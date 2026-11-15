@@ -2,7 +2,7 @@
 // and every request by where it stands. HR and team leads approve or refuse with a word; HR also
 // cancels; the CEO reads. A month narrows it.
 
-import type { LeaveLine, LeaveList } from "@2mg/api/types";
+import type { FormList, LeaveLine, LeaveList } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronLeft, ChevronRight, FileText, Undo2 } from "lucide-react";
 import { useState } from "react";
@@ -11,7 +11,7 @@ import { api } from "../api";
 import { manilaToday } from "../team/range";
 import { Button, CARD, PageHead, PageState, Problem, Tabs, useAction } from "../ui";
 import { LEAVE_WORDS } from "./attendance-report";
-import { daysWords, LEAVE_STATUS, spanWords } from "./my-leave";
+import { daysWords, FormLineRow, LEAVE_STATUS, spanWords } from "./my-leave";
 
 type View = "waiting" | "asked" | "approved" | "refused" | "cancelled";
 const shiftMonth = (month: string, by: number) => {
@@ -29,6 +29,16 @@ export function LeaveListPage() {
   const [params, setParams] = useSearchParams();
   const view = (params.get("view") as View | null) ?? "waiting";
   const month = params.get("month");
+  const forms = params.get("of") === "forms";
+  const formsQuery = useQuery({
+    queryKey: ["leave", "forms", view, month],
+    queryFn: () =>
+      api<FormList>(
+        `/api/hr/forms/list?${new URLSearchParams({ view, ...(month ? { month } : {}) })}`,
+      ),
+    placeholderData: (previous) => previous,
+    enabled: forms,
+  });
   const query = useQuery({
     queryKey: ["leave", "list", view, month],
     queryFn: () =>
@@ -39,6 +49,7 @@ export function LeaveListPage() {
   });
   const data = query.data;
   if (!data) return <PageState query={query} what="the leave" />;
+  const counts = forms ? (formsQuery.data?.counts ?? data.counts) : data.counts;
   const set = (key: string, value: string | null) => {
     const out = new URLSearchParams(params);
     if (value === null) out.delete(key);
@@ -47,19 +58,36 @@ export function LeaveListPage() {
   };
   const shownMonth = month ?? manilaToday().slice(0, 7);
   const tabs: { key: View; label: string; count: number }[] = [
-    ...(data.mine || view === "waiting"
-      ? [{ key: "waiting" as View, label: "Waiting for you", count: data.counts.waiting }]
+    ...(counts.waiting || view === "waiting"
+      ? [{ key: "waiting" as View, label: "Waiting for you", count: counts.waiting }]
       : []),
-    { key: "asked", label: "Asked", count: data.counts.asked },
-    { key: "approved", label: "Approved", count: data.counts.approved },
-    { key: "refused", label: "Not approved", count: data.counts.refused },
-    { key: "cancelled", label: "Cancelled", count: data.counts.cancelled },
+    { key: "asked", label: "Asked", count: counts.asked },
+    { key: "approved", label: "Approved", count: counts.approved },
+    { key: "refused", label: "Not approved", count: counts.refused },
+    { key: "cancelled", label: "Cancelled", count: counts.cancelled },
   ];
 
   return (
     <div className={`flex flex-col gap-4 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
       <PageHead
-        title="Leave"
+        title={forms ? "Forms" : "Leave"}
+        tags={
+          <span className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs font-semibold">
+            {[
+              { key: null, label: "Leave" },
+              { key: "forms", label: "Forms" },
+            ].map((one) => (
+              <button
+                key={one.label}
+                type="button"
+                onClick={() => set("of", one.key)}
+                className={`rounded-md px-2.5 py-1 ${(one.key === "forms") === forms ? "bg-brand text-white" : "text-slate-600 hover:bg-slate-100"}`}
+              >
+                {one.label}
+              </button>
+            ))}
+          </span>
+        }
         actions={
           <div className="flex items-center gap-1">
             {month && (
@@ -93,10 +121,12 @@ export function LeaveListPage() {
       </PageHead>
       <section className={`${CARD} overflow-hidden`}>
         <ul className="divide-y divide-slate-100">
-          {data.lines.map((line) => (
-            <Line key={line.id} line={line} />
-          ))}
-          {data.lines.length === 0 && (
+          {forms
+            ? (formsQuery.data?.lines ?? []).map((line) => (
+                <FormLineRow key={line.id} line={line} showPerson />
+              ))
+            : data.lines.map((line) => <Line key={line.id} line={line} />)}
+          {(forms ? (formsQuery.data?.lines.length ?? 0) : data.lines.length) === 0 && (
             <li className="px-4 py-8 text-center text-sm text-slate-500">
               {view === "waiting" ? "Nothing waiting for you." : "Nothing here."}
             </li>

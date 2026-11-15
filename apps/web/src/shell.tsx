@@ -1,7 +1,13 @@
 // The frame every signed-in screen sits in: the top bar, the role's menu down the left on a
 // desk, the same menu as a tab bar on a phone.
 
-import type { LeaveList, OrderDashboard, OrgMenuUnit, SearchResult } from "@2mg/api/types";
+import type {
+  FormList,
+  LeaveList,
+  OrderDashboard,
+  OrgMenuUnit,
+  SearchResult,
+} from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -421,6 +427,12 @@ function MenuList({
     enabled: wantsLeave,
     staleTime: 60_000,
   });
+  const forms = useQuery({
+    queryKey: ["leave", "forms", "waiting", null],
+    queryFn: () => api<FormList>("/api/hr/forms/list?view=waiting"),
+    enabled: wantsLeave,
+    staleTime: 60_000,
+  });
   // The asks for people, regions and areas waiting (the CEO's) count beside Requests.
   const news = useUpdates();
   const counts = (
@@ -430,7 +442,7 @@ function MenuList({
           orgRequests: teams.data?.openRequests ?? 0,
           important: unreadIn(news.data, "important"),
           updates: unreadIn(news.data, "updates"),
-          leave: leave.data?.counts.waiting ?? 0,
+          leave: (leave.data?.counts.waiting ?? 0) + (forms.data?.counts.waiting ?? 0),
         }
       : undefined
   ) as Record<Badge, number> | undefined;

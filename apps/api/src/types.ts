@@ -3180,6 +3180,10 @@ export type AttendanceDay = {
   /** Leave HR recorded for this working day (a half day leaves the other half to work). */
   leave: LeaveKind | null;
   halfDay: boolean;
+  /** An approved form: official business or work from home (the day counts as worked). */
+  form: "ob" | "wfh" | null;
+  /** Approved overtime that day (an overtime form), in minutes. */
+  overtimeMinutes: number;
   note: string | null;
 };
 
@@ -3277,6 +3281,9 @@ export type AttendanceReport = {
     lateMinutes: number;
     undertimeMinutes: number;
     afterHoursMinutes: number;
+    /** Approved overtime, and days of official business or work from home. */
+    overtimeMinutes: number;
+    formDays: number;
   }[];
   totals: {
     people: number;
@@ -3288,6 +3295,7 @@ export type AttendanceReport = {
     expectedMinutes: number;
     lateDays: number;
     lateMinutes: number;
+    overtimeMinutes: number;
   };
 };
 
@@ -3731,4 +3739,40 @@ export type LivePeople = {
     /** The customer they checked in at and haven't reported yet. */
     atVisit: string | null;
   }[];
+};
+
+/** Official business, work from home, overtime. */
+export type FormKind = "ob" | "wfh" | "ot";
+
+export type FormLine = {
+  id: number;
+  person: { id: number; name: string; team: string | null };
+  kind: FormKind;
+  day: string;
+  /** "HH:MM" (official business and overtime). */
+  from: string | null;
+  to: string | null;
+  minutes: number;
+  place: string | null;
+  reason: string;
+  status: LeaveStatus;
+  approver: string | null;
+  decidedBy: string | null;
+  decisionNote: string | null;
+  canDecide: boolean;
+  canCancel: boolean;
+};
+
+export type FormList = {
+  lines: FormLine[];
+  counts: { waiting: number; asked: number; approved: number; refused: number; cancelled: number };
+};
+
+export type FormInput = {
+  kind: FormKind;
+  day: string;
+  from?: string | null;
+  to?: string | null;
+  place?: string | null;
+  reason: string;
 };

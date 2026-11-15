@@ -202,6 +202,7 @@ function dayOf(
   today: string,
   leaves: LeaveRow[] = [],
   hiredOn: string | null = null,
+  forms: FormRow[] = [],
 ): AttendanceDay {
   const holiday = holidays.get(day) ?? null;
   const work = isWorkDay(day, schedule, new Set(holidays.keys()));
@@ -213,6 +214,17 @@ function dayOf(
     kind === "work" ? leaves.find((one) => one.from <= day && one.to >= day) : undefined;
   const leave = onLeave?.kind ?? null;
   const halfDay = Boolean(onLeave?.halfDay);
+  // An approved official business or work from home covers the day; overtime adds its hours.
+  const covering = forms.find((one) => one.day === day && one.kind !== "ot") ?? null;
+  const form = covering?.kind === "ob" || covering?.kind === "wfh" ? covering.kind : null;
+  const formMinutes = covering
+    ? covering.kind === "wfh"
+      ? dayMinutes(schedule) - schedule.breakMinutes
+      : formSpan(covering)
+    : 0;
+  const overtimeMinutes = forms
+    .filter((one) => one.day === day && one.kind === "ot")
+    .reduce((sum, one) => sum + formSpan(one), 0);
   if (!row)
     return {
       day,
@@ -223,13 +235,15 @@ function dayOf(
       outFrom: null,
       inFrom: null,
       working: false,
-      workedMinutes: 0,
       lateMinutes: 0,
       undertimeMinutes: 0,
       afterHoursMinutes: 0,
-      absent: kind === "work" && day < today && !onLeave,
+      absent: kind === "work" && day < today && !onLeave && !form,
       leave,
       halfDay,
+      form,
+      overtimeMinutes,
+      workedMinutes: formMinutes,
       note: null,
     };
   const ended = row.timeOut ?? (day < today ? row.lastSeen : null);
@@ -246,16 +260,21 @@ function dayOf(
     inFrom: row.inFrom,
     working,
     // Still working: the hours so far.
-    workedMinutes: working
-      ? dayFigures(day, row.timeIn, Date.now(), schedule, kind === "work").workedMinutes
-      : figures.workedMinutes,
-    // On leave that day (a half day): the other half isn't counted late or short.
-    lateMinutes: onLeave ? 0 : figures.lateMinutes,
-    undertimeMinutes: onLeave ? 0 : figures.undertimeMinutes,
+    workedMinutes: Math.max(
+      formMinutes,
+      working
+        ? dayFigures(day, row.timeIn, Date.now(), schedule, kind === "work").workedMinutes
+        : figures.workedMinutes,
+    ),
+    // On leave that day (a half day), or covered by a form: not counted late or short.
+    lateMinutes: onLeave || form ? 0 : figures.lateMinutes,
+    undertimeMinutes: onLeave || form ? 0 : figures.undertimeMinutes,
     afterHoursMinutes: figures.afterHoursMinutes,
     absent: false,
     leave,
     halfDay,
+    form,
+    overtimeMinutes,
     note: row.note,
   };
 }
@@ -272,6 +291,47 @@ export function leaveDays(
   for (let at = from; at <= to; at = addDays(at, 1))
     if (isWorkDay(at, schedule, holidays)) days += 1;
   return halfDay ? days / 2 : days;
+}
+
+type FormRow = {
+  personId: number;
+  kind: "ob" | "wfh" | "ot";
+  day: string;
+  from: string | null;
+  to: string | null;
+};
+
+/** The minutes from a form's start to its end ("HH:MM"). */
+export const formSpan = (form: { from: string | null; to: string | null }) => {
+  if (!form.from || !form.to) return 0;
+  const minutes = (clock: string) => {
+    const [h, m] = clock.split(":").map(Number);
+    return (h ?? 0) * 60 + (m ?? 0);
+  };
+  return Math.max(0, minutes(form.to) - minutes(form.from));
+};
+
+/** Approved forms of these people in these days, by person. */
+async function formsOf(
+  db: Runner,
+  ids: number[],
+  from: string,
+  to: string,
+): Promise<Map<number, FormRow[]>> {
+  const out = new Map<number, FormRow[]>();
+  if (!ids.length) return out;
+  const found = await rows<FormRow>(
+    db,
+    sql`select person_id::int as "personId", kind, to_char(day, 'YYYY-MM-DD') as day,
+        to_char(from_time, 'HH24:MI') as "from", to_char(to_time, 'HH24:MI') as "to"
+      from hr_form where status = 'approved' and day between ${from}::date and ${to}::date
+        and person_id in (${sql.join(
+          ids.map((id) => sql`${id}`),
+          sql`, `,
+        )})`,
+  );
+  for (const row of found) out.set(row.personId, [...(out.get(row.personId) ?? []), row]);
+  return out;
 }
 
 /** Approved leave of these people that touches these days, by person. */
@@ -368,10 +428,11 @@ export async function attendanceToday(
   const people = await visiblePeople(db, me);
   const ids = people.map((one) => one.id);
   const first = `${day.slice(0, 7)}-01`;
-  const [schedules, holidays, leaves, found] = await Promise.all([
+  const [schedules, holidays, leaves, forms, found] = await Promise.all([
     schedulesOf(db, ids),
     holidaysBetween(db, first, day),
     leavesOf(db, ids, first, day),
+    formsOf(db, ids, first, day),
     ids.length
       ? rows<DayRow>(
           db,
@@ -397,6 +458,7 @@ export async function attendanceToday(
         today,
         leaves.get(person.id),
         person.hiredOn,
+        forms.get(person.id),
       ),
     );
     const todays = month[month.length - 1] as AttendanceDay;
@@ -450,10 +512,11 @@ export async function attendanceMonth(
   const first = `${month}-01`;
   const lastOfMonth = addDays(`${nextMonth(month)}-01`, -1);
   const last = lastOfMonth < today ? lastOfMonth : today;
-  const [schedules, holidays, leaveMap, found, named] = await Promise.all([
+  const [schedules, holidays, leaveMap, formMap, found, named] = await Promise.all([
     schedulesOf(db, [personId]),
     holidaysBetween(db, first, lastOfMonth),
     leavesOf(db, [personId], first, lastOfMonth),
+    formsOf(db, [personId], first, lastOfMonth),
     rows<DayRow>(
       db,
       sql`select ${dayColumns} from attendance a where a.person_id = ${personId}
@@ -482,6 +545,7 @@ export async function attendanceMonth(
         today,
         leaves,
         person.hiredOn,
+        formMap.get(personId),
       ),
     );
   return {
@@ -621,10 +685,11 @@ export async function attendanceReport(
   if (from < addDays(to, -366)) from = addDays(to, -366);
   const people = await visiblePeople(db, me);
   const ids = people.map((one) => one.id);
-  const [schedules, holidays, leaveMap, found] = await Promise.all([
+  const [schedules, holidays, leaveMap, formMap, found] = await Promise.all([
     schedulesOf(db, ids),
     holidaysBetween(db, from, to),
     leavesOf(db, ids, from, to),
+    formsOf(db, ids, from, to),
     ids.length
       ? rows<DayRow>(
           db,
@@ -659,17 +724,28 @@ export async function attendanceReport(
       lateMinutes: 0,
       undertimeMinutes: 0,
       afterHoursMinutes: 0,
+      overtimeMinutes: 0,
+      formDays: 0,
     };
     for (let at = from; at <= to; at = addDays(at, 1)) {
-      const day = dayOf(at, mine?.get(at), schedule, holidays, today, leaves, person.hiredOn);
+      const day = dayOf(
+        at,
+        mine?.get(at),
+        schedule,
+        holidays,
+        today,
+        leaves,
+        person.hiredOn,
+        formMap.get(person.id),
+      );
       if (day.kind === "work") {
         figures.workDays += 1;
         // Today counts only once they came in: a day not over isn't a shortfall yet.
         if (at < today || day.timeIn)
           figures.expectedMinutes += day.leave ? (day.halfDay ? fullDay / 2 : 0) : fullDay;
       }
-      // Came in on a working day (work on a rest day still counts in the hours).
-      if (day.timeIn && day.kind === "work") figures.present += 1;
+      // Came in (or worked on a form) on a working day; a rest day's work counts in the hours.
+      if ((day.timeIn || day.form) && day.kind === "work") figures.present += 1;
       if (day.absent) figures.absent += 1;
       if (day.leave) {
         const share = day.halfDay ? 0.5 : 1;
@@ -681,6 +757,8 @@ export async function attendanceReport(
       figures.lateMinutes += day.lateMinutes;
       figures.undertimeMinutes += day.undertimeMinutes;
       figures.afterHoursMinutes += day.afterHoursMinutes;
+      figures.overtimeMinutes += day.overtimeMinutes;
+      if (day.form) figures.formDays += 1;
     }
     return {
       personId: person.id,
@@ -707,6 +785,7 @@ export async function attendanceReport(
       expectedMinutes: sum("expectedMinutes"),
       lateDays: sum("lateDays"),
       lateMinutes: sum("lateMinutes"),
+      overtimeMinutes: sum("overtimeMinutes"),
     },
   };
 }

@@ -71,7 +71,7 @@ const spanWords = (from: string, to: string) =>
 
 /** Whom a person's request waits for: whom they report to, unless that is the CEO, the Admin,
  *  or nobody at work (then HR, null). */
-async function approverOf(
+export async function approverOf(
   db: Runner,
   personId: number,
 ): Promise<{ id: number; name: string } | null> {

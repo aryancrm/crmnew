@@ -17,6 +17,7 @@ import {
   startDay,
   workCalendar,
 } from "./attendance";
+import { cancelForm, decideForm, formList, myForms, requestForm } from "./forms";
 import {
   cancelLeave,
   decideLeave,
@@ -142,6 +143,35 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
       "x-content-type-options": "nosniff",
       "cache-control": "private, max-age=3600",
     });
+  });
+  app.get("/api/hr/forms/mine", async (c) => c.json({ lines: await myForms(db, c.get("me")) }));
+  app.get("/api/hr/forms/list", async (c) =>
+    c.json(
+      await formList(db, c.get("me"), { view: c.req.query("view"), month: c.req.query("month") }),
+    ),
+  );
+  app.post("/api/hr/forms", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        kind: z.enum(["ob", "wfh", "ot"], { message: "Pick the form." }),
+        day,
+        from: z.string().max(5).nullish(),
+        to: z.string().max(5).nullish(),
+        place: words(200),
+        reason: z.string().max(300),
+      }),
+    );
+    return c.json(await requestForm(db, c.get("me"), input));
+  });
+  app.post("/api/hr/forms/:id/decide", async (c) => {
+    const input = await readBody(c, z.object({ approve: z.boolean(), note: words(300) }));
+    await decideForm(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+  app.post("/api/hr/forms/:id/cancel", async (c) => {
+    await cancelForm(db, c.get("me"), idParam(c));
+    return c.json({ ok: true });
   });
   app.post("/api/hr/leave/:id/cancel", async (c) => {
     await cancelLeave(db, c.get("me"), idParam(c));

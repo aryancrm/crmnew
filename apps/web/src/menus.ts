@@ -385,7 +385,7 @@ function deskFor(me: Me): Space {
   const leave: MenuItem[] =
     me.role === "ceo" || me.role === "admin"
       ? []
-      : [{ to: "/me/leave", label: "My leave", icon: CalendarDays }];
+      : [{ to: "/me/leave", label: "Leave & forms", icon: CalendarDays }];
   const extra =
     SPEED_ROLES.includes(me.role) && !listed.some((item) => item.to === "/speed")
       ? [speedLink, ...leave, messagesLink]
@@ -487,7 +487,7 @@ function ownDesk(me: Me): Space {
           ),
           { to: "/targets", label: "Targets", icon: Target },
           { to: "/hr/attendance", label: "Team attendance", icon: CalendarClock },
-          { to: "/hr/leave", label: "Team leave", icon: CalendarDays, badge: "leave" },
+          { to: "/hr/leave", label: "Team leave & forms", icon: CalendarDays, badge: "leave" },
           customers,
         ]),
         icon: Users,
@@ -574,7 +574,7 @@ function ownDesk(me: Me): Space {
           { ...home, label: "People", icon: Users },
           { to: "/hr/people?view=joining", label: "Joining", icon: UserPlus },
           { to: "/hr/attendance", label: "Who's working", icon: CalendarClock },
-          { to: "/hr/leave", label: "Leave", icon: CalendarDays, badge: "leave" },
+          { to: "/hr/leave", label: "Leave & forms", icon: CalendarDays, badge: "leave" },
           { to: "/hr/report", label: "Attendance report", icon: BarChart3 },
         ]),
         icon: Users,

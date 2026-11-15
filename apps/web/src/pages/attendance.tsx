@@ -451,6 +451,16 @@ export function AttendanceMonthPage() {
                           Leave · {leaveWord(one)}
                         </span>
                       )}
+                      {one.form && (
+                        <span className="ml-2 rounded bg-sky-50 px-1 text-[11px] font-semibold text-sky-700">
+                          {one.form === "ob" ? "Official business" : "Work from home"}
+                        </span>
+                      )}
+                      {one.overtimeMinutes > 0 && (
+                        <span className="ml-2 rounded bg-emerald-50 px-1 text-[11px] font-semibold text-emerald-700">
+                          Overtime {hours(one.overtimeMinutes)}
+                        </span>
+                      )}
                     </td>
                     <td
                       className="px-3 py-2 tabular-nums"

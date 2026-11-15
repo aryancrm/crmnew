@@ -22,6 +22,7 @@ const NEEDS_YOU = new Set([
   "seat_request",
   "announcement",
   "leave_request",
+  "form_request",
 ]);
 
 export type UpdatesBox = "important" | "updates";

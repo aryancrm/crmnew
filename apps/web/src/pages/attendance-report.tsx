@@ -180,6 +180,7 @@ export function AttendanceReportPage() {
                 <th className="px-3 py-2 text-right">A day</th>
                 <th className="px-3 py-2 text-right">Late</th>
                 <th className="px-3 py-2 text-right">Undertime</th>
+                <th className="px-3 py-2 text-right">Overtime</th>
                 <th className="px-3 py-2 text-right">Absent</th>
                 <th className="px-3 py-2">Leave</th>
               </tr>
@@ -234,6 +235,16 @@ export function AttendanceReportPage() {
                       {hours(one.undertimeMinutes)}
                     </td>
                     <td
+                      className={`px-3 py-2.5 text-right tabular-nums ${one.overtimeMinutes ? "text-emerald-700" : "text-slate-400"}`}
+                      title={
+                        one.formDays
+                          ? `${one.formDays} days of official business or work from home`
+                          : undefined
+                      }
+                    >
+                      {hours(one.overtimeMinutes)}
+                    </td>
+                    <td
                       className={`px-3 py-2.5 text-right tabular-nums ${one.absent ? "font-semibold text-rose-700" : "text-slate-400"}`}
                     >
                       {one.absent || "—"}
@@ -252,7 +263,7 @@ export function AttendanceReportPage() {
               })}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
                     Nobody here.
                   </td>
                 </tr>

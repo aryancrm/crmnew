@@ -1,10 +1,11 @@
-// A person's own leave: the vacation and sick leave left this year, asking for leave (with a paper
-// such as a medical certificate), and what they asked for with whoever decided it. A request waits
-// for whom they report to (HR when that is the CEO).
+// A person's own leave and forms: the vacation and sick leave left this year, asking for leave
+// (with a paper such as a medical certificate), filing official business, work from home or
+// overtime, and what they asked for with whoever decided it. Everything waits for whom they
+// report to (HR when that is the CEO).
 
-import type { LeaveKind, LeaveLine, MyLeave } from "@2mg/api/types";
+import type { FormKind, FormLine, LeaveKind, LeaveLine, MyLeave } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarPlus, Camera, FileText } from "lucide-react";
+import { BriefcaseBusiness, CalendarPlus, Camera, FileText } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
@@ -52,6 +53,11 @@ export function MyLeavePage() {
     queryFn: () => api<MyLeave>("/api/hr/leave/mine"),
   });
   const [asking, setAsking] = useState(params.get("new") === "1");
+  const [filing, setFiling] = useState(false);
+  const forms = useQuery({
+    queryKey: ["leave", "forms", "mine"],
+    queryFn: () => api<{ lines: FormLine[] }>("/api/hr/forms/mine"),
+  });
   const data = query.data;
   if (!data) return <PageState query={query} what="your leave" />;
   const b = data.balances;
@@ -76,12 +82,17 @@ export function MyLeavePage() {
   return (
     <div className="flex flex-col gap-4">
       <PageHead
-        title="My leave"
+        title="My leave & forms"
         sub={`${data.year} · your requests go to ${data.approver}`}
         actions={
-          <Button variant="primary" onClick={() => setAsking(true)}>
-            <CalendarPlus size={16} /> Ask for leave
-          </Button>
+          <>
+            <Button onClick={() => setFiling(true)}>
+              <BriefcaseBusiness size={16} /> File a form
+            </Button>
+            <Button variant="primary" onClick={() => setAsking(true)}>
+              <CalendarPlus size={16} /> Ask for leave
+            </Button>
+          </>
         }
       />
       <div className="grid gap-3 md:grid-cols-3">
@@ -109,7 +120,23 @@ export function MyLeavePage() {
           )}
         </ul>
       </section>
+      <section className={`${CARD} overflow-hidden`}>
+        <h2 className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
+          Forms: official business, work from home, overtime
+        </h2>
+        <ul className="divide-y divide-slate-100">
+          {(forms.data?.lines ?? []).map((line) => (
+            <FormLineRow key={line.id} line={line} />
+          ))}
+          {forms.data && forms.data.lines.length === 0 && (
+            <li className="px-4 py-6 text-center text-sm text-slate-500">
+              No forms filed this year.
+            </li>
+          )}
+        </ul>
+      </section>
       {asking && <AskDialog mine={data} onClose={() => setAsking(false)} />}
+      {filing && <FormDialog approver={data.approver} onClose={() => setFiling(false)} />}
     </div>
   );
 }
@@ -288,6 +315,238 @@ function AskDialog({ mine, onClose }: { mine: MyLeave; onClose: () => void }) {
           </Button>
           <Button type="submit" variant="primary" disabled={action.busy}>
             {action.busy ? "Sending…" : "Ask for leave"}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+export const FORM_WORDS: Record<FormKind, string> = {
+  ob: "Official business",
+  wfh: "Work from home",
+  ot: "Overtime",
+};
+const hoursWords = (minutes: number) =>
+  minutes % 60 ? `${Math.floor(minutes / 60)}h ${minutes % 60}m` : `${minutes / 60}h`;
+export const formWhen = (line: FormLine) =>
+  `${spanWords(line.day, line.day)}${line.from ? ` · ${line.from}–${line.to} (${hoursWords(line.minutes)})` : ""}`;
+
+/** A form as a line: what, when, where it stands, and who decided it. */
+export function FormLineRow({
+  line,
+  showPerson = false,
+}: {
+  line: FormLine;
+  showPerson?: boolean;
+}) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const [refusing, setRefusing] = useState(false);
+  const [note, setNote] = useState("");
+  const status = LEAVE_STATUS[line.status];
+  const done = () => queries.invalidateQueries({ queryKey: ["leave"] });
+  const decide = (approve: boolean) =>
+    action.run(async () => {
+      await api(`/api/hr/forms/${line.id}/decide`, { body: { approve, note: note || null } });
+      await done();
+    });
+  return (
+    <li className="flex flex-col gap-2 px-4 py-3 lg:flex-row lg:items-start lg:justify-between">
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          {showPerson && <span className="font-semibold text-slate-900">{line.person.name}</span>}
+          <span className={showPerson ? "text-slate-700" : "font-semibold text-slate-900"}>
+            {FORM_WORDS[line.kind]}
+          </span>
+          <span className="text-slate-700">{formWhen(line)}</span>
+          <span
+            className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ${status.tone}`}
+          >
+            {status.word}
+          </span>
+        </div>
+        <div className="text-xs text-slate-500">
+          {[
+            showPerson ? line.person.team : null,
+            line.place,
+            line.reason,
+            line.status === "asked" ? `with ${line.approver ?? "HR"}` : null,
+            line.decidedBy && line.status !== "asked" ? `by ${line.decidedBy}` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+        </div>
+        {line.decisionNote && <div className="mt-1 text-xs text-rose-700">{line.decisionNote}</div>}
+        <Problem message={action.problem?.message} />
+      </div>
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        {line.canDecide &&
+          (refusing ? (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault();
+                void decide(false);
+              }}
+              className="flex items-center gap-2"
+            >
+              <input
+                value={note}
+                onChange={(event) => setNote(event.target.value)}
+                placeholder="Why not"
+                className="h-8 w-48 rounded-lg border border-slate-300 px-2 text-sm"
+              />
+              <Button small type="submit" disabled={action.busy}>
+                Not approved
+              </Button>
+            </form>
+          ) : (
+            <>
+              <Button small variant="primary" disabled={action.busy} onClick={() => decide(true)}>
+                Approve
+              </Button>
+              <Button small onClick={() => setRefusing(true)}>
+                Not approved
+              </Button>
+            </>
+          ))}
+        {line.canCancel && !line.canDecide && (
+          <Button
+            small
+            variant="quiet"
+            disabled={action.busy}
+            onClick={() =>
+              action.run(async () => {
+                await api(`/api/hr/forms/${line.id}/cancel`, { body: {} });
+                await done();
+              })
+            }
+          >
+            Cancel it
+          </Button>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function FormDialog({ approver, onClose }: { approver: string; onClose: () => void }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const [kind, setKind] = useState<FormKind>("ob");
+  const [day, setDay] = useState(manilaToday());
+  const [from, setFrom] = useState("09:00");
+  const [to, setTo] = useState("12:00");
+  const [place, setPlace] = useState("");
+  const [reason, setReason] = useState("");
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const done = await action.run(() =>
+      api("/api/hr/forms", {
+        body: {
+          kind,
+          day,
+          from: kind === "wfh" ? null : from,
+          to: kind === "wfh" ? null : to,
+          place: kind === "ob" ? place : null,
+          reason,
+        },
+      }),
+    );
+    if (done) {
+      await queries.invalidateQueries({ queryKey: ["leave"] });
+      onClose();
+    }
+  }
+  return (
+    <Dialog
+      title="File a form"
+      sub={`It goes to ${approver}.`}
+      onClose={onClose}
+      busy={action.busy}
+    >
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Label text="Form *" error={action.at("kind")}>
+            <select
+              value={kind}
+              onChange={(event) => {
+                const next = event.target.value as FormKind;
+                setKind(next);
+                if (next === "ot") {
+                  setFrom("16:00");
+                  setTo("18:00");
+                }
+              }}
+              className={FIELD}
+            >
+              {(Object.keys(FORM_WORDS) as FormKind[]).map((key) => (
+                <option key={key} value={key}>
+                  {FORM_WORDS[key]}
+                </option>
+              ))}
+            </select>
+          </Label>
+          <Label text="Day *" error={action.at("day")}>
+            <input
+              type="date"
+              value={day}
+              onChange={(event) => setDay(event.target.value)}
+              className={FIELD}
+            />
+          </Label>
+        </div>
+        {kind !== "wfh" && (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Label text="From *" error={action.at("from")}>
+              <input
+                type="time"
+                value={from}
+                onChange={(event) => setFrom(event.target.value)}
+                className={FIELD}
+              />
+            </Label>
+            <Label text="To *" error={action.at("to")}>
+              <input
+                type="time"
+                value={to}
+                onChange={(event) => setTo(event.target.value)}
+                className={FIELD}
+              />
+            </Label>
+          </div>
+        )}
+        {kind === "ob" && (
+          <Label text="Where *" error={action.at("place")}>
+            <input
+              value={place}
+              onChange={(event) => setPlace(event.target.value)}
+              className={FIELD}
+              placeholder="Pasay General Hospital"
+            />
+          </Label>
+        )}
+        <Label text="What it was for *" error={action.at("reason")}>
+          <input
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            className={FIELD}
+            placeholder={
+              kind === "ot"
+                ? "Stock count"
+                : kind === "wfh"
+                  ? "Monthly reports"
+                  : "Meeting with the pharmacy head"
+            }
+          />
+        </Label>
+        <Problem message={action.general(["kind", "day", "from", "to", "place", "reason"])} />
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button onClick={onClose} disabled={action.busy}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" disabled={action.busy}>
+            {action.busy ? "Sending…" : "File the form"}
           </Button>
         </div>
       </form>
