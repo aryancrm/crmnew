@@ -25,23 +25,23 @@ import {
   ChevronDown,
   ChevronRight,
   FileCheck2,
-  History,
+  Hand,
   LoaderCircle,
   MapPin,
   Plus,
   Search,
   Undo2,
+  UserRound,
   X,
 } from "lucide-react";
 import { Fragment, lazy, type ReactNode, Suspense, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
-import { CustomerHistoryDialog } from "../customers/history-dialog";
 import { type DispatchAsk, DispatchDialogs } from "../dispatch/parts";
 import { ConfirmPaymentDialog, useMoney } from "../finance/parts";
 import { avatarTone, dayHeading, initials, PRIMARY_SM, QUIET_SM } from "../look";
-import { Checks } from "../orders/checks";
+import { Checks, checksOf } from "../orders/checks";
 import { ReasonDialog, useOrderAction, waited } from "../orders/parts";
 import { RepStrip } from "../rep-strip";
 import { count, Dialog, dayLabel, PageState, peso } from "../ui";
@@ -110,12 +110,12 @@ const STRIP = ["Placed", "Management", "Finance", "Packed", "Shipped", "Delivere
 
 /** The customer's kind as the Leads card shows its type pill. */
 export const KIND_BADGE: Record<string, { label: string; style: string }> = {
-  hospital: { label: "Hospital", style: "before:bg-sky-500" },
-  doctor: { label: "Doctor", style: "before:bg-indigo-500" },
-  patient: { label: "Patient", style: "before:bg-teal-500" },
-  drugstore: { label: "Drugstore", style: "before:bg-amber-500" },
-  distributor: { label: "Distributor", style: "before:bg-violet-500" },
-  government: { label: "Government", style: "before:bg-rose-500" },
+  hospital: { label: "Hospital", style: "border-sky-200 bg-sky-50 text-sky-800" },
+  doctor: { label: "Doctor", style: "border-indigo-200 bg-indigo-50 text-indigo-800" },
+  patient: { label: "Patient", style: "border-teal-200 bg-teal-50 text-teal-800" },
+  drugstore: { label: "Drugstore", style: "border-amber-200 bg-amber-50 text-amber-900" },
+  distributor: { label: "Distributor", style: "border-violet-200 bg-violet-50 text-violet-800" },
+  government: { label: "Government", style: "border-rose-200 bg-rose-50 text-rose-800" },
 };
 
 const termsOf = (card: OrderCard) =>
@@ -252,7 +252,6 @@ export function OrdersToCheck({
     what: CardAsk;
     reason?: string;
   } | null>(null);
-  const [history, setHistory] = useState<OrderCard | null>(null);
   const [confirming, setConfirming] = useState<OrderCard | null>(null);
   const [dispatching, setDispatching] = useState<DispatchAsk>(null);
   const [approvingAll, setApprovingAll] = useState(false);
@@ -370,7 +369,6 @@ export function OrdersToCheck({
       onApprove={() => order.act(card.id, "approve")}
       onResume={() => order.act(card.id, "resume")}
       onAsk={(what) => setAsking({ card, what })}
-      onHistory={data.desk === "management" ? () => setHistory(card) : undefined}
       onTake={dispatch && data.can.dispatch ? (release) => take(card.id, release) : undefined}
       onHandle={
         data.desk === "management" && data.can.manage
@@ -734,27 +732,6 @@ export function OrdersToCheck({
         />
       )}
       <DispatchDialogs ask={dispatching} onClose={() => setDispatching(null)} />
-      {history && (
-        <CustomerHistoryDialog
-          customerId={history.customerId}
-          name={history.customer}
-          onHold={
-            data.can.manage &&
-            [
-              "pending_approval",
-              "finance_check",
-              "ready_for_invoice",
-              "ready_for_dispatch",
-            ].includes(history.status)
-              ? (reason) => {
-                  setAsking({ card: history, what: "hold", reason });
-                  setHistory(null);
-                }
-              : undefined
-          }
-          onClose={() => setHistory(null)}
-        />
-      )}
       {checking && (
         <Dialog
           title="Medicine check"
@@ -768,27 +745,74 @@ export function OrdersToCheck({
   );
 }
 
-/** One order, laid out exactly as the Leads desk's card (LeadCardItem). */
-/** Why Management sent it back and the MedRep's answer, read in full over the page. */
-function SentBackStory({ card, onClose }: { card: OrderCard; onClose: () => void }) {
+/** Management's checks on a card, as the Leads card's road: the next thing to look at, then each
+ *  check as a step (green fine, amber to look at); a step opens that check on the order. */
+const CARD_CHECKS = [
+  { key: "price", label: "Price", check: "price" },
+  { key: "stock", label: "Stock", check: "stock" },
+  { key: "customer", label: "Customer", check: "customer" },
+  { key: "paper", label: "Papers", check: "papers" },
+] as const;
+
+function CheckSteps({ card }: { card: OrderCard }) {
+  const navigate = useNavigate();
+  const all = checksOf(card);
+  const tone = (key: string) =>
+    key === "paper"
+      ? all.some((one) => (one.key === "paper" || one.key === "proof") && one.tone === "warn")
+        ? "warn"
+        : "ok"
+      : (all.find((one) => one.key === key)?.tone ?? "ok");
+  const warns = all.filter((one) => one.tone === "warn");
+  const fine = CARD_CHECKS.filter((step) => tone(step.key) !== "warn").length;
+  const go = (check: string) => (event: { stopPropagation: () => void }) => {
+    event.stopPropagation();
+    navigate(`/orders/${card.id}?step=management&check=${check}`);
+  };
   return (
-    <Dialog title={`Sent back · ${card.code}`} sub={card.customer} onClose={onClose}>
-      <div className="flex flex-col gap-3 text-[13px] text-slate-700">
-        <div>
-          <div className="text-xs font-semibold text-slate-500">
-            {card.sentBackBy ?? "Management"} sent it back
-            {card.sentBackCount > 1 ? ` (${card.sentBackCount} times)` : ""}
-          </div>
-          <p className="mt-0.5 whitespace-pre-line">{card.sentBackReason}</p>
-        </div>
-        {card.reply && (
-          <div>
-            <div className="text-xs font-semibold text-slate-500">{card.medrep}'s answer</div>
-            <p className="mt-0.5 whitespace-pre-line">{card.reply}</p>
-          </div>
-        )}
+    <>
+      <div className="mb-1 flex items-center justify-between gap-2 text-[10px] font-medium text-slate-400">
+        <span>Next action</span>
+        <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
       </div>
-    </Dialog>
+      <p
+        className="mb-2 line-clamp-2 text-[11px] leading-snug font-medium text-slate-800"
+        title={warns.map((one) => one.title).join("\n") || undefined}
+      >
+        {warns.length
+          ? `Look at: ${warns.map((one) => one.label).join(", ")}`
+          : "Everything checks out: approve it"}
+      </p>
+      <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-slate-500">
+        <span className="font-semibold text-slate-700">Management check</span>
+        <span className="text-[9px] text-slate-400">
+          {fine} of {CARD_CHECKS.length} fine
+        </span>
+      </div>
+      <div className="grid grid-cols-4 gap-1">
+        {CARD_CHECKS.map((step) => {
+          const warn = tone(step.key) === "warn";
+          return (
+            <button
+              key={step.key}
+              type="button"
+              onClick={go(step.check)}
+              title={`Open the ${step.label.toLowerCase()} check`}
+              className="group/step flex flex-col gap-1 rounded py-0.5 text-left"
+            >
+              <span
+                className={`h-1.5 w-full rounded-full ${warn ? "bg-amber-400 ring-2 ring-amber-100" : "bg-emerald-500"}`}
+              />
+              <span
+                className={`text-[10px] font-semibold group-hover/step:underline ${warn ? "text-amber-700" : "text-slate-600"}`}
+              >
+                {step.label}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </>
   );
 }
 
@@ -803,7 +827,6 @@ export function OrderCardItem({
   onConfirm,
   onInvoice,
   onDispatch,
-  onHistory,
   fixable = false,
   showRep = true,
   onTake,
@@ -818,8 +841,6 @@ export function OrderCardItem({
   onApprove: () => void;
   onResume: () => void;
   onAsk: (what: CardAsk) => void;
-  /** The customer's history in a pop-up (Management's cards). */
-  onHistory?: () => void;
   /** The MedRep's own sent-back order: a button to fix it and send it again. */
   fixable?: boolean;
   /** Who placed it (not on a MedRep's own list: they are all theirs). */
@@ -867,12 +888,9 @@ export function OrderCardItem({
   const kind = KIND_BADGE[card.customerKind] ?? KIND_BADGE.hospital;
   const stepIdx = Math.min(card.step, STRIP.length - 1);
   const open = () => navigate(`/orders/${card.id}`);
-  const [story, setStory] = useState(false);
 
   return (
     <>
-      {/* Beside the card, not inside it: a click in the popup doesn't open the order. */}
-      {story && <SentBackStory card={card} onClose={() => setStory(false)} />}
       {/* biome-ignore lint/a11y/useSemanticElements: the card holds buttons, so it can't be one link */}
       <div
         role="link"
@@ -903,7 +921,7 @@ export function OrderCardItem({
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-1.5">
                   <h3
-                    className="truncate text-sm font-semibold tracking-tight text-slate-900 transition-colors group-hover:text-emerald-800"
+                    className="line-clamp-2 text-sm leading-snug font-semibold tracking-tight text-slate-900 transition-colors group-hover:text-emerald-800"
                     title={card.customer}
                   >
                     {card.customer}
@@ -913,46 +931,87 @@ export function OrderCardItem({
                   className="truncate text-[11px] font-medium text-slate-500"
                   title={card.customerPhone ? `Phone ${card.customerPhone}` : undefined}
                 >
-                  <span className="font-semibold text-slate-700">{card.code}</span> ·{" "}
-                  {peso(card.total)}
+                  <span className="font-semibold text-slate-700">{peso(card.total)}</span> ·{" "}
+                  {card.code}
                 </div>
               </div>
             </div>
 
-            <div className="flex shrink-0 items-center gap-1.5">
-              {finished && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-                  <CheckCheck className="size-3" /> Delivered
+            <div className="flex shrink-0 flex-col items-end gap-1 text-[11px]">
+              <span className="flex items-center gap-1.5">
+                {finished && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+                    <CheckCheck className="size-3" /> Delivered
+                  </span>
+                )}
+                {flagged && (
+                  <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+                    {card.statusLabel}
+                  </span>
+                )}
+                {late && (
+                  <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+                    Late
+                  </span>
+                )}
+                {isNew && !late && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow-2xs">
+                    <span className="size-1.5 rounded-full bg-white" />
+                    New
+                  </span>
+                )}
+                <span
+                  className={`text-[10px] font-medium tabular-nums ${late ? "text-rose-700" : "text-slate-400"}`}
+                  title={`${card.statusLabel} since ${new Date(card.stepSince).toLocaleString("en-PH", { timeZone: "Asia/Manila" })} · placed ${new Date(card.submittedAt).toLocaleString("en-PH", { timeZone: "Asia/Manila" })}`}
+                >
+                  {waited(card.stepSince)}
                 </span>
-              )}
-              {flagged && (
-                <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-                  {card.statusLabel}
-                </span>
-              )}
-              {late && (
-                <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-                  Late
-                </span>
-              )}
-              {isNew && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow-2xs">
-                  <span className="size-1.5 rounded-full bg-white" />
-                  New
-                </span>
-              )}
-              <span
-                className={`text-[11px] font-semibold tabular-nums ${late ? "text-rose-700" : "text-slate-500"}`}
-                title={`${card.statusLabel} since ${new Date(card.stepSince).toLocaleString("en-PH", { timeZone: "Asia/Manila" })} · placed ${new Date(card.submittedAt).toLocaleString("en-PH", { timeZone: "Asia/Manila" })}`}
-              >
-                {waited(card.stepSince)}
               </span>
+              {onHandle && (pending || (flagged && heldBy === "management")) && (
+                // Who in Management has it, so two people don't work the same order.
+                <span className="flex items-center gap-1.5">
+                  {card.handledById === me?.id ? (
+                    <>
+                      <span className="font-semibold text-sky-700">You have it</span>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onHandle(true);
+                        }}
+                        className="font-medium text-slate-500 hover:text-slate-900"
+                      >
+                        Let go
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {card.handledBy && (
+                        <span className="max-w-[90px] truncate font-semibold text-slate-700">
+                          {card.handledBy}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onHandle(false);
+                        }}
+                        className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-semibold text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+                      >
+                        {!card.handledBy && <Hand className="size-3" />}
+                        {card.handledBy ? "Take over" : "I'll handle it"}
+                      </button>
+                    </>
+                  )}
+                </span>
+              )}
             </div>
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
             <span
-              className={`inline-flex shrink-0 items-center gap-1 text-[10.5px] font-semibold text-slate-700 before:size-1.5 before:rounded-full before:content-[""] ${kind?.style}`}
+              className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${kind?.style}`}
             >
               {kind?.label}
             </span>
@@ -961,7 +1020,7 @@ export function OrderCardItem({
                 {card.channel}
               </span>
             )}
-            <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-slate-700">
+            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
               {termsOf(card)}
             </span>
             {card.customerCity && (
@@ -1019,9 +1078,14 @@ export function OrderCardItem({
             </div>
           ) : (
             <>
-              {/* What Management checks, on top (Aryan): price, stock, papers, customer. */}
-              <div className="mt-2">
-                <Checks card={card} />
+              <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
+                {showRep && (
+                  <span className="inline-flex min-w-0 items-center gap-1">
+                    <UserRound className="size-3 shrink-0 text-slate-400" />
+                    <span className="truncate">{card.medrep}</span>
+                  </span>
+                )}
+                {!(pending && desk === "management") && <Checks card={card} small />}
               </div>
             </>
           )}
@@ -1036,134 +1100,56 @@ export function OrderCardItem({
                 {card.cameBackReason}
               </div>
             )}
-          {card.status !== "draft" && card.sentBackCount > 0 && card.sentBackReason && (
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation();
-                setStory(true);
-              }}
-              className="mt-2 flex w-full items-center gap-1.5 truncate text-left text-[11px] text-slate-600 hover:text-slate-900"
-            >
-              <span className="size-1.5 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
-              <span className="font-semibold text-slate-800">
-                Sent back{card.sentBackCount > 1 ? ` ${card.sentBackCount} times` : ""}
-                {card.reply ? ", answered" : ""}
-              </span>
-              <span className="font-semibold text-emerald-700">Read</span>
-            </button>
-          )}
-          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
-            {warehouse && inWarehouse && onTake && (
-              // Who has it in hand, so two people don't pack the same order.
-              <span className="inline-flex items-center gap-1">
-                {card.dispatchById === me?.id ? (
-                  <>
-                    <span className="rounded-full bg-sky-600 px-2 py-0.5 font-semibold text-white">
-                      You have it
-                    </span>
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onTake(true);
-                      }}
-                      className="rounded-full px-1.5 py-0.5 font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                    >
-                      Let go
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    {card.dispatchBy && (
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">
-                        {card.dispatchBy} has it
+          {warehouse && inWarehouse && onTake && (
+            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
+              {
+                // Who has it in hand, so two people don't pack the same order.
+                <span className="inline-flex items-center gap-1">
+                  {card.dispatchById === me?.id ? (
+                    <>
+                      <span className="rounded-full bg-sky-600 px-2 py-0.5 font-semibold text-white">
+                        You have it
                       </span>
-                    )}
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onTake(false);
-                      }}
-                      className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700 hover:bg-slate-200"
-                    >
-                      {card.dispatchBy ? "Take over" : "Take it"}
-                    </button>
-                  </>
-                )}
-              </span>
-            )}
-            {onHandle &&
-              (pending || (flagged && heldBy === "management")) &&
-              (card.handledById === me?.id ? (
-                <span className="inline-flex items-center gap-1">
-                  <span className="rounded-full bg-sky-600 px-2 py-0.5 font-semibold text-white">
-                    You're handling it
-                  </span>
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onHandle(true);
-                    }}
-                    className="rounded-full px-1.5 py-0.5 font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                  >
-                    Let go
-                  </button>
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1">
-                  {card.handledBy && (
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">
-                      {card.handledBy} is handling it
-                    </span>
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onTake(true);
+                        }}
+                        className="rounded-full px-1.5 py-0.5 font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                      >
+                        Let go
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      {card.dispatchBy && (
+                        <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">
+                          {card.dispatchBy} has it
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onTake(false);
+                        }}
+                        className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700 hover:bg-slate-200"
+                      >
+                        {card.dispatchBy ? "Take over" : "Take it"}
+                      </button>
+                    </>
                   )}
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onHandle(false);
-                    }}
-                    className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700 hover:bg-slate-200"
-                  >
-                    {card.handledBy ? "Take over" : "I'll handle it"}
-                  </button>
                 </span>
-              ))}
-            {showRep && !warehouse && (
-              <span
-                className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-slate-100 py-0.5 pr-2 pl-0.5"
-                title={`Placed by ${card.medrep}${card.area ? ` · ${card.area}` : ""}`}
-              >
-                <span
-                  className={`flex size-4 shrink-0 items-center justify-center rounded-full text-[8px] font-bold ${avatarTone(card.medrep)}`}
-                >
-                  {initials(card.medrep)}
-                </span>
-                <span className="truncate font-semibold text-slate-700">{card.medrep}</span>
-              </span>
-            )}
-            {onHistory && (
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onHistory();
-                }}
-                className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700 hover:bg-slate-200"
-                title="What they bought, what they owe and how late"
-              >
-                <History className="size-3" /> History
-              </button>
-            )}
-            {/* The findings are the checks on top; the warehouse reads only its own facts. */}
-          </div>
+              }
+            </div>
+          )}
         </div>
 
         <div
           className={`mt-2.5 border-t pt-2.5 ${finished ? "border-emerald-200/80" : "border-slate-100"}`}
         >
+          {pending && desk === "management" && <CheckSteps card={card} />}
           {!(pending && desk === "management") && (
             <>
               <div className="mb-1 flex items-center justify-between gap-2 text-[10px] font-medium text-slate-400">

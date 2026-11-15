@@ -108,7 +108,9 @@ export function Checks({
   small?: boolean;
 }) {
   const all = checksOf(card);
-  const shown = small ? all.filter((one) => one.tone === "warn") : all;
+  // The card shows what is fine and what needs a look; information only (no PO from a hospital)
+  // stays on the order's page. The table shows only what needs a look.
+  const shown = all.filter((one) => (small ? one.tone === "warn" : one.tone !== "info"));
   const list: Checked[] = shown.length
     ? shown
     : [

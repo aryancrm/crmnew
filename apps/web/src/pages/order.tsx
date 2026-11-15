@@ -47,6 +47,7 @@ import {
 } from "../finance/parts";
 import { MedicinePopup } from "../inventory/medicine-popup";
 import { avatarTone, initials } from "../look";
+import { checksOf } from "../orders/checks";
 import { ReasonDialog, StatusPill, shortSpan, useOrderAction } from "../orders/parts";
 import { SendToCustomer } from "../orders/send-update";
 import { PAPER_ACCEPT, uploadPaper } from "../photo";
@@ -238,6 +239,23 @@ export function Order() {
       (old) => {
         const next = new URLSearchParams(old);
         next.set("step", key);
+        return next;
+      },
+      { replace: true },
+    );
+  // While the order waits for Management, its step is gone through check by check.
+  const checking = can.approve && order.status === "pending_approval";
+  const states = checkStates(data);
+  const askedCheck = params.get("check") as CheckKey | null;
+  const check: CheckKey = CHECKS.some((item) => item.key === askedCheck)
+    ? (askedCheck as CheckKey)
+    : "price";
+  const openCheck = (key: CheckKey) =>
+    setParams(
+      (old) => {
+        const next = new URLSearchParams(old);
+        next.set("step", "management");
+        next.set("check", key);
         return next;
       },
       { replace: true },
@@ -552,44 +570,84 @@ export function Order() {
           aria-label="Steps"
           className="min-w-0 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm lg:col-start-1 lg:row-start-1"
         >
-          {steps.map((item) => {
-            const on = item.key === opened;
-            return (
-              <button
-                key={item.key}
-                type="button"
-                aria-current={on ? "step" : undefined}
-                onClick={() => open(item.key)}
-                className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors ${on ? "bg-emerald-50 font-semibold text-emerald-900" : "text-slate-700 hover:bg-slate-50"}`}
-              >
-                <span
-                  className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                    item.shape === "done" || item.shape === "skipped"
-                      ? "bg-emerald-600 text-white"
-                      : item.shape === "stopped"
-                        ? "bg-rose-100 text-rose-700"
-                        : on || item.shape === "now"
-                          ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
-                          : "bg-slate-100 text-slate-500"
-                  }`}
-                >
-                  {item.shape === "done" || item.shape === "skipped" ? (
-                    <Check className="size-3.5" />
-                  ) : (
-                    item.number
-                  )}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate">{item.label}</span>
-                  <span
-                    className={`block truncate text-[11px] font-normal ${item.mine && item.shape !== "done" ? "font-semibold text-amber-700" : "text-slate-500"}`}
+          {checking && opened === "management"
+            ? CHECKS.map((item, index) => {
+                const on = item.key === check;
+                const state = states[item.key];
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    aria-current={on ? "step" : undefined}
+                    onClick={() => openCheck(item.key)}
+                    className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors ${on ? "bg-emerald-50 font-semibold text-emerald-900" : "text-slate-700 hover:bg-slate-50"}`}
                   >
-                    {item.mine && item.shape !== "done" ? "Your step" : item.who}
-                  </span>
-                </span>
-              </button>
-            );
-          })}
+                    <span
+                      className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                        item.key === "approve"
+                          ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
+                          : state.ok
+                            ? "bg-emerald-600 text-white"
+                            : "bg-amber-400 text-white"
+                      }`}
+                    >
+                      {item.key === "approve" ? (
+                        index + 1
+                      ) : state.ok ? (
+                        <Check className="size-3.5" />
+                      ) : (
+                        "!"
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{item.label}</span>
+                      <span
+                        className={`block truncate text-[11px] font-normal ${state.ok || item.key === "approve" ? "text-slate-500" : "font-semibold text-amber-700"}`}
+                      >
+                        {state.note}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })
+            : steps.map((item) => {
+                const on = item.key === opened;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    aria-current={on ? "step" : undefined}
+                    onClick={() => open(item.key)}
+                    className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors ${on ? "bg-emerald-50 font-semibold text-emerald-900" : "text-slate-700 hover:bg-slate-50"}`}
+                  >
+                    <span
+                      className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                        item.shape === "done" || item.shape === "skipped"
+                          ? "bg-emerald-600 text-white"
+                          : item.shape === "stopped"
+                            ? "bg-rose-100 text-rose-700"
+                            : on || item.shape === "now"
+                              ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
+                              : "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      {item.shape === "done" || item.shape === "skipped" ? (
+                        <Check className="size-3.5" />
+                      ) : (
+                        item.number
+                      )}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{item.label}</span>
+                      <span
+                        className={`block truncate text-[11px] font-normal ${item.mine && item.shape !== "done" ? "font-semibold text-amber-700" : "text-slate-500"}`}
+                      >
+                        {item.mine && item.shape !== "done" ? "Your step" : item.who}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
           {shownOthers.length > 0 && (
             <div className="mt-1 flex flex-wrap gap-1.5 border-t border-slate-100 px-1 pt-2">
               {shownOthers.map((item) => (
@@ -627,6 +685,9 @@ export function Order() {
               act={act}
               onAsk={setAsking}
               next={() => open(nextOf("management") ?? "finance")}
+              check={checking ? check : undefined}
+              onCheck={openCheck}
+              states={states}
             />
           )}
           {opened === "finance" && (
@@ -661,6 +722,41 @@ export function Order() {
       <DispatchDialogs ask={dispatching} onClose={() => setDispatching(null)} />
     </div>
   );
+}
+
+// ---------------------------------------------------------------- Management's checks
+
+/** What Management goes through on an order, one step each (Aryan): each opens the part to look
+ *  at, and the last approves it. */
+const CHECKS = [
+  { key: "price", label: "Medicines & price" },
+  { key: "stock", label: "Stock & warehouse" },
+  { key: "customer", label: "Customer & licence" },
+  { key: "papers", label: "Papers" },
+  { key: "approve", label: "Approve" },
+] as const;
+type CheckKey = (typeof CHECKS)[number]["key"];
+
+/** How each check stands on this order: fine, or what needs a look. */
+function checkStates(data: OrderDetail): Record<CheckKey, { ok: boolean; note: string }> {
+  const list = checksOf({
+    findings: data.findings,
+    papers: data.papers.map((paper) => paper.kind),
+    customerKind: data.order.customerKind,
+    items: data.items,
+  });
+  const of = (key: string) => list.find((one) => one.key === key);
+  const state = (keys: string[], fine: string) => {
+    const warn = keys.map(of).find((one) => one?.tone === "warn");
+    return warn ? { ok: false, note: warn.label } : { ok: true, note: fine };
+  };
+  return {
+    price: state(["price"], of("price")?.label ?? "Price OK"),
+    stock: state(["stock"], "In stock"),
+    customer: state(["customer"], "Customer OK"),
+    papers: state(["paper", "proof"], "Papers fine"),
+    approve: { ok: false, note: "Your step" },
+  };
 }
 
 // ---------------------------------------------------------------- frames
@@ -1205,13 +1301,36 @@ function ManagementStep({
   act,
   onAsk,
   next,
+  check,
+  onCheck,
+  states,
 }: {
   data: OrderDetail;
   act: ReturnType<typeof useOrderAction>;
   onAsk: (action: OrderAction) => void;
   next: () => void;
+  /** The check being gone through (Management, while it waits); none = everything at once. */
+  check?: CheckKey;
+  onCheck?: (key: CheckKey) => void;
+  states?: Record<CheckKey, { ok: boolean; note: string }>;
 }) {
   const { order, can } = data;
+  const shows = (key: CheckKey) => !check || check === key;
+  const at = check ? CHECKS.findIndex((item) => item.key === check) : -1;
+  const after = at >= 0 ? CHECKS[at + 1] : undefined;
+  const findingsOf = (kinds: string[]) =>
+    data.findings.filter((finding) => !check || kinds.includes(finding.kind));
+  const shownFindings = !check
+    ? data.findings
+    : check === "price"
+      ? findingsOf(["price"])
+      : check === "stock"
+        ? findingsOf(["stock"])
+        : check === "customer"
+          ? findingsOf(["customer", "licence", "owes", "credit"])
+          : check === "papers"
+            ? findingsOf(["papers"])
+            : data.findings;
   // Where it ships from: the default warehouse, unless only another can fill every line.
   const [warehouse, setWarehouse] = useState(() => {
     const fill = data.warehouseFill ?? [];
@@ -1226,13 +1345,21 @@ function ManagementStep({
   const completes = can.approve || (can.resume && order.heldRole === "management");
   return (
     <StepPanel
-      number={2}
-      title="Management check"
+      number={check ? at + 1 : 2}
+      title={check ? (CHECKS[at]?.label ?? "Management check") : "Management check"}
       footer={
-        order.approvedAt ? <NextButton label="Next: Finance check" onClick={next} /> : undefined
+        order.approvedAt ? (
+          <NextButton label="Next: Finance check" onClick={next} />
+        ) : check && after && onCheck ? (
+          <NextButton label={`Next: ${after.label}`} onClick={() => onCheck(after.key)} />
+        ) : undefined
       }
     >
-      {order.approvedAt ? (
+      {check && check !== "approve" && states ? (
+        <Fact shape={states[check].ok ? "done" : "now"}>
+          <b>{states[check].note}</b>
+        </Fact>
+      ) : order.approvedAt ? (
         order.approvedBy ? (
           <Fact shape="done" note={short(order.approvedAt)}>
             <b>Approved</b> by {order.approvedBy}
@@ -1252,9 +1379,9 @@ function ManagementStep({
           <b>Sent back</b> · {order.flagReason ?? "fix it and place it again"}
         </Fact>
       ) : null}
-      {data.findings.length > 0 && (
+      {shownFindings.length > 0 && (
         <ul className="flex flex-col gap-1.5 rounded-xl bg-slate-50 px-3 py-2.5 text-[13px] text-slate-800">
-          {data.findings.map((finding) => (
+          {shownFindings.map((finding) => (
             <li key={finding.text} className="flex gap-2">
               <TriangleAlert
                 size={15}
@@ -1266,15 +1393,40 @@ function ManagementStep({
           ))}
         </ul>
       )}
-      <Lines data={data} compare />
+      {(shows("price") || shows("stock")) && <Lines data={data} compare />}
       {/* What Management checks besides the price: the buyer's licence and the papers. */}
-      <LicenceFacts order={order} />
-      <PaperChips data={data} kinds={["po", "prescription", "gl", "payment_proof"]} />
-      {completes && <DetailsLine data={data} />}
-      {can.approve && data.warehouseFill && data.warehouseFill.length > 0 && (
-        <ShipsFrom fill={data.warehouseFill} value={warehouse} onChange={setWarehouse} />
+      {shows("customer") && <LicenceFacts order={order} />}
+      {shows("papers") && (
+        <PaperChips data={data} kinds={["po", "prescription", "gl", "payment_proof"]} />
       )}
-      {can.approve && (
+      {(shows("customer") || check === "approve") && completes && <DetailsLine data={data} />}
+      {(shows("stock") || check === "approve") &&
+        can.approve &&
+        data.warehouseFill &&
+        data.warehouseFill.length > 0 && (
+          <ShipsFrom fill={data.warehouseFill} value={warehouse} onChange={setWarehouse} />
+        )}
+      {check === "approve" && states && (
+        <ul className="flex flex-col gap-1 text-[13px]">
+          {CHECKS.filter((item) => item.key !== "approve").map((item) => (
+            <li key={item.key}>
+              <button
+                type="button"
+                onClick={() => onCheck?.(item.key)}
+                className="flex items-center gap-2 text-left hover:underline"
+              >
+                <span
+                  className={`size-2 shrink-0 rounded-full ${states[item.key].ok ? "bg-emerald-500" : "bg-amber-400"}`}
+                  aria-hidden="true"
+                />
+                <span className="font-semibold text-slate-800">{item.label}</span>
+                <span className="text-slate-500">· {states[item.key].note}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {can.approve && shows("approve") && (
         <div className="flex flex-wrap items-end gap-2">
           {!order.leadId && (
             <label className="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700">
