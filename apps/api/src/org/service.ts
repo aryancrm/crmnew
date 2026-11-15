@@ -50,7 +50,7 @@ export const creditedTo = (today: string): SQL =>
   sql`coalesce((select ch_h.person_id from seat_holder ch_h where ch_h.seat_id = o.seat_id and ch_h.kind = 'holder'
       and ${inForce("ch_h", today)} order by ch_h.starts_on desc, ch_h.id desc limit 1), o.medrep_id)`;
 
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Seat login IDs end in the company's domain: "hos1@2mginc.com". */
 export const LOGIN_DOMAIN = (process.env.LOGIN_DOMAIN ?? "2mginc.com").toLowerCase();
@@ -77,6 +77,7 @@ const MODULE_LOGIN: Record<Role, string> = {
   online: "online",
   admin: "admin",
   ceo: "ceo",
+  hr: "hr",
 };
 function loginPrefix(module: Role, channelCode: string | null): string {
   if (module === "medrep")
@@ -109,7 +110,7 @@ export async function personOfSeatLogin(
 }
 
 /** A password a person can read out and type once: 12 letters and digits. */
-function freshPassword(): string {
+export function freshPassword(): string {
   return randomBytes(9).toString("base64url").replace(/[-_]/g, "x");
 }
 
@@ -272,7 +273,7 @@ export async function projectOrg(db: Runner, today = todayManila()): Promise<voi
 }
 
 /** Gives every seat without one its login ID: the next free number for its work and channel. */
-async function fillSeatLogins(db: Runner): Promise<void> {
+export async function fillSeatLogins(db: Runner): Promise<void> {
   const missing = await rows<{ id: number; module: Role; code: string | null }>(
     db,
     sql`with recursive up as (
@@ -431,7 +432,10 @@ export async function personHistory(
 
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
-async function change<T>(db: Database, work: (tx: Tx, today: string) => Promise<T>): Promise<T> {
+export async function change<T>(
+  db: Database,
+  work: (tx: Tx, today: string) => Promise<T>,
+): Promise<T> {
   const today = todayManila();
   return db.transaction(async (tx) => {
     const result = await work(tx, today);
@@ -466,7 +470,7 @@ async function unitChannel(tx: Runner, unitId: number): Promise<number | null> {
   return found?.channelId ?? null;
 }
 
-async function seatRow(tx: Runner, seatId: number, today: string) {
+export async function seatRow(tx: Runner, seatId: number, today: string) {
   const [seat] = await rows<{
     id: number;
     unitId: number;
@@ -487,6 +491,22 @@ async function seatRow(tx: Runner, seatId: number, today: string) {
   );
   if (!seat) throw new Refusal(404, "not_found", "That seat isn't there any more.", "seatId");
   return seat;
+}
+
+/** A seat a new joiner starts in on a later day: nobody else is put in it meanwhile. */
+export async function refuseIfPromised(tx: Runner, seatId: number, today: string): Promise<void> {
+  const [promised] = await rows<{ name: string; starts: string }>(
+    tx,
+    sql`select p.name, to_char(h.starts_on, 'FMDD Mon YYYY') as starts from seat_holder h join person p on p.id = h.person_id
+      where h.seat_id = ${seatId} and h.kind = 'holder' and h.starts_on > ${today}::date and p.active limit 1`,
+  );
+  if (promised)
+    throw new Refusal(
+      409,
+      "taken",
+      `This seat is ${promised.name}'s from ${promised.starts}: they are joining.`,
+      "seatId",
+    );
 }
 
 async function activePerson(tx: Runner, personId: number) {
@@ -651,6 +671,7 @@ export async function addPerson(db: Database, me: Me, input: OrgPersonInput): Pr
           `${seat.holder} already sits in "${seat.title}".`,
           "seatId",
         );
+      await refuseIfPromised(tx, seat.id, today);
       seatId = seat.id;
     } else {
       if (!input.unitId) throw new Refusal(400, "invalid", "Pick the team they join.", "unitId");
@@ -673,9 +694,15 @@ export async function addPerson(db: Database, me: Me, input: OrgPersonInput): Pr
         returning id::int as id`,
     );
     const personId = made?.id as number;
+    const starts = startDay(input.startsOn, today);
     await tx.execute(
       sql`insert into seat_holder (seat_id, person_id, kind, starts_on, reason, by_person)
-        values (${seatId}, ${personId}, 'holder', ${startDay(input.startsOn, today)}::date, 'Joined', ${me.id})`,
+        values (${seatId}, ${personId}, 'holder', ${starts}::date, 'Joined', ${me.id})`,
+    );
+    // Everyone has an employee record; HR fills in the rest.
+    await tx.execute(
+      sql`insert into employee (person_id, hire_date, position, mobile, created_by)
+        values (${personId}, ${starts}::date, ${seat.title}, ${clean(input.phone)}, ${me.id})`,
     );
     // Its login ID now signs this person in.
     await fillSeatLogins(tx);
@@ -800,6 +827,7 @@ export async function fillSeat(
         `${seat.holder} sits in "${seat.title}": it isn't vacant.`,
         "seatId",
       );
+    await refuseIfPromised(tx, seat.id, today);
     const person = await activePerson(tx, input.personId);
     const starts = startDay(input.startsOn, today);
     const reason = clean(input.reason);
@@ -879,8 +907,9 @@ export async function personLeaves(
   me: Me,
   personId: number,
   input: { reason?: string | null; lastDay?: string | null },
+  roles: readonly Role[] = ORG_CHANGE_ROLES,
 ): Promise<{ vacant: string[] }> {
-  allow(me, ORG_CHANGE_ROLES, "mark people as left");
+  allow(me, roles, "mark people as left");
   if (personId === me.id) throw new Refusal(400, "invalid", "You can't mark yourself as left.");
   return change(db, async (tx, today) => {
     const person = await activePerson(tx, personId);
@@ -901,6 +930,12 @@ export async function personLeaves(
     );
     await tx.execute(sql`update person set active = false where id = ${person.id}`);
     await tx.execute(sql`delete from session where person_id = ${person.id}`);
+    // The record stays, marked left with the day and why.
+    await tx.execute(
+      sql`update employee set status = 'left', left_on = ${lastDay}::date,
+          left_reason = ${clean(input.reason) ?? "Left the company"}, updated_at = now(), updated_by = ${me.id}
+        where person_id = ${person.id}`,
+    );
     return { vacant: vacant.map((seat) => seat.title) };
   });
 }

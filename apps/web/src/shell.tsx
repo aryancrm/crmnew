@@ -306,6 +306,7 @@ function linkOpen(location: { pathname: string; search: string }, items: { to: s
 const OWN_BACK = [
   /^\/admin\/channels\/\d+/,
   /^\/hr\/attendance\/\d+/,
+  /^\/hr\/people\/\d+/,
   /^\/my-team/,
   /^\/customers\/\d+/,
   /^\/orders\/\d+/,

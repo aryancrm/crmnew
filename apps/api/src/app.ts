@@ -140,11 +140,10 @@ export function createApp(db: Database, options: AppOptions) {
       throw wrong;
     }
 
-    if (found.failedLogins > 0 || found.lockedUntil)
-      await db
-        .update(person)
-        .set({ failedLogins: 0, lockedUntil: null })
-        .where(eq(person.id, found.id));
+    await db
+      .update(person)
+      .set({ failedLogins: 0, lockedUntil: null, lastSignInAt: new Date() })
+      .where(eq(person.id, found.id));
 
     const token = await startSession(db, found.id);
     setCookie(c, SESSION_COOKIE, token, {

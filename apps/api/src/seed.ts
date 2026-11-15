@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { hashPassword } from "./auth/password";
 import { type Database, rows } from "./db/index";
 import { area, channel, person } from "./db/schema";
+import { ensureRecords } from "./hr/people";
 import { buildDemoOrg } from "./org/seed";
 import { projectOrg } from "./org/service";
 import type { Role } from "./people/roles";
@@ -83,12 +84,15 @@ export async function seedDemo(db: Database, password: string): Promise<boolean>
       channel: "ONLINE",
       reportsTo: ceo,
     });
+    await add("Helen", "hr", "HR officer", { reportsTo: ceo });
     // Each channel's head is named on the channel. The other six have none yet.
     await tx.execute(sql`update channel set head_id = ${head} where code = 'HOSP'`);
     await tx.execute(sql`update channel set head_id = ${jane} where code = 'ONLINE'`);
     // The same people as seats in the company's tree, which from now on writes the fields above.
     await buildDemoOrg(tx);
     await projectOrg(tx);
+    // Everyone has an employee record (HR fills in the rest).
+    await ensureRecords(tx);
   });
   return true;
 }

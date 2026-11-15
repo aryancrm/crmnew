@@ -11,6 +11,7 @@ export const ROLES = [
   "ceo",
   "online",
   "admin",
+  "hr",
 ] as const;
 
 export type Role = (typeof ROLES)[number];
@@ -28,6 +29,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   ceo: "CEO",
   online: "Online desk",
   admin: "Admin",
+  hr: "HR",
 };
 
 export function isRole(value: string): value is Role {

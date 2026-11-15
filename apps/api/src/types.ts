@@ -3218,3 +3218,137 @@ export type MyDay = {
   today: AttendanceDay;
   schedule: { start: string; end: string };
 };
+
+// ---- HR: people and joining. Money is whole centavos (monthly); days "YYYY-MM-DD". ----
+
+export type Company = "2mg" | "gpi";
+export type Classification = "probationary" | "regular" | "part_time" | "intern";
+/** Where a person stands: joining (starts on a later day), working, or left. */
+export type PersonStage = "joining" | "active" | "left";
+/** Their login: not used yet, used, or switched off (they left). */
+export type LoginState = "new" | "ready" | "off";
+
+export type HrPersonRow = {
+  personId: number;
+  name: string;
+  employeeCode: string | null;
+  company: Company;
+  position: string | null;
+  team: string | null;
+  role: Role;
+  roleLabel: string;
+  stage: PersonStage;
+  login: LoginState;
+  /** The email they sign in with (HR gave it), else their seat's login ID. */
+  loginId: string | null;
+  hireDate: string;
+  classification: Classification;
+  /** Fields still missing on their record (address, IDs…): HR's to-do. */
+  missing: string[];
+};
+
+export type HrPeople = {
+  rows: HrPersonRow[];
+  counts: { all: number; active: number; joining: number; left: number; missing: number };
+};
+
+export type HrPerson = {
+  personId: number;
+  name: string;
+  role: Role;
+  roleLabel: string;
+  stage: PersonStage;
+  login: LoginState;
+  loginId: string | null;
+  lastSignIn: string | null;
+  seat: {
+    id: number;
+    title: string;
+    team: string;
+    channel: string | null;
+    area: string | null;
+    boss: string | null;
+  } | null;
+  /** Every seat they have held, newest first. */
+  history: { title: string; team: string; from: string; to: string | null; why: string | null }[];
+  record: {
+    company: Company;
+    employeeCode: string | null;
+    classification: Classification;
+    position: string | null;
+    department: string | null;
+    hireDate: string;
+    regularizedOn: string | null;
+    leftOn: string | null;
+    leftReason: string | null;
+    mobile: string | null;
+    personalEmail: string | null;
+    birthDate: string | null;
+    address: string | null;
+    emergencyName: string | null;
+    emergencyPhone: string | null;
+    emergencyRelation: string | null;
+    /** Pay, bank and government IDs: null for anyone but HR, the CEO, the Admin and the person. */
+    salary: number | null;
+    allowance: number | null;
+    bankName: string | null;
+    bankAccount: string | null;
+    sss: string | null;
+    philhealth: string | null;
+    pagibig: string | null;
+    tin: string | null;
+  };
+  missing: string[];
+  /** edit: the record; login: the login email and password; leave: mark as left. */
+  can: { edit: boolean; login: boolean; leave: boolean };
+};
+
+export type HrRecordInput = Partial<{
+  company: Company;
+  employeeCode: string | null;
+  classification: Classification;
+  position: string | null;
+  department: string | null;
+  hireDate: string;
+  regularizedOn: string | null;
+  mobile: string | null;
+  personalEmail: string | null;
+  birthDate: string | null;
+  address: string | null;
+  emergencyName: string | null;
+  emergencyPhone: string | null;
+  emergencyRelation: string | null;
+  salary: number | null;
+  allowance: number | null;
+  bankName: string | null;
+  bankAccount: string | null;
+  sss: string | null;
+  philhealth: string | null;
+  pagibig: string | null;
+  tin: string | null;
+}>;
+
+/** What HR picks from to add a joiner: the seats nobody holds or is joining. */
+export type JoinerForm = {
+  today: string;
+  seats: { id: number; title: string; team: string; channel: string | null; area: string | null }[];
+};
+
+/** A new joiner. HR types the login email and password they hand over; nothing is sent. */
+export type JoinerInput = {
+  name: string;
+  mobile: string;
+  company: Company;
+  employeeCode?: string | null;
+  seatId: number;
+  startsOn: string;
+  classification: Classification;
+  position?: string | null;
+  salary?: number | null;
+  allowance?: number | null;
+  loginEmail: string;
+  password: string;
+};
+
+/** HR changes the email a person signs in with, or gives a new password (both typed by HR). */
+export type HrLoginInput = { email?: string | null; password?: string | null };

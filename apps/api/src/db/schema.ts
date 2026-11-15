@@ -39,6 +39,7 @@ export const person = pgTable("person", {
   mustChangePassword: boolean("must_change_password").notNull().default(false),
   failedLogins: integer("failed_logins").notNull().default(0),
   lockedUntil: at("locked_until"),
+  lastSignInAt: at("last_sign_in_at"),
   active: boolean("active").notNull().default(true),
   createdAt: at("created_at").notNull().defaultNow(),
 });

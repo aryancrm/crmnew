@@ -12,6 +12,7 @@ import { NewsList } from "../inventory/news";
 import { count, Facts, PageHead, Panel, Tile } from "../ui";
 import { AdminChannelsPage } from "./admin-channels";
 import { CeoHomePage } from "./ceo-home";
+import { HrPeoplePage } from "./hr-people";
 import { Attention } from "./inventory-overview";
 import { ManagementHome } from "./management-home";
 import { MedrepHome } from "./medrep-home";
@@ -51,6 +52,8 @@ export function Home() {
   if (me.role === "dispatch") return <OrdersToCheck desk="dispatch" />;
   if (me.role === "medrep") return <MedrepHome />;
   if (me.role === "online") return <Navigate to="/leads" replace />;
+  // HR's Home is People: everyone's record.
+  if (me.role === "hr") return <HrPeoplePage />;
   return <Desk />;
 }
 

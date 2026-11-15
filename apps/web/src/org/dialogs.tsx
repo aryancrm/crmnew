@@ -55,6 +55,11 @@ export const WORK: Record<Role, { label: string; title: string; does: string }> 
     does: "Works the enquiries and chats that come in online.",
   },
   admin: { label: "Admin", title: "System admin", does: "Sets the system up and adds people." },
+  hr: {
+    label: "HR",
+    title: "HR officer",
+    does: "Adds new joiners, keeps people's records, attendance, leave and pay.",
+  },
   ceo: { label: "CEO", title: "CEO", does: "Sees the whole company." },
 };
 /** The order the work is offered in, sales first. */
@@ -66,6 +71,7 @@ export const WORK_ORDER: Role[] = [
   "finance",
   "dispatch",
   "inventory",
+  "hr",
   "admin",
   "ceo",
 ];

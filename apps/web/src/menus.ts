@@ -303,13 +303,20 @@ const reportsApp: Space = {
   ],
 };
 
-/** HR: who is working and each person's attendance (leave, forms and payroll come next). */
+/** HR: people's records and who is working (leave, forms and payroll come next). */
 const hrApp: Space = {
   key: "hr",
   label: "HR",
   icon: CalendarClock,
   tone: "bg-teal-600 text-white",
-  groups: [{ items: [{ to: "/hr/attendance", label: "Who's working", icon: CalendarClock }] }],
+  groups: [
+    {
+      items: [
+        { to: "/hr/people", label: "People", icon: Users },
+        { to: "/hr/attendance", label: "Who's working", icon: CalendarClock },
+      ],
+    },
+  ],
 };
 
 /** The apps on the Admin's and the CEO's page of apps, in order. */
@@ -506,6 +513,16 @@ function ownDesk(me: Me): Space {
             items: [stockLink, { to: "/customers", label: "Customers", icon: Users }],
           },
         ],
+      };
+    case "hr":
+      // HR's Home is People: everyone's record, new joiners, who left.
+      return {
+        ...desk([
+          { ...home, label: "People", icon: Users },
+          { to: "/hr/people?view=joining", label: "Joining", icon: UserPlus },
+          { to: "/hr/attendance", label: "Who's working", icon: CalendarClock },
+        ]),
+        icon: Users,
       };
     case "inventory":
       return inventoryApp(me);

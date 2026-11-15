@@ -90,4 +90,6 @@ export async function buildDemoOrg(tx: Runner): Promise<void> {
   await seat(ops, "Finance officer", "finance", "fiona");
   await seat(ops, "Dispatch lead", "dispatch", "marco");
   await seat(ops, "Inventory officer", "inventory", "irene");
+  const hr = await unit("HR", "department", company, null, 9);
+  await seat(hr, "HR officer", "hr", "helen", { lead: true });
 }

@@ -21,7 +21,7 @@ import {
 } from "./work-time";
 
 /** Who sees everyone's attendance and puts a day right. */
-export const ATTENDANCE_ALL_ROLES: Role[] = ["ceo", "admin"];
+export const ATTENDANCE_ALL_ROLES: Role[] = ["ceo", "admin", "hr"];
 /** Who sees their own team's (whoever reports to them, down the line). */
 const LEAD_ROLES: Role[] = ["team_lead", "manager"];
 

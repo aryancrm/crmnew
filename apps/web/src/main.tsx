@@ -11,6 +11,7 @@ import { ChannelsPage } from "./pages/channels";
 import { Customer } from "./pages/customer";
 import { Customers } from "./pages/customers";
 import { Home } from "./pages/home";
+import { HrPeoplePage, HrPersonPage } from "./pages/hr-people";
 import { InboxPage } from "./pages/inbox";
 import { Inventory } from "./pages/inventory";
 import { InventoryOverview } from "./pages/inventory-overview";
@@ -110,6 +111,8 @@ createRoot(root).render(
             <Route path="team" element={<TeamSalesPage />} />
             <Route path="company" element={<OrgChartPage />} />
             <Route path="people" element={<OrgPage />} />
+            <Route path="hr/people" element={<HrPeoplePage />} />
+            <Route path="hr/people/:id" element={<HrPersonPage key="person" />} />
             <Route path="hr/attendance" element={<AttendancePage />} />
             <Route path="hr/attendance/:id" element={<AttendanceMonthPage key="month" />} />
             <Route path="admin/channels" element={<AdminChannelsPage />} />
