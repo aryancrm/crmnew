@@ -10,6 +10,7 @@ import { seedDemoDispatch } from "./dispatch/seed";
 import { seedDemoFinance } from "./finance/seed";
 import { seedDemoAttendance } from "./hr/seed";
 import { seedDemoInventory } from "./inventory/seed";
+import { makeFirstAdmin } from "./first-admin";
 import { startKeepAwake } from "./keep-awake";
 import { startChannelJobs } from "./online/inbox";
 import { seedDemoOnline } from "./online/seed";
@@ -29,6 +30,8 @@ const db = openDatabase({
 
 const applied = await migrate(db);
 if (applied.length) console.log(`database: applied ${applied.join(", ")}`);
+
+if (await makeFirstAdmin(db)) console.log("database: the first System admin made");
 
 if (process.env.SEED_DEMO === "1") {
   const password = process.env.SEED_PASSWORD;

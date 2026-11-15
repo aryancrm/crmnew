@@ -11,7 +11,7 @@ import { projectOrg } from "./org/service";
 import type { Role } from "./people/roles";
 
 /** Each channel with the Division its orders carry (none for RX: its doctors' orders say). */
-const CHANNELS: [code: string, name: string, division: string | null][] = [
+export const CHANNELS: [code: string, name: string, division: string | null][] = [
   ["HOSP", "Hospitals", "HOS"],
   ["RX", "Doctors", null],
   ["B2B", "Distributors and drugstores", "B2B"],
