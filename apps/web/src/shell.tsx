@@ -253,7 +253,7 @@ export function Shell() {
               }
               className={({ isActive }) =>
                 `flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] ${
-                  (item.children ? inFolder(item, location.pathname) : openOf(item.to, isActive))
+                  (item.children ? inFolder(item, location) : openOf(item.to, isActive))
                     ? "font-semibold text-brand"
                     : "text-slate-500"
                 }`
@@ -384,11 +384,18 @@ function PageBack({ trail }: { trail: string[] }) {
   );
 }
 
-/** Whether a page of a folder (or the folder's own) is open: it then shows unfolded. */
-function inFolder(item: MenuItem, pathname: string): boolean {
+/** Whether a page of a folder (or the folder's own) is open: it then shows unfolded. A filtered
+ *  link (/orders?stuck=1) counts only on that list with that filter, not on every order. */
+function inFolder(item: MenuItem, location: { pathname: string; search: string }): boolean {
   return allItems(item.children ?? [item]).some((one) => {
-    const path = one.to.split("?")[0] ?? "";
-    return path !== "/" && (pathname === path || pathname.startsWith(`${path}/`));
+    const [path = "", query] = one.to.split("?");
+    if (path === "/") return false;
+    if (query) {
+      if (location.pathname !== path) return false;
+      const now = new URLSearchParams(location.search);
+      return [...new URLSearchParams(query)].every(([key, value]) => now.get(key) === value);
+    }
+    return location.pathname === path || location.pathname.startsWith(`${path}/`);
   });
 }
 
@@ -542,7 +549,7 @@ function MenuList({
   };
 
   const folder = (item: MenuItem) => {
-    const here = inFolder(item, location.pathname);
+    const here = inFolder(item, location);
     const open = folded[item.label] ?? here;
     // Folded, it still says what waits inside.
     const waiting = allItems(item.children ?? []).reduce(
