@@ -137,12 +137,8 @@ describe("a team lead's team", () => {
 
   it("is every team under a head; the CEO picks any box; a MedRep has none", async () => {
     const head = await board("vanessa");
-    expect(head.units.map((unit) => unit.name)).toEqual([
-      "Hospital Division",
-      "NCR 1",
-      "Mindanao",
-      "Patient Assistance",
-    ]);
+    // The Patient Assistance Program is its own channel, not the hospitals' head's.
+    expect(head.units.map((unit) => unit.name)).toEqual(["Hospital Division", "NCR 1", "Mindanao"]);
     expect(head.seats.some((seat) => seat.person?.name === "Daniel" && seat.lead)).toBe(true);
     expect(head.seats.some((seat) => seat.person?.name === "Ryan")).toBe(true);
     // Mindanao's lead seat is empty: it is Vanessa's to fill or cover.

@@ -60,6 +60,30 @@ describe("the Admin panel's channels", () => {
     expect(channels.find((one) => one.code === "ONLINE")?.division).toBe("B2C");
   });
 
+  it("keeps the Patient Assistance Program a channel of its own, and stands a box alone when moved", async () => {
+    let now = await tree();
+    const byId = new Map(now.units.map((unit) => [unit.id, unit]));
+    const pap = now.units.find((unit) => unit.channel?.code === "PAP");
+    expect(pap?.kind).toBe("business");
+    expect(byId.get(pap?.parentId ?? 0)?.kind).toBe("company");
+    const hospital = now.units.find((unit) => unit.name === "Hospital Division");
+    expect(
+      now.units.filter((unit) => unit.parentId === hospital?.id).map((unit) => unit.name),
+    ).toEqual(["NCR 1", "Mindanao"]);
+    // A line moved straight under the company becomes a business of its own.
+    const company = now.units.find((unit) => unit.kind === "company");
+    const md = now.units.find((unit) => unit.name === "MD Telesales");
+    expect(md?.kind).toBe("line");
+    expect(
+      (await send("admin", `/api/org/units/${md?.id}`, { parentId: company?.id }, "PATCH")).status,
+    ).toBe(200);
+    now = await tree();
+    expect(now.units.find((unit) => unit.id === md?.id)).toMatchObject({
+      kind: "business",
+      parentId: company?.id,
+    });
+  });
+
   it("adds a channel whose people, customers and orders work like every other", async () => {
     // Only the CEO and the Admin add channels, with a short code and a Division from the list.
     expect(

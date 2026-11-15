@@ -67,7 +67,6 @@ export async function buildDemoOrg(tx: Runner): Promise<void> {
   await seat(ncr1, "MedRep", "medrep", "ryan", { areaId: who("ryan")?.areaId ?? null });
   const mindanao = await unit("Mindanao", "team", hospital, null, 2);
   await seat(mindanao, "Area manager", "team_lead", null, { lead: true });
-  await unit("Patient Assistance", "line", hospital, "PAP", 3);
 
   const rx = await unit("Prescription Business", "business", company, "RX", 2);
   await seat(rx, "RX head", "manager", null, { lead: true });
@@ -79,13 +78,15 @@ export async function buildDemoOrg(tx: Runner): Promise<void> {
   await unit("B2B Telesales", "line", marketing, "B2B", 1);
   await unit("Government Bidding", "line", marketing, "BID", 2);
   await unit("Modern Trade", "business", company, "MT", 4);
+  // The Patient Assistance Program is a channel of its own, never inside the hospitals'.
+  await unit("Patient Assistance", "business", company, "PAP", 5);
 
-  const online = await unit("Online", "business", company, "ONLINE", 5);
+  const online = await unit("Online", "business", company, "ONLINE", 6);
   await seat(online, "Online desk lead", "online", "jane", { lead: true });
 
-  const management = await unit("Management", "department", company, null, 6);
+  const management = await unit("Management", "department", company, null, 7);
   await seat(management, "Operations management", "management", "sarla");
-  const ops = await unit("Supply Chain, Ops & Finance", "department", company, null, 7);
+  const ops = await unit("Supply Chain, Ops & Finance", "department", company, null, 8);
   await seat(ops, "Finance officer", "finance", "fiona");
   await seat(ops, "Dispatch lead", "dispatch", "marco");
   await seat(ops, "Inventory officer", "inventory", "irene");

@@ -51,6 +51,8 @@ function shapeOf(tree: OrgTree, channel: Channel) {
   const teams: { unit: OrgUnit; path: string[] }[] = [];
   const walk = (unit: OrgUnit, path: string[]) => {
     for (const kid of kids.get(unit.id) ?? []) {
+      // A box of another channel sitting under this one is that channel's, never a team here.
+      if (kid.channel && kid.channel.id !== channel.id) continue;
       teams.push({ unit: kid, path });
       walk(kid, [...path, kid.name]);
     }
@@ -67,8 +69,11 @@ function shapeOf(tree: OrgTree, channel: Channel) {
   const asks = tree.requests.filter(
     (request) => request.status === "open" && unitIds.has(request.unitId),
   );
+  const parent = top?.parentId ? byId.get(top.parentId) : undefined;
   return {
     top,
+    /** The box of another channel this channel's box sits inside, when it does (it shouldn't). */
+    insideOf: parent?.channel && parent.channel.id !== channel.id ? parent : null,
     head,
     teams,
     leads,
@@ -195,6 +200,9 @@ function ChannelCard({ channel, shape }: { channel: Channel; shape: ReturnType<t
           </div>
           <div className="mt-0.5 text-xs text-slate-500">
             {channel.division ? `Division ${channel.division}` : "No Division set"}
+            {shape.insideOf && (
+              <span className="font-semibold text-amber-700"> · inside {shape.insideOf.name}</span>
+            )}
           </div>
         </div>
         {shape.asks.length > 0 && (
@@ -448,6 +456,14 @@ function ChannelPage({ tree, channel }: { tree: OrgTree; channel: Channel }) {
   );
   // Seats in the channel's own box other than its head: people straight under the head.
   const direct = top?.seats.filter((seat) => !seat.lead) ?? [];
+  /** Moves the channel's box out of another channel's, straight under the company. */
+  const standAlone = () =>
+    retire.run(async () => {
+      const root = tree.units.find((unit) => unit.kind === "company");
+      if (!top || !root) return;
+      await api(`/api/org/units/${top.id}`, { method: "PATCH", body: { parentId: root.id } });
+      await queries.invalidateQueries({ queryKey: ["org"] });
+    });
 
   return (
     <div className="flex flex-col gap-4">
@@ -490,6 +506,21 @@ function ChannelPage({ tree, channel }: { tree: OrgTree; channel: Channel }) {
               `${shape.areas.length} ${shape.areas.length === 1 ? "area" : "areas"}`,
             ].join(" · ")}
           </p>
+          {shape.insideOf && (
+            <p className="mt-2 inline-flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900 ring-1 ring-amber-200">
+              Sits inside {shape.insideOf.name}: it counts there too.
+              {can && (
+                <button
+                  type="button"
+                  disabled={retire.busy}
+                  onClick={() => standAlone()}
+                  className="font-semibold text-amber-800 underline hover:text-amber-950"
+                >
+                  Make it a channel of its own
+                </button>
+              )}
+            </p>
+          )}
         </div>
         {can && (
           <div className="flex flex-wrap items-center gap-2">

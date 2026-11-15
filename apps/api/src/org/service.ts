@@ -1065,7 +1065,10 @@ export async function updateUnit(
       );
       if (loop)
         throw new Refusal(400, "invalid", `${unit.name} can't go under its own team.`, "parentId");
-      await unitRow(tx, input.parentId);
+      const parent = await unitRow(tx, input.parentId);
+      // Straight under the company a line or team stands as a business of its own.
+      if (parent.kind === "company" && (unit.kind === "line" || unit.kind === "team"))
+        await tx.execute(sql`update org_unit set kind = 'business' where id = ${unit.id}`);
     }
     const name = input.name === undefined ? unit.name : input.name.trim();
     if (!name) throw new Refusal(400, "invalid", "Name the team.", "name");
