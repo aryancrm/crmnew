@@ -4024,3 +4024,16 @@ export type OrderReturns = {
   }[];
   can: { ask: boolean };
 };
+
+// ---------------------------------------------------------------- data checks
+
+export type DataCheck = {
+  key: string;
+  label: string;
+  ok: boolean;
+  /** How many things are wrong. */
+  count: number;
+  /** The first few, by name. */
+  problems: string[];
+};
+export type DataChecks = { at: string; ok: boolean; checks: DataCheck[] };

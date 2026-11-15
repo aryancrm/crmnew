@@ -17,6 +17,7 @@ import {
   startSession,
   whoIs,
 } from "./auth/sessions";
+import { checkRoutes } from "./checks/routes";
 import { customerRoutes } from "./customers/routes";
 import { countQueries, type Database } from "./db/index";
 import { person } from "./db/schema";
@@ -252,6 +253,7 @@ export function createApp(db: Database, options: AppOptions) {
   overviewRoutes(app, db, signedIn);
   // Before the orders' own addresses: /api/orders/:id/returns is theirs.
   returnRoutes(app, db, signedIn);
+  checkRoutes(app, db, signedIn);
   orderRoutes(app, db, signedIn);
   financeRoutes(app, db, signedIn);
   dispatchRoutes(app, db, signedIn);

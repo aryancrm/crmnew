@@ -272,3 +272,12 @@ describe("returns", () => {
     expect(await invoiceOf(orderId)).toEqual(before);
   });
 });
+
+describe("the data, checked against itself", () => {
+  it("comes out clean after orders, payments, deliveries, returns and refunds", async () => {
+    const { runChecks } = await import("../checks/integrity");
+    const result = await runChecks(db);
+    const wrong = result.checks.filter((check) => !check.ok);
+    expect(wrong.map((check) => `${check.label}: ${check.problems.join("; ")}`)).toEqual([]);
+  });
+});
