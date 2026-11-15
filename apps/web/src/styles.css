@@ -1,0 +1,156 @@
+@import "tailwindcss";
+
+/* The look is the old CRM's own (frontend/app/globals.css): Inter, the quiet green, slate
+   greys, soft cards. Tables follow its copy of Zoho Inventory's. Screens use these names,
+   never raw colours. */
+@theme {
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "Inter Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
+
+  --color-ground: #f7f8fa;
+  --color-line: #e2e8f0;
+  --color-line-soft: #eef1f5;
+  --color-field: #cbd5e1;
+  --color-ink: #111827;
+  --color-ink-2: #64748b;
+  --color-hover: #f8fafc;
+  --color-head: #f1f5f9;
+
+  --color-brand: #047857;
+  --color-brand-dark: #065f46;
+  --color-brand-tint: #ecfdf5;
+
+  --color-good: #15803d;
+  --color-good-tint: #effaf3;
+  --color-good-fill: #16a34a;
+  --color-warn: #b45309;
+  --color-warn-tint: #fff8eb;
+  --color-warn-fill: #d97706;
+  --color-bad: #b91c1c;
+  --color-bad-tint: #fdf2f2;
+  --color-bad-fill: #dc2626;
+  --color-info: #0369a1;
+  --color-info-tint: #eff7fc;
+  --color-info-fill: #0284c7;
+
+  /* Zoho Inventory's table and link colours, as the old CRM measured them. */
+  --color-zoho-link: #1c5bd9;
+  --color-zoho-th: #6c718a;
+  --color-zoho-head: #f9f9fb;
+  --color-zoho-line: #ebeaf2;
+
+  --shadow-card: 0 1px 2px 0 rgb(15 23 42 / 0.025), 0 8px 24px -16px rgb(15 23 42 / 0.16), 0 0 0 1px rgb(15 23 42 / 0.035);
+  --shadow-pop: 0 8px 24px -6px rgb(15 23 42 / 0.16), 0 0 0 1px rgb(15 23 42 / 0.06);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* A phone zooms the page when a field's text is under 16px. */
+@media (pointer: coarse) {
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+
+@layer components {
+  /* A text box or select, as the old CRM's Case details draws them: 40px high, a slate-300
+     border, 8px corners, the green ring on focus. */
+  .field {
+    min-height: 2.5rem;
+    width: 100%;
+    border-radius: 0.5rem;
+    border: 1px solid #cbd5e1;
+    background: #fff;
+    padding: 0.5rem 0.75rem;
+    font-size: 14px;
+    color: #0f172a;
+    transition: border-color 150ms, box-shadow 150ms;
+  }
+  .field:focus {
+    border-color: #059669;
+    outline: none;
+    box-shadow: 0 0 0 2px #d1fae5;
+  }
+  .field:disabled {
+    background: #f8fafc;
+    color: #94a3b8;
+  }
+  .field::placeholder {
+    color: #94a3b8;
+  }
+  @media (pointer: coarse) {
+    .field {
+      min-height: 2.75rem;
+      font-size: 16px;
+    }
+  }
+
+  /* A table of records, after Zoho Inventory: small grey capital headings on a pale band,
+     a fine line between rows, a number as a blue link. */
+  .t {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .t th {
+    padding: 0.625rem 0.75rem;
+    border-bottom: 1px solid var(--color-zoho-line);
+    background: var(--color-zoho-head);
+    text-align: left;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: var(--color-zoho-th);
+    white-space: nowrap;
+  }
+  .t td {
+    padding: 0.75rem;
+    border-bottom: 1px solid var(--color-zoho-line);
+    vertical-align: middle;
+  }
+  .t tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  .t tbody tr:hover {
+    background: #f8f8fc;
+  }
+  .t .num {
+    text-align: right;
+  }
+  .t a {
+    color: var(--color-zoho-link);
+  }
+}
+
+/* Keep the chevron clear of the edge on every native dropdown. */
+select.field {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m7 10 5 5 5-5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  padding-right: 2.25rem;
+}

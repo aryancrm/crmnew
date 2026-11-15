@@ -1,0 +1,7 @@
+packages:
+  - apps/*
+
+# pnpm runs a dependency's install scripts only when allowed here.
+allowBuilds:
+  esbuild: true
+  "@tailwindcss/oxide": true

@@ -1,0 +1,11 @@
+{
+  "name": "2mg-crm",
+  "private": true,
+  "packageManager": "pnpm@12.14.0",
+  "scripts": {
+    "dev:api": "pnpm --filter @2mg/api dev",
+    "dev:web": "pnpm --filter @2mg/web dev",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "name": "@2mg/api",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./types": "./src/types.ts",
+    "./landed": "./src/purchases/landed.ts",
+    "./journey": "./src/online/journey.ts",
+    "./divisions": "./src/orders/divisions.ts",
+    "./late": "./src/orders/late.ts",
+    "./phone": "./src/phone.ts"
+  },
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "start": "tsx src/server.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@electric-sql/pglite": "0.5.10",
+    "@hono/node-server": "2.1.5",
+    "drizzle-orm": "0.45.4",
+    "hono": "4.13.13",
+    "imapflow": "2.5.8",
+    "mailparser": "3.10.0",
+    "nodemailer": "10.1.7",
+    "pdf-lib": "1.17.1",
+    "postgres": "3.4.9",
+    "tsx": "4.23.15",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/mailparser": "3.9.0",
+    "@types/node": "^24.0.0",
+    "@types/nodemailer": "8.0.2",
+    "typescript": "5.9.3",
+    "vitest": "5.0.5"
+  }
+}

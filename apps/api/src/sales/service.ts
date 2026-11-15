@@ -1,0 +1,612 @@
+// Sales against target, read one way for every page. A sale is an invoice Finance made (not
+// cancelled), on the Manila day it was made, counted for the order's MedRep and its channel:
+// what Zoho's "Sales by salesperson" and the CEO's sheet count. The team pages, the channel
+// report, the CEO Home and the company tree all read these functions.
+
+import { type SQL, sql } from "drizzle-orm";
+import { type Database, rows } from "../db/index";
+import { Refusal } from "../http";
+import { STATUS_LABEL } from "../orders/rules";
+import { ROLE_LABEL, type Role } from "../people/roles";
+import type {
+  CeoAlert,
+  CeoHome,
+  ChannelFigures,
+  CompanyTreeData,
+  Me,
+  MonthFacts,
+  OrderStatus,
+  SellerFigures,
+  TeamSales,
+} from "../types";
+import {
+  boundsOf,
+  monthBounds,
+  monthFacts,
+  paceTone,
+  pctOf,
+  periodBefore,
+  periodFacts,
+} from "./rules";
+
+const SELLERS: readonly Role[] = ["medrep", "team_lead", "manager", "online"];
+const WHOLE: readonly Role[] = ["ceo", "admin"];
+const LEADS: readonly Role[] = ["team_lead", "manager"];
+const ids = (values: number[]) =>
+  sql.join(
+    values.map((value) => sql`${value}`),
+    sql`, `,
+  );
+const list = (values: readonly string[]) =>
+  sql.join(
+    values.map((value) => sql`${value}`),
+    sql`, `,
+  );
+
+/** Invoices (alias `i`) that count as sold in a month. */
+const soldIn = (facts: MonthFacts): SQL => {
+  const { first, next } = boundsOf(facts);
+  return sql`i.status <> 'cancelled' and i.issued_on >= ${first}::date and i.issued_on < ${next}::date`;
+};
+
+type Figures = {
+  sold: number;
+  today: number;
+  placed: number;
+  placedValue: number;
+  waiting: number;
+  held: number;
+  target: number | null;
+};
+const NOTHING: Figures = {
+  sold: 0,
+  today: 0,
+  placed: 0,
+  placedValue: 0,
+  waiting: 0,
+  held: 0,
+  target: null,
+};
+
+/** Each person's month, by the orders that name them as MedRep. */
+async function figuresOf(
+  db: Database,
+  personIds: number[],
+  facts: MonthFacts,
+): Promise<Map<number, Figures>> {
+  if (personIds.length === 0) return new Map();
+  const { first, next } = monthBounds(facts.month);
+  const [sold, placed, now, targets] = await Promise.all([
+    rows<{ id: number; sold: number; today: number }>(
+      db,
+      sql`select o.medrep_id::int as id, sum(i.total)::float8 as sold,
+          coalesce(sum(i.total) filter (where i.issued_on = ${facts.today}::date), 0)::float8 as today
+        from invoice i join sales_order o on o.id = i.order_id
+        where ${soldIn(facts)} and o.medrep_id in (${ids(personIds)}) group by o.medrep_id`,
+    ),
+    rows<{ id: number; placed: number; value: number }>(
+      db,
+      sql`select medrep_id::int as id, count(*)::int as placed, sum(total)::float8 as value from sales_order
+        where status not in ('draft', 'cancelled') and medrep_id in (${ids(personIds)})
+          and (coalesce(submitted_at, created_at) at time zone 'Asia/Manila')::date >= ${first}::date
+          and (coalesce(submitted_at, created_at) at time zone 'Asia/Manila')::date < ${next}::date
+        group by medrep_id`,
+    ),
+    rows<{ id: number; waiting: number; held: number }>(
+      db,
+      sql`select medrep_id::int as id,
+          count(*) filter (where status in ('pending_approval', 'finance_check', 'ready_for_invoice'))::int as waiting,
+          count(*) filter (where status in ('on_hold', 'exception') or (status = 'draft' and flag_reason is not null))::int as held
+        from sales_order where medrep_id in (${ids(personIds)}) group by medrep_id`,
+    ),
+    rows<{ id: number; amount: number }>(
+      db,
+      sql`select person_id::int as id, amount::float8 as amount from sales_target where month = ${first}::date and person_id in (${ids(personIds)})`,
+    ),
+  ]);
+  const map = new Map<number, Figures>();
+  for (const id of personIds) {
+    const s = sold.find((row) => row.id === id);
+    const p = placed.find((row) => row.id === id);
+    const n = now.find((row) => row.id === id);
+    map.set(id, {
+      sold: s?.sold ?? 0,
+      today: s?.today ?? 0,
+      placed: p?.placed ?? 0,
+      placedValue: p?.value ?? 0,
+      waiting: n?.waiting ?? 0,
+      held: n?.held ?? 0,
+      target: targets.find((row) => row.id === id)?.amount ?? null,
+    });
+  }
+  return map;
+}
+
+type PersonRow = {
+  id: number;
+  name: string;
+  role: Role;
+  title: string | null;
+  area: string | null;
+  channel: string | null;
+  reportsToId: number | null;
+};
+
+/** Puts people in the order of their tree (each one followed by those under them), with depth. */
+function treeOrder(people: PersonRow[], topIds: number[]): (PersonRow & { depth: number })[] {
+  const out: (PersonRow & { depth: number })[] = [];
+  const seen = new Set<number>();
+  const walk = (person: PersonRow, depth: number) => {
+    if (seen.has(person.id)) return;
+    seen.add(person.id);
+    out.push({ ...person, depth });
+    for (const under of people.filter((row) => row.reportsToId === person.id))
+      walk(under, depth + 1);
+  };
+  for (const top of people.filter(
+    (row) => topIds.includes(row.id) || !people.some((other) => other.id === row.reportsToId),
+  ))
+    walk(top, 0);
+  return out;
+}
+
+const personColumns = sql`p.id::int as id, p.name, p.role, p.title, a.name as area, ch.code as channel, p.reports_to::int as "reportsToId"`;
+const personFrom = sql`from person p left join area a on a.id = p.area_id left join channel ch on ch.id = p.channel_id`;
+
+/** A team's month: everyone under a team lead or manager (the whole company for the Admin and
+ *  the CEO), each against their target, and the team's orders stopped now. */
+export async function teamSales(db: Database, me: Me, asked?: string): Promise<TeamSales> {
+  const whole = WHOLE.includes(me.role);
+  if (!whole && !LEADS.includes(me.role))
+    throw new Refusal(
+      403,
+      "not_allowed",
+      "Team sales are for team leads, managers, the CEO and the Admin.",
+    );
+  const facts = monthFacts(asked);
+  const people = await rows<PersonRow>(
+    db,
+    whole
+      ? sql`select ${personColumns} ${personFrom} where p.active and p.role in (${list(SELLERS)})
+          order by ch.sort nulls last, p.name`
+      : sql`with recursive team as (
+            select id from person where reports_to = ${me.id}
+            union all select q.id from person q join team t on q.reports_to = t.id
+          )
+          select ${personColumns} ${personFrom} where p.active and p.id in (select id from team) and p.role in (${list(SELLERS)})
+          order by p.name`,
+  );
+  const ordered = treeOrder(people, []);
+  const [figures, lead, stopped, everything] = await Promise.all([
+    figuresOf(
+      db,
+      ordered.map((person) => person.id),
+      facts,
+    ),
+    whole
+      ? Promise.resolve([])
+      : rows<{ name: string; title: string | null; channel: string | null }>(
+          db,
+          sql`select p.name, p.title, ch.name as channel from person p left join channel ch on ch.id = p.channel_id where p.id = ${me.id}`,
+        ),
+    ordered.length === 0
+      ? Promise.resolve([])
+      : rows<Omit<TeamSales["stopped"][number], "statusLabel">>(
+          db,
+          sql`select o.id::int as id, o.code, c.name as customer, rep.name as medrep, o.status, o.flag_reason as reason
+            from sales_order o join customer c on c.id = o.customer_id join person rep on rep.id = o.medrep_id
+            where o.medrep_id in (${ids(ordered.map((person) => person.id))})
+              and (o.status in ('on_hold', 'exception') or (o.status = 'draft' and o.flag_reason is not null))
+            order by o.updated_at desc limit 20`,
+        ),
+    // The company's whole month counts every invoice, whoever's order it was.
+    whole
+      ? rows<{ sold: number; today: number }>(
+          db,
+          sql`select coalesce(sum(i.total), 0)::float8 as sold, coalesce(sum(i.total) filter (where i.issued_on = ${facts.today}::date), 0)::float8 as today
+            from invoice i where ${soldIn(facts)}`,
+        )
+      : Promise.resolve([]),
+  ]);
+  const rowsOut: SellerFigures[] = ordered.map((person) => {
+    const f = figures.get(person.id) ?? NOTHING;
+    return {
+      personId: person.id,
+      name: person.name,
+      roleLabel: ROLE_LABEL[person.role],
+      title: person.title,
+      area: person.area,
+      channel: person.channel,
+      reportsToId: person.reportsToId,
+      depth: person.depth,
+      target: f.target,
+      sold: f.sold,
+      today: f.today,
+      placed: f.placed,
+      placedValue: f.placedValue,
+      waiting: f.waiting,
+      held: f.held,
+      pct: pctOf(f.sold, f.target),
+      tone: paceTone(f.sold, f.target, facts.pace),
+    };
+  });
+  const sum = (key: "sold" | "today" | "placed" | "placedValue") =>
+    rowsOut.reduce((total, row) => total + row[key], 0);
+  const targets = rowsOut.filter((row) => row.target !== null);
+  const target = targets.length
+    ? targets.reduce((total, row) => total + (row.target ?? 0), 0)
+    : null;
+  const sold = whole ? (everything[0]?.sold ?? 0) : sum("sold");
+  return {
+    ...facts,
+    lead: whole ? null : (lead[0] ?? null),
+    total: {
+      target,
+      sold,
+      today: whole ? (everything[0]?.today ?? 0) : sum("today"),
+      placed: sum("placed"),
+      placedValue: sum("placedValue"),
+      pct: pctOf(sold, target),
+      tone: paceTone(sold, target, facts.pace),
+    },
+    people: rowsOut,
+    stopped: stopped.map((row) => ({
+      ...row,
+      statusLabel: row.status === "draft" ? "Sent back" : STATUS_LABEL[row.status as OrderStatus],
+    })),
+    can: { setTargets: true },
+  };
+}
+
+/** Monthly targets (alias `t`) shared out over the days counted: a whole month counts whole. */
+const targetShare = (facts: MonthFacts): SQL => {
+  const { first, next } = boundsOf(facts);
+  return sql`t.amount * greatest(0, least(${next}::date, (t.month + interval '1 month')::date) - greatest(${first}::date, t.month))::float8
+    / ((t.month + interval '1 month')::date - t.month)`;
+};
+
+/** Each channel's month: what it sold (its orders' invoices) against its people's targets. */
+export async function channelSales(db: Database, facts: MonthFacts): Promise<ChannelFigures[]> {
+  const found = await rows<Omit<ChannelFigures, "pct" | "tone">>(
+    db,
+    sql`select ch.id::int as id, ch.code, ch.name, h.name as head,
+        (select nullif(sum(${targetShare(facts)}), 0) from sales_target t join person p on p.id = t.person_id
+          where p.channel_id = ch.id and p.active)::float8 as target,
+        coalesce((select sum(i.total) from invoice i join sales_order o on o.id = i.order_id
+          where o.channel_id = ch.id and ${soldIn(facts)}), 0)::float8 as sold,
+        coalesce((select sum(i.total) from invoice i join sales_order o on o.id = i.order_id
+          where o.channel_id = ch.id and ${soldIn(facts)} and i.issued_on = ${facts.today}::date), 0)::float8 as today
+      from channel ch left join person h on h.id = ch.head_id
+      order by ch.sort, ch.id`,
+  );
+  return found.map((row) => ({
+    ...row,
+    pct: pctOf(row.sold, row.target),
+    tone: paceTone(row.sold, row.target, facts.pace),
+  }));
+}
+
+/** The CEO's first screen: the month in four figures, the company in summaries, the channels
+ *  against their targets, and what needs the CEO now. */
+export async function ceoHome(
+  db: Database,
+  me: Me,
+  asked?: string,
+  days?: { from?: string; to?: string },
+): Promise<CeoHome> {
+  if (!WHOLE.includes(me.role))
+    throw new Refusal(403, "not_allowed", "The CEO Home is for the CEO and the Admin.");
+  const facts = periodFacts({ month: asked, ...days });
+  const before = periodBefore(facts);
+  const { first, next } = boundsOf(facts);
+  const today = facts.today;
+  const soon = new Date(Date.parse(`${today}T00:00:00Z`) + 90 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  // Ordered from suppliers and not received yet: what will be paid out (in pesos, landed).
+  const [buying] = await rows<{ count: number; value: number }>(
+    db,
+    sql`select count(*)::int as count, coalesce(sum(goods_total + extras_total), 0)::float8 as value
+      from purchase where state = 'ordered'`,
+  );
+  const [channels, totals, money, orders, dispatch, stock, counts] = await Promise.all([
+    channelSales(db, facts),
+    rows<{
+      achieved: number;
+      today: number;
+      collected: number;
+      before: number;
+      target: number | null;
+    }>(
+      db,
+      sql`select
+          coalesce((select sum(i.total) from invoice i where ${soldIn(facts)}), 0)::float8 as achieved,
+          coalesce((select sum(i.total) from invoice i where ${soldIn(facts)} and i.issued_on = ${today}::date), 0)::float8 as today,
+          coalesce((select sum(amount) from payment where active and paid_on >= ${first}::date and paid_on < ${next}::date), 0)::float8 as collected,
+          coalesce((select sum(amount) from payment where active and paid_on >= ${before.from}::date and paid_on <= ${before.to}::date), 0)::float8 as before,
+          (select nullif(sum(${targetShare(facts)}), 0) from sales_target t join person p on p.id = t.person_id where p.active)::float8 as target`,
+    ),
+    rows<{ owed: number; overdue: number; late: number; refunds: number; cod: number }>(
+      db,
+      sql`select coalesce(sum(i.total - i.paid) filter (where i.status = 'open'), 0)::float8 as owed,
+          coalesce(sum(i.total - i.paid) filter (where i.status = 'open' and i.terms = 'cod' and o.status = 'shipped'), 0)::float8 as cod,
+          coalesce(sum(i.total - i.paid) filter (where i.status = 'open' and i.due_on < ${today}::date and not (i.terms in ('cod', 'days') and o.status <> 'completed')), 0)::float8 as overdue,
+          count(distinct i.customer_id) filter (where i.status = 'open' and i.due_on < (${today}::date - 60) and not (i.terms in ('cod', 'days') and o.status <> 'completed'))::int as late,
+          coalesce(sum(i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points') - i.refunded) filter (where i.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points') > i.refunded), 0)::float8 as refunds
+        from invoice i join sales_order o on o.id = i.order_id`,
+    ),
+    rows<CeoHome["orders"]>(
+      db,
+      sql`select count(*) filter (where status = 'pending_approval')::int as awaiting,
+          count(*) filter (where status in ('finance_check', 'ready_for_invoice'))::int as finance,
+          count(*) filter (where status in ('on_hold', 'exception'))::int as "onHold",
+          count(*) filter (where status in ('pending_approval', 'finance_check', 'ready_for_invoice') and coalesce(status_since, updated_at) < now() - interval '48 hours')::int as stuck,
+          (max(extract(epoch from now() - coalesce(submitted_at, created_at)) / 3600) filter (where status = 'pending_approval'))::int as "oldestHours",
+          count(*) filter (where status not in ('draft', 'cancelled') and (coalesce(submitted_at, created_at) at time zone 'Asia/Manila')::date = ${today}::date)::int as today
+        from sales_order`,
+    ),
+    rows<CeoHome["dispatch"]>(
+      db,
+      sql`select count(*) filter (where status = 'ready_for_dispatch')::int as "toPack",
+          count(*) filter (where status = 'packing')::int as "toShip",
+          count(*) filter (where status = 'shipped')::int as "onTheWay",
+          count(*) filter (where status = 'completed' and delivered_on = ${today}::date)::int as "deliveredToday"
+        from sales_order`,
+    ),
+    rows<CeoHome["stock"]>(
+      db,
+      sql`with shelf as (
+            select m.id, m.reorder_level, coalesce(sum(s.qty) filter (where b.expires_on >= ${today}::date), 0) as qty
+            from medicine m left join batch b on b.medicine_id = m.id left join stock s on s.batch_id = b.id
+            where m.active group by m.id, m.reorder_level
+          )
+          select (select count(*) from shelf)::int as medicines,
+            (select count(*) from shelf where qty = 0)::int as out,
+            (select count(*) from shelf where qty > 0 and qty <= reorder_level)::int as low,
+            (select count(distinct b.id) from batch b join stock s on s.batch_id = b.id
+              where s.qty > 0 and b.expires_on >= ${today}::date and b.expires_on <= ${soon}::date)::int as expiring,
+            (select sum(s.qty * b.unit_cost) from stock s join batch b on b.id = s.batch_id where s.qty > 0 and b.expires_on >= ${today}::date)::float8 as value`,
+    ),
+    rows<{
+      customers: number;
+      toReview: number;
+      people: number;
+      sellers: number;
+      withoutTarget: number;
+    }>(
+      db,
+      sql`select (select count(*) from customer where active)::int as customers,
+          (select count(*) from customer where active and review = 'to_review')::int as "toReview",
+          (select count(*) from person where active)::int as people,
+          (select count(*) from person where active and role = 'medrep')::int as sellers,
+          (select count(*) from person p where p.active and p.role = 'medrep'
+            and not exists (select 1 from sales_target t where t.person_id = p.id and t.month = ${first}::date))::int as "withoutTarget"`,
+    ),
+  ]);
+  const total = totals[0] ?? { achieved: 0, today: 0, collected: 0, before: 0, target: null };
+  const owed = money[0] ?? { owed: 0, overdue: 0, late: 0, refunds: 0, cod: 0 };
+  const waiting = orders[0] ?? {
+    awaiting: 0,
+    finance: 0,
+    onHold: 0,
+    stuck: 0,
+    oldestHours: null,
+    today: 0,
+  };
+  const shelf = stock[0] ?? { medicines: 0, out: 0, low: 0, expiring: 0, value: null };
+  const counted = counts[0] ?? {
+    customers: 0,
+    toReview: 0,
+    people: 0,
+    sellers: 0,
+    withoutTarget: 0,
+  };
+  const peso = (centavos: number) => `₱${Math.round(centavos / 100).toLocaleString("en-PH")}`;
+
+  const alerts: CeoAlert[] = [];
+  if (facts.running)
+    for (const channel of channels.filter((row) => row.tone === "far"))
+      alerts.push({
+        kind: "channel",
+        text: `${channel.name} is far behind: ${Math.round(channel.pct ?? 0)}% of ${peso(channel.target ?? 0)}`,
+        note: `${facts.daysLeft} ${facts.daysLeft === 1 ? "day" : "days"} left${channel.head ? ` · ${channel.head}` : ""}`,
+        href: `/reports/channels?month=${facts.month}`,
+        tone: "bad",
+      });
+  if (waiting.stuck > 0)
+    alerts.push({
+      kind: "orders",
+      text: `${waiting.stuck} ${waiting.stuck === 1 ? "order has" : "orders have"} waited over 2 days`,
+      note: "For Management or Finance",
+      href: "/orders?stuck=1",
+      tone: "bad",
+    });
+  if (owed.late > 0)
+    alerts.push({
+      kind: "money",
+      text: `${owed.late} ${owed.late === 1 ? "customer is" : "customers are"} over 60 days late`,
+      note: `${peso(owed.overdue)} overdue in all`,
+      href: "/owed",
+      tone: "bad",
+    });
+  if (owed.refunds > 0)
+    alerts.push({
+      kind: "refunds",
+      text: `${peso(owed.refunds)} to give back for cancelled orders`,
+      note: null,
+      href: "/refunds",
+      tone: "warn",
+    });
+  if (shelf.out > 0)
+    alerts.push({
+      kind: "stock",
+      text: `${shelf.out} ${shelf.out === 1 ? "medicine is" : "medicines are"} out of stock`,
+      note: shelf.low ? `${shelf.low} more low` : null,
+      href: "/inventory?show=out",
+      tone: "warn",
+    });
+  if (waiting.onHold > 0)
+    alerts.push({
+      kind: "orders",
+      text: `${waiting.onHold} ${waiting.onHold === 1 ? "order is" : "orders are"} on hold`,
+      note: null,
+      href: "/on-hold",
+      tone: "warn",
+    });
+  if (counted.toReview > 0)
+    alerts.push({
+      kind: "customers",
+      text: `${counted.toReview} new ${counted.toReview === 1 ? "customer" : "customers"} not checked yet`,
+      note: null,
+      href: "/customers?review=1",
+      tone: "warn",
+    });
+
+  return {
+    ...facts,
+    sales: {
+      target: total.target,
+      achieved: total.achieved,
+      today: total.today,
+      collected: total.collected,
+      collectedBefore: { amount: total.before, ...before },
+      pct: pctOf(total.achieved, total.target),
+      tone: paceTone(total.achieved, total.target, facts.pace),
+      channels,
+    },
+    money: {
+      owed: owed.owed,
+      overdue: owed.overdue,
+      lateCustomers: owed.late,
+      refundsOwed: owed.refunds,
+      codOnTheRoad: owed.cod,
+      purchasesOpen: buying?.count ?? 0,
+      purchasesValue: buying?.value ?? 0,
+    },
+    orders: waiting,
+    dispatch: dispatch[0] ?? { toPack: 0, toShip: 0, onTheWay: 0, deliveredToday: 0 },
+    stock: shelf,
+    customers: { total: counted.customers, toReview: counted.toReview },
+    people: {
+      total: counted.people,
+      sellers: counted.sellers,
+      withoutTarget: counted.withoutTarget,
+    },
+    alerts,
+  };
+}
+
+/** The company tree's data: the CEO, the channels and their heads, each area held by its MedRep
+ *  under the person he reports to, and everyone else under their boss; the month's figures on
+ *  each area (its MedRep's target and sales) and the sales no area holds on its channel. */
+export async function companyTree(db: Database, me: Me, asked?: string): Promise<CompanyTreeData> {
+  if (!WHOLE.includes(me.role))
+    throw new Refusal(403, "not_allowed", "The company tree is for the CEO and the Admin.");
+  const facts = monthFacts(asked);
+  const [channels, areas, people] = await Promise.all([
+    rows<{
+      id: number;
+      code: string;
+      name: string;
+      headId: number | null;
+      head: string | null;
+      sort: number;
+    }>(
+      db,
+      sql`select ch.id::int as id, ch.code, ch.name, ch.head_id::int as "headId", h.name as head, ch.sort::int as sort
+        from channel ch left join person h on h.id = ch.head_id and h.active order by ch.sort, ch.id`,
+    ),
+    rows<{
+      id: number;
+      name: string;
+      channelId: number;
+      holderId: number | null;
+      holder: string | null;
+      managerId: number | null;
+      manager: string | null;
+      cities: string[] | null;
+    }>(
+      db,
+      sql`select a.id::int as id, a.name, a.channel_id::int as "channelId", rep.id::int as "holderId", rep.name as holder,
+          boss.id::int as "managerId", boss.name as manager, a.cities
+        from area a
+        left join lateral (select id, name, reports_to from person where area_id = a.id and role = 'medrep' and active order by id limit 1) rep on true
+        left join person boss on boss.id = rep.reports_to
+        order by a.channel_id, a.name`,
+    ),
+    rows<{
+      id: number;
+      name: string;
+      role: Role;
+      title: string | null;
+      reportsToId: number | null;
+    }>(
+      db,
+      sql`select id::int as id, name, role, title, reports_to::int as "reportsToId" from person where active order by name`,
+    ),
+  ]);
+  const holderIds = areas.map((area) => area.holderId).filter((id): id is number => id !== null);
+  const [figures, perChannel] = await Promise.all([
+    figuresOf(db, holderIds, facts),
+    channelSales(db, facts),
+  ]);
+  const ceo = people.find((person) => person.role === "ceo") ?? null;
+  const territories = areas.map((area, sort) => {
+    const f = area.holderId ? (figures.get(area.holderId) ?? NOTHING) : NOTHING;
+    return {
+      id: `a${area.id}`,
+      name: area.name,
+      // The old tree's HQ: here, the cities the area covers.
+      hq: area.cities?.length ? area.cities.join(", ") : null,
+      channelId: `c${area.channelId}`,
+      manager: area.manager,
+      managerId: area.managerId ? `p${area.managerId}` : null,
+      holder: area.holder,
+      holderId: area.holderId ? `p${area.holderId}` : null,
+      note: null,
+      target: f.target ?? 0,
+      achieved: f.sold,
+      today: f.today,
+      sort,
+    };
+  });
+  return {
+    month: facts.month,
+    today: facts.today,
+    asOf: null,
+    company: "2MG Inc.",
+    ceo: ceo?.name ?? null,
+    ceoId: ceo ? `p${ceo.id}` : null,
+    channels: channels.map((channel) => {
+      const sold = perChannel.find((row) => row.id === channel.id);
+      const onAreas = territories.filter((t) => t.channelId === `c${channel.id}`);
+      return {
+        id: `c${channel.id}`,
+        code: channel.code,
+        name: channel.name,
+        head: channel.head,
+        headId: channel.headId ? `p${channel.headId}` : null,
+        sort: channel.sort,
+        // What the channel sold that no area's MedRep holds (an order Management or the desk placed).
+        crmAchieved: Math.max(
+          0,
+          (sold?.sold ?? 0) - onAreas.reduce((sum, t) => sum + t.achieved, 0),
+        ),
+        crmToday: Math.max(0, (sold?.today ?? 0) - onAreas.reduce((sum, t) => sum + t.today, 0)),
+      };
+    }),
+    territories,
+    people: people.map((person) => ({
+      id: `p${person.id}`,
+      name: person.name,
+      code: null,
+      department: ROLE_LABEL[person.role],
+      position: person.title,
+      reportsToId: person.reportsToId ? `p${person.reportsToId}` : null,
+      status: "active",
+      hasLogin: true,
+      userId: `p${person.id}`,
+      rep: person.role === "medrep",
+    })),
+  };
+}

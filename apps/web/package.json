@@ -1,0 +1,29 @@
+{
+  "name": "@2mg/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "test": "echo \"no web tests yet\""
+  },
+  "dependencies": {
+    "@fontsource-variable/inter": "^5.3.0",
+    "@tanstack/react-query": "5.107.1",
+    "lucide-react": "1.60.0",
+    "react": "19.3.1",
+    "react-dom": "19.3.1",
+    "react-router-dom": "7.18.5"
+  },
+  "devDependencies": {
+    "@2mg/api": "workspace:*",
+    "@tailwindcss/vite": "4.3.3",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "6.3.0",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3",
+    "vite": "8.3.8"
+  }
+}
