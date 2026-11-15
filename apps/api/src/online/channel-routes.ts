@@ -214,6 +214,7 @@ export function channelRoutes(
         smtpHost: host,
         smtpPort: z.number().int(),
         intake: z.enum(["screen", "all"]).optional(),
+        relayUrl: z.string().trim().max(300).nullish(),
       }),
     );
     return c.json(await connectMailbox(db, c.get("me"), input));

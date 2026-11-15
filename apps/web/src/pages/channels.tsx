@@ -323,6 +323,7 @@ function ConnectMailbox() {
     imapPort: "993",
     smtpHost: "smtp.gmail.com",
     smtpPort: "465",
+    relayUrl: "",
   });
   const [said, setSaid] = useState<string | null>(null);
   const action = useAction();
@@ -347,6 +348,7 @@ function ConnectMailbox() {
           imapPort: Number(form.imapPort),
           smtpHost: form.smtpHost,
           smtpPort: Number(form.smtpPort),
+          relayUrl: form.relayUrl.trim() || null,
         },
       });
     });
@@ -365,6 +367,7 @@ function ConnectMailbox() {
     "imapPort",
     "smtpHost",
     "smtpPort",
+    "relayUrl",
   ];
   return (
     <form
@@ -432,6 +435,21 @@ function ConnectMailbox() {
           password doesn't work.
         </div>
       )}
+      <Field label="Send through the Google script (optional)" error={action.at("relayUrl")}>
+        {(field) => (
+          <input
+            {...field}
+            className={INPUT}
+            placeholder="https://script.google.com/macros/s/…/exec"
+            value={form.relayUrl}
+            onChange={(event) => set({ relayUrl: event.target.value })}
+          />
+        )}
+      </Field>
+      <div className="-mt-1 text-[12px] text-slate-500">
+        The server's plan blocks mail ports: emails go out through this Google Apps Script web app,
+        running as the mailbox's own account.
+      </div>
       {preset === "other" && (
         <div className="grid grid-cols-[1fr_5rem] gap-2">
           <Field label="IMAP server" error={action.at("imapHost")}>

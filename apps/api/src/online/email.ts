@@ -5,6 +5,7 @@
 // a case, are a customer on that address, or answer a thread we wrote in. Lists and automatic
 // mail never open a case. The agent answers from the case or the Inbox, threaded.
 
+import { isRelayUrl, pairRelay, pingRelay, relaySend } from "./mail-relay";
 import { randomUUID } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -31,6 +32,9 @@ export type Mailbox = {
   imapPort: number;
   smtpHost: string;
   smtpPort: number;
+  /** Sends through the company's Google Apps Script instead of SMTP (Render's free plan blocks it). */
+  relayUrl?: string | null;
+  relaySecret?: string | null;
 };
 export type Cursor = { uidValidity: string; lastUid: number };
 export type MailFile = { filename: string; content: Uint8Array; contentType: string };
@@ -168,6 +172,15 @@ const realTransport: MailTransport = {
       imap.close();
       return { error: explain("imap", error, m), cursor: null };
     }
+    // Sending through Google's script: the script is checked instead of the mail server.
+    if (m.relayUrl && m.relaySecret) {
+      try {
+        await pingRelay(m.relayUrl, m.relaySecret);
+      } catch (error) {
+        return { error: error instanceof Error ? error.message : String(error), cursor: null };
+      }
+      return { error: null, cursor };
+    }
     const smtp = smtpOf(m);
     try {
       await smtp.verify();
@@ -210,6 +223,10 @@ const realTransport: MailTransport = {
     }
   },
   async send(m, mail) {
+    if (m.relayUrl && m.relaySecret) {
+      await relaySend(m.relayUrl, m.relaySecret, { ...mail, from: { address: m.address, name: m.name } });
+      return;
+    }
     await publicServer(m.smtpHost, m.smtpPort, SMTP_PORTS);
     const smtp = smtpOf(m);
     try {
@@ -409,6 +426,8 @@ export type MailboxInput = {
   smtpHost: string;
   smtpPort: number;
   intake?: "screen" | "all";
+  /** The Google Apps Script web app (…/exec) that sends for this mailbox, when SMTP is blocked. */
+  relayUrl?: string | null;
 };
 
 /** Google and Zoho show app passwords in groups of four; the spaces are only for reading. */
@@ -432,6 +451,39 @@ export async function connectMailbox(
     smtpHost: input.smtpHost.trim().toLowerCase(),
     smtpPort: input.smtpPort,
   };
+  const relayUrl = input.relayUrl?.trim() || null;
+  if (relayUrl) {
+    if (!isRelayUrl(relayUrl))
+      throw new Refusal(
+        400,
+        "invalid",
+        "Paste the Google script's web app address, ending in /exec.",
+        "relayUrl",
+      );
+    // Connected before with this script: its secret is kept (the script hands it over only once).
+    const [before] = await rows<{ secret: string }>(
+      db,
+      sql`select secret from channel_account where kind = 'email' and key = ${address}`,
+    );
+    const kept = before ? (JSON.parse(unseal(before.secret)) as Mailbox) : null;
+    if (kept?.relayUrl === relayUrl && kept.relaySecret) mailbox.relaySecret = kept.relaySecret;
+    else {
+      try {
+        const paired = await pairRelay(relayUrl);
+        if (paired.email && paired.email !== address)
+          throw new Error(`The script sends as ${paired.email}, not ${address}.`);
+        mailbox.relaySecret = paired.secret;
+      } catch (error) {
+        throw new Refusal(
+          400,
+          "invalid",
+          error instanceof Error ? error.message : String(error),
+          "relayUrl",
+        );
+      }
+    }
+    mailbox.relayUrl = relayUrl;
+  }
   const checked = await mailTransport().check(mailbox);
   if (checked.error) throw new Refusal(400, "invalid", checked.error, "password");
   const [account] = await rows<{ id: number }>(
