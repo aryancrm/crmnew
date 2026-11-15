@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createApp } from "./app";
 import { openDatabase, rows } from "./db/index";
 import { migrate } from "./db/migrate";
-import { makeFirstAdmin } from "./first-admin";
+import { ensureCompanyTree, makeFirstAdmin } from "./first-admin";
 import { sql } from "drizzle-orm";
 
 describe("the first System admin on an empty database", () => {
@@ -23,5 +23,22 @@ describe("the first System admin on an empty database", () => {
       body: JSON.stringify({ email: "admin@example.com", password: "first-pass-123" }),
     });
     expect(login.status).toBe(200);
+
+    // The tree comes with it: a company box, one box per channel, the admin in a seat; once.
+    expect(await ensureCompanyTree(db)).toBe(true);
+    expect(await ensureCompanyTree(db)).toBe(false);
+    const units = await rows<{ kind: string; n: number }>(
+      db,
+      sql`select kind, count(*)::int as n from org_unit group by kind order by kind`,
+    );
+    expect(units).toEqual([
+      { kind: "business", n: 8 },
+      { kind: "company", n: 1 },
+    ]);
+    const [seated] = await rows<{ n: number }>(
+      db,
+      sql`select count(*)::int as n from seat_holder h join person p on p.id = h.person_id where p.role = 'admin'`,
+    );
+    expect(seated?.n).toBe(1);
   });
 });

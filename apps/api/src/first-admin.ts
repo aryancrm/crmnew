@@ -35,3 +35,53 @@ export async function makeFirstAdmin(
   });
   return true;
 }
+
+/**
+ * A company that started empty has no tree: no company box to hang teams on, so nobody can be
+ * added from Teams & people. On start, with no company box yet, this makes it (named after the
+ * company's settings, else "2MG Inc."), one business box per sales channel, and a System admin
+ * seat for every admin who has none. It does nothing once the tree exists.
+ */
+export async function ensureCompanyTree(db: Database): Promise<boolean> {
+  const [company] = await rows<{ id: number }>(
+    db,
+    sql`select id::int as id from org_unit where kind = 'company'`,
+  );
+  if (company) return false;
+  const [admins] = await rows<{ count: number }>(
+    db,
+    sql`select count(*)::int as count from person where role = 'admin' and active`,
+  );
+  if ((admins?.count ?? 0) === 0) return false;
+  await db.transaction(async (tx) => {
+    const [made] = await rows<{ id: number }>(
+      tx,
+      sql`insert into org_unit (name, kind, parent_id, sort) values ('2MG Inc.', 'company', null, 0)
+        returning id::int as id`,
+    );
+    const root = made?.id as number;
+    await tx.execute(
+      sql`insert into org_unit (name, kind, parent_id, channel_id, sort)
+        select c.name, 'business', ${root}, c.id, c.sort + 1 from channel c where c.active`,
+    );
+    const free = await rows<{ id: number }>(
+      tx,
+      sql`select p.id::int as id from person p where p.role = 'admin' and p.active
+        and not exists (select 1 from seat_holder h where h.person_id = p.id)`,
+    );
+    for (const admin of free) {
+      const [seat] = await rows<{ id: number }>(
+        tx,
+        sql`insert into seat (unit_id, title, module, lead, sort)
+          values (${root}, 'System admin', 'admin', false,
+            (select coalesce(max(sort), 0) + 1 from seat where unit_id = ${root}))
+          returning id::int as id`,
+      );
+      await tx.execute(
+        sql`insert into seat_holder (seat_id, person_id, kind, starts_on, reason)
+          values (${seat?.id}, ${admin.id}, 'holder', current_date, 'Joined')`,
+      );
+    }
+  });
+  return true;
+}
