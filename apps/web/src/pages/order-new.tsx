@@ -905,18 +905,33 @@ export function OrderNew({
             </label>
             <label className="flex flex-col gap-1">
               <span className={FIELD_LABEL}>Sub-division</span>
-              <input
-                list="sub-divisions"
-                value={pickedSubDivision}
-                onChange={(event) => setSubDivision(event.target.value.toUpperCase())}
-                className={FIELD}
-                placeholder={SUB_DIVISIONS[pickedDivision] ? "Pick or type" : "Type it"}
-              />
-              <datalist id="sub-divisions">
-                {(SUB_DIVISIONS[pickedDivision] ?? []).map((name) => (
-                  <option key={name} value={name} />
-                ))}
-              </datalist>
+              {(SUB_DIVISIONS[pickedDivision] ?? []).length > 0 ? (
+                <select
+                  value={pickedSubDivision}
+                  onChange={(event) => setSubDivision(event.target.value)}
+                  className={FIELD}
+                >
+                  <option value="">-- Not set --</option>
+                  {[
+                    ...(pickedSubDivision &&
+                    !(SUB_DIVISIONS[pickedDivision] ?? []).includes(pickedSubDivision)
+                      ? [pickedSubDivision]
+                      : []),
+                    ...(SUB_DIVISIONS[pickedDivision] ?? []),
+                  ].map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  value={pickedSubDivision}
+                  onChange={(event) => setSubDivision(event.target.value.toUpperCase())}
+                  className={FIELD}
+                  placeholder="The area within the Division"
+                />
+              )}
             </label>
           </div>
           <label className="flex flex-col gap-1">

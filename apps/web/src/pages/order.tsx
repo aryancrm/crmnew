@@ -4,7 +4,7 @@
 // and the step being worked on the right. Management, Finance and Dispatch each open on their
 // own step; the step open is in the address (?step=).
 
-import { DIVISIONS, PAYMENT_TERMS, SUB_DIVISIONS } from "@2mg/api/divisions";
+import { DIVISIONS, PAYMENT_TERMS, SUB_DIVISIONS, termsOfLabel } from "@2mg/api/divisions";
 import type { OrderAction, OrderDetail, PaperKind } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -1223,6 +1223,16 @@ function ManagementStep({
   );
 }
 
+/** What a Payment Term means for the money: paid first, on delivery, or credit for some days. */
+function termWords(label: string): string {
+  const { terms, days } = termsOfLabel(label);
+  return terms === "advance"
+    ? "Paid before it goes out"
+    : terms === "cod"
+      ? "Cash on delivery"
+      : `Credit: paid ${days} days after the invoice`;
+}
+
 /** What the MedRep sent, for Management to complete before approving: the Division and
  *  Sub-division, the Payment Terms, who receives it and where, the day, the PO, the company that
  *  bills it and the remarks. */
@@ -1296,11 +1306,62 @@ function CompleteDetails({ data }: { data: OrderDetail }) {
             ))}
           </select>
         </label>
-        {input("subDivision", "Sub-division", { list: "complete-sub-divisions" })}
-        {input("paymentTerm", "Payment terms", {
-          list: "complete-payment-terms",
-          placeholder: "e.g. PDC 30, NET 30, COD",
-        })}
+        {(SUB_DIVISIONS[value.division] ?? []).length > 0 ? (
+          <label className="flex flex-col gap-1">
+            <span className="text-[12px] font-semibold text-slate-600">Sub-division</span>
+            <select
+              value={value.subDivision}
+              onChange={(event) => set("subDivision", event.target.value)}
+              className={INPUT}
+            >
+              <option value="">-- Not set --</option>
+              {[
+                ...(value.subDivision &&
+                !(SUB_DIVISIONS[value.division] ?? []).includes(value.subDivision)
+                  ? [value.subDivision]
+                  : []),
+                ...(SUB_DIVISIONS[value.division] ?? []),
+              ].map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          input("subDivision", "Sub-division", { placeholder: "The area within the Division" })
+        )}
+        <p className="-mt-1 text-[11px] text-slate-500 sm:col-span-2">
+          Division: the selling team the order counts for (HOS hospitals; B&amp;B, STC, URO the Rx
+          field teams; B2B distributors; BID government tenders; MD Telesales the doctors'
+          patients). Sub-division: the area within it.
+        </p>
+        <label className="flex flex-col gap-1">
+          <span className="text-[12px] font-semibold text-slate-600">Payment terms</span>
+          <select
+            value={value.paymentTerm}
+            onChange={(event) => set("paymentTerm", event.target.value)}
+            className={INPUT}
+          >
+            <option value="">-- Not set --</option>
+            {[
+              ...(value.paymentTerm && !PAYMENT_TERMS.includes(value.paymentTerm as never)
+                ? [value.paymentTerm]
+                : []),
+              ...PAYMENT_TERMS,
+            ].map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
+          {value.paymentTerm && (
+            <span className="text-[11px] text-slate-500">{termWords(value.paymentTerm)}</span>
+          )}
+          {action.at("paymentTerm") && (
+            <span className="text-xs text-rose-700">{action.at("paymentTerm")}</span>
+          )}
+        </label>
         {input("expectedOn", "Expected shipment date", { type: "date" })}
         {input("receiver", "Receiver")}
         {input("receiverPhone", "Receiver's contact")}
@@ -1319,16 +1380,6 @@ function CompleteDetails({ data }: { data: OrderDetail }) {
         </label>
         {input("note", "Customer remarks", { wide: true })}
       </div>
-      <datalist id="complete-sub-divisions">
-        {(SUB_DIVISIONS[value.division] ?? []).map((name) => (
-          <option key={name} value={name} />
-        ))}
-      </datalist>
-      <datalist id="complete-payment-terms">
-        {PAYMENT_TERMS.map((name) => (
-          <option key={name} value={name} />
-        ))}
-      </datalist>
       <Problem message={action.general(Object.keys(value))} />
       <div className="flex items-center gap-3">
         <Button type="submit" small disabled={action.busy}>
