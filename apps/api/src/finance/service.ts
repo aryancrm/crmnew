@@ -907,9 +907,14 @@ export async function customersOwe(
     Omit<OwedRow, "terms"> & { paymentTerms: PaymentTerms; paymentDays: number | null }
   >(
     db,
-    sql`select c.id::int as "customerId", c.name as customer, c.kind, c.city, c.payment_terms as "paymentTerms",
-        c.payment_days::int as "paymentDays", c.credit_limit::int as "creditLimit",
-        (select p.name from person p where p.area_id = c.area_id and p.role = 'medrep' and p.active order by p.id limit 1) as medrep,
+    // Terms and MedRep as the open invoices have them (the order's), not the customer's today: a
+    // customer moved to credit last week still owes on the advance invoices of before.
+    sql`select c.id::int as "customerId", c.name as customer, c.kind, c.city,
+        case when count(distinct i.terms) = 1 then min(i.terms) else 'mixed' end as "paymentTerms",
+        case when count(distinct o.payment_days) = 1 then min(o.payment_days)::int end as "paymentDays",
+        c.credit_limit::int as "creditLimit",
+        (select string_agg(distinct p.name, ', ') from invoice i2 join sales_order o2 on o2.id = i2.order_id
+          join person p on p.id = o2.medrep_id where i2.customer_id = c.id and i2.status = 'open') as medrep,
         count(*)::int as invoices,
         coalesce(sum(${balance}) filter (where not ${onDelivery} and ${late} <= 0), 0)::float8 as current,
         coalesce(sum(${balance}) filter (where not ${onDelivery} and ${late} between 1 and 30), 0)::float8 as d30,
@@ -921,7 +926,7 @@ export async function customersOwe(
         coalesce(sum(${balance}) filter (where not ${onDelivery} and ${late} > 0), 0)::float8 as overdue,
         coalesce(max(${late}) filter (where not ${onDelivery} and ${late} > 0), 0)::int as "oldestDays"
       ${invoiceFrom} where ${sql.join(narrowed, sql` and `)}
-      group by c.id, c.name, c.kind, c.city, c.payment_terms, c.payment_days, c.credit_limit, c.area_id
+      group by c.id, c.name, c.kind, c.city, c.credit_limit, c.area_id
       having sum(${balance}) > 0
       order by overdue desc, total desc, c.name`,
   );
@@ -943,11 +948,15 @@ export async function customersOwe(
     rows: found.map(({ paymentTerms, paymentDays, ...row }) => ({
       ...row,
       terms:
-        paymentTerms === "days"
-          ? `${paymentDays} days`
-          : paymentTerms === "cod"
-            ? "COD"
-            : "Advance",
+        (paymentTerms as string) === "mixed"
+          ? "Mixed"
+          : paymentTerms === "days"
+            ? paymentDays
+              ? `${paymentDays} days`
+              : "Credit"
+            : paymentTerms === "cod"
+              ? "COD"
+              : "Advance",
     })),
     totals,
     today,

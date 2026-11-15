@@ -363,7 +363,8 @@ describe("what customers owe", () => {
     );
     const owed = await read<OwedList>("fiona", "/api/finance/owed");
     const row = owed.rows.find((item) => item.customerId === creditHospital);
-    expect(row).toMatchObject({ terms: "30 days", oldestDays: 45 });
+    // Terms are the open invoices' own: this customer also has an earlier test's COD invoice open.
+    expect(row).toMatchObject({ terms: "Mixed", oldestDays: 45 });
     expect(row?.d60).toBe(invoice?.total);
     expect(row?.overdue).toBe(
       (row?.d30 ?? 0) + (row?.d60 ?? 0) + (row?.d90 ?? 0) + (row?.older ?? 0),

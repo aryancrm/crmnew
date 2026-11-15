@@ -988,6 +988,8 @@ export type OrderDetail = {
     amount: number;
     /** Sellable pieces in all warehouses now. */
     inStock: number;
+    /** What this customer paid for it last time (unit price, an earlier order), if ever. */
+    lastPrice: number | null;
     /** Given at no charge (a promo's free goods). */
     free: boolean;
   }[];

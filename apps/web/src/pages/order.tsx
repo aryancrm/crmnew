@@ -769,6 +769,15 @@ function Lines({ data, compare }: { data: OrderDetail; compare?: boolean }) {
                 className={`num whitespace-nowrap ${item.unitPrice < item.listPrice ? "font-semibold text-amber-700" : ""}`}
               >
                 {peso(item.unitPrice)}
+                {item.lastPrice != null && item.lastPrice !== item.unitPrice && (
+                  // What this customer paid last time, so a price that moved is seen.
+                  <div
+                    className={`text-[10px] font-normal ${item.unitPrice < item.lastPrice ? "text-amber-700" : "text-ink-3"}`}
+                    title="The price on this customer's last order of it"
+                  >
+                    last {peso(item.lastPrice)}
+                  </div>
+                )}
               </td>
               <td
                 className={`num ${item.inStock < item.qty ? "font-semibold text-bad" : "text-emerald-700"}`}

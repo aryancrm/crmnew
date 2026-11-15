@@ -331,7 +331,11 @@ const itemsOf = (db: Runner, orderIds: number[]) =>
               - case when so.status in ('packing', 'shipped', 'completed', 'cancelled', 'draft') then 0 else coalesce((select sum(oi.qty) from order_item oi join sales_order o on o.id = oi.order_id
                   where oi.medicine_id = i.medicine_id and o.id < i.order_id and ${PROMISED_ORDER}), 0) end)::int as "inStock",
             (select mp.amount::int from medicine_price mp where mp.medicine_id = i.medicine_id and mp.buyer_type = c.kind) as "ownPrice",
-            c.kind as "ownKind"
+            c.kind as "ownKind",
+            (select oi.unit_price::int from order_item oi join sales_order o2 on o2.id = oi.order_id
+              where o2.customer_id = so.customer_id and oi.medicine_id = i.medicine_id and not oi.free
+                and o2.id < i.order_id and o2.status not in ('draft', 'cancelled')
+              order by o2.id desc, oi.id desc limit 1) as "lastPrice"
           from order_item i join medicine m on m.id = i.medicine_id
             join sales_order so on so.id = i.order_id join customer c on c.id = so.customer_id
           where i.order_id in (${sql.join(
