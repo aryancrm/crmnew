@@ -194,9 +194,15 @@ export async function savePurchase(
     }
 
     if (state === "received") {
-      const lines = await rows<{ id: number; qty: number; unitCost: number }>(
+      const lines = await rows<{
+        id: number;
+        qty: number;
+        unitCost: number;
+        batchId: number | null;
+      }>(
         tx,
-        sql`select id::int as id, coalesce(received_qty, 0)::int as qty, unit_cost::float8 as "unitCost"
+        sql`select id::int as id, coalesce(received_qty, 0)::int as qty, unit_cost::float8 as "unitCost",
+              batch_id::int as "batchId"
             from purchase_line where purchase_id = ${id} order by id`,
       );
       const landed = landedCosts(lines, input.fxRate, extras);
@@ -207,11 +213,10 @@ export async function savePurchase(
           sql`update purchase_line set goods = ${cost.goods}, extras = ${cost.extras}, landed_unit = ${cost.landedUnit}
               where id = ${line.id}`,
         );
-        // The batch this line made follows its new cost.
-        await tx.execute(
-          sql`update batch set unit_cost = ${cost.landedUnit} where purchase_line_id = ${line.id}`,
-        );
       }
+      // Every batch these lines landed in follows, other purchases into the same batch counted too.
+      for (const batchId of new Set(lines.flatMap((line) => (line.batchId ? [line.batchId] : []))))
+        await recostBatch(tx, batchId);
       await tx.execute(
         sql`update purchase set fx_rate = ${input.fxRate}, supplier_ref = ${clean(input.supplierRef)}, note = ${clean(input.note)},
               goods_total = ${landed.reduce((sum, cost) => sum + cost.goods, 0)}, extras_total = ${extras}
@@ -368,6 +373,8 @@ export async function receivePurchase(
     for (const line of came) {
       const cost = landed[line.index] ?? { goods: 0, extras: 0, landedUnit: 0 };
       let batchId: number | null = null;
+      let shelfBefore = 0;
+      let costBefore: number | null = null;
       if (line.qty > 0) {
         const [batch] = await rows<{
           id: number;
@@ -388,15 +395,10 @@ export async function receivePurchase(
             `lines.${line.at}.expiresOn`,
           );
         if (batch) {
-          // More of a batch already on the shelf: its cost becomes the average of old and new.
-          const average =
-            batch.unitCost === null || batch.onShelf === 0
-              ? cost.landedUnit
-              : Math.round(
-                  (batch.onShelf * batch.unitCost + line.qty * cost.landedUnit) /
-                    (batch.onShelf + line.qty),
-                );
-          await tx.execute(sql`update batch set unit_cost = ${average} where id = ${batch.id}`);
+          // More of a batch already on the shelf: what was there and what it cost are kept on the
+          // line, and the batch's cost becomes the average of old and new (recostBatch below).
+          shelfBefore = batch.onShelf;
+          costBefore = batch.unitCost;
           batchId = batch.id;
         } else {
           const [made] = await rows<{ id: number }>(
@@ -420,9 +422,11 @@ export async function receivePurchase(
       }
       await tx.execute(
         sql`update purchase_line set received_qty = ${line.qty}, batch_id = ${batchId},
-              goods = ${cost.goods}, extras = ${cost.extras}, landed_unit = ${cost.landedUnit}
+              goods = ${cost.goods}, extras = ${cost.extras}, landed_unit = ${cost.landedUnit},
+              shelf_before = ${line.qty > 0 ? shelfBefore : null}, cost_before = ${line.qty > 0 ? costBefore : null}
             where id = ${line.id}`,
       );
+      if (batchId) await recostBatch(tx, batchId, id);
     }
     await tx.execute(
       sql`update purchase set state = 'received', received_by = ${me.id}, received_at = now(),
@@ -430,6 +434,45 @@ export async function receivePurchase(
           where id = ${id}`,
     );
   });
+}
+
+/**
+ * A batch's cost from every purchase received into it, in the order they landed: the first
+ * sets it (averaged with the batch's own cost when it was already on the shelf without a
+ * purchase), each later one averages it with the pieces on the shelf just before it landed.
+ * Worked out again whenever a purchase's costs change, so a freight bill coming in later moves
+ * the batch, and one purchase's change never wipes another's. `landing` is a purchase being
+ * received right now (not marked received yet). A batch no purchase came into keeps its cost.
+ */
+async function recostBatch(tx: Runner, batchId: number, landing?: number): Promise<void> {
+  const lines = await rows<{
+    qty: number;
+    landedUnit: number;
+    shelfBefore: number | null;
+    costBefore: number | null;
+  }>(
+    tx,
+    sql`select l.received_qty::int as qty, l.landed_unit::int as "landedUnit",
+          l.shelf_before::int as "shelfBefore", l.cost_before::int as "costBefore"
+        from purchase_line l join purchase p on p.id = l.purchase_id
+        where l.batch_id = ${batchId} and l.received_qty > 0
+          and (p.state = 'received' ${landing ? sql`or p.id = ${landing}` : sql``})
+        order by p.received_at nulls last, l.id`,
+  );
+  if (!lines.length) return;
+  let cost: number | null = null;
+  let shelf = 0;
+  for (const [index, line] of lines.entries()) {
+    // Lines received before this was kept: assume the earlier pieces were all still there.
+    const before = line.shelfBefore ?? shelf;
+    if (index === 0) cost = line.costBefore;
+    cost =
+      cost === null || before <= 0
+        ? line.landedUnit
+        : Math.round((before * cost + line.qty * line.landedUnit) / (before + line.qty));
+    shelf = before + line.qty;
+  }
+  await tx.execute(sql`update batch set unit_cost = ${cost} where id = ${batchId}`);
 }
 
 export async function cancelPurchase(db: Database, id: number, reason: string): Promise<void> {

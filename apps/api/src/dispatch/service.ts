@@ -467,6 +467,18 @@ export async function deliverOrder(
   await db.transaction(async (tx) => {
     const order = await lockOrder(tx, orderId);
     if (!orderActions(me, order).deliver) throw notNow(order);
+    // The signed delivery receipt is the proof the customer has it: no photo, not delivered.
+    const [receipt] = await rows(
+      tx,
+      sql`select 1 from order_file where order_id = ${orderId} and kind = 'dr' and active limit 1`,
+    );
+    if (!receipt)
+      throw new Refusal(
+        400,
+        "invalid",
+        "Add the photo of the signed delivery receipt first: it is the proof the customer has it.",
+        "proof",
+      );
     const pickup = order.status === "packing";
     await tx.execute(
       sql`update sales_order set status = 'completed', delivered_on = ${input.deliveredOn}::date, delivered_at = now(), delivered_by = ${me.id},

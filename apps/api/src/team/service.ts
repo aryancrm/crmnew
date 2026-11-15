@@ -230,7 +230,7 @@ export async function teamBoard(
             (select count(*) from customer c where c.active and s.area_id is not null and c.area_id = s.area_id)::int as customers
           from seat s left join area a on a.id = s.area_id
             left join lateral (select x.person_id, x.starts_on from seat_holder x join person q on q.id = x.person_id and q.active
-              where x.seat_id = s.id and x.kind = 'holder' and ${inForce("x", today)} order by x.starts_on limit 1) h on true
+              where x.seat_id = s.id and x.kind = 'holder' and ${inForce("x", today)} order by x.starts_on desc, x.id desc limit 1) h on true
             left join person p on p.id = h.person_id
             left join lateral (select x.person_id, x.ends_on from seat_holder x join person q on q.id = x.person_id and q.active
               where x.seat_id = s.id and x.kind = 'acting' and ${inForce("x", today)} order by x.starts_on desc limit 1) ah on true
@@ -544,7 +544,7 @@ async function teamNeeds(db: Database, seatIds: number[], today: string): Promis
         from sales_order o join customer c on c.id = o.customer_id join seat s on s.id = o.seat_id
           left join area a on a.id = s.area_id
           left join lateral (select q.name from seat_holder h join person q on q.id = h.person_id and q.active
-            where h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)} limit 1) rep on true
+            where h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)} order by h.starts_on desc, h.id desc limit 1) rep on true
         where o.seat_id in (${list}) and (
           (o.status = 'draft' and o.sent_back_at is not null)
           or o.status in ('on_hold', 'exception')
@@ -569,7 +569,7 @@ async function teamNeeds(db: Database, seatIds: number[], today: string): Promis
         from invoice i join sales_order o on o.id = i.order_id join customer c on c.id = i.customer_id
           join seat s on s.id = o.seat_id left join area a on a.id = s.area_id
           left join lateral (select q.name from seat_holder h join person q on q.id = h.person_id and q.active
-            where h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)} limit 1) rep on true
+            where h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)} order by h.starts_on desc, h.id desc limit 1) rep on true
         where o.seat_id in (${list}) and i.status = 'open' and i.total > i.paid and i.due_on < ${today}::date
           and not (i.terms in ('cod', 'days') and o.status <> 'completed')
         order by i.due_on, i.id limit 20`,

@@ -6,7 +6,16 @@ import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { addDays, todayManila } from "../inventory/rules";
 import { seedDemo } from "../seed";
-import type { CustomerList, Me, OrderBoard, OrgLogin, OrgPersonHistory, OrgTree } from "../types";
+import type {
+  CustomerList,
+  Me,
+  OrderBoard,
+  OrgLogin,
+  OrgPersonHistory,
+  OrgTree,
+  TargetList,
+  TeamSales,
+} from "../types";
 
 const PASSWORD = "test-password-1";
 let db: Database;
@@ -293,6 +302,12 @@ describe("the company's tree", () => {
     const theirs = await read<CustomerList>("mika", "/api/customers?q=Pasay General");
     expect(theirs.rows.map((row) => row.name)).toContain("Pasay General Hospital");
     expect((await get("mika", `/api/orders/${placed.id}`)).status).toBe(200);
+    // The seat's sale counts for Mika on every page now, as My team counts it by seat.
+    const team = await read<TeamSales>("daniel", "/api/team/sales");
+    expect(team.people.find((row) => row.name === "Mika Tan")?.placed).toBe(1);
+    expect(team.people.some((row) => row.name === "Ryan")).toBe(false);
+    const targets = await read<TargetList>("naresh", "/api/targets");
+    expect(targets.rows.find((row) => row.name === "Mika Tan")?.placed).toBeGreaterThan(0);
     // Ryan's history keeps his seat and why it ended.
     const history = await read<OrgPersonHistory>("naresh", `/api/org/people/${ryan.id}`);
     expect(history.person.active).toBe(false);

@@ -33,6 +33,8 @@ import { count, PageState, timeLabel } from "../ui";
 const QUEUES: { key: LeadQueue; label: string; dot?: string }[] = [
   { key: "all", label: "All" },
   { key: "active", label: "Active" },
+  // Waiting on the agent's word: an unanswered message, an order held or sent back.
+  { key: "attention", label: "Waiting on you", dot: "bg-amber-500" },
   { key: "deliver", label: "To deliver" },
   { key: "payment", label: "Payment" },
   { key: "done", label: "Completed" },

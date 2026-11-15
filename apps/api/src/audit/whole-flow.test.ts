@@ -11,6 +11,7 @@ import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { addDays, todayManila } from "../inventory/rules";
 import { seedDemo } from "../seed";
+import { attachReceipt } from "../testing/receipt";
 import type {
   Catalogue,
   CeoHome,
@@ -101,11 +102,22 @@ const order = (who: string, id: number) => read<OrderDetail>(who, `/api/orders/$
 const pack = (id: number) => ok("marco", `/api/dispatch/orders/${id}/pack`);
 const ship = (id: number) =>
   ok("marco", `/api/dispatch/orders/${id}/ship`, { method: "rider", rider: "Jun" });
-const deliver = (id: number) =>
-  ok("marco", `/api/dispatch/orders/${id}/deliver`, {
+const deliver = async (id: number) => {
+  // No signed receipt, no delivery; with its photo, delivered.
+  expect(
+    (
+      await send("marco", `/api/dispatch/orders/${id}/deliver`, {
+        receivedBy: "Nurse Ana",
+        deliveredOn: today,
+      })
+    ).status,
+  ).toBe(400);
+  expect(await attachReceipt(app, cookies.marco as string, id)).toBe(200);
+  return ok("marco", `/api/dispatch/orders/${id}/deliver`, {
     receivedBy: "Nurse Ana",
     deliveredOn: today,
   });
+};
 
 describe("one order through every desk", () => {
   it("a credit order: placed, approved, invoiced, packed, shipped, delivered, part paid", async () => {

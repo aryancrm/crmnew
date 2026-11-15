@@ -10,6 +10,7 @@ import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { todayManila } from "../inventory/rules";
 import { seedDemo } from "../seed";
+import { attachReceipt } from "../testing/receipt";
 import type { Catalogue, CustomerUpdate, LeadCase, OrderDetail } from "../types";
 import { type Mailbox, type OutgoingMail, useMailTransport } from "./email";
 
@@ -146,6 +147,7 @@ describe("a hospital's order", () => {
     expect(mails[1]?.text).toContain("Courier & tracking: LBC · 7781 2290");
     expect(mails[1]?.text).toContain("for payment on delivery");
 
+    await attachReceipt(app, cookies.marco as string, orderId);
     await ok(
       await post("marco", `/api/dispatch/orders/${orderId}/deliver`, {
         receivedBy: "Nurse Joy",

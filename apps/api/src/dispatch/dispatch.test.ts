@@ -7,6 +7,7 @@ import { addDays } from "../finance/rules";
 import { seedFixture } from "../inventory/fixture";
 import { todayManila } from "../inventory/rules";
 import { seedDemo } from "../seed";
+import { attachReceipt } from "../testing/receipt";
 import type {
   DispatchKpis,
   NotificationList,
@@ -69,8 +70,11 @@ const pack = (who: string, id: number, picks?: object[]) =>
   post(who, `/api/dispatch/orders/${id}/pack`, picks ? { picks } : {});
 const ship = (who: string, id: number, body: object) =>
   post(who, `/api/dispatch/orders/${id}/ship`, body);
-const deliver = (who: string, id: number, body: object) =>
-  post(who, `/api/dispatch/orders/${id}/deliver`, body);
+/** Delivers with the signed receipt's photo put on the order first (unless `receipt` is false). */
+const deliver = async (who: string, id: number, body: object, receipt = true) => {
+  if (receipt) await attachReceipt(app, cookies.marco as string, id);
+  return post(who, `/api/dispatch/orders/${id}/deliver`, body);
+};
 
 beforeAll(async () => {
   db = openDatabase({ dir: "memory" });
@@ -279,6 +283,12 @@ describe("shipping and delivery", () => {
     expect(back.picks).toHaveLength(1);
     expect((await ship("marco", id, { method: "rider", rider: "Jun" })).status).toBe(200);
 
+    // No photo of the signed receipt on the order: not delivered.
+    expect(
+      await fieldOf(
+        await deliver("marco", id, { receivedBy: "Nurse Ana", deliveredOn: todayManila() }, false),
+      ),
+    ).toBe("proof");
     expect(
       await fieldOf(await deliver("marco", id, { receivedBy: "", deliveredOn: todayManila() })),
     ).toBe("receivedBy");

@@ -5,6 +5,7 @@ import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { todayManila } from "../inventory/rules";
 import { seedDemo } from "../seed";
+import { attachReceipt } from "../testing/receipt";
 import type { Catalogue, LeadCase, LeadDesk, OrderDetail } from "../types";
 import { deskStepOf, papersFor, quoteTotals, reliefPrice, roadStepOf } from "./rules";
 
@@ -408,6 +409,8 @@ describe("the agent takes the case to Paid", () => {
         })
       ).status,
     ).toBe(403);
+    // The agent keeps the signed receipt on the case's order, then hands it over.
+    expect(await attachReceipt(app, cookies.jane as string, orderId)).toBe(200);
     expect(
       (
         await post("jane", `/api/dispatch/orders/${orderId}/deliver`, {
@@ -515,6 +518,18 @@ describe("the desk", () => {
     expect(
       (await read<LeadDesk>("jane", "/api/leads?queue=deliver")).cards.every(
         (card) => card.step.value === "ordered",
+      ),
+    ).toBe(true);
+    // Needs you: the cases waiting on the agent's word, as many as its count says.
+    const needs = await read<LeadDesk>("jane", "/api/leads?queue=attention");
+    expect(needs.queue).toBe("attention");
+    expect(needs.cards.length).toBe(active.counts.attention);
+    expect(
+      needs.cards.every(
+        (card) =>
+          card.awaitingReply ||
+          card.next.startsWith("Order on hold") ||
+          card.next.startsWith("Order sent back"),
       ),
     ).toBe(true);
     expect((await post("jane", `/api/leads/${id}/reopen`)).status).toBe(200);

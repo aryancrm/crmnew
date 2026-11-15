@@ -9,7 +9,7 @@ import { addCustomer } from "../customers/service";
 import { type Database, rows } from "../db/index";
 import { addPerson, addSeat, coverSeat } from "../org/service";
 import type { BuyerType, Me, OrderItemInput } from "../types";
-import { spreadDemoStepTimes } from "./seed-times";
+import { alignDemoMoneyDates, spreadDemoStepTimes } from "./seed-times";
 import { actOnOrder, placeOrder } from "./service";
 
 export async function seedDemoTeam(db: Database, password: string): Promise<boolean> {
@@ -211,5 +211,6 @@ export async function seedDemoTeam(db: Database, password: string): Promise<bool
   if (approved) await actOnOrder(db, sarla, approved, "approve", {});
   // Every demo order moved within a second; give the steps believable times.
   await spreadDemoStepTimes(db);
+  await alignDemoMoneyDates(db);
   return true;
 }

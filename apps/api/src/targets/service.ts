@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
-import { inForce } from "../org/service";
+import { creditedTo, inForce } from "../org/service";
 import { ROLE_LABEL, type Role } from "../people/roles";
 import type { Me, TargetList } from "../types";
 
@@ -42,9 +42,9 @@ export async function listTargets(db: Database, me: Me, asked?: string): Promise
         t.amount::float8 as target, setter.name as "setBy", seat.unit_id::int as "unitId", seat.login,
         (select l.amount::float8 from sales_target l where l.person_id = p.id
           and l.month = (${first}::date - interval '1 month')::date) as "lastTarget",
-        coalesce((select sum(o.total) from sales_order o where o.medrep_id = p.id and o.status not in ('draft', 'cancelled')
+        coalesce((select sum(o.total) from sales_order o where ${creditedTo(todayManila())} = p.id and o.status not in ('draft', 'cancelled')
           and date_trunc('month', o.created_at at time zone 'Asia/Manila')::date = ${first}::date), 0)::float8 as placed,
-        coalesce((select sum(i.total) from invoice i join sales_order o on o.id = i.order_id where o.medrep_id = p.id
+        coalesce((select sum(i.total) from invoice i join sales_order o on o.id = i.order_id where ${creditedTo(todayManila())} = p.id
           and i.status <> 'cancelled' and date_trunc('month', i.issued_on)::date = ${first}::date), 0)::float8 as sold
       from person p
       left join channel ch on ch.id = p.channel_id

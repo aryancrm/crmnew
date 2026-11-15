@@ -9,6 +9,7 @@ import { type Database, rows } from "../db/index";
 import { allow } from "../http";
 import { addDays, todayManila } from "../inventory/rules";
 import { iso } from "../inventory/service";
+import { creditedTo } from "../org/service";
 import type { CompanyKpis, Me, MyKpisPeriod, OrderStatus } from "../types";
 import { ORDER_ALL_ROLES } from "./rules";
 
@@ -91,7 +92,7 @@ export async function companyKpis(
       sql`select rep.id::int as id, rep.name, ch.code as channel, count(*)::int as orders,
           coalesce(sum(o.total) filter (where o.status <> 'cancelled'), 0)::int as value,
           count(*) filter (where o.status = 'completed')::int as completed
-        from sales_order o join person rep on rep.id = o.medrep_id left join channel ch on ch.id = o.channel_id
+        from sales_order o join person rep on rep.id = ${creditedTo(today)} left join channel ch on ch.id = o.channel_id
         where ${inPeriod}
         group by rep.id, rep.name, ch.code
         order by value desc, orders desc limit 12`,

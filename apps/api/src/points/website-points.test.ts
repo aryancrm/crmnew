@@ -11,6 +11,7 @@ import { seedFixture } from "../inventory/fixture";
 import { todayManila } from "../inventory/rules";
 import { useWebHttp } from "../online/websites";
 import { seedDemo } from "../seed";
+import { attachReceipt } from "../testing/receipt";
 
 const PASSWORD = "test-password-1";
 const SITE = "https://www.2mginc.com";
@@ -130,6 +131,7 @@ async function deliveredAndPaid(ref: string): Promise<number> {
     sql`select id::int as id from invoice where order_id = ${orderId}`,
   );
   await db.execute(sql`update sales_order set status = 'shipped' where id = ${orderId}`);
+  await attachReceipt(app, cookies.marco as string, orderId);
   expect(
     (
       await post("marco", `/api/dispatch/orders/${orderId}/deliver`, {

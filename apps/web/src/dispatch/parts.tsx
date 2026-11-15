@@ -39,6 +39,81 @@ export function useDispatch() {
   return { ...action, send };
 }
 
+/** The photo of the signed delivery receipt, put on the order before it is marked delivered:
+ *  nothing is delivered without it, and a photo that didn't upload is simply tried again (once
+ *  on the order, it isn't sent twice). An order already holding one needs no new photo. */
+function useReceipt(orderId: number) {
+  const [photo, setPhotoState] = useState<File | null>(null);
+  const [sent, setSent] = useState<File | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  async function upload(): Promise<boolean> {
+    setProblem(null);
+    if (!photo || sent === photo) return true;
+    setBusy(true);
+    try {
+      await uploadPaper(orderId, "dr", photo);
+      setSent(photo);
+      return true;
+    } catch (error) {
+      setProblem(
+        `The photo didn't upload (${error instanceof Error ? error.message : "no connection"}). Press the button again to retry.`,
+      );
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  }
+  return {
+    photo,
+    sent: Boolean(photo) && sent === photo,
+    setPhoto: (file: File | null) => {
+      setPhotoState(file);
+      setProblem(null);
+    },
+    upload,
+    problem,
+    busy,
+  };
+}
+
+function ReceiptPicker({
+  receipt,
+  error,
+}: {
+  receipt: ReturnType<typeof useReceipt>;
+  error?: string;
+}) {
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <label
+          className={`inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-[10px] border bg-white px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 ${error ? "border-rose-400" : "border-line"}`}
+        >
+          <Camera size={15} aria-hidden="true" />{" "}
+          {receipt.photo ? "Change photo" : "Photo of the signed receipt *"}
+          <input
+            type="file"
+            accept={PAPER_ACCEPT}
+            className="sr-only"
+            onChange={(event) => {
+              receipt.setPhoto(event.target.files?.[0] ?? null);
+              event.target.value = "";
+            }}
+          />
+        </label>
+        {receipt.photo && (
+          <span className="truncate text-[13px] text-ink-2">
+            {receipt.photo.name}
+            {receipt.sent && <span className="text-emerald-700"> · on the order</span>}
+          </span>
+        )}
+      </div>
+      {error && <span className="text-xs font-medium text-rose-700">{error}</span>}
+    </div>
+  );
+}
+
 const expiry = (day: string) =>
   new Date(`${day}T00:00:00Z`).toLocaleDateString("en-PH", {
     month: "short",
@@ -237,9 +312,11 @@ export function ShipDialog({
   const [rider, setRider] = useState("");
   const [receivedBy, setReceivedBy] = useState("");
   const [day, setDay] = useState(todayManila());
+  const receipt = useReceipt(orderId);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (method === "pickup" && !(await receipt.upload())) return;
     const done =
       method === "pickup"
         ? await work.send(`/api/dispatch/orders/${orderId}/deliver`, {
@@ -333,6 +410,9 @@ export function ShipDialog({
           </Field>
         )}
         {method === "pickup" && (
+          <ReceiptPicker receipt={receipt} error={receipt.problem ?? work.at("proof")} />
+        )}
+        {method === "pickup" && (
           <div className="flex flex-col gap-3 sm:flex-row">
             <Field label="Picked up by" error={work.at("receivedBy")}>
               {(field) => (
@@ -359,14 +439,27 @@ export function ShipDialog({
           </div>
         )}
         <Problem
-          message={work.general(["courier", "tracking", "rider", "receivedBy", "deliveredOn"])}
+          message={work.general([
+            "courier",
+            "tracking",
+            "rider",
+            "receivedBy",
+            "deliveredOn",
+            "proof",
+          ])}
         />
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
           <Button onClick={onClose} disabled={work.busy}>
             Close
           </Button>
-          <Button type="submit" variant="primary" disabled={work.busy}>
-            {work.busy ? "Saving…" : method === "pickup" ? "Picked up" : "Shipped"}
+          <Button type="submit" variant="primary" disabled={work.busy || receipt.busy}>
+            {receipt.busy
+              ? "Uploading photo…"
+              : work.busy
+                ? "Saving…"
+                : method === "pickup"
+                  ? "Picked up"
+                  : "Shipped"}
           </Button>
         </div>
       </form>
@@ -388,11 +481,12 @@ export function DeliverDialog({
   const [receivedBy, setReceivedBy] = useState("");
   const [day, setDay] = useState(todayManila());
   const [note, setNote] = useState("");
-  const [photo, setPhoto] = useState<File | null>(null);
-  const [photoProblem, setPhotoProblem] = useState<string | null>(null);
+  const receipt = useReceipt(orderId);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    // The photo goes on the order first: if it fails, nothing is marked and the button retries.
+    if (!(await receipt.upload())) return;
     if (
       !(await work.send(`/api/dispatch/orders/${orderId}/deliver`, {
         receivedBy,
@@ -401,21 +495,11 @@ export function DeliverDialog({
       }))
     )
       return;
-    if (photo) {
-      try {
-        await uploadPaper(orderId, "dr", photo);
-      } catch (error) {
-        setPhotoProblem(
-          `Delivered. The photo didn't upload: ${error instanceof Error ? error.message : "try again"} Add it on the order's Papers.`,
-        );
-        return;
-      }
-    }
     onClose();
   }
 
   return (
-    <Dialog title={`Delivered · ${code}`} onClose={onClose} busy={work.busy}>
+    <Dialog title={`Delivered · ${code}`} onClose={onClose} busy={work.busy || receipt.busy}>
       <form onSubmit={submit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-3 sm:flex-row">
           <Field label="Received by" error={work.at("receivedBy")}>
@@ -442,22 +526,7 @@ export function DeliverDialog({
             )}
           </Field>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-[10px] border border-line bg-white px-3 text-sm font-semibold text-emerald-700 hover:bg-emerald-50">
-            <Camera size={15} aria-hidden="true" />{" "}
-            {photo ? "Change photo" : "Photo of the signed receipt"}
-            <input
-              type="file"
-              accept={PAPER_ACCEPT}
-              className="sr-only"
-              onChange={(event) => {
-                setPhoto(event.target.files?.[0] ?? null);
-                event.target.value = "";
-              }}
-            />
-          </label>
-          {photo && <span className="truncate text-[13px] text-ink-2">{photo.name}</span>}
-        </div>
+        <ReceiptPicker receipt={receipt} error={receipt.problem ?? work.at("proof")} />
         <Field label="Note (optional)" error={work.at("note")}>
           {(field) => (
             <input
@@ -468,13 +537,13 @@ export function DeliverDialog({
             />
           )}
         </Field>
-        <Problem message={photoProblem ?? work.general(["receivedBy", "deliveredOn", "note"])} />
+        <Problem message={work.general(["receivedBy", "deliveredOn", "note", "proof"])} />
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
           <Button onClick={onClose} disabled={work.busy}>
             Close
           </Button>
-          <Button type="submit" variant="primary" disabled={work.busy || Boolean(photoProblem)}>
-            {work.busy ? "Saving…" : "Delivered"}
+          <Button type="submit" variant="primary" disabled={work.busy || receipt.busy}>
+            {receipt.busy ? "Uploading photo…" : work.busy ? "Saving…" : "Delivered"}
           </Button>
         </div>
       </form>

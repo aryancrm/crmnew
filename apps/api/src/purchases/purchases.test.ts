@@ -244,6 +244,46 @@ describe("purchases", () => {
     expect((await post("irene", `/api/purchases/${id}/cancel`)).status).toBe(409);
   });
 
+  it("keep one batch's cost right when two purchases land in it and their costs change later", async () => {
+    const { input, imatinib } = await order();
+    const expiresOn = addDays(todayManila(), 400);
+    const costOf = async () =>
+      (await medicinePage(imatinib, "sarla")).batches.find((batch) => batch.batchNo === "IM7001")
+        ?.unitCost;
+    // One medicine per purchase, no other costs: a piece lands at its price × the rate.
+    const buy = async (qty: number, unitCost: number) => {
+      const made = await post("irene", "/api/purchases", {
+        ...input,
+        lines: [{ medicineId: imatinib, qty, unitCost }],
+        costs: [],
+      });
+      const id = (await made.json()).id as number;
+      const line = (await purchase(id)).lines[0];
+      const done = await post("irene", `/api/purchases/${id}/receive`, {
+        lines: [{ lineId: line?.id, qty, batchNo: "IM7001", expiresOn }],
+      });
+      expect(done.status, await done.clone().text()).toBe(200);
+      return id;
+    };
+    const first = await buy(10, 10); // ₱580 a piece
+    expect(await costOf()).toBe(58_000);
+    const second = await buy(10, 20); // ₱1,160 a piece, into the same batch
+    expect(await costOf()).toBe(87_000);
+
+    // The second purchase's freight comes later: ₱5,800 over its 10 pieces.
+    const freight = (id: number, unitCost: number, amount: number) =>
+      post("irene", `/api/purchases/${id}`, {
+        ...input,
+        lines: [{ medicineId: imatinib, qty: 10, unitCost }],
+        costs: [{ kind: "freight", amount }],
+      });
+    expect((await freight(second, 20, 580_000)).status).toBe(200);
+    expect(await costOf()).toBe((10 * 58_000 + 10 * 174_000) / 20);
+    // Then the first one's: the second purchase's share stays in the batch.
+    expect((await freight(first, 10, 290_000)).status).toBe(200);
+    expect(await costOf()).toBe((10 * 87_000 + 10 * 174_000) / 20);
+  });
+
   it("can be cancelled while on order", async () => {
     const { input, imatinib } = await order();
     const coming =

@@ -114,3 +114,76 @@ export async function spreadDemoStepTimes(db: Database): Promise<number> {
   }
   return byOrder.size;
 }
+
+const DAY_MS = 86_400_000;
+const daysBetween = (from: string, to: string) =>
+  Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / DAY_MS);
+
+/**
+ * Demo only: an invoice is never dated before its order. The finance seed ages a few credit
+ * invoices (one long overdue) before the times are spread to end now. A completed order's whole
+ * story moves back with its invoice (placed the day before it, delivered long ago, so it is truly
+ * late); an open order's invoice is dated the day Finance made it. Safe to run on every start.
+ */
+export async function alignDemoMoneyDates(db: Database): Promise<number> {
+  const wrong = await rows<{
+    orderId: number;
+    invoiceId: number;
+    status: string;
+    placed: string;
+    issued: string;
+  }>(
+    db,
+    sql`select o.id::int as "orderId", i.id::int as "invoiceId", o.status,
+        (o.created_at at time zone 'Asia/Manila')::date::text as placed, i.issued_on::text as issued
+      from invoice i join sales_order o on o.id = i.order_id
+      where i.issued_on < (o.created_at at time zone 'Asia/Manila')::date`,
+  );
+  for (const one of wrong)
+    await db.transaction(async (tx) => {
+      if (one.status === "completed") {
+        const back = sql`${`${daysBetween(one.issued, one.placed) + 1} days`}::interval`;
+        await tx.execute(
+          sql`update sales_order set created_at = created_at - ${back}, submitted_at = submitted_at - ${back},
+              approved_at = approved_at - ${back}, updated_at = updated_at - ${back}, packed_at = packed_at - ${back},
+              shipped_at = shipped_at - ${back}, delivered_at = delivered_at - ${back},
+              delivered_on = (delivered_on - ${back})::date, expected_on = (expected_on - ${back})::date,
+              sent_back_at = sent_back_at - ${back}, finance_checked_at = finance_checked_at - ${back},
+              status_since = status_since - ${back}, dispatch_by_at = dispatch_by_at - ${back},
+              came_back_at = came_back_at - ${back}
+            where id = ${one.orderId}`,
+        );
+        await tx.execute(
+          sql`update order_step set entered_at = entered_at - ${back}, left_at = left_at - ${back} where order_id = ${one.orderId}`,
+        );
+        await tx.execute(
+          sql`update order_event set at = at - ${back} where order_id = ${one.orderId}`,
+        );
+        // Credit falls due its days after the delivery, cash on delivery on it.
+        await tx.execute(
+          sql`update invoice i set due_on = case
+              when i.terms = 'days' then coalesce(o.delivered_on, i.issued_on) + coalesce(o.payment_days, 0)
+              when i.terms = 'cod' then coalesce(o.delivered_on, i.issued_on) else i.due_on end
+            from sales_order o where o.id = i.order_id and i.id = ${one.invoiceId}`,
+        );
+      } else {
+        // Dated the day Finance finished with it (else the day it was placed).
+        await tx.execute(
+          sql`update invoice i set issued_on = made.day,
+              due_on = case
+                when i.terms = 'days' then coalesce(o.delivered_on, made.day) + coalesce(o.payment_days, 0)
+                when i.terms = 'cod' then coalesce(o.delivered_on, made.day) else made.day end
+            from sales_order o, lateral (select coalesce(
+                (select max(s.left_at) from order_step s where s.order_id = o.id and s.status in ('finance_check', 'ready_for_invoice')),
+                o.created_at) at time zone 'Asia/Manila' as at) step,
+              lateral (select step.at::date as day) made
+            where o.id = i.order_id and i.id = ${one.invoiceId}`,
+        );
+        await tx.execute(
+          sql`update payment p set paid_on = greatest(p.paid_on, i.issued_on) from invoice i
+            where i.id = p.invoice_id and i.id = ${one.invoiceId}`,
+        );
+      }
+    });
+  return wrong.length;
+}

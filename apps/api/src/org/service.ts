@@ -40,6 +40,16 @@ export const ORG_CHANGE_ROLES: Role[] = ["ceo", "admin"];
 export const inForce = (alias: string, today: string): SQL =>
   sql`(${sql.raw(alias)}.starts_on <= ${today}::date and (${sql.raw(alias)}.ends_on is null or ${sql.raw(alias)}.ends_on >= ${today}::date))`;
 
+/**
+ * Whom an order (alias `o`) counts for: the person holding its seat today (on a handover day the
+ * one who starts, not the one leaving), else (a vacant seat,
+ * or none) the MedRep named on it. My team counts by seat; Home, team sales, targets, the
+ * channels and the KPIs count people by this, so one sale is never credited two ways.
+ */
+export const creditedTo = (today: string): SQL =>
+  sql`coalesce((select ch_h.person_id from seat_holder ch_h where ch_h.seat_id = o.seat_id and ch_h.kind = 'holder'
+      and ${inForce("ch_h", today)} order by ch_h.starts_on desc, ch_h.id desc limit 1), o.medrep_id)`;
+
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Seat login IDs end in the company's domain: "hos1@2mginc.com". */

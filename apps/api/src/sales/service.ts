@@ -6,7 +6,9 @@
 import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
+import { todayManila } from "../inventory/rules";
 import { STATUS_LABEL } from "../orders/rules";
+import { creditedTo } from "../org/service";
 import { ROLE_LABEL, type Role } from "../people/roles";
 import type {
   CeoAlert,
@@ -77,28 +79,30 @@ async function figuresOf(
 ): Promise<Map<number, Figures>> {
   if (personIds.length === 0) return new Map();
   const { first, next } = monthBounds(facts.month);
+  // Whose each order is: its seat's holder today (as My team counts), else its MedRep.
+  const whose = creditedTo(todayManila());
   const [sold, placed, now, targets] = await Promise.all([
     rows<{ id: number; sold: number; today: number }>(
       db,
-      sql`select o.medrep_id::int as id, sum(i.total)::float8 as sold,
+      sql`select ${whose}::int as id, sum(i.total)::float8 as sold,
           coalesce(sum(i.total) filter (where i.issued_on = ${facts.today}::date), 0)::float8 as today
         from invoice i join sales_order o on o.id = i.order_id
-        where ${soldIn(facts)} and o.medrep_id in (${ids(personIds)}) group by o.medrep_id`,
+        where ${soldIn(facts)} and ${whose} in (${ids(personIds)}) group by 1`,
     ),
     rows<{ id: number; placed: number; value: number }>(
       db,
-      sql`select medrep_id::int as id, count(*)::int as placed, sum(total)::float8 as value from sales_order
-        where status not in ('draft', 'cancelled') and medrep_id in (${ids(personIds)})
-          and (coalesce(submitted_at, created_at) at time zone 'Asia/Manila')::date >= ${first}::date
-          and (coalesce(submitted_at, created_at) at time zone 'Asia/Manila')::date < ${next}::date
-        group by medrep_id`,
+      sql`select ${whose}::int as id, count(*)::int as placed, sum(o.total)::float8 as value from sales_order o
+        where o.status not in ('draft', 'cancelled') and ${whose} in (${ids(personIds)})
+          and (coalesce(o.submitted_at, o.created_at) at time zone 'Asia/Manila')::date >= ${first}::date
+          and (coalesce(o.submitted_at, o.created_at) at time zone 'Asia/Manila')::date < ${next}::date
+        group by 1`,
     ),
     rows<{ id: number; waiting: number; held: number }>(
       db,
-      sql`select medrep_id::int as id,
-          count(*) filter (where status in ('pending_approval', 'finance_check', 'ready_for_invoice'))::int as waiting,
-          count(*) filter (where status in ('on_hold', 'exception') or (status = 'draft' and flag_reason is not null))::int as held
-        from sales_order where medrep_id in (${ids(personIds)}) group by medrep_id`,
+      sql`select ${whose}::int as id,
+          count(*) filter (where o.status in ('pending_approval', 'finance_check', 'ready_for_invoice'))::int as waiting,
+          count(*) filter (where o.status in ('on_hold', 'exception') or (o.status = 'draft' and o.flag_reason is not null))::int as held
+        from sales_order o where ${whose} in (${ids(personIds)}) group by 1`,
     ),
     rows<{ id: number; amount: number }>(
       db,
@@ -196,7 +200,7 @@ export async function teamSales(db: Database, me: Me, asked?: string): Promise<T
           db,
           sql`select o.id::int as id, o.code, c.name as customer, rep.name as medrep, o.status, o.flag_reason as reason
             from sales_order o join customer c on c.id = o.customer_id join person rep on rep.id = o.medrep_id
-            where o.medrep_id in (${ids(ordered.map((person) => person.id))})
+            where ${creditedTo(todayManila())} in (${ids(ordered.map((person) => person.id))})
               and (o.status in ('on_hold', 'exception') or (o.status = 'draft' and o.flag_reason is not null))
             order by o.updated_at desc limit 20`,
         ),
@@ -637,19 +641,20 @@ export async function channelSalesDetail(
   );
   if (!channel) throw new Refusal(404, "not_found", "No such channel.");
   const sold = soldIn(facts);
+  const whose = creditedTo(todayManila());
   const [people, customers, medicines] = await Promise.all([
     rows<ChannelSalesDetail["people"][number]>(
       db,
       sql`select p.id::int as id, p.name, a.name as area,
           coalesce((select sum(i.total) from invoice i join sales_order o on o.id = i.order_id
-            where o.channel_id = ${channel.id} and o.medrep_id = p.id and ${sold}), 0)::float8 as sold,
+            where o.channel_id = ${channel.id} and ${whose} = p.id and ${sold}), 0)::float8 as sold,
           (select sum(${targetShare(facts)}) from sales_target t where t.person_id = p.id)::float8 as target,
           (select count(distinct o.id) from invoice i join sales_order o on o.id = i.order_id
-            where o.channel_id = ${channel.id} and o.medrep_id = p.id and ${sold})::int as orders
+            where o.channel_id = ${channel.id} and ${whose} = p.id and ${sold})::int as orders
         from person p left join area a on a.id = p.area_id
         where p.active and (p.channel_id = ${channel.id} or exists (select 1 from sales_order o join invoice i on i.order_id = o.id
-          where o.medrep_id = p.id and o.channel_id = ${channel.id} and ${sold}))
-          and (p.role in ('medrep', 'team_lead', 'manager') or exists (select 1 from sales_order o where o.medrep_id = p.id and o.channel_id = ${channel.id}))
+          where ${whose} = p.id and o.channel_id = ${channel.id} and ${sold}))
+          and (p.role in ('medrep', 'team_lead', 'manager') or exists (select 1 from sales_order o where ${whose} = p.id and o.channel_id = ${channel.id}))
         order by sold desc, p.name`,
     ),
     rows<ChannelSalesDetail["customers"][number]>(

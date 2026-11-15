@@ -7,6 +7,7 @@ import { seedFixture } from "../inventory/fixture";
 import { todayManila } from "../inventory/rules";
 import { type Cursor, type Mailbox, type OutgoingMail, useMailTransport } from "../online/email";
 import { seedDemo } from "../seed";
+import { attachReceipt } from "../testing/receipt";
 import type { Catalogue, LeadCase, OrderDetail, PointsAccountDetail, PointsList } from "../types";
 
 const PASSWORD = "test-password-1";
@@ -85,6 +86,7 @@ async function delivered(leadId: number): Promise<{ orderId: number; invoiceId: 
   await db.execute(
     sql`update sales_order set status = 'shipped', courier = 'LBC' where id = ${orderId}`,
   );
+  await attachReceipt(app, cookies.marco as string, orderId);
   expect(
     (
       await post("marco", `/api/dispatch/orders/${orderId}/deliver`, {

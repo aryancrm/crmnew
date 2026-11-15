@@ -13,6 +13,7 @@ import { startChannelJobs } from "./online/inbox";
 import { seedDemoOnline } from "./online/seed";
 import { seedDemoOrders } from "./orders/seed";
 import { seedDemoTeam } from "./orders/seed-team";
+import { alignDemoMoneyDates } from "./orders/seed-times";
 import { fillOrderSeats, projectOrg } from "./org/service";
 import { seedDemo } from "./seed";
 
@@ -39,6 +40,9 @@ if (process.env.SEED_DEMO === "1") {
   if (await seedDemoOnline(db)) console.log("database: demo enquiries made");
   if (await seedDemoTeam(db, password))
     console.log("database: more demo MedReps and their orders made");
+  // Older demo databases had invoices dated before their orders: put them right once.
+  const aligned = await alignDemoMoneyDates(db);
+  if (aligned) console.log(`database: ${aligned} demo invoices dated after their orders`);
 }
 
 // The tree writes each person's role, boss and area; a cover that ended yesterday stops today.
