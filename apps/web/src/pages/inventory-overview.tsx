@@ -2,7 +2,7 @@
 // out, expiring), the news, the top stocked medicines and what moved last. Every figure comes
 // from /api/overview and opens the list it counts.
 
-import type { Overview, StockNews } from "@2mg/api/types";
+import type { InventoryList, Overview, StockNews } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import {
   Boxes,
@@ -182,6 +182,7 @@ export function InventoryOverview() {
             </div>
 
             <div className="flex min-w-0 flex-col gap-4">
+              <ReorderPanel />
               <Panel title="Top stocked">
                 <ul className="flex flex-col gap-3 px-4 py-3">
                   {data.topStocked.map((row) => (
@@ -283,5 +284,65 @@ export function Attention({
       <span className="text-xl font-bold">{count(value)}</span>
       <span className="text-[13px] font-semibold text-ink">{label}</span>
     </Link>
+  );
+}
+
+/** What to buy: medicines whose free stock and what is already coming fall short of their
+ *  reorder level, the furthest short first, with a way to start the purchase order. */
+function ReorderPanel() {
+  const query = useQuery({
+    queryKey: ["inventory", "list"],
+    queryFn: () => api<InventoryList>("/api/inventory"),
+  });
+  const rows = (query.data?.medicines ?? [])
+    .map((row) => ({ row, short: row.reorderLevel - (row.free + (row.coming?.qty ?? 0)) }))
+    .filter(({ row, short }) => row.reorderLevel > 0 && short > 0)
+    .sort((a, b) => b.short / b.row.reorderLevel - a.short / a.row.reorderLevel);
+  if (!query.data) return null;
+  if (rows.length === 0)
+    return (
+      <Panel title="To reorder">
+        <p className="px-4 py-3 text-[13px] text-ink-2">
+          Nothing to reorder: what is free and what is coming covers every reorder level.
+        </p>
+      </Panel>
+    );
+  return (
+    <Panel title="To reorder" count={rows.length}>
+      <ul className="flex flex-col divide-y divide-slate-100 px-4">
+        {rows.slice(0, 8).map(({ row, short }) => (
+          <li key={row.id} className="flex items-center justify-between gap-3 py-2.5">
+            <Link to={`/medicines/${row.id}`} className="min-w-0 hover:underline">
+              <span className="block truncate text-[13px] font-semibold text-ink">
+                {[row.name, row.strength].filter(Boolean).join(" ")}
+              </span>
+              <span className="text-[11px] text-ink-2">
+                Free {count(row.free)}
+                {row.coming ? ` · ${count(row.coming.qty)} coming` : ""} · reorder at{" "}
+                {count(row.reorderLevel)}
+              </span>
+            </Link>
+            <span className="shrink-0 text-right">
+              <span className="block text-[13px] font-semibold text-bad tabular-nums">
+                {count(short)} short
+              </span>
+              <span className="block h-1.5 w-20 overflow-hidden rounded-full bg-slate-100">
+                <span
+                  className="block h-full rounded-full bg-amber-400"
+                  style={{
+                    width: `${Math.max(4, Math.min(100, ((row.free + (row.coming?.qty ?? 0)) / row.reorderLevel) * 100))}%`,
+                  }}
+                />
+              </span>
+            </span>
+          </li>
+        ))}
+      </ul>
+      <div className="border-t border-slate-100 px-4 py-2.5">
+        <Link to="/purchases/new" className="text-xs font-semibold text-brand-dark hover:underline">
+          New purchase order →
+        </Link>
+      </div>
+    </Panel>
   );
 }
