@@ -124,7 +124,7 @@ const readDraft = (personId: number): Draft | null => {
 };
 
 const PAPERS: { kind: PaperKind; label: string }[] = [
-  { kind: "po", label: "Purchase order" },
+  { kind: "po", label: "Customer's PO" },
   { kind: "payment_proof", label: "Proof of payment" },
   { kind: "prescription", label: "Prescription" },
   { kind: "gl", label: "Guarantee letter" },

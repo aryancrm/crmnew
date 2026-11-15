@@ -276,7 +276,7 @@ export const NEXT_OF: Record<OrderStatus, string> = {
 };
 
 export const PAPER_LABEL: Record<PaperKind, string> = {
-  po: "Purchase order",
+  po: "Customer's PO",
   payment_proof: "Proof of payment",
   prescription: "Prescription",
   gl: "Guarantee letter",

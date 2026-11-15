@@ -829,6 +829,114 @@ function Lines({ data, compare }: { data: OrderDetail; compare?: boolean }) {
 }
 
 /** Papers of some kinds: each with what it is for, its files, and adding one. */
+/** The order's papers on one line (Management's step): one on file opens with a click, one not
+ *  yet there is a small "+" to add a photo. */
+function PaperChips({ data, kinds }: { data: OrderDetail; kinds: PaperKind[] }) {
+  const queries = useQueryClient();
+  const [uploading, setUploading] = useState<PaperKind | null>(null);
+  const [problem, setProblem] = useState<string | null>(null);
+  const { order, can } = data;
+  const mayAdd = (kind: string) =>
+    kind === "payment_proof" ? can.addProof : kind === "dr" ? can.addDr : can.addPaper;
+  const rows = data.paperList.filter((row) => kinds.includes(row.kind));
+  if (rows.length === 0) return null;
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12.5px]">
+        <span className="font-semibold text-slate-600">Papers</span>
+        {rows.map((row) => {
+          const onFile = data.papers.filter((paper) => paper.kind === row.kind);
+          if (onFile.length)
+            return onFile.map((paper) => (
+              <a
+                key={paper.id}
+                href={`/api/papers/${paper.id}`}
+                target="_blank"
+                rel="noreferrer"
+                title={paper.name}
+                className="inline-flex items-center gap-1.5 font-semibold text-slate-800 hover:underline"
+              >
+                <span className="size-1.5 rounded-full bg-emerald-500" aria-hidden="true" />
+                {row.label}
+              </a>
+            ));
+          return mayAdd(row.kind) ? (
+            <label
+              key={row.kind}
+              title={row.why ?? undefined}
+              className={`inline-flex cursor-pointer items-center gap-1 font-semibold ${
+                row.needed ? "text-amber-700" : "text-slate-500"
+              } hover:text-emerald-700 ${uploading ? "pointer-events-none opacity-50" : ""}`}
+            >
+              <Camera size={13} aria-hidden="true" />
+              {uploading === row.kind ? "Uploading…" : `+ ${row.label}`}
+              <input
+                type="file"
+                accept={PAPER_ACCEPT}
+                className="sr-only"
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = "";
+                  if (!file) return;
+                  setUploading(row.kind);
+                  try {
+                    await uploadPaper(order.id, row.kind, file);
+                    setProblem(null);
+                  } catch (error) {
+                    setProblem(
+                      error instanceof Error
+                        ? error.message
+                        : "That paper didn't upload. Try again.",
+                    );
+                  } finally {
+                    setUploading(null);
+                    await queries.invalidateQueries({ queryKey: ["orders"] });
+                  }
+                }}
+              />
+            </label>
+          ) : (
+            <span key={row.kind} className="text-slate-400">
+              No {row.label.toLowerCase()}
+            </span>
+          );
+        })}
+      </div>
+      {problem && <Problem message={problem} />}
+    </div>
+  );
+}
+
+/** What the MedRep sent, in one line, with the form to complete it folded until it is wanted. */
+function DetailsLine({ data }: { data: OrderDetail }) {
+  const { order } = data;
+  const [open, setOpen] = useState(false);
+  const facts = [
+    order.division ? [order.division, order.subDivision].filter(Boolean).join(" · ") : null,
+    order.paymentTerm,
+    order.deliveryAddress,
+    order.expectedOn ? `wanted ${dayLabel(order.expectedOn)}` : null,
+  ].filter(Boolean);
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-[12.5px]">
+        <span className="min-w-0 text-slate-700">
+          <span className="font-semibold text-slate-600">Details</span>{" "}
+          {facts.length ? facts.join(" · ") : "Division, payment terms and delivery not filled yet"}
+        </span>
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className="shrink-0 font-semibold text-emerald-700 hover:underline"
+        >
+          {open ? "Close" : "Edit details"}
+        </button>
+      </div>
+      {open && <CompleteDetails data={data} />}
+    </div>
+  );
+}
+
 function Papers({ data, kinds }: { data: OrderDetail; kinds: PaperKind[] }) {
   const queries = useQueryClient();
   const [uploading, setUploading] = useState<PaperKind | null>(null);
@@ -1172,8 +1280,8 @@ function ManagementStep({
       <Lines data={data} compare />
       {/* What Management checks besides the price: the buyer's licence and the papers. */}
       <LicenceFacts order={order} />
-      <Papers data={data} kinds={["po", "prescription", "gl", "payment_proof"]} />
-      {completes && <CompleteDetails data={data} />}
+      <PaperChips data={data} kinds={["po", "prescription", "gl", "payment_proof"]} />
+      {completes && <DetailsLine data={data} />}
       {can.approve && data.warehouseFill && data.warehouseFill.length > 0 && (
         <ShipsFrom fill={data.warehouseFill} value={warehouse} onChange={setWarehouse} />
       )}
