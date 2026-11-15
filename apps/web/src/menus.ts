@@ -29,6 +29,7 @@ import {
   PackageCheck,
   Pill,
   Radio,
+  Settings,
   ShoppingCart,
   SlidersHorizontal,
   Stethoscope,
@@ -521,14 +522,6 @@ function ownDesk(me: Me): Space {
                 [
                   { to: "/my-team", label: "Company view", icon: BarChart3, teams: true },
                   { to: "/company", label: "Company chart", icon: Network },
-                  { to: "/people", label: "Teams & people", icon: Users },
-                  { to: "/people?tab=areas", label: "Areas", icon: MapPin },
-                  {
-                    to: "/people?tab=requests",
-                    label: "Requests",
-                    icon: UserPlus,
-                    badge: "orgRequests",
-                  },
                 ],
                 "Company",
               ),
@@ -545,16 +538,44 @@ function ownDesk(me: Me): Space {
               ),
             ),
           },
+          {
+            // Setting the company up (teams, seats, areas, asks) is its own panel, apart from
+            // the figures: one way in.
+            items: [{ to: "/people", label: "Admin panel", icon: Settings, badge: "orgRequests" }],
+          },
         ],
       };
   }
 }
 
+/** The Admin panel: where the company is set up (who heads each channel, who sits under whom,
+ *  the areas, the asks for people), apart from the CEO's figures. */
+const adminPanel: Space = {
+  key: "admin-panel",
+  label: "Admin panel",
+  icon: Settings,
+  tone: "bg-slate-700 text-white",
+  groups: [
+    {
+      items: [
+        { to: "/people", label: "Teams & people", icon: Users },
+        { to: "/people?tab=areas", label: "Areas", icon: MapPin },
+        { to: "/people?tab=requests", label: "Requests", icon: UserPlus, badge: "orgRequests" },
+      ],
+    },
+  ],
+};
+const ADMIN_PANEL_PATHS = ["/people"];
+
 /** The menu for the page that is open: an app's while inside it, else the person's desk. */
 export function spaceFor(me: Me, pathname: string): Space {
   const desk = deskFor(me);
-  // The CEO's and the Admin's sidebar holds every app as a folder: it never swaps for another.
-  if (APP_ROLES.includes(me.role)) return desk;
+  // The CEO's and the Admin's sidebar holds every app as a folder: it never swaps for another,
+  // but for the Admin panel, which is its own place.
+  if (APP_ROLES.includes(me.role))
+    return under(pathname, ADMIN_PANEL_PATHS)
+      ? { ...adminPanel, back: { to: "/", label: `Back to ${me.roleLabel}` } }
+      : desk;
   // A page the person's own sidebar lists (Management's "Medicines & stock", say) keeps that
   // sidebar: following one's own link never swaps the menu for another app's.
   const listed = desk.groups.some((group) =>

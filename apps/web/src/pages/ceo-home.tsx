@@ -28,6 +28,17 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { collectedChange, counted, exactPeso, monthShort, shortPeso } from "../ceo";
+import {
+  CustomersCard,
+  MedicinesCard,
+  OrdersNowCard,
+  PeopleCard,
+  PlacedToDeliveredCard,
+  SpeedCards,
+  TeamsCard,
+  useBoard,
+  useSpeed,
+} from "../team/glance";
 import { RangePicker } from "../team/range";
 import { PageState } from "../ui";
 import { greeting, todayWords } from "./home";
@@ -36,6 +47,32 @@ type Icon = React.ComponentType<{ className?: string }>;
 const num = (n: number) => n.toLocaleString("en-PH");
 /** A white card with a hairline border, flat. */
 const CARD = "rounded-xl border border-slate-200 bg-white";
+
+/** The company at a glance for the days picked: orders right now, how long each desk takes, who
+ *  sells most, which team is ahead, the medicines and the customers; each card opens its page. */
+function AtAGlance() {
+  const board = useBoard();
+  const speed = useSpeed();
+  return (
+    <>
+      {speed.data && (
+        <section aria-label="Desks" className="space-y-3">
+          <SpeedCards report={speed.data} />
+        </section>
+      )}
+      {board.data && (
+        <section aria-label="Orders and selling" className="grid gap-3 lg:grid-cols-2">
+          <OrdersNowCard board={board.data} />
+          {speed.data ? <PlacedToDeliveredCard report={speed.data} /> : <span />}
+          <PeopleCard board={board.data} />
+          <TeamsCard board={board.data} />
+          <MedicinesCard board={board.data} />
+          <CustomersCard board={board.data} />
+        </section>
+      )}
+    </>
+  );
+}
 
 /** One side of the money: its total large, then each part with where to look at it. */
 function MoneySide({
@@ -354,8 +391,10 @@ export function CeoHomePage() {
         </Metric>
       </section>
 
-      {/* 3. The company, one summary per app */}
-      {/* 3. Money at a glance: what is to come in, what is to go out */}
+      {/* 3. The day's work and who sells, open: the cards of My team and Speed */}
+      <AtAGlance />
+
+      {/* 4. Money at a glance: what is to come in, what is to go out */}
       <section aria-label="Money" className="grid gap-3 md:grid-cols-2">
         <MoneySide
           title="To come in"
@@ -401,6 +440,97 @@ export function CeoHomePage() {
         />
       </section>
 
+      {/* 5. The channels against their targets, and what needs the CEO */}
+      <div className="grid gap-3 lg:grid-cols-2">
+        <section aria-labelledby="channels-target" className={`${CARD} min-w-0`}>
+          <header className="flex items-baseline justify-between gap-3 px-4 pt-4 pb-2 sm:px-5">
+            <h2 id="channels-target" className="text-sm font-semibold text-slate-900">
+              Channels against target
+            </h2>
+            {data.running && <span className="text-xs text-slate-500">Pace {pacePct}%</span>}
+          </header>
+          {channels.length === 0 ? (
+            <p className="px-4 pb-4 text-sm text-slate-500 sm:px-5">No sales channels yet.</p>
+          ) : (
+            <ul className="pb-2">
+              {channels.map((channel) => (
+                <li key={channel.code}>
+                  <Link
+                    to={`/reports/channels${monthQuery}#${channel.code}`}
+                    title={
+                      channel.target === null
+                        ? `${channel.name}: ${exactPeso(channel.sold)}, no target`
+                        : `${channel.name}: ${exactPeso(channel.sold)} of ${exactPeso(channel.target)}`
+                    }
+                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-4 py-2 hover:bg-slate-50 sm:grid-cols-[minmax(0,13rem)_minmax(0,1fr)_3.5rem] sm:px-5 lg:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_3.5rem]"
+                  >
+                    <span className="col-start-1 row-start-1 truncate text-sm text-slate-800">
+                      {channel.name}
+                    </span>
+                    <span className="col-span-2 row-start-2 sm:col-span-1 sm:col-start-2 sm:row-start-1">
+                      <PaceBar
+                        pct={channel.pct}
+                        pace={data.running ? data.pace : null}
+                        tone={channel.tone}
+                      />
+                    </span>
+                    <span
+                      className={`col-start-2 row-start-1 text-right text-sm tabular-nums sm:col-start-3 ${channel.pct === null ? "text-slate-400" : `font-semibold ${PCT[channel.tone]}`}`}
+                    >
+                      {channel.pct === null ? "—" : `${Math.round(channel.pct)}%`}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section aria-labelledby="needs-you" className={`${CARD} min-w-0`}>
+          <header className="flex items-baseline justify-between gap-3 px-4 pt-4 pb-2 sm:px-5">
+            <h2 id="needs-you" className="text-sm font-semibold text-slate-900">
+              Needs you
+            </h2>
+            {data.alerts.length > 0 && (
+              <span className="text-xs text-slate-500 tabular-nums">{data.alerts.length}</span>
+            )}
+          </header>
+          {data.alerts.length === 0 ? (
+            <p className="flex items-center gap-2 px-4 pb-4 text-sm text-slate-500 sm:px-5">
+              <CheckCircle2 className="size-4 text-emerald-600" /> Nothing needs you right now
+            </p>
+          ) : (
+            <ul className="pb-2">
+              {data.alerts.map((alert) => {
+                const AlertIcon = ALERT_ICONS[alert.kind];
+                return (
+                  <li key={`${alert.kind}:${alert.text}`}>
+                    <Link
+                      to={alert.href}
+                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 sm:px-5"
+                    >
+                      <span
+                        className={`grid size-8 shrink-0 place-items-center rounded-lg ${alert.tone === "bad" ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-700"}`}
+                      >
+                        <AlertIcon className="size-4" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-sm text-slate-900">{alert.text}</span>
+                        {alert.note && (
+                          <span className="block text-xs text-slate-500">{alert.note}</span>
+                        )}
+                      </span>
+                      <ChevronRight className="size-4 shrink-0 text-slate-300" />
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      </div>
+
+      {/* 6. Every part of the company, one line each, to open it */}
       <section aria-labelledby="your-company">
         <h2 id="your-company" className="mb-3 text-sm font-semibold text-slate-900">
           Your company
@@ -497,96 +627,6 @@ export function CeoHomePage() {
           />
         </div>
       </section>
-
-      {/* 4. The channels against their targets, and what needs the CEO */}
-      <div className="grid gap-3 lg:grid-cols-2">
-        <section aria-labelledby="channels-target" className={`${CARD} min-w-0`}>
-          <header className="flex items-baseline justify-between gap-3 px-4 pt-4 pb-2 sm:px-5">
-            <h2 id="channels-target" className="text-sm font-semibold text-slate-900">
-              Channels against target
-            </h2>
-            {data.running && <span className="text-xs text-slate-500">Pace {pacePct}%</span>}
-          </header>
-          {channels.length === 0 ? (
-            <p className="px-4 pb-4 text-sm text-slate-500 sm:px-5">No sales channels yet.</p>
-          ) : (
-            <ul className="pb-2">
-              {channels.map((channel) => (
-                <li key={channel.code}>
-                  <Link
-                    to={`/reports/channels${monthQuery}#${channel.code}`}
-                    title={
-                      channel.target === null
-                        ? `${channel.name}: ${exactPeso(channel.sold)}, no target`
-                        : `${channel.name}: ${exactPeso(channel.sold)} of ${exactPeso(channel.target)}`
-                    }
-                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-4 py-2 hover:bg-slate-50 sm:grid-cols-[minmax(0,13rem)_minmax(0,1fr)_3.5rem] sm:px-5 lg:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_3.5rem]"
-                  >
-                    <span className="col-start-1 row-start-1 truncate text-sm text-slate-800">
-                      {channel.name}
-                    </span>
-                    <span className="col-span-2 row-start-2 sm:col-span-1 sm:col-start-2 sm:row-start-1">
-                      <PaceBar
-                        pct={channel.pct}
-                        pace={data.running ? data.pace : null}
-                        tone={channel.tone}
-                      />
-                    </span>
-                    <span
-                      className={`col-start-2 row-start-1 text-right text-sm tabular-nums sm:col-start-3 ${channel.pct === null ? "text-slate-400" : `font-semibold ${PCT[channel.tone]}`}`}
-                    >
-                      {channel.pct === null ? "—" : `${Math.round(channel.pct)}%`}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        <section aria-labelledby="needs-you" className={`${CARD} min-w-0`}>
-          <header className="flex items-baseline justify-between gap-3 px-4 pt-4 pb-2 sm:px-5">
-            <h2 id="needs-you" className="text-sm font-semibold text-slate-900">
-              Needs you
-            </h2>
-            {data.alerts.length > 0 && (
-              <span className="text-xs text-slate-500 tabular-nums">{data.alerts.length}</span>
-            )}
-          </header>
-          {data.alerts.length === 0 ? (
-            <p className="flex items-center gap-2 px-4 pb-4 text-sm text-slate-500 sm:px-5">
-              <CheckCircle2 className="size-4 text-emerald-600" /> Nothing needs you right now
-            </p>
-          ) : (
-            <ul className="pb-2">
-              {data.alerts.map((alert) => {
-                const AlertIcon = ALERT_ICONS[alert.kind];
-                return (
-                  <li key={`${alert.kind}:${alert.text}`}>
-                    <Link
-                      to={alert.href}
-                      className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 sm:px-5"
-                    >
-                      <span
-                        className={`grid size-8 shrink-0 place-items-center rounded-lg ${alert.tone === "bad" ? "bg-rose-50 text-rose-600" : "bg-amber-50 text-amber-700"}`}
-                      >
-                        <AlertIcon className="size-4" />
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm text-slate-900">{alert.text}</span>
-                        {alert.note && (
-                          <span className="block text-xs text-slate-500">{alert.note}</span>
-                        )}
-                      </span>
-                      <ChevronRight className="size-4 shrink-0 text-slate-300" />
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-      </div>
     </div>
   );
 }

@@ -6,6 +6,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CirclePlus,
   KeyRound,
   LogOut,
@@ -23,7 +25,6 @@ import { unreadIn, useUpdates } from "./updates";
 export function Shell() {
   const me = useMe();
   const location = useLocation();
-  const navigate = useNavigate();
   const [drawer, setDrawer] = useState(false);
   // On a computer the menu button hides the sidebar for more room, and the choice is kept.
   const wide = useWide();
@@ -178,22 +179,6 @@ export function Shell() {
         >
           <span className="truncate text-sm font-semibold text-slate-900">{space.label}</span>
         </NavLink>
-        {/* One way back on every page: to the page before it in the CRM (else Home). */}
-        {location.pathname !== "/" && (
-          <button
-            type="button"
-            onClick={() =>
-              (window.history.state as { idx?: number } | null)?.idx ? navigate(-1) : navigate("/")
-            }
-            className="group ml-1 inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-slate-200 bg-white pr-3 pl-1 text-[13px] font-medium text-slate-600 shadow-sm hover:border-slate-300 hover:text-slate-900"
-            title="Back to the page before"
-          >
-            <span className="grid size-6 place-items-center rounded-full bg-slate-100 group-hover:bg-emerald-50 group-hover:text-emerald-700">
-              <ArrowLeft size={14} aria-hidden="true" />
-            </span>
-            Back
-          </button>
-        )}
         <div className="ml-auto flex w-full max-w-xl justify-end">
           <SearchBox />
         </div>
@@ -208,6 +193,10 @@ export function Shell() {
           {menu()}
         </aside>
         <main className="min-w-0 flex-1 px-4 pt-6 pb-24 md:px-8 md:pb-10 print:p-0">
+          {/* The way back sits in the page, as on a team's page: a small ‹ and where you are. */}
+          {location.pathname !== "/" && !OWN_BACK.some((test) => test.test(location.pathname)) && (
+            <PageBack trail={trailOf(space, location.pathname)} />
+          )}
           <Outlet />
         </main>
       </div>
@@ -310,6 +299,63 @@ function linkOpen(location: { pathname: string; search: string }, items: { to: s
       : isActive && !items.some((other) => other.to.startsWith(`${to}?`) && filtered(other.to));
 }
 
+/** Pages that draw their own way back (a team's page, a record's crumbs, an order, a case). */
+const OWN_BACK = [
+  /^\/my-team/,
+  /^\/customers\/\d+/,
+  /^\/orders\/\d+/,
+  /^\/leads\/\d+/,
+  /^\/messages\/\d+/,
+];
+
+/** "Orders › All orders": where the open page sits in the sidebar (the closest link). */
+function trailOf(space: { groups: MenuGroup[] }, pathname: string): string[] {
+  let best: { length: number; trail: string[] } = { length: 0, trail: [] };
+  const consider = (item: MenuItem, parent?: MenuItem) => {
+    const path = item.to.split("?")[0] ?? "";
+    if (path === "/" || !(pathname === path || pathname.startsWith(`${path}/`))) return;
+    if (path.length > best.length)
+      best = { length: path.length, trail: parent ? [parent.label, item.label] : [item.label] };
+  };
+  for (const group of space.groups)
+    for (const item of group.items) {
+      consider(item);
+      for (const child of item.children ?? []) consider(child, item);
+    }
+  return best.trail;
+}
+
+/** A small round ‹ (to the page before, else Home) and where the page sits. */
+function PageBack({ trail }: { trail: string[] }) {
+  const navigate = useNavigate();
+  return (
+    <nav
+      aria-label="Where you are"
+      className="mb-3 flex flex-wrap items-center gap-1 text-xs text-slate-500 print:hidden"
+    >
+      <button
+        type="button"
+        onClick={() =>
+          (window.history.state as { idx?: number } | null)?.idx ? navigate(-1) : navigate("/")
+        }
+        aria-label="Back"
+        title="Back to the page before"
+        className="mr-1 grid size-6 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:border-emerald-300 hover:text-emerald-700"
+      >
+        <ChevronLeft className="size-3.5" />
+      </button>
+      {trail.map((part, n) => (
+        <span key={part} className="flex items-center gap-1">
+          {n > 0 && <ChevronRight className="size-3" />}
+          <span className={n === trail.length - 1 ? "font-semibold text-slate-700" : ""}>
+            {part}
+          </span>
+        </span>
+      ))}
+    </nav>
+  );
+}
+
 /** Whether a page of a folder (or the folder's own) is open: it then shows unfolded. */
 function inFolder(item: MenuItem, pathname: string): boolean {
   return allItems(item.children ?? [item]).some((one) => {
@@ -338,7 +384,7 @@ function MenuList({
   const [folded, setFolded] = useState<Record<string, boolean>>({});
 
   // The teams listed under Company (the CEO) or My team (a lead), read once.
-  const wantsTeams = every.some((item) => item.teams);
+  const wantsTeams = every.some((item) => item.teams || item.badge === "orgRequests");
   const teams = useQuery({
     queryKey: ["org", "menu"],
     queryFn: () => api<{ units: OrgMenuUnit[]; openRequests: number }>("/api/org/menu"),

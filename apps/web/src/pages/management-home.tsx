@@ -10,6 +10,7 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { avatarTone, initials } from "../look";
+import { DeskGlance } from "../team/glance";
 import { count, peso } from "../ui";
 import { Figure, type Period, PeriodBox, periodWord } from "./figures";
 import { greeting, todayWords } from "./home";
@@ -112,6 +113,9 @@ export function ManagementHome() {
           to="/team"
         />
       </div>
+
+      {/* How fast Management approves, and each approver against the limit. */}
+      <DeskGlance steps={["management"]} people="management" />
 
       {/* The company's orders for the period and where they stand now. */}
       <PeriodBox

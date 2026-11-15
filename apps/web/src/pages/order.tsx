@@ -8,12 +8,13 @@ import { DIVISIONS, PAYMENT_TERMS, SUB_DIVISIONS } from "@2mg/api/divisions";
 import type { OrderAction, OrderDetail, PaperKind } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft,
   ArrowRight,
   Banknote,
   Box,
   Camera,
   Check,
+  ChevronLeft,
+  ChevronRight,
   CircleCheck,
   CirclePause,
   CircleX,
@@ -278,13 +279,22 @@ export function Order() {
 
   return (
     <div className="mx-auto max-w-screen-2xl">
-      <button
-        type="button"
-        onClick={() => navigate(-1)}
-        className="mb-3 inline-flex items-center gap-1.5 text-xs font-medium text-slate-500 hover:text-slate-800"
+      <nav
+        aria-label="Where you are"
+        className="mb-3 flex items-center gap-1 text-xs text-slate-500"
       >
-        <ArrowLeft className="size-3.5" /> Back
-      </button>
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          aria-label="Back"
+          title="Back to the page before"
+          className="mr-1 grid size-6 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:border-emerald-300 hover:text-emerald-700"
+        >
+          <ChevronLeft className="size-3.5" />
+        </button>
+        Orders <ChevronRight className="size-3" />
+        <span className="font-semibold text-slate-700">{order.code}</span>
+      </nav>
 
       {/* Who it is for, what it is worth and where it goes. */}
       <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">

@@ -21,6 +21,7 @@ import { api } from "../api";
 import { useMe } from "../auth";
 import { shortPeso } from "../ceo";
 import { avatarTone, dayHeading, initials, PRIMARY_SM } from "../look";
+import { Donut } from "../team/charts";
 import { count, dayLabel, PageState, peso } from "../ui";
 import { Figure, type Period, PeriodBox, periodWord as periodWordOf } from "./figures";
 import { greeting, todayWords } from "./home";
@@ -466,6 +467,8 @@ export function MedrepHome() {
             )}
           </section>
 
+          <MyOrdersNow />
+
           <ToCollectPanel />
 
           {sales && sales.target !== null && sales.target > 0 && (
@@ -770,6 +773,34 @@ function ToCollectPanel() {
           ))}
         </ul>
       )}
+    </section>
+  );
+}
+
+/** Where his open orders wait now, as the team page's donut. */
+function MyOrdersNow() {
+  const mine = useMine("all", 1);
+  const counts = mine.data?.counts;
+  if (!counts) return null;
+  const open =
+    counts.management + counts.finance + counts.dispatch + counts.held + counts.sent_back;
+  if (!open) return null;
+  return (
+    <section className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs">
+      <h3 className="mb-3 text-sm font-semibold tracking-tight text-slate-900">
+        My orders right now
+      </h3>
+      <Donut
+        label="open"
+        middle={String(open)}
+        slices={[
+          { label: "With Management", value: counts.management, color: "#8b5cf6" },
+          { label: "With Finance", value: counts.finance, color: "#f59e0b" },
+          { label: "Packing or on the way", value: counts.dispatch, color: "#0ea5e9" },
+          { label: "On hold", value: counts.held, color: "#f43f5e" },
+          { label: "Sent back to me", value: counts.sent_back, color: "#fbbf24" },
+        ]}
+      />
     </section>
   );
 }

@@ -13,6 +13,7 @@ import { api } from "../api";
 import { useMe } from "../auth";
 import { counted, exactPeso, monthName, monthShort, shiftMonth, shortPeso } from "../ceo";
 import { avatarTone, initials } from "../look";
+import { LeadGlance } from "../team/glance";
 import { PageState } from "../ui";
 import { PACE_TEXT, PaceBar } from "./ceo-home";
 import { greeting, todayWords } from "./home";
@@ -101,6 +102,8 @@ export function TeamSalesPage() {
           )}
         </nav>
       </header>
+
+      <LeadGlance />
 
       <section aria-label="The team's month" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Figure

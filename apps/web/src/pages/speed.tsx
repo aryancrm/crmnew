@@ -75,7 +75,7 @@ const toneOf = (minutes: number, limit: number) =>
       ? { text: "text-amber-700", bar: "bg-amber-400", ring: "#f59e0b" }
       : { text: "text-emerald-700", bar: "bg-emerald-500", ring: "#10b981" };
 
-function StepCard({ step }: { step: SpeedReport["steps"][number] }) {
+export function StepCard({ step }: { step: SpeedReport["steps"][number] }) {
   const look = STEP[step.step];
   const tone = toneOf(step.avgMinutes, step.lateAfterMinutes);
   const lateShare = step.orders ? step.late / step.orders : 0;

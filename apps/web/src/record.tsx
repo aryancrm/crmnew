@@ -6,7 +6,7 @@
 // reads like the case page.
 
 import type { LucideIcon } from "lucide-react";
-import { ArrowLeft, Check } from "lucide-react";
+import { Check, ChevronLeft } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
@@ -18,9 +18,11 @@ export function Crumbs({ list, to }: { list: string; to: string }) {
       <button
         type="button"
         onClick={() => (window.history.length > 1 ? navigate(-1) : navigate(to))}
-        className="inline-flex items-center gap-1 font-medium hover:text-slate-800"
+        aria-label="Back"
+        title="Back to the page before"
+        className="mr-1 grid size-6 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:border-emerald-300 hover:text-emerald-700"
       >
-        <ArrowLeft className="size-3.5" /> Back
+        <ChevronLeft className="size-3.5" />
       </button>
       <Link to={to} className="hover:text-slate-800">
         {list}
