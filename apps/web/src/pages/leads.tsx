@@ -60,7 +60,8 @@ const STEP_LINE: { key: DeskStep; label: string }[] = [
   { key: "done", label: "Done" },
 ];
 
-export function LeadsDesk() {
+export function LeadsDesk({ desk = "online" }: { desk?: "online" | "pap" }) {
+  const pap = desk === "pap";
   const [params, setParams] = useSearchParams();
   const queue = (params.get("queue") ?? HOME) as LeadQueue;
   const step = params.get("at") ?? "";
@@ -110,6 +111,7 @@ export function LeadsDesk() {
     type,
     q,
     shown: shown ? String(shown) : "",
+    desk: pap ? "pap" : "",
   }).toString();
   const query = useQuery({
     queryKey: ["leads", "desk", search],
@@ -158,14 +160,16 @@ export function LeadsDesk() {
     <div className="mx-auto max-w-screen-2xl">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <h1 className="text-2xl font-bold tracking-tight text-ink">Leads &amp; enquiries</h1>
+          <h1 className="text-2xl font-bold tracking-tight text-ink">
+            {pap ? "PAP cases" : "Leads & enquiries"}
+          </h1>
           <span className="rounded-full bg-stone-200/75 px-2.5 py-0.5 text-xs font-semibold text-stone-600 tabular-nums">
             {count(data.counts.active)}
           </span>
         </div>
         {data.can.add && (
           <button type="button" className={PRIMARY_SM} onClick={() => setAdding(true)}>
-            <Plus className="size-4" /> New lead
+            <Plus className="size-4" /> {pap ? "New PAP case" : "New lead"}
           </button>
         )}
       </div>
@@ -281,7 +285,7 @@ export function LeadsDesk() {
                 </button>
               )}
             </div>
-            <div className="flex flex-wrap items-center gap-1.5">
+            <div className={`flex flex-wrap items-center gap-1.5 ${pap ? "hidden" : ""}`}>
               {select("Type", type, (value) => set({ type: value }), [
                 { value: "", label: "All types" },
                 { value: "enquiry", label: "Enquiries" },
@@ -434,7 +438,7 @@ export function LeadsDesk() {
         )}
       </div>
 
-      {adding && <NewLeadDialog agents={data.agents} onClose={() => setAdding(false)} />}
+      {adding && <NewLeadDialog pap={pap} agents={data.agents} onClose={() => setAdding(false)} />}
     </div>
   );
 }

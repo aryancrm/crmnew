@@ -89,7 +89,8 @@ const teamSeatAreas = sql`(select s.area_id from seat s
 export function seen(me: Me): SQL {
   if (me.role === "medrep")
     return sql`(c.added_by = ${me.id} ${me.area ? sql`or c.area_id = ${me.area.id}` : sql``}
-      or c.area_id in ${seatAreasOf(me)})`;
+      or c.area_id in ${seatAreasOf(me)}
+      or exists (select 1 from lead l where l.customer_id = c.id and l.desk = 'pap' and l.assigned_to = ${me.id}))`;
   if (me.role === "team_lead" || me.role === "manager")
     return sql`(c.added_by in (select id from team)
       or c.area_id in (select area_id from person where id in (select id from team) and area_id is not null)

@@ -1651,6 +1651,7 @@ export type LeadPaperKind =
   | "valid_id"
   | "med_cert"
   | "gl_letter"
+  | "pickup_photo"
   | "other"
   | "unsorted";
 export type LeadQueue = "all" | "active" | "attention" | "deliver" | "payment" | "done" | "lost";
@@ -1777,7 +1778,15 @@ export type LeadCase = {
     glLetterNo: string | null;
     glAmount: number | null;
     glLetterOn: string | null;
+    glExpiresOn: string | null;
     glVerifiedAt: string | null;
+    /** The claim after delivery (guarantee letter). */
+    claimSentOn: string | null;
+    claimRef: string | null;
+    /** PCSO's other two quotations: each vendor's name and total, from their written quote. */
+    canvass: { vendor: string; amount: number }[];
+    /** online: the Online desk's; pap: a PAP MedRep's patient-assistance case. */
+    desk: "online" | "pap";
     state: "open" | "lost";
     lostReason: string | null;
     firstContactAt: string;
@@ -1904,6 +1913,8 @@ export type GlInput = {
   letterNo?: string | null;
   amount?: number | null;
   letterOn?: string | null;
+  /** The letter's last day. */
+  expiresOn?: string | null;
   verify?: boolean;
 };
 

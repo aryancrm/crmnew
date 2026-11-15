@@ -213,13 +213,13 @@ export function LeadPage() {
     <div className="mx-auto max-w-screen-2xl space-y-4">
       <nav aria-label="Where you are" className="flex items-center gap-1.5 text-xs text-slate-500">
         <Link
-          to="/leads"
+          to={lead.desk === "pap" ? "/pap" : "/leads"}
           className="inline-flex items-center gap-1 font-medium hover:text-slate-800"
         >
           <ArrowLeft className="size-3.5" /> Back
         </Link>
-        <Link to="/leads" className="hover:text-slate-800">
-          Leads &amp; enquiries
+        <Link to={lead.desk === "pap" ? "/pap" : "/leads"} className="hover:text-slate-800">
+          {lead.desk === "pap" ? "PAP cases" : "Leads & enquiries"}
         </Link>
         <span aria-hidden="true" className="text-slate-300">
           ›
@@ -298,8 +298,8 @@ export function LeadPage() {
                 <span className="shrink-0 text-slate-400">Intake {intakeAt}</span>
                 <span className="inline-flex items-center gap-1.5">
                   <UserRound className="size-3.5 text-slate-400" />
-                  <span className="text-slate-400">Owner</span>
-                  {data.can.work && data.agents.length > 0 ? (
+                  <span className="text-slate-400">{lead.desk === "pap" ? "MedRep" : "Owner"}</span>
+                  {data.can.work && data.agents.length > 0 && lead.desk !== "pap" ? (
                     <select
                       aria-label="Case owner"
                       value={lead.assignedTo ?? ""}
@@ -719,7 +719,9 @@ function PaperRow({
 }) {
   const write = useCaseWrite(data.lead.id);
   const [uploading, setUploading] = useState(0);
-  const locked = Boolean(data.order && data.order.status !== "cancelled");
+  // The order fixes the papers it was placed with; the pick-up photo comes after it.
+  const locked =
+    Boolean(data.order && data.order.status !== "cancelled") && kind !== "pickup_photo";
   async function upload(list: FileList | null) {
     if (!list?.length) return;
     const chosen = [...list];
@@ -1198,6 +1200,77 @@ const toDraft = (line: QuoteLine): Draft => ({
 });
 const centavos = (text: string) => Math.round(Number(text.replace(/,/g, "")) * 100);
 
+/** PCSO asks for three quotations: ours and two other vendors' totals, each from that
+ *  vendor's written quotation. They print after ours, one page each. */
+function Canvass({ data, editable }: { data: LeadCase; editable: boolean }) {
+  const { lead } = data;
+  const write = useCaseWrite(lead.id);
+  const [rows, setRows] = useState(() =>
+    [0, 1].map((at) => ({
+      vendor: lead.canvass[at]?.vendor ?? "",
+      amount: lead.canvass[at] ? (lead.canvass[at].amount / 100).toFixed(2) : "",
+    })),
+  );
+  const change = (at: number, changes: Partial<{ vendor: string; amount: string }>) =>
+    setRows((all) => all.map((row, index) => (index === at ? { ...row, ...changes } : row)));
+  const saved = lead.canvass.length === 2;
+  async function save() {
+    await write.send(`/api/leads/${lead.id}/canvass`, {
+      lines: rows
+        .filter((row) => row.vendor.trim() || row.amount.trim())
+        .map((row) => ({
+          vendor: row.vendor.trim(),
+          amount: Number.isFinite(centavos(row.amount)) ? centavos(row.amount) : 0,
+        })),
+    });
+  }
+  return (
+    <div className="mt-4 rounded-xl bg-slate-50 px-3 py-3">
+      <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-slate-700">
+        <span
+          className={`size-2 rounded-full ${saved ? "bg-emerald-500" : "bg-amber-400"}`}
+          aria-hidden="true"
+        />
+        PCSO's 3 quotations: ours, and two other vendors'
+      </div>
+      <div className="grid gap-2">
+        {rows.map((row, at) => (
+          <div key={`vendor-${at + 2}`} className="grid gap-2 sm:grid-cols-[1fr_10rem]">
+            <input
+              aria-label={`Quotation ${at + 2}: vendor`}
+              placeholder={`Quotation ${at + 2}: vendor's name`}
+              className={INPUT}
+              disabled={!editable}
+              value={row.vendor}
+              onChange={(event) => change(at, { vendor: event.target.value })}
+            />
+            <input
+              aria-label={`Quotation ${at + 2}: total (₱)`}
+              placeholder="Their total (₱)"
+              inputMode="decimal"
+              className={`${INPUT} tabular-nums`}
+              disabled={!editable}
+              value={row.amount}
+              onChange={(event) => change(at, { amount: event.target.value })}
+            />
+          </div>
+        ))}
+      </div>
+      <Problem message={write.general(["lines"]) ?? write.at("lines")} />
+      {editable && (
+        <div className="mt-2 flex items-center justify-between gap-2">
+          <span className="text-[11px] text-slate-500">
+            From each vendor's written quotation. The PDF prints all 3.
+          </span>
+          <Button small disabled={write.busy} onClick={save}>
+            {write.busy ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void }) {
   const { lead } = data;
   const editable = data.can.work && !(data.order && data.order.status !== "cancelled");
@@ -1436,6 +1509,9 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
           </dl>
         )}
 
+        {quoted && lead.road === "gl" && lead.agency === "pcso" && (
+          <Canvass data={data} editable={editable} />
+        )}
         {quoted && <QuotationOut data={data} />}
 
         {quoted && (
@@ -1593,6 +1669,7 @@ function GlStep({
   const [letterNo, setLetterNo] = useState(lead.glLetterNo ?? "");
   const [amount, setAmount] = useState(lead.glAmount ? (lead.glAmount / 100).toFixed(2) : "");
   const [letterOn, setLetterOn] = useState(lead.glLetterOn ?? "");
+  const [expiresOn, setExpiresOn] = useState(lead.glExpiresOn ?? "");
   const agency = AGENCIES.find((item) => item.key === lead.agency);
   const letter = data.papers.find((paper) => paper.kind === "gl_letter");
   const quoted = data.quote.lines.length > 0 && !data.quote.stale;
@@ -1603,11 +1680,12 @@ function GlStep({
       letterNo: letterNo.trim() || null,
       amount: amount.trim() ? centavos(amount) : null,
       letterOn: letterOn || null,
+      expiresOn: expiresOn || null,
       verify,
     });
   }
   const verified = Boolean(lead.glVerifiedAt);
-  const fields = ["appliedOn", "letterNo", "amount", "letterOn", "verify"];
+  const fields = ["appliedOn", "letterNo", "amount", "letterOn", "expiresOn", "verify"];
 
   if (part === "apply")
     return (
@@ -1683,7 +1761,7 @@ function GlStep({
           files={letter.files}
         />
       )}
-      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+      <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <Field label="Letter number" error={write.at("letterNo")}>
           {(field) => (
             <input
@@ -1716,6 +1794,18 @@ function GlStep({
               disabled={!editable}
               value={letterOn}
               onChange={(event) => setLetterOn(event.target.value)}
+            />
+          )}
+        </Field>
+        <Field label="Valid until" error={write.at("expiresOn")}>
+          {(field) => (
+            <input
+              {...field}
+              type="date"
+              className={INPUT}
+              disabled={!editable}
+              value={expiresOn}
+              onChange={(event) => setExpiresOn(event.target.value)}
             />
           )}
         </Field>
@@ -2155,6 +2245,103 @@ function OrderStep({ data, onNext }: { data: LeadCase; onNext: () => void }) {
   );
 }
 
+/** The guarantee letter's claim after delivery: 4.1 the pick-up photo, 4.2 sent to the agency
+ *  (the day and its reference), 4.3 the agency's money, which Finance records on the invoice. */
+function ClaimSteps({ data }: { data: LeadCase }) {
+  const { lead } = data;
+  const write = useCaseWrite(lead.id);
+  const [sentOn, setSentOn] = useState(lead.claimSentOn ?? "");
+  const [ref, setRef] = useState(lead.claimRef ?? "");
+  const photo = data.papers.find((paper) => paper.kind === "pickup_photo");
+  const hasPhoto = Boolean(photo?.files.length);
+  const agency = AGENCIES.find((item) => item.key === lead.agency)?.short ?? "the agency";
+  const dot = (done: boolean) => (
+    <span
+      className={`grid size-5 shrink-0 place-items-center rounded-full text-[10px] font-bold ${done ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-600"}`}
+      aria-hidden="true"
+    >
+      {done ? "✓" : ""}
+    </span>
+  );
+  return (
+    <div className="flex flex-col gap-3 rounded-xl bg-slate-50 px-3 py-3 text-[13px]">
+      <div className="flex items-start gap-2">
+        {dot(hasPhoto)}
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold text-slate-800">4.1 Pick-up photo</div>
+          <PaperRow
+            data={data}
+            kind="pickup_photo"
+            label="The patient with the medicines"
+            needed
+            files={photo?.files ?? []}
+          />
+        </div>
+      </div>
+      <div className="flex items-start gap-2">
+        {dot(Boolean(lead.claimSentOn))}
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold text-slate-800">4.2 Claim sent to {agency}</div>
+          <div className="mt-1.5 grid gap-2 sm:grid-cols-[10rem_1fr_auto] sm:items-end">
+            <Field label="Sent on" error={write.at("sentOn")}>
+              {(field) => (
+                <input
+                  {...field}
+                  type="date"
+                  className={INPUT}
+                  disabled={!data.can.work}
+                  value={sentOn}
+                  onChange={(event) => setSentOn(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field label="Claim reference (optional)" error={write.at("ref")}>
+              {(field) => (
+                <input
+                  {...field}
+                  className={INPUT}
+                  disabled={!data.can.work}
+                  value={ref}
+                  onChange={(event) => setRef(event.target.value)}
+                />
+              )}
+            </Field>
+            {data.can.work && (
+              <Button
+                small
+                variant={lead.claimSentOn ? "plain" : "primary"}
+                disabled={write.busy || !sentOn}
+                onClick={() =>
+                  write.send(`/api/leads/${lead.id}/claim`, {
+                    sentOn: sentOn || null,
+                    ref: ref.trim() || null,
+                  })
+                }
+              >
+                {write.busy ? "Saving…" : lead.claimSentOn ? "Save" : "Claim sent"}
+              </Button>
+            )}
+          </div>
+          <Problem message={write.general(["sentOn", "ref"])} />
+        </div>
+      </div>
+      <div className="flex items-start gap-2">
+        {dot(data.step.value === "done")}
+        <div className="min-w-0 flex-1">
+          <div className="font-semibold text-slate-800">4.3 {agency} pays</div>
+          <div className="text-slate-600">
+            {data.step.value === "done"
+              ? "Paid."
+              : data.can.pay
+                ? "Record the agency's money below when it comes."
+                : "Finance records the agency's money on the invoice when it comes."}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PayStep({ data, onBack }: { data: LeadCase; onBack: () => void }) {
   const write = useCaseWrite(data.lead.id);
   const [paying, setPaying] = useState(false);
@@ -2181,6 +2368,7 @@ function PayStep({ data, onBack }: { data: LeadCase; onBack: () => void }) {
   return (
     <StepPanel number="4" title={title}>
       <div className="flex flex-col gap-4">
+        {gl && order.status === "completed" && <ClaimSteps data={data} />}
         <dl className="grid grid-cols-2 gap-3 text-[13px] sm:grid-cols-4">
           <div>
             <dt className="text-[12px] text-slate-500">Invoice</dt>
@@ -2445,6 +2633,7 @@ function EditDialog({
         onClose={onClose}
         problem={write.general(FIELDS)}
         lockRoad={lockRoad}
+        pap={data.lead.desk === "pap"}
       />
     </Dialog>
   );

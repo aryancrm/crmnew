@@ -517,8 +517,16 @@ export function OrderNew({
     return <PageState query={catalogue.data ? stock : catalogue} what="the medicines" />;
 
   const proofMissing = picked?.paymentTerms === "advance" && !papers.payment_proof;
+  // A PAP MedRep's patient is paid by a guarantee letter: that starts as a PAP case, where the
+  // quotation, the application, the letter and the claim are tracked.
+  const papPatient =
+    me?.role === "medrep" && me.channel?.code === "PAP" && picked?.kind === "patient";
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (papPatient && !fixId) {
+      navigate("/pap?new=1");
+      return;
+    }
     if (proofMissing && (!noProof || (noProof === "other" && !noProofNote.trim()))) {
       setNoProofAsk(true);
       document.getElementById("no-proof")?.scrollIntoView({ block: "center", behavior: "smooth" });
@@ -596,6 +604,17 @@ export function OrderNew({
 
   return (
     <form onSubmit={submit} className="mx-auto flex max-w-3xl flex-col gap-5 pb-4">
+      {papPatient && !fixId && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-4 py-3 text-[13px] text-slate-700">
+          <span className="flex items-center gap-2">
+            <span className="size-2 rounded-full bg-amber-400" aria-hidden="true" />A patient on a
+            guarantee letter starts as a PAP case.
+          </span>
+          <Link to="/pap?new=1" className="font-semibold text-emerald-700 hover:underline">
+            Start a PAP case
+          </Link>
+        </div>
+      )}
       <div className="flex items-center gap-2">
         <button
           type="button"

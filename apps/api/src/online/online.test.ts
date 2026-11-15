@@ -115,6 +115,8 @@ describe("the rules", () => {
       glApplied: false,
       glLetter: false,
       glVerified: false,
+      glProblem: null,
+      claimSent: false,
       order: null,
     };
     expect(roadStepOf({ ...base, quoted: false })).toBe("new");
@@ -285,7 +287,7 @@ describe("the other roads", () => {
         await post("jane", `/api/leads/${id}/gl`, {
           appliedOn: todayManila(),
           letterNo: "PCSO-123",
-          amount: 500000,
+          amount: medicine.price * 5,
           verify: true,
         }),
       ),
@@ -297,7 +299,7 @@ describe("the other roads", () => {
         await post("jane", `/api/leads/${id}/gl`, {
           appliedOn: todayManila(),
           letterNo: "PCSO-123",
-          amount: 500000,
+          amount: medicine.price * 5,
           letterOn: todayManila(),
           verify: true,
         })

@@ -22,7 +22,7 @@ import type { CompanyInfo, LeadCase, Me } from "../types";
 import { replyByEmail } from "./email";
 import { replyOnMessenger } from "./messenger";
 import { LEAD_READ_ROLES, LEAD_WORK_ROLES } from "./rules";
-import { leadCase, quoteSent } from "./service";
+import { leadCase, leadGate, quoteSent } from "./service";
 
 export type QuotationSnapshot = {
   company: CompanyInfo;
@@ -45,6 +45,8 @@ export type QuotationSnapshot = {
   toPay: number;
   validityDays: number;
   preparedBy: string;
+  /** PCSO's price canvass: the two other vendors' totals, printed one page each after ours. */
+  canvass?: { vendor: string; amount: number }[];
 };
 
 const AGENCY: Record<string, string> = {
@@ -102,6 +104,7 @@ export function snapshotOf(data: LeadCase, company: CompanyInfo, me: Me): Quotat
     toPay: Math.max(0, total - points * 100),
     validityDays: 30,
     preparedBy: me.name,
+    canvass: lead.road === "gl" && lead.agency === "pcso" ? lead.canvass : [],
   };
 }
 
@@ -378,6 +381,42 @@ export async function drawQuotation(s: QuotationSnapshot): Promise<Uint8Array> {
     align: "right",
   });
 
+  // PCSO's price canvass: one page for each other vendor's quotation (ours is the first).
+  const canvass = s.canvass ?? [];
+  for (const [index, other] of canvass.entries()) {
+    page = doc.addPage([PAGE.w, PAGE.h]);
+    pages.push(page);
+    text("PRICE CANVASS", LEFT, 70, { font: bold, size: 16, color: BRAND });
+    text(`Quotation ${index + 2} of ${canvass.length + 1}`, RIGHT, 70, {
+      font: bold,
+      size: 11,
+      align: "right",
+    });
+    rule(84, BRAND, 1.2);
+    const rows: [string, string][] = [
+      ["Patient", s.patient],
+      ["For", AGENCY[s.agency ?? ""] ?? "Guarantee letter"],
+      ["Vendor", other.vendor],
+      ["Vendor's total", money(other.amount)],
+      ["Our quotation", `${money(s.total)} (Quotation 1, ref. ${s.reference})`],
+      ["Date", s.date],
+    ];
+    rows.forEach(([label, value], at) => {
+      text(label, LEFT, 116 + at * 22, { size: 10, color: SOFT });
+      text(value, LEFT + 120, 116 + at * 22, {
+        font: label === "Vendor's total" ? bold : body,
+        size: 10.5,
+      });
+    });
+    rule(116 + rows.length * 22 + 4);
+    text(
+      `Canvassed from ${other.vendor}'s written quotation for the same medicines and quantities.`,
+      LEFT,
+      116 + rows.length * 22 + 26,
+      { size: 9.5, color: SOFT },
+    );
+  }
+
   // The foot of every page.
   for (const [index, each] of pages.entries()) {
     const foot = plain(s.company.footer);
@@ -412,7 +451,7 @@ export async function quotationPdf(
   me: Me,
   leadId: number,
 ): Promise<{ bytes: Uint8Array; name: string }> {
-  allow(me, LEAD_READ_ROLES, "see a quotation");
+  await leadGate(db, me, leadId, "read", "see a quotation");
   const snapshot = snapshotOf(await leadCase(db, me, leadId), await companyInfo(db), me);
   return { bytes: await drawQuotation(snapshot), name: fileName(snapshot) };
 }
@@ -425,7 +464,7 @@ export async function quotationLink(
   me: Me,
   leadId: number,
 ): Promise<{ path: string }> {
-  allow(me, LEAD_WORK_ROLES, "make a quotation link");
+  await leadGate(db, me, leadId, "work", "make a quotation link");
   const snapshot = snapshotOf(await leadCase(db, me, leadId), await companyInfo(db), me);
   const token = randomBytes(24).toString("base64url");
   await db.execute(
@@ -464,7 +503,7 @@ export async function sendQuotation(
   leadId: number,
   input: { via: "messenger" | "email"; link?: string | null },
 ): Promise<void> {
-  allow(me, LEAD_WORK_ROLES, "send a quotation");
+  await leadGate(db, me, leadId, "work", "send a quotation");
   const data = await leadCase(db, me, leadId);
   const company = await companyInfo(db);
   const snapshot = snapshotOf(data, company, me);

@@ -144,6 +144,7 @@ export function LeadForm({
   problem,
   lockRoad,
   focus,
+  pap = false,
 }: {
   start: LeadInput;
   agents: { id: number; name: string }[];
@@ -157,6 +158,8 @@ export function LeadForm({
   lockRoad?: string | null;
   /** The field to put the cursor in ("Add email" opens the form at the email). */
   focus?: "email";
+  /** A PAP MedRep's case: always a guarantee letter, always theirs (no owner, no road choice). */
+  pap?: boolean;
 }) {
   const [value, setValue] = useState<LeadInput>(start);
   const startRelation = !start.relation || start.relation === "self" ? "self" : start.relation;
@@ -347,25 +350,27 @@ export function LeadForm({
           </select>
           <Err message={at("source")} />
         </label>
-        <label className={LABEL}>
-          Owner
-          <select
-            name="assignedTo"
-            className={BOX}
-            value={value.assignedTo ?? ""}
-            onChange={(event) =>
-              set({ assignedTo: event.target.value ? Number(event.target.value) : null })
-            }
-          >
-            <option value="">Unassigned</option>
-            {agents.map((agent) => (
-              <option key={agent.id} value={agent.id}>
-                {agent.name}
-              </option>
-            ))}
-          </select>
-          <Err message={at("assignedTo")} />
-        </label>
+        {!pap && (
+          <label className={LABEL}>
+            Owner
+            <select
+              name="assignedTo"
+              className={BOX}
+              value={value.assignedTo ?? ""}
+              onChange={(event) =>
+                set({ assignedTo: event.target.value ? Number(event.target.value) : null })
+              }
+            >
+              <option value="">Unassigned</option>
+              {agents.map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.name}
+                </option>
+              ))}
+            </select>
+            <Err message={at("assignedTo")} />
+          </label>
+        )}
         <label className={`${LABEL} sm:col-span-2`}>
           What they are asking for
           <textarea
@@ -380,8 +385,10 @@ export function LeadForm({
       </fieldset>
 
       <fieldset disabled={busy} className="space-y-2">
-        <legend className="text-sm font-semibold text-slate-900">How will they pay?</legend>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <legend className="text-sm font-semibold text-slate-900">
+          {pap ? "Guarantee letter from" : "How will they pay?"}
+        </legend>
+        <div className={`grid grid-cols-2 gap-2 sm:grid-cols-4 ${pap ? "hidden" : ""}`}>
           {ROAD_CHOICES.map((road) => (
             <button
               key={road.key}
@@ -399,7 +406,7 @@ export function LeadForm({
         </div>
         {value.road === "gl" && (
           <fieldset className="grid grid-cols-2 gap-2 pt-1 sm:grid-cols-4">
-            <legend className="mb-1 text-xs font-semibold text-slate-600">
+            <legend className={`mb-1 text-xs font-semibold text-slate-600 ${pap ? "sr-only" : ""}`}>
               Which agency gives the letter?
             </legend>
             {AGENCIES.map((agency) => (
@@ -464,9 +471,12 @@ const FIELDS = [
 export function NewLeadDialog({
   agents,
   onClose,
+  pap = false,
 }: {
   agents: LeadDesk["agents"];
   onClose: () => void;
+  /** A PAP MedRep's new case: a guarantee letter's road, theirs. */
+  pap?: boolean;
 }) {
   const me = useMe().data;
   const navigate = useNavigate();
@@ -484,23 +494,28 @@ export function NewLeadDialog({
   }
   return (
     <Dialog
-      title="New enquiry"
-      sub="Who is asking, how to reach them and how they pay. Save, and the case opens."
+      title={pap ? "New PAP case" : "New enquiry"}
+      sub={
+        pap
+          ? "The patient, how to reach them and the agency giving the letter. Save, and the case opens."
+          : "Who is asking, how to reach them and how they pay. Save, and the case opens."
+      }
       onClose={onClose}
       busy={action.busy}
     >
       <LeadForm
         start={{
-          source: "messenger",
+          source: pap ? "referral" : "messenger",
           name: "",
-          road: "regular",
+          road: pap ? "gl" : "regular",
           assignedTo: me?.role === "online" ? me.id : null,
         }}
+        pap={pap}
         agents={agents}
         busy={action.busy}
         at={action.at}
         onSubmit={save}
-        submitLabel="Add enquiry"
+        submitLabel={pap ? "Open the case" : "Add enquiry"}
         closeLabel="Cancel"
         onClose={onClose}
         problem={action.general(FIELDS)}

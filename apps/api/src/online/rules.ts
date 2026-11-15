@@ -18,6 +18,10 @@ import { AGENCY_SHORT, ROAD_STEP_DATA, type Road, roadStepData } from "./journey
 
 /** Who works the cases. */
 export const LEAD_WORK_ROLES: readonly Role[] = ["online", "admin"];
+/** A PAP MedRep works their own patient-assistance (guarantee letter) cases. */
+export const PAP_CHANNEL = "PAP";
+export const isPapRep = (me: { role: Role; channel: { code: string } | null }) =>
+  me.role === "medrep" && me.channel?.code === PAP_CHANNEL;
 /** Who reads them. */
 export const LEAD_READ_ROLES: readonly Role[] = ["online", "admin", "ceo", "management"];
 
@@ -44,6 +48,7 @@ export const PAPER_LABEL: Record<LeadPaperKind, string> = {
   valid_id: "Patient's valid ID",
   med_cert: "Medical certificate or clinical abstract",
   gl_letter: "Guarantee letter",
+  pickup_photo: "Pick-up photo",
   other: "Other paper",
   unsorted: "Photo from the chat",
 };
@@ -57,6 +62,7 @@ const PAPER_PHRASE: Record<LeadPaperKind, string> = {
   valid_id: "patient's valid ID",
   med_cert: "medical certificate or clinical abstract",
   gl_letter: "guarantee letter",
+  pickup_photo: "pick-up photo",
   other: "other paper",
   unsorted: "photo from the chat",
 };
@@ -109,6 +115,10 @@ export type CaseFacts = {
   glApplied: boolean;
   glLetter: boolean;
   glVerified: boolean;
+  /** Why the verified letter can't carry the order (expired, less than the quotation). */
+  glProblem: string | null;
+  /** The claim went to the agency after delivery. */
+  claimSent: boolean;
   order: {
     status: OrderStatus;
     flagReason: string | null;
@@ -129,7 +139,7 @@ export function roadStepOf(f: CaseFacts): string {
   const order = f.order && f.order.status !== "cancelled" ? f.order : null;
   if (order) {
     if (order.status === "completed")
-      return order.paid ? "done" : f.road === "gl" ? "claim" : "payment";
+      return order.paid ? "done" : f.road === "gl" ? (f.claimSent ? "billed" : "claim") : "payment";
     return "ordered";
   }
   const rxOk = !f.rxNeeded || f.files.has("rx");
@@ -137,7 +147,7 @@ export function roadStepOf(f: CaseFacts): string {
   if (f.road === "gl") {
     if (!f.glApplied) return "apply";
     if (!f.glLetter) return "waiting";
-    if (!f.glVerified) return "verify";
+    if (!f.glVerified || f.glProblem) return "verify";
     if (!rxOk || !f.files.has("valid_id") || !f.files.has("med_cert")) return "papers";
     return "ready";
   }
@@ -180,7 +190,7 @@ export function nextOf(f: CaseFacts, step: string): string {
     case "waiting":
       return `Waiting for the ${agency} letter: follow up`;
     case "verify":
-      return "Check the guarantee letter and mark it verified";
+      return f.glProblem ?? "Check the guarantee letter and mark it verified";
     case "ready":
       return "Place the order";
     case "ordered": {
@@ -200,7 +210,11 @@ export function nextOf(f: CaseFacts, step: string): string {
     case "payment":
       return "Delivered: record the payment received";
     case "claim":
-      return `Delivered: claim it from ${agency}`;
+      return f.files.has("pickup_photo")
+        ? `Delivered: send the claim to ${agency}`
+        : `Delivered: add the pick-up photo, then send the claim to ${agency}`;
+    case "billed":
+      return `Claim sent: waiting for ${agency} to pay`;
     case "done":
       return "Delivered and paid; refill when due";
     default:

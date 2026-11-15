@@ -20,6 +20,8 @@ import {
   readLeadFile,
   removeLeadFile,
   reopenLead,
+  saveCanvass,
+  saveClaim,
   saveGl,
   saveLead,
   saveQuote,
@@ -72,6 +74,7 @@ export function onlineRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
         type: query.type,
         month: query.month,
         shown: Number(query.shown) || 0,
+        desk: query.desk,
       }),
     );
   });
@@ -120,10 +123,37 @@ export function onlineRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
         letterNo: optional(60),
         amount: z.number().int().min(0).max(100_000_000_00).nullish(),
         letterOn: day,
+        expiresOn: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, "Pick the day.")
+          .nullish()
+          .or(z.literal("").transform(() => null)),
         verify: z.boolean().optional(),
       }),
     );
     await saveGl(db, c.get("me"), idParam(c), input as GlInput);
+    return c.json({ ok: true });
+  });
+  app.post("/api/leads/:id/claim", async (c) => {
+    const input = await readBody(c, z.object({ sentOn: day, ref: optional(80) }));
+    await saveClaim(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+  app.post("/api/leads/:id/canvass", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        lines: z
+          .array(
+            z.object({
+              vendor: z.string().max(120),
+              amount: z.number().int().min(0).max(100_000_000_00),
+            }),
+          )
+          .max(2, "Two other vendors at most."),
+      }),
+    );
+    await saveCanvass(db, c.get("me"), idParam(c), input.lines);
     return c.json({ ok: true });
   });
   app.post("/api/leads/:id/note", async (c) => {

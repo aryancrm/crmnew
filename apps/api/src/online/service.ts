@@ -43,6 +43,7 @@ import { caseHistory } from "./case-history";
 import {
   type CaseFacts,
   deskStepOf,
+  isPapRep,
   LEAD_READ_ROLES,
   LEAD_WORK_ROLES,
   nextOf,
@@ -97,6 +98,11 @@ type LeadRow = {
   glAmount: number | null;
   glLetterOn: string | null;
   glVerifiedAt: string | null;
+  glExpiresOn: string | null;
+  claimSentOn: string | null;
+  claimRef: string | null;
+  canvass: { vendor: string; amount: number }[];
+  desk: "online" | "pap";
   state: "open" | "lost";
   lostReason: string | null;
   orderId: number | null;
@@ -139,6 +145,7 @@ const leadColumns = sql`l.id::int as id, l.code, l.source, l.name, l.relation, l
   l.quote_lines as "quoteLines", l.quote_road as "quoteRoad", l.quote_agency as "quoteAgency", ${iso("l.quote_saved_at")} as "quoteSavedAt",
   l.quote_sent_via as "quoteSentVia", ${iso("l.quote_sent_at")} as "quoteSentAt", ${day("l.gl_applied_on")} as "glAppliedOn",
   l.gl_letter_no as "glLetterNo", l.gl_amount::int as "glAmount", ${day("l.gl_letter_on")} as "glLetterOn", ${iso("l.gl_verified_at")} as "glVerifiedAt",
+  ${day("l.gl_expires_on")} as "glExpiresOn", ${day("l.claim_sent_on")} as "claimSentOn", l.claim_ref as "claimRef", l.canvass, l.desk,
   l.state, l.lost_reason as "lostReason", l.order_id::int as "orderId", ${iso("l.first_contact_at")} as "firstContactAt",
   to_char(l.first_contact_at at time zone 'Asia/Manila', 'YYYY-MM-DD') as "firstDay", (l.opened_at is null) as unopened,
   coalesce(maker.name, case l.chat_channel when 'messenger' then 'Messenger' when 'email' then 'Email' else 'System' end) as "createdBy",
@@ -161,6 +168,18 @@ const quotedFor = (row: LeadRow) =>
   row.quoteRoad === row.road &&
   (row.road !== "gl" || row.quoteAgency === row.agency);
 
+/** Why a verified letter can't carry the order: it expired, or it grants less than the
+ *  quotation comes to. */
+function glProblemOf(row: LeadRow): string | null {
+  if (row.road !== "gl" || !row.glVerifiedAt) return null;
+  if (row.glExpiresOn && row.glExpiresOn < todayManila())
+    return `The letter expired on ${row.glExpiresOn}: get a new letter and record it`;
+  const total = quoteTotals(row.quoteLines, row.road).total;
+  if (row.glAmount !== null && quotedFor(row) && total > row.glAmount)
+    return `The quotation (${peso(total)}) is more than the letter (${peso(row.glAmount)}): lower the quotation`;
+  return null;
+}
+
 function factsOf(row: LeadRow): CaseFacts {
   return {
     road: row.road,
@@ -173,6 +192,8 @@ function factsOf(row: LeadRow): CaseFacts {
     glApplied: Boolean(row.glAppliedOn),
     glLetter: Boolean(row.glLetterNo) || row.kinds.includes("gl_letter"),
     glVerified: Boolean(row.glVerifiedAt),
+    glProblem: glProblemOf(row),
+    claimSent: Boolean(row.claimSentOn),
     order: row.orderStatus
       ? {
           status: row.orderStatus,
@@ -298,9 +319,16 @@ export async function leadDesk(
     type?: string;
     month?: string;
     shown?: number;
+    /** online (the default): the Online desk's cases; pap: the patient-assistance cases. */
+    desk?: string;
   },
 ): Promise<LeadDesk> {
-  allow(me, LEAD_READ_ROLES, "see the Online desk");
+  const desk = filter.desk === "pap" ? "pap" : "online";
+  // A PAP MedRep reads only their own PAP cases; Management, the CEO and the admin read them all.
+  if (desk === "pap") {
+    if (!isPapRep(me) && !["admin", "ceo", "management"].includes(me.role))
+      throw new Refusal(403, "forbidden", "Your role can't see the PAP cases.");
+  } else allow(me, LEAD_READ_ROLES, "see the Online desk");
   const queue: LeadQueue = QUEUES.includes(filter.queue as LeadQueue)
     ? (filter.queue as LeadQueue)
     : "active";
@@ -312,7 +340,8 @@ export async function leadDesk(
     : null;
   const type = filter.type === "enquiry" || filter.type === "website_order" ? filter.type : null;
   const month = /^\d{4}-\d{2}$/.test(filter.month ?? "") ? (filter.month as string) : null;
-  const where: SQL[] = [];
+  const where: SQL[] = [sql`l.desk = ${desk}`];
+  if (desk === "pap" && isPapRep(me)) where.push(sql`l.assigned_to = ${me.id}`);
   if (filter.source && filter.source in SOURCE_LABEL) where.push(sql`l.source = ${filter.source}`);
   if (filter.who === "mine") where.push(sql`l.assigned_to = ${me.id}`);
   for (const word of (filter.q ?? "").toLowerCase().split(/\s+/).filter(Boolean).slice(0, 5)) {
@@ -375,7 +404,7 @@ export async function leadDesk(
     cards: matched.slice(0, Math.max(SHOWN, filter.shown ?? 0)),
     total: matched.length,
     agents,
-    can: { add: LEAD_WORK_ROLES.includes(me.role) },
+    can: { add: desk === "pap" ? isPapRep(me) : LEAD_WORK_ROLES.includes(me.role) },
   };
 }
 
@@ -425,12 +454,16 @@ function journeyOf(row: LeadRow, facts: CaseFacts, step: string): LeadCase["jour
             state:
               step === "done"
                 ? "paid"
-                : row.glVerifiedAt
-                  ? "verified"
-                  : facts.glLetter
-                    ? "letter_received"
-                    : "applied",
-            claim_sent_on: null,
+                : row.claimSentOn
+                  ? "billed"
+                  : row.glVerifiedAt
+                    ? "verified"
+                    : facts.glLetter
+                      ? "letter_received"
+                      : "applied",
+            // The chart's "Photo sent" stop: the pick-up photo on file (or the claim already sent).
+            claim_sent_on:
+              row.claimSentOn ?? (facts.files.has("pickup_photo") ? todayManila() : null),
           }
         : null,
     order:
@@ -475,7 +508,7 @@ export async function setCasePoints(
   id: number,
   points: number,
 ): Promise<void> {
-  allow(me, LEAD_WORK_ROLES, "use a customer's points");
+  await leadGate(db, me, id, "work", "use a customer's points");
   if (!Number.isInteger(points) || points < 0)
     throw new Refusal(400, "invalid", "Type a whole number of points.", "points");
   await db.transaction(async (tx) => {
@@ -640,9 +673,9 @@ async function orderTrail(db: Runner, orderId: number): Promise<CaseOrderTrail> 
 }
 
 export async function leadCase(db: Database, me: Me, id: number): Promise<LeadCase> {
-  allow(me, LEAD_READ_ROLES, "see the Online desk");
+  await leadGate(db, me, id, "read", "see a case");
   const row = await readLead(db, id);
-  const work = LEAD_WORK_ROLES.includes(me.role);
+  const work = mayOnCase(me, row, "work");
   if (work && row.unopened)
     await db.execute(sql`update lead set opened_at = now() where id = ${id} and opened_at is null`);
   const [files, events, agents, web, wallet, program, trail, history] = await Promise.all([
@@ -683,7 +716,9 @@ export async function leadCase(db: Database, me: Me, id: number): Promise<LeadCa
   const totals = quoteTotals(row.quoteLines, row.road);
   const liveOrder = row.orderStatus && row.orderStatus !== "cancelled";
   const placeWhy = !work
-    ? "Only the Online desk places orders."
+    ? row.desk === "pap"
+      ? "Only the PAP MedRep places this order."
+      : "Only the Online desk places orders."
     : row.state === "lost"
       ? "The case is closed."
       : liveOrder
@@ -739,6 +774,11 @@ export async function leadCase(db: Database, me: Me, id: number): Promise<LeadCa
       glAmount: row.glAmount,
       glLetterOn: row.glLetterOn,
       glVerifiedAt: row.glVerifiedAt,
+      glExpiresOn: row.glExpiresOn,
+      claimSentOn: row.claimSentOn,
+      claimRef: row.claimRef,
+      canvass: row.canvass,
+      desk: row.desk,
       state: row.state,
       lostReason: row.lostReason,
       firstContactAt: row.firstContactAt,
@@ -797,15 +837,69 @@ export async function leadCase(db: Database, me: Me, id: number): Promise<LeadCa
       placeWhy,
       // The agent hands the parcel over once Dispatch has packed it, and records the money once
       // there is an invoice (in advance, or after a cash-on-delivery handover).
-      deliver: work && (row.orderStatus === "shipped" || row.orderStatus === "packing"),
+      // A PAP case's order goes the MedRep's way: Dispatch hands it over, Finance records the money.
+      deliver:
+        work &&
+        row.desk !== "pap" &&
+        (row.orderStatus === "shipped" || row.orderStatus === "packing"),
       pay:
         work &&
+        row.desk !== "pap" &&
         Boolean(
           trail?.invoice && trail.invoice.balance > 0 && trail.invoice.state.word !== "Cancelled",
         ) &&
         (row.orderTerms !== "cod" || row.orderStatus === "completed"),
     },
   };
+}
+
+// ---------------------------------------------------------------- who
+
+/** Who may read or work one case. The Online desk its own desk's cases; a PAP MedRep only the
+ *  patient-assistance cases they opened; Management and the CEO read every case; the admin
+ *  works any. */
+export function mayOnCase(
+  me: Me,
+  lead: { desk: "online" | "pap"; assignedTo: number | null },
+  need: "read" | "work",
+): boolean {
+  if (me.role === "admin") return true;
+  if (lead.desk === "pap") {
+    if (isPapRep(me)) return lead.assignedTo === me.id;
+    return need === "read" && (me.role === "ceo" || me.role === "management");
+  }
+  return (need === "read" ? LEAD_READ_ROLES : LEAD_WORK_ROLES).includes(me.role);
+}
+
+/** Refuses a case the person may not read or work (as "not one of yours"). */
+export async function leadGate(
+  db: Runner,
+  me: Me,
+  id: number,
+  need: "read" | "work",
+  what: string,
+): Promise<void> {
+  if (!(me.role === "admin" || LEAD_READ_ROLES.includes(me.role) || isPapRep(me)))
+    throw new Refusal(403, "forbidden", `Your role can't ${what}.`);
+  const [lead] = await rows<{ desk: "online" | "pap"; assignedTo: number | null }>(
+    db,
+    sql`select desk, assigned_to::int as "assignedTo" from lead where id = ${id}`,
+  );
+  if (!lead) throw new Refusal(404, "not_found", "That enquiry doesn't exist.");
+  if (!mayOnCase(me, lead, "read"))
+    throw new Refusal(404, "not_found", "That case isn't one of yours.");
+  if (need === "work" && !mayOnCase(me, lead, "work"))
+    throw new Refusal(403, "forbidden", `Your role can't ${what}.`);
+}
+
+/** The case a paper belongs to. */
+async function leadOfFile(db: Runner, fileId: number): Promise<number> {
+  const [file] = await rows<{ leadId: number }>(
+    db,
+    sql`select lead_id::int as "leadId" from lead_file where id = ${fileId}`,
+  );
+  if (!file) throw new Refusal(404, "not_found", "That paper isn't there any more.");
+  return file.leadId;
 }
 
 // ---------------------------------------------------------------- writing
@@ -846,14 +940,24 @@ async function agentOrNull(tx: Runner, id: number | null | undefined): Promise<n
 
 /** A new enquiry, typed in by the agent (a call, a walk-in, a chat until Messenger connects). */
 export async function addLead(db: Database, me: Me, input: LeadInput): Promise<number> {
-  allow(me, LEAD_WORK_ROLES, "add an enquiry");
+  // A PAP MedRep opens their own patient-assistance case: a guarantee letter's road, theirs.
+  const pap = isPapRep(me);
+  if (!pap) allow(me, LEAD_WORK_ROLES, "add an enquiry");
+  if (pap && input.road !== "gl")
+    throw new Refusal(
+      400,
+      "invalid",
+      "A PAP case is paid by a guarantee letter: pick the agency.",
+      "agency",
+    );
   const name = input.name.trim();
   if (!name) throw new Refusal(400, "invalid", "Type who is asking.", "name");
   if (input.road === "gl" && !input.agency)
     throw new Refusal(400, "invalid", "Pick the agency that gives the letter.", "agency");
   return db.transaction(async (tx) => {
-    const assigned =
-      input.assignedTo === undefined
+    const assigned = pap
+      ? me.id
+      : input.assignedTo === undefined
         ? me.role === "online"
           ? me.id
           : null
@@ -861,8 +965,8 @@ export async function addLead(db: Database, me: Me, input: LeadInput): Promise<n
     const self = !clean(input.relation) || clean(input.relation)?.toLowerCase() === "self";
     const [made] = await rows<{ id: number }>(
       tx,
-      sql`insert into lead (source, name, relation, patient_name, phone, phone_key, email, city, address, road, agency, request, assigned_to, created_by, opened_at)
-        values (${input.source}, ${name}, ${clean(input.relation)}, ${self ? name : (clean(input.patientName) ?? name)}, ${formatPhone(input.phone)}, ${phoneKey(input.phone)},
+      sql`insert into lead (desk, source, name, relation, patient_name, phone, phone_key, email, city, address, road, agency, request, assigned_to, created_by, opened_at)
+        values (${pap ? "pap" : "online"}, ${input.source}, ${name}, ${clean(input.relation)}, ${self ? name : (clean(input.patientName) ?? name)}, ${formatPhone(input.phone)}, ${phoneKey(input.phone)},
           ${clean(input.email)}, ${clean(input.city)}, ${clean(input.address)}, ${input.road ?? "regular"}, ${input.road === "gl" ? (input.agency ?? null) : null},
           ${clean(input.request)}, ${assigned}, ${me.id}, now())
         returning id::int as id`,
@@ -877,7 +981,9 @@ export async function addLead(db: Database, me: Me, input: LeadInput): Promise<n
       id,
       me,
       "status",
-      `Enquiry from ${SOURCE_LABEL[input.source]} added by ${me.name}.`,
+      pap
+        ? `PAP case opened by ${me.name} (${SOURCE_LABEL[input.source]}).`
+        : `Enquiry from ${SOURCE_LABEL[input.source]} added by ${me.name}.`,
     );
     return id;
   });
@@ -885,7 +991,7 @@ export async function addLead(db: Database, me: Me, input: LeadInput): Promise<n
 
 /** Who they are, how they pay, who works it. The road can't change once the order is placed. */
 export async function saveLead(db: Database, me: Me, id: number, input: LeadInput): Promise<void> {
-  allow(me, LEAD_WORK_ROLES, "change an enquiry");
+  await leadGate(db, me, id, "work", "change an enquiry");
   const name = input.name.trim();
   if (!name) throw new Refusal(400, "invalid", "Type who is asking.", "name");
   await db.transaction(async (tx) => {
@@ -897,7 +1003,14 @@ export async function saveLead(db: Database, me: Me, id: number, input: LeadInpu
       throw new Refusal(409, "not_now", "Locked: the order is placed with this road.", "road");
     if (road === "gl" && !input.agency)
       throw new Refusal(400, "invalid", "Pick the agency that gives the letter.", "agency");
-    const assigned = await agentOrNull(tx, input.assignedTo);
+    const [kept] = await rows<{ desk: string; assignedTo: number | null }>(
+      tx,
+      sql`select desk, assigned_to::int as "assignedTo" from lead where id = ${id}`,
+    );
+    const pap = kept?.desk === "pap";
+    if (pap && road !== "gl")
+      throw new Refusal(400, "invalid", "A PAP case is paid by a guarantee letter.", "road");
+    const assigned = pap ? (kept?.assignedTo ?? null) : await agentOrNull(tx, input.assignedTo);
     const self = !clean(input.relation) || clean(input.relation)?.toLowerCase() === "self";
     await tx.execute(
       sql`update lead set source = ${input.source}, name = ${name}, relation = ${clean(input.relation)},
@@ -932,7 +1045,7 @@ export async function saveQuote(
   id: number,
   input: QuoteInput,
 ): Promise<void> {
-  allow(me, LEAD_WORK_ROLES, "make a quotation");
+  await leadGate(db, me, id, "work", "make a quotation");
   if (input.lines.length === 0)
     throw new Refusal(400, "invalid", "Add at least one medicine.", "lines");
   const ids = [...new Set(input.lines.map((line) => line.medicineId))];
@@ -1033,7 +1146,7 @@ export async function saveQuote(
 
 const SENT_VIA = ["messenger", "sms", "viber", "whatsapp", "email", "printed"];
 export async function quoteSent(db: Database, me: Me, id: number, via: string): Promise<void> {
-  allow(me, LEAD_WORK_ROLES, "send a quotation");
+  await leadGate(db, me, id, "work", "send a quotation");
   if (!SENT_VIA.includes(via)) throw new Refusal(400, "invalid", "Say how it was sent.", "via");
   await db.transaction(async (tx) => {
     const lead = await lockLead(tx, id);
@@ -1057,7 +1170,7 @@ export async function quoteSent(db: Database, me: Me, id: number, via: string): 
 
 /** The guarantee letter's road: the application, the letter, its check. */
 export async function saveGl(db: Database, me: Me, id: number, input: GlInput): Promise<void> {
-  allow(me, LEAD_WORK_ROLES, "record a guarantee letter");
+  await leadGate(db, me, id, "work", "record a guarantee letter");
   const today = todayManila();
   for (const [field, value] of [
     ["appliedOn", input.appliedOn],
@@ -1091,10 +1204,12 @@ export async function saveGl(db: Database, me: Me, id: number, input: GlInput): 
         );
       if (!input.amount)
         throw new Refusal(400, "invalid", "Type the amount the letter grants.", "amount");
+      if (input.expiresOn && input.expiresOn < today)
+        throw new Refusal(400, "invalid", "That letter has expired: get a new one.", "expiresOn");
     }
     await tx.execute(
       sql`update lead set gl_applied_on = ${input.appliedOn ?? null}::date, gl_letter_no = ${clean(input.letterNo)}, gl_amount = ${input.amount ?? null},
-          gl_letter_on = ${input.letterOn ?? null}::date,
+          gl_letter_on = ${input.letterOn ?? null}::date, gl_expires_on = ${input.expiresOn ?? null}::date,
           gl_verified_at = ${input.verify ? sql`coalesce(gl_verified_at, now())` : null}, gl_verified_by = ${input.verify ? me.id : null}
         where id = ${id}`,
     );
@@ -1102,9 +1217,92 @@ export async function saveGl(db: Database, me: Me, id: number, input: GlInput): 
       input.appliedOn ? `applied on ${input.appliedOn}` : null,
       clean(input.letterNo) ? `letter ${clean(input.letterNo)}` : null,
       input.amount ? `for ${peso(input.amount)}` : null,
+      input.expiresOn ? `valid until ${input.expiresOn}` : null,
       input.verify ? "verified" : before?.verified ? "no longer verified" : null,
     ].filter(Boolean);
     await note(tx, id, me, "gl", `Guarantee letter: ${said.join(", ") || "cleared"}.`);
+  });
+}
+
+/** The claim after delivery (guarantee letter): the pick-up photo on file, the day it went to
+ *  the agency and its reference. The agency's money is recorded by Finance on the invoice. */
+export async function saveClaim(
+  db: Database,
+  me: Me,
+  id: number,
+  input: { sentOn?: string | null; ref?: string | null },
+): Promise<void> {
+  await leadGate(db, me, id, "work", "record the claim");
+  if (input.sentOn && input.sentOn > todayManila())
+    throw new Refusal(400, "invalid", "That day hasn't come yet.", "sentOn");
+  await db.transaction(async (tx) => {
+    const lead = await lockLead(tx, id);
+    if (lead.road !== "gl")
+      throw new Refusal(409, "not_now", "This case doesn't pay by a guarantee letter.");
+    if (lead.orderStatus !== "completed")
+      throw new Refusal(409, "not_now", "The claim goes after the delivery.");
+    const [photo] = await rows<{ n: number }>(
+      tx,
+      sql`select count(*)::int as n from lead_file where lead_id = ${id} and kind = 'pickup_photo' and active`,
+    );
+    if (input.sentOn && !photo?.n)
+      throw new Refusal(
+        400,
+        "invalid",
+        "Add the pick-up photo before sending the claim.",
+        "sentOn",
+      );
+    await tx.execute(
+      sql`update lead set claim_sent_on = ${input.sentOn ?? null}::date, claim_ref = ${clean(input.ref)} where id = ${id}`,
+    );
+    await note(
+      tx,
+      id,
+      me,
+      "gl",
+      input.sentOn
+        ? `Claim sent to the agency on ${input.sentOn}${clean(input.ref) ? ` (ref. ${clean(input.ref)})` : ""}.`
+        : "Claim not sent yet.",
+    );
+  });
+}
+
+/** PCSO's price canvass: the two other vendors' quotations, each from their written quote. */
+export async function saveCanvass(
+  db: Database,
+  me: Me,
+  id: number,
+  lines: { vendor: string; amount: number }[],
+): Promise<void> {
+  await leadGate(db, me, id, "work", "record the price canvass");
+  const clean2 = lines
+    .map((line) => ({ vendor: line.vendor.trim().slice(0, 120), amount: Math.round(line.amount) }))
+    .filter((line) => line.vendor || line.amount);
+  if (clean2.length > 2) throw new Refusal(400, "invalid", "Two other vendors at most.", "lines");
+  clean2.forEach((line, index) => {
+    if (!line.vendor)
+      throw new Refusal(400, "invalid", "Type the vendor's name.", `lines.${index}.vendor`);
+    if (!(line.amount > 0))
+      throw new Refusal(400, "invalid", "Type the vendor's total.", `lines.${index}.amount`);
+  });
+  await db.transaction(async (tx) => {
+    const lead = await lockLead(tx, id);
+    if (lead.road !== "gl")
+      throw new Refusal(409, "not_now", "This case doesn't pay by a guarantee letter.");
+    if (lead.ordered)
+      throw new Refusal(409, "not_now", "The order is placed with these quotations.");
+    await tx.execute(
+      sql`update lead set canvass = ${JSON.stringify(clean2)}::jsonb where id = ${id}`,
+    );
+    await note(
+      tx,
+      id,
+      me,
+      "quote",
+      clean2.length
+        ? `Price canvass: ${clean2.map((line) => `${line.vendor} ${peso(line.amount)}`).join(", ")}.`
+        : "Price canvass cleared.",
+    );
   });
 }
 
@@ -1116,7 +1314,7 @@ export async function addLeadFile(
   leadId: number,
   file: { kind: string; name: string; mime: string; bytes: Uint8Array },
 ): Promise<number> {
-  allow(me, LEAD_WORK_ROLES, "file a paper");
+  await leadGate(db, me, leadId, "work", "file a paper");
   if (!PAPER_KINDS.includes(file.kind as LeadPaperKind) || file.kind === "unsorted")
     throw new Refusal(400, "invalid", "Say what the paper is.", "kind");
   if (!FILE_TYPES.includes(file.mime))
@@ -1129,6 +1327,8 @@ export async function addLeadFile(
     const lead = await lockLead(tx, leadId);
     if (lead.state === "lost")
       throw new Refusal(409, "not_now", `${lead.code} is closed. Reopen it first.`);
+    if (file.kind === "pickup_photo" && lead.orderStatus !== "completed")
+      throw new Refusal(409, "not_now", "The pick-up photo comes after the delivery.", "kind");
     const [made] = await rows<{ id: number }>(
       tx,
       sql`insert into lead_file (lead_id, kind, name, mime, size, data, by_person)
@@ -1150,7 +1350,7 @@ export async function readLeadFile(
   me: Me,
   fileId: number,
 ): Promise<{ name: string; mime: string; bytes: Uint8Array }> {
-  allow(me, LEAD_READ_ROLES, "see a case's papers");
+  await leadGate(db, me, await leadOfFile(db, fileId), "read", "see a case's papers");
   const [file] = await rows<{ name: string; mime: string; data: Uint8Array }>(
     db,
     sql`select name, mime, data from lead_file where id = ${fileId} and active`,
@@ -1160,7 +1360,7 @@ export async function readLeadFile(
 }
 
 export async function removeLeadFile(db: Database, me: Me, fileId: number): Promise<void> {
-  allow(me, LEAD_WORK_ROLES, "take a paper off");
+  await leadGate(db, me, await leadOfFile(db, fileId), "work", "take a paper off");
   await db.transaction(async (tx) => {
     const [file] = await rows<{ leadId: number; kind: LeadPaperKind; name: string }>(
       tx,
@@ -1183,7 +1383,7 @@ export async function addLeadNote(
   id: number,
   message: string,
 ): Promise<void> {
-  allow(me, LEAD_WORK_ROLES, "write on a case");
+  await leadGate(db, me, id, "work", "write on a case");
   const text = message.trim();
   if (!text) throw new Refusal(400, "invalid", "Type the note.", "message");
   await db.transaction(async (tx) => {
@@ -1198,7 +1398,7 @@ export async function closeLead(
   id: number,
   reason: string | null,
 ): Promise<void> {
-  allow(me, LEAD_WORK_ROLES, "close a case");
+  await leadGate(db, me, id, "work", "close a case");
   const why = clean(reason);
   if (!why) throw new Refusal(400, "invalid", "Say why it is lost.", "reason");
   await db.transaction(async (tx) => {
@@ -1216,7 +1416,7 @@ export async function closeLead(
 }
 
 export async function reopenLead(db: Database, me: Me, id: number): Promise<void> {
-  allow(me, LEAD_WORK_ROLES, "reopen a case");
+  await leadGate(db, me, id, "work", "reopen a case");
   await db.transaction(async (tx) => {
     const lead = await lockLead(tx, id);
     if (lead.state !== "lost") return;
@@ -1235,6 +1435,7 @@ const ORDER_PAPER: Record<LeadPaperKind, string> = {
   pwd_booklet: "other",
   valid_id: "other",
   med_cert: "other",
+  pickup_photo: "other",
   other: "other",
   unsorted: "other",
 };
@@ -1299,7 +1500,7 @@ export async function orderFromLead(
   pay?: "cod" | "advance" | null,
   toManagement = false,
 ): Promise<number> {
-  allow(me, LEAD_WORK_ROLES, "place an order");
+  await leadGate(db, me, id, "work", "place an order");
   const row = await readLead(db, id);
   const facts = factsOf(row);
   const step = roadStepOf(facts);
@@ -1323,6 +1524,9 @@ export async function orderFromLead(
       "Say how they pay: cash on delivery or paid in advance.",
       "pay",
     );
+  // A PAP case's order is the MedRep's own: Management checks it, then Finance, then Dispatch,
+  // like any MedRep order (the Online desk's skips Finance: its agent takes the money).
+  const pap = row.desk === "pap";
   const customerId = await patientOf(db, me, id);
   const relief = row.road === "senior" || row.road === "pwd";
   const law =
@@ -1344,7 +1548,7 @@ export async function orderFromLead(
       deliveryAddress: [row.address, row.city].filter(Boolean).join(", ") || null,
       receiver: row.patientName ?? row.name,
       receiverPhone: row.phone,
-      note: `Online enquiry ${row.code} (${SOURCE_LABEL[row.source]})${row.road === "gl" && row.glLetterNo ? ` · GL ${row.glLetterNo}` : ""}`,
+      note: `${pap ? "PAP case" : "Online enquiry"} ${row.code} (${SOURCE_LABEL[row.source]})${row.road === "gl" && row.glLetterNo ? ` · GL ${row.glLetterNo}${row.agency ? ` (${row.agency.toUpperCase()})` : ""}` : ""}`,
     },
     {
       // A guarantee letter's order is paid by the agency on its claim: billed, not paid first.
@@ -1354,7 +1558,7 @@ export async function orderFromLead(
           : { terms: paying === "cod" ? "cod" : "advance", days: null },
       deliveryFee: website?.deliveryFee ?? 0,
       relief,
-      leadId: id,
+      leadId: pap ? undefined : id,
       toManagement,
       inside: async (tx, orderId) => {
         // The points the agent chose come off the medicines (checked again against the balance now).
@@ -1383,8 +1587,14 @@ export async function orderFromLead(
           orderId,
           me,
           "paper",
-          `From the Online enquiry ${row.code}: its papers came with it.`,
+          `From the ${pap ? "PAP case" : "Online enquiry"} ${row.code}: its papers came with it.`,
         );
+        if (pap) {
+          await tx.execute(
+            sql`insert into lead_event (lead_id, kind, message, by_person) values (${id}, 'status', ${`Order ${code?.code} placed: Management checks it, then Finance, then Dispatch.`}, ${me.id})`,
+          );
+          return;
+        }
         // Where it goes next is the order line's (routeOrder): Management only for a discount,
         // credit or a business buyer to check; else straight to Dispatch with its invoice.
         const checks = await caseOrderChecks(tx, orderId);

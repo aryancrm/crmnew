@@ -13,7 +13,7 @@ import { seedDemoInventory } from "./inventory/seed";
 import { startChannelJobs } from "./online/inbox";
 import { seedDemoOnline } from "./online/seed";
 import { seedDemoOrders } from "./orders/seed";
-import { seedDemoTeam } from "./orders/seed-team";
+import { seedDemoTeam, seedPapRep } from "./orders/seed-team";
 import { alignDemoMoneyDates } from "./orders/seed-times";
 import { fillOrderSeats, projectOrg } from "./org/service";
 import { seedDemo } from "./seed";
@@ -41,6 +41,7 @@ if (process.env.SEED_DEMO === "1") {
   if (await seedDemoOnline(db)) console.log("database: demo enquiries made");
   if (await seedDemoTeam(db, password))
     console.log("database: more demo MedReps and their orders made");
+  if (await seedPapRep(db, password)) console.log("database: a demo PAP MedRep made");
   if (await seedDemoAttendance(db)) console.log("database: two weeks of demo attendance made");
   // Older demo databases had invoices dated before their orders: put them right once.
   const aligned = await alignDemoMoneyDates(db);

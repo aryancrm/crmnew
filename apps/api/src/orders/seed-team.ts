@@ -214,3 +214,35 @@ export async function seedDemoTeam(db: Database, password: string): Promise<bool
   await alignDemoMoneyDates(db);
   return true;
 }
+
+/** A PAP MedRep for a developer's computer (Paula, Metro Manila), so the patient-assistance
+ *  cases can be walked: she opens a guarantee-letter case for a patient. Runs once. */
+export async function seedPapRep(db: Database, password: string): Promise<boolean> {
+  const found = await rows<{ id: number; email: string; name: string }>(
+    db,
+    sql`select id::int as id, email, name from person where email in ('paula@2mg.test', 'naresh@2mg.test')`,
+  );
+  if (found.some((row) => row.email === "paula@2mg.test")) return false;
+  const naresh = found.find((row) => row.email === "naresh@2mg.test");
+  if (!naresh) return false;
+  const ceo = { id: naresh.id, name: naresh.name, role: "ceo" } as Me;
+  const [unit] = await rows<{ id: number }>(
+    db,
+    sql`select id::int as id from org_unit where name = 'Patient Assistance' and active`,
+  );
+  if (!unit) return false;
+  const added = await addPerson(db, ceo, {
+    name: "Paula",
+    email: "paula@2mg.test",
+    password,
+    unitId: unit.id,
+    title: "PAP MedRep",
+    module: "medrep",
+    newArea: { name: "PAP | Metro Manila", cities: ["Manila", "Quezon City", "Pasig"] },
+    startsOn: "2025-06-01",
+  });
+  await db.execute(
+    sql`update person set must_change_password = false where id = ${added.personId}`,
+  );
+  return true;
+}

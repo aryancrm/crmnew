@@ -101,7 +101,8 @@ export function RoadPicker({
       }`}
     >
       <legend className="sr-only">Payment road</legend>
-      <div className="grid grid-cols-3 gap-1">
+      {/* A PAP case is always a guarantee letter: only its agency is chosen. */}
+      <div className={`grid grid-cols-3 gap-1 ${lead.desk === "pap" ? "hidden" : ""}`}>
         <button
           type="button"
           disabled={details.busy || off}

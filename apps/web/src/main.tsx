@@ -92,6 +92,7 @@ createRoot(root).render(
             <Route path="points/:id" element={<PointsAccountPage key="points" />} />
             <Route path="settings" element={<SettingsPage />} />
             <Route path="leads" element={<LeadsDesk />} />
+            <Route path="pap" element={<LeadsDesk key="pap" desk="pap" />} />
             <Route path="leads/:id" element={<LeadPage key="lead" />} />
             <Route path="orders" element={<Orders />} />
             <Route path="orders/new" element={<OrderNew />} />

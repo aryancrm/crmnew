@@ -22,6 +22,7 @@ import {
   FileText,
   Gift,
   HandCoins,
+  HeartHandshake,
   House,
   Inbox,
   LayoutGrid,
@@ -437,10 +438,15 @@ function ownDesk(me: Me): Space {
     groups: [{ items: [...items, stockLink] }],
   });
   switch (me.role) {
-    case "medrep":
+    case "medrep": {
+      // A PAP MedRep's patients come as cases (the guarantee letter's road), not plain orders.
+      const pap = me.channel?.code === "PAP";
       return {
         ...desk([
           home,
+          ...(pap
+            ? [{ to: "/pap", label: "PAP cases", icon: HeartHandshake, short: "Cases" }]
+            : []),
           folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
           folder(
             "Visits",
@@ -455,8 +461,11 @@ function ownDesk(me: Me): Space {
           ),
           { to: "/my/area", label: "My area", icon: MapPin },
         ]),
-        cta: { ...newOrder, label: "New order" },
+        cta: pap
+          ? { to: "/pap?new=1", label: "New PAP case" }
+          : { ...newOrder, label: "New order" },
       };
+    }
     case "management":
       // As designed on the canvas: its own work first, then what it looks things up in.
       return {
