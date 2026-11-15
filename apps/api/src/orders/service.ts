@@ -1059,6 +1059,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
     db,
     sql`${team(me)} select ${rowColumns}, ${caseColumns}, c.kind as "customerKind", c.city as "customerCity", c.review as "customerReview",
         coalesce(c.licence_expires < (now() at time zone 'Asia/Manila')::date, false) as "licenceExpired",
+        c.licence_no as "licenceNo", ${day("c.licence_expires")} as "licenceExpires", c.tin,
         raiser.name as "raisedBy", o.raised_by::int as "raisedById", o.medrep_id::int as "medrepId",
         ch.code as channel, a.name as area,
         o.payment_terms as "paymentTerms", o.payment_days::int as "paymentDays",

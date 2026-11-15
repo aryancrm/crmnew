@@ -49,6 +49,7 @@ import { avatarTone, initials } from "../look";
 import { ReasonDialog, StatusPill, shortSpan, useOrderAction } from "../orders/parts";
 import { SendToCustomer } from "../orders/send-update";
 import { PAPER_ACCEPT, uploadPaper } from "../photo";
+import { manilaToday } from "../team/range";
 import {
   Button,
   count,
@@ -758,7 +759,7 @@ function Lines({ data, compare }: { data: OrderDetail; compare?: boolean }) {
             {compare && <th className="num">List price</th>}
             <th className="num">Given</th>
             <th className="num" title="On the shelf, less what orders placed before this one hold">
-              Free
+              Free stock
             </th>
             <th className="num">Amount</th>
           </tr>
@@ -986,6 +987,55 @@ function PlacedStep({ data, next }: { data: OrderDetail; next: () => void }) {
   );
 }
 
+/** The buyer's licence (a hospital's or drugstore's LTO, a doctor's PRC), its expiry and TIN, with
+ *  what is missing in amber and a way to fill it on the customer. A patient needs none. */
+function LicenceFacts({ order }: { order: OrderDetail["order"] }) {
+  if (order.customerKind === "patient") return null;
+  const name = order.customerKind === "doctor" ? "PRC licence" : "LTO number";
+  const today = manilaToday();
+  const expired = Boolean(order.licenceExpires && order.licenceExpires < today);
+  const missing = [
+    order.licenceNo ? null : name,
+    order.customerKind !== "doctor" && !order.licenceExpires ? "licence expiry" : null,
+    order.tin ? null : "TIN",
+  ].filter(Boolean);
+  return (
+    <div
+      className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-[13px] ${
+        expired || missing.length
+          ? "border-amber-200 bg-amber-50 text-amber-950"
+          : "border-slate-200 text-slate-700"
+      }`}
+    >
+      <div className="flex flex-wrap gap-x-4 gap-y-1">
+        <span>
+          <span className="text-slate-500">{name}:</span> <b>{order.licenceNo ?? "—"}</b>
+        </span>
+        {order.customerKind !== "doctor" && (
+          <span>
+            <span className="text-slate-500">Expires:</span>{" "}
+            <b className={expired ? "text-rose-700" : ""}>
+              {order.licenceExpires ? dayLabel(order.licenceExpires) : "—"}
+              {expired ? " (expired)" : ""}
+            </b>
+          </span>
+        )}
+        <span>
+          <span className="text-slate-500">TIN:</span> <b>{order.tin ?? "—"}</b>
+        </span>
+      </div>
+      {missing.length > 0 && (
+        <Link
+          to={`/customers/${order.customerId}`}
+          className="text-xs font-semibold text-amber-800 underline"
+        >
+          Missing {missing.join(", ")}: fill it on the customer
+        </Link>
+      )}
+    </div>
+  );
+}
+
 function ManagementStep({
   data,
   act,
@@ -1047,6 +1097,9 @@ function ManagementStep({
         </ul>
       )}
       <Lines data={data} compare />
+      {/* What Management checks besides the price: the buyer's licence and the papers. */}
+      <LicenceFacts order={order} />
+      <Papers data={data} kinds={["po", "prescription", "gl", "payment_proof"]} />
       {completes && <CompleteDetails data={data} />}
       {can.approve && (
         <div className="flex flex-wrap items-end gap-2">

@@ -924,6 +924,11 @@ export type OrderDetail = {
     customerKind: CustomerKind;
     customerCity: string | null;
     customerReview: "ok" | "to_review";
+    /** The licence that lets them buy (a hospital's LTO, a doctor's PRC), its expiry and TIN:
+     *  what Management checks. */
+    licenceNo: string | null;
+    licenceExpires: string | null;
+    tin: string | null;
     raisedBy: string;
     channel: string | null;
     area: string | null;
