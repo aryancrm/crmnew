@@ -10,6 +10,7 @@ import { seedDemoDispatch } from "./dispatch/seed";
 import { seedDemoFinance } from "./finance/seed";
 import { seedDemoAttendance } from "./hr/seed";
 import { seedDemoInventory } from "./inventory/seed";
+import { startKeepAwake } from "./keep-awake";
 import { startChannelJobs } from "./online/inbox";
 import { seedDemoOnline } from "./online/seed";
 import { seedDemoOrders } from "./orders/seed";
@@ -65,4 +66,5 @@ if (process.env.CHANNEL_JOBS !== "off") startChannelJobs(db);
 
 serve({ fetch: createApp(db, { webUrl }).fetch, port }, () => {
   console.log(`api: listening on http://localhost:${port}`);
+  startKeepAwake();
 });
