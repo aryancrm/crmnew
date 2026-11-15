@@ -137,9 +137,11 @@ export function HrPeoplePage() {
         title="People"
         sub={`${data.counts.active} working · 2MG Inc. and Getmeds Philippines`}
         actions={
-          <Button variant="primary" onClick={() => setAdding(true)}>
-            <UserPlus size={16} /> New joiner
-          </Button>
+          data.can.add && (
+            <Button variant="primary" onClick={() => setAdding(true)}>
+              <UserPlus size={16} /> New joiner
+            </Button>
+          )
         }
       >
         <Tabs<View>
@@ -236,7 +238,7 @@ export function HrPeoplePage() {
           </table>
         </div>
       </section>
-      {adding && (
+      {adding && data.can.add && (
         <NewJoinerDialog
           onClose={() => {
             setAdding(false);

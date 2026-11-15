@@ -187,7 +187,7 @@ export function AtWorkCard() {
     .filter((one) => one.today.lateMinutes > 0)
     .sort((a, b) => b.today.lateMinutes - a.today.lateMinutes);
   const notIn = (data?.people ?? []).filter(
-    (one) => !one.today.timeIn && one.today.kind === "work",
+    (one) => !one.today.timeIn && one.today.kind === "work" && !one.today.leave,
   );
   const lateList = useSeeAll(late, 4);
   if (!data) return null;
@@ -197,7 +197,7 @@ export function AtWorkCard() {
     <GlanceCard
       title="At work today"
       note={data.holiday ? `Holiday: ${data.holiday}` : expected === 0 ? "Rest day" : undefined}
-      to="/hr/attendance"
+      to="/hr/report"
       seeAll={lateList.seeAll}
       head={
         expected === 0 ? (
@@ -220,6 +220,7 @@ export function AtWorkCard() {
             { label: "Working now", value: data.counts.working, color: "#059669" },
             { label: "Done for the day", value: data.counts.done, color: "#0ea5e9" },
             { label: "Not in yet", value: data.counts.notIn, color: "#f59e0b" },
+            { label: "On leave", value: data.counts.onLeave, color: "#8b5cf6" },
           ]}
         />
         <div className="min-w-0 space-y-3">

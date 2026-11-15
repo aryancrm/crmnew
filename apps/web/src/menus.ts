@@ -11,6 +11,7 @@ import {
   BellRing,
   Boxes,
   Building2,
+  CalendarCheck,
   CalendarClock,
   ClipboardCheck,
   ClipboardList,
@@ -303,7 +304,8 @@ const reportsApp: Space = {
   ],
 };
 
-/** HR: people's records and who is working (leave, forms and payroll come next). */
+/** HR as the CEO and the Admin open it: the reports. HR's own desk does the work (joiners,
+ *  records, putting days right, leave). */
 const hrApp: Space = {
   key: "hr",
   label: "HR",
@@ -312,11 +314,20 @@ const hrApp: Space = {
   groups: [
     {
       items: [
+        { to: "/hr/report", label: "Attendance report", icon: BarChart3 },
         { to: "/hr/people", label: "People", icon: Users },
-        { to: "/hr/attendance", label: "Who's working", icon: CalendarClock },
       ],
     },
   ],
+};
+
+/** Field as the CEO and the Admin open it: the visits report (the MedReps' calls). */
+const fieldApp: Space = {
+  key: "field",
+  label: "Field",
+  icon: CalendarCheck,
+  tone: "bg-sky-600 text-white",
+  groups: [{ items: [{ to: "/field/report", label: "Visits report", icon: CalendarCheck }] }],
 };
 
 /** The apps on the Admin's and the CEO's page of apps, in order. */
@@ -329,6 +340,7 @@ export const appsFor = (me: Me): Space[] =>
         dispatchApp,
         inventoryApp(me),
         customersApp(me),
+        fieldApp,
         hrApp,
         reportsApp,
       ]
@@ -378,6 +390,7 @@ function ownDesk(me: Me): Space {
         ...desk([
           home,
           folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+          { to: "/visits", label: "Visits", icon: CalendarCheck },
           { to: "/my/area", label: "My area", icon: MapPin },
         ]),
         cta: { ...newOrder, label: "New order" },
@@ -433,6 +446,7 @@ function ownDesk(me: Me): Space {
             "Team",
           ),
           folder("Team orders", ClipboardList, orderStages("Sent back"), "Orders"),
+          { to: "/field/report", label: "Team visits", icon: CalendarCheck },
           { to: "/targets", label: "Targets", icon: Target },
           { to: "/hr/attendance", label: "Team attendance", icon: CalendarClock },
           customers,
@@ -521,6 +535,7 @@ function ownDesk(me: Me): Space {
           { ...home, label: "People", icon: Users },
           { to: "/hr/people?view=joining", label: "Joining", icon: UserPlus },
           { to: "/hr/attendance", label: "Who's working", icon: CalendarClock },
+          { to: "/hr/report", label: "Attendance report", icon: BarChart3 },
         ]),
         icon: Users,
       };

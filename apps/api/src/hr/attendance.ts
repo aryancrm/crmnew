@@ -1,8 +1,9 @@
 // Attendance, the HR app's first piece: every person's working day has a time in and a time out.
 // The day starts by itself with their first activity on a working day (from three hours before
 // it opens until it closes), or with "Start my day" on any day; it ends with "End my day", else
-// with the last thing they did that day. HR puts a day right (with a note); the person, their
-// team lead, HR, the CEO and the Admin see it. Everyone's hours go to HR's and the CEO's pages.
+// with the last thing they did that day. HR does the work: puts a day right (with a note) and
+// records leave. The person, their team lead, HR, the CEO and the Admin see it; the CEO's page is
+// the report (who worked how long, who less, late, absent, on leave), with nothing to change.
 
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
@@ -10,18 +11,33 @@ import { allow, Refusal } from "../http";
 import { addDays, todayManila } from "../inventory/rules";
 import { iso, type Runner } from "../inventory/service";
 import type { Role } from "../people/roles";
-import type { AttendanceDay, AttendanceMonth, AttendanceToday, Me, MyDay } from "../types";
+import type {
+  AttendanceDay,
+  AttendanceMonth,
+  AttendanceReport,
+  AttendanceToday,
+  LeaveInput,
+  LeaveKind,
+  LeaveRow,
+  Me,
+  MyDay,
+} from "../types";
 import {
   DEFAULT_SCHEDULE,
   dayFigures,
+  dayMinutes,
   isWorkDay,
   manilaMoment,
   type WorkSchedule,
   workMinutes,
 } from "./work-time";
 
-/** Who sees everyone's attendance and puts a day right. */
+/** Who sees everyone's attendance. */
 export const ATTENDANCE_ALL_ROLES: Role[] = ["ceo", "admin", "hr"];
+/** Who changes it (puts a day right, records leave): HR, with the Admin as its backup. The CEO
+ *  reads the report. */
+export const ATTENDANCE_WRITE_ROLES: Role[] = ["hr", "admin"];
+const LEAVE_KINDS: LeaveKind[] = ["vl", "sl", "lwop", "other"];
 /** Who sees their own team's (whoever reports to them, down the line). */
 const LEAD_ROLES: Role[] = ["team_lead", "manager"];
 
@@ -134,7 +150,7 @@ export async function putDayRight(
   personId: number,
   input: { day: string; timeIn: string; timeOut: string | null; note: string },
 ): Promise<void> {
-  allow(me, ATTENDANCE_ALL_ROLES, "put attendance right");
+  allow(me, ATTENDANCE_WRITE_ROLES, "put attendance right");
   const note = input.note.trim();
   if (!note) throw new Refusal(400, "invalid", "Say why the day is changed.", "note");
   const timeIn = manilaMoment(input.day, input.timeIn);
@@ -184,10 +200,19 @@ function dayOf(
   schedule: WorkSchedule,
   holidays: Map<string, string>,
   today: string,
+  leaves: LeaveRow[] = [],
+  hiredOn: string | null = null,
 ): AttendanceDay {
   const holiday = holidays.get(day) ?? null;
   const work = isWorkDay(day, schedule, new Set(holidays.keys()));
-  const kind = holiday ? "holiday" : work ? "work" : "rest";
+  // A day before they joined isn't theirs to miss (a time in that day still counts).
+  const kind =
+    hiredOn && day < hiredOn && !row ? "before" : holiday ? "holiday" : work ? "work" : "rest";
+  // Leave counts only on a working day.
+  const onLeave =
+    kind === "work" ? leaves.find((one) => one.from <= day && one.to >= day) : undefined;
+  const leave = onLeave?.kind ?? null;
+  const halfDay = Boolean(onLeave?.halfDay);
   if (!row)
     return {
       day,
@@ -202,7 +227,9 @@ function dayOf(
       lateMinutes: 0,
       undertimeMinutes: 0,
       afterHoursMinutes: 0,
-      absent: kind === "work" && day < today,
+      absent: kind === "work" && day < today && !onLeave,
+      leave,
+      halfDay,
       note: null,
     };
   const ended = row.timeOut ?? (day < today ? row.lastSeen : null);
@@ -222,19 +249,72 @@ function dayOf(
     workedMinutes: working
       ? dayFigures(day, row.timeIn, Date.now(), schedule, kind === "work").workedMinutes
       : figures.workedMinutes,
-    lateMinutes: figures.lateMinutes,
-    undertimeMinutes: figures.undertimeMinutes,
+    // On leave that day (a half day): the other half isn't counted late or short.
+    lateMinutes: onLeave ? 0 : figures.lateMinutes,
+    undertimeMinutes: onLeave ? 0 : figures.undertimeMinutes,
     afterHoursMinutes: figures.afterHoursMinutes,
     absent: false,
+    leave,
+    halfDay,
     note: row.note,
   };
+}
+
+/** The working days a leave takes (a half day is 0.5): holidays and rest days don't count. */
+function leaveDays(
+  from: string,
+  to: string,
+  halfDay: boolean,
+  schedule: WorkSchedule,
+  holidays: ReadonlySet<string>,
+): number {
+  let days = 0;
+  for (let at = from; at <= to; at = addDays(at, 1))
+    if (isWorkDay(at, schedule, holidays)) days += 1;
+  return halfDay ? days / 2 : days;
+}
+
+/** Approved leave of these people that touches these days, by person. */
+async function leavesOf(
+  db: Runner,
+  ids: number[],
+  from: string,
+  to: string,
+): Promise<Map<number, LeaveRow[]>> {
+  const out = new Map<number, LeaveRow[]>();
+  if (!ids.length) return out;
+  const found = await rows<Omit<LeaveRow, "days">>(
+    db,
+    sql`select l.id::int as id, l.person_id::int as "personId", l.kind, to_char(l.from_day, 'YYYY-MM-DD') as "from",
+        to_char(l.to_day, 'YYYY-MM-DD') as "to", l.half_day as "halfDay", l.reason, m.name as "madeBy",
+        ${iso("l.made_at")} as "madeAt"
+      from person_leave l join person m on m.id = l.made_by
+      where l.status = 'approved' and l.from_day <= ${to}::date and l.to_day >= ${from}::date
+        and l.person_id in (${sql.join(
+          ids.map((id) => sql`${id}`),
+          sql`, `,
+        )})
+      order by l.from_day`,
+  );
+  for (const row of found)
+    out.set(row.personId, [...(out.get(row.personId) ?? []), { ...row, days: 0 }]);
+  return out;
 }
 
 /** The people a person may see the attendance of: everyone, their team down the line, or themselves. */
 async function visiblePeople(
   db: Runner,
   me: Me,
-): Promise<{ id: number; name: string; title: string | null; role: Role; team: string | null }[]> {
+): Promise<
+  {
+    id: number;
+    name: string;
+    title: string | null;
+    role: Role;
+    team: string | null;
+    hiredOn: string | null;
+  }[]
+> {
   const scope = ATTENDANCE_ALL_ROLES.includes(me.role)
     ? sql`true`
     : LEAD_ROLES.includes(me.role)
@@ -246,8 +326,12 @@ async function visiblePeople(
     sql`select p.id::int as id, p.name, p.title, p.role,
         (select u.name from seat_holder h join seat s on s.id = h.seat_id and s.active join org_unit u on u.id = s.unit_id
           where h.person_id = p.id and h.kind = 'holder' and h.starts_on <= current_date
-            and (h.ends_on is null or h.ends_on >= current_date) order by h.starts_on limit 1) as team
-      from person p where p.active and p.role <> 'admin' and ${scope} order by p.name`,
+            and (h.ends_on is null or h.ends_on >= current_date) order by h.starts_on limit 1) as team,
+        (select to_char(e.hire_date, 'YYYY-MM-DD') from employee e where e.person_id = p.id) as "hiredOn"
+      from person p where p.active and p.role <> 'admin' and ${scope}
+        -- Someone joining on a later day has no attendance yet.
+        and not exists (select 1 from employee e where e.person_id = p.id and e.hire_date > ${todayManila()}::date)
+      order by p.name`,
   );
 }
 
@@ -284,9 +368,10 @@ export async function attendanceToday(
   const people = await visiblePeople(db, me);
   const ids = people.map((one) => one.id);
   const first = `${day.slice(0, 7)}-01`;
-  const [schedules, holidays, found] = await Promise.all([
+  const [schedules, holidays, leaves, found] = await Promise.all([
     schedulesOf(db, ids),
     holidaysBetween(db, first, day),
+    leavesOf(db, ids, first, day),
     ids.length
       ? rows<DayRow>(
           db,
@@ -310,6 +395,8 @@ export async function attendanceToday(
         schedule,
         holidays,
         today,
+        leaves.get(person.id),
+        person.hiredOn,
       ),
     );
     const todays = month[month.length - 1] as AttendanceDay;
@@ -331,11 +418,15 @@ export async function attendanceToday(
   return {
     day,
     holiday: holidays.get(day) ?? null,
-    can: { putRight: ATTENDANCE_ALL_ROLES.includes(me.role) },
+    can: { putRight: ATTENDANCE_WRITE_ROLES.includes(me.role) },
     counts: {
       working: out.filter((one) => one.today.working).length,
       done: out.filter((one) => one.today.timeIn && !one.today.working).length,
-      notIn: out.filter((one) => !one.today.timeIn && one.today.kind === "work").length,
+      notIn: out.filter(
+        (one) =>
+          !one.today.timeIn && one.today.kind === "work" && (!one.today.leave || one.today.halfDay),
+      ).length,
+      onLeave: out.filter((one) => one.today.leave).length,
       late: out.filter((one) => one.today.lateMinutes > 0).length,
       rest: out.filter((one) => !one.today.timeIn && one.today.kind !== "work").length,
     },
@@ -359,9 +450,10 @@ export async function attendanceMonth(
   const first = `${month}-01`;
   const lastOfMonth = addDays(`${nextMonth(month)}-01`, -1);
   const last = lastOfMonth < today ? lastOfMonth : today;
-  const [schedules, holidays, found, named] = await Promise.all([
+  const [schedules, holidays, leaveMap, found, named] = await Promise.all([
     schedulesOf(db, [personId]),
     holidaysBetween(db, first, lastOfMonth),
+    leavesOf(db, [personId], first, lastOfMonth),
     rows<DayRow>(
       db,
       sql`select ${dayColumns} from attendance a where a.person_id = ${personId}
@@ -374,6 +466,11 @@ export async function attendanceMonth(
     ),
   ]);
   const schedule = schedules.get(personId) ?? DEFAULT_SCHEDULE;
+  const holidaySet = new Set(holidays.keys());
+  const leaves = (leaveMap.get(personId) ?? []).map((one) => ({
+    ...one,
+    days: leaveDays(one.from, one.to, one.halfDay, schedule, holidaySet),
+  }));
   const days: AttendanceDay[] = [];
   for (let at = first; at <= last; at = addDays(at, 1))
     days.push(
@@ -383,6 +480,8 @@ export async function attendanceMonth(
         schedule,
         holidays,
         today,
+        leaves,
+        person.hiredOn,
       ),
     );
   return {
@@ -398,8 +497,13 @@ export async function attendanceMonth(
       lateMinutes: days.reduce((sum, one) => sum + one.lateMinutes, 0),
       undertimeMinutes: days.reduce((sum, one) => sum + one.undertimeMinutes, 0),
       afterHoursMinutes: days.reduce((sum, one) => sum + one.afterHoursMinutes, 0),
+      leaveDays: days.reduce((sum, one) => sum + (one.leave ? (one.halfDay ? 0.5 : 1) : 0), 0),
     },
-    can: { putRight: ATTENDANCE_ALL_ROLES.includes(me.role) },
+    leaves,
+    can: {
+      putRight: ATTENDANCE_WRITE_ROLES.includes(me.role),
+      leave: ATTENDANCE_WRITE_ROLES.includes(me.role),
+    },
   };
 }
 
@@ -430,4 +534,190 @@ function nextMonth(month: string): string {
 export async function workMinutesNow(db: Runner, since: string): Promise<number> {
   const { schedule, holidays } = await workCalendar(db);
   return workMinutes(since, Date.now(), schedule, holidays);
+}
+
+// ------------------------------------------------------------------ leave (HR's work)
+
+/** HR records a person's leave (from their form or message): approved as recorded. Leave can't
+ *  overlap leave already recorded, and it must take at least one working day. */
+export async function recordLeave(
+  db: Database,
+  me: Me,
+  input: LeaveInput,
+): Promise<{ id: number }> {
+  allow(me, ATTENDANCE_WRITE_ROLES, "record leave");
+  if (!LEAVE_KINDS.includes(input.kind))
+    throw new Refusal(400, "invalid", "Pick the kind of leave.", "kind");
+  const DAY = /^\d{4}-\d{2}-\d{2}$/;
+  if (!DAY.test(input.from)) throw new Refusal(400, "invalid", "Pick the first day.", "from");
+  const to = input.halfDay ? input.from : input.to;
+  if (!DAY.test(to) || to < input.from)
+    throw new Refusal(400, "invalid", "The last day comes on or after the first.", "to");
+  if (to > addDays(input.from, 92))
+    throw new Refusal(400, "invalid", "Record a leave of at most three months at a time.", "to");
+  const [person] = await rows<{ id: number; name: string }>(
+    db,
+    sql`select id::int as id, name from person where id = ${input.personId} and role <> 'admin'`,
+  );
+  if (!person) throw new Refusal(404, "not_found", "No such person.", "personId");
+  const [schedules, holidays] = await Promise.all([
+    schedulesOf(db, [person.id]),
+    holidaysBetween(db, input.from, to),
+  ]);
+  const schedule = schedules.get(person.id) ?? DEFAULT_SCHEDULE;
+  if (leaveDays(input.from, to, false, schedule, new Set(holidays.keys())) === 0)
+    throw new Refusal(
+      400,
+      "invalid",
+      "Those days are rest days or holidays: no leave needed.",
+      "from",
+    );
+  return db.transaction(async (tx) => {
+    // One person's leave is recorded one at a time, so two can't overlap.
+    await tx.execute(sql`select id from person where id = ${person.id} for update`);
+    const [overlap] = await rows<{ from: string; to: string }>(
+      tx,
+      sql`select to_char(from_day, 'YYYY-MM-DD') as "from", to_char(to_day, 'YYYY-MM-DD') as "to"
+        from person_leave where person_id = ${person.id} and status = 'approved'
+          and from_day <= ${to}::date and to_day >= ${input.from}::date limit 1`,
+    );
+    if (overlap)
+      throw new Refusal(
+        409,
+        "taken",
+        `${person.name} already has leave ${overlap.from === overlap.to ? `on ${overlap.from}` : `from ${overlap.from} to ${overlap.to}`}.`,
+        "from",
+      );
+    const [made] = await rows<{ id: number }>(
+      tx,
+      sql`insert into person_leave (person_id, kind, from_day, to_day, half_day, reason, made_by)
+        values (${person.id}, ${input.kind}, ${input.from}::date, ${to}::date, ${Boolean(input.halfDay)},
+          ${input.reason?.trim() || null}, ${me.id}) returning id::int as id`,
+    );
+    return { id: made?.id as number };
+  });
+}
+
+/** HR takes back leave recorded by mistake (kept, marked cancelled). */
+export async function cancelLeave(db: Database, me: Me, leaveId: number): Promise<void> {
+  allow(me, ATTENDANCE_WRITE_ROLES, "cancel leave");
+  const changed = await rows<{ id: number }>(
+    db,
+    sql`update person_leave set status = 'cancelled', cancelled_by = ${me.id}, cancelled_at = now()
+      where id = ${leaveId} and status = 'approved' returning id::int as id`,
+  );
+  if (!changed.length) throw new Refusal(404, "not_found", "That leave isn't on record.");
+}
+
+// ------------------------------------------------------------------ the report (read only)
+
+/** Who worked how long over chosen days, who less, late, absent and on leave: the CEO's report
+ *  (everyone), HR's, and a team lead's for their team. Nothing on it changes anything. */
+export async function attendanceReport(
+  db: Database,
+  me: Me,
+  asked: { from?: string | null; to?: string | null },
+): Promise<AttendanceReport> {
+  if (!ATTENDANCE_ALL_ROLES.includes(me.role) && !LEAD_ROLES.includes(me.role))
+    throw new Refusal(
+      403,
+      "not_allowed",
+      "The attendance report is for HR, team leads and the CEO.",
+    );
+  const today = todayManila();
+  const DAY = /^\d{4}-\d{2}-\d{2}$/;
+  const to = asked.to && DAY.test(asked.to) && asked.to < today ? asked.to : today;
+  let from = asked.from && DAY.test(asked.from) ? asked.from : `${today.slice(0, 7)}-01`;
+  if (from > to) from = to;
+  if (from < addDays(to, -366)) from = addDays(to, -366);
+  const people = await visiblePeople(db, me);
+  const ids = people.map((one) => one.id);
+  const [schedules, holidays, leaveMap, found] = await Promise.all([
+    schedulesOf(db, ids),
+    holidaysBetween(db, from, to),
+    leavesOf(db, ids, from, to),
+    ids.length
+      ? rows<DayRow>(
+          db,
+          sql`select ${dayColumns} from attendance a where a.day between ${from}::date and ${to}::date
+            and a.person_id in (${sql.join(
+              ids.map((id) => sql`${id}`),
+              sql`, `,
+            )})`,
+        )
+      : Promise.resolve([]),
+  ]);
+  const byPerson = new Map<number, Map<string, DayRow>>();
+  for (const row of found) {
+    const mine = byPerson.get(row.personId) ?? new Map<string, DayRow>();
+    mine.set(row.day, row);
+    byPerson.set(row.personId, mine);
+  }
+  const out = people.map((person) => {
+    const schedule = schedules.get(person.id) ?? DEFAULT_SCHEDULE;
+    const fullDay = dayMinutes(schedule) - schedule.breakMinutes;
+    const leaves = leaveMap.get(person.id) ?? [];
+    const mine = byPerson.get(person.id);
+    const figures = {
+      workDays: 0,
+      present: 0,
+      absent: 0,
+      leaveDays: 0,
+      leave: {} as Partial<Record<LeaveKind, number>>,
+      workedMinutes: 0,
+      expectedMinutes: 0,
+      lateDays: 0,
+      lateMinutes: 0,
+      undertimeMinutes: 0,
+      afterHoursMinutes: 0,
+    };
+    for (let at = from; at <= to; at = addDays(at, 1)) {
+      const day = dayOf(at, mine?.get(at), schedule, holidays, today, leaves, person.hiredOn);
+      if (day.kind === "work") {
+        figures.workDays += 1;
+        // Today counts only once they came in: a day not over isn't a shortfall yet.
+        if (at < today || day.timeIn)
+          figures.expectedMinutes += day.leave ? (day.halfDay ? fullDay / 2 : 0) : fullDay;
+      }
+      // Came in on a working day (work on a rest day still counts in the hours).
+      if (day.timeIn && day.kind === "work") figures.present += 1;
+      if (day.absent) figures.absent += 1;
+      if (day.leave) {
+        const share = day.halfDay ? 0.5 : 1;
+        figures.leaveDays += share;
+        figures.leave[day.leave] = (figures.leave[day.leave] ?? 0) + share;
+      }
+      figures.workedMinutes += day.workedMinutes;
+      if (day.lateMinutes > 0) figures.lateDays += 1;
+      figures.lateMinutes += day.lateMinutes;
+      figures.undertimeMinutes += day.undertimeMinutes;
+      figures.afterHoursMinutes += day.afterHoursMinutes;
+    }
+    return {
+      personId: person.id,
+      name: person.name,
+      title: person.title,
+      team: person.team,
+      ...figures,
+      averageMinutes: figures.present ? Math.round(figures.workedMinutes / figures.present) : 0,
+    };
+  });
+  const sum = (key: keyof (typeof out)[number]) =>
+    out.reduce((total, one) => total + (one[key] as number), 0);
+  return {
+    from,
+    to,
+    people: out,
+    totals: {
+      people: out.length,
+      workDays: sum("workDays"),
+      present: sum("present"),
+      absent: sum("absent"),
+      leaveDays: sum("leaveDays"),
+      workedMinutes: sum("workedMinutes"),
+      expectedMinutes: sum("expectedMinutes"),
+      lateDays: sum("lateDays"),
+      lateMinutes: sum("lateMinutes"),
+    },
+  };
 }

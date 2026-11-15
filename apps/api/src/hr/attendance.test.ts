@@ -35,7 +35,7 @@ beforeAll(async () => {
   await migrate(db);
   await seedDemo(db, PASSWORD);
   app = createApp(db, { webUrl: "http://localhost:5180" });
-  for (const name of ["naresh", "daniel", "ryan", "marco", "fiona"]) {
+  for (const name of ["naresh", "daniel", "ryan", "marco", "fiona", "helen"]) {
     const response = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -141,7 +141,7 @@ describe("attendance", () => {
     expect(ryan.days.filter((one) => one.absent).length).toBeGreaterThanOrEqual(0);
   });
 
-  it("shows each person only what is theirs to see, and lets the CEO put a day right", async () => {
+  it("shows each person only what is theirs to see, and lets HR (not the CEO) put a day right", async () => {
     expect((await get("ryan", `/api/hr/attendance/${ids.marco}`)).status).toBe(403);
     expect((await get("daniel", `/api/hr/attendance/${ids.ryan}`)).status).toBe(200);
     expect((await get("daniel", `/api/hr/attendance/${ids.fiona}`)).status).toBe(403);
@@ -151,7 +151,8 @@ describe("attendance", () => {
     expect(team.people.map((one) => one.name)).toEqual(expect.arrayContaining(["Daniel", "Ryan"]));
     const all = await read<AttendanceToday>("naresh", "/api/hr/attendance");
     expect(all.people.length).toBeGreaterThan(team.people.length);
-    expect(all.can.putRight).toBe(true);
+    expect(all.can.putRight).toBe(false);
+    expect((await read<AttendanceToday>("helen", "/api/hr/attendance")).can.putRight).toBe(true);
 
     const day = addDays(todayManila(), -1);
     expect(
@@ -164,7 +165,17 @@ describe("attendance", () => {
         })
       ).status,
     ).toBe(403);
-    const noNote = await send("naresh", `/api/hr/attendance/${ids.ryan}`, {
+    expect(
+      (
+        await send("naresh", `/api/hr/attendance/${ids.ryan}`, {
+          day,
+          timeIn: "08:00",
+          timeOut: "17:00",
+          note: "The CEO reads only",
+        })
+      ).status,
+    ).toBe(403);
+    const noNote = await send("helen", `/api/hr/attendance/${ids.ryan}`, {
       day,
       timeIn: "08:00",
       timeOut: "17:00",
@@ -173,7 +184,7 @@ describe("attendance", () => {
     expect(noNote.status).toBe(400);
     expect(
       (
-        await send("naresh", `/api/hr/attendance/${ids.ryan}`, {
+        await send("helen", `/api/hr/attendance/${ids.ryan}`, {
           day,
           timeIn: "08:00",
           timeOut: "17:00",

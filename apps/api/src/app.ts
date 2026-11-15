@@ -21,6 +21,7 @@ import { customerRoutes } from "./customers/routes";
 import { countQueries, type Database } from "./db/index";
 import { person } from "./db/schema";
 import { dispatchRoutes } from "./dispatch/routes";
+import { fieldRoutes } from "./field/routes";
 import { financeRoutes } from "./finance/routes";
 import { markSeen } from "./hr/attendance";
 import { hrRoutes } from "./hr/routes";
@@ -241,6 +242,7 @@ export function createApp(db: Database, options: AppOptions) {
   notifyRoutes(app, db, signedIn);
   orgRoutes(app, db, signedIn);
   hrRoutes(app, db, signedIn);
+  fieldRoutes(app, db, signedIn);
   messageRoutes(app, db, signedIn);
   teamRoutes(app, db, signedIn);
   speedRoutes(app, db, signedIn);

@@ -68,7 +68,7 @@ const maskPhone = (phone: string | null) => {
 };
 
 /** The person and everyone under them, down the reporting line. Used by `seen`. */
-const team = (me: Me): SQL => sql`
+export const team = (me: Me): SQL => sql`
   with recursive team as (
     select id from person where id = ${me.id}
     union all
@@ -86,7 +86,7 @@ const teamSeatAreas = sql`(select s.area_id from seat s
   where s.active and s.area_id is not null and s.boss_id in (select id from team))`;
 
 /** Which customers (alias `c`) this person may see. Needs `team` in front of the query. */
-function seen(me: Me): SQL {
+export function seen(me: Me): SQL {
   if (me.role === "medrep")
     return sql`(c.added_by = ${me.id} ${me.area ? sql`or c.area_id = ${me.area.id}` : sql``}
       or c.area_id in ${seatAreasOf(me)})`;

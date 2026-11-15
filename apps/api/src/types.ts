@@ -3160,8 +3160,9 @@ import type { WorkSchedule } from "./hr/work-time";
 
 export type AttendanceDay = {
   day: string;
-  /** work: a working day; rest: off the schedule; holiday: the company's holiday. */
-  kind: "work" | "rest" | "holiday";
+  /** work: a working day; rest: off the schedule; holiday: the company's holiday; before:
+   *  before the person joined. */
+  kind: "work" | "rest" | "holiday" | "before";
   holiday: string | null;
   timeIn: string | null;
   timeOut: string | null;
@@ -3174,16 +3175,52 @@ export type AttendanceDay = {
   lateMinutes: number;
   undertimeMinutes: number;
   afterHoursMinutes: number;
-  /** A working day gone by with no time in. */
+  /** A working day gone by with no time in and no leave. */
   absent: boolean;
+  /** Leave HR recorded for this working day (a half day leaves the other half to work). */
+  leave: LeaveKind | null;
+  halfDay: boolean;
   note: string | null;
+};
+
+/** Vacation, sick, without pay, other. */
+export type LeaveKind = "vl" | "sl" | "lwop" | "other";
+
+export type LeaveRow = {
+  id: number;
+  personId: number;
+  kind: LeaveKind;
+  from: string;
+  to: string;
+  halfDay: boolean;
+  /** Working days it takes (a half day is 0.5). */
+  days: number;
+  reason: string | null;
+  madeBy: string;
+  madeAt: string;
+};
+
+export type LeaveInput = {
+  personId: number;
+  kind: LeaveKind;
+  from: string;
+  to: string;
+  halfDay?: boolean;
+  reason?: string | null;
 };
 
 export type AttendanceToday = {
   day: string;
   holiday: string | null;
   can: { putRight: boolean };
-  counts: { working: number; done: number; notIn: number; late: number; rest: number };
+  counts: {
+    working: number;
+    done: number;
+    notIn: number;
+    late: number;
+    rest: number;
+    onLeave: number;
+  };
   people: {
     personId: number;
     name: string;
@@ -3209,8 +3246,49 @@ export type AttendanceMonth = {
     lateMinutes: number;
     undertimeMinutes: number;
     afterHoursMinutes: number;
+    leaveDays: number;
   };
-  can: { putRight: boolean };
+  leaves: LeaveRow[];
+  /** putRight: change a day's times; leave: record or cancel leave (HR's work). */
+  can: { putRight: boolean; leave: boolean };
+};
+
+/** The CEO's (and HR's, a team lead's for the team) attendance report over chosen days: who
+ *  worked how long, who less, late, absent and on leave. Read only. */
+export type AttendanceReport = {
+  from: string;
+  to: string;
+  people: {
+    personId: number;
+    name: string;
+    title: string | null;
+    team: string | null;
+    workDays: number;
+    present: number;
+    absent: number;
+    leaveDays: number;
+    leave: Partial<Record<LeaveKind, number>>;
+    workedMinutes: number;
+    /** Hours on a day they came in, on average. */
+    averageMinutes: number;
+    /** What their working days ask for (leave days off), to compare with workedMinutes. */
+    expectedMinutes: number;
+    lateDays: number;
+    lateMinutes: number;
+    undertimeMinutes: number;
+    afterHoursMinutes: number;
+  }[];
+  totals: {
+    people: number;
+    workDays: number;
+    present: number;
+    absent: number;
+    leaveDays: number;
+    workedMinutes: number;
+    expectedMinutes: number;
+    lateDays: number;
+    lateMinutes: number;
+  };
 };
 
 /** A person's own day, for the top bar's Start / End my day. */
@@ -3250,6 +3328,8 @@ export type HrPersonRow = {
 export type HrPeople = {
   rows: HrPersonRow[];
   counts: { all: number; active: number; joining: number; left: number; missing: number };
+  /** add: New joiner (HR's work; the CEO only reads). */
+  can: { add: boolean };
 };
 
 export type HrPerson = {
@@ -3352,3 +3432,92 @@ export type JoinerInput = {
 
 /** HR changes the email a person signs in with, or gives a new password (both typed by HR). */
 export type HrLoginInput = { email?: string | null; password?: string | null };
+
+// ---- Field: visits to doctors, hospitals and drugstores (SEFMED's daily work). ----
+
+export type VisitStatus = "planned" | "done" | "skipped";
+/** How the doctor took a medicine detailed on the visit. */
+export type VisitReaction = "will_prescribe" | "prescribes" | "needs_info" | "not_interested";
+export type SkipReason =
+  | "not_available"
+  | "busy"
+  | "clinic_closed"
+  | "out_of_town"
+  | "rescheduled"
+  | "other";
+
+export type VisitRow = {
+  id: number;
+  day: string;
+  status: VisitStatus;
+  customer: {
+    id: number;
+    name: string;
+    kind: string;
+    specialty: string | null;
+    city: string | null;
+  };
+  checkedInAt: string | null;
+  checkInPlace: string | null;
+  doneAt: string | null;
+  objective: string | null;
+  detailed: { medicineId: number; name: string; reaction: VisitReaction }[];
+  notes: string | null;
+  nextDay: string | null;
+  skipReason: string | null;
+  /** The last visit done to this customer before this one. */
+  lastVisit: string | null;
+};
+
+/** One person's visits on a day: theirs to work, or their team's / anyone's to look at. */
+export type FieldDay = {
+  day: string;
+  today: string;
+  person: { id: number; name: string; area: string | null };
+  visits: VisitRow[];
+  counts: { planned: number; done: number; skipped: number };
+  /** work: it is the person's own day (plan, check in, report, skip). */
+  can: { work: boolean };
+};
+
+/** What the visit forms pick from: the customers this person looks after, the medicines. */
+export type FieldForm = {
+  customers: {
+    id: number;
+    name: string;
+    kind: string;
+    specialty: string | null;
+    city: string | null;
+    lastVisit: string | null;
+  }[];
+  medicines: { id: number; name: string; strength: string | null }[];
+};
+
+export type VisitPlanInput = { customerId: number; day: string; objective?: string | null };
+export type VisitReportInput = {
+  objective?: string | null;
+  detailed: { medicineId: number; reaction: VisitReaction }[];
+  notes?: string | null;
+  nextDay?: string | null;
+};
+
+/** Visits over chosen days, per person: the team lead's for the team, the CEO's for everyone. */
+export type FieldReport = {
+  from: string;
+  to: string;
+  people: {
+    personId: number;
+    name: string;
+    title: string | null;
+    team: string | null;
+    planned: number;
+    done: number;
+    skipped: number;
+    /** Different doctors, hospitals and drugstores visited. */
+    covered: number;
+    /** Days with at least one visit done, and visits a day on those. */
+    fieldDays: number;
+    perDay: number;
+  }[];
+  totals: { planned: number; done: number; skipped: number; covered: number; fieldDays: number };
+};

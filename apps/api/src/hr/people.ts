@@ -35,8 +35,11 @@ import type {
   PersonStage,
 } from "../types";
 
-/** Who keeps people's records, adds joiners and sees pay. */
+/** Who sees people's records and pay: HR, the CEO and the Admin. */
 export const HR_ROLES: Role[] = ["hr", "ceo", "admin"];
+/** Who does HR's work (adds joiners, keeps records, logins, leaving): HR, with the Admin as its
+ *  backup. The CEO reads. */
+export const HR_WRITE_ROLES: Role[] = ["hr", "admin"];
 const COMPANIES: Company[] = ["2mg", "gpi"];
 const CLASSES: Classification[] = ["probationary", "regular", "part_time", "intern"];
 const PHONE = /^\+?[0-9][0-9 -]{6,18}$/;
@@ -59,7 +62,9 @@ export async function ensureRecords(db: Runner): Promise<void> {
   await db.execute(
     sql`insert into employee (person_id, status, hire_date, position, mobile)
       select p.id, case when p.active then 'active' else 'left' end,
-        (p.created_at at time zone 'Asia/Manila')::date, p.title, p.phone
+        -- Hired the day they first held a seat, else the day they were added.
+        coalesce((select min(h.starts_on) from seat_holder h where h.person_id = p.id),
+          (p.created_at at time zone 'Asia/Manila')::date), p.title, p.phone
       from person p where not exists (select 1 from employee e where e.person_id = p.id)`,
   );
 }
@@ -160,12 +165,14 @@ export async function hrPeople(
       left: all.filter((one) => one.stage === "left").length,
       missing: all.filter((one) => one.stage !== "left" && one.missing.length > 0).length,
     },
+    can: { add: HR_WRITE_ROLES.includes(me.role) },
   };
 }
 
 /** One person's record: HR, the CEO and the Admin see all of it; a person their own, pay too. */
 export async function hrPerson(db: Database, me: Me, personId: number): Promise<HrPerson> {
   const hr = HR_ROLES.includes(me.role);
+  const works = HR_WRITE_ROLES.includes(me.role);
   if (!hr && me.id !== personId)
     throw new Refusal(403, "not_allowed", "Only HR sees other people's records.");
   await ensureRecords(db);
@@ -297,16 +304,16 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
     },
     missing: one.missing,
     can: {
-      edit: hr,
-      login: hr && one.active && one.role !== "ceo" && one.role !== "admin",
-      leave: hr && one.active && me.id !== one.personId && one.role !== "ceo",
+      edit: works,
+      login: works && one.active && one.role !== "ceo" && one.role !== "admin",
+      leave: works && one.active && me.id !== one.personId && one.role !== "ceo",
     },
   };
 }
 
 /** The vacant seats a joiner can take: nobody in them now and nobody joining them. */
 export async function joinerForm(db: Database, me: Me): Promise<JoinerForm> {
-  allow(me, HR_ROLES, "add new joiners");
+  allow(me, HR_WRITE_ROLES, "add new joiners");
   const today = todayManila();
   const seats = await rows<JoinerForm["seats"][number]>(
     db,
@@ -385,7 +392,7 @@ export async function addJoiner(
   me: Me,
   input: JoinerInput,
 ): Promise<{ personId: number; loginEmail: string }> {
-  allow(me, HR_ROLES, "add new joiners");
+  allow(me, HR_WRITE_ROLES, "add new joiners");
   const name = input.name.trim().replace(/\s+/g, " ");
   if (!name) throw new Refusal(400, "invalid", "Type their full name.", "name");
   const mobile = input.mobile.trim();
@@ -463,7 +470,7 @@ export async function setLogin(
   personId: number,
   input: HrLoginInput,
 ): Promise<{ loginEmail: string | null }> {
-  allow(me, HR_ROLES, "change logins");
+  allow(me, HR_WRITE_ROLES, "change logins");
   const changeEmail = input.email !== undefined && input.email !== null;
   const changePassword =
     input.password !== undefined && input.password !== null && input.password !== "";
@@ -539,7 +546,7 @@ export async function updateRecord(
   personId: number,
   input: HrRecordInput,
 ): Promise<void> {
-  allow(me, HR_ROLES, "change people's records");
+  allow(me, HR_WRITE_ROLES, "change people's records");
   await ensureRecords(db);
   const sets: SQL[] = [];
   for (const [key, column] of Object.entries(RECORD_COLUMNS) as [keyof HrRecordInput, string][]) {
@@ -616,5 +623,5 @@ export async function markLeft(
 ): Promise<{ vacant: string[] }> {
   if (!clean(input.reason))
     throw new Refusal(400, "invalid", "Say why they left (resigned, end of contract…).", "reason");
-  return personLeaves(db, me, personId, input, HR_ROLES);
+  return personLeaves(db, me, personId, input, HR_WRITE_ROLES);
 }

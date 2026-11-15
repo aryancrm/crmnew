@@ -53,9 +53,11 @@ create table employee (
 --> statement-breakpoint
 create unique index employee_code_once on employee (company, upper(employee_code)) where employee_code is not null;
 --> statement-breakpoint
--- Everyone already here has a record: active or left as their login is, hired the day they were added.
+-- Everyone already here has a record: active or left as their login is, hired the day they first
+-- held a seat (else the day they were added).
 insert into employee (person_id, status, hire_date, position, mobile)
 select p.id, case when p.active then 'active' else 'left' end,
-  (p.created_at at time zone 'Asia/Manila')::date, p.title, p.phone
+  coalesce((select min(h.starts_on) from seat_holder h where h.person_id = p.id),
+    (p.created_at at time zone 'Asia/Manila')::date), p.title, p.phone
 from person p
 where not exists (select 1 from employee e where e.person_id = p.id);

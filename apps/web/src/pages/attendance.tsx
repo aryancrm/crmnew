@@ -3,15 +3,20 @@
 // team lead their team; anyone else goes to their own month). A person's month is their DTR, day
 // by day, where HR puts a day right with a note.
 
-import type { AttendanceDay, AttendanceMonth, AttendanceToday } from "@2mg/api/types";
+import type { AttendanceDay, AttendanceMonth, AttendanceToday, LeaveKind } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Pencil, Search } from "lucide-react";
+import { BarChart3, CalendarPlus, ChevronLeft, ChevronRight, Pencil, Search } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { clock, hourOf, hours, IN_FROM, OUT_FROM } from "../hr/parts";
 import { Button, CARD, Dialog, Field, INPUT, PageHead, PageState, Problem, useAction } from "../ui";
+import { LEAVE_WORDS } from "./attendance-report";
+
+const LEAVE_SHORT: Record<LeaveKind, string> = { vl: "VL", sl: "SL", lwop: "LWOP", other: "Other" };
+const leaveWord = (day: AttendanceDay) =>
+  day.leave ? `${day.halfDay ? "Half-day " : ""}${LEAVE_SHORT[day.leave]}` : "";
 
 const manilaToday = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
@@ -28,9 +33,14 @@ const weekday = (day: string) =>
     timeZone: "UTC",
   });
 
-type Filter = "all" | "working" | "done" | "notIn" | "late";
+type Filter = "all" | "working" | "done" | "notIn" | "late" | "leave";
 
 function statusOf(day: AttendanceDay): { word: string; tone: string } {
+  if (day.leave && !day.timeIn)
+    return {
+      word: `On leave · ${leaveWord(day)}`,
+      tone: "bg-violet-50 text-violet-800 ring-violet-200",
+    };
   if (day.working)
     return { word: "Working", tone: "bg-emerald-50 text-emerald-800 ring-emerald-200" };
   if (day.timeIn) return { word: "Done", tone: "bg-sky-50 text-sky-800 ring-sky-200" };
@@ -73,8 +83,12 @@ export function AttendancePage() {
       return false;
     if (filter === "working") return one.today.working;
     if (filter === "done") return one.today.timeIn && !one.today.working;
-    if (filter === "notIn") return !one.today.timeIn && one.today.kind === "work";
+    if (filter === "notIn")
+      return (
+        !one.today.timeIn && one.today.kind === "work" && (!one.today.leave || one.today.halfDay)
+      );
     if (filter === "late") return one.today.lateMinutes > 0;
+    if (filter === "leave") return Boolean(one.today.leave);
     return true;
   });
   const tiles: { key: Filter; label: string; value: number; tone: string }[] = [
@@ -87,6 +101,7 @@ export function AttendancePage() {
       tone: "text-amber-700",
     },
     { key: "late", label: "Came late", value: data.counts.late, tone: "text-rose-700" },
+    { key: "leave", label: "On leave", value: data.counts.onLeave, tone: "text-violet-700" },
   ];
 
   return (
@@ -100,6 +115,14 @@ export function AttendancePage() {
         }
         actions={
           <div className="flex items-center gap-1">
+            {data.people.length > 1 && (
+              <Link
+                to="/hr/report"
+                className="mr-2 inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-line bg-white px-2.5 text-[13px] font-semibold text-slate-700 shadow-sm hover:bg-hover"
+              >
+                <BarChart3 size={15} /> Report
+              </Link>
+            )}
             <Button
               small
               variant="quiet"
@@ -128,7 +151,7 @@ export function AttendancePage() {
         }
       />
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         {tiles.map((tile) => (
           <button
             key={tile.key}
@@ -281,6 +304,7 @@ export function AttendanceMonthPage() {
     placeholderData: (previous) => previous,
   });
   const [fixing, setFixing] = useState<AttendanceDay | null>(null);
+  const [addingLeave, setAddingLeave] = useState(false);
   const data = query.data;
   if (!data) return <PageState query={query} what="the attendance" />;
   const mine = me?.id === data.person.id;
@@ -305,7 +329,11 @@ export function AttendanceMonthPage() {
       hours(data.totals.undertimeMinutes),
       data.totals.undertimeMinutes ? "text-amber-700" : undefined,
     ],
-    ["After hours", hours(data.totals.afterHoursMinutes)],
+    [
+      "On leave",
+      data.totals.leaveDays ? `${data.totals.leaveDays} days` : "—",
+      data.totals.leaveDays ? "text-violet-700" : undefined,
+    ],
   ];
 
   return (
@@ -338,6 +366,11 @@ export function AttendanceMonthPage() {
         sub={`${data.schedule.name}: ${hourOf(data.schedule.start)} – ${hourOf(data.schedule.end)}, ${data.schedule.days.length === 6 ? "Monday to Saturday" : `${data.schedule.days.length} days a week`}`}
         actions={
           <div className="flex items-center gap-1">
+            {data.can.leave && (
+              <Button small className="mr-2" onClick={() => setAddingLeave(true)}>
+                <CalendarPlus size={15} /> Record leave
+              </Button>
+            )}
             <Button
               small
               variant="quiet"
@@ -407,8 +440,16 @@ export function AttendanceMonthPage() {
                       {one.kind === "rest" && !one.timeIn && (
                         <span className="ml-2 text-[11px]">Rest day</span>
                       )}
+                      {one.kind === "before" && (
+                        <span className="ml-2 text-[11px]">Before joining</span>
+                      )}
                       {one.absent && (
                         <span className="ml-2 text-[11px] font-semibold text-rose-700">Absent</span>
+                      )}
+                      {one.leave && (
+                        <span className="ml-2 rounded bg-violet-50 px-1 text-[11px] font-semibold text-violet-700">
+                          Leave · {leaveWord(one)}
+                        </span>
                       )}
                     </td>
                     <td
@@ -464,6 +505,25 @@ export function AttendanceMonthPage() {
           </table>
         </div>
       </section>
+      {data.leaves.length > 0 && (
+        <section className={`${CARD} overflow-hidden`}>
+          <h2 className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
+            Leave this month
+          </h2>
+          <ul className="divide-y divide-slate-100 text-sm">
+            {data.leaves.map((one) => (
+              <LeaveLine key={one.id} leave={one} canCancel={data.can.leave} />
+            ))}
+          </ul>
+        </section>
+      )}
+      {addingLeave && (
+        <LeaveDialog
+          personId={data.person.id}
+          name={data.person.name}
+          onClose={() => setAddingLeave(false)}
+        />
+      )}
       {fixing && (
         <PutRightDialog
           personId={data.person.id}
@@ -566,6 +626,164 @@ function PutRightDialog({
           </Button>
           <Button type="submit" variant="primary" disabled={action.busy}>
             {action.busy ? "Saving…" : "Save the day"}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+function LeaveLine({
+  leave,
+  canCancel,
+}: {
+  leave: AttendanceMonth["leaves"][number];
+  canCancel: boolean;
+}) {
+  const queries = useQueryClient();
+  const action = useAction();
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
+      <div className="min-w-0">
+        <span className="font-semibold text-violet-800">{LEAVE_WORDS[leave.kind]} leave</span>
+        <span className="text-slate-700">
+          {" · "}
+          {leave.from === leave.to
+            ? weekday(leave.from)
+            : `${weekday(leave.from)} – ${weekday(leave.to)}`}
+          {" · "}
+          {leave.halfDay ? "half a day" : `${leave.days} ${leave.days === 1 ? "day" : "days"}`}
+        </span>
+        <div className="text-xs text-slate-500">
+          {leave.reason ? `${leave.reason} · ` : ""}recorded by {leave.madeBy}
+        </div>
+        <Problem message={action.problem?.message} />
+      </div>
+      {canCancel && (
+        <Button
+          small
+          variant="quiet"
+          disabled={action.busy}
+          onClick={() =>
+            action.run(async () => {
+              await api(`/api/hr/leave/${leave.id}/cancel`, { body: {} });
+              await queries.invalidateQueries({ queryKey: ["attendance"] });
+            })
+          }
+        >
+          Cancel it
+        </Button>
+      )}
+    </li>
+  );
+}
+
+function LeaveDialog({
+  personId,
+  name,
+  onClose,
+}: {
+  personId: number;
+  name: string;
+  onClose: () => void;
+}) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const [kind, setKind] = useState<LeaveKind>("vl");
+  const [from, setFrom] = useState(manilaToday());
+  const [to, setTo] = useState(manilaToday());
+  const [halfDay, setHalfDay] = useState(false);
+  const [reason, setReason] = useState("");
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const done = await action.run(() =>
+      api("/api/hr/leave", {
+        body: { personId, kind, from, to: halfDay ? from : to, halfDay, reason: reason || null },
+      }),
+    );
+    if (done) {
+      await queries.invalidateQueries({ queryKey: ["attendance"] });
+      onClose();
+    }
+  }
+  return (
+    <Dialog
+      title={`Leave for ${name}`}
+      sub="As they asked for it (their form or message). Rest days and holidays don't count."
+      onClose={onClose}
+      busy={action.busy}
+    >
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <div className="flex flex-wrap gap-3">
+          <Field label="Kind" error={action.at("kind")}>
+            {(props) => (
+              <select
+                {...props}
+                value={kind}
+                onChange={(event) => setKind(event.target.value as LeaveKind)}
+                className={INPUT}
+              >
+                {(Object.keys(LEAVE_WORDS) as LeaveKind[]).map((key) => (
+                  <option key={key} value={key}>
+                    {LEAVE_WORDS[key]} ({LEAVE_SHORT[key]})
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+          <Field label="From" error={action.at("from")}>
+            {(props) => (
+              <input
+                {...props}
+                type="date"
+                value={from}
+                onChange={(event) => setFrom(event.target.value)}
+                className={INPUT}
+              />
+            )}
+          </Field>
+          {!halfDay && (
+            <Field label="To" error={action.at("to")}>
+              {(props) => (
+                <input
+                  {...props}
+                  type="date"
+                  value={to}
+                  min={from}
+                  onChange={(event) => setTo(event.target.value)}
+                  className={INPUT}
+                />
+              )}
+            </Field>
+          )}
+        </div>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={halfDay}
+            onChange={(event) => setHalfDay(event.target.checked)}
+            className="size-4 accent-emerald-600"
+          />
+          Half a day
+        </label>
+        <Field label="Reason" error={action.at("reason")}>
+          {(props) => (
+            <input
+              {...props}
+              value={reason}
+              onChange={(event) => setReason(event.target.value)}
+              className={INPUT}
+              placeholder="Family matter"
+            />
+          )}
+        </Field>
+        <Problem message={action.general(["kind", "from", "to", "reason"])} />
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button onClick={onClose} disabled={action.busy}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" disabled={action.busy}>
+            {action.busy ? "Saving…" : "Record leave"}
           </Button>
         </div>
       </form>
