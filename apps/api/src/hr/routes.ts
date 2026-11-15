@@ -4,12 +4,12 @@
 import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
-import { type Env, idParam, readBody } from "../http";
+import { type Env, idParam, Refusal, readBody } from "../http";
+import type { LeaveKind } from "../types";
 import {
   attendanceMonth,
   attendanceReport,
   attendanceToday,
-  cancelLeave,
   endDay,
   myDay,
   putDayRight,
@@ -17,6 +17,16 @@ import {
   startDay,
   workCalendar,
 } from "./attendance";
+import {
+  cancelLeave,
+  decideLeave,
+  LEAVE_FILE_MAX_BYTES,
+  type LeaveFile,
+  leaveFile,
+  leaveList,
+  myLeave,
+  requestLeave,
+} from "./leave";
 import {
   addJoiner,
   hrPeople,
@@ -83,6 +93,55 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
       }),
     );
     return c.json(await recordLeave(db, c.get("me"), input));
+  });
+  app.get("/api/hr/leave/mine", async (c) =>
+    c.json(await myLeave(db, c.get("me"), Number(c.req.query("year")) || null)),
+  );
+  app.get("/api/hr/leave/list", async (c) =>
+    c.json(
+      await leaveList(db, c.get("me"), { view: c.req.query("view"), month: c.req.query("month") }),
+    ),
+  );
+  // A request with an optional paper: a form with its fields as text and the paper as `file`.
+  app.post("/api/hr/leave/request", async (c) => {
+    if (Number(c.req.header("content-length") ?? 0) > LEAVE_FILE_MAX_BYTES + 64 * 1024)
+      throw new Refusal(400, "invalid", "That file is over 10 MB. Take the photo again.", "file");
+    const body = await c.req.parseBody().catch(() => ({}) as Record<string, unknown>);
+    const text = (key: string) =>
+      typeof body[key] === "string" ? (body[key] as string).trim() : "";
+    const file = body.file;
+    const paper: LeaveFile | null =
+      file instanceof File && file.size > 0
+        ? { name: file.name, mime: file.type, bytes: new Uint8Array(await file.arrayBuffer()) }
+        : null;
+    return c.json(
+      await requestLeave(
+        db,
+        c.get("me"),
+        {
+          kind: text("kind") as LeaveKind,
+          from: text("from"),
+          to: text("to") || text("from"),
+          halfDay: text("halfDay") === "true",
+          reason: text("reason") || null,
+        },
+        paper,
+      ),
+    );
+  });
+  app.post("/api/hr/leave/:id/decide", async (c) => {
+    const input = await readBody(c, z.object({ approve: z.boolean(), note: words(300) }));
+    await decideLeave(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+  app.get("/api/hr/leave/:id/file", async (c) => {
+    const paper = await leaveFile(db, c.get("me"), idParam(c));
+    return c.body(paper.bytes as Uint8Array<ArrayBuffer>, 200, {
+      "content-type": paper.mime,
+      "content-disposition": `inline; filename="${encodeURIComponent(paper.name)}"`,
+      "x-content-type-options": "nosniff",
+      "cache-control": "private, max-age=3600",
+    });
   });
   app.post("/api/hr/leave/:id/cancel", async (c) => {
     await cancelLeave(db, c.get("me"), idParam(c));

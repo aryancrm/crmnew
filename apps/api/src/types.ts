@@ -3633,3 +3633,56 @@ export type ExpenseInput = {
   visitId?: number | null;
   note?: string | null;
 };
+
+// ---- HR: leave asked for by people, decided by whom they report to (HR when none). ----
+
+export type LeaveStatus = "asked" | "approved" | "refused" | "cancelled";
+
+export type LeaveBalance = {
+  /** Days a year (regular employees: 10 VL and 10 SL; others none). */
+  allotted: number;
+  used: number;
+  /** Asked for and not decided yet. */
+  asked: number;
+  left: number;
+};
+
+export type LeaveLine = {
+  id: number;
+  person: { id: number; name: string; team: string | null };
+  kind: LeaveKind;
+  from: string;
+  to: string;
+  halfDay: boolean;
+  days: number;
+  reason: string | null;
+  status: LeaveStatus;
+  /** Who decides it while asked (null: HR). */
+  approver: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionNote: string | null;
+  madeBy: string;
+  madeAt: string;
+  /** A paper with it (a medical certificate), opened at /api/hr/leave/:id/file. */
+  file: { name: string; mime: string } | null;
+  canDecide: boolean;
+  canCancel: boolean;
+};
+
+/** A person's own leave: what is left this year, what they asked for, and whom they ask. */
+export type MyLeave = {
+  year: number;
+  classification: Classification;
+  balances: { vl: LeaveBalance; sl: LeaveBalance; lwop: { used: number; asked: number } };
+  approver: string;
+  lines: LeaveLine[];
+};
+
+/** Leave for HR (everyone), a team lead (the team) and the CEO (everyone, to read). */
+export type LeaveList = {
+  lines: LeaveLine[];
+  counts: { waiting: number; asked: number; approved: number; refused: number; cancelled: number };
+  /** Lines this person decides (their team's, all for HR). */
+  mine: number;
+};

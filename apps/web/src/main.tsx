@@ -21,12 +21,14 @@ import { InventoryOverview } from "./pages/inventory-overview";
 import { Invoice, Invoices } from "./pages/invoices";
 import { LeadPage } from "./pages/lead";
 import { LeadsDesk } from "./pages/leads";
+import { LeaveListPage } from "./pages/leave-list";
 import { Login } from "./pages/login";
 import { Medicine } from "./pages/medicine";
 import { Medicines } from "./pages/medicines";
 import { MessagesPage } from "./pages/messages";
 import { Payments, Refunds } from "./pages/money";
 import { Moves } from "./pages/moves";
+import { MyLeavePage } from "./pages/my-leave";
 import { MyTeamPage, TeamSeatPage } from "./pages/my-team";
 import { NotBuilt } from "./pages/not-built";
 import { Order } from "./pages/order";
@@ -120,6 +122,8 @@ createRoot(root).render(
             <Route path="hr/people/:id" element={<HrPersonPage key="person" />} />
             <Route path="hr/attendance" element={<AttendancePage />} />
             <Route path="hr/report" element={<AttendanceReportPage />} />
+            <Route path="hr/leave" element={<LeaveListPage />} />
+            <Route path="me/leave" element={<MyLeavePage />} />
             <Route path="visits" element={<VisitsPage />} />
             <Route path="visits/plan" element={<VisitPlanPage />} />
             <Route path="visits/expenses" element={<FieldExpensesPage />} />

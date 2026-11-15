@@ -106,9 +106,10 @@ describe("HR's work and the CEO's report", () => {
 
     expect((await send("helen", "/api/hr/leave", leave)).status).toBe(200);
     expect((await send("helen", "/api/hr/leave", { ...leave, kind: "sl" })).status).toBe(409);
-    expect((await send("ryan", "/api/hr/leave", { ...leave, from: workDays[2], to: workDays[2] })).status).toBe(
-      403,
-    );
+    expect(
+      (await send("ryan", "/api/hr/leave", { ...leave, from: workDays[2], to: workDays[2] }))
+        .status,
+    ).toBe(403);
   });
 
   it("counts a day on leave as leave, not absence", async () => {

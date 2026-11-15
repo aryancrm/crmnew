@@ -261,7 +261,7 @@ function dayOf(
 }
 
 /** The working days a leave takes (a half day is 0.5): holidays and rest days don't count. */
-function leaveDays(
+export function leaveDays(
   from: string,
   to: string,
   halfDay: boolean,
@@ -335,7 +335,7 @@ async function visiblePeople(
   );
 }
 
-async function schedulesOf(db: Runner, ids: number[]): Promise<Map<number, WorkSchedule>> {
+export async function schedulesOf(db: Runner, ids: number[]): Promise<Map<number, WorkSchedule>> {
   if (!ids.length) return new Map();
   const found = await rows<ScheduleRow & { personId: number }>(
     db,
@@ -349,7 +349,7 @@ async function schedulesOf(db: Runner, ids: number[]): Promise<Map<number, WorkS
   return new Map(found.map((row) => [row.personId, toSchedule(row)]));
 }
 
-async function holidaysBetween(db: Runner, from: string, to: string) {
+export async function holidaysBetween(db: Runner, from: string, to: string) {
   const found = await rows<{ day: string; name: string }>(
     db,
     sql`select to_char(day, 'YYYY-MM-DD') as day, name from holiday where active and day between ${from}::date and ${to}::date`,
@@ -578,7 +578,7 @@ export async function recordLeave(
     const [overlap] = await rows<{ from: string; to: string }>(
       tx,
       sql`select to_char(from_day, 'YYYY-MM-DD') as "from", to_char(to_day, 'YYYY-MM-DD') as "to"
-        from person_leave where person_id = ${person.id} and status = 'approved'
+        from person_leave where person_id = ${person.id} and status in ('approved', 'asked')
           and from_day <= ${to}::date and to_day >= ${input.from}::date limit 1`,
     );
     if (overlap)
@@ -590,23 +590,12 @@ export async function recordLeave(
       );
     const [made] = await rows<{ id: number }>(
       tx,
-      sql`insert into person_leave (person_id, kind, from_day, to_day, half_day, reason, made_by)
+      sql`insert into person_leave (person_id, kind, from_day, to_day, half_day, reason, made_by, decided_by, decided_at)
         values (${person.id}, ${input.kind}, ${input.from}::date, ${to}::date, ${Boolean(input.halfDay)},
-          ${input.reason?.trim() || null}, ${me.id}) returning id::int as id`,
+          ${input.reason?.trim() || null}, ${me.id}, ${me.id}, now()) returning id::int as id`,
     );
     return { id: made?.id as number };
   });
-}
-
-/** HR takes back leave recorded by mistake (kept, marked cancelled). */
-export async function cancelLeave(db: Database, me: Me, leaveId: number): Promise<void> {
-  allow(me, ATTENDANCE_WRITE_ROLES, "cancel leave");
-  const changed = await rows<{ id: number }>(
-    db,
-    sql`update person_leave set status = 'cancelled', cancelled_by = ${me.id}, cancelled_at = now()
-      where id = ${leaveId} and status = 'approved' returning id::int as id`,
-  );
-  if (!changed.length) throw new Refusal(404, "not_found", "That leave isn't on record.");
 }
 
 // ------------------------------------------------------------------ the report (read only)

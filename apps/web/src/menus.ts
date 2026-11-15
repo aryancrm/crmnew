@@ -13,6 +13,7 @@ import {
   Building2,
   CalendarCheck,
   CalendarClock,
+  CalendarDays,
   CalendarRange,
   ClipboardCheck,
   ClipboardList,
@@ -64,7 +65,8 @@ export type Badge =
   | "inbox"
   | "orgRequests"
   | "important"
-  | "updates";
+  | "updates"
+  | "leave";
 export type MenuItem = {
   to: string;
   label: string;
@@ -317,6 +319,7 @@ const hrApp: Space = {
     {
       items: [
         { to: "/hr/report", label: "Attendance report", icon: BarChart3 },
+        { to: "/hr/leave?view=approved", label: "Leave", icon: CalendarDays },
         { to: "/hr/people", label: "People", icon: Users },
       ],
     },
@@ -370,10 +373,15 @@ function deskFor(me: Me): Space {
   const [first, ...rest] = space.groups;
   if (!first) return space;
   const listed = allItems(space.groups.flatMap((group) => group.items));
+  // Everyone asks for their own leave, except the CEO and the Admin (HR records theirs).
+  const leave: MenuItem[] =
+    me.role === "ceo" || me.role === "admin"
+      ? []
+      : [{ to: "/me/leave", label: "My leave", icon: CalendarDays }];
   const extra =
     SPEED_ROLES.includes(me.role) && !listed.some((item) => item.to === "/speed")
-      ? [speedLink, messagesLink]
-      : [messagesLink];
+      ? [speedLink, ...leave, messagesLink]
+      : [...leave, messagesLink];
   return { ...space, groups: [{ ...first, items: [...first.items, ...extra] }, ...rest] };
 }
 
@@ -468,6 +476,7 @@ function ownDesk(me: Me): Space {
           ),
           { to: "/targets", label: "Targets", icon: Target },
           { to: "/hr/attendance", label: "Team attendance", icon: CalendarClock },
+          { to: "/hr/leave", label: "Team leave", icon: CalendarDays, badge: "leave" },
           customers,
         ]),
         icon: Users,
@@ -554,6 +563,7 @@ function ownDesk(me: Me): Space {
           { ...home, label: "People", icon: Users },
           { to: "/hr/people?view=joining", label: "Joining", icon: UserPlus },
           { to: "/hr/attendance", label: "Who's working", icon: CalendarClock },
+          { to: "/hr/leave", label: "Leave", icon: CalendarDays, badge: "leave" },
           { to: "/hr/report", label: "Attendance report", icon: BarChart3 },
         ]),
         icon: Users,
