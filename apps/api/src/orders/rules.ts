@@ -322,6 +322,13 @@ export function paperList(
     onFile: onFile.includes(kind),
   });
   const patient = customer.patient ?? customer.kind === "patient";
+  // Whatever the MedRep attached shows too, even a kind this buyer isn't expected to send.
+  const withTheRest = (list: ReturnType<typeof row>[]): ReturnType<typeof row>[] => [
+    ...list,
+    ...onFile
+      .filter((kind) => !list.some((one) => one.kind === kind))
+      .map((kind) => row(kind, false, null)),
+  ];
   const proof = row(
     "payment_proof",
     customer.terms === "advance",
@@ -339,7 +346,7 @@ export function paperList(
   // A patient: the prescription and their ID first (Management checks them), then what a
   // discount or a guarantee letter asks for.
   if (patient)
-    return [
+    return withTheRest([
       row(
         "prescription",
         customer.rx ?? true,
@@ -354,15 +361,15 @@ export function paperList(
       proof,
       dr,
       row("other", false, null),
-    ];
-  return [
+    ]);
+  return withTheRest([
     row("po", false, "Their purchase order, when they gave one"),
     row("hospital_doc", false, "Their licence (LTO), accreditation or any paper they send"),
     proof,
     row("prescription", false, "For a prescription medicine, when there is one"),
     dr,
     row("other", false, null),
-  ];
+  ]);
 }
 
 /** Papers can be added to an order until it is done, by whoever placed it and by Management.

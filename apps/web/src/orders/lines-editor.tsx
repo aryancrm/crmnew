@@ -87,7 +87,12 @@ export function LinesEditor({ data, onDone }: { data: OrderDetail; onDone: () =>
   const change = (key: number, changes: Partial<Line>) =>
     setLines((all) => all.map((line) => (line.key === key ? { ...line, ...changes } : line)));
   const priceOf = (row: CatalogueRow) => row.prices[kind] ?? row.prices.hospital ?? 0;
-  function add(row: CatalogueRow) {
+  const labelOf = (key: string) =>
+    catalogue.data?.buyerTypes.find((type) => type.key === key)?.label ?? key;
+  const rowOf = (id: number) => catalogue.data?.rows.find((row) => row.id === id);
+  /** Adds a medicine at one of its prices (the buyer's own, or another: a doctor's price). */
+  function add(row: CatalogueRow, at: BuyerType = kind) {
+    const price = row.prices[at] ?? priceOf(row);
     setLines((all) => [
       ...all,
       {
@@ -95,16 +100,22 @@ export function LinesEditor({ data, onDone }: { data: OrderDetail; onDone: () =>
         medicineId: row.id,
         medicine: [row.name, row.strength].filter(Boolean).join(" "),
         sku: row.code,
-        priceKind: row.prices[kind] !== undefined ? kind : "hospital",
+        priceKind: row.prices[at] !== undefined ? at : "hospital",
         qty: "1",
-        price: (priceOf(row) / 100).toFixed(2),
-        listPrice: priceOf(row),
+        price: (price / 100).toFixed(2),
+        listPrice: price,
         free: false,
         reason: "",
         stock: row.free,
       },
     ]);
     setSearch("");
+  }
+  /** A line moved to another price list (a doctor's, a patient's…). */
+  function priceKindOf(line: Line, at: string) {
+    const price = rowOf(line.medicineId)?.prices[at as BuyerType];
+    if (price === undefined) return;
+    change(line.key, { priceKind: at, listPrice: price, price: (price / 100).toFixed(2) });
   }
   /** The same medicine given free: its quantity set, at ₱0, with a remark. */
   function addFree(line: Line) {
@@ -177,11 +188,11 @@ export function LinesEditor({ data, onDone }: { data: OrderDetail; onDone: () =>
         {found.length > 0 && (
           <ul className="absolute right-0 left-0 z-20 mt-1 max-h-72 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg">
             {found.map((row) => (
-              <li key={row.id}>
+              <li key={row.id} className="px-3 py-2 hover:bg-slate-50">
                 <button
                   type="button"
                   onClick={() => add(row)}
-                  className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-slate-50"
+                  className="flex w-full items-center justify-between gap-3 text-left"
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-[13px] font-semibold text-slate-900">
@@ -196,9 +207,23 @@ export function LinesEditor({ data, onDone }: { data: OrderDetail; onDone: () =>
                     <span className="block text-[13px] font-semibold text-emerald-700 tabular-nums">
                       {peso(priceOf(row))}
                     </span>
-                    <span className="block text-[10px] text-slate-400">a piece</span>
+                    <span className="block text-[10px] text-slate-400">{labelOf(kind)} price</span>
                   </span>
                 </button>
+                {/* Every price it has: one tap adds it at that price (a doctor's, a patient's…). */}
+                <span className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                  {(Object.entries(row.prices) as [BuyerType, number][]).map(([at, price]) => (
+                    <button
+                      key={at}
+                      type="button"
+                      onClick={() => add(row, at)}
+                      title={`Add at the ${labelOf(at).toLowerCase()} price`}
+                      className={`text-[11px] tabular-nums hover:underline ${at === kind ? "font-semibold text-emerald-700" : "text-slate-600"}`}
+                    >
+                      {labelOf(at)} {peso(price)}
+                    </button>
+                  ))}
+                </span>
               </li>
             ))}
           </ul>
@@ -228,8 +253,26 @@ export function LinesEditor({ data, onDone }: { data: OrderDetail; onDone: () =>
                       {line.medicine}
                       {line.free && <span className="ml-1 text-emerald-700">(Free)</span>}
                     </div>
-                    <div className="text-[11px] text-slate-500">
-                      {line.sku ?? ""} · list {peso(line.listPrice)}
+                    <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
+                      {line.sku ?? ""} ·
+                      {!line.free && rowOf(line.medicineId) ? (
+                        <select
+                          aria-label={`Price list for ${line.medicine}`}
+                          value={line.priceKind}
+                          onChange={(event) => priceKindOf(line, event.target.value)}
+                          className="h-6 rounded border border-slate-200 bg-white px-1 text-[11px]"
+                        >
+                          {Object.entries(rowOf(line.medicineId)?.prices ?? {}).map(
+                            ([at, price]) => (
+                              <option key={at} value={at}>
+                                {labelOf(at)} {peso(price as number)}
+                              </option>
+                            ),
+                          )}
+                        </select>
+                      ) : (
+                        <span>list {peso(line.listPrice)}</span>
+                      )}
                     </div>
                     {(line.free || below) && (
                       <input

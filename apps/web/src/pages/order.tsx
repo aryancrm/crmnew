@@ -267,6 +267,13 @@ export function Order() {
     ? (askedCheck as CheckKey)
     : (CHECKS.find((item) => item.key !== "approve" && !states[item.key].ok)?.key ??
       (order.status === "pending_approval" ? "approve" : "papers"));
+  const ownStep = (key: StepKey) =>
+    !desk ||
+    (desk === "management"
+      ? key === "management"
+      : desk === "finance"
+        ? key === "finance" || key === "paid"
+        : key === "dispatch" || key === "delivered");
   // Finance's and Dispatch's own steps, from the order's road.
   const deskKeys: StepKey[] =
     desk === "finance"
@@ -308,6 +315,17 @@ export function Order() {
     steps[steps.findIndex((item) => item.key === key) + 1]?.key ?? null;
   const ask = (what: NonNullable<DispatchAsk>["what"]) =>
     setDispatching({ what, orderId: order.id, code: order.code });
+  // Management's last change before approving: what it added, gave free or repriced.
+  const changed = data.events.findLast((event) =>
+    event.message.includes("changed the order before approving it"),
+  );
+  const changedBy = changed
+    ? {
+        by: changed.by,
+        at: changed.at,
+        what: changed.message.replace(/^.*changed the order before approving it:\s*/, ""),
+      }
+    : null;
   const pays =
     order.paymentTerms === "days"
       ? `Pays ${order.paymentDays} days after the invoice`
@@ -456,6 +474,17 @@ export function Order() {
             </div>
           </div>
         </div>
+        {changedBy && (
+          // What Management changed before approving, for the MedRep to see at once.
+          <div className="mt-3 flex gap-2.5 rounded-xl bg-slate-50 px-3.5 py-3 text-[13px] text-slate-800">
+            <PencilLine className="mt-0.5 size-4 shrink-0 text-sky-600" aria-hidden="true" />
+            <div className="min-w-0">
+              <b>Changed by {changedBy.by}</b>{" "}
+              <span className="text-slate-500">· {short(changedBy.at)}</span>
+              <div className="mt-0.5">{changedBy.what}</div>
+            </div>
+          </div>
+        )}
         {order.status === "draft" && (order.sentBackReason ?? order.flagReason) ? (
           // Sent back: Management's reason, and the MedRep's two ways to answer it.
           <div className="mt-3 flex flex-col gap-2.5 rounded-xl bg-slate-50 px-3.5 py-3 text-[13px] text-slate-800 sm:flex-row sm:items-center">
@@ -581,6 +610,8 @@ export function Order() {
             <li key={item.key} className="relative flex min-w-0 flex-col items-center text-center">
               <button
                 type="button"
+                // Each desk opens only its own steps: Management doesn't tick Finance's or Dispatch's.
+                disabled={!ownStep(item.key)}
                 onClick={() => open(item.key)}
                 aria-label={`${item.label}: ${item.shape === "done" ? "done" : item.shape === "skipped" ? "not needed" : item.shape === "now" ? "now" : item.shape === "stopped" ? "held" : "later"}`}
                 className={`grid size-7 place-items-center rounded-full focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none ${
@@ -859,11 +890,13 @@ function checkStates(data: OrderDetail): Record<CheckKey, { ok: boolean; note: s
     customer: state(["customer"], "Customer OK"),
     papers: (() => {
       // The papers this buyer is expected to send, read from what is on file.
-      const missing = data.paperList.filter((row) => row.needed && !row.onFile);
+      const missing = data.paperList.filter(
+        (row) => row.needed && !row.onFile && row.kind !== "payment_proof" && row.kind !== "dr",
+      );
       if (missing.length)
         return { ok: false, note: `No ${missing.map((row) => row.label).join(", ")}` };
       return state(
-        ["paper", "proof"],
+        ["paper"],
         of("paper")?.tone === "ok" ? (of("paper")?.label ?? "Papers fine") : "Papers fine",
       );
     })(),
@@ -1139,7 +1172,9 @@ function DetailsLine({ data }: { data: OrderDetail }) {
 function Documents({ data }: { data: OrderDetail }) {
   const onFile = new Set(data.papers.map((paper) => paper.kind));
   const patient = data.order.customerKind === "patient" || data.order.patientOrder;
-  const missing = data.paperList.filter((row) => row.needed && !row.onFile);
+  const missing = data.paperList.filter(
+    (row) => row.needed && !row.onFile && row.kind !== "payment_proof" && row.kind !== "dr",
+  );
   const suggestion = missing.length
     ? `Next: add ${missing.map((row) => row.label).join(" and ")}.`
     : patient && onFile.has("prescription") && !onFile.has("gl")
@@ -1160,7 +1195,13 @@ function Documents({ data }: { data: OrderDetail }) {
           <span>{suggestion}</span>
         </div>
       )}
-      <Papers data={data} kinds={data.paperList.map((row) => row.kind)} />
+      {/* Management's papers: the delivery receipt is Dispatch's, the proof of payment Finance's. */}
+      <Papers
+        data={data}
+        kinds={data.paperList
+          .map((row) => row.kind)
+          .filter((kind) => kind !== "dr" && kind !== "payment_proof")}
+      />
     </div>
   );
 }
@@ -1475,7 +1516,7 @@ function ManagementStep({
         : check === "customer"
           ? findingsOf(["customer", "licence", "owes", "credit"])
           : check === "papers"
-            ? findingsOf(["papers", "rx"])
+            ? findingsOf(["rx"])
             : data.findings;
   // Where it ships from: the default warehouse, unless only another can fill every line.
   const [warehouse, setWarehouse] = useState(() => {
@@ -1493,7 +1534,7 @@ function ManagementStep({
   return (
     <StepPanel
       number={check ? at + 1 : 2}
-      title={check ? (CHECKS[at]?.label ?? "Management check") : "Management check"}
+      title={check ? checkLabel(check, data) : "Management check"}
       footer={
         order.approvedAt ? (
           <NextButton label="Next: Finance check" onClick={next} />
