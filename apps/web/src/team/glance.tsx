@@ -3,9 +3,16 @@
 // ahead against their targets, and each desk's speed. Each card opens its full page for detail;
 // nothing needs a click to be read.
 
-import type { SpeedReport, TeamBoard } from "@2mg/api/types";
+import type {
+  ChannelFigures,
+  ChannelReport,
+  OwedList,
+  PaymentList,
+  SpeedReport,
+  TeamBoard,
+} from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
-import type { ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { counted, shortPeso } from "../ceo";
@@ -47,28 +54,60 @@ export function useSpeed() {
 }
 
 /** A card with its title, a note at the right and, when it has one, a way to its full page. */
+/** A card's "See all": how many rows are folded away, and whether they are shown. */
+export type SeeAll = { hidden: number; open: boolean; toggle: () => void };
+
+/** Rows folded to `limit` until See all opens them, in the card itself. */
+export function useSeeAll<T>(rows: T[], limit: number): { shown: T[]; seeAll: SeeAll } {
+  const [open, setOpen] = useState(false);
+  return {
+    shown: open ? rows : rows.slice(0, limit),
+    seeAll: {
+      hidden: Math.max(0, rows.length - limit),
+      open,
+      toggle: () => setOpen((now) => !now),
+    },
+  };
+}
+
 export function GlanceCard({
   title,
   note,
   to,
+  seeAll,
   children,
   className = "",
 }: {
   title: string;
   note?: ReactNode;
+  /** Its own page, for more than the card holds. */
   to?: string;
+  seeAll?: SeeAll;
   children: ReactNode;
   className?: string;
 }) {
   return (
     <section className={`${CARD} min-w-0 p-4 sm:p-5 ${className}`}>
-      <header className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+      <header className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
-        <span className="flex items-baseline gap-3">
+        <span className="flex items-center gap-3">
           {note && <span className="text-xs text-slate-500">{note}</span>}
+          {seeAll && (seeAll.hidden > 0 || seeAll.open) && (
+            <button
+              type="button"
+              onClick={seeAll.toggle}
+              className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+            >
+              {seeAll.open ? "Show less" : `See all (${seeAll.hidden} more)`}
+            </button>
+          )}
           {to && (
-            <Link to={to} className="text-xs font-semibold text-emerald-700 hover:underline">
-              All →
+            <Link
+              to={to}
+              className="text-xs font-semibold text-slate-500 hover:text-emerald-700"
+              title="Open its page"
+            >
+              Open ↗
             </Link>
           )}
         </span>
@@ -99,11 +138,12 @@ export function OrdersNowCard({ board, to = "/orders" }: { board: TeamBoard; to?
 }
 
 export function MedicinesCard({ board }: { board: TeamBoard }) {
+  const { shown, seeAll } = useSeeAll(board.topMedicines, 6);
   return (
-    <GlanceCard title="Medicines sold" note="Placed, by value" to="/medicines">
+    <GlanceCard title="Medicines sold" note="Placed, by value" to="/medicines" seeAll={seeAll}>
       {board.topMedicines.length ? (
         <Bars
-          rows={board.topMedicines.slice(0, 6).map((one) => ({
+          rows={shown.map((one) => ({
             key: one.name,
             label: one.name,
             sub: `${count(one.qty)} pcs`,
@@ -161,14 +201,13 @@ export function PeopleCard({
   board: TeamBoard;
   title?: string;
 }) {
-  const rows = board.seats
+  const all = board.seats
     // Sellers only: MedReps, and anyone else (a lead) who sold or placed; desks never.
     .filter(
       (seat) =>
         seat.person && (seat.sold > 0 || seat.placedValue > 0 || /medrep/i.test(seat.moduleLabel)),
     )
     .sort((a, b) => b.sold - a.sold || b.placedValue - a.placedValue)
-    .slice(0, 8)
     .map((seat) => ({
       key: seat.seatId,
       label: seat.person?.name ?? "",
@@ -179,8 +218,9 @@ export function PeopleCard({
       mark: seat.target,
       tone: toneOf(seat.sold, seat.target, board.pace),
     }));
+  const { shown: rows, seeAll } = useSeeAll(all, 6);
   return (
-    <GlanceCard title={title} note="Sold; the line marks the target" to="/my-team">
+    <GlanceCard title={title} note="Sold; the line marks the target" to="/my-team" seeAll={seeAll}>
       {rows.length ? (
         <Bars rows={rows} />
       ) : (
@@ -262,7 +302,7 @@ export function SpeedCards({
 export function PlacedToDeliveredCard({ report }: { report: SpeedReport }) {
   const parts = (["management", "finance", "dispatch", "road"] as const)
     .map((key) => report.steps.find((step) => step.step === key))
-    .filter((step): step is NonNullable<typeof step> => Boolean(step && step.orders));
+    .filter((step): step is NonNullable<typeof step> => Boolean(step?.orders));
   const top = Math.max(1, ...parts.map((step) => step.avgMinutes));
   const COLOR: Record<string, string> = {
     management: "bg-violet-500",
@@ -279,7 +319,7 @@ export function PlacedToDeliveredCard({ report }: { report: SpeedReport }) {
   return (
     <GlanceCard
       title="Placed to delivered"
-      note={counted(report.endToEnd.orders, "order") + " delivered"}
+      note={`${counted(report.endToEnd.orders, "order")} delivered`}
       to="/speed"
     >
       <div className="text-3xl font-semibold tracking-tight text-slate-900 tabular-nums">
@@ -365,5 +405,226 @@ export function DeskGlance({ steps, people }: { steps: string[]; people: string 
         )}
       </GlanceCard>
     </section>
+  );
+}
+
+const TONE_BAR: Record<string, string> = {
+  on: "bg-emerald-500",
+  behind: "bg-amber-400",
+  far: "bg-rose-500",
+  none: "bg-slate-400",
+};
+
+/** What "Sales this month" opens, on the Home: every channel against its target, with its head,
+ *  people and customers, and what it sold today. */
+export function ChannelSalesCard({
+  channels,
+  label,
+}: {
+  channels: ChannelFigures[];
+  label: string;
+}) {
+  const report = useQuery({
+    queryKey: ["reports", "channels"],
+    queryFn: () => api<ChannelReport>("/api/reports/channels"),
+  });
+  const extra = new Map((report.data?.channels ?? []).map((row) => [row.code, row]));
+  const sorted = [...channels].sort((a, b) => b.sold - a.sold);
+  const { shown, seeAll } = useSeeAll(sorted, 5);
+  const sold = channels.reduce((sum, row) => sum + row.sold, 0);
+  return (
+    <GlanceCard
+      title="Sales by channel"
+      note={`${shortPeso(sold)} sold · ${label}`}
+      to="/reports/channels"
+      seeAll={seeAll}
+    >
+      <Bars
+        rows={shown.map((row) => {
+          const more = extra.get(row.code);
+          return {
+            key: row.code,
+            label: `${row.code} · ${row.name}`,
+            sub: [
+              row.head ?? "No head named",
+              more ? `${more.people} people · ${count(more.customers)} customers` : null,
+              row.today ? `today ${shortPeso(row.today)}` : null,
+              row.pct != null ? `${row.pct}% of ${shortPeso(row.target ?? 0)}` : "No target",
+            ]
+              .filter(Boolean)
+              .join(" · "),
+            value: row.sold,
+            mark: row.target,
+            tone: TONE_BAR[row.tone] ?? "bg-slate-400",
+          };
+        })}
+      />
+    </GlanceCard>
+  );
+}
+
+const AGE: {
+  key: "current" | "d30" | "d60" | "d90" | "older" | "onDelivery";
+  label: string;
+  color: string;
+}[] = [
+  { key: "current", label: "Not due yet", color: "bg-emerald-500" },
+  { key: "d30", label: "1–30 days late", color: "bg-amber-400" },
+  { key: "d60", label: "31–60 days", color: "bg-orange-500" },
+  { key: "d90", label: "61–90 days", color: "bg-rose-500" },
+  { key: "older", label: "Over 90 days", color: "bg-rose-700" },
+  { key: "onDelivery", label: "Due on delivery", color: "bg-sky-400" },
+];
+
+/** What customers owe, big: how late it is, and who owes most (the latest first). */
+export function OwedCard() {
+  const query = useQuery({
+    queryKey: ["finance", "owed"],
+    queryFn: () => api<OwedList>("/api/finance/owed"),
+  });
+  const data = query.data;
+  const { shown, seeAll } = useSeeAll(data?.rows ?? [], 6);
+  if (!data) return null;
+  const total = data.totals.total;
+  return (
+    <GlanceCard
+      title="Customers owe us"
+      note={counted(data.rows.length, "customer")}
+      to="/owed"
+      seeAll={seeAll}
+    >
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <div className="text-3xl font-semibold tracking-tight text-slate-900 tabular-nums">
+            {shortPeso(total)}
+          </div>
+          <div
+            className={`text-xs ${data.totals.overdue ? "font-semibold text-rose-600" : "text-slate-500"}`}
+          >
+            {data.totals.overdue
+              ? `${shortPeso(data.totals.overdue)} past due`
+              : "Nothing past due"}
+          </div>
+        </div>
+      </div>
+      <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-slate-100">
+        {AGE.filter((age) => data.totals[age.key] > 0).map((age) => (
+          <span
+            key={age.key}
+            className={age.color}
+            style={{ width: `${(data.totals[age.key] / Math.max(1, total)) * 100}%` }}
+            title={`${age.label}: ${shortPeso(data.totals[age.key])}`}
+          />
+        ))}
+      </div>
+      <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] sm:grid-cols-3">
+        {AGE.map((age) => (
+          <li key={age.key} className="flex items-center justify-between gap-2">
+            <span className="flex items-center gap-1.5 text-slate-500">
+              <span className={`size-2 rounded-full ${age.color}`} /> {age.label}
+            </span>
+            <span
+              className={`font-semibold tabular-nums ${data.totals[age.key] ? "text-slate-800" : "text-slate-300"}`}
+            >
+              {shortPeso(data.totals[age.key])}
+            </span>
+          </li>
+        ))}
+      </ul>
+      <ul className="mt-4 divide-y divide-slate-100 border-t border-slate-100">
+        {shown.map((row) => (
+          <li key={row.customerId}>
+            <Link
+              to={`/customers/${row.customerId}`}
+              className="-mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-2 hover:bg-slate-50"
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-[13px] font-semibold text-slate-800">
+                  {row.customer}
+                </span>
+                <span className="block truncate text-[11px] text-slate-500">
+                  {[row.medrep, row.terms, counted(row.invoices, "invoice")]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </span>
+              </span>
+              <span className="shrink-0 text-right">
+                <span className="block text-[13px] font-semibold tabular-nums text-slate-900">
+                  {shortPeso(row.total)}
+                </span>
+                <span
+                  className={`block text-[11px] ${row.overdue ? "font-semibold text-rose-600" : "text-slate-400"}`}
+                >
+                  {row.overdue ? `${shortPeso(row.overdue)} · ${row.oldestDays}d late` : "not late"}
+                </span>
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </GlanceCard>
+  );
+}
+
+/** The month's money in: how it came (bank, cash, check…) and day by day. */
+export function CollectedCard() {
+  const query = useQuery({
+    queryKey: ["payments", "glance"],
+    queryFn: () => api<PaymentList>("/api/payments"),
+  });
+  const data = query.data;
+  const { shown, seeAll } = useSeeAll(data?.rows ?? [], 5);
+  if (!data) return null;
+  const top = Math.max(1, ...data.byDay.map((one) => one.amount));
+  return (
+    <GlanceCard title="Collected" note={data.monthLabel} to="/payments" seeAll={seeAll}>
+      <div className="text-3xl font-semibold tracking-tight text-emerald-700 tabular-nums">
+        {shortPeso(data.sum)}
+      </div>
+      <div className="mb-3 text-xs text-slate-500">{counted(data.total, "payment")} received</div>
+      {data.byDay.length > 0 && (
+        <div
+          className="mb-4 flex h-16 items-end gap-1"
+          role="img"
+          aria-label="Collected day by day"
+        >
+          {data.byDay.map((one) => (
+            <span
+              key={one.day}
+              className="min-w-1 max-w-6 flex-1 rounded-t bg-emerald-400/80"
+              style={{ height: `${Math.max(6, (one.amount / top) * 100)}%` }}
+              title={`${one.day}: ${shortPeso(one.amount)}`}
+            />
+          ))}
+        </div>
+      )}
+      <Bars
+        rows={data.byMethod.map((one) => ({
+          key: one.method,
+          label: one.label,
+          sub: counted(one.count, "payment"),
+          value: one.amount,
+        }))}
+        color="bg-emerald-500"
+      />
+      {shown.length > 0 && (
+        <ul className="mt-4 divide-y divide-slate-100 border-t border-slate-100">
+          {shown.map((row) => (
+            <li key={row.id} className="flex items-center justify-between gap-3 py-2 text-[13px]">
+              <span className="min-w-0">
+                <span className="block truncate font-medium text-slate-800">{row.customer}</span>
+                <span className="block text-[11px] text-slate-500">
+                  {row.paidOn} · {row.methodLabel}
+                  {row.reference ? ` · ${row.reference}` : ""}
+                </span>
+              </span>
+              <span className="shrink-0 font-semibold tabular-nums text-emerald-700">
+                {shortPeso(row.amount)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </GlanceCard>
   );
 }

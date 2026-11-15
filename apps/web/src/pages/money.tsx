@@ -7,7 +7,9 @@ import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { shortPeso } from "../ceo";
 import { METHODS, RefundDialog } from "../finance/parts";
+import { Bars } from "../team/charts";
 import { Button, Card, count, dayLabel, PageHead, PageState, peso, Tile, timeLabel } from "../ui";
 
 /** The address's own filters, with a box that types into `q`. */
@@ -112,6 +114,55 @@ export function Payments() {
           </div>
         }
       />
+      {/* The month at a glance: how much came in, day by day, and how it was paid. */}
+      <section
+        aria-label="The month"
+        className="mb-4 grid gap-3 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]"
+      >
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="text-xs text-slate-500">Collected in {data.monthLabel}</div>
+          <div className="mt-1 text-3xl font-semibold tracking-tight text-emerald-700 tabular-nums">
+            {shortPeso(data.sum)}
+          </div>
+          <div className="text-xs text-slate-500">
+            {data.total} {data.total === 1 ? "payment" : "payments"}
+          </div>
+          {data.byDay.length > 0 && (
+            <div
+              className="mt-4 flex h-20 items-end gap-1"
+              role="img"
+              aria-label="Collected day by day"
+            >
+              {data.byDay.map((one) => (
+                <span
+                  key={one.day}
+                  className="min-w-1 max-w-6 flex-1 rounded-t bg-emerald-400/80"
+                  style={{
+                    height: `${Math.max(6, (one.amount / Math.max(1, ...data.byDay.map((d) => d.amount))) * 100)}%`,
+                  }}
+                  title={`${one.day}: ${shortPeso(one.amount)}`}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-3 text-sm font-semibold text-slate-900">How it was paid</div>
+          {data.byMethod.length ? (
+            <Bars
+              rows={data.byMethod.map((one) => ({
+                key: one.method,
+                label: one.label,
+                sub: `${one.count} ${one.count === 1 ? "payment" : "payments"}`,
+                value: one.amount,
+              }))}
+              color="bg-emerald-500"
+            />
+          ) : (
+            <p className="text-sm text-slate-500">Nothing came in this month.</p>
+          )}
+        </div>
+      </section>
       <Card className="overflow-x-auto">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line-soft px-4 py-3">
           <div className="flex flex-1 flex-wrap items-center gap-2">

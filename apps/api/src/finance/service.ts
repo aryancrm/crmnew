@@ -863,7 +863,7 @@ export async function listPayments(
     );
   }
   const scope = sql.join(where, sql` and `);
-  const [found, counted] = await Promise.all([
+  const [found, counted, byMethod, byDay] = await Promise.all([
     rows<Omit<PaymentRow, "methodLabel">>(
       db,
       sql`select ${paymentColumns} ${paymentFrom} where ${scope} order by p.paid_on desc, p.id desc limit ${PAGE} offset ${(page - 1) * PAGE}`,
@@ -872,12 +872,25 @@ export async function listPayments(
       db,
       sql`select count(*)::int as total, coalesce(sum(p.amount), 0)::float8 as sum ${paymentFrom} where ${scope}`,
     ),
+    // The month's money by how it came, and day by day (the filters' payments).
+    rows<{ method: PaymentRow["method"]; amount: number; count: number }>(
+      db,
+      sql`select p.method, sum(p.amount)::float8 as amount, count(*)::int as count ${paymentFrom} where ${scope}
+        group by p.method order by sum(p.amount) desc`,
+    ),
+    rows<{ day: string; amount: number }>(
+      db,
+      sql`select ${day("p.paid_on")} as day, sum(p.amount)::float8 as amount ${paymentFrom} where ${scope}
+        group by p.paid_on order by p.paid_on`,
+    ),
   ]);
   const [year, monthNumber] = month.split("-").map(Number);
   return {
     rows: found.map(withMethod),
     total: counted[0]?.total ?? 0,
     sum: counted[0]?.sum ?? 0,
+    byMethod: byMethod.map((row) => ({ ...row, label: METHOD_LABEL[row.method] })),
+    byDay,
     page,
     pageSize: PAGE,
     month,

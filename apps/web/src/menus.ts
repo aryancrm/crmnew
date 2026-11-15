@@ -538,11 +538,22 @@ function ownDesk(me: Me): Space {
               ),
             ),
           },
-          {
-            // Setting the company up (teams, seats, areas, asks) is its own panel, apart from
-            // the figures: one way in.
-            items: [{ to: "/people", label: "Admin panel", icon: Settings, badge: "orgRequests" }],
-          },
+          // Setting the company up is the Admin's own panel (the Admin login), apart from the
+          // CEO's figures: never in the CEO's sidebar.
+          ...(me.role === "admin"
+            ? [
+                {
+                  items: [
+                    {
+                      to: "/people",
+                      label: "Admin panel",
+                      icon: Settings,
+                      badge: "orgRequests" as const,
+                    },
+                  ],
+                },
+              ]
+            : []),
         ],
       };
   }

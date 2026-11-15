@@ -135,7 +135,7 @@ function Org({ tree }: { tree: OrgTree }) {
     <div className="flex flex-col gap-4">
       <PageHead
         title="Teams & people"
-        sub="Every job is a seat in a team. Someone leaves: the seat stays with its customers and orders for the next person."
+        sub="Every job is a seat in a team; its customers and orders stay with the seat."
         actions={
           <label className="relative flex items-center">
             <Search size={16} className="pointer-events-none absolute left-3 text-slate-400" />
@@ -715,15 +715,7 @@ function SeatRow({ seat, unit, open }: { seat: OrgSeat; unit: OrgUnit; open: (po
         </div>
       )}
       <div className="flex items-center gap-1.5">
-        {holder ? (
-          <Button
-            small
-            onClick={() => open({ kind: "leave", holder })}
-            title="They leave the company"
-          >
-            <UserMinus size={14} /> Leaves
-          </Button>
-        ) : (
+        {!holder && (
           <Button small variant="primary" onClick={() => open({ kind: "add", unit, seat })}>
             <UserPlus size={14} /> Fill
           </Button>
@@ -761,6 +753,12 @@ function SeatRow({ seat, unit, open }: { seat: OrgSeat; unit: OrgUnit; open: (po
                       run(`/api/org/people/${holder.personId}/password`, {}, (answer) =>
                         open({ kind: "login", name: holder.name, login: answer as OrgLogin }),
                       ),
+                  },
+                  // Kept in the menu, not on every row: someone leaving isn't news to show.
+                  {
+                    label: "No longer with us…",
+                    icon: <UserMinus size={14} />,
+                    onClick: () => open({ kind: "leave", holder }),
                   },
                 ]
               : [

@@ -1181,6 +1181,9 @@ export type PaymentList = {
   pageSize: number;
   /** The money in every payment in the filters. */
   sum: number;
+  /** The same money by how it was paid, most first; and day by day. */
+  byMethod: { method: PaymentMethod; label: string; amount: number; count: number }[];
+  byDay: { day: string; amount: number }[];
   month: string;
   monthLabel: string;
   methods: { key: PaymentMethod; label: string }[];
@@ -3065,7 +3068,14 @@ export type ToCollect = {
  *  balance before, after each line and at the end. Centavos. */
 export type Statement = {
   company: CompanyInfo;
-  customer: { id: number; code: string; name: string; address: string | null; tin: string | null; terms: string };
+  customer: {
+    id: number;
+    code: string;
+    name: string;
+    address: string | null;
+    tin: string | null;
+    terms: string;
+  };
   from: string;
   to: string;
   opening: number;

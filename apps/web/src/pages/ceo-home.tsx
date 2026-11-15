@@ -29,9 +29,12 @@ import { api } from "../api";
 import { useMe } from "../auth";
 import { collectedChange, counted, exactPeso, monthShort, shortPeso } from "../ceo";
 import {
+  ChannelSalesCard,
+  CollectedCard,
   CustomersCard,
   MedicinesCard,
   OrdersNowCard,
+  OwedCard,
   PeopleCard,
   PlacedToDeliveredCard,
   SpeedCards,
@@ -391,10 +394,22 @@ export function CeoHomePage() {
         </Metric>
       </section>
 
-      {/* 3. The day's work and who sells, open: the cards of My team and Speed */}
+      {/* 3. What "Sales this month" opens, here: every channel against its target */}
+      <ChannelSalesCard channels={sales.channels} label={inMonth} />
+
+      {/* 4. The day's work and who sells, open: the cards of My team and Speed */}
       <AtAGlance />
 
-      {/* 4. Money at a glance: what is to come in, what is to go out */}
+      {/* 5. What customers owe (big) and what came in */}
+      <section
+        aria-label="Owed and collected"
+        className="grid gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]"
+      >
+        <OwedCard />
+        <CollectedCard />
+      </section>
+
+      {/* 6. Money at a glance: what is to come in, what is to go out */}
       <section aria-label="Money" className="grid gap-3 md:grid-cols-2">
         <MoneySide
           title="To come in"
@@ -440,52 +455,8 @@ export function CeoHomePage() {
         />
       </section>
 
-      {/* 5. The channels against their targets, and what needs the CEO */}
-      <div className="grid gap-3 lg:grid-cols-2">
-        <section aria-labelledby="channels-target" className={`${CARD} min-w-0`}>
-          <header className="flex items-baseline justify-between gap-3 px-4 pt-4 pb-2 sm:px-5">
-            <h2 id="channels-target" className="text-sm font-semibold text-slate-900">
-              Channels against target
-            </h2>
-            {data.running && <span className="text-xs text-slate-500">Pace {pacePct}%</span>}
-          </header>
-          {channels.length === 0 ? (
-            <p className="px-4 pb-4 text-sm text-slate-500 sm:px-5">No sales channels yet.</p>
-          ) : (
-            <ul className="pb-2">
-              {channels.map((channel) => (
-                <li key={channel.code}>
-                  <Link
-                    to={`/reports/channels${monthQuery}#${channel.code}`}
-                    title={
-                      channel.target === null
-                        ? `${channel.name}: ${exactPeso(channel.sold)}, no target`
-                        : `${channel.name}: ${exactPeso(channel.sold)} of ${exactPeso(channel.target)}`
-                    }
-                    className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-4 py-2 hover:bg-slate-50 sm:grid-cols-[minmax(0,13rem)_minmax(0,1fr)_3.5rem] sm:px-5 lg:grid-cols-[minmax(0,10rem)_minmax(0,1fr)_3.5rem]"
-                  >
-                    <span className="col-start-1 row-start-1 truncate text-sm text-slate-800">
-                      {channel.name}
-                    </span>
-                    <span className="col-span-2 row-start-2 sm:col-span-1 sm:col-start-2 sm:row-start-1">
-                      <PaceBar
-                        pct={channel.pct}
-                        pace={data.running ? data.pace : null}
-                        tone={channel.tone}
-                      />
-                    </span>
-                    <span
-                      className={`col-start-2 row-start-1 text-right text-sm tabular-nums sm:col-start-3 ${channel.pct === null ? "text-slate-400" : `font-semibold ${PCT[channel.tone]}`}`}
-                    >
-                      {channel.pct === null ? "—" : `${Math.round(channel.pct)}%`}
-                    </span>
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
+      {/* 7. What needs the CEO */}
+      <div className="grid gap-3">
         <section aria-labelledby="needs-you" className={`${CARD} min-w-0`}>
           <header className="flex items-baseline justify-between gap-3 px-4 pt-4 pb-2 sm:px-5">
             <h2 id="needs-you" className="text-sm font-semibold text-slate-900">
