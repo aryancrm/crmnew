@@ -5,6 +5,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AdminChannelPage, AdminChannelsPage } from "./pages/admin-channels";
+import { AdminDataChecks } from "./pages/admin-data-checks";
 import { AttendanceMonthPage, AttendancePage } from "./pages/attendance";
 import { AttendanceReportPage } from "./pages/attendance-report";
 import { ChangePassword } from "./pages/change-password";
@@ -147,6 +148,7 @@ createRoot(root).render(
             <Route path="field/report" element={<FieldReportPage />} />
             <Route path="hr/attendance/:id" element={<AttendanceMonthPage key="month" />} />
             <Route path="admin/channels" element={<AdminChannelsPage />} />
+            <Route path="admin/data-checks" element={<AdminDataChecks />} />
             <Route path="admin/channels/:id" element={<AdminChannelPage />} />
             <Route path="my-team" element={<MyTeamPage />} />
             <Route path="messages" element={<MessagesPage />} />

@@ -39,6 +39,7 @@ import {
   Receipt,
   ReceiptText,
   Settings,
+  ShieldCheck,
   ShoppingCart,
   SlidersHorizontal,
   Stethoscope,
@@ -735,6 +736,8 @@ function adminPanel(me: Me): Space {
         items: [
           { to: "/settings", label: "Company details", icon: Building2 },
           { to: "/channels", label: "Online pages & mail", icon: Radio },
+          // The data checked against itself: every bill, payment, return and shelf adds up.
+          { to: "/admin/data-checks", label: "Data checks", icon: ShieldCheck },
         ],
       },
       {
