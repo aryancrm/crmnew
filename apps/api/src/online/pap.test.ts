@@ -52,7 +52,7 @@ beforeAll(async () => {
   await seedFixture(db);
   expect(await seedPapRep(db, PASSWORD)).toBe(true);
   app = createApp(db, { webUrl: "http://localhost:5180" });
-  for (const name of ["paula", "jane", "sarla", "fiona", "marco", "ryan", "naresh"]) {
+  for (const name of ["paula", "pia", "jane", "sarla", "fiona", "marco", "ryan", "naresh"]) {
     const response = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -180,7 +180,17 @@ describe("PAP cases", () => {
     let order = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
     expect(order.order).toMatchObject({ status: "pending_approval", medrep: "Paula" });
     expect(order.order.channel).toBe("PAP");
+    // The PAP head approves it, not Management.
+    expect(order.can.approve).toBe(false);
     expect((await post("sarla", `/api/orders/${orderId}/approve`, { finance: true })).status).toBe(
+      409,
+    );
+    const queue = await read<{ orders: { id: number }[] }>("sarla", "/api/orders/queue");
+    expect(queue.orders.map((row) => row.id)).not.toContain(orderId);
+    const piaQueue = await read<{ orders: { id: number }[] }>("pia", "/api/orders/queue");
+    expect(piaQueue.orders.map((row) => row.id)).toContain(orderId);
+    expect((await read<OrderDetail>("pia", `/api/orders/${orderId}`)).can.approve).toBe(true);
+    expect((await post("pia", `/api/orders/${orderId}/approve`, { finance: true })).status).toBe(
       200,
     );
     order = await read<OrderDetail>("fiona", `/api/orders/${orderId}`);

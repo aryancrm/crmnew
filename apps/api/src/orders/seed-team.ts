@@ -7,7 +7,7 @@
 import { sql } from "drizzle-orm";
 import { addCustomer } from "../customers/service";
 import { type Database, rows } from "../db/index";
-import { addPerson, addSeat, coverSeat } from "../org/service";
+import { addPerson, addSeat, coverSeat, projectOrg } from "../org/service";
 import type { BuyerType, Me, OrderItemInput } from "../types";
 import { alignDemoMoneyDates, spreadDemoStepTimes } from "./seed-times";
 import { actOnOrder, placeOrder } from "./service";
@@ -222,7 +222,6 @@ export async function seedPapRep(db: Database, password: string): Promise<boolea
     db,
     sql`select id::int as id, email, name from person where email in ('paula@2mg.test', 'naresh@2mg.test')`,
   );
-  if (found.some((row) => row.email === "paula@2mg.test")) return false;
   const naresh = found.find((row) => row.email === "naresh@2mg.test");
   if (!naresh) return false;
   const ceo = { id: naresh.id, name: naresh.name, role: "ceo" } as Me;
@@ -231,6 +230,32 @@ export async function seedPapRep(db: Database, password: string): Promise<boolea
     sql`select id::int as id from org_unit where name = 'Patient Assistance' and active`,
   );
   if (!unit) return false;
+  // The PAP head (Pia) leads the unit and approves its orders, not Management.
+  const [pia] = await rows<{ id: number }>(
+    db,
+    sql`select id::int as id from person where email = 'pia@2mg.test'`,
+  );
+  let made = false;
+  if (!pia) {
+    const head = await addPerson(db, ceo, {
+      name: "Pia",
+      email: "pia@2mg.test",
+      password,
+      unitId: unit.id,
+      title: "PAP head",
+      module: "manager",
+      lead: true,
+      startsOn: "2025-06-01",
+    });
+    await db.execute(
+      sql`update person set must_change_password = false where id = ${head.personId}`,
+    );
+    made = true;
+  }
+  if (found.some((row) => row.email === "paula@2mg.test")) {
+    if (made) await projectOrg(db);
+    return made;
+  }
   const added = await addPerson(db, ceo, {
     name: "Paula",
     email: "paula@2mg.test",
@@ -244,5 +269,6 @@ export async function seedPapRep(db: Database, password: string): Promise<boolea
   await db.execute(
     sql`update person set must_change_password = false where id = ${added.personId}`,
   );
+  await projectOrg(db);
   return true;
 }

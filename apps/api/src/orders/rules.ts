@@ -154,9 +154,14 @@ export function orderActions(
     leadId?: number | null;
     /** Management's approval can still be taken back (the server says, from its timeline). */
     takeBack?: boolean;
+    /** Who decides it instead of Management (a PAP order's head); none: Management. */
+    approverId?: number | null;
   },
 ): Record<OrderAction, boolean> {
-  const manage = ORDER_MANAGE_ROLES.includes(me.role);
+  const managers = ORDER_MANAGE_ROLES.includes(me.role);
+  // The approval (and a hold before it) is the order's own approver's when it has one.
+  const decides =
+    order.approverId != null ? order.approverId === me.id || me.role === "admin" : managers;
   const finance = FINANCE_ROLES.includes(me.role);
   const dispatch = DISPATCH_ROLES.includes(me.role);
   // An Online case's order: its agent hands it over (Dispatch still packs and ships it).
@@ -165,10 +170,11 @@ export function orderActions(
   const pending = order.status === "pending_approval";
   const flagged = order.status === "on_hold" || order.status === "exception";
   const held = flagged ? holder(order) : null;
+  const manage = pending || held === "management" ? decides : managers;
   return {
-    approve: manage && pending,
-    send_back: manage && pending,
-    reject: manage && pending,
+    approve: decides && pending,
+    send_back: decides && pending,
+    reject: decides && pending,
     hold:
       (manage && OPEN.includes(order.status)) ||
       (finance && FINANCE_STATUSES.includes(order.status)) ||
@@ -277,8 +283,12 @@ export const NEXT_OF: Record<OrderStatus, string> = {
 
 export const PAPER_LABEL: Record<PaperKind, string> = {
   po: "Customer's PO",
+  hospital_doc: "Hospital's papers",
   payment_proof: "Proof of payment",
   prescription: "Prescription",
+  valid_id: "Patient's ID",
+  senior_id: "Senior citizen / PWD ID",
+  med_cert: "Medical certificate",
   gl: "Guarantee letter",
   dr: "Signed delivery receipt",
   other: "Other paper",
@@ -293,7 +303,15 @@ export const INVOICE_FROM_LABEL: Record<InvoiceFrom, string> = {
 /** The papers an order is expected to carry. Only a proof of payment is needed before it can
  *  go on (for a customer who pays in advance); the rest are kept when there are any. */
 export function paperList(
-  customer: { kind: string; terms: PaymentTerms; days: number | null },
+  customer: {
+    kind: string;
+    terms: PaymentTerms;
+    days: number | null;
+    /** A patient's own order, or one for a patient through a hospital or a doctor. */
+    patient?: boolean;
+    /** A medicine on it needs a prescription. */
+    rx?: boolean;
+  },
   onFile: PaperKind[],
 ): { kind: PaperKind; label: string; needed: boolean; why: string | null; onFile: boolean }[] {
   const row = (kind: PaperKind, needed: boolean, why: string | null) => ({
@@ -303,28 +321,47 @@ export function paperList(
     why,
     onFile: onFile.includes(kind),
   });
+  const patient = customer.patient ?? customer.kind === "patient";
+  const proof = row(
+    "payment_proof",
+    customer.terms === "advance",
+    customer.terms === "advance"
+      ? "Pays in advance: Finance checks this"
+      : customer.terms === "cod"
+        ? "Not needed · pays on delivery"
+        : `Not needed · pays in ${customer.days} days`,
+  );
+  const dr = row(
+    "dr",
+    false,
+    "The delivery receipt the customer signed: Dispatch adds it when it is delivered",
+  );
+  // A patient: the prescription and their ID first (Management checks them), then what a
+  // discount or a guarantee letter asks for.
+  if (patient)
+    return [
+      row(
+        "prescription",
+        customer.rx ?? true,
+        customer.rx === false
+          ? "No medicine on it needs one"
+          : "The doctor's prescription for these medicines",
+      ),
+      row("valid_id", true, "The patient's valid ID"),
+      row("senior_id", false, "For a senior citizen's or PWD's 20% off"),
+      row("gl", false, "When a government guarantee letter pays (PCSO, DSWD…)"),
+      row("med_cert", false, "When the agency asks for it with the letter"),
+      proof,
+      dr,
+      row("other", false, null),
+    ];
   return [
-    row(
-      "po",
-      false,
-      customer.kind === "hospital" ? "The hospital's purchase order, when it gave one" : null,
-    ),
-    row(
-      "payment_proof",
-      customer.terms === "advance",
-      customer.terms === "advance"
-        ? "Pays in advance: Finance checks this"
-        : customer.terms === "cod"
-          ? "Not needed · pays on delivery"
-          : `Not needed · pays in ${customer.days} days`,
-    ),
+    row("po", false, "Their purchase order, when they gave one"),
+    row("hospital_doc", false, "Their licence (LTO), accreditation or any paper they send"),
+    proof,
     row("prescription", false, "For a prescription medicine, when there is one"),
-    row("gl", false, "When a patient's government guarantee letter pays"),
-    row(
-      "dr",
-      false,
-      "The delivery receipt the customer signed: Dispatch adds it when it is delivered",
-    ),
+    dr,
+    row("other", false, null),
   ];
 }
 

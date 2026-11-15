@@ -325,9 +325,9 @@ describe("the other roads", () => {
     });
     expect(order.papers.map((paper) => paper.kind).sort()).toEqual([
       "gl",
-      "other",
-      "other",
+      "med_cert",
       "prescription",
+      "valid_id",
     ]);
   });
 

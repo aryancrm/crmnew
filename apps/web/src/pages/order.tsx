@@ -48,7 +48,9 @@ import {
 } from "../finance/parts";
 import { MedicinePopup } from "../inventory/medicine-popup";
 import { avatarTone, initials } from "../look";
+import { ApproveDialog } from "../orders/approve-dialog";
 import { checksOf } from "../orders/checks";
+import { LinesEditor } from "../orders/lines-editor";
 import { ReasonDialog, StatusPill, shortSpan, useOrderAction } from "../orders/parts";
 import { SendToCustomer } from "../orders/send-update";
 import { PAPER_ACCEPT, uploadPaper } from "../photo";
@@ -67,7 +69,7 @@ import {
   useAction,
 } from "../ui";
 
-type StepKey = "placed" | "management" | "finance" | "dispatch" | "delivered" | "paid";
+type StepKey = "placed" | "management" | "finance" | "dispatch" | "delivered" | "paid" | "proof";
 type Shape = "done" | "now" | "stopped" | "later" | "skipped";
 
 const short = (iso: string) =>
@@ -108,6 +110,7 @@ function stepsOf(data: OrderDetail) {
     dispatch: Boolean(order.shippedAt) || delivered,
     delivered,
     paid: invoice?.status === "paid",
+    proof: false,
   };
   const order_: StepKey[] = ["placed", "management", "finance", "dispatch", "delivered", "paid"];
   const current =
@@ -121,6 +124,7 @@ function stepsOf(data: OrderDetail) {
       can.pack || can.ship || can.unpack || can.failed || (can.resume && heldAt === "dispatch"),
     delivered: can.deliver,
     paid: can.recordPayment,
+    proof: false,
   };
   const shape = (key: StepKey): Shape => {
     if (key === "finance" && financeSkipped) return "skipped";
@@ -223,6 +227,7 @@ export function Order() {
   });
   const act = useOrderAction();
   const money = useMoney();
+  const me = useMe().data;
   const [asking, setAsking] = useState<OrderAction | null>(null);
   const [dispatching, setDispatching] = useState<DispatchAsk>(null);
   const data = query.data;
@@ -232,7 +237,7 @@ export function Order() {
   const picked = params.get("step") as StepKey | null;
   // Each desk opens on its own step when it has one, else where the order stands.
   const opened: StepKey =
-    picked && steps.some((item) => item.key === picked)
+    picked && (steps.some((item) => item.key === picked) || picked === "proof")
       ? picked
       : (steps.find((item) => item.mine)?.key ?? current ?? "placed");
   const open = (key: StepKey) =>
@@ -244,13 +249,51 @@ export function Order() {
       },
       { replace: true },
     );
-  // While the order waits for Management, its step is gone through check by check.
-  const checking = can.approve && order.status === "pending_approval";
+  // Each desk sees its own steps at the side (Aryan): Management what it checks, Finance the
+  // money, Dispatch the packing and the handover. Everyone else, the order's whole road.
+  // Whoever approves this order (Management, or a PAP order's head) sees the checks.
+  const desk =
+    me?.role === "management" || me?.role === "admin" || can.approve
+      ? "management"
+      : me?.role === "finance"
+        ? "finance"
+        : me?.role === "dispatch"
+          ? "dispatch"
+          : null;
+  const checking = desk === "management" && (!picked || picked === "management");
   const states = checkStates(data);
   const askedCheck = params.get("check") as CheckKey | null;
   const check: CheckKey = CHECKS.some((item) => item.key === askedCheck)
     ? (askedCheck as CheckKey)
-    : "price";
+    : (CHECKS.find((item) => item.key !== "approve" && !states[item.key].ok)?.key ??
+      (order.status === "pending_approval" ? "approve" : "papers"));
+  // Finance's and Dispatch's own steps, from the order's road.
+  const deskKeys: StepKey[] =
+    desk === "finance"
+      ? ["proof", "finance", "paid"]
+      : desk === "dispatch"
+        ? ["dispatch", "delivered"]
+        : [];
+  const proofOk =
+    !data.paperList.find((row) => row.kind === "payment_proof")?.needed ||
+    data.papers.some((paper) => paper.kind === "payment_proof");
+  const railSteps = deskKeys.length
+    ? deskKeys.map((key, index) =>
+        key === "proof"
+          ? {
+              key,
+              number: index + 1,
+              label: "Payment proof",
+              shape: (proofOk ? "done" : "now") as Shape,
+              who: proofOk ? "On file or not needed" : "Pays in advance: check the slip",
+              mine: !proofOk,
+            }
+          : {
+              ...(steps.find((item) => item.key === key) ?? (steps[0] as (typeof steps)[number])),
+              number: index + 1,
+            },
+      )
+    : steps;
   const openCheck = (key: CheckKey) =>
     setParams(
       (old) => {
@@ -593,7 +636,7 @@ export function Order() {
           aria-label="Steps"
           className="min-w-0 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm lg:col-start-1 lg:row-start-1"
         >
-          {checking && opened === "management"
+          {desk === "management"
             ? CHECKS.map((item, index) => {
                 const on = item.key === check;
                 const state = states[item.key];
@@ -601,39 +644,49 @@ export function Order() {
                   <button
                     key={item.key}
                     type="button"
-                    aria-current={on ? "step" : undefined}
+                    aria-current={on && checking ? "step" : undefined}
                     onClick={() => openCheck(item.key)}
-                    className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors ${on ? "bg-emerald-50 font-semibold text-emerald-900" : "text-slate-700 hover:bg-slate-50"}`}
+                    className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors ${on && checking ? "bg-emerald-50 font-semibold text-emerald-900" : "text-slate-700 hover:bg-slate-50"}`}
                   >
                     <span
                       className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                        item.key === "approve"
-                          ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
-                          : state.ok
-                            ? "bg-emerald-600 text-white"
-                            : "bg-amber-400 text-white"
+                        item.key === "approve" && order.approvedAt
+                          ? "bg-emerald-600 text-white"
+                          : item.key === "approve"
+                            ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
+                            : state.ok
+                              ? "bg-emerald-600 text-white"
+                              : "bg-amber-400 text-white"
                       }`}
                     >
-                      {item.key === "approve" ? (
+                      {item.key === "approve" && !order.approvedAt ? (
                         index + 1
-                      ) : state.ok ? (
+                      ) : state.ok || item.key === "approve" ? (
                         <Check className="size-3.5" />
                       ) : (
                         "!"
                       )}
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate">{item.label}</span>
+                      <span className="block truncate">{checkLabel(item.key, data)}</span>
                       <span
                         className={`block truncate text-[11px] font-normal ${state.ok || item.key === "approve" ? "text-slate-500" : "font-semibold text-amber-700"}`}
                       >
-                        {state.note}
+                        {item.key === "approve"
+                          ? order.approvedAt
+                            ? `Approved${order.approvedBy ? ` by ${order.approvedBy}` : ""}`
+                            : can.approve
+                              ? "Your step"
+                              : order.status === "pending_approval"
+                                ? "Waiting"
+                                : "—"
+                          : state.note}
                       </span>
                     </span>
                   </button>
                 );
               })
-            : steps.map((item) => {
+            : railSteps.map((item) => {
                 const on = item.key === opened;
                 return (
                   <button
@@ -701,28 +754,48 @@ export function Order() {
         </nav>
 
         <div className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
-          {opened === "placed" && <PlacedStep data={data} next={() => open("management")} />}
-          {opened === "management" && (
+          {opened === "proof" && (
+            <StepPanel
+              number={1}
+              title="Payment proof"
+              footer={<NextButton label="Next: Finance check" onClick={() => open("finance")} />}
+            >
+              <Papers data={data} kinds={["payment_proof", "po", "other"]} />
+            </StepPanel>
+          )}
+          {checking ? (
             <ManagementStep
               data={data}
               act={act}
               onAsk={setAsking}
               next={() => open(nextOf("management") ?? "finance")}
-              check={checking ? check : undefined}
+              check={check}
               onCheck={openCheck}
               states={states}
+              autoApprove={params.get("approve") === "1"}
+            />
+          ) : null}
+          {!checking && opened === "placed" && (
+            <PlacedStep data={data} next={() => open("management")} />
+          )}
+          {opened === "management" && !checking && (
+            <ManagementStep
+              data={data}
+              act={act}
+              onAsk={setAsking}
+              next={() => open(nextOf("management") ?? "finance")}
             />
           )}
-          {opened === "finance" && (
+          {!checking && opened === "finance" && (
             <FinanceStep data={data} money={money} next={() => open("dispatch")} />
           )}
-          {opened === "dispatch" && (
+          {!checking && opened === "dispatch" && (
             <DispatchStep data={data} ask={ask} next={() => open("delivered")} />
           )}
-          {opened === "delivered" && (
+          {!checking && opened === "delivered" && (
             <DeliveredStep data={data} ask={ask} next={() => open("paid")} />
           )}
-          {opened === "paid" && <PaidStep data={data} />}
+          {!checking && opened === "paid" && <PaidStep data={data} />}
           <div className="mt-3">
             <Problem message={problem?.message} />
           </div>
@@ -753,12 +826,17 @@ export function Order() {
 /** What Management goes through on an order, one step each (Aryan): each opens the part to look
  *  at, and the last approves it. */
 const CHECKS = [
+  { key: "papers", label: "RX & documents" },
   { key: "price", label: "Medicines & price" },
   { key: "stock", label: "Stock & warehouse" },
   { key: "customer", label: "Customer & licence" },
-  { key: "papers", label: "Papers" },
   { key: "approve", label: "Approve" },
 ] as const;
+/** A hospital's (or any business's) order: its documents, no prescription to check. */
+const checkLabel = (key: CheckKey, data: OrderDetail) =>
+  key === "papers" && data.order.customerKind !== "patient" && !data.order.patientOrder
+    ? "Documents"
+    : (CHECKS.find((item) => item.key === key)?.label ?? key);
 type CheckKey = (typeof CHECKS)[number]["key"];
 
 /** How each check stands on this order: fine, or what needs a look. */
@@ -767,6 +845,7 @@ function checkStates(data: OrderDetail): Record<CheckKey, { ok: boolean; note: s
     findings: data.findings,
     papers: data.papers.map((paper) => paper.kind),
     customerKind: data.order.customerKind,
+    patientOrder: data.order.patientOrder,
     items: data.items,
   });
   const of = (key: string) => list.find((one) => one.key === key);
@@ -778,7 +857,16 @@ function checkStates(data: OrderDetail): Record<CheckKey, { ok: boolean; note: s
     price: state(["price"], of("price")?.label ?? "Price OK"),
     stock: state(["stock"], "In stock"),
     customer: state(["customer"], "Customer OK"),
-    papers: state(["paper", "proof"], "Papers fine"),
+    papers: (() => {
+      // The papers this buyer is expected to send, read from what is on file.
+      const missing = data.paperList.filter((row) => row.needed && !row.onFile);
+      if (missing.length)
+        return { ok: false, note: `No ${missing.map((row) => row.label).join(", ")}` };
+      return state(
+        ["paper", "proof"],
+        of("paper")?.tone === "ok" ? (of("paper")?.label ?? "Papers fine") : "Papers fine",
+      );
+    })(),
     approve: { ok: false, note: "Your step" },
   };
 }
@@ -1042,6 +1130,37 @@ function DetailsLine({ data }: { data: OrderDetail }) {
         </button>
       </div>
       {open && <CompleteDetails data={data} />}
+    </div>
+  );
+}
+
+/** Every paper this order carries, by who it is for (a hospital's PO and its own papers; a
+ *  patient's prescription and ID), with what to add next, as the old CRM suggested it. */
+function Documents({ data }: { data: OrderDetail }) {
+  const onFile = new Set(data.papers.map((paper) => paper.kind));
+  const patient = data.order.customerKind === "patient" || data.order.patientOrder;
+  const missing = data.paperList.filter((row) => row.needed && !row.onFile);
+  const suggestion = missing.length
+    ? `Next: add ${missing.map((row) => row.label).join(" and ")}.`
+    : patient && onFile.has("prescription") && !onFile.has("gl")
+      ? "Prescription on file. Is a guarantee letter paying for it (PCSO, DSWD…)? Add it under Guarantee letter."
+      : patient && onFile.has("gl") && !onFile.has("med_cert")
+        ? "Guarantee letter on file: add the medical certificate if the agency asks for it."
+        : null;
+  return (
+    <div className="flex flex-col gap-3">
+      {data.order.patientOrder && (
+        <div className="text-[13px] text-slate-700">
+          <b>For a patient:</b> {data.order.patientName ?? "name not given"}
+        </div>
+      )}
+      {suggestion && (
+        <div className="flex gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[13px] text-slate-700">
+          <span className="mt-1.5 size-2 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
+          <span>{suggestion}</span>
+        </div>
+      )}
+      <Papers data={data} kinds={data.paperList.map((row) => row.kind)} />
     </div>
   );
 }
@@ -1328,6 +1447,7 @@ function ManagementStep({
   check,
   onCheck,
   states,
+  autoApprove = false,
 }: {
   data: OrderDetail;
   act: ReturnType<typeof useOrderAction>;
@@ -1337,6 +1457,8 @@ function ManagementStep({
   check?: CheckKey;
   onCheck?: (key: CheckKey) => void;
   states?: Record<CheckKey, { ok: boolean; note: string }>;
+  /** Opened from a card's Approve: the approve window opens at once. */
+  autoApprove?: boolean;
 }) {
   const { order, can } = data;
   const shows = (key: CheckKey) => !check || check === key;
@@ -1353,7 +1475,7 @@ function ManagementStep({
         : check === "customer"
           ? findingsOf(["customer", "licence", "owes", "credit"])
           : check === "papers"
-            ? findingsOf(["papers"])
+            ? findingsOf(["papers", "rx"])
             : data.findings;
   // Where it ships from: the default warehouse, unless only another can fill every line.
   const [warehouse, setWarehouse] = useState(() => {
@@ -1363,7 +1485,8 @@ function ManagementStep({
     return main && main.short.length > 0 && fills ? String(fills.id) : "";
   });
   // Management decides here whether Finance checks the order too.
-  const [finance, setFinance] = useState(data.order.financeCheck);
+  const [approving, setApproving] = useState(autoApprove && data.can.approve);
+  const [editing, setEditing] = useState(false);
   const waiting = order.status === "pending_approval";
   // Management completes what the MedRep sent before approving it.
   const completes = can.approve || (can.resume && order.heldRole === "management");
@@ -1417,11 +1540,28 @@ function ManagementStep({
           ))}
         </ul>
       )}
-      {(shows("price") || shows("stock")) && <Lines data={data} compare />}
+      {editing && check === "price" ? (
+        <LinesEditor data={data} onDone={() => setEditing(false)} />
+      ) : (
+        (shows("price") || shows("stock")) && (
+          <>
+            <Lines data={data} compare />
+            {can.approve && check === "price" && (
+              <div>
+                <Button small onClick={() => setEditing(true)}>
+                  <PencilLine size={14} aria-hidden="true" /> Edit medicines · add, free, price
+                </Button>
+              </div>
+            )}
+          </>
+        )
+      )}
       {/* What Management checks besides the price: the buyer's licence and the papers. */}
       {shows("customer") && <LicenceFacts order={order} />}
-      {shows("papers") && (
-        <PaperChips data={data} kinds={["po", "prescription", "gl", "payment_proof"]} />
+      {check === "papers" ? (
+        <Documents data={data} />
+      ) : (
+        !check && <PaperChips data={data} kinds={["po", "prescription", "gl", "payment_proof"]} />
       )}
       {(shows("customer") || check === "approve") && completes && <DetailsLine data={data} />}
       {(shows("stock") || check === "approve") &&
@@ -1452,34 +1592,9 @@ function ManagementStep({
       )}
       {can.approve && shows("approve") && (
         <div className="flex flex-wrap items-end gap-2">
-          {!order.leadId && (
-            <label className="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700">
-              <input
-                type="checkbox"
-                checked={finance}
-                onChange={(event) => setFinance(event.target.checked)}
-              />
-              Finance checks it too
-            </label>
-          )}
-          <Button
-            variant="primary"
-            disabled={act.busy}
-            onClick={() =>
-              act.act(order.id, "approve", {
-                warehouseId: warehouse ? Number(warehouse) : null,
-                finance: order.leadId ? undefined : finance,
-              })
-            }
-          >
+          <Button variant="primary" disabled={act.busy} onClick={() => setApproving(true)}>
             <CircleCheck size={16} aria-hidden="true" /> Approve
           </Button>
-          <Link
-            to={`/orders/${order.id}/change`}
-            className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-line bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm hover:border-field hover:bg-hover"
-          >
-            <PencilLine size={16} aria-hidden="true" /> Change the order
-          </Link>
           {can.send_back && (
             <Button disabled={act.busy} onClick={() => onAsk("send_back")}>
               <Undo2 size={16} aria-hidden="true" /> Send back
@@ -1491,6 +1606,18 @@ function ManagementStep({
             </Button>
           )}
         </div>
+      )}
+      {approving && (
+        <ApproveDialog
+          data={data}
+          initial={warehouse}
+          busy={act.busy}
+          problem={act.problem?.message ?? null}
+          onClose={() => setApproving(false)}
+          onApprove={async (choice) => {
+            if (await act.act(order.id, "approve", choice)) setApproving(false);
+          }}
+        />
       )}
     </StepPanel>
   );

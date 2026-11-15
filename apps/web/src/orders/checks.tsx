@@ -21,6 +21,8 @@ export function checksOf(card: {
   findings: OrderFinding[];
   papers: PaperKind[];
   customerKind: CustomerKind;
+  /** An order for one patient through a hospital or a doctor: checked as a patient's. */
+  patientOrder?: boolean;
   items?: { qty: number; listPrice: number; unitPrice: number; free: boolean }[];
 }): Checked[] {
   const found = (kinds: OrderFinding["kind"][]) =>
@@ -50,7 +52,26 @@ export function checksOf(card: {
   // A hospital's (or distributor's) purchase order is their own paper, which the MedRep brings
   // when they gave one: for information, never a problem. A patient's prescription is needed for
   // a prescription medicine.
-  const paper = PAPER_FOR[card.customerKind];
+  // A patient's order: the prescription and the ID, which Management checks.
+  const patient = card.customerKind === "patient" || card.patientOrder;
+  const rx = found(["rx"]);
+  const paper = patient ? undefined : PAPER_FOR[card.customerKind];
+  if (patient)
+    out.push(
+      rx.length
+        ? {
+            key: "paper",
+            tone: "warn",
+            label: rx.map((item) => item.short).join(", "),
+            title: rx.map((item) => item.text).join("\n"),
+          }
+        : {
+            key: "paper",
+            tone: "ok",
+            label: "Rx & ID attached",
+            title: "Prescription and ID on file",
+          },
+    );
   if (paper)
     out.push(
       card.papers.includes(paper.kind)

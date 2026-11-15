@@ -125,11 +125,14 @@ const readDraft = (personId: number): Draft | null => {
   }
 };
 
-const PAPERS: { kind: PaperKind; label: string }[] = [
-  { kind: "po", label: "Customer's PO" },
+const PAPERS: { kind: PaperKind; label: string; patient?: boolean; business?: boolean }[] = [
+  { kind: "prescription", label: "Prescription", patient: true },
+  { kind: "valid_id", label: "Patient's ID", patient: true },
+  { kind: "senior_id", label: "Senior citizen / PWD ID", patient: true },
+  { kind: "gl", label: "Guarantee letter", patient: true },
+  { kind: "po", label: "Customer's PO", business: true },
+  { kind: "hospital_doc", label: "Their papers (LTO, accreditation…)", business: true },
   { kind: "payment_proof", label: "Proof of payment" },
-  { kind: "prescription", label: "Prescription" },
-  { kind: "gl", label: "Guarantee letter" },
 ];
 
 /** Today's date in Manila, as the API counts days. */
@@ -225,6 +228,10 @@ export function OrderNew({
   const [doctor, setDoctor] = useState<{ id: number; name: string } | null>(null);
   const [findDoctor, setFindDoctor] = useState("");
   const [papers, setPapers] = useState<Partial<Record<PaperKind, File>>>({});
+  // An order through a hospital or a doctor for one patient (Aryan): its prescription and the
+  // patient's ID go with it, and Management checks them as on a patient's own order.
+  const [patientOrder, setPatientOrder] = useState(false);
+  const [patientName, setPatientName] = useState("");
   // An advance order without its slip says why (the hub's rule): Finance reads it.
   const [noProof, setNoProof] = useState<NoProofReason | "">("");
   const [noProofNote, setNoProofNote] = useState("");
@@ -315,6 +322,8 @@ export function OrderNew({
     if (order.division) setDivision(order.division);
     if (order.subDivision) setSubDivision(order.subDivision);
     setPaymentTerm(order.paymentTerm ?? "");
+    setPatientOrder(order.patientOrder);
+    setPatientName(order.patientName ?? "");
     setNoProof(order.noProofReason ?? "");
     setNoProofNote(order.noProofNote ?? "");
   }, [fixing.data]);
@@ -517,6 +526,7 @@ export function OrderNew({
     return <PageState query={catalogue.data ? stock : catalogue} what="the medicines" />;
 
   const proofMissing = picked?.paymentTerms === "advance" && !papers.payment_proof;
+  const forPatient = picked?.kind === "patient" || patientOrder;
   // A PAP MedRep's patient is paid by a guarantee letter: that starts as a PAP case, where the
   // quotation, the application, the letter and the claim are tracked.
   const papPatient =
@@ -557,6 +567,8 @@ export function OrderNew({
       division: pickedDivision || null,
       subDivision: pickedSubDivision || null,
       paymentTerm: paymentTerm.trim() || null,
+      patientOrder: picked?.kind !== "patient" && patientOrder,
+      patientName: picked?.kind !== "patient" && patientOrder ? patientName.trim() || null : null,
       noProofReason: proofMissing && noProof ? noProof : null,
       noProofNote: proofMissing && noProof ? noProofNote.trim() || null : null,
     };
@@ -1484,8 +1496,49 @@ export function OrderNew({
       {/* 4 · Papers */}
       <section className="flex flex-col gap-2">
         <StepHead number={5} title="Papers" />
+        {picked && picked.kind !== "patient" && (
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <span className="text-[13px] font-semibold text-slate-900">
+              Is this order for one patient?
+            </span>
+            <span className="flex gap-1 rounded-lg bg-slate-100 p-0.5 text-xs font-semibold">
+              {[
+                { on: false, label: "No" },
+                { on: true, label: "Yes, a patient" },
+              ].map((choice) => (
+                <button
+                  key={choice.label}
+                  type="button"
+                  aria-pressed={patientOrder === choice.on}
+                  onClick={() => setPatientOrder(choice.on)}
+                  className={`rounded-md px-3 py-1.5 ${patientOrder === choice.on ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"}`}
+                >
+                  {choice.label}
+                </button>
+              ))}
+            </span>
+            {patientOrder && (
+              <input
+                aria-label="The patient's name"
+                value={patientName}
+                onChange={(event) => setPatientName(event.target.value)}
+                placeholder="The patient's name"
+                className={`${FIELD} min-w-48 flex-1`}
+              />
+            )}
+            {patientOrder && (
+              <span className="w-full text-[11px] text-slate-500">
+                Add the prescription and the patient's ID below: Management checks them.
+              </span>
+            )}
+          </div>
+        )}
         <div className="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm">
-          {PAPERS.map((paper) => {
+          {PAPERS.filter((paper) =>
+            forPatient
+              ? !paper.business || paper.kind === "po"
+              : !paper.patient || paper.kind === "prescription",
+          ).map((paper) => {
             const file = papers[paper.kind];
             const notNeeded =
               paper.kind === "payment_proof" && picked && picked.paymentTerms !== "advance"

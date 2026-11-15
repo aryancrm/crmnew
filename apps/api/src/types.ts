@@ -591,7 +591,8 @@ export type OrderStage =
 
 /** What the system found on an order, for Management (and Finance) to weigh before it goes on. */
 export type OrderFinding = {
-  kind: "price" | "stock" | "customer" | "licence" | "papers" | "owes" | "credit";
+  /** rx: a patient's order without its prescription or the patient's ID (Management's). */
+  kind: "price" | "stock" | "customer" | "licence" | "papers" | "rx" | "owes" | "credit";
   /** A few words for a pill on the card: "Below hospital price". */
   short: string;
   /** What is to be decided, for the card's "Next action". */
@@ -638,6 +639,8 @@ export type CardItem = {
 export type OrderCard = OrderRow & {
   /** The MedRep the order is for: what Management's queue groups by. */
   medrepId: number;
+  /** Who approves it instead of Management (a PAP order's head); null: Management. */
+  approverId: number | null;
   customerKind: CustomerKind;
   customerCity: string | null;
   channel: string | null;
@@ -748,6 +751,9 @@ export type OrderRow = {
   createdAt: string;
   updatedAt: string;
   flagReason: string | null;
+  /** An order for one patient through a hospital or a doctor, and whose. */
+  patientOrder: boolean;
+  patientName: string | null;
   /** Filled on the approval queue: the medicines in one line and what the system found. */
   lines?: string;
   findings?: OrderFinding[];
@@ -822,6 +828,10 @@ export type OrderInput = {
   /** Pays in advance with no proof of payment attached: why. */
   noProofReason?: NoProofReason | null;
   noProofNote?: string | null;
+  /** An order for one patient (through a hospital or a doctor): the prescription and the ID
+   *  are then checked as on a patient's own order. */
+  patientOrder?: boolean;
+  patientName?: string | null;
   deliveryAddress?: string | null;
   receiver?: string | null;
   receiverPhone?: string | null;
@@ -883,7 +893,17 @@ export type OrderDetailsInput = {
 export type OrderChecks = { management: boolean; finance: boolean };
 
 export type InvoiceFrom = "2mg" | "getmeds";
-export type PaperKind = "po" | "payment_proof" | "prescription" | "gl" | "dr" | "other";
+export type PaperKind =
+  | "po"
+  | "hospital_doc"
+  | "payment_proof"
+  | "prescription"
+  | "valid_id"
+  | "senior_id"
+  | "med_cert"
+  | "gl"
+  | "dr"
+  | "other";
 
 export type OrderPaper = {
   id: number;
@@ -1040,6 +1060,8 @@ export type OrderDetail = {
         name: string;
         isDefault: boolean;
         short: { medicine: string; need: number; have: number }[];
+        /** Every medicine of the order: what it needs and what is free in this warehouse. */
+        lines: { medicine: string; need: number; have: number }[];
       }[]
     | null;
   papers: OrderPaper[];

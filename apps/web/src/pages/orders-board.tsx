@@ -179,6 +179,7 @@ export function OrdersToCheck({
   /** Boxes for the top of the side column (Management's Home: who sold what). */
   aside?: ReactNode;
 }) {
+  const navigate = useNavigate();
   const TABS = all
     ? [{ key: "all" as const, label: "All orders" }, ...DESK_TABS.management]
     : DESK_TABS[desk];
@@ -366,7 +367,8 @@ export function OrdersToCheck({
       desk={data.desk}
       manage={finance ? data.can.finance : dispatch ? data.can.dispatch : data.can.manage}
       busy={busy}
-      onApprove={() => order.act(card.id, "approve")}
+      // Approving picks the warehouse, as the hub did: the order opens with its approve window.
+      onApprove={() => navigate(`/orders/${card.id}?step=management&check=approve&approve=1`)}
       onResume={() => order.act(card.id, "resume")}
       onAsk={(what) => setAsking({ card, what })}
       onTake={dispatch && data.can.dispatch ? (release) => take(card.id, release) : undefined}

@@ -91,6 +91,8 @@ const orderInput = z.object({
     .enum(["payment_to_follow", "paid_no_slip", "other"], { error: "Pick why there is no proof." })
     .nullish(),
   noProofNote: optional(300),
+  patientOrder: z.boolean().optional(),
+  patientName: optional(120),
 });
 
 /** What Management completes on a field order. */
