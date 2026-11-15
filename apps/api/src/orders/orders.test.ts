@@ -63,7 +63,7 @@ beforeAll(async () => {
   await seedDemo(db, PASSWORD);
   await seedFixture(db);
   app = createApp(db, { webUrl: "http://localhost:5180" });
-  for (const name of ["ryan", "daniel", "sarla", "jane", "fiona", "vanessa", "naresh"]) {
+  for (const name of ["ryan", "daniel", "sarla", "jane", "fiona", "vanessa", "naresh", "marco"]) {
     const response = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -342,6 +342,58 @@ describe("what Management does with an order", () => {
     // Once approved it can't be changed this way.
     await act("sarla", made.body.id, "approve");
     expect((await post("sarla", `/api/orders/${made.body.id}/change`, changed)).status).toBe(409);
+  });
+
+  it("waits for stock: held with what is short, and the holder and MedRep told when it comes", async () => {
+    // A medicine with stock free to sell (the tests before took this one's).
+    const free = (await read<Catalogue>("sarla", "/api/inventory/medicines")).rows.find(
+      (row) => row.free >= 5 && row.prices.hospital !== undefined && row.id !== medicine.id,
+    );
+    const covered = await place("ryan", {
+      customerId: hospital,
+      items: [{ medicineId: free?.id, qty: 1, priceKind: "hospital" }],
+    });
+    // Nothing short: no need to wait.
+    expect((await act("sarla", covered.body.id, "hold", { stock: true })).status).toBe(409);
+    const short = await place("ryan", {
+      customerId: hospital,
+      items: [line({ qty: medicine.stock + 50 })],
+    });
+    expect((await act("sarla", short.body.id, "hold", { stock: true })).status).toBe(200);
+    const held = await order("ryan", short.body.id);
+    expect(held.order.status).toBe("on_hold");
+    expect(held.order.flagReason).toMatch(/^Waiting for stock: .*needs/);
+    const [place2] = await rows<{ id: number }>(
+      db,
+      sql`select id::int as id from warehouse where active order by is_default desc, id limit 1`,
+    );
+    const receive = (qty: number, batchNo: string) =>
+      post("marco", "/api/inventory/receive", {
+        medicineId: medicine.id,
+        warehouseId: place2?.id,
+        batchNo,
+        expiresOn: "2030-12-31",
+        qty,
+        ref: "PO test",
+      });
+    // A little isn't enough: nobody is told.
+    expect((await receive(1, "WAIT-1")).status).toBe(200);
+    const told = () =>
+      rows<{ person: number; kind: string }>(
+        db,
+        sql`select person_id::int as person, kind from notification
+          where order_id = ${short.body.id} and kind like 'stock_back%' order by kind`,
+      );
+    expect(await told()).toEqual([]);
+    expect((await receive(100_000, "WAIT-2")).status).toBe(200);
+    expect((await told()).map((one) => one.kind)).toEqual(["stock_back", "stock_back_info"]);
+    // Told once per wait.
+    expect((await receive(10, "WAIT-3")).status).toBe(200);
+    expect(await told()).toHaveLength(2);
+    expect((await act("sarla", short.body.id, "resume")).status).toBe(200);
+    const resumed = await order("sarla", short.body.id);
+    expect(resumed.order.status).toBe("pending_approval");
+    expect(resumed.order.flagReason).toBeNull();
   });
 
   it("keeps how long it stood at each step, and a card counts from its own step", async () => {

@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { Database } from "../db/index";
 import { allow, type Env, idParam, readBody } from "../http";
 import { COST_ROLES, PURCHASE_ROLES } from "../inventory/rules";
+import { afterStockIn } from "../orders/stock-wait";
 import {
   cancelPurchase,
   listPurchases,
@@ -136,6 +137,7 @@ export function purchaseRoutes(
       }),
     );
     await receivePurchase(db, c.get("me"), idParam(c), input.lines);
+    await afterStockIn(db);
     return c.json({ ok: true });
   });
 

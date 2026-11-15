@@ -69,7 +69,7 @@ export function useOrderAction() {
   async function run(
     id: number,
     what: OrderAction,
-    body: { reason?: string; warehouseId?: number | null; finance?: boolean } = {},
+    body: { reason?: string; warehouseId?: number | null; finance?: boolean; stock?: boolean } = {},
   ) {
     const done = await action.run(async () => {
       await api(`/api/orders/${id}/${what}`, { body });

@@ -77,6 +77,7 @@ import {
   STATUSES,
   STEP_OF,
 } from "./rules";
+import { shortLines, shortWords } from "./stock-wait";
 
 const PAGE = 25;
 const list = (values: readonly string[]): SQL =>
@@ -1185,6 +1186,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
       recordPayment:
         (orderCan(me).finance || (Boolean(order.leadId) && CASE_AGENT_ROLES.includes(me.role))) &&
         money.invoice?.status === "open",
+      waitStock: orderActions(me, who).hold && (await shortLines(db, id)).length > 0,
     },
   };
 }
@@ -1490,7 +1492,13 @@ export async function actOnOrder(
   me: Me,
   id: number,
   action: OrderAction,
-  input: { reason?: string | null; warehouseId?: number | null; finance?: boolean },
+  input: {
+    reason?: string | null;
+    warehouseId?: number | null;
+    finance?: boolean;
+    /** Holding: wait until what it needs is on the shelf (the reason is worked out). */
+    stock?: boolean;
+  },
 ): Promise<OrderStatus> {
   const reason = clean(input.reason);
   let before: OrderStatus = "pending_approval";
@@ -1534,7 +1542,7 @@ export async function actOnOrder(
       "cancel",
       "take_back",
     ];
-    if (needsReason.includes(action) && !reason)
+    if (needsReason.includes(action) && !reason && !(action === "hold" && input.stock))
       throw new Refusal(400, "invalid", "Say why.", "reason");
     if (action === "resubmit" && !reason)
       throw new Refusal(
@@ -1617,6 +1625,27 @@ export async function actOnOrder(
       case "hold": {
         const role: HoldRole =
           me.role === "finance" ? "finance" : me.role === "dispatch" ? "dispatch" : "management";
+        if (input.stock) {
+          const short = await shortLines(tx, id);
+          if (!short.length)
+            throw new Refusal(
+              409,
+              "in_stock",
+              `Everything on ${order.code} is on the shelf: it doesn't need to wait.`,
+            );
+          const why = `Waiting for stock: ${shortWords(short)}${reason ? `. ${reason}` : ""}`;
+          await set(
+            sql`status = 'on_hold', held_from = ${order.status}, held_role = ${role}, flag_reason = ${why},
+              waiting_stock_at = now(), waiting_stock_by = ${me.id}`,
+          );
+          return logEvent(
+            tx,
+            id,
+            me,
+            "status",
+            `${why}. Held until it comes in; ${me.name} and the MedRep are told when it does.`,
+          );
+        }
         await set(
           sql`status = 'on_hold', held_from = ${order.status}, held_role = ${role}, flag_reason = ${reason}`,
         );
@@ -1635,7 +1664,10 @@ export async function actOnOrder(
         return logEvent(tx, id, me, "status", `Marked as an exception. Reason: ${reason}`);
       case "resume": {
         const back = order.heldFrom ?? "pending_approval";
-        await set(sql`status = ${back}, held_from = null, held_role = null, flag_reason = null`);
+        await set(
+          sql`status = ${back}, held_from = null, held_role = null, flag_reason = null,
+            waiting_stock_at = null, waiting_stock_by = null`,
+        );
         return logEvent(
           tx,
           id,

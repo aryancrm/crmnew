@@ -1034,6 +1034,8 @@ export type OrderDetail = {
     addProof: boolean;
     addDr: boolean;
     recordPayment: boolean;
+    /** Hold it until stock comes in: only while something on it is short. */
+    waitStock: boolean;
   };
 };
 

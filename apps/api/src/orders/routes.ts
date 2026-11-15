@@ -29,6 +29,7 @@ import {
   reviseOrder,
   saveOrderDetails,
 } from "./service";
+import { tellStockBack } from "./stock-wait";
 
 /** The bell is told after the work is saved; a failure there never undoes the work. */
 export async function tellSafely(tell: () => Promise<void>): Promise<void> {
@@ -296,9 +297,16 @@ export function orderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
         warehouseId: z.number().int().positive().nullish(),
         // Approving: Management decides whether Finance checks it too (field orders ask nothing).
         finance: z.boolean().optional(),
+        // Holding until stock comes in.
+        stock: z.boolean().optional(),
       }),
     );
     const before = await actOnOrder(db, c.get("me"), idParam(c), action, input);
+    // A cancelled order frees what it promised: someone waiting may now be covered.
+    if (action === "cancel")
+      await tellSafely(async () => {
+        await tellStockBack(db);
+      });
     await tellSafely(() =>
       tellAboutOrder(db, c.get("me"), idParam(c), action, input.reason ?? null, before),
     );

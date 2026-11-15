@@ -23,6 +23,7 @@ const NEEDS_YOU = new Set([
   "announcement",
   "leave_request",
   "form_request",
+  "stock_back",
 ]);
 
 export type UpdatesBox = "important" | "updates";

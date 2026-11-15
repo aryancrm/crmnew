@@ -20,6 +20,7 @@ import {
   CircleX,
   ExternalLink,
   FileText,
+  Hourglass,
   MapPin,
   PackageOpen,
   PencilLine,
@@ -602,6 +603,16 @@ export function Order() {
                   <item.icon className="size-3.5" aria-hidden="true" /> {item.label}
                 </Button>
               ))}
+              {can.waitStock && (
+                <Button
+                  small
+                  disabled={act.busy}
+                  title="Hold it until what it needs is on the shelf; you are told when it comes in"
+                  onClick={() => act.act(order.id, "hold", { stock: true })}
+                >
+                  <Hourglass className="size-3.5" aria-hidden="true" /> Wait for stock
+                </Button>
+              )}
             </div>
           )}
         </nav>

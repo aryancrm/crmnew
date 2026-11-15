@@ -4,6 +4,7 @@ import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
 import { allow, type Env, idParam, may, readBody } from "../http";
+import { afterStockIn } from "../orders/stock-wait";
 import { answerRequest, askForMedicine, medicineRequests, REQUEST_ANSWER_ROLES } from "./requests";
 import { BUYER_TYPES, CATALOGUE_ROLES, COST_ROLES, PRICE_ROLES, STOCK_ROLES } from "./rules";
 import {
@@ -171,12 +172,12 @@ export function inventoryRoutes(
     );
     const me = c.get("me");
     // Only those who see costs may record one.
-    return c.json(
-      await receiveStock(db, me, {
-        ...input,
-        unitCost: may(me, COST_ROLES) ? input.unitCost : null,
-      }),
-    );
+    const received = await receiveStock(db, me, {
+      ...input,
+      unitCost: may(me, COST_ROLES) ? input.unitCost : null,
+    });
+    await afterStockIn(db);
+    return c.json(received);
   });
 
   app.post("/api/inventory/move", async (c) => {
@@ -210,7 +211,9 @@ export function inventoryRoutes(
         reason: optional(300),
       }),
     );
-    return c.json(await countStock(db, c.get("me"), input));
+    const counted = await countStock(db, c.get("me"), input);
+    if (counted.difference > 0) await afterStockIn(db);
+    return c.json(counted);
   });
 
   app.get("/api/stock-news", async (c) => c.json({ news: await openNews(db) }));
