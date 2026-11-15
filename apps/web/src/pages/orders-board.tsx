@@ -8,7 +8,6 @@
 import { lateAfterFor } from "@2mg/api/late";
 import type {
   BoardTab,
-  CardItem,
   Desk,
   MedicineDetail,
   OrderBoard,
@@ -161,53 +160,6 @@ type CardAsk = "hold" | "send_back" | "take_back";
 
 /** How long after approving Management may take it back (the API's TAKE_BACK_MINUTES). */
 const TAKE_BACK_MINUTES = 30;
-
-/** One line under the medicines, only when the order isn't at the list price: what it comes to
- *  at the buyer's list price and what was offered, how much lower, and any free goods. The card
- *  stays the same height however many medicines it has. */
-function CardPrice({ items }: { items: CardItem[] }) {
-  const paid = items.filter((item) => !item.free);
-  const list = paid.reduce((sum, item) => sum + item.qty * item.listPrice, 0);
-  const offered = paid.reduce((sum, item) => sum + item.qty * item.unitPrice, 0);
-  const free = items.filter((item) => item.free);
-  if (offered === list && free.length === 0) return null;
-  const off = list > 0 && offered < list ? Math.round((1 - offered / list) * 100) : 0;
-  const lower = paid.filter((item) => item.unitPrice < item.listPrice);
-  return (
-    <p
-      className="mt-1 truncate text-[11px] text-slate-600"
-      title={[
-        ...lower.map(
-          (item) =>
-            `${item.name}: ${item.priceLabel} price ${peso(item.listPrice)}, offered ${peso(item.unitPrice)}${item.reason ? ` (${item.reason})` : ""}`,
-        ),
-        ...free.map(
-          (item) => `${item.name} × ${item.qty} free${item.reason ? ` (${item.reason})` : ""}`,
-        ),
-      ].join("\n")}
-    >
-      <span className="font-semibold text-slate-700">Price:</span>{" "}
-      {offered !== list && (
-        <>
-          list <s className="text-slate-400">{peso(list)}</s> → offered{" "}
-          <span className={`font-semibold ${offered < list ? "text-amber-700" : "text-slate-900"}`}>
-            {peso(offered)}
-          </span>
-          {off > 0 && (
-            <span className="ml-1 rounded bg-amber-100 px-1 text-[10px] font-bold text-amber-800">
-              −{off}%
-            </span>
-          )}
-        </>
-      )}
-      {free.length > 0 && (
-        <span className={offered !== list ? "ml-1.5" : ""}>
-          + free {free.map((item) => `${item.name.split(" ")[0]} × ${count(item.qty)}`).join(", ")}
-        </span>
-      )}
-    </p>
-  );
-}
 
 /** An order waiting this long for Management is late. */
 
@@ -810,6 +762,29 @@ export function OrdersToCheck({
 }
 
 /** One order, laid out exactly as the Leads desk's card (LeadCardItem). */
+/** Why Management sent it back and the MedRep's answer, read in full over the page. */
+function SentBackStory({ card, onClose }: { card: OrderCard; onClose: () => void }) {
+  return (
+    <Dialog title={`Sent back · ${card.code}`} sub={card.customer} onClose={onClose}>
+      <div className="flex flex-col gap-3 text-[13px] text-slate-700">
+        <div>
+          <div className="text-xs font-semibold text-slate-500">
+            {card.sentBackBy ?? "Management"} sent it back
+            {card.sentBackCount > 1 ? ` (${card.sentBackCount} times)` : ""}
+          </div>
+          <p className="mt-0.5 whitespace-pre-line">{card.sentBackReason}</p>
+        </div>
+        {card.reply && (
+          <div>
+            <div className="text-xs font-semibold text-slate-500">{card.medrep}'s answer</div>
+            <p className="mt-0.5 whitespace-pre-line">{card.reply}</p>
+          </div>
+        )}
+      </div>
+    </Dialog>
+  );
+}
+
 export function OrderCardItem({
   card,
   desk = "management",
@@ -885,537 +860,557 @@ export function OrderCardItem({
   const kind = KIND_BADGE[card.customerKind] ?? KIND_BADGE.hospital;
   const stepIdx = Math.min(card.step, STRIP.length - 1);
   const open = () => navigate(`/orders/${card.id}`);
+  const [story, setStory] = useState(false);
 
   return (
-    // biome-ignore lint/a11y/useSemanticElements: the card holds buttons, so it can't be one link
-    <div
-      role="link"
-      tabIndex={0}
-      aria-label={`Open order ${card.code}: ${card.customer}, ${peso(card.total)}, ${card.statusLabel}`}
-      onClick={open}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" && event.target === event.currentTarget) open();
-      }}
-      className={`group relative flex min-w-0 cursor-pointer flex-col justify-between rounded-2xl border p-3.5 shadow-sm transition-[border-color,box-shadow] hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none ${
-        stopped
-          ? "border-rose-200/80 bg-rose-50/60 hover:border-rose-300"
-          : finished
-            ? "border-emerald-300 bg-emerald-50 hover:border-emerald-400"
-            : isNew
-              ? "border-sky-200/80 bg-sky-50/40 hover:border-sky-300"
-              : "border-slate-200/90 bg-white hover:border-emerald-300"
-      }`}
-    >
-      <div>
-        <div className="flex items-start justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <span
-              className={`flex size-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold shadow-2xs ${avatarTone(card.customer)}`}
-            >
-              {initials(card.customer)}
-            </span>
-            <div className="min-w-0">
-              <div className="flex min-w-0 items-center gap-1.5">
-                <h3
-                  className="truncate text-sm font-semibold tracking-tight text-slate-900 transition-colors group-hover:text-emerald-800"
-                  title={card.customer}
-                >
-                  {card.customer}
-                </h3>
-              </div>
-              <div
-                className="truncate text-[11px] font-medium text-slate-500"
-                title={card.customerPhone ? `Phone ${card.customerPhone}` : undefined}
+    <>
+      {/* Beside the card, not inside it: a click in the popup doesn't open the order. */}
+      {story && <SentBackStory card={card} onClose={() => setStory(false)} />}
+      {/* biome-ignore lint/a11y/useSemanticElements: the card holds buttons, so it can't be one link */}
+      <div
+        role="link"
+        tabIndex={0}
+        aria-label={`Open order ${card.code}: ${card.customer}, ${peso(card.total)}, ${card.statusLabel}`}
+        onClick={open}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && event.target === event.currentTarget) open();
+        }}
+        className={`group relative flex min-w-0 cursor-pointer flex-col justify-between rounded-2xl border p-3.5 shadow-sm transition-[border-color,box-shadow] hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none ${
+          stopped
+            ? "border-rose-200/80 bg-rose-50/60 hover:border-rose-300"
+            : finished
+              ? "border-emerald-300 bg-emerald-50 hover:border-emerald-400"
+              : isNew
+                ? "border-sky-200/80 bg-sky-50/40 hover:border-sky-300"
+                : "border-slate-200/90 bg-white hover:border-emerald-300"
+        }`}
+      >
+        <div>
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              <span
+                className={`flex size-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold shadow-2xs ${avatarTone(card.customer)}`}
               >
-                <span className="font-semibold text-slate-700">{card.code}</span> ·{" "}
-                {peso(card.total)}
+                {initials(card.customer)}
+              </span>
+              <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-1.5">
+                  <h3
+                    className="truncate text-sm font-semibold tracking-tight text-slate-900 transition-colors group-hover:text-emerald-800"
+                    title={card.customer}
+                  >
+                    {card.customer}
+                  </h3>
+                </div>
+                <div
+                  className="truncate text-[11px] font-medium text-slate-500"
+                  title={card.customerPhone ? `Phone ${card.customerPhone}` : undefined}
+                >
+                  <span className="font-semibold text-slate-700">{card.code}</span> ·{" "}
+                  {peso(card.total)}
+                </div>
               </div>
             </div>
-          </div>
 
-          <div className="flex shrink-0 items-center gap-1.5">
-            {finished && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-                <CheckCheck className="size-3" /> Delivered
-              </span>
-            )}
-            {flagged && (
-              <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-                {card.statusLabel}
-              </span>
-            )}
-            {late && (
-              <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-                Late
-              </span>
-            )}
-            {isNew && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow-2xs">
-                <span className="size-1.5 rounded-full bg-white" />
-                New
-              </span>
-            )}
-            <span
-              className={`text-[11px] font-semibold tabular-nums ${late ? "text-rose-700" : "text-slate-500"}`}
-              title={`${card.statusLabel} since ${new Date(card.stepSince).toLocaleString("en-PH", { timeZone: "Asia/Manila" })} · placed ${new Date(card.submittedAt).toLocaleString("en-PH", { timeZone: "Asia/Manila" })}`}
-            >
-              {waited(card.stepSince)}
-            </span>
-          </div>
-        </div>
-
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          <span
-            className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${kind?.style}`}
-          >
-            {kind?.label}
-          </span>
-          {card.channel && (
-            <span className="max-w-[120px] truncate text-[10px] font-semibold text-slate-600">
-              {card.channel}
-            </span>
-          )}
-          <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
-            {termsOf(card)}
-          </span>
-          {card.customerCity && (
-            <span
-              className="inline-flex max-w-[140px] items-center gap-0.5 truncate text-[10px] text-slate-500"
-              title={card.customerCity}
-            >
-              <MapPin className="size-2.5 shrink-0 text-slate-400" />
-              <span className="truncate">{card.customerCity}</span>
-            </span>
-          )}
-        </div>
-
-        <p className="mt-2 truncate text-[11px] text-slate-600" title={card.lines}>
-          <span className="font-semibold text-slate-700">Medicine:</span> {card.lines}
-        </p>
-        {warehouse ? (
-          // The warehouse's facts: where it goes, to whom, how many pieces, by when.
-          <div className="mt-1.5 space-y-1.5 text-[11px] text-slate-600">
-            <p className="truncate" title={card.deliveryAddress ?? undefined}>
-              <span className="font-semibold text-slate-700">Deliver to:</span>{" "}
-              {[card.receiver, card.deliveryAddress].filter(Boolean).join(" · ") || "—"}
-            </p>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 tabular-nums">
-                {count(card.pieces)} pcs
-              </span>
-              {card.receiverPhone && (
-                <a
-                  href={`tel:${card.receiverPhone.replace(/[^\d+]/g, "")}`}
-                  onClick={(event) => event.stopPropagation()}
-                  className="rounded px-1 py-0.5 text-[10px] font-medium text-slate-600 tabular-nums hover:bg-slate-100"
-                >
-                  {card.receiverPhone}
-                </a>
-              )}
-              {card.expectedOn && inWarehouse && (
-                <span
-                  className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                    card.expectedOn < today
-                      ? "bg-rose-50 text-rose-800 ring-1 ring-rose-200"
-                      : card.expectedOn === today
-                        ? "bg-amber-50 text-amber-900 ring-1 ring-amber-200"
-                        : "bg-slate-50 text-slate-600 ring-1 ring-slate-200"
-                  }`}
-                >
-                  {card.expectedOn < today
-                    ? `Late · wanted ${dayLabel(card.expectedOn)}`
-                    : card.expectedOn === today
-                      ? "Wanted today"
-                      : `Wanted ${dayLabel(card.expectedOn)}`}
+            <div className="flex shrink-0 items-center gap-1.5">
+              {finished && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+                  <CheckCheck className="size-3" /> Delivered
                 </span>
               )}
+              {flagged && (
+                <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+                  {card.statusLabel}
+                </span>
+              )}
+              {late && (
+                <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-semibold text-white">
+                  Late
+                </span>
+              )}
+              {isNew && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow-2xs">
+                  <span className="size-1.5 rounded-full bg-white" />
+                  New
+                </span>
+              )}
+              <span
+                className={`text-[11px] font-semibold tabular-nums ${late ? "text-rose-700" : "text-slate-500"}`}
+                title={`${card.statusLabel} since ${new Date(card.stepSince).toLocaleString("en-PH", { timeZone: "Asia/Manila" })} · placed ${new Date(card.submittedAt).toLocaleString("en-PH", { timeZone: "Asia/Manila" })}`}
+              >
+                {waited(card.stepSince)}
+              </span>
             </div>
           </div>
-        ) : (
-          <>
-            {/* What Management checks, on top (Aryan): price, stock, papers, customer. */}
-            <div className="mt-2">
-              <Checks card={card} />
-            </div>
-            <CardPrice items={card.items} />
-          </>
-        )}
-        {warehouse &&
-          card.status === "packing" &&
-          card.cameBackCount > 0 &&
-          card.cameBackReason && (
-            <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] leading-snug text-rose-900">
-              <span className="font-semibold">
-                Came back{card.cameBackCount > 1 ? ` ${card.cameBackCount} times` : ""}:
-              </span>{" "}
-              {card.cameBackReason}
-            </div>
-          )}
-        {card.status !== "draft" && card.sentBackCount > 0 && card.sentBackReason && (
-          <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-[11px] leading-snug text-amber-950">
-            <div>
-              <span className="font-semibold">
-                Sent back{card.sentBackCount > 1 ? ` ${card.sentBackCount} times` : ""}
-                {card.sentBackBy ? ` by ${card.sentBackBy}` : ""}:
-              </span>{" "}
-              {card.sentBackReason}
-            </div>
-            {card.reply && (
-              <div className="mt-0.5">
-                <span className="font-semibold">{card.medrep}'s answer:</span> {card.reply}
-              </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <span
+              className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${kind?.style}`}
+            >
+              {kind?.label}
+            </span>
+            {card.channel && (
+              <span className="max-w-[120px] truncate text-[10px] font-semibold text-slate-600">
+                {card.channel}
+              </span>
+            )}
+            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+              {termsOf(card)}
+            </span>
+            {card.customerCity && (
+              <span
+                className="inline-flex max-w-[140px] items-center gap-0.5 truncate text-[10px] text-slate-500"
+                title={card.customerCity}
+              >
+                <MapPin className="size-2.5 shrink-0 text-slate-400" />
+                <span className="truncate">{card.customerCity}</span>
+              </span>
             )}
           </div>
-        )}
-        <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
-          {warehouse && inWarehouse && onTake && (
-            // Who has it in hand, so two people don't pack the same order.
-            <span className="inline-flex items-center gap-1">
-              {card.dispatchById === me?.id ? (
-                <>
+
+          <p className="mt-2 truncate text-[11px] text-slate-600" title={card.lines}>
+            <span className="font-semibold text-slate-700">Medicine:</span> {card.lines}
+          </p>
+          {warehouse ? (
+            // The warehouse's facts: where it goes, to whom, how many pieces, by when.
+            <div className="mt-1.5 space-y-1.5 text-[11px] text-slate-600">
+              <p className="truncate" title={card.deliveryAddress ?? undefined}>
+                <span className="font-semibold text-slate-700">Deliver to:</span>{" "}
+                {[card.receiver, card.deliveryAddress].filter(Boolean).join(" · ") || "—"}
+              </p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 tabular-nums">
+                  {count(card.pieces)} pcs
+                </span>
+                {card.receiverPhone && (
+                  <a
+                    href={`tel:${card.receiverPhone.replace(/[^\d+]/g, "")}`}
+                    onClick={(event) => event.stopPropagation()}
+                    className="rounded px-1 py-0.5 text-[10px] font-medium text-slate-600 tabular-nums hover:bg-slate-100"
+                  >
+                    {card.receiverPhone}
+                  </a>
+                )}
+                {card.expectedOn && inWarehouse && (
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                      card.expectedOn < today
+                        ? "bg-rose-50 text-rose-800 ring-1 ring-rose-200"
+                        : card.expectedOn === today
+                          ? "bg-amber-50 text-amber-900 ring-1 ring-amber-200"
+                          : "bg-slate-50 text-slate-600 ring-1 ring-slate-200"
+                    }`}
+                  >
+                    {card.expectedOn < today
+                      ? `Late · wanted ${dayLabel(card.expectedOn)}`
+                      : card.expectedOn === today
+                        ? "Wanted today"
+                        : `Wanted ${dayLabel(card.expectedOn)}`}
+                  </span>
+                )}
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* What Management checks, on top (Aryan): price, stock, papers, customer. */}
+              <div className="mt-2">
+                <Checks card={card} />
+              </div>
+            </>
+          )}
+          {warehouse &&
+            card.status === "packing" &&
+            card.cameBackCount > 0 &&
+            card.cameBackReason && (
+              <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] leading-snug text-rose-900">
+                <span className="font-semibold">
+                  Came back{card.cameBackCount > 1 ? ` ${card.cameBackCount} times` : ""}:
+                </span>{" "}
+                {card.cameBackReason}
+              </div>
+            )}
+          {card.status !== "draft" && card.sentBackCount > 0 && card.sentBackReason && (
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setStory(true);
+              }}
+              className="mt-2 flex w-full items-center gap-1.5 truncate text-left text-[11px] text-slate-600 hover:text-slate-900"
+            >
+              <span className="size-1.5 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
+              <span className="font-semibold text-slate-800">
+                Sent back{card.sentBackCount > 1 ? ` ${card.sentBackCount} times` : ""}
+                {card.reply ? ", answered" : ""}
+              </span>
+              <span className="font-semibold text-emerald-700">Read</span>
+            </button>
+          )}
+          <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
+            {warehouse && inWarehouse && onTake && (
+              // Who has it in hand, so two people don't pack the same order.
+              <span className="inline-flex items-center gap-1">
+                {card.dispatchById === me?.id ? (
+                  <>
+                    <span className="rounded-full bg-sky-50 px-2 py-0.5 font-semibold text-sky-800 ring-1 ring-sky-200">
+                      You have it
+                    </span>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onTake(true);
+                      }}
+                      className="rounded-full px-1.5 py-0.5 font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                    >
+                      Let go
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    {card.dispatchBy && (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">
+                        {card.dispatchBy} has it
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onTake(false);
+                      }}
+                      className="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                    >
+                      {card.dispatchBy ? "Take over" : "Take it"}
+                    </button>
+                  </>
+                )}
+              </span>
+            )}
+            {onHandle &&
+              (pending || (flagged && heldBy === "management")) &&
+              (card.handledById === me?.id ? (
+                <span className="inline-flex items-center gap-1">
                   <span className="rounded-full bg-sky-50 px-2 py-0.5 font-semibold text-sky-800 ring-1 ring-sky-200">
-                    You have it
+                    You're handling it
                   </span>
                   <button
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      onTake(true);
+                      onHandle(true);
                     }}
                     className="rounded-full px-1.5 py-0.5 font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900"
                   >
                     Let go
                   </button>
-                </>
+                </span>
               ) : (
-                <>
-                  {card.dispatchBy && (
+                <span className="inline-flex items-center gap-1">
+                  {card.handledBy && (
                     <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">
-                      {card.dispatchBy} has it
+                      {card.handledBy} is handling it
                     </span>
                   )}
                   <button
                     type="button"
                     onClick={(event) => {
                       event.stopPropagation();
-                      onTake(false);
+                      onHandle(false);
                     }}
                     className="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
                   >
-                    {card.dispatchBy ? "Take over" : "Take it"}
+                    {card.handledBy ? "Take over" : "I'll handle it"}
+                  </button>
+                </span>
+              ))}
+            {showRep && !warehouse && (
+              <span
+                className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-slate-100 py-0.5 pr-2 pl-0.5"
+                title={`Placed by ${card.medrep}${card.area ? ` · ${card.area}` : ""}`}
+              >
+                <span
+                  className={`flex size-4 shrink-0 items-center justify-center rounded-full text-[8px] font-bold ${avatarTone(card.medrep)}`}
+                >
+                  {initials(card.medrep)}
+                </span>
+                <span className="truncate font-semibold text-slate-700">{card.medrep}</span>
+              </span>
+            )}
+            {onHistory && (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onHistory();
+                }}
+                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                title="What they bought, what they owe and how late"
+              >
+                <History className="size-3" /> History
+              </button>
+            )}
+            {/* The findings are the checks on top; the warehouse reads only its own facts. */}
+          </div>
+        </div>
+
+        <div
+          className={`mt-2.5 border-t pt-2.5 ${finished ? "border-emerald-200/80" : "border-slate-100"}`}
+        >
+          {!(pending && desk === "management") && (
+            <>
+              <div className="mb-1 flex items-center justify-between gap-2 text-[10px] font-medium text-slate-400">
+                <span>{finished ? "Completed" : "Next action"}</span>
+                {finished ? (
+                  <CheckCheck className="size-3.5 text-emerald-600" />
+                ) : (
+                  <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+                )}
+              </div>
+              <p
+                className={`mb-2 line-clamp-2 text-[11px] leading-snug font-medium ${stopped ? "text-rose-700" : "text-slate-800"}`}
+                title={card.next}
+              >
+                {card.next}
+              </p>
+            </>
+          )}
+          {/* Every order in Management's queue stands at the same step: no strip there. */}
+          {!(pending && desk === "management") && (
+            <>
+              <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-slate-500">
+                <span
+                  className={`max-w-[170px] truncate font-semibold ${stopped ? "text-rose-700" : "text-slate-700"}`}
+                >
+                  {stopped || atDispatch
+                    ? card.statusLabel
+                    : finished
+                      ? "Delivered"
+                      : STRIP[stepIdx]}
+                </span>
+                <span className="shrink-0 text-[9px] text-slate-400">
+                  {finished ? "Complete" : `${stepIdx + 1} of ${STRIP.length}`}
+                </span>
+              </div>
+              <div className="flex gap-1" aria-hidden="true">
+                {STRIP.map((label, index) => {
+                  const done = finished || index < stepIdx;
+                  const current = index === stepIdx && !finished;
+                  return (
+                    <div
+                      key={label}
+                      title={label}
+                      className={`h-1.5 flex-1 rounded-full ${
+                        current
+                          ? stopped
+                            ? "bg-rose-600 ring-2 ring-rose-200"
+                            : "bg-blue-600 ring-2 ring-blue-200"
+                          : done
+                            ? "bg-emerald-500"
+                            : "bg-slate-200"
+                      }`}
+                    />
+                  );
+                })}
+              </div>
+            </>
+          )}
+          {(card.warehouse || (warehouse && card.papers.length > 0)) && (
+            <div className="mt-2.5 flex flex-wrap gap-1">
+              {card.warehouse && (
+                <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-800">
+                  Ships from · {card.warehouse}
+                </span>
+              )}
+              {card.status === "shipped" && (card.courier || card.rider) && (
+                <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[9px] font-semibold text-sky-800">
+                  {card.courier
+                    ? `${card.courier}${card.tracking ? ` · ${card.tracking}` : ""}`
+                    : `Rider · ${card.rider}`}
+                </span>
+              )}
+              {warehouse && card.papers.length > 0 && (
+                <span
+                  className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-700"
+                  title="Papers on file"
+                >
+                  <FileCheck2 className="size-3" />{" "}
+                  {card.papers.map((kind) => PAPER_SHORT[kind] ?? "Paper").join(" · ")}
+                </span>
+              )}
+            </div>
+          )}
+
+          {desk === "finance" && manage && (atFinance || heldByFinance) && (
+            // biome-ignore lint/a11y/noStaticElementInteractions: keeps a button's click off the card
+            // biome-ignore lint/a11y/useKeyWithClickEvents: the buttons inside have their own keys
+            <div
+              className="mt-3 grid grid-cols-[2fr_1fr] gap-1.5"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {atFinance ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={card.status === "finance_check" ? onConfirm : onInvoice}
+                    className="h-8 rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
+                  >
+                    {card.status === "finance_check" ? "Confirm payment" : "Make invoice"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onAsk("hold")}
+                    className="h-8 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Hold
                   </button>
                 </>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={onResume}
+                  className="col-span-2 h-8 rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
+                >
+                  Take off hold
+                </button>
               )}
-            </span>
+            </div>
           )}
-          {onHandle &&
-            (pending || (flagged && heldBy === "management")) &&
-            (card.handledById === me?.id ? (
-              <span className="inline-flex items-center gap-1">
-                <span className="rounded-full bg-sky-50 px-2 py-0.5 font-semibold text-sky-800 ring-1 ring-sky-200">
-                  You're handling it
-                </span>
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onHandle(true);
-                  }}
-                  className="rounded-full px-1.5 py-0.5 font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-                >
-                  Let go
-                </button>
-              </span>
-            ) : (
-              <span className="inline-flex items-center gap-1">
-                {card.handledBy && (
-                  <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">
-                    {card.handledBy} is handling it
-                  </span>
-                )}
-                <button
-                  type="button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onHandle(false);
-                  }}
-                  className="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-                >
-                  {card.handledBy ? "Take over" : "I'll handle it"}
-                </button>
-              </span>
-            ))}
-          {showRep && !warehouse && (
-            <span
-              className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-slate-100 py-0.5 pr-2 pl-0.5"
-              title={`Placed by ${card.medrep}${card.area ? ` · ${card.area}` : ""}`}
+
+          {desk === "dispatch" && manage && onDispatch && (atDispatch || heldBy === "dispatch") && (
+            // biome-ignore lint/a11y/noStaticElementInteractions: keeps a button's click off the card
+            // biome-ignore lint/a11y/useKeyWithClickEvents: the buttons inside have their own keys
+            <div
+              className="mt-3 grid grid-cols-[2fr_1fr] gap-1.5"
+              onClick={(event) => event.stopPropagation()}
             >
-              <span
-                className={`flex size-4 shrink-0 items-center justify-center rounded-full text-[8px] font-bold ${avatarTone(card.medrep)}`}
-              >
-                {initials(card.medrep)}
-              </span>
-              <span className="truncate font-semibold text-slate-700">{card.medrep}</span>
-            </span>
+              {atDispatch ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      onDispatch(
+                        card.status === "ready_for_dispatch"
+                          ? "pack"
+                          : card.status === "packing"
+                            ? "ship"
+                            : "deliver",
+                      )
+                    }
+                    className="h-8 rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
+                  >
+                    {card.status === "ready_for_dispatch"
+                      ? "Pack"
+                      : card.status === "packing"
+                        ? "Ship"
+                        : "Delivered"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      card.status === "shipped" ? onDispatch("failed") : onAsk("hold")
+                    }
+                    className="h-8 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    {card.status === "shipped" ? "Came back" : "Hold"}
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={onResume}
+                  className="col-span-2 h-8 rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
+                >
+                  Take off hold
+                </button>
+              )}
+            </div>
           )}
-          {onHistory && (
+
+          {desk === "management" && manage && (pending || flagged) && (
+            // biome-ignore lint/a11y/noStaticElementInteractions: keeps a button's click off the card
+            // biome-ignore lint/a11y/useKeyWithClickEvents: the buttons inside have their own keys
+            <div
+              className="mt-3 grid grid-cols-[2fr_1fr_1fr] gap-1.5"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {pending ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={onApprove}
+                    className="h-8 rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
+                  >
+                    Approve
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onAsk("hold")}
+                    className="h-8 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Hold
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onAsk("send_back")}
+                    className="h-8 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                  >
+                    Send back
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={onResume}
+                  className="col-span-3 h-8 rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
+                >
+                  Take off hold
+                </button>
+              )}
+            </div>
+          )}
+
+          {desk === "management" && manage && card.takeBack && card.approvedAt && (
             <button
               type="button"
+              disabled={busy}
               onClick={(event) => {
                 event.stopPropagation();
-                onHistory();
+                onAsk("take_back");
               }}
-              className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-              title="What they bought, what they owe and how late"
+              className="mt-3 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 text-xs font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-50"
             >
-              <History className="size-3" /> History
+              <Undo2 className="size-3.5" /> Take back approval ·{" "}
+              {Math.max(
+                1,
+                Math.ceil(TAKE_BACK_MINUTES - (Date.now() - Date.parse(card.approvedAt)) / 60_000),
+              )}{" "}
+              min left
             </button>
           )}
-          {/* The findings are the checks on top; the warehouse reads only its own facts. */}
-        </div>
-      </div>
 
-      <div
-        className={`mt-2.5 border-t pt-2.5 ${finished ? "border-emerald-200/80" : "border-slate-100"}`}
-      >
-        <div className="mb-1 flex items-center justify-between gap-2 text-[10px] font-medium text-slate-400">
-          <span>{finished ? "Completed" : "Next action"}</span>
-          {finished ? (
-            <CheckCheck className="size-3.5 text-emerald-600" />
-          ) : (
-            <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+          {fixable && card.status === "draft" && (
+            <Link
+              to={`/orders/${card.id}/fix`}
+              onClick={(event) => event.stopPropagation()}
+              className="mt-3 flex h-8 items-center justify-center rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark"
+            >
+              Fix and send again
+            </Link>
           )}
         </div>
-        <p
-          className={`mb-2 line-clamp-2 text-[11px] leading-snug font-medium ${stopped ? "text-rose-700" : "text-slate-800"}`}
-          title={card.next}
-        >
-          {card.next}
-        </p>
-        <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-slate-500">
-          <span
-            className={`max-w-[170px] truncate font-semibold ${stopped ? "text-rose-700" : "text-slate-700"}`}
-          >
-            {stopped || atDispatch ? card.statusLabel : finished ? "Delivered" : STRIP[stepIdx]}
-          </span>
-          <span className="shrink-0 text-[9px] text-slate-400">
-            {finished ? "Complete" : `${stepIdx + 1} of ${STRIP.length}`}
-          </span>
-        </div>
-        <div className="flex gap-1" aria-hidden="true">
-          {STRIP.map((label, index) => {
-            const done = finished || index < stepIdx;
-            const current = index === stepIdx && !finished;
-            return (
-              <div
-                key={label}
-                title={label}
-                className={`h-1.5 flex-1 rounded-full ${
-                  current
-                    ? stopped
-                      ? "bg-rose-600 ring-2 ring-rose-200"
-                      : "bg-blue-600 ring-2 ring-blue-200"
-                    : done
-                      ? "bg-emerald-500"
-                      : "bg-slate-200"
-                }`}
-              />
-            );
-          })}
-        </div>
-        {(card.warehouse || (warehouse && card.papers.length > 0)) && (
-          <div className="mt-2.5 flex flex-wrap gap-1">
-            {card.warehouse && (
-              <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-800">
-                Ships from · {card.warehouse}
-              </span>
-            )}
-            {card.status === "shipped" && (card.courier || card.rider) && (
-              <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[9px] font-semibold text-sky-800">
-                {card.courier
-                  ? `${card.courier}${card.tracking ? ` · ${card.tracking}` : ""}`
-                  : `Rider · ${card.rider}`}
-              </span>
-            )}
-            {warehouse && card.papers.length > 0 && (
-              <span
-                className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-700"
-                title="Papers on file"
-              >
-                <FileCheck2 className="size-3" />{" "}
-                {card.papers.map((kind) => PAPER_SHORT[kind] ?? "Paper").join(" · ")}
-              </span>
-            )}
-          </div>
-        )}
-
-        {desk === "finance" && manage && (atFinance || heldByFinance) && (
-          // biome-ignore lint/a11y/noStaticElementInteractions: keeps a button's click off the card
-          // biome-ignore lint/a11y/useKeyWithClickEvents: the buttons inside have their own keys
-          <div
-            className="mt-3 grid grid-cols-[2fr_1fr] gap-1.5"
-            onClick={(event) => event.stopPropagation()}
-          >
-            {atFinance ? (
-              <>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={card.status === "finance_check" ? onConfirm : onInvoice}
-                  className="h-8 rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
-                >
-                  {card.status === "finance_check" ? "Confirm payment" : "Make invoice"}
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => onAsk("hold")}
-                  className="h-8 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  Hold
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={onResume}
-                className="col-span-2 h-8 rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
-              >
-                Take off hold
-              </button>
-            )}
-          </div>
-        )}
-
-        {desk === "dispatch" && manage && onDispatch && (atDispatch || heldBy === "dispatch") && (
-          // biome-ignore lint/a11y/noStaticElementInteractions: keeps a button's click off the card
-          // biome-ignore lint/a11y/useKeyWithClickEvents: the buttons inside have their own keys
-          <div
-            className="mt-3 grid grid-cols-[2fr_1fr] gap-1.5"
-            onClick={(event) => event.stopPropagation()}
-          >
-            {atDispatch ? (
-              <>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() =>
-                    onDispatch(
-                      card.status === "ready_for_dispatch"
-                        ? "pack"
-                        : card.status === "packing"
-                          ? "ship"
-                          : "deliver",
-                    )
-                  }
-                  className="h-8 rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
-                >
-                  {card.status === "ready_for_dispatch"
-                    ? "Pack"
-                    : card.status === "packing"
-                      ? "Ship"
-                      : "Delivered"}
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => (card.status === "shipped" ? onDispatch("failed") : onAsk("hold"))}
-                  className="h-8 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  {card.status === "shipped" ? "Came back" : "Hold"}
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={onResume}
-                className="col-span-2 h-8 rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
-              >
-                Take off hold
-              </button>
-            )}
-          </div>
-        )}
-
-        {desk === "management" && manage && (pending || flagged) && (
-          // biome-ignore lint/a11y/noStaticElementInteractions: keeps a button's click off the card
-          // biome-ignore lint/a11y/useKeyWithClickEvents: the buttons inside have their own keys
-          <div
-            className="mt-3 grid grid-cols-[2fr_1fr_1fr] gap-1.5"
-            onClick={(event) => event.stopPropagation()}
-          >
-            {pending ? (
-              <>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={onApprove}
-                  className="h-8 rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
-                >
-                  Approve
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => onAsk("hold")}
-                  className="h-8 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  Hold
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => onAsk("send_back")}
-                  className="h-8 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-                >
-                  Send back
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={onResume}
-                className="col-span-3 h-8 rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
-              >
-                Take off hold
-              </button>
-            )}
-          </div>
-        )}
-
-        {desk === "management" && manage && card.takeBack && card.approvedAt && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={(event) => {
-              event.stopPropagation();
-              onAsk("take_back");
-            }}
-            className="mt-3 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 text-xs font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-50"
-          >
-            <Undo2 className="size-3.5" /> Take back approval ·{" "}
-            {Math.max(
-              1,
-              Math.ceil(TAKE_BACK_MINUTES - (Date.now() - Date.parse(card.approvedAt)) / 60_000),
-            )}{" "}
-            min left
-          </button>
-        )}
-
-        {fixable && card.status === "draft" && (
-          <Link
-            to={`/orders/${card.id}/fix`}
-            onClick={(event) => event.stopPropagation()}
-            className="mt-3 flex h-8 items-center justify-center rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark"
-          >
-            Fix and send again
-          </Link>
-        )}
       </div>
-    </div>
+    </>
   );
 }
 

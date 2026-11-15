@@ -1,7 +1,7 @@
-// Management's Home, built as the MedRep's Home is: who and when, four figures (what waits for
-// them, orders today, this month, sales against the targets), the company's orders for a day or
-// the month and where they stand, then the queue to approve with who sold what beside it. White
-// and slate, the case page's boxes; never black.
+// Management's Home: who and when, four figures (what waits for them, orders today, this month,
+// sales against the targets), what is held or with Dispatch, then the queue to approve with who
+// sold what beside it. Nothing Management only looks at (Aryan, 15 Nov: how fast each approver
+// is lives under Speed).
 
 import type { CompanyKpis } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
@@ -10,9 +10,8 @@ import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { avatarTone, initials } from "../look";
-import { DeskGlance } from "../team/glance";
 import { count, peso } from "../ui";
-import { Figure, type Period, PeriodBox, periodWord } from "./figures";
+import { Figure, type Period, periodWord } from "./figures";
 import { greeting, todayWords } from "./home";
 import { OrdersToCheck } from "./orders-board";
 
@@ -27,7 +26,7 @@ function waitedFor(iso: string | null): string | null {
 
 export function ManagementHome() {
   const me = useMe().data;
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const location = useLocation();
   // "Waiting for you" and "on hold" open the queue below, on its tab: once per link followed,
   // after the page has drawn (a link opened from outside lands before the figures are read).
@@ -113,62 +112,6 @@ export function ManagementHome() {
           to="/team"
         />
       </div>
-
-      {/* How fast Management approves, and each approver against the limit. */}
-      <DeskGlance steps={["management"]} people="management" />
-
-      {/* The company's orders for the period and where they stand now. */}
-      <PeriodBox
-        title="Company orders"
-        short="Orders"
-        period={period}
-        day={day}
-        shownDay={data?.day}
-        today={data?.today}
-        faded={kpis.isPlaceholderData}
-        error={kpis.isError ? "Couldn't read the figures. Pull to refresh." : null}
-        onPick={(next, picked) => {
-          const nextParams = new URLSearchParams(params);
-          if (next === "today") nextParams.delete("period");
-          else nextParams.set("period", next);
-          if (picked) nextParams.set("day", picked);
-          else nextParams.delete("day");
-          setParams(nextParams, { replace: true });
-        }}
-        cells={[
-          {
-            label: "Total submitted",
-            value: data?.submitted,
-            sub: data ? peso(data.submittedValue) : null,
-            to: "/orders",
-          },
-          {
-            label: "Pending validation",
-            value: data?.pending,
-            sub: "Management or Finance",
-            to: "/orders?status=pending_approval",
-          },
-          {
-            label: "In fulfilment",
-            value: data?.fulfilment,
-            sub: "packing or on the way",
-            to: "/orders?tab=dispatch",
-          },
-          {
-            label: "Completed",
-            value: data?.completed,
-            sub: data ? peso(data.completedValue) : null,
-            to: "/orders?status=completed",
-          },
-          { label: "Cancelled", value: data?.cancelled, to: "/orders?status=cancelled" },
-          {
-            label: "New customers",
-            value: data?.newCustomers,
-            sub: data && data.toReview > 0 ? `${count(data.toReview)} to check` : "added",
-            to: "/customers?review=1",
-          },
-        ]}
-      />
 
       {/* Right now beyond Management: on hold, at Dispatch. */}
       {data && (data.onHold > 0 || data.toPack > 0 || data.onTheWay > 0) && (

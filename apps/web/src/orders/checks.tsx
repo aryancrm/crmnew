@@ -21,6 +21,7 @@ export function checksOf(card: {
   findings: OrderFinding[];
   papers: PaperKind[];
   customerKind: CustomerKind;
+  items?: { qty: number; listPrice: number; unitPrice: number; free: boolean }[];
 }): Checked[] {
   const found = (kinds: OrderFinding["kind"][]) =>
     card.findings.filter((one) => kinds.includes(one.kind));
@@ -35,8 +36,15 @@ export function checksOf(card: {
         }
       : { key, tone: "ok" as const, label: fine, title: fineTitle };
   };
+  // How far below the buyer's list the paid lines come to, said on the price check itself.
+  const paid = (card.items ?? []).filter((item) => !item.free);
+  const list = paid.reduce((sum, item) => sum + item.qty * item.listPrice, 0);
+  const offered = paid.reduce((sum, item) => sum + item.qty * item.unitPrice, 0);
+  const off = list > 0 && offered < list ? Math.round((1 - offered / list) * 100) : 0;
+  const price = one("price", ["price"], "Price OK", "Every medicine at this buyer's list price");
+  if (off > 0) price.label = `Price ${off}% below list`;
   const out: Checked[] = [
-    one("price", ["price"], "Price OK", "Every medicine at this buyer's list price"),
+    price,
     one("stock", ["stock"], "In stock", "Everything on it is free on the shelf"),
   ];
   // A hospital's (or distributor's) purchase order is their own paper, which the MedRep brings
@@ -117,8 +125,8 @@ export function Checks({
         <span
           key={one.key}
           title={one.title}
-          className={`inline-flex items-center gap-1.5 whitespace-nowrap ${small ? "text-[11px]" : "text-[11.5px]"} ${
-            one.tone === "warn" ? "font-semibold text-slate-800" : "text-slate-600"
+          className={`inline-flex items-center gap-1.5 font-semibold whitespace-nowrap ${small ? "text-[11px]" : "text-[11.5px]"} ${
+            one.tone === "info" ? "text-slate-500" : "text-slate-800"
           }`}
         >
           <span className={`size-1.5 shrink-0 rounded-full ${DOT[one.tone]}`} aria-hidden="true" />
