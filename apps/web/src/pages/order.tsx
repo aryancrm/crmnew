@@ -22,6 +22,7 @@ import {
   FileText,
   MapPin,
   PackageOpen,
+  PencilLine,
   Phone,
   Play,
   Printer,
@@ -1075,6 +1076,12 @@ function ManagementStep({
           >
             <CircleCheck size={16} aria-hidden="true" /> Approve
           </Button>
+          <Link
+            to={`/orders/${order.id}/change`}
+            className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-line bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm hover:border-field hover:bg-hover"
+          >
+            <PencilLine size={16} aria-hidden="true" /> Change the order
+          </Link>
           {can.send_back && (
             <Button disabled={act.busy} onClick={() => onAsk("send_back")}>
               <Undo2 size={16} aria-hidden="true" /> Send back

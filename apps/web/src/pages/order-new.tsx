@@ -141,7 +141,14 @@ const monthYear = (day: string) =>
     timeZone: "Asia/Manila",
   }).format(new Date(`${day}T00:00:00+08:00`));
 
-export function OrderNew({ fix = false }: { fix?: boolean }) {
+export function OrderNew({
+  fix = false,
+  change: management = false,
+}: {
+  fix?: boolean;
+  /** Management changing a placed order before approving it. */
+  change?: boolean;
+}) {
   const me = useMe().data;
   const navigate = useNavigate();
   const queries = useQueryClient();
@@ -149,13 +156,15 @@ export function OrderNew({ fix = false }: { fix?: boolean }) {
   const [params] = useSearchParams();
   // Fixing an order Management sent back: the same form, filled from the order.
   const routeId = useParams().id;
-  const fixId = fix ? Number(routeId) || null : null;
+  // Management changing a placed order before approving it: the same form again.
+  const fixId = fix || management ? Number(routeId) || null : null;
   const fixing = useQuery({
     queryKey: ["orders", "one", fixId],
     queryFn: () => api<OrderDetail>(`/api/orders/${fixId}`),
     enabled: Boolean(fixId),
   });
-  const sentBack = fixing.data?.order;
+  const sentBack = fix ? fixing.data?.order : undefined;
+  const changing = management ? fixing.data?.order : undefined;
   const [answer, setAnswer] = useState("");
   const catalogue = useQuery({
     queryKey: ["inventory", "medicines"],
@@ -471,6 +480,19 @@ export function OrderNew({ fix = false }: { fix?: boolean }) {
   );
 
   if (fixId && !fixing.data) return <PageState query={fixing} what="the order" />;
+  if (changing && changing.status !== "pending_approval")
+    return (
+      <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-600 shadow-2xs">
+        {changing.code} isn't waiting for Management: it is {changing.statusLabel.toLowerCase()}{" "}
+        now.{" "}
+        <Link
+          to={`/orders/${changing.id}`}
+          className="font-semibold text-emerald-700 hover:underline"
+        >
+          Open the order
+        </Link>
+      </div>
+    );
   if (sentBack && sentBack.status !== "draft")
     return (
       <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-600 shadow-2xs">
@@ -516,7 +538,9 @@ export function OrderNew({ fix = false }: { fix?: boolean }) {
     };
     const done = await action.run(async () => {
       if (fixId) {
-        await api(`/api/orders/${fixId}/revise`, { body: { ...body, answer } });
+        await api(`/api/orders/${fixId}/${management ? "change" : "revise"}`, {
+          body: { ...body, answer },
+        });
         id = fixId;
       } else id = (await api<{ id: number }>("/api/orders", { body })).id;
     });
@@ -566,7 +590,11 @@ export function OrderNew({ fix = false }: { fix?: boolean }) {
           <ArrowLeft className="size-5" />
         </button>
         <h1 className="flex-1 text-2xl font-bold tracking-tight text-ink">
-          {sentBack ? `Fix order ${sentBack.code}` : "New order"}
+          {sentBack
+            ? `Fix order ${sentBack.code}`
+            : changing
+              ? `Change order ${changing.code}`
+              : "New order"}
         </h1>
         <button
           type="button"
@@ -607,9 +635,16 @@ export function OrderNew({ fix = false }: { fix?: boolean }) {
         </div>
       )}
 
+      {changing && (
+        <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-[13px] text-sky-950">
+          You're changing {changing.medrep}'s order before approving it. Write why at the bottom:
+          they are told what changed. It stays with you to approve.
+        </div>
+      )}
+
       {/* Who checks the order is Management's call: the field (a MedRep, a team lead) only
           places it, so only the office sees the switch. */}
-      {!fieldRole && (
+      {!fieldRole && !changing && (
         <OrderChecksBox
           reasons={checkReasons}
           management={toManagement}
@@ -720,7 +755,7 @@ export function OrderNew({ fix = false }: { fix?: boolean }) {
             )}
           </div>
         ) : null}
-        {picked && forWhom.data?.can && (
+        {picked && forWhom.data?.can && !fixId && (
           <label className={`${BOX} flex flex-col gap-1.5`}>
             <span className="text-xs font-semibold text-slate-700">Whose order is it?</span>
             <select
@@ -1531,14 +1566,18 @@ export function OrderNew({ fix = false }: { fix?: boolean }) {
       {fixId && (
         <section className="flex flex-col gap-2 rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs">
           <label htmlFor="answer" className="text-sm font-bold text-slate-900">
-            Your answer to Management
+            {management ? "Why you changed it (the MedRep is told)" : "Your answer to Management"}
           </label>
           <textarea
             id="answer"
             required
             value={answer}
             onChange={(event) => setAnswer(event.target.value)}
-            placeholder="What you changed, or why it is right as it is"
+            placeholder={
+              management
+                ? "Only 20 in stock; price as agreed with the hospital"
+                : "What you changed, or why it is right as it is"
+            }
             className={`${FIELD} min-h-20 py-2`}
             aria-invalid={Boolean(action.at("answer"))}
           />
@@ -1569,11 +1608,13 @@ export function OrderNew({ fix = false }: { fix?: boolean }) {
         >
           {action.busy
             ? fixId
-              ? "Sending…"
+              ? "Saving…"
               : "Placing…"
-            : fixId
-              ? "Send to Management"
-              : "Place order"}
+            : management
+              ? "Save the changes"
+              : fixId
+                ? "Send to Management"
+                : "Place order"}
         </button>
       </div>
 

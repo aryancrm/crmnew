@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../app";
-import { countQueries, type Database, openDatabase } from "../db/index";
+import { countQueries, type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { seedDemo } from "../seed";
@@ -295,6 +295,53 @@ describe("what Management does with an order", () => {
     ).toBe(true);
     // Not sent back now: it can't be fixed again until Management sends it back.
     expect((await post("ryan", `/api/orders/${made.body.id}/revise`, fixed)).status).toBe(409);
+  });
+
+  it("is changed by Management before approving; the MedRep is told what and why", async () => {
+    const made = await place("ryan", { customerId: hospital, items: [line()] });
+    const before = await order("sarla", made.body.id);
+    const changed = {
+      customerId: hospital,
+      items: [line({ qty: 6 })],
+      answer: "Only 6 in stock this week",
+    };
+    // A reason is needed, nothing-changed is refused, and only Management changes it.
+    expect(
+      (await post("sarla", `/api/orders/${made.body.id}/change`, { ...changed, answer: "" }))
+        .status,
+    ).toBe(400);
+    expect(
+      (
+        await post("sarla", `/api/orders/${made.body.id}/change`, {
+          ...changed,
+          items: [line()],
+        })
+      ).status,
+    ).toBe(400);
+    expect((await post("ryan", `/api/orders/${made.body.id}/change`, changed)).status).toBe(409);
+    expect((await post("sarla", `/api/orders/${made.body.id}/change`, changed)).status).toBe(200);
+    const after = await order("sarla", made.body.id);
+    // Still Management's to approve; the total follows the lines.
+    expect(after.order.status).toBe("pending_approval");
+    expect(after.items.map((item) => item.qty)).toEqual([6]);
+    expect(after.order.total).toBe(6 * (before.items[0]?.unitPrice ?? 0));
+    expect(
+      after.events.some(
+        (event) =>
+          event.message.includes("changed the order before approving it") &&
+          event.message.includes("10 → 6") &&
+          event.message.includes("Only 6 in stock"),
+      ),
+    ).toBe(true);
+    const [told] = await rows<{ title: string; body: string }>(
+      db,
+      sql`select title, body from notification where kind = 'order_changed' and order_id = ${made.body.id}`,
+    );
+    expect(told?.title).toContain("changed your order");
+    expect(told?.body).toContain("Only 6 in stock");
+    // Once approved it can't be changed this way.
+    await act("sarla", made.body.id, "approve");
+    expect((await post("sarla", `/api/orders/${made.body.id}/change`, changed)).status).toBe(409);
   });
 
   it("keeps how long it stood at each step, and a card counts from its own step", async () => {

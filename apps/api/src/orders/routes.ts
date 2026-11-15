@@ -239,6 +239,13 @@ export function orderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
     return c.json({ ok: true });
   });
 
+  // Management changes a placed order before approving it: the same form, with why.
+  app.post("/api/orders/:id/change", async (c) => {
+    const input = await readBody(c, orderInput.extend({ answer: z.string().max(1000) }));
+    await reviseOrder(db, c.get("me"), idParam(c), input as OrderRevision, "management");
+    return c.json({ ok: true });
+  });
+
   app.post("/api/orders/:id/details", async (c) => {
     const input = await readBody(c, detailsInput);
     await saveOrderDetails(db, c.get("me"), idParam(c), input as OrderDetailsInput);

@@ -15,6 +15,7 @@ import {
 import { Refusal } from "../http";
 import { buyerLabel, todayManila } from "../inventory/rules";
 import { clean, day, iso, PROMISED_ORDER, type Runner, warehouses } from "../inventory/service";
+import { notify } from "../notify/service";
 import { reliefPrice } from "../online/rules";
 import { inForce } from "../org/service";
 import { ROLE_LABEL, type Role } from "../people/roles";
@@ -1729,13 +1730,18 @@ export async function reviseOrder(
   me: Me,
   id: number,
   input: OrderRevision,
+  /** management: Management changes a placed order before approving it (it stays with them, the
+   *  MedRep is told what changed and why). */
+  by: "medrep" | "management" = "medrep",
 ): Promise<void> {
   const answer = clean(input.answer);
   if (!answer)
     throw new Refusal(
       400,
       "invalid",
-      "Tell Management what you fixed, or why it is right as it is.",
+      by === "management"
+        ? "Say why you changed it: the MedRep is told."
+        : "Tell Management what you fixed, or why it is right as it is.",
       "answer",
     );
   const today = todayManila();
@@ -1773,17 +1779,19 @@ export async function reviseOrder(
         from sales_order o where o.id = ${id} for update of o`,
     );
     if (!order) throw new Refusal(404, "not_found", "That order doesn't exist.");
-    if (!orderActions(me, order).resubmit)
+    if (by === "management" ? !orderActions(me, order).approve : !orderActions(me, order).resubmit)
       throw new Refusal(
         409,
         "not_now",
-        `${order.code} isn't waiting for you to fix it now. Reload it.`,
+        by === "management"
+          ? `${order.code} isn't waiting for Management now, so it can't be changed. Reload it.`
+          : `${order.code} isn't waiting for you to fix it now. Reload it.`,
       );
     if (input.customerId !== order.customerId)
       throw new Refusal(
         400,
         "invalid",
-        "The customer can't change on a sent-back order. Cancel it and place a new one.",
+        "The customer can't change on a placed order. Cancel it and place a new one.",
         "customerId",
       );
 
@@ -1881,9 +1889,30 @@ export async function reviseOrder(
           receiver = ${next.receiver}, receiver_phone = ${next.receiverPhone}, customer_po = ${next.customerPo}, note = ${next.note},
           invoice_from = coalesce(${input.invoiceFrom ?? null}, invoice_from), doctor_id = ${input.doctorId ?? null},
           division = ${next.division}, sub_division = ${next.subDivision},
-          status = 'pending_approval', flag_reason = null, submitted_at = now(), reply = ${answer}, updated_at = now()
+          ${by === "management" ? sql`` : sql`status = 'pending_approval', flag_reason = null, submitted_at = now(), reply = ${answer},`}
+          updated_at = now()
         where id = ${id}`,
     );
+    if (by === "management") {
+      if (!changes.length) throw new Refusal(400, "invalid", "Nothing was changed.", "answer");
+      await logEvent(
+        tx,
+        id,
+        me,
+        "status",
+        `${me.name} changed the order before approving it: ${changes.join("; ")}. Why: ${answer}`,
+      );
+      await notify(tx, {
+        to: [order.medrepId, order.raisedBy].filter((who) => who !== me.id),
+        kind: "order_changed",
+        title: `${me.name} changed your order ${order.code}`,
+        body: `${changes.join("; ")}. Why: ${answer}`,
+        link: `/orders/${id}`,
+        orderId: id,
+        key: `order:${id}:changed:${Date.now()}`,
+      });
+      return;
+    }
     await logEvent(
       tx,
       id,
