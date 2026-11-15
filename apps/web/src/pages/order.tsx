@@ -45,6 +45,7 @@ import {
   RecordPaymentDialog,
   useMoney,
 } from "../finance/parts";
+import { MedicinePopup } from "../inventory/medicine-popup";
 import { avatarTone, initials } from "../look";
 import { ReasonDialog, StatusPill, shortSpan, useOrderAction } from "../orders/parts";
 import { SendToCustomer } from "../orders/send-update";
@@ -749,8 +750,11 @@ function Facts({ rows }: { rows: [string, ReactNode][] }) {
 /** The order's lines, with the price list beside what was given. */
 function Lines({ data, compare }: { data: OrderDetail; compare?: boolean }) {
   const { order } = data;
+  // A medicine opens over the page, so the order stays where it is.
+  const [medicine, setMedicine] = useState<number | null>(null);
   return (
     <div className="-mx-4 overflow-x-auto border-y border-slate-100">
+      {medicine !== null && <MedicinePopup id={medicine} onClose={() => setMedicine(null)} />}
       <table className="t">
         <thead>
           <tr>
@@ -768,12 +772,14 @@ function Lines({ data, compare }: { data: OrderDetail; compare?: boolean }) {
           {data.items.map((item) => (
             <tr key={item.id}>
               <td>
-                <Link
-                  to={`/medicines/${item.medicineId}`}
-                  className="font-semibold hover:underline"
+                <button
+                  type="button"
+                  onClick={() => setMedicine(item.medicineId)}
+                  className="text-left font-semibold hover:underline"
+                  title="Prices, stock in each warehouse, batches"
                 >
                   {item.medicine}
-                </Link>
+                </button>
                 <div className="text-xs text-ink-2">
                   {item.free ? "Free" : `${item.priceLabel} price`}
                   {item.reason && item.reason !== "Free" ? ` · ${item.reason}` : ""}
