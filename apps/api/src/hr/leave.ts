@@ -6,6 +6,7 @@
 // request, or approved leave not started yet; HR cancels any. The approver and the person are told
 // under Messages. What HR records itself (attendance.ts) is approved as recorded.
 
+import { bytesOf, keepFile } from "../files/store";
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
@@ -125,7 +126,7 @@ const lineColumns = (
   l.half_day as "halfDay", l.reason, l.status, l.approver_id::int as "approverId", a.name as approver,
   d.name as "decidedBy", ${iso("l.decided_at")} as "decidedAt", l.decision_note as "decisionNote",
   m.name as "madeBy", ${iso("l.made_at")} as "madeAt",
-  case when l.file_data is null then null else json_build_object('name', l.file_name, 'mime', l.file_mime) end as file`;
+  case when l.file_data is null and l.file_key is null then null else json_build_object('name', l.file_name, 'mime', l.file_mime) end as file`;
 
 const fromLines = sql`from person_leave l join person p on p.id = l.person_id join person m on m.id = l.made_by
   left join person a on a.id = l.approver_id left join person d on d.id = l.decided_by`;
@@ -277,6 +278,9 @@ export async function requestLeave(
       "from",
     );
   const approver = await approverOf(db, me.id);
+  const kept = file
+    ? await keepFile("leave", { ...file, name: file.name.trim().slice(0, 120) || "paper" })
+    : null;
   const made = await db.transaction(async (tx) => {
     await tx.execute(sql`select id from person where id = ${me.id} for update`);
     const [overlap] = await rows<{ from: string; to: string }>(
@@ -314,10 +318,10 @@ export async function requestLeave(
     const [line] = await rows<{ id: number }>(
       tx,
       sql`insert into person_leave (person_id, kind, from_day, to_day, half_day, reason, status, approver_id, made_by,
-          file_name, file_mime, file_data)
+          file_name, file_mime, file_data, file_key)
         values (${me.id}, ${input.kind}, ${input.from}::date, ${to}::date, ${Boolean(input.halfDay)}, ${reason},
-          'asked', ${approver?.id ?? null}, ${me.id}, ${file ? file.name.trim().slice(0, 120) || "paper" : null},
-          ${file?.mime ?? null}, ${file ? Buffer.from(file.bytes) : null})
+          'asked', ${approver?.id ?? null}, ${me.id}, ${kept?.name ?? null},
+          ${kept?.mime ?? null}, ${kept?.data ?? null}, ${kept?.key ?? null})
         returning id::int as id`,
     );
     const id = line?.id as number;
@@ -463,12 +467,13 @@ export async function leaveFile(db: Database, me: Me, leaveId: number): Promise<
     name: string;
     mime: string;
     data: Uint8Array | null;
+    key: string | null;
   }>(
     db,
     sql`select person_id::int as "personId", approver_id::int as "approverId", file_name as name, file_mime as mime,
-        file_data as data from person_leave where id = ${leaveId}`,
+        file_data as data, file_key as key from person_leave where id = ${leaveId}`,
   );
-  if (!line?.data) throw new Refusal(404, "not_found", "No paper with this leave.");
+  if (!line || (!line.data && !line.key)) throw new Refusal(404, "not_found", "No paper with this leave.");
   const lead =
     LEAD_ROLES.includes(me.role) &&
     (
@@ -487,5 +492,5 @@ export async function leaveFile(db: Database, me: Me, leaveId: number): Promise<
     me.role !== "management"
   )
     throw new Refusal(403, "not_allowed", "That paper isn't yours to see.");
-  return { name: line.name, mime: line.mime, bytes: line.data };
+  return { name: line.name, mime: line.mime, bytes: await bytesOf(line) };
 }

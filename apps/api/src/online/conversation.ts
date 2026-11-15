@@ -3,6 +3,7 @@
 // Their first message opens a case; later ones land on their newest case (a lost one opens
 // again when they write); the same message kept twice (the webhook and the pull) is one line.
 
+import { type KeptFile, keepFile } from "../files/store";
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import type { Runner } from "../inventory/service";
@@ -73,6 +74,10 @@ export async function keepMessage(
   db: Database,
   m: Message,
 ): Promise<{ leadId: number | null; kept: boolean; opened: boolean }> {
+  // Photos are made smaller and stored before the transaction, so an upload never holds a lock.
+  const keptFiles: KeptFile[] = [];
+  for (const file of m.files ?? [])
+    keptFiles.push(await keepFile("chats", { ...file, name: file.name.slice(0, 120) || "file" }));
   return db.transaction(async (tx) => {
     await lockConversation(tx, m.account, m.key);
     const [twin] = await rows<{ leadId: number }>(
@@ -111,11 +116,11 @@ export async function keepMessage(
     }
 
     const files: { fileId?: number; name?: string; mime?: string; missing?: boolean }[] = [];
-    for (const file of m.files ?? []) {
+    for (const file of keptFiles) {
       const [kept] = await rows<{ id: number }>(
         tx,
-        sql`insert into lead_file (lead_id, kind, name, mime, size, data, by_person)
-          values (${lead.id}, 'unsorted', ${file.name.slice(0, 120)}, ${file.mime}, ${file.bytes.byteLength}, ${Buffer.from(file.bytes)}, ${m.direction === "out" ? (m.byPerson ?? null) : null})
+        sql`insert into lead_file (lead_id, kind, name, mime, size, data, store_key, by_person)
+          values (${lead.id}, 'unsorted', ${file.name}, ${file.mime}, ${file.size}, ${file.data}, ${file.key}, ${m.direction === "out" ? (m.byPerson ?? null) : null})
           returning id::int as id`,
       );
       files.push({ fileId: kept?.id, name: file.name, mime: file.mime });

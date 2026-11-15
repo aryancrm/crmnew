@@ -8,6 +8,7 @@
 // tried again until the website takes it. Prescriptions and enquiries sent through a website land
 // on the person's case (by their number) or open one.
 
+import { keepFile } from "../files/store";
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
@@ -834,9 +835,14 @@ async function copyDocuments(
     if (got && /^(image\/(jpeg|png|webp|gif|heic|heif)|application\/pdf)$/.test(got.mime)) {
       const extension = got.mime === "application/pdf" ? "pdf" : (got.mime.split("/")[1] ?? "jpg");
       const label = file.kind === "prescription" ? "rx" : file.kind === "id" ? "id" : "gl-letter";
+      const kept = await keepFile("cases", {
+        name: `website-${label}-${order.ref}-${file.key.slice(0, 6)}.${extension}`,
+        mime: got.mime,
+        bytes: got.bytes,
+      });
       await db.execute(
-        sql`insert into lead_file (lead_id, kind, name, mime, size, data, by_person)
-          values (${order.leadId}, 'unsorted', ${`website-${label}-${order.ref}-${file.key.slice(0, 6)}.${extension}`}, ${got.mime}, ${got.bytes.byteLength}, ${Buffer.from(got.bytes)}, null)`,
+        sql`insert into lead_file (lead_id, kind, name, mime, size, data, store_key, by_person)
+          values (${order.leadId}, 'unsorted', ${kept.name}, ${kept.mime}, ${kept.size}, ${kept.data}, ${kept.key}, null)`,
       );
       file.fetched = true;
     } else {
@@ -973,9 +979,14 @@ async function receiveRequest(
   if (!request || !file || file.fetched || file.gaveUp) return "kept";
   const got = await http.file(fileUrl);
   if (got && /^(image\/(jpeg|png|webp|gif|heic|heif)|application\/pdf)$/.test(got.mime)) {
+    const kept = await keepFile("cases", {
+      name: `website-rx-${ref}.${got.mime === "application/pdf" ? "pdf" : (got.mime.split("/")[1] ?? "jpg")}`,
+      mime: got.mime,
+      bytes: got.bytes,
+    });
     await db.execute(
-      sql`insert into lead_file (lead_id, kind, name, mime, size, data, by_person)
-        values (${leadId}, 'unsorted', ${`website-rx-${ref}.${got.mime === "application/pdf" ? "pdf" : (got.mime.split("/")[1] ?? "jpg")}`}, ${got.mime}, ${got.bytes.byteLength}, ${Buffer.from(got.bytes)}, null)`,
+      sql`insert into lead_file (lead_id, kind, name, mime, size, data, store_key, by_person)
+        values (${leadId}, 'unsorted', ${kept.name}, ${kept.mime}, ${kept.size}, ${kept.data}, ${kept.key}, null)`,
     );
     await db.execute(
       sql`update web_request set file = ${JSON.stringify({ ...file, fetched: true })}::jsonb where id = ${request.id}`,

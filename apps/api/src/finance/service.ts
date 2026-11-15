@@ -3,6 +3,7 @@
 // cancelled order, and the lists: invoices, payments received, customers owe, refunds owed.
 // Every change is one transaction that also writes the order's timeline.
 
+import { keepFile } from "../files/store";
 import { type SQL, sql } from "drizzle-orm";
 import { customerDetail } from "../customers/service";
 import { type Database, rows } from "../db/index";
@@ -1272,6 +1273,7 @@ export async function addHoldProof(
     throw new Refusal(400, "invalid", "Add a screenshot (a photo or an image).", "file");
   if (file.bytes.length === 0 || file.bytes.length > HOLD_PROOF_BYTES)
     throw new Refusal(400, "invalid", "That image is over 10 MB.", "file");
+  const kept = await keepFile("orders", file);
   return db.transaction(async (tx) => {
     const [order] = await rows<{ status: string; heldRole: string | null }>(
       tx,
@@ -1296,8 +1298,8 @@ export async function addHoldProof(
       );
     const [made] = await rows<{ id: number }>(
       tx,
-      sql`insert into order_file (order_id, kind, name, mime, size, data, by_person, hold_event_id)
-        values (${orderId}, 'other', ${file.name.slice(0, 200)}, ${file.mime}, ${file.bytes.length}, ${file.bytes},
+      sql`insert into order_file (order_id, kind, name, mime, size, data, store_key, by_person, hold_event_id)
+        values (${orderId}, 'other', ${kept.name}, ${kept.mime}, ${kept.size}, ${kept.data}, ${kept.key},
           ${me.id}, ${hold?.id ?? null})
         returning id::int as id`,
     );

@@ -36,5 +36,8 @@ folder: check nothing listens on :4100 before starting the API.
 
 - Money is whole centavos. Nothing with history is deleted: cancel, reverse, archive.
 - The API checks the role on every call; a hidden button is never the only guard.
+- Every file's bytes go through `src/files/store.ts` (`keepFile` before the transaction,
+  `bytesOf` to read): it makes photos smaller and puts them in the bucket online. Never insert
+  raw bytes into a file table directly.
 - `src/checks/integrity.ts` checks the data against itself (Admin panel → Data checks); the
   130-person test (`src/checks/scale.test.ts`) checks who sees what. Keep both green.

@@ -1,6 +1,7 @@
 // Orders: placing one, what Management does with it, and the lists and figures its screens
 // show. Every change is one transaction that also writes the order's timeline.
 
+import { bytesOf, keepFile } from "../files/store";
 import { type SQL, sql } from "drizzle-orm";
 import { customerDetail } from "../customers/service";
 import { type Database, rows } from "../db/index";
@@ -2243,12 +2244,17 @@ export async function addPaper(
     throw new Refusal(400, "invalid", "That file is empty.", "file");
   if (paper.bytes.byteLength > PAPER_MAX_BYTES)
     throw new Refusal(400, "invalid", "That file is over 10 MB. Take the photo again.", "file");
-  const name = paper.name.trim().slice(0, 120) || "paper";
+  const kept = await keepFile("orders", {
+    name: paper.name.trim().slice(0, 120) || "paper",
+    mime: paper.mime,
+    bytes: paper.bytes,
+  });
+  const name = kept.name;
   return db.transaction(async (tx) => {
     const [made] = await rows<{ id: number }>(
       tx,
-      sql`insert into order_file (order_id, kind, name, mime, size, data, by_person)
-        values (${orderId}, ${paper.kind}, ${name}, ${paper.mime}, ${paper.bytes.byteLength}, ${Buffer.from(paper.bytes)}, ${me.id})
+      sql`insert into order_file (order_id, kind, name, mime, size, data, store_key, by_person)
+        values (${orderId}, ${paper.kind}, ${name}, ${kept.mime}, ${kept.size}, ${kept.data}, ${kept.key}, ${me.id})
         returning id::int as id`,
     );
     await logEvent(
@@ -2285,13 +2291,19 @@ export async function readPaper(
   me: Me,
   paperId: number,
 ): Promise<{ name: string; mime: string; bytes: Uint8Array }> {
-  const [paper] = await rows<{ orderId: number; name: string; mime: string; data: Uint8Array }>(
+  const [paper] = await rows<{
+    orderId: number;
+    name: string;
+    mime: string;
+    data: Uint8Array | null;
+    key: string | null;
+  }>(
     db,
-    sql`select order_id::int as "orderId", name, mime, data from order_file where id = ${paperId} and active`,
+    sql`select order_id::int as "orderId", name, mime, data, store_key as key from order_file where id = ${paperId} and active`,
   );
   if (!paper) throw new Refusal(404, "not_found", "That paper isn't there any more.");
   await visibleOrder(db, me, paper.orderId);
-  return { name: paper.name, mime: paper.mime, bytes: paper.data };
+  return { name: paper.name, mime: paper.mime, bytes: await bytesOf(paper) };
 }
 
 /** Takes a paper off an order. It is kept, marked removed, and the timeline says so. */

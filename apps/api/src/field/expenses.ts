@@ -3,6 +3,7 @@
 // payment proof (a fare may have none). The person adds them; their team lead approves each or
 // sends it back with a word; the CEO, Management and the Admin read everyone's.
 
+import { bytesOf, keepFile } from "../files/store";
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
@@ -92,20 +93,23 @@ export async function addExpense(
     throw new Refusal(403, "not_allowed", "Field expenses are added by the person who spent.");
   checkReceipt(receipt);
   checkInput(input, Boolean(receipt));
+  const kept = receipt
+    ? await keepFile("expenses", { ...receipt, name: receipt.name.trim().slice(0, 120) || "receipt" })
+    : null;
   return db.transaction(async (tx) => {
     const visitId = await checkVisit(tx, me, input.visitId, input.day);
     const [made] = await rows<{ id: number }>(
       tx,
       sql`insert into field_expense (person_id, seat_id, day, kind, amount, km, visit_id, note,
-          receipt_name, receipt_mime, receipt_size, receipt_data)
+          receipt_name, receipt_mime, receipt_size, receipt_data, receipt_key)
         values (${me.id},
           (select h.seat_id from seat_holder h join seat s on s.id = h.seat_id and s.active
             where h.person_id = ${me.id} and h.kind = 'holder' and ${inForce("h", todayManila())}
             order by h.starts_on limit 1),
           ${input.day}::date, ${input.kind}, ${input.amount}, ${input.km ?? null}, ${visitId},
-          ${clean(input.note) ?? null}, ${receipt ? receipt.name.trim().slice(0, 120) || "receipt" : null},
-          ${receipt?.mime ?? null}, ${receipt?.bytes.byteLength ?? null},
-          ${receipt ? Buffer.from(receipt.bytes) : null})
+          ${clean(input.note) ?? null}, ${kept?.name ?? null},
+          ${kept?.mime ?? null}, ${kept?.size ?? null},
+          ${kept?.data ?? null}, ${kept?.key ?? null})
         returning id::int as id`,
     );
     return { id: made?.id as number };
@@ -122,10 +126,13 @@ export async function changeExpense(
 ): Promise<void> {
   if (me.viewedBy) throw new Refusal(403, "not_allowed", "Look-only: nothing changes.");
   checkReceipt(receipt);
+  const kept = receipt
+    ? await keepFile("expenses", { ...receipt, name: receipt.name.trim().slice(0, 120) || "receipt" })
+    : null;
   await db.transaction(async (tx) => {
     const [line] = await rows<{ personId: number; status: string; hasReceipt: boolean }>(
       tx,
-      sql`select person_id::int as "personId", status, receipt_data is not null as "hasReceipt"
+      sql`select person_id::int as "personId", status, (receipt_data is not null or receipt_key is not null) as "hasReceipt"
         from field_expense where id = ${expenseId} for update`,
     );
     if (!line) throw new Refusal(404, "not_found", "No such expense.");
@@ -140,9 +147,9 @@ export async function changeExpense(
           km = ${input.km ?? null}, visit_id = ${visitId}, note = ${clean(input.note) ?? null},
           status = 'pending', decided_by = null, decided_at = null, decision_note = null
           ${
-            receipt
-              ? sql`, receipt_name = ${receipt.name.trim().slice(0, 120) || "receipt"}, receipt_mime = ${receipt.mime},
-                receipt_size = ${receipt.bytes.byteLength}, receipt_data = ${Buffer.from(receipt.bytes)}`
+            kept
+              ? sql`, receipt_name = ${kept.name}, receipt_mime = ${kept.mime},
+                receipt_size = ${kept.size}, receipt_data = ${kept.data}, receipt_key = ${kept.key}`
               : sql``
           }
         where id = ${expenseId}`,
@@ -186,7 +193,7 @@ const rowColumns = sql`x.id::int as id, json_build_object('id', p.id::int, 'name
   to_char(x.day, 'YYYY-MM-DD') as day, x.kind, x.amount, x.km, x.note, x.status,
   d.name as "decidedBy", x.decision_note as "decisionNote",
   case when x.visit_id is null then null else json_build_object('id', x.visit_id::int, 'customer', c.name) end as visit,
-  case when x.receipt_data is null then null else json_build_object('name', x.receipt_name, 'mime', x.receipt_mime) end as receipt`;
+  case when x.receipt_data is null and x.receipt_key is null then null else json_build_object('name', x.receipt_name, 'mime', x.receipt_mime) end as receipt`;
 
 /**
  * Expenses over chosen days: one person's (their own, their team lead's, everyone's for the CEO,
@@ -283,13 +290,14 @@ export async function readReceipt(db: Database, me: Me, expenseId: number): Prom
     name: string;
     mime: string;
     data: Uint8Array | null;
+    key: string | null;
   }>(
     db,
-    sql`select person_id::int as "personId", receipt_name as name, receipt_mime as mime, receipt_data as data
+    sql`select person_id::int as "personId", receipt_name as name, receipt_mime as mime, receipt_data as data, receipt_key as key
       from field_expense where id = ${expenseId}`,
   );
-  if (!line?.data) throw new Refusal(404, "not_found", "No bill on file.");
+  if (!line || (!line.data && !line.key)) throw new Refusal(404, "not_found", "No bill on file.");
   if (!(await maySeeField(db, me, line.personId)) && !FIELD_READ_ROLES.includes(me.role))
     throw new Refusal(403, "not_allowed", "That bill isn't yours to see.");
-  return { name: line.name, mime: line.mime, bytes: line.data };
+  return { name: line.name, mime: line.mime, bytes: await bytesOf(line) };
 }

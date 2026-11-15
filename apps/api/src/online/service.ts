@@ -4,6 +4,7 @@
 // Online channel's MedRep. Where a case stands is read from all of that every time, in the old
 // CRM's road steps, so it can never disagree with its papers or its order.
 
+import { bytesOf, keepFile } from "../files/store";
 import { type SQL, sql } from "drizzle-orm";
 import { phoneKey } from "../customers/service";
 import { type Database, rows } from "../db/index";
@@ -1322,7 +1323,12 @@ export async function addLeadFile(
   if (file.bytes.byteLength === 0) throw new Refusal(400, "invalid", "That file is empty.", "file");
   if (file.bytes.byteLength > LEAD_FILE_MAX_BYTES)
     throw new Refusal(400, "invalid", "That file is over 10 MB. Take the photo again.", "file");
-  const name = file.name.trim().slice(0, 120) || "paper";
+  const kept = await keepFile("cases", {
+    name: file.name.trim().slice(0, 120) || "paper",
+    mime: file.mime,
+    bytes: file.bytes,
+  });
+  const name = kept.name;
   return db.transaction(async (tx) => {
     const lead = await lockLead(tx, leadId);
     if (lead.state === "lost")
@@ -1331,8 +1337,8 @@ export async function addLeadFile(
       throw new Refusal(409, "not_now", "The pick-up photo comes after the delivery.", "kind");
     const [made] = await rows<{ id: number }>(
       tx,
-      sql`insert into lead_file (lead_id, kind, name, mime, size, data, by_person)
-        values (${leadId}, ${file.kind}, ${name}, ${file.mime}, ${file.bytes.byteLength}, ${Buffer.from(file.bytes)}, ${me.id}) returning id::int as id`,
+      sql`insert into lead_file (lead_id, kind, name, mime, size, data, store_key, by_person)
+        values (${leadId}, ${file.kind}, ${name}, ${kept.mime}, ${kept.size}, ${kept.data}, ${kept.key}, ${me.id}) returning id::int as id`,
     );
     await note(
       tx,
@@ -1351,12 +1357,12 @@ export async function readLeadFile(
   fileId: number,
 ): Promise<{ name: string; mime: string; bytes: Uint8Array }> {
   await leadGate(db, me, await leadOfFile(db, fileId), "read", "see a case's papers");
-  const [file] = await rows<{ name: string; mime: string; data: Uint8Array }>(
+  const [file] = await rows<{ name: string; mime: string; data: Uint8Array | null; key: string | null }>(
     db,
-    sql`select name, mime, data from lead_file where id = ${fileId} and active`,
+    sql`select name, mime, data, store_key as key from lead_file where id = ${fileId} and active`,
   );
   if (!file) throw new Refusal(404, "not_found", "That paper isn't there any more.");
-  return { name: file.name, mime: file.mime, bytes: file.data };
+  return { name: file.name, mime: file.mime, bytes: await bytesOf(file) };
 }
 
 export async function removeLeadFile(db: Database, me: Me, fileId: number): Promise<void> {
@@ -1567,12 +1573,12 @@ export async function orderFromLead(
         if (!fromWebsite && row.road === "regular" && row.pointsToUse > 0)
           await spendOnOrder(tx, me, orderId, row.pointsToUse);
         await tx.execute(
-          sql`insert into order_file (order_id, kind, name, mime, size, data, by_person)
+          sql`insert into order_file (order_id, kind, name, mime, size, data, store_key, by_person)
             select ${orderId}, case f.kind ${sql.raw(
               Object.entries(ORDER_PAPER)
                 .map(([kind, as]) => `when '${kind}' then '${as}'`)
                 .join(" "),
-            )} end, f.name, f.mime, f.size, f.data, ${me.id}
+            )} end, f.name, f.mime, f.size, f.data, f.store_key, ${me.id}
             from lead_file f where f.lead_id = ${id} and f.active and f.kind <> 'unsorted'`,
         );
         const [code] = await rows<{ code: string }>(
