@@ -44,7 +44,17 @@ import {
   SideRows,
   StatePill,
 } from "../record";
-import { Button, count, dayLabel, PageState, Problem, peso, timeLabel, useAction } from "../ui";
+import {
+  Button,
+  count,
+  Dialog,
+  dayLabel,
+  PageState,
+  Problem,
+  peso,
+  timeLabel,
+  useAction,
+} from "../ui";
 
 const KIND_TONE: Record<string, BadgeTone> = {
   hospital: "teal",
@@ -71,6 +81,7 @@ export function Customer() {
   const queries = useQueryClient();
   const action = useAction();
   const [editing, setEditing] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
   const query = useQuery({
     queryKey: ["customers", "one", id, "page"],
     queryFn: () => api<CustomerPage>(`/api/customers/${id}/page`),
@@ -333,6 +344,15 @@ export function Customer() {
                   : []),
               ]}
             />
+            {can.credit && (
+              <button
+                type="button"
+                onClick={() => setTermsOpen(true)}
+                className="mt-2 w-full rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Change terms or credit limit
+              </button>
+            )}
           </SideCard>
           <Details data={data} />
           {customer.kind === "hospital" && <Doctors data={data} />}
@@ -340,6 +360,16 @@ export function Customer() {
         </div>
       </div>
 
+      {termsOpen && (
+        <TermsDialog
+          id={customer.id}
+          name={customer.name}
+          terms={customer.paymentTerms}
+          days={customer.paymentDays}
+          limit={customer.creditLimit}
+          onClose={() => setTermsOpen(false)}
+        />
+      )}
       {editing && (
         <CustomerDialog
           can={can}
@@ -706,5 +736,101 @@ function Activity({ data }: { data: CustomerPage }) {
         </ol>
       )}
     </SectionPanel>
+  );
+}
+
+/** Finance or Management sets how a customer pays: in advance, on delivery, or on credit with its
+ *  days, and the credit limit. New orders take these; placed orders keep theirs. */
+function TermsDialog({
+  id,
+  name,
+  terms,
+  days,
+  limit,
+  onClose,
+}: {
+  id: number;
+  name: string;
+  terms: string;
+  days: number | null;
+  limit: number | null;
+  onClose: () => void;
+}) {
+  const action = useAction();
+  const queries = useQueryClient();
+  const [paymentTerms, setTerms] = useState(terms || "advance");
+  const [paymentDays, setDays] = useState(days ? String(days) : "30");
+  const [credit, setCredit] = useState(limit ? String(limit / 100) : "");
+  async function save() {
+    const done = await action.run(() =>
+      api(`/api/customers/${id}/credit`, {
+        body: {
+          paymentTerms,
+          paymentDays: paymentTerms === "days" ? Number(paymentDays) || null : null,
+          creditLimit: credit.trim() ? Math.round(Number(credit) * 100) : null,
+        },
+      }),
+    );
+    if (done) {
+      await queries.invalidateQueries({ queryKey: ["customers"] });
+      onClose();
+    }
+  }
+  const field =
+    "h-9 rounded-lg border border-slate-300 px-3 text-sm focus:border-emerald-600 focus:outline-none";
+  return (
+    <Dialog
+      title={`How ${name} pays`}
+      sub="New orders take these; orders already placed keep their own."
+      onClose={onClose}
+      busy={action.busy}
+    >
+      <div className="flex flex-col gap-3">
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-semibold text-slate-600">Payment terms</span>
+          <select
+            value={paymentTerms}
+            onChange={(event) => setTerms(event.target.value)}
+            className={field}
+          >
+            <option value="advance">Pays in advance</option>
+            <option value="cod">Cash on delivery</option>
+            <option value="days">On credit</option>
+          </select>
+        </label>
+        {paymentTerms === "days" && (
+          <label className="flex flex-col gap-1">
+            <span className="text-xs font-semibold text-slate-600">Days to pay, from delivery</span>
+            <input
+              value={paymentDays}
+              onChange={(event) => setDays(event.target.value)}
+              inputMode="numeric"
+              className={field}
+            />
+          </label>
+        )}
+        <label className="flex flex-col gap-1">
+          <span className="text-xs font-semibold text-slate-600">
+            Credit limit (₱, empty for none)
+          </span>
+          <input
+            value={credit}
+            onChange={(event) => setCredit(event.target.value)}
+            inputMode="decimal"
+            className={field}
+            placeholder="No limit"
+          />
+        </label>
+        <Problem message={action.problem?.message} />
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+          <Button onClick={onClose} disabled={action.busy}>
+            Cancel
+          </Button>
+          <Button variant="primary" onClick={save} disabled={action.busy}>
+            {action.busy ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </div>
+    </Dialog>
   );
 }

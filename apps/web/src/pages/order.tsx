@@ -1469,7 +1469,9 @@ function DeliveredStep({
       {can.deliver && (
         <div>
           <Button variant="primary" onClick={() => ask("deliver")}>
-            <CircleCheck size={16} aria-hidden="true" /> Mark as delivered
+            <CircleCheck size={16} aria-hidden="true" />{" "}
+            {/* Delivered while still packed at the warehouse: the customer picked it up. */}
+            {order.status === "packing" ? "Picked up by the customer" : "Mark as delivered"}
           </Button>
         </div>
       )}

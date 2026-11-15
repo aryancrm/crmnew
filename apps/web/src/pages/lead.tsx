@@ -1996,7 +1996,7 @@ function PlacedOrder({
             variant="primary"
             onClick={() => setAsk({ what: "deliver", orderId: order.id, code: order.code })}
           >
-            Mark as delivered
+            {order.status === "packing" ? "Picked up by the customer" : "Mark as delivered"}
           </Button>
           <span className="text-[13px] text-slate-500">
             Who received it, the day, and the signed receipt's photo.

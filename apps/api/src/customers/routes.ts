@@ -17,6 +17,7 @@ import {
   myArea,
   reviewCustomer,
   saveCustomer,
+  saveCustomerCredit,
   toCollect,
 } from "./service";
 
@@ -114,6 +115,18 @@ export function customerRoutes(
     });
   });
 
+  app.post("/api/customers/:id/credit", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        paymentTerms: z.enum(["advance", "cod", "days"], { error: "Pick how they pay." }),
+        paymentDays: z.number().int().positive().max(365).nullish(),
+        creditLimit: z.number().int().min(0).nullish(),
+      }),
+    );
+    await saveCustomerCredit(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
   app.post("/api/customers/:id", async (c) => {
     allow(c.get("me"), CUSTOMER_ADD_ROLES, "change a customer");
     const input = await readBody(c, customerInput);

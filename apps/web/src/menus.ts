@@ -386,6 +386,8 @@ function ownDesk(me: Me): Space {
               { ...home, badge: "awaiting" },
               { to: "/orders/sent-back", label: "Sent back", icon: Undo2, badge: "sentBack" },
               { to: "/on-hold", label: "On hold", icon: TriangleAlert, badge: "flagged" },
+              // Orders that haven't moved for two days at Finance or Dispatch, to chase.
+              { to: "/orders?stuck=1", label: "Stuck over 2 days", icon: Timer },
               { to: "/orders", label: "All orders", icon: ClipboardList, short: "Orders" },
               {
                 to: "/customers?review=1",

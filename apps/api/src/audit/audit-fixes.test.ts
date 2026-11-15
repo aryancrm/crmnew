@@ -129,6 +129,25 @@ describe("the role audit's fixes", () => {
     expect(JSON.stringify(await twice.json())).toContain("is already in the area");
   });
 
+  it("lets Finance set a customer's terms and credit limit, not a MedRep", async () => {
+    const asked = { paymentTerms: "days", paymentDays: 45, creditLimit: 500_000_00 };
+    const fiona = await app.request("/api/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: "fiona@2mg.test", password: PASSWORD }),
+    });
+    cookies.fiona = fiona.headers.get("set-cookie")?.split(";")[0] as string;
+    expect((await send("fiona", `/api/customers/${hospital}/credit`, asked)).status).toBe(200);
+    const [saved] = await rows<{ terms: string; days: number; limit: number }>(
+      db,
+      sql`select payment_terms as terms, payment_days::int as days, credit_limit::int as "limit" from customer where id = ${hospital}`,
+    );
+    expect(saved).toEqual({ terms: "days", days: 45, limit: 500_000_00 });
+    expect((await send("ryan", `/api/customers/${hospital}/credit`, asked)).status).toBe(403);
+    // Orders stuck two days at any desk are listed for Management.
+    expect((await get("sarla", "/api/orders?stuck=1")).status).toBe(200);
+  });
+
   it("lists who owes and finds orders and people from the search box", async () => {
     const list = await read<CustomerList>("sarla", "/api/customers?sort=owed&owes=");
     expect(list.rows[0]).toHaveProperty("owed");

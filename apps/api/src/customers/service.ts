@@ -4,7 +4,7 @@
 
 import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
-import { Refusal } from "../http";
+import { allow, Refusal } from "../http";
 import { addDays, EXPIRING_DAYS, todayManila } from "../inventory/rules";
 import { clean, day, iso, type Runner } from "../inventory/service";
 import { inForce } from "../org/service";
@@ -44,9 +44,13 @@ export const CUSTOMER_ADD_ROLES: readonly Role[] = [
 /** Who sets the area, the payment terms and the credit limit, and reviews new customers. */
 export const CUSTOMER_MANAGE_ROLES: readonly Role[] = ["management", "admin"];
 
+/** Who sets a customer's payment terms and credit limit: Management, and Finance who collects. */
+export const CUSTOMER_CREDIT_ROLES: readonly Role[] = ["management", "finance", "admin"];
+
 export const customerCan = (me: Me): CustomerCan => ({
   add: CUSTOMER_ADD_ROLES.includes(me.role),
   manage: CUSTOMER_MANAGE_ROLES.includes(me.role),
+  credit: CUSTOMER_CREDIT_ROLES.includes(me.role),
 });
 
 export const PAGE_SIZE = 50;
@@ -583,4 +587,23 @@ export async function toCollect(db: Database, me: Me): Promise<ToCollect> {
     ],
     rows: found,
   };
+}
+
+/** Finance (or Management) changes how a customer pays: the terms, their days, the credit limit.
+ *  Orders already placed keep theirs; new orders take these. */
+export async function saveCustomerCredit(
+  db: Database,
+  me: Me,
+  id: number,
+  input: Pick<CustomerInput, "paymentTerms" | "paymentDays" | "creditLimit">,
+): Promise<void> {
+  allow(me, CUSTOMER_CREDIT_ROLES, "change a customer's terms or credit limit");
+  await customerDetail(db, me, id);
+  const { terms, days } = termsOf(input as CustomerInput);
+  if (input.creditLimit != null && input.creditLimit < 0)
+    throw new Refusal(400, "invalid", "The credit limit can't be below zero.", "creditLimit");
+  await db.execute(
+    sql`update customer set payment_terms = ${terms}, payment_days = ${days}, credit_limit = ${input.creditLimit ?? null}
+      where id = ${id}`,
+  );
 }

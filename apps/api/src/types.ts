@@ -329,6 +329,8 @@ export type CustomerCan = {
   add: boolean;
   /** Change the area, the payment terms and the credit limit, and mark a new customer reviewed. */
   manage: boolean;
+  /** Change only the payment terms and the credit limit (Finance too). */
+  credit: boolean;
 };
 
 export type CustomerRow = {
