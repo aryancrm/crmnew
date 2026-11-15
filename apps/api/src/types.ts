@@ -3385,6 +3385,8 @@ export type HrPerson = {
     philhealth: string | null;
     pagibig: string | null;
     tin: string | null;
+    /** Schemes they aren't covered by, and no tax (HR, the CEO, the Admin, the person). */
+    payExempt: { sss: boolean; philhealth: boolean; pagibig: boolean; tax: boolean } | null;
   };
   missing: string[];
   /** edit: the record; login: the login email and password; leave: mark as left. */
@@ -3414,6 +3416,11 @@ export type HrRecordInput = Partial<{
   philhealth: string | null;
   pagibig: string | null;
   tin: string | null;
+  /** Not covered by a scheme (a foreign national, Pag-IBIG waived), or not taxed. */
+  noSss: boolean;
+  noPhilhealth: boolean;
+  noPagibig: boolean;
+  noTax: boolean;
 }>;
 
 /** What HR picks from to add a joiner: the seats nobody holds or is joining. */
@@ -3775,4 +3782,99 @@ export type FormInput = {
   to?: string | null;
   place?: string | null;
   reason: string;
+};
+
+// ------------------------------------------------------------------ payroll
+
+import type { PayAttendance, PayLine } from "./hr/pay-rules";
+
+export type { PayAttendance, PayLine } from "./hr/pay-rules";
+
+/** One person's payslip for one cut-off: worked out from their DTR while the cut-off is a draft,
+ *  frozen once HR releases it. */
+export type Payslip = {
+  cutoff: string;
+  person: {
+    id: number;
+    name: string;
+    employeeCode: string | null;
+    company: Company;
+    position: string | null;
+    department: string | null;
+  };
+  monthlySalary: number;
+  monthlyAllowance: number;
+  dailyRate: number;
+  hourlyRate: number;
+  attendance: PayAttendance;
+  earnings: PayLine[];
+  /** Time not worked, off the basic pay. */
+  less: PayLine[];
+  gross: number;
+  /** What SSS was reckoned on: gross less earnings that aren't taxable. */
+  sssBase: number;
+  taxable: number;
+  /** SSS, PhilHealth, Pag-IBIG, withholding tax, then HR's own deductions. */
+  deductions: PayLine[];
+  totalDeductions: number;
+  net: number;
+  /** The company's shares, beside the slip. */
+  employer: { sss: number; philhealth: number; pagibig: number; total: number } | null;
+  /** Where the pay goes. */
+  bank: { name: string | null; account: string | null } | null;
+};
+
+export type PayPeriod = {
+  key: string;
+  label: string;
+  from: string;
+  to: string;
+  payDay: string;
+  /** running: the cut-off hasn't ended; ready: ended, not released; released: payslips out. */
+  status: "running" | "ready" | "released";
+  released: { by: string; at: string } | null;
+};
+
+export type PayrollList = {
+  periods: (PayPeriod & { people: number | null; gross: number | null; net: number | null })[];
+};
+
+export type PayrollCutoff = PayPeriod & {
+  slips: Payslip[];
+  /** People employed in the cut-off with no salary on their record: not paid until HR adds it. */
+  noSalary: { id: number; name: string; position: string | null }[];
+  totals: {
+    people: number;
+    gross: number;
+    deductions: number;
+    tax: number;
+    net: number;
+    employer: number;
+    byCompany: { company: Company; people: number; net: number }[];
+  };
+  /** adjust: add or take off lines; release: freeze the payslips (with why not, when not). */
+  can: { adjust: boolean; release: boolean };
+  whyNotRelease: string | null;
+  before: string;
+  after: string | null;
+};
+
+export type PayAdjustmentInput = {
+  personId: number;
+  label: string;
+  kind: "earning" | "deduction";
+  taxable?: boolean;
+  amount: number;
+  note?: string | null;
+};
+
+export type MyPayslips = {
+  slips: { cutoff: string; label: string; payDay: string; gross: number; net: number }[];
+};
+
+export type PayRuleRow = {
+  kind: "sss" | "philhealth" | "pagibig" | "tax";
+  startsOn: string;
+  source: string | null;
+  rule: unknown;
 };

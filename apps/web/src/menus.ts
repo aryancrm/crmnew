@@ -34,6 +34,7 @@ import {
   Pill,
   Radio,
   Receipt,
+  ReceiptText,
   Settings,
   ShoppingCart,
   SlidersHorizontal,
@@ -46,6 +47,7 @@ import {
   User,
   UserPlus,
   Users,
+  Wallet,
 } from "lucide-react";
 
 /** A count from the orders dashboard shown beside a link. "finance" is Finance's own work:
@@ -320,6 +322,7 @@ const hrApp: Space = {
       items: [
         { to: "/hr/report", label: "Attendance report", icon: BarChart3 },
         { to: "/hr/leave?view=approved", label: "Leave", icon: CalendarDays },
+        { to: "/hr/payroll", label: "Payroll", icon: Wallet },
         { to: "/hr/people", label: "People", icon: Users },
       ],
     },
@@ -385,7 +388,17 @@ function deskFor(me: Me): Space {
   const leave: MenuItem[] =
     me.role === "ceo" || me.role === "admin"
       ? []
-      : [{ to: "/me/leave", label: "Leave & forms", icon: CalendarDays }];
+      : [
+          {
+            to: "/me/leave",
+            // HR's desk has the company's "Leave & forms": theirs is "My leave & forms".
+            label: listed.some((item) => item.label === "Leave & forms")
+              ? "My leave & forms"
+              : "Leave & forms",
+            icon: CalendarDays,
+          },
+          { to: "/me/payslips", label: "My payslips", icon: ReceiptText },
+        ];
   const extra =
     SPEED_ROLES.includes(me.role) && !listed.some((item) => item.to === "/speed")
       ? [speedLink, ...leave, messagesLink]
@@ -575,6 +588,7 @@ function ownDesk(me: Me): Space {
           { to: "/hr/people?view=joining", label: "Joining", icon: UserPlus },
           { to: "/hr/attendance", label: "Who's working", icon: CalendarClock },
           { to: "/hr/leave", label: "Leave & forms", icon: CalendarDays, badge: "leave" },
+          { to: "/hr/payroll", label: "Payroll", icon: Wallet },
           { to: "/hr/report", label: "Attendance report", icon: BarChart3 },
         ]),
         icon: Users,

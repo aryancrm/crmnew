@@ -209,6 +209,10 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
     philhealth: string | null;
     pagibig: string | null;
     tin: string | null;
+    noSss: boolean;
+    noPhilhealth: boolean;
+    noPagibig: boolean;
+    noTax: boolean;
     seatId: number | null;
     seatTitle: string | null;
     seatLogin: string | null;
@@ -225,6 +229,7 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
         to_char(e.birth_date, 'YYYY-MM-DD') as "birthDate", e.address, e.emergency_name as "emergencyName",
         e.emergency_phone as "emergencyPhone", e.emergency_relation as "emergencyRelation",
         e.salary, e.allowance, e.bank_name as "bankName", e.bank_account as "bankAccount", e.sss, e.philhealth, e.pagibig, e.tin,
+        e.no_sss as "noSss", e.no_philhealth as "noPhilhealth", e.no_pagibig as "noPagibig", e.no_tax as "noTax",
         seat.id as "seatId", seat.title as "seatTitle", seat.login as "seatLogin", seat.team, seat.area,
         ${MISSING} as missing
       from person p join employee e on e.person_id = p.id ${seatLateral(today)}
@@ -301,6 +306,9 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
       philhealth: pay ? one.philhealth : null,
       pagibig: pay ? one.pagibig : null,
       tin: pay ? one.tin : null,
+      payExempt: pay
+        ? { sss: one.noSss, philhealth: one.noPhilhealth, pagibig: one.noPagibig, tax: one.noTax }
+        : null,
     },
     missing: one.missing,
     can: {
@@ -536,6 +544,10 @@ const RECORD_COLUMNS: Record<keyof HrRecordInput, string> = {
   philhealth: "philhealth",
   pagibig: "pagibig",
   tin: "tin",
+  noSss: "no_sss",
+  noPhilhealth: "no_philhealth",
+  noPagibig: "no_pagibig",
+  noTax: "no_tax",
 };
 const DATE_FIELDS = new Set(["hireDate", "regularizedOn", "birthDate"]);
 
@@ -551,9 +563,15 @@ export async function updateRecord(
   const sets: SQL[] = [];
   for (const [key, column] of Object.entries(RECORD_COLUMNS) as [keyof HrRecordInput, string][]) {
     if (!(key in input)) continue;
-    let value = input[key] as string | number | null | undefined;
+    let value = input[key] as string | number | boolean | null | undefined;
     if (typeof value === "string") value = value.trim() || null;
     if (value === undefined) value = null;
+    if (key.startsWith("no")) {
+      if (typeof value !== "boolean")
+        throw new Refusal(400, "invalid", "Tick it or leave it.", key);
+      sets.push(sql`${sql.raw(column)} = ${value}`);
+      continue;
+    }
     if (key === "company" && !COMPANIES.includes(value as Company))
       throw new Refusal(400, "invalid", "Pick the company.", key);
     if (key === "classification" && !CLASSES.includes(value as Classification))

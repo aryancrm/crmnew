@@ -417,6 +417,59 @@ export async function holidaysBetween(db: Runner, from: string, to: string) {
   return new Map(found.map((row) => [row.day, row.name]));
 }
 
+/** Each person's days from one day to another, worked out as the report counts them (time in and
+ *  out, late, undertime, absent, leave, forms): what the report and payroll read. One query at a
+ *  time, so it runs inside a transaction too. */
+export async function attendanceDays(
+  db: Runner,
+  people: { id: number; hiredOn: string | null }[],
+  from: string,
+  to: string,
+): Promise<Map<number, { schedule: WorkSchedule; days: AttendanceDay[] }>> {
+  const out = new Map<number, { schedule: WorkSchedule; days: AttendanceDay[] }>();
+  const ids = people.map((one) => one.id);
+  if (!ids.length) return out;
+  const today = todayManila();
+  const schedules = await schedulesOf(db, ids);
+  const holidays = await holidaysBetween(db, from, to);
+  const leaveMap = await leavesOf(db, ids, from, to);
+  const formMap = await formsOf(db, ids, from, to);
+  const found = await rows<DayRow>(
+    db,
+    sql`select ${dayColumns} from attendance a where a.day between ${from}::date and ${to}::date
+      and a.person_id in (${sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `,
+      )})`,
+  );
+  const byPerson = new Map<number, Map<string, DayRow>>();
+  for (const row of found) {
+    const mine = byPerson.get(row.personId) ?? new Map<string, DayRow>();
+    mine.set(row.day, row);
+    byPerson.set(row.personId, mine);
+  }
+  for (const person of people) {
+    const schedule = schedules.get(person.id) ?? DEFAULT_SCHEDULE;
+    const mine = byPerson.get(person.id);
+    const days: AttendanceDay[] = [];
+    for (let at = from; at <= to; at = addDays(at, 1))
+      days.push(
+        dayOf(
+          at,
+          mine?.get(at),
+          schedule,
+          holidays,
+          today,
+          leaveMap.get(person.id) ?? [],
+          person.hiredOn,
+          formMap.get(person.id),
+        ),
+      );
+    out.set(person.id, { schedule, days });
+  }
+  return out;
+}
+
 /** Who is working on a day (today by default), and each person's month so far. */
 export async function attendanceToday(
   db: Database,
@@ -684,34 +737,10 @@ export async function attendanceReport(
   if (from > to) from = to;
   if (from < addDays(to, -366)) from = addDays(to, -366);
   const people = await visiblePeople(db, me);
-  const ids = people.map((one) => one.id);
-  const [schedules, holidays, leaveMap, formMap, found] = await Promise.all([
-    schedulesOf(db, ids),
-    holidaysBetween(db, from, to),
-    leavesOf(db, ids, from, to),
-    formsOf(db, ids, from, to),
-    ids.length
-      ? rows<DayRow>(
-          db,
-          sql`select ${dayColumns} from attendance a where a.day between ${from}::date and ${to}::date
-            and a.person_id in (${sql.join(
-              ids.map((id) => sql`${id}`),
-              sql`, `,
-            )})`,
-        )
-      : Promise.resolve([]),
-  ]);
-  const byPerson = new Map<number, Map<string, DayRow>>();
-  for (const row of found) {
-    const mine = byPerson.get(row.personId) ?? new Map<string, DayRow>();
-    mine.set(row.day, row);
-    byPerson.set(row.personId, mine);
-  }
+  const worked = await attendanceDays(db, people, from, to);
   const out = people.map((person) => {
-    const schedule = schedules.get(person.id) ?? DEFAULT_SCHEDULE;
+    const { schedule, days } = worked.get(person.id) ?? { schedule: DEFAULT_SCHEDULE, days: [] };
     const fullDay = dayMinutes(schedule) - schedule.breakMinutes;
-    const leaves = leaveMap.get(person.id) ?? [];
-    const mine = byPerson.get(person.id);
     const figures = {
       workDays: 0,
       present: 0,
@@ -727,17 +756,8 @@ export async function attendanceReport(
       overtimeMinutes: 0,
       formDays: 0,
     };
-    for (let at = from; at <= to; at = addDays(at, 1)) {
-      const day = dayOf(
-        at,
-        mine?.get(at),
-        schedule,
-        holidays,
-        today,
-        leaves,
-        person.hiredOn,
-        formMap.get(person.id),
-      );
+    for (const day of days) {
+      const at = day.day;
       if (day.kind === "work") {
         figures.workDays += 1;
         // Today counts only once they came in: a day not over isn't a shortfall yet.

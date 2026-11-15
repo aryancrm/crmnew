@@ -31,6 +31,7 @@ import { MessagesPage } from "./pages/messages";
 import { Payments, Refunds } from "./pages/money";
 import { Moves } from "./pages/moves";
 import { MyLeavePage } from "./pages/my-leave";
+import { MyPayslipsPage } from "./pages/my-payslips";
 import { MyTeamPage, TeamSeatPage } from "./pages/my-team";
 import { NotBuilt } from "./pages/not-built";
 import { Order } from "./pages/order";
@@ -40,6 +41,7 @@ import { OrdersToCheck } from "./pages/orders-board";
 import { OrgPage } from "./pages/org";
 import { OrgChartPage } from "./pages/org-chart";
 import { OwedReport } from "./pages/owed";
+import { PayRatesPage, PayrollCutoffPage, PayrollPage } from "./pages/payroll";
 import { PointsAccountPage, PointsPage } from "./pages/points";
 import { Purchase } from "./pages/purchase";
 import { Purchases } from "./pages/purchases";
@@ -126,6 +128,11 @@ createRoot(root).render(
             <Route path="hr/report" element={<AttendanceReportPage />} />
             <Route path="hr/leave" element={<LeaveListPage />} />
             <Route path="me/leave" element={<MyLeavePage />} />
+            <Route path="me/payslips" element={<MyPayslipsPage />} />
+            <Route path="me/payslips/:cutoff" element={<MyPayslipsPage />} />
+            <Route path="hr/payroll" element={<PayrollPage />} />
+            <Route path="hr/payroll/rates" element={<PayRatesPage />} />
+            <Route path="hr/payroll/:cutoff" element={<PayrollCutoffPage key="cutoff" />} />
             <Route path="visits" element={<VisitsPage />} />
             <Route path="visits/plan" element={<VisitPlanPage />} />
             <Route path="visits/calendar" element={<FieldCalendarPage />} />

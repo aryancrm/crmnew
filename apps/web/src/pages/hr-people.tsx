@@ -710,6 +710,22 @@ export function HrPersonPage() {
               ["PhilHealth", shown(r.philhealth)],
               ["Pag-IBIG", shown(r.pagibig)],
               ["TIN", shown(r.tin)],
+              [
+                "Not covered",
+                r.payExempt
+                  ? (
+                      [
+                        ["sss", "SSS"],
+                        ["philhealth", "PhilHealth"],
+                        ["pagibig", "Pag-IBIG"],
+                        ["tax", "Tax"],
+                      ] as const
+                    )
+                      .filter(([key]) => r.payExempt?.[key])
+                      .map(([, label]) => label)
+                      .join(", ") || null
+                  : null,
+              ],
             ]),
           )}
       </div>
@@ -777,6 +793,9 @@ function RecordDialog({ person, onClose }: { person: HrPerson; onClose: () => vo
     birthDate: r.birthDate ?? "",
   });
   const [pay, setPay] = useState({ salary: pesosOf(r.salary), allowance: pesosOf(r.allowance) });
+  const [exempt, setExempt] = useState(
+    r.payExempt ?? { sss: false, philhealth: false, pagibig: false, tax: false },
+  );
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -788,6 +807,14 @@ function RecordDialog({ person, onClose }: { person: HrPerson; onClose: () => vo
       birthDate: days.birthDate || null,
       salary: centavos(pay.salary),
       allowance: centavos(pay.allowance),
+      ...(r.payExempt
+        ? {
+            noSss: exempt.sss,
+            noPhilhealth: exempt.philhealth,
+            noPagibig: exempt.pagibig,
+            noTax: exempt.tax,
+          }
+        : {}),
     };
     for (const [key] of RECORD_TEXT)
       (body as Record<string, string | null>)[key] = text[key]?.trim() || null;
@@ -903,6 +930,33 @@ function RecordDialog({ person, onClose }: { person: HrPerson; onClose: () => vo
             {pick(9, 11)}
           </div>
           <div className="grid gap-3 sm:grid-cols-4">{pick(11, 15)}</div>
+          {r.payExempt && (
+            <fieldset className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-slate-700">
+              <legend className="mb-1 text-xs font-semibold text-slate-600">
+                Not covered on payslips (a foreign national, Pag-IBIG waived)
+              </legend>
+              {(
+                [
+                  ["sss", "No SSS"],
+                  ["philhealth", "No PhilHealth"],
+                  ["pagibig", "No Pag-IBIG"],
+                  ["tax", "No withholding tax"],
+                ] as const
+              ).map(([key, label]) => (
+                <label key={key} className="flex items-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={exempt[key]}
+                    onChange={(event) =>
+                      setExempt((now) => ({ ...now, [key]: event.target.checked }))
+                    }
+                    className="size-4 accent-emerald-600"
+                  />
+                  {label}
+                </label>
+              ))}
+            </fieldset>
+          )}
         </Section>
         <Problem
           message={action.general([
