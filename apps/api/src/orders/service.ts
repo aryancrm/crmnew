@@ -49,6 +49,7 @@ import type {
   PaymentTerms,
   Vat,
 } from "../types";
+import { stuckNow } from "./clock";
 import { DIVISIONS, subDivisionOfArea, termsOfLabel } from "./divisions";
 import { logEvent, peso } from "./events";
 import {
@@ -74,7 +75,6 @@ import {
   STATUS_LABEL,
   STATUSES,
   STEP_OF,
-  STUCK_HOURS,
 } from "./rules";
 
 const PAGE = 25;
@@ -147,8 +147,6 @@ const labelled = <T extends { status: OrderStatus }>(row: T) => ({
   statusLabel: STATUS_LABEL[row.status],
 });
 
-const stuckCutoff = sql`now() - make_interval(hours => ${STUCK_HOURS})`;
-
 /** How long Management may take back an approval given by mistake. */
 export const TAKE_BACK_MINUTES = 30;
 /** An approval (alias `o`) Management can still take back: given by a person (not the system),
@@ -188,10 +186,7 @@ function filterOf(me: Me, filter: OrderFilter): SQL {
       ? ["on_hold", "exception"]
       : STATUS_GROUPS[filter.group as keyof typeof STATUS_GROUPS];
   if (group) conditions.push(sql`o.status in (${list(group)})`);
-  if (filter.stuck)
-    conditions.push(
-      sql`o.status not in (${list(NEVER_STUCK)}) and coalesce(o.status_since, o.updated_at) < ${stuckCutoff}`,
-    );
+  if (filter.stuck) conditions.push(sql`o.status not in (${list(NEVER_STUCK)}) and ${stuckNow()}`);
   if (filter.medrep) conditions.push(sql`o.medrep_id = ${filter.medrep}`);
   if (filter.from)
     conditions.push(sql`(o.created_at at time zone 'Asia/Manila')::date >= ${filter.from}::date`);
@@ -249,7 +244,7 @@ export async function orderDashboard(db: Database, me: Me): Promise<OrderDashboa
       sql`${team(me)} select
           count(*) filter (where (o.created_at at time zone 'Asia/Manila')::date = (now() at time zone 'Asia/Manila')::date)::int as today,
           count(*) filter (where o.created_at >= now() - interval '7 days')::int as week,
-          count(*) filter (where o.status not in (${list(NEVER_STUCK)}) and coalesce(o.status_since, o.updated_at) < ${stuckCutoff})::int as stuck,
+          count(*) filter (where o.status not in (${list(NEVER_STUCK)}) and ${stuckNow()})::int as stuck,
           (percentile_cont(0.5) within group (order by extract(epoch from (o.updated_at - o.submitted_at)) / 60.0)
             filter (where o.status in ('shipped', 'completed') and o.submitted_at is not null))::float8 as minutes
         from sales_order o where ${seen(me)}`,

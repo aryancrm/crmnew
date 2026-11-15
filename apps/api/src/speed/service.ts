@@ -9,6 +9,7 @@ import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
 import { day } from "../inventory/service";
+import { limitAt, waitedAt } from "../orders/clock";
 import { LATE_AFTER as LIMITS } from "../orders/late";
 import { ledUnits } from "../org/service";
 import type { Role } from "../people/roles";
@@ -98,7 +99,9 @@ export async function speedReport(
       db,
       sql`with passed as (
           select st.order_id, ${STEP_OF} as step, st.left_at, st.how,
-            extract(epoch from st.left_at - st.entered_at) / 60 as minutes,
+            -- A desk's time in working minutes (an order left overnight isn't slow), the road's on the clock.
+            case when st.status = 'shipped' then extract(epoch from st.left_at - st.entered_at) / 60
+              else work_minutes(st.entered_at, st.left_at) end as minutes,
             (select e.by_person from order_event e where e.order_id = st.order_id
               and e.at between st.left_at - interval '15 seconds' and st.left_at + interval '15 seconds'
               order by abs(extract(epoch from e.at - st.left_at)), e.id limit 1) as by_person
@@ -128,9 +131,8 @@ export async function speedReport(
               when o.status in ('ready_for_dispatch', 'packing') then 'dispatch'
               when o.status = 'shipped' then 'road'
               when o.status = 'draft' and o.sent_back_at is not null then 'fix' end as step,
-            extract(epoch from now() - o.status_since) / 60 as minutes,
-            case when o.status = 'pending_approval' then ${LATE_AFTER.management}::int when o.status = 'shipped' then ${LATE_AFTER.road}::int
-              else ${LATE_AFTER.finance}::int end as limit_minutes
+            ${waitedAt(sql`o.status`, sql`o.status_since`)} as minutes,
+            ${limitAt(sql`o.status`)} as limit_minutes
           from sales_order o where ${scope.where}) s
         where s.step is not null group by s.step`,
     ),

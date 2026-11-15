@@ -8,6 +8,7 @@ import { openDatabase } from "./db/index";
 import { migrate } from "./db/migrate";
 import { seedDemoDispatch } from "./dispatch/seed";
 import { seedDemoFinance } from "./finance/seed";
+import { seedDemoAttendance } from "./hr/seed";
 import { seedDemoInventory } from "./inventory/seed";
 import { startChannelJobs } from "./online/inbox";
 import { seedDemoOnline } from "./online/seed";
@@ -40,6 +41,7 @@ if (process.env.SEED_DEMO === "1") {
   if (await seedDemoOnline(db)) console.log("database: demo enquiries made");
   if (await seedDemoTeam(db, password))
     console.log("database: more demo MedReps and their orders made");
+  if (await seedDemoAttendance(db)) console.log("database: two weeks of demo attendance made");
   // Older demo databases had invoices dated before their orders: put them right once.
   const aligned = await alignDemoMoneyDates(db);
   if (aligned) console.log(`database: ${aligned} demo invoices dated after their orders`);

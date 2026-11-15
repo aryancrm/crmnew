@@ -117,7 +117,8 @@ describe("a team lead's team", () => {
     const pasay = await customer("Pasay Late Hospital", "Pasay");
     const late = await order("ryan", pasay);
     await db.execute(
-      sql`update sales_order set status_since = now() - interval '5 hours' where id = ${late}`,
+      // Ten days back holds more than Management's four working hours, whatever day it runs.
+      sql`update sales_order set status_since = now() - interval '10 days' where id = ${late}`,
     );
     const back = await order("ryan", pasay, 4);
     expect(
@@ -132,7 +133,7 @@ describe("a team lead's team", () => {
     });
     const flagged = seen.needs.find((need) => need.orderId === late);
     expect(flagged?.kind).toBe("late");
-    expect(flagged?.why).toBe("At Management for 5h");
+    expect(flagged?.why).toBe("At Management for 10d");
   });
 
   it("is every team under a head; the CEO picks any box; a MedRep has none", async () => {

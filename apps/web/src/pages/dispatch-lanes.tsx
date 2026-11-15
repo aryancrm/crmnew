@@ -15,6 +15,7 @@ import { useMe } from "../auth";
 import { type DispatchAsk, DispatchDialogs } from "../dispatch/parts";
 import { ReasonDialog, waited } from "../orders/parts";
 import { count, dayLabel, inPacks, PageState, peso, useAction } from "../ui";
+import { useWorkClock } from "../work-clock";
 
 type Lane = "pack" | "ship" | "road";
 
@@ -308,8 +309,10 @@ function WorkCard({
 }) {
   const late = card.expectedOn !== null && card.expectedOn < today;
   const dueToday = card.expectedOn === today;
-  const waitedHours = hoursSince(lane === "road" ? card.shippedAt : card.stepSince);
-  const slow = lane === "road" ? waitedHours >= 72 : waitedHours >= 4;
+  // On the road: three days on the clock; at Dispatch: past a working day, in working hours.
+  const { lateAt } = useWorkClock();
+  const slow =
+    lane === "road" ? hoursSince(card.shippedAt) >= 72 : lateAt(card.status, card.stepSince);
   return (
     // biome-ignore lint/a11y/useSemanticElements: the card holds buttons, so it can't be one link
     <div

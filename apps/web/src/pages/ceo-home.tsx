@@ -21,6 +21,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { collectedChange, counted, exactPeso, monthShort, shortPeso } from "../ceo";
+import { AtWorkCard } from "../hr/parts";
 import {
   ChannelSalesCard,
   CollectedCard,
@@ -79,6 +80,7 @@ function AtAGlance({ money, stock }: { money: Data["money"]; stock: Data["stock"
         />
         <StockCard stock={stock} />
       </section>
+      <AtWorkCard />
       {board.data && (
         <section aria-label="Who and what sells" className="grid gap-3 lg:grid-cols-2">
           <PeopleCard board={board.data} />

@@ -7,6 +7,7 @@ import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
+import { stuckNow } from "../orders/clock";
 import { STATUS_LABEL } from "../orders/rules";
 import { creditedTo } from "../org/service";
 import { ROLE_LABEL, type Role } from "../people/roles";
@@ -356,10 +357,10 @@ export async function ceoHome(
       sql`select count(*) filter (where status = 'pending_approval')::int as awaiting,
           count(*) filter (where status in ('finance_check', 'ready_for_invoice'))::int as finance,
           count(*) filter (where status in ('on_hold', 'exception'))::int as "onHold",
-          count(*) filter (where status in ('pending_approval', 'finance_check', 'ready_for_invoice') and coalesce(status_since, updated_at) < now() - interval '48 hours')::int as stuck,
+          count(*) filter (where o.status in ('pending_approval', 'finance_check', 'ready_for_invoice') and ${stuckNow()})::int as stuck,
           (max(extract(epoch from now() - coalesce(submitted_at, created_at)) / 3600) filter (where status = 'pending_approval'))::int as "oldestHours",
           count(*) filter (where status not in ('draft', 'cancelled') and (coalesce(submitted_at, created_at) at time zone 'Asia/Manila')::date = ${today}::date)::int as today
-        from sales_order`,
+        from sales_order o`,
     ),
     rows<CeoHome["dispatch"]>(
       db,

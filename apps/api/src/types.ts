@@ -3151,3 +3151,70 @@ export type ChannelSalesDetail = {
   customers: { id: number; name: string; kind: CustomerKind; sold: number; orders: number }[];
   medicines: { name: string; qty: number; value: number }[];
 };
+
+// ---- HR: working hours and attendance. Times are ISO; days "YYYY-MM-DD" (Manila). ----
+
+export type { WorkSchedule } from "./hr/work-time";
+
+import type { WorkSchedule } from "./hr/work-time";
+
+export type AttendanceDay = {
+  day: string;
+  /** work: a working day; rest: off the schedule; holiday: the company's holiday. */
+  kind: "work" | "rest" | "holiday";
+  holiday: string | null;
+  timeIn: string | null;
+  timeOut: string | null;
+  /** Where time out came from: their button, the last thing they did, HR. */
+  outFrom: "button" | "last_seen" | "field" | "hr" | null;
+  inFrom: "sign_in" | "button" | "field" | "hr" | null;
+  /** Still working (today, not ended). */
+  working: boolean;
+  workedMinutes: number;
+  lateMinutes: number;
+  undertimeMinutes: number;
+  afterHoursMinutes: number;
+  /** A working day gone by with no time in. */
+  absent: boolean;
+  note: string | null;
+};
+
+export type AttendanceToday = {
+  day: string;
+  holiday: string | null;
+  can: { putRight: boolean };
+  counts: { working: number; done: number; notIn: number; late: number; rest: number };
+  people: {
+    personId: number;
+    name: string;
+    title: string | null;
+    role: Role;
+    team: string | null;
+    today: AttendanceDay;
+    /** This month so far: days worked, hours, late days, absent days. */
+    month: { days: number; workedMinutes: number; lateDays: number; absentDays: number };
+  }[];
+};
+
+export type AttendanceMonth = {
+  month: string;
+  person: { id: number; name: string; title: string | null };
+  schedule: WorkSchedule & { name: string };
+  days: AttendanceDay[];
+  totals: {
+    workDays: number;
+    present: number;
+    absent: number;
+    workedMinutes: number;
+    lateMinutes: number;
+    undertimeMinutes: number;
+    afterHoursMinutes: number;
+  };
+  can: { putRight: boolean };
+};
+
+/** A person's own day, for the top bar's Start / End my day. */
+export type MyDay = {
+  today: AttendanceDay;
+  schedule: { start: string; end: string };
+};

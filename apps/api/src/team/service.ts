@@ -10,6 +10,7 @@ import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
 import { day, iso } from "../inventory/service";
+import { lateNow } from "../orders/clock";
 import { STATUS_LABEL } from "../orders/rules";
 import { inForce, ledUnits } from "../org/service";
 import { ROLE_LABEL, type Role } from "../people/roles";
@@ -18,9 +19,6 @@ import type { Me, OrderStatus, OrgUnitKind, TeamBoard, TeamNeed, TeamSeatCard } 
 const LEADS: Role[] = ["team_lead", "manager"];
 const WHOLE: Role[] = ["ceo", "admin"];
 
-/** How long an order may stand at a step before the lead hears of it. */
-const LATE_AFTER = sql`case o.status when 'pending_approval' then interval '4 hours'
-  when 'shipped' then interval '72 hours' else interval '24 hours' end`;
 const OPEN = sql`o.status in ('pending_approval', 'finance_check', 'ready_for_invoice', 'ready_for_dispatch', 'packing', 'shipped')`;
 
 const ids = (values: number[]): SQL =>
@@ -548,7 +546,7 @@ async function teamNeeds(db: Database, seatIds: number[], today: string): Promis
         where o.seat_id in (${list}) and (
           (o.status = 'draft' and o.sent_back_at is not null)
           or o.status in ('on_hold', 'exception')
-          or (${OPEN} and o.status_since < now() - ${LATE_AFTER}))
+          or (${OPEN} and ${lateNow()}))
         order by (o.status = 'draft') desc, (o.status in ('on_hold', 'exception')) desc, o.status_since limit 40`,
     ),
     rows<{

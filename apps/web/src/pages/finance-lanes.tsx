@@ -15,6 +15,7 @@ import { useMe } from "../auth";
 import { ConfirmPaymentDialog, RecordPaymentDialog, useMoney } from "../finance/parts";
 import { ReasonDialog, waited } from "../orders/parts";
 import { count, dayLabel, PageState, peso } from "../ui";
+import { useWorkClock } from "../work-clock";
 import { Figure } from "./figures";
 
 type Lane = "check" | "invoice" | "collect";
@@ -335,7 +336,8 @@ function OrderMoneyCard({
   onOpen: () => void;
   children: ReactNode;
 }) {
-  const hours = (Date.now() - Date.parse(card.stepSince)) / 3_600_000;
+  // Past Finance's limit (a working day), in working hours.
+  const late = useWorkClock().lateAt("finance_check", card.stepSince);
   const overLimit = card.creditLimit !== null && card.owed + card.total > card.creditLimit;
   return (
     // biome-ignore lint/a11y/useSemanticElements: the card holds buttons, so it can't be one link
@@ -362,7 +364,7 @@ function OrderMoneyCard({
           </div>
         </div>
         <span
-          className={`shrink-0 text-[11px] font-semibold tabular-nums ${hours >= 4 ? "text-rose-700" : "text-slate-500"}`}
+          className={`shrink-0 text-[11px] font-semibold tabular-nums ${late ? "text-rose-700" : "text-slate-500"}`}
         >
           {waited(card.stepSince)}
         </span>

@@ -11,6 +11,7 @@ import {
   BellRing,
   Boxes,
   Building2,
+  CalendarClock,
   ClipboardCheck,
   ClipboardList,
   Factory,
@@ -302,6 +303,15 @@ const reportsApp: Space = {
   ],
 };
 
+/** HR: who is working and each person's attendance (leave, forms and payroll come next). */
+const hrApp: Space = {
+  key: "hr",
+  label: "HR",
+  icon: CalendarClock,
+  tone: "bg-teal-600 text-white",
+  groups: [{ items: [{ to: "/hr/attendance", label: "Who's working", icon: CalendarClock }] }],
+};
+
 /** The apps on the Admin's and the CEO's page of apps, in order. */
 export const appsFor = (me: Me): Space[] =>
   APP_ROLES.includes(me.role)
@@ -312,6 +322,7 @@ export const appsFor = (me: Me): Space[] =>
         dispatchApp,
         inventoryApp(me),
         customersApp(me),
+        hrApp,
         reportsApp,
       ]
     : [];
@@ -416,6 +427,7 @@ function ownDesk(me: Me): Space {
           ),
           folder("Team orders", ClipboardList, orderStages("Sent back"), "Orders"),
           { to: "/targets", label: "Targets", icon: Target },
+          { to: "/hr/attendance", label: "Team attendance", icon: CalendarClock },
           customers,
         ]),
         icon: Users,

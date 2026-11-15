@@ -4,6 +4,7 @@
 // average by day; each person who did a step, slowest first, against the limit (a step card picks
 // one step); and the couriers.
 
+import { LIMIT_WORDS } from "@2mg/api/late";
 import type { SpeedReport, SpeedStep } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { Clock3, Hourglass, PackageCheck, Truck, Undo2, UserCheck, Wallet } from "lucide-react";
@@ -88,7 +89,7 @@ export function StepCard({ step }: { step: SpeedReport["steps"][number] }) {
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold text-slate-900">{look.label}</div>
           <div className="text-[11px] text-slate-500">
-            {look.who} · limit {took(step.lateAfterMinutes)}
+            {look.who} · limit {LIMIT_WORDS[step.step]}
           </div>
         </div>
       </div>
@@ -107,7 +108,7 @@ export function StepCard({ step }: { step: SpeedReport["steps"][number] }) {
           </div>
           <div
             className="relative h-2 rounded-full bg-slate-100"
-            title={`Average ${took(step.avgMinutes)} against a limit of ${took(step.lateAfterMinutes)}`}
+            title={`Average ${took(step.avgMinutes)} against a limit of ${LIMIT_WORDS[step.step]}`}
           >
             <div
               className={`absolute inset-y-0 left-0 rounded-full ${tone.bar}`}
@@ -131,7 +132,7 @@ export function StepCard({ step }: { step: SpeedReport["steps"][number] }) {
           <div
             className={`text-xs ${step.late ? "font-semibold text-rose-600" : "text-emerald-700"}`}
           >
-            {step.late ? `${step.late} late (over ${took(step.lateAfterMinutes)})` : "None late"}
+            {step.late ? `${step.late} late (over ${LIMIT_WORDS[step.step]})` : "None late"}
           </div>
         </>
       ) : (

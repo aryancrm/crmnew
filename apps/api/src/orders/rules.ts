@@ -42,8 +42,6 @@ export const STATUS_GROUPS = {
   exceptions: ["on_hold", "exception", "cancelled"],
 } satisfies Record<string, OrderStatus[]>;
 
-/** An order that isn't finished and hasn't moved for this long is "stuck". */
-export const STUCK_HOURS = 48;
 /** Statuses that can't be stuck: not placed yet, or finished. */
 export const NEVER_STUCK: OrderStatus[] = ["draft", "completed", "cancelled"];
 

@@ -45,6 +45,7 @@ import { avatarTone, dayHeading, initials, PRIMARY_SM, QUIET_SM } from "../look"
 import { ReasonDialog, useOrderAction, waited } from "../orders/parts";
 import { RepStrip } from "../rep-strip";
 import { count, Dialog, dayLabel, PageState, peso } from "../ui";
+import { useWorkClock } from "../work-clock";
 
 /** The work tabs, as the Leads desk's queues: each desk's own work first. */
 const DESK_TABS: Record<Desk, { key: BoardTab; label: string; dot?: string }[]> = {
@@ -835,9 +836,11 @@ export function OrderCardItem({
   onDispatch?: (what: "pack" | "ship" | "deliver" | "failed" | "unpack") => void;
 }) {
   const navigate = useNavigate();
-  // The clock counts from when it reached its step: Management's wait from when it came to
-  // Management, Finance's from when it came to Finance.
-  const minutes = (Date.now() - Date.parse(card.stepSince)) / 60_000;
+  // The clock counts from when it reached its step (Management's wait from when it came to
+  // Management, Finance's from when it came to Finance), in working hours: a night or a Sunday
+  // doesn't make it late.
+  const { waitedAt } = useWorkClock();
+  const minutes = waitedAt(card.status, card.stepSince);
   const pending = card.status === "pending_approval";
   const flagged = card.status === "on_hold" || card.status === "exception";
   const stopped = flagged || card.status === "cancelled";

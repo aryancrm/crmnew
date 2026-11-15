@@ -8,6 +8,7 @@
     "./journey": "./src/online/journey.ts",
     "./divisions": "./src/orders/divisions.ts",
     "./late": "./src/orders/late.ts",
+    "./work-time": "./src/hr/work-time.ts",
     "./phone": "./src/phone.ts"
   },
   "scripts": {

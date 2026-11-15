@@ -61,9 +61,10 @@ describe("speed", () => {
       ).id;
     const slow = await place();
     const quick = await place();
-    // The slow one waited five hours at Management before Sarla approved it.
+    // The slow one waited ten days at Management before Sarla approved it: more than its four
+    // working hours whatever day the test runs (a desk's clock counts working hours only).
     await db.execute(
-      sql`update order_step set entered_at = entered_at - interval '5 hours' where order_id = ${slow} and status = 'pending_approval'`,
+      sql`update order_step set entered_at = entered_at - interval '10 days' where order_id = ${slow} and status = 'pending_approval'`,
     );
     expect((await send("sarla", `/api/orders/${slow}/approve`)).status).toBe(200);
     expect((await send("sarla", `/api/orders/${quick}/approve`)).status).toBe(200);

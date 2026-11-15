@@ -27,6 +27,9 @@ export async function countQueries<T>(
   return { result, queries: store.queries };
 }
 
+/** Runs bookkeeping a request sets off (attendance's "last seen") outside its query count. */
+export const uncounted = <T>(work: () => Promise<T>): Promise<T> => counter.exit(work);
+
 export type Database = ReturnType<typeof drizzlePostgres<typeof schema>>;
 
 /** Runs hand-written SQL and returns its rows, whichever driver is underneath. */

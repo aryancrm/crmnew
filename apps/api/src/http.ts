@@ -5,7 +5,7 @@ import { getCookie } from "hono/cookie";
 import { createMiddleware } from "hono/factory";
 import type { z } from "zod";
 import { SESSION_COOKIE, whoIs } from "./auth/sessions";
-import type { Database } from "./db/index";
+import { type Database, uncounted } from "./db/index";
 import { ROLE_LABEL, type Role } from "./people/roles";
 import type { Me } from "./types";
 
@@ -49,7 +49,9 @@ export function idParam(c: Context, name = "id"): number {
 }
 
 /** Routes behind this need a signed-in person; `c.get("me")` is who. */
-export function signedInWith(db: Database) {
+/** The signed-in check. `onSeen` hears each signed-in request (attendance notes who is working);
+ *  it never holds the request up or fails it. */
+export function signedInWith(db: Database, onSeen?: (me: Me) => Promise<void>) {
   return createMiddleware<Env>(async (c, next) => {
     const token = getCookie(c, SESSION_COOKIE);
     const me = token ? await whoIs(db, token) : null;
@@ -65,6 +67,10 @@ export function signedInWith(db: Database) {
       );
     c.set("me", me);
     c.set("token", token);
+    if (onSeen && !me.viewedBy)
+      void uncounted(() => onSeen(me)).catch((error) =>
+        console.error("attendance: couldn't note", error),
+      );
     await next();
   });
 }

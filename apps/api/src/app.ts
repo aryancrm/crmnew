@@ -22,6 +22,8 @@ import { countQueries, type Database } from "./db/index";
 import { person } from "./db/schema";
 import { dispatchRoutes } from "./dispatch/routes";
 import { financeRoutes } from "./finance/routes";
+import { markSeen } from "./hr/attendance";
+import { hrRoutes } from "./hr/routes";
 import { allow, type Env, idParam, Refusal, readBody, signedInWith } from "./http";
 import { inventoryRoutes } from "./inventory/routes";
 import { messageRoutes } from "./messages/routes";
@@ -89,7 +91,8 @@ export function createApp(db: Database, options: AppOptions) {
     c.json({ error: { code: "not_found", message: "No such address." } } satisfies ApiError, 404),
   );
 
-  const signedIn = signedInWith(db);
+  // Every signed-in request notes who is working (their day starts with the first one).
+  const signedIn = signedInWith(db, (me) => markSeen(db, me));
 
   app.get("/api/health", (c) => c.json({ ok: true }));
 
@@ -238,6 +241,7 @@ export function createApp(db: Database, options: AppOptions) {
   inventoryRoutes(app, db, signedIn);
   notifyRoutes(app, db, signedIn);
   orgRoutes(app, db, signedIn);
+  hrRoutes(app, db, signedIn);
   messageRoutes(app, db, signedIn);
   teamRoutes(app, db, signedIn);
   speedRoutes(app, db, signedIn);
