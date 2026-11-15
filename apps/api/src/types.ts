@@ -3686,3 +3686,49 @@ export type LeaveList = {
   /** Lines this person decides (their team's, all for HR). */
   mine: number;
 };
+
+/** Visits by day over a month: one person's (each visit), or a team's (counts, and who is out). */
+export type FieldCalendar = {
+  month: string;
+  today: string;
+  /** The person shown; null for the whole team (a team lead's, everyone for the CEO). */
+  person: { id: number; name: string } | null;
+  /** Whom this viewer may pick (a MedRep only themselves). */
+  people: { id: number; name: string; team: string | null }[];
+  days: {
+    day: string;
+    work: boolean;
+    holiday: string | null;
+    planned: number;
+    done: number;
+    skipped: number;
+    /** On leave that day: the person's kind, or (whole team) how many people. */
+    leave: LeaveKind | null;
+    away: number;
+    visits: {
+      id: number;
+      personId: number;
+      personName: string;
+      customer: string;
+      kind: string;
+      status: VisitStatus;
+      at: string | null;
+    }[];
+  }[];
+};
+
+/** Where the field people are now: their phone's last place while their day runs. */
+export type LivePeople = {
+  people: {
+    personId: number;
+    name: string;
+    team: string | null;
+    place: string | null;
+    at: string | null;
+    accuracyM: number | null;
+    /** Their working day is running (started, not ended). */
+    working: boolean;
+    /** The customer they checked in at and haven't reported yet. */
+    atVisit: string | null;
+  }[];
+};

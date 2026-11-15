@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { Database } from "../db/index";
 import { type Env, idParam, Refusal, readBody } from "../http";
 import type { ExpenseInput, ExpenseKind, VisitClass } from "../types";
+import { fieldCalendar, fieldCalendarDay, tellWhere, whereIsTheTeam } from "./calendar";
 import {
   addExpense,
   changeExpense,
@@ -205,4 +206,24 @@ export function fieldRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
       "cache-control": "private, max-age=3600",
     });
   });
+
+  app.get("/api/field/calendar", async (c) =>
+    c.json(
+      await fieldCalendar(db, c.get("me"), {
+        month: c.req.query("month"),
+        person: Number(c.req.query("person")) || null,
+      }),
+    ),
+  );
+  app.get("/api/field/calendar/day", async (c) =>
+    c.json({ visits: await fieldCalendarDay(db, c.get("me"), c.req.query("day") ?? "") }),
+  );
+  app.post("/api/field/where", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({ place: z.string().max(60), accuracy: z.number().nonnegative().nullish() }),
+    );
+    return c.json(await tellWhere(db, c.get("me"), input));
+  });
+  app.get("/api/field/where", async (c) => c.json(await whereIsTheTeam(db, c.get("me"))));
 }

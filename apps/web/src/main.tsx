@@ -11,7 +11,9 @@ import { ChangePassword } from "./pages/change-password";
 import { ChannelsPage } from "./pages/channels";
 import { Customer } from "./pages/customer";
 import { Customers } from "./pages/customers";
+import { FieldCalendarPage } from "./pages/field-calendar";
 import { FieldExpensesPage } from "./pages/field-expenses";
+import { FieldLivePage } from "./pages/field-live";
 import { FieldReportPage } from "./pages/field-report";
 import { Home } from "./pages/home";
 import { HrPeoplePage, HrPersonPage } from "./pages/hr-people";
@@ -126,6 +128,8 @@ createRoot(root).render(
             <Route path="me/leave" element={<MyLeavePage />} />
             <Route path="visits" element={<VisitsPage />} />
             <Route path="visits/plan" element={<VisitPlanPage />} />
+            <Route path="visits/calendar" element={<FieldCalendarPage />} />
+            <Route path="field/live" element={<FieldLivePage />} />
             <Route path="visits/expenses" element={<FieldExpensesPage />} />
             <Route path="field/report" element={<FieldReportPage />} />
             <Route path="hr/attendance/:id" element={<AttendanceMonthPage key="month" />} />

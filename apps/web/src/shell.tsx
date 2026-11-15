@@ -19,6 +19,7 @@ import { useEffect, useRef, useState } from "react";
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
 import { initials, useMe } from "./auth";
+import { LiveLocationSender } from "./field/live-sender";
 import { MyDayButton } from "./hr/parts";
 import { allItems, type Badge, type MenuGroup, type MenuItem, spaceFor } from "./menus";
 import { unreadIn, useUpdates } from "./updates";
@@ -185,6 +186,7 @@ export function Shell() {
         </div>
         {/* The person's working day: when it started, Start / End my day. */}
         <MyDayButton />
+        <LiveLocationSender />
         <Account name={me.data.name} role={me.data.roleLabel} />
       </header>
 

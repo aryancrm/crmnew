@@ -332,7 +332,15 @@ const fieldApp: Space = {
   label: "Field",
   icon: CalendarCheck,
   tone: "bg-sky-600 text-white",
-  groups: [{ items: [{ to: "/field/report", label: "Visits report", icon: CalendarCheck }] }],
+  groups: [
+    {
+      items: [
+        { to: "/field/report", label: "Visits report", icon: CalendarCheck },
+        { to: "/visits/calendar", label: "Calendar", icon: CalendarDays },
+        { to: "/field/live", label: "Where the team is", icon: MapPin },
+      ],
+    },
+  ],
 };
 
 /** The apps on the Admin's and the CEO's page of apps, in order. */
@@ -405,6 +413,7 @@ function ownDesk(me: Me): Space {
             CalendarCheck,
             [
               { to: "/visits", label: "Today's visits", icon: CalendarCheck },
+              { to: "/visits/calendar", label: "Calendar", icon: CalendarDays },
               { to: "/visits/plan", label: "Visit plan", icon: CalendarRange },
               { to: "/visits/expenses", label: "My expenses", icon: Receipt },
             ],
@@ -470,6 +479,8 @@ function ownDesk(me: Me): Space {
             CalendarCheck,
             [
               { to: "/field/report", label: "Visits report", icon: BarChart3 },
+              { to: "/visits/calendar", label: "Team calendar", icon: CalendarDays },
+              { to: "/field/live", label: "Where the team is", icon: MapPin },
               { to: "/visits/expenses?waiting=1", label: "Expenses to approve", icon: Receipt },
             ],
             "Visits",
