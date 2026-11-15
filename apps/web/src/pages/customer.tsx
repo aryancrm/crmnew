@@ -344,6 +344,12 @@ export function Customer() {
                   : []),
               ]}
             />
+            <Link
+              to={`/customers/${customer.id}/statement`}
+              className="mt-2 block w-full rounded-lg border border-slate-200 px-3 py-1.5 text-center text-xs font-semibold text-slate-700 hover:bg-slate-50"
+            >
+              Statement of account
+            </Link>
             {can.credit && (
               <button
                 type="button"

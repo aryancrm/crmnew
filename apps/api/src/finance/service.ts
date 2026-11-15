@@ -4,6 +4,7 @@
 // Every change is one transaction that also writes the order's timeline.
 
 import { type SQL, sql } from "drizzle-orm";
+import { customerDetail } from "../customers/service";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
@@ -17,7 +18,7 @@ import {
   PAPER_LABEL,
   STATUS_LABEL,
 } from "../orders/rules";
-import { mayReadOrder } from "../orders/service";
+import { mayReadOrder, withCity } from "../orders/service";
 import { POINT_CENTAVOS, settleOrderPoints } from "../points/service";
 import { companyInfo } from "../settings/service";
 import type {
@@ -41,6 +42,7 @@ import type {
   RefundList,
   RefundOwed,
   RefundRow,
+  Statement,
   Vat,
 } from "../types";
 import {
@@ -1004,4 +1006,84 @@ export async function orderOfInvoice(db: Database, invoiceId: number): Promise<n
     sql`select order_id::int as "orderId" from invoice where id = ${invoiceId}`,
   );
   return found?.orderId ?? null;
+}
+
+/** A customer's statement of account (anyone who may see the customer). Cancelled invoices are left
+ *  out with their payments; a refund is money given back, so it raises the balance again. */
+export async function customerStatement(
+  db: Database,
+  me: Me,
+  customerId: number,
+  asked: { from?: string; to?: string },
+): Promise<Statement> {
+  const { customer } = await customerDetail(db, me, customerId);
+  const today = todayManila();
+  const isDay = (value?: string) => Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+  const to = isDay(asked.to) ? (asked.to as string) : today;
+  const from = isDay(asked.from) ? (asked.from as string) : `${to.slice(0, 7)}-01`;
+  if (from > to)
+    throw new Refusal(400, "invalid", "The first day comes after the last one.", "from");
+  const moves = await rows<{
+    day: string;
+    kind: Statement["lines"][number]["kind"];
+    ref: string;
+    note: string | null;
+    debit: number;
+    credit: number;
+  }>(
+    db,
+    sql`select * from (
+        select ${day("i.issued_on")} as day, 'invoice' as kind, i.code as ref, o.code as note, i.total::int as debit, 0 as credit, i.id as sort
+          from invoice i join sales_order o on o.id = i.order_id
+          where i.customer_id = ${customerId} and i.status <> 'cancelled'
+        union all
+        select ${day("p.paid_on")}, 'payment', i.code, concat_ws(' · ', initcap(p.method), p.reference), 0, p.amount::int, p.id
+          from payment p join invoice i on i.id = p.invoice_id
+          where i.customer_id = ${customerId} and p.active and i.status <> 'cancelled'
+        union all
+        select ${day("r.refunded_on")}, 'refund', i.code, concat_ws(' · ', initcap(r.method), r.reference), r.amount::int, 0, r.id
+          from refund r join invoice i on i.id = r.invoice_id
+          where i.customer_id = ${customerId} and i.status <> 'cancelled'
+      ) m where m.day <= ${to} order by m.day, case m.kind when 'invoice' then 0 when 'payment' then 1 else 2 end, m.sort`,
+  );
+  let balance = 0;
+  let opening = 0;
+  const lines: Statement["lines"] = [];
+  for (const move of moves) {
+    balance += move.debit - move.credit;
+    if (move.day < from) opening = balance;
+    else lines.push({ ...move, balance });
+  }
+  const [aging] = await rows<Statement["aging"]>(
+    db,
+    sql`select
+        coalesce(sum(i.total - i.paid) filter (where i.due_on is null or i.due_on >= ${today}::date or (i.terms in ('cod', 'days') and o.status <> 'completed')), 0)::int as current,
+        coalesce(sum(i.total - i.paid) filter (where i.due_on < ${today}::date and ${today}::date - i.due_on <= 30 and not (i.terms in ('cod', 'days') and o.status <> 'completed')), 0)::int as d30,
+        coalesce(sum(i.total - i.paid) filter (where ${today}::date - i.due_on between 31 and 60 and not (i.terms in ('cod', 'days') and o.status <> 'completed')), 0)::int as d60,
+        coalesce(sum(i.total - i.paid) filter (where ${today}::date - i.due_on > 60 and not (i.terms in ('cod', 'days') and o.status <> 'completed')), 0)::int as older
+      from invoice i join sales_order o on o.id = i.order_id
+      where i.customer_id = ${customerId} and i.status = 'open'`,
+  );
+  return {
+    company: await companyInfo(db),
+    customer: {
+      id: customer.id,
+      code: customer.code,
+      name: customer.name,
+      address: withCity(customer.address, customer.city),
+      tin: customer.tin ?? null,
+      terms:
+        customer.paymentTerms === "days"
+          ? `${customer.paymentDays ?? ""} days`.trim()
+          : customer.paymentTerms === "cod"
+            ? "Cash on delivery"
+            : "Advance",
+    },
+    from,
+    to,
+    opening,
+    lines,
+    closing: balance,
+    aging: aging ?? { current: 0, d30: 0, d60: 0, older: 0 },
+  };
 }

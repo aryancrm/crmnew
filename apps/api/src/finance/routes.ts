@@ -10,6 +10,7 @@ import { financeBoard } from "./board";
 import { STAFF_METHODS } from "./rules";
 import {
   confirmPayment,
+  customerStatement,
   customersOwe,
   invoiceDetail,
   listInvoices,
@@ -71,6 +72,14 @@ export function financeRoutes(
     c.json(await customersOwe(db, c.get("me"), { q: c.req.query("q") })),
   );
   app.get("/api/finance/refunds", async (c) => c.json(await refundsOwed(db, c.get("me"))));
+  app.get("/api/finance/statement/:id", async (c) =>
+    c.json(
+      await customerStatement(db, c.get("me"), idParam(c), {
+        from: c.req.query("from"),
+        to: c.req.query("to"),
+      }),
+    ),
+  );
 
   app.get("/api/invoices", async (c) => {
     const query = c.req.query();

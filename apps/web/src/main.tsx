@@ -37,6 +37,7 @@ import { SalesOrderPage } from "./pages/sales-order";
 import { SettingsPage } from "./pages/settings";
 import { DeliveryReceipt, Shipments } from "./pages/shipments";
 import { SpeedPage } from "./pages/speed";
+import { StatementPage } from "./pages/statement";
 import { Suppliers } from "./pages/suppliers";
 import { Targets } from "./pages/targets";
 import { TeamSalesPage } from "./pages/team";
@@ -67,6 +68,7 @@ createRoot(root).render(
             <Route path="patients" element={<Customers key="patient" kind="patient" />} />
             <Route path="customers" element={<Customers key="all" />} />
             <Route path="customers/:id" element={<Customer />} />
+            <Route path="customers/:id/statement" element={<StatementPage />} />
             <Route path="my/area" element={<Customers key="mine" mine />} />
             <Route path="inbox" element={<InboxPage />} />
             <Route path="channels" element={<ChannelsPage />} />

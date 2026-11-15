@@ -3060,3 +3060,27 @@ export type ToCollect = {
     daysLate: number;
   }[];
 };
+
+/** A customer's statement of account for some days: what was billed, paid and refunded, with the
+ *  balance before, after each line and at the end. Centavos. */
+export type Statement = {
+  company: CompanyInfo;
+  customer: { id: number; code: string; name: string; address: string | null; tin: string | null; terms: string };
+  from: string;
+  to: string;
+  opening: number;
+  lines: {
+    day: string;
+    kind: "invoice" | "payment" | "refund";
+    ref: string;
+    note: string | null;
+    /** Billed (raises the balance). */
+    debit: number;
+    /** Paid (lowers it). */
+    credit: number;
+    balance: number;
+  }[];
+  closing: number;
+  /** Open now, by how late. */
+  aging: { current: number; d30: number; d60: number; older: number };
+};

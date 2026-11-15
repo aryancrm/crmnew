@@ -167,6 +167,17 @@ describe("one order through every desk", () => {
       invoice.total - half,
     );
 
+    // The customer's statement adds up: billed less paid is the balance due.
+    const statement = await read<{
+      opening: number;
+      closing: number;
+      lines: { debit: number; credit: number }[];
+    }>("fiona", `/api/finance/statement/${customer}?from=${today.slice(0, 8)}01&to=${today}`);
+    expect(statement.closing).toBe(
+      statement.opening + statement.lines.reduce((sum, line) => sum + line.debit - line.credit, 0),
+    );
+    expect(statement.closing).toBe(invoice.total - half);
+
     // The CEO's, a lead's and the desks' screens all read it.
     const home = await read<CeoHome>("naresh", "/api/ceo/home");
     expect(home.sales.achieved).toBeGreaterThan(0);
