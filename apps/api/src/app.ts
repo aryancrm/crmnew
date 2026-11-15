@@ -37,6 +37,7 @@ import { personOfSeatLogin } from "./org/service";
 import { overviewRoutes } from "./overview/routes";
 import { pointsRoutes } from "./points/routes";
 import { purchaseRoutes } from "./purchases/routes";
+import { returnRoutes } from "./returns/routes";
 import { salesRoutes } from "./sales/routes";
 import { speedRoutes } from "./speed/routes";
 import { targetRoutes } from "./targets/routes";
@@ -249,6 +250,8 @@ export function createApp(db: Database, options: AppOptions) {
   purchaseRoutes(app, db, signedIn);
   customerRoutes(app, db, signedIn);
   overviewRoutes(app, db, signedIn);
+  // Before the orders' own addresses: /api/orders/:id/returns is theirs.
+  returnRoutes(app, db, signedIn);
   orderRoutes(app, db, signedIn);
   financeRoutes(app, db, signedIn);
   dispatchRoutes(app, db, signedIn);

@@ -33,6 +33,7 @@ import {
   MessagesSquare,
   Network,
   PackageCheck,
+  PackageX,
   Pill,
   Radio,
   Receipt,
@@ -160,6 +161,7 @@ const orderStages = (sentBack: string): MenuItem[] => [
   { to: "/orders?stage=dispatch", label: "Packing or on the way", icon: Truck },
   { to: "/orders?stage=held", label: "On hold", icon: TriangleAlert },
   { to: "/orders?stage=delivered", label: "Delivered this month", icon: PackageCheck },
+  { to: "/returns", label: "Returns", icon: PackageX },
 ];
 
 /** Inventory, laid out the way Zoho Inventory lays out its own. */
@@ -243,6 +245,7 @@ const moneyLinks: MenuItem[] = [
   { to: "/invoices", label: "Invoices", icon: FileText },
   { to: "/payments", label: "Payments received", icon: Banknote },
   { to: "/refunds", label: "Refunds owed", icon: Undo2, badge: "refunds" },
+  { to: "/returns", label: "Returns", icon: PackageX },
 ];
 
 const financeApp: Space = {
@@ -490,6 +493,7 @@ function ownDesk(me: Me): Space {
                   { to: "/on-hold", label: "On hold", icon: TriangleAlert, badge: "flagged" },
                   // Orders that haven't moved for two days at Finance or Dispatch, to chase.
                   { to: "/orders?stuck=1", label: "Stuck over 2 days", icon: Timer },
+                  { to: "/returns?status=requested", label: "Returns to approve", icon: PackageX },
                 ],
                 "Stopped",
               ),
@@ -638,6 +642,7 @@ function ownDesk(me: Me): Space {
                 icon: TriangleAlert,
                 badge: "dispatchHeld",
               },
+              { to: "/returns?status=approved", label: "Returns to check", icon: PackageX },
             ],
           },
           {

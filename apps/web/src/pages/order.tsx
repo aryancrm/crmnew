@@ -52,6 +52,7 @@ import { ApproveDialog } from "../orders/approve-dialog";
 import { checksOf } from "../orders/checks";
 import { LinesEditor } from "../orders/lines-editor";
 import { ReasonDialog, StatusPill, shortSpan, useOrderAction } from "../orders/parts";
+import { OrderReturnsBox } from "../orders/returns";
 import { SendToCustomer } from "../orders/send-update";
 import { PAPER_ACCEPT, uploadPaper } from "../photo";
 import { manilaToday } from "../team/range";
@@ -852,6 +853,12 @@ export function Order() {
           <div className="mt-3">
             <Problem message={problem?.message} />
           </div>
+          {/* Goods back after delivery: asked here, approved and checked on /returns too. */}
+          {order.status === "completed" && (
+            <div className="mt-4">
+              <OrderReturnsBox orderId={order.id} />
+            </div>
+          )}
         </div>
 
         <div className="flex min-w-0 flex-col gap-4 lg:col-start-1 lg:row-start-2">
@@ -2306,6 +2313,13 @@ function MoneyCard({ data }: { data: OrderDetail }) {
           <div className="flex justify-between gap-3 text-emerald-700">
             <dt>{order.pointsUsed.toLocaleString("en-PH")} points</dt>
             <dd className="tabular-nums">−{peso(order.pointsUsed * 100)}</dd>
+          </div>
+        )}
+        {invoice && goods + order.deliveryFee - invoice.total > 0 && (
+          // Goods that came back: credited on the bill.
+          <div className="flex justify-between gap-3 text-slate-600">
+            <dt>Returned</dt>
+            <dd className="tabular-nums">−{peso(goods + order.deliveryFee - invoice.total)}</dd>
           </div>
         )}
         {invoice && (

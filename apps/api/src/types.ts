@@ -3964,3 +3964,63 @@ export type MyConfirmations = {
   }[];
   total: number;
 };
+
+// ---------------------------------------------------------------- returns
+
+export type ReturnReason = "expired" | "damaged" | "wrong_item" | "not_needed" | "other";
+export type ReturnOutcome = "restocked" | "damaged" | "missing";
+export type ReturnInput = {
+  reason: ReturnReason;
+  note?: string | null;
+  lines: { orderItemId: number; qty: number }[];
+};
+/** Goods that came back after delivery, and what happened to them. */
+export type ReturnRow = {
+  id: number;
+  code: string;
+  orderId: number;
+  orderCode: string;
+  customer: string;
+  medrep: string;
+  status: "requested" | "approved" | "received" | "rejected" | "cancelled";
+  statusLabel: string;
+  reason: ReturnReason;
+  reasonLabel: string;
+  note: string | null;
+  requestedBy: string;
+  requestedById: number;
+  requestedAt: string;
+  decidedBy: string | null;
+  decidedNote: string | null;
+  decidedAt: string | null;
+  receivedBy: string | null;
+  receivedAt: string | null;
+  /** What was taken off the bill. */
+  credit: number;
+  lines: {
+    id: number;
+    medicine: string;
+    qty: number;
+    unitPrice: number;
+    outcome: ReturnOutcome | null;
+  }[];
+  can: { decide: boolean; receive: boolean; cancel: boolean };
+};
+export type ReturnList = {
+  rows: ReturnRow[];
+  counts: Partial<Record<ReturnRow["status"], number>>;
+};
+/** An order's returns, what of it can still come back, and whether this person may ask. */
+export type OrderReturns = {
+  returns: ReturnRow[];
+  left: {
+    orderItemId: number;
+    medicineId: number;
+    medicine: string;
+    qty: number;
+    left: number;
+    unitPrice: number;
+    free: boolean;
+  }[];
+  can: { ask: boolean };
+};

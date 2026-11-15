@@ -47,6 +47,7 @@ import { PointsAccountPage, PointsPage } from "./pages/points";
 import { Purchase } from "./pages/purchase";
 import { Purchases } from "./pages/purchases";
 import { ChannelsReport, Reports } from "./pages/reports";
+import { Returns } from "./pages/returns";
 import { SalesOrderPage } from "./pages/sales-order";
 import { SettingsPage } from "./pages/settings";
 import { DeliveryReceipt, Shipments } from "./pages/shipments";
@@ -120,6 +121,7 @@ createRoot(root).render(
             <Route path="owed" element={<OwedReport />} />
             <Route path="refunds" element={<Refunds />} />
             <Route path="finance/mine" element={<MyConfirmations />} />
+            <Route path="returns" element={<Returns />} />
             <Route path="inventory/overview" element={<InventoryOverview />} />
             <Route path="inventory/requests" element={<MedicineRequestsPage />} />
             <Route path="targets" element={<Targets />} />

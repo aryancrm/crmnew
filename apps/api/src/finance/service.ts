@@ -678,13 +678,19 @@ export async function recordRefund(
   payable({ amount: input.amount, paidOn: input.refundedOn }, "refundedOn");
   await db.transaction(async (tx) => {
     const invoice = await lockInvoice(tx, invoiceId);
-    if (invoice.status !== "cancelled")
+    // A cancelled order gives back what came in; a return gives back what was paid beyond the
+    // bill it left (never the points).
+    const cash = invoice.paid - invoice.refunded - (await pointsPaid(tx, invoice.id));
+    const owed =
+      invoice.status === "cancelled"
+        ? cash
+        : Math.min(cash, invoice.paid - invoice.refunded - invoice.total);
+    if (invoice.status !== "cancelled" && owed <= 0)
       throw new Refusal(
         409,
         "not_now",
-        `Invoice ${invoice.code} isn't cancelled: there is nothing to give back.`,
+        `Nothing was paid beyond invoice ${invoice.code}: there is nothing to give back.`,
       );
-    const owed = invoice.paid - invoice.refunded - (await pointsPaid(tx, invoice.id));
     if (owed <= 0)
       throw new Refusal(
         409,
@@ -989,7 +995,7 @@ export async function customersOwe(
 export async function refundsOwed(db: Database, me: Me): Promise<RefundList> {
   allow(me, FINANCE_READ_ROLES, "see refunds");
   const today = todayManila();
-  const [owed, done] = await Promise.all([
+  const [owed, overpaid, done] = await Promise.all([
     rows<Omit<RefundOwed, "days" | "owed"> & { cancelledDay: string | null }>(
       db,
       sql`select i.id::int as "invoiceId", i.code as "invoiceCode", i.order_id::int as "orderId", o.code as "orderCode",
@@ -997,6 +1003,21 @@ export async function refundsOwed(db: Database, me: Me): Promise<RefundList> {
           i.cancelled_reason as reason, ${iso("i.cancelled_at")} as "cancelledAt",
           to_char(i.cancelled_at at time zone 'Asia/Manila', 'YYYY-MM-DD') as "cancelledDay"
         ${invoiceFrom} where i.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points') > i.refunded order by i.cancelled_at, i.id`,
+    ),
+    // Paid beyond the bill a return left: given back as well.
+    rows<Omit<RefundOwed, "days"> & { cancelledDay: string | null }>(
+      db,
+      sql`select i.id::int as "invoiceId", i.code as "invoiceCode", i.order_id::int as "orderId", o.code as "orderCode",
+          i.customer_id::int as "customerId", c.name as customer, i.paid::int as received, i.refunded::int as refunded,
+          least(i.paid - i.refunded - i.total,
+            i.paid - i.refunded - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points'))::int as owed,
+          'Goods returned: ' || coalesce((select string_agg(r.code, ', ') from sales_return r where r.order_id = i.order_id and r.status = 'received'), 'credit') as reason,
+          ${iso("(select max(r.received_at) from sales_return r where r.order_id = i.order_id)")} as "cancelledAt",
+          to_char((select max(r.received_at) from sales_return r where r.order_id = i.order_id) at time zone 'Asia/Manila', 'YYYY-MM-DD') as "cancelledDay"
+        ${invoiceFrom} where i.status <> 'cancelled' and i.credited > 0
+          and least(i.paid - i.refunded - i.total,
+            i.paid - i.refunded - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points')) > 0
+        order by i.id`,
     ),
     rows<RefundList["done"][number]>(
       db,
@@ -1007,11 +1028,17 @@ export async function refundsOwed(db: Database, me: Me): Promise<RefundList> {
     ),
   ]);
   return {
-    owed: owed.map(({ cancelledDay, ...row }) => ({
-      ...row,
-      owed: row.received - row.refunded,
-      days: cancelledDay ? Math.max(0, daysBetween(cancelledDay, today)) : 0,
-    })),
+    owed: [
+      ...owed.map(({ cancelledDay, ...row }) => ({
+        ...row,
+        owed: row.received - row.refunded,
+        days: cancelledDay ? Math.max(0, daysBetween(cancelledDay, today)) : 0,
+      })),
+      ...overpaid.map(({ cancelledDay, ...row }) => ({
+        ...row,
+        days: cancelledDay ? Math.max(0, daysBetween(cancelledDay, today)) : 0,
+      })),
+    ],
     done: done.map(withMethod),
     can: { refund: FINANCE_ROLES.includes(me.role) },
   };
