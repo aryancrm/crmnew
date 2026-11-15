@@ -307,6 +307,42 @@ async function filesOf(
 
 // ---------------------------------------------------------------- connecting a page
 
+/**
+ * Which page a token belongs to, and its name. Reading the page object (/me) needs
+ * pages_read_engagement, which the app may not have: then debug_token (needs no page permission)
+ * names the page id, and the name comes from the page itself if it can be read, else from one of
+ * its conversations (the page is a participant), else "Page <id>".
+ */
+async function pageOfToken(token: string): Promise<{ id: string; name: string }> {
+  const me = await graph().call<{ id?: string; name?: string }>("GET", "/me", token, {
+    fields: "id,name",
+  });
+  if (!me.error && me.data?.id)
+    return { id: String(me.data.id), name: me.data.name?.trim() || `Page ${me.data.id}` };
+  const info = await graph().call<{ data?: { profile_id?: string | number; is_valid?: boolean } }>(
+    "GET",
+    "/debug_token",
+    token,
+    { input_token: token },
+  );
+  const id = info.data?.data?.profile_id ? String(info.data.data.profile_id) : null;
+  if (info.error || !info.data?.data?.is_valid || !id)
+    throw new Refusal(
+      400,
+      "invalid",
+      `Meta didn't accept the token: ${info.error ?? me.error ?? "it names no page"}. Generate the page's token again in Messenger API Settings.`,
+      "token",
+    );
+  const named = await graph().call<{ name?: string }>("GET", `/${id}`, token, { fields: "name" });
+  if (!named.error && named.data?.name?.trim()) return { id, name: named.data.name.trim() };
+  const talks = await graph().call<{ data?: Conversation[] }>("GET", `/${id}/conversations`, token, {
+    fields: "participants",
+    limit: "1",
+  });
+  const self = talks.data?.data?.[0]?.participants?.data?.find((one) => String(one.id) === id);
+  return { id, name: self?.name?.trim() || `Page ${id}` };
+}
+
 /** Connects (or connects again) the page a token belongs to; its waiting events are taken in. */
 export async function connectPage(
   db: Database,
@@ -316,20 +352,12 @@ export async function connectPage(
   allow(me, CHANNEL_ROLES, "connect a Facebook page");
   const clean = token.trim();
   if (!clean) throw new Refusal(400, "invalid", "Paste the page's access token.", "token");
-  const page = await graph().call<{ id?: string; name?: string }>("GET", "/me", clean, {
-    fields: "id,name",
-  });
-  if (page.error || !page.data?.id)
-    throw new Refusal(
-      400,
-      "invalid",
-      `Meta didn't accept the token: ${page.error ?? "it names no page"}.`,
-      "token",
-    );
+  const found = await pageOfToken(clean);
+  const page = { data: found };
   const subscribed = await graph().call("POST", `/${page.data.id}/subscribed_apps`, clean, {
     subscribed_fields: MESSENGER_FIELDS,
   });
-  const name = page.data.name?.trim() || `Page ${page.data.id}`;
+  const name = page.data.name;
   const [account] = await rows<{ id: number }>(
     db,
     sql`insert into channel_account (kind, key, name, secret, connected_by, cursor, sync_error)
