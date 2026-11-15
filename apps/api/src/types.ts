@@ -658,6 +658,9 @@ export type OrderCard = OrderRow & {
   /** Who in the warehouse has it in hand. */
   dispatchBy: string | null;
   dispatchById: number | null;
+  /** Who in Management is handling it. */
+  handledBy: string | null;
+  handledById: number | null;
   /** It came back undelivered (how many times, and why the last time). */
   cameBackCount: number;
   cameBackReason: string | null;

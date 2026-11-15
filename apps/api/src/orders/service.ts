@@ -653,6 +653,7 @@ const cardColumns = sql`${rowColumns}, o.medrep_id::int as "medrepId", ${sentBac
   o.delivery_address as "deliveryAddress", o.receiver, o.receiver_phone as "receiverPhone", ${day("o.expected_on")} as "expectedOn",
   (select coalesce(sum(i.qty), 0) from order_item i where i.order_id = o.id)::int as pieces,
   (select p.name from person p where p.id = o.dispatch_by) as "dispatchBy", o.dispatch_by::int as "dispatchById",
+  (select p.name from person p where p.id = o.manage_by) as "handledBy", o.manage_by::int as "handledById",
   o.came_back_count::int as "cameBackCount", o.came_back_reason as "cameBackReason", c.kind as "customerKind", c.city as "customerCity", ch.code as channel, a.name as area,
   o.payment_terms as "paymentTerms", o.payment_days::int as "paymentDays",
   ${iso("coalesce(o.submitted_at, o.created_at)")} as "submittedAt", o.held_from as "heldFrom", c.review,
@@ -2228,6 +2229,63 @@ export async function removePaper(db: Database, me: Me, paperId: number): Promis
       me,
       "paper",
       `${PAPER_LABEL[paper.kind]} removed (${paper.name}).`,
+    );
+  });
+}
+
+/** Who in Management is handling an order: everyone sees every order; one says "I'll handle it"
+ *  and the others see who. Taking one someone else has says so on the timeline. */
+export async function handleOrder(
+  db: Database,
+  me: Me,
+  orderId: number,
+  release: boolean,
+): Promise<void> {
+  if (!ORDER_MANAGE_ROLES.includes(me.role))
+    throw new Refusal(403, "not_allowed", "Only Management handles an order here.");
+  await db.transaction(async (tx) => {
+    const [order] = await rows<{
+      code: string;
+      status: OrderStatus;
+      heldRole: HoldRole | null;
+      by: number | null;
+      name: string | null;
+    }>(
+      tx,
+      sql`select o.code, o.status, o.held_role as "heldRole", o.manage_by::int as by, p.name
+        from sales_order o left join person p on p.id = o.manage_by where o.id = ${orderId} for update of o`,
+    );
+    if (!order) throw new Refusal(404, "not_found", "That order doesn't exist.");
+    const managements =
+      order.status === "pending_approval" ||
+      ((order.status === "on_hold" || order.status === "exception") &&
+        (order.heldRole ?? "management") === "management");
+    if (!managements)
+      throw new Refusal(409, "not_now", `${order.code} isn't with Management now. Reload it.`);
+    if (release) {
+      if (order.by !== me.id) return;
+      await tx.execute(
+        sql`update sales_order set manage_by = null, manage_by_at = null where id = ${orderId}`,
+      );
+      await logEvent(
+        tx,
+        orderId,
+        me,
+        "note",
+        `${me.name} let it go: anyone in Management can take it.`,
+      );
+      return;
+    }
+    if (order.by === me.id) return;
+    await tx.execute(
+      sql`update sales_order set manage_by = ${me.id}, manage_by_at = now() where id = ${orderId}`,
+    );
+    await logEvent(
+      tx,
+      orderId,
+      me,
+      "note",
+      order.by ? `${me.name} took it over from ${order.name}.` : `${me.name} is handling it.`,
     );
   });
 }

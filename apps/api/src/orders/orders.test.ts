@@ -63,7 +63,17 @@ beforeAll(async () => {
   await seedDemo(db, PASSWORD);
   await seedFixture(db);
   app = createApp(db, { webUrl: "http://localhost:5180" });
-  for (const name of ["ryan", "daniel", "sarla", "jane", "fiona", "vanessa", "naresh", "marco"]) {
+  for (const name of [
+    "ryan",
+    "daniel",
+    "sarla",
+    "jane",
+    "fiona",
+    "vanessa",
+    "naresh",
+    "marco",
+    "admin",
+  ]) {
     const response = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -394,6 +404,32 @@ describe("what Management does with an order", () => {
     const resumed = await order("sarla", short.body.id);
     expect(resumed.order.status).toBe("pending_approval");
     expect(resumed.order.flagReason).toBeNull();
+  });
+
+  it("lets one person in Management say they handle it, take it over or let it go", async () => {
+    const made = await place("ryan", { customerId: hospital, items: [line({ qty: 2 })] });
+    const card = async (who: string) =>
+      (await read<OrderBoard>(who, "/api/orders/board?tab=needs")).cards.find(
+        (one) => one.id === made.body.id,
+      );
+    expect((await post("ryan", `/api/orders/${made.body.id}/handle`)).status).toBe(403);
+    expect((await post("sarla", `/api/orders/${made.body.id}/handle`)).status).toBe(200);
+    expect((await card("admin"))?.handledBy).toBe("Sarla");
+    // Another takes it over; the one who no longer has it can't let it go for them.
+    expect((await post("admin", `/api/orders/${made.body.id}/handle`)).status).toBe(200);
+    expect(
+      (await post("sarla", `/api/orders/${made.body.id}/handle`, { release: true })).status,
+    ).toBe(200);
+    expect((await card("sarla"))?.handledBy).toBe("Admin");
+    const events = (await order("sarla", made.body.id)).events.map((one) => one.message);
+    expect(events).toContain("Sarla is handling it.");
+    expect(events).toContain("Admin took it over from Sarla.");
+    expect(
+      (await post("admin", `/api/orders/${made.body.id}/handle`, { release: true })).status,
+    ).toBe(200);
+    expect((await card("sarla"))?.handledBy).toBeNull();
+    await act("sarla", made.body.id, "approve");
+    expect((await post("sarla", `/api/orders/${made.body.id}/handle`)).status).toBe(409);
   });
 
   it("keeps how long it stood at each step, and a card counts from its own step", async () => {

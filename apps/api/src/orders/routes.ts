@@ -16,6 +16,7 @@ import {
   actOnOrder,
   addPaper,
   approvalQueue,
+  handleOrder,
   listOrders,
   myOrders,
   orderBoard,
@@ -237,6 +238,13 @@ export function orderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
     const input = await readBody(c, orderInput.extend({ answer: z.string().max(1000) }));
     await reviseOrder(db, c.get("me"), idParam(c), input as OrderRevision);
     await tellSafely(() => tellAboutOrder(db, c.get("me"), idParam(c), "revise", null, "draft"));
+    return c.json({ ok: true });
+  });
+
+  // Someone in Management says "I'll handle it" (or lets it go).
+  app.post("/api/orders/:id/handle", async (c) => {
+    const input = await readBody(c, z.object({ release: z.boolean().optional() }));
+    await handleOrder(db, c.get("me"), idParam(c), Boolean(input.release));
     return c.json({ ok: true });
   });
 

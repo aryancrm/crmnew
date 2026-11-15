@@ -395,6 +395,12 @@ export function OrdersToCheck({
     await queries.invalidateQueries({ queryKey: ["dispatch"] });
   }
 
+  /** Someone in Management says "I'll handle it", takes it over, or lets it go. */
+  async function handle(orderId: number, release: boolean) {
+    await order.run(() => api(`/api/orders/${orderId}/handle`, { body: { release } }));
+    await queries.invalidateQueries({ queryKey: ["orders"] });
+  }
+
   const cardOf = (card: OrderCard) => (
     <OrderCardItem
       key={card.id}
@@ -407,6 +413,11 @@ export function OrdersToCheck({
       onAsk={(what) => setAsking({ card, what })}
       onHistory={data.desk === "management" ? () => setHistory(card) : undefined}
       onTake={dispatch && data.can.dispatch ? (release) => take(card.id, release) : undefined}
+      onHandle={
+        data.desk === "management" && data.can.manage
+          ? (release) => handle(card.id, release)
+          : undefined
+      }
       onConfirm={() => setConfirming(card)}
       onInvoice={() => money.send(`/api/finance/orders/${card.id}/invoice`, {})}
       onDispatch={(what) => setDispatching({ what, orderId: card.id, code: card.code })}
@@ -814,6 +825,7 @@ export function OrderCardItem({
   fixable = false,
   showRep = true,
   onTake,
+  onHandle,
 }: {
   card: OrderCard;
   /** Whose buttons the card shows: Management's (approve) or Finance's (confirm, invoice). */
@@ -832,6 +844,8 @@ export function OrderCardItem({
   showRep?: boolean;
   /** Dispatch: take it in the warehouse (or take it over), or let it go. */
   onTake?: (release: boolean) => void;
+  /** Management: "I'll handle it" (or take it over), or let it go. */
+  onHandle?: (release: boolean) => void;
   onConfirm?: () => void;
   onInvoice?: () => void;
   onDispatch?: (what: "pack" | "ship" | "deliver" | "failed" | "unpack") => void;
@@ -1094,6 +1108,43 @@ export function OrderCardItem({
               )}
             </span>
           )}
+          {onHandle &&
+            (pending || (flagged && heldBy === "management")) &&
+            (card.handledById === me?.id ? (
+              <span className="inline-flex items-center gap-1">
+                <span className="rounded-full bg-sky-50 px-2 py-0.5 font-semibold text-sky-800 ring-1 ring-sky-200">
+                  You're handling it
+                </span>
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onHandle(true);
+                  }}
+                  className="rounded-full px-1.5 py-0.5 font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                >
+                  Let go
+                </button>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1">
+                {card.handledBy && (
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700">
+                    {card.handledBy} is handling it
+                  </span>
+                )}
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onHandle(false);
+                  }}
+                  className="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                >
+                  {card.handledBy ? "Take over" : "I'll handle it"}
+                </button>
+              </span>
+            ))}
           {showRep && !warehouse && (
             <span
               className="inline-flex min-w-0 items-center gap-1.5 rounded-full bg-slate-100 py-0.5 pr-2 pl-0.5"
