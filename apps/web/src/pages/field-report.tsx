@@ -1,6 +1,7 @@
 // The visits report over chosen days: each MedRep's visits done, skipped and still planned, how
-// many doctors, hospitals and drugstores they covered, and calls a day in the field. A team lead's
-// for the team, the CEO's for everyone. A person opens their day, to look.
+// many doctors, hospitals and drugstores they covered, calls a day, this month's plan and coverage
+// by class, check-ins away from the clinic, and what they spent. A team lead's for the team (with
+// the plans and expenses waiting for them), the CEO's for everyone. A person opens their day.
 
 import type { FieldReport } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
@@ -11,7 +12,8 @@ import { api } from "../api";
 import { useMe } from "../auth";
 import { Ring } from "../team/charts";
 import { manilaToday, RangePicker, short } from "../team/range";
-import { CARD, PageHead, PageState } from "../ui";
+import { CARD, PageHead, PageState, peso } from "../ui";
+import { PLAN_WORDS } from "./visit-plan";
 
 type Sort = "done" | "least" | "skipped" | "name";
 type Row = FieldReport["people"][number];
@@ -51,6 +53,7 @@ export function FieldReportPage() {
     setParams(out, { replace: true });
   };
   const visitsOn = me && ["team_lead", "manager"].includes(me.role);
+  const plansWaiting = data.people.filter((one) => one.plan === "sent");
 
   return (
     <div className={`flex flex-col gap-4 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
@@ -71,7 +74,23 @@ export function FieldReportPage() {
         <RangePicker />
       </PageHead>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+      {visitsOn && plansWaiting.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+          Plans waiting for you:{" "}
+          {plansWaiting.map((one, at) => (
+            <span key={one.personId}>
+              {at > 0 && ", "}
+              <Link
+                to={`/visits/plan?person=${one.personId}&month=${data.month}`}
+                className="font-semibold underline-offset-2 hover:underline"
+              >
+                {one.name}
+              </Link>
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         <div className={`${CARD} flex items-center gap-4 p-4`}>
           <Ring share={closed ? t.done / closed : null} color="#0284c7" size={72}>
             <span className="text-sm font-semibold text-slate-900 tabular-nums">
@@ -99,11 +118,24 @@ export function FieldReportPage() {
           <div className="mt-1 text-xs text-slate-500">over {t.fieldDays} days in the field</div>
         </div>
         <div className={`${CARD} p-4`}>
-          <div className="text-xs font-semibold text-slate-500">No visit done</div>
-          <div className="mt-1 text-2xl font-semibold text-rose-700 tabular-nums">
-            {data.people.filter((one) => one.done === 0).length}
+          <div className="text-xs font-semibold text-slate-500">Seen as their class asks</div>
+          <div className="mt-1 text-2xl font-semibold text-slate-900 tabular-nums">
+            {t.seenEnough}
+            <span className="text-sm font-medium text-slate-500"> of {t.customers}</span>
           </div>
-          <div className="mt-1 text-xs text-slate-500">people in these days</div>
+          <div className="mt-1 text-xs text-slate-500">
+            customers this month{t.away ? ` · ${t.away} check-ins away from the clinic` : ""}
+          </div>
+        </div>
+        <div className={`${CARD} p-4`}>
+          <div className="text-xs font-semibold text-slate-500">Spent in the field</div>
+          <div className="mt-1 text-2xl font-semibold text-slate-900 tabular-nums">
+            {peso(t.spent)}
+          </div>
+          <div className="mt-1 text-xs text-slate-500">
+            {t.done ? `${peso(Math.round(t.spent / t.done))} a visit` : "approved"}
+            {t.spentPending ? ` · ${peso(t.spentPending)} waiting` : ""}
+          </div>
         </div>
       </div>
 
@@ -143,6 +175,10 @@ export function FieldReportPage() {
                 <th className="px-3 py-2 text-right">Covered</th>
                 <th className="px-3 py-2 text-right">Field days</th>
                 <th className="px-3 py-2 text-right">A day</th>
+                <th className="px-3 py-2 text-right">Seen enough</th>
+                <th className="px-3 py-2 text-right">Away</th>
+                <th className="px-3 py-2">Plan</th>
+                <th className="px-3 py-2 text-right">Spent</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -173,11 +209,41 @@ export function FieldReportPage() {
                   <td className="px-3 py-2.5 text-right tabular-nums">{one.covered || "—"}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums">{one.fieldDays || "—"}</td>
                   <td className="px-3 py-2.5 text-right tabular-nums">{one.perDay || "—"}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">
+                    {one.customers ? `${one.seenEnough}/${one.customers}` : "—"}
+                  </td>
+                  <td
+                    className={`px-3 py-2.5 text-right tabular-nums ${one.away ? "font-semibold text-rose-700" : "text-slate-400"}`}
+                    title={one.noPlace ? `${one.noPlace} with no location shared` : undefined}
+                  >
+                    {one.away || "—"}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <Link
+                      to={`/visits/plan?person=${one.personId}&month=${data.month}`}
+                      className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ${one.plan ? PLAN_WORDS[one.plan].tone : "bg-white text-slate-400 ring-slate-200"}`}
+                    >
+                      {one.plan ? PLAN_WORDS[one.plan].word : "No plan"}
+                    </Link>
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">
+                    <Link
+                      to={`/visits/expenses?person=${one.personId}&from=${data.from}&to=${data.to}`}
+                      className="hover:text-emerald-700"
+                    >
+                      {one.spent ? peso(one.spent) : "—"}
+                      {one.spentPending ? (
+                        <span className="block text-[11px] text-amber-700">
+                          +{peso(one.spentPending)} waiting
+                        </span>
+                      ) : null}
+                    </Link>
+                  </td>
                 </tr>
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={11} className="px-4 py-6 text-center text-sm text-slate-500">
                     Nobody here.
                   </td>
                 </tr>

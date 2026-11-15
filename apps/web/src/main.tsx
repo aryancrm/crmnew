@@ -11,6 +11,7 @@ import { ChangePassword } from "./pages/change-password";
 import { ChannelsPage } from "./pages/channels";
 import { Customer } from "./pages/customer";
 import { Customers } from "./pages/customers";
+import { FieldExpensesPage } from "./pages/field-expenses";
 import { FieldReportPage } from "./pages/field-report";
 import { Home } from "./pages/home";
 import { HrPeoplePage, HrPersonPage } from "./pages/hr-people";
@@ -47,6 +48,7 @@ import { StatementPage } from "./pages/statement";
 import { Suppliers } from "./pages/suppliers";
 import { Targets } from "./pages/targets";
 import { TeamSalesPage } from "./pages/team";
+import { VisitPlanPage } from "./pages/visit-plan";
 import { VisitsPage } from "./pages/visits";
 import { Shell } from "./shell";
 import "./styles.css";
@@ -119,6 +121,8 @@ createRoot(root).render(
             <Route path="hr/attendance" element={<AttendancePage />} />
             <Route path="hr/report" element={<AttendanceReportPage />} />
             <Route path="visits" element={<VisitsPage />} />
+            <Route path="visits/plan" element={<VisitPlanPage />} />
+            <Route path="visits/expenses" element={<FieldExpensesPage />} />
             <Route path="field/report" element={<FieldReportPage />} />
             <Route path="hr/attendance/:id" element={<AttendanceMonthPage key="month" />} />
             <Route path="admin/channels" element={<AdminChannelsPage />} />

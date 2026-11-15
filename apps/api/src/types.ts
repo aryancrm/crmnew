@@ -3436,6 +3436,9 @@ export type HrLoginInput = { email?: string | null; password?: string | null };
 // ---- Field: visits to doctors, hospitals and drugstores (SEFMED's daily work). ----
 
 export type VisitStatus = "planned" | "done" | "skipped";
+export type PlanStatus = "draft" | "sent" | "approved" | "sent_back";
+/** How often a customer is visited a month: A 4, B 2, C 1, D 1 (no class yet: once). */
+export type VisitClass = "A" | "B" | "C" | "D";
 /** How the doctor took a medicine detailed on the visit. */
 export type VisitReaction = "will_prescribe" | "prescribes" | "needs_info" | "not_interested";
 export type SkipReason =
@@ -3456,9 +3459,14 @@ export type VisitRow = {
     kind: string;
     specialty: string | null;
     city: string | null;
+    visitClass: VisitClass | null;
+    /** The clinic's place is known: check-ins are compared with it. */
+    pinned: boolean;
   };
   checkedInAt: string | null;
   checkInPlace: string | null;
+  /** Metres from the clinic's pin at check-in (null: no pin or no place shared). */
+  distanceM: number | null;
   doneAt: string | null;
   objective: string | null;
   detailed: { medicineId: number; name: string; reaction: VisitReaction }[];
@@ -3505,6 +3513,8 @@ export type VisitReportInput = {
 export type FieldReport = {
   from: string;
   to: string;
+  /** The month the coverage counts (the last day's). */
+  month: string;
   people: {
     personId: number;
     name: string;
@@ -3518,6 +3528,108 @@ export type FieldReport = {
     /** Days with at least one visit done, and visits a day on those. */
     fieldDays: number;
     perDay: number;
+    /** Visits done with the check-in far from the clinic's pin, and with no place shared. */
+    away: number;
+    noPlace: number;
+    /** Customers they look after, and how many were seen this month as often as their class asks. */
+    customers: number;
+    seenEnough: number;
+    /** This month's plan: not made, draft, sent to the team lead, approved, sent back. */
+    plan: PlanStatus | null;
+    /** Field expenses in these days (centavos): approved, and waiting for the team lead. */
+    spent: number;
+    spentPending: number;
   }[];
-  totals: { planned: number; done: number; skipped: number; covered: number; fieldDays: number };
+  totals: {
+    planned: number;
+    done: number;
+    skipped: number;
+    covered: number;
+    fieldDays: number;
+    away: number;
+    customers: number;
+    seenEnough: number;
+    spent: number;
+    spentPending: number;
+  };
+};
+
+/** One person's month of visits: coverage by class, the days, and the plan's state. */
+export type VisitPlanPage = {
+  month: string;
+  today: string;
+  person: { id: number; name: string; area: string | null };
+  plan: {
+    status: PlanStatus | null;
+    sentAt: string | null;
+    decidedBy: string | null;
+    decidedAt: string | null;
+    note: string | null;
+  };
+  customers: {
+    id: number;
+    name: string;
+    kind: string;
+    specialty: string | null;
+    city: string | null;
+    visitClass: VisitClass | null;
+    /** Visits a month its class asks for. */
+    needed: number;
+    planned: number;
+    done: number;
+    skipped: number;
+    lastVisit: string | null;
+  }[];
+  days: { day: string; work: boolean; leave: boolean; planned: number; done: number }[];
+  totals: { needed: number; planned: number; done: number };
+  /** make: fill the month; send: to the team lead; decide: approve or send back; setClass. */
+  can: { make: boolean; send: boolean; decide: boolean; setClass: boolean };
+};
+
+export type ExpenseKind = "petrol" | "fare" | "parking" | "toll" | "food" | "lodging" | "other";
+export type ExpenseStatus = "pending" | "approved" | "sent_back";
+
+export type ExpenseRow = {
+  id: number;
+  person: { id: number; name: string };
+  day: string;
+  kind: ExpenseKind;
+  /** Whole centavos. */
+  amount: number;
+  km: number | null;
+  visit: { id: number; customer: string } | null;
+  note: string | null;
+  /** The bill or payment proof is on file (opened at /api/field/expenses/:id/receipt). */
+  receipt: { name: string; mime: string } | null;
+  status: ExpenseStatus;
+  decidedBy: string | null;
+  decisionNote: string | null;
+  /** The person viewing may approve or send it back (their team lead's). */
+  canDecide: boolean;
+};
+
+/** A person's field expenses over chosen days, or the team's / everyone's waiting ones. */
+export type FieldExpenses = {
+  from: string;
+  to: string;
+  person: { id: number; name: string } | null;
+  rows: ExpenseRow[];
+  totals: {
+    pending: number;
+    approved: number;
+    sentBack: number;
+    byKind: Partial<Record<ExpenseKind, number>>;
+    km: number;
+  };
+  /** add: it is the person's own (they spend in the field). */
+  can: { add: boolean };
+};
+
+export type ExpenseInput = {
+  day: string;
+  kind: ExpenseKind;
+  amount: number;
+  km?: number | null;
+  visitId?: number | null;
+  note?: string | null;
 };

@@ -197,9 +197,12 @@ export function Shell() {
         </aside>
         <main className="min-w-0 flex-1 px-4 pt-6 pb-24 md:px-8 md:pb-10 print:p-0">
           {/* The way back sits in the page, as on a team's page: a small ‹ and where you are. */}
-          {location.pathname !== "/" && !OWN_BACK.some((test) => test.test(location.pathname)) && (
-            <PageBack trail={trailOf(space, location.pathname)} />
-          )}
+          {location.pathname !== "/" &&
+            !OWN_BACK.some((test) => test.test(location.pathname)) &&
+            // Someone else's visits, plan or expenses draw their own way back to the report.
+            !(location.pathname.startsWith("/visits") && location.search.includes("person=")) && (
+              <PageBack trail={trailOf(space, location.pathname)} />
+            )}
           <Outlet />
         </main>
       </div>
@@ -296,10 +299,21 @@ function linkOpen(location: { pathname: string; search: string }, items: { to: s
     const now = new URLSearchParams(location.search);
     return [...new URLSearchParams(query)].every(([key, value]) => now.get(key) === value);
   };
+  // A deeper sibling that is open (Visit plan at /visits/plan) closes its parent path (/visits).
+  const deeper = (to: string) =>
+    items.some((other) => {
+      const path = other.to.split("?")[0] ?? "";
+      return (
+        path.startsWith(`${to}/`) &&
+        (location.pathname === path || location.pathname.startsWith(`${path}/`))
+      );
+    });
   return (to: string, isActive: boolean) =>
     to.includes("?")
       ? filtered(to)
-      : isActive && !items.some((other) => other.to.startsWith(`${to}?`) && filtered(other.to));
+      : isActive &&
+        !deeper(to) &&
+        !items.some((other) => other.to.startsWith(`${to}?`) && filtered(other.to));
 }
 
 /** Pages that draw their own way back (a team's page, a record's crumbs, an order, a case). */

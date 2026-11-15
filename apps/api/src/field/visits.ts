@@ -1,10 +1,12 @@
 // The field's visits (SEFMED's daily work, inside the CRM): a MedRep plans visits to the doctors,
 // hospitals and drugstores they look after, checks in on the spot (the phone's place kept), then
 // reports the call (what was detailed and how the doctor took it, notes, the next visit) or skips
-// it with a reason. A team lead sees the team's days and the report; the CEO everyone's. The
-// visit keeps its seat: the work stays with the seat when its person changes.
+// it with a reason. The team lead runs the team's field (approves the month plan, sets each
+// customer's class, sees the team's days); the CEO, Management and the Admin read everyone's.
+// The visit keeps its seat: the work stays with the seat when its person changes. A check-in is
+// compared with the clinic's pin; far away is said, never refused.
 
-import { sql } from "drizzle-orm";
+import { type SQL, sql } from "drizzle-orm";
 import { seen, team } from "../customers/service";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
@@ -24,11 +26,33 @@ import type {
   VisitRow,
 } from "../types";
 
-/** Who visits: MedReps, and team leads and managers on their own or joint calls. */
+/** Who visits: MedReps, and team leads and managers on their own calls. */
 export const FIELD_ROLES: Role[] = ["medrep", "team_lead", "manager"];
-const LEAD_ROLES: Role[] = ["team_lead", "manager"];
-/** Who sees every person's field work (read only). */
-const ALL_ROLES: Role[] = ["ceo", "admin", "management"];
+/** Who runs a team's field: approves plans, sets classes, sees the team's days. */
+export const LEAD_ROLES: Role[] = ["team_lead", "manager"];
+/** Who reads every person's field work. */
+export const FIELD_READ_ROLES: Role[] = ["ceo", "admin", "management"];
+const ALL_ROLES = FIELD_READ_ROLES;
+/** Visits a month a class asks for; a customer with no class yet, once. */
+export const CLASS_VISITS: Record<string, number> = { A: 4, B: 2, C: 1, D: 1 };
+export const visitsNeeded = (visitClass: string | null) =>
+  (visitClass && CLASS_VISITS[visitClass]) || 1;
+/** A check-in farther than this from the clinic's pin is "away from the clinic". */
+export const NEAR_METRES = 300;
+
+/** Metres between two "lat,lng" places (haversine). */
+export function metresBetween(a: string, b: string): number | null {
+  const [lat1, lng1] = a.split(",").map(Number);
+  const [lat2, lng2] = b.split(",").map(Number);
+  if ([lat1, lng1, lat2, lng2].some((one) => one === undefined || Number.isNaN(one))) return null;
+  const rad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = rad((lat2 as number) - (lat1 as number));
+  const dLng = rad((lng2 as number) - (lng1 as number));
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(rad(lat1 as number)) * Math.cos(rad(lat2 as number)) * Math.sin(dLng / 2) ** 2;
+  return Math.round(2 * 6_371_000 * Math.asin(Math.sqrt(h)));
+}
 const REACTIONS: VisitReaction[] = ["will_prescribe", "prescribes", "needs_info", "not_interested"];
 export const SKIP_WORDS: Record<SkipReason, string> = {
   not_available: "Doctor not available",
@@ -47,10 +71,9 @@ function mustVisit(me: Me) {
     throw new Refusal(403, "not_allowed", "Visits are made by MedReps and their team leads.");
 }
 
-/** Whether `me` may look at this person's field work. */
-async function maySee(db: Runner, me: Me, personId: number): Promise<boolean> {
-  if (me.id === personId || ALL_ROLES.includes(me.role)) return true;
-  if (!LEAD_ROLES.includes(me.role)) return false;
+/** Whether `me` leads this person (they are in my team, down the reporting line). */
+export async function leads(db: Runner, me: Me, personId: number): Promise<boolean> {
+  if (!LEAD_ROLES.includes(me.role) || me.id === personId) return false;
   const [found] = await rows<{ id: number }>(
     db,
     sql`${team(me)} select id::int as id from team where id = ${personId}`,
@@ -58,8 +81,16 @@ async function maySee(db: Runner, me: Me, personId: number): Promise<boolean> {
   return Boolean(found);
 }
 
+/** Whether `me` may look at this person's field work: their own, their team lead's, and
+ *  everyone's for the CEO, Management and the Admin. */
+export async function maySeeField(db: Runner, me: Me, personId: number): Promise<boolean> {
+  return me.id === personId || ALL_ROLES.includes(me.role) || leads(db, me, personId);
+}
+
 const visitColumns = sql`v.id::int as id, to_char(v.day, 'YYYY-MM-DD') as day, v.status,
-  json_build_object('id', c.id::int, 'name', c.name, 'kind', c.kind, 'specialty', c.specialty, 'city', c.city) as customer,
+  json_build_object('id', c.id::int, 'name', c.name, 'kind', c.kind, 'specialty', c.specialty, 'city', c.city,
+    'visitClass', c.visit_class, 'pinned', c.pin is not null) as customer,
+  v.distance_m as "distanceM",
   ${iso("v.checked_in_at")} as "checkedInAt", v.check_in_place as "checkInPlace", ${iso("v.done_at")} as "doneAt",
   v.objective, v.notes, to_char(v.next_day, 'YYYY-MM-DD') as "nextDay", v.skip_reason as "skipReason",
   coalesce((select json_agg(json_build_object('medicineId', m.id::int, 'name', m.name, 'reaction', d.item->>'reaction')
@@ -77,7 +108,7 @@ export async function fieldDay(
   const today = todayManila();
   const day = asked.day && DAY.test(asked.day) ? asked.day : today;
   const personId = asked.person ?? me.id;
-  if (!(await maySee(db, me, personId)))
+  if (!(await maySeeField(db, me, personId)))
     throw new Refusal(403, "not_allowed", "That person's visits aren't yours to see.");
   const [person] = await rows<{ id: number; name: string; area: string | null; role: Role }>(
     db,
@@ -227,9 +258,15 @@ export async function checkIn(
         "Check in on the day of the visit. Move it to today first.",
       );
     if (visit.checkedInAt) return;
-    const at = clean(place);
+    const typed = clean(place);
+    const at = typed && PLACE.test(typed) ? typed : null;
+    const [customer] = await rows<{ pin: string | null }>(
+      tx,
+      sql`select pin from customer where id = ${visit.customerId}`,
+    );
+    const distance = at && customer?.pin ? metresBetween(at, customer.pin) : null;
     await tx.execute(
-      sql`update visit set checked_in_at = now(), check_in_place = ${at && PLACE.test(at) ? at : null}
+      sql`update visit set checked_in_at = now(), check_in_place = ${at}, distance_m = ${distance}
         where id = ${visit.id}`,
     );
   });
@@ -343,7 +380,16 @@ export async function moveVisit(db: Database, me: Me, visitId: number, day: stri
   });
 }
 
-/** Visits over chosen days, per person: a team lead's team, everyone's for the CEO. */
+/** The customers (alias `c`) a person (by id) looks after: those they added and those of their
+ *  area or of the seats they hold today. */
+export const lookedAfterBy = (person: SQL, today: string): SQL => sql`(c.added_by = ${person}
+  or c.area_id = (select area_id from person where id = ${person})
+  or c.area_id in (select s.area_id from seat s join seat_holder h on h.seat_id = s.id
+    where h.person_id = ${person} and s.active and s.area_id is not null and ${inForce("h", today)}))`;
+
+/** Visits over chosen days, per person: a team lead's for the team, everyone's for the CEO,
+ *  Management and the Admin. Done, skipped, still planned, covered, calls a day, check-ins away
+ *  from the clinic, this month's coverage by class and the month plan's state. */
 export async function fieldReport(
   db: Database,
   me: Me,
@@ -355,12 +401,14 @@ export async function fieldReport(
       "not_allowed",
       "The visits report is for team leads, Management and the CEO.",
     );
+  const scope = ALL_ROLES.includes(me.role) ? sql`true` : sql`p.id in (select id from team)`;
   const today = todayManila();
   const to = asked.to && DAY.test(asked.to) ? asked.to : today;
   let from = asked.from && DAY.test(asked.from) ? asked.from : `${today.slice(0, 7)}-01`;
   if (from > to) from = to;
   if (from < addDays(to, -366)) from = addDays(to, -366);
-  const scope = ALL_ROLES.includes(me.role) ? sql`true` : sql`p.id in (select id from team)`;
+  const monthStart = `${to.slice(0, 7)}-01`;
+  const monthEnd = addDays(`${nextMonthOf(to.slice(0, 7))}-01`, -1);
   const people = await rows<Omit<FieldReport["people"][number], "perDay">>(
     db,
     sql`${team(me)} select p.id::int as "personId", p.name, p.title,
@@ -370,10 +418,25 @@ export async function fieldReport(
         count(v.id) filter (where v.status = 'done')::int as done,
         count(v.id) filter (where v.status = 'skipped')::int as skipped,
         count(distinct v.customer_id) filter (where v.status = 'done')::int as covered,
-        count(distinct v.day) filter (where v.status = 'done')::int as "fieldDays"
+        count(distinct v.day) filter (where v.status = 'done')::int as "fieldDays",
+        count(v.id) filter (where v.status = 'done' and v.distance_m > ${NEAR_METRES})::int as away,
+        count(v.id) filter (where v.status = 'done' and v.check_in_place is null)::int as "noPlace",
+        (select count(*)::int from customer c where c.active and c.kind in ('doctor', 'hospital', 'drugstore')
+          and ${lookedAfterBy(sql`p.id`, today)}) as customers,
+        (select count(*)::int from customer c where c.active and c.kind in ('doctor', 'hospital', 'drugstore')
+          and ${lookedAfterBy(sql`p.id`, today)}
+          and (select count(*) from visit d where d.customer_id = c.id and d.person_id = p.id and d.status = 'done'
+            and d.day between ${monthStart}::date and ${monthEnd}::date)
+            >= case c.visit_class when 'A' then 4 when 'B' then 2 else 1 end) as "seenEnough",
+        (select vp.status from visit_plan vp where vp.person_id = p.id and vp.month = ${monthStart}::date) as plan,
+        (select coalesce(sum(x.amount), 0)::int from field_expense x where x.person_id = p.id and x.status = 'approved'
+          and x.day between ${from}::date and ${to}::date) as spent,
+        (select coalesce(sum(x.amount), 0)::int from field_expense x where x.person_id = p.id and x.status = 'pending'
+          and x.day between ${from}::date and ${to}::date) as "spentPending"
       from person p
       left join visit v on v.person_id = p.id and v.day between ${from}::date and ${to}::date
       where p.active and p.role in ('medrep', 'team_lead', 'manager') and ${scope}
+        and p.id <> ${me.id}
       group by p.id, p.name, p.title
       -- A lead with no visits isn't listed; every MedRep is (none is the point).
       having p.role = 'medrep' or count(v.id) > 0
@@ -383,11 +446,22 @@ export async function fieldReport(
     ...one,
     perDay: one.fieldDays ? Math.round((one.done / one.fieldDays) * 10) / 10 : 0,
   }));
-  const sum = (key: "planned" | "done" | "skipped" | "covered" | "fieldDays") =>
-    out.reduce((total, one) => total + one[key], 0);
+  type Counted =
+    | "planned"
+    | "done"
+    | "skipped"
+    | "covered"
+    | "fieldDays"
+    | "away"
+    | "customers"
+    | "seenEnough"
+    | "spent"
+    | "spentPending";
+  const sum = (key: Counted) => out.reduce((total, one) => total + one[key], 0);
   return {
     from,
     to,
+    month: to.slice(0, 7),
     people: out,
     totals: {
       planned: sum("planned"),
@@ -395,6 +469,16 @@ export async function fieldReport(
       skipped: sum("skipped"),
       covered: sum("covered"),
       fieldDays: sum("fieldDays"),
+      away: sum("away"),
+      customers: sum("customers"),
+      seenEnough: sum("seenEnough"),
+      spent: sum("spent"),
+      spentPending: sum("spentPending"),
     },
   };
 }
+
+const nextMonthOf = (month: string) => {
+  const [y, m] = month.split("-").map(Number) as [number, number];
+  return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, "0")}`;
+};

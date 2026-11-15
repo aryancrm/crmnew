@@ -9,6 +9,7 @@ import { CalendarPlus, Check, ChevronLeft, ChevronRight, MapPin, Plus, Trash2 } 
 import { type FormEvent, type ReactNode, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useMe } from "../auth";
 import { clock } from "../hr/parts";
 import { FIELD } from "../org/dialogs";
 import { Button, CARD, Dialog, PageHead, PageState, Problem, Tabs, useAction } from "../ui";
@@ -33,6 +34,10 @@ const SKIP_WORDS: Record<SkipReason, string> = {
   rescheduled: "Moved to another day",
   other: "Other",
 };
+/** Farther than this from the clinic's pin is "away from the clinic" (as the API counts it). */
+const NEAR_METRES = 300;
+const distanceWords = (metres: number) =>
+  metres >= 1000 ? `${(metres / 1000).toFixed(1)} km` : `${metres} m`;
 const KIND_WORDS: Record<string, string> = {
   doctor: "Doctor",
   hospital: "Hospital",
@@ -75,6 +80,7 @@ function Label({ text, error, children }: { text: string; error?: string; childr
 type View = "planned" | "done" | "skipped";
 
 export function VisitsPage() {
+  const me = useMe().data;
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const person = params.get("person");
@@ -92,6 +98,9 @@ export function VisitsPage() {
   const data = query.data;
   if (!data) return <PageState query={query} what="the visits" />;
   const mine = data.can.work;
+  // A team lead (Management, the Admin) may move a wrong pin; the CEO only looks.
+  const leadView =
+    !mine && Boolean(me && ["team_lead", "manager", "management", "admin"].includes(me.role));
   const go = (next: string) => {
     const out = new URLSearchParams(params);
     if (next === data.today) out.delete("day");
@@ -172,7 +181,13 @@ export function VisitsPage() {
 
       <div className="grid gap-3 lg:grid-cols-2">
         {shown.map((visit) => (
-          <VisitCard key={visit.id} visit={visit} mine={mine} today={data.today} />
+          <VisitCard
+            key={visit.id}
+            visit={visit}
+            mine={mine}
+            today={data.today}
+            canPin={leadView}
+          />
         ))}
       </div>
       {shown.length === 0 && (
@@ -196,7 +211,17 @@ export function VisitsPage() {
   );
 }
 
-function VisitCard({ visit, mine, today }: { visit: VisitRow; mine: boolean; today: string }) {
+function VisitCard({
+  visit,
+  mine,
+  today,
+  canPin,
+}: {
+  visit: VisitRow;
+  mine: boolean;
+  today: string;
+  canPin: boolean;
+}) {
   const queries = useQueryClient();
   const action = useAction();
   const [open, setOpen] = useState<"report" | "skip" | "move" | null>(null);
@@ -219,7 +244,14 @@ function VisitCard({ visit, mine, today }: { visit: VisitRow; mine: boolean; tod
             {c.name}
           </Link>
           <div className="text-xs text-slate-500">
-            {[KIND_WORDS[c.kind] ?? c.kind, c.specialty, c.city].filter(Boolean).join(" · ")}
+            {[
+              c.visitClass ? `Class ${c.visitClass}` : null,
+              KIND_WORDS[c.kind] ?? c.kind,
+              c.specialty,
+              c.city,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </div>
         </div>
         <span
@@ -270,6 +302,19 @@ function VisitCard({ visit, mine, today }: { visit: VisitRow; mine: boolean; tod
               ) : (
                 <span className="ml-2 text-slate-400">no location shared</span>
               )}
+              {visit.distanceM !== null &&
+                (visit.distanceM > NEAR_METRES ? (
+                  <span className="ml-2 rounded bg-rose-50 px-1 text-[11px] font-semibold text-rose-700">
+                    Away from the clinic · {distanceWords(visit.distanceM)}
+                  </span>
+                ) : (
+                  <span className="ml-2 rounded bg-emerald-50 px-1 text-[11px] font-semibold text-emerald-700">
+                    At the clinic
+                  </span>
+                ))}
+              {!c.pinned && visit.checkInPlace && (
+                <span className="ml-2 text-[11px] text-slate-400">clinic not pinned yet</span>
+              )}
             </dd>
           </>
         )}
@@ -305,6 +350,23 @@ function VisitCard({ visit, mine, today }: { visit: VisitRow; mine: boolean; tod
         </ul>
       )}
       <Problem message={action.problem?.message} />
+      {visit.checkInPlace &&
+        ((mine && !c.pinned) || (!mine && canPin && (visit.distanceM ?? 0) > NEAR_METRES)) && (
+          <div>
+            <Button
+              small
+              disabled={action.busy}
+              onClick={() =>
+                action.run(async () => {
+                  await api(`/api/field/visits/${visit.id}/pin`, { body: {} });
+                  await queries.invalidateQueries({ queryKey: ["field"] });
+                })
+              }
+            >
+              <MapPin size={14} /> {c.pinned ? "Move the clinic's pin here" : "Pin the clinic here"}
+            </Button>
+          </div>
+        )}
       {mine && planned && (
         <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
           {visit.day === today && !visit.checkedInAt && (
