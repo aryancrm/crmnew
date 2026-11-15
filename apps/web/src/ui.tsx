@@ -398,12 +398,23 @@ export function Dialog({
     }
     return () => dialog?.close();
   }, []);
+  // A tap on the dimmed page behind closes it too (Aryan): only when the press began there, so
+  // dragging a selection out of a field doesn't.
+  const pressedOutside = useRef(false);
   return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: Escape closes it (onCancel); the click is the dimmed page behind.
     <dialog
       ref={ref}
       onCancel={(event) => {
         event.preventDefault();
         if (!busy) onClose();
+      }}
+      onMouseDown={(event) => {
+        pressedOutside.current = event.target === event.currentTarget;
+      }}
+      onClick={(event) => {
+        if (pressedOutside.current && event.target === event.currentTarget && !busy) onClose();
+        pressedOutside.current = false;
       }}
       className={`m-auto ${wide ? "w-[min(48rem,calc(100vw-2rem))]" : "w-[min(40rem,calc(100vw-2rem))]"} max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-900/40`}
     >

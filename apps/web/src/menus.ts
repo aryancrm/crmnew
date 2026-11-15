@@ -449,14 +449,16 @@ function ownDesk(me: Me): Space {
               // Home is the queue to approve (the waiting count sits on it); what waits on
               // others or is stopped has its own link.
               { ...home, badge: "awaiting" },
+              // Aryan: All orders is the main list, right under Home.
+              { to: "/orders", label: "All orders", icon: ClipboardList, short: "Orders" },
               { to: "/orders/sent-back", label: "Sent back", icon: Undo2, badge: "sentBack" },
               { to: "/on-hold", label: "On hold", icon: TriangleAlert, badge: "flagged" },
               // Orders that haven't moved for two days at Finance or Dispatch, to chase.
               { to: "/orders?stuck=1", label: "Stuck over 2 days", icon: Timer },
-              { to: "/orders", label: "All orders", icon: ClipboardList, short: "Orders" },
+              // Customers a MedRep added from the field that nobody has checked yet.
               {
                 to: "/customers?review=1",
-                label: "Not checked yet",
+                label: "New customers to check",
                 icon: UserPlus,
                 badge: "customers",
                 short: "To check",

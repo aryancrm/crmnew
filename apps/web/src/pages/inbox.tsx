@@ -453,6 +453,12 @@ function HeldSendersDialog({ onClose }: { onClose: () => void }) {
       aria-modal="true"
       aria-label="New email senders"
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-3"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") onClose();
+      }}
     >
       <div className="flex max-h-[85dvh] w-full max-w-xl flex-col rounded-2xl bg-white shadow-pop">
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
