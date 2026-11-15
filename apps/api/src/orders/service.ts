@@ -1046,6 +1046,51 @@ export async function myOrders(
   };
 }
 
+/** Each active warehouse and what it can't fill of an order: its unexpired stock less what other
+ *  approved, unpacked orders shipping from it hold (Management picks where it ships from). */
+async function warehouseFill(db: Runner, orderId: number): Promise<OrderDetail["warehouseFill"]> {
+  const today = todayManila();
+  const found = await rows<{
+    id: number;
+    name: string;
+    isDefault: boolean;
+    medicine: string;
+    need: number;
+    have: number;
+  }>(
+    db,
+    sql`with need as (
+          select medicine_id, sum(qty)::int as qty from order_item where order_id = ${orderId} group by 1
+        )
+        select w.id::int as id, w.name, w.is_default as "isDefault",
+          m.name || coalesce(' ' || m.strength, '') as medicine, n.qty as need,
+          greatest(0,
+            coalesce((select sum(s.qty) from stock s join batch b on b.id = s.batch_id
+              where s.warehouse_id = w.id and b.medicine_id = n.medicine_id and s.qty > 0
+                and b.expires_on >= ${today}::date), 0)
+            - coalesce((select sum(i.qty) from order_item i join sales_order o on o.id = i.order_id
+              where o.warehouse_id = w.id and o.id <> ${orderId} and i.medicine_id = n.medicine_id
+                and ${PROMISED_ORDER}), 0)
+          )::int as have
+        from warehouse w cross join need n join medicine m on m.id = n.medicine_id
+        where w.active
+        order by w.is_default desc, w.name, m.name`,
+  );
+  const out = new Map<number, NonNullable<OrderDetail["warehouseFill"]>[number]>();
+  for (const row of found) {
+    const place = out.get(row.id) ?? {
+      id: row.id,
+      name: row.name,
+      isDefault: row.isDefault,
+      short: [],
+    };
+    if (row.have < row.need)
+      place.short.push({ medicine: row.medicine, need: row.need, have: row.have });
+    out.set(row.id, place);
+  }
+  return [...out.values()];
+}
+
 export async function orderDetail(db: Database, me: Me, id: number): Promise<OrderDetail> {
   const [order] = await rows<
     Omit<OrderDetail["order"], "statusLabel" | "invoiceFromLabel"> & {
@@ -1176,6 +1221,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
     events: events.map(({ role, ...event }) => ({ ...event, byRole: ROLE_LABEL[role] })),
     steps: steps.map((step) => ({ ...step, label: STATUS_LABEL[step.status] })),
     warehouses: places,
+    warehouseFill: orderActions(me, who).approve ? await warehouseFill(db, id) : null,
     money,
     picks,
     can: {

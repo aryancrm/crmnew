@@ -987,6 +987,67 @@ function PlacedStep({ data, next }: { data: OrderDetail; next: () => void }) {
   );
 }
 
+/** Where the order ships from, as Management picks it: each warehouse with whether it can fill
+ *  every line, else what it is short of (as the hub's approve-and-check-stock did). */
+function ShipsFrom({
+  fill,
+  value,
+  onChange,
+}: {
+  fill: NonNullable<OrderDetail["warehouseFill"]>;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const picked = value || String(fill.find((place) => place.isDefault)?.id ?? fill[0]?.id ?? "");
+  return (
+    <fieldset className="flex flex-col gap-1.5">
+      <legend className="mb-1 text-[12px] font-semibold text-slate-600">Ships from</legend>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {fill.map((place) => {
+          const chosen = String(place.id) === picked;
+          const fills = place.short.length === 0;
+          return (
+            <label
+              key={place.id}
+              className={`flex cursor-pointer gap-2.5 rounded-xl border px-3 py-2.5 text-[13px] ${
+                chosen
+                  ? "border-emerald-400 bg-emerald-50/60 ring-1 ring-emerald-300"
+                  : "border-slate-200 bg-white hover:border-slate-300"
+              }`}
+            >
+              <input
+                type="radio"
+                name="ships-from"
+                checked={chosen}
+                onChange={() => onChange(place.isDefault ? "" : String(place.id))}
+                className="mt-0.5 accent-emerald-600"
+              />
+              <span className="min-w-0">
+                <span className="font-semibold text-slate-900">
+                  {place.name}
+                  {place.isDefault && (
+                    <span className="ml-1.5 text-[11px] font-medium text-slate-500">main</span>
+                  )}
+                </span>
+                <span className={`block text-xs ${fills ? "text-emerald-700" : "text-amber-800"}`}>
+                  {fills
+                    ? "Can fill every line"
+                    : place.short
+                        .map(
+                          (one) =>
+                            `${one.medicine}: needs ${count(one.need)}, has ${count(one.have)}`,
+                        )
+                        .join(" · ")}
+                </span>
+              </span>
+            </label>
+          );
+        })}
+      </div>
+    </fieldset>
+  );
+}
+
 /** The buyer's licence (a hospital's or drugstore's LTO, a doctor's PRC), its expiry and TIN, with
  *  what is missing in amber and a way to fill it on the customer. A patient needs none. */
 function LicenceFacts({ order }: { order: OrderDetail["order"] }) {
@@ -1048,7 +1109,13 @@ function ManagementStep({
   next: () => void;
 }) {
   const { order, can } = data;
-  const [warehouse, setWarehouse] = useState("");
+  // Where it ships from: the default warehouse, unless only another can fill every line.
+  const [warehouse, setWarehouse] = useState(() => {
+    const fill = data.warehouseFill ?? [];
+    const main = fill.find((place) => place.isDefault);
+    const fills = fill.find((place) => place.short.length === 0);
+    return main && main.short.length > 0 && fills ? String(fills.id) : "";
+  });
   // Management decides here whether Finance checks the order too.
   const [finance, setFinance] = useState(data.order.financeCheck);
   const waiting = order.status === "pending_approval";
@@ -1101,23 +1168,11 @@ function ManagementStep({
       <LicenceFacts order={order} />
       <Papers data={data} kinds={["po", "prescription", "gl", "payment_proof"]} />
       {completes && <CompleteDetails data={data} />}
+      {can.approve && data.warehouseFill && data.warehouseFill.length > 0 && (
+        <ShipsFrom fill={data.warehouseFill} value={warehouse} onChange={setWarehouse} />
+      )}
       {can.approve && (
         <div className="flex flex-wrap items-end gap-2">
-          <label className="flex flex-col gap-1 text-[12px] font-semibold text-slate-600">
-            Ships from
-            <select
-              className={`${INPUT} w-56`}
-              value={warehouse}
-              onChange={(event) => setWarehouse(event.target.value)}
-            >
-              <option value="">Main (the default)</option>
-              {data.warehouses.map((place) => (
-                <option key={place.id} value={place.id}>
-                  {place.name}
-                </option>
-              ))}
-            </select>
-          </label>
           {!order.leadId && (
             <label className="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 text-[13px] font-medium text-slate-700">
               <input

@@ -1021,6 +1021,16 @@ export type OrderDetail = {
     at: string;
   }[];
   warehouses: Warehouse[];
+  /** For whoever approves it: each warehouse and what it can't fill of this order (stock
+   *  unexpired, less what other approved orders from it hold). Null for anyone else. */
+  warehouseFill:
+    | {
+        id: number;
+        name: string;
+        isDefault: boolean;
+        short: { medicine: string; need: number; have: number }[];
+      }[]
+    | null;
   papers: OrderPaper[];
   /** The papers this order is expected to carry, and whether each is on file. */
   paperList: {
