@@ -14,7 +14,7 @@ import type {
   ToCollect,
 } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
-import { Gauge, Plus, TriangleAlert } from "lucide-react";
+import { Gauge, Plus } from "lucide-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
@@ -369,9 +369,12 @@ export function MedrepHome() {
               key={row.id}
               // A sent-back order opens straight in its fix form; a held one on its page.
               to={row.status === "draft" ? `/orders/${row.id}/fix` : `/orders/${row.id}`}
-              className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-900 hover:border-amber-300"
+              className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs text-slate-700 shadow-2xs hover:border-slate-300"
             >
-              <TriangleAlert className="size-4 shrink-0" />
+              <span
+                className={`size-2 shrink-0 rounded-full ${row.status === "draft" ? "bg-amber-400" : "bg-rose-500"}`}
+                aria-hidden="true"
+              />
               <span className="min-w-0 flex-1">
                 <span className="font-semibold">
                   {row.code} · {row.customer}{" "}
@@ -379,7 +382,9 @@ export function MedrepHome() {
                 </span>{" "}
                 {row.reason}
               </span>
-              <span className="font-semibold">{row.status === "draft" ? "Fix" : "Open"}</span>
+              <span className="font-semibold text-emerald-700">
+                {row.status === "draft" ? "Fix" : "Open"}
+              </span>
             </Link>
           ))}
         </div>

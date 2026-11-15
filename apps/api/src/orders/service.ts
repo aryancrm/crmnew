@@ -685,7 +685,8 @@ const caseColumns = sql`o.lead_id::int as "leadId", coalesce((select l.road = 'g
  *  assistance is approved apart, Aryan). None for every other order. */
 const approverSql = sql`(select ch2.head_id::int from channel ch2 where ch2.id = o.channel_id and ch2.code = 'PAP')`;
 
-const cardColumns = sql`${rowColumns}, o.medrep_id::int as "medrepId", ${approverSql} as "approverId", ${sentBackColumns},
+const cardColumns = sql`${rowColumns}, o.medrep_id::int as "medrepId", ${approverSql} as "approverId",
+  (select ap.name from person ap where ap.id = ${approverSql}) as "approverName", ${sentBackColumns},
   ${iso("o.approved_at")} as "approvedAt", ${takeBackSql} as "takeBack", ${iso("o.status_since")} as "stepSince",
   o.delivery_address as "deliveryAddress", o.receiver, o.receiver_phone as "receiverPhone", ${day("o.expected_on")} as "expectedOn",
   (select coalesce(sum(i.qty), 0) from order_item i where i.order_id = o.id)::int as pieces,
@@ -760,10 +761,13 @@ function nextLine(viewer: Viewer, row: CardRow, findings: OrderFinding[]): strin
   switch (row.status) {
     case "draft":
       return `Sent back to you${row.flagReason ? `: ${row.flagReason}` : ""}. Fix it and place it again.`;
-    case "pending_approval":
+    case "pending_approval": {
+      // A PAP order is approved by the PAP head, not Management.
+      const who = row.approverName ? `${row.approverName} (PAP head)` : "Management";
       return findings.length
-        ? `Management is checking it: ${findings.map((finding) => finding.short.toLowerCase()).join(", ")}`
-        : "Management is checking it";
+        ? `${who} is checking it: ${findings.map((finding) => finding.short.toLowerCase()).join(", ")}`
+        : `${who} is checking it`;
+    }
     case "finance_check":
       return "Finance is checking the payment";
     case "ready_for_invoice":
@@ -1157,6 +1161,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         coalesce(c.licence_expires < (now() at time zone 'Asia/Manila')::date, false) as "licenceExpired",
         c.licence_no as "licenceNo", ${day("c.licence_expires")} as "licenceExpires", c.tin,
         o.no_proof_reason as "noProofReason", o.no_proof_note as "noProofNote", ${approverSql} as "approverId",
+        (select ap.name from person ap where ap.id = ${approverSql}) as "approverName",
         (o.finance_checked_by = ${me.id} and o.status = 'ready_for_dispatch' and coalesce(o.points_used, 0) = 0
           and now() - o.finance_checked_at <= interval '90 seconds') as undoable,
         (select coalesce(json_agg(json_build_object('id', f.id, 'name', f.name) order by f.id), '[]'::json)

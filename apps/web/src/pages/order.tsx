@@ -281,6 +281,8 @@ export function Order() {
       : desk === "dispatch"
         ? ["dispatch", "delivered"]
         : [];
+  const railNumber = (key: StepKey) =>
+    deskKeys.length && deskKeys.includes(key) ? deskKeys.indexOf(key) + 1 : undefined;
   const proofOk =
     !data.paperList.find((row) => row.kind === "payment_proof")?.needed ||
     data.papers.some((paper) => paper.kind === "payment_proof");
@@ -663,126 +665,131 @@ export function Order() {
       </section>
 
       <div className="mt-4 grid items-start gap-4 lg:grid-cols-[19rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] 2xl:grid-cols-[22rem_minmax(0,1fr)]">
-        <nav
-          aria-label="Steps"
-          className="min-w-0 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm lg:col-start-1 lg:row-start-1"
-        >
-          {desk === "management"
-            ? CHECKS.map((item, index) => {
-                const on = item.key === check;
-                const state = states[item.key];
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    aria-current={on && checking ? "step" : undefined}
-                    onClick={() => openCheck(item.key)}
-                    className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors ${on && checking ? "bg-emerald-50 font-semibold text-emerald-900" : "text-slate-700 hover:bg-slate-50"}`}
-                  >
-                    <span
-                      className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                        item.key === "approve" && order.approvedAt
-                          ? "bg-emerald-600 text-white"
-                          : item.key === "approve"
-                            ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
-                            : state.ok
-                              ? "bg-emerald-600 text-white"
-                              : "bg-amber-400 text-white"
-                      }`}
+        {/* Each desk's own steps at the side; anyone else steps through the journey on top. */}
+        {(desk || shownOthers.length > 0) && (
+          <nav
+            aria-label="Steps"
+            className="min-w-0 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm lg:col-start-1 lg:row-start-1"
+          >
+            {desk === "management"
+              ? CHECKS.map((item, index) => {
+                  const on = item.key === check;
+                  const state = states[item.key];
+                  return (
+                    <button
+                      key={item.key}
+                      type="button"
+                      aria-current={on && checking ? "step" : undefined}
+                      onClick={() => openCheck(item.key)}
+                      className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors ${on && checking ? "bg-emerald-50 font-semibold text-emerald-900" : "text-slate-700 hover:bg-slate-50"}`}
                     >
-                      {item.key === "approve" && !order.approvedAt ? (
-                        index + 1
-                      ) : state.ok || item.key === "approve" ? (
-                        <Check className="size-3.5" />
-                      ) : (
-                        "!"
-                      )}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate">{checkLabel(item.key, data)}</span>
                       <span
-                        className={`block truncate text-[11px] font-normal ${state.ok || item.key === "approve" ? "text-slate-500" : "font-semibold text-amber-700"}`}
-                      >
-                        {item.key === "approve"
-                          ? order.approvedAt
-                            ? `Approved${order.approvedBy ? ` by ${order.approvedBy}` : ""}`
-                            : can.approve
-                              ? "Your step"
-                              : order.status === "pending_approval"
-                                ? "Waiting"
-                                : "—"
-                          : state.note}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })
-            : railSteps.map((item) => {
-                const on = item.key === opened;
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    aria-current={on ? "step" : undefined}
-                    onClick={() => open(item.key)}
-                    className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors ${on ? "bg-emerald-50 font-semibold text-emerald-900" : "text-slate-700 hover:bg-slate-50"}`}
-                  >
-                    <span
-                      className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                        item.shape === "done" || item.shape === "skipped"
-                          ? "bg-emerald-600 text-white"
-                          : item.shape === "stopped"
-                            ? "bg-rose-100 text-rose-700"
-                            : on || item.shape === "now"
+                        className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                          item.key === "approve" && order.approvedAt
+                            ? "bg-emerald-600 text-white"
+                            : item.key === "approve"
                               ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
-                              : "bg-slate-100 text-slate-500"
-                      }`}
-                    >
-                      {item.shape === "done" || item.shape === "skipped" ? (
-                        <Check className="size-3.5" />
-                      ) : (
-                        item.number
-                      )}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate">{item.label}</span>
-                      <span
-                        className={`block truncate text-[11px] font-normal ${item.mine && item.shape !== "done" ? "font-semibold text-amber-700" : "text-slate-500"}`}
+                              : state.ok
+                                ? "bg-emerald-600 text-white"
+                                : "bg-amber-400 text-white"
+                        }`}
                       >
-                        {item.mine && item.shape !== "done" ? "Your step" : item.who}
+                        {item.key === "approve" && !order.approvedAt ? (
+                          index + 1
+                        ) : state.ok || item.key === "approve" ? (
+                          <Check className="size-3.5" />
+                        ) : (
+                          "!"
+                        )}
                       </span>
-                    </span>
-                  </button>
-                );
-              })}
-          {shownOthers.length > 0 && (
-            <div className="mt-1 flex flex-wrap gap-1.5 border-t border-slate-100 px-1 pt-2">
-              {shownOthers.map((item) => (
-                <Button
-                  key={item.action}
-                  small
-                  variant={item.danger ? "danger" : "plain"}
-                  disabled={act.busy}
-                  onClick={() =>
-                    item.reason ? setAsking(item.action) : act.act(order.id, item.action)
-                  }
-                >
-                  <item.icon className="size-3.5" aria-hidden="true" /> {item.label}
-                </Button>
-              ))}
-              {can.waitStock && (
-                <Button
-                  small
-                  disabled={act.busy}
-                  title="Hold it until what it needs is on the shelf; you are told when it comes in"
-                  onClick={() => act.act(order.id, "hold", { stock: true })}
-                >
-                  <Hourglass className="size-3.5" aria-hidden="true" /> Wait for stock
-                </Button>
-              )}
-            </div>
-          )}
-        </nav>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate">{checkLabel(item.key, data)}</span>
+                        <span
+                          className={`block truncate text-[11px] font-normal ${state.ok || item.key === "approve" ? "text-slate-500" : "font-semibold text-amber-700"}`}
+                        >
+                          {item.key === "approve"
+                            ? order.approvedAt
+                              ? `Approved${order.approvedBy ? ` by ${order.approvedBy}` : ""}`
+                              : can.approve
+                                ? "Your step"
+                                : order.status === "pending_approval"
+                                  ? "Waiting"
+                                  : "—"
+                            : state.note}
+                        </span>
+                      </span>
+                    </button>
+                  );
+                })
+              : !desk
+                ? null
+                : railSteps.map((item) => {
+                    const on = item.key === opened;
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        aria-current={on ? "step" : undefined}
+                        onClick={() => open(item.key)}
+                        className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors ${on ? "bg-emerald-50 font-semibold text-emerald-900" : "text-slate-700 hover:bg-slate-50"}`}
+                      >
+                        <span
+                          className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                            item.shape === "done" || item.shape === "skipped"
+                              ? "bg-emerald-600 text-white"
+                              : item.shape === "stopped"
+                                ? "bg-rose-100 text-rose-700"
+                                : on || item.shape === "now"
+                                  ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
+                                  : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {item.shape === "done" || item.shape === "skipped" ? (
+                            <Check className="size-3.5" />
+                          ) : (
+                            item.number
+                          )}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">{item.label}</span>
+                          <span
+                            className={`block truncate text-[11px] font-normal ${item.mine && item.shape !== "done" ? "font-semibold text-amber-700" : "text-slate-500"}`}
+                          >
+                            {item.mine && item.shape !== "done" ? "Your step" : item.who}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+            {shownOthers.length > 0 && (
+              <div className="mt-1 flex flex-wrap gap-1.5 border-t border-slate-100 px-1 pt-2">
+                {shownOthers.map((item) => (
+                  <Button
+                    key={item.action}
+                    small
+                    variant={item.danger ? "danger" : "plain"}
+                    disabled={act.busy}
+                    onClick={() =>
+                      item.reason ? setAsking(item.action) : act.act(order.id, item.action)
+                    }
+                  >
+                    <item.icon className="size-3.5" aria-hidden="true" /> {item.label}
+                  </Button>
+                ))}
+                {can.waitStock && (
+                  <Button
+                    small
+                    disabled={act.busy}
+                    title="Hold it until what it needs is on the shelf; you are told when it comes in"
+                    onClick={() => act.act(order.id, "hold", { stock: true })}
+                  >
+                    <Hourglass className="size-3.5" aria-hidden="true" /> Wait for stock
+                  </Button>
+                )}
+              </div>
+            )}
+          </nav>
+        )}
 
         <div className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
           {opened === "proof" && (
@@ -818,22 +825,37 @@ export function Order() {
             />
           )}
           {!checking && opened === "finance" && (
-            <FinanceStep data={data} money={money} next={() => open("dispatch")} />
+            <FinanceStep
+              data={data}
+              money={money}
+              next={() => open("dispatch")}
+              n={railNumber("finance")}
+            />
           )}
           {!checking && opened === "dispatch" && (
-            <DispatchStep data={data} ask={ask} next={() => open("delivered")} />
+            <DispatchStep
+              data={data}
+              ask={ask}
+              next={() => open("delivered")}
+              n={railNumber("dispatch")}
+            />
           )}
           {!checking && opened === "delivered" && (
-            <DeliveredStep data={data} ask={ask} next={() => open("paid")} />
+            <DeliveredStep
+              data={data}
+              ask={ask}
+              next={() => open("paid")}
+              n={railNumber("delivered")}
+            />
           )}
-          {!checking && opened === "paid" && <PaidStep data={data} />}
+          {!checking && opened === "paid" && <PaidStep data={data} n={railNumber("paid")} />}
           <div className="mt-3">
             <Problem message={problem?.message} />
           </div>
         </div>
 
         <div className="flex min-w-0 flex-col gap-4 lg:col-start-1 lg:row-start-2">
-          <MoneyCard data={data} />
+          {desk !== "dispatch" && <MoneyCard data={data} />}
           <Activity data={data} />
         </div>
       </div>
@@ -1560,7 +1582,9 @@ function ManagementStep({
         )
       ) : waiting ? (
         <Fact shape="now">
-          <b>Waiting for Management</b>
+          <b>
+            Waiting for {order.approverName ? `${order.approverName} (PAP head)` : "Management"}
+          </b>
         </Fact>
       ) : order.status === "draft" ? (
         <Fact shape="stopped">
@@ -1834,9 +1858,12 @@ function CompleteDetails({ data }: { data: OrderDetail }) {
 
 function FinanceStep({
   data,
+  n,
   money,
   next,
 }: {
+  /** Its number at the side, for a desk that sees only its own steps. */
+  n?: number;
   data: OrderDetail;
   money: ReturnType<typeof useMoney>;
   next: () => void;
@@ -1849,7 +1876,7 @@ function FinanceStep({
   const skipped = Boolean(order.leadId) && !checked && Boolean(invoice);
   return (
     <StepPanel
-      number={3}
+      number={n ?? 3}
       title="Finance check"
       footer={
         checked || skipped ? <NextButton label="Next: Pack & ship" onClick={next} /> : undefined
@@ -1966,9 +1993,12 @@ function FinanceStep({
 
 function DispatchStep({
   data,
+  n,
   ask,
   next,
 }: {
+  /** Its number at the side, for a desk that sees only its own steps. */
+  n?: number;
   data: OrderDetail;
   ask: (what: NonNullable<DispatchAsk>["what"]) => void;
   next: () => void;
@@ -1978,7 +2008,7 @@ function DispatchStep({
   const left = Boolean(order.packedAt) || ["shipped", "completed"].includes(order.status);
   return (
     <StepPanel
-      number={4}
+      number={n ?? 4}
       title="Pack & ship"
       footer={
         order.shippedAt || order.status === "completed" ? (
@@ -2076,9 +2106,12 @@ function DispatchStep({
 
 function DeliveredStep({
   data,
+  n,
   ask,
   next,
 }: {
+  /** Its number at the side, for a desk that sees only its own steps. */
+  n?: number;
   data: OrderDetail;
   ask: (what: NonNullable<DispatchAsk>["what"]) => void;
   next: () => void;
@@ -2087,7 +2120,7 @@ function DeliveredStep({
   const delivered = order.status === "completed";
   return (
     <StepPanel
-      number={5}
+      number={n ?? 5}
       title="Delivered"
       footer={delivered ? <NextButton label="Next: Paid" onClick={next} /> : undefined}
     >
@@ -2142,13 +2175,20 @@ function DeliveredStep({
   );
 }
 
-function PaidStep({ data }: { data: OrderDetail }) {
+function PaidStep({
+  data,
+  n,
+}: {
+  /** Its number at the side, for a desk that sees only its own steps. */
+  n?: number;
+  data: OrderDetail;
+}) {
   const { order, can } = data;
   const [paying, setPaying] = useState(false);
   const invoice = data.money.invoice;
   const proofs = data.papers.filter((paper) => paper.kind === "payment_proof");
   return (
-    <StepPanel number={6} title="Paid">
+    <StepPanel number={n ?? 6} title="Paid">
       {!invoice ? (
         <Fact shape="later">
           <b>No invoice yet</b> · it is made once the order is checked

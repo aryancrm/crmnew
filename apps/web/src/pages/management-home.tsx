@@ -6,7 +6,7 @@
 import type { CompanyKpis } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
-import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { count, peso } from "../ui";
@@ -110,38 +110,6 @@ export function ManagementHome() {
           to="/team"
         />
       </div>
-
-      {/* Right now beyond Management: on hold, at Dispatch. */}
-      {data && (data.onHold > 0 || data.toPack > 0 || data.onTheWay > 0) && (
-        <div className="flex flex-wrap gap-2 text-xs">
-          {data.onHold > 0 && (
-            <Link
-              to="/?tab=hold#queue"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-2.5 py-1.5 font-semibold text-white hover:bg-rose-700"
-            >
-              <span className="size-1.5 rounded-full bg-white" /> {count(data.onHold)} on hold
-            </Link>
-          )}
-          {data.toPack > 0 && (
-            <Link
-              to="/orders?tab=dispatch"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 font-semibold text-slate-800 hover:bg-slate-200"
-            >
-              <span className="size-1.5 rounded-full bg-sky-500" /> {count(data.toPack)} with
-              Dispatch to pack
-            </Link>
-          )}
-          {data.onTheWay > 0 && (
-            <Link
-              to="/orders?status=shipped"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-slate-100 px-2.5 py-1.5 font-semibold text-slate-800 hover:bg-slate-200"
-            >
-              <span className="size-1.5 rounded-full bg-teal-500" /> {count(data.onTheWay)} on the
-              way
-            </Link>
-          )}
-        </div>
-      )}
 
       {/* The queue to approve, the cards across the whole width (Aryan: three or more a row). */}
       <div id="queue" className="scroll-mt-20">

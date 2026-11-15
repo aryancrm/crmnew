@@ -23,7 +23,6 @@ import {
   ArrowRight,
   CheckCheck,
   ChevronDown,
-  ChevronRight,
   FileCheck2,
   Hand,
   LoaderCircle,
@@ -34,7 +33,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { Fragment, lazy, type ReactNode, Suspense, useEffect, useState } from "react";
+import { lazy, type ReactNode, Suspense, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
@@ -43,7 +42,6 @@ import { ConfirmPaymentDialog, useMoney } from "../finance/parts";
 import { avatarTone, dayHeading, initials, PRIMARY_SM, QUIET_SM } from "../look";
 import { Checks, checksOf } from "../orders/checks";
 import { ReasonDialog, useOrderAction, waited } from "../orders/parts";
-import { RepStrip } from "../rep-strip";
 import { count, Dialog, dayLabel, PageState, peso } from "../ui";
 import { useWorkClock } from "../work-clock";
 
@@ -198,12 +196,8 @@ export function OrdersToCheck({
   // "Medicine check" button that opens the same check in a pop-up.
   // Management's cards take the whole width (Aryan: three or more a row); Finance keeps its money
   // glance beside them.
-  const side =
-    view === "cards" &&
-    !all &&
-    defaultTab !== "hold" &&
-    defaultTab !== "sent" &&
-    desk === "finance";
+  // Every desk's cards take the whole width (Aryan): Finance's money is in its Money pages.
+  const side = false;
   const [checking, setChecking] = useState(false);
   const shown = Number(params.get("shown")) || 0;
   const tab = (params.get("tab") ?? defaultTab) as BoardTab;
@@ -430,7 +424,8 @@ export function OrdersToCheck({
           </span>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {(finance ? data.can.finance : data.can.manage) && clean.length > 0 && (
+          {/* Management approves one by one, picking the warehouse; Finance may invoice the clean ones together. */}
+          {finance && data.can.finance && clean.length > 0 && (
             <button
               type="button"
               className={QUIET_SM}
@@ -438,11 +433,7 @@ export function OrdersToCheck({
               disabled={busy || approvingAll}
             >
               <CheckCheck className="size-3.5 text-emerald-600" />
-              {approvingAll
-                ? finance
-                  ? "Invoicing…"
-                  : "Approving…"
-                : `${finance ? "Invoice" : "Approve"} the ${clean.length} with nothing found`}
+              {approvingAll ? "Invoicing…" : `Invoice the ${clean.length} with nothing found`}
             </button>
           )}
           {!side && data.desk === "management" && (
@@ -506,52 +497,6 @@ export function OrdersToCheck({
               })}
             </div>
 
-            {/* Where the orders stand: every step, with how many are at it. */}
-            {
-              <fieldset className="-mx-1 mt-2 flex min-w-0 items-center gap-0.5 overflow-x-auto border-t border-slate-100 px-1 pt-2 [scrollbar-width:none]">
-                <legend className="sr-only">Orders by step</legend>
-                {[...STEP_LINE, ...STEP_LINE_END].map((step, index) => {
-                  const n = data.byStatus[step.status] ?? 0;
-                  const on = data.status === step.status;
-                  const end = index >= STEP_LINE.length;
-                  return (
-                    <Fragment key={step.status}>
-                      {index === STEP_LINE.length ? (
-                        <span
-                          aria-hidden="true"
-                          className="mx-1.5 h-4 w-px shrink-0 bg-slate-200"
-                        />
-                      ) : index > 0 ? (
-                        <ChevronRight
-                          aria-hidden="true"
-                          className="size-3 shrink-0 text-slate-300"
-                        />
-                      ) : null}
-                      <button
-                        type="button"
-                        aria-pressed={on}
-                        onClick={() => set({ status: on ? "" : step.status })}
-                        className={`flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none ${
-                          on
-                            ? end
-                              ? "bg-rose-50 text-rose-800 ring-1 ring-rose-300 ring-inset"
-                              : "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-300 ring-inset"
-                            : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                        }`}
-                      >
-                        <span>{step.label}</span>
-                        <span
-                          className={`font-bold tabular-nums ${on ? "" : n ? (end ? "text-rose-700" : "text-slate-900") : "text-slate-400"}`}
-                        >
-                          {n}
-                        </span>
-                      </button>
-                    </Fragment>
-                  );
-                })}
-              </fieldset>
-            }
-
             <div className="mt-2.5 flex flex-col gap-2 border-t border-slate-100 pt-2.5 lg:flex-row lg:items-center">
               <div className="relative w-full lg:max-w-sm">
                 <Search className="pointer-events-none absolute top-2 left-3 size-4 text-slate-400" />
@@ -583,57 +528,46 @@ export function OrdersToCheck({
                   { value: "", label: "All channels" },
                   ...data.channels.map((code) => ({ value: code, label: code })),
                 ])}
+                {data.medreps.length > 1 &&
+                  select("MedRep", medrep, (value) => set({ medrep: value, shown: "" }), [
+                    { value: "", label: "Every MedRep" },
+                    ...data.medreps.map((rep) => ({
+                      value: String(rep.id),
+                      label: `${rep.name} (${data.byRep.find((one) => one.id === rep.id)?.orders ?? 0})`,
+                    })),
+                  ])}
               </div>
-            </div>
-
-            {/* Who the orders are from. */}
-            {
-              <div className="mt-2.5 border-t border-slate-100 pt-2.5">
-                <RepStrip
-                  reps={data.byRep.map((rep) => ({
-                    ...rep,
-                    count: rep.orders,
-                    more: peso(rep.value),
-                  }))}
-                  everyone={data.medreps}
-                  picked={medrep}
-                  total={shownTotal}
-                  noun="order"
-                  onPick={(id) => set({ medrep: id, shown: "" })}
-                />
+              <div
+                className="flex flex-wrap items-center gap-2 text-xs text-slate-500 lg:ml-auto"
+                role="status"
+              >
+                {query.isFetching && query.isPlaceholderData ? (
+                  <span className="inline-flex items-center gap-1.5 text-slate-600">
+                    <LoaderCircle className="size-3.5 animate-spin" /> Updating…
+                  </span>
+                ) : (
+                  <span>
+                    <strong className="font-semibold text-slate-800 tabular-nums">
+                      {data.cards.length}
+                    </strong>{" "}
+                    of {count(shownTotal)}
+                    {q && <span className="ml-1">matching “{q}”</span>}
+                  </span>
+                )}
+                {narrowed && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTyped("");
+                      set({ q: "", channel: "", medrep: "", status: "" });
+                    }}
+                    className="font-medium text-emerald-700 hover:underline"
+                  >
+                    Clear
+                  </button>
+                )}
+                {viewSwitch}
               </div>
-            }
-
-            <div
-              className="mt-2.5 flex flex-wrap items-center gap-2 px-1 text-xs text-slate-500"
-              role="status"
-            >
-              {query.isFetching && query.isPlaceholderData ? (
-                <span className="inline-flex items-center gap-1.5 text-slate-600">
-                  <LoaderCircle className="size-3.5 animate-spin" /> Updating orders…
-                </span>
-              ) : (
-                <span>
-                  <strong className="font-semibold text-slate-800 tabular-nums">
-                    {data.cards.length}
-                  </strong>{" "}
-                  of {count(shownTotal)} orders
-                  {q && <span className="ml-1">matching “{q}”</span>}
-                </span>
-              )}
-              {narrowed && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTyped("");
-                    set({ q: "", channel: "", medrep: "", status: "" });
-                  }}
-                  className="font-medium text-emerald-700 hover:underline"
-                >
-                  Clear filters
-                </button>
-              )}
-              <span className="ml-auto">{viewSwitch}</span>
             </div>
           </div>
 
@@ -647,7 +581,11 @@ export function OrdersToCheck({
           )}
 
           {data.cards.length > 0 && view === "table" ? (
-            <OrdersCardTable cards={data.cards} faded={query.isPlaceholderData} />
+            <OrdersCardTable
+              cards={data.cards}
+              faded={query.isPlaceholderData}
+              checks={!dispatch}
+            />
           ) : data.cards.length > 0 && view === "board" ? (
             <OrdersLanes
               cards={data.cards}
@@ -759,13 +697,9 @@ const CARD_CHECKS = [
 
 function CheckSteps({ card }: { card: OrderCard }) {
   const navigate = useNavigate();
-  const all = checksOf(card);
-  const tone = (key: string) =>
-    key === "paper"
-      ? all.some((one) => (one.key === "paper" || one.key === "proof") && one.tone === "warn")
-        ? "warn"
-        : "ok"
-      : (all.find((one) => one.key === key)?.tone ?? "ok");
+  // The proof of payment is Finance's to check, not Management's.
+  const all = checksOf(card).filter((one) => one.key !== "proof");
+  const tone = (key: string) => all.find((one) => one.key === key)?.tone ?? "ok";
   const warns = all.filter((one) => one.tone === "warn");
   const fine = CARD_CHECKS.filter((step) => tone(step.key) !== "warn").length;
   const go = (check: string) => (event: { stopPropagation: () => void }) => {
@@ -878,6 +812,13 @@ export function OrderCardItem({
     card.status === "ready_for_dispatch" || card.status === "packing" || card.status === "shipped";
   const me = useMe().data;
   const warehouse = desk === "dispatch";
+  // Management's checks and buttons only for whoever decides it: Management, or the order's own
+  // approver (a PAP order's head). A MedRep reads where it stands instead.
+  const decides =
+    desk === "management" &&
+    manage &&
+    (card.approverId == null || card.approverId === me?.id || me?.role === "admin");
+  const checking = pending && decides;
   // Waiting on the desk that reads it: the clock (and New, Late) count from reaching this step.
   const waitingHere =
     pending ||
@@ -1080,17 +1021,15 @@ export function OrderCardItem({
               </div>
             </div>
           ) : (
-            <>
-              <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
-                {showRep && (
-                  <span className="inline-flex min-w-0 items-center gap-1">
-                    <UserRound className="size-3 shrink-0 text-slate-400" />
-                    <span className="truncate">{card.medrep}</span>
-                  </span>
-                )}
-                {!(pending && desk === "management") && <Checks card={card} small />}
-              </div>
-            </>
+            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
+              {showRep && (
+                <span className="inline-flex min-w-0 items-center gap-1">
+                  <UserRound className="size-3 shrink-0 text-slate-400" />
+                  <span className="truncate">{card.medrep}</span>
+                </span>
+              )}
+              {!checking && <Checks card={card} small />}
+            </div>
           )}
           {warehouse &&
             card.status === "packing" &&
@@ -1152,8 +1091,8 @@ export function OrderCardItem({
         <div
           className={`mt-2.5 border-t pt-2.5 ${finished ? "border-emerald-200/80" : "border-slate-100"}`}
         >
-          {pending && desk === "management" && <CheckSteps card={card} />}
-          {!(pending && desk === "management") && (
+          {checking && <CheckSteps card={card} />}
+          {!checking && (
             <>
               <div className="mb-1 flex items-center justify-between gap-2 text-[10px] font-medium text-slate-400">
                 <span>{finished ? "Completed" : "Next action"}</span>
@@ -1172,7 +1111,7 @@ export function OrderCardItem({
             </>
           )}
           {/* Every order in Management's queue stands at the same step: no strip there. */}
-          {!(pending && desk === "management") && (
+          {!checking && (
             <>
               <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-slate-500">
                 <span
@@ -1329,7 +1268,7 @@ export function OrderCardItem({
             </div>
           )}
 
-          {desk === "management" && manage && (pending || flagged) && (
+          {decides && (pending || flagged) && (
             // biome-ignore lint/a11y/noStaticElementInteractions: keeps a button's click off the card
             // biome-ignore lint/a11y/useKeyWithClickEvents: the buttons inside have their own keys
             <div
@@ -1734,14 +1673,23 @@ const statusWord = (card: OrderCard) =>
   card.statusLabel;
 
 /** All orders as one dense row each, the Leads desk's Table view for orders. */
-function OrdersCardTable({ cards, faded }: { cards: OrderCard[]; faded: boolean }) {
+function OrdersCardTable({
+  cards,
+  faded,
+  checks = true,
+}: {
+  cards: OrderCard[];
+  faded: boolean;
+  /** Management's and Finance's checks; Dispatch's table leaves them out. */
+  checks?: boolean;
+}) {
   const navigate = useNavigate();
   const head = "whitespace-nowrap px-3 py-2 text-left font-semibold";
   return (
     <div
       className={`overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm ${faded ? "opacity-60" : ""}`}
     >
-      <table className="w-full min-w-[1240px] text-xs">
+      <table className="w-full min-w-[960px] text-xs">
         <thead className="border-b border-slate-200 bg-slate-50 text-[11px] text-slate-500">
           <tr>
             <th scope="col" className={head}>
@@ -1753,9 +1701,11 @@ function OrdersCardTable({ cards, faded }: { cards: OrderCard[]; faded: boolean 
             <th scope="col" className={head}>
               Medicines
             </th>
-            <th scope="col" className={head}>
-              Checks
-            </th>
+            {checks && (
+              <th scope="col" className={head}>
+                Checks
+              </th>
+            )}
             <th scope="col" className={head}>
               MedRep
             </th>
@@ -1799,9 +1749,11 @@ function OrdersCardTable({ cards, faded }: { cards: OrderCard[]; faded: boolean 
               <td className="max-w-[16rem] truncate px-3 py-2 text-slate-600" title={card.lines}>
                 {card.lines}
               </td>
-              <td className="px-3 py-2">
-                <Checks card={card} small />
-              </td>
+              {checks && (
+                <td className="px-3 py-2">
+                  <Checks card={card} small />
+                </td>
+              )}
               <td className="px-3 py-2 text-slate-700">{card.medrep}</td>
               <td className="px-3 py-2 text-slate-600">{card.channel ?? "—"}</td>
               <td className="px-3 py-2 text-right font-semibold text-slate-900 tabular-nums">
@@ -1814,8 +1766,8 @@ function OrdersCardTable({ cards, faded }: { cards: OrderCard[]; faded: boolean 
                   {statusWord(card)}
                 </span>
               </td>
-              <td className="max-w-[14rem] truncate px-3 py-2 text-slate-600" title={card.next}>
-                {card.next}
+              <td className="max-w-[16rem] px-3 py-2 text-slate-600" title={card.next}>
+                <span className="line-clamp-2">{card.next}</span>
               </td>
               <td className="px-3 py-2 whitespace-nowrap text-slate-500">
                 {dayLabel(card.placedOn)}

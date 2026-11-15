@@ -135,6 +135,13 @@ const PAPERS: { kind: PaperKind; label: string; patient?: boolean; business?: bo
   { kind: "payment_proof", label: "Proof of payment" },
 ];
 
+/** The order papers are shown in: a patient's prescription and ID first; a hospital's PO first. */
+const paperRank = (kind: PaperKind, patient: boolean) =>
+  (patient
+    ? ["prescription", "valid_id", "senior_id", "gl", "po", "payment_proof"]
+    : ["po", "hospital_doc", "prescription", "payment_proof"]
+  ).indexOf(kind);
+
 /** Today's date in Manila, as the API counts days. */
 const manilaToday = () =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
@@ -1534,105 +1541,108 @@ export function OrderNew({
           </div>
         )}
         <div className="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm">
-          {PAPERS.filter((paper) =>
-            forPatient
-              ? !paper.business || paper.kind === "po"
-              : !paper.patient || paper.kind === "prescription",
-          ).map((paper) => {
-            const file = papers[paper.kind];
-            const notNeeded =
-              paper.kind === "payment_proof" && picked && picked.paymentTerms !== "advance"
-                ? picked.paymentTerms === "cod"
-                  ? "Not needed · pays on delivery"
-                  : `Not needed · pays in ${picked.paymentDays} days`
-                : null;
-            return (
-              <div
-                key={paper.kind}
-                className="flex min-h-13 items-center justify-between gap-3 border-b border-slate-100 px-4 py-2 last:border-b-0"
-              >
-                <div className="min-w-0">
-                  <div className="text-[13px] text-slate-900">{paper.label}</div>
-                  {paper.kind === "payment_proof" &&
-                    picked?.paymentTerms === "advance" &&
-                    !file && (
-                      <div id="no-proof" className="mt-1 flex flex-wrap items-center gap-2">
-                        <select
-                          aria-label="Why there is no proof yet"
-                          value={noProof}
-                          onChange={(event) => {
-                            setNoProof(event.target.value as NoProofReason | "");
-                            setNoProofAsk(false);
-                          }}
-                          className={`h-8 rounded-lg border bg-white px-2 text-xs ${noProofAsk && !noProof ? "border-rose-400" : "border-slate-200"}`}
-                        >
-                          <option value="">No slip yet? Say why…</option>
-                          {NO_PROOF_REASONS.map((one) => (
-                            <option key={one.value} value={one.value}>
-                              {one.label}
-                            </option>
-                          ))}
-                        </select>
-                        {noProof && (
-                          <input
-                            aria-label="A word for Finance"
-                            value={noProofNote}
-                            maxLength={300}
-                            onChange={(event) => setNoProofNote(event.target.value)}
-                            placeholder={
-                              noProof === "other"
-                                ? "Say what (needed)"
-                                : "A word for Finance (optional)"
-                            }
-                            className={`h-8 min-w-40 flex-1 rounded-lg border bg-white px-2 text-xs ${noProofAsk && noProof === "other" && !noProofNote.trim() ? "border-rose-400" : "border-slate-200"}`}
-                          />
-                        )}
-                        {noProofAsk && (
-                          <span className="w-full text-[11px] text-rose-700">
-                            Add the proof, or say why it isn't here yet
-                          </span>
-                        )}
-                      </div>
-                    )}
-                </div>
-                {file ? (
-                  <div className="flex min-w-0 items-center gap-2 text-xs">
-                    <FileCheck2 className="size-4 shrink-0 text-emerald-600" />
-                    <span
-                      className="max-w-40 truncate font-semibold text-emerald-700"
-                      title={file.name}
-                    >
-                      {file.name}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={`Remove the ${paper.label.toLowerCase()}`}
-                      onClick={() => setPapers((all) => ({ ...all, [paper.kind]: undefined }))}
-                      className="grid size-7 place-items-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                    >
-                      <X className="size-3.5" />
-                    </button>
+          {[...PAPERS]
+            .sort((a, b) => paperRank(a.kind, forPatient) - paperRank(b.kind, forPatient))
+            .filter((paper) =>
+              forPatient
+                ? !paper.business || paper.kind === "po"
+                : !paper.patient || paper.kind === "prescription",
+            )
+            .map((paper) => {
+              const file = papers[paper.kind];
+              const notNeeded =
+                paper.kind === "payment_proof" && picked && picked.paymentTerms !== "advance"
+                  ? picked.paymentTerms === "cod"
+                    ? "Not needed · pays on delivery"
+                    : `Not needed · pays in ${picked.paymentDays} days`
+                  : null;
+              return (
+                <div
+                  key={paper.kind}
+                  className="flex min-h-13 items-center justify-between gap-3 border-b border-slate-100 px-4 py-2 last:border-b-0"
+                >
+                  <div className="min-w-0">
+                    <div className="text-[13px] text-slate-900">{paper.label}</div>
+                    {paper.kind === "payment_proof" &&
+                      picked?.paymentTerms === "advance" &&
+                      !file && (
+                        <div id="no-proof" className="mt-1 flex flex-wrap items-center gap-2">
+                          <select
+                            aria-label="Why there is no proof yet"
+                            value={noProof}
+                            onChange={(event) => {
+                              setNoProof(event.target.value as NoProofReason | "");
+                              setNoProofAsk(false);
+                            }}
+                            className={`h-8 rounded-lg border bg-white px-2 text-xs ${noProofAsk && !noProof ? "border-rose-400" : "border-slate-200"}`}
+                          >
+                            <option value="">No slip yet? Say why…</option>
+                            {NO_PROOF_REASONS.map((one) => (
+                              <option key={one.value} value={one.value}>
+                                {one.label}
+                              </option>
+                            ))}
+                          </select>
+                          {noProof && (
+                            <input
+                              aria-label="A word for Finance"
+                              value={noProofNote}
+                              maxLength={300}
+                              onChange={(event) => setNoProofNote(event.target.value)}
+                              placeholder={
+                                noProof === "other"
+                                  ? "Say what (needed)"
+                                  : "A word for Finance (optional)"
+                              }
+                              className={`h-8 min-w-40 flex-1 rounded-lg border bg-white px-2 text-xs ${noProofAsk && noProof === "other" && !noProofNote.trim() ? "border-rose-400" : "border-slate-200"}`}
+                            />
+                          )}
+                          {noProofAsk && (
+                            <span className="w-full text-[11px] text-rose-700">
+                              Add the proof, or say why it isn't here yet
+                            </span>
+                          )}
+                        </div>
+                      )}
                   </div>
-                ) : notNeeded ? (
-                  <span className="text-xs text-slate-500">{notNeeded}</span>
-                ) : (
-                  <label className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
-                    <Camera className="size-4" /> Add photo
-                    <input
-                      type="file"
-                      accept={PAPER_ACCEPT}
-                      className="sr-only"
-                      onChange={(event) => {
-                        const chosen = event.target.files?.[0];
-                        if (chosen) setPapers((all) => ({ ...all, [paper.kind]: chosen }));
-                        event.target.value = "";
-                      }}
-                    />
-                  </label>
-                )}
-              </div>
-            );
-          })}
+                  {file ? (
+                    <div className="flex min-w-0 items-center gap-2 text-xs">
+                      <FileCheck2 className="size-4 shrink-0 text-emerald-600" />
+                      <span
+                        className="max-w-40 truncate font-semibold text-emerald-700"
+                        title={file.name}
+                      >
+                        {file.name}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label={`Remove the ${paper.label.toLowerCase()}`}
+                        onClick={() => setPapers((all) => ({ ...all, [paper.kind]: undefined }))}
+                        className="grid size-7 place-items-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                      >
+                        <X className="size-3.5" />
+                      </button>
+                    </div>
+                  ) : notNeeded ? (
+                    <span className="text-xs text-slate-500">{notNeeded}</span>
+                  ) : (
+                    <label className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
+                      <Camera className="size-4" /> Add photo
+                      <input
+                        type="file"
+                        accept={PAPER_ACCEPT}
+                        className="sr-only"
+                        onChange={(event) => {
+                          const chosen = event.target.files?.[0];
+                          if (chosen) setPapers((all) => ({ ...all, [paper.kind]: chosen }));
+                          event.target.value = "";
+                        }}
+                      />
+                    </label>
+                  )}
+                </div>
+              );
+            })}
         </div>
       </section>
 

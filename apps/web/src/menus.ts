@@ -527,6 +527,17 @@ function ownDesk(me: Me): Space {
       return {
         ...desk([
           home,
+          // The PAP head approves the PAP orders (not Management): one link straight to them.
+          ...(me.channel?.code === "PAP"
+            ? [
+                {
+                  to: "/orders?stage=management",
+                  label: "PAP orders to approve",
+                  icon: ClipboardCheck,
+                  short: "Approve",
+                },
+              ]
+            : []),
           folder(
             "My team",
             Users,

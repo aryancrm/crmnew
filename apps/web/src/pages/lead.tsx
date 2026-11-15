@@ -1893,14 +1893,15 @@ const shortTime = (iso: string) =>
   }).format(new Date(iso));
 
 /** Where the case's order stands, in a few words for the step's heading. */
-function orderWord(order: NonNullable<LeadCase["order"]>): string {
+function orderWord(order: NonNullable<LeadCase["order"]>, pap = false): string {
   if (order.status === "completed")
     return order.trail.invoice && order.trail.invoice.balance === 0
       ? "Delivered and paid"
       : "Delivered";
   if (order.status === "shipped") return "On the way";
   if (order.status === "packing") return "Packed";
-  if (order.status === "pending_approval") return "Waiting for Management";
+  if (order.status === "pending_approval")
+    return pap ? "Waiting for the PAP head" : "Waiting for Management";
   if (order.status === "on_hold" || order.status === "exception") return "On hold";
   if (order.status === "draft") return "Sent back";
   return "With Dispatch";
@@ -1935,7 +1936,7 @@ function PlacedOrder({
   return (
     <StepPanel
       number="3"
-      title={`Order ${order.code} · ${peso(order.total)} · ${orderWord(order)}`}
+      title={`Order ${order.code} · ${peso(order.total)} · ${orderWord(order, data.lead.desk === "pap")}`}
       footer={
         <>
           <Link

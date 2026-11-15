@@ -641,6 +641,7 @@ export type OrderCard = OrderRow & {
   medrepId: number;
   /** Who approves it instead of Management (a PAP order's head); null: Management. */
   approverId: number | null;
+  approverName: string | null;
   customerKind: CustomerKind;
   customerCity: string | null;
   channel: string | null;
@@ -958,6 +959,8 @@ export type OrderDetail = {
     /** Pays in advance and placed with no proof: why (the MedRep's word). */
     noProofReason: NoProofReason | null;
     noProofNote: string | null;
+    /** Who approves it instead of Management (a PAP order's head), when someone does. */
+    approverName: string | null;
     /** Finance's screenshots with the hold it is on now. */
     holdProofs: { id: number; name: string }[];
     raisedBy: string;
