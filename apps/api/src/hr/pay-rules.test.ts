@@ -1,18 +1,17 @@
-// Payroll's arithmetic against figures worked by hand (2MG's register rules, BIR's table).
+// Payroll's arithmetic against figures worked by hand (2MG's register rules, BIR's monthly table).
 
 import { describe, expect, it } from "vitest";
 import {
-  type Cutoff,
   computeSlip,
-  cutoffByKey,
-  cutoffOf,
   type PayAttendance,
+  type PayMonth,
   type PayRules,
   pagibigMonth,
   payDayOf,
+  payMonthByKey,
+  payMonthOf,
   philhealthMonth,
-  shiftCutoff,
-  sssForCutoff,
+  shiftMonth,
   sssMonth,
   withholdingTax,
 } from "./pay-rules";
@@ -34,18 +33,18 @@ const RULES: PayRules = {
   tax: {
     rows: [
       { over: 0, base: 0, rateBps: 0 },
-      { over: 1041700, base: 0, rateBps: 1500 },
-      { over: 1666700, base: 93750, rateBps: 2000 },
-      { over: 3333300, base: 427070, rateBps: 2500 },
-      { over: 8333300, base: 1677070, rateBps: 3000 },
-      { over: 33333300, base: 9177070, rateBps: 3500 },
+      { over: 2083300, base: 0, rateBps: 1500 },
+      { over: 3333300, base: 187500, rateBps: 2000 },
+      { over: 6666700, base: 854180, rateBps: 2500 },
+      { over: 16666700, base: 3354180, rateBps: 3000 },
+      { over: 66666700, base: 18354180, rateBps: 3500 },
     ],
   },
 };
 const peso = (p: number) => Math.round(p * 100);
 const NOTHING: PayAttendance = {
-  workDays: 13,
-  present: 13,
+  workDays: 26,
+  present: 26,
   absent: 0,
   unpaidLeave: 0,
   paidLeave: { vl: 0, sl: 0, other: 0 },
@@ -56,47 +55,35 @@ const NOTHING: PayAttendance = {
   holidaysWorked: { regular: 0, special: 0 },
 };
 const NONE = { sss: false, philhealth: false, pagibig: false, tax: false };
+const month = (key: string) => payMonthByKey(key) as PayMonth;
 
-describe("cut-offs", () => {
-  it("runs the 26th to the 10th (paid the 15th) and the 11th to the 25th (paid month-end)", () => {
-    expect(cutoffOf("2026-11-05")).toMatchObject({
-      key: "2026-11-a",
-      from: "2026-10-26",
-      to: "2026-11-10",
-      payOn: "2026-11-15",
-    });
-    expect(cutoffOf("2026-11-15")).toMatchObject({
-      key: "2026-11-b",
-      from: "2026-11-11",
-      to: "2026-11-25",
+describe("the pay month", () => {
+  it("runs from the 1st to the month's last day", () => {
+    expect(payMonthOf("2026-11-15")).toEqual({
+      key: "2026-11",
+      from: "2026-11-01",
+      to: "2026-11-30",
       payOn: "2026-11-30",
     });
-    expect(cutoffOf("2026-11-27").key).toBe("2026-12-a");
-    expect(cutoffOf("2026-12-28")).toMatchObject({
-      key: "2027-01-a",
-      from: "2026-12-26",
-      to: "2027-01-10",
-    });
-    expect(cutoffOf("2026-01-03").from).toBe("2025-12-26");
-    expect(cutoffByKey("2026-13-a")).toBeNull();
-    expect(cutoffByKey("nonsense")).toBeNull();
+    expect(month("2026-02").to).toBe("2026-02-28");
+    expect(month("2028-02").to).toBe("2028-02-29");
+    expect(payMonthByKey("2026-13")).toBeNull();
+    expect(payMonthByKey("2026-11-a")).toBeNull();
   });
 
-  it("steps back and forth, across a year", () => {
-    expect(shiftCutoff("2026-11-a", -1)).toBe("2026-10-b");
-    expect(shiftCutoff("2026-11-b", 1)).toBe("2026-12-a");
-    expect(shiftCutoff("2026-01-a", -1)).toBe("2025-12-b");
-    expect(shiftCutoff("2026-11-b", -3)).toBe("2026-10-a");
+  it("steps back and forth across a year", () => {
+    expect(shiftMonth("2026-01", -1)).toBe("2025-12");
+    expect(shiftMonth("2026-12", 1)).toBe("2027-01");
+    expect(shiftMonth("2026-11", -5)).toBe("2026-06");
   });
 
-  it("moves a pay day back off weekends and holidays", () => {
+  it("moves the pay day back off weekends and holidays", () => {
     // 30 Nov 2026 is Bonifacio Day; the 28th and 29th a weekend.
-    expect(payDayOf(cutoffByKey("2026-11-b") as Cutoff, new Set(["2026-11-30"]))).toBe(
-      "2026-11-27",
-    );
-    // 15 Nov 2026 is a Sunday.
-    expect(payDayOf(cutoffByKey("2026-11-a") as Cutoff, new Set())).toBe("2026-11-13");
-    expect(payDayOf(cutoffByKey("2026-12-a") as Cutoff, new Set())).toBe("2026-12-15");
+    expect(payDayOf(month("2026-11"), new Set(["2026-11-30"]))).toBe("2026-11-27");
+    // 31 Oct 2026 is a Saturday.
+    expect(payDayOf(month("2026-10"), new Set())).toBe("2026-10-30");
+    // 31 and 30 Dec 2026 are holidays.
+    expect(payDayOf(month("2026-12"), new Set(["2026-12-30", "2026-12-31"]))).toBe("2026-12-29");
   });
 });
 
@@ -115,23 +102,6 @@ describe("the law's shares", () => {
     expect(sssMonth(RULES.sss, peso(50000)).employee).toBe(peso(1750));
   });
 
-  it("SSS on what was earned: a on its own, b on the month less what a took", () => {
-    const a = sssForCutoff(RULES.sss, peso(20000), peso(9800), "a", null);
-    expect(a.employee).toBe(peso(487.5));
-    const b = sssForCutoff(RULES.sss, peso(20000), peso(10000), "b", {
-      earnings: peso(9800),
-      employee: a.employee,
-      employer: a.employer,
-    });
-    // The month on ₱19,800 (credit ₱20,000): ₱1,000 less ₱487.50 = ₱512.50, rounded to ₱25 as
-    // the register does.
-    expect(b.employee).toBe(peso(525));
-    // As the register: a high first cut-off isn't capped at the bracket's top...
-    expect(sssForCutoff(RULES.sss, peso(40000), peso(20000), "a", null).employee).toBe(peso(1000));
-    // ...but never takes more than the month's most.
-    expect(sssForCutoff(RULES.sss, peso(100000), peso(50000), "a", null).employee).toBe(peso(1750));
-  });
-
   it("PhilHealth within its floor and ceiling; Pag-IBIG ₱200", () => {
     expect(philhealthMonth(RULES.philhealth, peso(20000))).toEqual({
       employee: peso(500),
@@ -145,11 +115,11 @@ describe("the law's shares", () => {
     });
   });
 
-  it("withholding tax by BIR's semi-monthly table", () => {
-    expect(withholdingTax(RULES.tax, peso(10417))).toBe(0);
-    expect(withholdingTax(RULES.tax, peso(15000))).toBe(peso(687.45));
-    expect(withholdingTax(RULES.tax, peso(20000))).toBe(peso(1604.1));
-    expect(withholdingTax(RULES.tax, peso(40000))).toBe(peso(5937.45));
+  it("withholding tax by BIR's monthly table", () => {
+    expect(withholdingTax(RULES.tax, peso(20833))).toBe(0);
+    expect(withholdingTax(RULES.tax, peso(30000))).toBe(peso(1375.05));
+    expect(withholdingTax(RULES.tax, peso(50000))).toBe(peso(5208.4));
+    expect(withholdingTax(RULES.tax, peso(100000))).toBe(peso(16875.05));
   });
 });
 
@@ -159,11 +129,10 @@ describe("one payslip", () => {
       rules: RULES,
       monthlySalary: peso(30000),
       monthlyAllowance: peso(2000),
-      half: "a",
       attendance: {
         ...NOTHING,
         absent: 1,
-        present: 12,
+        present: 25,
         lateMinutes: 30,
         overtime: { ...NOTHING.overtime, ordinary: 120 },
       },
@@ -186,15 +155,13 @@ describe("one payslip", () => {
         },
       ],
       exempt: NONE,
-      prior: null,
-      firstCutoff: false,
     });
     // Daily ₱30,000 × 12 ÷ 313 = ₱1,150.16; hourly ₱143.77.
     expect(slip.dailyRate).toBe(peso(1150.16));
     expect(slip.hourlyRate).toBe(peso(143.77));
     expect(slip.earnings.map((one) => [one.key, one.amount])).toEqual([
-      ["basic", peso(15000)],
-      ["allowance", peso(1000)],
+      ["basic", peso(30000)],
+      ["allowance", peso(2000)],
       ["ot_ordinary", peso(359.42)],
       ["adj_2", peso(500)],
     ]);
@@ -202,64 +169,18 @@ describe("one payslip", () => {
       ["absent", peso(1150.16)],
       ["late", peso(71.88)],
     ]);
-    expect(slip.gross).toBe(peso(15637.38));
-    expect(slip.sssBase).toBe(peso(15137.38));
+    expect(slip.gross).toBe(peso(31637.38));
+    // SSS on ₱31,137.38 earned (the rice isn't taxable): a ₱31,000 credit.
+    expect(slip.sssBase).toBe(peso(31137.38));
     expect(slip.deductions.map((one) => [one.key, one.amount])).toEqual([
-      ["sss", peso(762.5)],
-      ["philhealth", peso(375)],
-      ["pagibig", peso(100)],
-      ["tax", peso(522.43)],
+      ["sss", peso(1550)],
+      ["philhealth", peso(750)],
+      ["pagibig", peso(200)],
+      ["tax", peso(1170.66)],
       ["adj_1", peso(1000)],
     ]);
-    expect(slip.taxable).toBe(peso(13899.88));
-    expect(slip.net).toBe(peso(15637.38 - 762.5 - 375 - 100 - 522.43 - 1000));
-  });
-
-  it("takes the whole month's PhilHealth on a joiner's first cut-off and what a left on b", () => {
-    const base = {
-      rules: RULES,
-      monthlySalary: peso(20000),
-      monthlyAllowance: 0,
-      attendance: NOTHING,
-      adjustments: [],
-      exempt: NONE,
-    };
-    const joiner = computeSlip({ ...base, half: "b", prior: null, firstCutoff: true });
-    expect(joiner.philhealth.employee).toBe(peso(500));
-    const a = computeSlip({ ...base, half: "a", prior: null, firstCutoff: false });
-    expect(a.philhealth.employee).toBe(peso(250));
-    const b = computeSlip({
-      ...base,
-      half: "b",
-      prior: {
-        sssBase: a.sssBase,
-        sss: a.sss.employee,
-        sssEmployer: a.sss.employer,
-        philhealth: a.philhealth.employee,
-        philhealthEmployer: a.philhealth.employer,
-      },
-      firstCutoff: false,
-    });
-    expect(b.philhealth.employee).toBe(peso(250));
-    expect(a.sss.employee + b.sss.employee).toBe(peso(1000));
-    expect(a.pagibig.employee + b.pagibig.employee).toBe(peso(200));
-  });
-
-  it("charges nothing for a scheme they aren't covered by, and no tax when exempt", () => {
-    const slip = computeSlip({
-      rules: RULES,
-      monthlySalary: peso(80000),
-      monthlyAllowance: 0,
-      half: "a",
-      attendance: NOTHING,
-      adjustments: [],
-      exempt: { sss: true, philhealth: true, pagibig: true, tax: true },
-      prior: null,
-      firstCutoff: false,
-    });
-    expect(slip.totalDeductions).toBe(0);
-    expect(slip.net).toBe(peso(40000));
-    expect(slip.deductions.every((one) => one.detail === "not covered")).toBe(true);
+    expect(slip.taxable).toBe(peso(28637.38));
+    expect(slip.net).toBe(peso(31637.38 - 1550 - 750 - 200 - 1170.66 - 1000));
   });
 
   it("never takes more than was earned: the shares first, then HR's lines", () => {
@@ -267,9 +188,8 @@ describe("one payslip", () => {
       rules: RULES,
       monthlySalary: peso(20000),
       monthlyAllowance: 0,
-      half: "a",
-      // Away all but half a day of the cut-off.
-      attendance: { ...NOTHING, present: 0, absent: 12.5 },
+      // Away all month.
+      attendance: { ...NOTHING, present: 0, absent: 26 },
       adjustments: [
         {
           id: 7,
@@ -281,8 +201,6 @@ describe("one payslip", () => {
         },
       ],
       exempt: NONE,
-      prior: null,
-      firstCutoff: false,
     });
     expect(slip.gross).toBeGreaterThan(0);
     expect(slip.net).toBe(0);
@@ -292,12 +210,25 @@ describe("one payslip", () => {
     expect(slip.sss.employee).toBe(slip.deductions.find((one) => one.key === "sss")?.amount);
   });
 
+  it("charges nothing for a scheme they aren't covered by, and no tax when exempt", () => {
+    const slip = computeSlip({
+      rules: RULES,
+      monthlySalary: peso(80000),
+      monthlyAllowance: 0,
+      attendance: NOTHING,
+      adjustments: [],
+      exempt: { sss: true, philhealth: true, pagibig: true, tax: true },
+    });
+    expect(slip.totalDeductions).toBe(0);
+    expect(slip.net).toBe(peso(80000));
+    expect(slip.deductions.every((one) => one.detail === "not covered")).toBe(true);
+  });
+
   it("pays a holiday worked and overtime on holidays and rest days at their rates", () => {
     const slip = computeSlip({
       rules: RULES,
       monthlySalary: peso(31300),
       monthlyAllowance: 0,
-      half: "a",
       attendance: {
         ...NOTHING,
         overtime: { ordinary: 0, restDay: 480, specialHoliday: 0, regularHoliday: 60 },
@@ -305,8 +236,6 @@ describe("one payslip", () => {
       },
       adjustments: [],
       exempt: NONE,
-      prior: null,
-      firstCutoff: false,
     });
     // Daily ₱1,200, hourly ₱150.
     const lines = Object.fromEntries(slip.earnings.map((one) => [one.key, one.amount]));

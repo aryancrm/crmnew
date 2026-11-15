@@ -1,6 +1,6 @@
 // One payslip as a person reads it (and prints it): earnings, time not worked, gross, the
 // deductions and the net pay, with the attendance it came from. HR sees the company's shares and,
-// while the cut-off is a draft, adds or takes off its own lines here.
+// while the month is a draft, adds or takes off its own lines here.
 
 import type { Company, PayLine, Payslip } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
@@ -197,7 +197,7 @@ function AddLine({ slip, onClose }: { slip: Payslip; onClose: () => void }) {
     event.preventDefault();
     const pesos = Number(amount.replace(/[₱,\s]/g, ""));
     const done = await action.run(() =>
-      api(`/api/hr/payroll/${slip.cutoff}/lines`, {
+      api(`/api/hr/payroll/${slip.month}/lines`, {
         body: {
           personId: slip.person.id,
           label,

@@ -1,6 +1,6 @@
-// Payroll as people use it: HR's draft follows the DTR, HR adds its own lines and releases an ended
-// cut-off; released payslips are frozen; each person reads only their own; the CEO reads the
-// register and changes nothing; nobody else sees anyone's pay.
+// Payroll as people use it, one a month: HR's draft follows the DTR, HR adds its own lines and
+// releases an ended month; released payslips are frozen; each person reads only their own; the CEO
+// reads the register and changes nothing; nobody else sees anyone's pay.
 
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -9,8 +9,8 @@ import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { addDays, todayManila } from "../inventory/rules";
 import { seedDemo } from "../seed";
-import type { Me, MyPayslips, PayrollCutoff, PayrollList, Payslip } from "../types";
-import { type Cutoff, cutoffByKey, cutoffOf, firstHalfOf, shiftCutoff } from "./pay-rules";
+import type { Me, MyPayslips, PayrollList, PayrollMonth, Payslip } from "../types";
+import { type PayMonth, payMonthByKey, payMonthOf, shiftMonth } from "./pay-rules";
 import { DEFAULT_SCHEDULE, isWorkDay } from "./work-time";
 
 const PASSWORD = "test-password-1";
@@ -18,11 +18,9 @@ let db: Database;
 let app: ReturnType<typeof createApp>;
 const cookies: Record<string, string> = {};
 const ids: Record<string, number> = {};
-const now = cutoffOf(todayManila()).key;
-// The last cut-off that has ended, and the last whole month (a and b both ended).
-const past = shiftCutoff(now, -1);
-const monthB = past.endsWith("-b") ? past : shiftCutoff(past, -1);
-const monthA = firstHalfOf(monthB);
+const now = payMonthOf(todayManila()).key;
+// The last month that has ended.
+const past = shiftMonth(now, -1);
 
 const get = (who: string, path: string) =>
   app.request(path, { headers: { cookie: cookies[who] as string } });
@@ -33,13 +31,18 @@ const send = (who: string, path: string, body: unknown = {}, method = "POST") =>
     headers: { "content-type": "application/json", cookie: cookies[who] as string },
     body: JSON.stringify(body),
   });
-const slipOf = (register: PayrollCutoff, name: string) =>
+const slipOf = (register: PayrollMonth, name: string) =>
   register.slips.find((one) => one.person.name === name) as Payslip;
 const line = (slip: Payslip, key: string) =>
   [...slip.earnings, ...slip.less, ...slip.deductions].find((one) => one.key === key)?.amount ?? 0;
 
-/** A full day, 7:00 to 16:00, on every working day of a cut-off except the ones skipped. */
-async function workAll(personId: number, cutoff: Cutoff, skip: string[] = [], late: string[] = []) {
+/** A full day, 7:00 to 16:00, on every working day of a month except the ones skipped. */
+async function workAll(
+  personId: number,
+  month: PayMonth,
+  skip: string[] = [],
+  late: string[] = [],
+) {
   const holidays = new Set(
     (
       await rows<{ day: string }>(
@@ -48,7 +51,7 @@ async function workAll(personId: number, cutoff: Cutoff, skip: string[] = [], la
       )
     ).map((one) => one.day),
   );
-  for (let at = cutoff.from; at <= cutoff.to; at = addDays(at, 1)) {
+  for (let at = month.from; at <= month.to; at = addDays(at, 1)) {
     if (!isWorkDay(at, DEFAULT_SCHEDULE, holidays) || skip.includes(at)) continue;
     const starts = late.includes(at) ? "07:40" : "07:00";
     await db.execute(
@@ -60,7 +63,7 @@ async function workAll(personId: number, cutoff: Cutoff, skip: string[] = [], la
     );
   }
 }
-const workDaysOf = async (cutoff: Cutoff) => {
+const workDaysOf = async (month: PayMonth) => {
   const holidays = new Set(
     (
       await rows<{ day: string }>(
@@ -70,7 +73,7 @@ const workDaysOf = async (cutoff: Cutoff) => {
     ).map((one) => one.day),
   );
   const out: string[] = [];
-  for (let at = cutoff.from; at <= cutoff.to; at = addDays(at, 1))
+  for (let at = month.from; at <= month.to; at = addDays(at, 1))
     if (isWorkDay(at, DEFAULT_SCHEDULE, holidays)) out.push(at);
   return out;
 };
@@ -99,21 +102,20 @@ beforeAll(async () => {
     expect(
       (await send("helen", `/api/hr/people/${ids[name]}`, { salary, allowance }, "PATCH")).status,
     ).toBe(200);
-  const pastDays = await workDaysOf(cutoffByKey(past) as Cutoff);
+  const pastDays = await workDaysOf(payMonthByKey(past) as PayMonth);
   await workAll(
     ids.ryan as number,
-    cutoffByKey(past) as Cutoff,
+    payMonthByKey(past) as PayMonth,
     [pastDays[0] as string],
     [pastDays[1] as string],
   );
-  for (const key of [monthA, monthB])
-    await workAll(ids.daniel as number, cutoffByKey(key) as Cutoff);
+  await workAll(ids.daniel as number, payMonthByKey(past) as PayMonth);
 });
 
 describe("payroll", () => {
-  it("lists the cut-offs for HR and the CEO; nobody else", async () => {
+  it("lists the months for HR and the CEO; nobody else", async () => {
     const list = await read<PayrollList>("helen", "/api/hr/payroll");
-    expect(list.periods).toHaveLength(12);
+    expect(list.periods).toHaveLength(6);
     expect(list.periods[0]).toMatchObject({ key: now, status: "running" });
     expect(list.periods[1]).toMatchObject({ key: past, status: "ready", people: null });
     expect((await get("naresh", "/api/hr/payroll")).status).toBe(200);
@@ -122,7 +124,7 @@ describe("payroll", () => {
   });
 
   it("works each slip out from the DTR: absent, late, the shares and tax", async () => {
-    const register = await read<PayrollCutoff>("helen", `/api/hr/payroll/${past}`);
+    const register = await read<PayrollMonth>("helen", `/api/hr/payroll/${past}`);
     expect(register.can).toEqual({ adjust: true, release: true });
     expect(register.noSalary.map((one) => one.name)).toContain("Fiona");
     const ryan = slipOf(register, "Ryan");
@@ -130,27 +132,26 @@ describe("payroll", () => {
     // ₱30,000 × 12 ÷ 313 = ₱1,150.16 a day; 45 minutes at ₱143.77 an hour.
     expect(line(ryan, "absent")).toBe(115016);
     expect(line(ryan, "late")).toBe(10783);
-    expect(line(ryan, "basic")).toBe(1_500_000);
-    expect(line(ryan, "allowance")).toBe(100_000);
-    expect(line(ryan, "pagibig")).toBe(10_000);
+    expect(line(ryan, "basic")).toBe(3_000_000);
+    expect(line(ryan, "allowance")).toBe(200_000);
+    expect(line(ryan, "pagibig")).toBe(20_000);
     expect(ryan.net).toBe(ryan.gross - ryan.totalDeductions);
     expect(register.totals.people).toBe(register.slips.length);
-    const ceo = await read<PayrollCutoff>("naresh", `/api/hr/payroll/${past}`);
+    const ceo = await read<PayrollMonth>("naresh", `/api/hr/payroll/${past}`);
     expect(ceo.can).toEqual({ adjust: false, release: false });
     expect(slipOf(ceo, "Ryan").net).toBe(ryan.net);
   });
 
-  it("settles SSS and PhilHealth over the month's two cut-offs", async () => {
-    const a = slipOf(await read<PayrollCutoff>("helen", `/api/hr/payroll/${monthA}`), "Daniel");
-    const b = slipOf(await read<PayrollCutoff>("helen", `/api/hr/payroll/${monthB}`), "Daniel");
-    // ₱50,000: the month's most, ₱1,750 of SSS; PhilHealth 2.5% each, ₱1,250.
-    expect(line(a, "sss") + line(b, "sss")).toBe(175_000);
-    expect(line(a, "philhealth") + line(b, "philhealth")).toBe(125_000);
-    expect(line(a, "pagibig") + line(b, "pagibig")).toBe(20_000);
+  it("takes the month's shares in one go", async () => {
+    const daniel = slipOf(await read<PayrollMonth>("helen", `/api/hr/payroll/${past}`), "Daniel");
+    // ₱50,000 a month, worked in full: SSS at its most (₱1,750), PhilHealth 2.5% (₱1,250), ₱200.
+    expect(line(daniel, "sss")).toBe(175_000);
+    expect(line(daniel, "philhealth")).toBe(125_000);
+    expect(line(daniel, "pagibig")).toBe(20_000);
   });
 
   it("lets HR add and take off its own lines; the CEO can't", async () => {
-    const before = slipOf(await read<PayrollCutoff>("helen", `/api/hr/payroll/${past}`), "Ryan");
+    const before = slipOf(await read<PayrollMonth>("helen", `/api/hr/payroll/${past}`), "Ryan");
     const advance = {
       personId: ids.ryan,
       label: "Cash advance",
@@ -177,7 +178,7 @@ describe("payroll", () => {
     const riceId = (
       (await (await send("helen", `/api/hr/payroll/${past}/lines`, rice)).json()) as { id: number }
     ).id;
-    const after = slipOf(await read<PayrollCutoff>("helen", `/api/hr/payroll/${past}`), "Ryan");
+    const after = slipOf(await read<PayrollMonth>("helen", `/api/hr/payroll/${past}`), "Ryan");
     expect(line(after, `adj_${made.id}`)).toBe(100_000);
     expect(after.net).toBe(before.net - 100_000 + 50_000);
     // Not taxable: tax and SSS are reckoned without it.
@@ -186,10 +187,10 @@ describe("payroll", () => {
     expect((await send("helen", `/api/hr/payroll/lines/${riceId}/remove`)).status).toBe(404);
   });
 
-  it("releases only an ended cut-off, once; then it's frozen and each person reads their own", async () => {
+  it("releases only an ended month, once; then it's frozen and each person reads their own", async () => {
     expect((await send("helen", `/api/hr/payroll/${now}/release`)).status).toBe(409);
     expect((await send("naresh", `/api/hr/payroll/${past}/release`)).status).toBe(403);
-    const draft = slipOf(await read<PayrollCutoff>("helen", `/api/hr/payroll/${past}`), "Ryan");
+    const draft = slipOf(await read<PayrollMonth>("helen", `/api/hr/payroll/${past}`), "Ryan");
     const released = await send("helen", `/api/hr/payroll/${past}/release`);
     expect(released.status).toBe(200);
     expect((await send("helen", `/api/hr/payroll/${past}/release`)).status).toBe(409);
@@ -210,12 +211,12 @@ describe("payroll", () => {
     expect(told?.n).toBe(1);
     // A day put right afterwards doesn't change what was released.
     await db.execute(sql`delete from attendance where person_id = ${ids.ryan}`);
-    const frozen = await read<PayrollCutoff>("helen", `/api/hr/payroll/${past}`);
+    const frozen = await read<PayrollMonth>("helen", `/api/hr/payroll/${past}`);
     expect(frozen.status).toBe("released");
     expect(frozen.can).toEqual({ adjust: false, release: false });
     expect(slipOf(frozen, "Ryan").net).toBe(draft.net);
     const mine = await read<MyPayslips>("ryan", "/api/hr/payslips/mine");
-    expect(mine.slips.map((one) => one.cutoff)).toEqual([past]);
+    expect(mine.slips.map((one) => one.month)).toEqual([past]);
     expect(mine.slips[0]?.net).toBe(draft.net);
     const slip = await read<{ slip: Payslip }>("ryan", `/api/hr/payslips/${past}`);
     expect(slip.slip.person.name).toBe("Ryan");
@@ -235,7 +236,7 @@ describe("payroll", () => {
     expect(
       (await send("helen", `/api/hr/people/${ids.daniel}`, { noPagibig: true }, "PATCH")).status,
     ).toBe(200);
-    const draft = slipOf(await read<PayrollCutoff>("helen", `/api/hr/payroll/${now}`), "Daniel");
+    const draft = slipOf(await read<PayrollMonth>("helen", `/api/hr/payroll/${now}`), "Daniel");
     expect(draft.deductions.find((one) => one.key === "pagibig")).toMatchObject({
       amount: 0,
       detail: "not covered",

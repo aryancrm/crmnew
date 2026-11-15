@@ -1,9 +1,9 @@
-// Payroll: HR's cut-offs and each one's register. A cut-off not yet released is worked out from the
-// DTR as it stands (a day HR puts right shows at once); HR adds its own lines on a payslip and
-// releases the cut-off once it has ended, which freezes the payslips. The CEO reads the same pages
+// Payroll, one a month: HR's months and each one's register. A month not yet released is worked
+// out from the DTR as it stands (a day HR puts right shows at once); HR adds its own lines on a
+// payslip and releases the month once it has ended, which freezes the payslips. The CEO reads the same pages
 // and changes nothing. The law's rates are on their own page.
 
-import type { PayRuleRow, PayrollCutoff, PayrollList, Payslip } from "@2mg/api/types";
+import type { PayRuleRow, PayrollList, PayrollMonth, Payslip } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Download, Scale, Search } from "lucide-react";
 import { useState } from "react";
@@ -27,7 +27,7 @@ import {
 /** The Manila calendar day of a moment the API sent (UTC). */
 const manilaDayOf = (iso: string) =>
   new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date(iso));
-const STATUS: Record<PayrollCutoff["status"], [string, Tone]> = {
+const STATUS: Record<PayrollMonth["status"], [string, Tone]> = {
   running: ["Running", "info"],
   ready: ["Ready to release", "warn"],
   released: ["Released", "good"],
@@ -50,7 +50,7 @@ export function PayrollPage() {
     <div className="flex flex-col gap-4">
       <PageHead
         title="Payroll"
-        sub="26th – 10th paid the 15th · 11th – 25th paid at month-end"
+        sub="The 1st to the month's last day, paid on the last day"
         actions={
           <Link to="/hr/payroll/rates">
             <Button small>
@@ -64,7 +64,7 @@ export function PayrollPage() {
           <table className="w-full text-sm [&_td]:whitespace-nowrap">
             <thead>
               <tr className="border-b border-slate-100 text-left text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
-                <th className="px-4 py-2">Cut-off</th>
+                <th className="px-4 py-2">Month</th>
                 <th className="px-3 py-2">Pay day</th>
                 <th className="px-3 py-2">Status</th>
                 <th className="px-3 py-2 text-right">People</th>
@@ -74,10 +74,10 @@ export function PayrollPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {data.periods.map((one, at) => {
-                // An ended cut-off older than one released (or than the last two) was never run
+                // An ended month older than one released (or than last month) was never run
                 // here: it isn't waiting on anyone.
                 const stale =
-                  one.status === "ready" && ((lastReleased >= 0 && at > lastReleased) || at > 2);
+                  one.status === "ready" && ((lastReleased >= 0 && at > lastReleased) || at > 1);
                 const [word, tone]: [string, Tone] = stale
                   ? ["Not released", "plain"]
                   : STATUS[one.status];
@@ -128,20 +128,20 @@ export function PayrollPage() {
   );
 }
 
-export function PayrollCutoffPage() {
-  const { cutoff = "" } = useParams();
+export function PayrollMonthPage() {
+  const { month = "" } = useParams();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const picked = Number(params.get("person")) || null;
   const query = useQuery({
-    queryKey: ["payroll", cutoff],
-    queryFn: () => api<PayrollCutoff>(`/api/hr/payroll/${cutoff}`),
+    queryKey: ["payroll", month],
+    queryFn: () => api<PayrollMonth>(`/api/hr/payroll/${month}`),
     placeholderData: (previous) => previous,
   });
   const [q, setQ] = useState("");
   const [releasing, setReleasing] = useState(false);
   const data = query.data;
-  if (!data) return <PageState query={query} what="the cut-off" />;
+  if (!data) return <PageState query={query} what="the month" />;
   const [word, tone] = STATUS[data.status];
   const words = q.trim().toLowerCase();
   const rows = data.slips.filter(
@@ -176,7 +176,7 @@ export function PayrollCutoffPage() {
               <Button
                 small
                 variant="quiet"
-                aria-label="The cut-off before"
+                aria-label="The month before"
                 onClick={() => navigate(`/hr/payroll/${data.before}`)}
               >
                 <ChevronLeft size={16} />
@@ -184,7 +184,7 @@ export function PayrollCutoffPage() {
               <Button
                 small
                 variant="quiet"
-                aria-label="The cut-off after"
+                aria-label="The month after"
                 disabled={!data.after}
                 onClick={() => data.after && navigate(`/hr/payroll/${data.after}`)}
               >
@@ -372,7 +372,7 @@ export function PayrollCutoffPage() {
   );
 }
 
-function ReleaseDialog({ data, onClose }: { data: PayrollCutoff; onClose: () => void }) {
+function ReleaseDialog({ data, onClose }: { data: PayrollMonth; onClose: () => void }) {
   const action = useAction();
   const queries = useQueryClient();
   return (
@@ -381,7 +381,7 @@ function ReleaseDialog({ data, onClose }: { data: PayrollCutoff; onClose: () => 
         <p>
           {data.totals.people} payslips, {peso(data.totals.net)} net pay, paid{" "}
           {longDay(data.payDay)}. Each person is told and can read their own. Once released, the
-          payslips stay as they are: a later change goes on the next cut-off.
+          payslips stay as they are: a later change goes on the next month.
         </p>
         {data.noSalary.length > 0 && (
           <p className="text-amber-800">
@@ -437,7 +437,7 @@ function ruleWords(kind: PayRuleRow["kind"], rule: Rule): string[] {
     ];
   return (rule.rows ?? []).map((row) =>
     row.rateBps === 0
-      ? `Up to ${peso(rule.rows?.[1]?.over ?? 0)} a cut-off: no tax`
+      ? `Up to ${peso(rule.rows?.[1]?.over ?? 0)} a month: no tax`
       : `Over ${peso(row.over)}: ${peso(row.base)} plus ${pct(row.rateBps)} of the excess`,
   );
 }
@@ -445,7 +445,7 @@ const KIND_WORDS: Record<PayRuleRow["kind"], string> = {
   sss: "SSS",
   philhealth: "PhilHealth",
   pagibig: "Pag-IBIG",
-  tax: "Withholding tax (semi-monthly)",
+  tax: "Withholding tax (monthly)",
 };
 
 export function PayRatesPage() {
@@ -486,23 +486,23 @@ export function PayRatesPage() {
         <section className={`${CARD} flex flex-col gap-2 p-4 lg:col-span-2`}>
           <h2 className="text-sm font-semibold text-slate-900">The company's own rules</h2>
           <ul className="list-disc pl-5 text-[13px] text-slate-700">
-            <li>Half the monthly salary and allowance each cut-off</li>
+            <li>
+              One payroll a month, the 1st to the last day, with the monthly salary and allowance
+            </li>
             <li>A day's pay is the monthly salary × 12 ÷ 313; an hour's is a day's ÷ 8</li>
             <li>
               Absent, leave without pay, late and undertime come off at those rates (late and
               undertime in 15-minute blocks)
             </li>
-            <li>
-              SSS on what was earned: the first cut-off on its own, the second on the month less the
-              first's; PhilHealth and Pag-IBIG half each cut-off (a joiner's first cut-off takes the
-              month's PhilHealth)
-            </li>
+            <li>SSS on what was earned in the month; PhilHealth and Pag-IBIG on the salary</li>
             <li>
               Approved overtime: 125% on a working day, 130% on a rest day, 169% on a special day,
               260% on a regular holiday; a holiday worked adds 100% (regular) or 30% (special) of
               the day
             </li>
-            <li>A pay day on a weekend or holiday moves to the working day before</li>
+            <li>
+              Paid on the month's last day; a weekend or holiday moves it to the working day before
+            </li>
           </ul>
         </section>
       </div>

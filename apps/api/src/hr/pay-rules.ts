@@ -1,24 +1,16 @@
-// Payroll's arithmetic, with no database: the cut-offs, a day's and an hour's pay, and one person's
-// payslip for one cut-off from their attendance. Money is whole centavos; each line is rounded once,
+// Payroll's arithmetic, with no database: the pay month, a day's and an hour's pay, and one person's
+// payslip for one month from their attendance. Money is whole centavos; each line is rounded once,
 // from the exact rate, as 2MG's register does.
 //
-// 2MG's own rules, as HR confirmed them for the HR portal's engine (Sep 2026):
-//   - two cut-offs a month: the 26th to the 10th, paid the 15th ("a"); the 11th to the 25th, paid
-//     the month's last day ("b"); a pay day on a Saturday, Sunday or holiday moves back to the
-//     working day before;
-//   - half the monthly salary and allowance per cut-off; daily rate = monthly × 12 ÷ 313, hourly =
-//     daily ÷ 8; absences, leave without pay, late and undertime come off at those rates;
-//   - SSS on what was actually earned: cut-off a takes 5% of its own earnings (doubled, put in its
-//     ₱500 bracket, halved), cut-off b the month's share on both cut-offs' earnings less what a
-//     took, rounded to ₱25. (Unlike the old register, a never takes more than the month's most.)
-//   - PhilHealth 5% of the monthly salary (₱10,000 to ₱100,000), half each; half per cut-off, the
-//     whole month on a joiner's first cut-off;
-//   - Pag-IBIG ₱200 a month, ₱100 per cut-off; the employer matches;
-//   - BIR's semi-monthly withholding table on the cut-off's taxable pay (gross less the three).
-// Added here (the CRM knows them): approved overtime (125% on a working day, 130% on a rest day,
-// 169% on a special day, 260% on a regular holiday) and a holiday worked (a regular holiday +100% of
-// the daily rate, a special day +30%: the monthly pay already holds the day itself).
-// The law-set rates (SSS, PhilHealth, Pag-IBIG, tax) are dated rows in pay_rule, passed in here.
+// One payroll a month, the 1st to the month's last day (Aryan, 15 Nov), paid on the last day (moved
+// back off a Saturday, Sunday or holiday). The rates are 2MG's, as HR confirmed them for the HR
+// portal's engine: the monthly salary and allowance; a day = monthly × 12 ÷ 313, an hour = a day
+// ÷ 8; absent, leave without pay, late and undertime come off at those rates; SSS on what was
+// earned in the month; PhilHealth 5% of the salary (₱10,000 to ₱100,000), half each; Pag-IBIG ₱200;
+// BIR's monthly withholding table on the month's taxable pay. Approved overtime (125% on a working
+// day, 130% on a rest day, 169% on a special day, 260% on a regular holiday) and a holiday worked (a
+// regular holiday +100% of the day, a special day +30%) are paid. The law-set rates are dated rows
+// in pay_rule, passed in here.
 
 export const DAYS_PER_YEAR = 313;
 export const HOURS_PER_DAY = 8;
@@ -48,7 +40,7 @@ export type SssRule = {
 };
 export type PhilhealthRule = { rateBps: number; floor: number; ceiling: number };
 export type PagibigRule = { employeeBps: number; employerBps: number; maxBase: number };
-/** BIR's semi-monthly table: above `over`, `base` plus `rateBps` of the excess. */
+/** BIR's monthly table: above `over`, `base` plus `rateBps` of the excess. */
 export type TaxRule = { rows: { over: number; base: number; rateBps: number }[] };
 export type PayRules = {
   sss: SssRule;
@@ -57,72 +49,50 @@ export type PayRules = {
   tax: TaxRule;
 };
 
-// ------------------------------------------------------------------ cut-offs
+// ------------------------------------------------------------------ the pay month
 
-export type Cutoff = {
-  /** "2026-11-a": 26 Oct – 10 Nov, paid 15 Nov; "2026-11-b": 11 – 25 Nov, paid 30 Nov. */
+export type PayMonth = {
+  /** "2026-11": 1 to 30 November, paid 30 November. */
   key: string;
-  half: "a" | "b";
   from: string;
   to: string;
-  /** The pay day before moving it off a weekend or holiday. */
+  /** The pay day before moving it off a weekend or holiday: the month's last day. */
   payOn: string;
 };
 
-const CUTOFF = /^(\d{4})-(\d{2})-([ab])$/;
+const MONTH = /^(\d{4})-(\d{2})$/;
 const ymd = (y: number, m: number, d: number) =>
   new Date(Date.UTC(y, m - 1, d)).toISOString().slice(0, 10);
 
-export function cutoffByKey(key: string): Cutoff | null {
-  const match = CUTOFF.exec(key);
+export function payMonthByKey(key: string): PayMonth | null {
+  const match = MONTH.exec(key);
   if (!match) return null;
   const y = Number(match[1]);
   const m = Number(match[2]);
   if (m < 1 || m > 12 || y < 2000 || y > 2100) return null;
-  const half = match[3] as "a" | "b";
-  return half === "a"
-    ? { key, half, from: ymd(y, m - 1, 26), to: ymd(y, m, 10), payOn: ymd(y, m, 15) }
-    : { key, half, from: ymd(y, m, 11), to: ymd(y, m, 25), payOn: ymd(y, m + 1, 0) };
+  return { key, from: ymd(y, m, 1), to: ymd(y, m + 1, 0), payOn: ymd(y, m + 1, 0) };
 }
 
-/** The cut-off a day falls in. */
-export function cutoffOf(day: string): Cutoff {
-  const y = Number(day.slice(0, 4));
-  const m = Number(day.slice(5, 7));
-  const d = Number(day.slice(8, 10));
-  if (d >= 26)
-    return cutoffByKey(
-      ymd(y, m + 1, 1)
-        .slice(0, 7)
-        .concat("-a"),
-    ) as Cutoff;
-  return cutoffByKey(`${day.slice(0, 7)}-${d <= 10 ? "a" : "b"}`) as Cutoff;
-}
+/** The pay month a day falls in. */
+export const payMonthOf = (day: string) => payMonthByKey(day.slice(0, 7)) as PayMonth;
 
-/** The cut-off before or after one. */
-export function shiftCutoff(key: string, by: number): string {
-  let at = cutoffByKey(key) as Cutoff;
-  for (let step = 0; step < Math.abs(by); step += 1) {
-    const day = new Date(`${by > 0 ? at.to : at.from}T00:00:00Z`);
-    day.setUTCDate(day.getUTCDate() + (by > 0 ? 1 : -1));
-    at = cutoffOf(day.toISOString().slice(0, 10));
-  }
-  return at.key;
+/** The month before or after one. */
+export function shiftMonth(key: string, by: number): string {
+  const y = Number(key.slice(0, 4));
+  const m = Number(key.slice(5, 7));
+  return ymd(y, m + by, 1).slice(0, 7);
 }
-
-/** The other cut-off of the same month: for b, its a. */
-export const firstHalfOf = (key: string) => key.replace(/-b$/, "-a");
 
 /** The pay day moved back off Saturdays, Sundays and holidays. */
-export function payDayOf(cutoff: Cutoff, holidays: ReadonlySet<string>): string {
-  const day = new Date(`${cutoff.payOn}T00:00:00Z`);
+export function payDayOf(month: PayMonth, holidays: ReadonlySet<string>): string {
+  const day = new Date(`${month.payOn}T00:00:00Z`);
   for (let tries = 0; tries < 10; tries += 1) {
     const at = day.toISOString().slice(0, 10);
     const weekday = day.getUTCDay();
     if (weekday !== 0 && weekday !== 6 && !holidays.has(at)) return at;
     day.setUTCDate(day.getUTCDate() - 1);
   }
-  return cutoff.payOn;
+  return month.payOn;
 }
 
 // ------------------------------------------------------------------ the law's shares
@@ -148,41 +118,6 @@ export function sssMonth(rule: SssRule, monthly: number) {
   };
 }
 
-/** SSS on a cut-off's own earnings; b needs what a earned and took. */
-export function sssForCutoff(
-  rule: SssRule,
-  monthlySalary: number,
-  earnings: number,
-  half: "a" | "b",
-  prior: { earnings: number; employee: number; employer: number } | null,
-): { employee: number; employer: number; basis: string } {
-  const fixed = sssMonth(rule, monthlySalary);
-  const most = sssMonth(rule, rule.mscMax).employee;
-  // Cut-off a: 5% of its earnings, doubled to a month, put in its bracket (no top, as the register
-  // does), halved; never more than the month's most.
-  const firstShare = (e: number) => {
-    const credit = Math.max(rule.mscMin, Math.round((Math.max(0, e) * 2) / rule.step) * rule.step);
-    return Math.min(most, round(ratio(credit, rule.employeeBps) / 2));
-  };
-  if (half === "a")
-    return {
-      employee: firstShare(earnings),
-      employer: round(fixed.employer / 2),
-      basis: "this cut-off's earnings",
-    };
-  const before = prior ?? {
-    earnings: 0,
-    employee: 0,
-    employer: 0,
-  };
-  const month = sssMonth(rule, before.earnings + Math.max(0, earnings));
-  return {
-    employee: Math.max(0, Math.round((month.employee - before.employee) / 2500) * 2500),
-    employer: Math.max(0, month.employer - before.employer),
-    basis: prior ? "the month's earnings, less the first cut-off's" : "this cut-off's earnings",
-  };
-}
-
 /** PhilHealth's month: 5% of the salary within its floor and ceiling, half each. */
 export function philhealthMonth(rule: PhilhealthRule, monthlySalary: number) {
   const base = Math.min(rule.ceiling, Math.max(rule.floor, monthlySalary));
@@ -200,7 +135,7 @@ export function pagibigMonth(rule: PagibigRule, monthlySalary: number) {
   };
 }
 
-/** Withholding tax on a cut-off's taxable pay. */
+/** Withholding tax on a month's taxable pay. */
 export function withholdingTax(rule: TaxRule, taxable: number): number {
   let row = rule.rows[0];
   for (const one of rule.rows) if (taxable > one.over) row = one;
@@ -211,7 +146,7 @@ export function withholdingTax(rule: TaxRule, taxable: number): number {
 // ------------------------------------------------------------------ one payslip
 
 export type PayAttendance = {
-  /** Working days of their schedule in the cut-off while employed. */
+  /** Working days of their schedule in the month while employed. */
   workDays: number;
   present: number;
   /** Working days gone by with no time in, leave or form. */
@@ -283,20 +218,9 @@ export function computeSlip(input: {
   rules: PayRules;
   monthlySalary: number;
   monthlyAllowance: number;
-  half: "a" | "b";
   attendance: PayAttendance;
   adjustments: PayAdjustment[];
   exempt: { sss: boolean; philhealth: boolean; pagibig: boolean; tax: boolean };
-  /** This month's cut-off a (for b): what it earned and took. */
-  prior: {
-    sssBase: number;
-    sss: number;
-    sssEmployer: number;
-    philhealth: number;
-    philhealthEmployer: number;
-  } | null;
-  /** Their first cut-off (joined within it): the whole month's PhilHealth is taken on it. */
-  firstCutoff: boolean;
 }): SlipFigures {
   const { rules, monthlySalary, attendance: a } = input;
   const daily = (monthlySalary * 12) / DAYS_PER_YEAR;
@@ -305,16 +229,16 @@ export function computeSlip(input: {
     {
       key: "basic",
       label: "Basic pay",
-      detail: "Half the monthly salary",
-      amount: round(monthlySalary / 2),
+      detail: "The monthly salary",
+      amount: monthlySalary,
     },
   ];
   if (input.monthlyAllowance > 0)
     earnings.push({
       key: "allowance",
       label: "Allowance",
-      detail: "Half the monthly allowance",
-      amount: round(input.monthlyAllowance / 2),
+      detail: null,
+      amount: input.monthlyAllowance,
     });
   for (const kind of Object.keys(OVERTIME_BPS) as OvertimeKind[]) {
     const minutes = a.overtime[kind];
@@ -373,44 +297,16 @@ export function computeSlip(input: {
   const gross = Math.max(0, earned - off);
   const sssBase = Math.max(0, gross - notTaxable);
 
-  const sss = input.exempt.sss
-    ? { employee: 0, employer: 0 }
-    : sssForCutoff(
-        rules.sss,
-        monthlySalary,
-        sssBase,
-        input.half,
-        input.half === "b" && input.prior
-          ? {
-              earnings: input.prior.sssBase,
-              employee: input.prior.sss,
-              employer: input.prior.sssEmployer,
-            }
-          : null,
-      );
-  const phMonth = philhealthMonth(rules.philhealth, monthlySalary);
-  const halfMonth = {
-    employee: round(phMonth.employee / 2),
-    employer: round(phMonth.employer / 2),
-  };
-  // Cut-off a takes half the month (all of it on a joiner's first); b takes what a left.
+  // SSS on what was earned in the month; PhilHealth and Pag-IBIG on the salary.
+  const none = { employee: 0, employer: 0 };
+  const sss = input.exempt.sss ? none : sssMonth(rules.sss, sssBase);
   const philhealth = input.exempt.philhealth
-    ? { employee: 0, employer: 0 }
-    : input.half === "b" && input.prior
-      ? {
-          employee: Math.max(0, phMonth.employee - input.prior.philhealth),
-          employer: Math.max(0, phMonth.employer - input.prior.philhealthEmployer),
-        }
-      : input.firstCutoff
-        ? phMonth
-        : halfMonth;
-  const piMonth = pagibigMonth(rules.pagibig, monthlySalary);
-  const pagibig = input.exempt.pagibig
-    ? { employee: 0, employer: 0 }
-    : { employee: round(piMonth.employee / 2), employer: round(piMonth.employer / 2) };
+    ? none
+    : philhealthMonth(rules.philhealth, monthlySalary);
+  const pagibig = input.exempt.pagibig ? none : pagibigMonth(rules.pagibig, monthlySalary);
 
   // Deductions come off what was earned, in order (the three shares, tax, then HR's lines), and
-  // never past it: a cut-off with too little pay takes what it can and says what it couldn't.
+  // never past it: a month with too little pay takes what it can and says what it couldn't.
   let room = gross;
   const take = (amount: number) => {
     const taken = Math.min(amount, room);
@@ -418,7 +314,7 @@ export function computeSlip(input: {
     return taken;
   };
   const short = (amount: number, taken: number) =>
-    taken < amount ? `${money(amount - taken)} not taken: not enough pay this cut-off` : null;
+    taken < amount ? `${money(amount - taken)} not taken: not enough pay this month` : null;
   const deductions: PayLine[] = [];
   const share = (key: string, label: string, amount: number, exempt: boolean) => {
     const taken = take(amount);

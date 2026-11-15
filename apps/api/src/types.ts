@@ -3790,10 +3790,11 @@ import type { PayAttendance, PayLine } from "./hr/pay-rules";
 
 export type { PayAttendance, PayLine } from "./hr/pay-rules";
 
-/** One person's payslip for one cut-off: worked out from their DTR while the cut-off is a draft,
+/** One person's payslip for one month: worked out from their DTR while the month is a draft,
  *  frozen once HR releases it. */
 export type Payslip = {
-  cutoff: string;
+  /** "2026-11": the 1st to the month's last day. */
+  month: string;
   person: {
     id: number;
     name: string;
@@ -3830,7 +3831,7 @@ export type PayPeriod = {
   from: string;
   to: string;
   payDay: string;
-  /** running: the cut-off hasn't ended; ready: ended, not released; released: payslips out. */
+  /** running: the month hasn't ended; ready: ended, not released; released: payslips out. */
   status: "running" | "ready" | "released";
   released: { by: string; at: string } | null;
 };
@@ -3839,9 +3840,9 @@ export type PayrollList = {
   periods: (PayPeriod & { people: number | null; gross: number | null; net: number | null })[];
 };
 
-export type PayrollCutoff = PayPeriod & {
+export type PayrollMonth = PayPeriod & {
   slips: Payslip[];
-  /** People employed in the cut-off with no salary on their record: not paid until HR adds it. */
+  /** People employed in the month with no salary on their record: not paid until HR adds it. */
   noSalary: { id: number; name: string; position: string | null }[];
   totals: {
     people: number;
@@ -3869,7 +3870,7 @@ export type PayAdjustmentInput = {
 };
 
 export type MyPayslips = {
-  slips: { cutoff: string; label: string; payDay: string; gross: number; net: number }[];
+  slips: { month: string; label: string; payDay: string; gross: number; net: number }[];
 };
 
 export type PayRuleRow = {

@@ -1,5 +1,5 @@
-// A person's own payslips: every released cut-off, newest first, and the one picked, to read or
-// print. A cut-off HR hasn't released isn't shown.
+// A person's own payslips: every released month, newest first, and the one picked, to read or
+// print. A month HR hasn't released isn't shown.
 
 import type { MyPayslips, PayPeriod, Payslip } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
@@ -9,12 +9,12 @@ import { longDay, PayslipView } from "../hr/payslip";
 import { CARD, PageHead, PageState, peso } from "../ui";
 
 export function MyPayslipsPage() {
-  const { cutoff } = useParams();
+  const { month } = useParams();
   const list = useQuery({
     queryKey: ["payroll", "mine"],
     queryFn: () => api<MyPayslips>("/api/hr/payslips/mine"),
   });
-  const picked = cutoff ?? list.data?.slips[0]?.cutoff ?? null;
+  const picked = month ?? list.data?.slips[0]?.month ?? null;
   const slip = useQuery({
     queryKey: ["payroll", "mine", picked],
     queryFn: () => api<{ slip: Payslip; period: PayPeriod }>(`/api/hr/payslips/${picked}`),
@@ -30,18 +30,18 @@ export function MyPayslipsPage() {
       />
       {data.slips.length === 0 ? (
         <p className={`${CARD} px-4 py-8 text-center text-sm text-slate-500`}>
-          Your payslip shows here once HR releases a cut-off: the 26th to the 10th is paid on the
-          15th, the 11th to the 25th at the month's end.
+          Your payslip shows here once HR releases the month: the 1st to the month's last day, paid
+          on the last day.
         </p>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
           <nav className={`${CARD} self-start overflow-hidden print:hidden`} aria-label="Payslips">
             <ul className="divide-y divide-slate-100">
               {data.slips.map((one) => (
-                <li key={one.cutoff}>
+                <li key={one.month}>
                   <Link
-                    to={`/me/payslips/${one.cutoff}`}
-                    className={`flex items-center justify-between gap-3 px-4 py-3 text-sm ${one.cutoff === picked ? "bg-emerald-50" : "hover:bg-slate-50"}`}
+                    to={`/me/payslips/${one.month}`}
+                    className={`flex items-center justify-between gap-3 px-4 py-3 text-sm ${one.month === picked ? "bg-emerald-50" : "hover:bg-slate-50"}`}
                   >
                     <span className="min-w-0">
                       <span className="block font-semibold text-slate-900">{one.label}</span>

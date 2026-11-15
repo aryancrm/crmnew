@@ -1,8 +1,8 @@
-// Payroll, HR's work: each cut-off's payslips are worked out from the DTR as it stands (attendance,
-// leave, forms), so a day HR puts right shows on the slip at once. HR adds its own lines (a loan, a
-// cash advance, a correction) and, once the cut-off has ended, releases it: the payslips are frozen
-// as they were and each person reads their own. The CEO and the Admin read the register; nobody
-// else sees anyone's pay. The arithmetic is src/hr/pay-rules.ts.
+// Payroll, HR's work, one a month (the 1st to the last day): each month's payslips are worked out
+// from the DTR as it stands (attendance, leave, forms), so a day HR puts right shows on the slip at
+// once. HR adds its own lines (a loan, a cash advance, a correction) and, once the month has ended,
+// releases it: the payslips are frozen as they were and each person reads their own. The CEO and
+// the Admin read the register; nobody else sees anyone's pay. The arithmetic is src/hr/pay-rules.ts.
 
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
@@ -17,22 +17,21 @@ import type {
   PayAdjustmentInput,
   PayPeriod,
   PayRuleRow,
-  PayrollCutoff,
   PayrollList,
+  PayrollMonth,
   Payslip,
 } from "../types";
 import { attendanceDays } from "./attendance";
 import {
-  type Cutoff,
   computeSlip,
-  cutoffByKey,
-  cutoffOf,
-  firstHalfOf,
   type PayAdjustment,
   type PayAttendance,
+  type PayMonth,
   type PayRules,
   payDayOf,
-  shiftCutoff,
+  payMonthByKey,
+  payMonthOf,
+  shiftMonth,
 } from "./pay-rules";
 import { HR_ROLES, HR_WRITE_ROLES } from "./people";
 import { isWorkDay } from "./work-time";
@@ -46,13 +45,17 @@ const shortDay = (day: string, withYear = false) =>
     ...(withYear ? { year: "numeric" } : {}),
     timeZone: "UTC",
   });
-export const cutoffLabel = (cutoff: Cutoff) =>
-  `${shortDay(cutoff.from)} – ${shortDay(cutoff.to, true)}`;
+export const monthLabel = (month: PayMonth) =>
+  new Date(`${month.from}T00:00:00Z`).toLocaleDateString("en-PH", {
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 
-function cutoffOrRefuse(key: string): Cutoff {
-  const cutoff = cutoffByKey(key);
-  if (!cutoff) throw new Refusal(404, "not_found", "No such cut-off.");
-  return cutoff;
+function monthOrRefuse(key: string): PayMonth {
+  const month = payMonthByKey(key);
+  if (!month) throw new Refusal(404, "not_found", "No such month.");
+  return month;
 }
 
 async function rulesOn(db: Runner, day: string): Promise<PayRules> {
@@ -73,13 +76,13 @@ async function rulesOn(db: Runner, day: string): Promise<PayRules> {
   return by as PayRules;
 }
 
-async function payDay(db: Runner, cutoff: Cutoff): Promise<string> {
+async function payDay(db: Runner, month: PayMonth): Promise<string> {
   const found = await rows<{ day: string }>(
     db,
     sql`select to_char(day, 'YYYY-MM-DD') as day from holiday where active
-      and day between (${cutoff.payOn}::date - 10) and ${cutoff.payOn}::date`,
+      and day between (${month.payOn}::date - 10) and ${month.payOn}::date`,
   );
-  return payDayOf(cutoff, new Set(found.map((one) => one.day)));
+  return payDayOf(month, new Set(found.map((one) => one.day)));
 }
 
 type Employee = {
@@ -101,8 +104,8 @@ type Employee = {
   bankAccount: string | null;
 };
 
-/** Everyone employed for some of the cut-off (the Admin's login isn't anyone's employee). */
-async function employeesIn(db: Runner, cutoff: Cutoff): Promise<Employee[]> {
+/** Everyone employed for some of the month (the Admin's login isn't anyone's employee). */
+async function employeesIn(db: Runner, month: PayMonth): Promise<Employee[]> {
   return rows<Employee>(
     db,
     sql`select p.id::int as id, p.name, e.company, e.employee_code as "employeeCode", e.position, e.department,
@@ -111,33 +114,19 @@ async function employeesIn(db: Runner, cutoff: Cutoff): Promise<Employee[]> {
         e.no_pagibig as "noPagibig", e.no_tax as "noTax", e.bank_name as "bankName",
         e.bank_account as "bankAccount"
       from employee e join person p on p.id = e.person_id
-      where p.role <> 'admin' and e.hire_date <= ${cutoff.to}::date
-        and (e.status = 'active' or (e.left_on is not null and e.left_on >= ${cutoff.from}::date))
+      where p.role <> 'admin' and e.hire_date <= ${month.to}::date
+        and (e.status = 'active' or (e.left_on is not null and e.left_on >= ${month.from}::date))
       order by p.name`,
   );
 }
 
-type Prior = {
-  sssBase: number;
-  sss: number;
-  sssEmployer: number;
-  philhealth: number;
-  philhealthEmployer: number;
-};
 const lineOf = (slip: Payslip, key: string) =>
   slip.deductions.find((one) => one.key === key)?.amount ?? 0;
-const priorOf = (slip: Payslip): Prior => ({
-  sssBase: slip.sssBase,
-  sss: lineOf(slip, "sss"),
-  sssEmployer: slip.employer?.sss ?? 0,
-  philhealth: lineOf(slip, "philhealth"),
-  philhealthEmployer: slip.employer?.philhealth ?? 0,
-});
 
 async function releasedSlips(db: Runner, key: string): Promise<Payslip[] | null> {
   const [run] = await rows<{ id: number }>(
     db,
-    sql`select id::int as id from pay_run where cutoff = ${key}`,
+    sql`select id::int as id from pay_run where month = ${key}`,
   );
   if (!run) return null;
   const found = await rows<{ slip: Payslip | string }>(
@@ -147,42 +136,32 @@ async function releasedSlips(db: Runner, key: string): Promise<Payslip[] | null>
   return found.map((one) => (typeof one.slip === "string" ? JSON.parse(one.slip) : one.slip));
 }
 
-/** A cut-off's payslips worked out from the DTR as it stands, with HR's lines. */
+/** A month's payslips worked out from the DTR as it stands, with HR's lines. */
 async function workOut(
   db: Runner,
-  cutoff: Cutoff,
+  month: PayMonth,
 ): Promise<{ slips: Payslip[]; noSalary: Employee[] }> {
-  const people = await employeesIn(db, cutoff);
+  const people = await employeesIn(db, month);
   const paid = people.filter((one) => one.salary !== null && one.salary > 0);
   const noSalary = people.filter((one) => !(one.salary !== null && one.salary > 0));
   if (!paid.length) return { slips: [], noSalary };
-  const rules = await rulesOn(db, cutoff.to);
+  const rules = await rulesOn(db, month.to);
   const holidayKinds = new Map(
     (
       await rows<{ day: string; kind: "regular" | "special" }>(
         db,
         sql`select to_char(day, 'YYYY-MM-DD') as day, kind from holiday where active
-          and day between ${cutoff.from}::date and ${cutoff.to}::date`,
+          and day between ${month.from}::date and ${month.to}::date`,
       )
     ).map((one) => [one.day, one.kind]),
   );
   const holidaySet = new Set(holidayKinds.keys());
-  const worked = await attendanceDays(db, paid, cutoff.from, cutoff.to);
+  const worked = await attendanceDays(db, paid, month.from, month.to);
   const adjustments = await rows<PayAdjustment & { personId: number }>(
     db,
     sql`select id::int as id, person_id::int as "personId", label, kind, taxable, amount, note
-      from pay_adjustment where cutoff = ${cutoff.key} and removed_at is null order by id`,
+      from pay_adjustment where month = ${month.key} and removed_at is null order by id`,
   );
-  // Cut-off b settles SSS and PhilHealth with the same month's a: as released, else as it stands.
-  const prior = new Map<number, Prior>();
-  if (cutoff.half === "b") {
-    const firstKey = firstHalfOf(cutoff.key);
-    const first =
-      (await releasedSlips(db, firstKey)) ??
-      (await workOut(db, cutoffByKey(firstKey) as Cutoff)).slips;
-    for (const slip of first) prior.set(slip.person.id, priorOf(slip));
-  }
-
   const slips = paid.map((person): Payslip => {
     const { schedule, days } = worked.get(person.id) ?? { schedule: null, days: [] };
     const a: PayAttendance = {
@@ -231,7 +210,6 @@ async function workOut(
       rules,
       monthlySalary: person.salary as number,
       monthlyAllowance: person.allowance ?? 0,
-      half: cutoff.half,
       attendance: a,
       adjustments: adjustments.filter((one) => one.personId === person.id),
       exempt: {
@@ -240,11 +218,9 @@ async function workOut(
         pagibig: person.noPagibig,
         tax: person.noTax,
       },
-      prior: prior.get(person.id) ?? null,
-      firstCutoff: person.hiredOn >= cutoff.from,
     });
     return {
-      cutoff: cutoff.key,
+      month: month.key,
       person: {
         id: person.id,
         name: person.name,
@@ -278,7 +254,7 @@ async function workOut(
   return { slips, noSalary };
 }
 
-function totalsOf(slips: Payslip[]): PayrollCutoff["totals"] {
+function totalsOf(slips: Payslip[]): PayrollMonth["totals"] {
   const byCompany = new Map<Company, { company: Company; people: number; net: number }>();
   for (const slip of slips) {
     const one = byCompany.get(slip.person.company) ?? {
@@ -302,45 +278,45 @@ function totalsOf(slips: Payslip[]): PayrollCutoff["totals"] {
   };
 }
 
-async function periodOf(db: Runner, cutoff: Cutoff, today: string): Promise<PayPeriod> {
+async function periodOf(db: Runner, month: PayMonth, today: string): Promise<PayPeriod> {
   const [run] = await rows<{ by: string; at: string; payDay: string }>(
     db,
     sql`select p.name as by, ${iso("r.released_at")} as at,
         to_char(r.pay_day, 'YYYY-MM-DD') as "payDay"
-      from pay_run r join person p on p.id = r.released_by where r.cutoff = ${cutoff.key}`,
+      from pay_run r join person p on p.id = r.released_by where r.month = ${month.key}`,
   );
   return {
-    key: cutoff.key,
-    label: cutoffLabel(cutoff),
-    from: cutoff.from,
-    to: cutoff.to,
-    payDay: run?.payDay ?? (await payDay(db, cutoff)),
-    status: run ? "released" : cutoff.to < today ? "ready" : "running",
+    key: month.key,
+    label: monthLabel(month),
+    from: month.from,
+    to: month.to,
+    payDay: run?.payDay ?? (await payDay(db, month)),
+    status: run ? "released" : month.to < today ? "ready" : "running",
     released: run ? { by: run.by, at: run.at } : null,
   };
 }
 
-/** The cut-offs: this one and the eleven before it (six months), the released ones with their totals. */
+/** The months: this one and the five before it, the released ones with their totals. */
 export async function payrollList(db: Database, me: Me): Promise<PayrollList> {
   allow(me, HR_ROLES, "read payroll");
   const today = todayManila();
-  const keys = [cutoffOf(today).key];
-  for (let at = 1; at < 12; at += 1) keys.push(shiftCutoff(keys[0] as string, -at));
+  const keys = [payMonthOf(today).key];
+  for (let at = 1; at < 6; at += 1) keys.push(shiftMonth(keys[0] as string, -at));
   const runs = new Map(
     (
-      await rows<{ cutoff: string; people: number; gross: number; net: number }>(
+      await rows<{ month: string; people: number; gross: number; net: number }>(
         db,
-        sql`select cutoff, people::int as people, gross::bigint::float8 as gross, net::bigint::float8 as net
-          from pay_run where cutoff in (${sql.join(
+        sql`select month, people::int as people, gross::bigint::float8 as gross, net::bigint::float8 as net
+          from pay_run where month in (${sql.join(
             keys.map((key) => sql`${key}`),
             sql`, `,
           )})`,
       )
-    ).map((one) => [one.cutoff, one]),
+    ).map((one) => [one.month, one]),
   );
   const periods = [];
   for (const key of keys) {
-    const period = await periodOf(db, cutoffByKey(key) as Cutoff, today);
+    const period = await periodOf(db, payMonthByKey(key) as PayMonth, today);
     const run = runs.get(key);
     periods.push({
       ...period,
@@ -352,28 +328,28 @@ export async function payrollList(db: Database, me: Me): Promise<PayrollList> {
   return { periods };
 }
 
-/** One cut-off's register: released (frozen) or as it stands from the DTR. */
-export async function payrollCutoff(db: Database, me: Me, key: string): Promise<PayrollCutoff> {
+/** One month's register: released (frozen) or as it stands from the DTR. */
+export async function payrollMonth(db: Database, me: Me, key: string): Promise<PayrollMonth> {
   allow(me, HR_ROLES, "read payroll");
-  const cutoff = cutoffOrRefuse(key);
+  const month = monthOrRefuse(key);
   const today = todayManila();
-  const period = await periodOf(db, cutoff, today);
+  const period = await periodOf(db, month, today);
   const released = await releasedSlips(db, key);
   const { slips, noSalary } = released
     ? { slips: released, noSalary: [] as Employee[] }
-    : await workOut(db, cutoff);
+    : await workOut(db, month);
   const writer = HR_WRITE_ROLES.includes(me.role) && !me.viewedBy;
   const whyNotRelease =
     period.status === "released"
       ? null
       : period.status === "running"
-        ? `This cut-off runs to ${shortDay(cutoff.to)}; it can be released from ${shortDay(
-            cutoffByKey(shiftCutoff(key, 1))?.from ?? cutoff.to,
+        ? `This month runs to ${shortDay(month.to)}; it can be released from ${shortDay(
+            payMonthByKey(shiftMonth(key, 1))?.from ?? month.to,
           )}.`
         : slips.length === 0
           ? "Nobody here has a salary on record."
           : null;
-  const next = cutoffByKey(shiftCutoff(key, 1)) as Cutoff;
+  const next = payMonthByKey(shiftMonth(key, 1)) as PayMonth;
   return {
     ...period,
     slips,
@@ -384,12 +360,12 @@ export async function payrollCutoff(db: Database, me: Me, key: string): Promise<
       release: writer && period.status === "ready" && slips.length > 0,
     },
     whyNotRelease: writer ? whyNotRelease : null,
-    before: shiftCutoff(key, -1),
+    before: shiftMonth(key, -1),
     after: next.from <= today ? next.key : null,
   };
 }
 
-/** HR adds a line to someone's payslip while the cut-off is a draft. */
+/** HR adds a line to someone's payslip while the month is a draft. */
 export async function addAdjustment(
   db: Database,
   me: Me,
@@ -398,7 +374,7 @@ export async function addAdjustment(
 ): Promise<{ id: number }> {
   allow(me, HR_WRITE_ROLES, "change payslips");
   if (me.viewedBy) throw new Refusal(403, "not_allowed", "Look-only: nothing changes.");
-  const cutoff = cutoffOrRefuse(key);
+  const month = monthOrRefuse(key);
   const label = clean(input.label);
   if (!label) throw new Refusal(400, "invalid", "Name the line (cash advance, loan…).", "label");
   if (label.length > 80) throw new Refusal(400, "invalid", "Keep the name short.", "label");
@@ -409,26 +385,20 @@ export async function addAdjustment(
   return db.transaction(async (tx) => {
     const [run] = await rows<{ id: number }>(
       tx,
-      sql`select id::int as id from pay_run where cutoff = ${key}`,
+      sql`select id::int as id from pay_run where month = ${key}`,
     );
-    if (run)
-      throw new Refusal(409, "released", "This cut-off is released; add it to the next one.");
+    if (run) throw new Refusal(409, "released", "This month is released; add it to the next one.");
     const [person] = await rows<{ name: string }>(
       tx,
       sql`select p.name from employee e join person p on p.id = e.person_id
-        where e.person_id = ${input.personId} and e.hire_date <= ${cutoff.to}::date
-          and (e.status = 'active' or e.left_on >= ${cutoff.from}::date)`,
+        where e.person_id = ${input.personId} and e.hire_date <= ${month.to}::date
+          and (e.status = 'active' or e.left_on >= ${month.from}::date)`,
     );
     if (!person)
-      throw new Refusal(
-        404,
-        "not_found",
-        "That person isn't employed in this cut-off.",
-        "personId",
-      );
+      throw new Refusal(404, "not_found", "That person isn't employed in this month.", "personId");
     const [made] = await rows<{ id: number }>(
       tx,
-      sql`insert into pay_adjustment (cutoff, person_id, label, kind, taxable, amount, note, made_by)
+      sql`insert into pay_adjustment (month, person_id, label, kind, taxable, amount, note, made_by)
         values (${key}, ${input.personId}, ${label}, ${input.kind},
           ${input.kind === "deduction" ? true : input.taxable !== false}, ${input.amount},
           ${clean(input.note) ?? null}, ${me.id})
@@ -442,65 +412,65 @@ export async function removeAdjustment(db: Database, me: Me, id: number): Promis
   allow(me, HR_WRITE_ROLES, "change payslips");
   if (me.viewedBy) throw new Refusal(403, "not_allowed", "Look-only: nothing changes.");
   await db.transaction(async (tx) => {
-    const [line] = await rows<{ cutoff: string; removed: boolean }>(
+    const [line] = await rows<{ month: string; removed: boolean }>(
       tx,
-      sql`select cutoff, removed_at is not null as removed from pay_adjustment where id = ${id} for update`,
+      sql`select month, removed_at is not null as removed from pay_adjustment where id = ${id} for update`,
     );
     if (!line || line.removed) throw new Refusal(404, "not_found", "No such line.");
     const [run] = await rows<{ id: number }>(
       tx,
-      sql`select id::int as id from pay_run where cutoff = ${line.cutoff}`,
+      sql`select id::int as id from pay_run where month = ${line.month}`,
     );
-    if (run) throw new Refusal(409, "released", "This cut-off is released; it stays as it was.");
+    if (run) throw new Refusal(409, "released", "This month is released; it stays as it was.");
     await tx.execute(
       sql`update pay_adjustment set removed_at = now(), removed_by = ${me.id} where id = ${id}`,
     );
   });
 }
 
-/** HR releases an ended cut-off: its payslips are frozen and each person is told. */
-export async function releaseCutoff(
+/** HR releases an ended month: its payslips are frozen and each person is told. */
+export async function releaseMonth(
   db: Database,
   me: Me,
   key: string,
 ): Promise<{ people: number; net: number }> {
   allow(me, HR_WRITE_ROLES, "release payslips");
   if (me.viewedBy) throw new Refusal(403, "not_allowed", "Look-only: nothing changes.");
-  const cutoff = cutoffOrRefuse(key);
+  const month = monthOrRefuse(key);
   const today = todayManila();
-  if (cutoff.to >= today)
+  if (month.to >= today)
     throw new Refusal(
       409,
       "running",
-      `This cut-off runs to ${shortDay(cutoff.to)}; release it once it has ended.`,
+      `This month runs to ${shortDay(month.to)}; release it once it has ended.`,
     );
   return db.transaction(async (tx) => {
     const [taken] = await rows<{ id: number }>(
       tx,
-      sql`select id::int as id from pay_run where cutoff = ${key}`,
+      sql`select id::int as id from pay_run where month = ${key}`,
     );
-    if (taken) throw new Refusal(409, "released", "This cut-off is already released.");
-    const paidOn = await payDay(tx, cutoff);
-    const { slips } = await workOut(tx, cutoff);
+    if (taken) throw new Refusal(409, "released", "This month is already released.");
+    const paidOn = await payDay(tx, month);
+    const { slips } = await workOut(tx, month);
     if (!slips.length) throw new Refusal(409, "empty", "Nobody here has a salary on record.");
     const totals = totalsOf(slips);
     const [run] = await rows<{ id: number }>(
       tx,
-      sql`insert into pay_run (cutoff, period_from, period_to, pay_day, people, gross, deductions, net, employer, released_by)
-        values (${key}, ${cutoff.from}::date, ${cutoff.to}::date, ${paidOn}::date,
+      sql`insert into pay_run (month, period_from, period_to, pay_day, people, gross, deductions, net, employer, released_by)
+        values (${key}, ${month.from}::date, ${month.to}::date, ${paidOn}::date,
           ${totals.people}, ${totals.gross}, ${totals.deductions}, ${totals.net}, ${totals.employer}, ${me.id})
         returning id::int as id`,
     );
     for (const slip of slips)
       await tx.execute(
-        sql`insert into payslip (run_id, cutoff, person_id, company, gross, net, tax, slip)
+        sql`insert into payslip (run_id, month, person_id, company, gross, net, tax, slip)
           values (${run?.id}, ${key}, ${slip.person.id}, ${slip.person.company}, ${slip.gross}, ${slip.net},
             ${slip.deductions.find((one) => one.key === "tax")?.amount ?? 0}, ${JSON.stringify(slip)}::jsonb)`,
       );
     await notify(tx, {
       to: slips.map((one) => one.person.id),
       kind: "payslip",
-      title: `Your payslip for ${cutoffLabel(cutoff)} is out`,
+      title: `Your payslip for ${monthLabel(month)} is out`,
       body: `Paid ${shortDay(paidOn, true)}`,
       link: `/me/payslips/${key}`,
       key: `payslip:${key}`,
@@ -511,16 +481,16 @@ export async function releaseCutoff(
 
 /** A person's own released payslips, newest first. */
 export async function myPayslips(db: Database, me: Me): Promise<MyPayslips> {
-  const found = await rows<{ cutoff: string; payDay: string; gross: number; net: number }>(
+  const found = await rows<{ month: string; payDay: string; gross: number; net: number }>(
     db,
-    sql`select s.cutoff, to_char(r.pay_day, 'YYYY-MM-DD') as "payDay", s.gross::int as gross, s.net::int as net
+    sql`select s.month, to_char(r.pay_day, 'YYYY-MM-DD') as "payDay", s.gross::int as gross, s.net::int as net
       from payslip s join pay_run r on r.id = s.run_id where s.person_id = ${me.id}
       order by r.period_from desc`,
   );
   return {
     slips: found.map((one) => ({
       ...one,
-      label: cutoffLabel(cutoffByKey(one.cutoff) as Cutoff),
+      label: monthLabel(payMonthByKey(one.month) as PayMonth),
     })),
   };
 }
@@ -532,20 +502,20 @@ export async function payslipOf(
   key: string,
   personId?: number | null,
 ): Promise<{ slip: Payslip; period: PayPeriod }> {
-  const cutoff = cutoffOrRefuse(key);
+  const month = monthOrRefuse(key);
   const who = personId ?? me.id;
   const reader = HR_ROLES.includes(me.role);
   if (who !== me.id && !reader)
     throw new Refusal(403, "not_allowed", "Someone else's payslip isn't yours to see.");
-  const period = await periodOf(db, cutoff, todayManila());
+  const period = await periodOf(db, month, todayManila());
   const released = await releasedSlips(db, key);
-  const slips = released ?? (reader ? (await workOut(db, cutoff)).slips : []);
+  const slips = released ?? (reader ? (await workOut(db, month)).slips : []);
   const slip = slips.find((one) => one.person.id === who);
   if (!slip)
     throw new Refusal(
       404,
       "not_found",
-      released || reader ? "No payslip for this cut-off." : "This payslip isn't out yet.",
+      released || reader ? "No payslip for this month." : "This payslip isn't out yet.",
     );
   return { slip, period };
 }
@@ -593,7 +563,7 @@ export async function registerCsv(
   me: Me,
   key: string,
 ): Promise<{ name: string; csv: string }> {
-  const register = await payrollCutoff(db, me, key);
+  const register = await payrollMonth(db, me, key);
   const lines = [CSV_COLUMNS.map(([name]) => cell(name)).join(",")];
   for (const slip of register.slips)
     lines.push(CSV_COLUMNS.map(([, pick]) => cell(pick(slip))).join(","));

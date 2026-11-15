@@ -32,11 +32,11 @@ import {
   addAdjustment,
   myPayslips,
   payRules,
-  payrollCutoff,
   payrollList,
+  payrollMonth,
   payslipOf,
   registerCsv,
-  releaseCutoff,
+  releaseMonth,
   removeAdjustment,
 } from "./payroll";
 import {
@@ -273,23 +273,23 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
     return c.json(await addJoiner(db, c.get("me"), input));
   });
 
-  // Payroll: HR works each cut-off and releases it; the CEO reads; each person reads their own.
+  // Payroll, one a month: HR works it and releases it; the CEO reads; each person reads their own.
   app.get("/api/hr/payroll", async (c) => c.json(await payrollList(db, c.get("me"))));
   app.get("/api/hr/payroll/rules", async (c) => c.json(await payRules(db, c.get("me"))));
-  app.get("/api/hr/payroll/:cutoff", async (c) =>
-    c.json(await payrollCutoff(db, c.get("me"), c.req.param("cutoff"))),
+  app.get("/api/hr/payroll/:month", async (c) =>
+    c.json(await payrollMonth(db, c.get("me"), c.req.param("month"))),
   );
-  app.get("/api/hr/payroll/:cutoff/register.csv", async (c) => {
-    const { name, csv } = await registerCsv(db, c.get("me"), c.req.param("cutoff"));
+  app.get("/api/hr/payroll/:month/register.csv", async (c) => {
+    const { name, csv } = await registerCsv(db, c.get("me"), c.req.param("month"));
     return c.body(csv, 200, {
       "content-type": "text/csv; charset=utf-8",
       "content-disposition": `attachment; filename="${name}"`,
     });
   });
-  app.get("/api/hr/payroll/:cutoff/slip/:id", async (c) =>
-    c.json(await payslipOf(db, c.get("me"), c.req.param("cutoff"), idParam(c))),
+  app.get("/api/hr/payroll/:month/slip/:id", async (c) =>
+    c.json(await payslipOf(db, c.get("me"), c.req.param("month"), idParam(c))),
   );
-  app.post("/api/hr/payroll/:cutoff/lines", async (c) => {
+  app.post("/api/hr/payroll/:month/lines", async (c) => {
     const input = await readBody(
       c,
       z.object({
@@ -302,7 +302,7 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
       }),
     );
     return c.json(
-      await addAdjustment(db, c.get("me"), c.req.param("cutoff"), {
+      await addAdjustment(db, c.get("me"), c.req.param("month"), {
         ...input,
         taxable: input.taxable ?? true,
       }),
@@ -312,11 +312,11 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
     await removeAdjustment(db, c.get("me"), idParam(c));
     return c.json({ ok: true });
   });
-  app.post("/api/hr/payroll/:cutoff/release", async (c) =>
-    c.json(await releaseCutoff(db, c.get("me"), c.req.param("cutoff"))),
+  app.post("/api/hr/payroll/:month/release", async (c) =>
+    c.json(await releaseMonth(db, c.get("me"), c.req.param("month"))),
   );
   app.get("/api/hr/payslips/mine", async (c) => c.json(await myPayslips(db, c.get("me"))));
-  app.get("/api/hr/payslips/:cutoff", async (c) =>
-    c.json(await payslipOf(db, c.get("me"), c.req.param("cutoff"))),
+  app.get("/api/hr/payslips/:month", async (c) =>
+    c.json(await payslipOf(db, c.get("me"), c.req.param("month"))),
   );
 }

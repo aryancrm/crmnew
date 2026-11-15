@@ -1,7 +1,8 @@
--- Payroll: each cut-off's payslips are worked out from the DTR (attendance, leave, forms), HR adds
--- its own lines (a loan, a cash advance, an adjustment) and releases them; a released cut-off is
--- frozen and each person reads their own payslip. The CEO reads the register. The law-set rates
--- (SSS, PhilHealth, Pag-IBIG, BIR's table) are dated rows: a new one starts on its day.
+-- Payroll, one a month (the 1st to the last day): each month's payslips are worked out from the
+-- DTR (attendance, leave, forms), HR adds its own lines (a loan, a cash advance, an adjustment) and
+-- releases them; a released month is frozen and each person reads their own payslip. The CEO reads
+-- the register. The law-set rates (SSS, PhilHealth, Pag-IBIG, BIR's table) are dated rows: a new
+-- one starts on its day.
 
 -- Who a scheme doesn't cover (a foreign national, Pag-IBIG waived) or who isn't taxed.
 alter table employee add column no_sss boolean not null default false;
@@ -35,13 +36,13 @@ insert into pay_rule (kind, starts_on, rule, source) values
     '{"employeeBps":200,"employerBps":200,"maxBase":1000000}',
     'Pag-IBIG from February 2024: 2% each of up to ₱10,000 (₱200 a month)'),
   ('tax', '2023-01-01',
-    '{"rows":[{"over":0,"base":0,"rateBps":0},{"over":1041700,"base":0,"rateBps":1500},{"over":1666700,"base":93750,"rateBps":2000},{"over":3333300,"base":427070,"rateBps":2500},{"over":8333300,"base":1677070,"rateBps":3000},{"over":33333300,"base":9177070,"rateBps":3500}]}',
-    'BIR withholding tax table, semi-monthly, from 1 January 2023 (TRAIN law)');
+    '{"rows":[{"over":0,"base":0,"rateBps":0},{"over":2083300,"base":0,"rateBps":1500},{"over":3333300,"base":187500,"rateBps":2000},{"over":6666700,"base":854180,"rateBps":2500},{"over":16666700,"base":3354180,"rateBps":3000},{"over":66666700,"base":18354180,"rateBps":3500}]}',
+    'BIR withholding tax table, monthly, from 1 January 2023 (TRAIN law)');
 --> statement-breakpoint
--- HR's own lines on a cut-off's payslip, kept while the cut-off is a draft.
+-- HR's own lines on a month's payslip, kept while the month is a draft.
 create table pay_adjustment (
   id bigint generated always as identity primary key,
-  cutoff text not null check (cutoff ~ '^[0-9]{4}-[0-9]{2}-[ab]$'),
+  month text not null check (month ~ '^[0-9]{4}-[0-9]{2}$'),
   person_id bigint not null references person (id),
   label text not null,
   kind text not null check (kind in ('earning', 'deduction')),
@@ -54,12 +55,12 @@ create table pay_adjustment (
   removed_at timestamptz
 );
 --> statement-breakpoint
-create index pay_adjustment_cutoff on pay_adjustment (cutoff) where removed_at is null;
+create index pay_adjustment_month on pay_adjustment (month) where removed_at is null;
 --> statement-breakpoint
--- A released cut-off: its payslips are frozen as they were released.
+-- A released month: its payslips are frozen as they were released.
 create table pay_run (
   id bigint generated always as identity primary key,
-  cutoff text not null unique check (cutoff ~ '^[0-9]{4}-[0-9]{2}-[ab]$'),
+  month text not null unique check (month ~ '^[0-9]{4}-[0-9]{2}$'),
   period_from date not null,
   period_to date not null,
   pay_day date not null,
@@ -75,7 +76,7 @@ create table pay_run (
 create table payslip (
   id bigint generated always as identity primary key,
   run_id bigint not null references pay_run (id),
-  cutoff text not null,
+  month text not null,
   person_id bigint not null references person (id),
   company text not null,
   gross integer not null,
@@ -85,4 +86,4 @@ create table payslip (
   unique (run_id, person_id)
 );
 --> statement-breakpoint
-create index payslip_person on payslip (person_id, cutoff);
+create index payslip_person on payslip (person_id, month);
