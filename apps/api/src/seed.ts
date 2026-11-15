@@ -9,15 +9,16 @@ import { buildDemoOrg } from "./org/seed";
 import { projectOrg } from "./org/service";
 import type { Role } from "./people/roles";
 
-const CHANNELS: [code: string, name: string][] = [
-  ["HOSP", "Hospitals"],
-  ["RX", "Doctors"],
-  ["B2B", "Distributors and drugstores"],
-  ["BID", "Government tenders"],
-  ["PAP", "Patient assistance"],
-  ["TS", "Telesales"],
-  ["MT", "Modern trade"],
-  ["ONLINE", "Online"],
+/** Each channel with the Division its orders carry (none for RX: its doctors' orders say). */
+const CHANNELS: [code: string, name: string, division: string | null][] = [
+  ["HOSP", "Hospitals", "HOS"],
+  ["RX", "Doctors", null],
+  ["B2B", "Distributors and drugstores", "B2B"],
+  ["BID", "Government tenders", "BID"],
+  ["PAP", "Patient assistance", "MD Telesales"],
+  ["TS", "Telesales", "TeleSales"],
+  ["MT", "Modern trade", "MT"],
+  ["ONLINE", "Online", "B2C"],
 ];
 
 export async function seedDemo(db: Database, password: string): Promise<boolean> {
@@ -31,7 +32,7 @@ export async function seedDemo(db: Database, password: string): Promise<boolean>
   await db.transaction(async (tx) => {
     const channels = await tx
       .insert(channel)
-      .values(CHANNELS.map(([code, name], sort) => ({ code, name, sort })))
+      .values(CHANNELS.map(([code, name, division], sort) => ({ code, name, sort, division })))
       .returning();
     const idOf = (code: string) => channels.find((row) => row.code === code)?.id ?? null;
 

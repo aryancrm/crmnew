@@ -97,7 +97,7 @@ export async function overview(db: Database, me: Me): Promise<Overview> {
           db,
           sql`select (select count(*) from customer where active)::int as customers,
               (select count(*) from customer where active and review = 'to_review')::int as "toReview",
-              (select count(*) from channel)::int as channels,
+              (select count(*) from channel where active)::int as channels,
               (select count(*) from person where active)::int as people`,
         )
       : Promise.resolve([]),
@@ -160,7 +160,7 @@ export async function channelReport(db: Database): Promise<ChannelReport> {
       db,
       sql`select ch.id::int as id, ch.code, ch.name, ch.head_id::int as "headId", h.name as "headName", h.title as "headTitle"
         from channel ch left join person h on h.id = ch.head_id and h.active
-        order by ch.sort, ch.id`,
+        where ch.active order by ch.sort, ch.id`,
     ),
     rows<{
       id: number;

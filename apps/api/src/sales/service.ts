@@ -268,9 +268,9 @@ const targetShare = (facts: MonthFacts): SQL => {
 
 /** Each channel's month: what it sold (its orders' invoices) against its people's targets. */
 export async function channelSales(db: Database, facts: MonthFacts): Promise<ChannelFigures[]> {
-  const found = await rows<Omit<ChannelFigures, "pct" | "tone">>(
+  const found = await rows<Omit<ChannelFigures, "pct" | "tone"> & { active: boolean }>(
     db,
-    sql`select ch.id::int as id, ch.code, ch.name, h.name as head,
+    sql`select ch.id::int as id, ch.code, ch.name, ch.active, h.name as head,
         (select nullif(sum(${targetShare(facts)}), 0) from sales_target t join person p on p.id = t.person_id
           where p.channel_id = ch.id and p.active)::float8 as target,
         coalesce((select sum(i.total) from invoice i join sales_order o on o.id = i.order_id
@@ -280,11 +280,14 @@ export async function channelSales(db: Database, facts: MonthFacts): Promise<Cha
       from channel ch left join person h on h.id = ch.head_id
       order by ch.sort, ch.id`,
   );
-  return found.map((row) => ({
-    ...row,
-    pct: pctOf(row.sold, row.target),
-    tone: paceTone(row.sold, row.target, facts.pace),
-  }));
+  // A retired channel shows only while it still has sales in the days asked.
+  return found
+    .filter(({ active, sold }) => active || sold > 0)
+    .map(({ active: _, ...row }) => ({
+      ...row,
+      pct: pctOf(row.sold, row.target),
+      tone: paceTone(row.sold, row.target, facts.pace),
+    }));
 }
 
 /** The CEO's first screen: the month in four figures, the company in summaries, the channels
@@ -524,7 +527,8 @@ export async function companyTree(db: Database, me: Me, asked?: string): Promise
     }>(
       db,
       sql`select ch.id::int as id, ch.code, ch.name, ch.head_id::int as "headId", h.name as head, ch.sort::int as sort
-        from channel ch left join person h on h.id = ch.head_id and h.active order by ch.sort, ch.id`,
+        from channel ch left join person h on h.id = ch.head_id and h.active
+        where ch.active order by ch.sort, ch.id`,
     ),
     rows<{
       id: number;

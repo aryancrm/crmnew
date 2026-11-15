@@ -8,7 +8,6 @@ import type { OrgHolder, OrgLogin, OrgSeat, OrgTree, OrgUnit, Role } from "@2mg/
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Building2,
-  ChevronLeft,
   ChevronRight,
   Ellipsis,
   Eye,
@@ -55,12 +54,12 @@ const ADD_FOR: Record<OrgUnit["kind"], Role[]> = {
   department: ["finance", "dispatch", "inventory", "management"],
 };
 
-type Pop =
-  | { kind: "add"; unit: OrgUnit; module?: Role; seat?: OrgSeat }
+export type Pop =
+  | { kind: "add"; unit: OrgUnit; module?: Role; seat?: OrgSeat; title?: string }
   | { kind: "seat"; unit: OrgUnit; seat?: OrgSeat; module?: Role }
   | { kind: "cover"; seat: OrgSeat }
   | { kind: "leave"; holder: OrgHolder }
-  | { kind: "unit"; parent?: OrgUnit; unit?: OrgUnit }
+  | { kind: "unit"; parent?: OrgUnit; unit?: OrgUnit; team?: boolean }
   | { kind: "login"; name: string; login: OrgLogin };
 
 const fmtDay = (day: string) =>
@@ -246,12 +245,32 @@ function Org({ tree }: { tree: OrgTree }) {
           </div>
         </div>
       )}
+      <OrgPops tree={tree} pop={pop} setPop={setPop} />
+    </div>
+  );
+}
+
+/** The dialog a Teams & people action opens: add or fill, a seat, a cover, leaving, a box, the
+ *  login shown once. Shared with the Admin panel's channel page. */
+export function OrgPops({
+  tree,
+  pop,
+  setPop,
+}: {
+  tree: OrgTree;
+  pop: Pop | null;
+  setPop: (pop: Pop | null) => void;
+}) {
+  const seats = tree.units.flatMap((unit) => unit.seats);
+  return (
+    <>
       {pop?.kind === "add" && (
         <AddPersonDialog
           tree={tree}
           unit={pop.unit}
           seat={pop.seat}
           module={pop.module}
+          title={pop.title}
           onClose={() => setPop(null)}
           onLogin={(name, login) => setPop({ kind: "login", name, login })}
         />
@@ -276,12 +295,18 @@ function Org({ tree }: { tree: OrgTree }) {
         />
       )}
       {pop?.kind === "unit" && (
-        <UnitDialog tree={tree} parent={pop.parent} unit={pop.unit} onClose={() => setPop(null)} />
+        <UnitDialog
+          tree={tree}
+          parent={pop.parent}
+          unit={pop.unit}
+          team={pop.team}
+          onClose={() => setPop(null)}
+        />
       )}
       {pop?.kind === "login" && (
         <LoginCard name={pop.name} login={pop.login} onClose={() => setPop(null)} />
       )}
-    </div>
+    </>
   );
 }
 
@@ -635,7 +660,15 @@ function SeatGroup({
   );
 }
 
-function SeatRow({ seat, unit, open }: { seat: OrgSeat; unit: OrgUnit; open: (pop: Pop) => void }) {
+export function SeatRow({
+  seat,
+  unit,
+  open,
+}: {
+  seat: OrgSeat;
+  unit: OrgUnit;
+  open: (pop: Pop) => void;
+}) {
   const queries = useQueryClient();
   const act = useAction();
   const holder = seat.holder;
@@ -776,7 +809,7 @@ function SeatRow({ seat, unit, open }: { seat: OrgSeat; unit: OrgUnit; open: (po
 }
 
 /** A small "…" menu of the less used actions. Closes on a click outside or Esc. */
-function Menu({
+export function Menu({
   items,
   busy,
 }: {

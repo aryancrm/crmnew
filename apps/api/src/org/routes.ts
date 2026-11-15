@@ -7,6 +7,7 @@ import { type Env, idParam, readBody } from "../http";
 import { ROLES } from "../people/roles";
 import {
   addArea,
+  addChannel,
   addPerson,
   addSeat,
   addUnit,
@@ -24,6 +25,7 @@ import {
   resetPassword,
   seatRequestForm,
   updateArea,
+  updateChannel,
   updateSeat,
   updateUnit,
 } from "./service";
@@ -68,6 +70,25 @@ export function orgRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHand
   app.use("/api/org/*", signedIn);
   app.get("/api/org", async (c) => c.json(await orgTree(db, c.get("me"))));
   app.get("/api/org/menu", async (c) => c.json(await menuUnits(db, c.get("me"))));
+  app.post("/api/org/channels", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({ code: text(12), name: text(60), division: text(40).nullable().optional() }),
+    );
+    return c.json(await addChannel(db, c.get("me"), input), 201);
+  });
+  app.patch("/api/org/channels/:id", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        name: text(60).optional(),
+        division: text(40).nullable().optional(),
+        active: z.boolean().optional(),
+      }),
+    );
+    await updateChannel(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
 
   app.post("/api/org/people", async (c) =>
     c.json(await addPerson(db, c.get("me"), await readBody(c, personBody)), 201),

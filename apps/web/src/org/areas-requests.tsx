@@ -18,19 +18,20 @@ const cityList = (text: string) =>
     .map((city) => city.trim())
     .filter(Boolean);
 
-function AreaDialog({
+export function AreaDialog({
   channel,
   area,
   onClose,
 }: {
-  channel: { id: number; code: string; name: string };
+  channel: { id: number; code: string; name: string; division?: string | null };
   area?: OrgTree["areas"][number];
   onClose: () => void;
 }) {
   const queries = useQueryClient();
   const action = useAction();
+  // Areas are named like the orders' sub-division: "HOS | Pasay".
   const [name, setName] = useState(
-    area?.name ?? `${channel.code === "HOSP" ? "HOS" : channel.code} | `,
+    area?.name ?? `${channel.division ?? (channel.code === "HOSP" ? "HOS" : channel.code)} | `,
   );
   const [cities, setCities] = useState(area?.cities.join(", ") ?? "");
   async function submit(event: FormEvent) {
@@ -99,85 +100,87 @@ export function AreasTab({ tree }: { tree: OrgTree }) {
   const seats = tree.units.flatMap((unit) => unit.seats.map((seat) => ({ seat, unit })));
   return (
     <div className="flex flex-col gap-4">
-      {tree.channels.map((channel) => {
-        const areas = tree.areas.filter((area) => area.channelId === channel.id);
-        return (
-          <section key={channel.id} className={`${CARD} overflow-hidden`}>
-            <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5">
-              <h3 className="text-sm font-semibold text-slate-900">
-                {channel.code} · {channel.name}
-                <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
-                  {areas.length}
-                </span>
-              </h3>
-              <Button small onClick={() => setPop({ channel })}>
-                <Plus size={14} /> Add area
-              </Button>
-            </div>
-            {areas.length === 0 ? (
-              <p className="px-4 py-3 text-xs text-slate-400">No area yet.</p>
-            ) : (
-              <ul className="divide-y divide-slate-100">
-                {areas.map((area) => {
-                  const held = seats.find(({ seat }) => seat.id === area.seatId);
-                  return (
-                    <li
-                      key={area.id}
-                      className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2.5"
-                    >
-                      <span className="flex min-w-0 flex-1 flex-col gap-1">
-                        <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
-                          <MapPin size={13} className="text-slate-400" /> {area.name}
+      {tree.channels
+        .filter((channel) => channel.active)
+        .map((channel) => {
+          const areas = tree.areas.filter((area) => area.channelId === channel.id);
+          return (
+            <section key={channel.id} className={`${CARD} overflow-hidden`}>
+              <div className="flex items-center justify-between gap-2 border-b border-slate-100 px-4 py-2.5">
+                <h3 className="text-sm font-semibold text-slate-900">
+                  {channel.code} · {channel.name}
+                  <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">
+                    {areas.length}
+                  </span>
+                </h3>
+                <Button small onClick={() => setPop({ channel })}>
+                  <Plus size={14} /> Add area
+                </Button>
+              </div>
+              {areas.length === 0 ? (
+                <p className="px-4 py-3 text-xs text-slate-400">No area yet.</p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {areas.map((area) => {
+                    const held = seats.find(({ seat }) => seat.id === area.seatId);
+                    return (
+                      <li
+                        key={area.id}
+                        className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-4 py-2.5"
+                      >
+                        <span className="flex min-w-0 flex-1 flex-col gap-1">
+                          <span className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
+                            <MapPin size={13} className="text-slate-400" /> {area.name}
+                          </span>
+                          <span className="flex flex-wrap gap-1">
+                            {area.cities.length ? (
+                              area.cities.map((city) => (
+                                <span
+                                  key={city}
+                                  className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600"
+                                >
+                                  {city}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-[11px] text-slate-400">No city yet</span>
+                            )}
+                          </span>
                         </span>
-                        <span className="flex flex-wrap gap-1">
-                          {area.cities.length ? (
-                            area.cities.map((city) => (
-                              <span
-                                key={city}
-                                className="rounded-md bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-600"
-                              >
-                                {city}
+                        <span className="text-xs text-slate-600">
+                          {held ? (
+                            held.seat.holder ? (
+                              <>
+                                <b>{held.seat.holder.name}</b> · {held.unit.name}
+                              </>
+                            ) : (
+                              <span className="rounded-md bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800">
+                                Vacant seat · {held.unit.name}
                               </span>
-                            ))
+                            )
                           ) : (
-                            <span className="text-[11px] text-slate-400">No city yet</span>
+                            <span className="text-slate-400">No seat holds it</span>
                           )}
                         </span>
-                      </span>
-                      <span className="text-xs text-slate-600">
-                        {held ? (
-                          held.seat.holder ? (
-                            <>
-                              <b>{held.seat.holder.name}</b> · {held.unit.name}
-                            </>
-                          ) : (
-                            <span className="rounded-md bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-800">
-                              Vacant seat · {held.unit.name}
-                            </span>
-                          )
-                        ) : (
-                          <span className="text-slate-400">No seat holds it</span>
-                        )}
-                      </span>
-                      <span className="w-24 text-right text-xs text-slate-500 tabular-nums">
-                        {area.customers} customer{area.customers === 1 ? "" : "s"}
-                      </span>
-                      <Button
-                        small
-                        variant="quiet"
-                        onClick={() => setPop({ channel, area })}
-                        aria-label={`Change ${area.name}`}
-                      >
-                        <Pencil size={14} />
-                      </Button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-        );
-      })}
+                        <span className="w-24 text-right text-xs text-slate-500 tabular-nums">
+                          {area.customers} customer{area.customers === 1 ? "" : "s"}
+                        </span>
+                        <Button
+                          small
+                          variant="quiet"
+                          onClick={() => setPop({ channel, area })}
+                          aria-label={`Change ${area.name}`}
+                        >
+                          <Pencil size={14} />
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </section>
+          );
+        })}
       {pop && <AreaDialog channel={pop.channel} area={pop.area} onClose={() => setPop(null)} />}
     </div>
   );

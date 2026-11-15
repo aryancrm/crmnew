@@ -10,6 +10,7 @@ import { api } from "../api";
 import { useMe } from "../auth";
 import { NewsList } from "../inventory/news";
 import { count, Facts, PageHead, Panel, Tile } from "../ui";
+import { AdminChannelsPage } from "./admin-channels";
 import { CeoHomePage } from "./ceo-home";
 import { Attention } from "./inventory-overview";
 import { ManagementHome } from "./management-home";
@@ -39,7 +40,9 @@ export const todayWords = () =>
 export function Home() {
   const me = useMe().data;
   if (!me) return null;
-  if (me.role === "admin" || me.role === "ceo") return <CeoHomePage />;
+  // The Admin login's Home is the Admin panel's Channels: setting the company up.
+  if (me.role === "admin") return <AdminChannelsPage />;
+  if (me.role === "ceo") return <CeoHomePage />;
   if (me.role === "team_lead" || me.role === "manager") return <TeamSalesPage />;
   if (me.role === "inventory") return <Navigate to="/inventory/overview" replace />;
   if (me.role === "management") return <ManagementHome />;

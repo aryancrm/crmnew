@@ -49,7 +49,7 @@ import type {
   PaymentTerms,
   Vat,
 } from "../types";
-import { DIVISIONS, divisionOfChannel, subDivisionOfArea, termsOfLabel } from "./divisions";
+import { DIVISIONS, subDivisionOfArea, termsOfLabel } from "./divisions";
 import { logEvent, peso } from "./events";
 import {
   CASE_AGENT_ROLES,
@@ -1335,7 +1335,7 @@ export async function orderForList(
   const today = todayManila();
   const medreps = await rows<OrderForList["medreps"][number]>(
     db,
-    sql`select p.id::int as id, p.name, a.name as area, ch.code as channel, seat.login, seat.team from person p
+    sql`select p.id::int as id, p.name, a.name as area, ch.code as channel, ch.division, seat.login, seat.team from person p
       left join area a on a.id = p.area_id left join channel ch on ch.id = p.channel_id
       left join lateral (select s.login, u.name as team from seat_holder h join seat s on s.id = h.seat_id and s.active
         join org_unit u on u.id = s.unit_id where h.person_id = p.id and h.kind = 'holder' and ${inForce("h", today)}
@@ -1414,13 +1414,14 @@ export async function placeOrder(
     (paymentTerm
       ? termsOfLabel(paymentTerm)
       : { terms: customer.paymentTerms, days: customer.paymentDays });
-  const [placer] = await rows<{ channel: string | null; area: string | null }>(
+  const [placer] = await rows<{ division: string | null; area: string | null }>(
     db,
     // The division and area are the MedRep's whose order it is (a team lead ordering for Ryan
     // books it under Ryan's channel and area), else the placer's own.
-    sql`select ch.code as channel, a.name as area from person p left join channel ch on ch.id = p.channel_id left join area a on a.id = p.area_id where p.id = ${holder?.id ?? me.id}`,
+    sql`select ch.division, a.name as area from person p left join channel ch on ch.id = p.channel_id left join area a on a.id = p.area_id where p.id = ${holder?.id ?? me.id}`,
   );
-  const orderDivision = division ?? (divisionOfChannel(placer?.channel) || null);
+  // The channel's own Division, as the Admin panel sets it (none when it has none).
+  const orderDivision = division ?? placer?.division ?? null;
   const subDivision =
     clean(input.subDivision) ??
     (orderDivision && placer?.area ? subDivisionOfArea(orderDivision, placer.area) : null);

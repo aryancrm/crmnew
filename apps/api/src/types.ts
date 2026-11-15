@@ -13,7 +13,8 @@ export type Me = {
   role: Role;
   roleLabel: string;
   mustChangePassword: boolean;
-  channel: { code: string; name: string } | null;
+  /** Their channel, and the Division its orders carry (set in the Admin panel). */
+  channel: { code: string; name: string; division: string | null } | null;
   area: { id: number; name: string; cities: string[] } | null;
   reportsTo: { name: string; title: string | null } | null;
   /** The CEO or Admin looking as this person (read only), when it is that. */
@@ -845,8 +846,10 @@ export type OrderForList = {
     id: number;
     name: string;
     area: string | null;
-    /** Their channel's code (the order's Division follows it). */
+    /** Their channel's code. */
     channel: string | null;
+    /** The Division their orders carry: their channel's. */
+    division: string | null;
     login: string | null;
     team: string | null;
   }[];
@@ -2660,7 +2663,7 @@ export type OrgTree = {
     roleLabel: string;
     title: string | null;
   }[];
-  channels: { id: number; code: string; name: string }[];
+  channels: { id: number; code: string; name: string; division: string | null; active: boolean }[];
   /** Every area, and the seat that holds it. */
   areas: {
     id: number;

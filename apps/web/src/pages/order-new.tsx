@@ -4,13 +4,7 @@
 // total, and what Management will see. A MedRep's order is always his own; Dispatch decides how
 // it goes out.
 
-import {
-  DIVISIONS,
-  divisionOfChannel,
-  PAYMENT_TERMS,
-  SUB_DIVISIONS,
-  subDivisionOfArea,
-} from "@2mg/api/divisions";
+import { DIVISIONS, PAYMENT_TERMS, SUB_DIVISIONS, subDivisionOfArea } from "@2mg/api/divisions";
 import { formatPhone } from "@2mg/api/phone";
 import type {
   Catalogue,
@@ -236,7 +230,8 @@ export function OrderNew({ fix = false }: { fix?: boolean }) {
   const forRep = forWhom.data?.can
     ? forWhom.data.medreps.find((rep) => rep.id === medrepId)
     : undefined;
-  const pickedDivision = division ?? divisionOfChannel(forRep ? forRep.channel : me?.channel?.code);
+  // The channel's own Division (the Admin panel sets it), the MedRep's whose order it is.
+  const pickedDivision = division ?? (forRep ? forRep.division : me?.channel?.division) ?? "";
   const pickedSubDivision =
     subDivision ??
     (pickedDivision

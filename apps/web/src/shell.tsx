@@ -301,6 +301,7 @@ function linkOpen(location: { pathname: string; search: string }, items: { to: s
 
 /** Pages that draw their own way back (a team's page, a record's crumbs, an order, a case). */
 const OWN_BACK = [
+  /^\/admin\/channels\/\d+/,
   /^\/my-team/,
   /^\/customers\/\d+/,
   /^\/orders\/\d+/,

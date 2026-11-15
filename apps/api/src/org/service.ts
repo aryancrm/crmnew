@@ -14,6 +14,7 @@ import { addDays, todayManila } from "../inventory/rules";
 import { clean, day, iso, type Runner } from "../inventory/service";
 import { sendMessage } from "../messages/service";
 import { notify } from "../notify/service";
+import { DIVISIONS } from "../orders/divisions";
 import { isRole, ROLE_LABEL, ROLES, type Role } from "../people/roles";
 import type {
   Me,
@@ -343,7 +344,7 @@ export async function orgTree(db: Database, me: Me): Promise<OrgTree> {
     ),
     rows<OrgTree["channels"][number]>(
       db,
-      sql`select id::int as id, code, name from channel order by sort, id`,
+      sql`select id::int as id, code, name, division, active from channel order by active desc, sort, id`,
     ),
     rows<OrgTree["areas"][number]>(
       db,
@@ -920,6 +921,104 @@ export async function resetPassword(db: Database, me: Me, personId: number): Pro
   };
 }
 
+const CHANNEL_CODE = /^[A-Z0-9&]{2,12}$/;
+
+/** A new sales channel (the Admin): its code, name and Division, and its own box at the top of the
+ *  company, where its head, team leads and MedReps go. Everything that reads channels (sales,
+ *  targets, the CEO's figures) takes it from there. */
+export async function addChannel(
+  db: Database,
+  me: Me,
+  input: { code: string; name: string; division?: string | null },
+): Promise<{ channelId: number; unitId: number }> {
+  allow(me, ORG_CHANGE_ROLES, "add channels");
+  const code = input.code.trim().toUpperCase();
+  const name = input.name.trim();
+  if (!CHANNEL_CODE.test(code))
+    throw new Refusal(
+      400,
+      "invalid",
+      "A short code: 2 to 12 letters or digits, like HOSP.",
+      "code",
+    );
+  if (!name) throw new Refusal(400, "invalid", "Name the channel.", "name");
+  const division = clean(input.division);
+  if (division && !(DIVISIONS as readonly string[]).includes(division))
+    throw new Refusal(400, "invalid", "Pick the Division from the list.", "division");
+  return change(db, async (tx) => {
+    const [taken] = await rows<{ id: number }>(
+      tx,
+      sql`select id::int as id from channel where upper(code) = ${code} or lower(name) = lower(${name})`,
+    );
+    if (taken)
+      throw new Refusal(409, "taken", "A channel with that code or name is already there.", "code");
+    const [sort] = await rows<{ next: number }>(
+      tx,
+      sql`select coalesce(max(sort), 0)::int + 1 as next from channel`,
+    );
+    const [made] = await rows<{ id: number }>(
+      tx,
+      sql`insert into channel (code, name, sort, division) values (${code}, ${name}, ${sort?.next ?? 1}, ${division})
+        returning id::int as id`,
+    );
+    const [company] = await rows<{ id: number }>(
+      tx,
+      sql`select id::int as id from org_unit where kind = 'company'`,
+    );
+    if (!company) throw new Refusal(409, "not_now", "The company's tree isn't set up yet.");
+    const [box] = await rows<{ id: number }>(
+      tx,
+      sql`insert into org_unit (name, kind, parent_id, channel_id, sort)
+        values (${name}, 'business', ${company.id}, ${made?.id}, ${sort?.next ?? 1}) returning id::int as id`,
+    );
+    return { channelId: made?.id as number, unitId: box?.id as number };
+  });
+}
+
+/** Rename a channel, set its Division, or take it out of use (only once nobody sits in it). */
+export async function updateChannel(
+  db: Database,
+  me: Me,
+  id: number,
+  input: { name?: string; division?: string | null; active?: boolean },
+): Promise<void> {
+  allow(me, ORG_CHANGE_ROLES, "change channels");
+  const division = input.division === undefined ? undefined : clean(input.division);
+  if (division && !(DIVISIONS as readonly string[]).includes(division))
+    throw new Refusal(400, "invalid", "Pick the Division from the list.", "division");
+  await change(db, async (tx) => {
+    const [channel] = await rows<{ id: number; name: string }>(
+      tx,
+      sql`select id::int as id, name from channel where id = ${id}`,
+    );
+    if (!channel) throw new Refusal(404, "not_found", "No such channel.");
+    if (input.active === false) {
+      const [busy] = await rows<{ n: number }>(
+        tx,
+        sql`select count(*)::int as n from person where active and channel_id = ${id}`,
+      );
+      if ((busy?.n ?? 0) > 0)
+        throw new Refusal(
+          409,
+          "not_now",
+          "People still work in this channel: move them first.",
+          "active",
+        );
+    }
+    const name = input.name?.trim();
+    await tx.execute(
+      sql`update channel set name = ${name || channel.name},
+          division = ${division === undefined ? sql`division` : division},
+          active = ${input.active ?? sql`active`}
+        where id = ${id}`,
+    );
+    if (name)
+      await tx.execute(
+        sql`update org_unit set name = ${name} where channel_id = ${id} and kind = 'business' and name = ${channel.name}`,
+      );
+  });
+}
+
 export async function addUnit(
   db: Database,
   me: Me,
@@ -1159,7 +1258,8 @@ export async function menuUnits(
   );
   const today = todayManila();
   const tops = whole
-    ? sql`select u.id from org_unit u join org_unit c on c.id = u.parent_id and c.kind = 'company' where u.active`
+    ? sql`select u.id from org_unit u join org_unit c on c.id = u.parent_id and c.kind = 'company'
+        left join channel ch on ch.id = u.channel_id where u.active and coalesce(ch.active, true)`
     : sql`select u.id from org_unit u where u.id in (${sql.join(
         led.map((id) => sql`${id}`),
         sql`, `,

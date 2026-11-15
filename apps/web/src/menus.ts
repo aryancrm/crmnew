@@ -318,15 +318,7 @@ export const appsFor = (me: Me): Space[] =>
 
 /** How long each desk keeps an order, and who is late: for the desks, team leads and the CEO. */
 const speedLink: MenuItem = { to: "/speed", label: "Speed", icon: Timer };
-const SPEED_ROLES: Role[] = [
-  "ceo",
-  "admin",
-  "management",
-  "finance",
-  "dispatch",
-  "team_lead",
-  "manager",
-];
+const SPEED_ROLES: Role[] = ["ceo", "management", "finance", "dispatch", "team_lead", "manager"];
 
 /** Messages on everyone's desk: what needs them, the news (no bell to miss), and the chats. */
 const messagesLink: MenuItem = folder(
@@ -505,8 +497,10 @@ function ownDesk(me: Me): Space {
       };
     case "inventory":
       return inventoryApp(me);
-    case "ceo":
     case "admin":
+      // The Admin login's desk is the Admin panel: setting the company up, apart from the CEO.
+      return adminPanel(me);
+    case "ceo":
       return {
         key: "desk",
         label: me.roleLabel,
@@ -538,44 +532,55 @@ function ownDesk(me: Me): Space {
               ),
             ),
           },
-          // Setting the company up is the Admin's own panel (the Admin login), apart from the
-          // CEO's figures: never in the CEO's sidebar.
-          ...(me.role === "admin"
-            ? [
-                {
-                  items: [
-                    {
-                      to: "/people",
-                      label: "Admin panel",
-                      icon: Settings,
-                      badge: "orgRequests" as const,
-                    },
-                  ],
-                },
-              ]
-            : []),
         ],
       };
   }
 }
 
-/** The Admin panel: where the company is set up (who heads each channel, who sits under whom,
- *  the areas, the asks for people), apart from the CEO's figures. */
-const adminPanel: Space = {
-  key: "admin-panel",
-  label: "Admin panel",
-  icon: Settings,
-  tone: "bg-slate-700 text-white",
-  groups: [
-    {
-      items: [
-        { to: "/people", label: "Teams & people", icon: Users },
-        { to: "/people?tab=areas", label: "Areas", icon: MapPin },
-        { to: "/people?tab=requests", label: "Requests", icon: UserPlus, badge: "orgRequests" },
-      ],
-    },
-  ],
-};
+/** The Admin panel, the Admin login's own desk: where the company is set up (its channels, who
+ *  heads each, the teams with their leads and MedReps, the areas, the asks for people, targets
+ *  and the company's details), apart from the CEO's figures. The apps stay as folders, to look. */
+function adminPanel(me: Me): Space {
+  return {
+    key: "desk",
+    label: "Admin panel",
+    icon: Settings,
+    tone: "bg-slate-700 text-white",
+    groups: [
+      {
+        items: [
+          { to: "/", label: "Channels", icon: Network },
+          { to: "/people", label: "Teams & people", icon: Users },
+          { to: "/people?tab=areas", label: "Areas", icon: MapPin },
+          {
+            to: "/people?tab=requests",
+            label: "Asks for people",
+            icon: UserPlus,
+            badge: "orgRequests",
+          },
+          { to: "/targets", label: "Targets", icon: Target },
+        ],
+      },
+      {
+        title: "Company",
+        items: [
+          { to: "/settings", label: "Company details", icon: Building2 },
+          { to: "/channels", label: "Online pages & mail", icon: Radio },
+        ],
+      },
+      {
+        title: "Apps",
+        items: appsFor(me).map((app) =>
+          folder(
+            app.label,
+            app.icon,
+            app.groups.flatMap((group) => group.items),
+          ),
+        ),
+      },
+    ],
+  };
+}
 const ADMIN_PANEL_PATHS = ["/people"];
 
 /** The menu for the page that is open: an app's while inside it, else the person's desk. */
@@ -583,9 +588,10 @@ export function spaceFor(me: Me, pathname: string): Space {
   const desk = deskFor(me);
   // The CEO's and the Admin's sidebar holds every app as a folder: it never swaps for another,
   // but for the Admin panel, which is its own place.
-  if (APP_ROLES.includes(me.role))
+  if (me.role === "admin") return desk;
+  if (me.role === "ceo")
     return under(pathname, ADMIN_PANEL_PATHS)
-      ? { ...adminPanel, back: { to: "/", label: `Back to ${me.roleLabel}` } }
+      ? { ...adminPanel(me), back: { to: "/", label: `Back to ${me.roleLabel}` } }
       : desk;
   // A page the person's own sidebar lists (Management's "Medicines & stock", say) keeps that
   // sidebar: following one's own link never swaps the menu for another app's.

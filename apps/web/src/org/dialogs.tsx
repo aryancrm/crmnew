@@ -376,6 +376,7 @@ export function AddPersonDialog({
   unit,
   seat,
   module = "medrep",
+  title,
   onClose,
   onLogin,
 }: {
@@ -384,6 +385,8 @@ export function AddPersonDialog({
   /** An empty seat to fill; else a new seat in the unit. */
   seat?: OrgSeat | null;
   module?: Role;
+  /** The new seat's title, when the work's own isn't right ("URO head"). */
+  title?: string;
   onClose: () => void;
   onLogin: (name: string, login: OrgLogin) => void;
 }) {
@@ -395,9 +398,10 @@ export function AddPersonDialog({
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [startsOn, setStartsOn] = useState(tree.today);
-  const [job, setJobState] = useState<JobState>(
-    freshJob(module, module !== "medrep" && !unit.seats.some((one) => one.lead)),
-  );
+  const [job, setJobState] = useState<JobState>(() => ({
+    ...freshJob(module, module !== "medrep" && !unit.seats.some((one) => one.lead)),
+    ...(title ? { title } : {}),
+  }));
   const setJob = (next: Partial<JobState>) => setJobState((state) => ({ ...state, ...next }));
   const [personId, setPersonId] = useState("");
   const [keepOther, setKeepOther] = useState(false);
@@ -873,18 +877,21 @@ export function UnitDialog({
   tree,
   parent,
   unit,
+  team = false,
   onClose,
 }: {
   tree: OrgTree;
   parent?: OrgUnit | null;
   unit?: OrgUnit | null;
+  /** Only a team, in its parent's channel: the Admin panel's channel page asks nothing else. */
+  team?: boolean;
   onClose: () => void;
 }) {
   const saved = useOrgSaved();
   const action = useAction();
   const [name, setName] = useState(unit?.name ?? "");
   const [kind, setKind] = useState<(typeof KINDS)[number]["value"]>(
-    parent?.kind === "company" ? "business" : "team",
+    parent?.kind === "company" && !team ? "business" : "team",
   );
   const [channel, setChannel] = useState(unit?.channel ? String(unit.channel.id) : "");
   async function submit(event: FormEvent) {
@@ -902,9 +909,15 @@ export function UnitDialog({
   }
   return (
     <Dialog
-      title={unit ? `Change ${unit.name}` : `A new box under ${parent?.name ?? ""}`}
-      sub={
+      title={
         unit
+          ? `Change ${unit.name}`
+          : team
+            ? `A new team in ${parent?.name ?? ""}`
+            : `A new box under ${parent?.name ?? ""}`
+      }
+      sub={
+        unit || team
           ? undefined
           : "A team, a business line, a business or a department. Add its seats after."
       }
@@ -922,7 +935,7 @@ export function UnitDialog({
               required
             />
           </Label>
-          {!unit && (
+          {!unit && !team && (
             <Label text="What it is">
               <select
                 value={kind}
@@ -937,20 +950,24 @@ export function UnitDialog({
               </select>
             </Label>
           )}
-          <Label text="Sales channel" error={action.at("channelId")}>
-            <select
-              value={channel}
-              onChange={(event) => setChannel(event.target.value)}
-              className={FIELD}
-            >
-              <option value="">{parent || unit ? "Same as above (or none)" : "None"}</option>
-              {tree.channels.map((one) => (
-                <option key={one.id} value={one.id}>
-                  {one.code} · {one.name}
-                </option>
-              ))}
-            </select>
-          </Label>
+          {!team && (
+            <Label text="Sales channel" error={action.at("channelId")}>
+              <select
+                value={channel}
+                onChange={(event) => setChannel(event.target.value)}
+                className={FIELD}
+              >
+                <option value="">{parent || unit ? "Same as above (or none)" : "None"}</option>
+                {tree.channels
+                  .filter((one) => one.active || one.id === unit?.channel?.id)
+                  .map((one) => (
+                    <option key={one.id} value={one.id}>
+                      {one.code} · {one.name}
+                    </option>
+                  ))}
+              </select>
+            </Label>
+          )}
         </div>
         <Problem message={action.general(["name", "channelId"])} />
         <Footer busy={action.busy} label={unit ? "Save" : "Add"} onClose={onClose} />

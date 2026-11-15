@@ -74,6 +74,7 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
       mustChangePassword: person.mustChangePassword,
       channelCode: channel.code,
       channelName: channel.name,
+      channelDivision: channel.division,
       areaId: area.id,
       areaName: area.name,
       areaCities: area.cities,
@@ -115,7 +116,9 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
     // Someone looking as this person isn't asked to change their password.
     mustChangePassword: row.viewerId ? false : row.mustChangePassword,
     channel:
-      row.channelCode && row.channelName ? { code: row.channelCode, name: row.channelName } : null,
+      row.channelCode && row.channelName
+        ? { code: row.channelCode, name: row.channelName, division: row.channelDivision ?? null }
+        : null,
     area:
       row.areaId && row.areaName
         ? { id: row.areaId, name: row.areaName, cities: row.areaCities ?? [] }
