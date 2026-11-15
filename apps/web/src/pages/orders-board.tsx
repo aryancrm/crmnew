@@ -110,12 +110,12 @@ const STRIP = ["Placed", "Management", "Finance", "Packed", "Shipped", "Delivere
 
 /** The customer's kind as the Leads card shows its type pill. */
 export const KIND_BADGE: Record<string, { label: string; style: string }> = {
-  hospital: { label: "Hospital", style: "bg-sky-50 text-sky-800 border-sky-200" },
-  doctor: { label: "Doctor", style: "bg-indigo-50 text-indigo-800 border-indigo-200" },
-  patient: { label: "Patient", style: "bg-teal-50 text-teal-800 border-teal-200" },
-  drugstore: { label: "Drugstore", style: "bg-amber-50 text-amber-800 border-amber-200" },
-  distributor: { label: "Distributor", style: "bg-violet-50 text-violet-800 border-violet-200" },
-  government: { label: "Government", style: "bg-rose-50 text-rose-800 border-rose-200" },
+  hospital: { label: "Hospital", style: "border-transparent bg-sky-600 text-white" },
+  doctor: { label: "Doctor", style: "border-transparent bg-indigo-600 text-white" },
+  patient: { label: "Patient", style: "border-transparent bg-teal-600 text-white" },
+  drugstore: { label: "Drugstore", style: "border-transparent bg-amber-500 text-white" },
+  distributor: { label: "Distributor", style: "border-transparent bg-violet-600 text-white" },
+  government: { label: "Government", style: "border-transparent bg-rose-600 text-white" },
 };
 
 const termsOf = (card: OrderCard) =>
@@ -195,7 +195,14 @@ export function OrdersToCheck({
   const lanes = view === "board" && !all && (desk === "dispatch" || desk === "finance");
   // Medicine check and Stock to watch belong beside the approvals; All orders and On hold get a
   // "Medicine check" button that opens the same check in a pop-up.
-  const side = view === "cards" && !all && defaultTab !== "hold" && defaultTab !== "sent";
+  // Management's cards take the whole width (Aryan: three or more a row); Finance keeps its money
+  // glance beside them.
+  const side =
+    view === "cards" &&
+    !all &&
+    defaultTab !== "hold" &&
+    defaultTab !== "sent" &&
+    desk === "finance";
   const [checking, setChecking] = useState(false);
   const shown = Number(params.get("shown")) || 0;
   const tab = (params.get("tab") ?? defaultTab) as BoardTab;
@@ -672,7 +679,7 @@ export function OrdersToCheck({
                       </span>
                       <span className="h-px min-w-6 flex-1 bg-slate-200/70" />
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 min-[1800px]:grid-cols-4">
                       {cards.map(cardOf)}
                     </div>
                   </section>
@@ -954,7 +961,7 @@ export function OrderCardItem({
                 {card.channel}
               </span>
             )}
-            <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+            <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-800">
               {termsOf(card)}
             </span>
             {card.customerCity && (
@@ -1052,7 +1059,7 @@ export function OrderCardItem({
               <span className="inline-flex items-center gap-1">
                 {card.dispatchById === me?.id ? (
                   <>
-                    <span className="rounded-full bg-sky-50 px-2 py-0.5 font-semibold text-sky-800 ring-1 ring-sky-200">
+                    <span className="rounded-full bg-sky-600 px-2 py-0.5 font-semibold text-white">
                       You have it
                     </span>
                     <button
@@ -1079,7 +1086,7 @@ export function OrderCardItem({
                         event.stopPropagation();
                         onTake(false);
                       }}
-                      className="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                      className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700 hover:bg-slate-200"
                     >
                       {card.dispatchBy ? "Take over" : "Take it"}
                     </button>
@@ -1091,7 +1098,7 @@ export function OrderCardItem({
               (pending || (flagged && heldBy === "management")) &&
               (card.handledById === me?.id ? (
                 <span className="inline-flex items-center gap-1">
-                  <span className="rounded-full bg-sky-50 px-2 py-0.5 font-semibold text-sky-800 ring-1 ring-sky-200">
+                  <span className="rounded-full bg-sky-600 px-2 py-0.5 font-semibold text-white">
                     You're handling it
                   </span>
                   <button
@@ -1118,7 +1125,7 @@ export function OrderCardItem({
                       event.stopPropagation();
                       onHandle(false);
                     }}
-                    className="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                    className="rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700 hover:bg-slate-200"
                   >
                     {card.handledBy ? "Take over" : "I'll handle it"}
                   </button>
@@ -1144,7 +1151,7 @@ export function OrderCardItem({
                   event.stopPropagation();
                   onHistory();
                 }}
-                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2 py-0.5 font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 font-semibold text-slate-700 hover:bg-slate-200"
                 title="What they bought, what they owe and how late"
               >
                 <History className="size-3" /> History
@@ -1262,7 +1269,7 @@ export function OrderCardItem({
                     type="button"
                     disabled={busy}
                     onClick={() => onAsk("hold")}
-                    className="h-8 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    className="h-8 rounded-lg bg-slate-100 text-xs font-semibold text-slate-800 hover:bg-slate-200 disabled:opacity-50"
                   >
                     Hold
                   </button>
@@ -1315,7 +1322,7 @@ export function OrderCardItem({
                     onClick={() =>
                       card.status === "shipped" ? onDispatch("failed") : onAsk("hold")
                     }
-                    className="h-8 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    className="h-8 rounded-lg bg-slate-100 text-xs font-semibold text-slate-800 hover:bg-slate-200 disabled:opacity-50"
                   >
                     {card.status === "shipped" ? "Came back" : "Hold"}
                   </button>
@@ -1354,7 +1361,7 @@ export function OrderCardItem({
                     type="button"
                     disabled={busy}
                     onClick={() => onAsk("hold")}
-                    className="h-8 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    className="h-8 rounded-lg bg-slate-100 text-xs font-semibold text-slate-800 hover:bg-slate-200 disabled:opacity-50"
                   >
                     Hold
                   </button>
@@ -1362,7 +1369,7 @@ export function OrderCardItem({
                     type="button"
                     disabled={busy}
                     onClick={() => onAsk("send_back")}
-                    className="h-8 rounded-lg border border-slate-200 bg-white text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    className="h-8 rounded-lg bg-slate-100 text-xs font-semibold text-slate-800 hover:bg-slate-200 disabled:opacity-50"
                   >
                     Send back
                   </button>

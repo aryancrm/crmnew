@@ -96,7 +96,7 @@ export function MyDayButton() {
         onClick={() => run("/api/hr/day/start")}
         disabled={action.busy}
         title={action.problem?.message ?? "Start your working day"}
-        className="hidden h-9 shrink-0 items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 sm:inline-flex"
+        className="hidden h-9 shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3 text-xs font-semibold text-white hover:bg-brand-dark sm:inline-flex"
       >
         <LogIn size={14} aria-hidden="true" /> Start my day
       </button>
@@ -108,15 +108,15 @@ export function MyDayButton() {
         type="button"
         onClick={() => setOpen((now) => !now)}
         aria-expanded={open}
-        className={`inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold ${
+        className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold ${
           day.working
-            ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-            : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            ? "bg-brand text-white hover:bg-brand-dark"
+            : "bg-slate-100 text-slate-700 hover:bg-slate-200"
         }`}
       >
         <span
           aria-hidden="true"
-          className={`size-2 rounded-full ${day.working ? "bg-emerald-500" : "bg-slate-300"}`}
+          className={`size-2 rounded-full ${day.working ? "bg-white" : "bg-slate-400"}`}
         />
         {day.working ? `In since ${clock(day.timeIn)}` : `Done · ${hours(day.workedMinutes)}`}
       </button>

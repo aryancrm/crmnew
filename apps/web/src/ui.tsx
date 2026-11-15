@@ -64,17 +64,18 @@ export const daysBetween = (from: string, to: string) =>
 
 export type Tone = "plain" | "brand" | "good" | "warn" | "bad" | "info" | "violet";
 
+// Solid colours, no tinted glass (Aryan, 15 Nov): a status is a filled pill.
 const TONES: Record<Tone, string> = {
-  plain: "bg-head text-slate-600 border-line",
-  brand: "bg-brand-tint text-brand-dark border-emerald-200",
-  good: "bg-good-tint text-good border-green-200",
-  warn: "bg-warn-tint text-warn border-amber-200",
-  bad: "bg-bad-tint text-bad border-red-200",
-  info: "bg-info-tint text-info border-sky-200",
-  violet: "bg-violet-50 text-violet-700 border-violet-200",
+  plain: "bg-slate-200 text-slate-800 border-transparent",
+  brand: "bg-brand text-white border-transparent",
+  good: "bg-emerald-600 text-white border-transparent",
+  warn: "bg-amber-500 text-white border-transparent",
+  bad: "bg-rose-600 text-white border-transparent",
+  info: "bg-sky-600 text-white border-transparent",
+  violet: "bg-violet-600 text-white border-transparent",
 };
 
-/** A status as a small tinted pill. */
+/** A status as a small filled pill. */
 export function Pill({ tone = "plain", children }: { tone?: Tone; children: ReactNode }) {
   return (
     <span
@@ -167,9 +168,9 @@ export function Panel({
 
 const BUTTONS = {
   primary: "bg-brand text-white shadow-sm hover:bg-brand-dark",
-  plain: "border border-line bg-white text-slate-700 shadow-sm hover:border-field hover:bg-hover",
+  plain: "bg-slate-100 text-slate-800 hover:bg-slate-200",
   quiet: "text-slate-600 hover:bg-head hover:text-ink",
-  danger: "border border-rose-200 bg-white text-rose-700 shadow-sm hover:bg-rose-50",
+  danger: "bg-rose-600 text-white shadow-sm hover:bg-rose-700",
 };
 
 export function Button({
