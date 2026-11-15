@@ -1,14 +1,15 @@
 // Reports: sales by channel (each channel's sales against its people's targets, its head, its
 // team by who reports to whom, its areas and customers), sales by person, and the company tree.
 
-import type { ChannelFigures, ChannelPerson, ChannelReport, MonthFacts } from "@2mg/api/types";
+import type { ChannelFigures, ChannelReport, ChannelSalesDetail, MonthFacts } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Network, User, Users } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, Network, User, Users } from "lucide-react";
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { exactPeso, monthName, shiftMonth, shortPeso } from "../ceo";
-import { Card, count, PageHead, PageState, Pill } from "../ui";
-import { PACE_TEXT, PaceBar } from "./ceo-home";
+import { Bars } from "../team/charts";
+import { Card, count, PageHead, PageState } from "../ui";
 
 const REPORTS = [
   {
@@ -121,142 +122,162 @@ export function ChannelsReport() {
           )
         }
       />
-      <Card className="mb-4 overflow-x-auto">
-        <table className="t">
-          <thead>
-            <tr>
-              <th>Channel</th>
-              <th>Head</th>
-              <th className="min-w-44">Against target</th>
-              <th className="num">Sold</th>
-              <th className="num">Target</th>
-              <th className="num">People</th>
-              <th className="num">MedReps</th>
-              <th className="num">Areas</th>
-              <th className="num">Customers</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.channels.map((channel) => (
-              <tr key={channel.id}>
-                <td>
-                  <a href={`#${channel.code}`} className="font-semibold">
-                    {channel.code}
-                  </a>
-                  <span className="text-ink-2"> · {channel.name}</span>
-                </td>
-                <td>
-                  {channel.head ? (
-                    channel.head.name
-                  ) : (
-                    <span className="text-ink-2">No head named</span>
-                  )}
-                </td>
-                <td>
-                  {(() => {
-                    const figures = figuresOf(channel.code);
-                    if (!figures)
-                      return (
-                        <span className="text-ink-2">{sales.isError ? "Couldn't read" : "…"}</span>
-                      );
-                    return (
-                      <span className="flex items-center gap-2">
-                        <span className="flex-1">
-                          <PaceBar
-                            pct={figures.pct}
-                            pace={month?.running ? month.pace : null}
-                            tone={figures.tone}
-                          />
-                        </span>
-                        <span
-                          className={`w-10 text-right text-[13px] tabular-nums ${figures.pct === null ? "text-slate-400" : `font-semibold ${PACE_TEXT[figures.tone]}`}`}
-                        >
-                          {figures.pct === null ? "—" : `${Math.round(figures.pct)}%`}
-                        </span>
-                      </span>
-                    );
-                  })()}
-                </td>
-                <td
-                  className="num font-semibold whitespace-nowrap"
-                  title={exactPeso(figuresOf(channel.code)?.sold ?? 0)}
-                >
-                  {shortPeso(figuresOf(channel.code)?.sold ?? 0)}
-                </td>
-                <td className="num whitespace-nowrap text-ink-2">
-                  {figuresOf(channel.code)?.target != null
-                    ? shortPeso(figuresOf(channel.code)?.target ?? 0)
-                    : "—"}
-                </td>
-                <td className="num">{count(channel.people)}</td>
-                <td className="num">{count(channel.medreps)}</td>
-                <td className="num">{count(channel.areas)}</td>
-                <td className="num">{count(channel.customers)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
-
-      <div className="grid items-start gap-4 lg:grid-cols-2">
-        {data.channels.map((channel) => (
-          <Card key={channel.id} className="scroll-mt-20 p-5">
-            <div id={channel.code} className="flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <span className="text-base font-semibold">{channel.code}</span>
-                <span className="text-ink-2"> · {channel.name}</span>
-              </div>
-              {channel.head ? (
-                <Pill tone="brand">Head: {channel.head.name}</Pill>
-              ) : (
-                <Pill tone="warn">No head named</Pill>
-              )}
-            </div>
-            {channel.tree.length === 0 ? (
-              <div className="mt-3 text-[13px] text-ink-2">Nobody works in this channel yet.</div>
-            ) : (
-              <ul className="mt-3 flex flex-col">
-                {channel.tree.map((person) => (
-                  <PersonRow key={person.id} person={person} depth={0} headId={channel.head?.id} />
-                ))}
-              </ul>
-            )}
-          </Card>
-        ))}
-      </div>
+      {/* Each channel against its target; opening one shows its sales inside: who sold, to
+          whom, which medicines. Data only: the company's tree is in Company. */}
+      <section className="space-y-2">
+        {[...data.channels]
+          .sort((a, b) => (figuresOf(b.code)?.sold ?? 0) - (figuresOf(a.code)?.sold ?? 0))
+          .map((channel) => (
+            <ChannelRow
+              key={channel.id}
+              channel={channel}
+              figures={figuresOf(channel.code)}
+              month={month?.month ?? ""}
+              pace={month?.pace ?? 1}
+            />
+          ))}
+      </section>
     </div>
   );
 }
 
-function PersonRow({
-  person,
-  depth,
-  headId,
+const toneBar = (sold: number, target: number | null, pace: number) =>
+  !target
+    ? "bg-slate-400"
+    : sold / target >= pace
+      ? "bg-emerald-500"
+      : sold / target >= pace / 2
+        ? "bg-amber-400"
+        : "bg-rose-500";
+
+/** One channel: its head, its sold against its target; opened, its sellers, customers and
+ *  medicines for the month. */
+function ChannelRow({
+  channel,
+  figures,
+  month,
+  pace,
 }: {
-  person: ChannelPerson;
-  depth: number;
-  headId?: number;
+  channel: ChannelReport["channels"][number];
+  figures: ChannelFigures | undefined;
+  month: string;
+  pace: number;
 }) {
+  const [open, setOpen] = useState(false);
+  const detail = useQuery({
+    queryKey: ["reports", "channel-sales", channel.code, month],
+    queryFn: () =>
+      api<ChannelSalesDetail>(
+        `/api/channel-sales/${channel.code}${month ? `?month=${month}` : ""}`,
+      ),
+    enabled: open,
+  });
+  const sold = figures?.sold ?? 0;
+  const target = figures?.target ?? null;
   return (
-    <>
-      <li
-        className="flex flex-wrap items-center gap-x-2 border-b border-line-soft py-2 last:border-b-0"
-        style={{ paddingLeft: depth * 20 }}
+    <div
+      id={channel.code}
+      className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+    >
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        className="grid w-full grid-cols-[1.25rem_minmax(0,1.4fr)_minmax(0,2fr)_6rem] items-center gap-3 px-4 py-3 text-left hover:bg-slate-50 md:grid-cols-[1.25rem_minmax(0,1.4fr)_minmax(0,2fr)_6rem_10rem]"
       >
-        {depth > 0 && (
-          <span className="text-slate-300" aria-hidden="true">
-            └
-          </span>
+        {open ? (
+          <ChevronDown className="size-4 text-slate-400" />
+        ) : (
+          <ChevronRight className="size-4 text-slate-400" />
         )}
-        <span className="text-[13px] font-semibold">{person.name}</span>
-        <span className="text-[13px] text-ink-2">
-          {[person.title ?? person.roleLabel, person.area].filter(Boolean).join(" · ")}
+        <span className="min-w-0">
+          <span className="block truncate text-sm font-semibold text-slate-900">
+            {channel.code} · {channel.name}
+          </span>
+          <span className="block truncate text-xs text-slate-500">
+            {channel.head ? channel.head.name : "No head named"} · {channel.people} people ·{" "}
+            {count(channel.customers)} customers
+          </span>
         </span>
-        {person.id === headId && <Pill tone="brand">Head</Pill>}
-      </li>
-      {person.team.map((member) => (
-        <PersonRow key={member.id} person={member} depth={depth + 1} headId={headId} />
-      ))}
-    </>
+        <span className="relative h-2.5 rounded-full bg-slate-100">
+          <span
+            className={`absolute inset-y-0 left-0 rounded-full ${toneBar(sold, target, pace)}`}
+            style={{ width: `${target ? Math.min(100, (sold / target) * 100) : sold ? 100 : 0}%` }}
+          />
+        </span>
+        <span className="text-right text-sm font-semibold tabular-nums" title={exactPeso(sold)}>
+          {shortPeso(sold)}
+        </span>
+        <span className="hidden text-right text-xs text-slate-500 md:block">
+          {target ? `${Math.round((sold / target) * 100)}% of ${shortPeso(target)}` : "No target"}
+          {figures?.today ? ` · today ${shortPeso(figures.today)}` : ""}
+        </span>
+      </button>
+      {open && (
+        <div className="grid gap-4 border-t border-slate-100 bg-slate-50/50 p-4 lg:grid-cols-3">
+          {!detail.data ? (
+            <p className="text-sm text-slate-500">
+              {detail.isError ? "Couldn't read it." : "Reading…"}
+            </p>
+          ) : (
+            <>
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h3 className="mb-3 text-xs font-semibold text-slate-700">Who sold</h3>
+                {detail.data.people.length ? (
+                  <Bars
+                    rows={detail.data.people.map((person) => ({
+                      key: person.id,
+                      label: person.name,
+                      sub: [
+                        person.area,
+                        `${person.orders} ${person.orders === 1 ? "order" : "orders"}`,
+                      ]
+                        .filter(Boolean)
+                        .join(" · "),
+                      value: person.sold,
+                      mark: person.target,
+                      tone: toneBar(person.sold, person.target, pace),
+                    }))}
+                  />
+                ) : (
+                  <p className="text-sm text-slate-500">Nobody in this channel yet.</p>
+                )}
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h3 className="mb-3 text-xs font-semibold text-slate-700">Customers</h3>
+                {detail.data.customers.length ? (
+                  <Bars
+                    rows={detail.data.customers.map((customer) => ({
+                      key: customer.id,
+                      label: customer.name,
+                      sub: `${customer.orders} ${customer.orders === 1 ? "order" : "orders"}`,
+                      value: customer.sold,
+                    }))}
+                    color="bg-violet-500"
+                  />
+                ) : (
+                  <p className="text-sm text-slate-500">No sale this month.</p>
+                )}
+              </div>
+              <div className="rounded-xl border border-slate-200 bg-white p-4">
+                <h3 className="mb-3 text-xs font-semibold text-slate-700">Medicines</h3>
+                {detail.data.medicines.length ? (
+                  <Bars
+                    rows={detail.data.medicines.map((medicine) => ({
+                      key: medicine.name,
+                      label: medicine.name,
+                      sub: `${count(medicine.qty)} pcs`,
+                      value: medicine.value,
+                    }))}
+                    color="bg-sky-500"
+                  />
+                ) : (
+                  <p className="text-sm text-slate-500">No sale this month.</p>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

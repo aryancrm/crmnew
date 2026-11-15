@@ -32,6 +32,7 @@ import type {
   Me,
   OrderPaper,
   OrderStatus,
+  OwedInvoices,
   OwedList,
   OwedRow,
   PaymentInput,
@@ -1098,5 +1099,57 @@ export async function customerStatement(
     lines,
     closing: balance,
     aging: aging ?? { current: 0, d30: 0, d60: 0, older: 0 },
+  };
+}
+
+/** Every unpaid invoice with whose it is and its days (Finance, Management, the CEO, the Admin). */
+export async function owedInvoices(db: Database, me: Me): Promise<OwedInvoices> {
+  allow(me, FINANCE_READ_ROLES, "see what customers owe");
+  const today = todayManila();
+  const found = await rows<
+    Omit<OwedInvoices["rows"][number], "terms"> & { termsKey: string; days: number | null }
+  >(
+    db,
+    sql`select i.id::int as "invoiceId", i.code as "invoiceCode", o.id::int as "orderId", o.code as "orderCode",
+        c.id::int as "customerId", c.name as customer, c.kind, c.city, rep.id::int as "medrepId", rep.name as medrep,
+        coalesce(u.name, (select u2.name from seat_holder h join seat s2 on s2.id = h.seat_id join org_unit u2 on u2.id = s2.unit_id
+          where h.person_id = o.medrep_id and h.kind = 'holder' order by h.starts_on desc limit 1)) as team,
+        ${day("i.issued_on")} as "issuedOn",
+        case when i.terms = 'days' and o.status <> 'completed' then null else ${day("i.due_on")} end as "dueOn",
+        ${day("o.delivered_on")} as "deliveredOn", i.terms as "termsKey", o.payment_days::int as days,
+        i.total::int as total, i.paid::int as paid, (i.total - i.paid)::int as balance,
+        case when i.terms = 'cod' and o.status <> 'completed' then 'on_delivery'
+             when i.terms = 'days' and o.status <> 'completed' then 'due'
+             when i.due_on < ${today}::date then 'late' else 'due' end as state,
+        case when not (i.terms in ('cod', 'days') and o.status <> 'completed') and i.due_on < ${today}::date
+             then (${today}::date - i.due_on)::int else 0 end as "daysLate"
+      from invoice i join sales_order o on o.id = i.order_id join customer c on c.id = i.customer_id
+        join person rep on rep.id = o.medrep_id
+        left join seat s on s.id = o.seat_id left join org_unit u on u.id = s.unit_id
+      where i.status = 'open' and i.total > i.paid
+      order by (case when i.terms = 'cod' and o.status <> 'completed' then 1 else 0 end),
+        "daysLate" desc, (i.total - i.paid) desc
+      limit 2000`,
+  );
+  const rowsOut = found.map(({ termsKey, days, ...row }) => ({
+    ...row,
+    terms:
+      termsKey === "days" ? `${days ?? ""} days`.trim() : termsKey === "cod" ? "COD" : "Advance",
+  }));
+  const counted = rowsOut.filter((row) => row.state !== "on_delivery");
+  return {
+    today,
+    rows: rowsOut,
+    totals: {
+      owed: counted.reduce((sum, row) => sum + row.balance, 0),
+      overdue: counted
+        .filter((row) => row.state === "late")
+        .reduce((sum, row) => sum + row.balance, 0),
+      onDelivery: rowsOut
+        .filter((row) => row.state === "on_delivery")
+        .reduce((sum, row) => sum + row.balance, 0),
+      invoices: counted.length,
+      customers: new Set(counted.map((row) => row.customerId)).size,
+    },
   };
 }

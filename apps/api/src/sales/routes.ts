@@ -4,7 +4,7 @@ import type { Hono, MiddlewareHandler } from "hono";
 import type { Database } from "../db/index";
 import { allow, type Env } from "../http";
 import { monthFacts } from "./rules";
-import { ceoHome, channelSales, companyTree, teamSales } from "./service";
+import { ceoHome, channelSales, channelSalesDetail, companyTree, teamSales } from "./service";
 
 export function salesRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandler<Env>): void {
   for (const path of ["/api/team/*", "/api/ceo/*", "/api/company/*", "/api/channel-sales/*"])
@@ -24,6 +24,11 @@ export function salesRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
   app.get("/api/company/tree", async (c) =>
     c.json(await companyTree(db, c.get("me"), c.req.query("month"))),
   );
+  app.get("/api/channel-sales/:code", async (c) => {
+    allow(c.get("me"), ["ceo", "admin", "management", "finance"], "see sales by channel");
+    const facts = monthFacts(c.req.query("month"));
+    return c.json(await channelSalesDetail(db, facts, c.req.param("code")));
+  });
   app.get("/api/channel-sales", async (c) => {
     allow(c.get("me"), ["ceo", "admin", "management", "finance"], "see sales by channel");
     const facts = monthFacts(c.req.query("month"));

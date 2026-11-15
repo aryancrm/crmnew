@@ -9,7 +9,6 @@ import { Navigate } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { NewsList } from "../inventory/news";
-import { DeskGlance } from "../team/glance";
 import { count, Facts, PageHead, Panel, Tile } from "../ui";
 import { CeoHomePage } from "./ceo-home";
 import { Attention } from "./inventory-overview";
@@ -44,20 +43,9 @@ export function Home() {
   if (me.role === "team_lead" || me.role === "manager") return <TeamSalesPage />;
   if (me.role === "inventory") return <Navigate to="/inventory/overview" replace />;
   if (me.role === "management") return <ManagementHome />;
-  if (me.role === "finance")
-    return (
-      <div className="space-y-5">
-        <DeskGlance steps={["finance"]} people="finance" />
-        <OrdersToCheck desk="finance" />
-      </div>
-    );
-  if (me.role === "dispatch")
-    return (
-      <div className="space-y-5">
-        <DeskGlance steps={["dispatch", "road"]} people="dispatch" />
-        <OrdersToCheck desk="dispatch" />
-      </div>
-    );
+  // A desk's Home is its work board itself, nothing stacked above it.
+  if (me.role === "finance") return <OrdersToCheck desk="finance" />;
+  if (me.role === "dispatch") return <OrdersToCheck desk="dispatch" />;
   if (me.role === "medrep") return <MedrepHome />;
   if (me.role === "online") return <Navigate to="/leads" replace />;
   return <Desk />;

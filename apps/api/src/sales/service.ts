@@ -12,6 +12,7 @@ import type {
   CeoAlert,
   CeoHome,
   ChannelFigures,
+  ChannelSalesDetail,
   CompanyTreeData,
   Me,
   MonthFacts,
@@ -326,9 +327,17 @@ export async function ceoHome(
           coalesce((select sum(amount) from payment where active and paid_on >= ${before.from}::date and paid_on <= ${before.to}::date), 0)::float8 as before,
           (select nullif(sum(${targetShare(facts)}), 0) from sales_target t join person p on p.id = t.person_id where p.active)::float8 as target`,
     ),
-    rows<{ owed: number; overdue: number; late: number; refunds: number; cod: number }>(
+    rows<{
+      owed: number;
+      onDelivery: number;
+      overdue: number;
+      late: number;
+      refunds: number;
+      cod: number;
+    }>(
       db,
-      sql`select coalesce(sum(i.total - i.paid) filter (where i.status = 'open'), 0)::float8 as owed,
+      sql`select coalesce(sum(i.total - i.paid) filter (where i.status = 'open' and not (i.terms = 'cod' and o.status <> 'completed')), 0)::float8 as owed,
+          coalesce(sum(i.total - i.paid) filter (where i.status = 'open' and i.terms = 'cod' and o.status <> 'completed'), 0)::float8 as "onDelivery",
           coalesce(sum(i.total - i.paid) filter (where i.status = 'open' and i.terms = 'cod' and o.status = 'shipped'), 0)::float8 as cod,
           coalesce(sum(i.total - i.paid) filter (where i.status = 'open' and i.due_on < ${today}::date and not (i.terms in ('cod', 'days') and o.status <> 'completed')), 0)::float8 as overdue,
           count(distinct i.customer_id) filter (where i.status = 'open' and i.due_on < (${today}::date - 60) and not (i.terms in ('cod', 'days') and o.status <> 'completed'))::int as late,
@@ -384,7 +393,7 @@ export async function ceoHome(
     ),
   ]);
   const total = totals[0] ?? { achieved: 0, today: 0, collected: 0, before: 0, target: null };
-  const owed = money[0] ?? { owed: 0, overdue: 0, late: 0, refunds: 0, cod: 0 };
+  const owed = money[0] ?? { owed: 0, onDelivery: 0, overdue: 0, late: 0, refunds: 0, cod: 0 };
   const waiting = orders[0] ?? {
     awaiting: 0,
     finance: 0,
@@ -480,6 +489,7 @@ export async function ceoHome(
       lateCustomers: owed.late,
       refundsOwed: owed.refunds,
       codOnTheRoad: owed.cod,
+      onDelivery: owed.onDelivery,
       purchasesOpen: buying?.count ?? 0,
       purchasesValue: buying?.value ?? 0,
     },
@@ -609,4 +619,49 @@ export async function companyTree(db: Database, me: Me, asked?: string): Promise
       rep: person.role === "medrep",
     })),
   };
+}
+
+/** A channel's sales opened up (see ChannelSalesDetail). */
+export async function channelSalesDetail(
+  db: Database,
+  facts: MonthFacts,
+  code: string,
+): Promise<ChannelSalesDetail> {
+  const [channel] = await rows<{ id: number }>(
+    db,
+    sql`select id::int as id from channel where code = ${code}`,
+  );
+  if (!channel) throw new Refusal(404, "not_found", "No such channel.");
+  const sold = soldIn(facts);
+  const [people, customers, medicines] = await Promise.all([
+    rows<ChannelSalesDetail["people"][number]>(
+      db,
+      sql`select p.id::int as id, p.name, a.name as area,
+          coalesce((select sum(i.total) from invoice i join sales_order o on o.id = i.order_id
+            where o.channel_id = ${channel.id} and o.medrep_id = p.id and ${sold}), 0)::float8 as sold,
+          (select sum(${targetShare(facts)}) from sales_target t where t.person_id = p.id)::float8 as target,
+          (select count(distinct o.id) from invoice i join sales_order o on o.id = i.order_id
+            where o.channel_id = ${channel.id} and o.medrep_id = p.id and ${sold})::int as orders
+        from person p left join area a on a.id = p.area_id
+        where p.active and (p.channel_id = ${channel.id} or exists (select 1 from sales_order o join invoice i on i.order_id = o.id
+          where o.medrep_id = p.id and o.channel_id = ${channel.id} and ${sold}))
+          and (p.role in ('medrep', 'team_lead', 'manager') or exists (select 1 from sales_order o where o.medrep_id = p.id and o.channel_id = ${channel.id}))
+        order by sold desc, p.name`,
+    ),
+    rows<ChannelSalesDetail["customers"][number]>(
+      db,
+      sql`select c.id::int as id, c.name, c.kind, sum(i.total)::float8 as sold, count(distinct o.id)::int as orders
+        from invoice i join sales_order o on o.id = i.order_id join customer c on c.id = o.customer_id
+        where o.channel_id = ${channel.id} and ${sold}
+        group by c.id, c.name, c.kind order by sold desc limit 50`,
+    ),
+    rows<ChannelSalesDetail["medicines"][number]>(
+      db,
+      sql`select m.name || coalesce(' ' || m.strength, '') as name, sum(oi.qty)::int as qty, sum(oi.qty * oi.unit_price)::float8 as value
+        from invoice i join sales_order o on o.id = i.order_id join order_item oi on oi.order_id = o.id join medicine m on m.id = oi.medicine_id
+        where o.channel_id = ${channel.id} and ${sold}
+        group by m.name, m.strength order by value desc limit 50`,
+    ),
+  ]);
+  return { people, customers, medicines };
 }

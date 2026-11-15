@@ -187,12 +187,15 @@ export function Donut({
                 return dash;
               })}
         </svg>
-        <div className="absolute inset-0 grid place-items-center text-center">
-          <div>
-            <div className="text-2xl font-semibold text-slate-900 tabular-nums">{middle}</div>
-            <div className="text-[11px] text-slate-500">{label}</div>
+        {middle && (
+          // No middle when the card already says the number above (never twice).
+          <div className="absolute inset-0 grid place-items-center text-center">
+            <div>
+              <div className="text-2xl font-semibold text-slate-900 tabular-nums">{middle}</div>
+              <div className="text-[11px] text-slate-500">{label}</div>
+            </div>
           </div>
-        </div>
+        )}
       </div>
       <ul className="grid min-w-0 flex-1 gap-1.5 text-[13px]">
         {slices.map((one) => (

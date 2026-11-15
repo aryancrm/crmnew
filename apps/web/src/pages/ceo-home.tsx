@@ -7,21 +7,14 @@
 import type { CeoAlert, CeoHome as Data, PaceTone } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import {
-  BarChart3,
-  Boxes,
   CheckCircle2,
   ChevronRight,
-  ClipboardCheck,
   Hourglass,
   Landmark,
-  Network,
   PackageX,
-  Target,
   TrendingDown,
-  Truck,
   Undo2,
   UserPlus,
-  Users,
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -53,7 +46,7 @@ const CARD = "rounded-xl border border-slate-200 bg-white";
 
 /** The company at a glance for the days picked: orders right now, how long each desk takes, who
  *  sells most, which team is ahead, the medicines and the customers; each card opens its page. */
-function AtAGlance() {
+function AtAGlance({ money, stock }: { money: Data["money"]; stock: Data["stock"] }) {
   const board = useBoard();
   const speed = useSpeed();
   return (
@@ -63,10 +56,31 @@ function AtAGlance() {
           <SpeedCards report={speed.data} />
         </section>
       )}
+      <section aria-label="Delivery, what we owe, stock" className="grid gap-3 lg:grid-cols-3">
+        {speed.data ? <PlacedToDeliveredCard report={speed.data} /> : <span />}
+        <MoneySide
+          title="We owe"
+          tone="out"
+          total={money.refundsOwed + money.purchasesValue}
+          rows={[
+            {
+              label: "Refunds to customers",
+              value: money.refundsOwed,
+              to: "/refunds",
+              bad: money.refundsOwed > 0,
+            },
+            {
+              label: `Supplier orders not received (${money.purchasesOpen})`,
+              value: money.purchasesValue,
+              to: "/purchases",
+              note: "Landed cost; supplier bills aren't kept yet",
+            },
+          ]}
+        />
+        <StockCard stock={stock} />
+      </section>
       {board.data && (
-        <section aria-label="Orders and selling" className="grid gap-3 lg:grid-cols-2">
-          <OrdersNowCard board={board.data} />
-          {speed.data ? <PlacedToDeliveredCard report={speed.data} /> : <span />}
+        <section aria-label="Who and what sells" className="grid gap-3 lg:grid-cols-2">
           <PeopleCard board={board.data} />
           <TeamsCard board={board.data} />
           <MedicinesCard board={board.data} />
@@ -74,6 +88,72 @@ function AtAGlance() {
         </section>
       )}
     </>
+  );
+}
+
+/** Orders waiting, open: how many and at which desk, the donut of where they stand. */
+function OrdersBox({ line, stuck }: { line: string; stuck: boolean }) {
+  const board = useBoard();
+  if (!board.data) return null;
+  return (
+    <OrdersNowCard
+      board={board.data}
+      title="Orders right now"
+      to="/orders/check"
+      head={
+        <>
+          <div className="text-3xl font-semibold tracking-tight text-slate-900 tabular-nums">
+            {num(board.data.totals.waiting + board.data.totals.stopped)}{" "}
+            <span className="text-sm font-normal text-slate-500">open</span>
+          </div>
+          <div className={`text-xs ${stuck ? "text-rose-600" : "text-slate-500"}`}>{line}</div>
+        </>
+      }
+    />
+  );
+}
+
+/** The shelf: what it is worth, what ran out, what expires soon. */
+function StockCard({ stock }: { stock: Data["stock"] }) {
+  return (
+    <section className={`${CARD} min-w-0 p-4 sm:p-5`}>
+      <div className="mb-3 flex items-baseline justify-between gap-2">
+        <h2 className="text-sm font-semibold text-slate-900">Stock</h2>
+        <Link
+          to="/inventory/overview"
+          className="text-xs font-semibold text-slate-500 hover:text-emerald-700"
+        >
+          Open ↗
+        </Link>
+      </div>
+      <div className="text-2xl font-semibold tracking-tight text-slate-900 tabular-nums">
+        {stock.value != null ? shortPeso(stock.value) : counted(stock.medicines, "medicine")}
+      </div>
+      <div className="mb-3 text-xs text-slate-500">
+        {stock.value != null ? `at cost · ${counted(stock.medicines, "medicine")}` : "on the shelf"}
+      </div>
+      <ul className="divide-y divide-slate-100 text-[13px]">
+        {(
+          [
+            ["Out of stock", stock.out, "/inventory?show=out", "text-rose-600"],
+            ["Running low", stock.low, "/inventory?show=low", "text-amber-700"],
+            ["Expiring in 90 days", stock.expiring, "/inventory?show=expiring", "text-amber-700"],
+          ] as const
+        ).map(([label, value, to, tone]) => (
+          <li key={label}>
+            <Link
+              to={to}
+              className="-mx-2 flex justify-between rounded-lg px-2 py-1.5 hover:bg-slate-50"
+            >
+              <span className="text-slate-600">{label}</span>
+              <span className={`font-semibold tabular-nums ${value ? tone : "text-slate-300"}`}>
+                {num(value)}
+              </span>
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 
@@ -133,7 +213,7 @@ function MoneySide({
 }
 
 /** One of the four month figures: a label, the figure large, a line under it. */
-function Metric({
+function _Metric({
   label,
   to,
   value,
@@ -213,7 +293,7 @@ const FIGURE = {
 } as const;
 
 /** One of the company's eight summaries: icon, name, a grey line, one figure; opens its app. */
-function Summary({
+function _Summary({
   to,
   icon: SummaryIcon,
   tint,
@@ -277,15 +357,10 @@ export function CeoHomePage() {
   });
   const data = query.data;
   if (!data || !me) return <PageState query={query} what="the company's figures" />;
-  const { sales, money, orders, dispatch, stock, customers, people } = data;
-  const monthQuery = data.running ? "" : `?month=${data.month}`;
+  const { sales, money, orders, stock } = data;
   const pacePct = Math.round(data.pace * 100);
   const collected = collectedChange(sales.collected, sales.collectedBefore);
   const waiting = orders.awaiting + orders.finance;
-  const channels = sales.channels;
-  const behind = channels.filter(
-    (channel) => channel.tone === "behind" || channel.tone === "far",
-  ).length;
   const inMonth = data.range
     ? data.range.label
     : data.running
@@ -309,151 +384,80 @@ export function CeoHomePage() {
         </div>
       </header>
 
-      {/* 2. The month in four figures */}
-      <section aria-label="The month" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Metric
-          label={
+      {/* 2. The four boxes, open: each holds what clicking it used to lead to */}
+      <section aria-label="The month" className="grid gap-3 lg:grid-cols-2">
+        <ChannelSalesCard
+          channels={sales.channels}
+          label={inMonth}
+          title={
             data.range
               ? `Sales · ${data.range.label}`
               : data.running
                 ? "Sales this month"
                 : `Sales in ${monthShort(data.month)}`
           }
-          to={`/reports/channels${monthQuery}`}
-          value={shortPeso(sales.achieved)}
-          title={exactPeso(sales.achieved)}
-        >
-          {sales.pct !== null && sales.target !== null ? (
+          head={
             <>
-              <PaceBar
-                pct={sales.pct}
-                pace={data.running ? data.pace : null}
-                tone={sales.tone === "far" ? "behind" : sales.tone}
-              />
-              <span
-                className={`mt-2 block ${sales.tone === "on" ? "text-emerald-700" : "text-amber-700"}`}
+              <div
+                className="text-3xl font-semibold tracking-tight text-slate-900 tabular-nums"
+                title={exactPeso(sales.achieved)}
               >
-                {Math.round(sales.pct)}% of {shortPeso(sales.target)}
-                {data.running && ` · pace ${pacePct}%`}
-              </span>
+                {shortPeso(sales.achieved)}
+              </div>
+              {sales.pct !== null && sales.target !== null ? (
+                <>
+                  <div className="mt-2">
+                    <PaceBar
+                      pct={sales.pct}
+                      pace={data.running ? data.pace : null}
+                      tone={sales.tone === "far" ? "behind" : sales.tone}
+                    />
+                  </div>
+                  <div
+                    className={`mt-1.5 text-xs ${sales.tone === "on" ? "text-emerald-700" : "text-amber-700"}`}
+                  >
+                    {Math.round(sales.pct)}% of {shortPeso(sales.target)}
+                    {data.running && ` · pace ${pacePct}%`}
+                  </div>
+                </>
+              ) : (
+                <div className="text-xs text-slate-500">No target set</div>
+              )}
             </>
-          ) : (
-            <span className="text-slate-500">No target set</span>
-          )}
-        </Metric>
-        <Metric
-          label="Collected"
-          to="/payments"
-          value={shortPeso(sales.collected)}
-          title={exactPeso(sales.collected)}
-        >
-          {collected ? (
-            <span
-              className={
-                collected.tone === "up"
-                  ? "text-emerald-700"
-                  : collected.tone === "down"
-                    ? "text-rose-600"
-                    : "text-slate-500"
-              }
-            >
-              {collected.text}
-            </span>
-          ) : (
-            <span className="text-slate-500">{inMonth}</span>
-          )}
-        </Metric>
-        <Metric
-          label="Customers owe us"
-          to="/owed"
-          value={shortPeso(money.owed)}
-          title={exactPeso(money.owed)}
-        >
-          {money.overdue > 0 ? (
-            <span className="text-rose-600" title={exactPeso(money.overdue)}>
-              {shortPeso(money.overdue)} overdue
-            </span>
-          ) : (
-            <span className="text-slate-500">Nothing overdue</span>
-          )}
-        </Metric>
-        <Metric label="Orders waiting" to="/orders/check" value={num(waiting)}>
-          {waiting > 0 || orders.onHold > 0 ? (
-            <span className={orders.stuck ? "text-rose-600" : "text-slate-500"}>
-              {[
-                orders.awaiting ? `${num(orders.awaiting)} with Management` : null,
-                orders.finance ? `${num(orders.finance)} with Finance` : null,
-                orders.onHold ? `${num(orders.onHold)} on hold` : null,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-            </span>
-          ) : (
-            <span className="text-slate-500">Nothing waiting</span>
-          )}
-        </Metric>
+          }
+        />
+        <CollectedCard
+          head={
+            <>
+              <div
+                className="text-3xl font-semibold tracking-tight text-emerald-700 tabular-nums"
+                title={exactPeso(sales.collected)}
+              >
+                {shortPeso(sales.collected)}
+              </div>
+              <div
+                className={`text-xs ${collected?.tone === "up" ? "text-emerald-700" : collected?.tone === "down" ? "text-rose-600" : "text-slate-500"}`}
+              >
+                {collected ? collected.text : inMonth}
+              </div>
+            </>
+          }
+        />
+        <OwedCard />
+        <OrdersBox
+          line={[
+            waiting ? `${num(waiting)} waiting for a decision` : "Nothing waiting for a decision",
+            orders.oldestHours ? `oldest ${orders.oldestHours}h` : null,
+            orders.stuck ? `${num(orders.stuck)} stuck over 2 days` : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
+          stuck={Boolean(orders.stuck)}
+        />
       </section>
-
-      {/* 3. What "Sales this month" opens, here: every channel against its target */}
-      <ChannelSalesCard channels={sales.channels} label={inMonth} />
 
       {/* 4. The day's work and who sells, open: the cards of My team and Speed */}
-      <AtAGlance />
-
-      {/* 5. What customers owe (big) and what came in */}
-      <section
-        aria-label="Owed and collected"
-        className="grid gap-3 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]"
-      >
-        <OwedCard />
-        <CollectedCard />
-      </section>
-
-      {/* 6. Money at a glance: what is to come in, what is to go out */}
-      <section aria-label="Money" className="grid gap-3 md:grid-cols-2">
-        <MoneySide
-          title="To come in"
-          tone="in"
-          total={money.owed}
-          rows={[
-            {
-              label: "Customers owe us",
-              value: money.owed,
-              to: "/owed",
-              note: money.lateCustomers
-                ? `${money.lateCustomers} customers over 60 days late`
-                : undefined,
-            },
-            { label: "Of it, past due", value: money.overdue, to: "/owed", bad: true },
-            {
-              label: "Cash on delivery with couriers",
-              value: money.codOnTheRoad,
-              to: "/shipments",
-              note: "Shipped, the rider collects it",
-            },
-            { label: `Collected ${inMonth}`, value: sales.collected, to: "/payments", good: true },
-          ]}
-        />
-        <MoneySide
-          title="To go out"
-          tone="out"
-          total={money.refundsOwed + money.purchasesValue}
-          rows={[
-            {
-              label: "Refunds we owe customers",
-              value: money.refundsOwed,
-              to: "/refunds",
-              bad: money.refundsOwed > 0,
-            },
-            {
-              label: `Supplier orders not received (${money.purchasesOpen})`,
-              value: money.purchasesValue,
-              to: "/purchases",
-              note: "Landed cost; supplier bills aren't kept in the CRM yet",
-            },
-          ]}
-        />
-      </section>
+      <AtAGlance money={money} stock={stock} />
 
       {/* 7. What needs the CEO */}
       <div className="grid gap-3">
@@ -500,104 +504,6 @@ export function CeoHomePage() {
           )}
         </section>
       </div>
-
-      {/* 6. Every part of the company, one line each, to open it */}
-      <section aria-labelledby="your-company">
-        <h2 id="your-company" className="mb-3 text-sm font-semibold text-slate-900">
-          Your company
-        </h2>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Summary
-            to={`/reports/channels${monthQuery}`}
-            icon={BarChart3}
-            tint="bg-emerald-50 text-emerald-700"
-            name="Sales"
-            line={`${counted(channels.length, "channel")} · ${behind ? `${behind} behind` : "none behind"}`}
-            figure={
-              data.running
-                ? `${shortPeso(sales.today)} today`
-                : sales.pct !== null
-                  ? `${Math.round(sales.pct)}% of target`
-                  : shortPeso(sales.achieved)
-            }
-          />
-          <Summary
-            to="/orders/check"
-            icon={ClipboardCheck}
-            tint="bg-teal-50 text-teal-700"
-            name="Orders"
-            line={
-              orders.awaiting
-                ? `${counted(orders.awaiting, "order")} waiting for approval`
-                : "Nothing waiting for approval"
-            }
-            figure={`${counted(orders.today, "order")} placed today`}
-            figureTone={orders.stuck ? "bad" : "plain"}
-          />
-          <Summary
-            to="/owed"
-            icon={Landmark}
-            tint="bg-sky-50 text-sky-700"
-            name="Money"
-            line={`${shortPeso(money.owed)} owed`}
-            figure={money.overdue > 0 ? `${shortPeso(money.overdue)} overdue` : "Nothing overdue"}
-            figureTone={money.overdue > 0 ? "bad" : "plain"}
-            title={exactPeso(money.overdue)}
-          />
-          <Summary
-            to="/dispatch"
-            icon={Truck}
-            tint="bg-blue-50 text-blue-700"
-            name="Dispatch"
-            line={`${num(dispatch.toPack)} to pack · ${num(dispatch.toShip)} to ship`}
-            figure={`${num(dispatch.onTheWay)} on the way`}
-          />
-          <Summary
-            to="/inventory/overview"
-            icon={Boxes}
-            tint="bg-amber-50 text-amber-700"
-            name="Stock"
-            line={
-              stock.value != null
-                ? `${shortPeso(stock.value)} at cost`
-                : counted(stock.medicines, "medicine")
-            }
-            figure={`${num(stock.out)} out · ${num(stock.expiring)} expiring`}
-            figureTone={stock.out ? "warn" : "plain"}
-            title={stock.value != null ? exactPeso(stock.value) : undefined}
-          />
-          <Summary
-            to="/customers"
-            icon={Users}
-            tint="bg-violet-50 text-violet-700"
-            name="Customers"
-            line={counted(customers.total, "customer")}
-            figure={customers.toReview ? `${num(customers.toReview)} to check` : "All checked"}
-            figureTone={customers.toReview ? "warn" : "plain"}
-          />
-          <Summary
-            to="/company"
-            icon={Network}
-            tint="bg-fuchsia-50 text-fuchsia-700"
-            name="People"
-            line={`${counted(people.total, "person", "people")} · ${counted(people.sellers, "MedRep")}`}
-            figure="Company tree"
-          />
-          <Summary
-            to={`/targets${monthQuery}`}
-            icon={Target}
-            tint="bg-slate-100 text-slate-600"
-            name="Targets"
-            line={
-              people.withoutTarget
-                ? `${counted(people.withoutTarget, "MedRep")} without a target`
-                : "Every MedRep has one"
-            }
-            figure={sales.target !== null ? shortPeso(sales.target) : "Not set"}
-            figureTone={sales.target === null ? "quiet" : people.withoutTarget ? "warn" : "plain"}
-          />
-        </div>
-      </section>
     </div>
   );
 }

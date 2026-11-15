@@ -19,7 +19,7 @@ import { Login } from "./pages/login";
 import { Medicine } from "./pages/medicine";
 import { Medicines } from "./pages/medicines";
 import { MessagesPage } from "./pages/messages";
-import { CustomersOwe, Payments, Refunds } from "./pages/money";
+import { Payments, Refunds } from "./pages/money";
 import { Moves } from "./pages/moves";
 import { MyTeamPage, TeamSeatPage } from "./pages/my-team";
 import { NotBuilt } from "./pages/not-built";
@@ -29,6 +29,7 @@ import { Orders } from "./pages/orders";
 import { OrdersToCheck } from "./pages/orders-board";
 import { OrgPage } from "./pages/org";
 import { OrgChartPage } from "./pages/org-chart";
+import { OwedReport } from "./pages/owed";
 import { PointsAccountPage, PointsPage } from "./pages/points";
 import { Purchase } from "./pages/purchase";
 import { Purchases } from "./pages/purchases";
@@ -99,7 +100,7 @@ createRoot(root).render(
             <Route path="invoices" element={<Invoices />} />
             <Route path="invoices/:id" element={<Invoice />} />
             <Route path="payments" element={<Payments />} />
-            <Route path="owed" element={<CustomersOwe />} />
+            <Route path="owed" element={<OwedReport />} />
             <Route path="refunds" element={<Refunds />} />
             <Route path="inventory/overview" element={<InventoryOverview />} />
             <Route path="inventory/requests" element={<MedicineRequestsPage />} />

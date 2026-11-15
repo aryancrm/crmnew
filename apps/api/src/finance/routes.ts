@@ -17,6 +17,7 @@ import {
   listPayments,
   makeInvoice,
   orderOfInvoice,
+  owedInvoices,
   recordPayment,
   recordRefund,
   refundsOwed,
@@ -72,6 +73,7 @@ export function financeRoutes(
     c.json(await customersOwe(db, c.get("me"), { q: c.req.query("q") })),
   );
   app.get("/api/finance/refunds", async (c) => c.json(await refundsOwed(db, c.get("me"))));
+  app.get("/api/finance/owed/invoices", async (c) => c.json(await owedInvoices(db, c.get("me"))));
   app.get("/api/finance/statement/:id", async (c) =>
     c.json(
       await customerStatement(db, c.get("me"), idParam(c), {

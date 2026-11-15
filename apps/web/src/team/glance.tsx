@@ -6,7 +6,7 @@
 import type {
   ChannelFigures,
   ChannelReport,
-  OwedList,
+  OwedInvoices,
   PaymentList,
   SpeedReport,
   TeamBoard,
@@ -75,6 +75,7 @@ export function GlanceCard({
   note,
   to,
   seeAll,
+  head,
   children,
   className = "",
 }: {
@@ -83,6 +84,8 @@ export function GlanceCard({
   /** Its own page, for more than the card holds. */
   to?: string;
   seeAll?: SeeAll;
+  /** The big figure on top (a Home box's own number), before the breakdown. */
+  head?: ReactNode;
   children: ReactNode;
   className?: string;
 }) {
@@ -112,18 +115,34 @@ export function GlanceCard({
           )}
         </span>
       </header>
+      {head && <div className="mb-4">{head}</div>}
       {children}
     </section>
   );
 }
 
-export function OrdersNowCard({ board, to = "/orders" }: { board: TeamBoard; to?: string }) {
+export function OrdersNowCard({
+  board,
+  to = "/orders",
+  title = "Orders right now",
+  head,
+}: {
+  board: TeamBoard;
+  to?: string;
+  title?: string;
+  head?: ReactNode;
+}) {
   const now = board.stagesNow;
   return (
-    <GlanceCard title="Orders right now" note={`${board.totals.stopped} stopped`} to={to}>
+    <GlanceCard
+      title={title}
+      note={head ? undefined : `${board.totals.stopped} stopped`}
+      to={to}
+      head={head}
+    >
       <Donut
-        label="open"
-        middle={String(board.totals.waiting + board.totals.stopped)}
+        label={head ? "Orders by where they stand" : "open"}
+        middle={head ? "" : String(board.totals.waiting + board.totals.stopped)}
         slices={[
           { label: "At Management", value: now.management, color: "#8b5cf6" },
           { label: "With Finance", value: now.finance, color: "#f59e0b" },
@@ -420,9 +439,13 @@ const TONE_BAR: Record<string, string> = {
 export function ChannelSalesCard({
   channels,
   label,
+  title = "Sales by channel",
+  head,
 }: {
   channels: ChannelFigures[];
   label: string;
+  title?: string;
+  head?: ReactNode;
 }) {
   const report = useQuery({
     queryKey: ["reports", "channels"],
@@ -434,10 +457,11 @@ export function ChannelSalesCard({
   const sold = channels.reduce((sum, row) => sum + row.sold, 0);
   return (
     <GlanceCard
-      title="Sales by channel"
-      note={`${shortPeso(sold)} sold · ${label}`}
+      title={title}
+      note={head ? undefined : `${shortPeso(sold)} sold · ${label}`}
       to="/reports/channels"
       seeAll={seeAll}
+      head={head}
     >
       <Bars
         rows={shown.map((row) => {
@@ -463,7 +487,7 @@ export function ChannelSalesCard({
   );
 }
 
-const AGE: {
+const _AGE: {
   key: "current" | "d30" | "d60" | "d90" | "older" | "onDelivery";
   label: string;
   color: string;
@@ -476,25 +500,86 @@ const AGE: {
   { key: "onDelivery", label: "Due on delivery", color: "bg-sky-400" },
 ];
 
-/** What customers owe, big: how late it is, and who owes most (the latest first). */
+/** What customers owe, big: how late it is and who owes most, from the same report as its page;
+ *  cash on delivery not delivered yet is said apart, not in the total. */
 export function OwedCard() {
   const query = useQuery({
-    queryKey: ["finance", "owed"],
-    queryFn: () => api<OwedList>("/api/finance/owed"),
+    queryKey: ["finance", "owed", "invoices"],
+    queryFn: () => api<OwedInvoices>("/api/finance/owed/invoices"),
   });
   const data = query.data;
-  const { shown, seeAll } = useSeeAll(data?.rows ?? [], 6);
+  const owed = (data?.rows ?? []).filter((row) => row.state !== "on_delivery");
+  const customers = [
+    ...owed
+      .reduce(
+        (map, row) => {
+          const now = map.get(row.customerId) ?? {
+            id: row.customerId,
+            name: row.customer,
+            medrep: row.medrep,
+            team: row.team,
+            total: 0,
+            late: 0,
+            oldest: 0,
+            invoices: 0,
+          };
+          now.total += row.balance;
+          now.invoices += 1;
+          if (row.state === "late") {
+            now.late += row.balance;
+            now.oldest = Math.max(now.oldest, row.daysLate);
+          }
+          return map.set(row.customerId, now);
+        },
+        new Map<
+          number,
+          {
+            id: number;
+            name: string;
+            medrep: string;
+            team: string | null;
+            total: number;
+            late: number;
+            oldest: number;
+            invoices: number;
+          }
+        >(),
+      )
+      .values(),
+  ].sort((a, b) => b.late - a.late || b.total - a.total);
+  const { shown, seeAll } = useSeeAll(customers, 5);
   if (!data) return null;
-  const total = data.totals.total;
+  const total = data.totals.owed;
+  const ages = [
+    {
+      label: "Not due yet",
+      color: "bg-emerald-500",
+      amount: owed.filter((row) => row.state === "due"),
+    },
+    {
+      label: "1–30 days late",
+      color: "bg-amber-400",
+      amount: owed.filter((row) => row.state === "late" && row.daysLate <= 30),
+    },
+    {
+      label: "31–60 days",
+      color: "bg-orange-500",
+      amount: owed.filter((row) => row.state === "late" && row.daysLate > 30 && row.daysLate <= 60),
+    },
+    {
+      label: "Over 60 days",
+      color: "bg-rose-600",
+      amount: owed.filter((row) => row.state === "late" && row.daysLate > 60),
+    },
+  ].map((age) => ({ ...age, amount: age.amount.reduce((sum, row) => sum + row.balance, 0) }));
   return (
     <GlanceCard
       title="Customers owe us"
-      note={counted(data.rows.length, "customer")}
+      note={counted(data.totals.customers, "customer")}
       to="/owed"
       seeAll={seeAll}
-    >
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
+      head={
+        <>
           <div className="text-3xl font-semibold tracking-tight text-slate-900 tabular-nums">
             {shortPeso(total)}
           </div>
@@ -504,46 +589,55 @@ export function OwedCard() {
             {data.totals.overdue
               ? `${shortPeso(data.totals.overdue)} past due`
               : "Nothing past due"}
+            {data.totals.onDelivery > 0 && (
+              <span className="font-normal text-sky-700">
+                {" "}
+                · cash on delivery to come {shortPeso(data.totals.onDelivery)}, apart
+              </span>
+            )}
           </div>
-        </div>
+        </>
+      }
+    >
+      <div className="flex h-3 overflow-hidden rounded-full bg-slate-100">
+        {ages
+          .filter((age) => age.amount > 0)
+          .map((age) => (
+            <span
+              key={age.label}
+              className={age.color}
+              style={{ width: `${(age.amount / Math.max(1, total)) * 100}%` }}
+              title={`${age.label}: ${shortPeso(age.amount)}`}
+            />
+          ))}
       </div>
-      <div className="mt-3 flex h-3 overflow-hidden rounded-full bg-slate-100">
-        {AGE.filter((age) => data.totals[age.key] > 0).map((age) => (
-          <span
-            key={age.key}
-            className={age.color}
-            style={{ width: `${(data.totals[age.key] / Math.max(1, total)) * 100}%` }}
-            title={`${age.label}: ${shortPeso(data.totals[age.key])}`}
-          />
-        ))}
-      </div>
-      <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] sm:grid-cols-3">
-        {AGE.map((age) => (
-          <li key={age.key} className="flex items-center justify-between gap-2">
+      <ul className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[11px]">
+        {ages.map((age) => (
+          <li key={age.label} className="flex items-center justify-between gap-2">
             <span className="flex items-center gap-1.5 text-slate-500">
               <span className={`size-2 rounded-full ${age.color}`} /> {age.label}
             </span>
             <span
-              className={`font-semibold tabular-nums ${data.totals[age.key] ? "text-slate-800" : "text-slate-300"}`}
+              className={`font-semibold tabular-nums ${age.amount ? "text-slate-800" : "text-slate-300"}`}
             >
-              {shortPeso(data.totals[age.key])}
+              {shortPeso(age.amount)}
             </span>
           </li>
         ))}
       </ul>
       <ul className="mt-4 divide-y divide-slate-100 border-t border-slate-100">
         {shown.map((row) => (
-          <li key={row.customerId}>
+          <li key={row.id}>
             <Link
-              to={`/customers/${row.customerId}`}
+              to={`/customers/${row.id}`}
               className="-mx-2 flex items-center justify-between gap-3 rounded-lg px-2 py-2 hover:bg-slate-50"
             >
               <span className="min-w-0">
                 <span className="block truncate text-[13px] font-semibold text-slate-800">
-                  {row.customer}
+                  {row.name}
                 </span>
                 <span className="block truncate text-[11px] text-slate-500">
-                  {[row.medrep, row.terms, counted(row.invoices, "invoice")]
+                  {[row.medrep, row.team, counted(row.invoices, "invoice")]
                     .filter(Boolean)
                     .join(" · ")}
                 </span>
@@ -553,9 +647,9 @@ export function OwedCard() {
                   {shortPeso(row.total)}
                 </span>
                 <span
-                  className={`block text-[11px] ${row.overdue ? "font-semibold text-rose-600" : "text-slate-400"}`}
+                  className={`block text-[11px] ${row.late ? "font-semibold text-rose-600" : "text-slate-400"}`}
                 >
-                  {row.overdue ? `${shortPeso(row.overdue)} · ${row.oldestDays}d late` : "not late"}
+                  {row.late ? `${shortPeso(row.late)} · ${row.oldest}d late` : "not late"}
                 </span>
               </span>
             </Link>
@@ -567,7 +661,7 @@ export function OwedCard() {
 }
 
 /** The month's money in: how it came (bank, cash, check…) and day by day. */
-export function CollectedCard() {
+export function CollectedCard({ head }: { head?: ReactNode }) {
   const query = useQuery({
     queryKey: ["payments", "glance"],
     queryFn: () => api<PaymentList>("/api/payments"),
@@ -577,11 +671,17 @@ export function CollectedCard() {
   if (!data) return null;
   const top = Math.max(1, ...data.byDay.map((one) => one.amount));
   return (
-    <GlanceCard title="Collected" note={data.monthLabel} to="/payments" seeAll={seeAll}>
-      <div className="text-3xl font-semibold tracking-tight text-emerald-700 tabular-nums">
-        {shortPeso(data.sum)}
-      </div>
-      <div className="mb-3 text-xs text-slate-500">{counted(data.total, "payment")} received</div>
+    <GlanceCard title="Collected" note={data.monthLabel} to="/payments" seeAll={seeAll} head={head}>
+      {!head && (
+        <>
+          <div className="text-3xl font-semibold tracking-tight text-emerald-700 tabular-nums">
+            {shortPeso(data.sum)}
+          </div>
+          <div className="mb-3 text-xs text-slate-500">
+            {counted(data.total, "payment")} received
+          </div>
+        </>
+      )}
       {data.byDay.length > 0 && (
         <div
           className="mb-4 flex h-16 items-end gap-1"

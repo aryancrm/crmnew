@@ -1526,6 +1526,8 @@ export type CeoHome = MonthFacts & {
     refundsOwed: number;
     /** Cash on delivery out with the couriers: shipped, not paid yet. */
     codOnTheRoad: number;
+    /** Cash on delivery whose goods aren't delivered yet (owed once delivered; not in `owed`). */
+    onDelivery: number;
     /** Ordered from suppliers, not received yet (landed, in pesos). */
     purchasesOpen: number;
     purchasesValue: number;
@@ -3093,4 +3095,56 @@ export type Statement = {
   closing: number;
   /** Open now, by how late. */
   aging: { current: number; d30: number; d60: number; older: number };
+};
+
+/** Every unpaid invoice, one line each: whose (customer, MedRep, team), when it was made and the day
+ *  it was due, how late, what is left. Cash on delivery not delivered yet is kept apart. */
+export type OwedInvoices = {
+  today: string;
+  rows: {
+    invoiceId: number;
+    invoiceCode: string;
+    orderId: number;
+    orderCode: string;
+    customerId: number;
+    customer: string;
+    kind: CustomerKind;
+    city: string | null;
+    medrepId: number;
+    medrep: string;
+    team: string | null;
+    issuedOn: string;
+    /** The day we gave them to pay by (credit: counted from delivery). */
+    dueOn: string | null;
+    deliveredOn: string | null;
+    terms: string;
+    total: number;
+    paid: number;
+    balance: number;
+    /** late: past its day; due: not yet; on_delivery: cash on delivery, goods not delivered yet. */
+    state: "late" | "due" | "on_delivery";
+    daysLate: number;
+  }[];
+  totals: {
+    owed: number;
+    overdue: number;
+    onDelivery: number;
+    invoices: number;
+    customers: number;
+  };
+};
+
+/** One channel's sales, opened: each of its sellers against their target, its best customers and
+ *  medicines, for the month (invoiced, as Sales this month counts). */
+export type ChannelSalesDetail = {
+  people: {
+    id: number;
+    name: string;
+    area: string | null;
+    sold: number;
+    target: number | null;
+    orders: number;
+  }[];
+  customers: { id: number; name: string; kind: CustomerKind; sold: number; orders: number }[];
+  medicines: { name: string; qty: number; value: number }[];
 };
