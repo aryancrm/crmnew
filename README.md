@@ -1,7 +1,7 @@
 # 2MG: the new system
 
 A complete new project (new code, new database, new screens). The plan, the business rules and
-what is built so far are in [docs/NEW-CRM-PLAN.md](../docs/NEW-CRM-PLAN.md): read that first.
+what is built so far are in [docs/PLAN.md](docs/PLAN.md): read that first.
 Nothing here imports from the old CRM in `../backend` and `../frontend`.
 
 ## Layout

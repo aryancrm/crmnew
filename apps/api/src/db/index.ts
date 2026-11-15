@@ -1,4 +1,4 @@
-// One database. With no DATABASE_URL it is an embedded Postgres (PGlite) in new/.data/pg:
+// One database. With no DATABASE_URL it is an embedded Postgres (PGlite) in .data/pg:
 // nothing to install. Online it is a Postgres address. The code above never knows which.
 
 import { AsyncLocalStorage } from "node:async_hooks";
