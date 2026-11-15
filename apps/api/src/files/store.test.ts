@@ -35,14 +35,14 @@ async function cameraPhoto(): Promise<Uint8Array> {
 }
 
 describe("photos are made smaller whatever sent them", () => {
-  it("a camera photo comes down to 2048 px WebP", async () => {
+  it("a camera photo comes down to 1600 px WebP", async () => {
     const bytes = await cameraPhoto();
     const small = await compressPhoto({ name: "rx.jpg", mime: "image/jpeg", bytes });
     expect(small.mime).toBe("image/webp");
     expect(small.name).toBe("rx.webp");
     expect(small.bytes.byteLength).toBeLessThan(bytes.byteLength);
     const meta = await sharp(small.bytes).metadata();
-    expect(Math.max(meta.width ?? 0, meta.height ?? 0)).toBe(2048);
+    expect(Math.max(meta.width ?? 0, meta.height ?? 0)).toBe(1600);
   });
 
   it("a PDF and a file that isn't a readable photo stay as they came", async () => {

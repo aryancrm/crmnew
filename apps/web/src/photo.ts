@@ -1,5 +1,5 @@
-// Papers sent from a phone: a photo is made smaller before it goes (longest side 2048 px,
-// WebP), as the old CRM does; a PDF, or anything the browser can't redraw, goes as it is.
+// Papers sent from a phone: a photo is made smaller before it goes (longest side 1600 px,
+// WebP 60: the writing on a prescription stays readable); a PDF, or anything the browser can't redraw, goes as it is.
 
 import type { PaperKind } from "@2mg/api/types";
 import { api } from "./api";
@@ -8,13 +8,13 @@ export async function smaller(file: File): Promise<File> {
   if (!file.type.startsWith("image/") || file.type === "image/gif") return file;
   try {
     const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, 2048 / Math.max(bitmap.width, bitmap.height));
+    const scale = Math.min(1, 1600 / Math.max(bitmap.width, bitmap.height));
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(bitmap.width * scale);
     canvas.height = Math.round(bitmap.height * scale);
     canvas.getContext("2d")?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
     const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, "image/webp", 0.72),
+      canvas.toBlob(resolve, "image/webp", 0.6),
     );
     if (!blob || blob.type !== "image/webp" || blob.size >= file.size) return file;
     return new File([blob], file.name.replace(/\.[^.]+$/, "") + ".webp", { type: "image/webp" });

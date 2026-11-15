@@ -23,9 +23,10 @@ export type KeptFile = {
 };
 
 const PHOTO = /^image\/(jpeg|png|webp|avif|heic|heif)$/i;
-const SIDE = 2048;
+const SIDE = 1600;
+const QUALITY = 60;
 
-/** Camera photos come down to 2048 px WebP; PDFs, animations and small photos stay as they are. */
+/** Camera photos come down to 1600 px WebP 60 (a prescription's writing stays readable); PDFs, animations and small photos stay as they are. */
 export async function compressPhoto(file: IncomingFile): Promise<IncomingFile> {
   if (!PHOTO.test(file.mime)) return file;
   try {
@@ -35,14 +36,14 @@ export async function compressPhoto(file: IncomingFile): Promise<IncomingFile> {
     const base = file.name.replace(/\.[^.]+$/, "") || "photo";
     const longest = Math.max(meta.width ?? 0, meta.height ?? 0);
     // Already made small by the browser: not encoded a second time.
-    if (meta.format === "webp" && longest <= SIDE && file.bytes.byteLength <= 600_000 && !meta.exif)
+    if (meta.format === "webp" && longest <= SIDE && file.bytes.byteLength <= 350_000 && !meta.exif)
       return { ...file, name: `${base}.webp`, mime: "image/webp" };
-    if (meta.format === "jpeg" && longest <= SIDE && file.bytes.byteLength <= 700_000 && !meta.exif)
+    if (meta.format === "jpeg" && longest <= SIDE && file.bytes.byteLength <= 450_000 && !meta.exif)
       return { ...file, name: `${base}.jpg`, mime: "image/jpeg" };
     const out = await image
       .rotate()
       .resize({ width: SIDE, height: SIDE, fit: "inside", withoutEnlargement: true })
-      .webp({ quality: 72, effort: 3 })
+      .webp({ quality: QUALITY, effort: 4 })
       .toBuffer();
     if (out.byteLength >= file.bytes.byteLength) return file;
     return { name: `${base}.webp`, mime: "image/webp", bytes: new Uint8Array(out) };
