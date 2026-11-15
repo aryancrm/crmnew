@@ -1,5 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "npx --yes pnpm@12.14.0 install --frozen-lockfile",
+  "buildCommand": "npx --yes pnpm@12.14.0 run build",
+  "outputDirectory": "dist",
   "rewrites": [
     { "source": "/api/:path*", "destination": "https://crmnew-api.onrender.com/api/:path*" },
     { "source": "/webhooks/:path*", "destination": "https://crmnew-api.onrender.com/webhooks/:path*" },
