@@ -42,6 +42,7 @@ import { CustomerHistoryDialog } from "../customers/history-dialog";
 import { type DispatchAsk, DispatchDialogs } from "../dispatch/parts";
 import { ConfirmPaymentDialog, useMoney } from "../finance/parts";
 import { avatarTone, dayHeading, initials, PRIMARY_SM, QUIET_SM } from "../look";
+import { Checks } from "../orders/checks";
 import { ReasonDialog, useOrderAction, waited } from "../orders/parts";
 import { RepStrip } from "../rep-strip";
 import { count, Dialog, dayLabel, PageState, peso } from "../ui";
@@ -1017,7 +1018,13 @@ export function OrderCardItem({
             </div>
           </div>
         ) : (
-          <CardPrice items={card.items} />
+          <>
+            {/* What Management checks, on top (Aryan): price, stock, papers, customer. */}
+            <div className="mt-2">
+              <Checks card={card} />
+            </div>
+            <CardPrice items={card.items} />
+          </>
         )}
         {warehouse &&
           card.status === "packing" &&
@@ -1113,15 +1120,7 @@ export function OrderCardItem({
               <History className="size-3" /> History
             </button>
           )}
-          {card.findings.map((finding) => (
-            <span
-              key={finding.text}
-              title={finding.text}
-              className={`rounded px-1.5 py-0.5 font-medium ${finding.kind === "licence" ? "bg-rose-50 text-rose-800" : "bg-amber-50 text-amber-800"}`}
-            >
-              {finding.short}
-            </span>
-          ))}
+          {/* The findings are the checks on top; the warehouse reads only its own facts. */}
         </div>
       </div>
 
@@ -1173,7 +1172,7 @@ export function OrderCardItem({
             );
           })}
         </div>
-        {(card.warehouse || card.papers.length > 0) && (
+        {(card.warehouse || (warehouse && card.papers.length > 0)) && (
           <div className="mt-2.5 flex flex-wrap gap-1">
             {card.warehouse && (
               <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-800">
@@ -1187,7 +1186,7 @@ export function OrderCardItem({
                   : `Rider · ${card.rider}`}
               </span>
             )}
-            {card.papers.length > 0 && (
+            {warehouse && card.papers.length > 0 && (
               <span
                 className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-700"
                 title="Papers on file"
@@ -1700,7 +1699,7 @@ function OrdersCardTable({ cards, faded }: { cards: OrderCard[]; faded: boolean 
     <div
       className={`overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm ${faded ? "opacity-60" : ""}`}
     >
-      <table className="w-full min-w-[1000px] text-xs">
+      <table className="w-full min-w-[1240px] text-xs">
         <thead className="border-b border-slate-200 bg-slate-50 text-[11px] text-slate-500">
           <tr>
             <th scope="col" className={head}>
@@ -1711,6 +1710,9 @@ function OrdersCardTable({ cards, faded }: { cards: OrderCard[]; faded: boolean 
             </th>
             <th scope="col" className={head}>
               Medicines
+            </th>
+            <th scope="col" className={head}>
+              Checks
             </th>
             <th scope="col" className={head}>
               MedRep
@@ -1754,6 +1756,9 @@ function OrdersCardTable({ cards, faded }: { cards: OrderCard[]; faded: boolean 
               </td>
               <td className="max-w-[16rem] truncate px-3 py-2 text-slate-600" title={card.lines}>
                 {card.lines}
+              </td>
+              <td className="px-3 py-2">
+                <Checks card={card} small />
               </td>
               <td className="px-3 py-2 text-slate-700">{card.medrep}</td>
               <td className="px-3 py-2 text-slate-600">{card.channel ?? "—"}</td>
