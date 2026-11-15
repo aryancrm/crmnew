@@ -185,17 +185,44 @@ export async function keepFile(folder: string, file: IncomingFile): Promise<Kept
   const hash = createHash("sha256").update(small.bytes).digest("hex");
   const key = `${folder}/${hash.slice(0, 2)}/${hash}.${EXT[small.mime] ?? "bin"}`;
   await store.put(key, small.bytes, small.mime);
+  remember(key, small.bytes);
   return { name, mime: small.mime, size: small.bytes.byteLength, data: null, key };
+}
+
+/** Files read from the bucket lately, kept in memory (at most 40 MB) so a photo opened again comes at once. */
+const recent = new Map<string, Uint8Array>();
+let recentBytes = 0;
+const RECENT_MAX = 40 * 1024 * 1024;
+
+function remember(key: string, bytes: Uint8Array): void {
+  if (bytes.byteLength > RECENT_MAX / 8 || recent.has(key)) return;
+  recent.set(key, bytes);
+  recentBytes += bytes.byteLength;
+  for (const [oldest, kept] of recent) {
+    if (recentBytes <= RECENT_MAX) break;
+    recent.delete(oldest);
+    recentBytes -= kept.byteLength;
+  }
 }
 
 /** A kept file's bytes, from the row or from the bucket. */
 export async function bytesOf(row: { data?: Uint8Array | null; key?: string | null }): Promise<Uint8Array> {
   if (row.data && row.data.byteLength > 0) return row.data;
   if (row.key) {
+    const known = recent.get(row.key);
+    if (known) {
+      // Most recently used goes to the back of the line.
+      recent.delete(row.key);
+      recent.set(row.key, known);
+      return known;
+    }
     const store = bucketNow();
     if (!store) throw new Error("This file is in the bucket but STORAGE_DRIVER isn't s3.");
     const bytes = await store.get(row.key);
-    if (bytes) return bytes;
+    if (bytes) {
+      remember(row.key, bytes);
+      return bytes;
+    }
   }
   throw new Refusal(404, "not_found", "That file isn't there any more.");
 }

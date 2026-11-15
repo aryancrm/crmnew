@@ -248,7 +248,7 @@ export function onlineRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
       "content-type": file.mime,
       "content-disposition": `inline; filename="${encodeURIComponent(file.name)}"`,
       "x-content-type-options": "nosniff",
-      "cache-control": "private, max-age=3600",
+      "cache-control": "private, max-age=604800, immutable",
     });
   });
   app.post("/api/lead-files/:id/remove", async (c) => {

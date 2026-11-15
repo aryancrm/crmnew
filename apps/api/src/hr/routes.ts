@@ -152,7 +152,7 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
       "content-type": paper.mime,
       "content-disposition": `inline; filename="${encodeURIComponent(paper.name)}"`,
       "x-content-type-options": "nosniff",
-      "cache-control": "private, max-age=3600",
+      "cache-control": "private, max-age=604800, immutable",
     });
   });
   app.get("/api/hr/forms/mine", async (c) => c.json({ lines: await myForms(db, c.get("me")) }));

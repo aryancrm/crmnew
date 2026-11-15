@@ -291,7 +291,7 @@ export function orderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
       "content-type": paper.mime,
       "content-disposition": `inline; filename="${encodeURIComponent(paper.name)}"`,
       "x-content-type-options": "nosniff",
-      "cache-control": "private, max-age=3600",
+      "cache-control": "private, max-age=604800, immutable",
     });
   });
 

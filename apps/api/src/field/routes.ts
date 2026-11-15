@@ -203,7 +203,7 @@ export function fieldRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
       "content-type": receipt.mime,
       "content-disposition": `inline; filename="${encodeURIComponent(receipt.name)}"`,
       "x-content-type-options": "nosniff",
-      "cache-control": "private, max-age=3600",
+      "cache-control": "private, no-cache",
     });
   });
 
