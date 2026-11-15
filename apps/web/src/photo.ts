@@ -1,4 +1,4 @@
-// Papers sent from a phone: a photo is made smaller before it goes (longest side 1600 px,
+// Papers sent from a phone (or a computer): a photo is made smaller before it goes (longest side 1600 px,
 // WebP 60: the writing on a prescription stays readable); a PDF, or anything the browser can't redraw, goes as it is.
 
 import type { PaperKind } from "@2mg/api/types";
