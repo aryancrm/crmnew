@@ -3,10 +3,11 @@
 
 import type { OrderAction, OrderList, OrderStatus } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Search } from "lucide-react";
+import { ImagePlus, Search } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { smaller } from "../photo";
 import {
   Button,
   Card,
@@ -130,6 +131,7 @@ export function ReasonDialog({
   code,
   what,
   initial = "",
+  financeHold = false,
   onClose,
 }: {
   orderId: number;
@@ -137,15 +139,39 @@ export function ReasonDialog({
   what: OrderAction;
   /** A reason already written (holding for money owed). */
   initial?: string;
+  /** Finance holds it: screenshots (the bank, the slip) go with the reason, for the MedRep. */
+  financeHold?: boolean;
   onClose: () => void;
 }) {
   const [reason, setReason] = useState(initial);
+  const [shots, setShots] = useState<File[]>([]);
+  const [shotProblem, setShotProblem] = useState<string | null>(null);
   const order = useOrderAction();
+  const queries = useQueryClient();
   const words = WHY[what];
   if (!words) return null;
+  const withShots = financeHold && what === "hold";
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (await order.act(orderId, what, { reason })) onClose();
+    if (!(await order.act(orderId, what, { reason }))) return;
+    if (withShots && shots.length) {
+      const failed: string[] = [];
+      for (const shot of shots) {
+        try {
+          const form = new FormData();
+          form.set("file", await smaller(shot));
+          await api(`/api/finance/orders/${orderId}/hold-proof`, { body: form });
+        } catch {
+          failed.push(shot.name);
+        }
+      }
+      await queries.invalidateQueries({ queryKey: ["orders"] });
+      if (failed.length) {
+        setShotProblem(`Held, but these didn't go: ${failed.join(", ")}`);
+        return;
+      }
+    }
+    onClose();
   }
   return (
     <Dialog title={`${words.title} · ${code}`} onClose={onClose} busy={order.busy}>
@@ -171,6 +197,49 @@ export function ReasonDialog({
             />
           )}
         </Field>
+        {withShots && (
+          <div className="flex flex-col gap-1.5">
+            <div className="text-xs font-medium text-slate-600">
+              Screenshots for the MedRep (up to 5)
+            </div>
+            {shots.length > 0 && (
+              <ul className="flex flex-col gap-1 text-[13px]">
+                {shots.map((shot, index) => (
+                  <li
+                    key={`${shot.name}-${index}`}
+                    className="flex items-center justify-between gap-2"
+                  >
+                    <span className="truncate">{shot.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => setShots((all) => all.filter((_, at) => at !== index))}
+                      className="text-xs text-slate-500 hover:text-slate-900"
+                    >
+                      Remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {shots.length < 5 && (
+              <label className="inline-flex w-fit cursor-pointer items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
+                <ImagePlus className="size-4" /> Add screenshot
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="sr-only"
+                  onChange={(event) => {
+                    const chosen = [...(event.target.files ?? [])];
+                    setShots((all) => [...all, ...chosen].slice(0, 5));
+                    event.target.value = "";
+                  }}
+                />
+              </label>
+            )}
+            {shotProblem && <div className="text-[13px] text-rose-700">{shotProblem}</div>}
+          </div>
+        )}
         <Problem message={order.general(["reason"])} />
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
           <Button onClick={onClose} disabled={order.busy}>

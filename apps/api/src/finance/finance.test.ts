@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../app";
-import { type Database, openDatabase } from "../db/index";
+import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { todayManila } from "../inventory/rules";
@@ -484,5 +484,79 @@ describe("numbers and lists", () => {
       0,
     );
     expect(board.cards.some((card) => card.id === id)).toBe(true);
+  });
+});
+
+describe("what the hub's Finance had", () => {
+  it("keeps the MedRep's reason for no proof; Finance undoes its own check within 90 seconds", async () => {
+    const id = await approved(hospital, {
+      noProofReason: "payment_to_follow",
+      noProofNote: "The hospital pays on Friday",
+    });
+    const placed = await order("fiona", id);
+    expect(placed.order).toMatchObject({
+      noProofReason: "payment_to_follow",
+      noProofNote: "The hospital pays on Friday",
+    });
+    const total = placed.order.total;
+    expect((await confirm("fiona", id, pay(total))).status).toBe(200);
+    expect((await order("fiona", id)).can.undoConfirm).toBe(true);
+    expect((await post("sarla", `/api/finance/orders/${id}/undo-confirm`)).status).toBe(403);
+    expect((await post("fiona", `/api/finance/orders/${id}/undo-confirm`)).status).toBe(200);
+    const back = await order("fiona", id);
+    expect(back.order.status).toBe("finance_check");
+    expect(back.can.undoConfirm).toBe(false);
+    expect((await post("fiona", `/api/finance/orders/${id}/undo-confirm`)).status).toBe(409);
+    // Checked again: the same invoice takes the money.
+    expect((await confirm("fiona", id, pay(total))).status).toBe(200);
+    const again = await order("fiona", id);
+    expect(again.order.status).toBe("ready_for_dispatch");
+    const [counted] = await rows<{ n: number }>(
+      db,
+      sql`select count(*)::int as n from invoice where order_id = ${id} and status <> 'cancelled'`,
+    );
+    expect(counted?.n).toBe(1);
+    // Too late: after 90 seconds it is held instead.
+    await db.execute(
+      sql`update sales_order set finance_checked_at = now() - interval '2 minutes' where id = ${id}`,
+    );
+    expect((await post("fiona", `/api/finance/orders/${id}/undo-confirm`)).status).toBe(409);
+  });
+
+  it("shows the MedRep Finance's screenshots with its hold, apart from the order's papers", async () => {
+    const id = await approved(hospital);
+    const shot = () => {
+      const form = new FormData();
+      form.set(
+        "file",
+        new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 9])], "bank.png", {
+          type: "image/png",
+        }),
+      );
+      return app.request(`/api/finance/orders/${id}/hold-proof`, {
+        method: "POST",
+        headers: { cookie: cookies.fiona as string },
+        body: form,
+      });
+    };
+    expect((await shot()).status).toBe(409);
+    expect(
+      (await post("fiona", `/api/orders/${id}/hold`, { reason: "The amount on the slip is short" }))
+        .status,
+    ).toBe(200);
+    expect((await shot()).status).toBe(200);
+    const held = await order("ryan", id);
+    expect(held.order.holdProofs.map((one) => one.name)).toEqual(["bank.png"]);
+    expect(held.papers.some((paper) => paper.name === "bank.png")).toBe(false);
+  });
+
+  it("lists what a Finance person confirmed, with the total", async () => {
+    const mine = await read<{ rows: { code: string; total: number }[]; total: number }>(
+      "fiona",
+      "/api/finance/my-confirmations",
+    );
+    expect(mine.rows.length).toBeGreaterThan(0);
+    expect(mine.total).toBe(mine.rows.reduce((sum, one) => sum + one.total, 0));
+    expect((await get("ryan", "/api/finance/my-confirmations")).status).toBe(403);
   });
 });

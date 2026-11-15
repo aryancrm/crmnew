@@ -719,6 +719,7 @@ export function OrdersToCheck({
           code={asking.card.code}
           what={asking.what}
           initial={asking.reason}
+          financeHold={["finance_check", "ready_for_invoice"].includes(asking.card.status)}
           onClose={() => setAsking(null)}
         />
       )}

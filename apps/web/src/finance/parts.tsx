@@ -9,6 +9,8 @@ import { type FormEvent, useState } from "react";
 import { api } from "../api";
 import { PAPER_ACCEPT, uploadPaper } from "../photo";
 import { Button, Dialog, Field, INPUT, Problem, peso, Status, useAction } from "../ui";
+import { noProofWords } from "./no-proof";
+import { rememberConfirm } from "./undo";
 
 export const METHODS: { key: PaymentMethod; label: string }[] = [
   { key: "bank", label: "Bank transfer" },
@@ -218,8 +220,13 @@ export function ConfirmPaymentDialog({
       checked,
       note,
     });
-    if (done) onClose();
+    if (done) {
+      rememberConfirm(orderId, code);
+      onClose();
+    }
   }
+  const order = detail.data?.order;
+  const why = order ? noProofWords(order.noProofReason, order.noProofNote) : null;
 
   return (
     <Dialog title={`Confirm payment · ${code}`} onClose={onClose} busy={money.busy}>
@@ -243,9 +250,23 @@ export function ConfirmPaymentDialog({
               ))}
             </div>
           ) : (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
-              No slip on the order. Type the bank reference you checked, or hold it until the MedRep
-              adds the proof.
+            <div className="flex gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[13px] text-slate-700">
+              <span
+                className="mt-1.5 size-2 shrink-0 rounded-full bg-amber-400"
+                aria-hidden="true"
+              />
+              <span>
+                {why ? (
+                  <>
+                    <b>No slip.</b> {order?.medrep ?? "The MedRep"} says: {why}
+                  </>
+                ) : (
+                  <>
+                    <b>No slip on the order.</b> Type the bank reference you checked, or hold it
+                    until the MedRep adds the proof.
+                  </>
+                )}
+              </span>
             </div>
           )}
         </div>

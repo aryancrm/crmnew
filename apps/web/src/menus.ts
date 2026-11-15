@@ -15,6 +15,7 @@ import {
   CalendarClock,
   CalendarDays,
   CalendarRange,
+  CheckCheck,
   ClipboardCheck,
   ClipboardList,
   Factory,
@@ -577,6 +578,7 @@ function ownDesk(me: Me): Space {
             items: [
               { to: "/", label: "Orders to check", icon: ClipboardCheck, badge: "finance" },
               { to: "/orders", label: "All orders", icon: ClipboardList },
+              { to: "/finance/mine", label: "My confirmations", icon: CheckCheck },
               folder("Money", Banknote, moneyLinks, "Money"),
             ],
           },

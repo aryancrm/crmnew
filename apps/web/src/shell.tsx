@@ -26,6 +26,7 @@ import { Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-route
 import { api } from "./api";
 import { initials, useMe } from "./auth";
 import { LiveLocationSender } from "./field/live-sender";
+import { UndoConfirmBar } from "./finance/undo";
 import { MyDayButton } from "./hr/parts";
 import { allItems, type Badge, type MenuGroup, type MenuItem, spaceFor } from "./menus";
 import { unreadIn, useUpdates } from "./updates";
@@ -212,6 +213,7 @@ export function Shell() {
               <PageBack trail={trailOf(space, location.pathname)} />
             )}
           <Outlet />
+          <UndoConfirmBar />
         </main>
       </div>
 

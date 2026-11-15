@@ -819,6 +819,9 @@ export type OrderItemInput = {
 export type OrderInput = {
   customerId: number;
   items: OrderItemInput[];
+  /** Pays in advance with no proof of payment attached: why. */
+  noProofReason?: NoProofReason | null;
+  noProofNote?: string | null;
   deliveryAddress?: string | null;
   receiver?: string | null;
   receiverPhone?: string | null;
@@ -932,6 +935,11 @@ export type OrderDetail = {
     licenceNo: string | null;
     licenceExpires: string | null;
     tin: string | null;
+    /** Pays in advance and placed with no proof: why (the MedRep's word). */
+    noProofReason: NoProofReason | null;
+    noProofNote: string | null;
+    /** Finance's screenshots with the hold it is on now. */
+    holdProofs: { id: number; name: string }[];
     raisedBy: string;
     channel: string | null;
     area: string | null;
@@ -1054,6 +1062,8 @@ export type OrderDetail = {
     recordPayment: boolean;
     /** Hold it until stock comes in: only while something on it is short. */
     waitStock: boolean;
+    /** Finance just checked its payment (within 90 seconds) and may take it back. */
+    undoConfirm: boolean;
   };
 };
 
@@ -3898,4 +3908,23 @@ export type PayRuleRow = {
   startsOn: string;
   source: string | null;
   rule: unknown;
+};
+
+/** Why an order paid in advance has no proof of payment yet. */
+export type NoProofReason = "payment_to_follow" | "paid_no_slip" | "other";
+
+/** Orders a Finance person confirmed, over chosen days. */
+export type MyConfirmations = {
+  from: string;
+  to: string;
+  rows: {
+    id: number;
+    code: string;
+    customer: string;
+    total: number;
+    at: string;
+    status: string;
+    statusLabel: string;
+  }[];
+  total: number;
 };

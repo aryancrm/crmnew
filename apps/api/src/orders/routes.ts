@@ -87,6 +87,10 @@ const orderInput = z.object({
   division: optional(40),
   subDivision: optional(60),
   paymentTerm: optional(60),
+  noProofReason: z
+    .enum(["payment_to_follow", "paid_no_slip", "other"], { error: "Pick why there is no proof." })
+    .nullish(),
+  noProofNote: optional(300),
 });
 
 /** What Management completes on a field order. */

@@ -30,6 +30,7 @@ import { Medicines } from "./pages/medicines";
 import { MessagesPage } from "./pages/messages";
 import { Payments, Refunds } from "./pages/money";
 import { Moves } from "./pages/moves";
+import { MyConfirmations } from "./pages/my-confirmations";
 import { MyLeavePage } from "./pages/my-leave";
 import { MyPayslipsPage } from "./pages/my-payslips";
 import { MyTeamPage, TeamSeatPage } from "./pages/my-team";
@@ -117,6 +118,7 @@ createRoot(root).render(
             <Route path="payments" element={<Payments />} />
             <Route path="owed" element={<OwedReport />} />
             <Route path="refunds" element={<Refunds />} />
+            <Route path="finance/mine" element={<MyConfirmations />} />
             <Route path="inventory/overview" element={<InventoryOverview />} />
             <Route path="inventory/requests" element={<MedicineRequestsPage />} />
             <Route path="targets" element={<Targets />} />

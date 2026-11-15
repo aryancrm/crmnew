@@ -39,6 +39,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { api } from "../api";
 import { useMe } from "../auth";
 import { type DispatchAsk, DispatchDialogs } from "../dispatch/parts";
+import { noProofWords } from "../finance/no-proof";
 import {
   ConfirmPaymentDialog,
   InvoiceStatus,
@@ -449,6 +450,28 @@ export function Order() {
               <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
               <span>
                 <b>{order.statusLabel}:</b> {order.flagReason}
+                {order.holdProofs.length > 0 && (
+                  // Finance's screenshots with the hold, for the MedRep to see what it saw.
+                  <span className="mt-2 flex flex-wrap gap-2">
+                    {order.holdProofs.map((shot) => (
+                      <a
+                        key={shot.id}
+                        href={`/api/papers/${shot.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={shot.name}
+                        className="block overflow-hidden rounded-lg border border-slate-200 bg-white hover:border-slate-400"
+                      >
+                        <img
+                          src={`/api/papers/${shot.id}`}
+                          alt={shot.name}
+                          loading="lazy"
+                          className="h-16 w-20 object-cover"
+                        />
+                      </a>
+                    ))}
+                  </span>
+                )}
               </span>
             </span>
             {can.answer && (
@@ -716,6 +739,7 @@ export function Order() {
           orderId={order.id}
           code={order.code}
           what={asking}
+          financeHold={["finance_check", "ready_for_invoice"].includes(order.status)}
           onClose={() => setAsking(null)}
         />
       )}
@@ -1670,6 +1694,16 @@ function FinanceStep({
       ) : checked ? (
         <Fact shape="done" note={short(checked)}>
           <b>Checked</b> by {by ?? "Finance"}
+          {can.undoConfirm && (
+            <button
+              type="button"
+              disabled={money.busy}
+              onClick={() => money.send(`/api/finance/orders/${order.id}/undo-confirm`, {})}
+              className="ml-2 font-semibold text-emerald-700 hover:underline disabled:opacity-50"
+            >
+              Undo
+            </button>
+          )}
         </Fact>
       ) : order.status === "finance_check" ? (
         <Fact shape="now">
@@ -1688,6 +1722,15 @@ function FinanceStep({
         <Fact shape="later">
           <b>After Management's approval</b>
         </Fact>
+      )}
+      {!checked && noProofWords(order.noProofReason, order.noProofNote) && (
+        <div className="flex gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[13px] text-slate-700">
+          <span className="mt-1.5 size-2 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
+          <span>
+            <b>No slip.</b> {order.medrep} says:{" "}
+            {noProofWords(order.noProofReason, order.noProofNote)}
+          </span>
+        </div>
       )}
       {data.findings.length > 0 && !checked && (
         <ul className="flex flex-col gap-1.5 rounded-xl bg-slate-50 px-3 py-2.5 text-[13px] text-slate-800">

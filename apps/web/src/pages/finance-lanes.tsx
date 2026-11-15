@@ -304,6 +304,7 @@ export function FinanceLanes() {
           orderId={holding.id}
           code={holding.code}
           what="hold"
+          financeHold
           onClose={() => setHolding(null)}
         />
       )}

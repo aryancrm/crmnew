@@ -30,6 +30,7 @@ import type {
   InvoiceTab,
   LeadSource,
   Me,
+  MyConfirmations,
   OrderPaper,
   OrderStatus,
   OwedInvoices,
@@ -390,7 +391,12 @@ export async function confirmPayment(
       `Payment checked: ${how(input)}${proof ? ", proof of payment on file" : ""}.${left > 0 ? ` ${peso(left)} still to pay.` : ""} It goes to Dispatch.${clean(input.note) ? ` ${clean(input.note)}` : ""}`,
       "finance_verified",
     );
-    const invoice = await issueInvoice(tx, me, order, today);
+    // A check undone left its invoice: the same one takes the payment again.
+    const [kept] = await rows<{ id: number; code: string }>(
+      tx,
+      sql`select id::int as id, code from invoice where order_id = ${orderId} and status <> 'cancelled'`,
+    );
+    const invoice = kept ?? (await issueInvoice(tx, me, order, today));
     await addPayment(
       tx,
       me,
@@ -1152,4 +1158,146 @@ export async function owedInvoices(db: Database, me: Me): Promise<OwedInvoices> 
       customers: new Set(counted.map((row) => row.customerId)).size,
     },
   };
+}
+
+/** How long after confirming a payment Finance may take it back (as the hub's Undo). */
+export const UNDO_SECONDS = 90;
+
+/** Finance takes back a payment check it just made (within a minute and a half, before Dispatch
+ *  touched the order): the invoice it made and the payment go, the order is back with Finance.
+ *  An order paid partly with points is held instead. */
+export async function undoConfirm(db: Database, me: Me, orderId: number): Promise<void> {
+  allow(me, FINANCE_ROLES, "undo a payment check");
+  await db.transaction(async (tx) => {
+    const [order] = await rows<{
+      code: string;
+      status: string;
+      by: number | null;
+      seconds: number | null;
+      points: number;
+    }>(
+      tx,
+      sql`select code, status, finance_checked_by::int as by, points_used::int as points,
+          extract(epoch from now() - finance_checked_at)::int as seconds
+        from sales_order where id = ${orderId} for update`,
+    );
+    if (!order) throw new Refusal(404, "not_found", "That order doesn't exist.");
+    if (
+      order.status !== "ready_for_dispatch" ||
+      order.by !== me.id ||
+      order.seconds === null ||
+      order.seconds > UNDO_SECONDS
+    )
+      throw new Refusal(
+        409,
+        "too_late",
+        `${order.code}'s payment check can't be undone now: put it on hold instead.`,
+      );
+    if (order.points > 0)
+      throw new Refusal(
+        409,
+        "too_late",
+        `${order.code} was paid partly with points: put it on hold instead.`,
+      );
+    const [invoice] = await rows<{ id: number; code: string }>(
+      tx,
+      sql`select id::int as id, code from invoice where order_id = ${orderId} and status <> 'cancelled' for update`,
+    );
+    // The invoice keeps its number (one invoice an order); the money taken in with the check goes.
+    if (invoice) {
+      await tx.execute(
+        sql`update payment set active = false, removed_reason = 'Payment check undone', removed_by = ${me.id},
+            removed_at = now() where invoice_id = ${invoice.id} and active`,
+      );
+      await tx.execute(sql`update invoice set paid = 0, status = 'open' where id = ${invoice.id}`);
+    }
+    // The steps the check marked are taken off the order's road.
+    await tx.execute(
+      sql`update order_event set stage = null where order_id = ${orderId} and stage in ('finance_verified', 'paid')`,
+    );
+    await tx.execute(
+      sql`update sales_order set status = 'finance_check', finance_checked_at = null, finance_checked_by = null,
+          updated_at = now() where id = ${orderId}`,
+    );
+    await logEvent(
+      tx,
+      orderId,
+      me,
+      "status",
+      `${me.name} undid the payment check${invoice ? ` (the payment on invoice ${invoice.code} taken off)` : ""}: it is back with Finance.`,
+    );
+    await settleOrderPoints(tx, orderId);
+  });
+}
+
+export const HOLD_PROOF_MAX = 5;
+export const HOLD_PROOF_BYTES = 10 * 1024 * 1024;
+
+/** A screenshot Finance adds to its hold, shown to the MedRep with the reason. */
+export async function addHoldProof(
+  db: Database,
+  me: Me,
+  orderId: number,
+  file: { name: string; mime: string; bytes: Uint8Array },
+): Promise<{ id: number }> {
+  allow(me, FINANCE_ROLES, "add a screenshot to a hold");
+  if (!file.mime.startsWith("image/"))
+    throw new Refusal(400, "invalid", "Add a screenshot (a photo or an image).", "file");
+  if (file.bytes.length === 0 || file.bytes.length > HOLD_PROOF_BYTES)
+    throw new Refusal(400, "invalid", "That image is over 10 MB.", "file");
+  return db.transaction(async (tx) => {
+    const [order] = await rows<{ status: string; heldRole: string | null }>(
+      tx,
+      sql`select status, held_role as "heldRole" from sales_order where id = ${orderId} for update`,
+    );
+    if (order?.status !== "on_hold" || order.heldRole !== "finance")
+      throw new Refusal(409, "not_now", "Only an order Finance holds takes its screenshots.");
+    const [hold] = await rows<{ id: number }>(
+      tx,
+      sql`select max(id)::int as id from order_event where order_id = ${orderId} and kind = 'status'`,
+    );
+    const [counted] = await rows<{ n: number }>(
+      tx,
+      sql`select count(*)::int as n from order_file where order_id = ${orderId} and active and hold_event_id = ${hold?.id ?? 0}`,
+    );
+    if ((counted?.n ?? 0) >= HOLD_PROOF_MAX)
+      throw new Refusal(
+        400,
+        "invalid",
+        `At most ${HOLD_PROOF_MAX} screenshots with a hold.`,
+        "file",
+      );
+    const [made] = await rows<{ id: number }>(
+      tx,
+      sql`insert into order_file (order_id, kind, name, mime, size, data, by_person, hold_event_id)
+        values (${orderId}, 'other', ${file.name.slice(0, 200)}, ${file.mime}, ${file.bytes.length}, ${file.bytes},
+          ${me.id}, ${hold?.id ?? null})
+        returning id::int as id`,
+    );
+    return { id: made?.id as number };
+  });
+}
+
+/** The orders a Finance person confirmed (their payment check) over chosen Manila days. */
+export async function myConfirmations(
+  db: Database,
+  me: Me,
+  asked: { from?: string | null; to?: string | null },
+): Promise<MyConfirmations> {
+  allow(me, FINANCE_ROLES, "see your confirmations");
+  const today = todayManila();
+  const DAY = /^\d{4}-\d{2}-\d{2}$/;
+  const to = asked.to && DAY.test(asked.to) ? asked.to : today;
+  const from = asked.from && DAY.test(asked.from) && asked.from <= to ? asked.from : to;
+  const found = await rows<MyConfirmations["rows"][number]>(
+    db,
+    sql`select o.id::int as id, o.code, c.name as customer, o.total::int as total, o.status,
+        ${iso("o.finance_checked_at")} as at
+      from sales_order o join customer c on c.id = o.customer_id
+      where o.finance_checked_by = ${me.id}
+        and (o.finance_checked_at at time zone 'Asia/Manila')::date between ${from}::date and ${to}::date
+      order by o.finance_checked_at desc`,
+  );
+  for (const one of found) one.statusLabel = STATUS_LABEL[one.status as OrderStatus] ?? one.status;
+  return { from, to, rows: found, total: found.reduce((sum, one) => sum + one.total, 0) };
 }

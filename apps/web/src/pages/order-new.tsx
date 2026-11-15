@@ -14,6 +14,7 @@ import type {
   CustomerList,
   InventoryList,
   InvoiceFrom,
+  NoProofReason,
   OrderDetail,
   OrderForList,
   OrderInput,
@@ -40,6 +41,7 @@ import { api } from "../api";
 import { useMe } from "../auth";
 import { shortPeso } from "../ceo";
 import { CustomerDialog } from "../customers/dialog";
+import { NO_PROOF_REASONS } from "../finance/no-proof";
 import { MedicineRequestDialog } from "../inventory/requests";
 import { avatarTone, initials } from "../look";
 import { OrderChecksBox } from "../orders/parts";
@@ -223,6 +225,10 @@ export function OrderNew({
   const [doctor, setDoctor] = useState<{ id: number; name: string } | null>(null);
   const [findDoctor, setFindDoctor] = useState("");
   const [papers, setPapers] = useState<Partial<Record<PaperKind, File>>>({});
+  // An advance order without its slip says why (the hub's rule): Finance reads it.
+  const [noProof, setNoProof] = useState<NoProofReason | "">("");
+  const [noProofNote, setNoProofNote] = useState("");
+  const [noProofAsk, setNoProofAsk] = useState(false);
   const [draftNote, setDraftNote] = useState<string | null>(null);
   // The switch at the top: to Management and to Finance before Dispatch. Off unless asked, or
   // unless something is wrong on the order (then Management is locked on).
@@ -309,6 +315,8 @@ export function OrderNew({
     if (order.division) setDivision(order.division);
     if (order.subDivision) setSubDivision(order.subDivision);
     setPaymentTerm(order.paymentTerm ?? "");
+    setNoProof(order.noProofReason ?? "");
+    setNoProofNote(order.noProofNote ?? "");
   }, [fixing.data]);
 
   function saveDraft() {
@@ -508,8 +516,14 @@ export function OrderNew({
   if (!catalogue.data || !stock.data)
     return <PageState query={catalogue.data ? stock : catalogue} what="the medicines" />;
 
+  const proofMissing = picked?.paymentTerms === "advance" && !papers.payment_proof;
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (proofMissing && (!noProof || (noProof === "other" && !noProofNote.trim()))) {
+      setNoProofAsk(true);
+      document.getElementById("no-proof")?.scrollIntoView({ block: "center", behavior: "smooth" });
+      return;
+    }
     let id = 0;
     const body: OrderInput = {
       customerId: customerId ?? 0,
@@ -535,6 +549,8 @@ export function OrderNew({
       division: pickedDivision || null,
       subDivision: pickedSubDivision || null,
       paymentTerm: paymentTerm.trim() || null,
+      noProofReason: proofMissing && noProof ? noProof : null,
+      noProofNote: proofMissing && noProof ? noProofNote.trim() || null : null,
     };
     const done = await action.run(async () => {
       if (fixId) {
@@ -1468,8 +1484,42 @@ export function OrderNew({
                   {paper.kind === "payment_proof" &&
                     picked?.paymentTerms === "advance" &&
                     !file && (
-                      <div className="text-[11px] text-amber-700">
-                        Pays in advance: Finance needs this
+                      <div id="no-proof" className="mt-1 flex flex-wrap items-center gap-2">
+                        <select
+                          aria-label="Why there is no proof yet"
+                          value={noProof}
+                          onChange={(event) => {
+                            setNoProof(event.target.value as NoProofReason | "");
+                            setNoProofAsk(false);
+                          }}
+                          className={`h-8 rounded-lg border bg-white px-2 text-xs ${noProofAsk && !noProof ? "border-rose-400" : "border-slate-200"}`}
+                        >
+                          <option value="">No slip yet? Say why…</option>
+                          {NO_PROOF_REASONS.map((one) => (
+                            <option key={one.value} value={one.value}>
+                              {one.label}
+                            </option>
+                          ))}
+                        </select>
+                        {noProof && (
+                          <input
+                            aria-label="A word for Finance"
+                            value={noProofNote}
+                            maxLength={300}
+                            onChange={(event) => setNoProofNote(event.target.value)}
+                            placeholder={
+                              noProof === "other"
+                                ? "Say what (needed)"
+                                : "A word for Finance (optional)"
+                            }
+                            className={`h-8 min-w-40 flex-1 rounded-lg border bg-white px-2 text-xs ${noProofAsk && noProof === "other" && !noProofNote.trim() ? "border-rose-400" : "border-slate-200"}`}
+                          />
+                        )}
+                        {noProofAsk && (
+                          <span className="w-full text-[11px] text-rose-700">
+                            Add the proof, or say why it isn't here yet
+                          </span>
+                        )}
                       </div>
                     )}
                 </div>

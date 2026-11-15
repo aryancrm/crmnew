@@ -3,25 +3,29 @@
 import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
-import { type Env, idParam, readBody } from "../http";
+import { type Env, idParam, Refusal, readBody } from "../http";
 import { tellCustomer } from "../online/tell";
 import type { ConfirmPaymentInput, PaymentInput, RefundInput } from "../types";
 import { financeBoard } from "./board";
 import { STAFF_METHODS } from "./rules";
 import {
+  addHoldProof,
   confirmPayment,
   customerStatement,
   customersOwe,
+  HOLD_PROOF_BYTES,
   invoiceDetail,
   listInvoices,
   listPayments,
   makeInvoice,
+  myConfirmations,
   orderOfInvoice,
   owedInvoices,
   recordPayment,
   recordRefund,
   refundsOwed,
   removePayment,
+  undoConfirm,
 } from "./service";
 
 const optional = (max: number) =>
@@ -60,6 +64,31 @@ export function financeRoutes(
     void tellCustomer(db, c.get("me"), idParam(c), "confirmed");
     return c.json(done);
   });
+  app.post("/api/finance/orders/:id/undo-confirm", async (c) => {
+    await undoConfirm(db, c.get("me"), idParam(c));
+    return c.json({ ok: true });
+  });
+  // A screenshot with Finance's hold (multipart, `file`).
+  app.post("/api/finance/orders/:id/hold-proof", async (c) => {
+    const length = Number(c.req.header("content-length") ?? 0);
+    if (length > HOLD_PROOF_BYTES + 64 * 1024)
+      throw new Refusal(400, "invalid", "That image is over 10 MB.", "file");
+    const body = await c.req.parseBody().catch(() => ({}) as Record<string, unknown>);
+    const file = body.file;
+    if (!(file instanceof File)) throw new Refusal(400, "invalid", "Add a screenshot.", "file");
+    return c.json(
+      await addHoldProof(db, c.get("me"), idParam(c), {
+        name: file.name,
+        mime: file.type,
+        bytes: new Uint8Array(await file.arrayBuffer()),
+      }),
+    );
+  });
+  app.get("/api/finance/my-confirmations", async (c) =>
+    c.json(
+      await myConfirmations(db, c.get("me"), { from: c.req.query("from"), to: c.req.query("to") }),
+    ),
+  );
   app.post("/api/finance/orders/:id/invoice", async (c) => {
     const input = await readBody(c, z.object({ note: optional(300) }));
     const done = await makeInvoice(db, c.get("me"), idParam(c), input);

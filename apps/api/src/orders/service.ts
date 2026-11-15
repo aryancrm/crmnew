@@ -353,7 +353,7 @@ async function papersOf(db: Runner, orderIds: number[]): Promise<Map<number, Pap
   const found = await rows<{ orderId: number; kind: PaperKind }>(
     db,
     sql`select distinct order_id::int as "orderId", kind from order_file
-      where active and order_id in (${sql.join(
+      where active and hold_event_id is null and order_id in (${sql.join(
         orderIds.map((id) => sql`${id}`),
         sql`, `,
       )})`,
@@ -1100,12 +1100,21 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
       licenceExpired: boolean;
       creditLimit: number | null;
       gl: boolean;
+      undoable: boolean;
     }
   >(
     db,
     sql`${team(me)} select ${rowColumns}, ${caseColumns}, c.kind as "customerKind", c.city as "customerCity", c.review as "customerReview",
         coalesce(c.licence_expires < (now() at time zone 'Asia/Manila')::date, false) as "licenceExpired",
         c.licence_no as "licenceNo", ${day("c.licence_expires")} as "licenceExpires", c.tin,
+        o.no_proof_reason as "noProofReason", o.no_proof_note as "noProofNote",
+        (o.finance_checked_by = ${me.id} and o.status = 'ready_for_dispatch' and coalesce(o.points_used, 0) = 0
+          and now() - o.finance_checked_at <= interval '90 seconds') as undoable,
+        (select coalesce(json_agg(json_build_object('id', f.id, 'name', f.name) order by f.id), '[]'::json)
+          from order_file f where f.order_id = o.id and f.active and f.hold_event_id is not null
+            and o.status in ('on_hold', 'exception')
+            and f.hold_event_id = (select max(g.hold_event_id) from order_file g where g.order_id = o.id and g.active))
+          as "holdProofs",
         raiser.name as "raisedBy", o.raised_by::int as "raisedById", o.medrep_id::int as "medrepId",
         ch.code as channel, a.name as area,
         o.payment_terms as "paymentTerms", o.payment_days::int as "paymentDays",
@@ -1155,7 +1164,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
       db,
       sql`select f.id::int as id, f.kind, f.name, f.mime, f.size::int as size, p.name as by, ${iso("f.at")} as at
         from order_file f join person p on p.id = f.by_person
-        where f.order_id = ${id} and f.active order by f.at, f.id`,
+        where f.order_id = ${id} and f.active and f.hold_event_id is null order by f.at, f.id`,
     ),
     orderMoney(db, id),
     moneyOf(db, [order.customerId]),
@@ -1174,7 +1183,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         from order_step s where s.order_id = ${id} order by s.entered_at, s.id`,
     ),
   ]);
-  const { raisedById, medrepId, licenceExpired, creditLimit, gl, ...shown } = order;
+  const { raisedById, medrepId, licenceExpired, creditLimit, gl, undoable, ...shown } = order;
   const onFile = [...new Set(papers.map((paper) => paper.kind))];
   const who = {
     status: order.status,
@@ -1235,6 +1244,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         (orderCan(me).finance || (Boolean(order.leadId) && CASE_AGENT_ROLES.includes(me.role))) &&
         money.invoice?.status === "open",
       waitStock: orderActions(me, who).hold && (await shortLines(db, id)).length > 0,
+      undoConfirm: orderCan(me).finance && Boolean(undoable),
     },
   };
 }
@@ -1478,13 +1488,15 @@ export async function placeOrder(
       tx,
       sql`insert into sales_order (customer_id, medrep_id, raised_by, channel_id, status, payment_terms, payment_days,
           delivery_address, receiver, receiver_phone, note, expected_on, customer_po, invoice_from, doctor_id, total, submitted_at,
-          approved_at, approved_by, warehouse_id, lead_id, delivery_fee, division, sub_division, payment_term)
+          approved_at, approved_by, warehouse_id, lead_id, delivery_fee, division, sub_division, payment_term,
+          no_proof_reason, no_proof_note)
         values (${customer.id}, ${holder?.id ?? me.id}, ${me.id}, ${holder?.channelId ?? own?.channelId ?? null}, ${status},
           ${terms.terms}, ${terms.days},
           ${clean(input.deliveryAddress) ?? withCity(customer.address, customer.city)},
           ${clean(input.receiver)}, ${clean(input.receiverPhone)}, ${clean(input.note)}, ${input.expectedOn || null}, ${clean(input.customerPo)}, ${input.invoiceFrom ?? "2mg"}, ${input.doctorId ?? null}, ${total}, now(),
           ${manages ? sql`now()` : null}, ${manages ? me.id : null}, ${shipsFrom?.id ?? null}, ${options.leadId ?? null}, ${deliveryFee},
-          ${orderDivision}, ${subDivision || null}, ${paymentTerm})
+          ${orderDivision}, ${subDivision || null}, ${paymentTerm},
+          ${input.noProofReason ?? null}, ${clean(input.noProofNote)})
         returning id::int as id`,
     );
     const id = made?.id as number;
@@ -1969,7 +1981,8 @@ export async function reviseOrder(
           receiver = ${next.receiver}, receiver_phone = ${next.receiverPhone}, customer_po = ${next.customerPo}, note = ${next.note},
           invoice_from = coalesce(${input.invoiceFrom ?? null}, invoice_from), doctor_id = ${input.doctorId ?? null},
           division = ${next.division}, sub_division = ${next.subDivision},
-          ${by === "management" ? sql`` : sql`status = 'pending_approval', flag_reason = null, submitted_at = now(), reply = ${answer},`}
+          ${by === "management" ? sql`` : sql`status = 'pending_approval', flag_reason = null, submitted_at = now(), reply = ${answer},
+            no_proof_reason = ${input.noProofReason ?? null}, no_proof_note = ${clean(input.noProofNote)},`}
           updated_at = now()
         where id = ${id}`,
     );
