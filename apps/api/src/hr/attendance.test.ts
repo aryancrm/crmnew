@@ -68,6 +68,14 @@ async function dayRow(
 
 describe("attendance", () => {
   it("starts a day with Start my day, ends it with End my day, once a day", async () => {
+    // Signing in during working hours starts the day by itself; on a holiday it doesn't, so the
+    // buttons are tested alone whatever the time the tests run.
+    await db.execute(
+      sql`insert into holiday (day, name) values (${todayManila()}::date, 'Test holiday')
+        on conflict (day) where active do nothing`,
+    );
+    await db.execute(sql`delete from attendance where person_id = ${ids.ryan}`);
+    forgetSeen();
     expect((await send("ryan", "/api/hr/day/end")).status).toBe(409);
     expect((await send("ryan", "/api/hr/day/start", { place: "14.55,121.02" })).status).toBe(200);
     expect((await send("ryan", "/api/hr/day/start")).status).toBe(200);
@@ -80,6 +88,7 @@ describe("attendance", () => {
     const mine = await read<AttendanceMonth>("ryan", `/api/hr/attendance/${ids.ryan}`);
     const today = mine.days.find((one) => one.day === todayManila());
     expect(today).toMatchObject({ working: false, outFrom: "button", inFrom: "button" });
+    await db.execute(sql`delete from holiday where name = 'Test holiday'`);
   });
 
   it("starts the day by itself in working hours only, and keeps the last thing they did", async () => {
