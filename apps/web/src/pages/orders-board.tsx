@@ -110,12 +110,12 @@ const STRIP = ["Placed", "Management", "Finance", "Packed", "Shipped", "Delivere
 
 /** The customer's kind as the Leads card shows its type pill. */
 export const KIND_BADGE: Record<string, { label: string; style: string }> = {
-  hospital: { label: "Hospital", style: "border-transparent bg-sky-600 text-white" },
-  doctor: { label: "Doctor", style: "border-transparent bg-indigo-600 text-white" },
-  patient: { label: "Patient", style: "border-transparent bg-teal-600 text-white" },
-  drugstore: { label: "Drugstore", style: "border-transparent bg-amber-500 text-white" },
-  distributor: { label: "Distributor", style: "border-transparent bg-violet-600 text-white" },
-  government: { label: "Government", style: "border-transparent bg-rose-600 text-white" },
+  hospital: { label: "Hospital", style: "before:bg-sky-500" },
+  doctor: { label: "Doctor", style: "before:bg-indigo-500" },
+  patient: { label: "Patient", style: "before:bg-teal-500" },
+  drugstore: { label: "Drugstore", style: "before:bg-amber-500" },
+  distributor: { label: "Distributor", style: "before:bg-violet-500" },
+  government: { label: "Government", style: "before:bg-rose-500" },
 };
 
 const termsOf = (card: OrderCard) =>
@@ -952,7 +952,7 @@ export function OrderCardItem({
 
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
             <span
-              className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${kind?.style}`}
+              className={`inline-flex shrink-0 items-center gap-1 text-[10.5px] font-semibold text-slate-700 before:size-1.5 before:rounded-full before:content-[""] ${kind?.style}`}
             >
               {kind?.label}
             </span>
@@ -961,7 +961,7 @@ export function OrderCardItem({
                 {card.channel}
               </span>
             )}
-            <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold text-slate-800">
+            <span className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-slate-700">
               {termsOf(card)}
             </span>
             {card.customerCity && (
@@ -1269,7 +1269,7 @@ export function OrderCardItem({
                     type="button"
                     disabled={busy}
                     onClick={() => onAsk("hold")}
-                    className="h-8 rounded-lg bg-slate-100 text-xs font-semibold text-slate-800 hover:bg-slate-200 disabled:opacity-50"
+                    className="h-8 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                   >
                     Hold
                   </button>
@@ -1322,7 +1322,7 @@ export function OrderCardItem({
                     onClick={() =>
                       card.status === "shipped" ? onDispatch("failed") : onAsk("hold")
                     }
-                    className="h-8 rounded-lg bg-slate-100 text-xs font-semibold text-slate-800 hover:bg-slate-200 disabled:opacity-50"
+                    className="h-8 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                   >
                     {card.status === "shipped" ? "Came back" : "Hold"}
                   </button>
@@ -1361,7 +1361,7 @@ export function OrderCardItem({
                     type="button"
                     disabled={busy}
                     onClick={() => onAsk("hold")}
-                    className="h-8 rounded-lg bg-slate-100 text-xs font-semibold text-slate-800 hover:bg-slate-200 disabled:opacity-50"
+                    className="h-8 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                   >
                     Hold
                   </button>
@@ -1369,7 +1369,7 @@ export function OrderCardItem({
                     type="button"
                     disabled={busy}
                     onClick={() => onAsk("send_back")}
-                    className="h-8 rounded-lg bg-slate-100 text-xs font-semibold text-slate-800 hover:bg-slate-200 disabled:opacity-50"
+                    className="h-8 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                   >
                     Send back
                   </button>

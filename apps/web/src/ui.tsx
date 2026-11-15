@@ -168,9 +168,9 @@ export function Panel({
 
 const BUTTONS = {
   primary: "bg-brand text-white shadow-sm hover:bg-brand-dark",
-  plain: "bg-slate-100 text-slate-800 hover:bg-slate-200",
+  plain: "text-slate-700 hover:bg-slate-100 hover:text-slate-900",
   quiet: "text-slate-600 hover:bg-head hover:text-ink",
-  danger: "bg-rose-600 text-white shadow-sm hover:bg-rose-700",
+  danger: "text-rose-700 hover:bg-rose-50",
 };
 
 export function Button({

@@ -396,7 +396,7 @@ export function Order() {
         </div>
         {order.status === "draft" && (order.sentBackReason ?? order.flagReason) ? (
           // Sent back: Management's reason, and the MedRep's two ways to answer it.
-          <div className="mt-3 flex flex-col gap-2.5 rounded-xl bg-amber-400 px-3.5 py-3 text-[13px] text-amber-950 sm:flex-row sm:items-center">
+          <div className="mt-3 flex flex-col gap-2.5 rounded-xl bg-slate-50 px-3.5 py-3 text-[13px] text-slate-800 sm:flex-row sm:items-center">
             <Undo2 className="hidden size-5 shrink-0 text-amber-600 sm:block" aria-hidden="true" />
             <div className="min-w-0 flex-1">
               <div className="font-semibold">
@@ -418,7 +418,7 @@ export function Order() {
                 <button
                   type="button"
                   onClick={() => setAsking("resubmit")}
-                  className="inline-flex h-9 items-center rounded-lg bg-amber-950 px-3 text-xs font-semibold text-white hover:bg-amber-900"
+                  className="inline-flex h-9 items-center rounded-lg bg-brand px-3 text-xs font-semibold text-white hover:bg-brand-dark"
                 >
                   It's right as it is
                 </button>
@@ -426,7 +426,7 @@ export function Order() {
             )}
           </div>
         ) : order.flagReason ? (
-          <div className="mt-3 flex flex-col gap-2 rounded-xl bg-rose-600 px-3 py-2 text-[13px] text-white sm:flex-row sm:items-center">
+          <div className="mt-3 flex flex-col gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[13px] text-rose-700 sm:flex-row sm:items-center">
             <span className="flex flex-1 gap-2">
               <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
               <span>
@@ -459,7 +459,7 @@ export function Order() {
           </div>
         ) : null}
         {order.status !== "draft" && order.sentBackCount > 0 && order.sentBackReason && (
-          <div className="mt-3 rounded-xl bg-amber-400 px-3.5 py-2.5 text-[13px] leading-snug text-amber-950">
+          <div className="mt-3 rounded-xl bg-slate-50 px-3.5 py-2.5 text-[13px] leading-snug text-slate-800">
             <div>
               <b>
                 Sent back{order.sentBackCount > 1 ? ` ${order.sentBackCount} times` : ""}
@@ -704,32 +704,19 @@ function NextButton({ label, onClick }: { label: string; onClick: () => void }) 
 
 /** A finished or waiting fact on a step, one line. */
 function Fact({ shape, children, note }: { shape: Shape; children: ReactNode; note?: ReactNode }) {
-  const tone =
-    shape === "done" || shape === "skipped"
-      ? "border-transparent bg-emerald-600 text-white"
-      : shape === "now"
-        ? "border-transparent bg-amber-400 text-amber-950"
-        : shape === "stopped"
-          ? "border-transparent bg-rose-600 text-white"
-          : "border-transparent bg-slate-100 text-slate-500";
+  const tone = shape === "later" ? "text-slate-500" : "text-slate-800";
   return (
     <div
-      className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border px-3 py-2.5 text-[13px] ${tone}`}
+      className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-slate-50 px-3 py-2.5 text-[13px] ${tone}`}
     >
       <span
         aria-hidden="true"
-        className={`font-bold ${shape === "now" ? "text-amber-950" : shape === "later" ? "text-slate-300" : "text-white"}`}
+        className={`font-bold ${shape === "done" || shape === "skipped" ? "text-emerald-600" : shape === "now" ? "text-amber-500" : shape === "stopped" ? "text-rose-600" : "text-slate-300"}`}
       >
         {shape === "done" || shape === "skipped" ? "✓" : shape === "stopped" ? "!" : "●"}
       </span>
       <span className="min-w-0 flex-1">{children}</span>
-      {note && (
-        <span
-          className={`text-right ${shape === "now" ? "text-amber-900" : shape === "later" ? "text-slate-500" : "text-white/80"}`}
-        >
-          {note}
-        </span>
-      )}
+      {note && <span className="text-right text-slate-500">{note}</span>}
     </div>
   );
 }
@@ -1180,7 +1167,7 @@ function LicenceFacts({ order }: { order: OrderDetail["order"] }) {
     <div
       className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-[13px] ${
         expired || missing.length
-          ? "border-transparent bg-amber-400 text-amber-950"
+          ? "border-transparent bg-slate-50 text-slate-800"
           : "border-slate-200 text-slate-700"
       }`}
     >
@@ -1204,7 +1191,7 @@ function LicenceFacts({ order }: { order: OrderDetail["order"] }) {
       {missing.length > 0 && (
         <Link
           to={`/customers/${order.customerId}`}
-          className="text-xs font-semibold text-amber-950 underline"
+          className="text-xs font-semibold text-amber-700 underline"
         >
           Missing {missing.join(", ")}: fill it on the customer
         </Link>
@@ -1266,7 +1253,7 @@ function ManagementStep({
         </Fact>
       ) : null}
       {data.findings.length > 0 && (
-        <ul className="flex flex-col gap-1.5 rounded-xl bg-amber-400 px-3 py-2.5 text-[13px] text-amber-950">
+        <ul className="flex flex-col gap-1.5 rounded-xl bg-slate-50 px-3 py-2.5 text-[13px] text-slate-800">
           {data.findings.map((finding) => (
             <li key={finding.text} className="flex gap-2">
               <TriangleAlert
@@ -1551,7 +1538,7 @@ function FinanceStep({
         </Fact>
       )}
       {data.findings.length > 0 && !checked && (
-        <ul className="flex flex-col gap-1.5 rounded-xl bg-amber-400 px-3 py-2.5 text-[13px] text-amber-950">
+        <ul className="flex flex-col gap-1.5 rounded-xl bg-slate-50 px-3 py-2.5 text-[13px] text-slate-800">
           {data.findings.map((finding) => (
             <li key={finding.text} className="flex gap-2">
               <TriangleAlert
