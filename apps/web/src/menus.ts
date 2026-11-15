@@ -378,32 +378,52 @@ const messagesLink: MenuItem = folder(
   "Messages",
 );
 
-/** Each role's own desk, with Messages on it. */
+/** Each role's own desk, with "Me" (their own leave, forms and payslips) and Messages at the foot
+ *  of its work, and Speed with what they look things up in: few links, folders for the rest
+ *  (Aryan, 15 Nov: less clutter). */
 function deskFor(me: Me): Space {
   const space = ownDesk(me);
   const [first, ...rest] = space.groups;
   if (!first) return space;
   const listed = allItems(space.groups.flatMap((group) => group.items));
   // Everyone asks for their own leave, except the CEO and the Admin (HR records theirs).
-  const leave: MenuItem[] =
+  const mine: MenuItem[] =
     me.role === "ceo" || me.role === "admin"
       ? []
       : [
-          {
-            to: "/me/leave",
-            // HR's desk has the company's "Leave & forms": theirs is "My leave & forms".
-            label: listed.some((item) => item.label === "Leave & forms")
-              ? "My leave & forms"
-              : "Leave & forms",
-            icon: CalendarDays,
-          },
-          { to: "/me/payslips", label: "My payslips", icon: ReceiptText },
+          folder(
+            "Me",
+            User,
+            [
+              {
+                to: "/me/leave",
+                // HR's desk has the company's "Leave & forms": theirs is "My leave & forms".
+                label: listed.some((item) => item.label === "Leave & forms")
+                  ? "My leave & forms"
+                  : "Leave & forms",
+                icon: CalendarDays,
+              },
+              { to: "/me/payslips", label: "My payslips", icon: ReceiptText },
+            ],
+            "Me",
+          ),
         ];
-  const extra =
+  const speed =
     SPEED_ROLES.includes(me.role) && !listed.some((item) => item.to === "/speed")
-      ? [speedLink, ...leave, messagesLink]
-      : [...leave, messagesLink];
-  return { ...space, groups: [{ ...first, items: [...first.items, ...extra] }, ...rest] };
+      ? [speedLink]
+      : [];
+  const [lookUp, ...others] = rest;
+  return {
+    ...space,
+    groups: [
+      { ...first, items: [...first.items, ...mine, messagesLink] },
+      ...(lookUp
+        ? [{ ...lookUp, items: [...lookUp.items, ...speed] }, ...others]
+        : speed.length
+          ? [{ title: "Look up", items: speed }]
+          : []),
+    ],
+  };
 }
 
 /** Each role's own desk: only that person's work, and one link into the shared stock. */
@@ -451,14 +471,22 @@ function ownDesk(me: Me): Space {
               { ...home, badge: "awaiting" },
               // Aryan: All orders is the main list, right under Home.
               { to: "/orders", label: "All orders", icon: ClipboardList, short: "Orders" },
-              { to: "/orders/sent-back", label: "Sent back", icon: Undo2, badge: "sentBack" },
-              { to: "/on-hold", label: "On hold", icon: TriangleAlert, badge: "flagged" },
-              // Orders that haven't moved for two days at Finance or Dispatch, to chase.
-              { to: "/orders?stuck=1", label: "Stuck over 2 days", icon: Timer },
+              // What stopped: one folder (Aryan) for the three lists.
+              folder(
+                "Stopped orders",
+                TriangleAlert,
+                [
+                  { to: "/orders/sent-back", label: "Sent back", icon: Undo2, badge: "sentBack" },
+                  { to: "/on-hold", label: "On hold", icon: TriangleAlert, badge: "flagged" },
+                  // Orders that haven't moved for two days at Finance or Dispatch, to chase.
+                  { to: "/orders?stuck=1", label: "Stuck over 2 days", icon: Timer },
+                ],
+                "Stopped",
+              ),
               // Customers a MedRep added from the field that nobody has checked yet.
               {
                 to: "/customers?review=1",
-                label: "New customers to check",
+                label: "Customers to check",
                 icon: UserPlus,
                 badge: "customers",
                 short: "To check",
@@ -469,9 +497,16 @@ function ownDesk(me: Me): Space {
             title: "Look up",
             items: [
               stockLink,
-              { to: "/hospitals", label: "Hospitals", icon: Building2 },
-              { to: "/doctors", label: "Doctors", icon: Stethoscope },
-              { to: "/patients", label: "Patients", icon: User },
+              folder(
+                "Customers",
+                Users,
+                [
+                  { to: "/hospitals", label: "Hospitals", icon: Building2 },
+                  { to: "/doctors", label: "Doctors", icon: Stethoscope },
+                  { to: "/patients", label: "Patients", icon: User },
+                ],
+                "Customers",
+              ),
             ],
           },
         ],
@@ -501,8 +536,15 @@ function ownDesk(me: Me): Space {
             "Visits",
           ),
           { to: "/targets", label: "Targets", icon: Target },
-          { to: "/hr/attendance", label: "Team attendance", icon: CalendarClock },
-          { to: "/hr/leave", label: "Team leave & forms", icon: CalendarDays, badge: "leave" },
+          folder(
+            "Team attendance",
+            CalendarClock,
+            [
+              { to: "/hr/attendance", label: "Who's working", icon: CalendarClock },
+              { to: "/hr/leave", label: "Leave & forms", icon: CalendarDays, badge: "leave" },
+            ],
+            "Attendance",
+          ),
           customers,
         ]),
         icon: Users,
@@ -534,8 +576,8 @@ function ownDesk(me: Me): Space {
           {
             items: [
               { to: "/", label: "Orders to check", icon: ClipboardCheck, badge: "finance" },
-              ...moneyLinks,
               { to: "/orders", label: "All orders", icon: ClipboardList },
+              folder("Money", Banknote, moneyLinks, "Money"),
             ],
           },
           {
@@ -560,6 +602,7 @@ function ownDesk(me: Me): Space {
             // holds have their own links, like Management's.
             items: [
               { ...home, badge: "dispatch" },
+              { to: "/orders", label: "All orders", icon: ClipboardList, short: "Orders" },
               {
                 to: "/shipments",
                 label: "On the road",
@@ -573,7 +616,6 @@ function ownDesk(me: Me): Space {
                 icon: TriangleAlert,
                 badge: "dispatchHeld",
               },
-              { to: "/orders", label: "All orders", icon: ClipboardList, short: "Orders" },
             ],
           },
           {

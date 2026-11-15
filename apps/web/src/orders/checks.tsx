@@ -1,10 +1,10 @@
 // What Management checks on an order, at a glance on top of its card and in the table (Aryan):
 // the price against the buyer's list, the stock, the papers that kind of buyer sends (a
-// hospital's PO, a patient's prescription) and the customer (new, licence, owing). Each is a
-// small chip: green when fine, amber when it needs a look; the full words are on hover.
+// hospital's own purchase order, a patient's prescription) and the customer (new, licence,
+// owing). Each is a word with a dot before it, no box (Aryan): green when fine, yellow when it
+// needs a look, grey when it is only for information; the full words are on hover.
 
 import type { CustomerKind, OrderFinding, PaperKind } from "@2mg/api/types";
-import { Check, TriangleAlert } from "lucide-react";
 
 /** The paper each kind of buyer sends with an order. */
 const PAPER_FOR: Partial<Record<CustomerKind, { kind: PaperKind; label: string }>> = {
@@ -15,7 +15,7 @@ const PAPER_FOR: Partial<Record<CustomerKind, { kind: PaperKind; label: string }
   patient: { kind: "prescription", label: "Rx" },
 };
 
-type Checked = { key: string; ok: boolean; label: string; title: string };
+type Checked = { key: string; tone: "ok" | "warn" | "info"; label: string; title: string };
 
 export function checksOf(card: {
   findings: OrderFinding[];
@@ -29,33 +29,52 @@ export function checksOf(card: {
     return list.length
       ? {
           key,
-          ok: false,
+          tone: "warn" as const,
           label: list[0]?.short ?? fine,
           title: list.map((item) => item.text).join("\n"),
         }
-      : { key, ok: true, label: fine, title: fineTitle };
+      : { key, tone: "ok" as const, label: fine, title: fineTitle };
   };
   const out: Checked[] = [
     one("price", ["price"], "Price OK", "Every medicine at this buyer's list price"),
     one("stock", ["stock"], "In stock", "Everything on it is free on the shelf"),
   ];
+  // A hospital's (or distributor's) purchase order is their own paper, which the MedRep brings
+  // when they gave one: for information, never a problem. A patient's prescription is needed for
+  // a prescription medicine.
   const paper = PAPER_FOR[card.customerKind];
   if (paper)
     out.push(
       card.papers.includes(paper.kind)
-        ? { key: "paper", ok: true, label: paper.label, title: `${paper.label} on file` }
-        : {
+        ? {
             key: "paper",
-            ok: false,
-            label: `No ${paper.label}`,
-            title: `No ${paper.label === "Rx" ? "prescription" : "purchase order"} attached yet`,
-          },
+            tone: "ok",
+            label: paper.kind === "po" ? "Their PO attached" : "Rx attached",
+            title:
+              paper.kind === "po"
+                ? "The customer's purchase order is on file"
+                : "The prescription is on file",
+          }
+        : paper.kind === "po"
+          ? {
+              key: "paper",
+              tone: "info",
+              label: "No PO from them",
+              title:
+                "The customer's own purchase order (their paper asking us for these medicines) isn't attached. Optional: the MedRep adds it when they gave one.",
+            }
+          : {
+              key: "paper",
+              tone: "warn",
+              label: "No prescription",
+              title: "No prescription attached yet",
+            },
     );
   const proof = found(["papers"]);
   if (proof.length)
     out.push({
       key: "proof",
-      ok: false,
+      tone: "warn",
       label: proof[0]?.short ?? "No payment proof",
       title: proof.map((item) => item.text).join("\n"),
     });
@@ -70,6 +89,8 @@ export function checksOf(card: {
   return out;
 }
 
+const DOT = { ok: "bg-emerald-500", warn: "bg-amber-400", info: "bg-slate-300" };
+
 export function Checks({
   card,
   small = false,
@@ -79,27 +100,28 @@ export function Checks({
   small?: boolean;
 }) {
   const all = checksOf(card);
-  const shown = small ? all.filter((one) => !one.ok) : all;
-  const list = shown.length
+  const shown = small ? all.filter((one) => one.tone === "warn") : all;
+  const list: Checked[] = shown.length
     ? shown
-    : [{ key: "fine", ok: true, label: "All fine", title: all.map((one) => one.title).join("\n") }];
+    : [
+        {
+          key: "fine",
+          tone: "ok",
+          label: "All fine",
+          title: all.map((one) => one.title).join("\n"),
+        },
+      ];
   return (
-    <span className={`flex gap-1 ${small ? "flex-nowrap" : "flex-wrap"}`}>
+    <span className={`flex gap-x-3 gap-y-0.5 ${small ? "flex-nowrap" : "flex-wrap"}`}>
       {list.map((one) => (
         <span
           key={one.key}
           title={one.title}
-          className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 font-semibold whitespace-nowrap ${small ? "text-[10px]" : "text-[10.5px]"} ${
-            one.ok
-              ? "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200"
-              : "bg-amber-50 text-amber-900 ring-1 ring-amber-200"
+          className={`inline-flex items-center gap-1.5 whitespace-nowrap ${small ? "text-[11px]" : "text-[11.5px]"} ${
+            one.tone === "warn" ? "font-semibold text-slate-800" : "text-slate-600"
           }`}
         >
-          {one.ok ? (
-            <Check className="size-3" aria-hidden="true" />
-          ) : (
-            <TriangleAlert className="size-3" aria-hidden="true" />
-          )}
+          <span className={`size-1.5 shrink-0 rounded-full ${DOT[one.tone]}`} aria-hidden="true" />
           {one.label}
         </span>
       ))}
