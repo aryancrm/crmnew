@@ -90,7 +90,7 @@ const WHY: Partial<Record<OrderAction, { title: string; button: string; hint: st
   reject: {
     title: "Reject this order",
     button: "Reject",
-    hint: "The order is put on hold with your reason. Nothing goes further until it is taken off hold.",
+    hint: "It stops here with your reason (it is kept on hold, not deleted): nothing goes further until it is taken off hold. To end it for good, cancel it instead.",
   },
   hold: {
     title: "Put on hold",
@@ -100,7 +100,7 @@ const WHY: Partial<Record<OrderAction, { title: string; button: string; hint: st
   exception: {
     title: "Mark as an exception",
     button: "Mark exception",
-    hint: "For an order that needs a supervisor's decision.",
+    hint: "For a problem Management can't settle alone (a contract, a dispute, a special price): it waits on hold, marked Exception, until the CEO or a supervisor decides and it is taken off hold.",
   },
   cancel: {
     title: "Cancel this order",

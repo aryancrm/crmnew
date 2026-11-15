@@ -41,6 +41,8 @@ export function Inventory() {
   const [dialog, setDialog] = useState<"receive" | "medicine" | "news" | null>(null);
 
   const show = (params.get("show") ?? "all") as Show;
+  // One warehouse picked: only its column, and only what it holds.
+  const place = Number(params.get("wh")) || 0;
   const search = params.get("q") ?? "";
   const set = (key: string, value: string) => {
     const next = new URLSearchParams(params);
@@ -58,13 +60,17 @@ export function Inventory() {
       if (show === "low" && row.status !== "low") return false;
       if (show === "expiring" && !row.expiringSoon) return false;
       if (show === "expired" && row.expired === 0) return false;
+      if (place && !(row.stock[place] ?? 0)) return false;
       const text = `${row.name} ${row.strength ?? ""} ${row.code}`.toLowerCase();
       return words.every((word) => text.includes(word));
     });
-  }, [data, search, show]);
+  }, [data, search, show, place]);
 
   if (!data) return <PageState query={query} what="the inventory" />;
-  const { can, warehouses, summary } = data;
+  const { can, summary } = data;
+  const warehouses = place
+    ? data.warehouses.filter((warehouse) => warehouse.id === place)
+    : data.warehouses;
   const year = data.today;
 
   const tiles: { key: Show; label: string; value: number; tone: string }[] = [
@@ -154,6 +160,24 @@ export function Inventory() {
           className="field pl-10"
         />
       </div>
+      {data.warehouses.length > 1 && (
+        <div className="flex flex-wrap gap-1.5">
+          {[{ id: 0, name: "All warehouses" }, ...data.warehouses].map((warehouse) => (
+            <button
+              key={warehouse.id}
+              type="button"
+              onClick={() => set("wh", warehouse.id ? String(warehouse.id) : "")}
+              className={`h-8 rounded-full border px-3 text-xs font-semibold ${
+                place === warehouse.id
+                  ? "border-emerald-600 bg-emerald-50 text-emerald-800"
+                  : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {warehouse.name}
+            </button>
+          ))}
+        </div>
+      )}
 
       <Card className="hidden overflow-x-auto md:block">
         <table className="w-full border-collapse">

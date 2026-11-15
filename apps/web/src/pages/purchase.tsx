@@ -573,8 +573,13 @@ function PurchaseView({ data, onEdit }: { data: PurchaseDetail; onEdit: () => vo
   const ordered = purchase.state === "ordered";
 
   async function cancel() {
+    // Asked first, with why: a supplier order isn't called off by a stray click.
+    const reason = window.prompt(
+      `Cancel ${purchase.code}? Say why (the supplier, the price, no longer needed…).`,
+    );
+    if (reason === null) return;
     const done = await action.run(async () => {
-      await api(`/api/purchases/${purchase.id}/cancel`, { method: "POST" });
+      await api(`/api/purchases/${purchase.id}/cancel`, { body: { reason } });
     });
     if (done) await queries.invalidateQueries({ queryKey: ["inventory"] });
   }

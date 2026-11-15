@@ -141,7 +141,8 @@ export function purchaseRoutes(
 
   app.post("/api/purchases/:id/cancel", async (c) => {
     allow(c.get("me"), PURCHASE_ROLES, "cancel a purchase");
-    await cancelPurchase(db, idParam(c));
+    const { reason } = await readBody(c, z.object({ reason: z.string().max(300).default("") }));
+    await cancelPurchase(db, idParam(c), reason);
     return c.json({ ok: true });
   });
 

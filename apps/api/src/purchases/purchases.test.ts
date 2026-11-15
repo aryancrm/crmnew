@@ -249,8 +249,14 @@ describe("purchases", () => {
     const coming =
       (await inventory()).medicines.find((row) => row.id === imatinib)?.coming?.qty ?? 0;
     const id = (await (await post("irene", "/api/purchases", input)).json()).id as number;
-    expect((await post("irene", `/api/purchases/${id}/cancel`)).status).toBe(200);
+    // A cancel says why; the reason goes on the purchase's note.
+    expect((await post("irene", `/api/purchases/${id}/cancel`)).status).toBe(400);
+    expect(
+      (await post("irene", `/api/purchases/${id}/cancel`, { reason: "Supplier raised the price" }))
+        .status,
+    ).toBe(200);
     expect((await purchase(id)).purchase.state).toBe("cancelled");
+    expect((await purchase(id)).purchase.note).toContain("Cancelled: Supplier raised the price");
     expect((await inventory()).medicines.find((row) => row.id === imatinib)?.coming?.qty ?? 0).toBe(
       coming,
     );

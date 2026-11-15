@@ -432,10 +432,18 @@ export async function receivePurchase(
   });
 }
 
-export async function cancelPurchase(db: Database, id: number): Promise<void> {
+export async function cancelPurchase(db: Database, id: number, reason: string): Promise<void> {
+  const why = reason.trim();
+  const [now] = await rows<{ state: string }>(db, sql`select state from purchase where id = ${id}`);
+  if (now && now.state !== "ordered")
+    throw new Refusal(409, "not_ordered", "Only a purchase still on order can be cancelled.");
+  if (!why) throw new Refusal(400, "invalid", "Say why the order is cancelled.", "reason");
+  // The reason is kept on the purchase's note, after anything written there before.
   const done = await rows(
     db,
-    sql`update purchase set state = 'cancelled' where id = ${id} and state = 'ordered' returning id`,
+    sql`update purchase set state = 'cancelled',
+        note = concat_ws(E'\n', nullif(note, ''), ${`Cancelled: ${why}`}::text)
+      where id = ${id} and state = 'ordered' returning id`,
   );
   if (!done.length)
     throw new Refusal(409, "not_ordered", "Only a purchase still on order can be cancelled.");
