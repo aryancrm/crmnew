@@ -754,16 +754,6 @@ function adminPanel(me: Me): Space {
           { to: "/admin/data-checks", label: "Data checks", icon: ShieldCheck },
         ],
       },
-      {
-        title: "Apps",
-        items: appsFor(me).map((app) =>
-          folder(
-            app.label,
-            app.icon,
-            app.groups.flatMap((group) => group.items),
-          ),
-        ),
-      },
     ],
   };
 }

@@ -47,7 +47,7 @@ const KIND_WORD: Record<OrgUnit["kind"], string> = {
 
 /** Which work an Add button offers first in a box of this kind. */
 const ADD_FOR: Record<OrgUnit["kind"], Role[]> = {
-  company: ["management", "admin"],
+  company: ["management", "finance", "dispatch", "inventory", "hr", "admin"],
   business: ["team_lead", "medrep"],
   line: ["team_lead", "medrep"],
   team: ["medrep", "team_lead"],
