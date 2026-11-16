@@ -242,7 +242,7 @@ export function Shell() {
         {(() => {
           // With a main action (the MedRep's New order) it sits raised in the middle of the bar, the
           // tabs either side of it, as phone apps do.
-          const tabs = flat.slice(0, space.cta ? 4 : 5);
+          const tabs = (space.tabs ?? flat).slice(0, space.cta ? 4 : 5);
           const half = Math.ceil(tabs.length / 2);
           const openOf = linkOpen(location, flat);
           const tab = (item: (typeof flat)[number]) => (

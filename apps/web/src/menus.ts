@@ -127,6 +127,8 @@ export type Space = {
   cta?: { to: string; label: string };
   /** The way back to the person's own desk, when this is an app they stepped into. */
   back?: { to: string; label: string };
+  /** The phone's tab bar, when it isn't the menu's first links. */
+  tabs?: MenuItem[];
 };
 
 const COST_ROLES: Role[] = ["inventory", "management", "finance", "ceo", "admin"];
@@ -453,17 +455,39 @@ function deskFor(me: Me): Space {
       ? [speedLink]
       : [];
   const [lookUp, ...others] = rest;
+  // A lead's or a head's desk is long: the same links, under three headings (the day's work, the
+  // team, what they look things up in) so it doesn't read as one long list. Nothing is taken off
+  // (Aryan, 17 Nov), and the phone's tab bar keeps the links it had.
+  const sorted = LEAD_ROLES.includes(me.role) ? sortLead(first.items) : null;
+  const work = sorted ? sorted.work : first.items;
+  const found = sorted ? sorted.lookUp : [];
+  const team = sorted?.team ?? [];
+  const lookUpItems = [...(lookUp?.items ?? []), ...found, ...speed];
   return {
     ...space,
+    ...(sorted ? { tabs: first.items } : {}),
     groups: [
-      { ...first, items: [...first.items, ...mine, messagesLink] },
-      ...(lookUp
-        ? [{ ...lookUp, items: [...lookUp.items, ...speed] }, ...others]
-        : speed.length
-          ? [{ title: "Look up", items: speed }]
-          : []),
+      { ...first, items: [...work, ...mine, messagesLink] },
+      ...(team.length ? [{ title: "Team", items: team }] : []),
+      ...(lookUpItems.length ? [{ title: "Look up", ...(lookUp ?? {}), items: lookUpItems }] : []),
+      ...others,
     ],
   };
+}
+
+const LEAD_ROLES: Role[] = ["team_lead", "manager"];
+/** Links about the people under a lead: their team, scores, targets, visits and attendance. */
+const TEAM_LINKS = ["/my-team", "/team-scores", "/targets", "/hr/attendance", "/field/report", "/rx/field"];
+/** What a lead looks things up in: customers and the stock. */
+const LOOK_UP_LINKS = ["/customers", "/medicines"];
+/** Splits a lead's links into the day's work, the team and the look-ups, keeping their order. A
+ *  "Team" heading over a single link would say nothing, so one team link stays with the work. */
+function sortLead(items: MenuItem[]): { work: MenuItem[]; team: MenuItem[]; lookUp: MenuItem[] } {
+  const lookUp = items.filter((item) => LOOK_UP_LINKS.includes(item.to));
+  const rest = items.filter((item) => !LOOK_UP_LINKS.includes(item.to));
+  const team = rest.filter((item) => TEAM_LINKS.includes(item.to));
+  if (team.length < 2) return { work: rest, team: [], lookUp };
+  return { work: rest.filter((item) => !TEAM_LINKS.includes(item.to)), team, lookUp };
 }
 
 /** Each role's own desk: only that person's work, and one link into the shared stock. */
