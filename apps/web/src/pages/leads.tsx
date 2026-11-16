@@ -475,14 +475,11 @@ function LeadCardItem({ card }: { card: LeadCard }) {
             <div className="min-w-0">
               <div className="flex min-w-0 items-center gap-1.5">
                 <h3
-                  className="truncate text-sm font-semibold tracking-tight text-slate-900 transition-colors group-hover:text-emerald-800"
-                  title={card.name}
+                  className="truncate text-[15px] font-semibold tracking-tight text-slate-900 transition-colors group-hover:text-emerald-800"
+                  title={`${card.name} · ${card.code}`}
                 >
                   {card.name}
                 </h3>
-                <span className="shrink-0 rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[10px] font-semibold text-slate-600">
-                  {card.code}
-                </span>
               </div>
               {card.patient && (
                 <div
