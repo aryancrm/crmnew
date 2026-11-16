@@ -268,7 +268,7 @@ describe("what the customer was given before", () => {
     const detail = await read<OrderDetail>("sarla", `/api/orders/${first}`);
     const item = detail.items[0]?.id as number;
     const prices = await read<OrderPrices>("sarla", `/api/orders/${first}/prices`);
-    expect(prices.customer).toMatchObject({ id: hospital, orders: 2, firstOn: "2026-06-03", lastOn: "2026-10-12", lastCode: "SO-67227" });
+    expect(prices.customer).toMatchObject({ id: hospital, orders: 2, bought: 552960, firstOn: "2026-06-03", lastOn: "2026-10-12", lastCode: "SO-67227" });
     expect(prices.customer.top[0]).toMatchObject({ times: 2, lastPrice: 6680 });
     expect(prices.lines[item]).toMatchObject({ times: 2, lastPrice: 6680 });
     expect(prices.lines[item]?.rows[0]).toMatchObject({ code: "SO-67227", from: "zoho", qty: 36, freeQty: 36 });

@@ -152,9 +152,9 @@ export async function orderPrices(db: Database, me: Me, id: number): Promise<Ord
   const [lines, past, own] = await Promise.all([
     linesOf(db, customerId, id),
     pastOf(db, customerId),
-    rows<{ orders: number; lastAt: string | null; firstAt: string | null }>(
+    rows<{ orders: number; bought: number; lastAt: string | null; firstAt: string | null }>(
       db,
-      sql`select count(*)::int as orders,
+      sql`select count(*)::int as orders, coalesce(sum(total), 0)::float8 as bought,
           to_char(max(coalesce(submitted_at, created_at)) at time zone 'Asia/Manila', 'YYYY-MM-DD') as "lastAt",
           to_char(min(coalesce(submitted_at, created_at)) at time zone 'Asia/Manila', 'YYYY-MM-DD') as "firstAt"
         from sales_order where customer_id = ${customerId} and id < ${id} and status not in ('draft', 'cancelled')`,
@@ -169,6 +169,7 @@ export async function orderPrices(db: Database, me: Me, id: number): Promise<Ord
     customer: {
       id: customerId,
       orders: past.orders + (own[0]?.orders ?? 0),
+      bought: past.bought + (own[0]?.bought ?? 0),
       firstOn: days.length ? days.reduce((a, b) => (a < b ? a : b)) : null,
       lastOn: days.length ? days.reduce((a, b) => (a > b ? a : b)) : null,
       lastCode: lines[0]?.code ?? null,

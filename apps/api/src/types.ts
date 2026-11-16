@@ -2322,8 +2322,9 @@ export type CustomerPrices = {
 export type OrderPrices = {
   customer: {
     id: number;
-    /** Orders before this one, Zoho's included. */
+    /** Orders before this one, Zoho's included, and what they came to (centavos). */
     orders: number;
+    bought: number;
     firstOn: string | null;
     lastOn: string | null;
     lastCode: string | null;
