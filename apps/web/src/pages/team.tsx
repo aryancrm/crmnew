@@ -18,6 +18,7 @@ import { PageState } from "../ui";
 import { PACE_TEXT, PaceBar } from "./ceo-home";
 import { seatWords } from "../seat-words";
 import { B2bTeamCard } from "./b2b";
+import { ClidpTeamCard } from "./clidp";
 import { DistrictNow } from "./district";
 import { HeadRisks, MentorHome, RxMentorHome, TelesalesCoachHome } from "./mentor";
 import { greeting, todayWords } from "./home";
@@ -167,6 +168,7 @@ export function TeamSalesPage() {
       {tsCoach && <TelesalesCoachHome />}
       {rxMentor && <RxMentorHome />}
       {b2bHead && <B2bTeamCard />}
+      {b2bHead && me.role === "manager" && <ClidpTeamCard />}
       {b2bHead && me.role === "manager" && <HeadRisks />}
 
       {!coach && !mentor && (

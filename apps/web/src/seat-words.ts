@@ -34,7 +34,9 @@ export const b2bRole = (me: Pick<Me, "role" | "title" | "channel"> | null | unde
       ? "nbd"
       : /\bCRR\b|Retention/i.test(me.title ?? "")
         ? "crr"
-        : null;
+        : /CLIDP/i.test(me.title ?? "")
+          ? "clidp"
+          : null;
 
 const B2B: Record<string, string> = {
   team_lead: "B2B Sales Coach",
@@ -59,7 +61,13 @@ export function seatWords(me: Person | null | undefined): Words {
   if (me.channel?.code === "TS" && me.business === "RX" && TS[me.role])
     return { desk: TS[me.role] as string, customers: "patients and doctors", myCustomers: "My patients", toCall: "Refills due" };
   const b2b = b2bRole(me);
-  if (b2b) return { desk: b2b === "nbd" ? "NBD · New Business" : "CRR · Retention & Reorder", customers: "accounts", myCustomers: "My accounts", toCall: "Accounts to call" };
+  if (b2b)
+    return {
+      desk: b2b === "nbd" ? "NBD · New Business" : b2b === "crr" ? "CRR · Retention & Reorder" : "CLIDP Sales Coach",
+      customers: "accounts",
+      myCustomers: "My accounts",
+      toCall: "Accounts to call",
+    };
   if (me.channel?.code === "B2B" && B2B[me.role])
     return { desk: B2B[me.role] as string, customers: "accounts", myCustomers: "Accounts", toCall: "Accounts to call" };
   if (me.channel?.code === "RX" && RX[me.role])

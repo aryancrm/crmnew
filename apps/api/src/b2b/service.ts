@@ -13,7 +13,8 @@ import { inForce } from "../org/service";
 import { teamSeats } from "../team/service";
 import type { B2bTeam, CrrDay, CustomerInput, Me, NbdDay } from "../types";
 
-export type B2bRole = "nbd" | "crr" | null;
+export type B2bRole = "nbd" | "crr" | "clidp" | null;
+/** NBD, CRR or CLIDP inside Sales and Marketing, by the seat's title as the chart names them. */
 export const b2bRole = (me: Pick<Me, "role" | "title" | "channel">): B2bRole =>
   me.role !== "medrep" || me.channel?.code !== "B2B"
     ? null
@@ -21,7 +22,9 @@ export const b2bRole = (me: Pick<Me, "role" | "title" | "channel">): B2bRole =>
       ? "nbd"
       : /\bCRR\b|Retention/i.test(me.title ?? "")
         ? "crr"
-        : null;
+        : /CLIDP/i.test(me.title ?? "")
+          ? "clidp"
+          : null;
 
 const B2B_KINDS = ["drugstore", "distributor", "hospital"] as const;
 const READY_ORDERS = 3;
@@ -100,7 +103,7 @@ export async function nbdDay(db: Database, me: Me): Promise<NbdDay> {
 type Account = CrrDay["accounts"][number];
 
 /** The accounts a CRR looks after (handed to them, or of their seat's area) and each one's health. */
-async function accountsOf(db: Database, crrIds: number[], areaIds: number[], today: string): Promise<Account[]> {
+export async function accountsOf(db: Database, crrIds: number[], areaIds: number[], today: string): Promise<Account[]> {
   if (!crrIds.length && !areaIds.length) return [];
   const first = `${today.slice(0, 7)}-01`;
   const prevFirst = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 2, 1)).toISOString().slice(0, 10);
@@ -144,7 +147,7 @@ async function accountsOf(db: Database, crrIds: number[], areaIds: number[], tod
   }));
 }
 
-async function seatAreas(db: Database, personId: number, today: string): Promise<number[]> {
+export async function seatAreas(db: Database, personId: number, today: string): Promise<number[]> {
   const found = await rows<{ id: number }>(
     db,
     sql`select s.area_id::int as id from seat_holder h join seat s on s.id = h.seat_id

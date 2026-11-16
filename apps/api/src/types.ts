@@ -4570,3 +4570,30 @@ export type B2bTeam = {
   handOvers: NbdDay["prospects"];
   crrPeople: { personId: number; name: string }[];
 };
+
+/** A CLIDP Sales Coach's day. */
+export type ClidpDay = {
+  today: string;
+  /** Volume against target on the working-day pace, %. */
+  volume: { pace: number | null; note: string };
+  accounts: CrrDay["accounts"];
+  owed: { total: number; rows: Collections["rows"] };
+  listings: {
+    id: number;
+    customerId: number;
+    customer: string;
+    medicine: string;
+    brand: string;
+    certificateNo: string | null;
+    validUntil: string | null;
+    daysLeft: number | null;
+    state: "valid" | "expiring" | "expired" | "no date";
+  }[];
+};
+
+/** The heads' CLIDP coaches. */
+export type ClidpTeam = {
+  today: string;
+  soon: string;
+  rows: { personId: number; name: string; pace: number | null; owed: number; accounts: number; late: number; listingsExpiring: number }[];
+};

@@ -29,6 +29,7 @@ import { GoHereFirst, HuddleCard, TodaysPulse } from "./hospital-day";
 import { RxHome } from "./rx";
 import { TelesalesDay } from "./telesales";
 import { CrrHome, NbdHome } from "./b2b";
+import { ClidpHome } from "./clidp";
 import { b2bRole } from "../seat-words";
 import { greeting, todayWords } from "./home";
 import { OrderCardItem } from "./orders-board";
@@ -168,6 +169,7 @@ export function MedrepHome() {
       {/* B2B: the NBD's prospects to hand-over, the CRR's accounts against their usual gap. */}
       {b2b === "nbd" && <NbdHome />}
       {b2b === "crr" && <CrrHome />}
+      {b2b === "clidp" && <ClidpHome />}
 
       {/* Today and this month at a glance: the two numbers asked most. */}
       {!hospital && !anesthesia && !rx && !telesales && !b2b && (

@@ -324,6 +324,7 @@ const reportsApp: Space = {
         { to: "/care-groups", label: "Care groups", icon: Users },
         { to: "/rx/field", label: "Rx field team", icon: Stethoscope },
         { to: "/b2b/team", label: "B2B team", icon: Building2 },
+        { to: "/clidp/team", label: "CLIDP", icon: FileText },
         { to: "/targets", label: "Targets", icon: Target },
       ],
     },
@@ -518,6 +519,18 @@ function ownDesk(me: Me): Space {
             folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
             { to: "/collections", label: "Collections", icon: HandCoins },
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+          ]),
+          cta: { ...newOrder, label: "New order" },
+        };
+      // CLIDP (Sales and Marketing, docs/PLAN.md 16.5): bulk to distributors under their listings.
+      if (b2bRole(me) === "clidp")
+        return {
+          ...desk([
+            home,
+            { to: "/my/area", label: "Accounts", icon: Building2, short: "Accounts" },
+            { to: "/clidp/listings", label: "Listings", icon: FileText },
+            folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+            { to: "/collections", label: "Collections", icon: HandCoins },
           ]),
           cta: { ...newOrder, label: "New order" },
         };
