@@ -62,8 +62,13 @@ function AtAGlance({ money, stock }: { money: Data["money"]; stock: Data["stock"
         <MoneySide
           title="We owe"
           tone="out"
-          total={money.refundsOwed + money.purchasesValue}
+          total={money.refundsOwed + money.billsValue}
           rows={[
+            {
+              label: `Supplier bills unpaid (${num(money.billsOpen)})`,
+              value: money.billsValue,
+              to: "/books/bills",
+            },
             {
               label: "Refunds to customers",
               value: money.refundsOwed,
@@ -71,10 +76,10 @@ function AtAGlance({ money, stock }: { money: Data["money"]; stock: Data["stock"
               bad: money.refundsOwed > 0,
             },
             {
-              label: `Supplier orders not received (${money.purchasesOpen})`,
+              label: `Ordered from suppliers, not received (${money.purchasesOpen})`,
               value: money.purchasesValue,
-              to: "/purchases",
-              note: "Landed cost; supplier bills aren't kept yet",
+              to: "/books/purchaseorders",
+              note: "Billed when it comes in",
             },
           ]}
         />

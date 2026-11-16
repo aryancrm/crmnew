@@ -1595,6 +1595,9 @@ export type CeoHome = MonthFacts & {
     /** Ordered from suppliers, not received yet (landed, in pesos). */
     purchasesOpen: number;
     purchasesValue: number;
+    /** Suppliers' unpaid bills and what is left on them (with their openings), in centavos. */
+    billsOpen: number;
+    billsValue: number;
   };
   orders: {
     awaiting: number;

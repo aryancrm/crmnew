@@ -319,6 +319,13 @@ export async function ceoHome(
     sql`select count(*)::int as count, coalesce(sum(goods_total + extras_total), 0)::float8 as value
       from purchase where state = 'ordered'`,
   );
+  // Suppliers' unpaid bills (the books: Zoho's and the ones made here) with their openings.
+  const [bills] = await rows<{ count: number; value: number }>(
+    db,
+    sql`select count(*)::int as count,
+        ((select coalesce(sum(opening_payables), 0) from supplier) + coalesce(sum(round(balance * fx_rate)), 0))::float8 as value
+      from book_doc where kind = 'bill' and balance > 0 and status not in ('void', 'draft', 'pending_approval')`,
+  );
   const [channels, totals, money, orders, dispatch, stock, counts] = await Promise.all([
     channelSales(db, facts),
     rows<{
@@ -515,6 +522,8 @@ export async function ceoHome(
       onDelivery: owed.onDelivery,
       purchasesOpen: buying?.count ?? 0,
       purchasesValue: buying?.value ?? 0,
+      billsOpen: bills?.count ?? 0,
+      billsValue: bills?.value ?? 0,
     },
     orders: waiting,
     dispatch: dispatch[0] ?? { toPack: 0, toShip: 0, onTheWay: 0, deliveredToday: 0 },
