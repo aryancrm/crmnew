@@ -45,7 +45,9 @@ export const CHART_2026: ChartUnit[] = [
       },
       {
         name: "NCR 2", kind: "team", channel: "HOSP",
-        seats: [{ title: "District Sales Coach – NCR 2", module: "team_lead", lead: true }, chc("Quezon City"), chc("Camanava, Bulacan", ["Caloocan", "Malabon", "Navotas", "Valenzuela", "Bulacan"]), chc("Marikina, Pasig")],
+        seats: [{ title: "District Sales Coach – NCR 2", module: "team_lead", lead: true }, chc("Quezon City"), chc("Camanava, Bulacan", ["Caloocan", "Malabon", "Navotas", "Valenzuela", "Bulacan"]), chc("Marikina, Pasig"),
+          // On the chart without a territory yet (Jomari Esguerra).
+          { title: "Customer Happiness Coachee – NCR 2", module: "medrep" }],
       },
       {
         name: "North & Central Luzon", kind: "team", channel: "HOSP",
@@ -80,7 +82,7 @@ export const CHART_2026: ChartUnit[] = [
     name: "Prescription Business",
     kind: "business",
     channel: "RX",
-    seats: [{ title: "PH Country Mentor", module: "manager", lead: true }],
+    seats: [{ title: "PX Country Mentor", module: "manager", lead: true }],
     units: [
       {
         // Uro & Onco Care and Blood & Bone Care work the same way: one team (Aryan, 16 Nov).
