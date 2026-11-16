@@ -15,6 +15,7 @@
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { sql } from "drizzle-orm";
 import { openDatabase } from "../src/db/index";
 import { migrate } from "../src/db/migrate";
 import { seedDemo } from "../src/seed";
@@ -278,6 +279,17 @@ const db = memory ? openDatabase({ dir: "memory" }) : testDir ? openDatabase({ d
 if (memory || testDir) await migrate(db);
 if (memory) await seedDemo(db, "not-a-real-password-1");
 const writes = apply || memory;
+{
+  // A database that has not had this change's migration yet (the live API still starting).
+  const found = (await db.execute(sql`select to_regclass('past_order') as here`)) as unknown;
+  const first = (Array.isArray(found) ? found : ((found as { rows?: unknown[] }).rows ?? []))[0] as
+    | { here: string | null }
+    | undefined;
+  if (!first?.here) {
+    console.log("This database has no past_order table yet: let the API start once on the new code (it migrates), then run this again.");
+    process.exit(1);
+  }
+}
 
 const add = <T extends Record<string, unknown>>(sum: T | null, part: T): T => {
   if (!sum) return { ...part };
