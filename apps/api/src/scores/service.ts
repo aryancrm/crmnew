@@ -11,7 +11,7 @@ import { Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
 import { inForce } from "../org/service";
 import { teamSeats } from "../team/service";
-import type { Me, MyScore, ScoreCard, ScoreDispute, TeamScores } from "../types";
+import type { Me, MyScore, ScoreCard, ScoreDispute, TeamNeed, TeamScores } from "../types";
 import { incrementOf, type Recipe, RECIPES, scoreOf } from "./recipes";
 
 const WHOLE = ["ceo", "admin"];
@@ -36,9 +36,12 @@ const daysBetween = (from: string, to: string) => {
 };
 
 /** The card a seat is scored on: Hospital CHC for a hospital MedRep, Rx CHC for a prescription
- *  MedRep, B2C CHC for the online desk. Leads and the other channels have no card here yet. */
+ *  MedRep, B2C CHC for the online desk, the B2C card for telesales (until theirs is published),
+ *  and a lead their team's average. Leads and the other channels have no card here yet. */
 export function recipeFor(seat: { module: string; lead: boolean; channel: string | null } | undefined): Recipe | null {
-  if (!seat || seat.lead) return null;
+  if (!seat) return null;
+  if (seat.lead || seat.module === "team_lead" || seat.module === "manager") return RECIPES.team;
+  if (seat.channel === "TS") return RECIPES.telesales;
   if (seat.module === "online" || seat.channel === "ONLINE") return RECIPES.b2c;
   if (seat.module === "medrep" && seat.channel === "HOSP") return RECIPES.hospital;
   if (seat.module === "medrep" && seat.channel === "RX") return RECIPES.rx;
@@ -84,6 +87,7 @@ export async function measure(
   upTo: string,
   live: boolean,
 ): Promise<{ values: Record<string, number | null>; notes: Record<string, string>; active: boolean }> {
+  if (recipe.key === "team") return teamMeasure(db, personId, month, upTo);
   const first = firstOf(month);
   const last = lastOf(month);
   const prevFirst = firstOf(shiftMonth(month, -1));
@@ -208,6 +212,42 @@ export async function measure(
   return { values, notes, active };
 }
 
+/** A lead's month: the average of the cards of the people in the seats under them (not other
+ *  leads, so a head's number isn't counted twice). */
+async function teamMeasure(db: Database, personId: number, month: string, upTo: string) {
+  const [who] = await rows<{ role: Me["role"] }>(db, sql`select role from person where id = ${personId}`);
+  if (!who) return { values: { team: null }, notes: { team: "" }, active: false };
+  let seatIds: number[] = [];
+  try {
+    seatIds = (await teamSeats(db, { id: personId, role: who.role } as Me, null)).seatIds;
+  } catch {
+    seatIds = [];
+  }
+  const members = seatIds.length
+    ? await rows<{ personId: number; module: string; lead: boolean; channel: string | null }>(
+        db,
+        sql`select distinct on (h.person_id) h.person_id::int as "personId", s.module, s.lead, ch.code as channel
+          from seat s join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", upTo)}
+            left join area a on a.id = s.area_id left join channel ch on ch.id = a.channel_id
+          where s.id in (${sql.join(seatIds.map((id) => sql`${id}`), sql`, `)}) and h.person_id <> ${personId}
+          order by h.person_id, h.starts_on desc`,
+      )
+    : [];
+  const percents: number[] = [];
+  for (const member of members) {
+    const recipe = recipeFor(member);
+    if (!recipe || recipe.key === "team") continue;
+    const card = await cardOf(db, member.personId, month, upTo);
+    if (card && card.max > 0) percents.push(card.percent);
+  }
+  const average = percents.length ? percents.reduce((a, b) => a + b, 0) / percents.length : null;
+  return {
+    values: { team: average },
+    notes: { team: percents.length ? `${percents.length} people's cards averaged` : "No one under them has a card yet" },
+    active: percents.length > 0,
+  };
+}
+
 /** A person's card for a month: the locked one when the month is locked, else worked out now. */
 export async function cardOf(db: Database, personId: number, month: string, today = todayManila()): Promise<ScoreCard | null> {
   const [locked] = await rows<{ recipe: string; total: number; max: number; capped: boolean; kpis: ScoreCard["kpis"]; lockedAt: string }>(
@@ -229,7 +269,8 @@ export async function cardOf(db: Database, personId: number, month: string, toda
   const recipe = recipeFor(await seatOn(db, personId, upTo));
   if (!recipe) return null;
   const { values, notes, active } = await measure(db, personId, recipe, month, upTo, live);
-  if (!active && !live) return null;
+  // Nothing to score (no target, sale, order, enquiry; for a lead, no one carded): no card.
+  if (!active) return null;
   const scored = scoreOf(recipe, values);
   return {
     month: month.slice(0, 7), recipe: recipe.key, label: recipe.label, source: recipe.source, live, lockedOn: null, upTo,
@@ -251,6 +292,8 @@ export async function lockMonth(db: Database, month: string, again = false): Pro
       where h.kind = 'holder' and h.starts_on <= ${last}::date and (h.ends_on is null or h.ends_on >= ${first}::date)
       order by h.person_id, h.starts_on desc, h.id desc`,
   );
+  // Leads last: their card is their team's locked cards.
+  people.sort((a, b) => Number(recipeFor(a)?.key === "team") - Number(recipeFor(b)?.key === "team"));
   let locked = 0;
   for (const one of people) {
     const recipe = recipeFor(one);
@@ -386,11 +429,13 @@ export async function teamScores(db: Database, me: Me, asked: { month?: string; 
       return { ...seat, card, ...year };
     }),
   );
-  const ids = people.flatMap((one) => (one.personId ? [one.personId] : []));
+  // A lead's row only when someone under them has a card.
+  const shown = people.filter((one) => one.card || recipeFor(one)?.key !== "team");
+  const ids = shown.flatMap((one) => (one.personId ? [one.personId] : []));
   return {
     month,
     today,
-    rows: people.map((one) => ({
+    rows: shown.map((one) => ({
       seatId: one.seatId, title: one.title, area: one.area, unit: one.unit, personId: one.personId, name: one.name,
       card: one.card, average: one.average, increment: one.increment, pip: one.pip,
       history: one.history.map((h) => ({ month: h.month, percent: h.percent })),
@@ -427,4 +472,37 @@ export async function answerDispute(db: Database, me: Me, id: number, input: { u
     sql`update score_dispute set state = ${input.upheld ? "upheld" : "turned_down"}, answer = ${input.answer},
       answered_by = ${me.id}, answered_at = now() where id = ${id}`,
   );
+}
+
+/** For a lead's "needs you now": the people under them whose month is going badly on their card
+ *  (below 60 with a week gone), whose coverage gate is failing, or who are due an improvement
+ *  plan (below 60 two locked months running). Leads' own team cards are left out. */
+export async function scoreNeeds(db: Database, seatIds: number[], today: string): Promise<TeamNeed[]> {
+  if (!seatIds.length) return [];
+  const held = await rows<{ seatId: number; personId: number; name: string; module: string; lead: boolean; channel: string | null }>(
+    db,
+    sql`select distinct on (h.person_id) s.id::int as "seatId", h.person_id::int as "personId", p.name, s.module, s.lead, ch.code as channel
+      from seat s join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)}
+        join person p on p.id = h.person_id
+        left join area a on a.id = s.area_id left join channel ch on ch.id = a.channel_id
+      where s.id in (${sql.join(seatIds.map((id) => sql`${id}`), sql`, `)})
+      order by h.person_id, h.starts_on desc`,
+  );
+  const needs: TeamNeed[] = [];
+  const base = { orderId: null, code: null, customer: null, customerId: null, since: null, amount: null } as const;
+  for (const one of held) {
+    const recipe = recipeFor(one);
+    if (!recipe || recipe.key === "team") continue;
+    const [card, year] = await Promise.all([cardOf(db, one.personId, today.slice(0, 7), today), yearOf(db, one.personId, shiftMonth(today, 1))]);
+    if (year.pip)
+      needs.push({ ...base, kind: "score", who: one.name, seatId: one.seatId, why: "Below 60 two months running: the improvement plan is due" });
+    if (!card) continue;
+    // Give the month a week before calling a low score.
+    if (Number(today.slice(8)) >= 8 && card.max > 0 && card.percent < 60)
+      needs.push({ ...base, kind: "score", who: one.name, seatId: one.seatId, why: `Score ${card.total} of ${card.max} this month, below 60` });
+    const gate = card.kpis.find((kpi) => kpi.weight === 0 && kpi.band && kpi.band !== "Pass");
+    if (gate && Number(today.slice(8)) >= 15)
+      needs.push({ ...base, kind: "score", who: one.name, seatId: one.seatId, why: `${gate.label.split(" ·")[0]} gate failing: ${gate.note}` });
+  }
+  return needs;
 }

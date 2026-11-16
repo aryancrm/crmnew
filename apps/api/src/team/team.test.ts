@@ -97,7 +97,8 @@ describe("a team lead's team", () => {
     expect(empty?.stages.management).toBe(1);
     expect(empty?.customers).toBe(1);
     expect(seen.totals).toMatchObject({ waiting: 3, stopped: 1, vacant: 1, placed: 4 });
-    expect(seen.needs.map((need) => need.kind)).toEqual(["held", "vacant"]);
+    // The order and seat needs; a scorecard one may follow, by the day of the month.
+    expect(seen.needs.filter((need) => need.kind !== "score").map((need) => need.kind)).toEqual(["held", "vacant"]);
     expect(seen.needs[1]?.why).toContain("1 customer and 1 open order wait with you");
 
     // One seat's orders and customers, for the person's page.

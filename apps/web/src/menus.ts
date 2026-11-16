@@ -568,6 +568,7 @@ function ownDesk(me: Me): Space {
             [
               { to: "/my-team", label: "Whole team", icon: Users, teams: true },
               { to: "/team-scores", label: "Scorecards", icon: Gauge },
+              { to: "/my/score", label: "My score", icon: Gauge },
             ],
             "Team",
           ),

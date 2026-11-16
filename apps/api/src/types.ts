@@ -2958,7 +2958,7 @@ export type TeamSeatCard = {
 
 /** Something under the lead that needs them, the most urgent first. */
 export type TeamNeed = {
-  kind: "sent_back" | "held" | "late" | "overdue" | "vacant";
+  kind: "sent_back" | "held" | "late" | "overdue" | "vacant" | "score";
   orderId: number | null;
   code: string | null;
   customer: string | null;

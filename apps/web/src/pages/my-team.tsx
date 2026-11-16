@@ -20,6 +20,7 @@ import {
   CirclePause,
   Clock,
   Eye,
+  Gauge,
   HandCoins,
   Mail,
   MapPin,
@@ -364,6 +365,7 @@ const NEED: Record<TeamNeed["kind"], { icon: ReactNode; tone: string }> = {
   late: { icon: <Clock className="size-4" />, tone: "bg-violet-50 text-violet-700" },
   overdue: { icon: <Banknote className="size-4" />, tone: "bg-rose-50 text-rose-600" },
   vacant: { icon: <UserRoundX className="size-4" />, tone: "bg-amber-50 text-amber-700" },
+  score: { icon: <Gauge className="size-4" />, tone: "bg-violet-50 text-violet-700" },
 };
 
 function Needs({ needs, seatHref }: { needs: TeamNeed[]; seatHref: (seatId: number) => string }) {
@@ -372,9 +374,9 @@ function Needs({ needs, seatHref }: { needs: TeamNeed[]; seatHref: (seatId: numb
   return (
     <ul className="-mx-2 max-h-[26rem] overflow-y-auto">
       {needs.map((need) => (
-        <li key={`${need.kind}-${need.code ?? need.seatId}`}>
+        <li key={`${need.kind}-${need.code ?? need.seatId}-${need.why}`}>
           <Link
-            to={need.orderId ? `/orders/${need.orderId}` : seatHref(need.seatId ?? 0)}
+            to={need.orderId ? `/orders/${need.orderId}` : need.kind === "score" ? "/team-scores" : seatHref(need.seatId ?? 0)}
             className="flex items-start gap-3 rounded-lg px-2 py-2 hover:bg-slate-50"
           >
             <span

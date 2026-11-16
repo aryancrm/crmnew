@@ -516,7 +516,7 @@ export async function teamBoard(
   };
 }
 
-/** What needs the lead now: sent back, on hold, late at a step, overdue, empty seats. */
+/** What needs the lead now: sent back, on hold, late at a step, overdue, empty seats, scores. */
 async function teamNeeds(db: Database, seatIds: number[], today: string): Promise<TeamNeed[]> {
   if (!seatIds.length) return [];
   const list = ids(seatIds);
@@ -649,6 +649,9 @@ async function teamNeeds(db: Database, seatIds: number[], today: string): Promis
         since: null,
         amount: null,
       });
+  // The scorecards: below 60 this month, a coverage gate failing, an improvement plan due.
+  const { scoreNeeds } = await import("../scores/service");
+  needs.push(...(await scoreNeeds(db, seatIds, today)));
   return needs;
 }
 

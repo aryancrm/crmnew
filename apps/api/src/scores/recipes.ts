@@ -21,9 +21,11 @@ export type KpiRecipe = {
   bands: Band[];
   /** A gate adds no points: below `pass` the month's total is capped at `cap`. */
   gate?: { pass: number; cap: number };
+  /** The value is the points (0 to the weight), not looked up in bands. */
+  direct?: boolean;
 };
 export type Recipe = {
-  key: "hospital" | "b2c" | "rx";
+  key: "hospital" | "b2c" | "rx" | "telesales" | "team";
   label: string;
   /** From the playbook named. */
   source: string;
@@ -195,7 +197,25 @@ export const RX: Recipe = {
   ],
 };
 
-export const RECIPES = { hospital: HOSPITAL, b2c: B2C, rx: RX };
+// No playbook publishes the MD Telesales card ("the Telesales KPI framework" is still to come):
+// until it is, telesales are scored on the B2C card, the nearest selling-by-phone card.
+export const TELESALES: Recipe = { ...B2C, key: "telesales", label: "MD Telesales", source: "B2C CHC card, until the telesales card is published" };
+
+// No playbook publishes the DSC's or the Mentor's card: until one is, a lead's score is the
+// average of the cards of the people under them (their team's month, in one number).
+export const TEAM: Recipe = {
+  key: "team",
+  label: "Team lead",
+  source: "The team's average, until the DSC and Mentor cards are published",
+  kpis: [
+    {
+      key: "team", label: "Team · average of the team's cards", how: "Each scored person under them, their month's score out of 100, averaged",
+      weight: 100, unit: "%", better: "high", bands: [], direct: true,
+    },
+  ],
+};
+
+export const RECIPES = { hospital: HOSPITAL, b2c: B2C, rx: RX, telesales: TELESALES, team: TEAM };
 
 export type KpiScore = {
   key: string;
@@ -235,6 +255,10 @@ export function scoreOf(
         key: kpi.key, label: kpi.label, how: kpi.how, weight: 0, unit: kpi.unit, value, points: null,
         band: pass ? "Pass" : `Fail: capped at ${kpi.gate.cap}`, next: pass ? null : { value: kpi.gate.pass, points: 0 },
       };
+    }
+    if (kpi.direct) {
+      const points = Math.max(0, Math.min(kpi.weight, Math.round(value)));
+      return { key: kpi.key, label: kpi.label, how: kpi.how, weight: kpi.weight, unit: kpi.unit, value, points, band: incrementOf(points).label, next: null };
     }
     const band = bandOf(kpi, value);
     const at = kpi.bands.indexOf(band);

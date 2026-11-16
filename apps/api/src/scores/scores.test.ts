@@ -6,7 +6,7 @@ import { migrate } from "../db/migrate";
 import { todayManila } from "../inventory/rules";
 import { seedDemo } from "../seed";
 import type { MyScore, TeamScores } from "../types";
-import { B2C, HOSPITAL, incrementOf, RX, scoreOf } from "./recipes";
+import { B2C, HOSPITAL, incrementOf, RX, scoreOf, TEAM, TELESALES } from "./recipes";
 import { lockDue, lockMonth } from "./service";
 
 describe("the playbook cards", () => {
@@ -35,6 +35,12 @@ describe("the playbook cards", () => {
     const short = scoreOf(RX, { nbd: 9, crr: 92, pap: 12, hit: 3, ccf: 60 });
     expect(short).toMatchObject({ total: 70, max: 100, capped: true });
     expect(scoreOf(RX, { nbd: 2, crr: 55, pap: 4, hit: null, ccf: 90 }).kpis.map((kpi) => kpi.points)).toEqual([12, 12, 15, null, null]);
+  });
+
+  it("telesales use the B2C card; a lead's points are the team's average", () => {
+    expect(scoreOf(TELESALES, { ist: 95, crr: 96, nbd: 90, nzsd: 99, ocr: 0 }).total).toBe(100);
+    expect(scoreOf(TEAM, { team: 72.4 })).toMatchObject({ total: 72, max: 100 });
+    expect(scoreOf(TEAM, { team: null })).toMatchObject({ total: 0, max: 0 });
   });
 
   it("the year's average sets the increment", () => {
@@ -74,6 +80,12 @@ beforeAll(async () => {
 
 describe("cards from the data", () => {
   it("a hospital MedRep sees this month's card live; others' cards are not theirs", async () => {
+    // A month with nothing to score has no card: give Ryan this month's target.
+    await db.execute(
+      sql`insert into sales_target (person_id, month, amount, set_by) values ((select id from person where email = 'ryan@2mg.test'),
+        date_trunc('month', ${todayManila()}::date)::date, 1000000, (select id from person where email = 'admin@2mg.test'))
+        on conflict (person_id, month) do update set amount = excluded.amount`,
+    );
     const mine = (await (await get("ryan", "/api/scores")).json()) as MyScore;
     expect(mine.mine).toBe(true);
     expect(mine.card?.recipe).toBe("hospital");
@@ -137,5 +149,11 @@ describe("cards from the data", () => {
     expect((await get("ryan", "/api/scores/team")).status).toBe(403);
     const team = (await (await get("admin", "/api/scores/team")).json()) as TeamScores;
     expect(team.rows.some((row) => row.name && row.card?.recipe === "hospital")).toBe(true);
+    // A lead's card is their team's average.
+    const lead = team.rows.find((row) => row.card?.recipe === "team");
+    if (lead?.card) {
+      expect(lead.card.kpis[0]?.key).toBe("team");
+      expect(lead.card.total).toBe(Math.round(lead.card.kpis[0]?.value ?? 0));
+    }
   });
 });
