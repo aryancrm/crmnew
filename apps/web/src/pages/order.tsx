@@ -13,6 +13,7 @@ import {
   Box,
   Camera,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   CircleCheck,
@@ -69,12 +70,14 @@ import {
   dayLabel,
   INPUT,
   inPacks,
+  LookSwitch,
   PageState,
   Pill,
   Problem,
   peso,
   timeLabel,
   useAction,
+  useLook,
 } from "../ui";
 
 type StepKey = "placed" | "management" | "finance" | "dispatch" | "delivered" | "paid" | "proof";
@@ -238,6 +241,8 @@ export function Order() {
   const me = useMe().data;
   const [asking, setAsking] = useState<OrderAction | null>(null);
   const [dispatching, setDispatching] = useState<DispatchAsk>(null);
+  // Management's two looks of its check: step by step, or everything on one page.
+  const [pageLook, pickPageLook] = useLook("crm:order-look", ORDER_LOOKS);
   const data = query.data;
   if (!data) return <PageState query={query} what="this order" />;
   const { order, can } = data;
@@ -269,6 +274,7 @@ export function Order() {
           ? "dispatch"
           : null;
   const checking = desk === "management" && (!picked || picked === "management");
+  const glance = checking && pageLook === "glance";
   const states = checkStates(data);
   const askedCheck = params.get("check") as CheckKey | null;
   const check: CheckKey = CHECKS.some((item) => item.key === askedCheck)
@@ -371,6 +377,106 @@ export function Order() {
   ];
   const shownOthers = others.filter((item) => can[item.action]);
 
+  // The order's road, each stop with who and when.
+  const journey = (
+      <section className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 pt-3 pb-4 shadow-sm">
+        <div className="text-[11px] font-semibold tracking-[0.06em] text-slate-500">
+          ORDER JOURNEY
+        </div>
+        <ol className="relative mt-3 grid grid-cols-6 gap-1">
+          <span
+            aria-hidden="true"
+            className="absolute top-[13px] right-[8.33%] left-[8.33%] h-[3px] rounded bg-slate-200"
+          />
+          <span
+            aria-hidden="true"
+            className="absolute top-[13px] left-[8.33%] h-[3px] rounded bg-emerald-500"
+            style={{
+              width: `${(Math.max(0, steps.filter((item) => item.shape === "done" || item.shape === "skipped").length - 1) / 5) * 83.34}%`,
+            }}
+          />
+          {steps.map((item) => (
+            <li key={item.key} className="relative flex min-w-0 flex-col items-center text-center">
+              <button
+                type="button"
+                // Each desk opens only its own steps: Management doesn't tick Finance's or Dispatch's.
+                disabled={!ownStep(item.key)}
+                onClick={() => open(item.key)}
+                aria-label={`${item.label}: ${item.shape === "done" ? "done" : item.shape === "skipped" ? "not needed" : item.shape === "now" ? "now" : item.shape === "stopped" ? "held" : "later"}`}
+                className={`grid size-7 place-items-center rounded-full focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none ${
+                  item.shape === "done"
+                    ? "bg-emerald-500 text-white"
+                    : item.shape === "skipped"
+                      ? "border-2 border-emerald-400 bg-white text-emerald-600"
+                      : item.shape === "now"
+                        ? "border-[3px] border-amber-500 bg-amber-50"
+                        : item.shape === "stopped"
+                          ? "border-[3px] border-rose-500 bg-rose-50 text-rose-600"
+                          : "border-2 border-slate-300 bg-white"
+                }`}
+              >
+                {item.shape === "done" ? (
+                  <Check className="size-4" />
+                ) : item.shape === "skipped" ? (
+                  <Check className="size-3.5" />
+                ) : item.shape === "stopped" ? (
+                  "!"
+                ) : null}
+              </button>
+              <span
+                className={`mt-2 text-[10px] leading-tight font-semibold sm:text-[12px] ${item.shape === "now" ? "text-amber-700" : item.shape === "stopped" ? "text-rose-700" : item.shape === "later" ? "text-slate-500" : "text-ink"}`}
+              >
+                {item.label}
+              </span>
+              <span className="mt-0.5 hidden text-[11px] text-slate-500 sm:block">
+                {item.who}
+                {item.when && item.shape === "done"
+                  ? ` · ${item.key === "delivered" ? dayLabel(item.when.slice(0, 10)) : short(item.when)}`
+                  : ""}
+              </span>
+              {item.took && (
+                <span
+                  className={`mt-0.5 rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums ${item.took.open ? "bg-amber-500 text-white" : "text-slate-500"}`}
+                  title={item.took.open ? "Waiting here for" : "Time it took at this step"}
+                >
+                  {item.took.minutes < 1
+                    ? item.took.open
+                      ? "just came"
+                      : "took <1m"
+                    : `${item.took.open ? "waiting" : "took"} ${shortSpan(item.took.minutes)}`}
+                </span>
+              )}
+            </li>
+          ))}
+        </ol>
+      </section>
+  );
+  const otherButtons = shownOthers.length > 0 && (
+    <>
+      {shownOthers.map((item) => (
+        <Button
+          key={item.action}
+          small
+          variant={item.danger ? "danger" : "plain"}
+          disabled={act.busy}
+          onClick={() => (item.reason ? setAsking(item.action) : act.act(order.id, item.action))}
+        >
+          <item.icon className="size-3.5" aria-hidden="true" /> {item.label}
+        </Button>
+      ))}
+      {can.waitStock && (
+        <Button
+          small
+          disabled={act.busy}
+          title="Hold it until what it needs is on the shelf; you are told when it comes in"
+          onClick={() => act.act(order.id, "hold", { stock: true })}
+        >
+          <Hourglass className="size-3.5" aria-hidden="true" /> Wait for stock
+        </Button>
+      )}
+    </>
+  );
+
   return (
     <div className="mx-auto max-w-screen-2xl">
       <nav
@@ -388,6 +494,16 @@ export function Order() {
         </button>
         Orders <ChevronRight className="size-3" />
         <span className="font-semibold text-slate-700">{order.code}</span>
+        {checking && (
+          <span className="ml-auto">
+            <LookSwitch
+              legend="How to see this order"
+              looks={ORDER_LOOKS}
+              value={pageLook}
+              onPick={pickPageLook}
+            />
+          </span>
+        )}
       </nav>
 
       {/* Who it is for, what it is worth and where it goes. */}
@@ -599,80 +715,37 @@ export function Order() {
         )}
       </section>
 
-      {/* The order's road, each stop with who and when. */}
-      <section className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 pt-3 pb-4 shadow-sm">
-        <div className="text-[11px] font-semibold tracking-[0.06em] text-slate-500">
-          ORDER JOURNEY
-        </div>
-        <ol className="relative mt-3 grid grid-cols-6 gap-1">
-          <span
-            aria-hidden="true"
-            className="absolute top-[13px] right-[8.33%] left-[8.33%] h-[3px] rounded bg-slate-200"
-          />
-          <span
-            aria-hidden="true"
-            className="absolute top-[13px] left-[8.33%] h-[3px] rounded bg-emerald-500"
-            style={{
-              width: `${(Math.max(0, steps.filter((item) => item.shape === "done" || item.shape === "skipped").length - 1) / 5) * 83.34}%`,
-            }}
-          />
-          {steps.map((item) => (
-            <li key={item.key} className="relative flex min-w-0 flex-col items-center text-center">
-              <button
-                type="button"
-                // Each desk opens only its own steps: Management doesn't tick Finance's or Dispatch's.
-                disabled={!ownStep(item.key)}
-                onClick={() => open(item.key)}
-                aria-label={`${item.label}: ${item.shape === "done" ? "done" : item.shape === "skipped" ? "not needed" : item.shape === "now" ? "now" : item.shape === "stopped" ? "held" : "later"}`}
-                className={`grid size-7 place-items-center rounded-full focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none ${
-                  item.shape === "done"
-                    ? "bg-emerald-500 text-white"
-                    : item.shape === "skipped"
-                      ? "border-2 border-emerald-400 bg-white text-emerald-600"
-                      : item.shape === "now"
-                        ? "border-[3px] border-amber-500 bg-amber-50"
-                        : item.shape === "stopped"
-                          ? "border-[3px] border-rose-500 bg-rose-50 text-rose-600"
-                          : "border-2 border-slate-300 bg-white"
-                }`}
-              >
-                {item.shape === "done" ? (
-                  <Check className="size-4" />
-                ) : item.shape === "skipped" ? (
-                  <Check className="size-3.5" />
-                ) : item.shape === "stopped" ? (
-                  "!"
-                ) : null}
-              </button>
-              <span
-                className={`mt-2 text-[10px] leading-tight font-semibold sm:text-[12px] ${item.shape === "now" ? "text-amber-700" : item.shape === "stopped" ? "text-rose-700" : item.shape === "later" ? "text-slate-500" : "text-ink"}`}
-              >
-                {item.label}
-              </span>
-              <span className="mt-0.5 hidden text-[11px] text-slate-500 sm:block">
-                {item.who}
-                {item.when && item.shape === "done"
-                  ? ` · ${item.key === "delivered" ? dayLabel(item.when.slice(0, 10)) : short(item.when)}`
-                  : ""}
-              </span>
-              {item.took && (
-                <span
-                  className={`mt-0.5 rounded-full px-1.5 py-px text-[10px] font-semibold tabular-nums ${item.took.open ? "bg-amber-500 text-white" : "text-slate-500"}`}
-                  title={item.took.open ? "Waiting here for" : "Time it took at this step"}
-                >
-                  {item.took.minutes < 1
-                    ? item.took.open
-                      ? "just came"
-                      : "took <1m"
-                    : `${item.took.open ? "waiting" : "took"} ${shortSpan(item.took.minutes)}`}
-                </span>
-              )}
-            </li>
-          ))}
-        </ol>
-      </section>
+      {!glance && journey}
 
-      <div className="mt-4 grid items-start gap-4 lg:grid-cols-[19rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] 2xl:grid-cols-[22rem_minmax(0,1fr)]">
+      {glance && (
+        // One page: what to decide and the buttons on top, each check under it (the ones the
+        // system found fine folded), money and what happened at the side, the road last.
+        <>
+          <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
+            <div className="min-w-0">
+              <ManagementGlance
+                data={data}
+                act={act}
+                onAsk={setAsking}
+                states={states}
+                more={otherButtons}
+                autoApprove={params.get("approve") === "1"}
+              />
+              <div className="mt-3">
+                <Problem message={problem?.message} />
+              </div>
+            </div>
+            <div className="flex min-w-0 flex-col gap-4">
+              <MoneyCard data={data} />
+              <Activity data={data} />
+            </div>
+          </div>
+          {journey}
+        </>
+      )}
+      <div
+        className={`mt-4 grid items-start gap-4 lg:grid-cols-[19rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] 2xl:grid-cols-[22rem_minmax(0,1fr)] ${glance ? "hidden" : ""}`}
+      >
         {/* Each desk's own steps at the side; anyone else steps through the journey on top. */}
         {(desk || shownOthers.length > 0) && (
           <nav
@@ -769,31 +842,9 @@ export function Order() {
                       </button>
                     );
                   })}
-            {shownOthers.length > 0 && (
+            {otherButtons && (
               <div className="mt-1 flex flex-wrap gap-1.5 border-t border-slate-100 px-1 pt-2">
-                {shownOthers.map((item) => (
-                  <Button
-                    key={item.action}
-                    small
-                    variant={item.danger ? "danger" : "plain"}
-                    disabled={act.busy}
-                    onClick={() =>
-                      item.reason ? setAsking(item.action) : act.act(order.id, item.action)
-                    }
-                  >
-                    <item.icon className="size-3.5" aria-hidden="true" /> {item.label}
-                  </Button>
-                ))}
-                {can.waitStock && (
-                  <Button
-                    small
-                    disabled={act.busy}
-                    title="Hold it until what it needs is on the shelf; you are told when it comes in"
-                    onClick={() => act.act(order.id, "hold", { stock: true })}
-                  >
-                    <Hourglass className="size-3.5" aria-hidden="true" /> Wait for stock
-                  </Button>
-                )}
+                {otherButtons}
               </div>
             )}
           </nav>
@@ -809,7 +860,7 @@ export function Order() {
               <Papers data={data} kinds={["payment_proof", "po", "other"]} />
             </StepPanel>
           )}
-          {checking ? (
+          {checking && !glance ? (
             <ManagementStep
               data={data}
               act={act}
@@ -905,6 +956,11 @@ const checkLabel = (key: CheckKey, data: OrderDetail) =>
     ? "Documents"
     : (CHECKS.find((item) => item.key === key)?.label ?? key);
 type CheckKey = (typeof CHECKS)[number]["key"];
+/** Management's two looks of its check. */
+const ORDER_LOOKS = [
+  ["steps", "Steps"],
+  ["glance", "One page"],
+] as const;
 
 /** How each check stands on this order: fine, or what needs a look. */
 function checkStates(data: OrderDetail): Record<CheckKey, { ok: boolean; note: string }> {
@@ -1718,6 +1774,251 @@ function ManagementStep({
         />
       )}
     </StepPanel>
+  );
+}
+
+/** Management's check on one page (Aryan: the useful things right on top, the rest out of the
+ *  way). On top: how many things need a look, each check as a chip, and Approve / Send back /
+ *  Reject. Under it one part per check: the ones the system found fine stay folded to a line, the
+ *  ones that need a look are open. */
+function ManagementGlance({
+  data,
+  act,
+  onAsk,
+  states,
+  more,
+  autoApprove = false,
+}: {
+  data: OrderDetail;
+  act: ReturnType<typeof useOrderAction>;
+  onAsk: (action: OrderAction) => void;
+  states: Record<CheckKey, { ok: boolean; note: string }>;
+  /** Hold, exception, cancel and the like. */
+  more?: ReactNode;
+  autoApprove?: boolean;
+}) {
+  const { order, can } = data;
+  const parts = ["price", "stock", "customer", "papers"] as const;
+  type Part = (typeof parts)[number];
+  const toLook = parts.filter((key) => !states[key].ok);
+  // Open at first: what needs a look; when nothing does, the medicines and their prices.
+  const [shown, setShown] = useState<Part[]>(() => (toLook.length ? toLook : ["price"]));
+  const [warehouse, setWarehouse] = useState(() => {
+    const fill = data.warehouseFill ?? [];
+    const main = fill.find((place) => place.isDefault);
+    const fills = fill.find((place) => place.short.length === 0);
+    return main && main.short.length > 0 && fills ? String(fills.id) : "";
+  });
+  const [approving, setApproving] = useState(autoApprove && can.approve);
+  const [editing, setEditing] = useState(false);
+  const waiting = order.status === "pending_approval";
+  const completes = can.approve || (can.resume && order.heldRole === "management");
+  const kinds: Record<Part, string[]> = {
+    price: ["price"],
+    stock: ["stock"],
+    customer: ["customer", "licence", "owes", "credit"],
+    papers: ["rx"],
+  };
+  const flip = (key: Part) =>
+    setShown(shown.includes(key) ? shown.filter((one) => one !== key) : [...shown, key]);
+  const goTo = (key: Part) => {
+    if (!shown.includes(key)) setShown([...shown, key]);
+    requestAnimationFrame(() =>
+      document.getElementById(`part-${key}`)?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
+  };
+  const body = (key: Part) => {
+    const findings = data.findings.filter((finding) => kinds[key].includes(finding.kind));
+    return (
+      <div className="flex flex-col gap-4 border-t border-slate-100 p-4">
+        {findings.length > 0 && (
+          <ul className="flex flex-col gap-1.5 rounded-xl bg-amber-50/70 px-3 py-2.5 text-[13px] text-slate-800">
+            {findings.map((finding) => (
+              <li key={finding.text} className="flex gap-2">
+                <TriangleAlert size={15} className="mt-0.5 shrink-0 text-amber-600" aria-hidden="true" />
+                <span>{finding.text}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        {key === "price" &&
+          (editing ? (
+            <LinesEditor data={data} onDone={() => setEditing(false)} />
+          ) : (
+            <>
+              <Lines data={data} compare />
+              {can.approve && (
+                <div>
+                  <Button small onClick={() => setEditing(true)}>
+                    <PencilLine size={14} aria-hidden="true" /> Edit medicines · add, free, price
+                  </Button>
+                </div>
+              )}
+            </>
+          ))}
+        {key === "stock" &&
+          (can.approve && data.warehouseFill && data.warehouseFill.length > 0 ? (
+            <ShipsFrom fill={data.warehouseFill} value={warehouse} onChange={setWarehouse} />
+          ) : (
+            <div className="text-[13px] text-slate-700">
+              {order.warehouse ? (
+                <>
+                  Ships from <b>{order.warehouse}</b>.
+                </>
+              ) : (
+                "The warehouse is picked when it is approved."
+              )}
+            </div>
+          ))}
+        {key === "customer" && (
+          <>
+            <LicenceFacts order={order} />
+            {completes && <DetailsLine data={data} />}
+          </>
+        )}
+        {key === "papers" && <Documents data={data} />}
+      </div>
+    );
+  };
+  return (
+    <div className="flex flex-col gap-3">
+      {/* What to decide, and the buttons: it stays in sight while the page is read. */}
+      <section className="sticky top-[3.75rem] z-10 rounded-2xl border border-slate-200 bg-white/95 shadow-md backdrop-blur">
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3">
+          <span
+            className={`grid size-10 shrink-0 place-items-center rounded-xl text-base font-bold ${
+              order.approvedAt || toLook.length === 0
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-amber-100 text-amber-800"
+            }`}
+          >
+            {order.approvedAt || toLook.length === 0 ? <Check className="size-5" /> : toLook.length}
+          </span>
+          <div className="min-w-0 flex-1 leading-tight">
+            <div className="text-[15px] font-bold text-ink">
+              {order.approvedAt
+                ? order.approvedBy
+                  ? `Approved by ${order.approvedBy}`
+                  : "Went straight on: no discount, no credit"
+                : order.status === "draft"
+                  ? "Sent back to the MedRep"
+                  : toLook.length === 0
+                    ? "Everything checks out"
+                    : `${toLook.length} ${toLook.length === 1 ? "thing" : "things"} to look at`}
+            </div>
+            <div className="text-[12px] text-slate-500">
+              {order.approvedAt
+                ? `${short(order.approvedAt)}${order.warehouse ? ` · ships from ${order.warehouse}` : ""}`
+                : order.status === "draft"
+                  ? (order.flagReason ?? "They fix it and place it again")
+                  : toLook.length === 0
+                    ? "Papers, price, stock and customer are fine."
+                    : `${toLook.map((key) => states[key].note).join(" · ")}${
+                        toLook.length < parts.length ? ". The rest is fine." : ""
+                      }`}
+            </div>
+          </div>
+          {can.approve && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="primary" disabled={act.busy} onClick={() => setApproving(true)}>
+                <CircleCheck size={16} aria-hidden="true" /> Approve
+              </Button>
+              {can.send_back && (
+                <Button disabled={act.busy} onClick={() => onAsk("send_back")}>
+                  <Undo2 size={16} aria-hidden="true" /> Send back
+                </Button>
+              )}
+              {can.reject && (
+                <Button variant="danger" disabled={act.busy} onClick={() => onAsk("reject")}>
+                  <CircleX size={16} aria-hidden="true" /> Reject
+                </Button>
+              )}
+            </div>
+          )}
+        </div>
+      </section>
+      {/* Each check as a chip (it opens that part), and the rarer things to do. */}
+      <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex flex-wrap items-center gap-1.5 px-4 py-2">
+          {parts.map((key) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => goTo(key)}
+              title={states[key].note}
+              className={`inline-flex items-center gap-1.5 rounded-full py-1 pr-2.5 pl-1.5 text-[12px] font-semibold ring-1 transition-colors ${
+                states[key].ok
+                  ? "bg-white text-slate-700 ring-slate-200 hover:bg-slate-50"
+                  : "bg-amber-50 text-amber-900 ring-amber-200 hover:bg-amber-100"
+              }`}
+            >
+              <span
+                className={`grid size-4 place-items-center rounded-full text-[9px] font-bold text-white ${states[key].ok ? "bg-emerald-600" : "bg-amber-500"}`}
+              >
+                {states[key].ok ? <Check className="size-3" /> : "!"}
+              </span>
+              {checkLabel(key, data)}
+              {!states[key].ok && (
+                <span className="font-normal text-amber-800">· {states[key].note}</span>
+              )}
+            </button>
+          ))}
+          {more && <span className="ml-auto flex flex-wrap items-center gap-1.5">{more}</span>}
+        </div>
+      </section>
+
+      {parts.map((key) => {
+        const open = shown.includes(key);
+        return (
+          <section
+            key={key}
+            id={`part-${key}`}
+            className="scroll-mt-40 rounded-2xl border border-slate-200 bg-white shadow-sm"
+          >
+            <button
+              type="button"
+              aria-expanded={open}
+              onClick={() => flip(key)}
+              className="flex w-full items-center gap-2.5 px-4 py-3 text-left"
+            >
+              <span
+                className={`grid size-6 shrink-0 place-items-center rounded-full text-[10px] font-bold text-white ${states[key].ok ? "bg-emerald-600" : "bg-amber-400"}`}
+              >
+                {states[key].ok ? <Check className="size-3.5" /> : "!"}
+              </span>
+              <h2 className="text-[15px] font-semibold text-ink">{checkLabel(key, data)}</h2>
+              <span
+                className={`min-w-0 flex-1 truncate text-[12.5px] ${states[key].ok ? "text-slate-500" : "font-semibold text-amber-700"}`}
+              >
+                {states[key].note}
+              </span>
+              <ChevronDown
+                className={`size-4 shrink-0 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+                aria-hidden="true"
+              />
+            </button>
+            {open && body(key)}
+          </section>
+        );
+      })}
+      {waiting && !can.approve && (
+        <div className="rounded-xl bg-slate-50 px-3 py-2 text-[13px] text-slate-700">
+          Waiting for {order.approverName ? `${order.approverName} (PAP head)` : "Management"}.
+        </div>
+      )}
+      {approving && (
+        <ApproveDialog
+          data={data}
+          initial={warehouse}
+          busy={act.busy}
+          problem={act.problem?.message ?? null}
+          onClose={() => setApproving(false)}
+          onApprove={async (choice) => {
+            if (await act.act(order.id, "approve", choice)) setApproving(false);
+          }}
+        />
+      )}
+    </div>
   );
 }
 

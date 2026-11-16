@@ -11,7 +11,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { avatarTone, initials } from "../look";
 import { SectionPanel } from "../record";
-import { count, dayLabel, peso } from "../ui";
+import { count, dayLabel, LookSwitch, peso, useLook } from "../ui";
 
 export const useOrderPrices = (orderId: number) =>
   useQuery({
@@ -108,62 +108,6 @@ function Delta({ now, then, small }: { now: number; then: number; small?: boolea
       {!small && share}
     </span>
   );
-}
-
-/** A small switch between looks of the same thing. */
-function LookSwitch<T extends string>({
-  legend,
-  looks,
-  value,
-  onPick,
-}: {
-  legend: string;
-  looks: readonly (readonly [T, string])[];
-  value: T;
-  onPick: (key: T) => void;
-}) {
-  return (
-    <fieldset className="inline-flex shrink-0 items-center gap-0.5 rounded-lg bg-slate-100 p-0.5 text-[11px] font-semibold">
-      <legend className="sr-only">{legend}</legend>
-      {looks.map(([key, label]) => (
-        <button
-          key={key}
-          type="button"
-          aria-pressed={value === key}
-          onClick={() => onPick(key)}
-          className={`rounded-md px-2.5 py-1 transition-colors ${
-            value === key
-              ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
-              : "text-slate-600 hover:text-slate-900"
-          }`}
-        >
-          {label}
-        </button>
-      ))}
-    </fieldset>
-  );
-}
-
-/** A look picked once and remembered on this computer. */
-function useLook<T extends string>(key: string, looks: readonly (readonly [T, string])[]) {
-  const first = (looks[0] as readonly [T, string])[0];
-  const [look, setLook] = useState<T>(() => {
-    try {
-      const saved = localStorage.getItem(key);
-      return looks.find(([one]) => one === saved)?.[0] ?? first;
-    } catch {
-      return first;
-    }
-  });
-  const pick = (next: T) => {
-    setLook(next);
-    try {
-      localStorage.setItem(key, next);
-    } catch {
-      // A private window: the pick lasts until the page is left.
-    }
-  };
-  return [look, pick] as const;
 }
 
 const Move = ({ from, to }: { from: number; to: number }) =>
