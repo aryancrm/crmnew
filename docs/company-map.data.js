@@ -174,7 +174,7 @@ window.COMPANY_MAP = {
         { name: "HIT · hospital inclusion", how: "PTC approvals of products under 12 months old (quarterly)", target: "2+", weight: "15" },
         { name: "Coverage gate", how: "Doctors visited ÷ 80", target: "80%", weight: "Below it the month is capped at 70" },
       ],
-      pay: ["No commission", "Increment on the 12-month average: 0% / 3% / 6% / 10% / 20% / 35%", "Doctor Purchase Rebate (doctor buys at doctor's price): 5% from ₱80,000 a month, 7% from ₱160,000, 10% from ₱250,000", "Patient Referral Rebate: patient price − doctor price, per unit the referred patient buys", "⚠ Both rebates may break DOH AO 2015-0053 / PHAP Code (no rebates tied to prescribing): legal check first"],
+      pay: ["No commission", "Increment on the 12-month average: 0% / 3% / 6% / 10% / 20% / 35%", "Doctor Purchase Rebate (doctor buys at doctor's price): 5% from ₱80,000 a month, 7% from ₱160,000, 10% from ₱250,000", "Patient Referral Rebate: patient price − doctor price, per unit the referred patient buys", "Cleared with the company's lawyer (Aryan, 16 Nov)"],
       crmHas: ["Field app: visits with check-in, call report, classes A–D, month plan approved by the team lead"],
       crmBuild: ["Doctor list per CHC capped at 80 with tiers and Red / Yellow / Green", "Call log with brands and outcome", "Patient Care Group register", "Prescriber attribution: which doctor's patient bought", "Formulary (PTC) tracker", "Doctor rebate calculation"],
       open: ["Third gate KPI: drugstore visits or joint field work?", "Which products are focus and reminder brands"],
@@ -513,10 +513,9 @@ window.COMPANY_MAP = {
     { name: "Across teams", items: ["NBD and CRR mean different things in B2B, B2C and Rx: keep each team's meaning, named per team", "DSC and Mentor team KPI (CTAR / TTAR) is defined nowhere", "Is PAP part of MD Telesales or B2C?", "Payroll monthly or semi-monthly?"] },
     { name: "B2B", items: ["NBD and CRR targets and weights", "When an account moves from NBD to CRR (first order? third?)", "Who the CLIDP buyers are"] },
     { name: "Operations", items: ["Cold-chain charge: how much, per order or per medicine?", "Senior / PWD: exact formula (SRP ÷ 1.12 × 0.8 for VAT items?)"] },
-    { name: "Law: needs a decision before building", items: [
-      "Doctor rebates in the Rx playbook (5/7/10% on purchases; patient price − doctor price per referred patient) look like rebates tied to prescribing, which DOH AO 2015-0053 and the PHAP Code forbid: check with a lawyer before the CRM computes them",
-      "Reps may not market to patients: the Rx CHC inside Patient Care Groups and PAP screening may need to sit with a non-sales team",
-      "Prescription medicines may not be sold on Lazada / Shopee; online orders only through a licensed drugstore",
+    { name: "Law: settled by Aryan (16 Nov)", items: [
+      "Doctor rebates, Patient Care Groups and PAP screening as the playbooks write them: cleared with the company's lawyer; built as written",
+      "Prescription medicines not on Lazada / Shopee; online orders through the licensed drugstore",
     ] },
     { name: "Law: what the CRM will enforce", items: [
       "Senior / PWD: price ÷ 1.12, then 20% off (₱100 → ₱71.43); no stacking with promos; ID declared on order, original shown on delivery",

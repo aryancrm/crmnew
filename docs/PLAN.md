@@ -1360,6 +1360,32 @@ later**.
 - The demo has a little invented history (`zoho/seed.ts`) for San Juan de Dios, Olivarez and one
   patient. 10 new tests (`zoho/import.test.ts`).
 
+## 15. Build plan: the whole company in the CRM (16 Nov 2026)
+
+The company map (docs/company-map.html) is the target: every seat of the 2026 chart, its screen, its
+scorecard, its reports and rhythm. Of its 27 needs, 5 are built, 6 partly, 16 to build. Nothing built
+so far is thrown away: the order line, inventory, customers, finance, dispatch, HR and the field app are
+what every role stands on. Aryan, 16 Nov: the doctor rebates and Patient Care Groups are cleared with
+the lawyer; build them as the playbooks write them.
+
+Each phase ends with tests, the data checks and the 130-person test green, the change log updated, and
+a short note for the next session. A phase starts by reading this section, the map and the change log.
+
+| Phase | What | Sessions | Needs from Aryan / heads |
+|---|---|---|---|
+| 0 | Live: push, import Zoho and the medicine list into the live database | 1 | Supabase address in .env.live |
+| 1 | Seats from the chart; Zoho salespeople tied to seats, customers under them; monthly targets per seat (peso and count) | 2–3 | Which RX names are which seat; who takes leavers' customers |
+| 2 | Scorecard engine: one engine, a recipe per role (Hospital, Rx, B2C, MD Telesales, DSC, Mentor, Training); computed daily, locked on the 1st, disputes, 12-month average → increment band, PIP flags. Fix NZSD to invoice days without holidays | 3–4 | Weights where playbooks disagree; telesales KPIs; CTAR/TTAR |
+| 3 | The coaches' rhythm: morning pulse, 7 PM huddle, Monday sync, Saturday report, 15th rescue, self-assessment, joint-call form, coaching notices and PIP | 2–3 | — |
+| 4 | B2B: NBD pipeline with licence papers, hand-over at the 3rd order or day 90, CRR account health (late 1.5×, at risk 2.5× or 90 days, lost 180) | 2 | NBD / CRR targets |
+| 5 | Rx field: 80 doctors in tiers, Red / Yellow / Green route, call log with brands, Patient Care Groups with the 15-minute clock, prescriber attribution, formulary tracker, doctor rebates | 3–4 | Focus and reminder brands |
+| 6 | Desks and prices: B2C refill list and reply timer, PAP report, tender desk, CLIDP and Modern Trade accounts, special prices (tiers, CLIDP, CSP, bundles), cold-chain charge, pharmacist check, samples and home stock, Zoho's owed money in the order checks | 3–4 | Cold-chain charge; who approves deals |
+| 7 | Training calendar and exams, regulatory and in-licensing registers, reports (SEFMED's), incentives | 2–3 | Incentive policy IP-2026-001 |
+| 8 | Switch: last Zoho import, SEFMED off, people moved channel by channel | 1–2 | Dates |
+
+About 19–26 sessions. Phases 1 and 2 first: every screen and report after them counts per seat and
+per scorecard.
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
