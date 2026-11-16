@@ -33,6 +33,16 @@ export const zohoCustomer = z.object({
   /** Zoho's payment terms as written there ("Paid", "Net 30"). */
   terms: text(80),
   createdAt: text(40),
+  /** Zoho has a company name for it (a business typed without one is usually a person). */
+  company: z.boolean().nullish(),
+  /** The licence to operate: its number, what it is for ("Drugstore", "Hospital", "Drug
+   *  Wholesaler") and the day it runs out (YYYY-MM-DD). */
+  licenceNo: text(80),
+  licenceType: text(80),
+  licenceExpires: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullish(),
 });
 export type ZohoCustomer = z.infer<typeof zohoCustomer>;
 
@@ -82,19 +92,37 @@ const HOSPITAL = /hospital|medical cent(er|re)|med(ical)? ?cent|clinic|infirmary
 const DRUGSTORE = /pharmac|drug ?store|drugs?\b|botica|farmacia|generics/i;
 const DOCTOR = /^(dr|dra|doc|doctor)\b\.?/i;
 
-/** The kind of customer a Zoho contact is here. Zoho only says business or individual, so the
- *  rest is read from their name and from what their orders were. */
+/** What a licence to operate is for. */
+function licenceKind(type: string | null | undefined): CustomerKind | null {
+  const said = (type ?? "").toLowerCase();
+  if (!said.trim()) return null;
+  if (/hospital|clinic/.test(said)) return "hospital";
+  if (/wholesal|distribut|import|trader/.test(said)) return "distributor";
+  if (/drug ?store|pharmac|retail/.test(said)) return "drugstore";
+  return null;
+}
+
+/** The kind of customer a Zoho contact is here. Zoho only says business or individual (and
+ *  thousands of its "businesses" are people), so the rest is read from the licence, the name and
+ *  what their orders were. */
 export function kindOf(
-  contact: Pick<ZohoCustomer, "name" | "business" | "doctor" | "hint">,
+  contact: Pick<
+    ZohoCustomer,
+    "name" | "business" | "doctor" | "hint" | "company" | "licenceNo" | "licenceType"
+  >,
 ): CustomerKind {
   const name = contact.name.trim();
-  if (!contact.business)
-    return contact.doctor || contact.hint === "doctor" || DOCTOR.test(name) ? "doctor" : "patient";
+  const person = contact.doctor || contact.hint === "doctor" || DOCTOR.test(name) ? "doctor" : "patient";
+  if (!contact.business) return person;
   if (contact.hint === "government") return "government";
+  const licensed = licenceKind(contact.licenceType);
+  if (licensed) return licensed;
   if (HOSPITAL.test(name)) return "hospital";
   if (DRUGSTORE.test(name)) return "drugstore";
   if (GOVERNMENT.test(name)) return "government";
-  if (contact.hint && contact.hint !== "doctor" && contact.hint !== "patient") return contact.hint;
+  if (contact.hint) return contact.hint === "patient" ? person : contact.hint;
+  // A "business" with no company name, no licence and no business order is a person.
+  if (contact.company === false && !contact.licenceNo) return person;
   return "distributor";
 }
 
@@ -196,7 +224,8 @@ export async function importZohoCustomers(
     }
   }
 
-  // Customers already here under the same names, and the areas that name a city.
+  // Customers already here under the same names. (No area is given: Zoho does not say whose
+  // customer it is, and a city alone would put a hospital under the wrong channel.)
   const names = [...new Set(fresh.map((one) => (clip(one.name, 160) ?? "").toLowerCase()))];
   const here = await rows<{ id: number; kind: string; name: string; city: string; phoneKey: string | null }>(
     db,
@@ -213,18 +242,6 @@ export async function importZohoCustomers(
     const phone = `${row.kind}|${row.name}|${row.phoneKey}`;
     if (row.phoneKey && !byPhone.has(phone)) byPhone.set(phone, row.id);
   }
-  const areas = await rows<{ id: number; cities: string[] }>(
-    db,
-    sql`select id::int as id, cities from area`,
-  );
-  const areaOf = new Map<string, number | null>();
-  for (const area of areas)
-    for (const city of area.cities ?? []) {
-      const key = city.toLowerCase();
-      // A city two areas name belongs to neither until someone says which.
-      areaOf.set(key, areaOf.has(key) ? null : area.id);
-    }
-
   const toMake: Record<string, unknown>[] = [];
   const links: { zohoId: string; target: Target }[] = [];
   for (const one of fresh) {
@@ -261,8 +278,9 @@ export async function importZohoCustomers(
       email: clip(one.email, 120),
       address: clip(one.address, 300),
       city,
-      areaId: kind === "patient" || !city ? null : (areaOf.get(city.toLowerCase()) ?? null),
       tin: clip(one.tin, 40),
+      licenceNo: kind === "patient" ? null : clip(one.licenceNo, 60),
+      licenceExpires: kind === "patient" ? null : (one.licenceExpires ?? null),
       terms,
       days,
       createdAt: made && !Number.isNaN(made.getTime()) ? made.toISOString() : null,
@@ -274,12 +292,14 @@ export async function importZohoCustomers(
     const made = toMake.length
       ? await rows<{ id: number; zohoId: string }>(
           tx,
-          sql`insert into customer (kind, name, phone, phone_key, email, address, city, area_id, tin,
-              payment_terms, payment_days, review, added_by, created_at, zoho_id)
-            select x.kind, x.name, x.phone, x."phoneKey", x.email, x.address, x.city, x."areaId", x.tin,
+          sql`insert into customer (kind, name, phone, phone_key, email, address, city, tin,
+              licence_no, licence_expires, payment_terms, payment_days, review, added_by, created_at, zoho_id)
+            select x.kind, x.name, x.phone, x."phoneKey", x.email, x.address, x.city, x.tin,
+              x."licenceNo", x."licenceExpires"::date,
               x.terms, x.days, 'ok', ${admin}, coalesce(x."createdAt"::timestamptz, now()), x."zohoId"
             from jsonb_to_recordset(${JSON.stringify(toMake)}::jsonb) as x(kind text, name text, phone text,
-              "phoneKey" text, email text, address text, city text, "areaId" bigint, tin text, terms text,
+              "phoneKey" text, email text, address text, city text, tin text,
+              "licenceNo" text, "licenceExpires" text, terms text,
               days integer, "createdAt" text, "zohoId" text)
             on conflict do nothing
             returning id::int as id, zoho_id as "zohoId"`,

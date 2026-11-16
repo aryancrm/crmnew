@@ -709,6 +709,8 @@ const LOOKS = [
 const PAST_STATUS: Record<string, string> = {
   closed: "Delivered",
   fulfilled: "Delivered",
+  invoiced: "Invoiced",
+  partially_invoiced: "Partly invoiced",
   confirmed: "Confirmed",
   void: "Cancelled",
 };

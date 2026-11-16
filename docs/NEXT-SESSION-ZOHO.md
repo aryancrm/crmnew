@@ -22,11 +22,12 @@ line of a buy-one-get-one, so it would be one call per order, 62,000 calls). Use
 **Settings → Data Backup → Backup Your Data** (CSV; Zoho emails a download link). Next:
 1. Done 16 Nov: the backup is unpacked in `.data/zoho-backup/` (Contacts/, Sales_Order/, Item.csv…;
    see the plan's change log (37) for the counts and the columns).
-2. Write `apps/api/scripts/import-zoho.ts`: read Contacts and Sales Orders CSVs (one row per
-   line), build the `zohoCustomer` / `zohoOrder` shapes (hint = what the customer's orders say:
-   "Hospital PO" → hospital, "Bidding Order" → government, "Doctor order" → doctor), try on a
-   copy of the local database, show Aryan the counts by kind.
-3. On Aryan's word: push, let Render migrate, then send the batches to the live CRM.
+2. Done 16 Nov: `apps/api/scripts/import-zoho.ts` reads the backup; applied to the local demo copy
+   only (25,452 customers, 64,380 orders; see the plan's change log (38)).
+3. On Aryan's word: push, let Render migrate (0054), then run the script against the live
+   database (`DATABASE_URL` in crmnew/.env, put there by Aryan; dry run first, then `--apply`).
+4. Later: Aryan's own medicine list (with Zoho's SKUs, so the old prices join by themselves).
+   SEFMED is read for the plan only, not imported.
 
 ## Where things stand
 

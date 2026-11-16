@@ -43,7 +43,7 @@ const customers = [
   // The same hospital typed a second time in Zoho.
   { id: "z-101", name: "san juan de dios hospital", business: true, city: "PASAY" },
   { id: "z-102", name: "Davao Doctors Hospital", business: true, city: "Davao City", hint: "hospital" },
-  { id: "z-103", name: "Mercury Drug Baclaran", business: true, city: "Pasay" },
+  { id: "z-103", name: "Mercury Drug Baclaran", business: true, city: "Pasay", licenceNo: "LTO-DS-7781", licenceType: "Drugstore", licenceExpires: "2027-03-31" },
   { id: "z-104", name: "Medisource Trading", business: true, hint: "distributor" },
   { id: "z-105", name: "Quezon Province", business: true, hint: "government" },
   { id: "z-106", name: "Dr. Ana Reyes", business: false, mobile: "0917 555 0101" },
@@ -150,6 +150,16 @@ describe("what Zoho's words mean here", () => {
     expect(kindOf({ name: "Quezon Province", business: true, hint: "government" })).toBe("government");
     expect(kindOf({ name: "St. Luke's", business: true, hint: "hospital" })).toBe("hospital");
     expect(kindOf({ name: "Medisource Trading", business: true })).toBe("distributor");
+    // The licence says what a business is, before its name does.
+    expect(kindOf({ name: "Southstar", business: true, licenceType: "DRUGSTORE" })).toBe("drugstore");
+    expect(kindOf({ name: "Southstar", business: true, licenceType: "Drug Importer|Wholesaler" })).toBe("distributor");
+    expect(kindOf({ name: "St. Luke's", business: true, licenceType: "Hospital" })).toBe("hospital");
+    // Zoho has thousands of people typed as a business: no company, no licence, no business order.
+    expect(kindOf({ name: "Lorna Santos", business: true, company: false })).toBe("patient");
+    expect(kindOf({ name: "Dr. Ana Reyes", business: true, company: false })).toBe("doctor");
+    expect(kindOf({ name: "Lorna Santos", business: true, company: false, hint: "patient" })).toBe("patient");
+    expect(kindOf({ name: "Lorna Santos", business: true, company: false, hint: "distributor" })).toBe("distributor");
+    expect(kindOf({ name: "Lorna Santos", business: true, company: false, licenceNo: "LTO-1" })).toBe("distributor");
   });
 
   it("reads the payment terms", () => {
@@ -208,6 +218,11 @@ describe("bringing Zoho's customers", () => {
     );
     expect(lorna).toMatchObject({ phone: "0917 555 0202", terms: "advance", review: "ok", kind: "patient" });
     expect(lorna?.code).toMatch(/^CUS-\d{5}$/);
+    const [drugstore] = await rows<{ kind: string; licence: string; expires: string }>(
+      db,
+      sql`select kind, licence_no as licence, to_char(licence_expires, 'YYYY-MM-DD') as expires from customer where id = ${of("z-103")}`,
+    );
+    expect(drugstore).toEqual({ kind: "drugstore", licence: "LTO-DS-7781", expires: "2027-03-31" });
   });
 
   it("sending them again adds nothing", async () => {
