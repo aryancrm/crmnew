@@ -191,7 +191,7 @@ export const RX: Recipe = {
       ],
     },
     {
-      key: "ccf", label: "CCF · doctor coverage (gate)", how: "Doctors visited at least once ÷ the 80 on the list; below 80% caps the total at 70", weight: 0, unit: "%", better: "high",
+      key: "ccf", label: "CCF · doctor coverage (gate)", how: "Doctors on my list visited at least once this month ÷ the doctors on my list; below 80% caps the total at 70", weight: 0, unit: "%", better: "high",
       bands: [], gate: { pass: 80, cap: 70 },
     },
   ],

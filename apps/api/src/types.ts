@@ -4351,7 +4351,7 @@ export type District = {
 export type RxDay = {
   today: string;
   seatId: number | null;
-  tiers: { tier: 1 | 2 | 3; size: number; doctors: number; visitsDue: number; visitsDone: number }[];
+  tiers: { tier: 1 | 2 | 3; doctors: number; visitsDue: number; visitsDone: number }[];
   doctors: {
     customerId: number;
     name: string;

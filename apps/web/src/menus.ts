@@ -499,7 +499,7 @@ function ownDesk(me: Me): Space {
         return {
           ...desk([
             home,
-            { to: "/rx/doctors", label: "My 80 doctors", icon: Stethoscope, short: "Doctors" },
+            { to: "/rx/doctors", label: "My doctors", icon: Stethoscope, short: "Doctors" },
             folder(
               "Calls",
               CalendarCheck,
@@ -511,7 +511,6 @@ function ownDesk(me: Me): Space {
               ],
               "Calls",
             ),
-            { to: "/to-call", label: "Doctors to call", icon: PhoneCall, short: "Call" },
             folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ]),

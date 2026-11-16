@@ -1,5 +1,5 @@
--- An Rx CHC's doctor list (Rx CHC Play Book): 80 doctors in three tiers, 20 Tier 1 (seen four
--- times a month), 40 Tier 2 (twice), 20 Tier 3 (once). The list belongs to the seat, so the next
+-- An Rx CHC's doctor list (Rx CHC Play Book): doctors in three tiers, Tier 1 seen four times a
+-- month, Tier 2 twice, Tier 3 once. As many as the CHC's work has (the playbook's 80 is a guide). The list belongs to the seat, so the next
 -- person in the seat keeps it. Taking a doctor off the list ends the line; it is not deleted.
 create table doctor_list (
   id bigint generated always as identity primary key,

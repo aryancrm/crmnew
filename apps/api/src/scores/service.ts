@@ -15,8 +15,6 @@ import type { Me, MyScore, ScoreCard, ScoreDispute, TeamNeed, TeamScores } from 
 import { incrementOf, type Recipe, RECIPES, scoreOf } from "./recipes";
 
 const WHOLE = ["ceo", "admin"];
-/** The Rx CHC's doctor list: 80 doctors (20 Tier 1, 40 Tier 2, 20 Tier 3). */
-const DOCTOR_LIST = 80;
 
 const firstOf = (month: string) => `${month.slice(0, 7)}-01`;
 const lastOf = (month: string) => {
@@ -169,7 +167,7 @@ export async function measure(
   notes.ocr = r.orders ? `${r.cancelled} of ${r.orders} orders cancelled` : "No orders yet";
   if (recipe.key === "rx") {
     const doctorInvoices = sql`invoice i join sales_order o on o.id = i.order_id join customer c on c.id = i.customer_id`;
-    const [rx] = await rows<{ newDoctors: number; lastDoctors: number; doctorsBack: number; approved: number; visited: number }>(
+    const [rx] = await rows<{ newDoctors: number; lastDoctors: number; doctorsBack: number; approved: number; visited: number; listed: number; listedVisited: number }>(
       db,
       sql`select
           (select count(distinct i.customer_id) from ${doctorInvoices}
@@ -185,7 +183,15 @@ export async function measure(
             and l.gl_letter_on between ${first}::date and ${upTo}::date)::int as approved,
           (select count(distinct v.customer_id) from visit v join customer c on c.id = v.customer_id
             where v.person_id = ${personId} and v.status = 'done' and c.kind = 'doctor'
-              and v.day between ${first}::date and ${upTo}::date)::int as visited`,
+              and v.day between ${first}::date and ${upTo}::date)::int as visited,
+          -- Coverage counts the doctors on the CHC's own list (as long as their work is).
+          (select count(*) from doctor_list l join seat_holder h on h.seat_id = l.seat_id and h.person_id = ${personId}
+              and h.starts_on <= ${upTo}::date and (h.ends_on is null or h.ends_on >= ${first}::date)
+            where l.set_at::date <= ${upTo}::date and (l.ended_at is null or l.ended_at::date > ${upTo}::date))::int as listed,
+          (select count(distinct v.customer_id) from visit v
+            where v.person_id = ${personId} and v.status = 'done' and v.day between ${first}::date and ${upTo}::date
+              and v.customer_id in (select l.customer_id from doctor_list l join seat_holder h on h.seat_id = l.seat_id and h.person_id = ${personId}
+                where l.ended_at is null or l.ended_at::date > ${upTo}::date))::int as "listedVisited"`,
     );
     const x = rx as NonNullable<typeof rx>;
     const rxValues: Record<string, number | null> = {
@@ -194,14 +200,15 @@ export async function measure(
       pap: x.approved,
       // The formulary tracker comes in Phase 5.
       hit: null,
-      ccf: (x.visited / DOCTOR_LIST) * 100,
+      // No list yet: nothing to measure coverage against.
+      ccf: x.listed > 0 ? (x.listedVisited / x.listed) * 100 : null,
     };
     const rxNotes: Record<string, string> = {
       nbd: `${x.newDoctors} doctor${x.newDoctors === 1 ? "" : "s"} invoiced for the first time`,
       crr: x.lastDoctors ? `${x.doctorsBack} of last month's ${x.lastDoctors} doctors again` : "No doctors last month",
       pap: `${x.approved} guarantee letter${x.approved === 1 ? "" : "s"} received`,
       hit: "Not in the CRM yet: the formulary tracker comes in Phase 5",
-      ccf: `${x.visited} of the ${DOCTOR_LIST} doctors visited`,
+      ccf: x.listed ? `${x.listedVisited} of the ${x.listed} doctors on my list visited` : "No doctor list yet: make it under My doctors",
     };
     // A rep is scored once they visit, sell, get a letter or have a target.
     return { values: rxValues, notes: rxNotes, active: Boolean(r.target || r.sales || r.orders || x.visited || x.approved) };

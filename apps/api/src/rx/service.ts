@@ -1,5 +1,6 @@
-// An Rx CHC's day (Rx CHC Play Book): their 80 doctors in tiers with the month's visits done
-// against due (Tier 1 four, Tier 2 two, Tier 3 one), each doctor's light for today's route (red:
+// An Rx CHC's day (Rx CHC Play Book): their doctor list in tiers with the month's visits done
+// against due (Tier 1 four, Tier 2 two, Tier 3 one; the list is as long as the CHC's own work,
+// the playbook's 80 is a guide, not a limit), each doctor's light for today's route (red:
 // a refill due within 48 hours or late against their usual gap; yellow: bought last month, not
 // yet this month; green: the rest), the doctors in their area not on the list yet, and their PAP
 // applications (pending, approved this month). The list is the seat's.
@@ -11,7 +12,6 @@ import { addDays, todayManila } from "../inventory/rules";
 import { inForce } from "../org/service";
 import type { Me, RxDay } from "../types";
 
-export const TIER_SIZE: Record<1 | 2 | 3, number> = { 1: 20, 2: 40, 3: 20 };
 export const TIER_VISITS: Record<1 | 2 | 3, number> = { 1: 4, 2: 2, 3: 1 };
 
 async function mySeat(db: Database, me: Me, today: string): Promise<{ id: number; areaId: number | null } | null> {
@@ -83,7 +83,6 @@ export async function rxDay(db: Database, me: Me): Promise<RxDay> {
       const inTier = listed.filter((doctor) => doctor.tier === tier);
       return {
         tier,
-        size: TIER_SIZE[tier],
         doctors: inTier.length,
         visitsDue: inTier.length * TIER_VISITS[tier],
         visitsDone: inTier.reduce((sum, doctor) => sum + Math.min(doctor.visits, TIER_VISITS[tier]), 0),
@@ -106,14 +105,6 @@ export async function setTier(db: Database, me: Me, input: { customerId: number;
   if (!seat) throw new Refusal(400, "no_seat", "You are not in a seat yet: ask HR to put you in one.");
   const [doctor] = await rows<{ kind: string }>(db, sql`select kind from customer where id = ${input.customerId} and active`);
   if (doctor?.kind !== "doctor") throw new Refusal(400, "invalid", "Only doctors go on the doctor list.", "customerId");
-  if (input.tier) {
-    const [inTier] = await rows<{ n: number }>(
-      db,
-      sql`select count(*)::int as n from doctor_list where seat_id = ${seat.id} and tier = ${input.tier} and ended_at is null and customer_id <> ${input.customerId}`,
-    );
-    if ((inTier?.n ?? 0) >= TIER_SIZE[input.tier])
-      throw new Refusal(400, "full", `Tier ${input.tier} has its ${TIER_SIZE[input.tier]} doctors: move one down first.`, "tier");
-  }
   await db.transaction(async (tx) => {
     await tx.execute(
       sql`update doctor_list set ended_at = now(), ended_by = ${me.id} where seat_id = ${seat.id} and customer_id = ${input.customerId} and ended_at is null`,

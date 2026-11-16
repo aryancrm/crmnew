@@ -51,4 +51,5 @@ it("dates every demo invoice after its order, and keeps a truly late one", async
   expect(found.some((one) => one.status === "completed" && one.due < todayManila())).toBe(true);
   // Running it again changes nothing.
   expect(await alignDemoMoneyDates(db)).toBe(0);
-});
+  // It seeds the whole demo inside the test: give it room when the full suite runs at once.
+}, 90_000);

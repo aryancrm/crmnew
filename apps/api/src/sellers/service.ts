@@ -167,9 +167,12 @@ const declaredOf = (personIds: number[], day: string) =>
       to_char(declared_at at time zone 'Asia/Manila', 'HH24:MI') as at
     from huddle where day = ${day}::date and person_id in (${sql.join(personIds.map((id) => sql`${id}`), sql`, `)})`;
 
+/** The 7 PM huddle is the Hospital CHC Playbook's: the Hospital Division's CHCs declare it. */
+const huddleSeller = (me: Me) => me.role === "medrep" && me.channel?.code === "HOSP";
+
 /** My huddle for today: the numbers as the data has them, and what I declared. */
 export async function myHuddle(db: Database, me: Me): Promise<Huddle> {
-  if (!SELLERS.includes(me.role)) throw new Refusal(403, "not_allowed", "The huddle is declared by sellers; leads read the team's.");
+  if (!huddleSeller(me)) throw new Refusal(403, "not_allowed", "The 7 PM huddle is the Hospital CHCs' (the Hospital Division's playbook).");
   const today = todayManila();
   const [actual, declared, coach] = await Promise.all([
     actualsOf(db, [me.id], today),
@@ -185,7 +188,7 @@ export async function myHuddle(db: Database, me: Me): Promise<Huddle> {
 }
 
 export async function declareHuddle(db: Database, me: Me, input: HuddleInput): Promise<void> {
-  if (!SELLERS.includes(me.role)) throw new Refusal(403, "not_allowed", "The huddle is declared by sellers.");
+  if (!huddleSeller(me)) throw new Refusal(403, "not_allowed", "The 7 PM huddle is the Hospital CHCs'.");
   if (!input.invoiced && !input.blocker?.trim())
     throw new Refusal(400, "invalid", "No invoice today: say what stood in the way.", "blocker");
   const today = todayManila();

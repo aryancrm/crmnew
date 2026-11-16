@@ -49,7 +49,7 @@ describe("an Rx CHC's doctors", () => {
     const after = (await (await get("joy", "/api/rx/day")).json()) as RxDay;
     const listed = after.doctors.find((one) => one.customerId === doctor?.id);
     expect(listed).toMatchObject({ tier: 1, due: 4, visits: 0, light: "green" });
-    expect(after.tiers[0]).toMatchObject({ tier: 1, size: 20, doctors: 1, visitsDue: 4, visitsDone: 0 });
+    expect(after.tiers[0]).toMatchObject({ tier: 1, doctors: 1, visitsDue: 4, visitsDone: 0 });
     // Moved to Tier 2, then off the list: the history stays.
     await post("joy", "/api/rx/doctors", { customerId: doctor?.id, tier: 2 });
     await post("joy", "/api/rx/doctors", { customerId: doctor?.id, tier: null });

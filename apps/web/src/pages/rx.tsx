@@ -1,4 +1,4 @@
-// An Rx CHC's doctors (Rx CHC Play Book): the 80-doctor list in three tiers with the month's
+// An Rx CHC's doctors (Rx CHC Play Book): their doctor list in three tiers (as long as their work) with the month's
 // visits done against due, each doctor's light for today's route, and the doctors of the area
 // not on the list yet (put one in a tier with a click). The Home shows today's route (eight
 // calls: red, then yellow, then the green behind on visits), the tiers in one line and the PAP
@@ -52,7 +52,7 @@ export function RxHome() {
         {data.tiers.map((tier) => (
           <Link key={tier.tier} to="/rx/doctors" className={`${CARD} block px-4 py-3 hover:bg-slate-50`}>
             <div className="text-[11px] font-semibold text-slate-500">
-              Tier {tier.tier} · {tier.doctors} of {tier.size} doctors
+              Tier {tier.tier} · {tier.doctors} doctor{tier.doctors === 1 ? "" : "s"}
             </div>
             <div className="mt-0.5 text-xl font-bold tracking-tight text-slate-900 tabular-nums">
               {tier.visitsDone}/{tier.visitsDue}
@@ -82,7 +82,7 @@ export function RxHome() {
             {data.doctors.some((doctor) => doctor.tier) ? "Every doctor is on track." : "Put your doctors in tiers first: "}
             {!data.doctors.some((doctor) => doctor.tier) && (
               <Link to="/rx/doctors" className="font-semibold text-emerald-700 hover:underline">
-                My 80 doctors
+                My doctors
               </Link>
             )}
           </p>
@@ -145,17 +145,14 @@ export function RxDoctorsPage() {
   return (
     <div className="mx-auto max-w-5xl">
       <PageHead
-        title="My 80 doctors"
-        sub={`${listed.length} of 80 on the list · Tier 1 seen four times a month, Tier 2 twice, Tier 3 once · the list stays with the seat`}
+        title="My doctors"
+        sub={`${listed.length} doctor${listed.length === 1 ? "" : "s"} on my list · Tier 1 seen four times a month, Tier 2 twice, Tier 3 once · the list stays with the seat`}
       />
       <div className="mb-3 grid grid-cols-3 gap-3">
         {data.tiers.map((tier) => (
           <div key={tier.tier} className={`${CARD} px-4 py-3`}>
             <div className="text-[11px] font-semibold text-slate-500">Tier {tier.tier}</div>
-            <div className="text-lg font-bold text-slate-900 tabular-nums">
-              {tier.doctors}
-              <span className="text-sm font-semibold text-slate-400">/{tier.size}</span>
-            </div>
+            <div className="text-lg font-bold text-slate-900 tabular-nums">{tier.doctors}</div>
             <div className="text-[11px] text-slate-500">
               {tier.visitsDone} of {tier.visitsDue} visits done
             </div>
@@ -225,13 +222,24 @@ export function RxDoctorsPage() {
                         key={tier}
                         type="button"
                         disabled={action.busy}
-                        onClick={() => setTier(doctor.customerId, doctor.tier === tier ? null : tier)}
-                        title={doctor.tier === tier ? "Take off the list" : `Put in Tier ${tier}`}
+                        onClick={() => doctor.tier !== tier && setTier(doctor.customerId, tier)}
+                        title={doctor.tier === tier ? `In Tier ${tier}` : `Put in Tier ${tier}`}
                         className={`size-7 rounded-md text-[12px] font-bold ring-1 ${doctor.tier === tier ? "bg-brand text-white ring-brand" : "text-slate-600 ring-slate-200 hover:bg-slate-50"}`}
                       >
                         {tier}
                       </button>
                     ))}
+                    {doctor.tier && (
+                      <button
+                        type="button"
+                        disabled={action.busy}
+                        onClick={() => setTier(doctor.customerId, null)}
+                        title="Take off my list"
+                        className="ml-1 rounded-md px-2 text-[11.5px] font-semibold text-slate-500 hover:bg-rose-50 hover:text-rose-700"
+                      >
+                        Remove
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
