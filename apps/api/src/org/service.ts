@@ -1163,11 +1163,26 @@ export async function fillOrderSeats(db: Runner, today = todayManila()): Promise
 // ---- Areas ----
 
 /** Customers of the area's cities who have no area yet join it. */
+/** The kinds of customer each channel's areas look after: a hospital territory takes the city's
+ *  hospitals, not its patients or drugstores (with Zoho's 90,000 customers a city holds all kinds). */
+const CHANNEL_KINDS: Record<string, string[]> = {
+  HOSP: ["hospital", "government"],
+  RX: ["doctor"],
+  B2B: ["drugstore", "distributor"],
+  BID: ["government", "hospital"],
+  MT: ["drugstore"],
+};
+
 async function claimCustomers(tx: Runner, areaId: number, cities: string[]): Promise<void> {
   if (!cities.length) return;
   await tx.execute(
     sql`update customer set area_id = ${areaId} where area_id is null
-      and lower(city) = any(string_to_array(${cities.map((city) => city.toLowerCase()).join("|")}, '|'))`,
+      and lower(city) = any(string_to_array(${cities.map((city) => city.toLowerCase()).join("|")}, '|'))
+      and kind = any(string_to_array(coalesce((select case c.code ${sql.raw(
+        Object.entries(CHANNEL_KINDS)
+          .map(([code, kinds]) => `when '${code}' then '${kinds.join("|")}'`)
+          .join(" "),
+      )} end from area a join channel c on c.id = a.channel_id where a.id = ${areaId}), ''), '|'))`,
   );
 }
 

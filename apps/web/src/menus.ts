@@ -7,6 +7,7 @@ import { officeMedrep } from "./auth";
 import type { Me, Role } from "@2mg/api/types";
 import {
   ArrowLeftRight,
+  Link2,
   Banknote,
   BarChart3,
   BellRing,
@@ -743,6 +744,8 @@ function adminPanel(me: Me): Space {
             badge: "orgRequests",
           },
           { to: "/targets", label: "Targets", icon: Target },
+          // Zoho's salespeople tied to seats: their customers come under the seat.
+          { to: "/admin/zoho-sellers", label: "Zoho salespeople", icon: Link2 },
         ],
       },
       {

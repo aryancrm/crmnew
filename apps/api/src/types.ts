@@ -4120,3 +4120,20 @@ export type DataCheck = {
   problems: string[];
 };
 export type DataChecks = { at: string; ok: boolean; checks: DataCheck[] };
+
+/** Zoho's salespeople, each with the customers they last sold to, and the seats they can be tied to. */
+export type ZohoSellers = {
+  sellers: {
+    /** As Zoho writes it ("HOS | PASAY"). */
+    name: string;
+    /** Customers whose latest Zoho order names them; of those, the ones who ordered in the last 18 months. */
+    customers: number;
+    recent: number;
+    lastOn: string | null;
+    /** The seat it is tied to, and the seat that looks like it. */
+    seatId: number | null;
+    suggested: number | null;
+  }[];
+  /** Seats with an area (only those can hold customers). */
+  seats: { id: number; title: string; unit: string; channel: string | null; area: string | null; holder: string | null }[];
+};
