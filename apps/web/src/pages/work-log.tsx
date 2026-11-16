@@ -116,7 +116,7 @@ export function WorkLogsPage() {
     <div className="mx-auto max-w-5xl space-y-4">
       <PageHead
         title="Work logs"
-        sub="What the office staff wrote about their day. Writing it is optional."
+        sub="What people wrote about their day (the Founder: everyone; a head: the people under them). Writing it is optional."
         actions={
           <input
             type="date"

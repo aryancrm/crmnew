@@ -65,6 +65,11 @@ export const WORK: Record<Role, { label: string; title: string; does: string }> 
     title: "Office staff",
     does: "Digital Marketing, IT and the like: writes their day (what they did, today, tomorrow) if they want.",
   },
+  regulatory: {
+    label: "In-licensing & Regulatory",
+    title: "Regulatory Affairs Pharmacist",
+    does: "Keeps the product pipeline (In-licensing) or the FDA registrations (Regulatory Affairs), by the seat's title.",
+  },
   ceo: { label: "CEO", title: "CEO", does: "Sees the whole company." },
 };
 /** The order the work is offered in, sales first. */

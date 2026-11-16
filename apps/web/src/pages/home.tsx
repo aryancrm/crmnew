@@ -9,6 +9,7 @@ import { Navigate } from "react-router-dom";
 import { api } from "../api";
 import { onlineDesk, useMe } from "../auth";
 import { NewsList } from "../inventory/news";
+import { RegulatoryHome } from "./regulatory";
 import { WorkLogPage } from "./work-log";
 import { count, Facts, PageHead, Panel, Tile } from "../ui";
 import { AdminChannelsPage } from "./admin-channels";
@@ -59,6 +60,7 @@ export function Home() {
   if (me.role === "hr") return <HrPeoplePage />;
   // The office staff's Home is their work log.
   if (me.role === "staff") return <WorkLogPage />;
+  if (me.role === "regulatory") return <RegulatoryHome />;
   return <Desk />;
 }
 

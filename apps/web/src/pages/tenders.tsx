@@ -4,7 +4,7 @@
 // details, envelope papers, our price per medicine, its next step, its history) and the company's
 // eligibility papers.
 
-import type { Catalogue, CompanyPaper, CustomerList, Tender, TenderDesk, TenderStep } from "@2mg/api/types";
+import type { Catalogue, CompanyPaper, CustomerList, RegulatoryDesk, Tender, TenderDesk, TenderStep } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useState } from "react";
@@ -522,6 +522,7 @@ export function CompanyPapersPage() {
           ))}
         </ul>
       </section>
+      <ProductCprs />
       <section className={`${CARD} grid gap-2 p-4 sm:grid-cols-[1fr_12rem_10rem_auto]`}>
         <input className="field h-9" placeholder="Paper (e.g. PhilGEPS Platinum certificate)" value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} />
         <input className="field h-9" placeholder="Number" value={form.number} onChange={(event) => setForm({ ...form, number: event.target.value })} />
@@ -545,6 +546,37 @@ export function CompanyPapersPage() {
         </div>
       </section>
     </div>
+  );
+}
+
+/** The products' CPRs for the envelope, as Regulatory Affairs keeps them (read only here). */
+function ProductCprs() {
+  const query = useQuery({ queryKey: ["regulatory"], queryFn: () => api<RegulatoryDesk>("/api/regulatory/desk") });
+  const cprs = (query.data?.registrations ?? []).filter((r) => ["approved", "renewal_filed"].includes(r.status));
+  if (!query.data) return null;
+  return (
+    <section className={CARD}>
+      <h3 className="border-b border-slate-100 px-4 py-3 text-sm font-bold text-slate-900">
+        Product registrations (CPRs) <span className="font-normal text-slate-500">· kept by Regulatory Affairs</span>
+      </h3>
+      {cprs.length === 0 ? (
+        <p className="px-4 py-3 text-[13px] text-slate-500">No CPR recorded yet.</p>
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {cprs.map((r) => (
+            <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-[13px]">
+              <span>
+                <b className="text-slate-900">{r.product}</b> {r.number && <span className="text-slate-500">· {r.number}</span>}
+              </span>
+              <span className={`text-[12px] font-semibold ${r.flag === "expired" ? "text-rose-700" : r.flag ? "text-amber-700" : "text-emerald-700"}`}>
+                {r.status === "renewal_filed" ? "renewal filed · " : ""}
+                {r.validUntil ? `${r.flag === "expired" ? "expired" : "valid until"} ${dayLabel(r.validUntil)}` : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

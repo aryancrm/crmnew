@@ -14,6 +14,8 @@ export const ROLES = [
   "hr",
   // Office departments that neither sell nor run the order line (Digital Marketing, IT…).
   "staff",
+  // In-licensing & Regulatory: the product pipeline and the FDA registrations (CPRs).
+  "regulatory",
 ] as const;
 
 export type Role = (typeof ROLES)[number];
@@ -33,6 +35,7 @@ export const ROLE_LABEL: Record<Role, string> = {
   admin: "Admin",
   hr: "HR",
   staff: "Office staff",
+  regulatory: "In-licensing & Regulatory",
 };
 
 export function isRole(value: string): value is Role {

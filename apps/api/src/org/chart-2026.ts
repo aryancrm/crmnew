@@ -143,4 +143,28 @@ export const CHART_2026: ChartUnit[] = [
     seats: [{ title: "Digital Marketing Coach", module: "staff" }, { title: "Multimedia Artist", module: "staff" }],
   },
   { name: "IT Division", kind: "department", channel: null, seats: [{ title: "Employee Happiness Coachee", module: "staff", n: 5 }] },
+  // Two teams, each with its Mentor (docs/PLAN.md 16.9): the product pipeline and the FDA registrations.
+  {
+    name: "In-licensing & Regulatory Department", kind: "department", channel: null, seats: [],
+    units: [
+      {
+        name: "In-licensing", kind: "line", channel: null,
+        seats: [
+          { title: "In-licensing Mentor", module: "regulatory", lead: true },
+          { title: "In-licensing Coach", module: "regulatory" },
+          { title: "In-licensing Executive", module: "regulatory", n: 2 },
+        ],
+      },
+      {
+        name: "Regulatory Affairs", kind: "line", channel: null,
+        seats: [
+          { title: "Regulatory Affairs Mentor", module: "regulatory", lead: true },
+          { title: "Regulatory Affairs Coach", module: "regulatory" },
+          { title: "Regulatory Affairs Pharmacist", module: "regulatory", n: 3 },
+          { title: "Regulatory Affairs Coachee", module: "regulatory", n: 2 },
+          { title: "Regulatory Affairs Coachee – India base", module: "regulatory" },
+        ],
+      },
+    ],
+  },
 ];

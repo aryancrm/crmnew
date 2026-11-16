@@ -1,12 +1,11 @@
 // The work log (17 Nov): anyone may write their day in their own words, and the office staff
 // (Digital Marketing, IT…) have it as their desk. Optional: an empty day is fine. One entry a day,
-// changed during the day. The Founder and the Admin read everyone's; a lead the people under them.
+// changed during the day. The Founder and the Admin read everyone's; a head the people under them.
 
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
-import { teamSeats } from "../team/service";
 import type { Me, WorkLog, WorkLogDay } from "../types";
 
 const entrySelect = sql`select to_char(w.day, 'YYYY-MM-DD') as day, w.done, w.today, w.tomorrow,
@@ -34,13 +33,15 @@ export async function writeWorkLog(db: Database, me: Me, input: { done?: string 
 export async function workLogDay(db: Database, me: Me, asked: { day?: string }): Promise<WorkLogDay> {
   const today = todayManila();
   const day = asked.day && /^\d{4}-\d{2}-\d{2}$/.test(asked.day) && asked.day <= today ? asked.day : today;
-  let who = sql`true`;
+  // The Founder and the Admin read everyone's; anyone else the people under them on the tree (a
+  // Mentor or Coach of any department), and nobody's when nobody reports to them.
+  const who = ["ceo", "admin"].includes(me.role)
+    ? sql`true`
+    : sql`w.person_id in (with recursive team as (select id from person where reports_to = ${me.id}
+        union all select p.id from person p join team t on p.reports_to = t.id) select id from team)`;
   if (!["ceo", "admin"].includes(me.role)) {
-    if (!["team_lead", "manager"].includes(me.role)) throw new Refusal(403, "not_allowed", "Work logs are read by the Founder and the heads.");
-    const { seatIds } = await teamSeats(db, me, null);
-    who = seatIds.length
-      ? sql`w.person_id in (select h.person_id from seat_holder h where h.seat_id in (${sql.join(seatIds.map((id) => sql`${id}`), sql`, `)}) and h.ends_on is null)`
-      : sql`false`;
+    const [under] = await rows<{ n: number }>(db, sql`select count(*)::int as n from person where reports_to = ${me.id} and active`);
+    if (!under?.n) throw new Refusal(403, "not_allowed", "Work logs are read by the Founder and the heads.");
   }
   const entries = await rows<WorkLogDay["entries"][number]>(
     db,

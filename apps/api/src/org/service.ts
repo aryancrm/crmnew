@@ -79,6 +79,7 @@ const MODULE_LOGIN: Record<Role, string> = {
   ceo: "ceo",
   hr: "hr",
   staff: "staff",
+  regulatory: "reg",
 };
 function loginPrefix(module: Role, channelCode: string | null): string {
   if (module === "medrep")

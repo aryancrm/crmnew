@@ -4698,3 +4698,56 @@ export type WorkLogDay = {
   today: string;
   entries: (WorkLog["entries"][number] & { personId: number; name: string; title: string | null; unit: string | null })[];
 };
+
+// ---- In-licensing & Regulatory (docs/PLAN.md 16.9) ----
+
+export type PipelineStage = "identified" | "talks" | "agreement" | "dossier" | "filed" | "registered" | "launched" | "dropped";
+export type RegistrationStatus = "preparing" | "filed" | "approved" | "renewal_filed" | "expired" | "withdrawn";
+
+export type PipelineRow = {
+  id: number;
+  name: string;
+  generic: string | null;
+  strength: string | null;
+  partner: string | null;
+  country: string | null;
+  stage: PipelineStage;
+  handledBy: { id: number; name: string } | null;
+  nextStep: string | null;
+  nextOn: string | null;
+  note: string | null;
+  updatedOn: string;
+  /** The registration Regulatory Affairs opened for it, once handed over. */
+  registrationId: number | null;
+};
+
+export type RegistrationRow = {
+  id: number;
+  product: string;
+  medicineId: number | null;
+  pipelineId: number | null;
+  number: string | null;
+  status: RegistrationStatus;
+  filedOn: string | null;
+  validUntil: string | null;
+  /** Days left before it expires (negative: past), for an approved one. */
+  daysLeft: number | null;
+  /** soon: within 180 days and no renewal filed; urgent: within 90; expired. */
+  flag: "soon" | "urgent" | "expired" | null;
+  handledBy: { id: number; name: string } | null;
+  note: string | null;
+};
+
+export type RegEvent = { at: string; what: string; by: string };
+
+/** The In-licensing & Regulatory desk: whichever team the seat is in, and both lists to read. */
+export type RegulatoryDesk = {
+  today: string;
+  /** inlicensing or ra by the seat's title; null for the Founder, the Admin and the bidding desk. */
+  team: "inlicensing" | "ra" | null;
+  canPipeline: boolean;
+  canRegistrations: boolean;
+  people: { id: number; name: string; title: string | null }[];
+  pipeline: PipelineRow[];
+  registrations: RegistrationRow[];
+};

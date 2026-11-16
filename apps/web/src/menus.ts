@@ -22,6 +22,7 @@ import {
   ClipboardCheck,
   ClipboardList,
   Factory,
+  FlaskConical,
   FileText,
   Gauge,
   Gift,
@@ -330,7 +331,13 @@ const reportsApp: Space = {
         { to: "/targets", label: "Targets", icon: Target },
       ],
     },
-    { title: "Office", items: [{ to: "/work-logs", label: "Work logs", icon: NotebookPen }] },
+    {
+      title: "Office",
+      items: [
+        { to: "/work-logs", label: "Work logs", icon: NotebookPen },
+        { to: "/reports/regulatory", label: "Pipeline & registrations", icon: FlaskConical },
+      ],
+    },
   ],
 };
 
@@ -1095,6 +1102,30 @@ function ownDesk(me: Me): Space {
         icon: NotebookPen,
         tone: "bg-brand text-white",
         groups: [{ items: [{ ...home, label: "My work log", icon: NotebookPen }] }],
+      };
+    case "regulatory":
+      // In-licensing & Regulatory (docs/PLAN.md 16.9): the pipeline and the FDA registrations, their
+      // own team's first; the medicines list to look things up; the work log if they want it.
+      const mentorLogs = /mentor/i.test(me.title ?? "") ? [{ to: "/work-logs", label: "Team's work logs", icon: NotebookPen }] : [];
+      return {
+        ...desk(
+          /in-?licens/i.test(me.title ?? "")
+            ? [
+                home,
+                { to: "/regulatory/pipeline", label: "Pipeline", icon: FlaskConical },
+                { to: "/regulatory/registrations", label: "Registrations (CPRs)", icon: ShieldCheck, short: "CPRs" },
+                { to: "/work-log", label: "My work log", icon: NotebookPen },
+                ...mentorLogs,
+              ]
+            : [
+                home,
+                { to: "/regulatory/registrations", label: "Registrations (CPRs)", icon: ShieldCheck, short: "CPRs" },
+                { to: "/regulatory/pipeline", label: "Pipeline", icon: FlaskConical },
+                { to: "/work-log", label: "My work log", icon: NotebookPen },
+                ...mentorLogs,
+              ],
+          FlaskConical,
+        ),
       };
     case "inventory":
       return inventoryApp(me);
