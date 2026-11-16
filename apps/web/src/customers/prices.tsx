@@ -766,6 +766,33 @@ export function PricesGiven({ customerId }: { customerId: number }) {
         }
         flush
       >
+        {(data.zoho.seller || data.zoho.division || data.zoho.owed > 0) && (
+          // Whose customer it was in Zoho, and what Zoho's invoices still show as owed.
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 border-b border-slate-100 bg-slate-50/60 px-4 py-2.5 text-[12.5px] sm:px-5">
+            {data.zoho.seller && (
+              <span className="text-slate-600">
+                Sold by <b className="text-slate-900">{data.zoho.seller}</b>
+              </span>
+            )}
+            {data.zoho.division && (
+              <span className="text-slate-600">
+                Division{" "}
+                <b className="text-slate-900">
+                  {[data.zoho.division, data.zoho.subDivision, data.zoho.headquarter]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </b>
+              </span>
+            )}
+            {data.zoho.owed > 0 && (
+              <span className="ml-auto rounded-full bg-amber-100 px-2.5 py-0.5 font-semibold text-amber-900 ring-1 ring-amber-200">
+                Owes {peso(data.zoho.owed)} in Zoho · {count(data.zoho.openInvoices)}{" "}
+                {data.zoho.openInvoices === 1 ? "invoice" : "invoices"}
+                {data.zoho.oldestDue ? ` · oldest due ${dayLabel(data.zoho.oldestDue)}` : ""}
+              </span>
+            )}
+          </div>
+        )}
         <ul className="divide-y divide-slate-100">
           {data.orders.map((order) => (
             <li key={order.id} className="px-4 py-2.5 hover:bg-slate-50/60 sm:px-5">

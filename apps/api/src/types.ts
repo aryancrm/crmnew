@@ -2305,6 +2305,18 @@ export type MedicinePrices = {
 /** A customer's prices, and their orders from before this CRM (Zoho). */
 export type CustomerPrices = {
   past: { orders: number; bought: number; firstOn: string | null; lastOn: string | null };
+  /** As Zoho had them: whose customer it was (the salesperson of their latest order, its
+   *  Division, Sub-division and Headquarter), and what Zoho's invoices still show as owed
+   *  (centavos), on how many invoices, the oldest due day. */
+  zoho: {
+    seller: string | null;
+    division: string | null;
+    subDivision: string | null;
+    headquarter: string | null;
+    owed: number;
+    openInvoices: number;
+    oldestDue: string | null;
+  };
   orders: {
     id: number;
     code: string;

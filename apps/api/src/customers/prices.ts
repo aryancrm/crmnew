@@ -133,9 +133,23 @@ const pastOf = async (db: Database, customerId: number) => {
  *  this CRM. Whoever may see the customer may see it. */
 export async function customerPrices(db: Database, me: Me, id: number): Promise<CustomerPrices> {
   await customerDetail(db, me, id);
-  const [lines, past, orders] = await Promise.all([
+  const [lines, past, under, owes, orders] = await Promise.all([
     linesOf(db, id),
     pastOf(db, id),
+    // Whose customer it was in Zoho: the salesperson of the latest order that names one.
+    rows<Pick<CustomerPrices["zoho"], "seller" | "division" | "subDivision" | "headquarter">>(
+      db,
+      sql`select seller, division, sub_division as "subDivision", headquarter from zoho_contact
+        where customer_id = ${id} and (seller is not null or division is not null)
+        order by seller_on desc nulls last limit 1`,
+    ),
+    // What Zoho's invoices still show as owed.
+    rows<Pick<CustomerPrices["zoho"], "owed" | "openInvoices" | "oldestDue">>(
+      db,
+      sql`select coalesce(sum(balance), 0)::float8 as owed, count(*)::int as "openInvoices",
+          to_char(min(due_on), 'YYYY-MM-DD') as "oldestDue"
+        from past_invoice where customer_id = ${id} and balance > 0 and status not in ('void', 'draft')`,
+    ),
     rows<CustomerPrices["orders"][number]>(
       db,
       sql`select p.id::int as id, p.code, to_char(p.ordered_on, 'YYYY-MM-DD') as "on", p.status, p.total::float8 as total, p.seller,
@@ -145,7 +159,20 @@ export async function customerPrices(db: Database, me: Me, id: number): Promise<
         order by p.ordered_on desc, p.id desc limit ${PAST_ORDERS}`,
     ),
   ]);
-  return { past, orders, medicines: byMedicine(lines).slice(0, MEDICINES) };
+  return {
+    past,
+    zoho: {
+      seller: under[0]?.seller ?? null,
+      division: under[0]?.division ?? null,
+      subDivision: under[0]?.subDivision ?? null,
+      headquarter: under[0]?.headquarter ?? null,
+      owed: owes[0]?.owed ?? 0,
+      openInvoices: owes[0]?.openInvoices ?? 0,
+      oldestDue: owes[0]?.oldestDue ?? null,
+    },
+    orders,
+    medicines: byMedicine(lines).slice(0, MEDICINES),
+  };
 }
 
 /** For an order being decided: what this customer was given before for each of its medicines,
