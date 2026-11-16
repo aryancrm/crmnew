@@ -6,6 +6,7 @@
 import { sql } from "drizzle-orm";
 import { phoneKey } from "../customers/service";
 import { type Database, rows } from "../db/index";
+import { keepFile } from "../files/store";
 
 export type OldLead = {
   id: string;
@@ -256,5 +257,82 @@ export async function importOldLeads(
     }
   }
 
+  return said;
+}
+
+// ---------------------------------------------------------------- the old CRM's photos
+
+/** One photo of an old enquiry, with a short-lived link to its bytes in the old storage. */
+export type OldFile = {
+  id: string;
+  leadId: string;
+  name: string;
+  mime: string;
+  kind: string | null;
+  status: string | null;
+  at: string;
+  url: string;
+};
+
+const FILE_KINDS: Record<string, string> = {
+  prescription: "rx",
+  osca_id: "osca_id",
+  pwd_id: "pwd_id",
+  booklet: "pwd_booklet",
+  id: "valid_id",
+  med_cert: "med_cert",
+  gl: "gl_letter",
+};
+
+/** The paper the new CRM files an old photo as; unfiled or refused ones wait as unsorted. */
+export function fileKindOf(file: Pick<OldFile, "kind" | "status">): string {
+  if (!file.kind || file.status === "rejected") return "unsorted";
+  return FILE_KINDS[file.kind] ?? "other";
+}
+
+/** Brings the old enquiries' photos over, once each (their old id is kept). */
+export async function importOldFiles(db: Database, files: OldFile[], apply: boolean) {
+  const said = { files: files.length, brought: 0, alreadyHere: 0, noCase: 0, failed: [] as string[] };
+  for (const file of files) {
+    const [here] = await rows<{ id: number }>(
+      db,
+      sql`select id::int as id from lead_file where legacy_id = ${file.id}`,
+    );
+    if (here) {
+      said.alreadyHere += 1;
+      continue;
+    }
+    const [lead] = await rows<{ id: number }>(
+      db,
+      sql`select id::int as id from lead where legacy_id = ${file.leadId}`,
+    );
+    if (!lead) {
+      said.noCase += 1;
+      continue;
+    }
+    if (!apply) {
+      said.brought += 1;
+      continue;
+    }
+    try {
+      const res = await fetch(file.url, { signal: AbortSignal.timeout(30_000) });
+      if (!res.ok) throw new Error(`old storage answered ${res.status}`);
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      if (!bytes.byteLength) throw new Error("empty file");
+      const kept = await keepFile("cases", {
+        name: file.name.slice(0, 120) || "photo",
+        mime: file.mime || "application/octet-stream",
+        bytes,
+      });
+      await db.execute(
+        sql`insert into lead_file (lead_id, kind, name, mime, size, data, store_key, by_person, at, legacy_id)
+          values (${lead.id}, ${fileKindOf(file)}, ${kept.name}, ${kept.mime}, ${kept.size}, ${kept.data}, ${kept.key}, null, ${file.at}, ${file.id})
+          on conflict (legacy_id) where legacy_id is not null do nothing`,
+      );
+      said.brought += 1;
+    } catch (error) {
+      said.failed.push(`${file.name}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   return said;
 }

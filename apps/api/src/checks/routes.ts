@@ -5,7 +5,7 @@ import type { Database } from "../db/index";
 import type { Env } from "../http";
 import { z } from "zod";
 import { allow, readBody } from "../http";
-import { importOldLeads, type OldLead, type OldMessage } from "../online/legacy-import";
+import { importOldFiles, importOldLeads, type OldFile, type OldLead, type OldMessage } from "../online/legacy-import";
 import { dataChecks } from "./integrity";
 
 export function checkRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandler<Env>): void {
@@ -31,5 +31,17 @@ export function checkRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
         Boolean(body.apply),
       ),
     );
+  });
+  // The old CRM's photos: links to the old storage, fetched and kept here (dry run unless apply).
+  app.post("/api/admin/import/old-files", signedIn, async (c) => {
+    allow(c.get("me"), ["admin"], "bring over the old CRM's photos");
+    const body = await readBody(
+      c,
+      z.object({
+        files: z.array(z.record(z.string(), z.unknown())).max(100),
+        apply: z.boolean().optional(),
+      }),
+    );
+    return c.json(await importOldFiles(db, body.files as unknown as OldFile[], Boolean(body.apply)));
   });
 }
