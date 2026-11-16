@@ -434,13 +434,19 @@ export function OrderNew({
     findMedicine.trim().length >= 1
       ? medicines
           .filter((row) => !lines.some((line) => line.medicineId === row.id))
-          .filter((row) =>
-            [row.name, row.generic, row.sku, row.code]
+          // Every word typed is somewhere in the name, its strength, generic, SKU or code, so
+          // "letrozole 2.5" finds "Letrozole 2.5 mg" (the strength is kept apart from the name).
+          .filter((row) => {
+            const text = [row.name, row.strength, row.generic, row.sku, row.code]
               .filter(Boolean)
               .join(" ")
+              .toLowerCase();
+            return findMedicine
+              .trim()
               .toLowerCase()
-              .includes(findMedicine.trim().toLowerCase()),
-          )
+              .split(/\s+/)
+              .every((word) => text.includes(word));
+          })
           .slice(0, 8)
       : [];
   /** A free line of the same medicine (a Buy 1 Take 1): the same quantity at ₱0, under the paid one. */
@@ -1761,7 +1767,9 @@ export function OrderNew({
               ? "Save the changes"
               : fixId
                 ? "Send to Management"
-                : "Place order"}
+                : papPatient
+                  ? "Start a PAP case"
+                  : "Place order"}
         </button>
       </div>
 

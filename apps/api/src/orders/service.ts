@@ -1266,7 +1266,14 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
       : { owes: owes.get(order.customerId), creditLimit, total: order.total },
   );
   return {
-    order: { ...labelled(shown), invoiceFromLabel: INVOICE_FROM_LABEL[order.invoiceFrom] },
+    order: {
+      ...labelled(shown),
+      // Delivered and paid is complete; delivered with money still owed says just that.
+      ...(shown.status === "completed" && money.invoice?.status === "paid"
+        ? { statusLabel: "Completed" }
+        : {}),
+      invoiceFromLabel: INVOICE_FROM_LABEL[order.invoiceFrom],
+    },
     items: items.map(({ orderId: _orderId, ...item }) => item),
     papers: papers.map((paper) => ({ ...paper, kindLabel: PAPER_LABEL[paper.kind] })),
     paperList: paperList(
