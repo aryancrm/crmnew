@@ -1,5 +1,6 @@
 // Customers to call: each customer's usual gap between orders (the median of their last six,
-// this CRM's orders and the old system's together), and where they stand against it today. Due
+// this CRM's orders and the old system's together), and where they stand against it today. Soon
+// when the refill falls within the next two days (MD Telesales' "refills due in 48 hours"); due
 // once the usual gap has passed; late past 1.5 times it; at risk past 2.5 times, or 90 days and
 // late; lost past 180 days (the thresholds found in Zoho's orders: the usual reorder gap is 28
 // days, which is taken for a customer with one order). A seller sees their own customers; a lead
@@ -13,7 +14,7 @@ import { inForce, ledUnits } from "../org/service";
 import type { CustomerKind, Me, Reorders, ReorderState } from "../types";
 import { seen, team } from "./service";
 
-export const REORDER_STATES: ReorderState[] = ["due", "late", "at_risk", "lost"];
+export const REORDER_STATES: ReorderState[] = ["soon", "due", "late", "at_risk", "lost"];
 const DEFAULT_GAP = 28;
 
 export async function reorders(
@@ -30,14 +31,16 @@ export async function reorders(
   const online = onlineDesk(me);
   const kind = (["hospital", "doctor", "patient", "drugstore", "distributor", "government"] as const).find((one) => one === asked.kind);
   // Patients are the online desk's; everyone else's list is the buying businesses and doctors.
-  // An Rx CHC's list is their doctors.
+  // An Rx CHC's list is their doctors; MD Telesales' their patients and doctors.
   const kindIs: SQL = kind
     ? sql`c.kind = ${kind}`
     : online
       ? sql`c.kind = 'patient'`
-      : me.role === "medrep" && me.channel?.code === "RX"
+      : me.channel?.code === "RX" && me.role === "medrep"
         ? sql`c.kind = 'doctor'`
-        : sql`c.kind <> 'patient'`;
+        : me.channel?.code === "TS"
+          ? sql`c.kind in ('patient', 'doctor')`
+          : sql`c.kind <> 'patient'`;
   const areaIs: SQL = asked.area ? sql`c.area_id = ${asked.area}` : sql`true`;
 
   const base = sql`${team(me)},
@@ -61,6 +64,7 @@ export async function reorders(
           when ${today}::date - s.last > 2.5 * s.usual or (${today}::date - s.last > 90 and ${today}::date - s.last > 1.5 * s.usual) then 'at_risk'
           when ${today}::date - s.last > 1.5 * s.usual then 'late'
           when ${today}::date - s.last >= s.usual then 'due'
+          when ${today}::date - s.last >= s.usual - 2 then 'soon'
           else 'ok' end as state
       from s where ${today}::date - s.last <= 730)`;
 
@@ -76,7 +80,17 @@ export async function reorders(
              join person p on p.id = h.person_id where x.area_id = c.area_id and x.active and not x.lead
            order by h.starts_on desc limit 1) as seller,
           to_char(st.last, 'YYYY-MM-DD') as "lastOn", st.orders, round(st.usual)::int as usual, st.since,
-          to_char(st.last + round(st.usual)::int, 'YYYY-MM-DD') as "expectedOn", coalesce(st."lastTotal", 0)::float8 as "lastTotal"
+          to_char(st.last + round(st.usual)::int, 'YYYY-MM-DD') as "expectedOn", coalesce(st."lastTotal", 0)::float8 as "lastTotal",
+          -- What they took last time: this CRM's latest order, else the old system's.
+          coalesce(
+            (select string_agg(m.name || coalesce(' ' || m.strength, '') || ' × ' || i.qty, ', ' order by i.id)
+               from order_item i join medicine m on m.id = i.medicine_id
+              where i.order_id = (select o.id from sales_order o where o.customer_id = c.id and o.status not in ('draft', 'cancelled')
+                order by coalesce(o.submitted_at, o.created_at) desc limit 1)),
+            (select string_agg(pi.name || ' × ' || pi.qty, ', ' order by pi.id) from past_order_item pi
+              where pi.past_order_id = (select p.id from past_order p where p.customer_id = c.id and p.status <> 'void'
+                order by p.ordered_on desc, p.id desc limit 1))
+          ) as "lastItems"
         from st join customer c on c.id = st.cid left join area a on a.id = c.area_id
         where st.state = ${state}
         order by st."lastTotal" desc nulls last, st.since desc limit 200`,

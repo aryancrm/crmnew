@@ -12,8 +12,9 @@ import { seatWords } from "../seat-words";
 import { shortPeso } from "../ceo";
 import { CARD, count, dayLabel, PageHead, PageState, Tabs } from "../ui";
 
-const STATE_LABEL: Record<ReorderState, string> = { due: "Due now", late: "Late", at_risk: "At risk", lost: "Lost" };
+const STATE_LABEL: Record<ReorderState, string> = { soon: "In 2 days", due: "Due now", late: "Late", at_risk: "At risk", lost: "Lost" };
 const STATE_SUB: Record<ReorderState, string> = {
+  soon: "Their refill falls in the next two days: reach them before they run out.",
   due: "Their usual gap has passed: call before they order elsewhere.",
   late: "Past 1.5 times their usual gap.",
   at_risk: "Past 2.5 times their usual gap, or 90 days and late.",
@@ -26,7 +27,8 @@ export function ToCallPage() {
   // A seller's own list: every line is theirs, so no seller column.
   const own = me?.role === "medrep" || me?.role === "online";
   const [params, setParams] = useSearchParams();
-  const state = (params.get("state") as ReorderState | null) ?? "due";
+  // MD Telesales start on the refills coming due; everyone else on the ones due now.
+  const state = (params.get("state") as ReorderState | null) ?? (me?.channel?.code === "TS" ? "soon" : "due");
   const area = params.get("area");
   const kind = params.get("kind");
   const query = useQuery({
@@ -64,7 +66,7 @@ export function ToCallPage() {
         }
       />
       <Tabs
-        tabs={(["due", "late", "at_risk", "lost"] as const).map((key) => ({ key, label: STATE_LABEL[key], count: of(key)?.customers ?? 0 }))}
+        tabs={(["soon", "due", "late", "at_risk", "lost"] as const).map((key) => ({ key, label: STATE_LABEL[key], count: of(key)?.customers ?? 0 }))}
         value={state}
         onChange={(key) => set("state", key)}
       />
@@ -98,6 +100,7 @@ export function ToCallPage() {
                   <div className="flex flex-wrap items-center gap-x-2 text-[11.5px] text-slate-500">
                     <span className="capitalize">{row.kind}</span>
                     {row.city && <span>{row.city}</span>}
+                    {row.lastItems && <span className="text-slate-600">Last: {row.lastItems}</span>}
                     {row.phone && row.phone.replace(/\D/g, "").length >= 7 && (
                       <a href={`tel:${row.phone.replace(/\s/g, "")}`} className="inline-flex items-center gap-1 text-emerald-700 hover:underline">
                         <Phone className="size-3" /> {row.phone}

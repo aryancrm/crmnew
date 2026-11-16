@@ -10,6 +10,7 @@ import { DEFAULT_SCHEDULE, isWorkDay } from "../hr/work-time";
 import { Refusal } from "../http";
 import { addDays, todayManila } from "../inventory/rules";
 import { inForce } from "../org/service";
+import { careGroups } from "../rx/groups";
 import { HOSPITAL } from "../scores/recipes";
 import { measure } from "../scores/service";
 import { teamSeats } from "../team/service";
@@ -61,6 +62,53 @@ export async function pulse(db: Database, me: Me): Promise<Pulse> {
   const invoiced = invoicedRow[0]?.n ?? 0;
   const round = (value: number | null) => (value === null ? null : Math.round(value));
   const dayWords = new Date(`${lastDay}T00:00:00Z`).toLocaleDateString("en-PH", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
+  const salesTile: Pulse["tiles"][number] = {
+    key: "sales",
+    label: "Sales vs target",
+    value: ist === null ? "No target" : `${round(ist)}%`,
+    sub: notes.ist ?? "",
+    tone: ist === null ? "none" : ist >= 91 ? "green" : ist >= 71 ? "amber" : "red",
+    to: "/my/score",
+  };
+  const invoiceTile: Pulse["tiles"][number] = {
+    key: "invoice",
+    label: "Invoice on the last working day",
+    value: invoiced ? "Yes" : "No",
+    sub: invoiced ? `${invoiced} invoice${invoiced === 1 ? "" : "s"} on ${dayWords}` : `None on ${dayWords}: a zero-sales day`,
+    tone: invoiced ? "green" : "red",
+    to: "/orders?stage=all",
+  };
+  // MD Telesales (Rx Team & Training Playbook): the sales number, the refills due in 48 hours,
+  // the care groups waiting for first contact (15 minutes), and the last working day's invoice.
+  if (me.channel?.code === "TS") {
+    const groups = await careGroups(db, me);
+    const refills = slipping.counts.filter((one) => one.state === "soon" || one.state === "due").reduce((sum, one) => sum + one.customers, 0);
+    const waiting = groups.counts.waiting + groups.counts.late;
+    return {
+      today,
+      lastDay,
+      tiles: [
+        salesTile,
+        {
+          key: "refills",
+          label: "Refills due",
+          value: String(refills),
+          sub: `${late} late or at risk too`,
+          tone: late > 2 ? "red" : refills || late ? "amber" : "green",
+          to: "/to-call?state=soon",
+        },
+        {
+          key: "groups",
+          label: "Groups waiting",
+          value: String(waiting),
+          sub: groups.counts.late ? `${groups.counts.late} past the 15 minutes` : "first contact within 15 minutes",
+          tone: groups.counts.late ? "red" : waiting ? "amber" : "green",
+          to: "/care-groups",
+        },
+        invoiceTile,
+      ],
+    };
+  }
   return {
     today,
     lastDay,

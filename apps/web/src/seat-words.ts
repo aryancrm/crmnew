@@ -18,11 +18,18 @@ const RX: Record<string, string> = {
   manager: "Country Mentor",
 };
 
+const TS: Record<string, string> = {
+  medrep: "MD Telesales",
+  team_lead: "Telesales Coach",
+};
+
 export function seatWords(me: Pick<Me, "role" | "roleLabel" | "channel"> | null | undefined): Words {
   const plain = { desk: me?.roleLabel ?? "", customers: "customers", myCustomers: "My area", toCall: "Customers to call" };
   if (!me) return plain;
   if (me.channel?.code === "HOSP" && HOSPITAL[me.role])
     return { desk: HOSPITAL[me.role] as string, customers: "hospitals", myCustomers: "My hospitals", toCall: "Hospitals to call" };
+  if (me.channel?.code === "TS" && TS[me.role])
+    return { desk: TS[me.role] as string, customers: "patients and doctors", myCustomers: "My patients", toCall: "Refills due" };
   if (me.channel?.code === "RX" && RX[me.role])
     return { desk: RX[me.role] as string, customers: "doctors", myCustomers: "My doctors", toCall: "Doctors to call" };
   return plain;

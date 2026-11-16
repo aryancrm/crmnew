@@ -184,11 +184,12 @@ export function Shell() {
         <span aria-hidden="true" className="hidden h-6 w-px bg-slate-200 md:block" />
         <NavLink
           to="/"
-          className="flex min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-slate-50"
+          className="flex max-w-[14rem] shrink-0 items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-slate-50"
         >
+          {/* The desk's name stays whole; the search box gives way on a narrow screen. */}
           <span className="truncate text-sm font-semibold text-slate-900">{space.label}</span>
         </NavLink>
-        <div className="ml-auto flex w-full max-w-xl justify-end">
+        <div className="ml-auto flex w-full min-w-0 max-w-xl justify-end">
           <SearchBox />
         </div>
         {/* The person's working day: when it started, Start / End my day. */}

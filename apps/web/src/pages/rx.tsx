@@ -4,13 +4,14 @@
 // calls: red, then yellow, then the green behind on visits), the tiers in one line and the PAP
 // applications.
 
-import type { RxDay } from "@2mg/api/types";
+import type { CareGroups, RxDay, RxField } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { HeartHandshake, Phone, Route } from "lucide-react";
+import { HeartHandshake, Phone, Route, Users } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { CARD, count, dayLabel, PageHead, PageState, Problem, useAction } from "../ui";
+import { EnrolDialog } from "./care-groups";
 
 type Doctor = RxDay["doctors"][number];
 
@@ -121,7 +122,54 @@ export function RxHome() {
           </ol>
         )}
       </section>
+      <RxGroups />
     </>
+  );
+}
+
+/** The Rx CHC's care groups: waiting for telesales, quiet 14 days (follow up), enrol a new one. */
+function RxGroups() {
+  const query = useQuery({ queryKey: ["care-groups"], queryFn: () => api<CareGroups>("/api/care-groups") });
+  const [enrolling, setEnrolling] = useState(false);
+  const data = query.data;
+  if (!data) return null;
+  const quiet = data.rows.filter((row) => row.state === "quiet14" || row.state === "quiet30");
+  const waiting = data.rows.filter((row) => row.state === "waiting" || row.state === "late");
+  return (
+    <section className={`${CARD} min-w-0`}>
+      <header className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
+        <h3 className="inline-flex items-center gap-1.5 text-sm font-bold text-slate-900">
+          <Users className="size-4 text-slate-500" /> Patient Care Groups
+        </h3>
+        <span className="flex items-center gap-3 text-[12px] text-slate-500">
+          {data.counts.enrolledToday} new today · {data.counts.active} active
+          <button type="button" onClick={() => setEnrolling(true)} className="rounded-lg bg-brand px-2 py-1 text-[12px] font-semibold text-white">
+            Enrol a group
+          </button>
+        </span>
+      </header>
+      {waiting.length === 0 && quiet.length === 0 ? (
+        <p className="px-4 py-3 text-[13px] text-slate-500">Every group is answered and active.</p>
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {waiting.map((row) => (
+            <li key={row.id} className="flex items-center justify-between gap-3 px-4 py-2 text-[13px]">
+              <span className="truncate font-semibold text-slate-900">{row.doctor}</span>
+              <span className={`text-[12px] font-semibold ${row.state === "late" ? "text-rose-700" : "text-amber-700"}`}>
+                Waiting for MD Telesales · {row.waitingMinutes} min
+              </span>
+            </li>
+          ))}
+          {quiet.map((row) => (
+            <li key={row.id} className="flex items-center justify-between gap-3 px-4 py-2 text-[13px]">
+              <span className="truncate font-semibold text-slate-900">{row.doctor}</span>
+              <span className="text-[12px] font-semibold text-amber-700">Quiet {row.quietDays} days: follow up</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {enrolling && <EnrolDialog onClose={() => setEnrolling(false)} />}
+    </section>
   );
 }
 
@@ -247,6 +295,76 @@ export function RxDoctorsPage() {
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+/** The Country Mentor's field team: each Rx CHC's month so far, lowest coverage first. */
+export function RxFieldTable({ data }: { data: RxField }) {
+  return (
+    <section className={`${CARD} min-w-0 overflow-x-auto`}>
+      <header className="flex items-baseline justify-between gap-3 px-4 pt-4 pb-2 sm:px-5">
+        <h2 className="text-sm font-semibold text-slate-900">Field team (Rx CHCs)</h2>
+        <span className="text-xs text-slate-500">This month so far, lowest coverage first · no sales target in the field</span>
+      </header>
+      <table className="w-full text-[13px]">
+        <thead>
+          <tr className="border-y border-slate-100 bg-slate-50/60 text-left text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
+            <th className="px-4 py-2 sm:px-5">Rx CHC</th>
+            <th className="px-3 py-2 text-right">Doctors listed</th>
+            <th className="px-3 py-2 text-right">Coverage</th>
+            <th className="px-3 py-2 text-right">Visits</th>
+            <th className="px-3 py-2 text-right">New doctors</th>
+            <th className="px-3 py-2 text-right">PAP letters</th>
+            <th className="px-4 py-2 text-right">Groups</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {data.rows.length === 0 && (
+            <tr>
+              <td colSpan={7} className="px-4 py-6 text-center text-slate-500">
+                No Rx CHC under you yet.
+              </td>
+            </tr>
+          )}
+          {data.rows.map((row) => (
+            <tr key={row.personId} className="hover:bg-slate-50/60">
+              <td className="px-4 py-2.5 sm:px-5">
+                <Link to={`/my/score?person=${row.personId}`} className="font-semibold text-slate-900 hover:underline">
+                  {row.name}
+                </Link>
+                <div className="text-[11.5px] text-slate-500">{row.area ?? row.seat}</div>
+              </td>
+              <td className="px-3 py-2.5 text-right tabular-nums">{row.listed}</td>
+              <td
+                className={`px-3 py-2.5 text-right font-semibold tabular-nums ${row.coverage === null ? "text-slate-400" : row.coverage >= 80 ? "text-emerald-700" : "text-rose-700"}`}
+              >
+                {row.coverage === null ? "No list" : `${row.coverage}%`}
+              </td>
+              <td className="px-3 py-2.5 text-right tabular-nums">
+                {row.visitsDone}/{row.visitsDue}
+              </td>
+              <td className="px-3 py-2.5 text-right tabular-nums">{row.newDoctors}</td>
+              <td className="px-3 py-2.5 text-right tabular-nums">{row.papApproved}</td>
+              <td className="px-4 py-2.5 text-right tabular-nums">
+                {row.groupsEnrolled}
+                {row.groupsQuiet > 0 && <div className="text-[11px] text-amber-700">{row.groupsQuiet} quiet</div>}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
+export function RxFieldPage() {
+  const query = useQuery({ queryKey: ["rx", "field"], queryFn: () => api<RxField>("/api/rx/field") });
+  if (!query.data) return <PageState query={query} what="the field team" />;
+  return (
+    <div className="mx-auto max-w-6xl">
+      <PageHead title="Field team" sub="The Rx CHCs: doctors on their lists, coverage against the 80% gate, visits, new prescribing doctors, PAP letters, care groups" />
+      <RxFieldTable data={query.data} />
     </div>
   );
 }

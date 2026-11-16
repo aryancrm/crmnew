@@ -4217,7 +4217,7 @@ export type TeamScores = {
   disputes: ScoreDispute[];
 };
 
-export type ReorderState = "due" | "late" | "at_risk" | "lost";
+export type ReorderState = "soon" | "due" | "late" | "at_risk" | "lost";
 
 /** Customers to call: who is due to reorder against their usual gap, who is late or slipping. */
 export type Reorders = {
@@ -4240,6 +4240,8 @@ export type Reorders = {
     since: number;
     expectedOn: string;
     lastTotal: number;
+    /** The medicines of their latest order. */
+    lastItems: string | null;
   }[];
   /** For a lead or above: per area, how its customers stand. */
   areas: { areaId: number | null; area: string; seller: string | null; due: number; late: number; atRisk: number; lost: number; ok: number }[];
@@ -4378,4 +4380,64 @@ export type RxDay = {
     approved: number;
     rows: { leadId: number; patient: string; agency: string | null; appliedOn: string | null; letterOn: string | null }[];
   };
+};
+
+/** Patient Care Groups: enrolled by the Rx CHC, first contact by MD Telesales within 15 minutes. */
+export type CareGroups = {
+  today: string;
+  firstContactMinutes: number;
+  counts: {
+    waiting: number;
+    /** Waiting past the 15 minutes. */
+    late: number;
+    active: number;
+    quiet14: number;
+    quiet30: number;
+    enrolledToday: number;
+    enrolledThisMonth: number;
+    contactedInTime: number;
+    contactedThisMonth: number;
+  };
+  rows: {
+    id: number;
+    name: string;
+    doctorId: number;
+    doctor: string;
+    doctorPhone: string | null;
+    chc: string;
+    telesales: string | null;
+    patients: number;
+    note: string | null;
+    enrolledAt: string;
+    firstContactAt: string | null;
+    lastActivityAt: string | null;
+    contactMinutes: number | null;
+    waitingMinutes: number | null;
+    quietDays: number;
+    mine: boolean;
+    state: "waiting" | "late" | "active" | "quiet14" | "quiet30";
+  }[];
+  can: { enrol: boolean; contact: boolean };
+};
+
+/** The Country Mentor's field team: each Rx CHC's month so far. */
+export type RxField = {
+  today: string;
+  rows: {
+    personId: number;
+    name: string;
+    seatId: number;
+    seat: string;
+    area: string | null;
+    listed: number;
+    visitsDue: number;
+    visitsDone: number;
+    /** Doctors on the list visited this month, %; null without a list. */
+    coverage: number | null;
+    newDoctors: number;
+    retention: number | null;
+    papApproved: number;
+    groupsEnrolled: number;
+    groupsQuiet: number;
+  }[];
 };

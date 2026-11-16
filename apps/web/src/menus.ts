@@ -320,6 +320,8 @@ const reportsApp: Space = {
         { to: "/to-call", label: "Customers to call", icon: PhoneCall },
         { to: "/collections", label: "Collections", icon: HandCoins },
         { to: "/huddle", label: "Evening huddles", icon: Megaphone },
+        { to: "/care-groups", label: "Care groups", icon: Users },
+        { to: "/rx/field", label: "Rx field team", icon: Stethoscope },
         { to: "/targets", label: "Targets", icon: Target },
       ],
     },
@@ -493,6 +495,19 @@ function ownDesk(me: Me): Space {
           ]),
           cta: { ...newOrder, label: "New order" },
         };
+      // MD Telesales: the care groups, the refills, the orders and the number (docs/PLAN.md 16.2).
+      if (me.channel?.code === "TS")
+        return {
+          ...desk([
+            home,
+            { to: "/care-groups", label: "Care groups", icon: Users, short: "Groups" },
+            { to: "/to-call", label: "Refills due", icon: Pill, short: "Refills" },
+            folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+            { to: "/my/area", label: "My patients", icon: Users },
+            { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+          ]),
+          cta: { ...newOrder, label: "New order" },
+        };
       // An Rx CHC: the doctors' day of the Rx CHC Play Book (docs/PLAN.md 16.2). Telesales take
       // the orders and hold the sales targets; the CHC builds the doctors.
       if (me.channel?.code === "RX")
@@ -500,6 +515,7 @@ function ownDesk(me: Me): Space {
           ...desk([
             home,
             { to: "/rx/doctors", label: "My doctors", icon: Stethoscope, short: "Doctors" },
+            { to: "/care-groups", label: "Care groups", icon: Users, short: "Groups" },
             folder(
               "Calls",
               CalendarCheck,
@@ -603,6 +619,74 @@ function ownDesk(me: Me): Space {
       };
     case "team_lead":
     case "manager":
+      // The Sales Coach of MD Telesales: the team's number, the groups answered in time, refills.
+      if (me.role === "team_lead" && me.channel?.code === "TS")
+        return {
+          ...desk([
+            home,
+            folder(
+              "My team",
+              Users,
+              [
+                { to: "/my-team", label: "Whole team", icon: Users, teams: true },
+                { to: "/team-scores", label: "Scorecards", icon: Gauge },
+              ],
+              "Team",
+            ),
+            { to: "/care-groups", label: "Care groups", icon: Users, short: "Groups" },
+            { to: "/to-call", label: "Refills due", icon: Pill, short: "Refills" },
+            folder("Team orders", ClipboardList, orderStages("Sent back"), "Orders"),
+            { to: "/targets", label: "Targets", icon: Target },
+            { to: "/collections", label: "Collections", icon: HandCoins },
+            folder(
+              "Team attendance",
+              CalendarClock,
+              [
+                { to: "/hr/attendance", label: "Who's working", icon: CalendarClock },
+                { to: "/hr/leave", label: "Leave & forms", icon: CalendarDays, badge: "leave" },
+              ],
+              "Attendance",
+            ),
+            { to: "/customers", label: "Patients & doctors", icon: Users },
+            { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+          ]),
+          icon: Users,
+        };
+      // The Country Mentor, head of the Prescription business: field and telesales together.
+      if (me.role === "manager" && me.channel?.code === "RX")
+        return {
+          ...desk([
+            home,
+            { to: "/rx/field", label: "Field team", icon: Stethoscope },
+            { to: "/my-team", label: "Whole business", icon: Users, teams: true },
+            { to: "/care-groups", label: "Care groups", icon: Users, short: "Groups" },
+            { to: "/team-scores", label: "Scorecards", icon: Gauge, short: "Scores" },
+            { to: "/targets", label: "Targets", icon: Target },
+            { to: "/collections", label: "Collections", icon: HandCoins },
+            folder("Business orders", ClipboardList, orderStages("Sent back"), "Orders"),
+            folder(
+              "Field visits",
+              CalendarCheck,
+              [
+                { to: "/field/report", label: "Visits report", icon: BarChart3 },
+                { to: "/field/live", label: "Where the team is", icon: MapPin },
+                { to: "/visits/expenses?waiting=1", label: "Expenses to approve", icon: Receipt },
+              ],
+              "Visits",
+            ),
+            folder(
+              "Attendance",
+              CalendarClock,
+              [
+                { to: "/hr/attendance", label: "Who's working", icon: CalendarClock },
+                { to: "/hr/leave", label: "Leave & forms", icon: CalendarDays, badge: "leave" },
+              ],
+              "Attendance",
+            ),
+            { to: "/customers", label: "Doctors & patients", icon: Users },
+          ]),
+          icon: Users,
+        };
       // A District Sales Coach of the Hospital Division: the coach's day (docs/PLAN.md 16.1).
       if (me.role === "team_lead" && me.channel?.code === "HOSP")
         return {

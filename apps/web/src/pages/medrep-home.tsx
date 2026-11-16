@@ -27,6 +27,7 @@ import { count, dayLabel, PageState, peso } from "../ui";
 import { Figure, type Period, PeriodBox, periodWord as periodWordOf } from "./figures";
 import { GoHereFirst, HuddleCard, TodaysPulse } from "./hospital-day";
 import { RxHome } from "./rx";
+import { TelesalesDay } from "./telesales";
 import { greeting, todayWords } from "./home";
 import { OrderCardItem } from "./orders-board";
 
@@ -123,6 +124,7 @@ export function MedrepHome() {
   if (!me) return null;
   const hospital = me.channel?.code === "HOSP";
   const rx = me.channel?.code === "RX";
+  const telesales = me.channel?.code === "TS";
   const data = kpis.data;
   const sales = mine.data?.sales;
   const periodWord = periodWordOf(period, data?.day ?? null);
@@ -155,9 +157,12 @@ export function MedrepHome() {
       {hospital && <GoHereFirst />}
       {/* An Rx CHC's day: the doctors, today's route, PAP (docs/PLAN.md 16.2). No sales target here. */}
       {rx && <RxHome />}
+      {/* MD Telesales: the pulse, the groups waiting (15 minutes), the refills due. */}
+      {telesales && <TodaysPulse />}
+      {telesales && <TelesalesDay />}
 
       {/* Today and this month at a glance: the two numbers asked most. */}
-      {!hospital && !rx && (
+      {!hospital && !rx && !telesales && (
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Figure
           label="Orders today"
@@ -495,9 +500,9 @@ export function MedrepHome() {
 
           {hospital && <HuddleCard />}
           {!hospital && <ToCollectPanel />}
-          {!hospital && !rx && <ToCallPanel />}
+          {!hospital && !rx && !telesales && <ToCallPanel />}
 
-          {!hospital && !rx && sales && sales.target !== null && sales.target > 0 && (
+          {!hospital && !rx && !telesales && sales && sales.target !== null && sales.target > 0 && (
             <section className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs">
               <div className="flex items-baseline justify-between gap-2">
                 <h3 className="text-sm font-semibold tracking-tight text-slate-900">

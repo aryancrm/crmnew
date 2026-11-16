@@ -10,7 +10,10 @@ import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
 import { addDays, todayManila } from "../inventory/rules";
 import { inForce } from "../org/service";
-import type { Me, RxDay } from "../types";
+import { RECIPES } from "../scores/recipes";
+import { measure } from "../scores/service";
+import { teamSeats } from "../team/service";
+import type { Me, RxDay, RxField } from "../types";
 
 export const TIER_VISITS: Record<1 | 2 | 3, number> = { 1: 4, 2: 2, 3: 1 };
 
@@ -114,4 +117,59 @@ export async function setTier(db: Database, me: Me, input: { customerId: number;
         sql`insert into doctor_list (seat_id, customer_id, tier, set_by) values (${seat.id}, ${input.customerId}, ${input.tier}, ${me.id})`,
       );
   });
+}
+
+/** The Country Mentor's field team: each Rx CHC under them with the month so far (doctors on
+ *  the list, coverage, visits done of due, new prescribing doctors, PAP letters, care groups
+ *  enrolled and gone quiet), worst coverage first. */
+export async function rxField(db: Database, me: Me): Promise<RxField> {
+  if (!["manager", "team_lead", "ceo", "admin"].includes(me.role)) throw new Refusal(403, "not_allowed", "The field team is the heads' view.");
+  const today = todayManila();
+  const first = `${today.slice(0, 7)}-01`;
+  const { seatIds } = await teamSeats(db, me, null);
+  const people = seatIds.length
+    ? await rows<{ personId: number; name: string; seatId: number; seat: string; area: string | null }>(
+        db,
+        sql`select distinct on (h.person_id) h.person_id::int as "personId", p.name, s.id::int as "seatId", s.title as seat, a.name as area
+          from seat s join seat_holder h on h.seat_id = s.id and ${inForce("h", today)} join person p on p.id = h.person_id
+            left join area a on a.id = s.area_id left join channel ch on ch.id = a.channel_id
+            join org_unit u on u.id = s.unit_id
+          where s.id in (${sql.join(seatIds.map((id) => sql`${id}`), sql`, `)}) and s.module = 'medrep' and not s.lead
+            and coalesce(ch.code, (select c2.code from channel c2 where c2.id = p.channel_id)) = 'RX'
+          order by h.person_id, (h.kind = 'holder') desc, h.starts_on desc`,
+      )
+    : [];
+  const out = await Promise.all(
+    people.map(async (one) => {
+      const [{ values }, [list]] = await Promise.all([
+        measure(db, one.personId, RECIPES.rx, today.slice(0, 7), today, true),
+        rows<{ listed: number; due: number; done: number; enrolled: number; quiet: number }>(
+          db,
+          sql`select count(*)::int as listed,
+              coalesce(sum(case l.tier when 1 then 4 when 2 then 2 else 1 end), 0)::int as due,
+              coalesce(sum(least(case l.tier when 1 then 4 when 2 then 2 else 1 end,
+                (select count(*) from visit v where v.customer_id = l.customer_id and v.person_id = ${one.personId} and v.status = 'done' and v.day >= ${first}::date))), 0)::int as done,
+              (select count(*) from care_group g where g.enrolled_by = ${one.personId}
+                and date_trunc('month', g.enrolled_at at time zone 'Asia/Manila') = date_trunc('month', ${today}::date))::int as enrolled,
+              (select count(*) from care_group g where g.enrolled_by = ${one.personId} and g.closed_at is null
+                and coalesce(g.last_activity_at, g.first_contact_at, g.enrolled_at) < now() - interval '14 days')::int as quiet
+            from doctor_list l where l.seat_id = ${one.seatId} and l.ended_at is null`,
+        ),
+      ]);
+      return {
+        ...one,
+        listed: list?.listed ?? 0,
+        visitsDue: list?.due ?? 0,
+        visitsDone: list?.done ?? 0,
+        coverage: values.ccf === null || values.ccf === undefined ? null : Math.round(values.ccf),
+        newDoctors: values.nbd ?? 0,
+        retention: values.crr === null || values.crr === undefined ? null : Math.round(values.crr),
+        papApproved: values.pap ?? 0,
+        groupsEnrolled: list?.enrolled ?? 0,
+        groupsQuiet: list?.quiet ?? 0,
+      };
+    }),
+  );
+  out.sort((a, b) => (a.coverage ?? -1) - (b.coverage ?? -1) || a.name.localeCompare(b.name));
+  return { today, rows: out };
 }

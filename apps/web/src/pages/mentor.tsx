@@ -4,13 +4,15 @@
 // months under 60: the improvement plan), the money owed by age with the biggest owers, and the
 // score questions waiting for an answer.
 
-import type { Collections, District, TeamScores } from "@2mg/api/types";
+import type { CareGroups, Collections, District, RxField, TeamScores } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { HandCoins, MessageSquareWarning, UserRoundX } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { shortPeso } from "../ceo";
 import { CARD } from "../ui";
+import { GroupsGlance, WaitingGroups } from "./care-groups";
+import { RxFieldTable } from "./rx";
 
 type Row = District["rows"][number];
 
@@ -216,5 +218,38 @@ function Questions({ data }: { data: TeamScores }) {
           : "No question waiting. A locked month's figure can be questioned within 10 days."}
       </p>
     </section>
+  );
+}
+
+/** The Sales Coach of MD Telesales: the groups waiting and the 15 minutes kept (the team's
+ *  people against their targets follow on the Home). */
+export function TelesalesCoachHome() {
+  const groups = useQuery({ queryKey: ["care-groups"], queryFn: () => api<CareGroups>("/api/care-groups"), refetchInterval: 30_000 });
+  if (!groups.data) return null;
+  return (
+    <>
+      <GroupsGlance data={groups.data} />
+      <WaitingGroups data={groups.data} />
+    </>
+  );
+}
+
+/** The Country Mentor (Prescription business): the field team, the care groups, people at risk
+ *  and money (telesales' people against their targets follow on the Home). */
+export function RxMentorHome() {
+  const field = useQuery({ queryKey: ["rx", "field"], queryFn: () => api<RxField>("/api/rx/field") });
+  const groups = useQuery({ queryKey: ["care-groups"], queryFn: () => api<CareGroups>("/api/care-groups"), refetchInterval: 60_000 });
+  const scores = useQuery({ queryKey: ["scores", "team", ""], queryFn: () => api<TeamScores>("/api/scores/team") });
+  const money = useQuery({ queryKey: ["my", "collections"], queryFn: () => api<Collections>("/api/my/collections") });
+  return (
+    <>
+      {field.data && <RxFieldTable data={field.data} />}
+      {groups.data && <GroupsGlance data={groups.data} />}
+      <div className="grid gap-3 lg:grid-cols-2">
+        {scores.data && <AtRisk data={scores.data} />}
+        {money.data && <Money data={money.data} />}
+      </div>
+      {scores.data && <Questions data={scores.data} />}
+    </>
   );
 }
