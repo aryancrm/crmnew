@@ -34,11 +34,11 @@ const paidOf = (history: MedicinePrices) =>
 
 /** The price over time as a small line; the dot at the end is the price now (amber when lower
  *  than last time, green when higher). */
-function Trend({ prices, now }: { prices: number[]; now?: number }) {
+function Trend({ prices, now, wide }: { prices: number[]; now?: number; wide?: boolean }) {
   const points = now === undefined ? prices : [...prices, now];
   if (points.length < 2) return null;
-  const width = 76;
-  const height = 22;
+  const width = wide ? 132 : 76;
+  const height = wide ? 34 : 22;
   const low = Math.min(...points);
   const high = Math.max(...points);
   const x = (index: number) => 3 + (index * (width - 6)) / (points.length - 1);
@@ -365,33 +365,15 @@ export function CustomerBefore({ prices, name }: { prices: OrderPrices; name: st
   );
 }
 
-const PAST_STATUS: Record<string, string> = {
-  closed: "Delivered",
-  fulfilled: "Delivered",
-  confirmed: "Confirmed",
-  void: "Cancelled",
+type LookProps = {
+  medicines: MedicinePrices[];
+  open: string | null;
+  toggle: (key: string) => void;
 };
 
-/** On the customer's page: what they were given, medicine by medicine, and their orders from
- *  before this CRM. Shown once they have any such history. */
-export function PricesGiven({ customerId }: { customerId: number }) {
-  const query = useQuery({
-    queryKey: ["customers", "prices", customerId],
-    queryFn: () => api<CustomerPrices>(`/api/customers/${customerId}/prices`),
-  });
-  const [open, setOpen] = useState<string | null>(null);
-  const [all, setAll] = useState(false);
-  const data = query.data;
-  if (!data || data.past.orders === 0) return null;
-  const medicines = all ? data.medicines : data.medicines.slice(0, 12);
+/** Look 1, a table: one line per medicine with its trend; a line opens to every order. */
+function PricesTable({ medicines, open, toggle }: LookProps) {
   return (
-    <>
-      <SectionPanel
-        icon={History}
-        title={`Prices given · ${count(data.medicines.length)} ${data.medicines.length === 1 ? "medicine" : "medicines"}`}
-        actions={<span className="text-xs text-slate-500">Tap a medicine for every order</span>}
-        flush
-      >
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -408,7 +390,7 @@ export function PricesGiven({ customerId }: { customerId: number }) {
                 <Fragment key={medicine.key}>
                   <tr
                     className={`cursor-pointer ${open === medicine.key ? "bg-slate-50" : "hover:bg-slate-50"}`}
-                    onClick={() => setOpen(open === medicine.key ? null : medicine.key)}
+                    onClick={() => toggle(medicine.key)}
                   >
                     <td className="px-4 py-2.5 sm:px-5">
                       <button
@@ -462,6 +444,249 @@ export function PricesGiven({ customerId }: { customerId: number }) {
             </tbody>
           </table>
         </div>
+  );
+}
+
+const Chip = ({ children, tone }: { children: ReactNode; tone?: "free" }) => (
+  <span
+    className={`rounded-full px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap tabular-nums ${
+      tone === "free" ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-600"
+    }`}
+  >
+    {children}
+  </span>
+);
+
+/** Look 2, cards: each medicine a card with the last price large, the trend and the range. */
+function PricesCards({ medicines, open, toggle }: LookProps) {
+  return (
+    <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-5">
+      {medicines.map((medicine) => {
+        const paid = paidOf(medicine);
+        const isOpen = open === medicine.key;
+        return (
+          <div
+            key={medicine.key}
+            className={`flex flex-col rounded-xl border bg-white transition-shadow ${
+              isOpen ? "border-emerald-300 shadow-sm sm:col-span-2" : "border-slate-200 hover:shadow-sm"
+            }`}
+          >
+            <button
+              type="button"
+              aria-expanded={isOpen}
+              onClick={() => toggle(medicine.key)}
+              className="flex flex-col gap-2.5 p-3.5 text-left"
+            >
+              <span className="flex items-start justify-between gap-3">
+                <span className="min-w-0 leading-tight">
+                  <span className="block truncate text-sm font-bold text-slate-900">
+                    {medicine.name}
+                  </span>
+                  <span className="block text-[11px] text-slate-400">
+                    {medicine.sku ?? "No SKU"} · last {dayLabel(medicine.lastAt)}
+                  </span>
+                </span>
+                <span className="shrink-0 text-right leading-tight">
+                  <span className="block text-[10px] font-semibold tracking-wide text-slate-500 uppercase">
+                    Last price
+                  </span>
+                  <span className="block text-lg font-bold text-slate-900 tabular-nums">
+                    {medicine.lastPrice !== null ? peso(medicine.lastPrice) : "Free"}
+                  </span>
+                </span>
+              </span>
+              <span className="flex items-end justify-between gap-3">
+                <span className="flex flex-wrap gap-1.5">
+                  <Chip>
+                    {count(medicine.times)} {medicine.times === 1 ? "order" : "orders"}
+                  </Chip>
+                  <Chip>
+                    {count(medicine.qty)} {unitOf(medicine.unit)}
+                  </Chip>
+                  {medicine.freeQty > 0 && <Chip tone="free">{count(medicine.freeQty)} free</Chip>}
+                  {paid.length > 1 && Math.min(...paid) !== Math.max(...paid) && (
+                    <Chip>
+                      {peso(Math.min(...paid))} to {peso(Math.max(...paid))}
+                    </Chip>
+                  )}
+                </span>
+                <Trend prices={paid.slice(-8)} wide />
+              </span>
+              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500">
+                {isOpen ? "Hide the orders" : "Every order"}
+                <ChevronDown
+                  size={13}
+                  className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
+                  aria-hidden="true"
+                />
+              </span>
+            </button>
+            {isOpen && (
+              <div className="border-t border-slate-100 bg-slate-50/60 p-3">
+                <PriceRows history={medicine} />
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Look 3, steps: each medicine's last prices side by side, the newest first, with an arrow
+ *  showing which way each one moved from the order before it. */
+function PricesSteps({ medicines, open, toggle }: LookProps) {
+  return (
+    <ul className="divide-y divide-slate-100">
+      {medicines.map((medicine) => {
+        const steps = medicine.rows.filter((row) => row.unitPrice !== null).slice(0, 5);
+        const isOpen = open === medicine.key;
+        return (
+          <li key={medicine.key} className={isOpen ? "bg-slate-50" : ""}>
+            <button
+              type="button"
+              aria-expanded={isOpen}
+              onClick={() => toggle(medicine.key)}
+              className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 text-left hover:bg-slate-50 sm:px-5"
+            >
+              <span className="w-44 min-w-0 shrink-0 leading-tight">
+                <span className="block truncate text-sm font-semibold text-slate-900">
+                  {medicine.name}
+                </span>
+                <span className="block text-[11px] text-slate-400">
+                  {medicine.sku ? `${medicine.sku} · ` : ""}
+                  {count(medicine.times)} {medicine.times === 1 ? "order" : "orders"}
+                </span>
+              </span>
+              <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
+                {steps.length === 0 && <Chip tone="free">Only given free</Chip>}
+                {steps.map((row, index) => {
+                  const older = steps[index + 1]?.unitPrice ?? null;
+                  const price = row.unitPrice as number;
+                  return (
+                    <Fragment key={`${row.from}:${row.code}:${price}`}>
+                      <span
+                        className={`shrink-0 rounded-lg px-2.5 py-1.5 leading-tight ring-1 ${
+                          index === 0 ? "bg-emerald-50 ring-emerald-200" : "bg-white ring-slate-200"
+                        }`}
+                        title={`${row.code} · ${pieces(row, medicine.unit)}`}
+                      >
+                        <span className="block text-[13px] font-bold text-slate-900 tabular-nums">
+                          {peso(price)}
+                        </span>
+                        <span className="block text-[10px] whitespace-nowrap text-slate-500">
+                          {dayLabel(row.at)}
+                          {row.freeQty ? (
+                            <span className="font-semibold text-emerald-700"> · +{count(row.freeQty)} free</span>
+                          ) : null}
+                        </span>
+                      </span>
+                      {older !== null &&
+                        (price === older ? (
+                          <Equal size={13} className="shrink-0 text-slate-300" aria-label="same as before" />
+                        ) : price < older ? (
+                          <ArrowDownRight size={14} className="shrink-0 text-amber-600" aria-label="lower than before" />
+                        ) : (
+                          <ArrowUpRight size={14} className="shrink-0 text-emerald-600" aria-label="higher than before" />
+                        ))}
+                    </Fragment>
+                  );
+                })}
+              </span>
+              <ChevronDown
+                size={15}
+                className={`shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
+                aria-hidden="true"
+              />
+            </button>
+            {isOpen && (
+              <div className="px-4 pb-3 sm:px-5">
+                <PriceRows history={medicine} />
+              </div>
+            )}
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/** The three looks of Prices given; the pick is remembered on this computer. */
+const LOOKS = [
+  ["table", "Table"],
+  ["cards", "Cards"],
+  ["steps", "Steps"],
+] as const;
+type Look = (typeof LOOKS)[number][0];
+const LOOK_KEY = "crm:prices-look";
+const savedLook = (): Look => {
+  try {
+    const saved = localStorage.getItem(LOOK_KEY);
+    return saved === "cards" || saved === "steps" ? saved : "table";
+  } catch {
+    return "table";
+  }
+};
+
+const PAST_STATUS: Record<string, string> = {
+  closed: "Delivered",
+  fulfilled: "Delivered",
+  confirmed: "Confirmed",
+  void: "Cancelled",
+};
+
+/** On the customer's page: what they were given, medicine by medicine, and their orders from
+ *  before this CRM. Shown once they have any such history. */
+export function PricesGiven({ customerId }: { customerId: number }) {
+  const query = useQuery({
+    queryKey: ["customers", "prices", customerId],
+    queryFn: () => api<CustomerPrices>(`/api/customers/${customerId}/prices`),
+  });
+  const [open, setOpen] = useState<string | null>(null);
+  const [all, setAll] = useState(false);
+  const [look, setLook] = useState<Look>(savedLook);
+  const toggle = (key: string) => setOpen(open === key ? null : key);
+  const pickLook = (key: Look) => {
+    setLook(key);
+    try {
+      localStorage.setItem(LOOK_KEY, key);
+    } catch {
+      // A private window: the pick lasts until the page is left.
+    }
+  };
+  const data = query.data;
+  if (!data || data.past.orders === 0) return null;
+  const medicines = all ? data.medicines : data.medicines.slice(0, 12);
+  return (
+    <>
+      <SectionPanel
+        icon={History}
+        title={`Prices given · ${count(data.medicines.length)} ${data.medicines.length === 1 ? "medicine" : "medicines"}`}
+        actions={
+          <fieldset className="inline-flex shrink-0 items-center gap-0.5 rounded-lg bg-slate-100 p-0.5 text-[11px] font-semibold">
+            <legend className="sr-only">How to see the prices</legend>
+            {LOOKS.map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                aria-pressed={look === key}
+                onClick={() => pickLook(key)}
+                className={`rounded-md px-2.5 py-1 transition-colors ${
+                  look === key
+                    ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </fieldset>
+        }
+        flush
+      >
+        {look === "table" && <PricesTable medicines={medicines} open={open} toggle={toggle} />}
+        {look === "cards" && <PricesCards medicines={medicines} open={open} toggle={toggle} />}
+        {look === "steps" && <PricesSteps medicines={medicines} open={open} toggle={toggle} />}
         {data.medicines.length > 12 && (
           <button
             type="button"
