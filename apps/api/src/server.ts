@@ -19,6 +19,7 @@ import { seedDemoTeam, seedPapRep } from "./orders/seed-team";
 import { alignDemoMoneyDates } from "./orders/seed-times";
 import { fillOrderSeats, projectOrg } from "./org/service";
 import { seedDemo } from "./seed";
+import { seedDemoPast } from "./zoho/seed";
 
 const port = Number(process.env.PORT ?? 4100);
 const webUrl = process.env.WEB_URL ?? "http://localhost:5180";
@@ -43,6 +44,7 @@ if (process.env.SEED_DEMO === "1") {
   if (await seedDemoOrders(db)) console.log("database: demo orders made");
   if (await seedDemoFinance(db)) console.log("database: demo invoices and payments made");
   if (await seedDemoDispatch(db)) console.log("database: demo deliveries made");
+  if (await seedDemoPast(db)) console.log("database: demo history from Zoho made");
   if (await seedDemoOnline(db)) console.log("database: demo enquiries made");
   if (await seedDemoTeam(db, password))
     console.log("database: more demo MedReps and their orders made");

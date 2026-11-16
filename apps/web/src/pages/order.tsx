@@ -34,10 +34,11 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, Fragment, type ReactNode, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
+import { CustomerBefore, LastGiven, useOrderPrices } from "../customers/prices";
 import { type DispatchAsk, DispatchDialogs } from "../dispatch/parts";
 import { noProofWords } from "../finance/no-proof";
 import {
@@ -1011,9 +1012,16 @@ function Lines({ data, compare }: { data: OrderDetail; compare?: boolean }) {
   const { order } = data;
   // A medicine opens over the page, so the order stays where it is.
   const [medicine, setMedicine] = useState<number | null>(null);
+  // What this customer was given before, line by line (this CRM's orders and Zoho's).
+  const prices = useOrderPrices(order.id).data;
   return (
     <div className="-mx-4 overflow-x-auto border-y border-slate-100">
       {medicine !== null && <MedicinePopup id={medicine} onClose={() => setMedicine(null)} />}
+      {compare && prices && (
+        <div className="border-b border-slate-100 px-4 py-2.5">
+          <CustomerBefore prices={prices} name={order.customer} />
+        </div>
+      )}
       <table className="t">
         <thead>
           <tr>
@@ -1028,53 +1036,56 @@ function Lines({ data, compare }: { data: OrderDetail; compare?: boolean }) {
           </tr>
         </thead>
         <tbody>
-          {data.items.map((item) => (
-            <tr key={item.id}>
-              <td>
-                <button
-                  type="button"
-                  onClick={() => setMedicine(item.medicineId)}
-                  className="text-left font-semibold hover:underline"
-                  title="Prices, stock in each warehouse, batches"
-                >
-                  {item.medicine}
-                </button>
-                <div className="text-xs text-ink-2">
-                  {item.free ? "Free" : `${item.priceLabel} price`}
-                  {item.reason && item.reason !== "Free" ? ` · ${item.reason}` : ""}
-                </div>
-              </td>
-              <td className="num">
-                {count(item.qty)}
-                {inPacks(item.qty, item.packSize) && (
-                  <div className="text-xs text-ink-2">{inPacks(item.qty, item.packSize)}</div>
-                )}
-              </td>
-              {compare && (
-                <td className="num whitespace-nowrap text-ink-2">{peso(item.listPrice)}</td>
-              )}
-              <td
-                className={`num whitespace-nowrap ${item.unitPrice < item.listPrice ? "font-semibold text-amber-700" : ""}`}
-              >
-                {peso(item.unitPrice)}
-                {item.lastPrice != null && item.lastPrice !== item.unitPrice && (
-                  // What this customer paid last time, so a price that moved is seen.
-                  <div
-                    className={`text-[10px] font-normal ${item.unitPrice < item.lastPrice ? "text-amber-700" : "text-ink-3"}`}
-                    title="The price on this customer's last order of it"
+          {data.items.map((item) => {
+            const before = prices?.lines[item.id];
+            return (
+              <Fragment key={item.id}>
+                <tr className={before ? "[&>td]:border-b-0 [&>td]:pb-1" : undefined}>
+                  <td>
+                    <button
+                      type="button"
+                      onClick={() => setMedicine(item.medicineId)}
+                      className="text-left font-semibold hover:underline"
+                      title="Prices, stock in each warehouse, batches"
+                    >
+                      {item.medicine}
+                    </button>
+                    <div className="text-xs text-ink-2">
+                      {item.free ? "Free" : `${item.priceLabel} price`}
+                      {item.reason && item.reason !== "Free" ? ` · ${item.reason}` : ""}
+                    </div>
+                  </td>
+                  <td className="num">
+                    {count(item.qty)}
+                    {inPacks(item.qty, item.packSize) && (
+                      <div className="text-xs text-ink-2">{inPacks(item.qty, item.packSize)}</div>
+                    )}
+                  </td>
+                  {compare && (
+                    <td className="num whitespace-nowrap text-ink-2">{peso(item.listPrice)}</td>
+                  )}
+                  <td
+                    className={`num whitespace-nowrap ${item.unitPrice < item.listPrice ? "font-semibold text-amber-700" : ""}`}
                   >
-                    last {peso(item.lastPrice)}
-                  </div>
+                    {peso(item.unitPrice)}
+                  </td>
+                  <td
+                    className={`num ${item.inStock < item.qty ? "font-semibold text-bad" : "text-emerald-700"}`}
+                  >
+                    {count(item.inStock)}
+                  </td>
+                  <td className="num font-semibold whitespace-nowrap">{peso(item.amount)}</td>
+                </tr>
+                {before && (
+                  <tr>
+                    <td colSpan={compare ? 6 : 5} className="pt-0">
+                      <LastGiven history={before} now={item.unitPrice} free={item.free} />
+                    </td>
+                  </tr>
                 )}
-              </td>
-              <td
-                className={`num ${item.inStock < item.qty ? "font-semibold text-bad" : "text-emerald-700"}`}
-              >
-                {count(item.inStock)}
-              </td>
-              <td className="num font-semibold whitespace-nowrap">{peso(item.amount)}</td>
-            </tr>
-          ))}
+              </Fragment>
+            );
+          })}
         </tbody>
       </table>
       {order.deliveryFee > 0 && (

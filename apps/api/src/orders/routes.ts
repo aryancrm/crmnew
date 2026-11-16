@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { Database } from "../db/index";
 import { allow, type Env, idParam, Refusal, readBody } from "../http";
 import { tellAboutOrder } from "../notify/service";
+import { orderPrices } from "../customers/prices";
 import { customerUpdate, noteSent, tellCustomer } from "../online/tell";
 import type { OrderAction, OrderDetailsInput, OrderInput, OrderRevision } from "../types";
 import { companyKpis } from "./company-kpis";
@@ -189,6 +190,10 @@ export function orderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
   );
 
   app.get("/api/orders/:id", async (c) => c.json(await orderDetail(db, c.get("me"), idParam(c))));
+  // What this customer was given before for each medicine on the order.
+  app.get("/api/orders/:id/prices", async (c) =>
+    c.json(await orderPrices(db, c.get("me"), idParam(c))),
+  );
   salesOrderRoutes(app, db);
 
   app.post("/api/orders", async (c) => {

@@ -6,6 +6,7 @@ import { z } from "zod";
 import type { Database } from "../db/index";
 import { allow, type Env, idParam, readBody } from "../http";
 import { customerPage } from "./page";
+import { customerPrices } from "./prices";
 import {
   addCustomer,
   CUSTOMER_ADD_ROLES,
@@ -105,6 +106,10 @@ export function customerRoutes(
   );
   app.get("/api/customers/:id/page", async (c) =>
     c.json(await customerPage(db, c.get("me"), idParam(c))),
+  );
+  // What they were given before, medicine by medicine (this CRM's orders and Zoho's).
+  app.get("/api/customers/:id/prices", async (c) =>
+    c.json(await customerPrices(db, c.get("me"), idParam(c))),
   );
 
   app.post("/api/customers", async (c) => {

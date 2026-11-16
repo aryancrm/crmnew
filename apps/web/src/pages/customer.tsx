@@ -26,6 +26,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { CustomerDialog } from "../customers/dialog";
+import { PricesGiven } from "../customers/prices";
 import {
   type BadgeTone,
   CodeChip,
@@ -322,6 +323,7 @@ export function Customer() {
         <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-4">
           <Orders data={data} />
           <Medicines data={data} />
+          <PricesGiven customerId={customer.id} />
           <Money data={data} />
           {data.cases && (patient || data.cases.length > 0) && <Cases data={data} />}
         </div>

@@ -2269,6 +2269,76 @@ export type CaseHistory = {
   enquiriesTotal: number;
 };
 
+/** One order (and price) on which a customer was given a medicine. */
+export type PriceRow = {
+  /** The order's day (YYYY-MM-DD, Manila). */
+  at: string;
+  code: string;
+  /** This CRM's order to open; none for an order from Zoho. */
+  orderId: number | null;
+  from: "crm" | "zoho";
+  /** Paid pieces at `unitPrice`, and the pieces that came free on the same order. */
+  qty: number;
+  freeQty: number;
+  /** Centavos for one piece, VAT in; none when everything on it was free. */
+  unitPrice: number | null;
+};
+
+/** What a customer was given before for one medicine, newest first. */
+export type MedicinePrices = {
+  key: string;
+  /** The medicine here, once it is listed (a Zoho line finds it by its SKU). */
+  medicineId: number | null;
+  sku: string | null;
+  name: string;
+  unit: string | null;
+  /** Orders it was on, and the pieces in all (free ones included). */
+  times: number;
+  qty: number;
+  freeQty: number;
+  lastAt: string;
+  /** The last price paid for one piece. */
+  lastPrice: number | null;
+  rows: PriceRow[];
+};
+
+/** A customer's prices, and their orders from before this CRM (Zoho). */
+export type CustomerPrices = {
+  past: { orders: number; bought: number; firstOn: string | null; lastOn: string | null };
+  orders: {
+    id: number;
+    code: string;
+    on: string;
+    status: string;
+    total: number;
+    seller: string | null;
+    medicines: string | null;
+  }[];
+  medicines: MedicinePrices[];
+};
+
+/** For an order being decided: the customer in short, and for each of its lines (by the line's
+ *  id) what this customer was given before. */
+export type OrderPrices = {
+  customer: {
+    id: number;
+    /** Orders before this one, Zoho's included. */
+    orders: number;
+    firstOn: string | null;
+    lastOn: string | null;
+    lastCode: string | null;
+    top: {
+      key: string;
+      name: string;
+      times: number;
+      qty: number;
+      unit: string | null;
+      lastPrice: number | null;
+    }[];
+  };
+  lines: Record<number, MedicinePrices | null>;
+};
+
 /** One customer's whole story: everything a page about a hospital, doctor, buyer or patient shows. */
 export type CustomerPage = CustomerDetail & {
   /** Who looks after them and the people above: the MedRep (or the desk agent), their manager, the head. */

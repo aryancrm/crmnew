@@ -6,6 +6,27 @@ crmnew commits are authored as aryancrm (already set in this repo's git config) 
 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Push to `origin` (aryancrm/crmnew);
 Render (crmnew-api) and Vercel (crmnew-psi.vercel.app) deploy from it.
 
+## Done on 16 Nov (afternoon) and what is next
+
+Built and tested locally, not pushed (see docs/PLAN.md 12.18): `past_order` / `past_order_item` /
+`zoho_contact` (migration 0054); Admin-only `POST /api/admin/import/zoho-customers` and
+`/zoho-orders` (`src/zoho/import.ts`); the price history under every order line, the customer
+box on Management's price step, Prices given and Zoho's orders on the customer's page.
+Aryan (16 Nov): **medicines later** (our list is not Zoho's 3,588 items); customers, hospitals
+and old prices now. A past line keeps the name and Zoho's SKU as text and joins a medicine by
+SKU when it is listed.
+
+Getting the data out: the page-API route below does not work from here (the in-app browser
+blocks a web page from reaching this computer, and the item-wise order list hides the free
+line of a buy-one-get-one, so it would be one call per order, 62,000 calls). Use Zoho's own
+**Settings → Data Backup → Backup Your Data** (CSV; Zoho emails a download link). Next:
+1. Aryan makes the backup and puts the zip on this computer.
+2. Write `apps/api/scripts/import-zoho.ts`: read Contacts and Sales Orders CSVs (one row per
+   line), build the `zohoCustomer` / `zohoOrder` shapes (hint = what the customer's orders say:
+   "Hospital PO" → hospital, "Bidding Order" → government, "Doctor order" → doctor), try on a
+   copy of the local database, show Aryan the counts by kind.
+3. On Aryan's word: push, let Render migrate, then send the batches to the live CRM.
+
 ## Where things stand
 
 - Live: web https://crmnew-psi.vercel.app, API https://crmnew-api.onrender.com, Supabase

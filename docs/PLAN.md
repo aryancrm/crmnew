@@ -893,8 +893,8 @@ backend/, frontend/  The old CRM. Reference, and still running live.
 
 Decide each one with Aryan when version 1 is in use: field visits, attendance and expenses
 (SEFMED); HR, leave, payslips; scorecards and KPIs beyond sales against target; doctor rebates;
-samples; tenders as their own module; the Zoho history import; the accounting ledger and
-statements.
+samples; tenders as their own module; the accounting ledger and statements. (The Zoho history
+import was brought forward: 12.18.)
 
 ## 12. Build order
 
@@ -1305,6 +1305,60 @@ Aryan reviewed Management's page and asked for less clutter and the main checks 
 - Walked as Sarla and Ryan: send back → fixed and sent again, hold → resume, reject → resume,
   approve (ships from Main, Finance invoices).
 
+### 12.18 History from Zoho: customers, past orders and the price given before (16 Nov)
+
+Aryan: Management approving a MedRep's order must see what this customer was given before
+(today they open Zoho → Sales orders → search the hospital). Bring Zoho's customers, hospitals
+and old sales with their prices now; **the medicine list is not Zoho's 3,588 items and comes
+later**.
+
+- **What Zoho holds** (org 714292728, seen 16 Nov, read only): 3,588 items, 50,000+ customers,
+  67,361 sales orders from SO-00575 (15 Mar 2021) to SO-70094 (44,256 closed, 18,033 confirmed,
+  5,042 void, 30 draft). Zoho says only "business" or "individual" for a customer. A
+  buy-one-get-one is two lines of the same item, one paid and one at ₱0. Most orders are typed
+  with tax in; Zoho's line total is before tax.
+- **Tables** (migration 0054): `past_order` and `past_order_item` hold Zoho's orders as history
+  only (no stock move, invoice, points, message or to-do; they are not `sales_order`, so no
+  list, KPI, target or check counts them). A line keeps the medicine's **name and Zoho's SKU as
+  text** and what one piece cost the customer in centavos, VAT in, after discounts (`free` when
+  ₱0). It joins a medicine here **through the SKU**, so the history lights up on a medicine the
+  day it is listed with Zoho's SKU; nothing has to be imported again. `zoho_contact` maps every
+  Zoho contact to its customer here (`customer.zoho_id` for the one that made it).
+- **One buyer, one customer**: a hospital, doctor or business is one customer per name and city
+  (the existing rule), and the same name with the same phone number is one customer; a second
+  Zoho contact of the same buyer joins the first and its orders land on the same page. The
+  same number under another name stays its own customer.
+- **Kind** (`kindOf`): an individual is a patient, or a doctor when Zoho's "Is Doctor" is ticked,
+  the name starts with Dr./Dra., or their orders were "Doctor order"; a business is government
+  when it bought by bidding, else by its name (hospital / medical center / clinic → hospital;
+  pharmacy / drug / botica → drugstore; DSWD, PCSO, city of… → government), else what its orders
+  say, else distributor. **Terms** (`termsOf`): "Net 30" → 30 days, COD / due on receipt → cash
+  on delivery, anything else → advance. Imported customers are `review = ok`, added by the Admin,
+  in the area that names their city (patients in none).
+- **Import** (`src/zoho/import.ts`): `POST /api/admin/import/zoho-customers` and
+  `/zoho-orders`, Admin only, in batches, dry run unless `apply`; every row keeps Zoho's id, so
+  sending again adds only what is missing. Drafts are left behind; void orders come as
+  cancelled and are left out of the prices. An order whose customer is not here yet is counted
+  (`noCustomer`) and skipped: customers first.
+- **Where it shows** (`customers/prices.ts`, web `customers/prices.tsx`): this CRM's orders and
+  Zoho's are read as one history.
+  - Under **each line of an order**: "Last time ₱66.80 · 36 pcs + 36 free · 12 Oct 2026 ·
+    SO-67227 · 4 more ▾"; it opens that medicine's every order for this customer (date, order,
+    pieces, free, price). **Amber when the price now is below the last one**, with how much
+    lower. (`GET /api/orders/:id/prices`: whoever may open the order.)
+  - On **Management's Medicines & price step**, a box about the customer: orders before, the last
+    one, buying since, the medicines they take most with the last price.
+  - On the **customer's page**: Prices given (every medicine, opening its history) and Orders
+    before this CRM (Zoho). (`GET /api/customers/:id/prices`: whoever may see the customer.)
+- **Getting the data out of Zoho**: the in-app browser does not let a web page hand data to this
+  computer, and one call per order would be 62,000 calls on Aryan's sign-in. Zoho's own
+  **Settings → Data Backup → Backup Your Data** exports everything as CSV (customers, and sales
+  orders one row per line) and emails a download link. Next: Aryan makes the backup and puts
+  the zip on this computer; `scripts/import-zoho.ts` (to write once the files' columns are
+  seen) reads it, tries it on a local copy, then sends it to the live CRM.
+- The demo has a little invented history (`zoho/seed.ts`) for San Juan de Dios, Olivarez and one
+  patient. 10 new tests (`zoho/import.test.ts`).
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -1314,6 +1368,12 @@ Aryan reviewed Management's page and asked for less clutter and the main checks 
 3. How do a Team lead and a Manager differ in what they see?
 4. Do field visits (SEFMED) wait for version 2?
 5. Which domain will the new app use?
+6. Order numbers that say what they are (`HOSP-2611-0042`, `ONL-2611-0007`, per channel per
+   month; website orders keep their own)? Today `2MG-500001…`. Waiting for Aryan's yes.
+7. The medicine list: which list is the real one (Zoho has 3,588 items; Aryan: ours is
+   different), and should Zoho's SKU stay the medicine's SKU so old prices join by themselves?
+8. Zoho's customers come over as they are (50,000+, patients included). Kinds are read from
+   names and orders (12.18): look over the hospitals / drugstores / distributors after the import.
 
 ## 14. Change log
 
@@ -1706,3 +1766,4 @@ Aryan reviewed Management's page and asked for less clutter and the main checks 
 - 16 Nov (30), Aryan: returns and refunds before the checks. Built returns (migration 0050): who sold it (or Management) asks on a delivered order (medicines, how many, why: expired, damaged, wrong item, not needed, other); Management approves or says why not (its own request is approved as made); Dispatch checks what came back line by line (good back on the shelf into the batch it left from, damaged written off, not received not credited); the bill is credited by what came back (the invoice's total comes down, so owed, sales, targets and points follow); money paid beyond the new bill shows in Finance's Refunds owed and is given back there. /returns for every desk (Management: Returns to approve; Dispatch: Returns to check; Finance: Returns; MedRep: Returns), and the order shows its returns and "Returned" in its money. 260 API tests.
 - 16 Nov (31), Aryan: "ensure everything and all the data is right, 130 people". Added the data checked against itself (`checks/integrity.ts`, GET /api/admin/data-checks for the CEO and the Admin): 17 checks (order total = lines + fee; bill = order less returns; paid = payments; refunded = refunds; paid status; nothing paid beyond the bill; no shelf below zero; shelf = sum of its moves; every placed order has its MedRep and channel; every delivered order billed; packed goods picked; returns credit what came back and never more than delivered; points balance = entries; no reporting loops; every MedRep reports to someone; nobody reports to someone who left). On the local copy 16 of 17 were clean; two demo orders (500006, 500007) were seeded as packed/shipped without picks (a seed shortcut, not something the app allows). And a 130-person company test (`checks/scale.test.ts`: two channels of four teams, team leads, 13 MedReps each, four HR, more Management, Finance and Dispatch): a MedRep sees only their own orders and customers, a team lead their team and not the next, a channel head their channel and not the other, Management/Finance/CEO/Admin everything, only Management approves, HR every person and no order; the CEO's, channel head's, team lead's and MedRep's sales all equal the bills; the data checks come out clean. 269 API tests.
 - 16 Nov (32), Aryan: before going live, photos as in the old CRM. `src/files/store.ts` keeps every photo and paper (case files, order papers and Finance's hold screenshots, field expense bills, leave papers, Messenger / email / website files) through one door: made smaller on the server with sharp (1600 px, WebP 60, also in the browser: a 1.4 MB prescription photo is kept as about 70 KB, still readable; PDFs and small photos as they are), then into a Supabase Storage bucket by its content hash (the same photo once) with only the key in the row, or into the row when no bucket is set. Files already in rows keep opening. Migration 0051 (store_key / receipt_key / file_key; data may be empty when the key is set). 274 API tests.
+- 16 Nov (33), Aryan: bring Zoho's customers, hospitals and old sales with their prices now, medicines later; Management must see what a customer was given before without opening Zoho. Built 12.18: `past_order` / `past_order_item` / `zoho_contact` (migration 0054), Admin-only batch imports (`/api/admin/import/zoho-customers`, `/zoho-orders`, rerun-safe by Zoho's id, history only), one price history across this CRM's orders and Zoho's joined by SKU, shown under every order line (amber when lower than last time), in a customer box on Management's price step, and on the customer's page. Nothing imported into the live CRM yet: the data comes out of Zoho through its own Data Backup (CSV), which Aryan has to make. 290 API tests (10 new).
