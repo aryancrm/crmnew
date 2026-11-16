@@ -1165,10 +1165,31 @@ export async function owedInvoices(db: Database, me: Me): Promise<OwedInvoices> 
         "daysLate" desc, (i.total - i.paid) desc
       limit 2000`,
   );
+  // Zoho's invoices still unpaid when Zoho was closed (the books): their seller is whoever holds
+  // the seat of the customer's area now (else Zoho's salesperson).
+  const zoho = await rows<Omit<OwedInvoices["rows"][number], "terms"> & { termsKey: string; days: number | null }>(
+    db,
+    sql`select -d.id::int as "invoiceId", d.number as "invoiceCode", null::int as "orderId",
+        (select string_agg(so.number, ', ') from book_link k join book_doc so on so.id = k.to_doc and so.kind = 'sales_order' where k.from_doc = d.id) as "orderCode",
+        c.id::int as "customerId", c.name as customer, c.kind, c.city, h.person_id::int as "medrepId",
+        coalesce(p.name, d.fields->>'salesperson_name', d.fields->>'Sales Person', 'Zoho') as medrep, u.name as team,
+        ${day("d.doc_date")} as "issuedOn", ${day("d.due_date")} as "dueOn", null as "deliveredOn", 'zoho' as "termsKey", null::int as days,
+        round(d.total * d.fx_rate)::int as total, round((d.total - d.balance) * d.fx_rate)::int as paid, round(d.balance * d.fx_rate)::int as balance,
+        case when d.due_date < ${today}::date then 'late' else 'due' end as state,
+        case when d.due_date < ${today}::date then (${today}::date - d.due_date)::int else 0 end as "daysLate"
+      from book_doc d join customer c on c.id = d.customer_id
+        left join lateral (select h.person_id, s.unit_id from seat s join seat_holder h on h.seat_id = s.id and h.ends_on is null and h.kind = 'holder'
+          where s.area_id = c.area_id order by h.starts_on desc limit 1) h on true
+        left join person p on p.id = h.person_id left join org_unit u on u.id = h.unit_id
+      where d.kind = 'invoice' and d.zoho_id is not null and d.balance > 0 and d.status not in ('void', 'draft')
+      order by "daysLate" desc, d.balance desc`,
+  );
+  found.push(...zoho);
+  found.sort((a, b) => (a.state === "on_delivery" ? 1 : 0) - (b.state === "on_delivery" ? 1 : 0) || b.daysLate - a.daysLate || b.balance - a.balance);
   const rowsOut = found.map(({ termsKey, days, ...row }) => ({
     ...row,
     terms:
-      termsKey === "days" ? `${days ?? ""} days`.trim() : termsKey === "cod" ? "COD" : "Advance",
+      termsKey === "zoho" ? "From Zoho" : termsKey === "days" ? `${days ?? ""} days`.trim() : termsKey === "cod" ? "COD" : "Advance",
   }));
   const counted = rowsOut.filter((row) => row.state !== "on_delivery");
   return {

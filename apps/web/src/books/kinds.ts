@@ -92,4 +92,4 @@ export function statusText(status: string, overdueDays?: number | null) {
 }
 export const statusClass = (status: string) => STATUS_COLOR[status] ?? "text-[#408dfb]";
 /** A view's name in the title menu: "All Purchase Orders", "Partially Billed". */
-export const viewLabel = (key: string, plural: string) => (key === "all" ? `All ${plural}` : key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()));
+export const viewLabel = (key: string, plural: string) => (key === "all" ? `All ${plural}` : key === "zoho_to_finish" ? "Zoho's open orders to finish" : key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()));

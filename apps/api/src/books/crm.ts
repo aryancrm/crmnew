@@ -19,30 +19,30 @@ const invoiceStatus = (today: string) => sql`case when i.status = 'cancelled' th
 export function crmLight(kind: BookKind, today: string): SQL {
   if (kind === "sales_order")
     return sql`union all select -o.id::int, ${MANILA_DAY("o.created_at")}, coalesce(o.code, 'DRAFT-' || o.id), o.customer_po, c.name, o.customer_id::int, o.status,
-      o.total::float8, 0::float8, ${DAY("o.expected_on")} from sales_order o join customer c on c.id = o.customer_id`;
+      o.total::float8, 0::float8, ${DAY("o.expected_on")}, false from sales_order o join customer c on c.id = o.customer_id`;
   if (kind === "invoice")
     return sql`union all select -i.id::int, ${DAY("i.issued_on")}, i.code, o.customer_po, c.name, i.customer_id::int, ${invoiceStatus(today)},
-      i.total::float8, greatest(0, i.total - i.paid)::float8, ${DAY("i.due_on")}
+      i.total::float8, greatest(0, i.total - i.paid)::float8, ${DAY("i.due_on")}, false
       from invoice i join customer c on c.id = i.customer_id join sales_order o on o.id = i.order_id`;
   if (kind === "customer_payment")
     return sql`union all select -p.id::int, ${DAY("p.paid_on")}, 'CRM-' || lpad(p.id::text, 5, '0'), p.reference, c.name, p.customer_id::int,
-      case when p.active then 'paid' else 'void' end, p.amount::float8, 0::float8, null from payment p join customer c on c.id = p.customer_id`;
+      case when p.active then 'paid' else 'void' end, p.amount::float8, 0::float8, null, false from payment p join customer c on c.id = p.customer_id`;
   if (kind === "sales_return")
     return sql`union all select -r.id::int, ${MANILA_DAY("r.requested_at")}, coalesce(r.code, 'RET-' || r.id), o.code, c.name, o.customer_id::int, r.status,
-      r.credit::float8, 0::float8, null from sales_return r join sales_order o on o.id = r.order_id join customer c on c.id = o.customer_id`;
+      r.credit::float8, 0::float8, null, false from sales_return r join sales_order o on o.id = r.order_id join customer c on c.id = o.customer_id`;
   if (kind === "adjustment")
-    return sql`union all select -m.id::int, ${MANILA_DAY("m.at")}, 'ADJ-' || m.id, m.ref, null, null, 'adjusted', 0::float8, 0::float8, null
+    return sql`union all select -m.id::int, ${MANILA_DAY("m.at")}, 'ADJ-' || m.id, m.ref, null, null, 'adjusted', 0::float8, 0::float8, null, false
       from stock_move m where m.kind = 'count'`;
   if (kind === "transfer_order")
-    return sql`union all select -m.id::int, ${MANILA_DAY("m.at")}, coalesce(m.ref, 'TRF-' || m.id), m.ref, null, null, 'transferred', 0::float8, 0::float8, null
+    return sql`union all select -m.id::int, ${MANILA_DAY("m.at")}, coalesce(m.ref, 'TRF-' || m.id), m.ref, null, null, 'transferred', 0::float8, 0::float8, null, false
       from stock_move m where m.kind = 'move_out'`;
   if (kind === "package")
     return sql`union all select -o.id::int, ${MANILA_DAY("o.packed_at")}, 'PKG-' || coalesce(o.code, o.id::text), o.code, c.name, o.customer_id::int,
       case when o.delivered_at is not null or o.status = 'completed' then 'delivered' when o.shipped_at is not null then 'shipped' else 'not_shipped' end,
-      0::float8, 0::float8, null from sales_order o join customer c on c.id = o.customer_id where o.packed_at is not null`;
+      0::float8, 0::float8, null, false from sales_order o join customer c on c.id = o.customer_id where o.packed_at is not null`;
   if (kind === "shipment")
     return sql`union all select -o.id::int, ${MANILA_DAY("o.shipped_at")}, 'SHP-' || coalesce(o.code, o.id::text), o.tracking, c.name, o.customer_id::int,
-      case when o.delivered_at is not null or o.status = 'completed' then 'delivered' else 'shipped' end, o.delivery_fee::float8, 0::float8, ${DAY("o.delivered_on")}
+      case when o.delivered_at is not null or o.status = 'completed' then 'delivered' else 'shipped' end, o.delivery_fee::float8, 0::float8, ${DAY("o.delivered_on")}, false
       from sales_order o join customer c on c.id = o.customer_id where o.shipped_at is not null`;
   return sql``;
 }

@@ -12,6 +12,9 @@ import { shortPeso } from "../ceo";
 import { seatWords } from "../seat-words";
 import { CARD, count, dayLabel, PageHead, PageState } from "../ui";
 
+/** The desks that open the books (Zoho's documents). */
+const BOOK_READERS = ["inventory", "management", "finance", "ceo", "admin"];
+
 const FLAG: Record<Collections["rows"][number]["flag"], { bar: string; pill: string; word: string }> = {
   ok: { bar: "bg-emerald-500", pill: "bg-emerald-50 text-emerald-800", word: "Under 60 days" },
   d60: { bar: "bg-amber-400", pill: "bg-amber-50 text-amber-800", word: "60 days: call" },
@@ -95,9 +98,15 @@ export function CollectionsPage() {
                   </div>
                 </td>
                 <td className="px-3 py-2.5 whitespace-nowrap">
-                  <Link to={`/orders/${row.oldestOrderId}`} className="text-slate-700 hover:underline">
-                    {row.oldestCode}
-                  </Link>
+                  {/* An invoice from Zoho opens in the books, for the desks that read them. */}
+                  {row.oldestHref.startsWith("/books") && !BOOK_READERS.includes(me?.role ?? "") ? (
+                    <span className="text-slate-700">{row.oldestCode}</span>
+                  ) : (
+                    <Link to={row.oldestHref} className="text-slate-700 hover:underline">
+                      {row.oldestCode}
+                    </Link>
+                  )}
+                  {row.oldestHref.startsWith("/books") && <span className="ml-1 rounded bg-slate-100 px-1 text-[10.5px] text-slate-500">Zoho</span>}
                   <div className="text-[11.5px] text-slate-400">
                     {dayLabel(row.oldestOn)}
                     {row.daysLate > 0 ? ` · ${row.daysLate} days past due` : ""}

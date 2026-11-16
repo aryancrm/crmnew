@@ -21,7 +21,7 @@ import {
 } from "./actions";
 import { customerDetail, customerList } from "./customers";
 import { itemDetail, itemList, priceLists } from "./items";
-import { bookDoc, bookList, isBookKind, payables, vendorDetail, vendorList } from "./service";
+import { bookDoc, bookFile, bookList, isBookKind, payables, vendorDetail, vendorList } from "./service";
 
 const listAsked = (query: (name: string) => string | undefined) => ({
   view: query("view"),
@@ -44,6 +44,15 @@ export function bookRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHan
   app.get("/api/books/customers/:id", async (c) => c.json(await customerDetail(db, c.get("me"), Number(c.req.param("id")))));
   app.get("/api/books/vendors", async (c) => c.json(await vendorList(db, c.get("me"), listAsked((n) => c.req.query(n)))));
   app.get("/api/books/vendors/:id", async (c) => c.json(await vendorDetail(db, c.get("me"), Number(c.req.param("id")))));
+  app.get("/api/books/files/:id", async (c) => {
+    const file = await bookFile(db, c.get("me"), Number(c.req.param("id")));
+    return c.body(file.bytes as Uint8Array<ArrayBuffer>, 200, {
+      "content-type": file.mime,
+      "content-disposition": `inline; filename="${encodeURIComponent(file.name)}"`,
+      "x-content-type-options": "nosniff",
+      "cache-control": "private, max-age=604800, immutable",
+    });
+  });
   app.get("/api/books/bill/payables", async (c) => c.json(await payables(db, c.get("me"))));
   app.get("/api/books/:kind", async (c) => {
     const kind = c.req.param("kind");

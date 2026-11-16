@@ -291,6 +291,23 @@ export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onC
           </div>
         )}
         <Linked docs={doc.linkedDocs} />
+        {(doc.files?.length ?? 0) > 0 && (
+          <div className="rounded-md border border-[#ebeaf2] px-4 py-3">
+            <div className="mb-1 font-medium">Attachments ({doc.files?.length})</div>
+            <ul className="space-y-1">
+              {doc.files?.map((file) => (
+                <li key={file.id} className="flex flex-wrap items-center justify-between gap-2">
+                  <a href={`/api/books/files/${file.id}`} target="_blank" rel="noreferrer" className="text-[#1c5bd9] hover:underline">
+                    {file.name}
+                  </a>
+                  <span className="text-[12px] text-[#6c718a]">
+                    {Math.round(file.size / 1024)} KB{file.uploadedBy ? ` · ${file.uploadedBy}` : ""}{file.uploadedOn ? ` · ${file.uploadedOn}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         <article className="mx-auto max-w-[820px] rounded-sm border border-[#ebeaf2] p-8 shadow-[0_0_6px_rgba(0,0,0,0.06)]">
           <div className="flex flex-wrap justify-between gap-6">
             <div>

@@ -64,7 +64,7 @@ export function GoHereFirst() {
         amount: row.owed,
         why: `${shortPeso(row.owed)} owed · oldest invoice ${row.age} days`,
         phone: row.phone,
-        orderId: row.oldestOrderId,
+        orderId: row.oldestOrderId ?? undefined,
       })),
     ...[...late.data.rows, ...due.data.rows].map((row): Stop => ({
       key: `r${row.customerId}`,

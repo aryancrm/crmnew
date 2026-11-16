@@ -260,13 +260,17 @@ export async function teamBoard(
       sql`select o.seat_id::int as "seatId",
             coalesce(sum(i.total - i.paid) filter (where i.status = 'open' and not (i.terms = 'cod' and o.status <> 'completed')), 0)::float8 as owed,
             coalesce(sum(i.total - i.paid) filter (where i.status = 'open' and ${due} and i.due_on < ${today}::date), 0)::float8 as overdue
-          from invoice i join sales_order o on o.id = i.order_id where o.seat_id in (${list}) group by o.seat_id`,
+          from invoice i join sales_order o on o.id = i.order_id where o.seat_id in (${list}) group by o.seat_id
+          union all
+          -- Zoho's unpaid invoices of the seat's Zoho salesperson.
+          select i.seat_id::int, sum(i.total - i.paid)::float8, coalesce(sum(i.total - i.paid) filter (where i.due_on < ${today}::date), 0)::float8
+          from sale_invoice i where i.source = 'zoho' and i.status = 'open' and i.seat_id in (${list}) group by i.seat_id`,
     ),
     rows<{ seatId: number; day: string; amount: number }>(
       db,
-      sql`select o.seat_id::int as "seatId", ${day("i.issued_on")} as day, sum(i.total)::float8 as amount
-          from invoice i join sales_order o on o.id = i.order_id
-          where o.seat_id in (${list}) and i.status <> 'cancelled' and ${inRange(sql`i.issued_on`)} group by 1, 2`,
+      sql`select i.seat_id::int as "seatId", ${day("i.issued_on")} as day, sum(i.total)::float8 as amount
+          from sale_invoice i
+          where i.seat_id in (${list}) and i.status <> 'cancelled' and ${inRange(sql`i.issued_on`)} group by 1, 2`,
     ),
     rows<{ seatId: number; day: string; amount: number }>(
       db,
@@ -362,7 +366,9 @@ export async function teamBoard(
   const cards: TeamSeatCard[] = seats.map((seat) => {
     const n = now.find((row) => row.seatId === seat.seatId);
     const o = other.find((row) => row.seatId === seat.seatId);
-    const m = owed.find((row) => row.seatId === seat.seatId);
+    // The CRM's own and Zoho's unpaid invoices of the seat, added up.
+    const mine = owed.filter((row) => row.seatId === seat.seatId);
+    const m = mine.length ? { owed: mine.reduce((sum, row) => sum + row.owed, 0), overdue: mine.reduce((sum, row) => sum + row.overdue, 0) } : undefined;
     const old = oldest.find((row) => row.seatId === seat.seatId);
     const soldDays = new Map(
       sold.filter((row) => row.seatId === seat.seatId).map((row) => [row.day, row.amount]),

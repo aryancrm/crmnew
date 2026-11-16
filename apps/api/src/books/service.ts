@@ -7,6 +7,7 @@ import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import { COST_ROLES } from "../inventory/rules";
 import { todayManila } from "../inventory/rules";
+import { bytesOf } from "../files/store";
 import { crmDoc, crmLight, crmRows } from "./crm";
 import type { BookDoc, BookKind, BookLine, BookLinked, BookList, BookRow, Me, VendorDetail, VendorList, VendorRow } from "../types";
 
@@ -90,17 +91,24 @@ export async function bookList(
   // and page; then everything a row shows, for the page's rows only.
   const light = sql`(select d.id::int as id, to_char(d.doc_date, 'YYYY-MM-DD') as date, d.number, d.reference, coalesce(s.name, c.name, d.party_name) as party,
       coalesce(d.supplier_id, d.customer_id)::int as "partyId", ${liveStatus(today)} as status, d.total::bigint::float8 as total, d.balance::bigint::float8 as balance,
-      to_char(d.due_date, 'YYYY-MM-DD') as due
+      to_char(d.due_date, 'YYYY-MM-DD') as due,
+      -- A Zoho sales order still open when Zoho was closed: to be finished (invoiced, shipped).
+      (d.kind = 'sales_order' and d.zoho_id is not null and d.status in ('confirmed', 'draft')
+        and (coalesce(d.fields->>'invoiced_status', '') <> 'invoiced' or coalesce(d.fields->>'shipped_status', '') in ('pending', 'partially_shipped'))) as open
     from book_doc d left join supplier s on s.id = d.supplier_id left join customer c on c.id = d.customer_id where d.kind = ${kind}
     ${crmLight(kind, today)})`;
   const views = await rows<{ key: string; count: number }>(db, sql`select r.status as key, count(*)::int as count from ${light} r group by 1 order by 2 desc`);
+  if (kind === "sales_order") {
+    const [open] = await rows<{ n: number }>(db, sql`select count(*)::int as n from ${light} r where r.open`);
+    if (open?.n) views.unshift({ key: "zoho_to_finish", count: open.n });
+  }
   const view = asked.view && views.some((v) => v.key === asked.view) ? asked.view : "all";
   const perPage = [10, 25, 50, 100, 200].includes(asked.perPage ?? 0) ? (asked.perPage as number) : 25;
   const page = Math.max(1, asked.page ?? 1);
   const q = asked.q?.trim();
   const where = sql.join(
     [
-      view === "all" ? sql`true` : sql`r.status = ${view}`,
+      view === "all" ? sql`true` : view === "zoho_to_finish" ? sql`r.open` : sql`r.status = ${view}`,
       q ? sql`(r.number ilike ${`%${q}%`} or r.reference ilike ${`%${q}%`} or r.party ilike ${`%${q}%`})` : sql`true`,
       asked.party ? sql`r."partyId" = ${asked.party}` : sql`true`,
     ],
@@ -180,8 +188,12 @@ export async function bookDoc(db: Database, me: Me, kind: BookKind, id: number):
   ]);
   // A purchase order's receives and bills, once each, reach the documents they lead to (the
   // payments on its bills) through the bills' own page.
+  const files = await rows<NonNullable<BookDoc["files"]>[number]>(
+    db,
+    sql`select id::int as id, name, mime, size, uploaded_by as "uploadedBy", uploaded_on as "uploadedOn" from book_file where doc_id = ${id} order by id`,
+  );
   const { supplierId: _drop, ...doc } = row;
-  return { ...doc, vendor: vendors[0] ?? null, lines, linkedDocs };
+  return { ...doc, vendor: vendors[0] ?? null, lines, linkedDocs, files };
 }
 
 // ------------------------------------------------------------------ vendors
@@ -260,4 +272,12 @@ export async function payables(db: Database, me: Me): Promise<{ total: number; d
       from book_doc where kind = 'bill' and balance > 0 and status not in ('void', 'draft', 'pending_approval')`,
   );
   return found ?? { total: 0, dueToday: 0, due30: 0, overdue: 0 };
+}
+
+/** A file on a books document, for the desks that read the books. */
+export async function bookFile(db: Database, me: Me, id: number): Promise<{ name: string; mime: string; bytes: Uint8Array }> {
+  mayRead(me);
+  const [file] = await rows<{ name: string; mime: string; data: Uint8Array | null; key: string | null }>(db, sql`select name, mime, data, key from book_file where id = ${id}`);
+  if (!file) throw new Refusal(404, "not_found", "That file is not here.");
+  return { name: file.name, mime: file.mime, bytes: await bytesOf(file) };
 }

@@ -143,12 +143,13 @@ export async function customerPrices(db: Database, me: Me, id: number): Promise<
         where customer_id = ${id} and (seller is not null or division is not null)
         order by seller_on desc nulls last limit 1`,
     ),
-    // What Zoho's invoices still show as owed.
+    // What Zoho's invoices still owe: the books (payments taken here on them count), plus what Zoho
+    // Books kept as the customer's opening balance.
     rows<Pick<CustomerPrices["zoho"], "owed" | "openInvoices" | "oldestDue">>(
       db,
-      sql`select coalesce(sum(balance), 0)::float8 as owed, count(*)::int as "openInvoices",
-          to_char(min(due_on), 'YYYY-MM-DD') as "oldestDue"
-        from past_invoice where customer_id = ${id} and balance > 0 and status not in ('void', 'draft')`,
+      sql`select (coalesce(sum(round(d.balance * d.fx_rate)), 0) + (select opening_receivables from customer where id = ${id}))::float8 as owed,
+          count(d.id)::int as "openInvoices", to_char(min(d.due_date), 'YYYY-MM-DD') as "oldestDue"
+        from book_doc d where d.customer_id = ${id} and d.kind = 'invoice' and d.zoho_id is not null and d.balance > 0 and d.status not in ('void', 'draft')`,
     ),
     rows<CustomerPrices["orders"][number]>(
       db,

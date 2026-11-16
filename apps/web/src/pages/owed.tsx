@@ -84,7 +84,7 @@ export function OwedReport() {
     by === "customer"
       ? `c${row.customerId}`
       : by === "medrep"
-        ? `m${row.medrepId}`
+        ? `m${row.medrepId ?? row.medrep}`
         : `t${row.team ?? "-"}`;
   const groups = [
     ...shown
@@ -335,17 +335,21 @@ function Invoices({ rows }: { rows: Row[] }) {
             <tr key={row.invoiceId} className="hover:bg-slate-50">
               <td className="px-4 py-2">
                 <Link
-                  to={`/invoices/${row.invoiceId}`}
+                  to={row.invoiceId < 0 ? `/books/invoices/${-row.invoiceId}` : `/invoices/${row.invoiceId}`}
                   className="font-semibold text-slate-800 hover:underline"
                 >
                   {row.invoiceCode}
                 </Link>
-                <Link
-                  to={`/orders/${row.orderId}`}
-                  className="block text-[11px] text-slate-400 hover:underline"
-                >
-                  {row.orderCode}
-                </Link>
+                {row.orderId ? (
+                  <Link
+                    to={`/orders/${row.orderId}`}
+                    className="block text-[11px] text-slate-400 hover:underline"
+                  >
+                    {row.orderCode}
+                  </Link>
+                ) : (
+                  <span className="block text-[11px] text-slate-400">{row.orderCode ?? ""} · Zoho</span>
+                )}
               </td>
               <td className="px-3 py-2">
                 <Link to={`/customers/${row.customerId}`} className="hover:underline">

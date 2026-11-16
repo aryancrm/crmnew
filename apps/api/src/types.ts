@@ -3260,15 +3260,16 @@ export type Statement = {
 export type OwedInvoices = {
   today: string;
   rows: {
+    /** Below zero: an invoice from Zoho, in the books (its id there is the same number, positive). */
     invoiceId: number;
     invoiceCode: string;
-    orderId: number;
-    orderCode: string;
+    orderId: number | null;
+    orderCode: string | null;
     customerId: number;
     customer: string;
     kind: CustomerKind;
     city: string | null;
-    medrepId: number;
+    medrepId: number | null;
     medrep: string;
     team: string | null;
     issuedOn: string;
@@ -4274,7 +4275,10 @@ export type Collections = {
     owed: number;
     invoices: number;
     oldestCode: string;
-    oldestOrderId: number;
+    /** The CRM's own order of the oldest invoice; empty for one that came from Zoho. */
+    oldestOrderId: number | null;
+    /** Where the oldest invoice opens: its order here, or Zoho's invoice in the books. */
+    oldestHref: string;
     oldestOn: string;
     /** Days since the oldest unpaid invoice. */
     age: number;
@@ -4844,6 +4848,8 @@ export type BookDoc = BookRow & {
   fromZoho: boolean;
   zohoCreated: string | null;
   vendor: { id: number; name: string; company: string | null; email: string | null; phone: string | null; address: string | null; country: string | null } | null;
+  /** Files on it (Zoho's, and any added here). */
+  files?: { id: number; name: string; mime: string; size: number; uploadedBy: string | null; uploadedOn: string | null }[];
   lines: BookLine[];
   linkedDocs: BookLinked[];
 };

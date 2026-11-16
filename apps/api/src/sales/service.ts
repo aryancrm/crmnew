@@ -48,6 +48,9 @@ const list = (values: readonly string[]) =>
   );
 
 /** Invoices (alias `i`) that count as sold in a month. */
+/** Every sale (the CRM's and Zoho's invoices) with its order's seat, MedRep, channel and id as "o". */
+const saleAs = sql`sale_invoice i cross join lateral (select i.seat_id, i.medrep_id, i.channel_id, coalesce(i.order_id, -i.id) as id) o`;
+
 const soldIn = (facts: MonthFacts): SQL => {
   const { first, next } = boundsOf(facts);
   return sql`i.status <> 'cancelled' and i.issued_on >= ${first}::date and i.issued_on < ${next}::date`;
@@ -87,7 +90,7 @@ async function figuresOf(
       db,
       sql`select ${whose}::int as id, sum(i.total)::float8 as sold,
           coalesce(sum(i.total) filter (where i.issued_on = ${facts.today}::date), 0)::float8 as today
-        from invoice i join sales_order o on o.id = i.order_id
+        from sale_invoice i cross join lateral (select i.seat_id, i.medrep_id) o
         where ${soldIn(facts)} and ${whose} in (${ids(personIds)}) group by 1`,
     ),
     rows<{ id: number; placed: number; value: number }>(
@@ -210,7 +213,7 @@ export async function teamSales(db: Database, me: Me, asked?: string): Promise<T
       ? rows<{ sold: number; today: number }>(
           db,
           sql`select coalesce(sum(i.total), 0)::float8 as sold, coalesce(sum(i.total) filter (where i.issued_on = ${facts.today}::date), 0)::float8 as today
-            from invoice i where ${soldIn(facts)}`,
+            from sale_invoice i where ${soldIn(facts)}`,
         )
       : Promise.resolve([]),
   ]);
@@ -278,10 +281,8 @@ export async function channelSales(db: Database, facts: MonthFacts): Promise<Cha
     sql`select ch.id::int as id, ch.code, ch.name, ch.active, h.name as head,
         (select nullif(sum(${targetShare(facts)}), 0) from sales_target t join person p on p.id = t.person_id
           where p.channel_id = ch.id and p.active)::float8 as target,
-        coalesce((select sum(i.total) from invoice i join sales_order o on o.id = i.order_id
-          where o.channel_id = ch.id and ${soldIn(facts)}), 0)::float8 as sold,
-        coalesce((select sum(i.total) from invoice i join sales_order o on o.id = i.order_id
-          where o.channel_id = ch.id and ${soldIn(facts)} and i.issued_on = ${facts.today}::date), 0)::float8 as today
+        coalesce((select sum(i.total) from sale_invoice i where i.channel_id = ch.id and ${soldIn(facts)}), 0)::float8 as sold,
+        coalesce((select sum(i.total) from sale_invoice i where i.channel_id = ch.id and ${soldIn(facts)} and i.issued_on = ${facts.today}::date), 0)::float8 as today
       from channel ch left join person h on h.id = ch.head_id
       order by ch.sort, ch.id`,
   );
@@ -329,8 +330,8 @@ export async function ceoHome(
     }>(
       db,
       sql`select
-          coalesce((select sum(i.total) from invoice i where ${soldIn(facts)}), 0)::float8 as achieved,
-          coalesce((select sum(i.total) from invoice i where ${soldIn(facts)} and i.issued_on = ${today}::date), 0)::float8 as today,
+          coalesce((select sum(i.total) from sale_invoice i where ${soldIn(facts)}), 0)::float8 as achieved,
+          coalesce((select sum(i.total) from sale_invoice i where ${soldIn(facts)} and i.issued_on = ${today}::date), 0)::float8 as today,
           coalesce((select sum(amount) from payment where active and paid_on >= ${first}::date and paid_on < ${next}::date), 0)::float8 as collected,
           coalesce((select sum(amount) from payment where active and paid_on >= ${before.from}::date and paid_on <= ${before.to}::date), 0)::float8 as before,
           (select nullif(sum(${targetShare(facts)}), 0) from sales_target t join person p on p.id = t.person_id where p.active)::float8 as target`,
@@ -401,7 +402,21 @@ export async function ceoHome(
     ),
   ]);
   const total = totals[0] ?? { achieved: 0, today: 0, collected: 0, before: 0, target: null };
-  const owed = money[0] ?? { owed: 0, onDelivery: 0, overdue: 0, late: 0, refunds: 0, cod: 0 };
+  const crmOwed = money[0] ?? { owed: 0, onDelivery: 0, overdue: 0, late: 0, refunds: 0, cod: 0 };
+  // What customers still owe on Zoho's invoices (the books), and what Zoho Books kept as opening balances.
+  const [zohoOwed] = await rows<{ owed: number; overdue: number; late: number }>(
+    db,
+    sql`select (coalesce(sum(round(d.balance * d.fx_rate)), 0) + (select coalesce(sum(opening_receivables), 0) from customer))::float8 as owed,
+        coalesce(sum(round(d.balance * d.fx_rate)) filter (where d.due_date < ${today}::date), 0)::float8 as overdue,
+        count(distinct d.customer_id) filter (where d.due_date < (${today}::date - 60))::int as late
+      from book_doc d where d.kind = 'invoice' and d.zoho_id is not null and d.balance > 0 and d.status not in ('void', 'draft')`,
+  );
+  const owed = {
+    ...crmOwed,
+    owed: crmOwed.owed + (zohoOwed?.owed ?? 0),
+    overdue: crmOwed.overdue + (zohoOwed?.overdue ?? 0),
+    late: crmOwed.late + (zohoOwed?.late ?? 0),
+  };
   const waiting = orders[0] ?? {
     awaiting: 0,
     finance: 0,
@@ -647,13 +662,11 @@ export async function channelSalesDetail(
     rows<ChannelSalesDetail["people"][number]>(
       db,
       sql`select p.id::int as id, p.name, a.name as area,
-          coalesce((select sum(i.total) from invoice i join sales_order o on o.id = i.order_id
-            where o.channel_id = ${channel.id} and ${whose} = p.id and ${sold}), 0)::float8 as sold,
+          coalesce((select sum(i.total) from ${saleAs} where o.channel_id = ${channel.id} and ${whose} = p.id and ${sold}), 0)::float8 as sold,
           (select sum(${targetShare(facts)}) from sales_target t where t.person_id = p.id)::float8 as target,
-          (select count(distinct o.id) from invoice i join sales_order o on o.id = i.order_id
-            where o.channel_id = ${channel.id} and ${whose} = p.id and ${sold})::int as orders
+          (select count(distinct o.id) from ${saleAs} where o.channel_id = ${channel.id} and ${whose} = p.id and ${sold})::int as orders
         from person p left join area a on a.id = p.area_id
-        where p.active and (p.channel_id = ${channel.id} or exists (select 1 from sales_order o join invoice i on i.order_id = o.id
+        where p.active and (p.channel_id = ${channel.id} or exists (select 1 from ${saleAs}
           where ${whose} = p.id and o.channel_id = ${channel.id} and ${sold}))
           and (p.role in ('medrep', 'team_lead', 'manager') or exists (select 1 from sales_order o where ${whose} = p.id and o.channel_id = ${channel.id}))
         order by sold desc, p.name`,
@@ -661,16 +674,22 @@ export async function channelSalesDetail(
     rows<ChannelSalesDetail["customers"][number]>(
       db,
       sql`select c.id::int as id, c.name, c.kind, sum(i.total)::float8 as sold, count(distinct o.id)::int as orders
-        from invoice i join sales_order o on o.id = i.order_id join customer c on c.id = o.customer_id
+        from ${saleAs} join customer c on c.id = i.customer_id
         where o.channel_id = ${channel.id} and ${sold}
         group by c.id, c.name, c.kind order by sold desc limit 50`,
     ),
     rows<ChannelSalesDetail["medicines"][number]>(
       db,
-      sql`select m.name || coalesce(' ' || m.strength, '') as name, sum(oi.qty)::int as qty, sum(oi.qty * oi.unit_price)::float8 as value
-        from invoice i join sales_order o on o.id = i.order_id join order_item oi on oi.order_id = o.id join medicine m on m.id = oi.medicine_id
-        where o.channel_id = ${channel.id} and ${sold}
-        group by m.name, m.strength order by value desc limit 50`,
+      sql`select name, sum(qty)::int as qty, sum(value)::float8 as value from (
+          select m.name || coalesce(' ' || m.strength, '') as name, oi.qty, oi.qty * oi.unit_price as value
+          from invoice i join sales_order o on o.id = i.order_id join order_item oi on oi.order_id = o.id join medicine m on m.id = oi.medicine_id
+          where o.channel_id = ${channel.id} and ${sold}
+          union all
+          -- Zoho's invoices of the channel's seats: their lines, under the medicine or Zoho's item name.
+          select coalesce(m.name || coalesce(' ' || m.strength, ''), l.item_name), l.qty::int, round(coalesce(l.amount, 0) * d.fx_rate)
+          from sale_invoice i join book_doc d on d.id = i.id and i.source = 'zoho' join book_line l on l.doc_id = d.id left join medicine m on m.id = l.medicine_id
+          where i.channel_id = ${channel.id} and ${sold}
+        ) x group by name order by value desc limit 50`,
     ),
   ]);
   return { people, customers, medicines };

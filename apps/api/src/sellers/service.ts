@@ -156,21 +156,45 @@ export async function collections(db: Database, me: Me): Promise<Collections> {
   if (![...SELLERS, ...LEADS, "ceo", "admin", "finance"].includes(me.role))
     throw new Refusal(403, "not_allowed", "Collections is the sellers' and their heads' list.");
   const today = todayManila();
-  const whose = ["ceo", "admin", "finance"].includes(me.role) ? sql`true` : whoseOrders(me);
+  const everyone = ["ceo", "admin", "finance"].includes(me.role);
+  const whose = everyone ? sql`true` : whoseOrders(me);
+  // The people whose customers these are: me, or my whole team for a head.
+  const team = LEADS.includes(me.role)
+    ? sql`(with recursive t as (select id from person where id = ${me.id} union all select p.id from person p join t on p.reports_to = t.id) select id from t)`
+    : sql`(select ${me.id}::bigint)`;
+  // Unpaid invoices: the CRM's own, and Zoho's still open when Zoho was closed (the books), whose
+  // seller is whoever holds the seat of the customer's area now.
   const found = await rows<Collections["rows"][number]>(
     db,
-    sql`select c.id::int as "customerId", c.name as customer, c.kind, c.phone,
-        sum(i.total - i.paid)::float8 as owed, count(*)::int as invoices,
-        (array_agg(i.code order by i.issued_on, i.id))[1] as "oldestCode",
-        (array_agg(o.id order by i.issued_on, i.id))[1]::int as "oldestOrderId",
-        to_char(min(i.issued_on), 'YYYY-MM-DD') as "oldestOn",
-        (${today}::date - min(i.issued_on))::int as age,
-        coalesce(max(${today}::date - i.due_on) filter (where i.due_on < ${today}::date), 0)::int as "daysLate",
-        (select p.name from person p where p.id = (array_agg(o.medrep_id order by i.issued_on))[1]) as seller
-      from invoice i join sales_order o on o.id = i.order_id join customer c on c.id = i.customer_id
-      where i.status = 'open' and i.total > i.paid and not (i.terms = 'cod' and o.status <> 'completed') and ${whose}
+    sql`with inv as (
+        select i.customer_id, i.code, '/orders/' || o.id as href, o.id::int as order_id, i.issued_on, i.due_on, (i.total - i.paid)::bigint as owed,
+          (select p.name from person p where p.id = o.medrep_id) as seller
+        from invoice i join sales_order o on o.id = i.order_id
+        where i.status = 'open' and i.total > i.paid and not (i.terms = 'cod' and o.status <> 'completed') and ${whose}
+        union all
+        select d.customer_id, d.number, '/books/invoices/' || d.id, null::int, d.doc_date, d.due_date, round(d.balance * d.fx_rate)::bigint,
+          coalesce((select p.name from seat s join seat_holder h on h.seat_id = s.id and h.ends_on is null and h.kind = 'holder' join person p on p.id = h.person_id
+            where s.area_id = c.area_id order by h.starts_on desc limit 1), d.fields->>'salesperson_name', d.fields->>'Sales Person')
+        from book_doc d join customer c on c.id = d.customer_id
+        where d.kind = 'invoice' and d.zoho_id is not null and d.balance > 0 and d.status not in ('void', 'draft')
+          and ${
+            everyone
+              ? sql`true`
+              : sql`c.area_id in (select s.area_id from seat s join seat_holder h on h.seat_id = s.id and h.ends_on is null where h.person_id in ${team} and s.area_id is not null)`
+          }
+      )
+      select c.id::int as "customerId", c.name as customer, c.kind, c.phone,
+        sum(inv.owed)::float8 as owed, count(*)::int as invoices,
+        (array_agg(inv.code order by inv.issued_on))[1] as "oldestCode",
+        (array_agg(inv.order_id order by inv.issued_on))[1]::int as "oldestOrderId",
+        (array_agg(inv.href order by inv.issued_on))[1] as "oldestHref",
+        to_char(min(inv.issued_on), 'YYYY-MM-DD') as "oldestOn",
+        (${today}::date - min(inv.issued_on))::int as age,
+        coalesce(max(${today}::date - inv.due_on) filter (where inv.due_on < ${today}::date), 0)::int as "daysLate",
+        (array_agg(inv.seller order by inv.issued_on))[1] as seller
+      from inv join customer c on c.id = inv.customer_id
       group by c.id, c.name, c.kind, c.phone
-      order by min(i.issued_on), sum(i.total - i.paid) desc limit 300`,
+      order by min(inv.issued_on), sum(inv.owed) desc limit 300`,
   );
   const flag = (age: number): Collections["rows"][number]["flag"] => (age >= 90 ? "d90" : age >= 75 ? "d75" : age >= 60 ? "d60" : "ok");
   const withFlags = found.map((row) => ({ ...row, flag: flag(row.age) }));
@@ -200,8 +224,13 @@ async function actualsOf(db: Database, personIds: number[], day: string) {
           where (o.medrep_id = p.id or o.raised_by = p.id) and i.status <> 'cancelled' and i.issued_on = ${day}::date), 0)::float8 as sales,
         (select count(*) from invoice i join sales_order o on o.id = i.order_id
           where (o.medrep_id = p.id or o.raised_by = p.id) and i.status <> 'cancelled' and i.issued_on = ${day}::date)::int as invoices,
-        coalesce((select sum(pm.amount) from payment pm join invoice i on i.id = pm.invoice_id join sales_order o on o.id = i.order_id
-          where (o.medrep_id = p.id or o.raised_by = p.id) and pm.paid_on = ${day}::date), 0)::float8 as collected,
+        (coalesce((select sum(pm.amount) from payment pm join invoice i on i.id = pm.invoice_id join sales_order o on o.id = i.order_id
+          where (o.medrep_id = p.id or o.raised_by = p.id) and pm.paid_on = ${day}::date), 0)
+          -- And what was taken here on Zoho's unpaid invoices of the customers of the seller's areas.
+          + coalesce((select sum(k.amount) from book_doc r join book_link k on k.from_doc = r.id join book_doc i on i.id = k.to_doc and i.kind = 'invoice'
+              join customer c on c.id = i.customer_id
+            where r.kind = 'customer_payment' and r.zoho_id is null and r.status <> 'void' and r.doc_date = ${day}::date
+              and c.area_id in (select s.area_id from seat s join seat_holder h on h.seat_id = s.id and h.ends_on is null where h.person_id = p.id)), 0))::float8 as collected,
         (select count(*) from visit v where v.person_id = p.id and v.status = 'done' and v.day = ${day}::date)::int as visits
       from person p where p.id in (${list})`,
   );
