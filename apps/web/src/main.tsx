@@ -65,6 +65,7 @@ import { HuddlePage } from "./pages/huddle";
 import { AccountsPage, B2bTeamPage, ProspectsPage } from "./pages/b2b";
 import { CareGroupsPage } from "./pages/care-groups";
 import { MtListingsPage } from "./pages/mt";
+import { WorkLogPage, WorkLogsPage } from "./pages/work-log";
 import { CompanyPapersPage, TenderPage, TendersPage } from "./pages/tenders";
 import { ClidpListingsPage, ClidpTeamPage } from "./pages/clidp";
 import { RxDoctorsPage, RxFieldPage } from "./pages/rx";
@@ -163,6 +164,8 @@ createRoot(root).render(
             <Route path="tenders/:id" element={<TenderPage />} />
             <Route path="company-papers" element={<CompanyPapersPage />} />
             <Route path="mt/listings" element={<MtListingsPage />} />
+            <Route path="work-log" element={<WorkLogPage />} />
+            <Route path="work-logs" element={<WorkLogsPage />} />
             <Route path="clidp/team" element={<ClidpTeamPage />} />
             <Route path="team-scores" element={<TeamScoresPage />} />
             <Route path="team" element={<TeamSalesPage />} />

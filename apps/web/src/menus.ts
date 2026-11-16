@@ -36,6 +36,7 @@ import {
   MessageSquarePlus,
   Megaphone,
   MessagesSquare,
+  NotebookPen,
   Network,
   PackageCheck,
   PackageX,
@@ -329,6 +330,7 @@ const reportsApp: Space = {
         { to: "/targets", label: "Targets", icon: Target },
       ],
     },
+    { title: "Office", items: [{ to: "/work-logs", label: "Work logs", icon: NotebookPen }] },
   ],
 };
 
@@ -1083,6 +1085,16 @@ function ownDesk(me: Me): Space {
           { to: "/hr/report", label: "Attendance report", icon: BarChart3 },
         ]),
         icon: Users,
+      };
+    case "staff":
+      // The office staff (Digital Marketing, IT): their Home is their work log, written when they
+      // like (Aryan, 17 Nov: optional). No stock, no customers.
+      return {
+        key: "desk",
+        label: seatWords(me).desk,
+        icon: NotebookPen,
+        tone: "bg-brand text-white",
+        groups: [{ items: [{ ...home, label: "My work log", icon: NotebookPen }] }],
       };
     case "inventory":
       return inventoryApp(me);

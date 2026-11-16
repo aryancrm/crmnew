@@ -46,6 +46,8 @@ const B2B: Record<string, string> = {
 export function seatWords(me: Person | null | undefined): Words {
   const plain = { desk: me?.roleLabel ?? "", customers: "customers", myCustomers: "My area", toCall: "Customers to call" };
   if (!me) return plain;
+  // The office staff (Digital Marketing, IT): their desk is their job title on the chart.
+  if (me.role === "staff") return { ...plain, desk: me.title ?? me.roleLabel };
   // The Hospital Division's Government Account box: a government bidding coachee, not a CHC.
   if (me.channel?.code === "HOSP" && me.role === "medrep" && /bidding/i.test(me.title ?? ""))
     return { desk: "Government Account", customers: "hospitals", myCustomers: "My hospitals", toCall: "Hospitals to call" };

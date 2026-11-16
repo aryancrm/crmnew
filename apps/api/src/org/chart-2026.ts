@@ -136,4 +136,11 @@ export const CHART_2026: ChartUnit[] = [
   // One person on the chart (Ms. Malou Jagonoy, COO), who looks after the pharmacy chains herself:
   // her seat has the chains' area.
   { name: "Modern Trade", kind: "business", channel: "MT", seats: [{ title: "Chief Operating Officer – Modern Trade", module: "manager", lead: true, area: "Modern Trade" }] },
+  // Two office boxes straight under the Founder, no head drawn on the chart: their people write a
+  // work log (optional) and sell nothing (Aryan, 17 Nov).
+  {
+    name: "Digital Marketing Coaching Department", kind: "department", channel: null,
+    seats: [{ title: "Digital Marketing Coach", module: "staff" }, { title: "Multimedia Artist", module: "staff" }],
+  },
+  { name: "IT Division", kind: "department", channel: null, seats: [{ title: "Employee Happiness Coachee", module: "staff", n: 5 }] },
 ];

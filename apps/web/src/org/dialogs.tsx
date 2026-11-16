@@ -60,6 +60,11 @@ export const WORK: Record<Role, { label: string; title: string; does: string }> 
     title: "HR officer",
     does: "Adds new joiners, keeps people's records, attendance, leave and pay.",
   },
+  staff: {
+    label: "Office staff",
+    title: "Office staff",
+    does: "Digital Marketing, IT and the like: writes their day (what they did, today, tomorrow) if they want.",
+  },
   ceo: { label: "CEO", title: "CEO", does: "Sees the whole company." },
 };
 /** The order the work is offered in, sales first. */

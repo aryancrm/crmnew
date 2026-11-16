@@ -1567,6 +1567,22 @@ Modern Trade playbook.
 |---|---|---|---|---|
 | Chief Operating Officer – Modern Trade (head, MT) | Home, Chains, Listings, Orders, Collections, Targets | Sales against target on pace; each chain: last order, due to reorder or late against its own gap, money owed and its age; listings (our medicines each chain carries, in how many branches); deductions and near-expiry returns are not in the CRM yet (they need Finance's short-payment record) | → Founder | Done 17 Nov, checked as Malou |
 
+### 16.8 Digital Marketing and IT (done 17 Nov): the work log
+
+Read from the chart (the two boxes cropped alone, 17 Nov): the Digital Marketing Coaching Department
+has Ms. Kriscel Calbayar (Digital Marketing Coach) and Mr. Arnel Catome (Multimedia Artist); the IT
+Division has five Employee Happiness Coachees (Mr. Jade Atyla Madigal, Mr. Linus Aurin, Mr. Cendric
+Angelo Gencianos, Mr. Aaron Manila, Mr. Zildian Bermas). No head is drawn in either box: they report
+to the Founder. They sell nothing. Aryan (17 Nov): they may write their day in the CRM, what they did,
+what they are doing today and tomorrow; optional, nothing is chased. A "Leads by source" screen for
+Digital Marketing was declined.
+
+New work "Office staff" (role `staff`); the chart's two boxes are departments with staff seats.
+
+| Seat | Menu | Home | Sends up | State |
+|---|---|---|---|---|
+| Digital Marketing Coach, Multimedia Artist, Employee Happiness Coachee (staff) | My work log, Me, Messages (no stock, no customers) | My work log: today's three boxes (what I did, today, tomorrow), saved and changed until midnight; earlier days | → Founder: Reports → Work logs (everyone's day, any day); a head reads the people under them | Done 17 Nov; API checked as Kriscel and the Founder |
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -2010,3 +2026,4 @@ Modern Trade playbook.
 - 17 Nov (59), Section 16.6 Government Bidding done (Subir Dey's three lines now all built: CLIDP, Government Bidding, B2B Telesales). Migrations 0064 (tender, tender_line, tender_event, company_paper) and 0065 (a bid line changed while preparing is kept, marked replaced). The tender's steps with what each needs: the Admin alone approves the bid price, never above the ABC; a tender is submitted only with every envelope paper ticked; lost needs the winning bid or the reason; dropped needs the reason; every move kept. The bidding desk's Home (Admin and coachees): deadlines this week, prices to approve (Admin), awaiting award, awards to deliver / waiting for acceptance (IAR) / to bill / to collect (days since acceptance), won this month and win rate, company papers ending. Tenders (bidding / awarded / closed), a tender's page (details, envelope checklist, bid lines, step buttons, history), Documents (company papers with expiry). The Mentor's Government Bidding card; Reports: Tenders. Demo: Jimmy, Hazel, Arron, two agencies, five tenders at different steps, four company papers. The bidding CHC's chart title. Admin chart: Subir Dey's part filled. 328 API tests.
 - 17 Nov (60), Section 16.7 Modern Trade, read from the chart box alone: one person, Ms. Malou Jagonoy, Chief Operating Officer (docs/ORG-CHART-2026.md said Mohan Jagessy: corrected). Migration 0066 mt_listing (which of our medicines a chain carries and in how many branches; changes are new lines). Her desk "Modern Trade · COO": Home with the chains against their own reorder gap (Order), money owed by chain, the listings; Listings page; her seat has the chains' area so Zoho's "MT | 1" customers can be placed under it. Not built and said on the page: the chains' deductions and near-expiry returns (they need Finance's short-payment record). Admin chart filled. Demo: Malou, two chains. 329 API tests.
 - 17 Nov (61), 16.1's waiting item done: the Government Account's bidding coachee (Rey in the demo) has Tenders and Documents on his desk and the bidding desk on his Home (his own tenders only); the Hospital Division's Business Mentor sees the tenders run from her division (Government tenders in her menu, a Government Account card on her Home).
+- 17 Nov (62), 16.8: Digital Marketing and IT get the work "Office staff" and a work log (what I did, today, tomorrow; optional, one entry a day, changed during the day). Their Home is the log; the Founder and the Admin read everyone's under Reports → Work logs, a head the people under them, nobody else. The chart's two boxes are added as departments under the Founder (no head drawn); demo: Kriscel, Arnel, Jade, Linus. The Admin panel's company chart has both boxes.

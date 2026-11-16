@@ -4684,3 +4684,17 @@ export type MtDay = {
   owed: { total: number; rows: Collections["rows"] };
   listings: { id: number; customerId: number; chain: string; medicine: string; branches: number; listed: boolean; since: string }[];
 };
+
+/** A person's own work log (optional): what they did, today, tomorrow. */
+export type WorkLog = {
+  today: string;
+  todayEntry: WorkLog["entries"][number] | null;
+  entries: { day: string; done: string | null; today: string | null; tomorrow: string | null; at: string }[];
+};
+
+/** Everyone's (or a team's) work log for a day. */
+export type WorkLogDay = {
+  day: string;
+  today: string;
+  entries: (WorkLog["entries"][number] & { personId: number; name: string; title: string | null; unit: string | null })[];
+};
