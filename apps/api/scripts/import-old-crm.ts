@@ -59,11 +59,12 @@ const { leads, messages } = await old.begin("read only", async (tx) => {
 });
 await old.end();
 
-const said = await importOldLeads(db, leads, messages, apply);
 if (process.env.EXPORT_JSON) {
   const { writeFileSync } = await import("node:fs");
   writeFileSync(process.env.EXPORT_JSON, JSON.stringify({ leads, messages }));
   console.log(`Wrote ${leads.length} leads and ${messages.length} messages to ${process.env.EXPORT_JSON}`);
 }
+if (process.env.EXPORT_ONLY) process.exit(0);
+const said = await importOldLeads(db, leads, messages, apply);
 console.log(apply ? "Applied:" : "Dry run (nothing written; add --apply):", said);
 process.exit(0);
