@@ -23,7 +23,7 @@ beforeAll(async () => {
   await migrate(db);
   await seedDemo(db, PASSWORD);
   app = createApp(db, { webUrl: "http://localhost:5180" });
-  for (const name of ["admin", "ryan", "daniel", "sarla"]) {
+  for (const name of ["admin", "ryan", "daniel", "vanessa", "sarla"]) {
     const response = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -80,5 +80,12 @@ describe("a Hospital CHC's day", () => {
     const ryan = district.rows.find((row) => row.name === "Ryan");
     expect(ryan?.huddle?.declared).toBe(true);
     expect((await get("ryan", "/api/team/district")).status).toBe(403);
+    // Up the line: the head of the division sees the same CHCs with their coach, and the huddle.
+    const division = (await (await get("vanessa", "/api/team/district")).json()) as District;
+    const seen = division.rows.find((row) => row.name === "Ryan");
+    expect(seen?.coach).toBe("Daniel");
+    expect(seen?.huddle?.declared).toBe(true);
+    const evening = (await (await get("vanessa", "/api/huddle/team")).json()) as TeamHuddle;
+    expect(evening.rows.find((row) => row.name === "Ryan")?.declared?.blocker).toBe("PO not signed at the hospital");
   });
 });

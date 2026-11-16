@@ -4326,6 +4326,8 @@ export type District = {
     seat: string;
     area: string | null;
     unit: string;
+    /** Who leads the seller's team (their DSC). */
+    coach: string | null;
     sales: number;
     target: number | null;
     /** Sales against the target on the working-day pace, %. */

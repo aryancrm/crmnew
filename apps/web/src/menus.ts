@@ -623,6 +623,48 @@ function ownDesk(me: Me): Space {
           icon: Users,
           cta: { ...newOrder, label: "New order" },
         };
+      // The Business Mentor, head of the Hospital Division: the division's month (docs/PLAN.md 16.1).
+      if (me.role === "manager" && me.channel?.code === "HOSP")
+        return {
+          ...desk([
+            home,
+            folder(
+              "Teams",
+              Users,
+              [
+                { to: "/my-team", label: "Whole division", icon: Users, teams: true },
+                { to: "/huddle", label: "Team huddle", icon: Megaphone },
+              ],
+              "Teams",
+            ),
+            { to: "/team-scores", label: "Scorecards", icon: Gauge, short: "Scores" },
+            { to: "/targets", label: "Targets", icon: Target },
+            { to: "/collections", label: "Collections", icon: HandCoins },
+            { to: "/to-call", label: "Hospitals to call", icon: PhoneCall },
+            folder("Division orders", ClipboardList, orderStages("Sent back"), "Orders"),
+            folder(
+              "Visits",
+              CalendarCheck,
+              [
+                { to: "/field/report", label: "Visits report", icon: BarChart3 },
+                { to: "/field/live", label: "Where the team is", icon: MapPin },
+                { to: "/visits/expenses?waiting=1", label: "Expenses to approve", icon: Receipt },
+              ],
+              "Visits",
+            ),
+            folder(
+              "Attendance",
+              CalendarClock,
+              [
+                { to: "/hr/attendance", label: "Who's working", icon: CalendarClock },
+                { to: "/hr/leave", label: "Leave & forms", icon: CalendarDays, badge: "leave" },
+              ],
+              "Attendance",
+            ),
+            { to: "/customers", label: "Hospitals & doctors", icon: Building2 },
+          ]),
+          icon: Users,
+        };
       // Home is the team's month: each person against their target.
       return {
         ...desk([

@@ -18,6 +18,7 @@ import { PageState } from "../ui";
 import { PACE_TEXT, PaceBar } from "./ceo-home";
 import { seatWords } from "../seat-words";
 import { DistrictNow } from "./district";
+import { MentorHome } from "./mentor";
 import { greeting, todayWords } from "./home";
 
 const CARD = "rounded-xl border border-slate-200 bg-white";
@@ -62,6 +63,7 @@ export function TeamSalesPage() {
   if (!data || !me) return <PageState query={query} what="the team's sales" />;
   const whole = data.lead === null;
   const coach = me.role === "team_lead" && me.channel?.code === "HOSP";
+  const mentor = me.role === "manager" && me.channel?.code === "HOSP";
   const current = data.today.slice(0, 7);
   const href = (month: string) =>
     month >= current ? location.pathname : `${location.pathname}?month=${month}`;
@@ -83,8 +85,8 @@ export function TeamSalesPage() {
           </h1>
           {data.lead && (
             <p className="mt-1 text-[13px] text-slate-500">
-              {coach
-                ? `${seatWords(me).desk} · your district`
+              {coach || mentor
+                ? `${seatWords(me).desk} · ${mentor ? "the Hospital Division" : "your district"}`
                 : `${[data.lead.title, data.lead.channel].filter(Boolean).join(" · ")} · your team`}
             </p>
           )}
@@ -108,7 +110,7 @@ export function TeamSalesPage() {
         </nav>
       </header>
 
-      {!coach && <LeadGlance />}
+      {!coach && !mentor && <LeadGlance />}
 
       <section aria-label="The team's month" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Figure
@@ -157,8 +159,9 @@ export function TeamSalesPage() {
 
       {/* A Hospital coach's day: who needs them, the district now, the huddle, the rescue. */}
       {coach && <DistrictNow />}
+      {mentor && <MentorHome />}
 
-      {!coach && (
+      {!coach && !mentor && (
       <section aria-labelledby="people" className={`${CARD} min-w-0`}>
         <header className="flex items-baseline justify-between gap-3 px-4 pt-4 pb-2 sm:px-5">
           <h2 id="people" className="text-sm font-semibold text-slate-900">

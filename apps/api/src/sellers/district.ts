@@ -24,10 +24,13 @@ export async function district(db: Database, me: Me): Promise<District> {
   const month = today.slice(0, 7);
   const { seatIds } = await teamSeats(db, me, null);
   const people = seatIds.length
-    ? await rows<{ personId: number; name: string; seatId: number; seat: string; areaId: number | null; area: string | null; unit: string }>(
+    ? await rows<{ personId: number; name: string; seatId: number; seat: string; areaId: number | null; area: string | null; unit: string; coach: string | null }>(
         db,
         sql`select distinct on (h.person_id) h.person_id::int as "personId", p.name, s.id::int as "seatId", s.title as seat,
-            s.area_id::int as "areaId", a.name as area, u.name as unit
+            s.area_id::int as "areaId", a.name as area, u.name as unit,
+            (select lp.name from seat ls join seat_holder lh on lh.seat_id = ls.id and lh.kind = 'holder' and ${inForce("lh", today)}
+               join person lp on lp.id = lh.person_id where ls.unit_id = s.unit_id and ls.lead and ls.active
+             order by lh.starts_on desc limit 1) as coach
           from seat s join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)}
             join person p on p.id = h.person_id join org_unit u on u.id = s.unit_id left join area a on a.id = s.area_id
           where s.id in (${sql.join(seatIds.map((id) => sql`${id}`), sql`, `)}) and not s.lead and s.module = 'medrep'
@@ -71,6 +74,7 @@ export async function district(db: Database, me: Me): Promise<District> {
       seat: one.seat,
       area: one.area,
       unit: one.unit,
+      coach: one.coach,
       sales: facts?.sales ?? 0,
       target: facts?.target ?? null,
       ist: ist === null ? null : Math.round(ist),
