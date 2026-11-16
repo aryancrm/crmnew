@@ -325,6 +325,7 @@ const reportsApp: Space = {
         { to: "/rx/field", label: "Rx field team", icon: Stethoscope },
         { to: "/b2b/team", label: "B2B team", icon: Building2 },
         { to: "/clidp/team", label: "CLIDP", icon: FileText },
+        { to: "/tenders", label: "Tenders", icon: FileText },
         { to: "/targets", label: "Targets", icon: Target },
       ],
     },
@@ -522,6 +523,18 @@ function ownDesk(me: Me): Space {
           ]),
           cta: { ...newOrder, label: "New order" },
         };
+      // Government Bidding's coachees and CHC (docs/PLAN.md 16.6): tenders from posting to payment.
+      if (me.channel?.code === "BID")
+        return {
+          ...desk([
+            home,
+            { to: "/tenders", label: "Tenders", icon: FileText, short: "Tenders" },
+            { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
+            folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+            { to: "/collections", label: "Collections", icon: HandCoins },
+          ]),
+          cta: { to: "/tenders", label: "Record a tender" },
+        };
       // CLIDP (Sales and Marketing, docs/PLAN.md 16.5): bulk to distributors under their listings.
       if (b2bRole(me) === "clidp")
         return {
@@ -672,6 +685,29 @@ function ownDesk(me: Me): Space {
       };
     case "team_lead":
     case "manager":
+      // The Government Bidding Admin: approves bid prices, keeps the company's papers, the team's tenders.
+      if (me.role === "team_lead" && me.channel?.code === "BID")
+        return {
+          ...desk([
+            home,
+            { to: "/tenders", label: "Tenders", icon: FileText, short: "Tenders" },
+            { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
+            folder("Team orders", ClipboardList, orderStages("Sent back"), "Orders"),
+            { to: "/collections", label: "Collections", icon: HandCoins },
+            folder(
+              "My team",
+              Users,
+              [
+                { to: "/my-team", label: "Whole team", icon: Users, teams: true },
+                { to: "/hr/attendance", label: "Who's working", icon: CalendarClock },
+                { to: "/hr/leave", label: "Leave & forms", icon: CalendarDays, badge: "leave" },
+              ],
+              "Team",
+            ),
+            { to: "/customers", label: "Agencies & hospitals", icon: Building2 },
+          ]),
+          icon: Users,
+        };
       // The B2B Sales Coach (and the district coach): the NBD pipeline, the CRR accounts, hand-overs.
       if (me.role === "team_lead" && me.channel?.code === "B2B")
         return {
@@ -709,6 +745,7 @@ function ownDesk(me: Me): Space {
           ...desk([
             home,
             { to: "/my-team", label: "Whole business", icon: Users, teams: true },
+            { to: "/tenders", label: "Tenders", icon: FileText },
             { to: "/team-scores", label: "Scorecards", icon: Gauge, short: "Scores" },
             { to: "/targets", label: "Targets", icon: Target },
             { to: "/collections", label: "Collections", icon: HandCoins },

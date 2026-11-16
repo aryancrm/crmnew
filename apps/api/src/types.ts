@@ -4597,3 +4597,80 @@ export type ClidpTeam = {
   soon: string;
   rows: { personId: number; name: string; pace: number | null; owed: number; accounts: number; late: number; listingsExpiring: number }[];
 };
+
+export type TenderStep = "found" | "preparing" | "price_approved" | "submitted" | "won" | "lost" | "contract" | "delivered" | "accepted" | "billed" | "paid" | "dropped";
+export type TenderMode = "competitive_bidding" | "limited_source" | "direct_contracting" | "direct_acquisition" | "repeat_order" | "small_value" | "negotiated" | "direct_sales" | "other";
+
+/** A government tender from the PhilGEPS posting to the payment. Money in centavos. */
+export type Tender = {
+  id: number;
+  code: string;
+  title: string;
+  agencyId: number;
+  agency: string;
+  philgepsRef: string | null;
+  mode: TenderMode;
+  abc: number | null;
+  ownerId: number;
+  owner: string;
+  step: TenderStep;
+  postedOn: string | null;
+  prebidOn: string | null;
+  deadlineAt: string | null;
+  openingOn: string | null;
+  ourBid: number | null;
+  winningBid: number | null;
+  resultNote: string | null;
+  noaOn: string | null;
+  ntpOn: string | null;
+  deliverBy: string | null;
+  deliveredOn: string | null;
+  /** The Inspection and Acceptance Report's day: the government owes from it. */
+  acceptedOn: string | null;
+  billedOn: string | null;
+  paidOn: string | null;
+  bidSecurityForm: string | null;
+  bidSecurityAmount: number | null;
+  bidSecurityBackOn: string | null;
+  priceApprovedBy: string | null;
+  papers: { paper: string; done: boolean }[];
+  droppedReason: string | null;
+};
+
+export type TenderInput = {
+  agencyId: number;
+  title: string;
+  philgepsRef?: string | null;
+  mode: TenderMode;
+  abc?: number | null;
+  postedOn?: string | null;
+  prebidOn?: string | null;
+  deadlineAt?: string | null;
+  openingOn?: string | null;
+};
+
+export type CompanyPaper = {
+  id: number;
+  name: string;
+  number: string | null;
+  expiresOn: string | null;
+  note: string | null;
+  daysLeft: number | null;
+  state: "valid" | "expiring" | "expired";
+};
+
+/** The bidding desk: deadlines, prices to approve, the awards on their way to payment. */
+export type TenderDesk = {
+  today: string;
+  deadlines: Tender[];
+  toApprove: Tender[];
+  awaiting: Tender[];
+  toDeliver: Tender[];
+  toAccept: Tender[];
+  toBill: Tender[];
+  toCollect: Tender[];
+  month: { won: number; lost: number; winRate: number | null; wonValue: number };
+  resultsCount: number;
+  papersEnding: CompanyPaper[];
+  canApprove: boolean;
+};

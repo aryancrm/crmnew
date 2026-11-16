@@ -64,6 +64,7 @@ import { CollectionsPage } from "./pages/collections";
 import { HuddlePage } from "./pages/huddle";
 import { AccountsPage, B2bTeamPage, ProspectsPage } from "./pages/b2b";
 import { CareGroupsPage } from "./pages/care-groups";
+import { CompanyPapersPage, TenderPage, TendersPage } from "./pages/tenders";
 import { ClidpListingsPage, ClidpTeamPage } from "./pages/clidp";
 import { RxDoctorsPage, RxFieldPage } from "./pages/rx";
 import { Targets } from "./pages/targets";
@@ -157,6 +158,9 @@ createRoot(root).render(
             <Route path="b2b/accounts" element={<AccountsPage />} />
             <Route path="b2b/team" element={<B2bTeamPage />} />
             <Route path="clidp/listings" element={<ClidpListingsPage />} />
+            <Route path="tenders" element={<TendersPage />} />
+            <Route path="tenders/:id" element={<TenderPage />} />
+            <Route path="company-papers" element={<CompanyPapersPage />} />
             <Route path="clidp/team" element={<ClidpTeamPage />} />
             <Route path="team-scores" element={<TeamScoresPage />} />
             <Route path="team" element={<TeamSalesPage />} />

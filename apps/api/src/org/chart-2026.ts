@@ -120,7 +120,7 @@ export const CHART_2026: ChartUnit[] = [
         seats: [
           { title: "Government Bidding Admin", module: "team_lead", lead: true },
           { title: "Government Bidding Coachee", module: "medrep", n: 2, area: "Bidding" },
-          { title: "Bidding CHC", module: "medrep", area: "Bidding CHC" },
+          { title: "Customer Happiness Coachee – Government Bidding", module: "medrep", area: "Bidding CHC" },
         ],
       },
       {

@@ -30,6 +30,7 @@ import { RxHome } from "./rx";
 import { TelesalesDay } from "./telesales";
 import { CrrHome, NbdHome } from "./b2b";
 import { ClidpHome } from "./clidp";
+import { BiddingHome } from "./tenders";
 import { b2bRole } from "../seat-words";
 import { greeting, todayWords } from "./home";
 import { OrderCardItem } from "./orders-board";
@@ -131,6 +132,7 @@ export function MedrepHome() {
   const telesales = me.channel?.code === "TS" && me.business === "RX";
   const anesthesia = me.channel?.code === "TS" && me.business === "HOSP";
   const b2b = b2bRole(me);
+  const bidding = me.channel?.code === "BID";
   const data = kpis.data;
   const sales = mine.data?.sales;
   const periodWord = periodWordOf(period, data?.day ?? null);
@@ -170,9 +172,11 @@ export function MedrepHome() {
       {b2b === "nbd" && <NbdHome />}
       {b2b === "crr" && <CrrHome />}
       {b2b === "clidp" && <ClidpHome />}
+      {/* Government Bidding: tenders from posting to payment. */}
+      {bidding && <BiddingHome />}
 
       {/* Today and this month at a glance: the two numbers asked most. */}
-      {!hospital && !anesthesia && !rx && !telesales && !b2b && (
+      {!hospital && !anesthesia && !rx && !telesales && !b2b && !bidding && (
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Figure
           label="Orders today"
@@ -512,7 +516,7 @@ export function MedrepHome() {
 
           {hospital && !/bidding/i.test(me.title ?? "") && <HuddleCard />}
           {!hospital && <ToCollectPanel />}
-          {!hospital && !anesthesia && !rx && !telesales && !b2b && <ToCallPanel />}
+          {!hospital && !anesthesia && !rx && !telesales && !b2b && !bidding && <ToCallPanel />}
 
           {!hospital && !anesthesia && !rx && !telesales && sales && sales.target !== null && sales.target > 0 && (
             <section className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs">

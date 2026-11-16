@@ -51,6 +51,9 @@ export function seatWords(me: Person | null | undefined): Words {
     return { desk: "Government Account", customers: "hospitals", myCustomers: "My hospitals", toCall: "Hospitals to call" };
   if (me.channel?.code === "HOSP" && HOSPITAL[me.role])
     return { desk: HOSPITAL[me.role] as string, customers: "hospitals", myCustomers: "My hospitals", toCall: "Hospitals to call" };
+  // Government Bidding (Sales and Marketing): its Admin, coachees and CHC.
+  if (me.channel?.code === "BID")
+    return { desk: me.role === "team_lead" ? "Government Bidding Admin" : "Government Bidding", customers: "agencies", myCustomers: "Agencies", toCall: "Agencies to call" };
   // The Online desk: the B2C CHC (the desk role, or the Online channel's MedRep).
   if (me.role === "online" || (me.role === "medrep" && me.channel?.code === "ONLINE"))
     return { desk: "B2C CHC", customers: "patients", myCustomers: "My patients", toCall: "Refills due" };

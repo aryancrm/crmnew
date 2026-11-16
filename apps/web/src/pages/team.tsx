@@ -19,6 +19,7 @@ import { PACE_TEXT, PaceBar } from "./ceo-home";
 import { seatWords } from "../seat-words";
 import { B2bTeamCard } from "./b2b";
 import { ClidpTeamCard } from "./clidp";
+import { BiddingCard, BiddingHome } from "./tenders";
 import { DistrictNow } from "./district";
 import { HeadRisks, MentorHome, RxMentorHome, TelesalesCoachHome } from "./mentor";
 import { greeting, todayWords } from "./home";
@@ -69,6 +70,7 @@ export function TeamSalesPage() {
   const tsCoach = me.role === "team_lead" && me.channel?.code === "TS" && me.business === "RX";
   const rxMentor = me.role === "manager" && me.channel?.code === "RX";
   const b2bHead = (me.role === "team_lead" || me.role === "manager") && me.channel?.code === "B2B";
+  const bidAdmin = me.role === "team_lead" && me.channel?.code === "BID";
   const current = data.today.slice(0, 7);
   const href = (month: string) =>
     month >= current ? location.pathname : `${location.pathname}?month=${month}`;
@@ -90,8 +92,8 @@ export function TeamSalesPage() {
           </h1>
           {data.lead && (
             <p className="mt-1 text-[13px] text-slate-500">
-              {coach || mentor || tsCoach || rxMentor || b2bHead
-                ? `${seatWords(me).desk} · ${mentor ? "the Hospital Division" : rxMentor ? "the Prescription business" : tsCoach ? "MD Telesales and B2C" : b2bHead ? (me.role === "manager" ? "Sales and Marketing" : "B2B Telesales") : "your district"}`
+              {coach || mentor || tsCoach || rxMentor || b2bHead || bidAdmin
+                ? `${seatWords(me).desk} · ${mentor ? "the Hospital Division" : rxMentor ? "the Prescription business" : tsCoach ? "MD Telesales and B2C" : b2bHead ? (me.role === "manager" ? "Sales and Marketing" : "B2B Telesales") : bidAdmin ? "Government Bidding" : "your district"}`
                 : `${[data.lead.title, data.lead.channel].filter(Boolean).join(" · ")} · your team`}
             </p>
           )}
@@ -115,7 +117,7 @@ export function TeamSalesPage() {
         </nav>
       </header>
 
-      {!coach && !mentor && !tsCoach && !rxMentor && !b2bHead && <LeadGlance />}
+      {!coach && !mentor && !tsCoach && !rxMentor && !b2bHead && !bidAdmin && <LeadGlance />}
 
       <section aria-label="The team's month" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Figure
@@ -169,6 +171,8 @@ export function TeamSalesPage() {
       {rxMentor && <RxMentorHome />}
       {b2bHead && <B2bTeamCard />}
       {b2bHead && me.role === "manager" && <ClidpTeamCard />}
+      {b2bHead && me.role === "manager" && <BiddingCard />}
+      {bidAdmin && <BiddingHome />}
       {b2bHead && me.role === "manager" && <HeadRisks />}
 
       {!coach && !mentor && (
