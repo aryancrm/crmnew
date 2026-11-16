@@ -4481,3 +4481,88 @@ export type B2cTeam = {
     noInvoiceYet: boolean;
   }[];
 };
+
+/** An NBD's desk: their prospects from first call to hand-over. */
+export type NbdDay = {
+  today: string;
+  prospects: {
+    customerId: number;
+    name: string;
+    kind: CustomerKind;
+    city: string | null;
+    phone: string | null;
+    nbdId: number;
+    nbd: string | null;
+    licenceNo: string | null;
+    licenceExpires: string | null;
+    permitNo: string | null;
+    permitExpires: string | null;
+    tin: string | null;
+    nextCallOn: string | null;
+    handedOverOn: string | null;
+    crr: string | null;
+    calls: number;
+    lastOutcome: string | null;
+    lastCallOn: string | null;
+    firstOrderOn: string | null;
+    orders: number;
+    /** The papers still missing or expired. */
+    missing: string[];
+    sinceFirst: number | null;
+    stage: "prospect" | "contacted" | "papers" | "ordered";
+    /** At the 3rd order or day 90: hand it to CRR. */
+    ready: boolean;
+    /** One order and no second by day 45. */
+    flagged: boolean;
+    callDue: boolean;
+  }[];
+  handedOver: NbdDay["prospects"];
+  month: { firstOrders: number; worked: number; conversion: number | null };
+};
+
+/** A CRR's accounts and each one's health against its own usual gap and 3-month average. */
+export type CrrDay = {
+  today: string;
+  accounts: {
+    customerId: number;
+    name: string;
+    kind: CustomerKind;
+    city: string | null;
+    phone: string | null;
+    lastOrderOn: string;
+    usual: number;
+    since: number;
+    expectedOn: string;
+    last30: number;
+    avg3: number;
+    lastMonth: boolean;
+    thisMonth: boolean;
+    lastOutcome: string | null;
+    lastCallOn: string | null;
+    crr: string | null;
+    state: "due" | "late" | "stopped" | "lost" | "ok";
+    trend: "up" | "flat" | "down";
+  }[];
+  month: { retention: number | null; up: number; flat: number; down: number };
+};
+
+/** The B2B coach's team now. */
+export type B2bTeam = {
+  today: string;
+  nbd: {
+    personId: number;
+    name: string;
+    open: number;
+    callsDue: number;
+    papersMissing: number;
+    ordered: number;
+    ready: number;
+    flagged: number;
+    callsThisMonth: number;
+    firstOrdersThisMonth: number;
+  }[];
+  crr: { personId: number; name: string; accounts: number; late: number; stopped: number; down: number; retention: number | null }[];
+  /** Accounts ready to hand over or flagged (no 2nd order by day 45). */
+  handOvers: NbdDay["prospects"];
+  crrPeople: { personId: number; name: string }[];
+};

@@ -28,6 +28,8 @@ import { Figure, type Period, PeriodBox, periodWord as periodWordOf } from "./fi
 import { GoHereFirst, HuddleCard, TodaysPulse } from "./hospital-day";
 import { RxHome } from "./rx";
 import { TelesalesDay } from "./telesales";
+import { CrrHome, NbdHome } from "./b2b";
+import { b2bRole } from "../seat-words";
 import { greeting, todayWords } from "./home";
 import { OrderCardItem } from "./orders-board";
 
@@ -125,6 +127,7 @@ export function MedrepHome() {
   const hospital = me.channel?.code === "HOSP";
   const rx = me.channel?.code === "RX";
   const telesales = me.channel?.code === "TS";
+  const b2b = b2bRole(me);
   const data = kpis.data;
   const sales = mine.data?.sales;
   const periodWord = periodWordOf(period, data?.day ?? null);
@@ -160,9 +163,12 @@ export function MedrepHome() {
       {/* MD Telesales: the pulse, the groups waiting (15 minutes), the refills due. */}
       {telesales && <TodaysPulse />}
       {telesales && <TelesalesDay />}
+      {/* B2B: the NBD's prospects to hand-over, the CRR's accounts against their usual gap. */}
+      {b2b === "nbd" && <NbdHome />}
+      {b2b === "crr" && <CrrHome />}
 
       {/* Today and this month at a glance: the two numbers asked most. */}
-      {!hospital && !rx && !telesales && (
+      {!hospital && !rx && !telesales && !b2b && (
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Figure
           label="Orders today"
@@ -415,7 +421,8 @@ export function MedrepHome() {
 
         <div className="flex min-w-0 flex-col gap-4">
           {/* Every customer they look after. */}
-          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          {!b2b && (
+<section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <header className="flex items-center justify-between gap-2 px-4 pt-3">
               <h3 className="text-sm font-bold text-slate-900">My customers</h3>
               <Link
@@ -495,12 +502,13 @@ export function MedrepHome() {
               </Link>
             )}
           </section>
+          )}
 
           <MyOrdersNow />
 
           {hospital && <HuddleCard />}
           {!hospital && <ToCollectPanel />}
-          {!hospital && !rx && !telesales && <ToCallPanel />}
+          {!hospital && !rx && !telesales && !b2b && <ToCallPanel />}
 
           {!hospital && !rx && !telesales && sales && sales.target !== null && sales.target > 0 && (
             <section className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs">

@@ -41,6 +41,7 @@ import { purchaseRoutes } from "./purchases/routes";
 import { returnRoutes } from "./returns/routes";
 import { salesRoutes } from "./sales/routes";
 import { speedRoutes } from "./speed/routes";
+import { b2bRoutes } from "./b2b/routes";
 import { b2cRoutes } from "./b2c/routes";
 import { rxRoutes } from "./rx/routes";
 import { scoreRoutes } from "./scores/routes";
@@ -270,6 +271,7 @@ export function createApp(db: Database, options: AppOptions) {
   sellerRoutes(app, db, signedIn);
   rxRoutes(app, db, signedIn);
   b2cRoutes(app, db, signedIn);
+  b2bRoutes(app, db, signedIn);
 
   return app;
 }

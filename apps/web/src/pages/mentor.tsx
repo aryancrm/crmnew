@@ -255,3 +255,18 @@ export function RxMentorHome() {
     </>
   );
 }
+
+/** A head's people at risk, money owed and score questions, for any division's Mentor. */
+export function HeadRisks() {
+  const scores = useQuery({ queryKey: ["scores", "team", ""], queryFn: () => api<TeamScores>("/api/scores/team") });
+  const money = useQuery({ queryKey: ["my", "collections"], queryFn: () => api<Collections>("/api/my/collections") });
+  return (
+    <>
+      <div className="grid gap-3 lg:grid-cols-2">
+        {scores.data && <AtRisk data={scores.data} />}
+        {money.data && <Money data={money.data} />}
+      </div>
+      {scores.data && <Questions data={scores.data} />}
+    </>
+  );
+}

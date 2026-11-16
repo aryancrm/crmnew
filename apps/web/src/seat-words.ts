@@ -5,6 +5,7 @@
 import type { Me } from "@2mg/api/types";
 
 type Words = { desk: string; customers: string; myCustomers: string; toCall: string };
+type Person = Pick<Me, "role" | "roleLabel" | "channel" | "title">;
 
 const HOSPITAL: Record<string, string> = {
   medrep: "Hospital CHC",
@@ -24,7 +25,22 @@ const TS: Record<string, string> = {
   team_lead: "Sales Coach",
 };
 
-export function seatWords(me: Pick<Me, "role" | "roleLabel" | "channel"> | null | undefined): Words {
+/** NBD or CRR inside B2B Telesales, by the seat's title as the chart names them. */
+export const b2bRole = (me: Pick<Me, "role" | "title" | "channel"> | null | undefined) =>
+  me?.role !== "medrep" || me.channel?.code !== "B2B"
+    ? null
+    : /\bNBD\b|New Business/i.test(me.title ?? "")
+      ? "nbd"
+      : /\bCRR\b|Retention/i.test(me.title ?? "")
+        ? "crr"
+        : null;
+
+const B2B: Record<string, string> = {
+  team_lead: "B2B Sales Coach",
+  manager: "Sales & Marketing Mentor",
+};
+
+export function seatWords(me: Person | null | undefined): Words {
   const plain = { desk: me?.roleLabel ?? "", customers: "customers", myCustomers: "My area", toCall: "Customers to call" };
   if (!me) return plain;
   if (me.channel?.code === "HOSP" && HOSPITAL[me.role])
@@ -34,6 +50,10 @@ export function seatWords(me: Pick<Me, "role" | "roleLabel" | "channel"> | null 
     return { desk: "B2C CHC", customers: "patients", myCustomers: "My patients", toCall: "Refills due" };
   if (me.channel?.code === "TS" && TS[me.role])
     return { desk: TS[me.role] as string, customers: "patients and doctors", myCustomers: "My patients", toCall: "Refills due" };
+  const b2b = b2bRole(me);
+  if (b2b) return { desk: b2b === "nbd" ? "NBD · New Business" : "CRR · Retention & Reorder", customers: "accounts", myCustomers: "My accounts", toCall: "Accounts to call" };
+  if (me.channel?.code === "B2B" && B2B[me.role])
+    return { desk: B2B[me.role] as string, customers: "accounts", myCustomers: "Accounts", toCall: "Accounts to call" };
   if (me.channel?.code === "RX" && RX[me.role])
     return { desk: RX[me.role] as string, customers: "doctors", myCustomers: "My doctors", toCall: "Doctors to call" };
   return plain;

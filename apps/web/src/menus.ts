@@ -4,7 +4,7 @@
 // screen that isn't built.
 
 import { officeMedrep } from "./auth";
-import { seatWords } from "./seat-words";
+import { b2bRole, seatWords } from "./seat-words";
 import type { Me, Role } from "@2mg/api/types";
 import {
   ArrowLeftRight,
@@ -55,6 +55,7 @@ import {
   Truck,
   Undo2,
   User,
+  UserCheck,
   UserPlus,
   Users,
   Wallet,
@@ -322,6 +323,7 @@ const reportsApp: Space = {
         { to: "/huddle", label: "Evening huddles", icon: Megaphone },
         { to: "/care-groups", label: "Care groups", icon: Users },
         { to: "/rx/field", label: "Rx field team", icon: Stethoscope },
+        { to: "/b2b/team", label: "B2B team", icon: Building2 },
         { to: "/targets", label: "Targets", icon: Target },
       ],
     },
@@ -495,6 +497,29 @@ function ownDesk(me: Me): Space {
           ]),
           cta: { ...newOrder, label: "New order" },
         };
+      // B2B Telesales (docs/PLAN.md 16.4): the NBD hunts new accounts, the CRR keeps them buying.
+      if (b2bRole(me) === "nbd")
+        return {
+          ...desk([
+            home,
+            { to: "/b2b/prospects", label: "Prospects", icon: Building2, short: "Prospects" },
+            folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+            { to: "/b2b/prospects?view=handed", label: "Handed over", icon: UserCheck },
+            { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+          ]),
+          cta: { ...newOrder, label: "New order" },
+        };
+      if (b2bRole(me) === "crr")
+        return {
+          ...desk([
+            home,
+            { to: "/b2b/accounts", label: "Accounts", icon: Building2, short: "Accounts" },
+            folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+            { to: "/collections", label: "Collections", icon: HandCoins },
+            { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+          ]),
+          cta: { ...newOrder, label: "New order" },
+        };
       // MD Telesales: the care groups, the refills, the orders and the number (docs/PLAN.md 16.2).
       if (me.channel?.code === "TS")
         return {
@@ -619,6 +644,60 @@ function ownDesk(me: Me): Space {
       };
     case "team_lead":
     case "manager":
+      // The B2B Sales Coach (and the district coach): the NBD pipeline, the CRR accounts, hand-overs.
+      if (me.role === "team_lead" && me.channel?.code === "B2B")
+        return {
+          ...desk([
+            home,
+            folder(
+              "My team",
+              Users,
+              [
+                { to: "/my-team", label: "Whole team", icon: Users, teams: true },
+                { to: "/team-scores", label: "Scorecards", icon: Gauge },
+              ],
+              "Team",
+            ),
+            folder("Team orders", ClipboardList, orderStages("Sent back"), "Orders"),
+            { to: "/targets", label: "Targets", icon: Target },
+            { to: "/collections", label: "Collections", icon: HandCoins },
+            folder(
+              "Team attendance",
+              CalendarClock,
+              [
+                { to: "/hr/attendance", label: "Who's working", icon: CalendarClock },
+                { to: "/hr/leave", label: "Leave & forms", icon: CalendarDays, badge: "leave" },
+              ],
+              "Attendance",
+            ),
+            { to: "/customers", label: "Accounts", icon: Building2 },
+            { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+          ]),
+          icon: Users,
+        };
+      // The Sales & Marketing Mentor: B2B (and Bidding and CLIDP as they are built).
+      if (me.role === "manager" && me.channel?.code === "B2B")
+        return {
+          ...desk([
+            home,
+            { to: "/my-team", label: "Whole business", icon: Users, teams: true },
+            { to: "/team-scores", label: "Scorecards", icon: Gauge, short: "Scores" },
+            { to: "/targets", label: "Targets", icon: Target },
+            { to: "/collections", label: "Collections", icon: HandCoins },
+            folder("Business orders", ClipboardList, orderStages("Sent back"), "Orders"),
+            folder(
+              "Attendance",
+              CalendarClock,
+              [
+                { to: "/hr/attendance", label: "Who's working", icon: CalendarClock },
+                { to: "/hr/leave", label: "Leave & forms", icon: CalendarDays, badge: "leave" },
+              ],
+              "Attendance",
+            ),
+            { to: "/customers", label: "Accounts", icon: Building2 },
+          ]),
+          icon: Users,
+        };
       // The Sales Coach of MD Telesales: the team's number, the groups answered in time, refills.
       if (me.role === "team_lead" && me.channel?.code === "TS")
         return {

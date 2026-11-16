@@ -61,6 +61,7 @@ import { MyScorePage } from "./pages/my-score";
 import { TeamScoresPage } from "./pages/team-scores";
 import { CollectionsPage } from "./pages/collections";
 import { HuddlePage } from "./pages/huddle";
+import { AccountsPage, B2bTeamPage, ProspectsPage } from "./pages/b2b";
 import { CareGroupsPage } from "./pages/care-groups";
 import { RxDoctorsPage, RxFieldPage } from "./pages/rx";
 import { Targets } from "./pages/targets";
@@ -150,6 +151,9 @@ createRoot(root).render(
             <Route path="rx/doctors" element={<RxDoctorsPage />} />
             <Route path="rx/field" element={<RxFieldPage />} />
             <Route path="care-groups" element={<CareGroupsPage />} />
+            <Route path="b2b/prospects" element={<ProspectsPage />} />
+            <Route path="b2b/accounts" element={<AccountsPage />} />
+            <Route path="b2b/team" element={<B2bTeamPage />} />
             <Route path="team-scores" element={<TeamScoresPage />} />
             <Route path="team" element={<TeamSalesPage />} />
             <Route path="company" element={<OrgChartPage />} />
