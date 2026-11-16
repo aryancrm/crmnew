@@ -120,7 +120,7 @@ export async function bookDoc(db: Database, me: Me, kind: BookKind, id: number):
       db,
       sql`select l.id::int as id, l.n, l.medicine_id::int as "medicineId", m.name || coalesce(' ' || m.strength, '') as medicine, l.item_name as "itemName", l.sku,
           l.description, l.account, l.warehouse, l.unit, l.qty::float8 as qty, l.rate::float8 as rate, l.tax_name as "taxName", l.tax_pct::float8 as "taxPct",
-          l.amount::bigint::float8 as amount, l.qty_done as "qtyDone", l.batches, l.fields
+          l.amount::bigint::float8 as amount, l.qty_done as "qtyDone", l.batches, l.fields, l.from_line::int as "fromLine"
         from book_line l left join medicine m on m.id = l.medicine_id where l.doc_id = ${id} order by l.n`,
     ),
     rows<BookLinked>(

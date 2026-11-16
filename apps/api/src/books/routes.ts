@@ -1,8 +1,23 @@
 // The books: Zoho Inventory's Sales and Purchases lists and documents.
 
 import type { Hono, MiddlewareHandler } from "hono";
+import { z } from "zod";
 import type { Database } from "../db/index";
-import { type Env, Refusal } from "../http";
+import { type Env, readBody, Refusal } from "../http";
+import { afterStockIn } from "../orders/stock-wait";
+import {
+  applyCredit,
+  billOrder,
+  bookChoices,
+  createBill,
+  createPurchaseOrder,
+  createVendorCredit,
+  payVendor,
+  receiveOrder,
+  saveVendor,
+  setOrderStatus,
+  voidDoc,
+} from "./actions";
 import { bookDoc, bookList, isBookKind, payables, vendorDetail, vendorList } from "./service";
 
 const listAsked = (query: (name: string) => string | undefined) => ({
@@ -17,6 +32,8 @@ const listAsked = (query: (name: string) => string | undefined) => ({
 
 export function bookRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandler<Env>): void {
   app.use("/api/books/*", signedIn);
+  app.use("/api/books-choices", signedIn);
+  bookActionRoutes(app, db);
   app.get("/api/books/vendors", async (c) => c.json(await vendorList(db, c.get("me"), listAsked((n) => c.req.query(n)))));
   app.get("/api/books/vendors/:id", async (c) => c.json(await vendorDetail(db, c.get("me"), Number(c.req.param("id")))));
   app.get("/api/books/bill/payables", async (c) => c.json(await payables(db, c.get("me"))));
@@ -31,3 +48,132 @@ export function bookRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHan
     return c.json(await bookDoc(db, c.get("me"), kind, Number(c.req.param("id"))));
   });
 }
+
+// ------------------------------------------------------------------ making documents
+
+const DAY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick the day.");
+const TEXT = (max: number) => z.string().max(max).nullish();
+const MONEY = z.number().int().min(0).max(100_000_000_000_00);
+const line = z.object({
+  medicineId: z.number().int().positive().nullish(),
+  itemName: TEXT(300),
+  description: TEXT(2000),
+  account: TEXT(200),
+  qty: z.number().positive().max(100_000_000),
+  rate: z.number().min(0).max(1_000_000_000),
+  taxPct: z.number().min(0).max(100).nullish(),
+});
+const applied = z.array(z.object({ billId: z.number().int().positive(), amount: MONEY })).max(200);
+
+export function bookActionRoutes(app: Hono<Env>, db: Database): void {
+  app.get("/api/books-choices", async (c) => c.json(await bookChoices(db, c.get("me"))));
+  app.post("/api/books/vendors", async (c) => c.json(await saveVendor(db, c.get("me"), null, await readBody(c, vendor))));
+  app.post("/api/books/vendors/:id", async (c) => c.json(await saveVendor(db, c.get("me"), Number(c.req.param("id")), await readBody(c, vendor))));
+  app.post("/api/books/purchase_order/new", async (c) =>
+    c.json(
+      await createPurchaseOrder(
+        db,
+        c.get("me"),
+        await readBody(
+          c,
+          z.object({
+            supplierId: z.number().int().min(0),
+            reference: TEXT(120),
+            date: DAY,
+            deliveryDate: DAY.nullish(),
+            paymentTerms: TEXT(60),
+            warehouseId: z.number().int().positive(),
+            fxRate: z.number().positive().nullish(),
+            notes: TEXT(2000),
+            terms: TEXT(4000),
+            issue: z.boolean(),
+            lines: z.array(line).min(1).max(200),
+          }),
+        ),
+      ),
+    ),
+  );
+  app.post("/api/books/purchase_order/:id/status", async (c) => {
+    const { to } = await readBody(c, z.object({ to: z.enum(["issued", "cancelled"]) }));
+    await setOrderStatus(db, c.get("me"), Number(c.req.param("id")), to);
+    return c.json({ ok: true });
+  });
+  app.post("/api/books/purchase_order/:id/receive", async (c) => {
+    const made = await receiveOrder(
+      db,
+      c.get("me"),
+      Number(c.req.param("id")),
+      await readBody(
+        c,
+        z.object({
+          date: DAY,
+          notes: TEXT(2000),
+          warehouseId: z.number().int().positive().nullish(),
+          lines: z.array(z.object({ lineId: z.number().int().positive(), qty: z.number().min(0), batchNo: TEXT(60), expiresOn: DAY.nullish() })).min(1).max(200),
+        }),
+      ),
+    );
+    await afterStockIn(db);
+    return c.json(made);
+  });
+  const billBody = z.object({
+    supplierId: z.number().int().min(0).optional(),
+    number: z.string().max(120),
+    reference: TEXT(120),
+    date: DAY,
+    dueDate: DAY.nullish(),
+    paymentTerms: TEXT(60),
+    fxRate: z.number().positive().nullish(),
+    notes: TEXT(2000),
+    orderLines: z.array(z.object({ lineId: z.number().int().positive(), qty: z.number().min(0), rate: z.number().min(0) })).max(200).optional(),
+    receiveId: z.number().int().positive().nullish(),
+    lines: z.array(line).max(200).optional(),
+  });
+  app.post("/api/books/purchase_order/:id/bill", async (c) => c.json(await billOrder(db, c.get("me"), Number(c.req.param("id")), await readBody(c, billBody))));
+  app.post("/api/books/bill/new", async (c) => c.json(await createBill(db, c.get("me"), await readBody(c, billBody))));
+  app.post("/api/books/vendor_payment/new", async (c) =>
+    c.json(
+      await payVendor(
+        db,
+        c.get("me"),
+        await readBody(
+          c,
+          z.object({ supplierId: z.number().int().min(0), date: DAY, amount: MONEY, mode: TEXT(60), paidThrough: TEXT(120), reference: TEXT(120), notes: TEXT(2000), bills: applied }),
+        ),
+      ),
+    ),
+  );
+  app.post("/api/books/vendor_credit/new", async (c) =>
+    c.json(
+      await createVendorCredit(
+        db,
+        c.get("me"),
+        await readBody(c, z.object({ supplierId: z.number().int().min(0), date: DAY, reference: TEXT(120), notes: TEXT(2000), fxRate: z.number().positive().nullish(), lines: z.array(line).min(1).max(200) })),
+      ),
+    ),
+  );
+  app.post("/api/books/:kind/:id/apply", async (c) => {
+    await applyCredit(db, c.get("me"), Number(c.req.param("id")), await readBody(c, z.object({ date: DAY, bills: applied })));
+    return c.json({ ok: true });
+  });
+  app.post("/api/books/:kind/:id/void", async (c) => {
+    const { reason } = await readBody(c, z.object({ reason: z.string().max(300) }));
+    await voidDoc(db, c.get("me"), Number(c.req.param("id")), reason);
+    return c.json({ ok: true });
+  });
+}
+
+const vendor = z.object({
+  name: z.string().max(200),
+  company: TEXT(200),
+  email: TEXT(200),
+  phone: TEXT(60),
+  mobile: TEXT(60),
+  website: TEXT(200),
+  currency: TEXT(3),
+  paymentTerms: TEXT(60),
+  tin: TEXT(40),
+  country: TEXT(80),
+  billingAddress: TEXT(600),
+  shippingAddress: TEXT(600),
+});

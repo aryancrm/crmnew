@@ -4,11 +4,12 @@
 
 import type { BookKind, VendorDetail, VendorList } from "@2mg/api/types";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { kindInfo, statusClass, statusText, zDate, zMoney } from "./kinds";
+import { useMay } from "./forms";
 import { Pager, ViewMenu } from "./list";
 
 const COUNT_LABEL: Partial<Record<BookKind, string>> = {
@@ -39,12 +40,13 @@ export function VendorsPage() {
     setParams(next);
   };
   const search = params.toString() ? `?${params}` : "";
+  const may = useMay();
   const sort = params.get("sort") ?? "name";
   const dir = params.get("dir") ?? "asc";
   // Zoho names the vendors' views "Active Vendors", "Inactive Vendors", "All Vendors".
   const label = (key: string) => (key === "active" ? "Active Vendors" : key === "inactive" ? "Inactive Vendors" : "All Vendors");
   const header = (
-    <div className="flex h-[60px] shrink-0 items-center border-b border-[#ebeaf2] px-5">
+    <div className="flex h-[60px] shrink-0 items-center justify-between border-b border-[#ebeaf2] px-5">
       <ViewMenu
         views={(data?.views ?? []).map((v) => ({ ...v, key: v.key }))}
         view={data?.view ?? "active"}
@@ -52,6 +54,11 @@ export function VendorsPage() {
         onPick={(key) => set({ view: key === "active" ? null : key, page: null })}
         labelOf={label}
       />
+      {may.bill && (
+        <Link to="/books/vendors/new" className="flex h-[32px] items-center gap-1 rounded-[5px] bg-[#408dfb] px-2.5 text-white hover:bg-[#2f7ef0]">
+          <Plus size={15} aria-hidden="true" /> New
+        </Link>
+      )}
     </div>
   );
   const sortable = (key: string, text: string, right?: boolean) => (

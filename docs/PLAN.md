@@ -1614,12 +1614,20 @@ and contact persons. A document already here is refreshed with Zoho's newer stat
 | Purchase Orders | list (views by status, RECEIVED/BILLED dots), split view: status steps, vendor and delivery address, lines, receives and bills, terms, every other field | Read, done 17 Nov |
 | Purchase Receives, Bills (payables band as Zoho's), Payments Made, Vendor Credits | lists and documents as above | Read, done 17 Nov |
 | Sales → Sales Returns, Credit Notes | lists and documents (data from Zoho's API) | Read, done 17 Nov |
-| Making documents (New PO, Receive, Convert to Bill, Record Payment, Vendor Credit) | Zoho's forms, tied to stock (batches) and money | Next |
+| Making documents | Zoho's forms: New Purchase Order (draft or issued, next number in Zoho's series), Receive (each medicine onto the shelf in its batch with expiry, the batch costed at the order's rate in pesos, waiting orders told), Convert to Bill (from the order or from a receive), a bill on its own (rent, utilities, freight), Record Payment (on one or more bills; the rest stays unused), Vendor Credit, Apply to Bills (a credit's or a payment's unused amount), Void (a bill nothing was paid on; a payment or credit, its money goes back on the bills), Cancel Order (nothing received or billed), Mark as Issued, New Vendor | Done 17 Nov, checked in the browser as Inventory (Irene) and Finance (Fiona) |
 | Sales → Customers, Sales Orders, Invoices, Payments Received | Zoho's lists over the CRM's own and Zoho's history | Next |
 | Items, Inventory (Adjustments, Packages, Shipments, Transfer Orders) | | After |
 
-Checked against Zoho on 17 Nov: the Bills band's Due Today and Due Within 30 Days match to the
-centavo; the totals differ only by what changed in Zoho after the 15 Nov backup.
+Checked against Zoho on 17 Nov: after bringing each document's state from Zoho's lists (statuses,
+balances, payments' unused amounts) and keeping what only Zoho Books explains as each vendor's
+opening credits and payables, the Bills band (Total, Due Today, Due Within 30 Days, Overdue) and
+every vendor's Payables and Unused Credits match Zoho to the centavo.
+
+Who makes what (interim, until Aryan says otherwise): purchase orders and receives — Inventory and
+the Admin; bills — Inventory, Finance and the Admin; payments made and vendor credits — Finance and
+the Admin; Management, the Founder read. The Inventory menu's Purchases now opens these screens; the
+CRM's earlier purchase pages (/purchases, /suppliers) stay reachable but are no longer in the menu.
+Stock is counted in Zoho's own units (pieces), as the opening stock was.
 
 ## 13. Questions waiting for Aryan
 
@@ -2067,3 +2075,4 @@ centavo; the totals differ only by what changed in Zoho after the 15 Nov backup.
 - 17 Nov (62), 16.8: Digital Marketing and IT get the work "Office staff" and a work log (what I did, today, tomorrow; optional, one entry a day, changed during the day). Their Home is the log; the Founder and the Admin read everyone's under Reports → Work logs, a head the people under them, nobody else. The chart's two boxes are added as departments under the Founder (no head drawn); demo: Kriscel, Arnel, Jade, Linus. The Admin panel's company chart has both boxes.
 - 17 Nov (63), 16.9 In-licensing & Regulatory built (the pipeline, the FDA registrations with renewal flags from 180/90 days, the CPRs on the bidding desk's Documents, heads read their people's work logs). Aryan, 17 Nov: the main work now is moving the whole of Zoho Inventory into this CRM, every section and every row of data, looking like Zoho on the outside with the data shown better inside (section 17).
 - 17 Nov (64), section 17: the books. Zoho's Purchases (1,716 vendors, 4,208 purchase orders, 4,704 receives, 8,878 bills, 7,420 payments made, 46 vendor credits) and its Sales Returns and Credit Notes in, every field kept, linked to each other; Zoho's own screens for them under /books, checked side by side with Zoho.
+- 17 Nov (65), section 17: Purchases are made in the books now, as in Zoho: purchase orders, receives into stock by batch and expiry, bills, payments made, vendor credits, void and cancel; payables and credits match Zoho to the centavo. The Inventory menu's Purchases opens them.

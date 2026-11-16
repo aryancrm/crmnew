@@ -70,6 +70,7 @@ import { PipelinePage, RegistrationsPage, RegulatoryReportPage } from "./pages/r
 import { BooksShell } from "./books/shell";
 import { BookListPage } from "./books/list";
 import { VendorsPage } from "./books/vendors";
+import { BillFromOrderPage, NewBillPage, NewPaymentPage, NewPurchaseOrderPage, NewVendorCreditPage, NewVendorPage, ReceivePage } from "./books/forms";
 import { CompanyPapersPage, TenderPage, TendersPage } from "./pages/tenders";
 import { ClidpListingsPage, ClidpTeamPage } from "./pages/clidp";
 import { RxDoctorsPage, RxFieldPage } from "./pages/rx";
@@ -105,6 +106,13 @@ createRoot(root).render(
           {/* Zoho Inventory's Sales and Purchases, in Zoho's own frame (docs/PLAN.md 17). */}
           <Route path="/books" element={<BooksShell />}>
             <Route index element={<Navigate to="/books/purchaseorders" replace />} />
+            <Route path="vendors/new" element={<NewVendorPage />} />
+            <Route path="purchaseorders/new" element={<NewPurchaseOrderPage />} />
+            <Route path="purchaseorders/:id/receive" element={<ReceivePage />} />
+            <Route path="purchaseorders/:id/bill" element={<BillFromOrderPage />} />
+            <Route path="bills/new" element={<NewBillPage />} />
+            <Route path="paymentsmade/new" element={<NewPaymentPage />} />
+            <Route path="vendorcredits/new" element={<NewVendorCreditPage />} />
             <Route path="vendors" element={<VendorsPage />} />
             <Route path="vendors/:id" element={<VendorsPage />} />
             <Route path=":list" element={<BookListPage />} />

@@ -5,10 +5,11 @@
 // (its own fields, each line's batches and expiry), which Zoho itself keeps out of sight.
 
 import type { BookDoc, BookKind, BookLine, BookLinked } from "@2mg/api/types";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronRight, Printer, X } from "lucide-react";
-import { useState } from "react";
-import { Link } from "react-router-dom";
+import { type ReactNode, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { ApplyToBills, Plain, useMay, VoidBox } from "./forms";
 import { api } from "../api";
 import { type KindInfo, kindInfo, statusClass, statusText, zDate, zMoney, zQty } from "./kinds";
 
@@ -216,11 +217,14 @@ function LineRow({ line, doc }: { line: BookLine; doc: BookDoc }) {
 
 export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onClose: () => void }) {
   const query = useQuery({ queryKey: ["books", info.kind, "doc", id], queryFn: () => api<BookDoc>(`/api/books/${info.kind}/${id}`) });
+  const may = useMay();
+  const navigate = useNavigate();
+  const [box, setBox] = useState<"apply" | "void" | "cancel" | null>(null);
   const doc = query.data;
   if (!doc) return <p className="p-6 text-[#6c718a]">{query.isError ? query.error.message : "Loading…"}</p>;
   const order = doc.kind === "purchase_order";
   const f = doc.fields as Record<string, string | undefined>;
-  const delivery = [f.Attention, f.Address, [f.City, f.State].filter(Boolean).join(", "), [f.Country, f.Code].filter(Boolean).join(" - "), f.Phone].filter(Boolean).join("\n");
+  const delivery = f.Attention ? [f.Attention, f.Address, [f.City, f.State].filter(Boolean).join(", "), [f.Country, f.Code].filter(Boolean).join(" - "), f.Phone].filter(Boolean).join("\n") : (f["Warehouse Name"] ?? "");
   const terms = f["Terms & Conditions"] ?? f.terms;
   const next =
     order && doc.status === "issued" && doc.received === "none"
@@ -238,12 +242,19 @@ export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onC
         </button>
       </div>
       <div className="flex h-[40px] items-center gap-1 border-b border-[#ebeaf2] bg-[#f9f9fb] px-4 text-[13px] print:hidden">
+        <Actions doc={doc} may={may} onBox={setBox} go={(to) => navigate(to)} />
         <button type="button" onClick={() => window.print()} className="flex items-center gap-1.5 rounded px-2.5 py-1 hover:bg-white">
           <Printer size={14} aria-hidden="true" /> PDF/Print
         </button>
         {doc.fromZoho && <span className="ml-auto text-[12px] text-[#6c718a]">From Zoho{doc.zohoCreated ? ` · made ${doc.zohoCreated}` : ""}</span>}
       </div>
       <div className="space-y-5 p-5">
+        {box === "apply" && <ApplyToBills doc={doc} onDone={() => setBox(null)} />}
+        {box === "void" && <VoidBox doc={doc} onDone={() => setBox(null)} />}
+        {box === "cancel" && <CancelOrder doc={doc} onDone={() => setBox(null)} />}
+        {doc.status === "void" && doc.fields && (
+          <div className="mx-auto max-w-[820px] rounded-md bg-[#f7f7fe] px-4 py-2 text-[#6c718a]">This {info.one.toLowerCase()} is void.</div>
+        )}
         {next && (
           <div className="rounded-md border border-[#ebeaf2] px-4 py-3">
             <span className="font-semibold">✦ WHAT'S NEXT?</span> <span className="text-[#4b4f63]">{next}</span>
@@ -311,7 +322,7 @@ export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onC
             </div>
           </div>
           <LineItems doc={doc} />
-          <div className="mt-4 ml-auto w-full max-w-sm space-y-1.5">
+          <div className={`mt-4 ml-auto w-full max-w-sm space-y-1.5 ${doc.kind === "purchase_receive" ? "hidden" : ""}`}>
             {doc.subTotal !== null && (
               <div className="flex justify-between">
                 <span>Sub Total</span>
@@ -349,10 +360,121 @@ export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onC
             </div>
           )}
         </article>
-        <section className="mx-auto max-w-[820px] print:hidden">
-          <h2 className="mb-2 text-[14px] font-semibold text-[#212529]">Everything else on it</h2>
-          <Fields fields={doc.fields} />
-        </section>
+        {Object.keys(doc.fields).some((key) => !SHOWN_ELSEWHERE.has(key) && key !== "Warehouse Name") && (
+          <section className="mx-auto max-w-[820px] print:hidden">
+            <h2 className="mb-2 text-[14px] font-semibold text-[#212529]">Everything else on it</h2>
+            <Fields fields={doc.fields} />
+          </section>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const TOOL = "flex items-center gap-1.5 rounded px-2.5 py-1 hover:bg-white";
+
+/** The toolbar's buttons for what can be done next with this document, by who may do it. */
+function Actions({ doc, may, onBox, go }: { doc: BookDoc; may: ReturnType<typeof useMay>; onBox: (box: "apply" | "void" | "cancel") => void; go: (to: string) => void }) {
+  const queries = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const left = (what: "received" | "billed") => doc.lines.some((line) => (line.qty ?? 0) - (line.qtyDone.cancelled ?? 0) - (line.qtyDone[what] ?? 0) > 0);
+  const open = !["draft", "cancelled", "closed", "void"].includes(doc.status);
+  const buttons: ReactNode[] = [];
+  if (doc.kind === "purchase_order") {
+    if (doc.status === "draft" && may.order)
+      buttons.push(
+        <button
+          key="issue"
+          type="button"
+          disabled={busy}
+          className={TOOL}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await api(`/api/books/purchase_order/${doc.id}/status`, { body: { to: "issued" } });
+              await queries.invalidateQueries({ queryKey: ["books"] });
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          Mark as Issued
+        </button>,
+      );
+    if (open && may.order && left("received"))
+      buttons.push(
+        <button key="receive" type="button" className={TOOL} onClick={() => go(`/books/purchaseorders/${doc.id}/receive`)}>
+          Receive
+        </button>,
+      );
+    if (open && may.bill && left("billed"))
+      buttons.push(
+        <button key="bill" type="button" className={TOOL} onClick={() => go(`/books/purchaseorders/${doc.id}/bill`)}>
+          Convert to Bill
+        </button>,
+      );
+    if (may.order && !["cancelled", "closed"].includes(doc.status) && doc.received === "none" && doc.billed === "none")
+      buttons.push(
+        <button key="cancel" type="button" className={TOOL} onClick={() => onBox("cancel")}>
+          Cancel Order
+        </button>,
+      );
+  }
+  if (doc.kind === "purchase_receive" && may.bill && doc.billed !== "full") {
+    const order = doc.linkedDocs.find((d) => d.kind === "purchase_order");
+    if (order)
+      buttons.push(
+        <button key="bill" type="button" className={TOOL} onClick={() => go(`/books/purchaseorders/${order.id}/bill?receive=${doc.id}`)}>
+          Convert to Bill
+        </button>,
+      );
+  }
+  if (doc.kind === "bill" && doc.balance > 0 && doc.status !== "void" && may.pay)
+    buttons.push(
+      <button key="pay" type="button" className={TOOL} onClick={() => go(`/books/paymentsmade/new?vendor=${doc.vendor?.id ?? ""}&bill=${doc.id}`)}>
+        Record Payment
+      </button>,
+    );
+  if ((doc.kind === "vendor_credit" || doc.kind === "vendor_payment") && doc.balance > 0 && doc.status !== "void" && may.pay)
+    buttons.push(
+      <button key="apply" type="button" className={TOOL} onClick={() => onBox("apply")}>
+        Apply to Bills
+      </button>,
+    );
+  const voidable = doc.status !== "void" && ((doc.kind === "bill" && may.bill && doc.balance === doc.total) || ((doc.kind === "vendor_payment" || doc.kind === "vendor_credit") && may.pay));
+  if (voidable)
+    buttons.push(
+      <button key="void" type="button" className={TOOL} onClick={() => onBox("void")}>
+        Void
+      </button>,
+    );
+  return <>{buttons}</>;
+}
+
+function CancelOrder({ doc, onDone }: { doc: BookDoc; onDone: () => void }) {
+  const queries = useQueryClient();
+  const [problem, setProblem] = useState<string | null>(null);
+  return (
+    <div className="mx-auto max-w-[820px] rounded-md border border-[#f76831] p-4">
+      <div className="mb-2 font-medium">Cancel {doc.number}? It stays in the books, marked cancelled.</div>
+      {problem && <div className="mb-2 text-[#b91c1c]">{problem}</div>}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className="h-[32px] rounded-[5px] bg-[#f76831] px-3 text-white"
+          onClick={async () => {
+            try {
+              await api(`/api/books/purchase_order/${doc.id}/status`, { body: { to: "cancelled" } });
+              await queries.invalidateQueries({ queryKey: ["books"] });
+              onDone();
+            } catch (error) {
+              setProblem(error instanceof Error ? error.message : "That didn't work.");
+            }
+          }}
+        >
+          Cancel the order
+        </button>
+        <Plain onClick={onDone}>Keep it</Plain>
       </div>
     </div>
   );

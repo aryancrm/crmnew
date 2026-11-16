@@ -10,7 +10,15 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { DocView } from "./doc";
+import { useMay } from "./forms";
 import { type Column, type KindInfo, kindByPath, statusClass, statusText, viewLabel, zDate, zMoney, zQty } from "./kinds";
+
+/** Why "+ New" is not offered on a list. */
+const NEW_HINT: Partial<Record<string, string>> = {
+  purchase_receive: "A receive is made from its purchase order: open the order and press Receive.",
+  sales_return: "Sales returns are made from the order (Sales comes next).",
+  credit_note: "Credit notes come with Sales (next).",
+};
 
 /** Columns that stay on one line, as in Zoho. */
 const NOWRAP = new Set(["date", "due", "status", "mode"]);
@@ -124,8 +132,8 @@ export function ViewMenu({ views, view, plural, onPick, labelOf }: { views: { ke
   }, []);
   return (
     <div ref={box} className="relative">
-      <button type="button" onClick={() => setOpen(!open)} className="flex items-center gap-1.5 text-[16px] font-semibold text-[#212529]" aria-expanded={open}>
-        {name(view)} <ChevronDown size={16} className="text-[#408dfb]" aria-hidden="true" />
+      <button type="button" onClick={() => setOpen(!open)} className="flex max-w-[230px] items-center gap-1.5 text-[16px] font-semibold whitespace-nowrap text-[#212529]" aria-expanded={open}>
+        <span className="truncate">{name(view)}</span> <ChevronDown size={16} className="text-[#408dfb]" aria-hidden="true" />
       </button>
       {open && (
         <ul className="absolute top-8 left-0 z-30 max-h-96 w-64 overflow-y-auto rounded-md border border-[#ebeaf2] bg-white py-1 shadow-lg">
@@ -183,6 +191,7 @@ export function BookListPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const [picked, setPicked] = useState<Set<number>>(new Set());
+  const may = useMay();
   const query = useBookList(info ?? { kind: "bill", path: "bills", plural: "Bills", one: "Bill", numberLabel: "Bill#", section: "Purchases" });
   if (!info) return <p className="p-6 text-[#6c718a]">No such list.</p>;
   const data = query.data;
@@ -195,6 +204,12 @@ export function BookListPage() {
     setParams(next);
   };
   const columns = COLUMNS[info.kind] ?? [];
+  const newTo =
+    (info.kind === "purchase_order" && may.order) ||
+    (info.kind === "bill" && may.bill) ||
+    ((info.kind === "vendor_payment" || info.kind === "vendor_credit") && may.pay)
+      ? `/books/${info.path}/new`
+      : null;
   const sort = params.get("sort") ?? "date";
   const dir = params.get("dir") ?? "desc";
   const search = params.toString() ? `?${params}` : "";
@@ -202,12 +217,15 @@ export function BookListPage() {
     <div className="flex h-[60px] shrink-0 items-center justify-between gap-3 border-b border-[#ebeaf2] px-5">
       <ViewMenu views={data?.views ?? [{ key: "all", count: 0 }]} view={data?.view ?? "all"} plural={info.plural} onPick={(key) => set({ view: key === "all" ? null : key, page: null })} />
       <div className="flex items-center gap-2">
-        <span
-          title="Making documents here comes with this list's next step; Zoho's own are all here to read."
-          className="flex h-[32px] cursor-not-allowed items-center gap-1 rounded-[5px] bg-[#408dfb]/50 px-2.5 text-white"
-        >
-          <Plus size={15} aria-hidden="true" /> New
-        </span>
+        {newTo ? (
+          <Link to={newTo} className="flex h-[32px] items-center gap-1 rounded-[5px] bg-[#408dfb] px-2.5 text-white hover:bg-[#2f7ef0]">
+            <Plus size={15} aria-hidden="true" /> New
+          </Link>
+        ) : (
+          <span title={NEW_HINT[info.kind] ?? "Not made here yet."} className="flex h-[32px] cursor-not-allowed items-center gap-1 rounded-[5px] bg-[#408dfb]/50 px-2.5 text-white">
+            <Plus size={15} aria-hidden="true" /> New
+          </span>
+        )}
         <span className="flex size-[32px] items-center justify-center rounded-[5px] border border-[#d7d5e2] bg-[#f7f7fe] text-[#6c718a]" aria-hidden="true">
           <Ellipsis size={16} />
         </span>
@@ -228,7 +246,7 @@ export function BookListPage() {
                 >
                   <div className="flex justify-between gap-2">
                     <span className="truncate font-medium text-[#212529]">{row.party ?? "—"}</span>
-                    <span className="shrink-0">{zMoney(row.total, row.currency)}</span>
+                    <span className="shrink-0">{info.kind === "purchase_receive" ? `${zQty(row.qty)} qty` : zMoney(row.total, row.currency)}</span>
                   </div>
                   <div className="text-[12px] text-[#6c718a]">
                     {row.number} • {zDate(row.date)}

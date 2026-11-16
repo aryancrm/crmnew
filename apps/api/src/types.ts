@@ -4818,6 +4818,8 @@ export type BookLine = {
   qtyDone: Record<string, number>;
   batches: Record<string, unknown>[];
   fields: Record<string, unknown>;
+  /** The order line a receive's or bill's line came from. */
+  fromLine: number | null;
 };
 
 export type BookLinked = { id: number; kind: BookKind; number: string; date: string; status: string; total: number; balance: number; amount: number | null; on: string | null; direction: "from" | "to" };
@@ -4851,4 +4853,16 @@ export type VendorDetail = VendorRow & {
   people: { id: number; name: string; email: string | null; phone: string | null; mobile: string | null; designation: string | null }[];
   counts: { kind: BookKind; count: number; total: number }[];
   recent: (BookRow & { kind: BookKind })[];
+};
+
+/** What the books' forms pick from. */
+export type BookChoices = {
+  today: string;
+  vendors: { id: number; name: string; currency: string; paymentTerms: string | null }[];
+  warehouses: { id: number; name: string }[];
+  medicines: { id: number; name: string; sku: string | null; unit: string | null }[];
+  accounts: string[];
+  modes: string[];
+  paidThrough: string[];
+  next: { purchaseOrder: string; receive: string; payment: string; vendorCredit: string };
 };

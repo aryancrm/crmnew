@@ -204,30 +204,28 @@ function inventoryApp(me: Me): Space {
           { to: "/transfers", label: "Transfers", icon: ArrowLeftRight },
         ],
       },
+      // Purchases are Zoho Inventory's, moved in whole, in Zoho's own frame (docs/PLAN.md 17).
       {
         title: "Purchases",
         items: [
           ...(seesCost
             ? [
-                { to: "/suppliers", label: "Suppliers", icon: Factory },
-                { to: "/purchases", label: "Purchase orders", icon: ShoppingCart },
+                { to: "/books/vendors", label: "Vendors", icon: Factory },
+                { to: "/books/purchaseorders", label: "Purchase orders", icon: ShoppingCart },
               ]
             : []),
-          { to: "/receives", label: "Receives", icon: PackageCheck },
+          // The books are for the stock and money desks; the others see what came in on the shelf.
+          seesCost
+            ? { to: "/books/purchasereceives", label: "Purchase receives", icon: PackageCheck }
+            : { to: "/receives", label: "Receives", icon: PackageCheck },
+          ...(seesCost
+            ? [
+                { to: "/books/bills", label: "Bills", icon: ReceiptText },
+                { to: "/books/paymentsmade", label: "Payments made", icon: Banknote },
+              ]
+            : []),
         ],
       },
-      // Zoho Inventory's Sales and Purchases, moved in whole, in Zoho's own frame (docs/PLAN.md 17).
-      ...(seesCost
-        ? [
-            {
-              title: "Books (from Zoho)",
-              items: [
-                { to: "/books/purchaseorders", label: "Purchase orders & bills", icon: ReceiptText },
-                { to: "/books/vendors", label: "Vendors", icon: Factory },
-              ],
-            },
-          ]
-        : []),
     ],
   };
 }
