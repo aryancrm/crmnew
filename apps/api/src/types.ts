@@ -4751,3 +4751,104 @@ export type RegulatoryDesk = {
   pipeline: PipelineRow[];
   registrations: RegistrationRow[];
 };
+
+// ---- The books: Zoho Inventory's Sales and Purchases documents (docs/PLAN.md 17) ----
+
+export type BookKind =
+  | "purchase_order" | "purchase_receive" | "bill" | "vendor_payment" | "vendor_credit"
+  | "sales_order" | "invoice" | "customer_payment" | "sales_return" | "credit_note"
+  | "package" | "shipment" | "transfer_order" | "adjustment";
+
+/** Nothing, some or all of an order line's quantity done (received, billed…): Zoho's dots. */
+export type DoneState = "none" | "partial" | "full";
+
+export type BookRow = {
+  id: number;
+  number: string;
+  reference: string | null;
+  date: string;
+  dueDate: string | null;
+  /** Zoho's key (issued, partially_billed…); a bill past its due day with money owed is overdue. */
+  status: string;
+  /** Days past due, for an overdue bill or invoice. */
+  overdueDays: number | null;
+  party: string | null;
+  partyId: number | null;
+  currency: string;
+  /** Centavos of the document's currency. */
+  total: number;
+  balance: number;
+  received: DoneState | null;
+  billed: DoneState | null;
+  /** The purchase order a receive is for; the bills a payment was put on. */
+  linked: string | null;
+  mode: string | null;
+  /** Centavos of a payment or credit not put on any bill yet. */
+  unused: number | null;
+  qty: number | null;
+};
+
+export type BookList = {
+  kind: BookKind;
+  today: string;
+  views: { key: string; count: number }[];
+  view: string;
+  page: number;
+  perPage: number;
+  total: number;
+  rows: BookRow[];
+};
+
+export type BookLine = {
+  id: number;
+  n: number;
+  medicineId: number | null;
+  medicine: string | null;
+  itemName: string | null;
+  sku: string | null;
+  description: string | null;
+  account: string | null;
+  warehouse: string | null;
+  unit: string | null;
+  qty: number | null;
+  rate: number | null;
+  taxName: string | null;
+  taxPct: number | null;
+  amount: number | null;
+  qtyDone: Record<string, number>;
+  batches: Record<string, unknown>[];
+  fields: Record<string, unknown>;
+};
+
+export type BookLinked = { id: number; kind: BookKind; number: string; date: string; status: string; total: number; balance: number; amount: number | null; on: string | null; direction: "from" | "to" };
+
+export type BookDoc = BookRow & {
+  kind: BookKind;
+  fxRate: number;
+  subTotal: number | null;
+  paymentTerms: string | null;
+  notes: string | null;
+  fields: Record<string, unknown>;
+  fromZoho: boolean;
+  zohoCreated: string | null;
+  vendor: { id: number; name: string; company: string | null; email: string | null; phone: string | null; address: string | null; country: string | null } | null;
+  lines: BookLine[];
+  linkedDocs: BookLinked[];
+};
+
+export type VendorRow = { id: number; name: string; company: string | null; email: string | null; phone: string | null; payables: number; credits: number; active: boolean };
+export type VendorList = { views: { key: string; count: number }[]; view: string; page: number; perPage: number; total: number; rows: VendorRow[] };
+export type VendorDetail = VendorRow & {
+  mobile: string | null;
+  website: string | null;
+  currency: string;
+  country: string | null;
+  tin: string | null;
+  billingAddress: string | null;
+  shippingAddress: string | null;
+  paymentTerms: string | null;
+  fields: Record<string, unknown>;
+  people: { id: number; name: string; email: string | null; phone: string | null; mobile: string | null; designation: string | null }[];
+  counts: { kind: BookKind; count: number; total: number }[];
+  recent: (BookRow & { kind: BookKind })[];
+};

@@ -1,0 +1,359 @@
+// One document of the books, as Zoho Inventory shows it on the right of its list (docs/PLAN.md
+// 17): the number with ✕, the toolbar, the documents it hangs together with (a purchase order's
+// receives and bills, a bill's payments), and the paper itself — title, status steps, the vendor,
+// the lines under a dark heading, the totals. Under the paper, everything else Zoho kept about it
+// (its own fields, each line's batches and expiry), which Zoho itself keeps out of sight.
+
+import type { BookDoc, BookKind, BookLine, BookLinked } from "@2mg/api/types";
+import { useQuery } from "@tanstack/react-query";
+import { ChevronDown, ChevronRight, Printer, X } from "lucide-react";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { api } from "../api";
+import { type KindInfo, kindInfo, statusClass, statusText, zDate, zMoney, zQty } from "./kinds";
+
+const TITLE: Partial<Record<BookKind, string>> = {
+  purchase_order: "PURCHASE ORDER",
+  purchase_receive: "PURCHASE RECEIVE",
+  bill: "BILL",
+  vendor_payment: "PAYMENTS MADE",
+  vendor_credit: "VENDOR CREDITS",
+  sales_return: "SALES RETURN",
+  credit_note: "CREDIT NOTE",
+};
+const LINKED_TITLE: Partial<Record<BookKind, string>> = {
+  purchase_order: "Purchase Orders",
+  purchase_receive: "Receives",
+  bill: "Bills",
+  vendor_payment: "Payments Made",
+  vendor_credit: "Vendor Credits",
+  sales_order: "Sales Orders",
+  invoice: "Invoices",
+  credit_note: "Credit Notes",
+  sales_return: "Sales Returns",
+};
+
+const step = (label: string, value: string, done: boolean) => (
+  <div className="flex items-center gap-3 py-1">
+    <span className={`w-20 ${done ? "text-[#212529]" : "text-[#6c718a]"}`}>{label}</span>
+    <span className={done ? "rounded-sm bg-[#408dfb] px-2 py-0.5 text-[11px] text-white uppercase" : "text-[#8e91a8]"}>{value}</span>
+  </div>
+);
+
+function Linked({ docs }: { docs: BookLinked[] }) {
+  const groups = new Map<BookKind, BookLinked[]>();
+  for (const doc of docs) groups.set(doc.kind, [...(groups.get(doc.kind) ?? []), doc]);
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  if (!docs.length) return null;
+  return (
+    <div className="space-y-2">
+      {[...groups].map(([kind, list]) => {
+        const info = kindInfo(kind);
+        const isOpen = open[kind] ?? true;
+        return (
+          <div key={kind} className="rounded-md border border-[#ebeaf2]">
+            <button type="button" onClick={() => setOpen({ ...open, [kind]: !isOpen })} className="flex w-full items-center justify-between px-4 py-2.5 text-left">
+              <span className="font-medium">
+                {LINKED_TITLE[kind] ?? kind} <span className="ml-1 rounded bg-[#ededf7] px-1.5 text-[11px] text-[#6c718a]">{list.length}</span>
+              </span>
+              {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+            </button>
+            {isOpen && (
+              <table className="w-full border-t border-[#ebeaf2] text-[12.5px]">
+                <thead>
+                  <tr className="text-[11px] text-[#6c718a] uppercase">
+                    <th className="px-4 py-1.5 text-left font-normal">Date</th>
+                    <th className="px-2 py-1.5 text-left font-normal">Number</th>
+                    <th className="px-2 py-1.5 text-left font-normal">Status</th>
+                    <th className="px-2 py-1.5 text-right font-normal">Amount</th>
+                    <th className="px-4 py-1.5 text-right font-normal">Put on this</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {list.map((doc) => (
+                    <tr key={doc.id} className="border-t border-[#f2f2f7]">
+                      <td className="px-4 py-1.5">{zDate(doc.date)}</td>
+                      <td className="px-2 py-1.5">
+                        {info ? (
+                          <Link to={`/books/${info.path}/${doc.id}`} className="text-[#1c5bd9]">
+                            {doc.number}
+                          </Link>
+                        ) : (
+                          doc.number
+                        )}
+                      </td>
+                      <td className={`px-2 py-1.5 text-[11.5px] uppercase ${statusClass(doc.status)}`}>{statusText(doc.status)}</td>
+                      <td className="px-2 py-1.5 text-right">{doc.kind === "purchase_receive" ? "" : zMoney(doc.total)}</td>
+                      <td className="px-4 py-1.5 text-right">{doc.amount === null ? "" : zMoney(doc.amount)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Fields the paper itself shows (the delivery address, the terms). */
+const SHOWN_ELSEWHERE = new Set(["Attention", "Address", "City", "State", "Country", "Code", "Phone", "Terms & Conditions", "terms"]);
+
+/** Field names as people read them: "CF.Delivery Mode" → "Delivery Mode", "vendor_name" → "Vendor name". */
+const fieldLabel = (key: string) => {
+  const plain = key.replace(/^CF\./, "").replace(/^Item\.CF\./, "").replace(/_/g, " ");
+  return plain.charAt(0).toUpperCase() + plain.slice(1);
+};
+const fieldValue = (value: unknown): string => {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (Array.isArray(value)) return value.map(fieldValue).filter(Boolean).join(", ");
+  if (typeof value === "object") return Object.entries(value as Record<string, unknown>).map(([k, v]) => `${fieldLabel(k)}: ${fieldValue(v)}`).join(" · ");
+  return String(value);
+};
+
+function Fields({ fields }: { fields: Record<string, unknown> }) {
+  // Zoho fills many fields with a zero or "false" that says nothing: those are left out.
+  const entries = Object.entries(fields).filter(([key, value]) => !SHOWN_ELSEWHERE.has(key) && !/^(0+(\.0+)?|false)$/i.test(fieldValue(value)) && fieldValue(value) !== "");
+  if (!entries.length) return null;
+  return (
+    <dl className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
+      {entries.map(([key, value]) => (
+        <div key={key} className="flex min-w-0 gap-3 border-b border-[#f2f2f7] py-1">
+          <dt className="w-44 shrink-0 text-[#6c718a]">{fieldLabel(key)}</dt>
+          <dd className="min-w-0 break-words">{fieldValue(value)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function LineItems({ doc }: { doc: BookDoc }) {
+  const order = doc.kind === "purchase_order";
+  const payment = doc.kind === "vendor_payment";
+  if (payment || !doc.lines.length) return null;
+  return (
+    <table className="mt-6 w-full border-collapse text-[12.5px]">
+      <thead>
+        <tr className="bg-[#3c3d3a] text-left text-white">
+          <th className="w-8 px-2 py-2 font-normal">#</th>
+          <th className="px-2 py-2 font-normal">Item &amp; Description</th>
+          <th className="px-2 py-2 text-right font-normal">{order ? "Ordered" : "Qty"}</th>
+          {doc.kind !== "purchase_receive" && <th className="px-2 py-2 text-right font-normal">Rate</th>}
+          {doc.kind !== "purchase_receive" && <th className="px-2 py-2 text-right font-normal">Amount</th>}
+        </tr>
+      </thead>
+      <tbody>
+        {doc.lines.map((line) => (
+          <LineRow key={line.id} line={line} doc={doc} />
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function LineRow({ line, doc }: { line: BookLine; doc: BookDoc }) {
+  const done = Object.entries(line.qtyDone ?? {});
+  return (
+    <tr className="border-b border-[#ebeaf2] align-top">
+      <td className="px-2 py-2.5">{line.n}</td>
+      <td className="px-2 py-2.5">
+        <div className="font-medium">
+          {line.medicineId ? (
+            <Link to={`/medicines/${line.medicineId}`} className="text-[#1c5bd9]" title={line.medicine ?? undefined}>
+              {line.itemName ?? line.medicine}
+            </Link>
+          ) : (
+            (line.itemName ?? line.account ?? "")
+          )}
+        </div>
+        {line.sku && <div className="text-[11.5px] text-[#6c718a]">SKU: {line.sku}</div>}
+        {line.description && <div className="text-[12px] whitespace-pre-wrap text-[#4b4f63]">{line.description}</div>}
+        {line.account && line.itemName && <div className="text-[11.5px] text-[#6c718a]">Account: {line.account}</div>}
+        {line.warehouse && <div className="text-[11.5px] text-[#6c718a]">{line.warehouse}</div>}
+        {line.batches?.length > 0 && (
+          <ul className="mt-1 space-y-0.5 text-[11.5px] text-[#4b4f63]">
+            {line.batches.map((batch, i) => (
+              <li key={i}>
+                Batch {fieldValue(batch["Batch Reference#"] ?? batch.batch_number ?? batch["Manufacturer Batch#"])}
+                {batch["Expiry Date"] || batch.expiry_date ? ` · expires ${zDate(String(batch["Expiry Date"] ?? batch.expiry_date))}` : ""}
+                {batch["Quantity In"] || batch["Quantity Out"] ? ` · ${fieldValue(batch["Quantity In"] ?? batch["Quantity Out"])}` : ""}
+              </li>
+            ))}
+          </ul>
+        )}
+        {Object.keys(line.fields ?? {}).length > 0 && (
+          <details className="mt-1 text-[11.5px] text-[#6c718a]">
+            <summary className="cursor-pointer">More about this line</summary>
+            <Fields fields={line.fields} />
+          </details>
+        )}
+      </td>
+      <td className="px-2 py-2.5 text-right whitespace-nowrap">
+        {zQty(line.qty)} {line.unit ?? ""}
+        {done.map(([what, qty]) => (
+          <div key={what} className="text-[11px] text-[#6c718a]">
+            {zQty(qty)} {what}
+          </div>
+        ))}
+      </td>
+      {doc.kind !== "purchase_receive" && <td className="px-2 py-2.5 text-right">{line.rate === null ? "" : zQty(line.rate)}</td>}
+      {doc.kind !== "purchase_receive" && (
+        <td className="px-2 py-2.5 text-right">
+          {zMoney(line.amount, "")}
+          {line.taxName && (
+            <div className="text-[11px] text-[#6c718a]">
+              {line.taxName}
+              {line.taxPct ? ` (${line.taxPct}%)` : ""}
+            </div>
+          )}
+        </td>
+      )}
+    </tr>
+  );
+}
+
+export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onClose: () => void }) {
+  const query = useQuery({ queryKey: ["books", info.kind, "doc", id], queryFn: () => api<BookDoc>(`/api/books/${info.kind}/${id}`) });
+  const doc = query.data;
+  if (!doc) return <p className="p-6 text-[#6c718a]">{query.isError ? query.error.message : "Loading…"}</p>;
+  const order = doc.kind === "purchase_order";
+  const f = doc.fields as Record<string, string | undefined>;
+  const delivery = [f.Attention, f.Address, [f.City, f.State].filter(Boolean).join(", "), [f.Country, f.Code].filter(Boolean).join(" - "), f.Phone].filter(Boolean).join("\n");
+  const terms = f["Terms & Conditions"] ?? f.terms;
+  const next =
+    order && doc.status === "issued" && doc.received === "none"
+      ? "Convert it to a bill or create a receive to complete your purchase."
+      : doc.kind === "bill" && doc.balance > 0 && doc.status !== "void"
+        ? "Record a payment for this bill when it is paid."
+        : null;
+  const fx = doc.currency !== "PHP" ? ` · 1 ${doc.currency} = PHP${doc.fxRate}` : "";
+  return (
+    <div className="min-h-full bg-white">
+      <div className="sticky top-0 z-10 flex h-[60px] items-center justify-between border-b border-[#ebeaf2] bg-white px-5">
+        <h1 className="text-[20px] font-medium text-[#212529]">{doc.number}</h1>
+        <button type="button" onClick={onClose} aria-label="Close" className="rounded p-1 text-[#f76831] hover:bg-[#f1f1fa]">
+          <X size={18} />
+        </button>
+      </div>
+      <div className="flex h-[40px] items-center gap-1 border-b border-[#ebeaf2] bg-[#f9f9fb] px-4 text-[13px] print:hidden">
+        <button type="button" onClick={() => window.print()} className="flex items-center gap-1.5 rounded px-2.5 py-1 hover:bg-white">
+          <Printer size={14} aria-hidden="true" /> PDF/Print
+        </button>
+        {doc.fromZoho && <span className="ml-auto text-[12px] text-[#6c718a]">From Zoho{doc.zohoCreated ? ` · made ${doc.zohoCreated}` : ""}</span>}
+      </div>
+      <div className="space-y-5 p-5">
+        {next && (
+          <div className="rounded-md border border-[#ebeaf2] px-4 py-3">
+            <span className="font-semibold">✦ WHAT'S NEXT?</span> <span className="text-[#4b4f63]">{next}</span>
+          </div>
+        )}
+        <Linked docs={doc.linkedDocs} />
+        <article className="mx-auto max-w-[820px] rounded-sm border border-[#ebeaf2] p-8 shadow-[0_0_6px_rgba(0,0,0,0.06)]">
+          <div className="flex flex-wrap justify-between gap-6">
+            <div>
+              <div className="text-[26px] font-normal tracking-wide text-[#212529]">{TITLE[doc.kind] ?? info.one.toUpperCase()}</div>
+              <div className="mt-1">
+                {info.numberLabel} <b>{doc.number}</b>
+              </div>
+              <div className="mt-4 text-[11px] text-[#6c718a] uppercase">Status</div>
+              {order ? (
+                <div className="mt-1 border-l-2 border-[#f7a524] pl-3">
+                  {step("Order", statusText(doc.status), true)}
+                  {step("Receive", doc.received === "full" ? "Received" : doc.received === "partial" ? "Partially Received" : "Yet To Be Received", doc.received !== "none")}
+                  {step("Bill", doc.billed === "full" ? "Billed" : doc.billed === "partial" ? "Partially Billed" : "Yet To Be Billed", doc.billed !== "none")}
+                </div>
+              ) : (
+                <div className={`mt-1 text-[12px] uppercase ${statusClass(doc.status)}`}>{statusText(doc.status, doc.overdueDays)}</div>
+              )}
+              <dl className="mt-5 grid grid-cols-[9rem_1fr] gap-y-1.5">
+                {doc.reference && (
+                  <>
+                    <dt className="text-[11px] text-[#6c718a] uppercase">Reference#</dt>
+                    <dd>{doc.reference}</dd>
+                  </>
+                )}
+                <dt className="text-[11px] text-[#6c718a] uppercase">{order ? "Order Date" : "Date"}</dt>
+                <dd>{zDate(doc.date)}</dd>
+                {doc.dueDate && (
+                  <>
+                    <dt className="text-[11px] text-[#6c718a] uppercase">{order ? "Delivery Date" : "Due Date"}</dt>
+                    <dd>{zDate(doc.dueDate)}</dd>
+                  </>
+                )}
+                {doc.paymentTerms && (
+                  <>
+                    <dt className="text-[11px] text-[#6c718a] uppercase">Payment Terms</dt>
+                    <dd>{doc.paymentTerms}</dd>
+                  </>
+                )}
+              </dl>
+            </div>
+            <div className="max-w-xs">
+              <div className="text-[11px] text-[#6c718a] uppercase">{info.section === "Sales" ? "Customer" : "Vendor Address"}</div>
+              {doc.vendor ? (
+                <Link to={`/books/vendors/${doc.vendor.id}`} className="font-medium text-[#1c5bd9]">
+                  {doc.vendor.name}
+                </Link>
+              ) : (
+                <div className="font-medium">{doc.party}</div>
+              )}
+              {doc.vendor?.address && <div className="mt-1 whitespace-pre-wrap text-[#4b4f63]">{doc.vendor.address}</div>}
+              {doc.vendor?.email && <div className="text-[#4b4f63]">{doc.vendor.email}</div>}
+              {doc.vendor?.phone && <div className="text-[#4b4f63]">{doc.vendor.phone}</div>}
+              {order && delivery && (
+                <div className="mt-5">
+                  <div className="text-[11px] text-[#6c718a] uppercase">Delivery Address</div>
+                  <div className="whitespace-pre-wrap text-[#212529]">{delivery}</div>
+                </div>
+              )}
+            </div>
+          </div>
+          <LineItems doc={doc} />
+          <div className="mt-4 ml-auto w-full max-w-sm space-y-1.5">
+            {doc.subTotal !== null && (
+              <div className="flex justify-between">
+                <span>Sub Total</span>
+                <span>{zMoney(doc.subTotal, "")}</span>
+              </div>
+            )}
+            <div className="flex justify-between bg-[#f5f5f5] px-2 py-2 font-semibold">
+              <span>Total</span>
+              <span>{zMoney(doc.total, doc.currency)}</span>
+            </div>
+            {(doc.kind === "bill" || doc.kind === "vendor_credit" || doc.kind === "credit_note") && (
+              <div className="flex justify-between px-2">
+                <span>{doc.kind === "bill" ? "Balance Due" : "Credits Remaining"}</span>
+                <span className="font-medium">{zMoney(doc.balance, doc.currency)}</span>
+              </div>
+            )}
+            {doc.unused !== null && doc.kind === "vendor_payment" && (
+              <div className="flex justify-between px-2">
+                <span>Unused Amount</span>
+                <span>{zMoney(doc.unused, doc.currency)}</span>
+              </div>
+            )}
+            {fx && <div className="text-right text-[11.5px] text-[#6c718a]">{fx.slice(3)}</div>}
+          </div>
+          {doc.notes && (
+            <div className="mt-6">
+              <div className="text-[11px] text-[#6c718a] uppercase">Notes</div>
+              <div className="whitespace-pre-wrap">{doc.notes}</div>
+            </div>
+          )}
+          {terms && (
+            <div className="mt-6">
+              <div className="text-[11px] text-[#6c718a] uppercase">Terms &amp; Conditions</div>
+              <div className="whitespace-pre-wrap text-[12.5px] text-[#4b4f63]">{terms}</div>
+            </div>
+          )}
+        </article>
+        <section className="mx-auto max-w-[820px] print:hidden">
+          <h2 className="mb-2 text-[14px] font-semibold text-[#212529]">Everything else on it</h2>
+          <Fields fields={doc.fields} />
+        </section>
+      </div>
+    </div>
+  );
+}

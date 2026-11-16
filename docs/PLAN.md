@@ -1583,6 +1583,44 @@ New work "Office staff" (role `staff`); the chart's two boxes are departments wi
 |---|---|---|---|---|
 | Digital Marketing Coach, Multimedia Artist, Employee Happiness Coachee (staff) | My work log, Me, Messages (no stock, no customers) | My work log: today's three boxes (what I did, today, tomorrow), saved and changed until midnight; earlier days | → Founder: Reports → Work logs (everyone's day, any day); a head reads the people under them | Done 17 Nov; API checked as Kriscel and the Founder |
 
+## 17. Zoho Inventory moved into the CRM (from 17 Nov 2026, the main work)
+
+Aryan, 17 Nov: the whole of Zoho Inventory comes into this CRM, every section and every row of
+data. On the outside it looks like Zoho, screen for screen; inside, the data is shown better; no
+data is left behind. Each screen links with the CRM's own orders, stock and customers.
+
+**Where the data comes from.** Zoho's full backup (Settings → Data Backup, 15 Nov 2026, in
+`.data/zoho-backup`) holds Items, Vendors, Contacts, Purchase Orders, Purchase Receives, Bills,
+Vendor Payments, Sales Orders, Invoices, Customer Payments, Packages, Shipments, Transfer Orders and
+Inventory Adjustments, with their lines and batches. It has no Sales Returns, Credit Notes or
+Vendor Credits: those are read from Zoho's own API in Aryan's signed-in Zoho tab (the browser
+pane) into `.data/zoho-api/*.jsonl`. `scripts/import-zoho-books.ts` brings them in (dry run by
+default; never against the live database without Aryan's word). Measured: of the backup's columns,
+only the ones always empty are dropped; every other value is kept.
+
+**The books.** One set of tables for every Zoho document (`book_doc`, `book_line`, `book_link`,
+migration 0069): the document's own columns (number, date, status, party, money in centavos of its
+currency with the rate), every other Zoho field in `fields` under Zoho's own name, lines matched to
+a medicine through the SKU, batches with expiry on the line, and the links between documents (a
+bill's purchase order and receive, a payment's bills, a vendor credit's bills, a credit note's
+invoices, a return's sales order and credit notes). Vendors are the suppliers with Zoho's fields
+and contact persons. A document already here is refreshed with Zoho's newer status and balance.
+
+**The screens** (`/books/...`, Zoho's frame: the dark menu, "Search in Bills ( / )"):
+
+| Zoho section | Screen | State |
+|---|---|---|
+| Purchases → Vendors | list (Active/Inactive/All, NAME, COMPANY NAME, EMAIL, WORK PHONE, PAYABLES), vendor with Overview and Transactions | Read, done 17 Nov |
+| Purchase Orders | list (views by status, RECEIVED/BILLED dots), split view: status steps, vendor and delivery address, lines, receives and bills, terms, every other field | Read, done 17 Nov |
+| Purchase Receives, Bills (payables band as Zoho's), Payments Made, Vendor Credits | lists and documents as above | Read, done 17 Nov |
+| Sales → Sales Returns, Credit Notes | lists and documents (data from Zoho's API) | Read, done 17 Nov |
+| Making documents (New PO, Receive, Convert to Bill, Record Payment, Vendor Credit) | Zoho's forms, tied to stock (batches) and money | Next |
+| Sales → Customers, Sales Orders, Invoices, Payments Received | Zoho's lists over the CRM's own and Zoho's history | Next |
+| Items, Inventory (Adjustments, Packages, Shipments, Transfer Orders) | | After |
+
+Checked against Zoho on 17 Nov: the Bills band's Due Today and Due Within 30 Days match to the
+centavo; the totals differ only by what changed in Zoho after the 15 Nov backup.
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -2028,3 +2066,4 @@ New work "Office staff" (role `staff`); the chart's two boxes are departments wi
 - 17 Nov (61), 16.1's waiting item done: the Government Account's bidding coachee (Rey in the demo) has Tenders and Documents on his desk and the bidding desk on his Home (his own tenders only); the Hospital Division's Business Mentor sees the tenders run from her division (Government tenders in her menu, a Government Account card on her Home).
 - 17 Nov (62), 16.8: Digital Marketing and IT get the work "Office staff" and a work log (what I did, today, tomorrow; optional, one entry a day, changed during the day). Their Home is the log; the Founder and the Admin read everyone's under Reports → Work logs, a head the people under them, nobody else. The chart's two boxes are added as departments under the Founder (no head drawn); demo: Kriscel, Arnel, Jade, Linus. The Admin panel's company chart has both boxes.
 - 17 Nov (63), 16.9 In-licensing & Regulatory built (the pipeline, the FDA registrations with renewal flags from 180/90 days, the CPRs on the bidding desk's Documents, heads read their people's work logs). Aryan, 17 Nov: the main work now is moving the whole of Zoho Inventory into this CRM, every section and every row of data, looking like Zoho on the outside with the data shown better inside (section 17).
+- 17 Nov (64), section 17: the books. Zoho's Purchases (1,716 vendors, 4,208 purchase orders, 4,704 receives, 8,878 bills, 7,420 payments made, 46 vendor credits) and its Sales Returns and Credit Notes in, every field kept, linked to each other; Zoho's own screens for them under /books, checked side by side with Zoho.

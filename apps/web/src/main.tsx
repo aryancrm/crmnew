@@ -4,7 +4,7 @@ import { ApiFailure } from "./api";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AdminChannelPage, AdminChannelsPage } from "./pages/admin-channels";
 import { AdminDataChecks } from "./pages/admin-data-checks";
 import { AdminCompanyChartPage } from "./pages/admin-company-chart";
@@ -67,6 +67,9 @@ import { CareGroupsPage } from "./pages/care-groups";
 import { MtListingsPage } from "./pages/mt";
 import { WorkLogPage, WorkLogsPage } from "./pages/work-log";
 import { PipelinePage, RegistrationsPage, RegulatoryReportPage } from "./pages/regulatory";
+import { BooksShell } from "./books/shell";
+import { BookListPage } from "./books/list";
+import { VendorsPage } from "./books/vendors";
 import { CompanyPapersPage, TenderPage, TendersPage } from "./pages/tenders";
 import { ClidpListingsPage, ClidpTeamPage } from "./pages/clidp";
 import { RxDoctorsPage, RxFieldPage } from "./pages/rx";
@@ -99,6 +102,14 @@ createRoot(root).render(
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          {/* Zoho Inventory's Sales and Purchases, in Zoho's own frame (docs/PLAN.md 17). */}
+          <Route path="/books" element={<BooksShell />}>
+            <Route index element={<Navigate to="/books/purchaseorders" replace />} />
+            <Route path="vendors" element={<VendorsPage />} />
+            <Route path="vendors/:id" element={<VendorsPage />} />
+            <Route path=":list" element={<BookListPage />} />
+            <Route path=":list/:id" element={<BookListPage />} />
+          </Route>
           <Route element={<Shell />}>
             <Route index element={<Home />} />
             <Route path="password" element={<ChangePassword />} />

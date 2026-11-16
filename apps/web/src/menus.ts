@@ -216,6 +216,18 @@ function inventoryApp(me: Me): Space {
           { to: "/receives", label: "Receives", icon: PackageCheck },
         ],
       },
+      // Zoho Inventory's Sales and Purchases, moved in whole, in Zoho's own frame (docs/PLAN.md 17).
+      ...(seesCost
+        ? [
+            {
+              title: "Books (from Zoho)",
+              items: [
+                { to: "/books/purchaseorders", label: "Purchase orders & bills", icon: ReceiptText },
+                { to: "/books/vendors", label: "Vendors", icon: Factory },
+              ],
+            },
+          ]
+        : []),
     ],
   };
 }
