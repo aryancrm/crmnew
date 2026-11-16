@@ -28,9 +28,10 @@ export async function district(db: Database, me: Me): Promise<District> {
         db,
         sql`select distinct on (h.person_id) h.person_id::int as "personId", p.name, s.id::int as "seatId", s.title as seat,
             s.area_id::int as "areaId", a.name as area, u.name as unit,
-            (select lp.name from seat ls join seat_holder lh on lh.seat_id = ls.id and lh.kind = 'holder' and ${inForce("lh", today)}
+            (select lp.name || case when lh.kind = 'acting' then ' (covering)' else '' end
+               from seat ls join seat_holder lh on lh.seat_id = ls.id and ${inForce("lh", today)}
                join person lp on lp.id = lh.person_id where ls.unit_id = s.unit_id and ls.lead and ls.active
-             order by lh.starts_on desc limit 1) as coach
+             order by (lh.kind = 'holder') desc, lh.starts_on desc limit 1) as coach
           from seat s join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)}
             join person p on p.id = h.person_id join org_unit u on u.id = s.unit_id left join area a on a.id = s.area_id
           where s.id in (${sql.join(seatIds.map((id) => sql`${id}`), sql`, `)}) and not s.lead and s.module = 'medrep'

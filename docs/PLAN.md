@@ -1412,7 +1412,12 @@ opened under the Management desk, with Management's menu and "Management" on top
 6. The office: Management, Finance, Dispatch / Pharmacy, Inventory, HR, Training.
 7. The Founder (CEO) and the Admin last: their screens are the roll-up of all the above.
 
-### 16.1 Hospital Division (in progress)
+### 16.1 Hospital Division (done 16 Nov; Tenders, the weekly report, Monday sync and route approval come with their phases)
+
+Checked up the line: a CHC sees only their hospitals (not another area's, no team views, no costs);
+their huddle, score and money reach their coach and the head; a covering coach shows as "(covering)";
+the CEO and the Admin reach the same views from Reports (Scorecards, Customers to call, Collections,
+Evening huddles). The Founder's own Home is built last, from every channel.
 
 | Seat | Menu | Home | Sends up | State |
 |---|---|---|---|---|
@@ -1851,3 +1856,4 @@ opened under the Management desk, with Management's menu and "Management" on top
 - 16 Nov (47), Section 16.1, the Hospital CHC seat done: the desk says "Hospital CHC" (seat-words.ts: a seat's own words by channel), its own menu in the order of its day (Home, My hospitals, My orders, Collections, Hospitals to call, Visits, Tonight's huddle, My score); Home starts with Today's pulse (sales vs target on the working-day pace, days to collect, hospitals not reordered, an invoice on the last working day; each green/amber/red and a link), then Go here first (owed 60 days and more, then hospitals due or late to reorder; Call, Collect, New order), and a huddle card; the old figures row and the second target card (which disagreed with the pace) are gone from this Home. New: Collections (/collections: each customer's owed money, oldest unpaid invoice and its age, flagged 60/75/90), the 7 PM huddle (migration 0058 huddle; /huddle: prefilled from the day's invoices, payments and visits, a blocker required when there was no invoice, tomorrow's first stop, declared to the named coach; a lead sees the team's evening: who declared, who is red, three working days without an invoice). 312 API tests.
 - 16 Nov (48), Section 16.1, the District Sales Coach seat done: its own desk and menu; Home with Needs you today, District now (/api/team/district), tonight's huddle and the 15th rescue; Team huddle (who declared, who is red, three working days without an invoice); Collections and Hospitals to call show the team's, with each line's seller.
 - 16 Nov (49), Section 16.1, the Business Mentor seat done (desk, menu, Home with the division team by team, people at risk, money by age, score questions). Tested up the line: a CHC's huddle reaches their coach and the head, each CHC row carries its coach.
+- 16 Nov (50), Section 16.1 Hospital Division done and checked up the line (CHC → DSC → Mentor → Reports for the CEO and Admin). Next: 16.2 Prescription (Rx).

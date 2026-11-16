@@ -318,6 +318,8 @@ const reportsApp: Space = {
         { to: "/team", label: "By person", icon: User },
         { to: "/team-scores", label: "Scorecards", icon: Gauge },
         { to: "/to-call", label: "Customers to call", icon: PhoneCall },
+        { to: "/collections", label: "Collections", icon: HandCoins },
+        { to: "/huddle", label: "Evening huddles", icon: Megaphone },
         { to: "/targets", label: "Targets", icon: Target },
       ],
     },
