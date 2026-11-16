@@ -1075,7 +1075,10 @@ function Lines({ data, compare }: { data: OrderDetail; compare?: boolean }) {
   // A medicine opens over the page, so the order stays where it is.
   const [medicine, setMedicine] = useState<number | null>(null);
   // What this customer was given before, line by line (this CRM's orders and Zoho's).
-  const prices = useOrderPrices(order.id).data;
+  // Dispatch packs and ships: earlier prices are not their work (Aryan, 17 Nov: less clutter).
+  const packer = useMe().data?.role === "dispatch";
+  const fetched = useOrderPrices(order.id).data;
+  const prices = packer ? undefined : fetched;
   const [look, pickLook] = useLineLook();
   const anyBefore = prices ? Object.values(prices.lines).some(Boolean) : false;
   return (

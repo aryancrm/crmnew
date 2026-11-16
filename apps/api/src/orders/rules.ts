@@ -27,7 +27,9 @@ export const STATUS_LABEL: Record<OrderStatus, string> = {
   ready_for_dispatch: "Ready For Dispatch",
   packing: "Packed",
   shipped: "In Transit",
-  completed: "Completed",
+  // The hub calls a delivered order "completed"; it is only complete once its invoice is paid,
+  // which the road shows apart (docs/PLAN.md 4.5), so the word here is what happened: delivered.
+  completed: "Delivered",
   on_hold: "On Hold",
   exception: "Exception",
   cancelled: "Cancelled",

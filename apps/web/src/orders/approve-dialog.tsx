@@ -41,6 +41,13 @@ export function ApproveDialog({
   const [picked, setPicked] = useState(first);
   const [finance, setFinance] = useState(order.financeCheck);
   const place = fill.find((one) => String(one.id) === picked);
+  // Only the warehouses that can fill the order (and the main one, and the one picked) show at
+  // first; the ones short on a line wait behind "more" (Aryan, 17 Nov: less clutter).
+  const [all, setAll] = useState(false);
+  const useful = fill.filter(
+    (one) => one.short.length === 0 || one.isDefault || String(one.id) === picked,
+  );
+  const shown = all || useful.length === 0 ? fill : useful;
   return (
     <Dialog
       title="Approve and check stock"
@@ -56,7 +63,7 @@ export function ApproveDialog({
               Send from warehouse
             </div>
             <div className="grid gap-2 sm:grid-cols-2">
-              {fill.map((one) => {
+              {shown.map((one) => {
                 const on = String(one.id) === picked;
                 const fills = one.short.length === 0;
                 return (
@@ -99,6 +106,15 @@ export function ApproveDialog({
                 );
               })}
             </div>
+            {shown.length < fill.length && (
+              <button
+                type="button"
+                onClick={() => setAll(true)}
+                className="mt-2 text-[12px] font-semibold text-slate-500 hover:text-slate-800"
+              >
+                {fill.length - shown.length} more, short on a line
+              </button>
+            )}
           </div>
         )}
 
