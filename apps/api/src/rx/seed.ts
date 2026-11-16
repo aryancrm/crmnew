@@ -71,15 +71,17 @@ export async function seedRxTeam(db: Database, password: string): Promise<boolea
     sql`select id::int as id, name from customer where kind = 'doctor' and area_id = (select area_id from person where id = ${joy.id}) order by id limit 2`,
   );
   const [waiting, answered] = doctors;
+  const [seat] = await rows<{ id: number }>(db, sql`select seat_id::int as id from seat_holder where person_id = ${joy.id} and ends_on is null limit 1`);
+  const joySeat = seat?.id ?? null;
   if (waiting)
     await db.execute(
-      sql`insert into care_group (doctor_id, name, enrolled_by, consent, patients, enrolled_at)
-        values (${waiting.id}, ${`${waiting.name} — GetMeds Prescription Care`}, ${joy.id}, true, 3, now() - interval '5 minutes')`,
+      sql`insert into care_group (doctor_id, name, enrolled_by, seat_id, consent, patients, enrolled_at)
+        values (${waiting.id}, ${`${waiting.name} — GetMeds Prescription Care`}, ${joy.id}, ${joySeat}, true, 3, now() - interval '5 minutes')`,
     );
   if (answered)
     await db.execute(
-      sql`insert into care_group (doctor_id, name, enrolled_by, consent, patients, enrolled_at, telesales_id, first_contact_at, last_activity_at)
-        values (${answered.id}, ${`${answered.name} — GetMeds Prescription Care`}, ${joy.id}, true, 5, now() - interval '3 days',
+      sql`insert into care_group (doctor_id, name, enrolled_by, seat_id, consent, patients, enrolled_at, telesales_id, first_contact_at, last_activity_at)
+        values (${answered.id}, ${`${answered.name} — GetMeds Prescription Care`}, ${joy.id}, ${joySeat}, true, 5, now() - interval '3 days',
           ${kim}, now() - interval '3 days' + interval '9 minutes', now() - interval '1 day')`,
     );
   return true;

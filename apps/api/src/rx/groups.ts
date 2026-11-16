@@ -20,10 +20,25 @@ const seesAll = (me: Me) =>
   ["ceo", "admin"].includes(me.role) ||
   (["team_lead", "manager"].includes(me.role) && ["TS", "RX"].includes(me.channel?.code ?? ""));
 
+/** The business (the top box under the company) a seat sits in. */
+const businessOf = (seat: SQL): SQL => sql`(with recursive up as (
+    select u.id, u.parent_id, u.kind from org_unit u where u.id = (select unit_id from seat where id = ${seat})
+    union all select p.id, p.parent_id, p.kind from org_unit p join up on p.id = up.parent_id)
+  select id from up where kind = 'business' limit 1)`;
+
+/** The person's own seat today. */
+const mySeat = (me: Me): SQL => sql`(select h.seat_id from seat_holder h where h.person_id = ${me.id}
+  and ${inForce("h", todayManila())} order by (h.kind = 'holder') desc, h.starts_on desc limit 1)`;
+
+/** A group belongs to the business of the CHC who enrolled it (the Prescription business): the
+ *  Hospital Division's anesthesia telesales never see oncology groups. */
+const sameBusiness = (me: Me): SQL => sql`(g.seat_id is null or ${businessOf(sql`g.seat_id`)} = ${businessOf(mySeat(me))})`;
+
 function scope(me: Me): SQL {
   if (isRxChc(me)) return sql`g.enrolled_by = ${me.id}`;
-  if (isTelesales(me)) return sql`(g.telesales_id = ${me.id} or g.telesales_id is null)`;
-  if (seesAll(me)) return sql`true`;
+  if (isTelesales(me)) return sql`(g.telesales_id = ${me.id} or (g.telesales_id is null and ${sameBusiness(me)}))`;
+  if (["ceo", "admin"].includes(me.role)) return sql`true`;
+  if (seesAll(me)) return sameBusiness(me);
   throw new Refusal(403, "not_allowed", "Care groups are the Rx CHCs', MD Telesales' and their heads'.");
 }
 

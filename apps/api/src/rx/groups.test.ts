@@ -63,6 +63,9 @@ describe("the Prescription channel", () => {
       expect(all.rows.length).toBeGreaterThanOrEqual(3);
     }
     expect((await get("ryan", "/api/care-groups")).status).toBe(403);
+    // Every group carries the CHC's seat, so it stays in the Prescription business.
+    const [seats] = await rows<{ n: number }>(db, sql`select count(*)::int as n from care_group where seat_id is null`);
+    expect(seats?.n).toBe(0);
   });
 
   it("MD Telesales: their pulse, and refills coming due in two days with what they took", async () => {
