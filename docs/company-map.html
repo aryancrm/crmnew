@@ -162,7 +162,18 @@ table.t tr:last-child td { border-bottom: 0; }
 .stack { display: flex; flex-direction: column; gap: 14px; }
 h3.h { font-size: 16px; letter-spacing: -.01em; }
 .sub { color: var(--ink2); font-size: 13px; margin-top: 2px; max-width: 90ch; }
+.screenwrap { display: grid; grid-template-columns: minmax(0, 400px) minmax(0, 1fr); gap: 16px; align-items: start; }
+.phone { border: 1px solid var(--line); border-radius: 26px; background: var(--card); box-shadow: var(--shadow); padding: 14px; display: flex; flex-direction: column; gap: 9px; }
+.phonetop { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 2px 4px 8px; border-bottom: 1px solid var(--line2); }
+.phonetop b { font-size: 15px; }
+.phonetop span { font-size: 11.5px; color: var(--ink3); text-align: right; }
+.chain { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; font-size: 11px; }
+.chain .arrow { color: var(--ink3); }
+.scard { border: 1px solid var(--line2); border-radius: 13px; background: var(--soft); padding: 9px 11px; }
+.scard .sbody { font-size: 13px; margin-top: 2px; }
+.menu { padding-top: 6px; border-top: 1px solid var(--line2); }
 @media (max-width: 860px) {
+  .screenwrap { grid-template-columns: 1fr; }
   .roles { grid-template-columns: 1fr; }
   .rolelist { position: static; max-height: 260px; }
   .barrow { grid-template-columns: 110px minmax(0, 1fr) 70px; }
@@ -382,8 +393,33 @@ function buildView() {
       h("div", { class: "grid2" }, D.questions.map((group) => block(group.name, group.items)))));
 }
 
+// ---------------------------------------------------------------- each person's screen
+function screensView() {
+  const S = D.screens;
+  const ids = Object.keys(S);
+  const shown = h("div", {});
+  const pick = (id) => {
+    const s = S[id];
+    const role = roleOf(id);
+    shown.replaceChildren(h("div", { class: "screenwrap" },
+      h("div", { class: "phone" },
+        h("div", { class: "phonetop" }, h("b", {}, role ? role.title : id), h("span", {}, s.sees)),
+        h("div", { class: "chain" }, s.chain.map((step, index) => [index ? h("span", { class: "arrow" }, "→") : null, h("span", { class: index ? "chip" : "chip good" }, step)])),
+        s.home.map((card, index) => h("div", { class: "scard" }, h("div", { class: "eyebrow" }, `${index + 1}. ${card.title}`), h("div", { class: "sbody" }, card.shows))),
+        h("div", { class: "menu" }, h("div", { class: "eyebrow" }, "Menu"), h("div", { class: "seats" }, s.menu.map((item) => h("span", { class: "chip" }, item))))),
+      h("div", { class: "card pad" },
+        h("h3", { class: "h" }, "What goes up from this screen"),
+        table(["Sends", "To", "When", "Then goes to"], s.sends.map((row) => [row.what, row.to, row.when, row.up || "—"])),
+        s.never && s.never.length ? h("div", { class: "grid2" }, block("Never sees", s.never)) : null)));
+    for (const button of bar.children) button.setAttribute("aria-pressed", String(button.dataset.id === id));
+  };
+  const bar = h("div", { class: "filters" }, ids.map((id) => h("button", { type: "button", "data-id": id, onclick: () => pick(id) }, S[id].label || roleOf(id)?.title || id)));
+  pick(ids[0]);
+  return h("div", {}, h("p", { class: "lead" }, D.text.screens), bar, shown);
+}
+
 // ---------------------------------------------------------------- the page
-const VIEWS = [["chart", "The chart", chartView], ["roles", "Every role", rolesView], ["reports", "Who reports what", reportsView], ["flows", "How work flows", flowsView], ["prices", "Prices and stock", pricesView], ["build", "CRM: built and to build", buildView]];
+const VIEWS = [["chart", "The chart", chartView], ["screens", "Each person's screen", screensView], ["roles", "Every role", rolesView], ["reports", "Who reports what", reportsView], ["flows", "How work flows", flowsView], ["prices", "Prices and stock", pricesView], ["build", "CRM: built and to build", buildView]];
 document.getElementById("title").textContent = D.title;
 document.getElementById("intro").textContent = D.intro;
 document.getElementById("meta").replaceChildren(...D.meta.map((line) => h("span", {}, line)));
