@@ -13,7 +13,7 @@ function PharmacyMark() {
       viewBox="0 0 480 360"
       fill="none"
       aria-hidden="true"
-      className="h-auto max-h-[36vh] w-full"
+      className="h-auto max-h-[22vh] lg:max-h-[36vh] w-full"
     >
       <path d="M40 300H440M65 305V321M415 305V321" stroke="#83a99a" strokeWidth="1.5" />
       <path d="M71 111L240 33L409 111V300H71V111Z" stroke="#83a99a" strokeWidth="1.5" />
@@ -87,7 +87,7 @@ export function Login() {
 
   return (
     <main className="grid min-h-dvh bg-[#f8faf9] lg:grid-cols-[1.05fr_1fr]">
-      <section className="relative isolate hidden flex-col justify-between gap-6 overflow-hidden bg-[#103e32] px-10 py-9 text-[#edf0e5] lg:flex xl:px-16">
+      <section className="relative isolate flex flex-col justify-between gap-4 overflow-hidden bg-[#103e32] px-6 py-6 text-[#edf0e5] sm:px-10 lg:gap-6 lg:py-9 xl:px-16">
         <div aria-hidden="true" className="pointer-events-none absolute -right-36 -top-40 -z-10 size-[600px] rounded-full bg-emerald-500/10 blur-3xl" />
         <div aria-hidden="true" className="pointer-events-none absolute -bottom-64 -left-40 -z-10 size-[600px] rounded-full bg-[#80a78c]/10 blur-3xl" />
         <div className="flex items-center gap-3">
@@ -105,7 +105,7 @@ export function Login() {
             From the first visit to the final delivery. Keep your people, customers, stock and orders moving together.
           </p>
         </div>
-        <div className="flex justify-between border-t border-[#527e6b]/40 pt-4 text-[11px] text-[#a8c2b5]">
+        <div className="hidden justify-between border-t border-[#527e6b]/40 lg:flex pt-4 text-[11px] text-[#a8c2b5]">
           <span>People · Orders · Inventory · Finance</span>
           <span>One workspace</span>
         </div>
