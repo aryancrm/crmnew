@@ -541,9 +541,13 @@ function LeadCardItem({ card }: { card: LeadCard }) {
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
-          {card.caseType === "website_order" && (
+          {card.caseType === "website_order" ? (
             <span className="inline-flex items-center rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-teal-800">
               Website order
+            </span>
+          ) : (
+            <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-800">
+              Enquiry
             </span>
           )}
           <span
