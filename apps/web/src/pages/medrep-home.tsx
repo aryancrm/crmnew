@@ -649,6 +649,12 @@ export function MyOrdersPage() {
               </button>
             );
           })}
+          <Link
+            to="/returns"
+            className="ml-auto flex shrink-0 items-center rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+          >
+            Returns
+          </Link>
         </div>
       </div>
 

@@ -162,17 +162,16 @@ const orderLinks: MenuItem[] = [
   { to: "/orders", label: "All orders", icon: ClipboardList },
 ];
 
-/** A MedRep's or a team's orders, by where they stand (the Orders page's own tabs). */
-const orderStages = (sentBack: string): MenuItem[] => [
-  { to: "/orders", label: "All", icon: ClipboardList },
-  { to: "/orders?stage=sent_back", label: sentBack, icon: Undo2, badge: "sentBack" },
-  { to: "/orders?stage=management", label: "With Management", icon: ClipboardCheck },
-  { to: "/orders?stage=finance", label: "With Finance", icon: HandCoins },
-  { to: "/orders?stage=dispatch", label: "Packing or on the way", icon: Truck },
-  { to: "/orders?stage=held", label: "On hold", icon: TriangleAlert },
-  { to: "/orders?stage=delivered", label: "Delivered this month", icon: PackageCheck },
-  { to: "/returns", label: "Returns", icon: PackageX },
-];
+/** A MedRep's or a team's orders: one link to all of them. Where they stand (sent back, with
+ *  Management, ...) and Returns are tabs on the page itself, not more links here (Aryan, 17 Nov:
+ *  "All" on top, less clutter). The badge counts what was sent back. */
+const ordersLink = (label: string): MenuItem => ({
+  to: "/orders",
+  label,
+  icon: ClipboardList,
+  badge: "sentBack",
+  short: "Orders",
+});
 
 /** Inventory, laid out the way Zoho Inventory lays out its own. */
 function inventoryApp(me: Me): Space {
@@ -486,7 +485,7 @@ function ownDesk(me: Me): Space {
             { to: "/leads", label: "Leads & enquiries", icon: Inbox },
             { to: "/inbox", label: "Inbox", icon: MessagesSquare, badge: "inbox" },
             { to: "/to-call", label: "Refills due", icon: Pill, short: "Refills" },
-            folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+            ordersLink("My orders"),
             { to: "/customers", label: "Patients", icon: Users },
             { to: "/points", label: "Points", icon: Gift },
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
@@ -499,7 +498,7 @@ function ownDesk(me: Me): Space {
           ...desk([
             home,
             { to: "/my/area", label: "My hospitals", icon: Building2, short: "Hospitals" },
-            folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+            ordersLink("My orders"),
             { to: "/collections", label: "Collections", icon: HandCoins },
             { to: "/to-call", label: "Hospitals to call", icon: PhoneCall, short: "Call" },
             folder(
@@ -530,7 +529,7 @@ function ownDesk(me: Me): Space {
           ...desk([
             home,
             { to: "/b2b/prospects", label: "Prospects", icon: Building2, short: "Prospects" },
-            folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+            ordersLink("My orders"),
             { to: "/b2b/prospects?view=handed", label: "Handed over", icon: UserCheck },
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ]),
@@ -541,7 +540,7 @@ function ownDesk(me: Me): Space {
           ...desk([
             home,
             { to: "/b2b/accounts", label: "Accounts", icon: Building2, short: "Accounts" },
-            folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+            ordersLink("My orders"),
             { to: "/collections", label: "Collections", icon: HandCoins },
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ]),
@@ -554,7 +553,7 @@ function ownDesk(me: Me): Space {
             home,
             { to: "/tenders", label: "Tenders", icon: FileText, short: "Tenders" },
             { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
-            folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+            ordersLink("My orders"),
             { to: "/collections", label: "Collections", icon: HandCoins },
           ]),
           cta: { to: "/tenders", label: "Record a tender" },
@@ -566,7 +565,7 @@ function ownDesk(me: Me): Space {
             home,
             { to: "/my/area", label: "Accounts", icon: Building2, short: "Accounts" },
             { to: "/clidp/listings", label: "Listings", icon: FileText },
-            folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+            ordersLink("My orders"),
             { to: "/collections", label: "Collections", icon: HandCoins },
           ]),
           cta: { ...newOrder, label: "New order" },
@@ -577,7 +576,7 @@ function ownDesk(me: Me): Space {
           ...desk([
             home,
             { to: "/to-call", label: "Customers to call", icon: PhoneCall, short: "Call" },
-            folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+            ordersLink("My orders"),
             { to: "/collections", label: "Collections", icon: HandCoins },
             { to: "/my/area", label: "My customers", icon: Building2 },
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
@@ -592,7 +591,7 @@ function ownDesk(me: Me): Space {
             home,
             { to: "/care-groups", label: "Care groups", icon: Users, short: "Groups" },
             { to: "/to-call", label: "Refills due", icon: Pill, short: "Refills" },
-            folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+            ordersLink("My orders"),
             { to: "/my/area", label: "My patients", icon: Users },
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ]),
@@ -617,7 +616,7 @@ function ownDesk(me: Me): Space {
               ],
               "Calls",
             ),
-            folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+            ordersLink("My orders"),
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ]),
           cta: { to: "/visits", label: "Log a call" },
@@ -630,7 +629,7 @@ function ownDesk(me: Me): Space {
           ...(pap
             ? [{ to: "/pap", label: "PAP cases", icon: HeartHandshake, short: "Cases" }]
             : []),
-          folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+          ordersLink("My orders"),
           folder(
             "Visits",
             CalendarCheck,
@@ -716,7 +715,7 @@ function ownDesk(me: Me): Space {
             home,
             { to: "/my/area", label: "Chains", icon: Building2, short: "Chains" },
             { to: "/mt/listings", label: "Listings", icon: FileText },
-            folder("Orders", ClipboardList, orderStages("Sent back"), "Orders"),
+            ordersLink("Orders"),
             { to: "/collections", label: "Collections", icon: HandCoins },
             { to: "/targets", label: "Targets", icon: Target },
           ]),
@@ -730,7 +729,7 @@ function ownDesk(me: Me): Space {
             home,
             { to: "/tenders", label: "Tenders", icon: FileText, short: "Tenders" },
             { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
-            folder("Team orders", ClipboardList, orderStages("Sent back"), "Orders"),
+            ordersLink("Team orders"),
             { to: "/collections", label: "Collections", icon: HandCoins },
             folder(
               "My team",
@@ -760,7 +759,7 @@ function ownDesk(me: Me): Space {
               ],
               "Team",
             ),
-            folder("Team orders", ClipboardList, orderStages("Sent back"), "Orders"),
+            ordersLink("Team orders"),
             { to: "/targets", label: "Targets", icon: Target },
             { to: "/collections", label: "Collections", icon: HandCoins },
             folder(
@@ -787,7 +786,7 @@ function ownDesk(me: Me): Space {
             { to: "/team-scores", label: "Scorecards", icon: Gauge, short: "Scores" },
             { to: "/targets", label: "Targets", icon: Target },
             { to: "/collections", label: "Collections", icon: HandCoins },
-            folder("Business orders", ClipboardList, orderStages("Sent back"), "Orders"),
+            ordersLink("Business orders"),
             folder(
               "Attendance",
               CalendarClock,
@@ -817,7 +816,7 @@ function ownDesk(me: Me): Space {
             ),
             { to: "/care-groups", label: "Care groups", icon: Users, short: "Groups" },
             { to: "/to-call", label: "Refills due", icon: Pill, short: "Refills" },
-            folder("Team orders", ClipboardList, orderStages("Sent back"), "Orders"),
+            ordersLink("Team orders"),
             { to: "/targets", label: "Targets", icon: Target },
             { to: "/collections", label: "Collections", icon: HandCoins },
             folder(
@@ -845,7 +844,7 @@ function ownDesk(me: Me): Space {
             { to: "/team-scores", label: "Scorecards", icon: Gauge, short: "Scores" },
             { to: "/targets", label: "Targets", icon: Target },
             { to: "/collections", label: "Collections", icon: HandCoins },
-            folder("Business orders", ClipboardList, orderStages("Sent back"), "Orders"),
+            ordersLink("Business orders"),
             folder(
               "Field visits",
               CalendarCheck,
@@ -886,7 +885,7 @@ function ownDesk(me: Me): Space {
             { to: "/huddle", label: "Team huddle", icon: Megaphone, short: "Huddle" },
             { to: "/to-call", label: "Hospitals to call", icon: PhoneCall },
             { to: "/collections", label: "Collections", icon: HandCoins },
-            folder("Team orders", ClipboardList, orderStages("Sent back"), "Orders"),
+            ordersLink("Team orders"),
             folder(
               "Team visits",
               CalendarCheck,
@@ -933,7 +932,7 @@ function ownDesk(me: Me): Space {
             { to: "/collections", label: "Collections", icon: HandCoins },
             { to: "/to-call", label: "Hospitals to call", icon: PhoneCall },
             { to: "/tenders", label: "Government tenders", icon: FileText },
-            folder("Division orders", ClipboardList, orderStages("Sent back"), "Orders"),
+            ordersLink("Division orders"),
             folder(
               "Visits",
               CalendarCheck,
@@ -983,7 +982,7 @@ function ownDesk(me: Me): Space {
             ],
             "Team",
           ),
-          folder("Team orders", ClipboardList, orderStages("Sent back"), "Orders"),
+          ordersLink("Team orders"),
           folder(
             "Team visits",
             CalendarCheck,
