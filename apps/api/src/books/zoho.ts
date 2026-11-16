@@ -362,6 +362,66 @@ export const CSV_SPECS: Record<string, CsvSpec> = {
     line: {},
     linksFromLines: [{ kind: "invoice", column: "Invoice Number", amount: "Invoice Amount", on: "Date" }],
   },
+  "Inventory_Adjustment": {
+    kind: "adjustment",
+    id: "InventoryAdjustment ID",
+    number: "CF.Adjustment Number",
+    reference: "Reference#",
+    date: "Date",
+    status: "Status",
+    notes: "Description",
+    line: {
+      item: "Item Name",
+      sku: "SKU",
+      description: "Item Desc",
+      account: "Account",
+      warehouse: "Warehouse Name",
+      unit: "Usage unit",
+      qty: "Quantity Adjusted",
+      rate: "Cost Price",
+      batch: BATCH,
+    },
+  },
+  "Package": {
+    kind: "package",
+    id: "Packing Number",
+    number: "Packing Number",
+    reference: "SO Number",
+    date: "Packing Date",
+    status: "Status",
+    party: "Customer Name",
+    notes: "Notes",
+    line: { item: "Item Name", sku: "SKU", qty: "Quantity Packed", rate: "Item Price", batch: BATCH },
+    linksFromHeader: [{ kind: "sales_order", column: "SO Number" }],
+  },
+  "Shipment_Order": {
+    kind: "shipment",
+    id: "Shipment ID",
+    number: "Shipment Number",
+    reference: "Tracking Number",
+    date: "Shipment Date",
+    dueDate: "Delivery Date",
+    status: "Status",
+    party: "Customer Name",
+    total: "Shipping Charge",
+    notes: "Notes",
+    created: "Created Time",
+    modified: "Last Modified Time",
+    line: {},
+    linksFromHeader: [
+      { kind: "sales_order", column: "SO Number" },
+      { kind: "package", column: "Packing Number" },
+    ],
+  },
+  "Transfer_Order.csv": {
+    kind: "transfer_order",
+    id: "InventoryAdjustment ID",
+    number: "Transfer Order#",
+    date: "Date",
+    status: "Status",
+    notes: "Reason",
+    line: { item: "Item Name", sku: "SKU", description: "Item Desc", unit: "Usage unit", qty: "Quantity Transferred", rate: "Cost Price", batch: ["Source Batch Reference#", "Destination Batch Reference#", "Quantity Out"] },
+  },
 };
 
 /** One CSV kind's rows (in any order) as documents. */
@@ -773,6 +833,9 @@ const LIST_KEYS: Partial<Record<BookKind, { id: string; balance?: string; total?
   customer_payment: { id: "payment_id", balance: "unused_amount", total: "amount" },
   credit_note: { id: "creditnote_id", balance: "balance", total: "total" },
   sales_return: { id: "salesreturn_id" },
+  package: { id: "package_number" },
+  shipment: { id: "shipment_id" },
+  adjustment: { id: "inventory_adjustment_id" },
 };
 /** What Zoho's list says of a document that is not on the document itself (a sales order's
  *  invoiced, paid, packed and shipped states, its delivery method), kept in its fields. */
@@ -780,7 +843,12 @@ const LIST_FIELDS: Partial<Record<BookKind, string[]>> = {
   sales_order: ["invoiced_status", "paid_status", "shipped_status", "order_status", "delivery_method", "salesperson_name", "is_backorder"],
   invoice: ["salesperson_name", "due_days", "is_viewed_by_client"],
   sales_return: ["receive_status", "refund_status", "salesreturn_status"],
+  adjustment: ["created_by_name", "created_time", "last_modified_by_name", "last_modified_time", "reason"],
+  shipment: ["carrier", "tracking_number", "delivery_date"],
 };
+
+/** Zoho writes a time as text ("2026-11-13T08:35:46+0800") or, in some lists, as milliseconds. */
+const zohoTime = (value: unknown) => (typeof value === "number" ? new Date(value).toISOString() : /^\d{12,}$/.test(String(value ?? "")) ? new Date(Number(value)).toISOString() : str(value));
 
 /** Brings each document's state as Zoho's list shows it today (status, balance, a payment's unused
  *  amount); says which of Zoho's documents are not here yet (made after the backup). */
@@ -811,7 +879,7 @@ export async function refreshFromList(db: Database, kind: BookKind, items: Recor
     await db.execute(
       sql`update book_doc set status = ${status}, balance = coalesce(${balance}, balance), total = coalesce(${total}, total),
         fields = fields || ${JSON.stringify(extra)}::jsonb,
-        zoho_modified = coalesce(${str(item.last_modified_time)}::timestamptz, zoho_modified) where id = ${id}`,
+        zoho_modified = coalesce(${zohoTime(item.last_modified_time)}::timestamptz, zoho_modified) where id = ${id}`,
     );
   }
   return { seen: items.length, updated, notHere };
@@ -994,5 +1062,92 @@ export function customerPaymentFromJson(doc: Json): BookDocInput {
   for (const invoice of (doc.invoices as Json[] | undefined) ?? [])
     if (str(invoice.invoice_number))
       out.links.push({ kind: "invoice", number: String(invoice.invoice_number), amount: cents(invoice.amount_applied as number), on: str(doc.date) });
+  return out;
+}
+
+// ------------------------------------------------------------------ items and price lists
+
+/** Every Zoho item (Item.csv: one row per item and batch), with Zoho's stock figures from its list
+ *  when read, matched to a medicine through its SKU. */
+export async function importItems(db: Database, all: Row[], listed: Record<string, unknown>[], apply: boolean): Promise<{ items: number; made: number; medicines: number }> {
+  const groups = new Map<string, Row[]>();
+  for (const row of all) {
+    const id = said(row["Item ID"]);
+    if (id) groups.set(id, [...(groups.get(id) ?? []), row]);
+  }
+  const stock = new Map(listed.map((item) => [String(item.item_id), item]));
+  const skus = new Map(
+    (await rows<{ sku: string; id: number }>(db, sql`select lower(sku) as sku, medicine_id::int as id from medicine_sku`)).map((row) => [row.sku, row.id]),
+  );
+  const batchCols = ["Batch ID", "Batch Reference#", "Manufacturer Batch#", "Manufactured Date", "Expiry Date", "Quantity In", "Warehouse Name", "Opening Stock", "Opening Stock Value", "Stock On Hand"];
+  const typed = new Set(["Item ID", "Item Name", "SKU", "Status", "Item Type", "Unit", "Selling Price", "Purchase Price", "Reorder Level", "Created Time", "Last Modified Time", ...batchCols]);
+  let made = 0;
+  let medicines = 0;
+  for (const [zohoId, group] of groups) {
+    const head = group[0] as Row;
+    const sku = filled(head.SKU);
+    const medicineId = sku ? (skus.get(sku.toLowerCase()) ?? null) : null;
+    if (medicineId) medicines++;
+    made++;
+    if (!apply) continue;
+    const listItem = stock.get(zohoId) ?? {};
+    const zohoStock = Object.fromEntries(
+      ["stock_on_hand", "available_stock", "actual_available_stock", "committed_stock", "actual_committed_stock", "available_for_sale_stock", "actual_available_for_sale_stock", "reorder_level"]
+        .filter((key) => listItem[key] !== undefined && listItem[key] !== null && listItem[key] !== "")
+        .map((key) => [key, listItem[key]]),
+    );
+    const batches = group.map((row) => rest(row, batchCols, new Set())).filter((batch) => Object.keys(batch).length);
+    await db.execute(
+      sql`insert into book_item (zoho_id, name, sku, status, item_type, unit, rate, purchase_rate, reorder_level, zoho_stock, batches, fields, medicine_id, zoho_created, zoho_modified)
+        values (${zohoId}, ${said(head["Item Name"])}, ${sku}, ${statusKey(head.Status)}, ${filled(head["Item Type"])}, ${filled(head.Unit)}, ${cents(head["Selling Price"])},
+          ${cents(head["Purchase Price"])}, ${num(head["Reorder Level"])}, ${JSON.stringify(zohoStock)}::jsonb, ${JSON.stringify(batches)}::jsonb,
+          ${JSON.stringify(rest(head, Object.keys(head), typed))}::jsonb, ${medicineId}, ${time(head["Created Time"])}::timestamptz, ${time(head["Last Modified Time"])}::timestamptz)
+        on conflict (zoho_id) do update set name = excluded.name, sku = excluded.sku, status = excluded.status, rate = excluded.rate, purchase_rate = excluded.purchase_rate,
+          reorder_level = excluded.reorder_level, zoho_stock = excluded.zoho_stock, batches = excluded.batches, fields = excluded.fields,
+          medicine_id = coalesce(excluded.medicine_id, book_item.medicine_id), zoho_modified = excluded.zoho_modified`,
+    );
+  }
+  return { items: groups.size, made, medicines };
+}
+
+export async function importPriceLists(db: Database, all: Row[], apply: boolean): Promise<number> {
+  let made = 0;
+  for (const row of all) {
+    const zohoId = filled(row["PriceList ID"]);
+    if (!zohoId) continue;
+    made++;
+    if (!apply) continue;
+    const pct = filled(row.Percentage);
+    const details = pct ? `${pct}% ${row["Is Increase"] === "true" ? "Markup" : "Markdown"}` : null;
+    await db.execute(
+      sql`insert into book_price_list (zoho_id, name, currency, kind, details, scheme, rounding, status, fields)
+        values (${zohoId}, ${said(row["PriceList Name"])}, ${filled(row["Currency Code"])}, ${filled(row.Type)}, ${details}, ${filled(row["Pricing Scheme"])},
+          ${filled(row["Rounding Type"])}, ${filled(row["PriceList Status"])}, ${JSON.stringify(rest(row, Object.keys(row), new Set(["PriceList ID", "PriceList Name"])))}::jsonb)
+        on conflict (zoho_id) do update set name = excluded.name, details = excluded.details, status = excluded.status, fields = excluded.fields`,
+    );
+  }
+  return made;
+}
+
+export function packageFromJson(doc: Json): BookDocInput {
+  // Zoho's backup has no package id: packages are kept by their number, from the API too.
+  const out = fromJson("package", { ...doc, package_key: doc.package_number }, { id: "package_key", number: "package_number", party: "customer_name", partyId: "customer_id" });
+  out.reference = str(doc.salesorder_number);
+  out.fields.carrier = doc.carrier ?? doc.delivery_method;
+  if (str(doc.salesorder_number)) out.links.push({ kind: "sales_order", number: String(doc.salesorder_number) });
+  return out;
+}
+
+export function shipmentFromJson(doc: Json): BookDocInput {
+  const out = fromJson("shipment", doc, { id: "shipment_id", number: "shipment_number", party: "customer_name", partyId: "customer_id" });
+  out.reference = str(doc.tracking_number);
+  out.total = cents(doc.shipping_charge as number) ?? 0;
+  out.status = statusKey(str(doc.status) ?? str(doc.shipment_status));
+  out.fields["SO Number"] = doc.salesorder_number;
+  out.fields["Carrier Name"] = doc.carrier ?? doc.delivery_method;
+  const packages = ((doc.packages as Json[] | undefined) ?? []).map((p) => str(p.package_number)).filter(Boolean) as string[];
+  if (packages[0]) out.fields["Packing Number"] = packages[0];
+  if (str(doc.salesorder_number)) out.links.push({ kind: "sales_order", number: String(doc.salesorder_number) });
+  for (const number of packages) out.links.push({ kind: "package", number });
   return out;
 }

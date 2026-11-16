@@ -4794,6 +4794,8 @@ export type BookRow = {
   deliveryMethod?: string | null;
   /** Made in this CRM (its order line), not brought from Zoho: opens the CRM's own record too. */
   crm?: { href: string } | null;
+  /** An inventory document's own columns: reason, type, warehouses, carrier, package… */
+  extra?: Record<string, string | number | null> | null;
 };
 
 export type BookList = {
@@ -4904,3 +4906,21 @@ export type BookCustomer = BookCustomerRow & {
   counts: { kind: BookKind; count: number; total: number }[];
   recent: (BookRow & { kind: BookKind })[];
 };
+
+export type BookItemRow = { id: number; name: string; sku: string | null; status: string; unit: string | null; rate: number | null; reorderLevel: number | null; stock: number | null; medicineId: number | null; zoho: boolean };
+export type BookItemList = { views: { key: string; count: number }[]; view: string; page: number; perPage: number; total: number; rows: BookItemRow[] };
+export type BookItem = BookItemRow & {
+  itemType: string | null;
+  purchaseRate: number | null;
+  fields: Record<string, unknown>;
+  zohoStock: Record<string, unknown>;
+  zohoBatches: Record<string, unknown>[];
+  /** This CRM's own stock of the medicine, by warehouse and batch. */
+  warehouses: { name: string; qty: number }[];
+  batches: { batchNo: string; expiresOn: string; qty: number; warehouse: string }[];
+  committed: number;
+  medicine: { id: number; name: string; generic: string | null; strength: string | null; form: string | null; pack: string | null } | null;
+  /** Documents with this item, newest first. */
+  recent: (BookRow & { kind: BookKind; qty: number | null })[];
+};
+export type BookPriceList = { id: number; name: string; currency: string | null; kind: string | null; details: string | null; scheme: string | null; rounding: string | null; status: string | null };

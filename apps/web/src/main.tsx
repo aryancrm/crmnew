@@ -71,6 +71,7 @@ import { BooksShell } from "./books/shell";
 import { BookListPage } from "./books/list";
 import { VendorsPage } from "./books/vendors";
 import { CustomersPage } from "./books/customers";
+import { ItemsPage, PriceListsPage } from "./books/items";
 import { BillFromOrderPage, NewBillPage, NewPaymentPage, NewReceiptPage, NewPurchaseOrderPage, NewVendorCreditPage, NewVendorPage, ReceivePage } from "./books/forms";
 import { CompanyPapersPage, TenderPage, TendersPage } from "./pages/tenders";
 import { ClidpListingsPage, ClidpTeamPage } from "./pages/clidp";
@@ -115,6 +116,9 @@ createRoot(root).render(
             <Route path="paymentsmade/new" element={<NewPaymentPage />} />
             <Route path="paymentsreceived/new" element={<NewReceiptPage />} />
             <Route path="vendorcredits/new" element={<NewVendorCreditPage />} />
+            <Route path="items" element={<ItemsPage />} />
+            <Route path="items/:id" element={<ItemsPage />} />
+            <Route path="pricelists" element={<PriceListsPage />} />
             <Route path="customers" element={<CustomersPage />} />
             <Route path="customers/:id" element={<CustomersPage />} />
             <Route path="vendors" element={<VendorsPage />} />

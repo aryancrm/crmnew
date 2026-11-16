@@ -20,6 +20,7 @@ import {
   voidDoc,
 } from "./actions";
 import { customerDetail, customerList } from "./customers";
+import { itemDetail, itemList, priceLists } from "./items";
 import { bookDoc, bookList, isBookKind, payables, vendorDetail, vendorList } from "./service";
 
 const listAsked = (query: (name: string) => string | undefined) => ({
@@ -36,6 +37,9 @@ export function bookRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHan
   app.use("/api/books/*", signedIn);
   app.use("/api/books-choices", signedIn);
   bookActionRoutes(app, db);
+  app.get("/api/books/items", async (c) => c.json(await itemList(db, c.get("me"), listAsked((n) => c.req.query(n)))));
+  app.get("/api/books/items/:id", async (c) => c.json(await itemDetail(db, c.get("me"), Number(c.req.param("id")))));
+  app.get("/api/books/pricelists", async (c) => c.json(await priceLists(db, c.get("me"))));
   app.get("/api/books/customers", async (c) => c.json(await customerList(db, c.get("me"), listAsked((n) => c.req.query(n)))));
   app.get("/api/books/customers/:id", async (c) => c.json(await customerDetail(db, c.get("me"), Number(c.req.param("id")))));
   app.get("/api/books/vendors", async (c) => c.json(await vendorList(db, c.get("me"), listAsked((n) => c.req.query(n)))));

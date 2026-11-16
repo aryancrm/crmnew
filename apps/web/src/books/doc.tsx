@@ -14,6 +14,10 @@ import { api } from "../api";
 import { type KindInfo, kindInfo, statusClass, statusText, zDate, zMoney, zQty } from "./kinds";
 
 const TITLE: Partial<Record<BookKind, string>> = {
+  adjustment: "INVENTORY ADJUSTMENT",
+  package: "PACKAGE",
+  shipment: "SHIPMENT ORDER",
+  transfer_order: "TRANSFER ORDER",
   sales_order: "SALES ORDER",
   invoice: "TAX INVOICE",
   customer_payment: "PAYMENT RECEIPT",
@@ -26,6 +30,8 @@ const TITLE: Partial<Record<BookKind, string>> = {
   credit_note: "CREDIT NOTE",
 };
 const LINKED_TITLE: Partial<Record<BookKind, string>> = {
+  package: "Packages",
+  shipment: "Shipments",
   purchase_order: "Purchase Orders",
   purchase_receive: "Receives",
   bill: "Bills",
@@ -35,6 +41,22 @@ const LINKED_TITLE: Partial<Record<BookKind, string>> = {
   invoice: "Invoices",
   credit_note: "Credit Notes",
   sales_return: "Sales Returns",
+};
+
+const EXTRA_LABEL: Record<string, string> = {
+  reason: "Reason",
+  description: "Description",
+  type: "Type",
+  warehouse: "Warehouse",
+  by: "Created By",
+  at: "Created Time",
+  qty: "Quantity",
+  from: "Source Warehouse",
+  to: "Destination Warehouse",
+  so: "Sales Order#",
+  package: "Package#",
+  carrier: "Carrier",
+  tracking: "Tracking#",
 };
 
 const step = (label: string, value: string, done: boolean) => (
@@ -293,6 +315,14 @@ export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onC
                     <dd>{doc.reference}</dd>
                   </>
                 )}
+                {Object.entries(doc.extra ?? {})
+                  .filter(([, value]) => value !== null && value !== "")
+                  .map(([key, value]) => (
+                    <div key={key} className="contents">
+                      <dt className="text-[11px] text-[#6c718a] uppercase">{EXTRA_LABEL[key] ?? key}</dt>
+                      <dd>{String(value)}</dd>
+                    </div>
+                  ))}
                 <dt className="text-[11px] text-[#6c718a] uppercase">{order ? "Order Date" : "Date"}</dt>
                 <dd>{zDate(doc.date)}</dd>
                 {doc.dueDate && (

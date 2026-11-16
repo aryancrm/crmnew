@@ -19,6 +19,10 @@ import {
   importVendorPeople,
   importVendors,
   linkDocs,
+  packageFromJson,
+  shipmentFromJson,
+  importItems,
+  importPriceLists,
   salesOrderFromJson,
   invoiceFromJson,
   customerPaymentFromJson,
@@ -46,7 +50,7 @@ const jsonl = (name: string) => {
   for (const line of readFileSync(path, "utf8").split("\n")) {
     if (!line.trim()) continue;
     const doc = JSON.parse(line) as Record<string, unknown>;
-    seen.set(String(doc.vendor_credit_id ?? doc.creditnote_id ?? doc.salesreturn_id ?? doc.salesorder_id ?? doc.invoice_id ?? doc.payment_id), doc);
+    seen.set(String(doc.vendor_credit_id ?? doc.creditnote_id ?? doc.salesreturn_id ?? doc.package_id ?? doc.shipment_id ?? doc.salesorder_id ?? doc.invoice_id ?? doc.payment_id), doc);
   }
   return [...seen.values()];
 };
@@ -94,7 +98,7 @@ for (const file of ["Purchase_Order.csv", "Purchase_Receive.csv", "Bill.csv", "V
   console.log(file, await saveDocs(db, docs, apply), `${Math.round((Date.now() - t0) / 1000)}s`);
 }
 // Sales: the big files go a few thousand documents at a time (a document's rows sit together).
-const sales = process.argv.includes("--no-sales") ? [] : (["Sales_Order", "Invoice", "Customer_Payment"] as const);
+const sales = process.argv.includes("--no-sales") ? [] : (["Sales_Order", "Invoice", "Customer_Payment", "Inventory_Adjustment", "Package", "Shipment_Order", "Transfer_Order.csv"] as const);
 for (const name of sales) {
   const spec = CSV_SPECS[name];
   if (!spec) continue;
@@ -137,6 +141,8 @@ for (const name of sales) {
   console.log(name, total, `${Math.round((Date.now() - t0) / 1000)}s`);
   kinds.push(slim as BookDocInput[]);
 }
+console.log("items", await importItems(db, [...rowsOf("Item.csv", ZOHO_DIR)] as Row[], jsonlRaw("list_items"), apply));
+console.log("price lists", await importPriceLists(db, [...rowsOf("Price_lists.csv", ZOHO_DIR)] as Row[], apply));
 if (sales.length) {
   console.log("customers' Zoho fields", await customerFields(db, rowsOf("Contacts", ZOHO_DIR) as Iterable<Row>, apply));
   console.log("customers' people", await importCustomerPeople(db, [...rowsOf("Contact_Persons.csv", ZOHO_DIR)] as Row[], apply));
@@ -146,6 +152,8 @@ for (const [name, read] of [
   ["salesorders_new", salesOrderFromJson],
   ["invoices_new", invoiceFromJson],
   ["customerpayments_new", customerPaymentFromJson],
+  ["packages_new", packageFromJson],
+  ["shipments_new", shipmentFromJson],
   ["vendorcredits", vendorCreditFromJson],
   ["salesreturns", salesReturnFromJson],
   ["creditnotes", creditNoteFromJson],
@@ -167,6 +175,9 @@ for (const [name, kind] of [
   ["list_customerpayments", "customer_payment"],
   ["list_creditnotes", "credit_note"],
   ["list_salesreturns", "sales_return"],
+  ["list_packages", "package"],
+  ["list_shipments", "shipment"],
+  ["list_adjustments", "adjustment"],
 ] as const) {
   const items = jsonlRaw(name);
   if (!items.length) continue;

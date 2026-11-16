@@ -40,7 +40,14 @@ const salesDots = sql`case when d.kind = 'sales_order' then ${dotOf(sql`d.fields
     case when d.kind = 'sales_order' then ${dotOf(sql`d.fields->>'packed_status'`, linesDot("packed"))} end as packed,
     case when d.kind = 'sales_order' then ${dotOf(sql`d.fields->>'shipped_status'`, sql`'none'`)} end as shipped,
     case when d.kind = 'sales_order' then coalesce(d.fields->>'Delivery Method', d.fields->>'delivery_method') end as "deliveryMethod",
-    null::jsonb as crm`;
+    null::jsonb as crm,
+    case when d.kind = 'adjustment' then jsonb_build_object('reason', d.fields->>'Reason', 'description', d.notes, 'type', initcap(d.fields->>'Adjustment Type'),
+        'warehouse', (select l.warehouse from book_line l where l.doc_id = d.id and l.warehouse is not null limit 1), 'by', d.fields->>'created_by_name', 'at', d.fields->>'created_time')
+      when d.kind = 'transfer_order' then jsonb_build_object('reason', d.notes, 'qty', (select sum(l.qty) from book_line l where l.doc_id = d.id),
+        'from', d.fields->>'From Warehouse Name', 'to', d.fields->>'To Warehouse Name')
+      when d.kind = 'package' then jsonb_build_object('so', d.reference, 'qty', (select sum(l.qty) from book_line l where l.doc_id = d.id), 'carrier', coalesce(d.fields->>'CF.Carrier', d.fields->>'carrier'))
+      when d.kind = 'shipment' then jsonb_build_object('so', d.fields->>'SO Number', 'package', d.fields->>'Packing Number', 'carrier', d.fields->>'Carrier Name', 'tracking', d.reference)
+      end as extra`;
 
 const rowSelect = (today: string) => sql`select d.id::int as id, d.number, d.reference, to_char(d.doc_date, 'YYYY-MM-DD') as date,
     to_char(d.due_date, 'YYYY-MM-DD') as "dueDate", ${liveStatus(today)} as status,

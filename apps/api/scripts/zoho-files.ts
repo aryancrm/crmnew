@@ -60,8 +60,10 @@ export function* rowsOf(name: string, dir = ZOHO_DIR): Generator<Row> {
         .map((file) => join(path, file))
     : [path];
   for (const file of files) {
-    const [head, ...lines] = parseCsv(readFileSync(file, "utf8"));
-    if (!head) continue;
+    const [first, ...lines] = parseCsv(readFileSync(file, "utf8"));
+    if (!first) continue;
+    // A column named twice (Packages have two "Billing Address" columns) keeps both: "(2)".
+    const head = first.map((column, at) => (first.indexOf(column) === at ? column : `${column} (2)`));
     for (const line of lines) {
       if (line.length === 1 && !line[0]) continue;
       const row: Row = {};

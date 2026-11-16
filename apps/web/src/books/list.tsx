@@ -15,6 +15,10 @@ import { type Column, type KindInfo, kindByPath, statusClass, statusText, viewLa
 
 /** Why "+ New" is not offered on a list. */
 const NEW_HINT: Partial<Record<string, string>> = {
+  adjustment: "Stock is counted and corrected from the medicine's page (Inventory).",
+  package: "Packages are packed by Dispatch on the order line.",
+  shipment: "Shipments go out from Dispatch on the order line.",
+  transfer_order: "Stock is moved between warehouses from the medicine's page (Inventory).",
   invoice: "Invoices are made on the order line: Finance invoices an approved order.",
 
   purchase_receive: "A receive is made from its purchase order: open the order and press Receive.",
@@ -86,6 +90,45 @@ export const COLUMNS: Record<string, Column[]> = {
     { key: "status", label: "Status", sort: "status", cell: status },
     { key: "total", label: "Amount", sort: "total", align: "right", cell: (r) => amount(r.total, r) },
     { key: "balance", label: "Balance", sort: "balance", align: "right", cell: (r) => amount(r.balance, r) },
+  ],
+  adjustment: [
+    { key: "date", label: "Date", sort: "date", cell: (r) => zDate(r.date) },
+    { key: "reason", label: "Reason", cell: (r) => String(r.extra?.reason ?? "") },
+    { key: "description", label: "Description", cell: (r) => String(r.extra?.description ?? "") },
+    { key: "status", label: "Status", sort: "status", cell: status },
+    { key: "number", label: "Reference Number", sort: "number", cell: (r) => <span className="font-medium text-[#1c5bd9]">{r.reference || r.number}</span> },
+    { key: "type", label: "Type", cell: (r) => String(r.extra?.type ?? "Quantity") },
+    { key: "by", label: "Created By", cell: (r) => String(r.extra?.by ?? "") },
+    { key: "warehouse", label: "Warehouse Name", cell: (r) => String(r.extra?.warehouse ?? "") },
+  ],
+  package: [
+    { key: "date", label: "Date", sort: "date", cell: (r) => zDate(r.date) },
+    { key: "number", label: "Package#", sort: "number", cell: num },
+    { key: "party", label: "Customer Name", sort: "party", cell: (r) => r.party ?? "" },
+    { key: "so", label: "Sales Order#", sort: "reference", cell: (r) => String(r.extra?.so ?? r.reference ?? "") },
+    { key: "status", label: "Status", sort: "status", cell: status },
+    { key: "carrier", label: "Carrier", cell: (r) => String(r.extra?.carrier ?? "") },
+    { key: "qty", label: "Quantity", align: "right", cell: (r) => zQty(Number(r.extra?.qty ?? 0)) },
+  ],
+  shipment: [
+    { key: "date", label: "Date", sort: "date", cell: (r) => zDate(r.date) },
+    { key: "number", label: "Shipment Order#", sort: "number", cell: num },
+    { key: "party", label: "Customer Name", sort: "party", cell: (r) => r.party ?? "" },
+    { key: "so", label: "Sales Order#", cell: (r) => String(r.extra?.so ?? "") },
+    { key: "package", label: "Package#", cell: (r) => String(r.extra?.package ?? "") },
+    { key: "carrier", label: "Carrier", cell: (r) => String(r.extra?.carrier ?? "") },
+    { key: "tracking", label: "Tracking#", cell: (r) => String(r.extra?.tracking ?? r.reference ?? "") },
+    { key: "status", label: "Status", sort: "status", cell: status },
+    { key: "total", label: "Shipping Rate", sort: "total", align: "right", cell: (r) => amount(r.total, r) },
+  ],
+  transfer_order: [
+    { key: "date", label: "Date", sort: "date", cell: (r) => zDate(r.date) },
+    { key: "number", label: "Transfer Order#", sort: "number", cell: num },
+    { key: "reason", label: "Reason", cell: (r) => String(r.extra?.reason ?? "") },
+    { key: "status", label: "Status", sort: "status", cell: status },
+    { key: "qty", label: "Quantity", align: "right", cell: (r) => zQty(Number(r.extra?.qty ?? 0)) },
+    { key: "from", label: "Source Warehouse", cell: (r) => String(r.extra?.from ?? "") },
+    { key: "to", label: "Destination Warehouse", cell: (r) => String(r.extra?.to ?? "") },
   ],
   sales_order: [
     { key: "date", label: "Date", sort: "date", cell: (r) => zDate(r.date) },
@@ -300,6 +343,13 @@ export function BookListPage() {
         </section>
       </div>
     );
+  if (info.kind === "package" && params.get("as") !== "list")
+    return (
+      <div className="flex h-full flex-col">
+        {header}
+        <PackagesBoard search={search} onList={() => set({ as: "list" })} />
+      </div>
+    );
   return (
     <div className="flex h-full flex-col">
       {header}
@@ -410,6 +460,66 @@ function Payables() {
         <div className="text-[#6c718a]">OverDue Bills</div>
         <div className="text-[15px]">{zMoney(p.overdue)}</div>
       </div>
+    </div>
+  );
+}
+
+/** Packages as Zoho shows them: three columns — Not Shipped, Shipped, Delivered — of cards. */
+function PackagesBoard({ search, onList }: { search: string; onList: () => void }) {
+  const columns: [string, string, string][] = [
+    ["not_shipped", "Packages, Not Shipped", "bg-[#d9f0fa]"],
+    ["shipped", "Shipped Packages", "bg-[#fbf3c8]"],
+    ["delivered", "Delivered Packages", "bg-[#d8f2c9]"],
+  ];
+  return (
+    <div className="min-h-0 flex-1 overflow-auto p-5">
+      <div className="mb-3 flex justify-end">
+        <button type="button" onClick={onList} className="text-[12px] text-[#1c5bd9]">
+          Show as a list
+        </button>
+      </div>
+      <div className="grid min-w-[900px] grid-cols-3 gap-5">
+        {columns.map(([key, title, tone]) => (
+          <BoardColumn key={key} view={key} title={title} tone={tone} search={search} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function BoardColumn({ view, title, tone, search }: { view: string; title: string; tone: string; search: string }) {
+  const [per, setPer] = useState(25);
+  const query = useQuery({ queryKey: ["books", "package", "board", view, per], queryFn: () => api<BookList>(`/api/books/package?view=${view}&perPage=${per}`), placeholderData: keepPreviousData });
+  const data = query.data;
+  return (
+    <div className="min-w-0">
+      <div className={`mb-3 flex items-center justify-between px-4 py-2.5 font-medium ${tone}`} style={{ clipPath: "polygon(0 0, 96% 0, 100% 50%, 96% 100%, 0 100%)" }}>
+        {title} <span className="pr-4 text-[12px] font-normal opacity-70">{data?.total ?? ""}</span>
+      </div>
+      <ul className="space-y-3">
+        {(data?.rows ?? []).map((row) => (
+          <li key={row.id}>
+            <Link to={`/books/packages/${row.id}${search}`} className="block rounded border border-[#ebeaf2] bg-white px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)] hover:border-[#408dfb]">
+              <div className="flex justify-between gap-2">
+                <span className="truncate">{row.party ?? ""}</span>
+                <span className="shrink-0">{zQty(Number(row.extra?.qty ?? 0))}</span>
+              </div>
+              <div className="text-[12px]">
+                <span className="text-[#1c5bd9]">{row.number}</span> <span className="text-[#6c718a]">| {String(row.extra?.so ?? row.reference ?? "")}</span>
+              </div>
+              <div className="text-[12px] text-[#6c718a]">
+                {row.extra?.carrier ? `${String(row.extra.carrier)} | ` : ""}
+                {zDate(row.date)}
+              </div>
+            </Link>
+          </li>
+        ))}
+      </ul>
+      {data && data.rows.length < data.total && (
+        <button type="button" onClick={() => setPer(Math.min(200, per + 50))} className="mt-3 w-full rounded bg-[#f1f1fa] py-1.5 text-[12px] text-[#1c5bd9]">
+          Show more
+        </button>
+      )}
     </div>
   );
 }

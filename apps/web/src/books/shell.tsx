@@ -13,14 +13,22 @@ type NavItem = { label: string; to: string };
 type NavGroup = { label: string; icon: ReactNode; items: NavItem[] };
 
 const GROUPS: NavGroup[] = [
-  { label: "Items", icon: <ShoppingBasket size={16} />, items: [{ label: "Items", to: "/medicines" }] },
+  {
+    label: "Items",
+    icon: <ShoppingBasket size={16} />,
+    items: [
+      { label: "Items", to: "/books/items" },
+      { label: "Price Lists", to: "/books/pricelists" },
+    ],
+  },
   {
     label: "Inventory",
     icon: <PackageOpen size={16} />,
     items: [
-      { label: "Inventory Adjustments", to: "/adjustments" },
-      { label: "Shipments", to: "/shipments" },
-      { label: "Transfer Orders", to: "/transfers" },
+      { label: "Inventory Adjustments", to: "/books/inventoryadjustments" },
+      { label: "Packages", to: "/books/packages" },
+      { label: "Shipments", to: "/books/shipments" },
+      { label: "Transfer Orders", to: "/books/transferorders" },
     ],
   },
   {
@@ -61,7 +69,7 @@ export function BooksShell() {
   if (me.isPending) return null;
   if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   if (!BOOK_ROLES.includes(me.data.role)) return <Navigate to="/" replace />;
-  const listName = segment === "vendors" ? "Vendors" : segment === "customers" ? "Customers" : (kindByPath(segment)?.plural ?? "Purchases");
+  const listName = segment === "vendors" ? "Vendors" : segment === "customers" ? "Customers" : segment === "items" ? "Items" : (kindByPath(segment)?.plural ?? "Purchases");
   return (
     <div className="flex h-dvh overflow-hidden bg-white font-sans text-[13px] leading-[1.6] text-black">
       <nav aria-label="Books menu" className="flex w-[220px] shrink-0 flex-col overflow-y-auto bg-[#21263c] pb-4 text-[#f0f0f0] print:hidden">
