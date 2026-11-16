@@ -7,12 +7,16 @@ import { seedFixture } from "../inventory/fixture";
 import { seedDemo } from "../seed";
 import type { CustomerPrices, OrderDetail, OrderPrices } from "../types";
 import {
+  identityPhone,
+  importZohoInvoices,
+  importZohoPayments,
   kindOf,
   termsOf,
   unitPriceOf,
   type ZohoCustomersResult,
   type ZohoOrdersResult,
 } from "./import";
+import { importMedicines, importOpeningStock } from "./medicines";
 
 const PASSWORD = "test-password-1";
 let db: Database;
@@ -50,8 +54,13 @@ const customers = [
   { id: "z-107", name: "Lorna Santos", business: false, mobile: "+63 917 555 0202", terms: "Paid" },
   // The same patient again, the number written another way: one customer.
   { id: "z-108", name: "LORNA SANTOS", business: false, mobile: "09175550202" },
-  // Another person on the same number: their own customer.
-  { id: "z-109", name: "Pedro Santos", business: false, mobile: "09175550202" },
+  // A line three or more names share (an office line, a placeholder) says nothing about who
+  // they are: each stays their own customer.
+  { id: "z-109", name: "Pedro Santos", business: false, mobile: "09175550202", sharedPhone: true },
+  // Whose customer it was in Zoho comes along.
+  { id: "z-110", name: "Cebu Doctors Hospital", business: true, city: "Cebu City", hint: "hospital", seller: "HOS | CEBU", sellerOn: "2026-10-01", division: "HOS", subDivision: "CEBU", headquarter: "CEBU" },
+  // The same number as Dr. Ana Reyes under another spelling: the same doctor.
+  { id: "z-111", name: "Dra. Ana P. Reyes", business: false, mobile: "+63 917 555 0101" },
 ];
 
 const orders = () => [
@@ -191,7 +200,7 @@ describe("bringing Zoho's customers", () => {
     const before = await count("customer");
     const dry = await send<ZohoCustomersResult>("zoho-customers", { customers });
     expect(dry.status).toBe(200);
-    expect(dry.said).toMatchObject({ customers: 10, made: 7, joined: 3, alreadyHere: 0 });
+    expect(dry.said).toMatchObject({ customers: 12, made: 8, joined: 4, alreadyHere: 0 });
     expect(await count("customer")).toBe(before);
     expect(await count("zoho_contact")).toBe(0);
   });
@@ -199,10 +208,10 @@ describe("bringing Zoho's customers", () => {
   it("makes each buyer once: twins in Zoho and customers already here are joined", async () => {
     const before = await count("customer");
     const { said } = await send<ZohoCustomersResult>("zoho-customers", { customers, apply: true });
-    expect(said).toMatchObject({ made: 7, joined: 3, skipped: 0 });
-    expect(said.byKind).toEqual({ hospital: 1, drugstore: 1, distributor: 1, government: 1, doctor: 1, patient: 2 });
-    expect(await count("customer")).toBe(before + 7);
-    expect(await count("zoho_contact")).toBe(10);
+    expect(said).toMatchObject({ made: 8, joined: 4, skipped: 0 });
+    expect(said.byKind).toEqual({ hospital: 2, drugstore: 1, distributor: 1, government: 1, doctor: 1, patient: 2 });
+    expect(await count("customer")).toBe(before + 8);
+    expect(await count("zoho_contact")).toBe(12);
     const linked = await rows<{ zohoId: string; customerId: number }>(
       db,
       sql`select zoho_id as "zohoId", customer_id::int as "customerId" from zoho_contact`,
@@ -212,6 +221,13 @@ describe("bringing Zoho's customers", () => {
     expect(of("z-101")).toBe(hospital);
     expect(of("z-108")).toBe(of("z-107"));
     expect(of("z-109")).not.toBe(of("z-107"));
+    expect(of("z-111")).toBe(of("z-106"));
+    const [cebu] = await rows<{ seller: string; on: string; division: string; sub: string; hq: string }>(
+      db,
+      sql`select seller, to_char(seller_on, 'YYYY-MM-DD') as on, division, sub_division as sub, headquarter as hq
+        from zoho_contact where zoho_id = 'z-110'`,
+    );
+    expect(cebu).toEqual({ seller: "HOS | CEBU", on: "2026-10-01", division: "HOS", sub: "CEBU", hq: "CEBU" });
     const [lorna] = await rows<{ code: string; phone: string; terms: string; review: string; kind: string }>(
       db,
       sql`select code, phone, payment_terms as terms, review, kind from customer where id = ${of("z-107")}`,
@@ -228,8 +244,19 @@ describe("bringing Zoho's customers", () => {
   it("sending them again adds nothing", async () => {
     const before = await count("customer");
     const { said } = await send<ZohoCustomersResult>("zoho-customers", { customers, apply: true });
-    expect(said).toMatchObject({ made: 0, joined: 0, alreadyHere: 10 });
+    expect(said).toMatchObject({ made: 0, joined: 0, alreadyHere: 12 });
     expect(await count("customer")).toBe(before);
+  });
+});
+
+describe("a number that says who someone is", () => {
+  it("leaves out placeholders and lines many names share", () => {
+    expect(identityPhone("0917 555 0101")).toBe("9175550101");
+    expect(identityPhone("+63 917 555 0101")).toBe("9175550101");
+    expect(identityPhone("0000000000")).toBeNull();
+    expect(identityPhone("1234567890")).toBeNull();
+    expect(identityPhone("0917 555 0101", true)).toBeNull();
+    expect(identityPhone(null)).toBeNull();
   });
 });
 
@@ -309,5 +336,131 @@ describe("what the customer was given before", () => {
     expect((await get("sarla", `/api/customers/${davao?.id}/prices`)).status).toBe(200);
     expect((await get("ryan", `/api/customers/${davao?.id}/prices`)).status).not.toBe(200);
     expect((await get("ryan", "/api/orders/999999/prices")).status).not.toBe(200);
+  });
+});
+
+describe("Zoho's invoices and payments", () => {
+  const invoices = [
+    { id: "inv-1", code: "INV-9001", customerId: "z-100", orderCode: "SO-67227", date: "2026-10-13", dueOn: "2026-11-12", status: "Overdue", total: 4809.6, balance: 1809.6, terms: "30 days" },
+    { id: "inv-2", code: "INV-8001", customerId: "z-101", orderCode: "SO-61002", date: "2026-06-04", dueOn: "2026-06-04", status: "Closed", total: 720, balance: 0 },
+    { id: "inv-3", code: "INV-8500", customerId: "z-100", date: "2026-08-02", status: "Void", total: 100, balance: 100 },
+    { id: "inv-4", code: "INV-0001", customerId: "z-nobody", date: "2026-08-02", status: "Open", total: 50, balance: 50 },
+  ];
+  const payments = [
+    { id: "pay-1", paymentNo: "26289", customerId: "z-100", invoiceCode: "INV-9001", date: "2026-10-20", mode: "Bank Transfer", amount: 3000, paymentTotal: 3720 },
+    { id: "pay-2", paymentNo: "26289", customerId: "z-101", invoiceCode: "INV-8001", date: "2026-10-20", mode: "Bank Transfer", amount: 720, paymentTotal: 3720 },
+  ];
+
+  it("come once, tied to their order, and a rerun brings the latest balance", async () => {
+    const dry = await importZohoInvoices(db, invoices, false);
+    expect(dry).toMatchObject({ invoices: 4, made: 3, updated: 0, noCustomer: 1, owed: 1809.6 });
+    expect(await count("past_invoice")).toBe(0);
+    expect(await importZohoInvoices(db, invoices, true)).toMatchObject({ made: 3, noCustomer: 1 });
+    expect(await importZohoPayments(db, payments, true)).toMatchObject({ made: 2, alreadyHere: 0 });
+    expect(await importZohoPayments(db, payments, true)).toMatchObject({ made: 0, alreadyHere: 2 });
+    const [first] = await rows<{ order: string | null; balance: number; status: string; paid: number }>(
+      db,
+      sql`select (select p.code from past_order p where p.id = v.past_order_id) as order, v.balance::int as balance, v.status,
+          (select coalesce(sum(amount), 0)::int from past_payment where past_invoice_id = v.id) as paid
+        from past_invoice v where v.zoho_id = 'inv-1'`,
+    );
+    expect(first).toEqual({ order: "SO-67227", balance: 180960, status: "overdue", paid: 300000 });
+    // Paid in Zoho since: the same invoice, its balance now nothing.
+    const later = await importZohoInvoices(db, [{ ...invoices[0], status: "Closed", balance: 0 } as (typeof invoices)[number]], true);
+    expect(later).toMatchObject({ made: 0, updated: 1, owed: 0 });
+    expect(await count("past_invoice")).toBe(3);
+    const [now] = await rows<{ balance: number; status: string }>(
+      db,
+      sql`select balance::int as balance, status from past_invoice where zoho_id = 'inv-1'`,
+    );
+    expect(now).toEqual({ balance: 0, status: "closed" });
+  });
+});
+
+describe("the price list's medicines and the shelf", () => {
+  const list = [
+    {
+      sku: "GM-7001",
+      aliases: ["GM-7001 ( 500 mg ) ( Tablet )", "GM-9999"],
+      name: "TestaGet",
+      generic: "Testamycin",
+      strength: "500 mg",
+      form: "Film-coated Tablet",
+      unit: "tablet",
+      pack: "Box of 10's",
+      packSize: 10,
+      category: "ONCOLOGY",
+      brand: "2MG",
+      rx: true,
+      vat: "vat12" as const,
+      shelfLifeMonths: 24,
+      coldChain: true,
+      listNote: "New Med",
+      prices: { doctor: 38.61, patient: 55.6, distributor: 30, drugstore: 46.2, hospital: 46.2 },
+      packPrices: { doctor: 386.1, patient: 556 },
+      srp: 69.5,
+      srpPack: 695,
+    },
+  ];
+  const shelf = [
+    { sku: "GM-7001", batchNo: "bt26190a", expiresOn: "2028-02-29", warehouse: "Getmeds Philippines Inc.", qty: 77518, unitCost: 12.5 },
+    { sku: "GM-9999", batchNo: "BT26190A", expiresOn: "2028-02-29", warehouse: "CEBU WAREHOUSE", qty: 1414, unitCost: 12.5 },
+    { sku: "GM-0000", batchNo: "X1", expiresOn: "2028-02-29", warehouse: "CEBU WAREHOUSE", qty: 5, unitCost: null },
+  ];
+
+  it("a medicine comes with its SKU, its other SKUs, its prices and its SRP; a rerun changes nothing", async () => {
+    expect(await importMedicines(db, list, false)).toMatchObject({ medicines: 1, made: 1, prices: 5 });
+    expect(await count("medicine_sku where sku like 'GM-7001%'")).toBe(0);
+    expect(await importMedicines(db, list, true)).toMatchObject({ made: 1, updated: 0, prices: 5, aliases: 2, problems: [] });
+    const [made] = await rows<Record<string, unknown>>(
+      db,
+      sql`select code, name, strength, pack_size::int as "packSize", vat, srp::int as srp, srp_pack::int as "srpPack",
+          shelf_life_months::int as months, cold_chain as cold, list_note as note,
+          (select amount::int from medicine_price where medicine_id = m.id and buyer_type = 'doctor') as doctor,
+          (select pack_amount::int from medicine_price where medicine_id = m.id and buyer_type = 'doctor') as "doctorPack",
+          (select amount::int from medicine_price where medicine_id = m.id and buyer_type = 'hospital') as hospital,
+          (select count(*)::int from price_change where medicine_id = m.id) as logged
+        from medicine m where sku = 'GM-7001'`,
+    );
+    expect(made).toMatchObject({ name: "TestaGet", strength: "500 mg", packSize: 10, vat: "vat12", srp: 6950, srpPack: 69500, months: 24, cold: true, note: "New Med", doctor: 3861, doctorPack: 38610, hospital: 4620, logged: 5 });
+    expect(String(made?.code)).toMatch(/^MED-\d{5}$/);
+    expect(await importMedicines(db, list, true)).toMatchObject({ made: 0, updated: 1, prices: 0, aliases: 0 });
+    // A new price list: only the price that moved is set, and logged.
+    const moved = [{ ...list[0], prices: { ...list[0]?.prices, doctor: 40 } }] as typeof list;
+    expect(await importMedicines(db, moved, true)).toMatchObject({ updated: 1, prices: 1 });
+    expect(await count("price_change where medicine_id = (select id from medicine where sku = 'GM-7001')")).toBe(6);
+  });
+
+  it("the batches go on the shelf in their warehouses once, under whichever SKU they came", async () => {
+    const before = await count("warehouse");
+    const said = await importOpeningStock(db, shelf, true);
+    expect(said).toMatchObject({ batches: 3, put: 2, pieces: 78932, alreadyHere: 0, noMedicine: 1 });
+    expect(await count("warehouse")).toBe(before + said.warehouses.length);
+    const [held] = await rows<{ batches: number; pieces: number; moves: number; cost: number }>(
+      db,
+      sql`select count(distinct b.id)::int as batches, sum(s.qty)::int as pieces,
+          (select coalesce(sum(qty), 0)::int from stock_move v where v.medicine_id = b.medicine_id and v.ref = 'ZOHO') as moves,
+          max(b.unit_cost)::int as cost
+        from batch b join stock s on s.batch_id = b.id
+        where b.medicine_id = (select id from medicine where sku = 'GM-7001') group by b.medicine_id`,
+    );
+    // One batch in two warehouses; the shelf is the sum of its moves.
+    expect(held).toEqual({ batches: 1, pieces: 78932, moves: 78932, cost: 1250 });
+    expect(await importOpeningStock(db, shelf, true)).toMatchObject({ put: 0, alreadyHere: 2 });
+  });
+
+  it("an old order's line finds the medicine through any SKU it went by", async () => {
+    const said = await send<ZohoOrdersResult>("zoho-orders", {
+      apply: true,
+      orders: [
+        { id: "so-90", code: "SO-69001", customerId: "z-100", date: "2026-11-02", status: "invoiced", total: 500, lines: [{ sku: "gm-9999", name: "Old name in Zoho", qty: 10, rate: 50, itemTotal: 500 }] },
+      ],
+    });
+    expect(said.said).toMatchObject({ made: 1 });
+    const prices = await read<CustomerPrices>("sarla", `/api/customers/${hospital}/prices`);
+    const found = prices.medicines.find((one) => one.sku === "GM-7001");
+    // This order, and the older one whose line stood under Zoho's name until the SKU was known.
+    expect(found).toMatchObject({ name: "TestaGet 500 mg", times: 2, lastPrice: 5000 });
+    expect(found?.medicineId).not.toBeNull();
   });
 });

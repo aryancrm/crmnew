@@ -443,7 +443,8 @@ export async function saveMedicine(
     if (sku) {
       const taken = await rows<{ name: string }>(
         tx,
-        sql`select name from medicine where lower(sku) = ${sku.toLowerCase()} and id <> ${id ?? 0}`,
+        sql`select name from medicine where id <> ${id ?? 0} and (lower(sku) = ${sku.toLowerCase()}
+          or id in (select medicine_id from medicine_sku where lower(sku) = ${sku.toLowerCase()}))`,
       );
       if (taken.length)
         throw new Refusal(409, "duplicate", `SKU ${sku} is already ${taken[0]?.name}'s.`, "sku");
@@ -462,6 +463,7 @@ export async function saveMedicine(
       await tx.execute(
         sql`update medicine set code = 'MED-' || lpad(id::text, 5, '0') where id = ${madeId}`,
       );
+      if (sku) await tx.execute(sql`insert into medicine_sku (medicine_id, sku) values (${madeId}, ${sku})`);
       return madeId;
     }
     const changed = await rows(
@@ -474,6 +476,12 @@ export async function saveMedicine(
           where id = ${id} returning id`,
     );
     if (!changed.length) throw new Refusal(404, "not_found", "No such medicine.");
+    // Its SKU now is one of the SKUs it goes by (the ones before stay, for its old orders).
+    if (sku)
+      await tx.execute(
+        sql`insert into medicine_sku (medicine_id, sku) select ${id}, ${sku}
+          where not exists (select 1 from medicine_sku where lower(sku) = ${sku.toLowerCase()})`,
+      );
     return id;
   });
 }

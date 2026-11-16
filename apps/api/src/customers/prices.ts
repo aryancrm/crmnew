@@ -55,7 +55,11 @@ const linesOf = (db: Database, customerId: number, before?: number) =>
           m.id::int, coalesce(m.sku, i.sku), coalesce(m.name || coalesce(' ' || m.strength, ''), i.name), coalesce(m.unit, i.unit),
           i.qty::int, i.unit_price::int, i.free, i.id
         from past_order_item i join past_order p on p.id = i.past_order_id
-          left join medicine m on i.sku is not null and lower(m.sku) = lower(i.sku)
+          -- The medicine a Zoho line is: by its SKU, or any SKU the medicine went by before.
+          left join lateral (select coalesce(
+              (select k.medicine_id from medicine_sku k where lower(k.sku) = lower(i.sku)),
+              (select d.id from medicine d where lower(d.sku) = lower(i.sku))) as id) known on i.sku is not null
+          left join medicine m on m.id = known.id
         where p.customer_id = ${customerId} and p.status <> 'void'
       ) found
       order by at desc, "from", code desc, line`,

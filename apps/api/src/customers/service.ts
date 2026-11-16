@@ -135,7 +135,8 @@ const holder = sql`(select string_agg(p.name, ', ' order by p.name) from person 
 const lookedAfter = sql`
   left join lateral (select p.id, p.name, ch.code as channel, pa.name as area from person p
       left join channel ch on ch.id = p.channel_id left join area pa on pa.id = p.area_id
-    where p.area_id = c.area_id and p.role = 'medrep' and p.active order by p.name limit 1) u on true
+    -- (No area: nobody to look for; with tens of thousands of patients this is most rows.)
+    where c.area_id is not null and p.area_id = c.area_id and p.role = 'medrep' and p.active order by p.name limit 1) u on true
   left join lateral (select p.id, p.name, ch.code as channel from lead l join person p on p.id = l.assigned_to
       left join channel ch on ch.id = p.channel_id
     where l.customer_id = c.id order by l.first_contact_at desc limit 1) d on true`;
@@ -186,8 +187,6 @@ export async function listCustomers(
   const kindScope = filter.kind
     ? sql`c.active and ${seen(me)} and c.kind = ${filter.kind}`
     : sql`c.active and ${seen(me)}`;
-  const placed = sql`o.customer_id = c.id and o.status not in ('draft', 'cancelled')`;
-
   const [list, counted, byKind, byRep, summary] = await Promise.all([
     rows<CustomerRow>(
       db,
@@ -206,14 +205,14 @@ export async function listCustomers(
           from customer c
           left join area a on a.id = c.area_id
           left join customer h on h.id = c.works_at
-          ${lookedAfter}
+          ${filter.medrep ? lookedAfter : sql``}
           where ${where}
           order by ${(SORTS[filter.sort ?? "name"] ?? byName)(today)}
           limit ${PAGE_SIZE} offset ${(page - 1) * PAGE_SIZE}`,
     ),
     rows<{ count: number }>(
       db,
-      sql`${team(me)} select count(*)::int as count from customer c ${lookedAfter} where ${where}`,
+      sql`${team(me)} select count(*)::int as count from customer c ${filter.medrep ? lookedAfter : sql``} where ${where}`,
     ),
     rows<{ kind: CustomerKind; count: number }>(
       db,
@@ -232,9 +231,10 @@ export async function listCustomers(
       db,
       sql`${team(me)} select count(*)::int as "all",
           count(*) filter (where c.review = 'to_review')::int as "toCheck",
-          count(*) filter (where exists (select 1 from sales_order o where ${placed}
+          count(*) filter (where c.id in (select o.customer_id from sales_order o where o.status not in ('draft', 'cancelled')
             and date_trunc('month', o.created_at at time zone 'Asia/Manila') = date_trunc('month', now() at time zone 'Asia/Manila')))::int as "orderedThisMonth",
-          count(*) filter (where not exists (select 1 from sales_order o where ${placed}))::int as "neverOrdered"
+          count(*) filter (where c.id not in (select o.customer_id from sales_order o where o.status not in ('draft', 'cancelled'))
+            and c.id not in (select p.customer_id from past_order p where p.status <> 'void'))::int as "neverOrdered"
         from customer c where ${kindScope}`,
     ),
   ]);

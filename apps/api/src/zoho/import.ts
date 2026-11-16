@@ -43,6 +43,19 @@ export const zohoCustomer = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .nullish(),
+  /** The salesperson on their latest order ("HOS | Juan"), its day, and its Division,
+   *  Sub-division and Headquarter. */
+  seller: text(200),
+  sellerOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullish(),
+  division: text(120),
+  subDivision: text(120),
+  headquarter: text(120),
+  /** Their number is shared by many different names in Zoho (an office line): it is kept, but
+   *  says nothing about who they are. */
+  sharedPhone: z.boolean().nullish(),
 });
 export type ZohoCustomer = z.infer<typeof zohoCustomer>;
 
@@ -62,6 +75,10 @@ export const zohoOrder = z.object({
   source: text(200),
   invoicedFrom: text(200),
   reference: text(200),
+  /** The name the order was under in Zoho, the doctor who referred it, the patient it was for. */
+  customerName: text(300),
+  doctor: text(200),
+  patient: text(200),
   /** Zoho's "prices include tax" on this order (the usual). */
   inclusiveTax: z.boolean().nullish(),
   /** A discount on the whole order, in percent. */
@@ -175,6 +192,15 @@ async function adminId(db: Database): Promise<number> {
 
 // ---------------------------------------------------------------- customers
 
+/** A number that says who someone is: not a placeholder (0000000000, 1234567890) and not a line
+ *  many different names share. */
+export function identityPhone(number: string | null | undefined, shared?: boolean | null): string | null {
+  const key = phoneKey(number);
+  if (!key || shared) return null;
+  if (/^(\d)\1+$/.test(key) || /0123456789|1234567890|9876543210/.test(key)) return null;
+  return key;
+}
+
 export type ZohoCustomersResult = {
   customers: number;
   /** New customers here. */
@@ -186,9 +212,10 @@ export type ZohoCustomersResult = {
   byKind: Partial<Record<CustomerKind, number>>;
 };
 
-/** Brings Zoho's customers over, once each. A hospital, doctor or business is one customer per
- *  name and city, and anyone with the same name and phone number is one customer, as everywhere
- *  in this CRM: a second Zoho contact of the same buyer joins the first. */
+/** Brings Zoho's customers over, once each. As everywhere in this CRM a customer is known by
+ *  their phone number: the same number and kind is one customer (a second Zoho contact of the
+ *  same buyer joins the first), and a hospital, doctor or business is one customer per name and
+ *  city. Each contact keeps whose customer it was in Zoho. */
 export async function importZohoCustomers(
   db: Database,
   customers: ZohoCustomer[],
@@ -215,9 +242,25 @@ export async function importZohoCustomers(
   );
   const fresh: ZohoCustomer[] = [];
   const seenIds = new Set<string>();
+  const known: Record<string, unknown>[] = [];
   for (const one of customers) {
-    if (linked.has(one.id)) said.alreadyHere += 1;
-    else if (seenIds.has(one.id)) said.skipped += 1;
+    if (linked.has(one.id)) {
+      said.alreadyHere += 1;
+      // Brought before: what Zoho knows now fills only what the customer here is missing, so
+      // nothing typed in this CRM is overwritten.
+      const number = clip(one.mobile, 40) ?? clip(one.phone, 40);
+      known.push({
+        zohoId: one.id,
+        phone: formatPhone(number)?.slice(0, 40) ?? null,
+        phoneKey: phoneKey(number),
+        email: clip(one.email, 120),
+        address: clip(one.address, 300),
+        city: clip(one.city, 80),
+        tin: clip(one.tin, 40),
+        licenceNo: clip(one.licenceNo, 60),
+        licenceExpires: one.licenceExpires ?? null,
+      });
+    } else if (seenIds.has(one.id)) said.skipped += 1;
     else {
       seenIds.add(one.id);
       fresh.push(one);
@@ -227,10 +270,17 @@ export async function importZohoCustomers(
   // Customers already here under the same names. (No area is given: Zoho does not say whose
   // customer it is, and a city alone would put a hospital under the wrong channel.)
   const names = [...new Set(fresh.map((one) => (clip(one.name, 160) ?? "").toLowerCase()))];
+  const numbers = [
+    ...new Set(
+      fresh
+        .map((one) => identityPhone(clip(one.mobile, 40) ?? clip(one.phone, 40), one.sharedPhone))
+        .filter((key): key is string => Boolean(key)),
+    ),
+  ];
   const here = await rows<{ id: number; kind: string; name: string; city: string; phoneKey: string | null }>(
     db,
     sql`select id::int as id, kind, lower(name) as name, lower(coalesce(city, '')) as city, phone_key as "phoneKey"
-      from customer where lower(name) in ${texts(names)} order by id`,
+      from customer where lower(name) in ${texts(names)} or phone_key in ${texts(numbers)} order by id`,
   );
   // A customer here, or one about to be made from this batch (its Zoho id, until it has an id).
   type Target = number | string;
@@ -239,11 +289,12 @@ export async function importZohoCustomers(
   for (const row of here) {
     const place = `${row.kind}|${row.name}|${row.city}`;
     if (row.kind !== "patient" && !byPlace.has(place)) byPlace.set(place, row.id);
-    const phone = `${row.kind}|${row.name}|${row.phoneKey}`;
+    const phone = `${row.kind}|${row.phoneKey}`;
     if (row.phoneKey && !byPhone.has(phone)) byPhone.set(phone, row.id);
   }
   const toMake: Record<string, unknown>[] = [];
   const links: { zohoId: string; target: Target }[] = [];
+  const sellerOf = new Map(customers.map((one) => [one.id, one]));
   for (const one of fresh) {
     const name = clip(one.name, 160) as string;
     if (!name) {
@@ -254,9 +305,10 @@ export async function importZohoCustomers(
     const city = clip(one.city, 80);
     const number = clip(one.mobile, 40) ?? clip(one.phone, 40);
     const key = phoneKey(number);
+    const identity = identityPhone(number, one.sharedPhone);
     const place = `${kind}|${name.toLowerCase()}|${(city ?? "").toLowerCase()}`;
-    const phone = `${kind}|${name.toLowerCase()}|${key}`;
-    const target = (kind !== "patient" ? byPlace.get(place) : undefined) ?? (key ? byPhone.get(phone) : undefined);
+    const phone = `${kind}|${identity}`;
+    const target = (identity ? byPhone.get(phone) : undefined) ?? (kind !== "patient" ? byPlace.get(place) : undefined);
     if (target !== undefined) {
       said.joined += 1;
       links.push({ zohoId: one.id, target });
@@ -265,7 +317,7 @@ export async function importZohoCustomers(
     said.made += 1;
     said.byKind[kind] = (said.byKind[kind] ?? 0) + 1;
     if (kind !== "patient") byPlace.set(place, one.id);
-    if (key) byPhone.set(phone, one.id);
+    if (identity) byPhone.set(phone, one.id);
     links.push({ zohoId: one.id, target: one.id });
     const { terms, days } = termsOf(one.terms);
     const made = one.createdAt ? new Date(one.createdAt) : null;
@@ -289,6 +341,17 @@ export async function importZohoCustomers(
   if (!apply) return said;
 
   await db.transaction(async (tx) => {
+    if (known.length)
+      await tx.execute(
+        sql`update customer c set phone = coalesce(c.phone, x.phone), phone_key = coalesce(c.phone_key, x."phoneKey"),
+            email = coalesce(c.email, x.email), address = coalesce(c.address, x.address), city = coalesce(c.city, x.city),
+            tin = coalesce(c.tin, x.tin),
+            licence_no = case when c.kind = 'patient' then c.licence_no else coalesce(c.licence_no, x."licenceNo") end,
+            licence_expires = case when c.kind = 'patient' then c.licence_expires else coalesce(c.licence_expires, x."licenceExpires"::date) end
+          from jsonb_to_recordset(${JSON.stringify(known)}::jsonb) as x("zohoId" text, phone text, "phoneKey" text, email text,
+            address text, city text, tin text, "licenceNo" text, "licenceExpires" text)
+          where c.zoho_id = x."zohoId"`,
+      );
     const made = toMake.length
       ? await rows<{ id: number; zohoId: string }>(
           tx,
@@ -327,6 +390,25 @@ export async function importZohoCustomers(
           select x."zohoId", x."customerId" from jsonb_to_recordset(${JSON.stringify(pairs)}::jsonb)
             as x("zohoId" text, "customerId" bigint)
           on conflict do nothing`,
+      );
+    // Whose customer each contact was in Zoho (new ones, and the latest for those brought before).
+    const sellers = customers
+      .filter((one) => one.seller || one.division || one.subDivision || one.headquarter)
+      .map((one) => ({
+        zohoId: one.id,
+        seller: clip(sellerOf.get(one.id)?.seller, 160),
+        sellerOn: one.sellerOn ?? null,
+        division: clip(one.division, 80),
+        subDivision: clip(one.subDivision, 80),
+        headquarter: clip(one.headquarter, 80),
+      }));
+    if (sellers.length)
+      await tx.execute(
+        sql`update zoho_contact z set seller = x.seller, seller_on = x."sellerOn"::date, division = x.division,
+            sub_division = x."subDivision", headquarter = x.headquarter
+          from jsonb_to_recordset(${JSON.stringify(sellers)}::jsonb) as x("zohoId" text, seller text, "sellerOn" text,
+            division text, "subDivision" text, headquarter text)
+          where z.zoho_id = x."zohoId"`,
       );
   });
   return said;
@@ -382,6 +464,7 @@ export async function importZohoOrders(
 
   const toMake: Record<string, unknown>[] = [];
   const items: Record<string, unknown>[] = [];
+  const known: { zohoId: string; status: string; total: number }[] = [];
   for (const order of orders) {
     if (order.status.toLowerCase() === "draft") {
       said.drafts += 1;
@@ -389,6 +472,8 @@ export async function importZohoOrders(
     }
     if (have.has(order.id)) {
       said.alreadyHere += 1;
+      // Brought before: where it stands now in Zoho (invoiced since, or void).
+      known.push({ zohoId: order.id, status: order.status.toLowerCase(), total: Math.round(order.total * 100) });
       continue;
     }
     const customerId = customerOf.get(order.customerId);
@@ -410,6 +495,9 @@ export async function importZohoOrders(
       source: clip(order.source, 120),
       invoicedFrom: clip(order.invoicedFrom, 120),
       reference: clip(order.reference, 120),
+      customerName: clip(order.customerName, 160),
+      doctor: clip(order.doctor && !/^n\/?a$/i.test(order.doctor.trim()) ? order.doctor : null, 120),
+      patient: clip(order.patient, 120),
     });
     for (const line of order.lines) {
       const qty = Math.round(line.qty);
@@ -429,14 +517,24 @@ export async function importZohoOrders(
       });
     }
   }
-  if (!apply || toMake.length === 0) return said;
+  if (!apply || (toMake.length === 0 && known.length === 0)) return said;
 
   await db.transaction(async (tx) => {
+    if (known.length)
+      await tx.execute(
+        sql`update past_order p set status = x.status, total = x.total
+          from jsonb_to_recordset(${JSON.stringify(known)}::jsonb) as x("zohoId" text, status text, total bigint)
+          where p.zoho_id = x."zohoId" and (p.status <> x.status or p.total <> x.total)`,
+      );
+    if (toMake.length === 0) return;
     await tx.execute(
-      sql`insert into past_order (zoho_id, code, customer_id, ordered_on, status, total, seller, division, source, invoiced_from, reference)
-        select x."zohoId", x.code, x."customerId", x.day::date, x.status, x.total, x.seller, x.division, x.source, x."invoicedFrom", x.reference
+      sql`insert into past_order (zoho_id, code, customer_id, ordered_on, status, total, seller, division, source, invoiced_from, reference,
+          customer_name, doctor, patient)
+        select x."zohoId", x.code, x."customerId", x.day::date, x.status, x.total, x.seller, x.division, x.source, x."invoicedFrom", x.reference,
+          x."customerName", x.doctor, x.patient
         from jsonb_to_recordset(${JSON.stringify(toMake)}::jsonb) as x("zohoId" text, code text, "customerId" bigint,
-          day text, status text, total bigint, seller text, division text, source text, "invoicedFrom" text, reference text)`,
+          day text, status text, total bigint, seller text, division text, source text, "invoicedFrom" text, reference text,
+          "customerName" text, doctor text, patient text)`,
     );
     if (items.length)
       await tx.execute(
@@ -448,5 +546,185 @@ export async function importZohoOrders(
           order by x.line`,
       );
   });
+  return said;
+}
+
+// ---------------------------------------------------------------- invoices and payments
+
+export const zohoInvoice = z.object({
+  /** Zoho's invoice id. */
+  id: z.string().min(1).max(40),
+  code: z.string().min(1).max(60),
+  customerId: z.string().min(1).max(40),
+  /** The sales order it bills (SO-67227). */
+  orderCode: text(60),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  dueOn: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullish(),
+  status: z.string().min(1).max(40),
+  /** Pesos. */
+  total: z.number().min(0),
+  balance: z.number().min(0),
+  terms: text(120),
+  seller: text(200),
+  invoicedFrom: text(200),
+});
+export type ZohoInvoice = z.infer<typeof zohoInvoice>;
+
+export const zohoPayment = z.object({
+  /** Zoho's id for this payment's share on one invoice. */
+  id: z.string().min(1).max(60),
+  paymentNo: text(60),
+  customerId: z.string().min(1).max(40),
+  invoiceCode: text(60),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  mode: text(80),
+  reference: text(200),
+  /** Pesos put on this invoice, and the whole payment. */
+  amount: z.number().min(0),
+  paymentTotal: z.number().min(0),
+});
+export type ZohoPayment = z.infer<typeof zohoPayment>;
+
+export type ZohoInvoicesResult = {
+  invoices: number;
+  made: number;
+  /** Brought before: their status and balance brought up to date. */
+  updated: number;
+  noCustomer: number;
+  /** Still owed on them, in pesos (void and draft left out). */
+  owed: number;
+};
+
+/** Zoho's invoices, once each; a rerun brings each one's latest status and balance. */
+export async function importZohoInvoices(
+  db: Database,
+  invoices: ZohoInvoice[],
+  apply: boolean,
+): Promise<ZohoInvoicesResult> {
+  const said: ZohoInvoicesResult = { invoices: invoices.length, made: 0, updated: 0, noCustomer: 0, owed: 0 };
+  if (invoices.length === 0) return said;
+  const customerOf = new Map(
+    (
+      await rows<{ zohoId: string; customerId: number }>(
+        db,
+        sql`select zoho_id as "zohoId", customer_id::int as "customerId" from zoho_contact
+          where zoho_id in ${texts([...new Set(invoices.map((one) => one.customerId))])}`,
+      )
+    ).map((row) => [row.zohoId, row.customerId]),
+  );
+  const have = new Set(
+    (
+      await rows<{ id: string }>(
+        db,
+        sql`select zoho_id as id from past_invoice where zoho_id in ${texts(invoices.map((one) => one.id))}`,
+      )
+    ).map((row) => row.id),
+  );
+  const list: Record<string, unknown>[] = [];
+  for (const invoice of invoices) {
+    const customerId = customerOf.get(invoice.customerId);
+    if (!customerId) {
+      said.noCustomer += 1;
+      continue;
+    }
+    const status = invoice.status.toLowerCase();
+    if (status !== "void" && status !== "draft") said.owed += invoice.balance;
+    if (have.has(invoice.id)) said.updated += 1;
+    else said.made += 1;
+    list.push({
+      zohoId: invoice.id,
+      code: invoice.code.trim(),
+      customerId,
+      orderCode: clip(invoice.orderCode, 60),
+      day: invoice.date,
+      dueOn: invoice.dueOn ?? null,
+      status,
+      total: Math.round(invoice.total * 100),
+      balance: Math.round(invoice.balance * 100),
+      terms: clip(invoice.terms, 80),
+      seller: clip(invoice.seller, 160),
+      invoicedFrom: clip(invoice.invoicedFrom, 120),
+    });
+  }
+  said.owed = Math.round(said.owed * 100) / 100;
+  if (!apply || list.length === 0) return said;
+  await db.execute(
+    sql`insert into past_invoice (zoho_id, code, customer_id, past_order_id, order_code, issued_on, due_on, status, total, balance, terms, seller, invoiced_from)
+      select x."zohoId", x.code, x."customerId",
+        (select p.id from past_order p where p.code = x."orderCode" and p.customer_id = x."customerId" order by p.id limit 1),
+        x."orderCode", x.day::date, x."dueOn"::date, x.status, x.total, x.balance, x.terms, x.seller, x."invoicedFrom"
+      from jsonb_to_recordset(${JSON.stringify(list)}::jsonb) as x("zohoId" text, code text, "customerId" bigint,
+        "orderCode" text, day text, "dueOn" text, status text, total bigint, balance bigint, terms text, seller text, "invoicedFrom" text)
+      on conflict (zoho_id) do update set status = excluded.status, total = excluded.total, balance = excluded.balance,
+        due_on = excluded.due_on, past_order_id = coalesce(past_invoice.past_order_id, excluded.past_order_id)`,
+  );
+  return said;
+}
+
+export type ZohoPaymentsResult = { payments: number; made: number; alreadyHere: number; noCustomer: number };
+
+/** Zoho's payments, once each (a payment does not change). */
+export async function importZohoPayments(
+  db: Database,
+  payments: ZohoPayment[],
+  apply: boolean,
+): Promise<ZohoPaymentsResult> {
+  const said: ZohoPaymentsResult = { payments: payments.length, made: 0, alreadyHere: 0, noCustomer: 0 };
+  if (payments.length === 0) return said;
+  const customerOf = new Map(
+    (
+      await rows<{ zohoId: string; customerId: number }>(
+        db,
+        sql`select zoho_id as "zohoId", customer_id::int as "customerId" from zoho_contact
+          where zoho_id in ${texts([...new Set(payments.map((one) => one.customerId))])}`,
+      )
+    ).map((row) => [row.zohoId, row.customerId]),
+  );
+  const have = new Set(
+    (
+      await rows<{ id: string }>(
+        db,
+        sql`select zoho_id as id from past_payment where zoho_id in ${texts(payments.map((one) => one.id))}`,
+      )
+    ).map((row) => row.id),
+  );
+  const list: Record<string, unknown>[] = [];
+  for (const payment of payments) {
+    if (have.has(payment.id)) {
+      said.alreadyHere += 1;
+      continue;
+    }
+    const customerId = customerOf.get(payment.customerId);
+    if (!customerId) {
+      said.noCustomer += 1;
+      continue;
+    }
+    have.add(payment.id);
+    said.made += 1;
+    list.push({
+      zohoId: payment.id,
+      paymentNo: clip(payment.paymentNo, 60),
+      customerId,
+      invoiceCode: clip(payment.invoiceCode, 60),
+      day: payment.date,
+      mode: clip(payment.mode, 60),
+      reference: clip(payment.reference, 160),
+      amount: Math.round(payment.amount * 100),
+      paymentTotal: Math.round(payment.paymentTotal * 100),
+    });
+  }
+  if (!apply || list.length === 0) return said;
+  await db.execute(
+    sql`insert into past_payment (zoho_id, payment_no, customer_id, past_invoice_id, invoice_code, paid_on, mode, reference, amount, payment_total)
+      select x."zohoId", x."paymentNo", x."customerId",
+        (select v.id from past_invoice v where v.code = x."invoiceCode" and v.customer_id = x."customerId" order by v.id limit 1),
+        x."invoiceCode", x.day::date, x.mode, x.reference, x.amount, x."paymentTotal"
+      from jsonb_to_recordset(${JSON.stringify(list)}::jsonb) as x("zohoId" text, "paymentNo" text, "customerId" bigint,
+        "invoiceCode" text, day text, mode text, reference text, amount bigint, "paymentTotal" bigint)
+      on conflict (zoho_id) do nothing`,
+  );
   return said;
 }
