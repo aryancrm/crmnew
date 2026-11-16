@@ -1386,6 +1386,40 @@ a short note for the next session. A phase starts by reading this section, the m
 About 19–26 sessions. Phases 1 and 2 first: every screen and report after them counts per seat and
 per scorecard.
 
+## 16. Each person's screen, one channel at a time (16 Nov 2026)
+
+Aryan, 16 Nov: "pick one channel, build every seat's screen in it, write it here as done, then the
+next; don't build for everyone at once." A page made for everyone ends up wrong for someone (it
+opened under the Management desk, with Management's menu and "Management" on top).
+
+**How each seat is built and checked** (all of these, for every seat, before it is ticked):
+1. Who signs in to it (role, channel, the demo person who checks it).
+2. The top bar: the desk's name is the seat's work ("Hospital CHC", "District Sales Coach"), not a role code.
+3. The left menu: only that seat's work, in the order of its day; words of that channel
+   ("My hospitals", "Hospitals to call"); nothing that leads to a screen not built.
+4. Home, top to bottom: the blocks of the company map's screen for the seat, each with its data
+   (whose: my area / my team / my division, said on the page) and its buttons.
+5. What it sends up, and where that lands on the head's screen.
+6. What it must never see; a page that isn't theirs refuses clearly ("Not part of your desk").
+7. Tests for who sees what; a look in the browser with the seat's demo person.
+
+**Order of channels** (the biggest and the one with the most data first):
+1. Hospital Division: Hospital CHC → District Sales Coach → Business Mentor.
+2. Prescription (Rx): Rx CHC → MD Telesales (Oncology) → DSC → Mentor.
+3. Online B2C: B2C CHC → coach.
+4. B2B: NBD, CRR, B2B telesales → coach.
+5. PAP; Government bidding; CLIDP; Modern Trade.
+6. The office: Management, Finance, Dispatch / Pharmacy, Inventory, HR, Training.
+7. The Founder (CEO) and the Admin last: their screens are the roll-up of all the above.
+
+### 16.1 Hospital Division (in progress)
+
+| Seat | Menu | Home | Sends up | State |
+|---|---|---|---|---|
+| Hospital CHC (MedRep, HOSP) | Home, My hospitals, New order, My orders, Collections, Hospitals to call, Visits, Huddle, My score (Tenders and the weekly report when built) | Today's pulse (sales vs target, DSO, hospitals not reordered, invoice yesterday: green/amber/red); go here first (money first: overdue, due to reorder); to collect (60/75/90 days); tonight's huddle; my scorecard | 7 PM huddle → DSC; orders → Management | Done 16 Nov: desk "Hospital CHC", its menu; Home with the pulse, go here first (Call / Collect / New order), huddle card, KPIs; Collections (60/75/90 days from the oldest unpaid invoice); Hospitals to call; Tonight's huddle (prefilled, blocker required with no invoice, named coach); My hospitals opens on hospitals. Checked in the browser as Ryan. Tenders and the weekly report: later phases |
+| District Sales Coach (team lead, HOSP) | Home, My team, Huddle, Hospitals to call, Collections, Approvals, Visits, Scorecards, Targets | District now (each CHC worst first); needs you today (3 evenings without an invoice, DSO over 90, approvals); tonight's huddle (who declared, who is red, blockers); 15th rescue (IST below 40%, DSO over 75, lapsed over 20%, NZSD under 80%) | District roll-up, rescue list → Mentor | To do |
+| Business Mentor (head, HOSP) | Home, Teams, People, Targets, Scorecards, Collections, Disputes | Division vs target by team, pace; each DSC's district; people at risk (below 60, improvement plan); money owed by age; disputes | Division review → Founder | To do |
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -1813,3 +1847,5 @@ per scorecard.
 - 16 Nov (43), Phase 2, second part. The Rx CHC card (Rx CHC Play Book p. 32-33): NBD 30 (doctors invoiced for the first time, by count: 1-2 → 12 … 9+ → 30), CRR 30 (last month's doctors invoiced again: 50% → 12 … 90% → 30), PAP 25 (guarantee letters received on the person's PAP cases: 1-2 → 10 … 11+ → 25), HIT 15 (left out until the formulary tracker, Phase 5), CCF gate (doctors visited ÷ the 80 on the list; below 80% the total is capped at 70; the lowest cap governs). The Home's scorecard now reads the engine (the old weekday-delivery NZSD is gone) and links to My score. Not built, waiting for Aryan: the Rx Team & Training Playbook moves NBD and CRR to MD Telesales with no new weights; the MD Telesales KPI framework, the DSC and Mentor cards and CTAR/TTAR are not published in any playbook; the Training Coach card (SEI, CAP, TCA, VAC, GOV) needs the training calendar and exams (Phase 7). 307 API tests.
 - 16 Nov (44), Aryan: "every person in the company has their own screen with the data relevant to them, and their head gets the relevant data"; he does not have the missing scorecard definitions, so interim rules (to change when HR publishes the cards): MD Telesales (seats in the TS channel) are scored on the B2C card; a lead (DSC, Mentor, head, any lead seat) on their team's average (the month's score of each scored person under them, leads not counted twice), locked after their people. A month with nothing to score (no target, sale, order, enquiry; for a lead, no one carded) has no card, running or locked. A lead's "needs you now" on My team adds the scorecards: below 60 with a week of the month gone, a coverage gate failing from the 15th, an improvement plan due (below 60 two locked months running). Leads have My score in their My team folder.
 - 16 Nov (45), Customers to call (/to-call; the CRR account health and the refill-due list of the company map): each customer's usual gap is the median of their last six gaps between orders, this CRM's and the old system's together (28 days with one order, at least 7); due once it has passed, late past 1.5 times, at risk past 2.5 times or 90 days and late, lost past 180 days (last two years only). A seller sees their own customers (the online desk its patients, everyone else the buying businesses and doctors), biggest last order first, with the phone to call; a lead, the CEO and the Admin also see per area whose customers are slipping, and open one area. Links: MedRep and online desks, leads' My team, Reports. Most old customers still have no area, so they show under "No area" until the old sellers are placed on seats.
+- 16 Nov (46), Aryan: "Customers to call" opened under the Management desk with Management's menu: build screens one channel at a time, every seat of it, and tick them in the plan (new section 16 with the method, the order of channels and the Hospital checklist). Fixed at once: the list says whose customers it is (my area, my team, the company) and is the sellers' and their heads' only; a refusal shows at once as "Not part of your desk" with a way home (no retries); the logo no longer runs under the desk name.
+- 16 Nov (47), Section 16.1, the Hospital CHC seat done: the desk says "Hospital CHC" (seat-words.ts: a seat's own words by channel), its own menu in the order of its day (Home, My hospitals, My orders, Collections, Hospitals to call, Visits, Tonight's huddle, My score); Home starts with Today's pulse (sales vs target on the working-day pace, days to collect, hospitals not reordered, an invoice on the last working day; each green/amber/red and a link), then Go here first (owed 60 days and more, then hospitals due or late to reorder; Call, Collect, New order), and a huddle card; the old figures row and the second target card (which disagreed with the pace) are gone from this Home. New: Collections (/collections: each customer's owed money, oldest unpaid invoice and its age, flagged 60/75/90), the 7 PM huddle (migration 0058 huddle; /huddle: prefilled from the day's invoices, payments and visits, a blocker required when there was no invoice, tomorrow's first stop, declared to the named coach; a lead sees the team's evening: who declared, who is red, three working days without an invoice). 312 API tests.

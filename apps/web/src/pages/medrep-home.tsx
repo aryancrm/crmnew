@@ -25,6 +25,7 @@ import { avatarTone, dayHeading, initials, PRIMARY_SM } from "../look";
 import { Donut } from "../team/charts";
 import { count, dayLabel, PageState, peso } from "../ui";
 import { Figure, type Period, PeriodBox, periodWord as periodWordOf } from "./figures";
+import { GoHereFirst, HuddleCard, TodaysPulse } from "./hospital-day";
 import { greeting, todayWords } from "./home";
 import { OrderCardItem } from "./orders-board";
 
@@ -118,6 +119,7 @@ export function MedrepHome() {
     queryFn: async () => (await api<{ news: StockNews[] }>("/api/stock-news")).news,
   });
   if (!me) return null;
+  const hospital = me.channel?.code === "HOSP";
   const data = kpis.data;
   const sales = mine.data?.sales;
   const periodWord = periodWordOf(period, data?.day ?? null);
@@ -145,7 +147,12 @@ export function MedrepHome() {
         </div>
       </div>
 
+      {/* A Hospital CHC's day starts with the pulse and where to go first (docs/PLAN.md 16.1). */}
+      {hospital && <TodaysPulse />}
+      {hospital && <GoHereFirst />}
+
       {/* Today and this month at a glance: the two numbers asked most. */}
+      {!hospital && (
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Figure
           label="Orders today"
@@ -174,6 +181,7 @@ export function MedrepHome() {
           sub={data ? SCORE_STATUS[data.scorecard.status].label : undefined}
         />
       </div>
+      )}
 
       {/* The period's figures: what was submitted and where it stands now. */}
       <PeriodBox
@@ -480,10 +488,11 @@ export function MedrepHome() {
 
           <MyOrdersNow />
 
-          <ToCollectPanel />
-          <ToCallPanel />
+          {hospital && <HuddleCard />}
+          {!hospital && <ToCollectPanel />}
+          {!hospital && <ToCallPanel />}
 
-          {sales && sales.target !== null && sales.target > 0 && (
+          {!hospital && sales && sales.target !== null && sales.target > 0 && (
             <section className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs">
               <div className="flex items-baseline justify-between gap-2">
                 <h3 className="text-sm font-semibold tracking-tight text-slate-900">

@@ -8,18 +8,25 @@ import { MapPin, Plus, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useMe } from "../auth";
 import { shortPeso } from "../ceo";
 import { CustomerDialog } from "../customers/dialog";
 import { RepStrip } from "../rep-strip";
+import { seatWords } from "../seat-words";
 import { Button, Card, count, dayLabel, PageHead, PageState, Pill } from "../ui";
 import { Figure } from "./figures";
 import { KIND_BADGE } from "./orders-board";
 
 export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean }) {
+  const me = useMe().data;
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const [adding, setAdding] = useState(false);
-  const picked = kind ?? ((params.get("kind") as CustomerKind | null) || undefined);
+  // A Hospital CHC's "My hospitals" opens on the hospitals; "all" shows every kind.
+  const asked = params.get("kind");
+  const hospitalsFirst = Boolean(mine) && me?.channel?.code === "HOSP" && me.role === "medrep";
+  const picked =
+    kind ?? (asked === "all" ? undefined : ((asked as CustomerKind | null) || (hospitalsFirst ? "hospital" : undefined)));
   const page = Number(params.get("page")) || 1;
   const review = params.get("review") === "1";
   const medrep = params.get("medrep") ?? "";
@@ -61,9 +68,9 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
   });
 
   const data = query.data;
-  if (!data) return <PageState query={query} what="the customers" />;
+  if (!data) return <PageState query={query} what={mine ? `the ${seatWords(me).customers}` : "the customers"} />;
   const kindLabel = data.kinds.find((entry) => entry.key === picked);
-  const title = mine ? "My area" : (kindLabel?.plural ?? "Customers");
+  const title = mine ? seatWords(me).myCustomers : (kindLabel?.plural ?? "Customers");
   const pages = Math.max(1, Math.ceil(data.total / data.pageSize));
   const label = (key: CustomerKind) => data.kinds.find((entry) => entry.key === key)?.label ?? key;
   const plural = (kindLabel?.plural ?? "Customers").toLowerCase();
@@ -171,7 +178,7 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
                 key={key}
                 type="button"
                 aria-pressed={picked === key}
-                onClick={() => set({ kind: picked === key ? "" : key, page: "" })}
+                onClick={() => set({ kind: picked === key ? (hospitalsFirst ? "all" : "") : key, page: "" })}
                 className={`flex flex-col gap-0.5 rounded-lg p-3 text-left ${picked === key ? "bg-brand-tint ring-2 ring-brand" : "bg-ground"}`}
               >
                 <span className="text-xl font-semibold">{count(area.data.counts[key] ?? 0)}</span>
@@ -227,7 +234,7 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
             aria-label="Kind of customer"
             className="h-9 flex-[1_1_11rem] rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700"
             value={picked ?? ""}
-            onChange={(event) => set({ kind: event.target.value, page: "" })}
+            onChange={(event) => set({ kind: event.target.value || (hospitalsFirst ? "all" : ""), page: "" })}
           >
             <option value="">All kinds</option>
             {data.kinds.map((entry) => (

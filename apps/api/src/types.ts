@@ -4246,3 +4246,69 @@ export type Reorders = {
   /** Whose customers these are: the seat's area, the teams led, the online desk, the company. */
   scope: { label: string; detail: string };
 };
+
+/** A seller's pulse for today: four numbers, each with its light. */
+export type Pulse = {
+  today: string;
+  /** The working day before today, for "an invoice yesterday?". */
+  lastDay: string;
+  tiles: { key: string; label: string; value: string; sub: string; tone: "green" | "amber" | "red" | "none"; to: string }[];
+};
+
+/** Money to collect, customer by customer, by the age of the oldest unpaid invoice. */
+export type Collections = {
+  today: string;
+  total: number;
+  buckets: { key: "ok" | "d60" | "d75" | "d90"; label: string; amount: number }[];
+  rows: {
+    customerId: number;
+    customer: string;
+    kind: CustomerKind;
+    phone: string | null;
+    owed: number;
+    invoices: number;
+    oldestCode: string;
+    oldestOrderId: number;
+    oldestOn: string;
+    /** Days since the oldest unpaid invoice. */
+    age: number;
+    /** Days past the latest due date passed. */
+    daysLate: number;
+    seller: string | null;
+    flag: "ok" | "d60" | "d75" | "d90";
+  }[];
+  scope: string;
+};
+
+type HuddleNumbers = { sales: number; collected: number; visits: number; invoiced: boolean };
+
+/** The 7 PM huddle a seller declares: the day's numbers from the data, and what they declared. */
+export type Huddle = {
+  day: string;
+  /** Whom it is declared to: the person they report to. */
+  coach: string | null;
+  actual: HuddleNumbers;
+  declared: (HuddleNumbers & { blocker: string | null; tomorrow: string | null; at: string }) | null;
+};
+
+export type HuddleInput = HuddleNumbers & { blocker?: string | null; tomorrow?: string | null };
+
+/** The coach's view of the team's huddle for a day. */
+export type TeamHuddle = {
+  day: string;
+  today: string;
+  declared: number;
+  rows: {
+    personId: number;
+    name: string;
+    seat: string;
+    area: string | null;
+    unit: string;
+    actual: HuddleNumbers;
+    declared: Huddle["declared"];
+    /** No invoice that day. */
+    red: boolean;
+    /** No invoice three working days running: go with them tomorrow. */
+    threeDry: boolean;
+  }[];
+};

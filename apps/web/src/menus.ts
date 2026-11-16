@@ -4,6 +4,7 @@
 // screen that isn't built.
 
 import { officeMedrep } from "./auth";
+import { seatWords } from "./seat-words";
 import type { Me, Role } from "@2mg/api/types";
 import {
   ArrowLeftRight,
@@ -33,6 +34,7 @@ import {
   MapPin,
   MessageCircle,
   MessageSquarePlus,
+  Megaphone,
   MessagesSquare,
   Network,
   PackageCheck,
@@ -442,7 +444,7 @@ function deskFor(me: Me): Space {
 function ownDesk(me: Me): Space {
   const desk = (items: MenuItem[], icon: LucideIcon = House): Space => ({
     key: "desk",
-    label: me.roleLabel,
+    label: seatWords(me).desk,
     icon,
     tone: "bg-brand text-white",
     groups: [{ items: [...items, stockLink] }],
@@ -463,6 +465,31 @@ function ownDesk(me: Me): Space {
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ]),
           cta: { to: "/leads?new=1", label: "New lead" },
+        };
+      // A Hospital CHC: the day of the Hospital CHC Playbook, in its order (docs/PLAN.md 16.1).
+      if (me.channel?.code === "HOSP")
+        return {
+          ...desk([
+            home,
+            { to: "/my/area", label: "My hospitals", icon: Building2, short: "Hospitals" },
+            folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+            { to: "/collections", label: "Collections", icon: HandCoins },
+            { to: "/to-call", label: "Hospitals to call", icon: PhoneCall, short: "Call" },
+            folder(
+              "Visits",
+              CalendarCheck,
+              [
+                { to: "/visits", label: "Today's visits", icon: CalendarCheck },
+                { to: "/visits/calendar", label: "Calendar", icon: CalendarDays },
+                { to: "/visits/plan", label: "Visit plan", icon: CalendarRange },
+                { to: "/visits/expenses", label: "My expenses", icon: Receipt },
+              ],
+              "Visits",
+            ),
+            { to: "/huddle", label: "Tonight's huddle", icon: Megaphone, short: "Huddle" },
+            { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+          ]),
+          cta: { ...newOrder, label: "New order" },
         };
       // A PAP MedRep's patients come as cases (the guarantee letter's road), not plain orders.
       const pap = me.channel?.code === "PAP";

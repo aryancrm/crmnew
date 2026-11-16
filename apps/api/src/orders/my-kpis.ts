@@ -124,7 +124,7 @@ async function monthScorecard(db: Database, me: Me, today: string): Promise<MyKp
     capped: card.capped,
     kpis: card.kpis.map((kpi) => ({
       code: kpi.key.toUpperCase(),
-      label: kpi.label.split(" · ")[1] ?? kpi.label,
+      label: ((part) => part.charAt(0).toUpperCase() + part.slice(1))(kpi.label.split(" · ")[1] ?? kpi.label),
       value: kpi.value === null ? null : Math.round(kpi.value),
       unit: kpi.unit,
       weight: kpi.weight,

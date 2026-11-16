@@ -42,6 +42,7 @@ import { returnRoutes } from "./returns/routes";
 import { salesRoutes } from "./sales/routes";
 import { speedRoutes } from "./speed/routes";
 import { scoreRoutes } from "./scores/routes";
+import { sellerRoutes } from "./sellers/routes";
 import { targetRoutes } from "./targets/routes";
 import { teamRoutes } from "./team/routes";
 import type { ApiError, Me } from "./types";
@@ -264,6 +265,7 @@ export function createApp(db: Database, options: AppOptions) {
   pointsRoutes(app, db, signedIn);
   targetRoutes(app, db, signedIn);
   scoreRoutes(app, db, signedIn);
+  sellerRoutes(app, db, signedIn);
 
   return app;
 }

@@ -7,6 +7,8 @@ import { useQuery } from "@tanstack/react-query";
 import { Phone } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useMe } from "../auth";
+import { seatWords } from "../seat-words";
 import { shortPeso } from "../ceo";
 import { CARD, count, dayLabel, PageHead, PageState, Tabs } from "../ui";
 
@@ -19,6 +21,10 @@ const STATE_SUB: Record<ReorderState, string> = {
 };
 
 export function ToCallPage() {
+  const me = useMe().data;
+  const words = seatWords(me);
+  // A seller's own list: every line is theirs, so no seller column.
+  const own = me?.role === "medrep" || me?.role === "online";
   const [params, setParams] = useSearchParams();
   const state = (params.get("state") as ReorderState | null) ?? "due";
   const area = params.get("area");
@@ -29,7 +35,7 @@ export function ToCallPage() {
       api<Reorders>(`/api/my/reorders?${new URLSearchParams({ state, ...(area ? { area } : {}), ...(kind ? { kind } : {}) })}`),
   });
   const data = query.data;
-  if (!data) return <PageState query={query} what="the customers to call" />;
+  if (!data) return <PageState query={query} what={`the ${words.customers} to call`} />;
   const set = (key: string, value: string | null) => {
     const copy = new URLSearchParams(params);
     if (value) copy.set(key, value);
@@ -42,13 +48,13 @@ export function ToCallPage() {
   return (
     <div className="mx-auto max-w-6xl">
       <PageHead
-        title="Customers to call"
+        title={words.toCall}
         tags={
           <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[12px] font-semibold text-emerald-800 ring-1 ring-emerald-200">
             {areaName ?? data.scope.label}
           </span>
         }
-        sub={`${data.scope.detail} · ${count(of("ok")?.customers ?? 0)} ordering on time · each against their own usual gap between orders`}
+        sub={`${data.scope.detail.replace("My customers", words.myCustomers)} · ${count(of("ok")?.customers ?? 0)} ordering on time · each against their own usual gap between orders`}
         actions={
           area ? (
             <button type="button" className="text-[13px] font-semibold text-emerald-700 hover:underline" onClick={() => set("area", null)}>
@@ -68,7 +74,7 @@ export function ToCallPage() {
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50/60 text-left text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
               <th className="px-4 py-2.5">Customer</th>
-              <th className="px-3 py-2.5">Seller · area</th>
+              {!own && <th className="px-3 py-2.5">Seller · area</th>}
               <th className="px-3 py-2.5">Last order</th>
               <th className="px-3 py-2.5 text-right">Usually every</th>
               <th className="px-3 py-2.5">Expected</th>
@@ -78,7 +84,7 @@ export function ToCallPage() {
           <tbody className="divide-y divide-slate-100">
             {data.rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
+                <td colSpan={own ? 5 : 6} className="px-4 py-6 text-center text-slate-500">
                   No one here.
                 </td>
               </tr>
@@ -99,10 +105,12 @@ export function ToCallPage() {
                     )}
                   </div>
                 </td>
-                <td className="px-3 py-2.5 text-slate-600">
-                  {row.seller ?? <span className="text-slate-400">No seller</span>}
-                  {row.area && <div className="text-[11.5px] text-slate-400">{row.area}</div>}
-                </td>
+                {!own && (
+                  <td className="px-3 py-2.5 text-slate-600">
+                    {row.seller ?? <span className="text-slate-400">No seller</span>}
+                    {row.area && <div className="text-[11.5px] text-slate-400">{row.area}</div>}
+                  </td>
+                )}
                 <td className="px-3 py-2.5 whitespace-nowrap text-slate-600">
                   {dayLabel(row.lastOn)}
                   <div className="text-[11.5px] text-slate-400">{row.since} days ago</div>
