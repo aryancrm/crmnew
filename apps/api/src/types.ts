@@ -4216,3 +4216,31 @@ export type TeamScores = {
   })[];
   disputes: ScoreDispute[];
 };
+
+export type ReorderState = "due" | "late" | "at_risk" | "lost";
+
+/** Customers to call: who is due to reorder against their usual gap, who is late or slipping. */
+export type Reorders = {
+  today: string;
+  state: ReorderState;
+  kind: CustomerKind | null;
+  counts: { state: ReorderState | "ok"; customers: number; lastValue: number }[];
+  rows: {
+    customerId: number;
+    name: string;
+    kind: CustomerKind;
+    city: string | null;
+    phone: string | null;
+    area: string | null;
+    seller: string | null;
+    lastOn: string;
+    orders: number;
+    /** Their usual days between orders. */
+    usual: number;
+    since: number;
+    expectedOn: string;
+    lastTotal: number;
+  }[];
+  /** For a lead or above: per area, how its customers stand. */
+  areas: { areaId: number | null; area: string; due: number; late: number; atRisk: number; lost: number; ok: number }[];
+};

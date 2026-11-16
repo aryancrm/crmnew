@@ -7,6 +7,7 @@ import type { Database } from "../db/index";
 import { allow, type Env, idParam, readBody } from "../http";
 import { customerPage } from "./page";
 import { customerPrices } from "./prices";
+import { reorders } from "./reorders";
 import {
   addCustomer,
   CUSTOMER_ADD_ROLES,
@@ -68,7 +69,7 @@ export function customerRoutes(
   signedIn: MiddlewareHandler<Env>,
 ): void {
   // "/path/*" also covers "/path" itself.
-  for (const path of ["/api/customers/*", "/api/my/area", "/api/my/collect"])
+  for (const path of ["/api/customers/*", "/api/my/area", "/api/my/collect", "/api/my/reorders"])
     app.use(path, signedIn);
 
   app.get("/api/customers", async (c) => {
@@ -147,4 +148,13 @@ export function customerRoutes(
 
   app.get("/api/my/area", async (c) => c.json(await myArea(db, c.get("me"))));
   app.get("/api/my/collect", async (c) => c.json(await toCollect(db, c.get("me"))));
+  app.get("/api/my/reorders", async (c) =>
+    c.json(
+      await reorders(db, c.get("me"), {
+        state: c.req.query("state"),
+        kind: c.req.query("kind"),
+        area: Number(c.req.query("area")) || undefined,
+      }),
+    ),
+  );
 }
