@@ -20,7 +20,8 @@ Getting the data out: the page-API route below does not work from here (the in-a
 blocks a web page from reaching this computer, and the item-wise order list hides the free
 line of a buy-one-get-one, so it would be one call per order, 62,000 calls). Use Zoho's own
 **Settings → Data Backup → Backup Your Data** (CSV; Zoho emails a download link). Next:
-1. Aryan makes the backup and puts the zip on this computer.
+1. Done 16 Nov: the backup is unpacked in `.data/zoho-backup/` (Contacts/, Sales_Order/, Item.csv…;
+   see the plan's change log (37) for the counts and the columns).
 2. Write `apps/api/scripts/import-zoho.ts`: read Contacts and Sales Orders CSVs (one row per
    line), build the `zohoCustomer` / `zohoOrder` shapes (hint = what the customer's orders say:
    "Hospital PO" → hospital, "Bidding Order" → government, "Doctor order" → doctor), try on a
