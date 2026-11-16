@@ -581,8 +581,8 @@ function ownDesk(me: Me): Space {
       return {
         ...desk(
           [
-            { to: "/inbox", label: "Inbox", icon: MessagesSquare, badge: "inbox" },
             { to: "/leads", label: "Leads & enquiries", icon: Inbox },
+            { to: "/inbox", label: "Inbox", icon: MessagesSquare, badge: "inbox" },
             { to: "/orders", label: "My orders", icon: ClipboardList },
             customers,
             { to: "/points", label: "Points", icon: Gift },
