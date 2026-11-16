@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Company Work Map</title>
+<!-- How the company works, drawn: who sits where, what each seat does, who reports what to whom and
+     how work and money move between teams. The page only draws; everything it says is in
+     company-map.data.js beside it, so a correction is one edit there. No server, no library. -->
+<style>
+:root {
+  --bg: #f5f6f8; --card: #ffffff; --soft: #f8fafc; --ink: #0f172a; --ink2: #475569; --ink3: #8a97aa;
+  --line: #e2e8f0; --line2: #eef1f5; --brand: #047857; --brand-ink: #065f46; --brand-tint: #ecfdf5;
+  --warn: #b45309; --warn-tint: #fff7ed; --bad: #b91c1c; --bad-tint: #fef2f2; --info: #1d4ed8; --info-tint: #eff6ff;
+  --shadow: 0 1px 2px rgba(15, 23, 42, .06), 0 6px 20px rgba(15, 23, 42, .05);
+  --t-hos: #ea580c; --t-rx: #d9480f; --t-sm: #7e22ce; --t-mt: #be185d; --t-mk: #1d4ed8; --t-it: #1e40af;
+  --t-reg: #9d174d; --t-hr: #0d9488; --t-ops: #15803d; --t-top: #0f766e;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0b1220; --card: #111a2c; --soft: #0f1728; --ink: #e8edf5; --ink2: #a9b6c8; --ink3: #74839a;
+    --line: #223049; --line2: #1a2740; --brand: #34d399; --brand-ink: #a7f3d0; --brand-tint: #0c2a22;
+    --warn: #fbbf24; --warn-tint: #2a2110; --bad: #f87171; --bad-tint: #2a1416; --info: #93c5fd; --info-tint: #13223f;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 20px rgba(0, 0, 0, .3);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0b1220; --card: #111a2c; --soft: #0f1728; --ink: #e8edf5; --ink2: #a9b6c8; --ink3: #74839a;
+  --line: #223049; --line2: #1a2740; --brand: #34d399; --brand-ink: #a7f3d0; --brand-tint: #0c2a22;
+  --warn: #fbbf24; --warn-tint: #2a2110; --bad: #f87171; --bad-tint: #2a1416; --info: #93c5fd; --info-tint: #13223f;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 6px 20px rgba(0, 0, 0, .3);
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+h1, h2, h3, h4, p { margin: 0; }
+button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; text-align: left; }
+.wrap { max-width: 1320px; margin: 0 auto; padding: 0 16px 80px; }
+header.top { padding: 22px 0 6px; }
+header.top h1 { font-size: 24px; letter-spacing: -.02em; }
+header.top p { color: var(--ink2); margin-top: 4px; max-width: 74ch; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; color: var(--ink3); font-size: 12px; }
+nav.tabs { position: sticky; top: 0; z-index: 20; background: var(--bg); padding: 10px 0; display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; border-bottom: 1px solid var(--line); }
+nav.tabs::-webkit-scrollbar { display: none; }
+nav.tabs button { white-space: nowrap; padding: 7px 13px; border-radius: 999px; font-weight: 600; font-size: 13px; color: var(--ink2); border: 1px solid transparent; }
+nav.tabs button:hover { background: var(--card); border-color: var(--line); }
+nav.tabs button[aria-selected="true"] { background: var(--ink); color: var(--bg); }
+section.view { display: none; padding-top: 18px; }
+section.view.on { display: block; }
+.lead { color: var(--ink2); max-width: 86ch; margin-bottom: 14px; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+.eyebrow { font-size: 10.5px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--ink3); }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 600; background: var(--soft); color: var(--ink2); border: 1px solid var(--line); white-space: nowrap; }
+.chip.good { background: var(--brand-tint); color: var(--brand-ink); border-color: transparent; }
+.chip.warn { background: var(--warn-tint); color: var(--warn); border-color: transparent; }
+.chip.bad { background: var(--bad-tint); color: var(--bad); border-color: transparent; }
+.chip.info { background: var(--info-tint); color: var(--info); border-color: transparent; }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.filters button { padding: 5px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--card); font-size: 12.5px; font-weight: 600; color: var(--ink2); }
+.filters button[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: #fff; }
+
+/* ---- the chart */
+.founder { display: flex; justify-content: center; }
+.founder .box { padding: 12px 20px; border-radius: 14px; background: var(--card); border: 2px solid var(--t-top); box-shadow: var(--shadow); text-align: center; }
+.founder .box b { display: block; font-size: 15px; }
+.founder .box span { font-size: 12px; color: var(--ink2); }
+.stem { width: 2px; height: 18px; background: var(--line); margin: 0 auto; }
+.bar { height: 2px; background: var(--line); margin: 0 6%; }
+.divs { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; margin-top: 14px; align-items: start; }
+.div { overflow: hidden; }
+.div > header { padding: 11px 14px; color: #fff; }
+.div > header h3 { font-size: 15px; letter-spacing: -.01em; }
+.div > header p { font-size: 12px; opacity: .92; margin-top: 1px; }
+.div > .body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; }
+.unit { border-left: 3px solid var(--tone, var(--line)); background: var(--soft); border-radius: 0 10px 10px 0; padding: 8px 10px; }
+.unit .unit { margin-top: 8px; background: var(--card); }
+.unit h4 { font-size: 13px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+.unit h4 small { font-weight: 500; color: var(--ink3); font-size: 11.5px; }
+.unit .note { font-size: 12px; color: var(--ink2); margin-top: 2px; }
+.seats { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+.seat { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 9px; border-radius: 9px; background: var(--card); border: 1px solid var(--line); font-size: 12px; line-height: 1.3; }
+.unit .unit .seat { background: var(--soft); }
+.seat:hover { border-color: var(--brand); }
+.seat b { font-weight: 650; }
+.seat i { font-style: normal; color: var(--ink3); }
+.seat .n { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--tone, var(--ink)); color: #fff; font-size: 10.5px; font-weight: 700; display: inline-grid; place-items: center; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 14px 0 0; color: var(--ink2); font-size: 12px; }
+
+/* ---- a role */
+.roles { display: grid; grid-template-columns: 280px minmax(0, 1fr); gap: 16px; align-items: start; }
+.rolelist { padding: 8px; position: sticky; top: 62px; max-height: calc(100vh - 80px); overflow: auto; }
+.rolelist input { width: 100%; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--soft); color: var(--ink); font: inherit; margin-bottom: 6px; }
+.rolelist .group { margin: 10px 6px 4px; }
+.rolelist button { display: block; width: 100%; padding: 6px 9px; border-radius: 9px; font-size: 13px; color: var(--ink2); }
+.rolelist button:hover { background: var(--soft); }
+.rolelist button[aria-current="true"] { background: var(--brand-tint); color: var(--brand-ink); font-weight: 650; }
+.role { padding: 18px; }
+.role h2 { font-size: 20px; letter-spacing: -.02em; }
+.role .house { color: var(--ink2); margin-top: 2px; font-size: 13px; }
+.role .purpose { margin-top: 10px; font-size: 15px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-top: 14px; }
+.block { border: 1px solid var(--line2); border-radius: 12px; padding: 12px; background: var(--soft); }
+.block h4 { font-size: 12.5px; margin-bottom: 6px; }
+.block ul { margin: 0; padding-left: 17px; color: var(--ink2); font-size: 13px; }
+.block li { margin: 3px 0; }
+.block li b { color: var(--ink); font-weight: 600; }
+table.t { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+table.t th { text-align: left; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink3); padding: 6px 8px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.t td { padding: 7px 8px; border-bottom: 1px solid var(--line2); vertical-align: top; color: var(--ink2); }
+table.t td:first-child { color: var(--ink); font-weight: 600; }
+table.t tr:last-child td { border-bottom: 0; }
+.scroll { overflow-x: auto; }
+.src { margin-top: 12px; font-size: 11.5px; color: var(--ink3); }
+.drawer { position: fixed; inset: 0; z-index: 40; display: none; }
+.drawer.on { display: block; }
+.drawer .shade { position: absolute; inset: 0; background: rgba(15, 23, 42, .45); }
+.drawer .panel { position: absolute; top: 0; right: 0; bottom: 0; width: min(760px, 100%); background: var(--bg); overflow: auto; padding: 14px; box-shadow: -10px 0 40px rgba(0, 0, 0, .2); }
+.drawer .close { position: sticky; top: 0; z-index: 2; float: right; margin: 0 0 6px 8px; padding: 6px 12px; border-radius: 999px; background: var(--ink); color: var(--bg); font-weight: 600; font-size: 12.5px; }
+
+/* ---- who reports what */
+.ladder { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 12px; }
+.when { padding: 12px; }
+.when h3 { font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.when h3 span { color: var(--ink3); font-weight: 500; font-size: 12px; }
+.line { margin-top: 9px; padding: 9px 10px; border-radius: 11px; background: var(--soft); border: 1px solid var(--line2); }
+.line .path { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; font-size: 12px; font-weight: 650; }
+.line .path .arrow { color: var(--ink3); font-weight: 400; }
+.line .what { margin-top: 4px; font-size: 13px; color: var(--ink); }
+.line .how { margin-top: 2px; font-size: 12px; color: var(--ink3); }
+.levels { display: flex; flex-wrap: wrap; align-items: stretch; gap: 0; margin-bottom: 14px; }
+.level { flex: 1 1 150px; padding: 10px 12px; background: var(--card); border: 1px solid var(--line); position: relative; }
+.level:first-child { border-radius: 12px 0 0 12px; }
+.level:last-child { border-radius: 0 12px 12px 0; }
+.level b { display: block; font-size: 13px; }
+.level span { font-size: 12px; color: var(--ink2); }
+.level + .level::before { content: "▶"; position: absolute; left: -7px; top: 50%; transform: translateY(-50%); font-size: 11px; color: var(--brand); background: var(--card); }
+
+/* ---- how work flows */
+.flow { padding: 14px; margin-bottom: 14px; }
+.flow h3 { font-size: 16px; letter-spacing: -.01em; }
+.flow > p { color: var(--ink2); margin: 2px 0 12px; max-width: 90ch; }
+.lanes { display: grid; gap: 6px 8px; min-width: 760px; }
+.lane { grid-column: 1; position: sticky; left: 0; z-index: 1; display: flex; align-items: center; padding: 8px 10px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); font-size: 12px; font-weight: 700; line-height: 1.25; }
+.track { grid-column: 2 / -1; border-radius: 10px; background: var(--soft); border: 1px dashed var(--line); }
+.step { z-index: 1; margin: 5px 0; padding: 7px 9px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); border-top: 3px solid var(--tone, var(--brand)); font-size: 12px; line-height: 1.35; box-shadow: var(--shadow); }
+.step .no { font-size: 10px; font-weight: 800; color: var(--tone, var(--brand)); letter-spacing: .04em; }
+.step b { display: block; font-size: 12.5px; }
+.step span { color: var(--ink2); }
+.step em { display: block; margin-top: 3px; font-style: normal; font-size: 11px; color: var(--warn); font-weight: 600; }
+
+/* ---- prices and stock */
+.ladderbars { display: flex; flex-direction: column; gap: 7px; margin-top: 10px; }
+.barrow { display: grid; grid-template-columns: 170px minmax(0, 1fr) 84px; gap: 10px; align-items: center; font-size: 12.5px; }
+.barrow .track2 { height: 22px; border-radius: 7px; background: var(--soft); border: 1px solid var(--line2); overflow: hidden; }
+.barrow .fill { height: 100%; border-radius: 6px 0 0 6px; background: var(--tone, var(--brand)); opacity: .85; }
+.barrow .val { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+.places { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; margin-top: 10px; }
+.place { padding: 11px 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--soft); }
+.place b { display: block; font-size: 13px; }
+.place span { font-size: 12px; color: var(--ink2); }
+.pad { padding: 14px; }
+.stack { display: flex; flex-direction: column; gap: 14px; }
+h3.h { font-size: 16px; letter-spacing: -.01em; }
+.sub { color: var(--ink2); font-size: 13px; margin-top: 2px; max-width: 90ch; }
+@media (max-width: 860px) {
+  .roles { grid-template-columns: 1fr; }
+  .rolelist { position: static; max-height: 260px; }
+  .barrow { grid-template-columns: 110px minmax(0, 1fr) 70px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1 id="title"></h1>
+    <p id="intro"></p>
+    <div class="meta" id="meta"></div>
+  </header>
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+  <div id="views"></div>
+</div>
+<div class="drawer" id="drawer"><div class="shade"></div><div class="panel"><button class="close" type="button">Close</button><div id="drawerBody"></div></div></div>
+<script src="company-map.units.js"></script>
+<script src="company-map.data.js"></script>
+<script>
+"use strict";
+const D = window.COMPANY_MAP;
+D.units = window.COMPANY_UNITS;
+const h = (tag, attrs, ...kids) => {
+  const node = document.createElement(tag);
+  for (const [key, value] of Object.entries(attrs || {})) {
+    if (value == null || value === false) continue;
+    if (key === "class") node.className = value;
+    else if (key === "style") node.setAttribute("style", value);
+    else if (key.startsWith("on")) node.addEventListener(key.slice(2), value);
+    else node.setAttribute(key, value === true ? "" : value);
+  }
+  for (const kid of kids.flat(9)) if (kid != null && kid !== false) node.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  return node;
+};
+const tone = (key) => `var(--t-${key || "top"})`;
+const unitsOf = (parent) => D.units.filter((unit) => unit.parent === parent);
+const roleOf = (id) => D.roles[id];
+const list = (items) => h("ul", {}, (items || []).map((item) => {
+  const at = typeof item === "string" ? item.indexOf(": ") : -1;
+  return h("li", {}, at > 0 && at < 46 ? [h("b", {}, item.slice(0, at + 1)), item.slice(at + 1)] : item);
+}));
+const block = (title, items) => (items && items.length ? h("div", { class: "block" }, h("h4", {}, title), list(items)) : null);
+const table = (heads, rows) => h("div", { class: "scroll" }, h("table", { class: "t" },
+  h("thead", {}, h("tr", {}, heads.map((head) => h("th", {}, head)))),
+  h("tbody", {}, rows.map((row) => h("tr", {}, row.map((cell) => h("td", {}, cell == null ? "—" : cell)))))));
+
+// ---------------------------------------------------------------- one role, drawn in full
+function roleCard(id) {
+  const role = roleOf(id);
+  if (!role) return h("div", { class: "card role" }, h("h2", {}, id), h("p", { class: "lead" }, "Not written yet."));
+  const where = D.units.filter((unit) => (unit.seats || []).some((seat) => seat.role === id) || unit.headRole === id);
+  return h("div", { class: "card role" },
+    h("div", { class: "eyebrow" }, role.level || "Role"),
+    h("h2", {}, role.title),
+    role.house ? h("div", { class: "house" }, role.house) : null,
+    where.length ? h("div", { class: "seats", style: "margin-top:8px" }, where.map((unit) => h("span", { class: "chip" }, unit.name))) : null,
+    h("p", { class: "purpose" }, role.purpose),
+    h("div", { class: "grid2" },
+      block("Who they serve", role.serves),
+      block("Every day", role.daily),
+      block("Every week", role.weekly),
+      block("Every month", role.monthly),
+      block("They get", role.gets),
+      block("They hand over", role.gives)),
+    role.reports && role.reports.length ? h("div", { style: "margin-top:14px" }, h("div", { class: "eyebrow", style: "margin-bottom:4px" }, "What they report"),
+      table(["What", "To whom", "When", "How"], role.reports.map((row) => [row.what, row.to, row.when, row.how]))) : null,
+    role.kpis && role.kpis.length ? h("div", { style: "margin-top:14px" }, h("div", { class: "eyebrow", style: "margin-bottom:4px" }, "How they are measured"),
+      table(["Measure", "How it is worked out", "Target", "Weight"], role.kpis.map((row) => [row.name, row.how, row.target, row.weight]))) : null,
+    h("div", { class: "grid2" },
+      block("Pay and incentive", role.pay),
+      block("Rules they work under", role.rules),
+      block("In the CRM today", role.crmHas),
+      block("The CRM still needs", role.crmBuild)),
+    role.open && role.open.length ? h("div", { class: "grid2" }, block("To confirm with the heads", role.open)) : null,
+    role.src ? h("div", { class: "src" }, "From: ", role.src.join(" · ")) : null);
+}
+function openRole(id) {
+  const body = document.getElementById("drawerBody");
+  body.replaceChildren(roleCard(id));
+  document.getElementById("drawer").classList.add("on");
+  document.querySelector("#drawer .panel").scrollTop = 0;
+}
+const closeDrawer = () => document.getElementById("drawer").classList.remove("on");
+document.querySelector("#drawer .shade").addEventListener("click", closeDrawer);
+document.querySelector("#drawer .close").addEventListener("click", closeDrawer);
+document.addEventListener("keydown", (event) => { if (event.key === "Escape") closeDrawer(); });
+
+// ---------------------------------------------------------------- the chart
+function seatChip(seat, toneKey) {
+  const role = roleOf(seat.role);
+  return h("button", { class: "seat", type: "button", style: `--tone:${tone(toneKey)}`, title: role ? role.purpose : "", onclick: () => openRole(seat.role) },
+    seat.n > 1 ? h("span", { class: "n" }, seat.n) : null,
+    h("b", {}, seat.title || (role && role.title) || seat.role),
+    seat.places ? h("i", {}, seat.places) : null,
+    seat.who ? h("i", {}, `· ${seat.who}`) : null);
+}
+function unitBox(unit, toneKey) {
+  return h("div", { class: "unit", style: `--tone:${tone(toneKey)}` },
+    h("h4", {}, unit.name, unit.tag ? h("small", {}, unit.tag) : null),
+    unit.note ? h("div", { class: "note" }, unit.note) : null,
+    unit.seats && unit.seats.length ? h("div", { class: "seats" }, unit.seats.map((seat) => seatChip(seat, toneKey))) : null,
+    unitsOf(unit.id).map((child) => unitBox(child, toneKey)));
+}
+function chartView() {
+  const root = D.units.find((unit) => !unit.parent);
+  return h("div", {},
+    h("p", { class: "lead" }, D.text.chart),
+    h("div", { class: "founder" }, h("div", { class: "box" }, h("b", {}, root.head), h("span", {}, root.name))),
+    h("div", { class: "stem" }), h("div", { class: "bar" }),
+    h("div", { class: "divs" }, unitsOf(root.id).map((division) => h("div", { class: "card div" },
+      h("header", { style: `background:${tone(division.tone)}` }, h("h3", {}, division.name), division.head ? h("p", {}, division.head) : null),
+      h("div", { class: "body" },
+        division.note ? h("div", { class: "note", style: "font-size:12.5px;color:var(--ink2)" }, division.note) : null,
+        division.seats && division.seats.length ? h("div", { class: "seats" }, division.seats.map((seat) => seatChip(seat, division.tone))) : null,
+        unitsOf(division.id).map((unit) => unitBox(unit, division.tone)))))),
+    h("div", { class: "legend" }, D.text.legend.map((line) => h("span", {}, line))));
+}
+
+// ---------------------------------------------------------------- every role
+function rolesView() {
+  const shown = h("div", {});
+  const pick = (id) => {
+    shown.replaceChildren(roleCard(id));
+    for (const button of side.querySelectorAll("button")) button.setAttribute("aria-current", String(button.dataset.id === id));
+  };
+  const side = h("div", { class: "card rolelist" });
+  const search = h("input", { type: "search", placeholder: "Find a role…", "aria-label": "Find a role" });
+  const fill = () => {
+    const word = search.value.trim().toLowerCase();
+    side.replaceChildren(search);
+    for (const group of D.roleGroups) {
+      const ids = group.roles.filter((id) => !word || `${roleOf(id)?.title} ${roleOf(id)?.house || ""}`.toLowerCase().includes(word));
+      if (!ids.length) continue;
+      side.append(h("div", { class: "eyebrow group" }, group.name));
+      for (const id of ids) side.append(h("button", { type: "button", "data-id": id, onclick: () => pick(id) }, roleOf(id)?.title || id));
+    }
+  };
+  search.addEventListener("input", fill);
+  fill();
+  pick(D.roleGroups[0].roles[0]);
+  return h("div", {}, h("p", { class: "lead" }, D.text.roles), h("div", { class: "roles" }, side, shown));
+}
+
+// ---------------------------------------------------------------- who reports what to whom
+function reportsView() {
+  let scope = "all";
+  const out = h("div", { class: "ladder" });
+  const draw = () => {
+    out.replaceChildren(...D.cadence.map((when) => {
+      const rows = when.rows.filter((row) => scope === "all" || row.scope === "all" || row.scope === scope);
+      return h("div", { class: "card when" },
+        h("h3", {}, when.when, h("span", {}, when.note || "")),
+        rows.length ? rows.map((row) => h("div", { class: "line" },
+          h("div", { class: "path" }, h("span", { class: "chip" }, row.from), h("span", { class: "arrow" }, "→"), h("span", { class: "chip good" }, row.to)),
+          h("div", { class: "what" }, row.what),
+          row.how ? h("div", { class: "how" }, row.how) : null)) : h("div", { class: "how", style: "margin-top:8px" }, "Nothing at this rhythm for this team."));
+    }));
+  };
+  const filters = h("div", { class: "filters" }, D.scopes.map(([key, label]) => h("button", { type: "button", "aria-pressed": String(key === scope), onclick: (event) => {
+    scope = key;
+    for (const button of filters.children) button.setAttribute("aria-pressed", String(button === event.currentTarget));
+    draw();
+  } }, label)));
+  draw();
+  return h("div", {},
+    h("p", { class: "lead" }, D.text.reports),
+    h("div", { class: "levels" }, D.levels.map((level) => h("div", { class: "level" }, h("b", {}, level.name), h("span", {}, level.note)))),
+    filters, out);
+}
+
+// ---------------------------------------------------------------- how work flows
+function flowsView() {
+  return h("div", {}, h("p", { class: "lead" }, D.text.flows), D.flows.map((flow) => {
+    const columns = flow.steps.length;
+    const lanes = h("div", { class: "lanes", style: `grid-template-columns: 148px repeat(${columns}, minmax(128px, 1fr))` });
+    flow.lanes.forEach((lane, row) => {
+      lanes.append(h("div", { class: "lane", style: `grid-row:${row + 1}` }, lane), h("div", { class: "track", style: `grid-row:${row + 1}` }));
+    });
+    flow.steps.forEach((step, index) => {
+      lanes.append(h("div", { class: "step", style: `grid-row:${flow.lanes.indexOf(step.lane) + 1};grid-column:${index + 2};--tone:${tone(flow.tone)}` },
+        h("div", { class: "no" }, `STEP ${index + 1}`), h("b", {}, step.title), step.detail ? h("span", {}, step.detail) : null, step.rule ? h("em", {}, step.rule) : null));
+    });
+    return h("div", { class: "card flow" }, h("h3", {}, flow.name), h("p", {}, flow.why), h("div", { class: "scroll" }, lanes),
+      flow.notes && flow.notes.length ? h("div", { class: "grid2" }, block("What the CRM must keep", flow.notes)) : null);
+  }));
+}
+
+// ---------------------------------------------------------------- prices and stock
+function pricesView() {
+  const P = D.prices;
+  const top = Math.max(...P.ladder.map((row) => row.value));
+  return h("div", { class: "stack" },
+    h("p", { class: "lead", style: "margin-bottom:0" }, D.text.prices),
+    h("div", { class: "card pad" }, h("h3", { class: "h" }, P.ladderTitle), h("p", { class: "sub" }, P.ladderNote),
+      h("div", { class: "ladderbars" }, P.ladder.map((row) => h("div", { class: "barrow" },
+        h("div", {}, h("b", {}, row.name), h("div", { class: "how", style: "font-size:11.5px;color:var(--ink3)" }, row.who)),
+        h("div", { class: "track2" }, h("div", { class: "fill", style: `width:${Math.max(3, (row.value / top) * 100)}%;--tone:${tone(row.tone)}` })),
+        h("div", { class: "val" }, row.label))))),
+    h("div", { class: "card pad" }, h("h3", { class: "h" }, "Every kind of price"), h("p", { class: "sub" }, P.typesNote),
+      table(["Price", "Who it is for", "Where it comes from", "Who may give it", "In the CRM"], P.types.map((row) => [row.name, row.who, row.from, row.rule, row.crm]))),
+    h("div", { class: "card pad" }, h("h3", { class: "h" }, "Where the stock is"), h("p", { class: "sub" }, D.stock.note),
+      h("div", { class: "places" }, D.stock.places.map((place) => h("div", { class: "place" }, h("b", {}, place.name), h("span", {}, place.note)))),
+      h("div", { class: "grid2" }, block("Rules of the shelf", D.stock.rules), block("The CRM still needs", D.stock.build))));
+}
+
+// ---------------------------------------------------------------- built and to build
+function buildView() {
+  const chip = (state) => h("span", { class: `chip ${state === "Built" ? "good" : state === "Partly" ? "warn" : "bad"}` }, state);
+  return h("div", { class: "stack" },
+    h("p", { class: "lead", style: "margin-bottom:0" }, D.text.build),
+    h("div", { class: "card pad" }, h("h3", { class: "h" }, "What each team needs, and where the CRM stands"),
+      table(["What", "Who needs it", "Today", "What is missing"], D.gaps.map((row) => [row.what, row.who, chip(row.state), row.note]))),
+    h("div", { class: "card pad" }, h("h3", { class: "h" }, "The order to build it in"), h("p", { class: "sub" }, D.text.order),
+      table(["Step", "What", "Why now"], D.order.map((row, index) => [String(index + 1), row.what, row.why]))),
+    h("div", { class: "card pad" }, h("h3", { class: "h" }, "Still to be decided"), h("p", { class: "sub" }, D.text.questions),
+      h("div", { class: "grid2" }, D.questions.map((group) => block(group.name, group.items)))));
+}
+
+// ---------------------------------------------------------------- the page
+const VIEWS = [["chart", "The chart", chartView], ["roles", "Every role", rolesView], ["reports", "Who reports what", reportsView], ["flows", "How work flows", flowsView], ["prices", "Prices and stock", pricesView], ["build", "CRM: built and to build", buildView]];
+document.getElementById("title").textContent = D.title;
+document.getElementById("intro").textContent = D.intro;
+document.getElementById("meta").replaceChildren(...D.meta.map((line) => h("span", {}, line)));
+const tabs = document.getElementById("tabs");
+const views = document.getElementById("views");
+const made = {};
+function show(key) {
+  if (!VIEWS.some(([id]) => id === key)) key = "chart";
+  for (const button of tabs.children) button.setAttribute("aria-selected", String(button.dataset.key === key));
+  if (!made[key]) {
+    made[key] = h("section", { class: "view", id: `view-${key}` }, VIEWS.find(([id]) => id === key)[2]());
+    views.append(made[key]);
+  }
+  for (const section of views.children) section.classList.toggle("on", section === made[key]);
+  try { history.replaceState(null, "", `#${key}`); } catch (error) { /* a preview without history */ }
+}
+for (const [key, label] of VIEWS) tabs.append(h("button", { type: "button", role: "tab", "data-key": key, onclick: () => show(key) }, label));
+show(location.hash.slice(1) || "chart");
+</script>
+</body>
+</html>
