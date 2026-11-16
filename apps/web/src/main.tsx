@@ -1,5 +1,6 @@
 import { MedicineRequestsPage } from "./inventory/requests";
 import "@fontsource-variable/inter";
+import { ApiFailure } from "./api";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -67,7 +68,15 @@ import { Shell } from "./shell";
 import "./styles.css";
 
 const queries = new QueryClient({
-  defaultOptions: { queries: { refetchOnWindowFocus: true, staleTime: 15_000 } },
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: true,
+      staleTime: 15_000,
+      // A refusal (not allowed, not found, wrong input) won't change on asking again: say it at once.
+      retry: (failures, error) =>
+        !(error instanceof ApiFailure && error.status >= 400 && error.status < 500) && failures < 3,
+    },
+  },
 });
 
 const root = document.getElementById("root");

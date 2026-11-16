@@ -43,7 +43,12 @@ export function ToCallPage() {
     <div className="mx-auto max-w-6xl">
       <PageHead
         title="Customers to call"
-        sub={`${count(of("ok")?.customers ?? 0)} ordering on time${areaName ? ` · ${areaName}` : ""} · each customer against their own usual gap between orders`}
+        tags={
+          <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[12px] font-semibold text-emerald-800 ring-1 ring-emerald-200">
+            {areaName ?? data.scope.label}
+          </span>
+        }
+        sub={`${data.scope.detail} · ${count(of("ok")?.customers ?? 0)} ordering on time · each against their own usual gap between orders`}
         actions={
           area ? (
             <button type="button" className="text-[13px] font-semibold text-emerald-700 hover:underline" onClick={() => set("area", null)}>
@@ -115,7 +120,7 @@ export function ToCallPage() {
       </div>
       {data.areas.length > 0 && !area && (
         <section className={`${CARD} overflow-x-auto`}>
-          <h2 className="border-b border-slate-100 px-4 py-3 text-[14px] font-semibold text-slate-900">By area: whose customers are slipping</h2>
+          <h2 className="border-b border-slate-100 px-4 py-3 text-[14px] font-semibold text-slate-900">By seller: whose customers are slipping</h2>
           <table className="w-full text-[13px]">
             <thead>
               <tr className="border-b border-slate-100 text-left text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
@@ -138,6 +143,7 @@ export function ToCallPage() {
                     ) : (
                       <span className="font-semibold text-slate-500">{row.area}</span>
                     )}
+                    <div className="text-[11.5px] text-slate-400">{row.seller ?? (row.areaId ? "Empty seat" : "Old customers not placed on a seat yet")}</div>
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{count(row.ok)}</td>
                   <td className="px-3 py-2 text-right tabular-nums">{count(row.due)}</td>

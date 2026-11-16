@@ -174,7 +174,7 @@ export function Shell() {
           <Menu size={20} aria-hidden="true" />
         </button>
         {/* The company's mark, then the workspace: the old CRM's top bar as it is. */}
-        <NavLink to="/" aria-label="Home" className="hidden min-w-0 items-center gap-2 md:flex">
+        <NavLink to="/" aria-label="Home" className="hidden shrink-0 items-center gap-2 md:flex">
           <img
             src="/2mg-inc-logo.png"
             alt="2MG Inc."
@@ -184,7 +184,7 @@ export function Shell() {
         <span aria-hidden="true" className="hidden h-6 w-px bg-slate-200 md:block" />
         <NavLink
           to="/"
-          className="flex min-w-0 shrink-0 items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-slate-50"
+          className="flex min-w-0 items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-slate-50"
         >
           <span className="truncate text-sm font-semibold text-slate-900">{space.label}</span>
         </NavLink>

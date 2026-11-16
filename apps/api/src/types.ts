@@ -4242,5 +4242,7 @@ export type Reorders = {
     lastTotal: number;
   }[];
   /** For a lead or above: per area, how its customers stand. */
-  areas: { areaId: number | null; area: string; due: number; late: number; atRisk: number; lost: number; ok: number }[];
+  areas: { areaId: number | null; area: string; seller: string | null; due: number; late: number; atRisk: number; lost: number; ok: number }[];
+  /** Whose customers these are: the seat's area, the teams led, the online desk, the company. */
+  scope: { label: string; detail: string };
 };

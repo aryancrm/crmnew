@@ -53,7 +53,9 @@ describe("customers to call", () => {
     expect(await state(lost)).toBe("lost");
     const list = await reorders(db, admin, { state: "due" });
     expect(list.rows.find((row) => row.customerId === due)).toMatchObject({ usual: 30, since: 32, orders: 4 });
-    // The head's view has a line per area.
+    // The head's view has a line per area, and says whose list it is.
     expect(list.areas.length).toBeGreaterThan(0);
+    expect(list.scope.label).toBe("Whole company");
+    await expect(reorders(db, { ...admin, role: "finance" } as Me, {})).rejects.toThrow(/sellers/);
   });
 });

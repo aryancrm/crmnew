@@ -494,6 +494,17 @@ export function PageState({
   what: string;
 }) {
   if (query.isPending) return <div className="p-8 text-center text-ink-2">Loading {what}…</div>;
+  // Not this person's page: say so, and lead back home (asking again changes nothing).
+  if (query.isError && query.error instanceof ApiFailure && query.error.status === 403)
+    return (
+      <Card className="mx-auto flex max-w-md flex-col items-center gap-3 p-6 text-center">
+        <div className="font-semibold">Not part of your desk</div>
+        <div className="text-ink-2">{query.error.message}</div>
+        <a href="/" className="rounded-lg bg-brand px-3 py-1.5 text-sm font-semibold text-white">
+          Back to my Home
+        </a>
+      </Card>
+    );
   if (query.isError)
     return (
       <Card className="mx-auto flex max-w-md flex-col items-center gap-3 p-6 text-center">

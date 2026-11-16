@@ -7,9 +7,9 @@
 
 import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
-import { onlineDesk } from "../http";
+import { onlineDesk, Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
-import { inForce } from "../org/service";
+import { inForce, ledUnits } from "../org/service";
 import type { CustomerKind, Me, Reorders, ReorderState } from "../types";
 import { seen, team } from "./service";
 
@@ -21,6 +21,10 @@ export async function reorders(
   me: Me,
   asked: { state?: string; kind?: string; area?: number },
 ): Promise<Reorders> {
+  // The sellers' and their heads' list: a seller, a lead or head, the online desk, the CEO and
+  // the Admin. Management, Finance and the warehouse have their own work.
+  if (!["medrep", "online", "team_lead", "manager", "ceo", "admin"].includes(me.role))
+    throw new Refusal(403, "not_allowed", "Customers to call is the sellers' and their heads' list.");
   const today = todayManila();
   const state = REORDER_STATES.find((one) => one === asked.state) ?? "due";
   const online = onlineDesk(me);
@@ -53,7 +57,7 @@ export async function reorders(
           else 'ok' end as state
       from s where ${today}::date - s.last <= 730)`;
 
-  const [counts, list, areas] = await Promise.all([
+  const [counts, list, areas, scope] = await Promise.all([
     rows<{ state: ReorderState | "ok"; n: number; value: number }>(
       db,
       sql`${base} select state, count(*)::int as n, coalesce(sum("lastTotal"), 0)::float8 as value from st group by state`,
@@ -78,10 +82,14 @@ export async function reorders(
           sql`${base} select c.area_id::int as "areaId", coalesce(a.name, 'No area') as area,
               count(*) filter (where st.state = 'due')::int as due, count(*) filter (where st.state = 'late')::int as late,
               count(*) filter (where st.state = 'at_risk')::int as "atRisk", count(*) filter (where st.state = 'lost')::int as lost,
-              count(*) filter (where st.state = 'ok')::int as ok
+              count(*) filter (where st.state = 'ok')::int as ok,
+              (select p.name from seat x join seat_holder h on h.seat_id = x.id and h.kind = 'holder' and ${inForce("h", today)}
+                 join person p on p.id = h.person_id where x.area_id = c.area_id and x.active and not x.lead
+               order by h.starts_on desc limit 1) as seller
             from st join customer c on c.id = st.cid left join area a on a.id = c.area_id
             group by c.area_id, a.name order by count(*) filter (where st.state in ('late', 'at_risk')) desc, a.name limit 100`,
         ),
+    scopeOf(db, me, today, online),
   ]);
   const of = (key: ReorderState | "ok") => counts.find((row) => row.state === key);
   return {
@@ -91,5 +99,38 @@ export async function reorders(
     counts: (["ok", ...REORDER_STATES] as const).map((key) => ({ state: key, customers: of(key)?.n ?? 0, lastValue: of(key)?.value ?? 0 })),
     rows: list,
     areas,
+    scope,
   };
+}
+
+/** Whose customers the list is, in the person's own words: their seat's area, the teams they
+ *  lead, the online desk, or the whole company. */
+async function scopeOf(db: Database, me: Me, today: string, online: boolean): Promise<Reorders["scope"]> {
+  if (online) return { label: "Online desk", detail: "Patients of the online desk's enquiries and orders" };
+  if (me.role === "medrep") {
+    const seats = await rows<{ title: string; area: string | null; unit: string }>(
+      db,
+      sql`select s.title, a.name as area, u.name as unit from seat_holder h join seat s on s.id = h.seat_id
+          join org_unit u on u.id = s.unit_id left join area a on a.id = s.area_id
+        where h.person_id = ${me.id} and h.kind = 'holder' and ${inForce("h", today)} order by h.starts_on desc`,
+    );
+    const first = seats[0];
+    return first
+      ? { label: first.area ?? first.title, detail: `My customers · ${first.unit}` }
+      : { label: me.area?.name ?? "My customers", detail: "Customers I added or in my area" };
+  }
+  if (me.role === "team_lead" || me.role === "manager") {
+    const led = await ledUnits(db, me);
+    const units = led.length
+      ? await rows<{ name: string }>(
+          db,
+          sql`select name from org_unit where id in (${sql.join(led.map((id) => sql`${id}`), sql`, `)}) order by name`,
+        )
+      : [];
+    return {
+      label: units.length === 1 ? (units[0]?.name as string) : units.length ? `${units.length} teams` : "My team",
+      detail: units.length > 1 ? `My teams' customers · ${units.map((unit) => unit.name).join(", ")}` : "My team's customers, every seat under me",
+    };
+  }
+  return { label: "Whole company", detail: "Every seller's customers, by area" };
 }
