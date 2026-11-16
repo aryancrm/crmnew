@@ -15,6 +15,8 @@ import { type Column, type KindInfo, kindByPath, statusClass, statusText, viewLa
 
 /** Why "+ New" is not offered on a list. */
 const NEW_HINT: Partial<Record<string, string>> = {
+  invoice: "Invoices are made on the order line: Finance invoices an approved order.",
+
   purchase_receive: "A receive is made from its purchase order: open the order and press Receive.",
   sales_return: "Sales returns are made from the order (Sales comes next).",
   credit_note: "Credit notes come with Sales (next).",
@@ -84,6 +86,39 @@ export const COLUMNS: Record<string, Column[]> = {
     { key: "status", label: "Status", sort: "status", cell: status },
     { key: "total", label: "Amount", sort: "total", align: "right", cell: (r) => amount(r.total, r) },
     { key: "balance", label: "Balance", sort: "balance", align: "right", cell: (r) => amount(r.balance, r) },
+  ],
+  sales_order: [
+    { key: "date", label: "Date", sort: "date", cell: (r) => zDate(r.date) },
+    { key: "number", label: "Sales Order#", sort: "number", cell: num },
+    { key: "reference", label: "Reference#", sort: "reference", cell: (r) => r.reference ?? "" },
+    { key: "party", label: "Customer Name", sort: "party", cell: (r) => r.party ?? "" },
+    { key: "status", label: "Order Status", sort: "status", cell: status },
+    { key: "invoiced", label: "Invoiced", align: "center", cell: (r) => dot(r.invoiced ?? null) },
+    { key: "paid", label: "Payment", align: "center", cell: (r) => dot(r.paid ?? null) },
+    { key: "packed", label: "Packed", align: "center", cell: (r) => dot(r.packed ?? null) },
+    { key: "shipped", label: "Shipped", align: "center", cell: (r) => dot(r.shipped ?? null) },
+    { key: "total", label: "Amount", sort: "total", align: "right", cell: (r) => amount(r.total, r) },
+    { key: "delivery", label: "Delivery Method", cell: (r) => r.deliveryMethod ?? "" },
+  ],
+  invoice: [
+    { key: "date", label: "Date", sort: "date", cell: (r) => zDate(r.date) },
+    { key: "number", label: "Invoice#", sort: "number", cell: num },
+    { key: "linked", label: "Order Number", cell: (r) => r.linked ?? "" },
+    { key: "party", label: "Customer Name", sort: "party", cell: (r) => r.party ?? "" },
+    { key: "status", label: "Status", sort: "status", cell: status },
+    { key: "due", label: "Due Date", sort: "due", cell: (r) => zDate(r.dueDate) },
+    { key: "total", label: "Amount", sort: "total", align: "right", cell: (r) => amount(r.total, r) },
+    { key: "balance", label: "Balance Due", sort: "balance", align: "right", cell: (r) => amount(r.balance, r) },
+  ],
+  customer_payment: [
+    { key: "date", label: "Date", sort: "date", cell: (r) => zDate(r.date) },
+    { key: "number", label: "Payment #", sort: "number", cell: num },
+    { key: "reference", label: "Reference Number", sort: "reference", cell: (r) => r.reference ?? "" },
+    { key: "party", label: "Customer Name", sort: "party", cell: (r) => r.party ?? "" },
+    { key: "linked", label: "Invoice#", cell: (r) => r.linked ?? "" },
+    { key: "mode", label: "Mode", cell: (r) => r.mode ?? "" },
+    { key: "total", label: "Amount", sort: "total", align: "right", cell: (r) => amount(r.total, r) },
+    { key: "unused", label: "Unused Amount", align: "right", cell: (r) => amount(r.unused, r) },
   ],
   sales_return: [
     { key: "date", label: "Date", sort: "date", cell: (r) => zDate(r.date) },
@@ -205,11 +240,13 @@ export function BookListPage() {
   };
   const columns = COLUMNS[info.kind] ?? [];
   const newTo =
-    (info.kind === "purchase_order" && may.order) ||
+    info.kind === "sales_order"
+      ? "/orders/new"
+      : (info.kind === "purchase_order" && may.order) ||
     (info.kind === "bill" && may.bill) ||
-    ((info.kind === "vendor_payment" || info.kind === "vendor_credit") && may.pay)
-      ? `/books/${info.path}/new`
-      : null;
+    ((info.kind === "vendor_payment" || info.kind === "vendor_credit" || info.kind === "customer_payment") && may.pay)
+        ? `/books/${info.path}/new`
+        : null;
   const sort = params.get("sort") ?? "date";
   const dir = params.get("dir") ?? "desc";
   const search = params.toString() ? `?${params}` : "";

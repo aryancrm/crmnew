@@ -70,7 +70,8 @@ import { PipelinePage, RegistrationsPage, RegulatoryReportPage } from "./pages/r
 import { BooksShell } from "./books/shell";
 import { BookListPage } from "./books/list";
 import { VendorsPage } from "./books/vendors";
-import { BillFromOrderPage, NewBillPage, NewPaymentPage, NewPurchaseOrderPage, NewVendorCreditPage, NewVendorPage, ReceivePage } from "./books/forms";
+import { CustomersPage } from "./books/customers";
+import { BillFromOrderPage, NewBillPage, NewPaymentPage, NewReceiptPage, NewPurchaseOrderPage, NewVendorCreditPage, NewVendorPage, ReceivePage } from "./books/forms";
 import { CompanyPapersPage, TenderPage, TendersPage } from "./pages/tenders";
 import { ClidpListingsPage, ClidpTeamPage } from "./pages/clidp";
 import { RxDoctorsPage, RxFieldPage } from "./pages/rx";
@@ -112,7 +113,10 @@ createRoot(root).render(
             <Route path="purchaseorders/:id/bill" element={<BillFromOrderPage />} />
             <Route path="bills/new" element={<NewBillPage />} />
             <Route path="paymentsmade/new" element={<NewPaymentPage />} />
+            <Route path="paymentsreceived/new" element={<NewReceiptPage />} />
             <Route path="vendorcredits/new" element={<NewVendorCreditPage />} />
+            <Route path="customers" element={<CustomersPage />} />
+            <Route path="customers/:id" element={<CustomersPage />} />
             <Route path="vendors" element={<VendorsPage />} />
             <Route path="vendors/:id" element={<VendorsPage />} />
             <Route path=":list" element={<BookListPage />} />

@@ -685,26 +685,27 @@ export const NewVendorCreditPage = () => <StandalonePage kind="vendor_credit" />
 // ------------------------------------------------------------------ Payments Made
 
 /** The vendor's bills with money owed, oldest first. */
-function useOpenBills(vendorId: number | null) {
+function useOpenBills(partyId: number | null, kind: "bill" | "invoice" = "bill") {
   return useQuery({
-    queryKey: ["books", "bill", "open", vendorId],
-    enabled: Boolean(vendorId),
+    queryKey: ["books", kind, "open", partyId],
+    enabled: Boolean(partyId),
     queryFn: async () => {
-      const list = await api<BookList>(`/api/books/bill?party=${vendorId}&perPage=200&sort=date&dir=asc`);
-      return list.rows.filter((row) => row.balance > 0 && !["void", "draft", "pending_approval"].includes(row.status));
+      const list = await api<BookList>(`/api/books/${kind}?party=${partyId}&perPage=200&sort=date&dir=asc`);
+      // The CRM's own invoices (ids below zero) take payments on the order line.
+      return list.rows.filter((row) => row.id > 0 && row.balance > 0 && !["void", "draft", "pending_approval"].includes(row.status));
     },
   });
 }
 
-function BillsTable({ bills, amounts, setAmounts, error }: { bills: BookList["rows"]; amounts: Record<number, string>; setAmounts: (next: Record<number, string>) => void; error?: (at: number) => string | undefined }) {
+function BillsTable({ bills, amounts, setAmounts, error, sales }: { bills: BookList["rows"]; amounts: Record<number, string>; setAmounts: (next: Record<number, string>) => void; error?: (at: number) => string | undefined; sales?: boolean }) {
   return (
     <table className="w-full border border-[#ebeaf2]">
       <thead>
         <tr className="border-b border-[#ebeaf2] bg-[#f9f9fb] text-left text-[11px] text-[#6c718a] uppercase">
           <th className="px-3 py-2 font-normal">Date</th>
-          <th className="px-2 py-2 font-normal">Bill#</th>
-          <th className="px-2 py-2 font-normal">PO#</th>
-          <th className="px-2 py-2 text-right font-normal">Bill Amount</th>
+          <th className="px-2 py-2 font-normal">{sales ? "Invoice Number" : "Bill#"}</th>
+          <th className="px-2 py-2 font-normal">{sales ? "Order Number" : "PO#"}</th>
+          <th className="px-2 py-2 text-right font-normal">{sales ? "Invoice Amount" : "Bill Amount"}</th>
           <th className="px-2 py-2 text-right font-normal">Amount Due</th>
           <th className="w-40 px-3 py-2 text-right font-normal">Payment</th>
         </tr>
@@ -717,7 +718,7 @@ function BillsTable({ bills, amounts, setAmounts, error }: { bills: BookList["ro
               {bill.dueDate && <div className="text-[11px] text-[#6c718a]">Due {zDate(bill.dueDate)}</div>}
             </td>
             <td className="px-2 py-2">{bill.number}</td>
-            <td className="px-2 py-2">{bill.reference ?? ""}</td>
+            <td className="px-2 py-2">{(sales ? bill.linked : bill.reference) ?? ""}</td>
             <td className="px-2 py-2 text-right">{zMoney(bill.total, bill.currency)}</td>
             <td className="px-2 py-2 text-right">{zMoney(bill.balance, "")}</td>
             <td className="px-3 py-2">
@@ -732,7 +733,7 @@ function BillsTable({ bills, amounts, setAmounts, error }: { bills: BookList["ro
         {!bills.length && (
           <tr>
             <td colSpan={6} className="px-3 py-6 text-center text-[#6c718a]">
-              There are no bills for this vendor.
+              {sales ? "There are no unpaid invoices from Zoho for this customer." : "There are no bills for this vendor."}
             </td>
           </tr>
         )}
@@ -861,19 +862,20 @@ export function ApplyToBills({ doc, onDone }: { doc: BookDoc; onDone: () => void
   const queries = useQueryClient();
   const action = useAction();
   const choices = useChoices().data;
-  const bills = useOpenBills(doc.vendor?.id ?? null).data ?? [];
+  const sales = doc.kind === "credit_note" || doc.kind === "customer_payment";
+  const bills = useOpenBills(sales ? doc.partyId : (doc.vendor?.id ?? null), sales ? "invoice" : "bill").data ?? [];
   const [amounts, setAmounts] = useState<Record<number, string>>({});
   const used = bills.reduce((sum, bill) => sum + Math.round((Number(amounts[bill.id]) || 0) * 100), 0);
   return (
     <div className="mx-auto max-w-[820px] rounded-md border border-[#408dfb] p-4">
       <div className="mb-2 flex items-center justify-between">
-        <span className="font-medium">Apply credits to bills · {zMoney(doc.unused ?? doc.balance, doc.currency)} available</span>
+        <span className="font-medium">Apply credits to {sales ? "invoices" : "bills"} · {zMoney(doc.unused ?? doc.balance, doc.currency)} available</span>
         <button type="button" aria-label="Close" onClick={onDone} className="text-[#6c718a]">
           <X size={16} />
         </button>
       </div>
       {action.problem && <div className="mb-2 text-[#b91c1c]">{action.problem.message}</div>}
-      <BillsTable bills={bills} amounts={amounts} setAmounts={setAmounts} />
+      <BillsTable bills={bills} amounts={amounts} setAmounts={setAmounts} sales={sales} />
       <div className="mt-3 flex items-center justify-end gap-3">
         <span>Amount to credit: {zMoney(used, "")}</span>
         <Primary
@@ -902,7 +904,9 @@ export function VoidBox({ doc, onDone }: { doc: BookDoc; onDone: () => void }) {
   const [reason, setReason] = useState("");
   return (
     <div className="mx-auto max-w-[820px] rounded-md border border-[#f76831] p-4">
-      <div className="mb-2 font-medium">Void {doc.number}? It stays in the books, marked void{doc.kind !== "bill" ? "; what it paid goes back onto its bills" : ""}.</div>
+      <div className="mb-2 font-medium">
+        Void {doc.number}? It stays in the books, marked void{doc.kind !== "bill" ? `; what it put on ${doc.kind === "customer_payment" || doc.kind === "credit_note" ? "invoices" : "bills"} goes back onto them` : ""}.
+      </div>
       <input className={ZIN} placeholder="Why" value={reason} onChange={(event) => setReason(event.target.value)} />
       {action.problem && <div className="mt-2 text-[#b91c1c]">{action.problem.message}</div>}
       <div className="mt-3 flex gap-2">
@@ -978,6 +982,153 @@ export function NewVendorPage() {
         <ZRow label="Shipping Address">
           <textarea className={`${ZIN} h-16 py-2`} value={form.shippingAddress} onChange={(event) => setForm({ ...form, shippingAddress: event.target.value })} />
         </ZRow>
+      </div>
+    </ZPage>
+  );
+}
+
+// ------------------------------------------------------------------ Payments Received (on Zoho's invoices)
+
+/** A customer found by typing (there are tens of thousands). */
+function CustomerPick({ value, onChange }: { value: { id: number; name: string } | null; onChange: (customer: { id: number; name: string } | null) => void }) {
+  const [text, setText] = useState(value?.name ?? "");
+  const found = useQuery({
+    queryKey: ["books", "customers", "pick", text],
+    enabled: text.trim().length >= 2 && text !== value?.name,
+    queryFn: () => api<{ rows: { id: number; name: string; kind: string; receivables: number }[] }>(`/api/books/customers?q=${encodeURIComponent(text.trim())}&perPage=10`),
+  }).data;
+  return (
+    <div className="relative">
+      <input
+        className={ZIN}
+        placeholder="Type the customer's name"
+        value={text}
+        onChange={(event) => {
+          setText(event.target.value);
+          onChange(null);
+        }}
+      />
+      {found && text !== value?.name && found.rows.length > 0 && (
+        <ul className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-md border border-[#ebeaf2] bg-white shadow-lg">
+          {found.rows.map((c) => (
+            <li key={c.id}>
+              <button
+                type="button"
+                className="flex w-full justify-between px-3 py-1.5 text-left hover:bg-[#408dfb] hover:text-white"
+                onClick={() => {
+                  setText(c.name);
+                  onChange({ id: c.id, name: c.name });
+                }}
+              >
+                <span className="truncate">{c.name}</span>
+                <span className="shrink-0 pl-2 text-[11px] opacity-70">{c.kind} · {zMoney(c.receivables)}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+export function NewReceiptPage() {
+  const [params] = useSearchParams();
+  const navigate = useNavigate();
+  const queries = useQueryClient();
+  const action = useAction();
+  const choices = useChoices().data;
+  const forInvoice = Number(params.get("invoice")) || null;
+  const [customer, setCustomer] = useState<{ id: number; name: string } | null>(params.get("customer") ? { id: Number(params.get("customer")), name: params.get("name") ?? "" } : null);
+  const [form, setForm] = useState({ amount: "", date: "", mode: "", depositTo: "", reference: "", notes: "" });
+  const invoices = useOpenBills(customer?.id ?? null, "invoice").data ?? [];
+  const [amounts, setAmounts] = useState<Record<number, string>>({});
+  const picked = useMemo(() => {
+    const out = { ...amounts };
+    const invoice = invoices.find((b) => b.id === forInvoice);
+    if (invoice && out[invoice.id] === undefined) out[invoice.id] = (invoice.balance / 100).toFixed(2);
+    return out;
+  }, [amounts, invoices, forInvoice]);
+  if (!choices) return <p className="p-6 text-[#6c718a]">Loading…</p>;
+  const used = invoices.reduce((sum, bill) => sum + Math.round((Number(picked[bill.id]) || 0) * 100), 0);
+  const paid = form.amount ? Math.round(Number(form.amount) * 100) : used;
+  return (
+    <ZPage
+      title="Record Payment"
+      onClose={() => navigate("/books/paymentsreceived")}
+      footer={
+        <>
+          <Primary
+            disabled={action.busy}
+            onClick={() =>
+              void action.run(async () => {
+                const made = await api<{ id: number }>("/api/books/customer_payment/new", {
+                  body: {
+                    customerId: customer?.id ?? 0,
+                    date: form.date || choices.today,
+                    amount: paid,
+                    mode: form.mode || null,
+                    depositTo: form.depositTo || null,
+                    reference: form.reference || null,
+                    notes: form.notes || null,
+                    invoices: invoices.filter((b) => Number(picked[b.id]) > 0).map((b) => ({ billId: b.id, amount: Math.round(Number(picked[b.id]) * 100) })),
+                  },
+                });
+                await queries.invalidateQueries({ queryKey: ["books"] });
+                navigate(`/books/paymentsreceived/${made.id}`);
+              })
+            }
+          >
+            Save as Paid
+          </Primary>
+          <Plain onClick={() => navigate("/books/paymentsreceived")}>Cancel</Plain>
+        </>
+      }
+    >
+      <Problem message={action.problem?.message} />
+      <div className="bg-[#fbfbfe] px-5 py-3">
+        <ZRow label="Customer Name" required error={action.at("customerId")}>
+          <CustomerPick value={customer} onChange={setCustomer} />
+        </ZRow>
+      </div>
+      <div className="px-5 py-3">
+        <ZRow label="Amount Received" required error={action.at("amount")}>
+          <input className={ZIN} inputMode="decimal" placeholder={(used / 100).toFixed(2)} value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} />
+        </ZRow>
+        <ZRow label="Payment Date" required error={action.at("date")}>
+          <input type="date" className={ZIN} value={form.date || choices.today} onChange={(event) => setForm({ ...form, date: event.target.value })} />
+        </ZRow>
+        <ZRow label="Payment Mode">
+          <input className={ZIN} list="book-modes-in" placeholder="Bank Transfer" value={form.mode} onChange={(event) => setForm({ ...form, mode: event.target.value })} />
+          <datalist id="book-modes-in">
+            {["Bank Transfer", "Bank Remittance", "Cash", "Check", "GCash", "Credit Card"].map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+        </ZRow>
+        <ZRow label="Deposit To">
+          <input className={ZIN} value={form.depositTo} onChange={(event) => setForm({ ...form, depositTo: event.target.value })} />
+        </ZRow>
+        <ZRow label="Reference#">
+          <input className={ZIN} value={form.reference} onChange={(event) => setForm({ ...form, reference: event.target.value })} />
+        </ZRow>
+      </div>
+      <div className="px-5 pb-4">
+        <BillsTable bills={invoices} amounts={picked} setAmounts={setAmounts} sales error={(at) => action.at(`bills.${at}.amount`)} />
+        <div className="mt-3 ml-auto max-w-sm space-y-1 rounded-md bg-[#f9f9fb] p-4">
+          <div className="flex justify-between">
+            <span>Amount Received:</span>
+            <span>{zMoney(paid, "")}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Amount used for Payments:</span>
+            <span>{zMoney(used, "")}</span>
+          </div>
+          <div className="flex justify-between">
+            <span>Amount in Excess:</span>
+            <span>{zMoney(Math.max(0, paid - used), "")}</span>
+          </div>
+        </div>
+        <p className="mt-3 text-[12px] text-[#6c718a]">Invoices made on the CRM's order line take their payments there (Finance → the invoice).</p>
       </div>
     </ZPage>
   );

@@ -105,6 +105,8 @@ const time = (value: string | undefined | null) => {
 /** Zoho's word for a status as a key: "Partially Billed" → partially_billed. */
 export const statusKey = (value: string | undefined | null) =>
   said(value)
+    // Zoho writes some in one word ("PartiallyPaid"): partially_paid.
+    .replace(/([a-z])([A-Z])/g, "$1_$2")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_|_$/g, "") || "unknown";
@@ -278,10 +280,92 @@ export const CSV_SPECS: Record<string, CsvSpec> = {
     line: {},
     linksFromLines: [{ kind: "bill", column: "Bill Number", on: "Bill Date" }],
   },
+  "Sales_Order": {
+    kind: "sales_order",
+    id: "SalesOrder ID",
+    number: "SalesOrder Number",
+    reference: "PurchaseOrder",
+    date: "Order Date",
+    dueDate: "Expected Shipment Date",
+    status: "Status",
+    party: "Customer Name",
+    partyId: "Customer ID",
+    currency: "Currency Code",
+    fx: "Exchange Rate",
+    subTotal: "SubTotal",
+    total: "Total",
+    paymentTerms: "Payment Terms Label",
+    notes: "Notes",
+    line: {
+      item: "Item Name",
+      sku: "SKU",
+      description: "Item Desc",
+      warehouse: "Warehouse Name",
+      unit: "Usage unit",
+      qty: "QuantityOrdered",
+      rate: "Item Price",
+      taxName: "Item Tax",
+      taxPct: "Item Tax %",
+      taxAmount: "Item Tax Amount",
+      amount: "Item Total",
+      done: { invoiced: "QuantityInvoiced", packed: "QuantityPacked", cancelled: "QuantityCancelled" },
+    },
+  },
+  "Invoice": {
+    kind: "invoice",
+    id: "Invoice ID",
+    number: "Invoice Number",
+    reference: "PurchaseOrder",
+    date: "Invoice Date",
+    dueDate: "Due Date",
+    status: "Invoice Status",
+    party: "Customer Name",
+    partyId: "Customer ID",
+    currency: "Currency Code",
+    fx: "Exchange Rate",
+    subTotal: "SubTotal",
+    total: "Total",
+    balance: "Balance",
+    paymentTerms: "Payment Terms Label",
+    notes: "Notes",
+    line: {
+      item: "Item Name",
+      sku: "SKU",
+      description: "Item Desc",
+      warehouse: "Warehouse Name",
+      unit: "Usage unit",
+      qty: "Quantity",
+      rate: "Item Price",
+      taxName: "Item Tax",
+      taxPct: "Item Tax %",
+      taxAmount: "Item Tax Amount",
+      amount: "Item Total",
+      batch: BATCH,
+    },
+    linksFromLines: [{ kind: "sales_order", column: "Sales Order Number" }],
+  },
+  "Customer_Payment": {
+    kind: "customer_payment",
+    id: "CustomerPayment ID",
+    number: "Payment Number Suffix",
+    reference: "Reference Number",
+    date: "Date",
+    status: "Payment Status",
+    party: "Customer Name",
+    partyId: "CustomerID",
+    currency: "Currency Code",
+    fx: "Exchange Rate",
+    total: "Amount",
+    notes: "Description",
+    created: "Created Time",
+    // A payment has no item lines: each row is an invoice it was put on, with the amount.
+    line: {},
+    linksFromLines: [{ kind: "invoice", column: "Invoice Number", amount: "Invoice Amount", on: "Date" }],
+  },
 };
 
 /** One CSV kind's rows (in any order) as documents. */
-export function docsFromCsv(spec: CsvSpec, all: Row[]): BookDocInput[] {
+export function docsFromCsv(spec: CsvSpec, all: Row[], knownLineCols?: Set<string>): BookDocInput[] {
   if (!all.length) return [];
   const columns = Object.keys(all[0] as Row);
   const groups = new Map<string, Row[]>();
@@ -292,7 +376,7 @@ export function docsFromCsv(spec: CsvSpec, all: Row[]): BookDocInput[] {
     if (group) group.push(row);
     else groups.set(id, [row]);
   }
-  const lineCols = lineColumns([...groups.values()], columns);
+  const lineCols = knownLineCols ?? lineColumns([...groups.values()], columns);
   const headerTaken = new Set(
     [spec.id, spec.number, spec.reference, spec.date, spec.dueDate, spec.status, spec.party, spec.partyId, spec.currency, spec.fx, spec.subTotal, spec.total, spec.balance, spec.paymentTerms, spec.notes, spec.created, spec.modified].filter(Boolean) as string[],
   );
@@ -358,7 +442,9 @@ export function docsFromCsv(spec: CsvSpec, all: Row[]): BookDocInput[] {
       }
     const total = cents(spec.total ? head[spec.total] : null) ?? lines.reduce((sum, line) => sum + (line.amount ?? 0), 0);
     const rawStatus = said(head[spec.status]);
-    const balance = cents(spec.balance ? head[spec.balance] : null) ?? 0;
+    // A payment's balance is what it was not put on any invoice or bill for (its unused amount).
+    const applied = links.reduce((sum, link) => sum + (link.amount ?? 0), 0);
+    const balance = spec.kind === "customer_payment" ? Math.max(0, (cents(spec.total ? head[spec.total] : null) ?? 0) - applied) : (cents(spec.balance ? head[spec.balance] : null) ?? 0);
     out.push({
       kind: spec.kind,
       zohoId,
@@ -638,7 +724,7 @@ export async function saveDocs(db: Database, docs: BookDocInput[], apply: boolea
 }
 
 /** Ties documents together by the numbers they name (a bill's purchase order, a payment's bills). */
-export async function linkDocs(db: Runner, docs: BookDocInput[], apply: boolean): Promise<{ links: number; missing: number }> {
+export async function linkDocs(db: Runner, docs: Pick<BookDocInput, "kind" | "zohoId" | "links">[], apply: boolean): Promise<{ links: number; missing: number }> {
   let links = 0;
   let missing = 0;
   const kind = docs[0]?.kind;
@@ -678,6 +764,18 @@ const LIST_KEYS: Partial<Record<BookKind, { id: string; balance?: string; total?
   bill: { id: "bill_id", balance: "balance", total: "total" },
   // A payment's balance is what is not put on any bill yet (Zoho's "Unused Amount").
   vendor_payment: { id: "payment_id", balance: "balance", total: "amount" },
+  sales_order: { id: "salesorder_id", total: "total" },
+  invoice: { id: "invoice_id", balance: "balance", total: "total" },
+  customer_payment: { id: "payment_id", balance: "unused_amount", total: "amount" },
+  credit_note: { id: "creditnote_id", balance: "balance", total: "total" },
+  sales_return: { id: "salesreturn_id" },
+};
+/** What Zoho's list says of a document that is not on the document itself (a sales order's
+ *  invoiced, paid, packed and shipped states, its delivery method), kept in its fields. */
+const LIST_FIELDS: Partial<Record<BookKind, string[]>> = {
+  sales_order: ["invoiced_status", "paid_status", "shipped_status", "order_status", "delivery_method", "salesperson_name", "is_backorder"],
+  invoice: ["salesperson_name", "due_days", "is_viewed_by_client"],
+  sales_return: ["receive_status", "refund_status", "salesreturn_status"],
 };
 
 /** Brings each document's state as Zoho's list shows it today (status, balance, a payment's unused
@@ -701,11 +799,14 @@ export async function refreshFromList(db: Database, kind: BookKind, items: Recor
     updated++;
     if (!apply) continue;
     // A receive's own status is whether it was received (Zoho's list says "billed" once billed).
-    const status = statusKey(str(kind === "purchase_receive" ? (item.received_status ?? item.status) : item.status));
+    const word = kind === "purchase_receive" ? (item.received_status ?? item.status) : kind === "sales_return" ? item.salesreturn_status : kind === "customer_payment" ? item.payment_status : kind === "sales_order" ? (item.order_status ?? item.status) : item.status;
+    const status = statusKey(str(word));
+    const extra = Object.fromEntries((LIST_FIELDS[kind] ?? []).filter((key) => str(item[key]) !== null).map((key) => [key, item[key]]));
     const balance = keys.balance ? cents(item[keys.balance] as number) : null;
     const total = keys.total ? cents(item[keys.total] as number) : null;
     await db.execute(
       sql`update book_doc set status = ${status}, balance = coalesce(${balance}, balance), total = coalesce(${total}, total),
+        fields = fields || ${JSON.stringify(extra)}::jsonb,
         zoho_modified = coalesce(${str(item.last_modified_time)}::timestamptz, zoho_modified) where id = ${id}`,
     );
   }
@@ -727,8 +828,8 @@ export async function openingCredits(db: Database, listed: Record<string, unknow
     const [found] = await rows<{ id: number; credits: number; payables: number }>(
       db,
       sql`select s.id::int as id,
-          coalesce((select sum(round(d.balance * d.fx_rate)) from book_doc d where d.supplier_id = s.id and d.kind in ('vendor_credit', 'vendor_payment') and d.status not in ('void', 'draft', 'pending_approval')), 0)::float8 as credits,
-          coalesce((select sum(round(d.balance * d.fx_rate)) from book_doc d where d.supplier_id = s.id and d.kind = 'bill' and d.status not in ('void', 'draft', 'pending_approval')), 0)::float8 as payables
+          coalesce((select sum(round(d.balance * d.fx_rate)) from book_doc d where d.supplier_id = s.id and d.zoho_id is not null and d.kind in ('vendor_credit', 'vendor_payment') and d.status not in ('void', 'draft', 'pending_approval')), 0)::float8 as credits,
+          coalesce((select sum(round(d.balance * d.fx_rate)) from book_doc d where d.supplier_id = s.id and d.zoho_id is not null and d.kind = 'bill' and d.status not in ('void', 'draft', 'pending_approval')), 0)::float8 as payables
         from supplier s where s.zoho_id = ${zohoId}`,
     );
     if (!found) continue;
@@ -741,4 +842,119 @@ export async function openingCredits(db: Database, listed: Record<string, unknow
     if (apply) await db.execute(sql`update supplier set opening_credits = ${openCredits}, opening_payables = ${openPayables} where id = ${found.id}`);
   }
   return { vendors, credits, payables };
+}
+
+/** Customers' own fields from Zoho's Contacts (every column with data), and their people. */
+export async function customerFields(db: Database, all: Iterable<Row>, apply: boolean): Promise<{ seen: number; matched: number }> {
+  let seen = 0;
+  let matched = 0;
+  const ids = new Map(
+    (await rows<{ zohoId: string; id: number }>(db, sql`select zoho_id as "zohoId", id::int as id from customer where zoho_id is not null`)).map((row) => [row.zohoId, row.id]),
+  );
+  for (const row of all) {
+    seen++;
+    const id = ids.get(said(row["Contact ID"]));
+    if (!id) continue;
+    matched++;
+    if (!apply) continue;
+    const fields = rest(row, Object.keys(row), new Set(["Contact ID"]));
+    await db.execute(sql`update customer set zoho_fields = ${JSON.stringify(fields)}::jsonb where id = ${id}`);
+  }
+  return { seen, matched };
+}
+
+export async function importCustomerPeople(db: Database, all: Row[], apply: boolean): Promise<number> {
+  let made = 0;
+  for (const row of all) {
+    const name = [filled(row.Salutation), filled(row["First Name"]), filled(row["Last Name"])].filter(Boolean).join(" ");
+    const owner = filled(row["Contact ID"]) ?? filled(row["Customer ID"]);
+    if (!owner || !name) continue;
+    const [customer] = await rows<{ id: number }>(db, sql`select id::int as id from customer where zoho_id = ${owner}`);
+    if (!customer) continue;
+    made++;
+    if (!apply) continue;
+    const fields = rest(row, Object.keys(row), new Set(["Contact ID", "Customer ID", "Contact Person ID", "Salutation", "First Name", "Last Name", "EmailID", "Phone", "MobilePhone", "Designation"]));
+    await db.execute(
+      sql`insert into customer_person (customer_id, zoho_id, name, email, phone, mobile, designation, fields)
+        values (${customer.id}, ${filled(row["Contact Person ID"]) ?? `${owner}:${name}`}, ${name}, ${filled(row.EmailID)}, ${filled(row.Phone)}, ${filled(row.MobilePhone)},
+          ${filled(row.Designation)}, ${JSON.stringify(fields)}::jsonb)
+        on conflict (zoho_id) do nothing`,
+    );
+  }
+  return made;
+}
+
+/** Each customer's receivables and unused credits that no Zoho document here explains (opening
+ *  balances and advances in Zoho Books), from Zoho's customer list: kept as opening figures. */
+export async function customerOpenings(db: Database, listed: Record<string, unknown>[], apply: boolean): Promise<{ customers: number; receivables: number; credits: number }> {
+  let customers = 0;
+  let receivables = 0;
+  let credits = 0;
+  const explained = new Map(
+    (
+      await rows<{ zohoId: string; owed: number; unused: number }>(
+        db,
+        sql`select c.zoho_id as "zohoId",
+            coalesce(sum(round(d.balance * d.fx_rate)) filter (where d.kind = 'invoice' and d.status not in ('void', 'draft')), 0)::float8 as owed,
+            coalesce(sum(round(d.balance * d.fx_rate)) filter (where d.kind in ('credit_note', 'customer_payment') and d.status not in ('void', 'draft')), 0)::float8 as unused
+          from customer c join book_doc d on d.customer_id = c.id and d.zoho_id is not null where c.zoho_id is not null group by c.zoho_id`,
+      )
+    ).map((row) => [row.zohoId, row]),
+  );
+  for (const v of listed) {
+    const zohoId = str(v.contact_id);
+    if (!zohoId) continue;
+    const owed = cents((v.outstanding_receivable_amount_bcy ?? v.outstanding_receivable_amount) as number) ?? 0;
+    const unused = cents((v.unused_credits_receivable_amount_bcy ?? v.unused_credits_receivable_amount) as number) ?? 0;
+    const here = explained.get(zohoId) ?? { owed: 0, unused: 0 };
+    const openOwed = Math.max(0, owed - here.owed);
+    const openCredits = Math.max(0, unused - here.unused);
+    if (!openOwed && !openCredits) continue;
+    customers++;
+    receivables += openOwed;
+    credits += openCredits;
+    if (apply) await db.execute(sql`update customer set opening_receivables = ${openOwed}, opening_credits = ${openCredits} where zoho_id = ${zohoId}`);
+  }
+  return { customers, receivables, credits };
+}
+
+// ------------------------------------------------------------------ sales documents made after the backup, from Zoho's API
+
+export function salesOrderFromJson(doc: Json): BookDocInput {
+  const out = fromJson("sales_order", doc, { id: "salesorder_id", number: "salesorder_number", party: "customer_name", partyId: "customer_id" });
+  out.status = statusKey(str(doc.order_status) ?? str(doc.status));
+  out.dueDate = str(doc.shipment_date);
+  for (const [at, item] of ((doc.line_items as Json[] | undefined) ?? []).entries()) {
+    const line = out.lines[at];
+    if (!line) continue;
+    for (const [key, name] of [["quantity_invoiced", "invoiced"], ["quantity_packed", "packed"], ["quantity_cancelled", "cancelled"], ["quantity_shipped", "shipped"]] as const) {
+      const value = num(item[key] as number);
+      if (value) line.qtyDone[name] = value;
+    }
+  }
+  for (const key of ["invoiced_status", "paid_status", "shipped_status", "delivery_method"]) if (str(doc[key])) out.fields[key] = doc[key];
+  return out;
+}
+
+export function invoiceFromJson(doc: Json): BookDocInput {
+  const out = fromJson("invoice", doc, { id: "invoice_id", number: "invoice_number", party: "customer_name", partyId: "customer_id" });
+  out.dueDate = str(doc.due_date);
+  const orders = new Set<string>();
+  for (const item of (doc.line_items as Json[] | undefined) ?? []) if (str(item.salesorder_number)) orders.add(String(item.salesorder_number));
+  for (const so of (doc.salesorders as Json[] | undefined) ?? []) if (str(so.salesorder_number)) orders.add(String(so.salesorder_number));
+  if (str(doc.salesorder_number)) orders.add(String(doc.salesorder_number));
+  for (const number of orders) out.links.push({ kind: "sales_order", number });
+  return out;
+}
+
+export function customerPaymentFromJson(doc: Json): BookDocInput {
+  const out = fromJson("customer_payment", doc, { id: "payment_id", number: "payment_number", party: "customer_name", partyId: "customer_id" });
+  out.total = cents(doc.amount as number) ?? 0;
+  out.balance = cents(doc.unused_amount as number) ?? 0;
+  out.status = statusKey(str(doc.payment_status) ?? "paid");
+  if (str(doc.payment_mode)) out.fields.Mode = doc.payment_mode;
+  for (const invoice of (doc.invoices as Json[] | undefined) ?? [])
+    if (str(invoice.invoice_number))
+      out.links.push({ kind: "invoice", number: String(invoice.invoice_number), amount: cents(invoice.amount_applied as number), on: str(doc.date) });
+  return out;
 }

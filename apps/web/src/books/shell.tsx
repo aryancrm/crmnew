@@ -27,10 +27,10 @@ const GROUPS: NavGroup[] = [
     label: "Sales",
     icon: <ShoppingCart size={16} />,
     items: [
-      { label: "Customers", to: "/customers" },
-      { label: "Sales Orders", to: "/orders" },
-      { label: "Invoices", to: "/invoices" },
-      { label: "Payments Received", to: "/payments" },
+      { label: "Customers", to: "/books/customers" },
+      { label: "Sales Orders", to: "/books/salesorders" },
+      { label: "Invoices", to: "/books/invoices" },
+      { label: "Payments Received", to: "/books/paymentsreceived" },
       { label: "Sales Returns", to: "/books/salesreturns" },
       { label: "Credit Notes", to: "/books/creditnotes" },
     ],
@@ -61,7 +61,7 @@ export function BooksShell() {
   if (me.isPending) return null;
   if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   if (!BOOK_ROLES.includes(me.data.role)) return <Navigate to="/" replace />;
-  const listName = segment === "vendors" ? "Vendors" : (kindByPath(segment)?.plural ?? "Purchases");
+  const listName = segment === "vendors" ? "Vendors" : segment === "customers" ? "Customers" : (kindByPath(segment)?.plural ?? "Purchases");
   return (
     <div className="flex h-dvh overflow-hidden bg-white font-sans text-[13px] leading-[1.6] text-black">
       <nav aria-label="Books menu" className="flex w-[220px] shrink-0 flex-col overflow-y-auto bg-[#21263c] pb-4 text-[#f0f0f0] print:hidden">

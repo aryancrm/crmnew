@@ -19,6 +19,12 @@ import {
   importVendorPeople,
   importVendors,
   linkDocs,
+  salesOrderFromJson,
+  invoiceFromJson,
+  customerPaymentFromJson,
+  customerOpenings,
+  customerFields,
+  importCustomerPeople,
   openingCredits,
   refreshFromList,
   type Row,
@@ -40,7 +46,7 @@ const jsonl = (name: string) => {
   for (const line of readFileSync(path, "utf8").split("\n")) {
     if (!line.trim()) continue;
     const doc = JSON.parse(line) as Record<string, unknown>;
-    seen.set(String(doc.vendor_credit_id ?? doc.creditnote_id ?? doc.salesreturn_id), doc);
+    seen.set(String(doc.vendor_credit_id ?? doc.creditnote_id ?? doc.salesreturn_id ?? doc.salesorder_id ?? doc.invoice_id ?? doc.payment_id), doc);
   }
   return [...seen.values()];
 };
@@ -87,7 +93,59 @@ for (const file of ["Purchase_Order.csv", "Purchase_Receive.csv", "Bill.csv", "V
   kinds.push(docs);
   console.log(file, await saveDocs(db, docs, apply), `${Math.round((Date.now() - t0) / 1000)}s`);
 }
+// Sales: the big files go a few thousand documents at a time (a document's rows sit together).
+const sales = process.argv.includes("--no-sales") ? [] : (["Sales_Order", "Invoice", "Customer_Payment"] as const);
+for (const name of sales) {
+  const spec = CSV_SPECS[name];
+  if (!spec) continue;
+  // First pass: every column that changes within any document is a line's column (so nothing a
+  // line holds is taken for the document's own and lost).
+  const lineCols = new Set<string>();
+  {
+    let first: Row | null = null;
+    for (const row of rowsOf(name, ZOHO_DIR) as Iterable<Row>) {
+      if (!first || row[spec.id] !== first[spec.id]) {
+        first = row;
+        continue;
+      }
+      for (const column of Object.keys(row)) if (!lineCols.has(column) && row[column] !== first[column]) lineCols.add(column);
+    }
+  }
+  const slim: Pick<BookDocInput, "kind" | "zohoId" | "links">[] = [];
+  const total = { docs: 0, made: 0, updated: 0, lines: 0, noParty: 0, medicines: 0 };
+  let batch: Row[][] = [];
+  const flush = async () => {
+    const rows = batch.flat();
+    batch = [];
+    if (!rows.length) return;
+    const docs = docsFromCsv(spec, rows, lineCols);
+    const result = await saveDocs(db, docs, apply);
+    for (const key of Object.keys(total) as (keyof typeof total)[]) total[key] += result[key];
+    for (const doc of docs) if (doc.links.length) slim.push({ kind: doc.kind, zohoId: doc.zohoId, links: doc.links });
+  };
+  let group: Row[] = [];
+  for (const row of rowsOf(name, ZOHO_DIR)) {
+    if (group.length && row[spec.id] !== group[0]?.[spec.id]) {
+      batch.push(group);
+      group = [];
+      if (batch.length >= 3000) await flush();
+    }
+    group.push(row as Row);
+  }
+  if (group.length) batch.push(group);
+  await flush();
+  console.log(name, total, `${Math.round((Date.now() - t0) / 1000)}s`);
+  kinds.push(slim as BookDocInput[]);
+}
+if (sales.length) {
+  console.log("customers' Zoho fields", await customerFields(db, rowsOf("Contacts", ZOHO_DIR) as Iterable<Row>, apply));
+  console.log("customers' people", await importCustomerPeople(db, [...rowsOf("Contact_Persons.csv", ZOHO_DIR)] as Row[], apply));
+}
+
 for (const [name, read] of [
+  ["salesorders_new", salesOrderFromJson],
+  ["invoices_new", invoiceFromJson],
+  ["customerpayments_new", customerPaymentFromJson],
   ["vendorcredits", vendorCreditFromJson],
   ["salesreturns", salesReturnFromJson],
   ["creditnotes", creditNoteFromJson],
@@ -104,6 +162,11 @@ for (const [name, kind] of [
   ["list_purchasereceives", "purchase_receive"],
   ["list_bills", "bill"],
   ["list_vendorpayments", "vendor_payment"],
+  ["list_salesorders", "sales_order"],
+  ["list_invoices", "invoice"],
+  ["list_customerpayments", "customer_payment"],
+  ["list_creditnotes", "credit_note"],
+  ["list_salesreturns", "sales_return"],
 ] as const) {
   const items = jsonlRaw(name);
   if (!items.length) continue;
@@ -112,5 +175,6 @@ for (const [name, kind] of [
   if (result.notHere.length) writeFileSync(join(API_DIR, `missing_${kind}.json`), JSON.stringify(result.notHere));
 }
 console.log("vendors' opening credits", await openingCredits(db, jsonlRaw("list_vendors"), apply));
+console.log("customers' opening figures", await customerOpenings(db, jsonlRaw("list_contacts"), apply));
 console.log(`done in ${Math.round((Date.now() - t0) / 1000)}s`);
 process.exit(0);

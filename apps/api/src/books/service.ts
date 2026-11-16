@@ -7,6 +7,7 @@ import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import { COST_ROLES } from "../inventory/rules";
 import { todayManila } from "../inventory/rules";
+import { crmDoc, crmLight, crmRows } from "./crm";
 import type { BookDoc, BookKind, BookLine, BookLinked, BookList, BookRow, Me, VendorDetail, VendorList, VendorRow } from "../types";
 
 export const PURCHASE_KINDS: BookKind[] = ["purchase_order", "purchase_receive", "bill", "vendor_payment", "vendor_credit"];
@@ -17,22 +18,29 @@ export const isBookKind = (value: string): value is BookKind => (ALL_KINDS as st
 /** Who reads the books: purchases and their money are for the stock and money desks. */
 const mayRead = (me: Me) => allow(me, COST_ROLES, "see the purchases");
 
-const SORTS: Record<string, SQL> = {
-  date: sql`d.doc_date`,
-  number: sql`lower(d.number)`,
-  reference: sql`lower(d.reference)`,
-  party: sql`lower(d.party_name)`,
-  status: sql`d.status`,
-  due: sql`d.due_date`,
-  total: sql`d.total`,
-  balance: sql`d.balance`,
-};
 
 /** A bill or invoice with money owed past its due day reads "overdue", whatever Zoho last said. */
 const liveStatus = (today: string) => sql`case
     when d.kind in ('bill', 'invoice') and d.balance > 0 and d.due_date < ${today}::date and d.status not in ('void', 'draft', 'paid', 'closed') then 'overdue'
     when d.kind in ('bill', 'invoice') and d.status = 'overdue' and (d.balance = 0 or d.due_date >= ${today}::date) then case when d.balance = 0 then 'paid' else 'open' end
     else d.status end`;
+
+/** A Zoho sales order's dots, from Zoho's list when it was read (its own words), else its lines. */
+const dotOf = (word: SQL, lines: SQL) => sql`case
+    when ${word} in ('invoiced', 'paid', 'shipped', 'fulfilled', 'packed', 'closed') then 'full'
+    when ${word} like 'partially%' then 'partial'
+    when ${word} is not null then 'none'
+    else ${lines} end`;
+const linesDot = (what: string) => sql`(select case when coalesce(sum((l.qty_done->>${what})::numeric), 0) = 0 then 'none'
+      when sum((l.qty_done->>${what})::numeric) >= sum(coalesce(l.qty, 0) - coalesce((l.qty_done->>'cancelled')::numeric, 0)) then 'full' else 'partial' end
+    from book_line l where l.doc_id = d.id)`;
+const salesDots = sql`case when d.kind = 'sales_order' then ${dotOf(sql`d.fields->>'invoiced_status'`, linesDot("invoiced"))} end as invoiced,
+    case when d.kind = 'sales_order' then ${dotOf(sql`d.fields->>'paid_status'`, sql`(select case when count(*) = 0 then 'none' when sum(i.balance) = 0 then 'full'
+        when sum(i.balance) < sum(i.total) then 'partial' else 'none' end from book_link k join book_doc i on i.id = k.from_doc and i.kind = 'invoice' and i.status <> 'void' where k.to_doc = d.id)`)} end as paid,
+    case when d.kind = 'sales_order' then ${dotOf(sql`d.fields->>'packed_status'`, linesDot("packed"))} end as packed,
+    case when d.kind = 'sales_order' then ${dotOf(sql`d.fields->>'shipped_status'`, sql`'none'`)} end as shipped,
+    case when d.kind = 'sales_order' then coalesce(d.fields->>'Delivery Method', d.fields->>'delivery_method') end as "deliveryMethod",
+    null::jsonb as crm`;
 
 const rowSelect = (today: string) => sql`select d.id::int as id, d.number, d.reference, to_char(d.doc_date, 'YYYY-MM-DD') as date,
     to_char(d.due_date, 'YYYY-MM-DD') as "dueDate", ${liveStatus(today)} as status,
@@ -52,13 +60,15 @@ const rowSelect = (today: string) => sql`select d.id::int as id, d.number, d.ref
       end as billed,
     case when d.kind = 'purchase_receive' then d.reference
       when d.kind in ('vendor_payment', 'customer_payment') then (select string_agg(b.number, ', ' order by b.doc_date) from book_link k join book_doc b on b.id = k.to_doc where k.from_doc = d.id)
+      when d.kind = 'invoice' then (select string_agg(b.number, ', ') from book_link k join book_doc b on b.id = k.to_doc and b.kind = 'sales_order' where k.from_doc = d.id)
       when d.kind = 'credit_note' then (select string_agg(b.number, ', ') from book_link k join book_doc b on b.id = k.to_doc and b.kind = 'invoice' where k.from_doc = d.id)
       when d.kind = 'sales_return' then (select string_agg(b.number, ', ') from book_link k join book_doc b on b.id = k.to_doc and b.kind = 'sales_order' where k.from_doc = d.id)
       end as linked,
     coalesce(d.fields->>'Mode', d.fields->>'payment_mode') as mode,
     -- What a payment or a credit has not been put on yet (Zoho's own figure, kept as its balance).
     case when d.kind in ('vendor_payment', 'customer_payment', 'vendor_credit', 'credit_note') then d.balance::bigint::float8 end as unused,
-    case when d.kind in ('purchase_receive', 'sales_return') then (select sum(l.qty)::float8 from book_line l where l.doc_id = d.id) end as qty
+    case when d.kind in ('purchase_receive', 'sales_return') then (select sum(l.qty)::float8 from book_line l where l.doc_id = d.id) end as qty,
+    ${salesDots}
   from book_doc d left join supplier s on s.id = d.supplier_id left join customer c on c.id = d.customer_id`;
 
 export async function bookList(
@@ -69,30 +79,38 @@ export async function bookList(
 ): Promise<BookList> {
   mayRead(me);
   const today = todayManila();
-  const views = await rows<{ key: string; count: number }>(
-    db,
-    sql`select ${liveStatus(today)} as key, count(*)::int as count from book_doc d where d.kind = ${kind} group by 1 order by 2 desc`,
-  );
+  // First the light rows (Zoho's documents and this CRM's own of the kind) to count, filter, sort
+  // and page; then everything a row shows, for the page's rows only.
+  const light = sql`(select d.id::int as id, to_char(d.doc_date, 'YYYY-MM-DD') as date, d.number, d.reference, coalesce(s.name, c.name, d.party_name) as party,
+      coalesce(d.supplier_id, d.customer_id)::int as "partyId", ${liveStatus(today)} as status, d.total::bigint::float8 as total, d.balance::bigint::float8 as balance,
+      to_char(d.due_date, 'YYYY-MM-DD') as due
+    from book_doc d left join supplier s on s.id = d.supplier_id left join customer c on c.id = d.customer_id where d.kind = ${kind}
+    ${crmLight(kind, today)})`;
+  const views = await rows<{ key: string; count: number }>(db, sql`select r.status as key, count(*)::int as count from ${light} r group by 1 order by 2 desc`);
   const view = asked.view && views.some((v) => v.key === asked.view) ? asked.view : "all";
   const perPage = [10, 25, 50, 100, 200].includes(asked.perPage ?? 0) ? (asked.perPage as number) : 25;
   const page = Math.max(1, asked.page ?? 1);
   const q = asked.q?.trim();
   const where = sql.join(
     [
-      sql`d.kind = ${kind}`,
-      view === "all" ? sql`true` : sql`${liveStatus(today)} = ${view}`,
-      q ? sql`(d.number ilike ${`%${q}%`} or d.reference ilike ${`%${q}%`} or d.party_name ilike ${`%${q}%`})` : sql`true`,
-      asked.party ? sql`(d.supplier_id = ${asked.party} or d.customer_id = ${asked.party})` : sql`true`,
+      view === "all" ? sql`true` : sql`r.status = ${view}`,
+      q ? sql`(r.number ilike ${`%${q}%`} or r.reference ilike ${`%${q}%`} or r.party ilike ${`%${q}%`})` : sql`true`,
+      asked.party ? sql`r."partyId" = ${asked.party}` : sql`true`,
     ],
     sql` and `,
   );
-  const by = SORTS[asked.sort ?? "date"] ?? SORTS.date;
+  const by = LIGHT_SORTS[asked.sort ?? "date"] ?? LIGHT_SORTS.date;
   const dir = asked.dir === "asc" ? sql`asc` : sql`desc`;
-  const [count] = await rows<{ n: number }>(db, sql`select count(*)::int as n from book_doc d where ${where}`);
-  const found = await rows<BookRow>(
-    db,
-    sql`${rowSelect(today)} where ${where} order by ${by} ${dir} nulls last, d.id desc limit ${perPage} offset ${(page - 1) * perPage}`,
-  );
+  const [count] = await rows<{ n: number }>(db, sql`select count(*)::int as n from ${light} r where ${where}`);
+  const pageRows = await rows<{ id: number }>(db, sql`select r.id from ${light} r where ${where} order by ${by} ${dir} nulls last, length(r.number) ${dir}, r.number ${dir}, r.id desc limit ${perPage} offset ${(page - 1) * perPage}`);
+  const ids = pageRows.map((row) => row.id);
+  const zoho = ids.filter((id) => id > 0);
+  const crm = ids.filter((id) => id < 0);
+  const full = [
+    ...(zoho.length ? await rows<BookRow>(db, sql`${rowSelect(today)} where d.id in (${sql.join(zoho.map((id) => sql`${id}`), sql`, `)})`) : []),
+    ...(crm.length ? await crmRows(db, kind, crm, today) : []),
+  ];
+  const byId = new Map(full.map((row) => [row.id, row]));
   return {
     kind,
     today,
@@ -101,13 +119,25 @@ export async function bookList(
     page,
     perPage,
     total: count?.n ?? 0,
-    rows: found,
+    rows: ids.map((id) => byId.get(id)).filter((row): row is BookRow => Boolean(row)),
   };
 }
+
+const LIGHT_SORTS: Record<string, SQL> = {
+  date: sql`r.date`,
+  number: sql`lower(r.number)`,
+  reference: sql`lower(r.reference)`,
+  party: sql`lower(r.party)`,
+  status: sql`r.status`,
+  due: sql`r.due`,
+  total: sql`r.total`,
+  balance: sql`r.balance`,
+};
 
 export async function bookDoc(db: Database, me: Me, kind: BookKind, id: number): Promise<BookDoc> {
   mayRead(me);
   const today = todayManila();
+  if (id < 0) return crmDoc(db, kind, -id, today);
   const [row] = await rows<BookRow & { kind: BookKind; fxRate: number; subTotal: number | null; paymentTerms: string | null; notes: string | null; fields: Record<string, unknown>; fromZoho: boolean; zohoCreated: string | null; supplierId: number | null }>(
     db,
     sql`select r.*, d.kind, d.fx_rate::float8 as "fxRate", d.sub_total::bigint::float8 as "subTotal", d.payment_terms as "paymentTerms", d.notes, d.fields,

@@ -13,11 +13,13 @@ import {
   createPurchaseOrder,
   createVendorCredit,
   payVendor,
+  receivePayment,
   receiveOrder,
   saveVendor,
   setOrderStatus,
   voidDoc,
 } from "./actions";
+import { customerDetail, customerList } from "./customers";
 import { bookDoc, bookList, isBookKind, payables, vendorDetail, vendorList } from "./service";
 
 const listAsked = (query: (name: string) => string | undefined) => ({
@@ -34,6 +36,8 @@ export function bookRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHan
   app.use("/api/books/*", signedIn);
   app.use("/api/books-choices", signedIn);
   bookActionRoutes(app, db);
+  app.get("/api/books/customers", async (c) => c.json(await customerList(db, c.get("me"), listAsked((n) => c.req.query(n)))));
+  app.get("/api/books/customers/:id", async (c) => c.json(await customerDetail(db, c.get("me"), Number(c.req.param("id")))));
   app.get("/api/books/vendors", async (c) => c.json(await vendorList(db, c.get("me"), listAsked((n) => c.req.query(n)))));
   app.get("/api/books/vendors/:id", async (c) => c.json(await vendorDetail(db, c.get("me"), Number(c.req.param("id")))));
   app.get("/api/books/bill/payables", async (c) => c.json(await payables(db, c.get("me"))));
@@ -139,6 +143,18 @@ export function bookActionRoutes(app: Hono<Env>, db: Database): void {
         await readBody(
           c,
           z.object({ supplierId: z.number().int().min(0), date: DAY, amount: MONEY, mode: TEXT(60), paidThrough: TEXT(120), reference: TEXT(120), notes: TEXT(2000), bills: applied }),
+        ),
+      ),
+    ),
+  );
+  app.post("/api/books/customer_payment/new", async (c) =>
+    c.json(
+      await receivePayment(
+        db,
+        c.get("me"),
+        await readBody(
+          c,
+          z.object({ customerId: z.number().int().min(0), date: DAY, amount: MONEY, mode: TEXT(60), depositTo: TEXT(120), reference: TEXT(120), notes: TEXT(2000), invoices: applied }),
         ),
       ),
     ),

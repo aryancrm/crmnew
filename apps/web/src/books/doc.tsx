@@ -14,6 +14,9 @@ import { api } from "../api";
 import { type KindInfo, kindInfo, statusClass, statusText, zDate, zMoney, zQty } from "./kinds";
 
 const TITLE: Partial<Record<BookKind, string>> = {
+  sales_order: "SALES ORDER",
+  invoice: "TAX INVOICE",
+  customer_payment: "PAYMENT RECEIPT",
   purchase_order: "PURCHASE ORDER",
   purchase_receive: "PURCHASE RECEIVE",
   bill: "BILL",
@@ -132,7 +135,7 @@ function Fields({ fields }: { fields: Record<string, unknown> }) {
 
 function LineItems({ doc }: { doc: BookDoc }) {
   const order = doc.kind === "purchase_order";
-  const payment = doc.kind === "vendor_payment";
+  const payment = doc.kind === "vendor_payment" || doc.kind === "customer_payment";
   if (payment || !doc.lines.length) return null;
   return (
     <table className="mt-6 w-full border-collapse text-[12.5px]">
@@ -246,6 +249,11 @@ export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onC
         <button type="button" onClick={() => window.print()} className="flex items-center gap-1.5 rounded px-2.5 py-1 hover:bg-white">
           <Printer size={14} aria-hidden="true" /> PDF/Print
         </button>
+        {doc.crm && (
+          <Link to={doc.crm.href} className="ml-auto rounded px-2.5 py-1 text-[#1c5bd9] hover:bg-white">
+            Open on the order line ↗
+          </Link>
+        )}
         {doc.fromZoho && <span className="ml-auto text-[12px] text-[#6c718a]">From Zoho{doc.zohoCreated ? ` · made ${doc.zohoCreated}` : ""}</span>}
       </div>
       <div className="space-y-5 p-5">
@@ -307,6 +315,10 @@ export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onC
                 <Link to={`/books/vendors/${doc.vendor.id}`} className="font-medium text-[#1c5bd9]">
                   {doc.vendor.name}
                 </Link>
+              ) : doc.partyId && info.section === "Sales" ? (
+                <Link to={`/books/customers/${doc.partyId}`} className="font-medium text-[#1c5bd9]">
+                  {doc.party}
+                </Link>
               ) : (
                 <div className="font-medium">{doc.party}</div>
               )}
@@ -333,13 +345,13 @@ export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onC
               <span>Total</span>
               <span>{zMoney(doc.total, doc.currency)}</span>
             </div>
-            {(doc.kind === "bill" || doc.kind === "vendor_credit" || doc.kind === "credit_note") && (
+            {(doc.kind === "bill" || doc.kind === "invoice" || doc.kind === "vendor_credit" || doc.kind === "credit_note") && (
               <div className="flex justify-between px-2">
-                <span>{doc.kind === "bill" ? "Balance Due" : "Credits Remaining"}</span>
+                <span>{doc.kind === "bill" || doc.kind === "invoice" ? "Balance Due" : "Credits Remaining"}</span>
                 <span className="font-medium">{zMoney(doc.balance, doc.currency)}</span>
               </div>
             )}
-            {doc.unused !== null && doc.kind === "vendor_payment" && (
+            {doc.unused !== null && (doc.kind === "vendor_payment" || doc.kind === "customer_payment") && (
               <div className="flex justify-between px-2">
                 <span>Unused Amount</span>
                 <span>{zMoney(doc.unused, doc.currency)}</span>
@@ -435,13 +447,28 @@ function Actions({ doc, may, onBox, go }: { doc: BookDoc; may: ReturnType<typeof
         Record Payment
       </button>,
     );
-  if ((doc.kind === "vendor_credit" || doc.kind === "vendor_payment") && doc.balance > 0 && doc.status !== "void" && may.pay)
+  if (doc.kind === "invoice" && doc.balance > 0 && doc.status !== "void" && may.pay)
+    buttons.push(
+      doc.crm ? (
+        <button key="pay" type="button" className={TOOL} onClick={() => go(doc.crm?.href ?? "/")}>
+          Record Payment ↗
+        </button>
+      ) : (
+        <button key="pay" type="button" className={TOOL} onClick={() => go(`/books/paymentsreceived/new?customer=${doc.partyId ?? ""}&name=${encodeURIComponent(doc.party ?? "")}&invoice=${doc.id}`)}>
+          Record Payment
+        </button>
+      ),
+    );
+  if ((doc.kind === "vendor_credit" || doc.kind === "vendor_payment" || ((doc.kind === "credit_note" || doc.kind === "customer_payment") && !doc.crm)) && doc.balance > 0 && doc.status !== "void" && may.pay)
     buttons.push(
       <button key="apply" type="button" className={TOOL} onClick={() => onBox("apply")}>
         Apply to Bills
       </button>,
     );
-  const voidable = doc.status !== "void" && ((doc.kind === "bill" && may.bill && doc.balance === doc.total) || ((doc.kind === "vendor_payment" || doc.kind === "vendor_credit") && may.pay));
+  const voidable =
+    doc.status !== "void" &&
+    !doc.crm &&
+    ((doc.kind === "bill" && may.bill && doc.balance === doc.total) || (["vendor_payment", "vendor_credit", "customer_payment", "credit_note"].includes(doc.kind) && may.pay));
   if (voidable)
     buttons.push(
       <button key="void" type="button" className={TOOL} onClick={() => onBox("void")}>

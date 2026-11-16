@@ -534,16 +534,18 @@ export async function createBill(db: Database, me: Me, input: BillInput): Promis
 // ------------------------------------------------------------------ money on bills
 
 type OpenBill = { id: number; number: string; balance: number; total: number; status: string };
-async function billsFor(tx: Runner, supplierId: number, applied: { billId: number; amount: number }[]): Promise<OpenBill[]> {
+/** The bills (a vendor's) or invoices (a customer's, from Zoho) money is put on, checked. */
+async function billsFor(tx: Runner, partyId: number, applied: { billId: number; amount: number }[], kind: "bill" | "invoice" = "bill"): Promise<OpenBill[]> {
   const out: OpenBill[] = [];
+  const word = kind === "bill" ? "bill" : "invoice";
   for (const [at, entry] of applied.entries()) {
     const [bill] = await rows<OpenBill>(
       tx,
       sql`select id::int as id, number, balance::bigint::float8 as balance, total::bigint::float8 as total, status from book_doc
-        where id = ${entry.billId} and kind = 'bill' and supplier_id = ${supplierId} for update`,
+        where id = ${entry.billId} and kind = ${kind} and ${kind === "bill" ? sql`supplier_id` : sql`customer_id`} = ${partyId} for update`,
     );
-    if (!bill || ["void", "draft"].includes(bill.status)) throw new Refusal(400, "invalid", "That bill is not this vendor's open bill.", `bills.${at}.billId`);
-    if (entry.amount <= 0 || entry.amount > bill.balance) throw new Refusal(400, "invalid", `Put at most ${(bill.balance / 100).toFixed(2)} on bill ${bill.number}.`, `bills.${at}.amount`);
+    if (!bill || ["void", "draft"].includes(bill.status)) throw new Refusal(400, "invalid", `That ${word} is not this ${kind === "bill" ? "vendor" : "customer"}'s open ${word}.`, `bills.${at}.billId`);
+    if (entry.amount <= 0 || entry.amount > bill.balance) throw new Refusal(400, "invalid", `Put at most ${(bill.balance / 100).toFixed(2)} on ${word} ${bill.number}.`, `bills.${at}.amount`);
     out.push(bill);
   }
   return out;
@@ -610,15 +612,16 @@ export async function createVendorCredit(db: Database, me: Me, input: CreditInpu
 export async function applyCredit(db: Database, me: Me, id: number, input: { date: string; bills: { billId: number; amount: number }[] }): Promise<void> {
   allow(me, PAY_ROLES, "put credits on bills");
   await db.transaction(async (tx) => {
-    const [credit] = await rows<{ id: number; kind: string; supplierId: number; balance: number; status: string }>(
+    const [credit] = await rows<{ id: number; kind: string; partyId: number; balance: number; status: string }>(
       tx,
-      sql`select id::int as id, kind, supplier_id::int as "supplierId", balance::bigint::float8 as balance, status from book_doc
-        where id = ${id} and kind in ('vendor_credit', 'vendor_payment') for update`,
+      sql`select id::int as id, kind, coalesce(supplier_id, customer_id)::int as "partyId", balance::bigint::float8 as balance, status from book_doc
+        where id = ${id} and kind in ('vendor_credit', 'vendor_payment', 'credit_note', 'customer_payment') for update`,
     );
     if (!credit || credit.status === "void") throw new Refusal(404, "not_found", "That credit is not in the books.");
     const date = day(input.date, "date") as string;
     const applied = input.bills.filter((entry) => entry.amount > 0);
-    const bills = await billsFor(tx, credit.supplierId, applied);
+    const sales = credit.kind === "credit_note" || credit.kind === "customer_payment";
+    const bills = await billsFor(tx, credit.partyId, applied, sales ? "invoice" : "bill");
     const used = applied.reduce((sum, entry) => sum + entry.amount, 0);
     if (!used) throw new Refusal(400, "invalid", "Put an amount on at least one bill.", "bills");
     if (used > credit.balance) throw new Refusal(400, "invalid", "More is put on the bills than the credit has left.", "bills");
@@ -629,7 +632,7 @@ export async function applyCredit(db: Database, me: Me, id: number, input: { dat
     }
     const balance = credit.balance - used;
     await tx.execute(
-      sql`update book_doc set balance = ${balance}, status = ${credit.kind === "vendor_credit" ? (balance <= 0 ? "closed" : "open") : "paid"} where id = ${credit.id}`,
+      sql`update book_doc set balance = ${balance}, status = ${credit.kind === "vendor_credit" || credit.kind === "credit_note" ? (balance <= 0 ? "closed" : "open") : "paid"} where id = ${credit.id}`,
     );
   });
 }
@@ -644,7 +647,7 @@ export async function voidDoc(db: Database, me: Me, id: number, reason: string):
       tx,
       sql`select kind, status, total::bigint::float8 as total, balance::bigint::float8 as balance from book_doc where id = ${id} for update`,
     );
-    if (!doc || !["bill", "vendor_payment", "vendor_credit"].includes(doc.kind)) throw new Refusal(404, "not_found", "That document is not voided here.");
+    if (!doc || !["bill", "vendor_payment", "vendor_credit", "customer_payment", "credit_note"].includes(doc.kind)) throw new Refusal(404, "not_found", "That document is not voided here.");
     allow(me, doc.kind === "bill" ? BILL_ROLES : PAY_ROLES, "void it");
     if (doc.status === "void") throw new Refusal(409, "void", "It is already void.");
     if (doc.kind === "bill") {
@@ -663,7 +666,7 @@ export async function voidDoc(db: Database, me: Me, id: number, reason: string):
       // The money it put on bills goes back onto them.
       const on = await rows<{ billId: number; amount: number }>(
         tx,
-        sql`select k.to_doc::int as "billId", coalesce(k.amount, 0)::float8 as amount from book_link k join book_doc b on b.id = k.to_doc and b.kind = 'bill' where k.from_doc = ${id}`,
+        sql`select k.to_doc::int as "billId", coalesce(k.amount, 0)::float8 as amount from book_link k join book_doc b on b.id = k.to_doc and b.kind in ('bill', 'invoice') where k.from_doc = ${id}`,
       );
       for (const entry of on)
         await tx.execute(
@@ -672,5 +675,40 @@ export async function voidDoc(db: Database, me: Me, id: number, reason: string):
         );
     }
     await tx.execute(sql`update book_doc set status = 'void', balance = 0, voided_by = ${me.id}, voided_at = now(), void_reason = ${why} where id = ${id}`);
+  });
+}
+
+export type ReceiptInput = { customerId: number; date: string; amount: number; mode?: string | null; depositTo?: string | null; reference?: string | null; notes?: string | null; invoices: { billId: number; amount: number }[] };
+
+/** Money received from a customer (centavos) on their invoices that came from Zoho; what is not
+ *  put on an invoice stays as the payment's unused amount. The CRM's own invoices take payments
+ *  on the order line, as before. */
+export async function receivePayment(db: Database, me: Me, input: ReceiptInput): Promise<{ id: number }> {
+  allow(me, PAY_ROLES, "record a payment");
+  return db.transaction(async (tx) => {
+    const [customer] = await rows<{ id: number; name: string }>(tx, sql`select id::int as id, name from customer where id = ${input.customerId}`);
+    if (!customer) throw new Refusal(400, "invalid", "Pick the customer.", "customerId");
+    const date = day(input.date, "date") as string;
+    if (!(input.amount > 0)) throw new Refusal(400, "invalid", "Type the amount received.", "amount");
+    const applied = input.invoices.filter((entry) => entry.amount > 0);
+    const invoices = await billsFor(tx, customer.id, applied, "invoice");
+    const used = applied.reduce((sum, entry) => sum + entry.amount, 0);
+    if (used > input.amount) throw new Refusal(400, "invalid", "More is put on the invoices than was received.", "amount");
+    const number = await nextNumber(tx, "customer_payment", "", 0);
+    const fields = { ...(clean(input.mode) ? { Mode: clean(input.mode) } : {}), ...(clean(input.depositTo) ? { "Deposit To": clean(input.depositTo) } : {}) };
+    const [made] = await rows<{ id: number }>(
+      tx,
+      sql`insert into book_doc (kind, number, reference, doc_date, status, customer_id, party_name, total, balance, notes, fields, created_by)
+        values ('customer_payment', ${number}, ${clean(input.reference)}, ${date}::date, 'paid', ${customer.id}, ${customer.name}, ${input.amount}, ${input.amount - used},
+          ${clean(input.notes)}, ${JSON.stringify(fields)}::jsonb, ${me.id})
+        returning id::int as id`,
+    );
+    const id = made?.id as number;
+    for (const [at, invoice] of invoices.entries()) {
+      const amount = applied[at]?.amount as number;
+      await settle(tx, invoice, amount);
+      await link(tx, id, invoice.id, amount, date);
+    }
+    return { id };
   });
 }

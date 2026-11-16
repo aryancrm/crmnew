@@ -4786,6 +4786,14 @@ export type BookRow = {
   /** Centavos of a payment or credit not put on any bill yet. */
   unused: number | null;
   qty: number | null;
+  /** A sales order's dots: invoiced, paid, packed, shipped (Zoho's), and how it goes out. */
+  invoiced?: DoneState | null;
+  paid?: DoneState | null;
+  packed?: DoneState | null;
+  shipped?: DoneState | null;
+  deliveryMethod?: string | null;
+  /** Made in this CRM (its order line), not brought from Zoho: opens the CRM's own record too. */
+  crm?: { href: string } | null;
 };
 
 export type BookList = {
@@ -4865,4 +4873,34 @@ export type BookChoices = {
   modes: string[];
   paidThrough: string[];
   next: { purchaseOrder: string; receive: string; payment: string; vendorCredit: string };
+};
+
+export type CustomerKind2 = "hospital" | "doctor" | "patient" | "drugstore" | "distributor" | "government";
+export type BookCustomerRow = { id: number; name: string; kind: CustomerKind2; company: string | null; email: string | null; phone: string | null; city: string | null; receivables: number; credits: number; active: boolean };
+export type BookCustomerList = { views: { key: string; count: number }[]; view: string; page: number; perPage: number; total: number; rows: BookCustomerRow[] };
+export type BookCustomer = BookCustomerRow & {
+  code: string | null;
+  address: string | null;
+  tin: string | null;
+  licenceNo: string | null;
+  licenceExpires: string | null;
+  permitNo: string | null;
+  permitExpires: string | null;
+  paymentTerms: string;
+  paymentDays: number | null;
+  creditLimit: number | null;
+  specialty: string | null;
+  worksAt: { id: number; name: string } | null;
+  area: string | null;
+  note: string | null;
+  createdOn: string;
+  /** What Zoho kept about them that has no place of its own here. */
+  zohoFields: Record<string, unknown>;
+  /** A patient's details as their orders carried them (Zoho's PX fields, doctor, senior / PWD). */
+  patient: Record<string, string> | null;
+  /** Doctors who work at this hospital; the hospitals a doctor's patients were sent from. */
+  doctors: { id: number; name: string; specialty: string | null }[];
+  people: { id: number; name: string; email: string | null; phone: string | null; mobile: string | null; designation: string | null }[];
+  counts: { kind: BookKind; count: number; total: number }[];
+  recent: (BookRow & { kind: BookKind })[];
 };
