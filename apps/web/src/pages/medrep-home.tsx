@@ -26,6 +26,7 @@ import { Donut } from "../team/charts";
 import { count, dayLabel, PageState, peso } from "../ui";
 import { Figure, type Period, PeriodBox, periodWord as periodWordOf } from "./figures";
 import { GoHereFirst, HuddleCard, TodaysPulse } from "./hospital-day";
+import { RxHome } from "./rx";
 import { greeting, todayWords } from "./home";
 import { OrderCardItem } from "./orders-board";
 
@@ -90,7 +91,8 @@ export function MedrepHome() {
   const [params, setParams] = useSearchParams();
   const period = (params.get("period") ?? "today") as Period;
   const day = params.get("day") ?? "";
-  const [kind, setKind] = useState<CustomerKind>("hospital");
+  // An Rx CHC's customers are doctors; everyone else opens on hospitals.
+  const [kind, setKind] = useState<CustomerKind>(me?.channel?.code === "RX" ? "doctor" : "hospital");
   const set = (changes: Record<string, string>) => {
     const next = new URLSearchParams(params);
     for (const [key, value] of Object.entries(changes)) {
@@ -120,6 +122,7 @@ export function MedrepHome() {
   });
   if (!me) return null;
   const hospital = me.channel?.code === "HOSP";
+  const rx = me.channel?.code === "RX";
   const data = kpis.data;
   const sales = mine.data?.sales;
   const periodWord = periodWordOf(period, data?.day ?? null);
@@ -150,9 +153,11 @@ export function MedrepHome() {
       {/* A Hospital CHC's day starts with the pulse and where to go first (docs/PLAN.md 16.1). */}
       {hospital && <TodaysPulse />}
       {hospital && <GoHereFirst />}
+      {/* An Rx CHC's day: the doctors, today's route, PAP (docs/PLAN.md 16.2). No sales target here. */}
+      {rx && <RxHome />}
 
       {/* Today and this month at a glance: the two numbers asked most. */}
-      {!hospital && (
+      {!hospital && !rx && (
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Figure
           label="Orders today"
@@ -490,9 +495,9 @@ export function MedrepHome() {
 
           {hospital && <HuddleCard />}
           {!hospital && <ToCollectPanel />}
-          {!hospital && <ToCallPanel />}
+          {!hospital && !rx && <ToCallPanel />}
 
-          {!hospital && sales && sales.target !== null && sales.target > 0 && (
+          {!hospital && !rx && sales && sales.target !== null && sales.target > 0 && (
             <section className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs">
               <div className="flex items-baseline justify-between gap-2">
                 <h3 className="text-sm font-semibold tracking-tight text-slate-900">

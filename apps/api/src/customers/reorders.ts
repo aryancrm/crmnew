@@ -30,7 +30,14 @@ export async function reorders(
   const online = onlineDesk(me);
   const kind = (["hospital", "doctor", "patient", "drugstore", "distributor", "government"] as const).find((one) => one === asked.kind);
   // Patients are the online desk's; everyone else's list is the buying businesses and doctors.
-  const kindIs: SQL = kind ? sql`c.kind = ${kind}` : online ? sql`c.kind = 'patient'` : sql`c.kind <> 'patient'`;
+  // An Rx CHC's list is their doctors.
+  const kindIs: SQL = kind
+    ? sql`c.kind = ${kind}`
+    : online
+      ? sql`c.kind = 'patient'`
+      : me.role === "medrep" && me.channel?.code === "RX"
+        ? sql`c.kind = 'doctor'`
+        : sql`c.kind <> 'patient'`;
   const areaIs: SQL = asked.area ? sql`c.area_id = ${asked.area}` : sql`true`;
 
   const base = sql`${team(me)},

@@ -197,11 +197,11 @@ export async function measure(
       ccf: (x.visited / DOCTOR_LIST) * 100,
     };
     const rxNotes: Record<string, string> = {
-      nbd: `${x.newDoctors} doctors invoiced for the first time`,
+      nbd: `${x.newDoctors} doctor${x.newDoctors === 1 ? "" : "s"} invoiced for the first time`,
       crr: x.lastDoctors ? `${x.doctorsBack} of last month's ${x.lastDoctors} doctors again` : "No doctors last month",
-      pap: `${x.approved} guarantee letters received`,
+      pap: `${x.approved} guarantee letter${x.approved === 1 ? "" : "s"} received`,
       hit: "Not in the CRM yet: the formulary tracker comes in Phase 5",
-      ccf: `${x.visited} of ${DOCTOR_LIST} doctors visited`,
+      ccf: `${x.visited} of the ${DOCTOR_LIST} doctors visited`,
     };
     // A rep is scored once they visit, sell, get a letter or have a target.
     return { values: rxValues, notes: rxNotes, active: Boolean(r.target || r.sales || r.orders || x.visited || x.approved) };

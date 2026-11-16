@@ -215,7 +215,7 @@ function AskDialog({ month, kpi, onClose }: { month: string; kpi?: ScoreCard["kp
           disabled={action.busy}
           onClick={() =>
             void action.run(async () => {
-              await api("/api/scores/disputes", { method: "POST", body: JSON.stringify({ month, kpi: kpi.key, note }) });
+              await api("/api/scores/disputes", { method: "POST", body: { month, kpi: kpi.key, note } });
               await queries.invalidateQueries({ queryKey: ["scores"] });
               onClose();
             })
@@ -234,7 +234,7 @@ export function Disputes({ disputes, canAnswer }: { disputes: MyScore["disputes"
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const answer = (id: number, upheld: boolean) =>
     void action.run(async () => {
-      await api(`/api/scores/disputes/${id}/answer`, { method: "POST", body: JSON.stringify({ upheld, answer: answers[id] ?? "" }) });
+      await api(`/api/scores/disputes/${id}/answer`, { method: "POST", body: { upheld, answer: answers[id] ?? "" } });
       await queries.invalidateQueries({ queryKey: ["scores"] });
     });
   return (

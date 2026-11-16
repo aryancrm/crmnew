@@ -48,14 +48,14 @@ function MyHuddlePage() {
     void action.run(async () => {
       await api("/api/huddle", {
         method: "POST",
-        body: JSON.stringify({
+        body: {
           sales: toCentavos(form.sales),
           collected: toCentavos(form.collected),
           visits: Number(form.visits) || 0,
           invoiced: form.invoiced,
           blocker: form.blocker || null,
           tomorrow: form.tomorrow || null,
-        }),
+        },
       });
       await queries.invalidateQueries({ queryKey: ["huddle"] });
     });

@@ -32,7 +32,7 @@ export function AdminZohoSellers() {
     setBusy(name);
     setProblem(null);
     try {
-      const said = await api<{ moved: number }>("/api/admin/zoho-sellers", { method: "POST", body: JSON.stringify({ name, seatId }) });
+      const said = await api<{ moved: number }>("/api/admin/zoho-sellers", { method: "POST", body: { name, seatId } });
       setMoved((old) => ({ ...old, [name]: said.moved }));
       await queries.invalidateQueries({ queryKey: ["admin", "zoho-sellers"] });
     } catch (error) {
@@ -45,7 +45,7 @@ export function AdminZohoSellers() {
     setBusy("chart");
     setProblem(null);
     try {
-      setChart(await api<ChartResult>("/api/admin/import/chart", { method: "POST", body: JSON.stringify({ apply }) }));
+      setChart(await api<ChartResult>("/api/admin/import/chart", { method: "POST", body: { apply } }));
       if (apply) await queries.invalidateQueries({ queryKey: ["admin", "zoho-sellers"] });
     } catch (error) {
       setProblem(error instanceof Error ? error.message : String(error));

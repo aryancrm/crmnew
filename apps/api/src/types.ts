@@ -4346,3 +4346,36 @@ export type District = {
     weight: number;
   }[];
 };
+
+/** An Rx CHC's day: the doctor list in tiers, each doctor's light, and their PAP applications. */
+export type RxDay = {
+  today: string;
+  seatId: number | null;
+  tiers: { tier: 1 | 2 | 3; size: number; doctors: number; visitsDue: number; visitsDone: number }[];
+  doctors: {
+    customerId: number;
+    name: string;
+    city: string | null;
+    phone: string | null;
+    specialty: string | null;
+    /** On the list in this tier; null for a doctor of the area not listed yet. */
+    tier: number | null;
+    /** Visits done this month, and due by the tier. */
+    visits: number;
+    due: number;
+    lastVisit: string | null;
+    nextVisit: string | null;
+    lastOrder: string | null;
+    /** Their next refill by their usual gap. */
+    refillOn: string | null;
+    lastMonth: boolean;
+    thisMonth: boolean;
+    /** Red: refill within 48 hours or late; yellow: missing from last month; green: the rest. */
+    light: "red" | "yellow" | "green";
+  }[];
+  pap: {
+    pending: number;
+    approved: number;
+    rows: { leadId: number; patient: string; agency: string | null; appliedOn: string | null; letterOn: string | null }[];
+  };
+};

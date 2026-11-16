@@ -493,6 +493,30 @@ function ownDesk(me: Me): Space {
           ]),
           cta: { ...newOrder, label: "New order" },
         };
+      // An Rx CHC: the doctors' day of the Rx CHC Play Book (docs/PLAN.md 16.2). Telesales take
+      // the orders and hold the sales targets; the CHC builds the doctors.
+      if (me.channel?.code === "RX")
+        return {
+          ...desk([
+            home,
+            { to: "/rx/doctors", label: "My 80 doctors", icon: Stethoscope, short: "Doctors" },
+            folder(
+              "Calls",
+              CalendarCheck,
+              [
+                { to: "/visits", label: "Today's calls", icon: CalendarCheck },
+                { to: "/visits/plan", label: "Route plan", icon: CalendarRange },
+                { to: "/visits/calendar", label: "Calendar", icon: CalendarDays },
+                { to: "/visits/expenses", label: "My expenses", icon: Receipt },
+              ],
+              "Calls",
+            ),
+            { to: "/to-call", label: "Doctors to call", icon: PhoneCall, short: "Call" },
+            folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+            { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+          ]),
+          cta: { to: "/visits", label: "Log a call" },
+        };
       // A PAP MedRep's patients come as cases (the guarantee letter's road), not plain orders.
       const pap = me.channel?.code === "PAP";
       return {
