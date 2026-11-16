@@ -1615,13 +1615,18 @@ and contact persons. A document already here is refreshed with Zoho's newer stat
 | Purchase Receives, Bills (payables band as Zoho's), Payments Made, Vendor Credits | lists and documents as above | Read, done 17 Nov |
 | Sales → Sales Returns, Credit Notes | lists and documents (data from Zoho's API) | Read, done 17 Nov |
 | Making documents | Zoho's forms: New Purchase Order (draft or issued, next number in Zoho's series), Receive (each medicine onto the shelf in its batch with expiry, the batch costed at the order's rate in pesos, waiting orders told), Convert to Bill (from the order or from a receive), a bill on its own (rent, utilities, freight), Record Payment (on one or more bills; the rest stays unused), Vendor Credit, Apply to Bills (a credit's or a payment's unused amount), Void (a bill nothing was paid on; a payment or credit, its money goes back on the bills), Cancel Order (nothing received or billed), Mark as Issued, New Vendor | Done 17 Nov, checked in the browser as Inventory (Irene) and Finance (Fiona) |
-| Sales → Customers, Sales Orders, Invoices, Payments Received | Zoho's lists over the CRM's own and Zoho's history | Next |
+| Sales → Customers | one view per kind (Hospitals, Doctors, Patients, Drugstores, Distributors, Government) and "Customers who owe"; NAME, COMPANY NAME, EMAIL, WORK PHONE, CITY, RECEIVABLES; a customer: what matters for its kind (licence, permit, TIN, terms, credit limit; a doctor's specialty and hospital; a hospital's doctors; a patient's details from their latest order: disease, age, sex, doctor, senior / PWD ID, prescription), Zoho's billing and shipping address, every Zoho field (and the records of Zoho contacts merged into it), people, receivables and unused credits, every document (Zoho's and the CRM's) | Done 17 Nov |
+| Sales Orders, Invoices, Payments Received | Zoho's lists with Zoho's columns (a sales order's INVOICED, PAYMENT, PACKED, SHIPPED dots and DELIVERY METHOD as Zoho's list says them), Zoho's 67,371 orders, 69,222 invoices (lines with batch and expiry) and 63,245 payments beside the CRM's own; the CRM's open on the order line ("Open on the order line ↗"); + New sales order is the CRM's order form | Done 17 Nov |
+| Record Payment on Zoho's open invoices, Apply credits (a credit note's, a payment's unused amount) to invoices, Void a payment | Finance and the Admin; the CRM's own invoices still take payments on the order line | Done 17 Nov |
 | Items, Inventory (Adjustments, Packages, Shipments, Transfer Orders) | | After |
 
 Checked against Zoho on 17 Nov: after bringing each document's state from Zoho's lists (statuses,
 balances, payments' unused amounts) and keeping what only Zoho Books explains as each vendor's
 opening credits and payables, the Bills band (Total, Due Today, Due Within 30 Days, Overdue) and
-every vendor's Payables and Unused Credits match Zoho to the centavo.
+every vendor's Payables and Unused Credits match Zoho to the centavo. Sales the same way: what
+customers owe (PHP111,293,889.85) and their unused credits (PHP5,744,382.25) match Zoho's totals to the
+centavo, once Zoho's contacts merged into one customer here are counted together (zoho_contact).
+`scripts/books-check.ts` lays the books' four totals beside Zoho's.
 
 Who makes what (interim, until Aryan says otherwise): purchase orders and receives — Inventory and
 the Admin; bills — Inventory, Finance and the Admin; payments made and vendor credits — Finance and
@@ -2076,3 +2081,4 @@ Stock is counted in Zoho's own units (pieces), as the opening stock was.
 - 17 Nov (63), 16.9 In-licensing & Regulatory built (the pipeline, the FDA registrations with renewal flags from 180/90 days, the CPRs on the bidding desk's Documents, heads read their people's work logs). Aryan, 17 Nov: the main work now is moving the whole of Zoho Inventory into this CRM, every section and every row of data, looking like Zoho on the outside with the data shown better inside (section 17).
 - 17 Nov (64), section 17: the books. Zoho's Purchases (1,716 vendors, 4,208 purchase orders, 4,704 receives, 8,878 bills, 7,420 payments made, 46 vendor credits) and its Sales Returns and Credit Notes in, every field kept, linked to each other; Zoho's own screens for them under /books, checked side by side with Zoho.
 - 17 Nov (65), section 17: Purchases are made in the books now, as in Zoho: purchase orders, receives into stock by batch and expiry, bills, payments made, vendor credits, void and cancel; payables and credits match Zoho to the centavo. The Inventory menu's Purchases opens them.
+- 17 Nov (66), section 17: Sales in the books — Zoho's sales orders, invoices, payments received, returns and credit notes in whole beside the CRM's own; customers by kind with every Zoho field; payments taken on Zoho's open invoices; customers' and vendors' money matches Zoho to the centavo.

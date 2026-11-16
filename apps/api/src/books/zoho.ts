@@ -673,7 +673,9 @@ export async function saveDocs(db: Database, docs: BookDocInput[], apply: boolea
   const parties = new Map<string, number>(
     vendor
       ? (await rows<{ key: string; id: number }>(db, sql`select lower(name) as key, id::int as id from supplier union all select zoho_id, id::int from supplier where zoho_id is not null`)).map((row) => [row.key, row.id])
-      : (await rows<{ key: string; id: number }>(db, sql`select zoho_id as key, id::int as id from customer where zoho_id is not null`)).map((row) => [row.key, row.id]),
+      : // Every Zoho contact, also those merged into one customer here (zoho_contact).
+        (await rows<{ key: string; id: number }>(db, sql`select zoho_id as key, id::int as id from customer where zoho_id is not null
+            union all select zoho_id, customer_id::int from zoho_contact`)).map((row) => [row.key, row.id]),
   );
   const have = new Map(
     (await rows<{ zohoId: string; id: number }>(db, sql`select zoho_id as "zohoId", id::int as id from book_doc where kind = ${kind} and zoho_id is not null`)).map((row) => [row.zohoId, row.id]),
@@ -687,7 +689,9 @@ export async function saveDocs(db: Database, docs: BookDocInput[], apply: boolea
       if (apply)
         await db.execute(
           sql`update book_doc set status = ${doc.status}, total = ${doc.total}, balance = ${doc.balance}, due_date = ${doc.dueDate}::date,
-            fields = ${JSON.stringify(doc.fields)}::jsonb, zoho_modified = ${doc.zohoModified}::timestamptz where id = ${existing}`,
+            fields = fields || ${JSON.stringify(doc.fields)}::jsonb, zoho_modified = ${doc.zohoModified}::timestamptz,
+            supplier_id = coalesce(supplier_id, ${vendor ? partyId : null}), customer_id = coalesce(customer_id, ${vendor ? null : partyId})
+            where id = ${existing}`,
         );
       continue;
     }
@@ -820,6 +824,7 @@ export async function openingCredits(db: Database, listed: Record<string, unknow
   let vendors = 0;
   let credits = 0;
   let payables = 0;
+  if (apply) await db.execute(sql`update supplier set opening_credits = 0, opening_payables = 0 where opening_credits <> 0 or opening_payables <> 0`);
   for (const v of listed) {
     const zohoId = str(v.contact_id);
     if (!zohoId) continue;
@@ -848,17 +853,30 @@ export async function openingCredits(db: Database, listed: Record<string, unknow
 export async function customerFields(db: Database, all: Iterable<Row>, apply: boolean): Promise<{ seen: number; matched: number }> {
   let seen = 0;
   let matched = 0;
-  const ids = new Map(
+  const primary = new Map(
     (await rows<{ zohoId: string; id: number }>(db, sql`select zoho_id as "zohoId", id::int as id from customer where zoho_id is not null`)).map((row) => [row.zohoId, row.id]),
+  );
+  const merged = new Map(
+    (await rows<{ zohoId: string; id: number }>(db, sql`select zoho_id as "zohoId", customer_id::int as id from zoho_contact`)).map((row) => [row.zohoId, row.id]),
   );
   for (const row of all) {
     seen++;
-    const id = ids.get(said(row["Contact ID"]));
+    const zohoId = said(row["Contact ID"]);
+    const id = primary.get(zohoId) ?? merged.get(zohoId);
     if (!id) continue;
     matched++;
     if (!apply) continue;
-    const fields = rest(row, Object.keys(row), new Set(["Contact ID"]));
-    await db.execute(sql`update customer set zoho_fields = ${JSON.stringify(fields)}::jsonb where id = ${id}`);
+    if (primary.has(zohoId)) {
+      const fields = rest(row, Object.keys(row), new Set(["Contact ID"]));
+      await db.execute(sql`update customer set zoho_fields = ${JSON.stringify(fields)}::jsonb || jsonb_strip_nulls(jsonb_build_object('Other Zoho records', zoho_fields->'Other Zoho records')) where id = ${id}`);
+    } else {
+      // A Zoho contact merged into this customer here: its own record is kept beside the main one.
+      const record = { "Contact ID": zohoId, ...rest(row, Object.keys(row), new Set(["Contact ID"])) };
+      await db.execute(
+        sql`update customer set zoho_fields = jsonb_set(zoho_fields, '{Other Zoho records}', coalesce(zoho_fields->'Other Zoho records', '[]'::jsonb) || ${JSON.stringify([record])}::jsonb)
+          where id = ${id} and not coalesce(zoho_fields->'Other Zoho records', '[]'::jsonb) @> ${JSON.stringify([{ "Contact ID": zohoId }])}::jsonb`,
+      );
+    }
   }
   return { seen, matched };
 }
@@ -869,7 +887,7 @@ export async function importCustomerPeople(db: Database, all: Row[], apply: bool
     const name = [filled(row.Salutation), filled(row["First Name"]), filled(row["Last Name"])].filter(Boolean).join(" ");
     const owner = filled(row["Contact ID"]) ?? filled(row["Customer ID"]);
     if (!owner || !name) continue;
-    const [customer] = await rows<{ id: number }>(db, sql`select id::int as id from customer where zoho_id = ${owner}`);
+    const [customer] = await rows<{ id: number }>(db, sql`select id::int as id from customer where zoho_id = ${owner} union all select customer_id::int from zoho_contact where zoho_id = ${owner} limit 1`);
     if (!customer) continue;
     made++;
     if (!apply) continue;
@@ -885,37 +903,57 @@ export async function importCustomerPeople(db: Database, all: Row[], apply: bool
 }
 
 /** Each customer's receivables and unused credits that no Zoho document here explains (opening
- *  balances and advances in Zoho Books), from Zoho's customer list: kept as opening figures. */
-export async function customerOpenings(db: Database, listed: Record<string, unknown>[], apply: boolean): Promise<{ customers: number; receivables: number; credits: number }> {
-  let customers = 0;
-  let receivables = 0;
-  let credits = 0;
-  const explained = new Map(
-    (
-      await rows<{ zohoId: string; owed: number; unused: number }>(
-        db,
-        sql`select c.zoho_id as "zohoId",
-            coalesce(sum(round(d.balance * d.fx_rate)) filter (where d.kind = 'invoice' and d.status not in ('void', 'draft')), 0)::float8 as owed,
-            coalesce(sum(round(d.balance * d.fx_rate)) filter (where d.kind in ('credit_note', 'customer_payment') and d.status not in ('void', 'draft')), 0)::float8 as unused
-          from customer c join book_doc d on d.customer_id = c.id and d.zoho_id is not null where c.zoho_id is not null group by c.zoho_id`,
-      )
-    ).map((row) => [row.zohoId, row]),
+ *  balances and advances in Zoho Books), from Zoho's customer list: kept as opening figures. Zoho
+ *  contacts merged into one customer here add up. */
+export async function customerOpenings(db: Database, listed: Record<string, unknown>[], apply: boolean): Promise<{ customers: number; receivables: number; credits: number; notHere: number }> {
+  const customerOf = new Map(
+    (await rows<{ zohoId: string; id: number }>(db, sql`select zoho_id as "zohoId", id::int as id from customer where zoho_id is not null union all select zoho_id, customer_id::int from zoho_contact`)).map(
+      (row) => [row.zohoId, row.id],
+    ),
   );
+  const zoho = new Map<number, { owed: number; unused: number }>();
+  let notHere = 0;
   for (const v of listed) {
     const zohoId = str(v.contact_id);
     if (!zohoId) continue;
     const owed = cents((v.outstanding_receivable_amount_bcy ?? v.outstanding_receivable_amount) as number) ?? 0;
     const unused = cents((v.unused_credits_receivable_amount_bcy ?? v.unused_credits_receivable_amount) as number) ?? 0;
-    const here = explained.get(zohoId) ?? { owed: 0, unused: 0 };
-    const openOwed = Math.max(0, owed - here.owed);
-    const openCredits = Math.max(0, unused - here.unused);
+    if (!owed && !unused) continue;
+    const id = customerOf.get(zohoId);
+    if (!id) {
+      notHere++;
+      continue;
+    }
+    const have = zoho.get(id) ?? { owed: 0, unused: 0 };
+    zoho.set(id, { owed: have.owed + owed, unused: have.unused + unused });
+  }
+  const explained = new Map(
+    (
+      await rows<{ id: number; owed: number; unused: number }>(
+        db,
+        sql`select d.customer_id::int as id,
+            coalesce(sum(round(d.balance * d.fx_rate)) filter (where d.kind = 'invoice' and d.status not in ('void', 'draft')), 0)::float8 as owed,
+            coalesce(sum(round(d.balance * d.fx_rate)) filter (where d.kind in ('credit_note', 'customer_payment') and d.status not in ('void', 'draft')), 0)::float8 as unused
+          from book_doc d where d.zoho_id is not null and d.customer_id is not null group by d.customer_id`,
+      )
+    ).map((row) => [row.id, row]),
+  );
+  let customers = 0;
+  let receivables = 0;
+  let credits = 0;
+  // Worked out afresh each time: what an earlier run kept and Zoho no longer says goes.
+  if (apply) await db.execute(sql`update customer set opening_receivables = 0, opening_credits = 0 where opening_receivables <> 0 or opening_credits <> 0`);
+  for (const [id, total] of zoho) {
+    const here = explained.get(id) ?? { owed: 0, unused: 0 };
+    const openOwed = Math.max(0, total.owed - here.owed);
+    const openCredits = Math.max(0, total.unused - here.unused);
     if (!openOwed && !openCredits) continue;
     customers++;
     receivables += openOwed;
     credits += openCredits;
-    if (apply) await db.execute(sql`update customer set opening_receivables = ${openOwed}, opening_credits = ${openCredits} where zoho_id = ${zohoId}`);
+    if (apply) await db.execute(sql`update customer set opening_receivables = ${openOwed}, opening_credits = ${openCredits} where id = ${id}`);
   }
-  return { customers, receivables, credits };
+  return { customers, receivables, credits, notHere };
 }
 
 // ------------------------------------------------------------------ sales documents made after the backup, from Zoho's API
