@@ -4441,3 +4441,43 @@ export type RxField = {
     groupsQuiet: number;
   }[];
 };
+
+/** A B2C CHC's day: the morning pulse, the enquiries waiting for a reply, refills, orders. */
+export type B2cDay = {
+  today: string;
+  replyMinutes: number;
+  /** The playbook's 8:00 questions, each green or red, with what to do. */
+  pulse: { key: string; question: string; value: string; green: boolean; action: string; to: string }[];
+  waiting: {
+    leadId: number;
+    code: string | null;
+    name: string;
+    source: string;
+    lastMessage: string | null;
+    since: string;
+    minutes: number;
+    /** Never bought: a new prospect (answered first). */
+    prospect: boolean;
+    unassigned: boolean;
+  }[];
+  refills: Reorders["rows"];
+  orders: { quoted: number; atFinance: number; toShip: number; day3: number };
+  day3: { orderId: number; code: string; customerId: number; customer: string; phone: string | null; deliveredOn: string }[];
+};
+
+/** The coach's B2C desk now. */
+export type B2cTeam = {
+  today: string;
+  rows: {
+    personId: number;
+    name: string;
+    seat: string;
+    waiting: number;
+    lateToday: number;
+    /** Three or more late replies today: the coach is told. */
+    alarm: boolean;
+    invoicesToday: number;
+    invoicedLastDay: boolean;
+    noInvoiceYet: boolean;
+  }[];
+};

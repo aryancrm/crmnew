@@ -15,6 +15,7 @@ import { CeoHomePage } from "./ceo-home";
 import { HrPeoplePage } from "./hr-people";
 import { Attention } from "./inventory-overview";
 import { ManagementHome } from "./management-home";
+import { B2cHome } from "./b2c";
 import { MedrepHome } from "./medrep-home";
 import { OrdersToCheck } from "./orders-board";
 import { TeamSalesPage } from "./team";
@@ -51,7 +52,8 @@ export function Home() {
   if (me.role === "finance") return <OrdersToCheck desk="finance" />;
   if (me.role === "dispatch") return <OrdersToCheck desk="dispatch" />;
   if (me.role === "medrep") return <MedrepHome />;
-  if (onlineDesk(me)) return <Navigate to="/leads" replace />;
+  // The B2C CHC starts on their morning pulse and the replies waiting (docs/PLAN.md 16.3).
+  if (onlineDesk(me)) return <B2cHome />;
   // HR's Home is People: everyone's record.
   if (me.role === "hr") return <HrPeoplePage />;
   return <Desk />;

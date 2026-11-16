@@ -11,6 +11,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { shortPeso } from "../ceo";
 import { CARD } from "../ui";
+import { B2cDeskCard } from "./b2c";
 import { GroupsGlance, WaitingGroups } from "./care-groups";
 import { RxFieldTable } from "./rx";
 
@@ -225,11 +226,11 @@ function Questions({ data }: { data: TeamScores }) {
  *  people against their targets follow on the Home). */
 export function TelesalesCoachHome() {
   const groups = useQuery({ queryKey: ["care-groups"], queryFn: () => api<CareGroups>("/api/care-groups"), refetchInterval: 30_000 });
-  if (!groups.data) return null;
   return (
     <>
-      <GroupsGlance data={groups.data} />
-      <WaitingGroups data={groups.data} />
+      <B2cDeskCard />
+      {groups.data && <GroupsGlance data={groups.data} />}
+      {groups.data && <WaitingGroups data={groups.data} />}
     </>
   );
 }
@@ -245,6 +246,7 @@ export function RxMentorHome() {
     <>
       {field.data && <RxFieldTable data={field.data} />}
       {groups.data && <GroupsGlance data={groups.data} />}
+      <B2cDeskCard />
       <div className="grid gap-3 lg:grid-cols-2">
         {scores.data && <AtRisk data={scores.data} />}
         {money.data && <Money data={money.data} />}

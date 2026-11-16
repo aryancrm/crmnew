@@ -20,7 +20,8 @@ const RX: Record<string, string> = {
 
 const TS: Record<string, string> = {
   medrep: "MD Telesales",
-  team_lead: "Telesales Coach",
+  // "Sales Coach (Onco-Hema)" on the chart: MD Telesales and the B2C CHCs under them.
+  team_lead: "Sales Coach",
 };
 
 export function seatWords(me: Pick<Me, "role" | "roleLabel" | "channel"> | null | undefined): Words {
@@ -28,6 +29,9 @@ export function seatWords(me: Pick<Me, "role" | "roleLabel" | "channel"> | null 
   if (!me) return plain;
   if (me.channel?.code === "HOSP" && HOSPITAL[me.role])
     return { desk: HOSPITAL[me.role] as string, customers: "hospitals", myCustomers: "My hospitals", toCall: "Hospitals to call" };
+  // The Online desk: the B2C CHC (the desk role, or the Online channel's MedRep).
+  if (me.role === "online" || (me.role === "medrep" && me.channel?.code === "ONLINE"))
+    return { desk: "B2C CHC", customers: "patients", myCustomers: "My patients", toCall: "Refills due" };
   if (me.channel?.code === "TS" && TS[me.role])
     return { desk: TS[me.role] as string, customers: "patients and doctors", myCustomers: "My patients", toCall: "Refills due" };
   if (me.channel?.code === "RX" && RX[me.role])

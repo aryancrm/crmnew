@@ -42,9 +42,16 @@ export async function reorders(
           ? sql`c.kind in ('patient', 'doctor')`
           : sql`c.kind <> 'patient'`;
   const areaIs: SQL = asked.area ? sql`c.area_id = ${asked.area}` : sql`true`;
+  // A B2C CHC's customers are their own (B2C CHC Playbook: the CHC on the first invoice owns the
+  // customer): ones they added, ordered for, or whose enquiry is theirs; not every patient.
+  const ownIs: SQL = online
+    ? sql`(c.added_by = ${me.id}
+        or exists (select 1 from sales_order o where o.customer_id = c.id and (o.medrep_id = ${me.id} or o.raised_by = ${me.id}))
+        or exists (select 1 from lead l where l.customer_id = c.id and l.assigned_to = ${me.id}))`
+    : sql`true`;
 
   const base = sql`${team(me)},
-    mine as (select c.id from customer c where c.active and ${kindIs} and ${areaIs} and ${seen(me)}),
+    mine as (select c.id from customer c where c.active and ${kindIs} and ${areaIs} and ${ownIs} and ${seen(me)}),
     days as (
       select o.customer_id as cid, (coalesce(o.submitted_at, o.created_at) at time zone 'Asia/Manila')::date as d, o.total::bigint as total
         from sales_order o where o.customer_id in (select id from mine) and o.status not in ('draft', 'cancelled')

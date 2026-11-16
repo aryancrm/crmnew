@@ -88,7 +88,7 @@ export function TeamSalesPage() {
           {data.lead && (
             <p className="mt-1 text-[13px] text-slate-500">
               {coach || mentor || tsCoach || rxMentor
-                ? `${seatWords(me).desk} · ${mentor ? "the Hospital Division" : rxMentor ? "the Prescription business" : tsCoach ? "MD Telesales" : "your district"}`
+                ? `${seatWords(me).desk} · ${mentor ? "the Hospital Division" : rxMentor ? "the Prescription business" : tsCoach ? "MD Telesales and B2C" : "your district"}`
                 : `${[data.lead.title, data.lead.channel].filter(Boolean).join(" · ")} · your team`}
             </p>
           )}
@@ -225,7 +225,10 @@ export function TeamSalesPage() {
                     />
                   ) : (
                     <span className="text-[11px] text-slate-400">
-                      No target{data.can.setTargets ? " · set it on Targets" : ""}
+                      {/* Rx CHCs carry no sales target (the Rx playbook: telesales hold it); leads neither. */}
+                      {person.channel === "RX" && person.roleLabel === "MedRep"
+                        ? "Field: no sales target (MD Telesales hold it)"
+                        : `No target${data.can.setTargets ? " · set it on Targets" : ""}`}
                     </span>
                   )}
                   <span className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px] text-slate-500">

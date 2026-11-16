@@ -462,9 +462,9 @@ function ownDesk(me: Me): Space {
             home,
             { to: "/leads", label: "Leads & enquiries", icon: Inbox },
             { to: "/inbox", label: "Inbox", icon: MessagesSquare, badge: "inbox" },
+            { to: "/to-call", label: "Refills due", icon: Pill, short: "Refills" },
             folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
-            customers,
-            { to: "/to-call", label: "Customers to call", icon: PhoneCall, short: "Call" },
+            { to: "/customers", label: "Patients", icon: Users },
             { to: "/points", label: "Points", icon: Gift },
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ]),
@@ -832,11 +832,13 @@ function ownDesk(me: Me): Space {
       return {
         ...desk(
           [
+            // The B2C CHC's day (docs/PLAN.md 16.3): Home is the morning pulse and the waiting replies.
+            home,
             { to: "/leads", label: "Leads & enquiries", icon: Inbox },
             { to: "/inbox", label: "Inbox", icon: MessagesSquare, badge: "inbox" },
+            { to: "/to-call", label: "Refills due", icon: Pill, short: "Refills" },
             { to: "/orders", label: "My orders", icon: ClipboardList },
-            customers,
-            { to: "/to-call", label: "Customers to call", icon: PhoneCall, short: "Call" },
+            { to: "/customers", label: "Patients", icon: Users },
             { to: "/points", label: "Points", icon: Gift },
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ],

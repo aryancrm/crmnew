@@ -18,6 +18,7 @@ import { seedDemoOrders } from "./orders/seed";
 import { seedDemoTeam, seedPapRep } from "./orders/seed-team";
 import { alignDemoMoneyDates } from "./orders/seed-times";
 import { fillOrderSeats, projectOrg } from "./org/service";
+import { seedB2cTeam } from "./b2c/seed";
 import { seedRxTeam } from "./rx/seed";
 import { lockDue } from "./scores/service";
 import { seedDemo } from "./seed";
@@ -52,6 +53,7 @@ if (process.env.SEED_DEMO === "1") {
     console.log("database: more demo MedReps and their orders made");
   if (await seedPapRep(db, password)) console.log("database: a demo PAP MedRep made");
   if (await seedRxTeam(db, password)) console.log("database: the Prescription channel's demo people made");
+  if (await seedB2cTeam(db, password)) console.log("database: the B2C channel's demo people made");
   if (await seedDemoAttendance(db)) console.log("database: two weeks of demo attendance made");
   // Older demo databases had invoices dated before their orders: put them right once.
   const aligned = await alignDemoMoneyDates(db);

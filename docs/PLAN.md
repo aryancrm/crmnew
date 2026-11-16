@@ -1428,7 +1428,9 @@ Evening huddles). The Founder's own Home is built last, from every channel.
 ### 16.2 Prescription (Rx) (done 16 Nov)
 
 How the channel works (Rx Team & Training Playbook and the 2026 chart): the Country Mentor heads
-the Prescription business. The Rx CHCs (field) build the doctors and carry no sales target; they
+the Prescription business. (Zoomed again on 16 Nov: on the chart MD Telesales Oncology sits inside
+the Onco-Hema Division, beside Uro & Onco Care and Blood & Bone Care; the Sales Admin, Kate
+Cagoyong, reports straight to the Country Mentor.) The Rx CHCs (field) build the doctors and carry no sales target; they
 report straight to the Mentor (the chart has no field coach). MD Telesales Oncology, under their
 Sales Coach, hold the sales target, answer every Patient Care Group within 15 minutes of the CHC's
 enrolment and turn it into orders. The Patient Care Group is the bridge between the two.
@@ -1439,6 +1441,26 @@ enrolment and turn it into orders. The Patient Care Group is the bridge between 
 | MD Telesales (Oncology, TS) | Home, Care groups, Refills due, My orders, My patients, My score; New order on top | Pulse (sales vs target on pace, refills due, groups waiting, invoice on the last working day); new groups waiting with the 15-minute clock and "Contacted"; refills due (today and the next two days) with what they took last, Call and New order; orders; scorecard (the B2C card for now) | Orders and sales → Sales Coach; first contacts → the groups' 15-minute record | Done 16 Nov, checked as Kim |
 | Sales Coach, MD Telesales (team lead, TS) | Home, My team, Care groups, Refills due, Team orders, Targets, Collections, Team attendance, Patients & doctors, My score | Team's totals; care groups at a glance (waiting now, 15 minutes kept this month, enrolled, quiet 14+ days); groups waiting; each telesales against their target | → Country Mentor | Done 16 Nov, checked as Lara |
 | Country Mentor (head, RX) | Home, Field team, Whole business, Care groups, Scorecards, Targets, Collections, Business orders, Field visits, Attendance, Doctors & patients | Business totals; field team (each Rx CHC: doctors listed, coverage against the 80% gate, visits, new doctors, PAP letters, groups enrolled and quiet; lowest coverage first); care groups; people at risk; money owed; score questions; each seller against their target | → Founder (Reports: Care groups, Rx field team) | Done 16 Nov, checked as Rosa |
+
+### 16.3 Online B2C (B2C Sales Coaching) (done 16 Nov)
+
+Read again from the chart (zoomed, 16 Nov): the B2C Sales Coaching Department hangs under MD
+Telesales Oncology, which sits inside the Onco-Hema Division of the Prescription Business. So the
+line is: B2C CHC (Mary Jane Viñas, Rachelle Upao) → Sales Coach, MD Telesales (Honey Cordero) →
+PX Country Mentor (Javed Shaikh) → Founder. (Also on the chart: Sales Admin Kate Cagoyong straight
+under the Country Mentor, and Sales Admin Sheila Mae Bazar in MD Telesales.) The B2C CHC works the
+Online desk (enquiries from Messenger, the websites, email, phone), as the B2C CHC Playbook v1.3
+runs it: every new enquiry answered within 15 minutes (three late in a day: the coach is told the
+same day); the morning pulse at 8:00 (overnight enquiries answered by 8:30, new prospects first,
+the refill-due list worked before noon, yesterday zero-sales or not, cancellations coded, care team
+groups for yesterday's first orders); at least one invoice by 2:30 PM or tell the coach; day-3
+check-in after each delivery; the end-of-day close.
+
+| Seat | Menu | Home | Sends up | State |
+|---|---|---|---|---|
+| B2C CHC (online, ONLINE) | Home, Leads & enquiries, Inbox, Refills due, My orders, Patients (the shared look-up, to search before adding), Points, My score; New lead on top | Morning pulse (enquiries waiting, new prospects not answered, refills due, invoice on the last working day, uncoded cancellations, late replies today: green / red each, with the playbook's action); waiting for a reply (oldest first, the 15-minute clock, open the case); refills due (by each patient's own rhythm; Call, New order); orders (quoted not ordered, at Finance, to ship, day-3 check-ins due); my scorecard (B2C card) | Late replies and zero-sales days → Sales Coach | Done 16 Nov, checked as Mae: desk "B2C CHC"; Home is the pulse, Reply opens the case, refills are their own patients only (2, not the company's 227) |
+| Sales Coach (Onco-Hema): MD Telesales and B2C | desk named "Sales Coach" as the chart has it | B2C desk now: each B2C CHC's enquiries waiting, late replies today (three or more: red), today's invoices, none on the last working day, none by 2:30 PM | → Country Mentor | Done 16 Nov, checked as Lara |
+| Country Mentor | — | B2C desk now on the Home too; the B2C CHCs in people at risk and in the business totals; an Rx field CHC shows "no sales target" instead of "set it on Targets" | → Founder | Done 16 Nov, checked as Rosa |
 
 ## 13. Questions waiting for Aryan
 
@@ -1876,3 +1898,4 @@ enrolment and turn it into orders. The Patient Care Group is the bridge between 
 - 16 Nov (52), Aryan: "why 80 doctors? doctors can be more or fewer; think it through". The doctor list has no fixed size and no tier limits (the playbook's 80 and 20/40/20 are a guide only); the coverage gate counts the doctors on the CHC's own list (no list: not measured). The Rx CHC's menu loses "Doctors to call" (today's route already has the refills due). Taking a doctor off the list is its own "Remove" button (clicking the tier again no longer removes). The 7 PM huddle is the Hospital CHCs' only (an Rx CHC opening it is told so).
 - 16 Nov (53), Section 16.2 Prescription done, bottom to top. New: Patient Care Groups (migration 0060 care_group; the Rx CHC enrols a doctor's group with the patients' consent, one open group a doctor; MD Telesales see the groups waiting with the 15-minute clock, the first to press Contacted takes the group; the CHC or the group's telesales logs activity; quiet 14 days goes back to the CHC; closed with a reason, never deleted; the Sales Coach, the Country Mentor, the CEO and the Admin see every group and the share answered within 15 minutes). Customers to call gains "In 2 days" (a refill falling in the next two days) and what each customer took last time; MD Telesales' list is their patients and doctors and opens on the refills coming due. MD Telesales' pulse: sales vs target, refills due, groups waiting, the last working day's invoice. The Country Mentor's field team (/rx/field). Demo people for the channel (rx/seed.ts): Rosa (Country Mentor), Lara (Sales Coach), Kim (MD Telesales) with patients whose refills come due and two of Joy's groups. The desk name in the top bar no longer gets cut ("MD T…"). 317 API tests.
 - 16 Nov (54), Checked up the line for 16.2: a care group belongs to the business of the CHC who enrolled it, so the Hospital Division's anesthesia telesales (also TS) never see the oncology groups; the Sales Coach and the Country Mentor see their business's groups, the CEO and the Admin all. Reports (CEO, Admin) gain Care groups and Rx field team.
+- 16 Nov (55), Section 16.3 Online B2C done. Read again from the zoomed chart first (B2C Sales Coaching under MD Telesales Oncology inside Onco-Hema; the Sales Admin under the Country Mentor). The B2C CHC's Home (/ for the Online desk, instead of jumping to the leads): the playbook's 8:00 pulse (enquiries waiting, new prospects not answered, the refill-due list, the last working day's invoice, cancellations without a reason, replies past 15 minutes today, each green or red with the playbook's action), waiting for a reply oldest first with the clock and Reply, refills due by each patient's own rhythm, orders by where they stand with the day-3 check-ins due (a check-in is kept on the order). A late reply: a turn's first inbound message in working hours answered after 15 minutes (or still waiting). A B2C CHC's refill list is their own patients (added, ordered for, or their enquiry), as the playbook's ownership rule says. The coach's and the Country Mentor's Homes show the B2C desk now (/api/b2c/team). Demo: the B2C Sales Coaching team under MD Telesales with Mae, an inactive demo Messenger page, three enquiries and two patients. 319 API tests.
