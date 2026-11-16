@@ -110,6 +110,138 @@ function Delta({ now, then, small }: { now: number; then: number; small?: boolea
   );
 }
 
+/** A small switch between looks of the same thing. */
+function LookSwitch<T extends string>({
+  legend,
+  looks,
+  value,
+  onPick,
+}: {
+  legend: string;
+  looks: readonly (readonly [T, string])[];
+  value: T;
+  onPick: (key: T) => void;
+}) {
+  return (
+    <fieldset className="inline-flex shrink-0 items-center gap-0.5 rounded-lg bg-slate-100 p-0.5 text-[11px] font-semibold">
+      <legend className="sr-only">{legend}</legend>
+      {looks.map(([key, label]) => (
+        <button
+          key={key}
+          type="button"
+          aria-pressed={value === key}
+          onClick={() => onPick(key)}
+          className={`rounded-md px-2.5 py-1 transition-colors ${
+            value === key
+              ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+              : "text-slate-600 hover:text-slate-900"
+          }`}
+        >
+          {label}
+        </button>
+      ))}
+    </fieldset>
+  );
+}
+
+/** A look picked once and remembered on this computer. */
+function useLook<T extends string>(key: string, looks: readonly (readonly [T, string])[]) {
+  const first = (looks[0] as readonly [T, string])[0];
+  const [look, setLook] = useState<T>(() => {
+    try {
+      const saved = localStorage.getItem(key);
+      return looks.find(([one]) => one === saved)?.[0] ?? first;
+    } catch {
+      return first;
+    }
+  });
+  const pick = (next: T) => {
+    setLook(next);
+    try {
+      localStorage.setItem(key, next);
+    } catch {
+      // A private window: the pick lasts until the page is left.
+    }
+  };
+  return [look, pick] as const;
+}
+
+const Move = ({ from, to }: { from: number; to: number }) =>
+  to === from ? (
+    <Equal size={13} className="shrink-0 text-slate-300" aria-label="same as before" />
+  ) : to < from ? (
+    <ArrowDownRight size={14} className="shrink-0 text-amber-600" aria-label="lower than before" />
+  ) : (
+    <ArrowUpRight size={14} className="shrink-0 text-emerald-600" aria-label="higher than before" />
+  );
+
+/** The last prices side by side, the newest first, with an arrow for which way each moved from
+ *  the order before it. `now` puts the price being decided in front. */
+function StepBoxes({ history, now }: { history: MedicinePrices; now?: number }) {
+  const steps = history.rows.filter((row) => row.unitPrice !== null).slice(0, 5);
+  const first = steps[0]?.unitPrice ?? null;
+  return (
+    <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto py-0.5 pl-0.5">
+      {now !== undefined && (
+        <>
+          <span
+            className={`shrink-0 rounded-lg px-2.5 py-1.5 leading-tight ring-1 ${
+              first !== null && now < first
+                ? "bg-amber-100 ring-amber-300"
+                : "bg-slate-900 text-white ring-slate-900"
+            }`}
+          >
+            <span
+              className={`block text-[13px] font-bold tabular-nums ${first !== null && now < first ? "text-amber-950" : "text-white"}`}
+            >
+              {peso(now)}
+            </span>
+            <span
+              className={`block text-[10px] font-semibold tracking-wide uppercase ${first !== null && now < first ? "text-amber-800" : "text-slate-300"}`}
+            >
+              Now
+            </span>
+          </span>
+          {first !== null && <Move from={first} to={now} />}
+        </>
+      )}
+      {steps.length === 0 && (
+        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+          Only given free
+        </span>
+      )}
+      {steps.map((row, index) => {
+        const older = steps[index + 1]?.unitPrice ?? null;
+        const price = row.unitPrice as number;
+        return (
+          <Fragment key={`${row.from}:${row.code}:${price}`}>
+            <span
+              className={`shrink-0 rounded-lg px-2.5 py-1.5 leading-tight ring-1 ${
+                index === 0 ? "bg-emerald-50 ring-emerald-200" : "bg-white ring-slate-200"
+              }`}
+              title={`${row.code} · ${pieces(row, history.unit)}`}
+            >
+              <span className="block text-[13px] font-bold text-slate-900 tabular-nums">
+                {peso(price)}
+              </span>
+              <span className="block text-[10px] whitespace-nowrap text-slate-500">
+                {dayLabel(row.at)}
+                {row.freeQty ? (
+                  <span className="font-semibold text-emerald-700">
+                    {" "}
+                    · +{count(row.freeQty)} free
+                  </span>
+                ) : null}
+              </span>
+            </span>
+            {older !== null && <Move from={older} to={price} />}
+          </Fragment>
+        );
+      })}
+    </span>
+  );
+}
+
 const ZohoTag = () => (
   <span
     className="rounded bg-slate-100 px-1 py-px text-[9px] font-bold tracking-wide text-slate-500 uppercase"
@@ -212,23 +344,65 @@ export function PriceRows({ history, now }: { history: MedicinePrices; now?: num
   );
 }
 
-/** Under an order's line: what this customer got last time against the price now, the trend,
- *  and every earlier order behind one click. Amber when the price now is below the last one. */
+/** The looks of the earlier prices under an order's lines. */
+export const LINE_LOOKS = [
+  ["strip", "Strip"],
+  ["steps", "Steps"],
+  ["open", "Open"],
+] as const;
+export type LineLook = (typeof LINE_LOOKS)[number][0];
+export const useLineLook = () => useLook("crm:order-prices-look", LINE_LOOKS);
+
+/** Above an order's lines: how to see what the customer paid before. */
+export function LineLookSwitch({
+  look,
+  onPick,
+}: {
+  look: LineLook;
+  onPick: (look: LineLook) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 border-b border-slate-100 px-4 py-2">
+      <span className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-slate-600">
+        <History size={13} className="text-slate-400" aria-hidden="true" />
+        What they paid before
+      </span>
+      <LookSwitch legend="How to see the earlier prices" looks={LINE_LOOKS} value={look} onPick={onPick} />
+    </div>
+  );
+}
+
+/** Under an order's line: what this customer got last time against the price now, and every
+ *  earlier order behind one click. Amber when the price now is below the last one. Three looks:
+ *  a strip (last price, trend, how much lower or higher), steps (the last prices side by side
+ *  starting from now), or open (every order shown without a click). */
 export function LastGiven({
   history,
   now,
   free,
+  look = "strip",
 }: {
   history: MedicinePrices;
   /** The price on the order being looked at. */
   now: number;
   free?: boolean;
+  look?: LineLook;
 }) {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(look === "open");
   const last = history.rows[0];
   if (!last) return null;
   const compare = !free && history.lastPrice !== null;
   const lower = compare && now < (history.lastPrice as number);
+  const orders = (
+    <span className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-white px-2 py-1 text-[11px] font-semibold whitespace-nowrap text-slate-700 shadow-2xs ring-1 ring-slate-200">
+      {count(history.times)} {history.times === 1 ? "order" : "orders"}
+      <ChevronDown
+        size={13}
+        className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
+        aria-hidden="true"
+      />
+    </span>
+  );
   return (
     <div
       className={`overflow-hidden rounded-xl border transition-colors ${
@@ -251,34 +425,39 @@ export function LastGiven({
         >
           <History size={14} aria-hidden="true" />
         </span>
-        <span className="flex min-w-0 flex-col leading-tight">
-          <span
-            className={`text-[10px] font-semibold tracking-wide uppercase ${lower ? "text-amber-700" : "text-slate-500"}`}
-          >
-            Last time
-          </span>
-          <span className="flex flex-wrap items-baseline gap-x-2">
-            <b className="text-[15px] font-bold text-slate-900 tabular-nums">
-              {history.lastPrice !== null ? peso(history.lastPrice) : "Free"}
-            </b>
-            <span className="text-[12px] text-slate-600 tabular-nums">
-              {pieces(last, history.unit)} · {dayLabel(last.at)} ·{" "}
-              <span className="font-semibold text-slate-800">{last.code}</span>
+        {look === "steps" ? (
+          <>
+            <StepBoxes history={history} now={compare ? now : undefined} />
+            <span className="ml-auto flex items-center gap-3">
+              {compare && <Delta now={now} then={history.lastPrice as number} small />}
+              {orders}
             </span>
-          </span>
-        </span>
-        <span className="ml-auto flex items-center gap-3">
-          <Trend prices={paidOf(history).slice(-8)} now={compare ? now : undefined} />
-          {compare && <Delta now={now} then={history.lastPrice as number} />}
-          <span className="inline-flex items-center gap-1 rounded-lg bg-white px-2 py-1 text-[11px] font-semibold whitespace-nowrap text-slate-700 shadow-2xs ring-1 ring-slate-200">
-            {count(history.times)} {history.times === 1 ? "order" : "orders"}
-            <ChevronDown
-              size={13}
-              className={`text-slate-400 transition-transform ${open ? "rotate-180" : ""}`}
-              aria-hidden="true"
-            />
-          </span>
-        </span>
+          </>
+        ) : (
+          <>
+            <span className="flex min-w-0 flex-col leading-tight">
+              <span
+                className={`text-[10px] font-semibold tracking-wide uppercase ${lower ? "text-amber-700" : "text-slate-500"}`}
+              >
+                Last time
+              </span>
+              <span className="flex flex-wrap items-baseline gap-x-2">
+                <b className="text-[15px] font-bold text-slate-900 tabular-nums">
+                  {history.lastPrice !== null ? peso(history.lastPrice) : "Free"}
+                </b>
+                <span className="text-[12px] text-slate-600 tabular-nums">
+                  {pieces(last, history.unit)} · {dayLabel(last.at)} ·{" "}
+                  <span className="font-semibold text-slate-800">{last.code}</span>
+                </span>
+              </span>
+            </span>
+            <span className="ml-auto flex items-center gap-3">
+              <Trend prices={paidOf(history).slice(-8)} now={compare ? now : undefined} />
+              {compare && <Delta now={now} then={history.lastPrice as number} />}
+              {orders}
+            </span>
+          </>
+        )}
       </button>
       {open && (
         <div className={`border-t px-3 py-2.5 ${lower ? "border-amber-200/70" : "border-slate-200/70"}`}>
@@ -539,7 +718,6 @@ function PricesSteps({ medicines, open, toggle }: LookProps) {
   return (
     <ul className="divide-y divide-slate-100">
       {medicines.map((medicine) => {
-        const steps = medicine.rows.filter((row) => row.unitPrice !== null).slice(0, 5);
         const isOpen = open === medicine.key;
         return (
           <li key={medicine.key} className={isOpen ? "bg-slate-50" : ""}>
@@ -558,41 +736,7 @@ function PricesSteps({ medicines, open, toggle }: LookProps) {
                   {count(medicine.times)} {medicine.times === 1 ? "order" : "orders"}
                 </span>
               </span>
-              <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
-                {steps.length === 0 && <Chip tone="free">Only given free</Chip>}
-                {steps.map((row, index) => {
-                  const older = steps[index + 1]?.unitPrice ?? null;
-                  const price = row.unitPrice as number;
-                  return (
-                    <Fragment key={`${row.from}:${row.code}:${price}`}>
-                      <span
-                        className={`shrink-0 rounded-lg px-2.5 py-1.5 leading-tight ring-1 ${
-                          index === 0 ? "bg-emerald-50 ring-emerald-200" : "bg-white ring-slate-200"
-                        }`}
-                        title={`${row.code} · ${pieces(row, medicine.unit)}`}
-                      >
-                        <span className="block text-[13px] font-bold text-slate-900 tabular-nums">
-                          {peso(price)}
-                        </span>
-                        <span className="block text-[10px] whitespace-nowrap text-slate-500">
-                          {dayLabel(row.at)}
-                          {row.freeQty ? (
-                            <span className="font-semibold text-emerald-700"> · +{count(row.freeQty)} free</span>
-                          ) : null}
-                        </span>
-                      </span>
-                      {older !== null &&
-                        (price === older ? (
-                          <Equal size={13} className="shrink-0 text-slate-300" aria-label="same as before" />
-                        ) : price < older ? (
-                          <ArrowDownRight size={14} className="shrink-0 text-amber-600" aria-label="lower than before" />
-                        ) : (
-                          <ArrowUpRight size={14} className="shrink-0 text-emerald-600" aria-label="higher than before" />
-                        ))}
-                    </Fragment>
-                  );
-                })}
-              </span>
+              <StepBoxes history={medicine} />
               <ChevronDown
                 size={15}
                 className={`shrink-0 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`}
@@ -611,22 +755,12 @@ function PricesSteps({ medicines, open, toggle }: LookProps) {
   );
 }
 
-/** The three looks of Prices given; the pick is remembered on this computer. */
+/** The three looks of Prices given. */
 const LOOKS = [
   ["table", "Table"],
   ["cards", "Cards"],
   ["steps", "Steps"],
 ] as const;
-type Look = (typeof LOOKS)[number][0];
-const LOOK_KEY = "crm:prices-look";
-const savedLook = (): Look => {
-  try {
-    const saved = localStorage.getItem(LOOK_KEY);
-    return saved === "cards" || saved === "steps" ? saved : "table";
-  } catch {
-    return "table";
-  }
-};
 
 const PAST_STATUS: Record<string, string> = {
   closed: "Delivered",
@@ -644,16 +778,8 @@ export function PricesGiven({ customerId }: { customerId: number }) {
   });
   const [open, setOpen] = useState<string | null>(null);
   const [all, setAll] = useState(false);
-  const [look, setLook] = useState<Look>(savedLook);
+  const [look, pickLook] = useLook("crm:prices-look", LOOKS);
   const toggle = (key: string) => setOpen(open === key ? null : key);
-  const pickLook = (key: Look) => {
-    setLook(key);
-    try {
-      localStorage.setItem(LOOK_KEY, key);
-    } catch {
-      // A private window: the pick lasts until the page is left.
-    }
-  };
   const data = query.data;
   if (!data || data.past.orders === 0) return null;
   const medicines = all ? data.medicines : data.medicines.slice(0, 12);
@@ -663,24 +789,7 @@ export function PricesGiven({ customerId }: { customerId: number }) {
         icon={History}
         title={`Prices given · ${count(data.medicines.length)} ${data.medicines.length === 1 ? "medicine" : "medicines"}`}
         actions={
-          <fieldset className="inline-flex shrink-0 items-center gap-0.5 rounded-lg bg-slate-100 p-0.5 text-[11px] font-semibold">
-            <legend className="sr-only">How to see the prices</legend>
-            {LOOKS.map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                aria-pressed={look === key}
-                onClick={() => pickLook(key)}
-                className={`rounded-md px-2.5 py-1 transition-colors ${
-                  look === key
-                    ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
-                    : "text-slate-600 hover:text-slate-900"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </fieldset>
+          <LookSwitch legend="How to see the prices" looks={LOOKS} value={look} onPick={pickLook} />
         }
         flush
       >

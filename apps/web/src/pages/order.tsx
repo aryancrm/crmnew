@@ -38,7 +38,13 @@ import { type FormEvent, Fragment, type ReactNode, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
-import { CustomerBefore, LastGiven, useOrderPrices } from "../customers/prices";
+import {
+  CustomerBefore,
+  LastGiven,
+  LineLookSwitch,
+  useLineLook,
+  useOrderPrices,
+} from "../customers/prices";
 import { type DispatchAsk, DispatchDialogs } from "../dispatch/parts";
 import { noProofWords } from "../finance/no-proof";
 import {
@@ -1014,6 +1020,8 @@ function Lines({ data, compare }: { data: OrderDetail; compare?: boolean }) {
   const [medicine, setMedicine] = useState<number | null>(null);
   // What this customer was given before, line by line (this CRM's orders and Zoho's).
   const prices = useOrderPrices(order.id).data;
+  const [look, pickLook] = useLineLook();
+  const anyBefore = prices ? Object.values(prices.lines).some(Boolean) : false;
   return (
     <div className="-mx-4 overflow-x-auto border-y border-slate-100">
       {medicine !== null && <MedicinePopup id={medicine} onClose={() => setMedicine(null)} />}
@@ -1022,6 +1030,7 @@ function Lines({ data, compare }: { data: OrderDetail; compare?: boolean }) {
           <CustomerBefore prices={prices} name={order.customer} />
         </div>
       )}
+      {anyBefore && <LineLookSwitch look={look} onPick={pickLook} />}
       <table className="t">
         <thead>
           <tr>
@@ -1079,7 +1088,13 @@ function Lines({ data, compare }: { data: OrderDetail; compare?: boolean }) {
                 {before && (
                   <tr>
                     <td colSpan={compare ? 6 : 5} className="pt-0">
-                      <LastGiven history={before} now={item.unitPrice} free={item.free} />
+                      <LastGiven
+                        key={look}
+                        history={before}
+                        now={item.unitPrice}
+                        free={item.free}
+                        look={look}
+                      />
                     </td>
                   </tr>
                 )}
