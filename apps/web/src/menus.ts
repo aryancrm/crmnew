@@ -3,6 +3,7 @@
 // pages is open. The Admin and the CEO start on a page of apps. Nothing here leads to a
 // screen that isn't built.
 
+import { officeMedrep } from "./auth";
 import type { Me, Role } from "@2mg/api/types";
 import {
   ArrowLeftRight,
@@ -443,6 +444,19 @@ function ownDesk(me: Me): Space {
   });
   switch (me.role) {
     case "medrep": {
+      // The Online channel's MedRep sits in the office: the Online desk first, then their orders.
+      if (officeMedrep(me))
+        return {
+          ...desk([
+            home,
+            { to: "/leads", label: "Leads & enquiries", icon: Inbox },
+            { to: "/inbox", label: "Inbox", icon: MessagesSquare, badge: "inbox" },
+            folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+            customers,
+            { to: "/points", label: "Points", icon: Gift },
+          ]),
+          cta: { to: "/leads?new=1", label: "New lead" },
+        };
       // A PAP MedRep's patients come as cases (the guarantee letter's road), not plain orders.
       const pap = me.channel?.code === "PAP";
       return {

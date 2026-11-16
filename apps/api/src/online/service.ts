@@ -10,7 +10,7 @@ import { phoneKey } from "../customers/service";
 import { type Database, rows } from "../db/index";
 import { invoiceState } from "../finance/rules";
 import { orderMoney } from "../finance/service";
-import { allow, Refusal } from "../http";
+import { allow, may, onlineDesk, Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
 import { clean, day, iso, type Runner } from "../inventory/service";
 import { logEvent, peso } from "../orders/events";
@@ -869,7 +869,7 @@ export function mayOnCase(
     if (isPapRep(me)) return lead.assignedTo === me.id;
     return need === "read" && (me.role === "ceo" || me.role === "management");
   }
-  return (need === "read" ? LEAD_READ_ROLES : LEAD_WORK_ROLES).includes(me.role);
+  return may(me, need === "read" ? LEAD_READ_ROLES : LEAD_WORK_ROLES);
 }
 
 /** Refuses a case the person may not read or work (as "not one of yours"). */

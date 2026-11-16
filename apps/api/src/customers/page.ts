@@ -4,6 +4,7 @@
 // customer is found the usual way (customerDetail: the same "may this person see it" rule), and
 // a patient is also known by their mobile number, so their enquiries on that number come along.
 
+import { may } from "../http";
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { invoiceState, METHOD_LABEL } from "../finance/rules";
@@ -26,7 +27,7 @@ export async function customerPage(db: Database, me: Me, id: number): Promise<Cu
     sql`select phone_key as "phoneKey", area_id::int as "areaId", added_by::int as "addedBy" from customer where id = ${id}`,
   );
   const phone = base?.phoneKey ?? null;
-  const readsCases = LEAD_READ_ROLES.includes(me.role);
+  const readsCases = may(me, LEAD_READ_ROLES);
   const sameCases = sql`(l.customer_id = ${id} or ${phone ? sql`l.phone_key = ${phone}` : sql`false`})`;
 
   const [orders, counted, medicines, invoices, payments, cases, events, starter] =

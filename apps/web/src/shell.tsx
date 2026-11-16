@@ -24,7 +24,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
-import { initials, useMe } from "./auth";
+import { initials, onlineDesk, useMe } from "./auth";
 import { LiveLocationSender } from "./field/live-sender";
 import { UndoConfirmBar } from "./finance/undo";
 import { MyDayButton } from "./hr/parts";
@@ -78,7 +78,7 @@ export function Shell() {
   const chats = useQuery({
     queryKey: ["inbox", "count"],
     queryFn: () => api<{ needs: number; held: number }>("/api/inbox/count"),
-    enabled: ["online", "admin", "ceo"].includes(me.data?.role ?? ""),
+    enabled: onlineDesk(me.data) || ["admin", "ceo"].includes(me.data?.role ?? ""),
     refetchInterval: () => (document.visibilityState === "visible" ? 30_000 : false),
   });
 

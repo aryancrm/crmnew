@@ -8,7 +8,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
-import { allow, Refusal } from "../http";
+import { allow, may, onlineDesk, Refusal } from "../http";
 import type { Me } from "../types";
 import { type Account, caseOf, chatOf, type IncomingFile, keepMessage } from "./conversation";
 import { graph } from "./graph";
@@ -540,7 +540,7 @@ export async function replyOnMessenger(
     byPerson: me.id,
   });
   // Whoever answers an unassigned case on the Online desk takes it.
-  if (me.role === "online")
+  if (onlineDesk(me))
     await db.execute(
       sql`update lead set assigned_to = ${me.id} where id = ${leadId} and assigned_to is null`,
     );

@@ -15,7 +15,7 @@ import { Lock } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { api } from "../api";
-import { useMe } from "../auth";
+import { onlineDesk, useMe } from "../auth";
 import { smaller } from "../photo";
 import { Button, Dialog, Problem, useAction } from "../ui";
 
@@ -508,7 +508,7 @@ export function NewLeadDialog({
           source: pap ? "referral" : "messenger",
           name: "",
           road: pap ? "gl" : "regular",
-          assignedTo: me?.role === "online" ? me.id : null,
+          assignedTo: me && onlineDesk(me) ? me.id : null,
         }}
         pap={pap}
         agents={agents}

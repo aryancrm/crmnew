@@ -4,7 +4,7 @@
 
 import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
-import { allow, Refusal } from "../http";
+import { allow, may, onlineDesk, Refusal } from "../http";
 import { addDays, EXPIRING_DAYS, todayManila } from "../inventory/rules";
 import { clean, day, iso, type Runner } from "../inventory/service";
 import { inForce } from "../org/service";
@@ -97,7 +97,7 @@ export function seen(me: Me): SQL {
       or c.area_id in ${teamSeatAreas})`;
   // The Online desk: patients, and the customers of its own enquiries and orders; not every
   // hospital's money.
-  if (me.role === "online")
+  if (onlineDesk(me))
     return sql`(c.kind = 'patient' or c.added_by = ${me.id}
       or exists (select 1 from lead l where l.customer_id = c.id)
       or exists (select 1 from sales_order o where o.customer_id = c.id and (o.lead_id is not null or o.medrep_id = ${me.id} or o.raised_by = ${me.id})))`;

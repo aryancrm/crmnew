@@ -7,7 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Building2, Stethoscope, User, UserPlus } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { api } from "../api";
-import { useMe } from "../auth";
+import { onlineDesk, useMe } from "../auth";
 import { NewsList } from "../inventory/news";
 import { count, Facts, PageHead, Panel, Tile } from "../ui";
 import { AdminChannelsPage } from "./admin-channels";
@@ -51,7 +51,7 @@ export function Home() {
   if (me.role === "finance") return <OrdersToCheck desk="finance" />;
   if (me.role === "dispatch") return <OrdersToCheck desk="dispatch" />;
   if (me.role === "medrep") return <MedrepHome />;
-  if (me.role === "online") return <Navigate to="/leads" replace />;
+  if (onlineDesk(me)) return <Navigate to="/leads" replace />;
   // HR's Home is People: everyone's record.
   if (me.role === "hr") return <HrPeoplePage />;
   return <Desk />;

@@ -16,7 +16,7 @@ import { ImapFlow } from "imapflow";
 import { simpleParser } from "mailparser";
 import nodemailer from "nodemailer";
 import { type Database, rows } from "../db/index";
-import { allow, Refusal } from "../http";
+import { allow, may, onlineDesk, Refusal } from "../http";
 import type { HeldSender, Me } from "../types";
 import { type Account, caseOf, chatOf, type IncomingFile, keepMessage } from "./conversation";
 import { CHANNEL_ROLES } from "./messenger";
@@ -643,7 +643,7 @@ export async function letSenderIn(
   for (const mail of mails.sort((a, b) => a.at.getTime() - b.at.getTime()))
     await land(db, account, mail);
   const lead = await caseOf(db, account, held.address);
-  if (lead && me.role === "online")
+  if (lead && onlineDesk(me))
     await db.execute(
       sql`update lead set assigned_to = ${me.id} where id = ${lead.id} and assigned_to is null`,
     );
@@ -678,7 +678,7 @@ export async function replyByEmail(
 ): Promise<void> {
   allow(me, LEAD_WORK_ROLES, "answer an email");
   await sendOnCase(db, leadId, text, extra, me.id);
-  if (me.role === "online")
+  if (onlineDesk(me))
     await db.execute(
       sql`update lead set assigned_to = ${me.id} where id = ${leadId} and assigned_to is null`,
     );

@@ -75,7 +75,13 @@ export function signedInWith(db: Database, onSeen?: (me: Me) => Promise<void>) {
   });
 }
 
-export const may = (me: Me, roles: readonly Role[]) => roles.includes(me.role);
+/** The Online channel's MedRep works in the office: a MedRep (orders go up the usual line) who
+ *  also works the Online desk (leads, Inbox, email, patients). */
+export const officeMedrep = (me: Me) => me.role === "medrep" && me.channel?.code === "ONLINE";
+/** Works the Online desk: its own desk role, or the Online channel's MedRep. */
+export const onlineDesk = (me: Me) => me.role === "online" || officeMedrep(me);
+export const may = (me: Me, roles: readonly Role[]) =>
+  roles.includes(me.role) || (roles.includes("online") && officeMedrep(me));
 
 /** Refuses unless the person has one of the roles; says who can. */
 export function allow(me: Me, roles: readonly Role[], what: string): void {

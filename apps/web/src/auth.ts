@@ -30,3 +30,10 @@ export function initials(name: string): string {
     (parts[0]?.[0] ?? "") + (parts.length > 1 ? (parts.at(-1)?.[0] ?? "") : "")
   ).toUpperCase();
 }
+
+/** The Online channel's MedRep works in the office: a MedRep who also works the Online desk. */
+export const officeMedrep = (me: { role: string; channel?: { code: string } | null } | null | undefined) =>
+  me?.role === "medrep" && me.channel?.code === "ONLINE";
+/** Works the Online desk: its own desk role, or the Online channel's MedRep. */
+export const onlineDesk = (me: { role: string; channel?: { code: string } | null } | null | undefined) =>
+  me?.role === "online" || officeMedrep(me);
