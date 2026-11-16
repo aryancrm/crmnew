@@ -6,7 +6,7 @@
 // row keeps Zoho's id, so a second run adds only what is missing.
 //
 //   ZOHO_DIR=<the unpacked backup>            (default: crmnew/.data/zoho-backup)
-//   DATABASE_URL=<this CRM's database>        (or in crmnew/.env)
+//   DATABASE_URL=<this CRM's database>        (or in crmnew/.env.live)
 //   TEST_PGLITE_DIR=<a copy of a local database>   try it there first
 //   npx tsx scripts/import-zoho.ts [--apply] [--all] [--memory]
 //
@@ -269,7 +269,12 @@ function envFile(path: string): Record<string, string> {
       }),
   );
 }
-const url = process.env.DATABASE_URL ?? envFile(join(import.meta.dirname, "../../../.env")).DATABASE_URL;
+// The live database's address is kept in crmnew/.env.live (never committed; the API itself
+// does not read it), else crmnew/.env.
+const url =
+  process.env.DATABASE_URL ||
+  envFile(join(import.meta.dirname, "../../../.env.live")).DATABASE_URL ||
+  envFile(join(import.meta.dirname, "../../../.env")).DATABASE_URL;
 const testDir = process.env.TEST_PGLITE_DIR;
 if (!memory && !testDir && !url) {
   console.log("No database given: counted only. (DATABASE_URL, TEST_PGLITE_DIR or --memory to go on.)");
