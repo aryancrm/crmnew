@@ -6,7 +6,7 @@ import { migrate } from "../db/migrate";
 import { todayManila } from "../inventory/rules";
 import { seedDemo } from "../seed";
 import type { MyScore, TeamScores } from "../types";
-import { B2C, HOSPITAL, incrementOf, scoreOf } from "./recipes";
+import { B2C, HOSPITAL, incrementOf, RX, scoreOf } from "./recipes";
 import { lockDue, lockMonth } from "./service";
 
 describe("the playbook cards", () => {
@@ -26,6 +26,15 @@ describe("the playbook cards", () => {
     expect(card.kpis.map((kpi) => kpi.points)).toEqual([45, 8, 7, 13, 10]);
     expect(scoreOf(B2C, { ist: null, crr: null, nbd: null, nzsd: null, ocr: 12 }).kpis[4]?.points).toBe(2);
     expect(scoreOf(B2C, { ist: null, crr: null, nbd: null, nzsd: null, ocr: 20 }).kpis[4]?.points).toBe(0);
+  });
+
+  it("Rx: counts by band, HIT left out until it is measured, coverage below 80% caps at 70", () => {
+    const card = scoreOf(RX, { nbd: 9, crr: 92, pap: 12, hit: null, ccf: 85 });
+    expect(card).toMatchObject({ total: 85, max: 85, capped: false });
+    expect(card.kpis.find((kpi) => kpi.key === "ccf")?.band).toBe("Pass");
+    const short = scoreOf(RX, { nbd: 9, crr: 92, pap: 12, hit: 3, ccf: 60 });
+    expect(short).toMatchObject({ total: 70, max: 100, capped: true });
+    expect(scoreOf(RX, { nbd: 2, crr: 55, pap: 4, hit: null, ccf: 90 }).kpis.map((kpi) => kpi.points)).toEqual([12, 12, 15, null, null]);
   });
 
   it("the year's average sets the increment", () => {
@@ -113,6 +122,15 @@ describe("cards from the data", () => {
     expect((await post("ryan", "/api/scores/lock", { month: last })).status).toBe(403);
     expect((await post("admin", "/api/scores/lock", { month: today.slice(0, 7) })).status).toBe(400);
     expect(await lockMonth(db, last, true)).toBeGreaterThan(0);
+  });
+
+  it("a prescription MedRep's card counts new doctors, doctors again, letters and visits", async () => {
+    const team = (await (await get("admin", "/api/scores/team")).json()) as TeamScores;
+    const rx = team.rows.find((row) => row.card?.recipe === "rx");
+    if (!rx) return; // the demo has no prescription MedRep in a seat
+    expect(rx.card?.kpis.map((kpi) => kpi.key)).toEqual(["nbd", "crr", "pap", "hit", "ccf"]);
+    expect(rx.card?.kpis.find((kpi) => kpi.key === "ccf")?.band).toMatch(/Pass|Fail/);
+    expect(rx.card?.kpis.find((kpi) => kpi.key === "hit")?.points).toBeNull();
   });
 
   it("a lead sees their team's cards; a MedRep has no team view", async () => {

@@ -15,19 +15,21 @@ export type KpiRecipe = {
   /** What it measures, in one line. */
   how: string;
   weight: number;
-  unit: "%" | "days";
+  unit: "%" | "days" | "count";
   better: "high" | "low";
   /** Best band first. */
   bands: Band[];
+  /** A gate adds no points: below `pass` the month's total is capped at `cap`. */
+  gate?: { pass: number; cap: number };
 };
 export type Recipe = {
-  key: "hospital" | "b2c";
+  key: "hospital" | "b2c" | "rx";
   label: string;
   /** From the playbook named. */
   source: string;
   kpis: KpiRecipe[];
   /** A month whose first KPI scores 0 cannot total more than this. */
-  capOnZero: { kpi: string; total: number };
+  capOnZero?: { kpi: string; total: number };
 };
 
 export const HOSPITAL: Recipe = {
@@ -136,14 +138,71 @@ export const B2C: Recipe = {
   ],
 };
 
-export const RECIPES = { hospital: HOSPITAL, b2c: B2C };
+// Rx CHC Play Book's card (p. 32-33). The Rx Team & Training Playbook moves NBD and CRR to MD
+// Telesales but gives no new weights (a question for Aryan); until the reconciled card is
+// published this one stands. HIT needs the formulary tracker (Phase 5): left out until then.
+export const RX: Recipe = {
+  key: "rx",
+  label: "Rx CHC",
+  source: "Rx CHC Play Book",
+  kpis: [
+    {
+      key: "nbd", label: "NBD · new prescribing doctors", how: "Doctors invoiced for the first time this month", weight: 30, unit: "count", better: "high",
+      bands: [
+        { from: 9, points: 30, label: "GetMeds Best" },
+        { from: 7, points: 27, label: "Elite" },
+        { from: 5, points: 24, label: "High Performer" },
+        { from: 3, points: 18, label: "Developing" },
+        { from: 1, points: 12, label: "Below Standard" },
+        { from: 0, points: 0, label: "Critical" },
+      ],
+    },
+    {
+      key: "crr", label: "CRR · doctors prescribing again", how: "Doctors invoiced last month and again this month ÷ invoiced last month", weight: 30, unit: "%", better: "high",
+      bands: [
+        { from: 90, points: 30, label: "GetMeds Best" },
+        { from: 80, points: 27, label: "Elite" },
+        { from: 70, points: 24, label: "High Performer" },
+        { from: 60, points: 18, label: "Developing" },
+        { from: 50, points: 12, label: "Below Standard" },
+        { from: 0, points: 0, label: "Critical" },
+      ],
+    },
+    {
+      key: "pap", label: "PAP · assistance approved", how: "Guarantee letters received this month on the person's PAP cases", weight: 25, unit: "count", better: "high",
+      bands: [
+        { from: 11, points: 25, label: "GetMeds Best" },
+        { from: 8, points: 23, label: "Elite" },
+        { from: 5, points: 20, label: "High Performer" },
+        { from: 3, points: 15, label: "Developing" },
+        { from: 1, points: 10, label: "Below Standard" },
+        { from: 0, points: 0, label: "Critical" },
+      ],
+    },
+    {
+      key: "hit", label: "HIT · hospital formulary listings", how: "New products approved by a hospital's PTC this quarter (not in the CRM yet)", weight: 15, unit: "count", better: "high",
+      bands: [
+        { from: 3, points: 15, label: "GetMeds Best" },
+        { from: 2, points: 10, label: "High Performer" },
+        { from: 1, points: 5, label: "Developing" },
+        { from: 0, points: 0, label: "Critical" },
+      ],
+    },
+    {
+      key: "ccf", label: "CCF · doctor coverage (gate)", how: "Doctors visited at least once ÷ the 80 on the list; below 80% caps the total at 70", weight: 0, unit: "%", better: "high",
+      bands: [], gate: { pass: 80, cap: 70 },
+    },
+  ],
+};
+
+export const RECIPES = { hospital: HOSPITAL, b2c: B2C, rx: RX };
 
 export type KpiScore = {
   key: string;
   label: string;
   how: string;
   weight: number;
-  unit: "%" | "days";
+  unit: "%" | "days" | "count";
   /** The measured value, rounded to one decimal; null when there is nothing to measure yet. */
   value: number | null;
   points: number | null;
@@ -170,6 +229,13 @@ export function scoreOf(
     if (raw === null || raw === undefined || !Number.isFinite(raw))
       return { key: kpi.key, label: kpi.label, how: kpi.how, weight: kpi.weight, unit: kpi.unit, value: null, points: null, band: null, next: null };
     const value = Math.round(raw * 10) / 10;
+    if (kpi.gate) {
+      const pass = value >= kpi.gate.pass;
+      return {
+        key: kpi.key, label: kpi.label, how: kpi.how, weight: 0, unit: kpi.unit, value, points: null,
+        band: pass ? "Pass" : `Fail: capped at ${kpi.gate.cap}`, next: pass ? null : { value: kpi.gate.pass, points: 0 },
+      };
+    }
     const band = bandOf(kpi, value);
     const at = kpi.bands.indexOf(band);
     const up = at > 0 ? kpi.bands[at - 1] : undefined;
@@ -182,9 +248,18 @@ export function scoreOf(
   const measured = kpis.filter((kpi) => kpi.points !== null);
   let total = measured.reduce((sum, kpi) => sum + (kpi.points ?? 0), 0);
   const max = measured.reduce((sum, kpi) => sum + kpi.weight, 0);
-  const first = kpis.find((kpi) => kpi.key === recipe.capOnZero.kpi);
-  const capped = first?.points === 0 && total > recipe.capOnZero.total;
-  if (capped) total = recipe.capOnZero.total;
+  // The lowest cap that applies governs.
+  const caps: number[] = [];
+  const first = recipe.capOnZero && kpis.find((kpi) => kpi.key === recipe.capOnZero?.kpi);
+  if (recipe.capOnZero && first?.points === 0) caps.push(recipe.capOnZero.total);
+  for (const kpi of recipe.kpis)
+    if (kpi.gate) {
+      const value = kpis.find((one) => one.key === kpi.key)?.value;
+      if (value !== null && value !== undefined && value < kpi.gate.pass) caps.push(kpi.gate.cap);
+    }
+  const cap = caps.length ? Math.min(...caps) : null;
+  const capped = cap !== null && total > cap;
+  if (capped) total = cap as number;
   return { kpis, total, max, capped };
 }
 

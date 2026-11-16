@@ -15,6 +15,8 @@ import type { Me, MyScore, ScoreCard, ScoreDispute, TeamScores } from "../types"
 import { incrementOf, type Recipe, RECIPES, scoreOf } from "./recipes";
 
 const WHOLE = ["ceo", "admin"];
+/** The Rx CHC's doctor list: 80 doctors (20 Tier 1, 40 Tier 2, 20 Tier 3). */
+const DOCTOR_LIST = 80;
 
 const firstOf = (month: string) => `${month.slice(0, 7)}-01`;
 const lastOf = (month: string) => {
@@ -33,12 +35,13 @@ const daysBetween = (from: string, to: string) => {
   return out;
 };
 
-/** The card a seat is scored on: Hospital CHC for a hospital MedRep, B2C CHC for the online
- *  desk. Leads and the other channels have no card here yet. */
+/** The card a seat is scored on: Hospital CHC for a hospital MedRep, Rx CHC for a prescription
+ *  MedRep, B2C CHC for the online desk. Leads and the other channels have no card here yet. */
 export function recipeFor(seat: { module: string; lead: boolean; channel: string | null } | undefined): Recipe | null {
   if (!seat || seat.lead) return null;
   if (seat.module === "online" || seat.channel === "ONLINE") return RECIPES.b2c;
   if (seat.module === "medrep" && seat.channel === "HOSP") return RECIPES.hospital;
+  if (seat.module === "medrep" && seat.channel === "RX") return RECIPES.rx;
   return null;
 }
 
@@ -160,6 +163,45 @@ export async function measure(
   notes.nbd = r.enquiries ? `${r.converted} of ${r.enquiries} new enquiries ordered` : "No new enquiries yet";
   values.ocr = r.orders > 0 ? (r.cancelled / r.orders) * 100 : null;
   notes.ocr = r.orders ? `${r.cancelled} of ${r.orders} orders cancelled` : "No orders yet";
+  if (recipe.key === "rx") {
+    const doctorInvoices = sql`invoice i join sales_order o on o.id = i.order_id join customer c on c.id = i.customer_id`;
+    const [rx] = await rows<{ newDoctors: number; lastDoctors: number; doctorsBack: number; approved: number; visited: number }>(
+      db,
+      sql`select
+          (select count(distinct i.customer_id) from ${doctorInvoices}
+            where ${mine} and c.kind = 'doctor' and i.status <> 'cancelled' and i.issued_on between ${first}::date and ${upTo}::date
+              and not exists (select 1 from invoice e where e.customer_id = i.customer_id and e.status <> 'cancelled' and e.issued_on < ${first}::date))::int as "newDoctors",
+          (select count(distinct i.customer_id) from ${doctorInvoices}
+            where ${mine} and c.kind = 'doctor' and i.status <> 'cancelled' and i.issued_on between ${prevFirst}::date and (${first}::date - 1))::int as "lastDoctors",
+          (select count(distinct i.customer_id) from ${doctorInvoices}
+            where ${mine} and c.kind = 'doctor' and i.status <> 'cancelled' and i.issued_on between ${prevFirst}::date and (${first}::date - 1)
+              and exists (select 1 from invoice n where n.customer_id = i.customer_id and n.status <> 'cancelled'
+                and n.issued_on between ${first}::date and ${upTo}::date))::int as "doctorsBack",
+          (select count(*) from lead l where l.assigned_to = ${personId} and l.road = 'gl'
+            and l.gl_letter_on between ${first}::date and ${upTo}::date)::int as approved,
+          (select count(distinct v.customer_id) from visit v join customer c on c.id = v.customer_id
+            where v.person_id = ${personId} and v.status = 'done' and c.kind = 'doctor'
+              and v.day between ${first}::date and ${upTo}::date)::int as visited`,
+    );
+    const x = rx as NonNullable<typeof rx>;
+    const rxValues: Record<string, number | null> = {
+      nbd: x.newDoctors,
+      crr: x.lastDoctors > 0 ? (x.doctorsBack / x.lastDoctors) * 100 : null,
+      pap: x.approved,
+      // The formulary tracker comes in Phase 5.
+      hit: null,
+      ccf: (x.visited / DOCTOR_LIST) * 100,
+    };
+    const rxNotes: Record<string, string> = {
+      nbd: `${x.newDoctors} doctors invoiced for the first time`,
+      crr: x.lastDoctors ? `${x.doctorsBack} of last month's ${x.lastDoctors} doctors again` : "No doctors last month",
+      pap: `${x.approved} guarantee letters received`,
+      hit: "Not in the CRM yet: the formulary tracker comes in Phase 5",
+      ccf: `${x.visited} of ${DOCTOR_LIST} doctors visited`,
+    };
+    // A rep is scored once they visit, sell, get a letter or have a target.
+    return { values: rxValues, notes: rxNotes, active: Boolean(r.target || r.sales || r.orders || x.visited || x.approved) };
+  }
   // A month with no target, no sale, no order and no enquiry has nothing to score (days without
   // an invoice alone don't make a card).
   const active = Boolean(r.target || r.sales || r.orders || r.lastCustomers || r.enquiries);

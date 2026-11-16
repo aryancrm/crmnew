@@ -3,17 +3,15 @@
 // or on the way, delivered, cancelled), plus the customers they added. Only their own orders: the
 // ones they placed or that are theirs as MedRep. One read, a handful of grouped queries.
 //
-// The scorecard is the old CRM's Hospital CHC card (backend/platform/src/scorecards.ts, the
-// Hospital Division play book), for this month so far: IST sales against the target on the
-// month-end pace (50), DSO days to collect (20), HRR last month's customers who bought again
-// (15), NZSD weekdays with a delivery (15). A KPI with nothing to measure yet is left out of
-// the maximum, never scored 0; IST at 60% or less caps the total at 40.
+// The scorecard is this month's card from the scorecard engine (src/scores): the seat's
+// playbook card, worked out live; My score has the whole of it.
 
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { addDays, todayManila } from "../inventory/rules";
 import { iso } from "../inventory/service";
 import type { Me, MyKpis, MyKpisPeriod, OrderStatus } from "../types";
+import { cardOf } from "../scores/service";
 import { STATUS_LABEL } from "./rules";
 
 const PENDING: OrderStatus[] = [
@@ -112,153 +110,26 @@ export async function myKpis(
   };
 }
 
-type Band = [number, number];
-const pointsAbove = (value: number, bands: Band[], strict = false) =>
-  bands.find(([at]) => (strict ? value > at : value >= at))?.[1] ?? 0;
-
+/** This month's card from the scorecard engine (src/scores), in the Home's shape. */
 async function monthScorecard(db: Database, me: Me, today: string): Promise<MyKpis["scorecard"]> {
-  const mine = sql`(o.medrep_id = ${me.id} or o.raised_by = ${me.id})`;
-  const month = sql`date_trunc('month', ${today}::date)`;
-  const [row] = await rows<{
-    sales: number;
-    target: number | null;
-    day: number;
-    daysInMonth: number;
-    unpaid: number;
-    creditSales: number;
-    lastCustomers: number;
-    cameBack: number;
-    weekdays: number;
-    saleDays: number;
-  }>(
-    db,
-    sql`select
-        coalesce((select sum(i.total) from invoice i join sales_order o on o.id = i.order_id
-          where ${mine} and i.status <> 'cancelled' and date_trunc('month', i.issued_on) = ${month}), 0)::float8 as sales,
-        (select t.amount::float8 from sales_target t where t.person_id = ${me.id} and t.month = ${month}::date) as target,
-        extract(day from ${today}::date)::int as day,
-        extract(day from (${month} + interval '1 month' - interval '1 day'))::int as "daysInMonth",
-        coalesce((select sum(i.total - i.paid) from invoice i join sales_order o on o.id = i.order_id
-          where ${mine} and i.status = 'open'), 0)::float8 as unpaid,
-        coalesce((select sum(i.total) from invoice i join sales_order o on o.id = i.order_id
-          where ${mine} and i.status <> 'cancelled' and i.terms = 'days' and date_trunc('month', i.issued_on) = ${month}), 0)::float8 as "creditSales",
-        (select count(distinct o.customer_id) from sales_order o where ${mine} and o.status not in ('draft', 'cancelled')
-          and date_trunc('month', (coalesce(o.submitted_at, o.created_at) at time zone 'Asia/Manila')::date) = ${month} - interval '1 month')::int as "lastCustomers",
-        (select count(distinct o.customer_id) from sales_order o where ${mine} and o.status not in ('draft', 'cancelled')
-          and date_trunc('month', (coalesce(o.submitted_at, o.created_at) at time zone 'Asia/Manila')::date) = ${month} - interval '1 month'
-          and exists (select 1 from sales_order n where n.customer_id = o.customer_id and (n.medrep_id = ${me.id} or n.raised_by = ${me.id})
-            and n.status not in ('draft', 'cancelled')
-            and date_trunc('month', (coalesce(n.submitted_at, n.created_at) at time zone 'Asia/Manila')::date) = ${month}))::int as "cameBack",
-        (select count(*) from generate_series(${month}::date, ${today}::date, interval '1 day') d
-          where extract(isodow from d) < 6)::int as weekdays,
-        (select count(distinct o.delivered_on) from sales_order o where ${mine} and o.status = 'completed'
-          and date_trunc('month', o.delivered_on) = ${month} and extract(isodow from o.delivered_on) < 6)::int as "saleDays"`,
-  );
-  const r = row ?? {
-    sales: 0,
-    target: null,
-    day: 1,
-    daysInMonth: 30,
-    unpaid: 0,
-    creditSales: 0,
-    lastCustomers: 0,
-    cameBack: 0,
-    weekdays: 1,
-    saleDays: 0,
-  };
-  const pace = r.day > 0 ? (r.sales * r.daysInMonth) / r.day : r.sales;
-  const ist = r.target && r.target > 0 ? Math.round((pace / r.target) * 100) : null;
-  const dso =
-    r.creditSales > 0 ? Math.round(r.unpaid / (r.creditSales / Math.max(1, r.day))) : null;
-  const hrr = r.lastCustomers > 0 ? Math.round((r.cameBack / r.lastCustomers) * 100) : null;
-  const nzsd = r.weekdays > 0 ? Math.round((r.saleDays / r.weekdays) * 100) : null;
-  const kpis: MyKpis["scorecard"]["kpis"] = [
-    {
-      code: "IST",
-      label: "Sales vs target",
-      value: ist,
-      unit: "%",
-      weight: 50,
-      points:
-        ist === null
-          ? null
-          : pointsAbove(
-              ist,
-              [
-                [90, 50],
-                [80, 40],
-                [70, 30],
-                [60, 20],
-              ],
-              true,
-            ),
-      note: r.target
-        ? `${Math.round(r.sales / 100).toLocaleString("en-PH")} of ${Math.round(r.target / 100).toLocaleString("en-PH")} pesos, on the month-end pace`
-        : "No target set for this month",
-    },
-    {
-      code: "DSO",
-      label: "Days to collect",
-      value: dso,
-      unit: "days",
-      weight: 20,
-      points: dso === null ? null : dso <= 70 ? 20 : dso < 90 ? 10 : 0,
-      note:
-        dso === null
-          ? "No sale on credit this month yet"
-          : "Unpaid on your bills, against a day's credit sales",
-    },
-    {
-      code: "HRR",
-      label: "Customers who came back",
-      value: hrr,
-      unit: "%",
-      weight: 15,
-      points:
-        hrr === null
-          ? null
-          : pointsAbove(hrr, [
-              [95, 15],
-              [85, 12],
-              [75, 8],
-            ]),
-      note: r.lastCustomers
-        ? `${r.cameBack} of last month's ${r.lastCustomers} customers ordered again`
-        : "No customer last month to count",
-    },
-    {
-      code: "NZSD",
-      label: "Days with a sale",
-      value: nzsd,
-      unit: "%",
-      weight: 15,
-      points:
-        nzsd === null
-          ? null
-          : pointsAbove(nzsd, [
-              [95, 15],
-              [90, 12],
-              [80, 9],
-              [70, 6],
-            ]),
-      note: `${r.saleDays} of ${r.weekdays} weekdays had a delivery`,
-    },
-  ];
-  const measured = kpis.filter((kpi) => kpi.points !== null);
-  const max = measured.reduce((sum, kpi) => sum + kpi.weight, 0);
-  let total = measured.reduce((sum, kpi) => sum + (kpi.points ?? 0), 0);
-  const capped = ist !== null && ist <= 60 && total > 40;
-  if (capped) total = 40;
+  const card = await cardOf(db, me.id, today.slice(0, 7), today);
+  const month = new Date(`${today}T00:00:00Z`).toLocaleDateString("en-PH", { month: "long", timeZone: "UTC" });
+  if (!card) return { card: "No scorecard", month, total: 0, max: 0, status: "none", capped: false, kpis: [] };
   return {
-    card: "Hospital CHC",
-    month: new Date(`${today}T00:00:00Z`).toLocaleDateString("en-PH", {
-      month: "long",
-      timeZone: "UTC",
-    }),
-    total,
-    max,
-    status: max === 0 ? "none" : total >= max * 0.8 ? "strong" : total > 0 ? "watch" : "review",
-    capped,
-    kpis,
+    card: card.label,
+    month,
+    total: card.total,
+    max: card.max,
+    status: card.max === 0 ? "none" : card.percent >= 80 ? "strong" : card.total > 0 ? "watch" : "review",
+    capped: card.capped,
+    kpis: card.kpis.map((kpi) => ({
+      code: kpi.key.toUpperCase(),
+      label: kpi.label.split(" · ")[1] ?? kpi.label,
+      value: kpi.value === null ? null : Math.round(kpi.value),
+      unit: kpi.unit,
+      weight: kpi.weight,
+      points: kpi.points,
+      note: kpi.note,
+    })),
   };
 }

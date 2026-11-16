@@ -45,12 +45,20 @@ export function MonthPicker({ month, today, onChange }: { month: string; today: 
   );
 }
 
-const figure = (value: number | null, unit: "%" | "days") =>
-  value === null ? "—" : unit === "%" ? `${value.toFixed(value < 10 && value % 1 ? 1 : 0)}%` : `${Math.round(value)} days`;
+const figure = (value: number | null, unit: "%" | "days" | "count") =>
+  value === null
+    ? "—"
+    : unit === "%"
+      ? `${value.toFixed(value < 10 && value % 1 ? 1 : 0)}%`
+      : unit === "days"
+        ? `${Math.round(value)} days`
+        : String(Math.round(value));
 
 function KpiRow({ kpi, onQuestion }: { kpi: ScoreCard["kpis"][number]; onQuestion?: () => void }) {
-  const share = kpi.points === null ? 0 : kpi.points / kpi.weight;
-  const color = kpi.points === null ? "bg-slate-200" : share >= 0.8 ? "bg-emerald-500" : share >= 0.4 ? "bg-amber-400" : "bg-red-500";
+  const gate = kpi.weight === 0;
+  const passed = gate && kpi.band === "Pass";
+  const share = gate ? (kpi.value === null ? 0 : Math.min(1, kpi.value / 100)) : kpi.points === null ? 0 : kpi.points / kpi.weight;
+  const color = gate ? (passed ? "bg-emerald-500" : "bg-red-500") : kpi.points === null ? "bg-slate-200" : share >= 0.8 ? "bg-emerald-500" : share >= 0.4 ? "bg-amber-400" : "bg-red-500";
   return (
     <div className="flex flex-col gap-2 px-4 py-3.5 sm:flex-row sm:items-center sm:gap-4">
       <div className="min-w-0 flex-1">
@@ -59,9 +67,9 @@ function KpiRow({ kpi, onQuestion }: { kpi: ScoreCard["kpis"][number]; onQuestio
           {kpi.band && <span className="text-[11.5px] font-medium text-slate-500">{kpi.band}</span>}
         </div>
         <div className="mt-0.5 text-[12px] text-slate-500">{kpi.note || kpi.how}</div>
-        {kpi.next && kpi.points !== null && (
+        {kpi.next && (kpi.points !== null || gate) && (
           <div className="mt-0.5 text-[11.5px] text-emerald-700">
-            {kpi.unit === "days" ? `At ${kpi.next.value} days or less` : `At ${kpi.next.value}%`}: {kpi.next.points} points
+            {kpi.unit === "days" ? `At ${kpi.next.value} days or less` : kpi.unit === "count" ? `At ${kpi.next.value}` : `At ${kpi.next.value}%`}: {kpi.next.points} points
           </div>
         )}
       </div>
@@ -72,7 +80,7 @@ function KpiRow({ kpi, onQuestion }: { kpi: ScoreCard["kpis"][number]; onQuestio
             <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.round(share * 100)}%` }} />
           </div>
           <div className="mt-1 text-right text-[11.5px] text-slate-500 tabular-nums">
-            {kpi.points === null ? "nothing to measure yet" : `${kpi.points} of ${kpi.weight}`}
+            {gate ? (kpi.band ?? "") : kpi.points === null ? "nothing to measure yet" : `${kpi.points} of ${kpi.weight}`}
           </div>
         </div>
         {onQuestion && (
@@ -127,7 +135,7 @@ export function MyScorePage() {
       />
       {!card ? (
         <div className={`${CARD} p-6 text-[13.5px] text-slate-600`}>
-          No scorecard for {monthLabel(data.month)}: only hospital MedReps and the online desk are scored for now, and only once
+          No scorecard for {monthLabel(data.month)}: only hospital and prescription MedReps and the online desk are scored for now, and only once
           there is a target or a sale to measure.
         </div>
       ) : (
@@ -152,7 +160,7 @@ export function MyScorePage() {
                 )}
                 {card.capped && (
                   <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11.5px] font-semibold text-red-800">
-                    <TriangleAlert className="size-3" /> IST below 60%: capped at 40
+                    <TriangleAlert className="size-3" /> Capped at {card.total}: {card.kpis.find((kpi) => kpi.weight === 0 && kpi.band !== "Pass") ? "coverage below the gate" : "IST scored nothing"}
                   </span>
                 )}
               </div>

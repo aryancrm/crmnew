@@ -216,8 +216,8 @@ export function MedrepHome() {
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="flex min-w-0 flex-col gap-4">
-          {/* The scorecard: the old CRM's Hospital CHC card, this month so far. */}
-          {data && (
+          {/* The scorecard: the seat's playbook card, this month so far; My score has the whole of it. */}
+          {data && data.scorecard.status !== "none" && (
             <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <header className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-slate-50/70 px-4 py-3">
                 <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600">
@@ -228,7 +228,10 @@ export function MedrepHome() {
                     My KPIs · {data.scorecard.month}
                   </h3>
                   <div className="text-[11px] text-slate-500">
-                    {data.scorecard.card} scorecard, this month so far
+                    {data.scorecard.card} scorecard, this month so far ·{" "}
+                    <Link to="/my/score" className="font-semibold text-emerald-700 hover:underline">
+                      Open
+                    </Link>
                   </div>
                 </div>
                 <span
@@ -258,7 +261,7 @@ export function MedrepHome() {
                         <span className="text-sm font-bold text-slate-900 tabular-nums">
                           {kpi.value === null
                             ? "—"
-                            : `${count(kpi.value)}${kpi.unit === "%" ? "%" : " days"}`}
+                            : `${count(kpi.value)}${kpi.unit === "%" ? "%" : kpi.unit === "days" ? " days" : ""}`}
                         </span>
                       </div>
                       <div className="truncate text-[11px] text-slate-500">{kpi.note}</div>
@@ -272,19 +275,21 @@ export function MedrepHome() {
                       </div>
                     </div>
                     <span className="text-right text-sm font-bold text-slate-900 tabular-nums">
-                      {kpi.points === null ? (
+                      {kpi.weight === 0 ? (
+                        <span className="text-xs font-medium text-slate-500">gate</span>
+                      ) : kpi.points === null ? (
                         <span className="text-xs font-medium text-slate-400">no data</span>
                       ) : (
                         kpi.points
                       )}
-                      <span className="text-[11px] font-medium text-slate-400">/{kpi.weight}</span>
+                      {kpi.weight > 0 && <span className="text-[11px] font-medium text-slate-400">/{kpi.weight}</span>}
                     </span>
                   </li>
                 ))}
               </ul>
               {data.scorecard.capped && (
                 <div className="border-t border-slate-100 px-4 py-2.5 text-[11px] text-rose-700">
-                  Sales are at 60% of the target or less: the total is capped at 40.
+                  The total is capped at {data.scorecard.total}: a capping rule of the card applies (see My score).
                 </div>
               )}
             </section>

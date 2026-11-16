@@ -2475,7 +2475,7 @@ export type MyKpis = {
     at: string;
     lines: string | null;
   }[];
-  /** This month's scorecard, the old CRM's Hospital CHC card. */
+  /** This month's scorecard from the scorecard engine (the seat's playbook card). */
   scorecard: {
     card: string;
     month: string;
@@ -2489,7 +2489,7 @@ export type MyKpis = {
       code: string;
       label: string;
       value: number | null;
-      unit: "%" | "days";
+      unit: "%" | "days" | "count";
       weight: number;
       points: number | null;
       note: string;
@@ -4159,7 +4159,7 @@ export type ScoreCard = {
     label: string;
     how: string;
     weight: number;
-    unit: "%" | "days";
+    unit: "%" | "days" | "count";
     value: number | null;
     points: number | null;
     band: string | null;
