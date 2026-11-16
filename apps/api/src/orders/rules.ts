@@ -1,6 +1,7 @@
 // The order line's words and rules, with no database: the statuses, what each is called,
 // which the dashboard's tiles count, and who may do what. After the hub's own state machine.
 
+import { may } from "../http";
 import { DISPATCH_ROLES } from "../dispatch/rules";
 import { FINANCE_ROLES } from "../finance/rules";
 import type { Role } from "../people/roles";
@@ -165,7 +166,7 @@ export function orderActions(
   const finance = FINANCE_ROLES.includes(me.role);
   const dispatch = DISPATCH_ROLES.includes(me.role);
   // An Online case's order: its agent hands it over (Dispatch still packs and ships it).
-  const agent = Boolean(order.leadId) && CASE_AGENT_ROLES.includes(me.role);
+  const agent = Boolean(order.leadId) && may(me, CASE_AGENT_ROLES);
   const mine = order.raisedBy === me.id || order.medrepId === me.id;
   const pending = order.status === "pending_approval";
   const flagged = order.status === "on_hold" || order.status === "exception";
@@ -387,7 +388,7 @@ export function mayAddPaper(
   // The case's agent keeps the money's proof and the signed receipt on it, delivered or not.
   if (
     order.leadId &&
-    CASE_AGENT_ROLES.includes(me.role) &&
+    may(me, CASE_AGENT_ROLES) &&
     (kind === undefined || kind === "payment_proof" || kind === "dr")
   )
     return true;

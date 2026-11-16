@@ -405,7 +405,7 @@ export async function leadDesk(
     cards: matched.slice(0, Math.max(SHOWN, filter.shown ?? 0)),
     total: matched.length,
     agents,
-    can: { add: desk === "pap" ? isPapRep(me) : LEAD_WORK_ROLES.includes(me.role) },
+    can: { add: desk === "pap" ? isPapRep(me) : may(me, LEAD_WORK_ROLES) },
   };
 }
 
@@ -880,7 +880,7 @@ export async function leadGate(
   need: "read" | "work",
   what: string,
 ): Promise<void> {
-  if (!(me.role === "admin" || LEAD_READ_ROLES.includes(me.role) || isPapRep(me)))
+  if (!(me.role === "admin" || may(me, LEAD_READ_ROLES) || isPapRep(me)))
     throw new Refusal(403, "forbidden", `Your role can't ${what}.`);
   const [lead] = await rows<{ desk: "online" | "pap"; assignedTo: number | null }>(
     db,
