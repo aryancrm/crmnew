@@ -56,6 +56,8 @@ import { DeliveryReceipt, Shipments } from "./pages/shipments";
 import { SpeedPage } from "./pages/speed";
 import { StatementPage } from "./pages/statement";
 import { Suppliers } from "./pages/suppliers";
+import { MyScorePage } from "./pages/my-score";
+import { TeamScoresPage } from "./pages/team-scores";
 import { Targets } from "./pages/targets";
 import { TeamSalesPage } from "./pages/team";
 import { VisitPlanPage } from "./pages/visit-plan";
@@ -127,6 +129,8 @@ createRoot(root).render(
             <Route path="inventory/overview" element={<InventoryOverview />} />
             <Route path="inventory/requests" element={<MedicineRequestsPage />} />
             <Route path="targets" element={<Targets />} />
+            <Route path="my/score" element={<MyScorePage />} />
+            <Route path="team-scores" element={<TeamScoresPage />} />
             <Route path="team" element={<TeamSalesPage />} />
             <Route path="company" element={<OrgChartPage />} />
             <Route path="people" element={<OrgPage />} />

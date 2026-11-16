@@ -64,8 +64,8 @@ export function AdminZohoSellers() {
   return (
     <div className="mx-auto max-w-5xl">
       <PageHead
-        title="Zoho salespeople"
-        sub={`${tied} of ${data.sellers.length} tied to a seat · tying one puts the customers it last sold to under that seat`}
+        title="Old customers to seats"
+        sub={`From the old system's orders, once: ${tied} of ${data.sellers.length} sellers placed · placing one puts the customers it last sold to under that seat`}
       />
       <section className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -103,7 +103,7 @@ export function AdminZohoSellers() {
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50/60 text-left text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
-              <th className="px-4 py-2.5">Zoho salesperson</th>
+              <th className="px-4 py-2.5">Seller on old orders</th>
               <th className="px-3 py-2.5 text-right">Customers</th>
               <th className="px-3 py-2.5">Last sold</th>
               <th className="px-4 py-2.5">Seat here</th>

@@ -18,6 +18,7 @@ import { seedDemoOrders } from "./orders/seed";
 import { seedDemoTeam, seedPapRep } from "./orders/seed-team";
 import { alignDemoMoneyDates } from "./orders/seed-times";
 import { fillOrderSeats, projectOrg } from "./org/service";
+import { lockDue } from "./scores/service";
 import { seedDemo } from "./seed";
 import { seedDemoPast } from "./zoho/seed";
 
@@ -58,11 +59,18 @@ if (process.env.SEED_DEMO === "1") {
 // The tree writes each person's role, boss and area; a cover that ended yesterday stops today.
 await projectOrg(db);
 await fillOrderSeats(db);
+// Last month's scorecards are locked on the 1st (and any month of the past year not yet locked).
+const lockScores = () =>
+  lockDue(db)
+    .then((locked) => locked && console.log(`scores: ${locked} monthly cards locked`))
+    .catch((error) => console.error("scores: couldn't lock the month", error));
+await lockScores();
 setInterval(
   () => {
     projectOrg(db).catch((error) =>
       console.error("org: couldn't bring the tree up to date", error),
     );
+    void lockScores();
   },
   15 * 60 * 1000,
 ).unref();

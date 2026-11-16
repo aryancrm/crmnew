@@ -41,6 +41,7 @@ import { purchaseRoutes } from "./purchases/routes";
 import { returnRoutes } from "./returns/routes";
 import { salesRoutes } from "./sales/routes";
 import { speedRoutes } from "./speed/routes";
+import { scoreRoutes } from "./scores/routes";
 import { targetRoutes } from "./targets/routes";
 import { teamRoutes } from "./team/routes";
 import type { ApiError, Me } from "./types";
@@ -262,6 +263,7 @@ export function createApp(db: Database, options: AppOptions) {
   channelRoutes(app, db, signedIn);
   pointsRoutes(app, db, signedIn);
   targetRoutes(app, db, signedIn);
+  scoreRoutes(app, db, signedIn);
 
   return app;
 }

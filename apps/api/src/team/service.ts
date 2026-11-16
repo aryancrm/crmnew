@@ -651,3 +651,6 @@ async function teamNeeds(db: Database, seatIds: number[], today: string): Promis
       });
   return needs;
 }
+
+/** The seats a person's team view covers (for the scorecards). */
+export const teamSeats = viewOf;

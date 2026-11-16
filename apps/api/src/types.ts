@@ -4139,3 +4139,80 @@ export type ZohoSellers = {
   /** Seats with an area (only those can hold customers). */
   seats: { id: number; title: string; unit: string; channel: string | null; area: string | null; holder: string | null }[];
 };
+
+/** A month's scorecard (Phase 2): the playbook card it is scored on and each KPI's figures. */
+export type ScoreCard = {
+  month: string;
+  recipe: string;
+  label: string;
+  source: string;
+  /** Still running: worked out now; else locked on the 1st. */
+  live: boolean;
+  lockedOn: string | null;
+  upTo: string;
+  total: number;
+  max: number;
+  percent: number;
+  capped: boolean;
+  kpis: {
+    key: string;
+    label: string;
+    how: string;
+    weight: number;
+    unit: "%" | "days";
+    value: number | null;
+    points: number | null;
+    band: string | null;
+    next: { value: number; points: number } | null;
+    note: string;
+  }[];
+};
+
+export type ScoreDispute = {
+  id: number;
+  personId: number;
+  person: string;
+  month: string;
+  kpi: string;
+  note: string;
+  raisedOn: string;
+  state: "open" | "upheld" | "turned_down";
+  answer: string | null;
+  answeredBy: string | null;
+};
+
+type ScoreYear = {
+  /** The locked months of the last year, oldest first. */
+  history: { month: string; total?: number; max?: number; percent: number }[];
+  average: number | null;
+  increment: { percent: number; label: string } | null;
+  /** Below 60 two locked months running. */
+  pip: boolean;
+};
+
+export type MyScore = ScoreYear & {
+  personId: number;
+  name: string;
+  seat: string | null;
+  area: string | null;
+  month: string;
+  today: string;
+  card: ScoreCard | null;
+  disputes: ScoreDispute[];
+  mine: boolean;
+};
+
+export type TeamScores = {
+  month: string;
+  today: string;
+  rows: (ScoreYear & {
+    seatId: number;
+    title: string;
+    area: string | null;
+    unit: string;
+    personId: number | null;
+    name: string | null;
+    card: ScoreCard | null;
+  })[];
+  disputes: ScoreDispute[];
+};

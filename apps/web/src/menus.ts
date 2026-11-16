@@ -22,6 +22,7 @@ import {
   ClipboardList,
   Factory,
   FileText,
+  Gauge,
   Gift,
   HandCoins,
   HeartHandshake,
@@ -312,6 +313,7 @@ const reportsApp: Space = {
       items: [
         { to: "/reports/channels", label: "By channel", icon: Users },
         { to: "/team", label: "By person", icon: User },
+        { to: "/team-scores", label: "Scorecards", icon: Gauge },
         { to: "/targets", label: "Targets", icon: Target },
       ],
     },
@@ -455,6 +457,7 @@ function ownDesk(me: Me): Space {
             folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
             customers,
             { to: "/points", label: "Points", icon: Gift },
+            { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ]),
           cta: { to: "/leads?new=1", label: "New lead" },
         };
@@ -479,6 +482,7 @@ function ownDesk(me: Me): Space {
             "Visits",
           ),
           { to: "/my/area", label: "My area", icon: MapPin },
+          { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
         ]),
         cta: pap
           ? { to: "/pap?new=1", label: "New PAP case" }
@@ -561,7 +565,10 @@ function ownDesk(me: Me): Space {
           folder(
             "My team",
             Users,
-            [{ to: "/my-team", label: "Whole team", icon: Users, teams: true }],
+            [
+              { to: "/my-team", label: "Whole team", icon: Users, teams: true },
+              { to: "/team-scores", label: "Scorecards", icon: Gauge },
+            ],
             "Team",
           ),
           folder("Team orders", ClipboardList, orderStages("Sent back"), "Orders"),
@@ -601,6 +608,7 @@ function ownDesk(me: Me): Space {
             { to: "/orders", label: "My orders", icon: ClipboardList },
             customers,
             { to: "/points", label: "Points", icon: Gift },
+            { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ],
           Inbox,
         ),
@@ -744,8 +752,8 @@ function adminPanel(me: Me): Space {
             badge: "orgRequests",
           },
           { to: "/targets", label: "Targets", icon: Target },
-          // Zoho's salespeople tied to seats: their customers come under the seat.
-          { to: "/admin/zoho-sellers", label: "Zoho salespeople", icon: Link2 },
+          // Once, from the old system's orders: who sold to each old customer, placed in a seat here.
+          { to: "/admin/zoho-sellers", label: "Old customers to seats", icon: Link2 },
         ],
       },
       {
