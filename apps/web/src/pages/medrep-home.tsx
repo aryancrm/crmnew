@@ -10,6 +10,7 @@ import type {
   MyKpis,
   MyOrderStage,
   MyOrders,
+  Reorders,
   StockNews,
   ToCollect,
 } from "@2mg/api/types";
@@ -480,6 +481,7 @@ export function MedrepHome() {
           <MyOrdersNow />
 
           <ToCollectPanel />
+          <ToCallPanel />
 
           {sales && sales.target !== null && sales.target > 0 && (
             <section className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs">
@@ -778,6 +780,62 @@ function ToCollectPanel() {
                     {row.daysLate} days late
                   </span>
                 </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+/** His customers due to reorder against their own usual gap, the biggest first; the page has all. */
+function ToCallPanel() {
+  const query = useQuery({
+    queryKey: ["reorders", "due", null, null],
+    queryFn: () => api<Reorders>("/api/my/reorders?state=due"),
+  });
+  const data = query.data;
+  if (!data) return null;
+  const of = (key: string) => data.counts.find((one) => one.state === key)?.customers ?? 0;
+  if (!of("due") && !of("late") && !of("at_risk")) return null;
+  return (
+    <section className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs">
+      <div className="flex items-baseline justify-between gap-2">
+        <h3 className="text-sm font-semibold tracking-tight text-slate-900">Customers to call</h3>
+        <Link to="/to-call" className="text-[12px] font-semibold text-emerald-700 hover:underline">
+          All
+        </Link>
+      </div>
+      <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+        {(
+          [
+            ["due", "Due now", "text-slate-900"],
+            ["late", "Late", "text-amber-700"],
+            ["at_risk", "At risk", "text-rose-700"],
+          ] as const
+        ).map(([key, label, tone]) => (
+          <Link key={key} to={`/to-call?state=${key}`} className="rounded-lg bg-slate-50 px-2 py-1.5 hover:bg-slate-100">
+            <div className={`text-lg font-semibold tabular-nums ${tone}`}>{count(of(key))}</div>
+            <div className="text-[11px] text-slate-500">{label}</div>
+          </Link>
+        ))}
+      </div>
+      {data.rows.length > 0 && (
+        <ul className="mt-3 divide-y divide-slate-100 border-t border-slate-100">
+          {data.rows.slice(0, 5).map((row) => (
+            <li key={row.customerId}>
+              <Link
+                to={`/customers/${row.customerId}`}
+                className="-mx-1 flex items-center justify-between gap-2 rounded-md px-1 py-1.5 hover:bg-slate-50"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-[13px] font-medium text-slate-800">{row.name}</span>
+                  <span className="text-[11px] text-slate-400">
+                    every {row.usual} days · last {row.since} days ago
+                  </span>
+                </span>
+                <span className="shrink-0 text-[13px] font-semibold tabular-nums text-slate-900">{shortPeso(row.lastTotal)}</span>
               </Link>
             </li>
           ))}
