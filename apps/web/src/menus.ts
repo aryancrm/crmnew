@@ -494,8 +494,13 @@ function ownDesk(me: Me): Space {
               ],
               "Visits",
             ),
-            // The 7 PM huddle is the CHCs' (not the Government Account's bidding coachee).
-            ...(/bidding/i.test(me.title ?? "") ? [] : [{ to: "/huddle", label: "Tonight's huddle", icon: Megaphone, short: "Huddle" }]),
+            // The Government Account's bidding coachee works tenders; the CHCs declare the 7 PM huddle.
+            ...(/bidding/i.test(me.title ?? "")
+              ? [
+                  { to: "/tenders", label: "Tenders", icon: FileText, short: "Tenders" },
+                  { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
+                ]
+              : [{ to: "/huddle", label: "Tonight's huddle", icon: Megaphone, short: "Huddle" }]),
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ]),
           cta: { ...newOrder, label: "New order" },
@@ -908,6 +913,7 @@ function ownDesk(me: Me): Space {
             { to: "/targets", label: "Targets", icon: Target },
             { to: "/collections", label: "Collections", icon: HandCoins },
             { to: "/to-call", label: "Hospitals to call", icon: PhoneCall },
+            { to: "/tenders", label: "Government tenders", icon: FileText },
             folder("Division orders", ClipboardList, orderStages("Sent back"), "Orders"),
             folder(
               "Visits",

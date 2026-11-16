@@ -43,7 +43,14 @@ export const ENVELOPE = [
 const isAdmin = (me: Me) => (me.role === "team_lead" && me.channel?.code === "BID") || me.role === "admin";
 const seesAll = (me: Me) =>
   ["ceo", "admin"].includes(me.role) || me.channel?.code === "BID" || (me.role === "manager" && me.business === "B2B");
-const scope = (me: Me): SQL => (seesAll(me) ? sql`true` : sql`t.owner_id = ${me.id}`);
+// Anyone else sees the tenders they run; a head (the Hospital Division's Business Mentor, say)
+// also those run from their own business (the Government Account's).
+const scope = (me: Me): SQL =>
+  seesAll(me)
+    ? sql`true`
+    : me.role === "manager" && me.business
+      ? sql`(t.owner_id = ${me.id} or seat_business_channel(t.seat_id) = ${me.business})`
+      : sql`t.owner_id = ${me.id}`;
 
 const tenderSelect = sql`select t.id::int as id, t.code, t.title, t.agency_id::int as "agencyId", c.name as agency, t.philgeps_ref as "philgepsRef",
     t.mode, t.abc::float8 as abc, t.owner_id::int as "ownerId", o.name as owner, t.step,

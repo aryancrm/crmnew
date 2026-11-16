@@ -7,6 +7,7 @@ import { migrate } from "../db/migrate";
 import { seedDemoInventory } from "../inventory/seed";
 import { seedDemo } from "../seed";
 import type { Tender, TenderDesk } from "../types";
+import { seedHospitalBoxes } from "../sellers/seed";
 import { seedBidding } from "./seed";
 
 const PASSWORD = "test-password-1";
@@ -24,8 +25,9 @@ beforeAll(async () => {
   await seedDemoInventory(db);
   await seedB2bTeam(db, PASSWORD);
   expect(await seedBidding(db, PASSWORD)).toBe(true);
+  await seedHospitalBoxes(db, PASSWORD);
   app = createApp(db, { webUrl: "http://localhost:5180" });
-  for (const name of ["jimmy", "hazel", "arron", "sam", "ryan"]) {
+  for (const name of ["jimmy", "hazel", "arron", "sam", "ryan", "rey", "vanessa"]) {
     const response = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -81,5 +83,16 @@ describe("government tenders", () => {
     expect((await post("arron", `/api/tenders/${id}/step`, { step: "dropped" })).status).toBe(400);
     expect((await post("arron", `/api/tenders/${id}/step`, { step: "dropped", note: "Below our cost" })).status).toBe(200);
     expect((await post("ryan", "/api/tenders", { agencyId: agency?.id, title: "Paracetamol", mode: "other" })).status).toBe(403);
+  });
+
+  it("the Hospital Division's Government Account works its own tenders; its Mentor sees them", async () => {
+    const [agency] = await rows<{ id: number }>(db, sql`select id::int as id from customer where name = 'East Avenue Medical Center'`);
+    const made = await post("rey", "/api/tenders", { agencyId: agency?.id, title: "Cisplatin vials for the hospital", mode: "small_value" });
+    expect(made.status).toBe(200);
+    const mine = (await (await get("rey", "/api/tenders")).json()) as Tender[];
+    expect(mine.map((t) => t.title)).toEqual(["Cisplatin vials for the hospital"]);
+    const division = (await (await get("vanessa", "/api/tenders")).json()) as Tender[];
+    expect(division.map((t) => t.title)).toEqual(["Cisplatin vials for the hospital"]);
+    expect(((await (await get("ryan", "/api/tenders")).json()) as Tender[]).length).toBe(0);
   });
 });

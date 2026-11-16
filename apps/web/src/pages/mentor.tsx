@@ -14,6 +14,7 @@ import { CARD } from "../ui";
 import { B2cDeskCard } from "./b2c";
 import { GroupsGlance, WaitingGroups } from "./care-groups";
 import { RxFieldTable } from "./rx";
+import { BiddingCard } from "./tenders";
 
 type Row = District["rows"][number];
 
@@ -29,6 +30,8 @@ export function MentorHome() {
         {money.data && <Money data={money.data} />}
       </div>
       {scores.data && <Questions data={scores.data} />}
+      {/* The Government Account's tenders (the division's own bidding coachee). */}
+      <BiddingCard title="Government Account (tenders)" />
     </>
   );
 }

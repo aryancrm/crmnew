@@ -549,7 +549,7 @@ export function CompanyPapersPage() {
 }
 
 /** The Mentor's card: the bidding pipeline. */
-export function BiddingCard() {
+export function BiddingCard({ title = "Government Bidding" }: { title?: string }) {
   const query = useQuery({ queryKey: ["tenders", "desk"], queryFn: () => api<TenderDesk>("/api/tenders/desk") });
   const data = query.data;
   if (!data) return null;
@@ -557,7 +557,7 @@ export function BiddingCard() {
   return (
     <section className={`${CARD} min-w-0 p-4`}>
       <div className="flex items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold text-slate-900">Government Bidding</h2>
+        <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
         <Link to="/tenders" className="text-[12px] font-semibold text-emerald-700 hover:underline">
           Tenders
         </Link>

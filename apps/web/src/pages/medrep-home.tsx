@@ -173,7 +173,7 @@ export function MedrepHome() {
       {b2b === "crr" && <CrrHome />}
       {b2b === "clidp" && <ClidpHome />}
       {/* Government Bidding: tenders from posting to payment. */}
-      {bidding && <BiddingHome />}
+      {(bidding || (hospital && /bidding/i.test(me.title ?? ""))) && <BiddingHome />}
 
       {/* Today and this month at a glance: the two numbers asked most. */}
       {!hospital && !anesthesia && !rx && !telesales && !b2b && !bidding && (
