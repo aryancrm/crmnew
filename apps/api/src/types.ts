@@ -2809,6 +2809,8 @@ export type OrgUnit = {
 
 export type OrgTree = {
   today: string;
+  /** New people get the company's common password: nobody types one. */
+  commonPassword: boolean;
   /** Seat login IDs end in this: "hos1@2mginc.com". */
   loginDomain: string;
   units: OrgUnit[];
@@ -2883,6 +2885,8 @@ export type OrgLogin = {
   login: string | null;
   email: string | null;
   password: string | null;
+  /** The password is the company's common one (they keep it). */
+  common?: boolean;
 };
 
 /** One person's seats now and before, for their page. */
@@ -3585,6 +3589,8 @@ export type HrRecordInput = Partial<{
 /** What HR picks from to add a joiner: the seats nobody holds or is joining. */
 export type JoinerForm = {
   today: string;
+  /** New joiners get the company's common password: HR types none. */
+  commonPassword: boolean;
   seats: { id: number; title: string; team: string; channel: string | null; area: string | null }[];
 };
 

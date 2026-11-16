@@ -12,15 +12,41 @@ import type {
   JoinerForm,
 } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, ChevronLeft, Copy, KeyRound, Pencil, Search, UserPlus } from "lucide-react";
+import {
+  Check,
+  ChevronLeft,
+  Copy,
+  KeyRound,
+  Pencil,
+  Search,
+  UserPlus,
+} from "lucide-react";
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  Link,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { FIELD } from "../org/dialogs";
-import { Button, CARD, Dialog, PageHead, PageState, Problem, peso, Tabs, useAction } from "../ui";
+import {
+  Button,
+  CARD,
+  Dialog,
+  PageHead,
+  PageState,
+  Problem,
+  peso,
+  Tabs,
+  useAction,
+} from "../ui";
 
-const COMPANY: Record<Company, string> = { "2mg": "2MG Inc.", gpi: "Getmeds Philippines" };
+const COMPANY: Record<Company, string> = {
+  "2mg": "2MG Inc.",
+  gpi: "Getmeds Philippines",
+};
 const CLASS: Record<Classification, string> = {
   probationary: "Probationary",
   regular: "Regular",
@@ -28,7 +54,9 @@ const CLASS: Record<Classification, string> = {
   intern: "Intern",
 };
 const manilaToday = () =>
-  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
+  new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(
+    new Date(),
+  );
 const dayWords = (day: string | null) =>
   day
     ? new Date(`${day}T00:00:00Z`).toLocaleDateString("en-PH", {
@@ -53,7 +81,8 @@ const centavos = (typed: string) => {
   const value = typed.replace(/[₱,\s]/g, "");
   return value === "" ? null : Math.round(Number(value) * 100);
 };
-const pesosOf = (value: number | null) => (value === null ? "" : String(value / 100));
+const pesosOf = (value: number | null) =>
+  value === null ? "" : String(value / 100);
 /** A password HR can read out: 10 letters and digits, no look-alikes. */
 function makePassword(): string {
   const letters = "abcdefghjkmnpqrstuvwxyz23456789";
@@ -61,13 +90,23 @@ function makePassword(): string {
   return Array.from(bytes, (byte) => letters[byte % letters.length]).join("");
 }
 
-function Label({ text, error, children }: { text: string; error?: string; children: ReactNode }) {
+function Label({
+  text,
+  error,
+  children,
+}: {
+  text: string;
+  error?: string;
+  children: ReactNode;
+}) {
   return (
     // biome-ignore lint/a11y/noLabelWithoutControl: the control comes in as the children.
     <label className="flex min-w-0 flex-col gap-1">
       <span className="text-xs font-semibold text-slate-600">{text}</span>
       {children}
-      {error && <span className="text-xs font-medium text-rose-700">{error}</span>}
+      {error && (
+        <span className="text-xs font-medium text-rose-700">{error}</span>
+      )}
     </label>
   );
 }
@@ -84,14 +123,25 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 }
 
 const STAGE: Record<HrPersonRow["stage"], { word: string; tone: string }> = {
-  active: { word: "Working", tone: "bg-emerald-50 text-emerald-800 ring-emerald-200" },
+  active: {
+    word: "Working",
+    tone: "bg-emerald-50 text-emerald-800 ring-emerald-200",
+  },
   joining: { word: "Joining", tone: "bg-sky-50 text-sky-800 ring-sky-200" },
   left: { word: "Left", tone: "bg-slate-100 text-slate-600 ring-slate-200" },
 };
-function StagePill({ stage, hireDate }: { stage: HrPersonRow["stage"]; hireDate?: string }) {
+function StagePill({
+  stage,
+  hireDate,
+}: {
+  stage: HrPersonRow["stage"];
+  hireDate?: string;
+}) {
   const one = STAGE[stage];
   return (
-    <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ${one.tone}`}>
+    <span
+      className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ${one.tone}`}
+    >
       {one.word}
       {stage === "joining" && hireDate ? ` ${dayWords(hireDate)}` : ""}
     </span>
@@ -109,7 +159,8 @@ export function HrPeoplePage() {
   const stage = view === "working" ? "" : view;
   const query = useQuery({
     queryKey: ["hr", "people", stage],
-    queryFn: () => api<HrPeople>(`/api/hr/people${stage ? `?stage=${stage}` : ""}`),
+    queryFn: () =>
+      api<HrPeople>(`/api/hr/people${stage ? `?stage=${stage}` : ""}`),
     placeholderData: (previous) => previous,
   });
   const [q, setQ] = useState("");
@@ -132,7 +183,9 @@ export function HrPeoplePage() {
   };
 
   return (
-    <div className={`flex flex-col gap-4 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
+    <div
+      className={`flex flex-col gap-4 ${query.isPlaceholderData ? "opacity-60" : ""}`}
+    >
       <PageHead
         title="People"
         sub={`${data.counts.active} working · 2MG Inc. and Getmeds Philippines`}
@@ -150,7 +203,11 @@ export function HrPeoplePage() {
           tabs={[
             { key: "working", label: "Working", count: data.counts.active },
             { key: "joining", label: "Joining", count: data.counts.joining },
-            { key: "missing", label: "Details missing", count: data.counts.missing },
+            {
+              key: "missing",
+              label: "Details missing",
+              count: data.counts.missing,
+            },
             { key: "left", label: "Left", count: data.counts.left },
           ]}
         />
@@ -159,7 +216,10 @@ export function HrPeoplePage() {
       <section className={`${CARD} overflow-hidden`}>
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3">
           <label className="relative flex items-center">
-            <Search size={15} className="pointer-events-none absolute left-3 text-slate-400" />
+            <Search
+              size={15}
+              className="pointer-events-none absolute left-3 text-slate-400"
+            />
             <input
               value={q}
               onChange={(event) => setQ(event.target.value)}
@@ -196,16 +256,26 @@ export function HrPeoplePage() {
                     >
                       {one.name}
                     </Link>
-                    <div className="text-xs text-slate-500">{one.employeeCode ?? "No ID yet"}</div>
+                    <div className="text-xs text-slate-500">
+                      {one.employeeCode ?? "No ID yet"}
+                    </div>
                   </td>
                   <td className="px-3 py-2.5">
-                    <div className="text-slate-800">{one.position ?? one.roleLabel}</div>
-                    <div className="text-xs text-slate-500">{one.team ?? "No seat"}</div>
+                    <div className="text-slate-800">
+                      {one.position ?? one.roleLabel}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      {one.team ?? "No seat"}
+                    </div>
                   </td>
-                  <td className="px-3 py-2.5 text-slate-700">{COMPANY[one.company]}</td>
+                  <td className="px-3 py-2.5 text-slate-700">
+                    {COMPANY[one.company]}
+                  </td>
                   <td className="px-3 py-2.5 whitespace-nowrap">
                     {one.stage === "active" ? (
-                      <span className="text-slate-700 tabular-nums">{dayWords(one.hireDate)}</span>
+                      <span className="text-slate-700 tabular-nums">
+                        {dayWords(one.hireDate)}
+                      </span>
                     ) : (
                       <StagePill stage={one.stage} hireDate={one.hireDate} />
                     )}
@@ -213,12 +283,17 @@ export function HrPeoplePage() {
                   <td className="px-3 py-2.5">
                     <div className="text-slate-700">{one.loginId ?? "—"}</div>
                     {one.login === "new" && (
-                      <div className="text-xs text-amber-700">Not signed in yet</div>
+                      <div className="text-xs text-amber-700">
+                        Not signed in yet
+                      </div>
                     )}
                   </td>
                   <td className="px-3 py-2.5 text-xs">
                     {one.missing.length ? (
-                      <span className="text-amber-700" title={one.missing.join(", ")}>
+                      <span
+                        className="text-amber-700"
+                        title={one.missing.join(", ")}
+                      >
                         {one.missing.length} missing
                       </span>
                     ) : (
@@ -229,7 +304,10 @@ export function HrPeoplePage() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
+                  <td
+                    colSpan={6}
+                    className="px-4 py-6 text-center text-sm text-slate-500"
+                  >
                     Nobody here.
                   </td>
                 </tr>
@@ -278,8 +356,12 @@ function NewJoinerDialog({ onClose }: { onClose: () => void }) {
     loginEmail: "",
     password: "",
   });
-  const [added, setAdded] = useState<{ personId: number; loginEmail: string } | null>(null);
-  const set = (next: Partial<typeof values>) => setValues((now) => ({ ...now, ...next }));
+  const [added, setAdded] = useState<{
+    personId: number;
+    loginEmail: string;
+  } | null>(null);
+  const set = (next: Partial<typeof values>) =>
+    setValues((now) => ({ ...now, ...next }));
   const teams = useMemo(() => {
     const byTeam = new Map<string, JoinerForm["seats"]>();
     for (const seat of form.data?.seats ?? [])
@@ -291,16 +373,19 @@ function NewJoinerDialog({ onClose }: { onClose: () => void }) {
   async function submit(event: FormEvent) {
     event.preventDefault();
     await action.run(async () => {
-      const made = await api<{ personId: number; loginEmail: string }>("/api/hr/joiners", {
-        body: {
-          ...values,
-          seatId: Number(values.seatId) || 0,
-          employeeCode: values.employeeCode || null,
-          position: values.position || null,
-          salary: centavos(values.salary),
-          allowance: centavos(values.allowance),
+      const made = await api<{ personId: number; loginEmail: string }>(
+        "/api/hr/joiners",
+        {
+          body: {
+            ...values,
+            seatId: Number(values.seatId) || 0,
+            employeeCode: values.employeeCode || null,
+            position: values.position || null,
+            salary: centavos(values.salary),
+            allowance: centavos(values.allowance),
+          },
         },
-      });
+      );
       setAdded(made);
       await queries.invalidateQueries({ queryKey: ["hr"] });
     });
@@ -354,7 +439,10 @@ function NewJoinerDialog({ onClose }: { onClose: () => void }) {
         <Section title="Job">
           <Label
             text="Seat *"
-            error={at("seatId") ?? (form.isError ? "The seats couldn't load." : undefined)}
+            error={
+              at("seatId") ??
+              (form.isError ? "The seats couldn't load." : undefined)
+            }
           >
             <select
               value={values.seatId}
@@ -389,7 +477,9 @@ function NewJoinerDialog({ onClose }: { onClose: () => void }) {
             <Label text="Company *" error={at("company")}>
               <select
                 value={values.company}
-                onChange={(event) => set({ company: event.target.value as Company })}
+                onChange={(event) =>
+                  set({ company: event.target.value as Company })
+                }
                 className={FIELD}
               >
                 {Object.entries(COMPANY).map(([value, label]) => (
@@ -402,7 +492,9 @@ function NewJoinerDialog({ onClose }: { onClose: () => void }) {
             <Label text="Employed as *" error={at("classification")}>
               <select
                 value={values.classification}
-                onChange={(event) => set({ classification: event.target.value as Classification })}
+                onChange={(event) =>
+                  set({ classification: event.target.value as Classification })
+                }
                 className={FIELD}
               >
                 {Object.entries(CLASS).map(([value, label]) => (
@@ -466,20 +558,29 @@ function NewJoinerDialog({ onClose }: { onClose: () => void }) {
                 placeholder="juan@2mginc.com"
               />
             </Label>
-            <Label text="Password *" error={at("password")}>
-              <div className="flex gap-2">
-                <input
-                  value={values.password}
-                  onChange={(event) => set({ password: event.target.value })}
-                  className={`${FIELD} min-w-0 flex-1 font-mono`}
-                  autoComplete="new-password"
-                  placeholder="At least 8 characters"
-                />
-                <Button small onClick={() => set({ password: makePassword() })}>
-                  Make one
-                </Button>
+            {form.data?.commonPassword ? (
+              <div className="self-end pb-2 text-[13px] text-slate-500">
+                Password: the company's common one, the same for everyone.
               </div>
-            </Label>
+            ) : (
+              <Label text="Password *" error={at("password")}>
+                <div className="flex gap-2">
+                  <input
+                    value={values.password}
+                    onChange={(event) => set({ password: event.target.value })}
+                    className={`${FIELD} min-w-0 flex-1 font-mono`}
+                    autoComplete="new-password"
+                    placeholder="At least 8 characters"
+                  />
+                  <Button
+                    small
+                    onClick={() => set({ password: makePassword() })}
+                  >
+                    Make one
+                  </Button>
+                </div>
+              </Label>
+            )}
           </div>
         </Section>
         <Problem
@@ -535,11 +636,17 @@ function HandOver({
     .filter(Boolean)
     .join("\n");
   return (
-    <Dialog title={`${name}'s login`} sub="Hand these over to them yourself." onClose={onClose}>
+    <Dialog
+      title={`${name}'s login`}
+      sub="Hand these over to them yourself."
+      onClose={onClose}
+    >
       <div className="flex flex-col gap-4">
         <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-2 rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-sm">
           <dt className="text-slate-500">Login email</dt>
-          <dd className="font-semibold text-slate-900 select-all">{loginEmail}</dd>
+          <dd className="font-semibold text-slate-900 select-all">
+            {loginEmail}
+          </dd>
           {password && (
             <>
               <dt className="text-slate-500">Password</dt>
@@ -556,7 +663,8 @@ function HandOver({
               setCopied(true);
             }}
           >
-            {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? "Copied" : "Copy"}
+            {copied ? <Check size={16} /> : <Copy size={16} />}{" "}
+            {copied ? "Copied" : "Copy"}
           </Button>
           <Button variant="primary" onClick={onOpen ?? onClose}>
             {onOpen ? "Open their record" : "Done"}
@@ -605,10 +713,15 @@ export function HrPersonPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <nav aria-label="Where you are" className="flex items-center gap-1.5 text-xs text-slate-500">
+      <nav
+        aria-label="Where you are"
+        className="flex items-center gap-1.5 text-xs text-slate-500"
+      >
         <button
           type="button"
-          onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/hr/people"))}
+          onClick={() =>
+            window.history.length > 1 ? navigate(-1) : navigate("/hr/people")
+          }
           aria-label="Back"
           className="mr-1 grid size-6 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:border-emerald-300 hover:text-emerald-700"
         >
@@ -624,7 +737,9 @@ export function HrPersonPage() {
             </span>
           </>
         )}
-        <span className="font-medium text-slate-700">{mine ? "My record" : data.name}</span>
+        <span className="font-medium text-slate-700">
+          {mine ? "My record" : data.name}
+        </span>
       </nav>
       <PageHead
         title={data.name}
@@ -656,14 +771,20 @@ export function HrPersonPage() {
         {box(
           "Job",
           facts([
-            ["Seat", data.seat ? `${data.seat.title} · ${data.seat.team}` : "No seat"],
+            [
+              "Seat",
+              data.seat ? `${data.seat.title} · ${data.seat.team}` : "No seat",
+            ],
             ["Channel", data.seat?.channel ?? null],
             ["Area", data.seat?.area ?? null],
             ["Reports to", data.seat?.boss ?? null],
             ["Employee ID", r.employeeCode],
             ["Employed as", CLASS[r.classification]],
             ["Started", dayWords(r.hireDate)],
-            ["Regular since", r.regularizedOn ? dayWords(r.regularizedOn) : null],
+            [
+              "Regular since",
+              r.regularizedOn ? dayWords(r.regularizedOn) : null,
+            ],
             ...(data.stage === "left"
               ? ([
                   ["Left", dayWords(r.leftOn)],
@@ -676,7 +797,10 @@ export function HrPersonPage() {
           "Login",
           facts([
             ["Signs in with", data.loginId],
-            ["Last signed in", data.login === "off" ? "Switched off" : when(data.lastSignIn)],
+            [
+              "Last signed in",
+              data.login === "off" ? "Switched off" : when(data.lastSignIn),
+            ],
           ]),
           data.can.login && (
             <Button small onClick={() => setOpen("login")}>
@@ -703,9 +827,18 @@ export function HrPersonPage() {
           box(
             "Pay and IDs",
             facts([
-              ["Salary", r.salary !== null ? `${peso(r.salary)} a month` : null],
-              ["Allowance", r.allowance !== null ? `${peso(r.allowance)} a month` : null],
-              ["Bank", [r.bankName, r.bankAccount].filter(Boolean).join(" · ") || null],
+              [
+                "Salary",
+                r.salary !== null ? `${peso(r.salary)} a month` : null,
+              ],
+              [
+                "Allowance",
+                r.allowance !== null ? `${peso(r.allowance)} a month` : null,
+              ],
+              [
+                "Bank",
+                [r.bankName, r.bankAccount].filter(Boolean).join(" · ") || null,
+              ],
               ["SSS", shown(r.sss)],
               ["PhilHealth", shown(r.philhealth)],
               ["Pag-IBIG", shown(r.pagibig)],
@@ -739,7 +872,8 @@ export function HrPersonPage() {
                 className="flex flex-wrap justify-between gap-2 px-4 py-2.5"
               >
                 <span className="text-slate-900">
-                  {one.title} <span className="text-slate-500">· {one.team}</span>
+                  {one.title}{" "}
+                  <span className="text-slate-500">· {one.team}</span>
                 </span>
                 <span className="text-xs text-slate-500 tabular-nums">
                   {dayWords(one.from)} – {one.to ? dayWords(one.to) : "now"}
@@ -749,9 +883,15 @@ export function HrPersonPage() {
             ))}
           </ul>,
         )}
-      {open === "edit" && <RecordDialog person={data} onClose={() => setOpen(null)} />}
-      {open === "login" && <LoginDialog person={data} onClose={() => setOpen(null)} />}
-      {open === "left" && <LeftDialog person={data} onClose={() => setOpen(null)} />}
+      {open === "edit" && (
+        <RecordDialog person={data} onClose={() => setOpen(null)} />
+      )}
+      {open === "login" && (
+        <LoginDialog person={data} onClose={() => setOpen(null)} />
+      )}
+      {open === "left" && (
+        <LeftDialog person={data} onClose={() => setOpen(null)} />
+      )}
     </div>
   );
 }
@@ -776,25 +916,44 @@ const RECORD_TEXT: [keyof HrRecordInput, string, string?][] = [
   ["tin", "TIN"],
 ];
 
-function RecordDialog({ person, onClose }: { person: HrPerson; onClose: () => void }) {
+function RecordDialog({
+  person,
+  onClose,
+}: {
+  person: HrPerson;
+  onClose: () => void;
+}) {
   const queries = useQueryClient();
   const action = useAction();
   const r = person.record;
   const [text, setText] = useState<Record<string, string>>(() =>
     Object.fromEntries(
-      RECORD_TEXT.map(([key]) => [key, (r[key as keyof typeof r] as string | null) ?? ""]),
+      RECORD_TEXT.map(([key]) => [
+        key,
+        (r[key as keyof typeof r] as string | null) ?? "",
+      ]),
     ),
   );
   const [company, setCompany] = useState<Company>(r.company);
-  const [classification, setClassification] = useState<Classification>(r.classification);
+  const [classification, setClassification] = useState<Classification>(
+    r.classification,
+  );
   const [days, setDays] = useState({
     hireDate: r.hireDate,
     regularizedOn: r.regularizedOn ?? "",
     birthDate: r.birthDate ?? "",
   });
-  const [pay, setPay] = useState({ salary: pesosOf(r.salary), allowance: pesosOf(r.allowance) });
+  const [pay, setPay] = useState({
+    salary: pesosOf(r.salary),
+    allowance: pesosOf(r.allowance),
+  });
   const [exempt, setExempt] = useState(
-    r.payExempt ?? { sss: false, philhealth: false, pagibig: false, tax: false },
+    r.payExempt ?? {
+      sss: false,
+      philhealth: false,
+      pagibig: false,
+      tax: false,
+    },
   );
 
   async function submit(event: FormEvent) {
@@ -830,17 +989,26 @@ function RecordDialog({ person, onClose }: { person: HrPerson; onClose: () => vo
     <Label key={key} text={label} error={action.at(key)}>
       <input
         value={text[key] ?? ""}
-        onChange={(event) => setText((now) => ({ ...now, [key]: event.target.value }))}
+        onChange={(event) =>
+          setText((now) => ({ ...now, [key]: event.target.value }))
+        }
         className={FIELD}
         placeholder={placeholder}
       />
     </Label>
   );
   const pick = (from: number, to: number) =>
-    RECORD_TEXT.slice(from, to).map(([key, label, placeholder]) => input(key, label, placeholder));
+    RECORD_TEXT.slice(from, to).map(([key, label, placeholder]) =>
+      input(key, label, placeholder),
+    );
 
   return (
-    <Dialog title={`${person.name}'s record`} onClose={onClose} busy={action.busy} wide>
+    <Dialog
+      title={`${person.name}'s record`}
+      onClose={onClose}
+      busy={action.busy}
+      wide
+    >
       <form onSubmit={submit} className="flex flex-col gap-5">
         <Section title="Job">
           <div className="grid gap-3 sm:grid-cols-3">
@@ -860,7 +1028,9 @@ function RecordDialog({ person, onClose }: { person: HrPerson; onClose: () => vo
             <Label text="Employed as" error={action.at("classification")}>
               <select
                 value={classification}
-                onChange={(event) => setClassification(event.target.value as Classification)}
+                onChange={(event) =>
+                  setClassification(event.target.value as Classification)
+                }
                 className={FIELD}
               >
                 {Object.entries(CLASS).map(([value, label]) => (
@@ -878,7 +1048,9 @@ function RecordDialog({ person, onClose }: { person: HrPerson; onClose: () => vo
               <input
                 type="date"
                 value={days.hireDate}
-                onChange={(event) => setDays((now) => ({ ...now, hireDate: event.target.value }))}
+                onChange={(event) =>
+                  setDays((now) => ({ ...now, hireDate: event.target.value }))
+                }
                 className={FIELD}
               />
             </Label>
@@ -887,7 +1059,10 @@ function RecordDialog({ person, onClose }: { person: HrPerson; onClose: () => vo
                 type="date"
                 value={days.regularizedOn}
                 onChange={(event) =>
-                  setDays((now) => ({ ...now, regularizedOn: event.target.value }))
+                  setDays((now) => ({
+                    ...now,
+                    regularizedOn: event.target.value,
+                  }))
                 }
                 className={FIELD}
               />
@@ -901,7 +1076,9 @@ function RecordDialog({ person, onClose }: { person: HrPerson; onClose: () => vo
               <input
                 type="date"
                 value={days.birthDate}
-                onChange={(event) => setDays((now) => ({ ...now, birthDate: event.target.value }))}
+                onChange={(event) =>
+                  setDays((now) => ({ ...now, birthDate: event.target.value }))
+                }
                 className={FIELD}
               />
             </Label>
@@ -914,7 +1091,9 @@ function RecordDialog({ person, onClose }: { person: HrPerson; onClose: () => vo
             <Label text="Salary (₱ a month)" error={action.at("salary")}>
               <input
                 value={pay.salary}
-                onChange={(event) => setPay((now) => ({ ...now, salary: event.target.value }))}
+                onChange={(event) =>
+                  setPay((now) => ({ ...now, salary: event.target.value }))
+                }
                 className={FIELD}
                 inputMode="decimal"
               />
@@ -922,7 +1101,9 @@ function RecordDialog({ person, onClose }: { person: HrPerson; onClose: () => vo
             <Label text="Allowance (₱ a month)" error={action.at("allowance")}>
               <input
                 value={pay.allowance}
-                onChange={(event) => setPay((now) => ({ ...now, allowance: event.target.value }))}
+                onChange={(event) =>
+                  setPay((now) => ({ ...now, allowance: event.target.value }))
+                }
                 className={FIELD}
                 inputMode="decimal"
               />
@@ -948,7 +1129,10 @@ function RecordDialog({ person, onClose }: { person: HrPerson; onClose: () => vo
                     type="checkbox"
                     checked={exempt[key]}
                     onChange={(event) =>
-                      setExempt((now) => ({ ...now, [key]: event.target.checked }))
+                      setExempt((now) => ({
+                        ...now,
+                        [key]: event.target.checked,
+                      }))
                     }
                     className="size-4 accent-emerald-600"
                   />
@@ -983,12 +1167,21 @@ function RecordDialog({ person, onClose }: { person: HrPerson; onClose: () => vo
   );
 }
 
-function LoginDialog({ person, onClose }: { person: HrPerson; onClose: () => void }) {
+function LoginDialog({
+  person,
+  onClose,
+}: {
+  person: HrPerson;
+  onClose: () => void;
+}) {
   const queries = useQueryClient();
   const action = useAction();
   const [email, setEmail] = useState(person.loginId ?? "");
   const [password, setPassword] = useState("");
-  const [done, setDone] = useState<{ loginEmail: string; password: string | null } | null>(null);
+  const [done, setDone] = useState<{
+    loginEmail: string;
+    password: string | null;
+  } | null>(null);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -996,10 +1189,18 @@ function LoginDialog({ person, onClose }: { person: HrPerson; onClose: () => voi
     await action.run(async () => {
       const answer = await api<{ loginEmail: string | null }>(
         `/api/hr/people/${person.personId}/login`,
-        { body: { email: emailChanged ? email : null, password: password || null } },
+        {
+          body: {
+            email: emailChanged ? email : null,
+            password: password || null,
+          },
+        },
       );
       await queries.invalidateQueries({ queryKey: ["hr"] });
-      setDone({ loginEmail: answer.loginEmail ?? email, password: password || null });
+      setDone({
+        loginEmail: answer.loginEmail ?? email,
+        password: password || null,
+      });
     });
   }
   if (done)
@@ -1056,7 +1257,13 @@ function LoginDialog({ person, onClose }: { person: HrPerson; onClose: () => voi
   );
 }
 
-function LeftDialog({ person, onClose }: { person: HrPerson; onClose: () => void }) {
+function LeftDialog({
+  person,
+  onClose,
+}: {
+  person: HrPerson;
+  onClose: () => void;
+}) {
   const queries = useQueryClient();
   const action = useAction();
   const [lastDay, setLastDay] = useState(manilaToday());
@@ -1064,7 +1271,9 @@ function LeftDialog({ person, onClose }: { person: HrPerson; onClose: () => void
   async function submit(event: FormEvent) {
     event.preventDefault();
     const done = await action.run(() =>
-      api(`/api/hr/people/${person.personId}/left`, { body: { lastDay, reason } }),
+      api(`/api/hr/people/${person.personId}/left`, {
+        body: { lastDay, reason },
+      }),
     );
     if (done) {
       await queries.invalidateQueries({ queryKey: ["hr"] });

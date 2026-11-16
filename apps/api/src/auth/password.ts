@@ -26,6 +26,14 @@ export async function passwordMatches(password: string, stored: string): Promise
   return key.length === expected.length && timingSafeEqual(key, expected);
 }
 
+/** The password every new person starts with, the same for everyone (Aryan, 17 Nov 2026: nobody
+ *  is asked for one and nobody has to change it). It lives in the server's JOIN_PASSWORD, never in
+ *  the code; without it each new person gets a fresh one, shown once. */
+export function joinPassword(): string | null {
+  const common = process.env.JOIN_PASSWORD?.trim();
+  return common && !passwordProblem(common) ? common : null;
+}
+
 /** What a new password must be, in the words the screen shows; null when it is fine. */
 export function passwordProblem(password: string): string | null {
   if (password.length < 8) return "Use at least 8 characters.";

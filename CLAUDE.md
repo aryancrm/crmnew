@@ -28,9 +28,12 @@ pnpm --filter @2mg/api dev         # API on :4100 (PGlite in .data/pg unless DAT
 pnpm --filter @2mg/web dev         # web on :5180
 ```
 
-Local demo: `.claude/launch.json` (`crmnew-api` with `SEED_DEMO=1`, `crmnew-web`). Demo people
-sign in with the demo password; never repeat credentials in chat. One process per PGlite
-folder: check nothing listens on :4100 before starting the API.
+Local: `.claude/launch.json` (`crmnew-api`, `crmnew-web`). Since 17 Nov the local database holds
+the real company (the 2026 chart's people, `docs/PEOPLE-2026.md`; the demo people left, the Admin
+login stays): everyone signs in with their seat's login ID (`hos1`…) and the company's common
+password, `JOIN_PASSWORD` (Aryan's rule: same for all, never forced to change; keep it out of code
+and docs). Tests still seed their own demo company. One process per PGlite folder: check nothing
+listens on :4100 before starting the API.
 
 ## Rules worth knowing
 

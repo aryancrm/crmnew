@@ -4,7 +4,7 @@
 // records; pay, bank and government IDs are theirs and the person's own.
 
 import { type SQL, sql } from "drizzle-orm";
-import { hashPassword, passwordProblem } from "../auth/password";
+import { hashPassword, joinPassword, passwordProblem } from "../auth/password";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import { addDays, todayManila } from "../inventory/rules";
@@ -335,7 +335,7 @@ export async function joinerForm(db: Database, me: Me): Promise<JoinerForm> {
         where h.seat_id = s.id and h.kind = 'holder' and (h.ends_on is null or h.ends_on >= ${today}::date))
       order by u.name, s.title`,
   );
-  return { today, seats };
+  return { today, seats, commonPassword: joinPassword() !== null };
 }
 
 const text = (value: string | null | undefined) => clean(value) ?? null;
@@ -426,7 +426,9 @@ export async function addJoiner(
   ] as const)
     if (value !== null && value !== undefined && (!Number.isInteger(value) || value < 0))
       throw new Refusal(400, "invalid", "Type the monthly amount in pesos.", field);
-  const password = checkPassword(input.password);
+  // HR types only the login and the employee ID; the password is the company's common one.
+  const common = clean(input.password) ? null : joinPassword();
+  const password = common ?? checkPassword(input.password);
   const code = text(input.employeeCode)?.toUpperCase() ?? null;
   const hash = await hashPassword(password);
 
