@@ -578,6 +578,51 @@ function ownDesk(me: Me): Space {
       };
     case "team_lead":
     case "manager":
+      // A District Sales Coach of the Hospital Division: the coach's day (docs/PLAN.md 16.1).
+      if (me.role === "team_lead" && me.channel?.code === "HOSP")
+        return {
+          ...desk([
+            home,
+            folder(
+              "My team",
+              Users,
+              [
+                { to: "/my-team", label: "Whole team", icon: Users, teams: true },
+                { to: "/team-scores", label: "Scorecards", icon: Gauge },
+              ],
+              "Team",
+            ),
+            { to: "/huddle", label: "Team huddle", icon: Megaphone, short: "Huddle" },
+            { to: "/to-call", label: "Hospitals to call", icon: PhoneCall },
+            { to: "/collections", label: "Collections", icon: HandCoins },
+            folder("Team orders", ClipboardList, orderStages("Sent back"), "Orders"),
+            folder(
+              "Team visits",
+              CalendarCheck,
+              [
+                { to: "/field/report", label: "Visits report", icon: BarChart3 },
+                { to: "/visits/calendar", label: "Team calendar", icon: CalendarDays },
+                { to: "/field/live", label: "Where the team is", icon: MapPin },
+                { to: "/visits/expenses?waiting=1", label: "Expenses to approve", icon: Receipt },
+              ],
+              "Visits",
+            ),
+            { to: "/targets", label: "Targets", icon: Target },
+            folder(
+              "Team attendance",
+              CalendarClock,
+              [
+                { to: "/hr/attendance", label: "Who's working", icon: CalendarClock },
+                { to: "/hr/leave", label: "Leave & forms", icon: CalendarDays, badge: "leave" },
+              ],
+              "Attendance",
+            ),
+            { to: "/customers", label: "Hospitals & doctors", icon: Building2 },
+            { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+          ]),
+          icon: Users,
+          cta: { ...newOrder, label: "New order" },
+        };
       // Home is the team's month: each person against their target.
       return {
         ...desk([

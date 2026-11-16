@@ -86,7 +86,7 @@ export async function measure(
   month: string,
   upTo: string,
   live: boolean,
-): Promise<{ values: Record<string, number | null>; notes: Record<string, string>; active: boolean }> {
+): Promise<{ values: Record<string, number | null>; notes: Record<string, string>; active: boolean; facts?: MonthFacts }> {
   if (recipe.key === "team") return teamMeasure(db, personId, month, upTo);
   const first = firstOf(month);
   const last = lastOf(month);
@@ -209,8 +209,12 @@ export async function measure(
   // A month with no target, no sale, no order and no enquiry has nothing to score (days without
   // an invoice alone don't make a card).
   const active = Boolean(r.target || r.sales || r.orders || r.lastCustomers || r.enquiries);
-  return { values, notes, active };
+  const facts: MonthFacts = { sales: r.sales, target: r.target, owed: r.owed, workedSoFar, daysWithInvoice };
+  return { values, notes, active, facts };
 }
+
+/** The plain figures behind a month's card, for the coaches' screens. */
+export type MonthFacts = { sales: number; target: number | null; owed: number; workedSoFar: number; daysWithInvoice: number };
 
 /** A lead's month: the average of the cards of the people in the seats under them (not other
  *  leads, so a head's number isn't counted twice). */

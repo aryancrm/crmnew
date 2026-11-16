@@ -4312,3 +4312,35 @@ export type TeamHuddle = {
     threeDry: boolean;
   }[];
 };
+
+/** A coach's district now: each seller's month so far and tonight's huddle, worst first. */
+export type District = {
+  today: string;
+  month: string;
+  /** From the 15th the rescue list counts. */
+  rescueOpen: boolean;
+  rows: {
+    personId: number;
+    name: string;
+    seatId: number;
+    seat: string;
+    area: string | null;
+    unit: string;
+    sales: number;
+    target: number | null;
+    /** Sales against the target on the working-day pace, %. */
+    ist: number | null;
+    dso: number | null;
+    owed: number;
+    /** Customers late or at risk against their usual gap, and their share of the area's. */
+    lapsed: number;
+    lapsedShare: number | null;
+    /** Working days so far without an invoice. */
+    zeroDays: number;
+    workedSoFar: number;
+    huddle: { declared: boolean; invoiced: boolean; threeDry: boolean; blocker: string | null } | null;
+    rescue: string[];
+    needs: string[];
+    weight: number;
+  }[];
+};

@@ -4,7 +4,7 @@ import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedDemo } from "../seed";
-import type { Collections, Huddle, Pulse, TeamHuddle } from "../types";
+import type { Collections, District, Huddle, Pulse, TeamHuddle } from "../types";
 
 const PASSWORD = "test-password-1";
 let db: Database;
@@ -68,5 +68,17 @@ describe("a Hospital CHC's day", () => {
     expect((await get("ryan", "/api/huddle/team")).status).toBe(403);
     const [count] = await rows<{ n: number }>(db, sql`select count(*)::int as n from huddle`);
     expect(count?.n).toBe(1);
+  });
+
+  it("the coach's district now: each CHC's month, worst first, and who needs the coach", async () => {
+    const response = await get("daniel", "/api/team/district");
+    expect(response.status).toBe(200);
+    const district = (await response.json()) as District;
+    expect(district.rows.some((row) => row.name === "Ryan")).toBe(true);
+    for (let n = 1; n < district.rows.length; n++)
+      expect((district.rows[n - 1] as District["rows"][number]).weight).toBeGreaterThanOrEqual((district.rows[n] as District["rows"][number]).weight);
+    const ryan = district.rows.find((row) => row.name === "Ryan");
+    expect(ryan?.huddle?.declared).toBe(true);
+    expect((await get("ryan", "/api/team/district")).status).toBe(403);
   });
 });

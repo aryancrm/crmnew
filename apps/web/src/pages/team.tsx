@@ -16,6 +16,8 @@ import { avatarTone, initials } from "../look";
 import { LeadGlance } from "../team/glance";
 import { PageState } from "../ui";
 import { PACE_TEXT, PaceBar } from "./ceo-home";
+import { seatWords } from "../seat-words";
+import { DistrictNow } from "./district";
 import { greeting, todayWords } from "./home";
 
 const CARD = "rounded-xl border border-slate-200 bg-white";
@@ -59,6 +61,7 @@ export function TeamSalesPage() {
   const data = query.data;
   if (!data || !me) return <PageState query={query} what="the team's sales" />;
   const whole = data.lead === null;
+  const coach = me.role === "team_lead" && me.channel?.code === "HOSP";
   const current = data.today.slice(0, 7);
   const href = (month: string) =>
     month >= current ? location.pathname : `${location.pathname}?month=${month}`;
@@ -80,7 +83,9 @@ export function TeamSalesPage() {
           </h1>
           {data.lead && (
             <p className="mt-1 text-[13px] text-slate-500">
-              {[data.lead.title, data.lead.channel].filter(Boolean).join(" · ")} · your team
+              {coach
+                ? `${seatWords(me).desk} · your district`
+                : `${[data.lead.title, data.lead.channel].filter(Boolean).join(" · ")} · your team`}
             </p>
           )}
         </div>
@@ -103,7 +108,7 @@ export function TeamSalesPage() {
         </nav>
       </header>
 
-      <LeadGlance />
+      {!coach && <LeadGlance />}
 
       <section aria-label="The team's month" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Figure
@@ -150,6 +155,10 @@ export function TeamSalesPage() {
         </Figure>
       </section>
 
+      {/* A Hospital coach's day: who needs them, the district now, the huddle, the rescue. */}
+      {coach && <DistrictNow />}
+
+      {!coach && (
       <section aria-labelledby="people" className={`${CARD} min-w-0`}>
         <header className="flex items-baseline justify-between gap-3 px-4 pt-4 pb-2 sm:px-5">
           <h2 id="people" className="text-sm font-semibold text-slate-900">
@@ -251,6 +260,7 @@ export function TeamSalesPage() {
           </ul>
         )}
       </section>
+      )}
 
       {data.stopped.length > 0 && (
         <section aria-labelledby="stopped" className={`${CARD} min-w-0`}>

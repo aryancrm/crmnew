@@ -152,7 +152,7 @@ function TeamHuddlePage() {
     <div className="mx-auto max-w-5xl">
       <PageHead
         title="Team huddle"
-        sub={`${dayLabel(data.day)} · ${data.declared} of ${data.rows.length} declared · ${red} without an invoice${dry ? ` · ${dry} three days running` : ""}`}
+        sub={`${dayLabel(data.day)} · ${data.declared} of ${data.rows.length} declared · ${red} without an invoice${dry ? ` · ${dry} with no invoice three working days running` : ""}`}
         actions={
           <div className="inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1 shadow-2xs">
             <button type="button" className="rounded-lg p-1.5 hover:bg-slate-100" onClick={() => setParams({ day: shift(data.day, -1) }, { replace: true })} aria-label="Day before">
@@ -211,7 +211,7 @@ function TeamHuddlePage() {
                       <span className="font-semibold text-rose-700">No</span>
                     )}
                     {row.threeDry && (
-                      <div className="inline-flex items-center gap-1 text-[11px] font-semibold text-rose-700">
+                      <div className="mt-0.5 flex items-center gap-1 text-[11px] font-semibold text-rose-700">
                         <TriangleAlert className="size-3" /> 3 days: go with them tomorrow
                       </div>
                     )}

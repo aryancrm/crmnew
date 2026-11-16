@@ -5,12 +5,15 @@ import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
 import { type Env, readBody } from "../http";
+import { district } from "./district";
 import { collections, declareHuddle, myHuddle, pulse, teamHuddle } from "./service";
 
 const MONEY = z.number().int().min(0).max(100_000_000_000);
 
 export function sellerRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandler<Env>): void {
-  for (const path of ["/api/my/pulse", "/api/my/collections", "/api/huddle", "/api/huddle/*"]) app.use(path, signedIn);
+  for (const path of ["/api/my/pulse", "/api/my/collections", "/api/huddle", "/api/huddle/*", "/api/team/district"]) app.use(path, signedIn);
+
+  app.get("/api/team/district", async (c) => c.json(await district(db, c.get("me"))));
 
   app.get("/api/my/pulse", async (c) => c.json(await pulse(db, c.get("me"))));
   app.get("/api/my/collections", async (c) => c.json(await collections(db, c.get("me"))));
