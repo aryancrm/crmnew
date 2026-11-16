@@ -84,7 +84,11 @@ export async function companyKpis(
           coalesce(sum(o.total) filter (where date_trunc('month', ${placedOn}) = ${month} and o.status <> 'cancelled'), 0)::int as "monthValue",
           coalesce((select sum(i.total) from invoice i where i.status <> 'cancelled'
             and date_trunc('month', i.issued_on) = ${month}), 0)::float8 as sales,
-          coalesce((select sum(t.amount) from sales_target t where t.month = ${month}::date), 0)::float8 as target
+          (coalesce((select sum(t.amount) from sales_target t where t.month = ${month}::date), 0)
+            -- An empty seat's target still counts in the company's.
+            + coalesce((select sum(t.amount) from seat_target t join seat s on s.id = t.seat_id and s.active
+                where t.month = ${month}::date and not exists (select 1 from seat_holder h where h.seat_id = s.id and h.kind = 'holder'
+                  and h.starts_on <= (${month}::date + interval '1 month' - interval '1 day')::date and (h.ends_on is null or h.ends_on >= ${month}::date))), 0))::float8 as target
         from sales_order o where o.status <> 'draft'`,
     ),
     rows<CompanyKpis["byRep"][number]>(

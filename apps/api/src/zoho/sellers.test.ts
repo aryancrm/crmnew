@@ -117,3 +117,33 @@ describe("Zoho's salespeople tied to seats", () => {
     expect(seen.rows.map((row) => row.name)).toContain("Chong Hua Mandaue");
   });
 });
+
+describe("targets on seats", () => {
+  it("an empty seat keeps its target, the person who takes it carries it, and the company counts it", async () => {
+    const month = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }).slice(0, 7);
+    const list = (await (await get("admin", `/api/targets?month=${month}`)).json()) as {
+      emptySeats: { seatId: number; area: string | null; target: number | null }[];
+    };
+    const cavite = list.emptySeats.find((seat) => seat.area === "Cavite, Laguna");
+    expect(cavite).toBeTruthy();
+    expect((await post("ryan", "/api/targets/seat", { seatId: cavite?.seatId, month, amount: 50_000_000 })).status).toBe(403);
+    expect((await post("admin", "/api/targets/seat", { seatId: cavite?.seatId, month, amount: 50_000_000 })).status).toBe(200);
+    const after = (await (await get("admin", `/api/targets?month=${month}`)).json()) as typeof list;
+    expect(after.emptySeats.find((seat) => seat.seatId === cavite?.seatId)?.target).toBe(50_000_000);
+
+    // A new person takes the seat: the seat's target is theirs from that month.
+    const [hr] = await rows<{ id: number }>(db, sql`select id::int as id from person where email = 'admin@2mg.test'`);
+    const [person] = await rows<{ id: number }>(
+      db,
+      sql`insert into person (name, role, password_hash, active) values ('New CHC Cavite', 'medrep', 'x', true) returning id::int as id`,
+    );
+    const filled = await post("admin", `/api/org/seats/${cavite?.seatId}/fill`, { personId: person?.id });
+    expect(filled.status, await filled.clone().text()).toBe(200);
+    const [carried] = await rows<{ amount: number }>(
+      db,
+      sql`select amount::int as amount from sales_target where person_id = ${person?.id} and month = ${`${month}-01`}::date`,
+    );
+    expect(carried?.amount).toBe(50_000_000);
+    expect(hr?.id).toBeTruthy();
+  });
+});

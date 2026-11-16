@@ -846,6 +846,13 @@ export async function fillSeat(
       sql`insert into seat_holder (seat_id, person_id, kind, starts_on, reason, by_person)
         values (${seat.id}, ${person.id}, 'holder', ${starts}::date, ${reason ?? (input.keepOther ? "Second seat" : "Moved")}, ${me.id})`,
     );
+    // The seat's targets come with it, from the month they start (not over one already theirs).
+    await tx.execute(
+      sql`insert into sales_target (person_id, month, amount, set_by)
+        select ${person.id}, t.month, t.amount, t.set_by from seat_target t
+        where t.seat_id = ${seat.id} and t.month >= date_trunc('month', ${starts}::date)::date
+        on conflict (person_id, month) do nothing`,
+    );
   });
 }
 

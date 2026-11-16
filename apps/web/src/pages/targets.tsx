@@ -249,6 +249,66 @@ export function Targets() {
           </section>
         ))
       )}
+      {data.emptySeats.length > 0 && (
+        // Seats nobody holds: their target waits for whoever takes the seat.
+        <section className="space-y-2.5">
+          <div className="flex items-center gap-2">
+            <h2 className="text-sm font-semibold text-slate-900">Empty seats</h2>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+              {data.emptySeats.length} · {shortPeso(data.emptySeats.reduce((sum, seat) => sum + (seat.target ?? 0), 0))} of target waiting
+            </span>
+            <span className="h-px min-w-6 flex-1 bg-slate-200/70" />
+          </div>
+          <div className={`${CARD} divide-y divide-slate-100`}>
+            {data.emptySeats.map((seat) => (
+              <SeatTargetRow key={seat.seatId} seat={seat} month={data.month} />
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+function SeatTargetRow({ seat, month }: { seat: TargetList["emptySeats"][number]; month: string }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const shown = seat.target === null ? "" : String(seat.target / 100);
+  const [typed, setTyped] = useState(shown);
+  const changed = typed.trim() !== shown;
+  async function save() {
+    const text = typed.replace(/[,₱\s]/g, "");
+    const done = await action.run(() =>
+      api("/api/targets/seat", { body: { seatId: seat.seatId, month, amount: text === "" ? null : Math.round(Number(text) * 100) } }),
+    );
+    if (done) await queries.invalidateQueries({ queryKey: ["targets"] });
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 text-[13px]">
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-semibold text-slate-900">{seat.area ?? seat.title}</div>
+        <div className="truncate text-[11.5px] text-slate-500">
+          {seat.unit} · {seat.title}
+          {seat.lastTarget !== null ? ` · last month ${shortPeso(seat.lastTarget)}` : ""}
+        </div>
+      </div>
+      <input
+        inputMode="decimal"
+        value={typed}
+        onChange={(event) => setTyped(event.target.value)}
+        onKeyDown={(event) => event.key === "Enter" && changed && void save()}
+        placeholder="Target, ₱"
+        aria-label={`Target for ${seat.area ?? seat.title}`}
+        className="field h-8 w-36 text-right tabular-nums"
+      />
+      <button
+        type="button"
+        disabled={!changed || action.busy}
+        onClick={() => void save()}
+        className="h-8 rounded-lg bg-brand px-3 text-xs font-semibold text-white disabled:opacity-40"
+      >
+        Save
+      </button>
     </div>
   );
 }

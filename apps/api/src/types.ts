@@ -1134,6 +1134,8 @@ export type MyOrders = {
 
 /** Monthly sales targets, for the people a person may set them for. */
 export type TargetList = {
+  /** Selling seats nobody holds today, with their targets (whoever takes the seat takes them). */
+  emptySeats: { seatId: number; title: string; unit: string; area: string | null; target: number | null; lastTarget: number | null }[];
   month: string;
   monthLabel: string;
   /** Days of the month, and how many have gone (all of them for a month gone by). */
