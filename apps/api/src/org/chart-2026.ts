@@ -94,11 +94,15 @@ export const CHART_2026: ChartUnit[] = [
           { title: "Rx CHC – Davao", module: "medrep", area: "Rx Davao", cities: [] },
           { title: "Rx CHC – Blood & Bone", module: "medrep", n: 2, area: "Rx Blood & Bone", cities: [] },
         ],
-      },
-      {
-        name: "MD Telesales Oncology", kind: "line", channel: "TS",
-        seats: [{ title: "Sales Coach – MD Telesales", module: "team_lead", lead: true }, { title: "MD Telesales – Oncology", module: "medrep", n: 4, area: "Telesales Oncology" }],
-        units: [{ name: "B2C Sales Coaching", kind: "team", channel: "ONLINE", seats: [{ title: "B2C CHC", module: "online", n: 2 }] }],
+        // On the chart MD Telesales Oncology hangs inside the Onco-Hema Division, beside Uro & Onco
+        // Care and Blood & Bone Care; the B2C Sales Coaching Department hangs under it.
+        units: [
+          {
+            name: "MD Telesales Oncology", kind: "line", channel: "TS",
+            seats: [{ title: "Sales Coach – MD Telesales", module: "team_lead", lead: true }, { title: "MD Telesales – Oncology", module: "medrep", n: 4, area: "Telesales Oncology" }],
+            units: [{ name: "B2C Sales Coaching", kind: "team", channel: "ONLINE", seats: [{ title: "B2C CHC", module: "online", n: 2 }] }],
+          },
+        ],
       },
     ],
   },

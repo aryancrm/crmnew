@@ -1412,7 +1412,38 @@ opened under the Management desk, with Management's menu and "Management" on top
 6. The office: Management, Finance, Dispatch / Pharmacy, Inventory, HR, Training.
 7. The Founder (CEO) and the Admin last: their screens are the roll-up of all the above.
 
+### 16.0 Audit of 16.1–16.4 against the chart (17 Nov 2026)
+
+Aryan caught the Hospital Division's Government Account box being pulled into Sales and Marketing's
+bidding. Every rule that picks a seat's desk, Home, card or list was then read against the chart's
+boxes (cropped one business at a time). What was wrong, and what was done:
+
+| What was wrong | Why | Fixed |
+|---|---|---|
+| The Hospital Division's MD Telesales Anesthesia got the Prescription Business's telesales desk (care groups, patients' refills, "MD Telesales") | Seats were told apart by channel (TS) only, not by the box they sit in | Each person now carries their business box (seat_business_channel, migration 0062, read in the one sign-in query); anesthesia telesales get their own desk "MD Telesales – Anesthesia" (pulse, go here first, customers to call, orders, collections, score), the Hospital CHC card, no care groups; oncology telesales keep theirs |
+| The Hospital Mentor's and coaches' District now counted every MedRep seat under them on the Hospital CHC card (it would have counted the PAP officer and the government bidding coachee) | No filter by box | District now: the Hospital Division's sellers to hospitals only (its CHCs and its anesthesia telesales) |
+| The Government Account's bidding coachee would get the 7 PM huddle and the Hospital CHC card, and the desk said "Hospital CHC" | Same: by channel (HOSP) | No huddle, no card until the bidding card, desk named "Government Account"; the tender desk comes with 16.5, then back in 16.1 |
+| The 7 PM team huddle listed every MedRep under a Hospital lead | No filter | The Hospital Division's CHCs only |
+| Care groups' heads: any TS or RX lead | By channel | The Prescription Business's leads only |
+| The chart code had MD Telesales Oncology beside the Onco-Hema Division | Read too fast | Inside Onco-Hema, as the chart draws it (the Onco-Hema seats were checked one by one: 1, 2, 1, 2, 2, 1, and Blood & Bone 2) |
+
+Checked and right: Hospital CHC / DSC / Mentor desks (HOSP seats), Rx CHC and Country Mentor (RX),
+B2C CHC (online), NBD and CRR (by the chart's titles), B2B coach and Sales & Marketing Mentor (B2B
+leads), every refusal for a seat that isn't theirs.
+
+Not built yet, and said so (no screen pretends to be theirs): the Sales Admins (Kate Cagoyong under
+the Country Mentor, Sheila Mae Bazar in MD Telesales, Aljean Carno in Bidding: no seat in the CRM's
+chart yet; their order work is the order line's Management step); the Patient Assistance Program
+department of the Hospital Division (its officer uses the existing PAP desk); CLIDP, Government
+Bidding (16.5), Modern Trade, the office departments, the Founder. The demo company still differs
+from the chart (PAP as its own business with a head, an "Online" business, "Doctor dispensing /
+referral" lines); the screens are checked on demo people placed as the chart places them.
+
 ### 16.1 Hospital Division (done 16 Nov; Tenders, the weekly report, Monday sync and route approval come with their phases)
+
+Still to add in 16.1 (after the bidding line is done): the Government Account box on the chart
+(Reynan Cuenca, Government Bidding Coachee for government hospitals) and the Hospital CHC's "Tenders
+open" block (a government posting quoted within 24 hours), on the tender record 16.5 builds.
 
 Checked up the line: a CHC sees only their hospitals (not another area's, no team views, no costs);
 their huddle, score and money reach their coach and the head; a covering coach shows as "(covering)";
@@ -1482,6 +1513,30 @@ against its own usual gap (due, late past 1.5 times, at risk past 2.5 times or 9
 | CRR (MedRep, B2B, seat "CRR") | Home, Accounts, My orders, My score; New order on top | Due to reorder this week; late (call today); down (less than their 3-month average); stopped (90 days: win back); this month (retention %, up / flat / down); each with Call logged and New order | Late, won back, lost → B2B Sales Coach | Done 16 Nov, checked as Fritz; an account shows in one list only |
 | B2B Sales Coach / District Coach Mindanao (team lead, B2B) | Home, My team, Hand-overs, Accounts, Team orders, Targets, Collections, Scorecards | Pipeline per NBD (prospects, calls, first orders, ready to hand over), hand-overs waiting (pick the CRR), CRR accounts late / at risk / stopped, retention | → Sales & Marketing Mentor | Done 16 Nov, checked as Jess |
 | Sales & Marketing Mentor (head) | Home, B2B, (Bidding and CLIDP in their own sections) | New accounts this month, accounts at risk, retention, each team against target | → Founder (Reports: B2B team) | Done 16 Nov, checked as Sam; adds people at risk, money owed, score questions |
+
+### 16.5 Government Bidding (paused 17 Nov for the audit in 16.0; the tender migration is drafted, kept aside)
+
+Read from the zoomed chart (16 Nov): under the Sales and Marketing Mentor, Government Bidding is one
+line: Jimmy Boy Saturinas (Government Bidding Admin), Angelica Gollena and Hazel Marie Balano
+(Government Bidding Coachees), Arron Tongcua (Customer Happiness Coachee) and Aljean Carno (Sales
+Admin). This section is only Subir Dey's line; the Hospital Division's own Government Account box
+(Reynan Cuenca) belongs to 16.1 and waits there. The work (company map, Hospital CHC Playbook, the old
+CRM's 9 steps, RA 12009 and its 2025 rules from the web research): a tender goes Found on PhilGEPS →
+Preparing → Price approved (by the Bidding Admin) → Submitted → Won or Lost (our price against the
+winning one, the reason) → Contract / NTP → Delivered → Accepted (IAR: the government pays only after
+inspection and acceptance; money owed counts from acceptance) → Billed → Paid. Each tender has its
+mode (competitive bidding, small value, direct acquisition, repeat order, negotiated…), ABC, PhilGEPS
+reference, deadlines, envelope papers (PhilGEPS Platinum certificate, Omnibus Sworn Statement, bid
+security, technical specs and stock availability, FDA LTO, CPR for each medicine, NFCC, SLCC), the
+bid security and the bid price per medicine. The company's eligibility papers have expiry dates
+watched by the Admin.
+
+| Seat | Menu | Home | Sends up | State |
+|---|---|---|---|---|
+| Government Bidding Admin (team lead, BID) | Home, Tenders, Documents, Collections, Team orders, My team, Scorecards | Deadlines this week (papers still missing), prices to approve, awaiting award, awarded (to deliver, waiting acceptance, to bill, to collect), this month's results (won, lost, win rate), company papers expiring | Pipeline (bid, won, lost) → Sales & Marketing Mentor | Building |
+| Government Bidding Coachee / Bidding CHC (MedRep, BID) | Home, Tenders, My orders, Collections, My score | My tenders by step, deadlines this week, papers missing, awarded deliveries and acceptance to follow | → Bidding Admin | Building |
+| Sales Admin (Prescription, Bidding) | — | Not a CRM seat yet: their work (order → Finance → dispatch) is the order line's Management step | — | Note |
+| Sales & Marketing Mentor | adds Tenders | Bidding pipeline: active, submitted, won / lost this month and win rate, awarded value to deliver, government money owed from acceptance | → Founder | Building |
 
 ## 13. Questions waiting for Aryan
 
@@ -1921,3 +1976,4 @@ against its own usual gap (due, late past 1.5 times, at risk past 2.5 times or 9
 - 16 Nov (54), Checked up the line for 16.2: a care group belongs to the business of the CHC who enrolled it, so the Hospital Division's anesthesia telesales (also TS) never see the oncology groups; the Sales Coach and the Country Mentor see their business's groups, the CEO and the Admin all. Reports (CEO, Admin) gain Care groups and Rx field team.
 - 16 Nov (55), Section 16.3 Online B2C done. Read again from the zoomed chart first (B2C Sales Coaching under MD Telesales Oncology inside Onco-Hema; the Sales Admin under the Country Mentor). The B2C CHC's Home (/ for the Online desk, instead of jumping to the leads): the playbook's 8:00 pulse (enquiries waiting, new prospects not answered, the refill-due list, the last working day's invoice, cancellations without a reason, replies past 15 minutes today, each green or red with the playbook's action), waiting for a reply oldest first with the clock and Reply, refills due by each patient's own rhythm, orders by where they stand with the day-3 check-ins due (a check-in is kept on the order). A late reply: a turn's first inbound message in working hours answered after 15 minutes (or still waiting). A B2C CHC's refill list is their own patients (added, ordered for, or their enquiry), as the playbook's ownership rule says. The coach's and the Country Mentor's Homes show the B2C desk now (/api/b2c/team). Demo: the B2C Sales Coaching team under MD Telesales with Mae, an inactive demo Messenger page, three enquiries and two patients. 319 API tests.
 - 16 Nov (56), Section 16.4 B2B Telesales done, read first from the zoomed chart. New: migration 0061 (the business permit beside the FDA licence and the BIR TIN; b2b_account: the NBD who brought an account in, the CRR it is handed to, the next call, dropped; account_call: each call's outcome and next call). NBD (seat "NBD"): calls today, papers missing, first orders this month and conversion, ready to hand to CRR (3rd order or day 90) and flagged (no 2nd order by day 45); Prospects (working / handed over), Add a prospect (a drugstore, distributor or clinic; duplicates refused), Call (outcome, note, next call), Papers. CRR (seat "CRR"): retention this month, buying more / steady / less; late (call today), due this week, buying less than their 3-month average (still on time), stopped 90 days (win back); Accounts with tabs. An NBD hands an account over once ready; the coach any time, to a CRR. The B2B Sales Coach and the Sales & Marketing Mentor: new business per NBD, accounts per CRR, hand-overs waiting (the Mentor also people at risk, money, score questions). Reports: B2B team. The NBD or CRR sees the accounts they work. Demo (b2b/seed.ts): Sam, Jess, Fritz, Flor with prospects and accounts. 322 API tests.
+- 17 Nov (57), Aryan: "you pulled the Hospital Division's Government Account into Subir Dey's bidding; how do I know there is nothing else". Audit of everything built in 16.1–16.4 against the chart (section 16.0): seats are now told apart by their business box as well as their channel (migration 0062 seat_business_channel; Me.business, read in the one sign-in query); MD Telesales Anesthesia get the Hospital Division's own telesales desk (not the Prescription telesales' care groups and refills); District now and the team huddle count only the Hospital Division's sellers to hospitals / CHCs; the Government Account's bidding coachee gets no CHC card or huddle and his desk says "Government Account"; care groups' heads are the Prescription Business's only; MD Telesales Oncology moved inside Onco-Hema in the chart code. Demo: Ana (anesthesia telesales) and Rey (Government Account) in the Hospital Division. 323 API tests, the one-query sign-in kept.

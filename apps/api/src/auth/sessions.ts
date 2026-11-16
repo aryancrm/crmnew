@@ -82,6 +82,10 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
       bossTitle: boss.title,
       viewerId: viewer.id,
       viewerName: viewer.name,
+      // The business box their seat sits in (by its channel), so a seat's desk follows the chart.
+      businessCode: sql<string | null>`(select seat_business_channel(h.seat_id) from seat_holder h
+        where h.person_id = ${person.id} and h.starts_on <= current_date and (h.ends_on is null or h.ends_on >= current_date)
+        order by (h.kind = 'holder') desc, h.starts_on desc limit 1)`,
     })
     .from(session)
     .innerJoin(person, eq(person.id, session.personId))
@@ -113,6 +117,7 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
     title: row.title,
     role: row.role,
     roleLabel: ROLE_LABEL[row.role],
+    business: row.businessCode ?? null,
     // Someone looking as this person isn't asked to change their password.
     mustChangePassword: row.viewerId ? false : row.mustChangePassword,
     channel:

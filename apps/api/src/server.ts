@@ -22,6 +22,7 @@ import { seedB2bTeam } from "./b2b/seed";
 import { seedB2cTeam } from "./b2c/seed";
 import { seedRxTeam } from "./rx/seed";
 import { lockDue } from "./scores/service";
+import { seedHospitalBoxes } from "./sellers/seed";
 import { seedDemo } from "./seed";
 import { seedDemoPast } from "./zoho/seed";
 
@@ -56,6 +57,7 @@ if (process.env.SEED_DEMO === "1") {
   if (await seedRxTeam(db, password)) console.log("database: the Prescription channel's demo people made");
   if (await seedB2cTeam(db, password)) console.log("database: the B2C channel's demo people made");
   if (await seedB2bTeam(db, password)) console.log("database: B2B Telesales' demo people made");
+  if (await seedHospitalBoxes(db, password)) console.log("database: the Hospital Division's anesthesia telesales and government account made");
   if (await seedDemoAttendance(db)) console.log("database: two weeks of demo attendance made");
   // Older demo databases had invoices dated before their orders: put them right once.
   const aligned = await alignDemoMoneyDates(db);

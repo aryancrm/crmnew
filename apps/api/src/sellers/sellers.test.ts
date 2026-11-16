@@ -4,7 +4,8 @@ import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedDemo } from "../seed";
-import type { Collections, District, Huddle, Pulse, TeamHuddle } from "../types";
+import type { Collections, District, Huddle, MyScore, Pulse, TeamHuddle } from "../types";
+import { seedHospitalBoxes } from "./seed";
 
 const PASSWORD = "test-password-1";
 let db: Database;
@@ -22,8 +23,9 @@ beforeAll(async () => {
   db = openDatabase({ dir: "memory" });
   await migrate(db);
   await seedDemo(db, PASSWORD);
+  expect(await seedHospitalBoxes(db, PASSWORD)).toBe(true);
   app = createApp(db, { webUrl: "http://localhost:5180" });
-  for (const name of ["admin", "ryan", "daniel", "vanessa", "sarla"]) {
+  for (const name of ["admin", "ryan", "daniel", "vanessa", "sarla", "ana", "rey"]) {
     const response = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -87,5 +89,24 @@ describe("a Hospital CHC's day", () => {
     expect(seen?.huddle?.declared).toBe(true);
     const evening = (await (await get("vanessa", "/api/huddle/team")).json()) as TeamHuddle;
     expect(evening.rows.find((row) => row.name === "Ryan")?.declared?.blocker).toBe("PO not signed at the hospital");
+  });
+
+  it("each Hospital box gets its own work: anesthesia telesales sell to hospitals, the bidding coachee works tenders", async () => {
+    // Anesthesia telesales (TS inside the Hospital Division): the hospital pulse, no care groups,
+    // the Hospital CHC card; counted with the division, not as Rx telesales.
+    const pulse = (await (await get("ana", "/api/my/pulse")).json()) as Pulse;
+    expect(pulse.tiles.map((tile) => tile.key)).toEqual(["sales", "dso", "reorder", "invoice"]);
+    expect((await get("ana", "/api/care-groups")).status).toBe(403);
+    expect((await get("ana", "/api/huddle")).status).toBe(403);
+    const division = (await (await get("vanessa", "/api/team/district")).json()) as District;
+    expect(division.rows.map((row) => row.name)).toContain("Ana");
+    // The government bidding coachee: no CHC card, no huddle, not counted as a CHC.
+    expect(division.rows.map((row) => row.name)).not.toContain("Rey");
+    expect((await get("rey", "/api/huddle")).status).toBe(403);
+    const rey = (await (await get("rey", "/api/scores")).json()) as MyScore;
+    expect(rey.card).toBeNull();
+    const evening = (await (await get("vanessa", "/api/huddle/team")).json()) as TeamHuddle;
+    expect(evening.rows.map((row) => row.name)).not.toContain("Ana");
+    expect(evening.rows.map((row) => row.name)).not.toContain("Rey");
   });
 });

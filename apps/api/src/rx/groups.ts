@@ -8,6 +8,7 @@ import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
+import { rxTelesales } from "../org/boxes";
 import { inForce } from "../org/service";
 import type { CareGroups, Me } from "../types";
 
@@ -15,10 +16,11 @@ export const FIRST_CONTACT_MINUTES = 15;
 const QUIET_DAYS = 14;
 
 const isRxChc = (me: Me) => me.role === "medrep" && me.channel?.code === "RX";
-const isTelesales = (me: Me) => me.role === "medrep" && me.channel?.code === "TS";
+// Care groups are the Prescription Business's: its telesales (oncology) and its heads, never the
+// Hospital Division's anesthesia telesales.
+const isTelesales = (me: Me) => rxTelesales(me);
 const seesAll = (me: Me) =>
-  ["ceo", "admin"].includes(me.role) ||
-  (["team_lead", "manager"].includes(me.role) && ["TS", "RX"].includes(me.channel?.code ?? ""));
+  ["ceo", "admin"].includes(me.role) || (["team_lead", "manager"].includes(me.role) && me.business === "RX");
 
 /** The business (the top box under the company) a seat sits in. */
 const businessOf = (seat: SQL): SQL => sql`(with recursive up as (

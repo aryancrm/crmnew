@@ -9,6 +9,7 @@ import { type Database, rows } from "../db/index";
 import { DEFAULT_SCHEDULE, isWorkDay } from "../hr/work-time";
 import { Refusal } from "../http";
 import { addDays, todayManila } from "../inventory/rules";
+import { rxTelesales } from "../org/boxes";
 import { inForce } from "../org/service";
 import { careGroups } from "../rx/groups";
 import { HOSPITAL } from "../scores/recipes";
@@ -80,7 +81,7 @@ export async function pulse(db: Database, me: Me): Promise<Pulse> {
   };
   // MD Telesales (Rx Team & Training Playbook): the sales number, the refills due in 48 hours,
   // the care groups waiting for first contact (15 minutes), and the last working day's invoice.
-  if (me.channel?.code === "TS") {
+  if (rxTelesales(me)) {
     const groups = await careGroups(db, me);
     const refills = slipping.counts.filter((one) => one.state === "soon" || one.state === "due").reduce((sum, one) => sum + one.customers, 0);
     const waiting = groups.counts.waiting + groups.counts.late;
@@ -215,8 +216,9 @@ const declaredOf = (personIds: number[], day: string) =>
       to_char(declared_at at time zone 'Asia/Manila', 'HH24:MI') as at
     from huddle where day = ${day}::date and person_id in (${sql.join(personIds.map((id) => sql`${id}`), sql`, `)})`;
 
-/** The 7 PM huddle is the Hospital CHC Playbook's: the Hospital Division's CHCs declare it. */
-const huddleSeller = (me: Me) => me.role === "medrep" && me.channel?.code === "HOSP";
+/** The 7 PM huddle is the Hospital CHC Playbook's: the Hospital Division's CHCs declare it (not its
+ *  anesthesia telesales, PAP officer or government bidding coachee: their work is not the CHC's). */
+const huddleSeller = (me: Me) => me.role === "medrep" && me.channel?.code === "HOSP" && !/bidding/i.test(me.title ?? "");
 
 /** My huddle for today: the numbers as the data has them, and what I declared. */
 export async function myHuddle(db: Database, me: Me): Promise<Huddle> {
@@ -268,8 +270,10 @@ export async function teamHuddle(db: Database, me: Me, asked: { day?: string }):
         sql`select distinct on (h.person_id) h.person_id::int as "personId", p.name, s.title as seat, a.name as area, u.name as unit
           from seat s join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", day)}
             join person p on p.id = h.person_id join org_unit u on u.id = s.unit_id left join area a on a.id = s.area_id
-          where s.id in (${sql.join(seatIds.map((id) => sql`${id}`), sql`, `)}) and not s.lead and s.module in ('medrep', 'online')
+          where s.id in (${sql.join(seatIds.map((id) => sql`${id}`), sql`, `)}) and not s.lead and s.module = 'medrep'
             and h.person_id <> ${me.id}
+            -- The huddle's people: the Hospital Division's CHCs.
+            and (select ch.code from channel ch where ch.id = a.channel_id) = 'HOSP' and s.title not ilike '%bidding%'
           order by h.person_id, h.starts_on desc`,
       )
     : [];

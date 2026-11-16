@@ -17,6 +17,10 @@ export type Me = {
   channel: { code: string; name: string; division: string | null } | null;
   area: { id: number; name: string; cities: string[] } | null;
   reportsTo: { name: string; title: string | null } | null;
+  /** The channel of the business box their seat sits in on the chart (HOSP for the Hospital
+   *  Division, RX for the Prescription Business, B2B for Sales and Marketing…). Telesales inside the
+   *  Hospital Division (anesthesia) and inside the Prescription Business (oncology) work differently. */
+  business?: string | null;
   /** The CEO or Admin looking as this person (read only), when it is that. */
   viewedBy?: { id: number; name: string } | null;
 };

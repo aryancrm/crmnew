@@ -1,5 +1,5 @@
-// A coach's district now (the Hospital CHC Playbook's District Sales Coach): each seller under
-// them with the month so far (sales against the target on the working-day pace, days to collect,
+// A coach's district now (the Hospital CHC Playbook's District Sales Coach): each Hospital
+// Division seller to hospitals under them (CHCs, anesthesia telesales) with the month so far (sales against the target on the working-day pace, days to collect,
 // customers lapsed against their usual gap, working days without an invoice) and tonight's
 // huddle, worst first. From it: who needs the coach today (three evenings without an invoice:
 // go with them tomorrow; days to collect over 90; not declared after 7 PM) and, from the 15th,
@@ -36,6 +36,11 @@ export async function district(db: Database, me: Me): Promise<District> {
             join person p on p.id = h.person_id join org_unit u on u.id = s.unit_id left join area a on a.id = s.area_id
           where s.id in (${sql.join(seatIds.map((id) => sql`${id}`), sql`, `)}) and not s.lead and s.module = 'medrep'
             and h.person_id <> ${me.id}
+            -- The Hospital Division's sellers to hospitals only: its CHCs and its anesthesia telesales.
+            -- Not its PAP officer (patients' cases) nor its government bidding coachee (tenders).
+            and seat_business_channel(s.id) = 'HOSP'
+            and (select ch.code from channel ch where ch.id = a.channel_id) in ('HOSP', 'TS')
+            and s.title not ilike '%bidding%'
           order by h.person_id, h.starts_on desc`,
       )
     : [];

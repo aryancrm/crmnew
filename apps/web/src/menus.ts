@@ -492,7 +492,8 @@ function ownDesk(me: Me): Space {
               ],
               "Visits",
             ),
-            { to: "/huddle", label: "Tonight's huddle", icon: Megaphone, short: "Huddle" },
+            // The 7 PM huddle is the CHCs' (not the Government Account's bidding coachee).
+            ...(/bidding/i.test(me.title ?? "") ? [] : [{ to: "/huddle", label: "Tonight's huddle", icon: Megaphone, short: "Huddle" }]),
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ]),
           cta: { ...newOrder, label: "New order" },
@@ -520,8 +521,22 @@ function ownDesk(me: Me): Space {
           ]),
           cta: { ...newOrder, label: "New order" },
         };
-      // MD Telesales: the care groups, the refills, the orders and the number (docs/PLAN.md 16.2).
-      if (me.channel?.code === "TS")
+      // MD Telesales Anesthesia (inside the Hospital Division): hospitals and doctors by phone.
+      if (me.channel?.code === "TS" && me.business === "HOSP")
+        return {
+          ...desk([
+            home,
+            { to: "/to-call", label: "Customers to call", icon: PhoneCall, short: "Call" },
+            folder("My orders", ClipboardList, orderStages("Sent back to me"), "Orders"),
+            { to: "/collections", label: "Collections", icon: HandCoins },
+            { to: "/my/area", label: "My customers", icon: Building2 },
+            { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+          ]),
+          cta: { ...newOrder, label: "New order" },
+        };
+      // MD Telesales Oncology (the Prescription Business): care groups, refills, orders, the number
+      // (docs/PLAN.md 16.2).
+      if (me.channel?.code === "TS" && me.business === "RX")
         return {
           ...desk([
             home,
@@ -699,7 +714,7 @@ function ownDesk(me: Me): Space {
           icon: Users,
         };
       // The Sales Coach of MD Telesales: the team's number, the groups answered in time, refills.
-      if (me.role === "team_lead" && me.channel?.code === "TS")
+      if (me.role === "team_lead" && me.channel?.code === "TS" && me.business === "RX")
         return {
           ...desk([
             home,

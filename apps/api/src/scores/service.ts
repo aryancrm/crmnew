@@ -36,23 +36,29 @@ const daysBetween = (from: string, to: string) => {
 /** The card a seat is scored on: Hospital CHC for a hospital MedRep, Rx CHC for a prescription
  *  MedRep, B2C CHC for the online desk, the B2C card for telesales (until theirs is published),
  *  and a lead their team's average. Leads and the other channels have no card here yet. */
-export function recipeFor(seat: { module: string; lead: boolean; channel: string | null } | undefined): Recipe | null {
+export function recipeFor(
+  seat: { module: string; lead: boolean; channel: string | null; business?: string | null; title?: string | null; seatTitle?: string | null } | undefined,
+): Recipe | null {
   if (!seat) return null;
   if (seat.lead || seat.module === "team_lead" || seat.module === "manager") return RECIPES.team;
-  if (seat.channel === "TS") return RECIPES.telesales;
+  // Telesales inside the Hospital Division (anesthesia) sell to hospitals: the Hospital CHC card.
+  // Telesales inside the Prescription Business (oncology): the B2C card, until theirs is published.
+  if (seat.channel === "TS") return seat.business === "HOSP" ? RECIPES.hospital : RECIPES.telesales;
   if (seat.module === "online" || seat.channel === "ONLINE") return RECIPES.b2c;
-  if (seat.module === "medrep" && seat.channel === "HOSP") return RECIPES.hospital;
+  // A government bidding coachee (the Hospital Division's Government Account) works tenders, not a
+  // CHC's daily invoices: no card until the bidding card is written.
+  if (seat.module === "medrep" && seat.channel === "HOSP") return /bidding/i.test(seat.seatTitle ?? seat.title ?? "") ? null : RECIPES.hospital;
   if (seat.module === "medrep" && seat.channel === "RX") return RECIPES.rx;
   return null;
 }
 
-type SeatOn = { seatId: number | null; module: string; lead: boolean; channel: string | null; title: string | null; area: string | null };
+type SeatOn = { seatId: number | null; module: string; lead: boolean; channel: string | null; business: string | null; title: string | null; area: string | null };
 
 /** The seat a person held on a day (their latest one in force), or their own role and area. */
 async function seatOn(db: Database, personId: number, day: string): Promise<SeatOn | undefined> {
   const [held] = await rows<SeatOn>(
     db,
-    sql`select s.id::int as "seatId", s.module, s.lead, ch.code as channel, s.title, a.name as area
+    sql`select s.id::int as "seatId", s.module, s.lead, ch.code as channel, seat_business_channel(s.id) as business, s.title as "seatTitle", s.title, a.name as area
       from seat_holder h join seat s on s.id = h.seat_id
         left join area a on a.id = s.area_id left join channel ch on ch.id = a.channel_id
       where h.person_id = ${personId} and h.kind = 'holder'
@@ -62,7 +68,7 @@ async function seatOn(db: Database, personId: number, day: string): Promise<Seat
   if (held) return held;
   const [own] = await rows<SeatOn>(
     db,
-    sql`select null::int as "seatId", p.role as module, false as lead, ch.code as channel, null as title, a.name as area
+    sql`select null::int as "seatId", p.role as module, false as lead, ch.code as channel, null as business, null as title, a.name as area
       from person p left join area a on a.id = p.area_id left join channel ch on ch.id = a.channel_id where p.id = ${personId}`,
   );
   return own;
@@ -235,9 +241,9 @@ async function teamMeasure(db: Database, personId: number, month: string, upTo: 
     seatIds = [];
   }
   const members = seatIds.length
-    ? await rows<{ personId: number; module: string; lead: boolean; channel: string | null }>(
+    ? await rows<{ personId: number; module: string; lead: boolean; channel: string | null; business: string | null }>(
         db,
-        sql`select distinct on (h.person_id) h.person_id::int as "personId", s.module, s.lead, ch.code as channel
+        sql`select distinct on (h.person_id) h.person_id::int as "personId", s.module, s.lead, ch.code as channel, seat_business_channel(s.id) as business, s.title as "seatTitle"
           from seat s join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", upTo)}
             left join area a on a.id = s.area_id left join channel ch on ch.id = a.channel_id
           where s.id in (${sql.join(seatIds.map((id) => sql`${id}`), sql`, `)}) and h.person_id <> ${personId}
@@ -295,9 +301,9 @@ export async function cardOf(db: Database, personId: number, month: string, toda
 export async function lockMonth(db: Database, month: string, again = false): Promise<number> {
   const first = firstOf(month);
   const last = lastOf(month);
-  const people = await rows<{ personId: number; seatId: number; module: string; lead: boolean; channel: string | null }>(
+  const people = await rows<{ personId: number; seatId: number; module: string; lead: boolean; channel: string | null; business: string | null }>(
     db,
-    sql`select distinct on (h.person_id) h.person_id::int as "personId", s.id::int as "seatId", s.module, s.lead, ch.code as channel
+    sql`select distinct on (h.person_id) h.person_id::int as "personId", s.id::int as "seatId", s.module, s.lead, ch.code as channel, seat_business_channel(s.id) as business, s.title as "seatTitle"
       from seat_holder h join seat s on s.id = h.seat_id
         left join area a on a.id = s.area_id left join channel ch on ch.id = a.channel_id
       where h.kind = 'holder' and h.starts_on <= ${last}::date and (h.ends_on is null or h.ends_on >= ${first}::date)
@@ -420,9 +426,9 @@ export async function teamScores(db: Database, me: Me, asked: { month?: string; 
   const { seatIds } = await teamSeats(db, me, asked.unitId ?? null);
   const day = month === today.slice(0, 7) ? today : lastOf(month);
   const seats = seatIds.length
-    ? await rows<{ seatId: number; title: string; area: string | null; unit: string; module: string; lead: boolean; channel: string | null; personId: number | null; name: string | null }>(
+    ? await rows<{ seatId: number; title: string; area: string | null; unit: string; module: string; lead: boolean; channel: string | null; business: string | null; personId: number | null; name: string | null }>(
         db,
-        sql`select s.id::int as "seatId", s.title, a.name as area, u.name as unit, s.module, s.lead, ch.code as channel,
+        sql`select s.id::int as "seatId", s.title, a.name as area, u.name as unit, s.module, s.lead, ch.code as channel, seat_business_channel(s.id) as business, s.title as "seatTitle",
             h.person_id::int as "personId", p.name
           from seat s join org_unit u on u.id = s.unit_id left join area a on a.id = s.area_id left join channel ch on ch.id = a.channel_id
             left join lateral (select x.person_id from seat_holder x where x.seat_id = s.id and x.kind = 'holder' and ${inForce("x", day)}
@@ -490,9 +496,9 @@ export async function answerDispute(db: Database, me: Me, id: number, input: { u
  *  plan (below 60 two locked months running). Leads' own team cards are left out. */
 export async function scoreNeeds(db: Database, seatIds: number[], today: string): Promise<TeamNeed[]> {
   if (!seatIds.length) return [];
-  const held = await rows<{ seatId: number; personId: number; name: string; module: string; lead: boolean; channel: string | null }>(
+  const held = await rows<{ seatId: number; personId: number; name: string; module: string; lead: boolean; channel: string | null; business: string | null }>(
     db,
-    sql`select distinct on (h.person_id) s.id::int as "seatId", h.person_id::int as "personId", p.name, s.module, s.lead, ch.code as channel
+    sql`select distinct on (h.person_id) s.id::int as "seatId", h.person_id::int as "personId", p.name, s.module, s.lead, ch.code as channel, seat_business_channel(s.id) as business, s.title as "seatTitle"
       from seat s join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)}
         join person p on p.id = h.person_id
         left join area a on a.id = s.area_id left join channel ch on ch.id = a.channel_id

@@ -126,7 +126,9 @@ export function MedrepHome() {
   if (!me) return null;
   const hospital = me.channel?.code === "HOSP";
   const rx = me.channel?.code === "RX";
-  const telesales = me.channel?.code === "TS";
+  // Telesales by their box on the chart: oncology (Prescription) or anesthesia (Hospital Division).
+  const telesales = me.channel?.code === "TS" && me.business === "RX";
+  const anesthesia = me.channel?.code === "TS" && me.business === "HOSP";
   const b2b = b2bRole(me);
   const data = kpis.data;
   const sales = mine.data?.sales;
@@ -156,8 +158,8 @@ export function MedrepHome() {
       </div>
 
       {/* A Hospital CHC's day starts with the pulse and where to go first (docs/PLAN.md 16.1). */}
-      {hospital && <TodaysPulse />}
-      {hospital && <GoHereFirst />}
+      {(hospital || anesthesia) && <TodaysPulse />}
+      {(hospital || anesthesia) && <GoHereFirst />}
       {/* An Rx CHC's day: the doctors, today's route, PAP (docs/PLAN.md 16.2). No sales target here. */}
       {rx && <RxHome />}
       {/* MD Telesales: the pulse, the groups waiting (15 minutes), the refills due. */}
@@ -168,7 +170,7 @@ export function MedrepHome() {
       {b2b === "crr" && <CrrHome />}
 
       {/* Today and this month at a glance: the two numbers asked most. */}
-      {!hospital && !rx && !telesales && !b2b && (
+      {!hospital && !anesthesia && !rx && !telesales && !b2b && (
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Figure
           label="Orders today"
@@ -506,11 +508,11 @@ export function MedrepHome() {
 
           <MyOrdersNow />
 
-          {hospital && <HuddleCard />}
+          {hospital && !/bidding/i.test(me.title ?? "") && <HuddleCard />}
           {!hospital && <ToCollectPanel />}
-          {!hospital && !rx && !telesales && !b2b && <ToCallPanel />}
+          {!hospital && !anesthesia && !rx && !telesales && !b2b && <ToCallPanel />}
 
-          {!hospital && !rx && !telesales && sales && sales.target !== null && sales.target > 0 && (
+          {!hospital && !anesthesia && !rx && !telesales && sales && sales.target !== null && sales.target > 0 && (
             <section className="rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs">
               <div className="flex items-baseline justify-between gap-2">
                 <h3 className="text-sm font-semibold tracking-tight text-slate-900">

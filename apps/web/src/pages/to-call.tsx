@@ -28,7 +28,7 @@ export function ToCallPage() {
   const own = me?.role === "medrep" || me?.role === "online";
   const [params, setParams] = useSearchParams();
   // MD Telesales start on the refills coming due; everyone else on the ones due now.
-  const state = (params.get("state") as ReorderState | null) ?? (me?.channel?.code === "TS" ? "soon" : "due");
+  const state = (params.get("state") as ReorderState | null) ?? (me?.channel?.code === "TS" && me.business === "RX" ? "soon" : "due");
   const area = params.get("area");
   const kind = params.get("kind");
   const query = useQuery({

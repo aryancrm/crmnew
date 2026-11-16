@@ -65,7 +65,7 @@ export function TeamSalesPage() {
   const whole = data.lead === null;
   const coach = me.role === "team_lead" && me.channel?.code === "HOSP";
   const mentor = me.role === "manager" && me.channel?.code === "HOSP";
-  const tsCoach = me.role === "team_lead" && me.channel?.code === "TS";
+  const tsCoach = me.role === "team_lead" && me.channel?.code === "TS" && me.business === "RX";
   const rxMentor = me.role === "manager" && me.channel?.code === "RX";
   const b2bHead = (me.role === "team_lead" || me.role === "manager") && me.channel?.code === "B2B";
   const current = data.today.slice(0, 7);
