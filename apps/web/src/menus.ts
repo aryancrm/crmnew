@@ -685,6 +685,20 @@ function ownDesk(me: Me): Space {
       };
     case "team_lead":
     case "manager":
+      // Modern Trade's COO (docs/PLAN.md 16.7): nobody under her; she looks after the chains.
+      if (me.role === "manager" && me.channel?.code === "MT")
+        return {
+          ...desk([
+            home,
+            { to: "/my/area", label: "Chains", icon: Building2, short: "Chains" },
+            { to: "/mt/listings", label: "Listings", icon: FileText },
+            folder("Orders", ClipboardList, orderStages("Sent back"), "Orders"),
+            { to: "/collections", label: "Collections", icon: HandCoins },
+            { to: "/targets", label: "Targets", icon: Target },
+          ]),
+          icon: Users,
+          cta: { ...newOrder, label: "New order" },
+        };
       // The Government Bidding Admin: approves bid prices, keeps the company's papers, the team's tenders.
       if (me.role === "team_lead" && me.channel?.code === "BID")
         return {

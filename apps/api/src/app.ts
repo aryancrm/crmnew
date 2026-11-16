@@ -44,6 +44,7 @@ import { speedRoutes } from "./speed/routes";
 import { b2bRoutes } from "./b2b/routes";
 import { b2cRoutes } from "./b2c/routes";
 import { clidpRoutes } from "./clidp/routes";
+import { mtRoutes } from "./mt/routes";
 import { tenderRoutes } from "./tenders/routes";
 import { rxRoutes } from "./rx/routes";
 import { scoreRoutes } from "./scores/routes";
@@ -276,6 +277,7 @@ export function createApp(db: Database, options: AppOptions) {
   b2bRoutes(app, db, signedIn);
   clidpRoutes(app, db, signedIn);
   tenderRoutes(app, db, signedIn);
+  mtRoutes(app, db, signedIn);
 
   return app;
 }

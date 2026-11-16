@@ -82,7 +82,7 @@ Sales admin: Kate Cagoyong. **Onco-Hema Division**:
   Jessa Domino (24/0); and people no longer on the chart: RENROSE (1,105/499), Pillow (130/100),
   Rachelle (87/53), KHAYZEE (28).
 
-Modern Trade (Mohan Jagessy), Digital Marketing, IT, In-licensing & Regulatory, HR, and Supply
+Modern Trade (Ms. Malou Jagonoy, Chief Operating Officer; corrected 17 Nov from the chart), Digital Marketing, IT, In-licensing & Regulatory, HR, and Supply
 chain, Operations & Finance are on the chart too; they sell to nobody.
 
 ## What this means for "whose customer is it"

@@ -51,6 +51,9 @@ export function seatWords(me: Person | null | undefined): Words {
     return { desk: "Government Account", customers: "hospitals", myCustomers: "My hospitals", toCall: "Hospitals to call" };
   if (me.channel?.code === "HOSP" && HOSPITAL[me.role])
     return { desk: HOSPITAL[me.role] as string, customers: "hospitals", myCustomers: "My hospitals", toCall: "Hospitals to call" };
+  // Modern Trade: the COO looks after the pharmacy chains herself.
+  if (me.channel?.code === "MT")
+    return { desk: "Modern Trade · COO", customers: "chains", myCustomers: "Chains", toCall: "Chains to call" };
   // Government Bidding (Sales and Marketing): its Admin, coachees and CHC.
   if (me.channel?.code === "BID")
     return { desk: me.role === "team_lead" ? "Government Bidding Admin" : "Government Bidding", customers: "agencies", myCustomers: "Agencies", toCall: "Agencies to call" };

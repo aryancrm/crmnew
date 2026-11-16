@@ -21,6 +21,7 @@ import { fillOrderSeats, projectOrg } from "./org/service";
 import { seedB2bTeam } from "./b2b/seed";
 import { seedClidp } from "./clidp/seed";
 import { seedB2cTeam } from "./b2c/seed";
+import { seedModernTrade } from "./mt/seed";
 import { seedRxTeam } from "./rx/seed";
 import { lockDue } from "./scores/service";
 import { seedHospitalBoxes } from "./sellers/seed";
@@ -61,6 +62,7 @@ if (process.env.SEED_DEMO === "1") {
   if (await seedB2bTeam(db, password)) console.log("database: B2B Telesales' demo people made");
   if (await seedClidp(db, password)) console.log("database: CLIDP's demo made");
   if (await seedBidding(db, password)) console.log("database: Government Bidding's demo made");
+  if (await seedModernTrade(db, password)) console.log("database: Modern Trade's demo made");
   if (await seedHospitalBoxes(db, password)) console.log("database: the Hospital Division's anesthesia telesales and government account made");
   if (await seedDemoAttendance(db)) console.log("database: two weeks of demo attendance made");
   // Older demo databases had invoices dated before their orders: put them right once.

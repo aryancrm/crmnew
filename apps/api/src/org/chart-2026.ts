@@ -133,5 +133,7 @@ export const CHART_2026: ChartUnit[] = [
       },
     ],
   },
-  { name: "Modern Trade", kind: "business", channel: "MT", seats: [{ title: "Chief Operating Officer – Modern Trade", module: "manager", lead: true }] },
+  // One person on the chart (Ms. Malou Jagonoy, COO), who looks after the pharmacy chains herself:
+  // her seat has the chains' area.
+  { name: "Modern Trade", kind: "business", channel: "MT", seats: [{ title: "Chief Operating Officer – Modern Trade", module: "manager", lead: true, area: "Modern Trade" }] },
 ];

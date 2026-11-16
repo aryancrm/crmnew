@@ -4674,3 +4674,13 @@ export type TenderDesk = {
   papersEnding: CompanyPaper[];
   canApprove: boolean;
 };
+
+/** Modern Trade's day: the chains, their money, their listings. */
+export type MtDay = {
+  today: string;
+  pace: number | null;
+  paceNote: string;
+  chains: CrrDay["accounts"];
+  owed: { total: number; rows: Collections["rows"] };
+  listings: { id: number; customerId: number; chain: string; medicine: string; branches: number; listed: boolean; since: string }[];
+};

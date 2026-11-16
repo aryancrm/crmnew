@@ -380,7 +380,22 @@ export const COMPANY_CHART: ChartBox = {
         },
       ],
     },
-    { name: "Modern Trade", checked: null, note: "Not read box by box yet.", seats: [] },
+    {
+      name: "Modern Trade",
+      checked: "17 Nov 2026",
+      note: "One person on the chart, nobody under her: she looks after the pharmacy chains herself.",
+      seats: [
+        {
+          title: "Chief Operating Officer (COO)",
+          people: ["Ms. Malou Jagonoy"],
+          work: ["Looks after the pharmacy chains: their listings, head-office orders, payment (about 60 days, net of deductions)"],
+          desk: "Modern Trade · COO",
+          screens: ["The chains (due / late against their own gap, Order)", "Money owed by chain", "Listings (medicines and branches)", "Collections", "Targets"],
+          status: "partly",
+          lead: true,
+        },
+      ],
+    },
     { name: "Digital Marketing Coaching Department", checked: null, note: "Not read box by box yet.", seats: [] },
     { name: "IT Division", checked: null, note: "Not read box by box yet.", seats: [] },
     { name: "In-licensing & Regulatory Department", checked: null, note: "Not read box by box yet.", seats: [] },
