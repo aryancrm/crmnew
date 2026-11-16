@@ -150,8 +150,8 @@ export async function bookDoc(db: Database, me: Me, kind: BookKind, id: number):
 // ------------------------------------------------------------------ vendors
 
 const vendorSelect = sql`select s.id::int as id, s.name, s.company_name as company, s.email, coalesce(s.phone, s.mobile) as phone, s.active,
-    coalesce((select sum(round(d.balance * d.fx_rate)) from book_doc d where d.supplier_id = s.id and d.kind = 'bill' and d.status not in ('void', 'draft')), 0)::bigint::float8 as payables,
-    coalesce((select sum(round(d.balance * d.fx_rate)) from book_doc d where d.supplier_id = s.id and d.kind in ('vendor_credit', 'vendor_payment') and d.status not in ('void', 'draft')), 0)::bigint::float8 as credits
+    (s.opening_payables + coalesce((select sum(round(d.balance * d.fx_rate)) from book_doc d where d.supplier_id = s.id and d.kind = 'bill' and d.status not in ('void', 'draft', 'pending_approval')), 0))::bigint::float8 as payables,
+    (s.opening_credits + coalesce((select sum(round(d.balance * d.fx_rate)) from book_doc d where d.supplier_id = s.id and d.kind in ('vendor_credit', 'vendor_payment') and d.status not in ('void', 'draft', 'pending_approval')), 0))::bigint::float8 as credits
   from supplier s`;
 
 export async function vendorList(db: Database, me: Me, asked: { view?: string; page?: number; perPage?: number; q?: string; sort?: string; dir?: string }): Promise<VendorList> {
@@ -220,7 +220,7 @@ export async function payables(db: Database, me: Me): Promise<{ total: number; d
         coalesce(sum(round(balance * fx_rate)) filter (where due_date = ${today}::date), 0)::bigint::float8 as "dueToday",
         coalesce(sum(round(balance * fx_rate)) filter (where due_date >= ${today}::date and due_date <= ${today}::date + 30), 0)::bigint::float8 as due30,
         coalesce(sum(round(balance * fx_rate)) filter (where due_date < ${today}::date), 0)::bigint::float8 as overdue
-      from book_doc where kind = 'bill' and balance > 0 and status not in ('void', 'draft')`,
+      from book_doc where kind = 'bill' and balance > 0 and status not in ('void', 'draft', 'pending_approval')`,
   );
   return found ?? { total: 0, dueToday: 0, due30: 0, overdue: 0 };
 }

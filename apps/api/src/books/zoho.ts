@@ -511,6 +511,19 @@ export async function importVendors(db: Database, all: Row[], apply: boolean): P
     if (have) matched++;
     else made++;
     if (!apply) continue;
+    // Zoho has a few vendors twice under one name: the second record's data is kept on the first.
+    if (!have) {
+      const [twin] = await rows<{ id: number }>(db, sql`select id::int as id from supplier where lower(name) = lower(${name}) and zoho_id is not null and zoho_id <> ${zohoId}`);
+      if (twin) {
+        const record = { "Contact ID": zohoId, ...rest(row, columns, new Set()) };
+        await db.execute(
+          sql`update supplier set fields = jsonb_set(fields, '{Other Zoho records}',
+              coalesce(fields->'Other Zoho records', '[]'::jsonb) || ${JSON.stringify([record])}::jsonb)
+            where id = ${twin.id} and not coalesce(fields->'Other Zoho records', '[]'::jsonb) @> ${JSON.stringify([{ "Contact ID": zohoId }])}::jsonb`,
+        );
+        continue;
+      }
+    }
     const values = {
       company: said2(row, "Company Name"),
       email: said2(row, "EmailID"),
@@ -661,7 +674,7 @@ export async function linkDocs(db: Runner, docs: BookDocInput[], apply: boolean)
 
 const LIST_KEYS: Partial<Record<BookKind, { id: string; balance?: string; total?: string }>> = {
   purchase_order: { id: "purchaseorder_id", total: "total" },
-  purchase_receive: { id: "receive_id" },
+  purchase_receive: { id: "purchasereceive_id" },
   bill: { id: "bill_id", balance: "balance", total: "total" },
   // A payment's balance is what is not put on any bill yet (Zoho's "Unused Amount").
   vendor_payment: { id: "payment_id", balance: "balance", total: "amount" },
@@ -687,7 +700,8 @@ export async function refreshFromList(db: Database, kind: BookKind, items: Recor
     }
     updated++;
     if (!apply) continue;
-    const status = statusKey(str(item.status));
+    // A receive's own status is whether it was received (Zoho's list says "billed" once billed).
+    const status = statusKey(str(kind === "purchase_receive" ? (item.received_status ?? item.status) : item.status));
     const balance = keys.balance ? cents(item[keys.balance] as number) : null;
     const total = keys.total ? cents(item[keys.total] as number) : null;
     await db.execute(
@@ -696,4 +710,35 @@ export async function refreshFromList(db: Database, kind: BookKind, items: Recor
     );
   }
   return { seen: items.length, updated, notHere };
+}
+
+/** Each vendor's unused credits and payables that no document here explains (advances and opening
+ *  balances kept in Zoho Books), from Zoho's vendor list in pesos: kept as the vendor's opening
+ *  credits and payables, so each vendor's figures stay Zoho's own. */
+export async function openingCredits(db: Database, listed: Record<string, unknown>[], apply: boolean): Promise<{ vendors: number; credits: number; payables: number }> {
+  let vendors = 0;
+  let credits = 0;
+  let payables = 0;
+  for (const v of listed) {
+    const zohoId = str(v.contact_id);
+    if (!zohoId) continue;
+    const unused = cents((v.unused_credits_payable_amount_bcy ?? v.unused_credits_payable_amount) as number) ?? 0;
+    const owed = cents((v.outstanding_payable_amount_bcy ?? v.outstanding_payable_amount) as number) ?? 0;
+    const [found] = await rows<{ id: number; credits: number; payables: number }>(
+      db,
+      sql`select s.id::int as id,
+          coalesce((select sum(round(d.balance * d.fx_rate)) from book_doc d where d.supplier_id = s.id and d.kind in ('vendor_credit', 'vendor_payment') and d.status not in ('void', 'draft', 'pending_approval')), 0)::float8 as credits,
+          coalesce((select sum(round(d.balance * d.fx_rate)) from book_doc d where d.supplier_id = s.id and d.kind = 'bill' and d.status not in ('void', 'draft', 'pending_approval')), 0)::float8 as payables
+        from supplier s where s.zoho_id = ${zohoId}`,
+    );
+    if (!found) continue;
+    const openCredits = Math.max(0, unused - found.credits);
+    const openPayables = Math.max(0, owed - found.payables);
+    if (!openCredits && !openPayables) continue;
+    vendors++;
+    credits += openCredits;
+    payables += openPayables;
+    if (apply) await db.execute(sql`update supplier set opening_credits = ${openCredits}, opening_payables = ${openPayables} where id = ${found.id}`);
+  }
+  return { vendors, credits, payables };
 }

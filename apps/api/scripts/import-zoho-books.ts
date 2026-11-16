@@ -19,6 +19,7 @@ import {
   importVendorPeople,
   importVendors,
   linkDocs,
+  openingCredits,
   refreshFromList,
   type Row,
   saveDocs,
@@ -61,6 +62,23 @@ const vendors = await importVendors(db, [...rowsOf("Vendors.csv", ZOHO_DIR)], ap
 console.log("vendors", vendors);
 console.log("vendor people", await importVendorPeople(db, [...rowsOf("Vendor_Contact_Persons.csv", ZOHO_DIR)], apply));
 
+// Vendors added in Zoho after the backup, from Zoho's list.
+const listed = jsonlRaw("list_vendors").map((v) => ({
+  "Contact ID": String(v.contact_id ?? ""),
+  "Display Name": String(v.contact_name ?? ""),
+  "Contact Name": String(v.contact_name ?? ""),
+  "Company Name": String(v.company_name ?? ""),
+  EmailID: String(v.email ?? ""),
+  Phone: String(v.phone ?? ""),
+  MobilePhone: String(v.mobile ?? ""),
+  "Currency Code": String(v.currency_code ?? "PHP"),
+  Status: v.status === "inactive" ? "Inactive" : "Active",
+  "Created Time": String(v.created_time ?? ""),
+}));
+const known = new Set([...rowsOf("Vendors.csv", ZOHO_DIR)].map((row) => row["Contact ID"]));
+const newer = listed.filter((v) => v["Contact ID"] && !known.has(v["Contact ID"]));
+if (newer.length) console.log("vendors since the backup", await importVendors(db, newer, apply));
+
 const kinds: BookDocInput[][] = [];
 for (const file of ["Purchase_Order.csv", "Purchase_Receive.csv", "Bill.csv", "Vendor_Payment.csv"]) {
   const spec = CSV_SPECS[file];
@@ -93,5 +111,6 @@ for (const [name, kind] of [
   console.log(name, { seen: result.seen, updated: result.updated, notHere: result.notHere.length });
   if (result.notHere.length) writeFileSync(join(API_DIR, `missing_${kind}.json`), JSON.stringify(result.notHere));
 }
+console.log("vendors' opening credits", await openingCredits(db, jsonlRaw("list_vendors"), apply));
 console.log(`done in ${Math.round((Date.now() - t0) / 1000)}s`);
 process.exit(0);
