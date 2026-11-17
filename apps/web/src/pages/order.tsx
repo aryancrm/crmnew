@@ -641,7 +641,9 @@ export function Order() {
             {detail("Invoicing from", order.invoiceFromLabel)}
             {detail("Expected", order.expectedOn ? dayLabel(order.expectedOn) : null)}
             {detail("Raised by", order.raisedBy)}
-            {detail("Note", order.note)}
+            {detail("Source", order.source)}
+            {detail("Customer remarks", order.note)}
+            {order.stockReason && detail("Goes on though short", order.stockReason)}
           </div>
         </div>
 

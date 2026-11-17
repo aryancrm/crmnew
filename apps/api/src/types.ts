@@ -837,9 +837,13 @@ export type OrderItemInput = {
 export type OrderInput = {
   customerId: number;
   items: OrderItemInput[];
-  /** Pays in advance with no proof of payment attached: why. */
+  /** Placed with no proof of payment attached: why. */
   noProofReason?: NoProofReason | null;
   noProofNote?: string | null;
+  /** Where the order came from (the hub's Source list). */
+  source?: string | null;
+  /** Placed though a medicine is short on the shelf: why the MedRep goes on. */
+  stockReason?: string | null;
   /** An order for one patient (through a hospital or a doctor): the prescription and the ID
    *  are then checked as on a patient's own order. */
   patientOrder?: boolean;
@@ -1001,9 +1005,13 @@ export type OrderDetail = {
     licenceNo: string | null;
     licenceExpires: string | null;
     tin: string | null;
-    /** Pays in advance and placed with no proof: why (the MedRep's word). */
+    /** Placed with no proof of payment: why (the MedRep's word). */
     noProofReason: NoProofReason | null;
     noProofNote: string | null;
+    /** Where the order came from (the hub's Source list). */
+    source: string | null;
+    /** Placed though a medicine was short: why the MedRep went on. */
+    stockReason: string | null;
     /** Who approves it instead of Management (a PAP order's head), when someone does. */
     approverName: string | null;
     /** Finance's screenshots with the hold it is on now. */
@@ -4124,7 +4132,7 @@ export type PayRuleRow = {
 };
 
 /** Why an order paid in advance has no proof of payment yet. */
-export type NoProofReason = "payment_to_follow" | "paid_no_slip" | "other";
+export type NoProofReason = "on_terms" | "payment_to_follow" | "paid_no_slip" | "other";
 
 /** Orders a Finance person confirmed, over chosen days. */
 export type MyConfirmations = {

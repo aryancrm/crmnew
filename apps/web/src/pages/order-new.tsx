@@ -4,7 +4,13 @@
 // total, and what Management will see. A MedRep's order is always his own; Dispatch decides how
 // it goes out.
 
-import { DIVISIONS, PAYMENT_TERMS, SUB_DIVISIONS, subDivisionOfArea } from "@2mg/api/divisions";
+import {
+  DIVISIONS,
+  ORDER_SOURCES,
+  PAYMENT_TERMS,
+  SUB_DIVISIONS,
+  subDivisionOfArea,
+} from "@2mg/api/divisions";
 import { formatPhone } from "@2mg/api/phone";
 import type {
   Catalogue,
@@ -25,17 +31,23 @@ import {
   ArrowLeft,
   Camera,
   Check,
+  ClipboardCheck,
   FileCheck2,
   MapPin,
+  Megaphone,
   Minus,
+  Paperclip,
+  Pill,
   Plus,
   Search,
   TriangleAlert,
   Undo2,
   UserPlus,
+  UserRound,
+  Users,
   X,
 } from "lucide-react";
-import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { type FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { VAT_WORDS } from "../inventory/vat";
@@ -47,7 +59,7 @@ import { MedicineRequestDialog } from "../inventory/requests";
 import { avatarTone, initials } from "../look";
 import { OrderChecksBox } from "../orders/parts";
 import { PAPER_ACCEPT, uploadPaper } from "../photo";
-import { count, dayLabel, inPacks, PageState, peso, timeLabel, useAction } from "../ui";
+import { count, Dialog, dayLabel, inPacks, PageState, peso, timeLabel, useAction } from "../ui";
 
 /** The price a kind of customer usually gets. */
 const USUAL: Record<CustomerKind, string> = {
@@ -66,26 +78,54 @@ const FIELD =
   "h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 focus:outline-none";
 const FIELD_LABEL = "text-xs font-semibold text-slate-600";
 
-/** A step of the form, headed as the case's steps: a number tile and the step's name. */
-function StepHead({
+/** A part of the form as the hub draws it (Aryan, 17 Nov: simple like the hub): a white card
+ *  headed by its icon and "1. General". */
+function Part({
   number,
   title,
+  icon: Icon,
   aside,
+  children,
 }: {
   number: number;
   title: string;
+  icon: typeof Pill;
   aside?: React.ReactNode;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-2.5">
-      <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-slate-100 text-xs font-bold text-slate-700">
-        {number}
-      </span>
-      <h2 className="min-w-0 flex-1 text-sm font-bold text-slate-900">{title}</h2>
-      {aside}
-    </div>
+    <section className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3">
+        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-tint text-brand">
+          <Icon className="size-4" aria-hidden="true" />
+        </span>
+        <h2 className="min-w-0 flex-1 text-[15px] font-semibold text-ink">
+          {number}. {title}
+        </h2>
+        {aside}
+      </div>
+      {children}
+    </section>
   );
 }
+
+/** A field's name as the hub writes it: small capitals, a star when it is needed. */
+function Label({ text, needed }: { text: string; needed?: boolean }) {
+  return (
+    <span className="text-[11px] font-semibold tracking-wide text-ink uppercase">
+      {text}
+      {needed && <span className="text-bad"> *</span>}
+    </span>
+  );
+}
+const HELP = "text-[11px] text-ink-2";
+/** Dispatch's word about a medicine, as its stock news says it. */
+const NEWS_WORDS: Record<string, string> = {
+  out: "Dispatch: out of stock",
+  low: "Dispatch: low stock",
+  back: "Dispatch: back in stock",
+  note: "Dispatch",
+};
 
 type Line = {
   key: number;
@@ -126,6 +166,7 @@ type Draft = {
   division?: string;
   subDivision?: string;
   paymentTerm?: string;
+  source?: string;
 };
 const draftKey = (personId: number) => `crm:draft:order:${personId}`;
 const readDraft = (personId: number): Draft | null => {
@@ -242,7 +283,13 @@ export function OrderNew({
   const [receiverPhone, setReceiverPhone] = useState("");
   const [expectedOn, setExpectedOn] = useState("");
   const [customerPo, setCustomerPo] = useState("");
+  // The hub's "Customer remarks": what Management reads with the order (needed, as in the hub).
   const [note, setNote] = useState("");
+  // Where the order came from: the hub's Source list (needed).
+  const [source, setSource] = useState("");
+  // The hub's last step: a Confirm window, and "why are you proceeding?" when a medicine is short.
+  const [confirming, setConfirming] = useState(false);
+  const [stockReason, setStockReason] = useState("");
   const [invoiceFrom, setInvoiceFrom] = useState<InvoiceFrom>("2mg");
   const [doctor, setDoctor] = useState<{ id: number; name: string } | null>(null);
   const [findDoctor, setFindDoctor] = useState("");
@@ -306,6 +353,7 @@ export function OrderNew({
     if (draft.division !== undefined) setDivision(draft.division);
     if (draft.subDivision !== undefined) setSubDivision(draft.subDivision);
     if (draft.paymentTerm !== undefined) setPaymentTerm(draft.paymentTerm);
+    if (draft.source !== undefined) setSource(draft.source);
     setInvoiceFrom(draft.invoiceFrom);
     setDoctor(draft.doctor);
     restoredAddress.current = draft.address;
@@ -353,6 +401,8 @@ export function OrderNew({
     if (order.division) setDivision(order.division);
     if (order.subDivision) setSubDivision(order.subDivision);
     setPaymentTerm(order.paymentTerm ?? "");
+    setSource(order.source ?? "");
+    setStockReason(order.stockReason ?? "");
     setPatientOrder(order.patientOrder);
     setPatientName(order.patientName ?? "");
     setNoProof(order.noProofReason ?? "");
@@ -376,6 +426,7 @@ export function OrderNew({
       division: pickedDivision,
       subDivision: pickedSubDivision,
       paymentTerm,
+      source,
     };
     try {
       localStorage.setItem(draftKey(me.id), JSON.stringify(draft));
@@ -397,6 +448,7 @@ export function OrderNew({
     setExpectedOn("");
     setCustomerPo("");
     setNote("");
+    setSource("");
     setInvoiceFrom("2mg");
     setDoctor(null);
     setPapers({});
@@ -413,6 +465,8 @@ export function OrderNew({
           : [picked.address, picked.city].filter(Boolean).join(", ")),
     );
     restoredAddress.current = null;
+    // On credit or cash on delivery there is no slip yet: the hub's first reason says so.
+    if (picked.paymentTerms !== "advance") setNoProof((now) => now || "on_terms");
   }, [picked]);
 
   const medicines = catalogue.data?.rows ?? [];
@@ -587,23 +641,66 @@ export function OrderNew({
   if (!catalogue.data || !stock.data)
     return <PageState query={catalogue.data ? stock : catalogue} what="the medicines" />;
 
-  const proofMissing = picked?.paymentTerms === "advance" && !papers.payment_proof;
+  // The field says why there is no proof of payment on any order (the hub's rule; Management
+  // doesn't). A customer on credit or cash on delivery starts as "on payment terms".
+  const asksProof = !management && !(me && ["management", "admin"].includes(me.role));
+  const proofMissing = asksProof && !papers.payment_proof;
   const forPatient = picked?.kind === "patient" || patientOrder;
+  // What a sent-back order already has on file counts (its prescription stays on the order).
+  const onFile = new Set((fixing.data?.papers ?? []).map((paper) => paper.kind));
+  const shortLines = lines.filter((line) => {
+    const row = byId.get(line.medicineId);
+    return row ? line.qty > row.free : false;
+  });
+  // What still keeps the order from going (the hub's "Missing: …"): Management changing an
+  // order isn't held by it.
+  const missing: string[] = management
+    ? []
+    : [
+        ...(customerId ? [] : ["Customer"]),
+        ...(pickedDivision ? [] : ["Division"]),
+        ...(address.trim() ? [] : ["Delivery address"]),
+        ...(source ? [] : ["Source"]),
+        ...(note.trim() ? [] : ["Customer remarks"]),
+        ...(expectedOn ? [] : ["Date needed"]),
+        ...(lines.length ? [] : ["At least one medicine"]),
+        ...(lines.some((line) => !line.free && !withRelief && line.lower && !line.reason.trim())
+          ? ["Why the price is different"]
+          : []),
+        ...(patientOrder && picked?.kind !== "patient" && !patientName.trim()
+          ? ["The patient's name"]
+          : []),
+        ...(withRelief && !relief?.idNo.trim() ? ["SC / PWD ID number"] : []),
+        // Whenever a patient buys, the prescription goes with the order (Aryan, 17 Nov).
+        ...(forPatient && !papers.prescription && !onFile.has("prescription")
+          ? ["Prescription"]
+          : []),
+        ...(proofMissing &&
+        !onFile.has("payment_proof") &&
+        (!noProof || (noProof === "other" && !noProofNote.trim()))
+          ? ["Proof of payment (or why there is none)"]
+          : []),
+        ...(fixId && !answer.trim() ? ["Your answer to Management"] : []),
+      ];
   // A PAP MedRep's patient is paid by a guarantee letter: that starts as a PAP case, where the
   // quotation, the application, the letter and the claim are tracked.
   const papPatient =
     me?.role === "medrep" && me.channel?.code === "PAP" && picked?.kind === "patient";
-  async function submit(event: FormEvent) {
+  function submit(event: FormEvent) {
     event.preventDefault();
     if (papPatient && !fixId) {
       navigate("/pap?new=1");
       return;
     }
-    if (proofMissing && (!noProof || (noProof === "other" && !noProofNote.trim()))) {
-      setNoProofAsk(true);
-      document.getElementById("no-proof")?.scrollIntoView({ block: "center", behavior: "smooth" });
+    if (missing.length) {
+      if (missing.some((item) => item.startsWith("Proof of payment"))) setNoProofAsk(true);
       return;
     }
+    // Management changing an order saves at once; the field confirms what goes (the hub's window).
+    if (management) void place();
+    else setConfirming(true);
+  }
+  async function place() {
     let id = 0;
     const body: OrderInput = {
       customerId: customerId ?? 0,
@@ -637,6 +734,8 @@ export function OrderNew({
       patientName: picked?.kind !== "patient" && patientOrder ? patientName.trim() || null : null,
       noProofReason: proofMissing && noProof ? noProof : null,
       noProofNote: proofMissing && noProof ? noProofNote.trim() || null : null,
+      source: source || null,
+      stockReason: shortLines.length ? stockReason.trim() || null : null,
     };
     const done = await action.run(async () => {
       if (fixId) {
@@ -646,7 +745,10 @@ export function OrderNew({
         id = fixId;
       } else id = (await api<{ id: number }>("/api/orders", { body })).id;
     });
-    if (!done) return;
+    if (!done) {
+      setConfirming(false);
+      return;
+    }
     // The order is placed; now its papers. One that fails can be added again on the order.
     const failed: string[] = [];
     for (const [kind, file] of Object.entries(papers) as [PaperKind, File][]) {
@@ -681,7 +783,7 @@ export function OrderNew({
   const lineError = (index: number, name: string) => action.at(`items.${index}.${name}`);
 
   return (
-    <form onSubmit={submit} className="mx-auto flex max-w-3xl flex-col gap-5 pb-4">
+    <form onSubmit={submit} className="mx-auto flex max-w-4xl flex-col gap-4 pb-4">
       {papPatient && !fixId && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-4 py-3 text-[13px] text-slate-700">
           <span className="flex items-center gap-2">
@@ -702,13 +804,20 @@ export function OrderNew({
         >
           <ArrowLeft className="size-5" />
         </button>
-        <h1 className="flex-1 text-2xl font-bold tracking-tight text-ink">
-          {sentBack
-            ? `Fix order ${sentBack.code}`
-            : changing
-              ? `Change order ${changing.code}`
-              : "New order"}
-        </h1>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold tracking-tight text-ink">
+            {sentBack
+              ? `Fix order ${sentBack.code}`
+              : changing
+                ? `Change order ${changing.code}`
+                : "Create New Order"}
+          </h1>
+          <p className="text-sm text-ink-2">
+            {changing
+              ? "Change the medicines or details before you approve it."
+              : "Fill the five parts. Management approves it, then Finance and Dispatch take it on."}
+          </p>
+        </div>
         <button
           type="button"
           hidden={Boolean(fixId)}
@@ -767,23 +876,87 @@ export function OrderNew({
         />
       )}
 
-      {me?.role === "medrep" && (
-        <div className="flex items-center gap-2.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-xs text-slate-700 shadow-2xs">
-          <MapPin className="size-4 shrink-0" />
-          <span>
-            <span className="font-semibold">
-              {[me.name, me.channel?.code, me.area?.name].filter(Boolean).join(" · ")}
-            </span>{" "}
-            · your order, your area
-          </span>
+      {/* 1 · General: whose order, the day, the Division (the hub's first part) */}
+      <Part number={1} title="General" icon={UserRound}>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="flex flex-col gap-1">
+            <Label text="Order date" />
+            <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-ink">
+              {dayLabel(manilaToday())}
+            </div>
+          </div>
+          <div className="flex flex-col gap-1">
+            <Label text="MedRep" />
+            <div className="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-ink">
+              <MapPin className="size-4 shrink-0 text-ink-2" aria-hidden="true" />
+              <span className="truncate">
+                {changing || sentBack
+                  ? (changing ?? sentBack)?.medrep
+                  : [me?.name, me?.channel?.code, me?.area?.name].filter(Boolean).join(" · ")}
+              </span>
+            </div>
+            {me?.role === "medrep" && !fixId && (
+              <span className={HELP}>Your own account: the order is yours, in your area.</span>
+            )}
+          </div>
         </div>
-      )}
+        <div className="grid gap-3 sm:grid-cols-2">
+            <label className="flex flex-col gap-1">
+              <Label text="Division" needed />
+              <select
+                value={pickedDivision}
+                onChange={(event) => {
+                  setDivision(event.target.value);
+                  setSubDivision("");
+                }}
+                className={FIELD}
+              >
+                <option value="">-- Not set --</option>
+                {DIVISIONS.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex flex-col gap-1">
+              <Label text="Sub-division" />
+              {(SUB_DIVISIONS[pickedDivision] ?? []).length > 0 ? (
+                <select
+                  value={pickedSubDivision}
+                  onChange={(event) => setSubDivision(event.target.value)}
+                  className={FIELD}
+                >
+                  <option value="">-- Not set --</option>
+                  {[
+                    ...(pickedSubDivision &&
+                    !(SUB_DIVISIONS[pickedDivision] ?? []).includes(pickedSubDivision)
+                      ? [pickedSubDivision]
+                      : []),
+                    ...(SUB_DIVISIONS[pickedDivision] ?? []),
+                  ].map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  value={pickedSubDivision}
+                  onChange={(event) => setSubDivision(event.target.value.toUpperCase())}
+                  className={FIELD}
+                  placeholder="The area within the Division"
+                />
+              )}
+            </label>
+          </div>
+        <span className={HELP}>
+          Filled from your account; change it for this order if needed.
+        </span>
+      </Part>
 
-      {/* 1 · Customer */}
-      <section className="flex flex-col gap-2">
-        <div className="flex items-baseline justify-between">
-          <StepHead number={1} title="Customer" />
-        </div>
+      {/* 2 · Customer details: who buys, where it goes, how they pay (the hub's second part) */}
+      <Part number={2} title="Customer details" icon={Users}>
         {picked ? (
           <div className={`${BOX} flex flex-col gap-2.5`}>
             <div className="flex items-start gap-3">
@@ -990,65 +1163,37 @@ export function OrderNew({
             </ul>
           </div>
         )}
-      </section>
-
-      {/* 2 · Division and payment terms: what the field fills in, as the hub's order form asks it.
-          Management completes the rest when it checks the order. */}
-      <section className="flex flex-col gap-2">
-        <StepHead number={2} title="Division and payment terms" />
-        <div className={`${BOX} flex flex-col gap-3`}>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="flex flex-col gap-1">
-              <span className={FIELD_LABEL}>Division</span>
-              <select
-                value={pickedDivision}
-                onChange={(event) => {
-                  setDivision(event.target.value);
-                  setSubDivision("");
-                }}
-                className={FIELD}
-              >
-                <option value="">-- Not set --</option>
-                {DIVISIONS.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className={FIELD_LABEL}>Sub-division</span>
-              {(SUB_DIVISIONS[pickedDivision] ?? []).length > 0 ? (
-                <select
-                  value={pickedSubDivision}
-                  onChange={(event) => setSubDivision(event.target.value)}
-                  className={FIELD}
-                >
-                  <option value="">-- Not set --</option>
-                  {[
-                    ...(pickedSubDivision &&
-                    !(SUB_DIVISIONS[pickedDivision] ?? []).includes(pickedSubDivision)
-                      ? [pickedSubDivision]
-                      : []),
-                    ...(SUB_DIVISIONS[pickedDivision] ?? []),
-                  ].map((name) => (
-                    <option key={name} value={name}>
-                      {name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  value={pickedSubDivision}
-                  onChange={(event) => setSubDivision(event.target.value.toUpperCase())}
-                  className={FIELD}
-                  placeholder="The area within the Division"
-                />
-              )}
-            </label>
-          </div>
+        <div className="grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-1 sm:col-span-2">
+            <Label text="Delivery address" needed />
+            <textarea
+              rows={2}
+              value={address}
+              onChange={(event) => setAddress(event.target.value)}
+              className={`${FIELD} h-auto py-2`}
+              placeholder="Filled from the customer: change it if it goes elsewhere"
+            />
+          </label>
           <label className="flex flex-col gap-1">
-            <span className={FIELD_LABEL}>Payment terms agreed with the customer</span>
+            <Label text="Receiver name" />
+            <input
+              value={receiver}
+              onChange={(event) => setReceiver(event.target.value)}
+              className={FIELD}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <Label text="Receiver contact no." />
+            <input
+              type="tel"
+              value={receiverPhone}
+              onChange={(event) => setReceiverPhone(event.target.value)}
+              onBlur={(event) => setReceiverPhone(formatPhone(event.target.value) ?? "")}
+              className={FIELD}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <Label text="Payment terms" needed />
             <select
               value={paymentTerm}
               onChange={(event) => setPaymentTerm(event.target.value)}
@@ -1068,20 +1213,151 @@ export function OrderNew({
                 )}
             </select>
           </label>
+          <label className="flex flex-col gap-1">
+            <Label text="Source" needed />
+            <select
+              value={source}
+              onChange={(event) => setSource(event.target.value)}
+              className={FIELD}
+            >
+              <option value="">-- Where did the order come from? --</option>
+              {ORDER_SOURCES.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+            {action.at("source") && <span className="text-xs text-rose-700">{action.at("source")}</span>}
+          </label>
+          <label className="flex flex-col gap-1">
+            <Label text="Invoicing from" needed />
+            <select
+              value={invoiceFrom}
+              onChange={(event) => setInvoiceFrom(event.target.value as InvoiceFrom)}
+              className={FIELD}
+            >
+              <option value="2mg">2MG Inc.</option>
+              <option value="getmeds">GetMeds Philippines Inc.</option>
+            </select>
+            <span className={HELP}>The company the invoice is made under.</span>
+          </label>
+          <label className="flex flex-col gap-1">
+            <Label text={picked?.kind === "hospital" ? "Hospital PO number" : "Customer's PO number"} />
+            <input
+              value={customerPo}
+              onChange={(event) => setCustomerPo(event.target.value)}
+              className={FIELD}
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <Label text="Date needed" needed />
+            <input
+              type="date"
+              value={expectedOn}
+              min={manilaToday()}
+              onChange={(event) => setExpectedOn(event.target.value)}
+              className={FIELD}
+            />
+            {action.at("expectedOn") && (
+              <span className="text-xs text-rose-700">{action.at("expectedOn")}</span>
+            )}
+          </label>
+          <div className="flex flex-col gap-1 sm:col-span-2">
+            <Label text="Doctor (if any)" />
+            {doctor ? (
+              <div className="flex items-center justify-between gap-2 rounded-[10px] border border-slate-200 bg-slate-50 px-3 py-2 text-[13px]">
+                <span className="font-medium text-slate-900">{doctor.name}</span>
+                <button
+                  type="button"
+                  aria-label="Take the doctor off"
+                  onClick={() => setDoctor(null)}
+                  className="grid size-6 place-items-center rounded text-slate-400 hover:bg-slate-200 hover:text-slate-700"
+                >
+                  <X className="size-3.5" />
+                </button>
+              </div>
+            ) : (
+              <div className="relative">
+                <input
+                  value={findDoctor}
+                  onChange={(event) => setFindDoctor(event.target.value)}
+                  placeholder="Search a doctor"
+                  className={FIELD}
+                  aria-label="Search a doctor"
+                />
+                {(findDoctor.trim() ? (doctors.data?.rows ?? []) : (customer.data?.doctors ?? []))
+                  .length > 0 &&
+                  (findDoctor.trim() || picked?.kind === "hospital") && (
+                    <ul className="mt-1 flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                      {!findDoctor.trim() && (
+                        <li className="px-3 pt-2 text-[10px] font-semibold text-slate-400 uppercase">
+                          Doctors at this hospital
+                        </li>
+                      )}
+                      {(findDoctor.trim()
+                        ? (doctors.data?.rows ?? [])
+                        : (customer.data?.doctors ?? [])
+                      )
+                        .slice(0, 6)
+                        .map((row) => (
+                          <li key={row.id}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDoctor({ id: row.id, name: row.name });
+                                setFindDoctor("");
+                              }}
+                              className="w-full px-3 py-2 text-left text-[13px] hover:bg-slate-50"
+                            >
+                              <span className="font-semibold text-slate-900">{row.name}</span>
+                              {row.specialty && (
+                                <span className="text-slate-500"> · {row.specialty}</span>
+                              )}
+                            </button>
+                          </li>
+                        ))}
+                    </ul>
+                  )}
+              </div>
+            )}
+            {action.at("doctorId") && (
+              <span className="text-xs text-rose-700">{action.at("doctorId")}</span>
+            )}
+          </div>
+          <label className="flex flex-col gap-1 sm:col-span-2">
+            <Label text="Customer remarks" needed />
+            <textarea
+              rows={2}
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+              className={`${FIELD} h-auto py-2`}
+              placeholder="What the customer asked, anything Management should know"
+            />
+            <span className={HELP}>Management reads it with the order.</span>
+          </label>
         </div>
-      </section>
+      </Part>
 
-      {/* 3 · Medicines */}
-      <section className="flex flex-col gap-2">
-        <div className="flex items-baseline justify-between">
-          <StepHead number={3} title="Medicines" />
-          {picked && (
-            <span className="text-[11px] text-slate-500">
+      {/* 3 · Medicines: price from Inventory by the buyer's kind, VAT shown (the hub's third part) */}
+      <Part
+        number={3}
+        title="Medicines"
+        icon={Pill}
+        aside={
+          picked ? (
+            <span className="text-[11px] text-ink-2">
               {catalogue.data.buyerTypes.find((type) => type.key === USUAL[picked.kind])?.label}{" "}
               prices first
             </span>
-          )}
-        </div>
+          ) : undefined
+        }
+      >
+          <datalist id="promo-kinds">
+            {["Buy 1 Take 1", "Buy 2 Take 1", "Buy 10 Take 1", "Sample", "Promo"].map((name) => (
+              <option key={name} value={name} />
+            ))}
+          </datalist>
+
         <div className="relative">
           <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-slate-400" />
           <input
@@ -1358,6 +1634,21 @@ export function OrderNew({
                         ? `Nearest expiry ${monthYear(held.nearestExpiry)}`
                         : ""}
                   </div>
+                  {/* What Dispatch announced about this medicine (the hub showed it on the items). */}
+                  {(stock.data?.news ?? [])
+                    .filter((one) => one.medicineId === row.id)
+                    .map((one) => (
+                      <div
+                        key={one.id}
+                        className="flex items-start gap-1 text-[11px] font-medium text-amber-800"
+                      >
+                        <Megaphone className="mt-px size-3.5 shrink-0" aria-hidden="true" />
+                        <span>
+                          {NEWS_WORDS[one.kind]}
+                          {one.message ? `: ${one.message}` : ""} · {one.by}
+                        </span>
+                      </div>
+                    ))}
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1">
                   <span className="text-sm font-semibold text-slate-900 tabular-nums">
@@ -1536,151 +1827,10 @@ export function OrderNew({
             </div>
           );
         })}
-      </section>
+      </Part>
 
-      {/* 4 · Delivery and address */}
-      <section className="flex flex-col gap-2">
-        <StepHead number={4} title="Delivery and address" />
-        <div className={`${BOX} flex flex-col gap-3`}>
-          <datalist id="promo-kinds">
-            {["Buy 1 Take 1", "Buy 2 Take 1", "Buy 10 Take 1", "Sample", "Promo"].map((name) => (
-              <option key={name} value={name} />
-            ))}
-          </datalist>
-          <label className="flex flex-col gap-1">
-            <span className={FIELD_LABEL}>Customer needs it by</span>
-            <input
-              type="date"
-              value={expectedOn}
-              onChange={(event) => setExpectedOn(event.target.value)}
-              className={FIELD}
-            />
-            {action.at("expectedOn") && (
-              <span className="text-xs text-rose-700">{action.at("expectedOn")}</span>
-            )}
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className={FIELD_LABEL}>Deliver to</span>
-            <textarea
-              rows={2}
-              value={address}
-              onChange={(event) => setAddress(event.target.value)}
-              className={FIELD}
-            />
-          </label>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="flex flex-col gap-1">
-              <span className={FIELD_LABEL}>Receiver</span>
-              <input
-                value={receiver}
-                onChange={(event) => setReceiver(event.target.value)}
-                className={FIELD}
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className={FIELD_LABEL}>Receiver's number</span>
-              <input
-                type="tel"
-                value={receiverPhone}
-                onChange={(event) => setReceiverPhone(event.target.value)}
-                onBlur={(event) => setReceiverPhone(formatPhone(event.target.value) ?? "")}
-                className={FIELD}
-              />
-            </label>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <label className="flex flex-col gap-1">
-              <span className={FIELD_LABEL}>
-                {picked?.kind === "hospital"
-                  ? "Hospital PO number"
-                  : "Customer's PO number (if any)"}
-              </span>
-              <input
-                value={customerPo}
-                onChange={(event) => setCustomerPo(event.target.value)}
-                className={FIELD}
-              />
-            </label>
-            <label className="flex flex-col gap-1">
-              <span className={FIELD_LABEL}>Invoice from</span>
-              <select
-                value={invoiceFrom}
-                onChange={(event) => setInvoiceFrom(event.target.value as InvoiceFrom)}
-                className={FIELD}
-              >
-                <option value="2mg">2MG Inc.</option>
-                <option value="getmeds">GetMeds Philippines Inc.</option>
-              </select>
-            </label>
-          </div>
-          <div className="flex flex-col gap-1">
-            <span className={FIELD_LABEL}>Doctor (if any)</span>
-            {doctor ? (
-              <div className="flex items-center justify-between gap-2 rounded-[10px] border border-slate-200 bg-slate-50 px-3 py-2 text-[13px]">
-                <span className="font-medium text-slate-900">{doctor.name}</span>
-                <button
-                  type="button"
-                  aria-label="Take the doctor off"
-                  onClick={() => setDoctor(null)}
-                  className="grid size-6 place-items-center rounded text-slate-400 hover:bg-slate-200 hover:text-slate-700"
-                >
-                  <X className="size-3.5" />
-                </button>
-              </div>
-            ) : (
-              <div className="relative">
-                <input
-                  value={findDoctor}
-                  onChange={(event) => setFindDoctor(event.target.value)}
-                  placeholder="Search a doctor"
-                  className={FIELD}
-                  aria-label="Search a doctor"
-                />
-                {(findDoctor.trim() ? (doctors.data?.rows ?? []) : (customer.data?.doctors ?? []))
-                  .length > 0 &&
-                  (findDoctor.trim() || picked?.kind === "hospital") && (
-                    <ul className="mt-1 flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-                      {!findDoctor.trim() && (
-                        <li className="px-3 pt-2 text-[10px] font-semibold text-slate-400 uppercase">
-                          Doctors at this hospital
-                        </li>
-                      )}
-                      {(findDoctor.trim()
-                        ? (doctors.data?.rows ?? [])
-                        : (customer.data?.doctors ?? [])
-                      )
-                        .slice(0, 6)
-                        .map((row) => (
-                          <li key={row.id}>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setDoctor({ id: row.id, name: row.name });
-                                setFindDoctor("");
-                              }}
-                              className="w-full px-3 py-2 text-left text-[13px] hover:bg-slate-50"
-                            >
-                              <span className="font-semibold text-slate-900">{row.name}</span>
-                              {row.specialty && (
-                                <span className="text-slate-500"> · {row.specialty}</span>
-                              )}
-                            </button>
-                          </li>
-                        ))}
-                    </ul>
-                  )}
-              </div>
-            )}
-            {action.at("doctorId") && (
-              <span className="text-xs text-rose-700">{action.at("doctorId")}</span>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* 4 · Papers */}
-      <section className="flex flex-col gap-2">
-        <StepHead number={5} title="Papers" />
+      {/* 4 · Documents: proof of payment or why not, the prescription, the customer's papers */}
+      <Part number={4} title="Documents" icon={Paperclip}>
         {picked && picked.kind !== "patient" && (
           <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <span className="text-[13px] font-semibold text-slate-900">
@@ -1731,22 +1881,27 @@ export function OrderNew({
             )
             .map((paper) => {
               const file = papers[paper.kind];
-              const notNeeded =
-                paper.kind === "payment_proof" && picked && picked.paymentTerms !== "advance"
-                  ? picked.paymentTerms === "cod"
-                    ? "Not needed · pays on delivery"
-                    : `Not needed · pays in ${picked.paymentDays} days`
-                  : null;
+              const already = onFile.has(paper.kind);
+              // Whenever a patient buys, the prescription is needed (Aryan, 17 Nov).
+              const needed = paper.kind === "prescription" && forPatient;
               return (
                 <div
                   key={paper.kind}
                   className="flex min-h-13 items-center justify-between gap-3 border-b border-slate-100 px-4 py-2 last:border-b-0"
                 >
                   <div className="min-w-0">
-                    <div className="text-[13px] text-slate-900">{paper.label}</div>
-                    {paper.kind === "payment_proof" &&
-                      picked?.paymentTerms === "advance" &&
-                      !file && (
+                    <div className="text-[13px] text-slate-900">
+                      {paper.label}
+                      {needed && !file && !already && (
+                        <span className="ml-2 rounded bg-bad-tint px-1.5 py-0.5 text-[10px] font-semibold text-bad">
+                          Needed
+                        </span>
+                      )}
+                      {already && !file && (
+                        <span className="ml-2 text-[11px] text-good">On the order already</span>
+                      )}
+                    </div>
+                    {paper.kind === "payment_proof" && asksProof && !file && !already && (
                         <div id="no-proof" className="mt-1 flex flex-wrap items-center gap-2">
                           <select
                             aria-label="Why there is no proof yet"
@@ -1757,7 +1912,7 @@ export function OrderNew({
                             }}
                             className={`h-8 rounded-lg border bg-white px-2 text-xs ${noProofAsk && !noProof ? "border-rose-400" : "border-slate-200"}`}
                           >
-                            <option value="">No slip yet? Say why…</option>
+                            <option value="">No proof of payment? Say why…</option>
                             {NO_PROOF_REASONS.map((one) => (
                               <option key={one.value} value={one.value}>
                                 {one.label}
@@ -1804,8 +1959,6 @@ export function OrderNew({
                         <X className="size-3.5" />
                       </button>
                     </div>
-                  ) : notNeeded ? (
-                    <span className="text-xs text-slate-500">{notNeeded}</span>
                   ) : (
                     <label className="inline-flex h-10 cursor-pointer items-center gap-1.5 rounded-lg px-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50">
                       <Camera className="size-4" /> Add photo
@@ -1825,28 +1978,12 @@ export function OrderNew({
               );
             })}
         </div>
-      </section>
+      </Part>
 
-      {/* 4 · Note */}
-      <section className="flex flex-col gap-2">
-        <label htmlFor="order-note" className="flex items-center gap-2.5">
-          <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-slate-100 text-xs font-bold text-slate-700">
-            6
-          </span>
-          <span className="text-sm font-bold text-slate-900">Note for Management</span>
-        </label>
-        <textarea
-          id="order-note"
-          rows={2}
-          value={note}
-          onChange={(event) => setNote(event.target.value)}
-          className={FIELD}
-          placeholder="Anything they should know"
-        />
-      </section>
-
+      {/* 5 · Review and place: what is missing, then the hub's Confirm window */}
+      <Part number={5} title="Review and place" icon={ClipboardCheck}>
       {lines.length > 0 && (
-        <div className={`${BOX} flex flex-col gap-1.5 text-[13px]`}>
+        <div className="flex flex-col gap-1.5 rounded-lg bg-slate-50 px-4 py-3 text-[13px]">
           <div className="flex justify-between">
             <span className="text-slate-500">
               Subtotal, {lines.length} {lines.length === 1 ? "medicine" : "medicines"}
@@ -1923,6 +2060,19 @@ export function OrderNew({
           {action.problem.message}
         </div>
       )}
+      {missing.length > 0 ? (
+        <div className="rounded-lg border border-bad/20 bg-bad-tint px-3.5 py-2.5 text-[13px] text-bad">
+          <b>Missing:</b> {missing.join(", ")}
+        </div>
+      ) : (
+        !management && (
+          <div className="flex items-center gap-2 text-[13px] text-good">
+            <Check className="size-4" aria-hidden="true" /> Everything needed is filled. Place it to
+            see the summary first.
+          </div>
+        )
+      )}
+      </Part>
 
       <div className="sticky bottom-16 z-10 -mx-4 flex items-center gap-4 border-t border-slate-200 bg-white px-4 py-3 md:bottom-0 md:mx-0 md:rounded-2xl md:border md:shadow-sm">
         <div className="flex flex-col">
@@ -1931,7 +2081,8 @@ export function OrderNew({
         </div>
         <button
           type="submit"
-          disabled={action.busy}
+          disabled={action.busy || missing.length > 0}
+          title={missing.length ? `Missing: ${missing.join(", ")}` : undefined}
           className="h-12 flex-1 rounded-2xl bg-brand text-base font-semibold text-white shadow-sm transition-colors hover:bg-brand-dark disabled:opacity-50"
         >
           {action.busy
@@ -1947,6 +2098,108 @@ export function OrderNew({
                   : "Place order"}
         </button>
       </div>
+
+      {confirming && (
+        // The hub's Confirm window: what goes, before it goes. A medicine short on the shelf asks
+        // "why are you proceeding?" (Management and Dispatch read the answer).
+        <Dialog
+          title={fixId ? "Send it to Management again?" : "Place this order?"}
+          sub={picked?.name}
+          onClose={() => setConfirming(false)}
+          busy={action.busy}
+        >
+          <div className="flex flex-col gap-3 text-[13px]">
+            <dl className="grid grid-cols-[8rem_1fr] gap-x-3 gap-y-1">
+              {(
+                [
+                  ["Customer", picked ? `${picked.name}${kindLabel ? ` · ${kindLabel}` : ""}` : ""],
+                  ["Division", [pickedDivision, pickedSubDivision].filter(Boolean).join(" · ")],
+                  ["Pays", paymentTerm || terms],
+                  ["Source", source],
+                  ["Date needed", expectedOn ? dayLabel(expectedOn) : ""],
+                  ["Deliver to", address],
+                  ["Invoicing from", invoiceFrom === "2mg" ? "2MG Inc." : "GetMeds Philippines Inc."],
+                  [
+                    "Documents",
+                    [
+                      ...Object.entries(papers)
+                        .filter(([, file]) => file)
+                        .map(([kind]) => PAPERS.find((paper) => paper.kind === kind)?.label ?? kind),
+                      ...(proofMissing && noProof && !papers.payment_proof
+                        ? [`no proof: ${NO_PROOF_REASONS.find((one) => one.value === noProof)?.label}`]
+                        : []),
+                    ].join(", ") || "None",
+                  ],
+                ] as const
+              ).map(([label, value]) => (
+                <Fragment key={label}>
+                  <dt className="text-ink-2">{label}</dt>
+                  <dd className="text-ink">{value || "—"}</dd>
+                </Fragment>
+              ))}
+            </dl>
+            <ul className="flex flex-col divide-y divide-slate-100 rounded-lg border border-slate-200">
+              {lines.map((line) => {
+                const row = byId.get(line.medicineId);
+                return (
+                  <li key={line.key} className="flex justify-between gap-3 px-3 py-1.5">
+                    <span className="min-w-0 truncate">
+                      {[row?.name, row?.strength].filter(Boolean).join(" ")} × {count(line.qty)}
+                      {line.free ? " (free)" : ""}
+                    </span>
+                    <span className="shrink-0 tabular-nums">{peso(line.qty * eachOf(line))}</span>
+                  </li>
+                );
+              })}
+              <li className="flex justify-between px-3 py-1.5 font-semibold">
+                <span>Total</span>
+                <span className="tabular-nums">{peso(total)}</span>
+              </li>
+            </ul>
+            {shortLines.length > 0 && (
+              <label className="flex flex-col gap-1 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <span className="font-semibold text-amber-900">
+                  Short on the shelf:{" "}
+                  {shortLines
+                    .map((line) => [byId.get(line.medicineId)?.name, byId.get(line.medicineId)?.strength].filter(Boolean).join(" "))
+                    .join(", ")}
+                  . Why are you proceeding?
+                </span>
+                <textarea
+                  rows={2}
+                  value={stockReason}
+                  onChange={(event) => setStockReason(event.target.value)}
+                  className={`${FIELD} h-auto py-2`}
+                  placeholder="e.g. The hospital waits for the next delivery"
+                  autoFocus
+                />
+                <span className="text-[11px] text-amber-800">Management and Dispatch read it.</span>
+              </label>
+            )}
+            <div className="text-ink-2">
+              Management checks it first, then Finance and Dispatch. You are told at each step.
+            </div>
+            <div className="flex justify-end gap-2 border-t border-slate-100 pt-3">
+              <button
+                type="button"
+                onClick={() => setConfirming(false)}
+                disabled={action.busy}
+                className="h-10 rounded-lg px-4 text-sm font-semibold text-ink-2 hover:bg-slate-100"
+              >
+                Go back
+              </button>
+              <button
+                type="button"
+                onClick={() => void place()}
+                disabled={action.busy || (shortLines.length > 0 && !stockReason.trim())}
+                className="h-10 rounded-lg bg-brand px-5 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
+              >
+                {action.busy ? "Placing…" : fixId ? "Send to Management" : "Confirm and place"}
+              </button>
+            </div>
+          </div>
+        </Dialog>
+      )}
 
       {adding && customers.data && (
         <CustomerDialog

@@ -1913,6 +1913,10 @@ on the local copy (database copied first, put back after), with what was seen wr
 23. **Businesses filed as patients**: 93 customers named like businesses (pharma, trading,
     medical…) are kind "patient" from the Zoho import; with the Rx rule their orders would wait
     for a prescription. List in `.data/lists/patients-that-look-like-businesses.csv` for the heads.
+24. **Delivery method on the order form**: the hub's MedRep picks it (Lalamove, pick-up…); crmnew
+    keeps your 14 Nov rule that the MedRep doesn't choose delivery and Dispatch picks it when it
+    ships. Keep it with Dispatch? (Likewise the hub let a MedRep raise an order for another MedRep;
+    crmnew keeps "a MedRep places only his own".)
 
 ## 14. Change log
 
@@ -2382,4 +2386,20 @@ on the local copy (database copied first, put back after), with what was seen wr
   in its tiles. Checked and fine: prices come from the 2026 price list (cost hidden from MedRep and
   Dispatch, the same prices for every other role), the history of a hospital from Zoho (orders,
   prices given, dues). Questions 17–23 written for Aryan. 359 tests green.
+- 17 Nov (85), plan 19 step B, part 1 (Aryan: start B): **the order form in the hub's five parts**,
+  each a white card with its icon — 1 General (order date, MedRep, Division, Sub-division),
+  2 Customer details (customer, delivery address, receiver, payment terms, **Source** from the
+  hub's list of 13, invoicing from, PO, date needed, doctor, **Customer remarks**), 3 Medicines
+  (price by the buyer's kind, VAT and Rx shown, SC/PWD, Dispatch's stock notes on each line),
+  4 Documents (a patient's **prescription marked Needed**; **no proof of payment → say why** on
+  every order the field places, a credit or COD customer starting as "Customer is on payment
+  terms"), 5 Review and place (**"Missing: …"** keeps Place order off: customer, Division, address,
+  Source, remarks, date, a medicine, a different price's reason, the patient's name, the SC/PWD ID,
+  the prescription, the proof or why; then the hub's **Confirm window** with everything that goes,
+  and "**Why are you proceeding?**" when a medicine is short). The order keeps its Source and the
+  short-stock answer (migration 0084); the order page shows Source, Customer remarks and "Goes on
+  though short". Walked as Ryan (DE OCAMPO, AmiGet 3,500 with 552 short → Confirm → placed, the order
+  page showing it all; a patient order missing its prescription) on a copy of the local database.
+  Next (B part 2): Buy 1 Take 1 added by itself (with the price book's promos) and the new-customer
+  form with a hospital's TIN, LTO and BIR 2303 / LTO / business permit papers. Question 24 written.
 

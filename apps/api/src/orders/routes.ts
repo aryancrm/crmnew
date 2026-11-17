@@ -10,6 +10,7 @@ import { orderPrices } from "../customers/prices";
 import { customerUpdate, noteSent, tellCustomer } from "../online/tell";
 import type { OrderAction, OrderDetailsInput, OrderInput, OrderRevision } from "../types";
 import { companyKpis } from "./company-kpis";
+import { ORDER_SOURCES } from "./divisions";
 import { myKpis } from "./my-kpis";
 import { ORDER_PLACE_ROLES } from "./rules";
 import { salesOrderRoutes } from "./sales-order";
@@ -89,8 +90,12 @@ const orderInput = z.object({
   subDivision: optional(60),
   paymentTerm: optional(60),
   noProofReason: z
-    .enum(["payment_to_follow", "paid_no_slip", "other"], { error: "Pick why there is no proof." })
+    .enum(["on_terms", "payment_to_follow", "paid_no_slip", "other"], {
+      error: "Pick why there is no proof.",
+    })
     .nullish(),
+  source: z.enum(ORDER_SOURCES, { error: "Pick where the order came from." }).nullish(),
+  stockReason: optional(300),
   noProofNote: optional(300),
   patientOrder: z.boolean().optional(),
   patientName: optional(120),

@@ -132,3 +132,20 @@ export function termsOfLabel(label: string): {
   if (/end of the month|^net$|initial stocking/.test(text)) return { terms: "days", days: 30 };
   return { terms: "days", days: 60 };
 }
+
+/** Where an order came from: the hub's Source list, asked on every order the field places. */
+export const ORDER_SOURCES = [
+  "Doctor order",
+  "Patient order referred by doctor",
+  "Patient order referred by patient",
+  "Emergency purchase",
+  "Hospital PO",
+  "Distributor order",
+  "Bidding Order",
+  "B2C Order",
+  "PCSO",
+  "IAPF",
+  "DSWD",
+  "Office of the President",
+  "Digital Marketing",
+] as const;

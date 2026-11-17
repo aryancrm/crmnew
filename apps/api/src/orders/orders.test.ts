@@ -183,6 +183,27 @@ describe("placing an order", () => {
     expect((await place("fiona", { customerId: hospital, items: [line()] })).status).toBe(403);
   });
 
+  it("keeps the hub's Source, the reason there is no proof, and why it goes on short", async () => {
+    const made = await place("ryan", {
+      customerId: hospital,
+      items: [line({ qty: medicine.stock + 50 })],
+      source: "Hospital PO",
+      note: "For the OR",
+      noProofReason: "on_terms",
+      stockReason: "They take what is there and wait for the rest",
+    });
+    expect(made.status).toBe(200);
+    expect((await order("sarla", made.body.id)).order).toMatchObject({
+      source: "Hospital PO",
+      noProofReason: "on_terms",
+      stockReason: "They take what is there and wait for the rest",
+    });
+    // Only the hub's list.
+    expect(
+      (await place("ryan", { customerId: hospital, items: [line()], source: "Walk-in" })).status,
+    ).toBe(400);
+  });
+
   it("Management's own order skips the queue", async () => {
     const made = await place("sarla", { customerId: hospital, items: [line()] });
     const detail = await order("sarla", made.body.id);

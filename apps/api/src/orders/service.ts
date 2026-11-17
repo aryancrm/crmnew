@@ -1248,6 +1248,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         coalesce(c.licence_expires < (now() at time zone 'Asia/Manila')::date, false) as "licenceExpired",
         c.licence_no as "licenceNo", ${day("c.licence_expires")} as "licenceExpires", c.tin,
         o.no_proof_reason as "noProofReason", o.no_proof_note as "noProofNote", ${approverSql} as "approverId",
+        o.source, o.stock_reason as "stockReason",
         (select ap.name from person ap where ap.id = ${approverSql}) as "approverName",
         (o.finance_checked_by = ${me.id} and o.status = 'ready_for_dispatch' and coalesce(o.points_used, 0) = 0
           and now() - o.finance_checked_at <= interval '90 seconds') as undoable,
@@ -1817,7 +1818,8 @@ export async function placeOrder(
       sql`insert into sales_order (customer_id, medrep_id, raised_by, channel_id, status, payment_terms, payment_days,
           delivery_address, receiver, receiver_phone, note, expected_on, customer_po, invoice_from, doctor_id, total, submitted_at,
           approved_at, approved_by, warehouse_id, lead_id, delivery_fee, division, sub_division, payment_term,
-          no_proof_reason, no_proof_note, patient_order, patient_name, relief_kind, relief_id_no, relief_name)
+          no_proof_reason, no_proof_note, patient_order, patient_name, relief_kind, relief_id_no, relief_name,
+          source, stock_reason)
         values (${customer.id}, ${holder?.id ?? me.id}, ${me.id}, ${holder?.channelId ?? own?.channelId ?? null}, ${status},
           ${terms.terms}, ${terms.days},
           ${clean(input.deliveryAddress) ?? withCity(customer.address, customer.city)},
@@ -1826,7 +1828,8 @@ export async function placeOrder(
           ${orderDivision}, ${subDivision || null}, ${paymentTerm},
           ${input.noProofReason ?? null}, ${clean(input.noProofNote)}, ${Boolean(input.patientOrder) && customer.kind !== "patient"},
           ${input.patientOrder && customer.kind !== "patient" ? clean(input.patientName) : null},
-          ${relief?.kind ?? null}, ${relief?.idNo ?? null}, ${relief?.name ?? null})
+          ${relief?.kind ?? null}, ${relief?.idNo ?? null}, ${relief?.name ?? null},
+          ${input.source ?? null}, ${clean(input.stockReason)})
         returning id::int as id`,
     );
     const id = made?.id as number;
@@ -2421,6 +2424,7 @@ export async function reviseOrder(
               ? sql``
               : sql`status = 'pending_approval', flag_reason = null, submitted_at = now(), reply = ${answer},
             no_proof_reason = ${input.noProofReason ?? null}, no_proof_note = ${clean(input.noProofNote)},
+            source = coalesce(${input.source ?? null}, source), stock_reason = ${clean(input.stockReason)},
             patient_order = ${Boolean(input.patientOrder)}, patient_name = ${input.patientOrder ? clean(input.patientName) : null},`
           }
           updated_at = now()
