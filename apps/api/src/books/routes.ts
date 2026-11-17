@@ -19,6 +19,7 @@ import {
   setOrderStatus,
   voidDoc,
 } from "./actions";
+import { accountDetail, accountList, banking } from "./accounts";
 import { customerDetail, customerList } from "./customers";
 import { itemDetail, itemList, priceLists } from "./items";
 import { bookDoc, bookFile, bookList, isBookKind, payables, vendorDetail, vendorList } from "./service";
@@ -54,6 +55,17 @@ export function bookRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHan
     });
   });
   app.get("/api/books/bill/payables", async (c) => c.json(await payables(db, c.get("me"))));
+  app.get("/api/books/accounts", async (c) => c.json(await accountList(db, c.get("me"), { view: c.req.query("view"), q: c.req.query("q") })));
+  app.get("/api/books/accounts/:id", async (c) =>
+    c.json(
+      await accountDetail(db, c.get("me"), Number(c.req.param("id")), {
+        page: Number(c.req.query("page")) || 1,
+        perPage: Number(c.req.query("perPage")) || 50,
+        kind: isBookKind(c.req.query("kind") ?? "") ? c.req.query("kind") : undefined,
+      }),
+    ),
+  );
+  app.get("/api/books/banking", async (c) => c.json(await banking(db, c.get("me"))));
   app.get("/api/books/:kind", async (c) => {
     const kind = c.req.param("kind");
     if (!isBookKind(kind)) throw new Refusal(404, "not_found", "No such list.");

@@ -4770,7 +4770,8 @@ export type RegulatoryDesk = {
 export type BookKind =
   | "purchase_order" | "purchase_receive" | "bill" | "vendor_payment" | "vendor_credit"
   | "sales_order" | "invoice" | "customer_payment" | "sales_return" | "credit_note"
-  | "package" | "shipment" | "transfer_order" | "adjustment";
+  | "package" | "shipment" | "transfer_order" | "adjustment"
+  | "expense" | "journal" | "transfer_fund" | "deposit" | "refund" | "recurring_bill" | "recurring_expense" | "fixed_asset";
 
 /** Nothing, some or all of an order line's quantity done (received, billed…): Zoho's dots. */
 export type DoneState = "none" | "partial" | "full";
@@ -4810,6 +4811,48 @@ export type BookRow = {
   /** An inventory document's own columns: reason, type, warehouses, carrier, package… */
   extra?: Record<string, string | number | null> | null;
 };
+
+/** An account of Zoho Books' chart, with what moved on it (centavos; balance = debits less credits). */
+export type BookAccountRow = {
+  id: number;
+  name: string;
+  code: string | null;
+  /** Zoho's type key: bank, cash, expense, other_current_asset… */
+  type: string;
+  /** Asset, liability, equity, income or expense. */
+  head?: string;
+  parent: string | null;
+  parentId: number | null;
+  active: boolean;
+  balance: number;
+  debits: number;
+  credits: number;
+  moves: number;
+  lastOn: string | null;
+};
+export type BookAccountList = { views: { key: string; count: number }[]; view: string; rows: BookAccountRow[] };
+export type BookEntryRow = {
+  docId: number;
+  kind: BookKind;
+  number: string;
+  date: string;
+  reference: string | null;
+  party: string | null;
+  debit: number;
+  credit: number;
+};
+export type BookAccountDetail = BookAccountRow & {
+  description: string | null;
+  currency: string;
+  fields: Record<string, unknown>;
+  /** What moved on it, by kind of document. */
+  kinds: { kind: BookKind; count: number; debit: number; credit: number }[];
+  page: number;
+  perPage: number;
+  total: number;
+  entries: BookEntryRow[];
+};
+export type Banking = { accounts: BookAccountRow[]; totals: { bank: number; cash: number; clearing: number; card: number } };
 
 export type BookList = {
   kind: BookKind;
@@ -4861,6 +4904,8 @@ export type BookDoc = BookRow & {
   files?: { id: number; name: string; mime: string; size: number; uploadedBy: string | null; uploadedOn: string | null }[];
   lines: BookLine[];
   linkedDocs: BookLinked[];
+  /** Its debits and credits on the chart of accounts (Finance, the CEO and the Admin see them). */
+  entries?: { account: string; accountId: number | null; debit: number; credit: number }[];
 };
 
 export type VendorRow = { id: number; name: string; company: string | null; email: string | null; phone: string | null; payables: number; credits: number; active: boolean };

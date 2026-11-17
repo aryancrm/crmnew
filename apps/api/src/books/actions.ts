@@ -675,6 +675,8 @@ export async function voidDoc(db: Database, me: Me, id: number, reason: string):
         );
     }
     await tx.execute(sql`update book_doc set status = 'void', balance = 0, voided_by = ${me.id}, voided_at = now(), void_reason = ${why} where id = ${id}`);
+    // A Zoho document's debits and credits were written down when it came in: they no longer count.
+    await tx.execute(sql`delete from book_ledger where doc_id = ${id}`);
   });
 }
 

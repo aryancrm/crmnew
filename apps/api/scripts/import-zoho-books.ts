@@ -36,6 +36,7 @@ import {
   salesReturnFromJson,
   vendorCreditFromJson,
 } from "../src/books/zoho";
+import { refreshLedger } from "../src/books/ledger";
 import { openTarget, ROOT, rowsOf, ZOHO_DIR } from "./zoho-files";
 
 const apply = process.argv.includes("--apply");
@@ -93,7 +94,9 @@ const kinds: BookDocInput[][] = [];
 for (const file of ["Purchase_Order.csv", "Purchase_Receive.csv", "Bill.csv", "Vendor_Payment.csv"]) {
   const spec = CSV_SPECS[file];
   if (!spec) continue;
-  const docs = docsFromCsv(spec, [...rowsOf(file, ZOHO_DIR)] as Row[]);
+  // Books' backup calls a bill's id "Bill ID" (Inventory's "PayInvoice ID"): the same id.
+  const read = ([...rowsOf(file, ZOHO_DIR)] as Row[]).map((row) => (row["PayInvoice ID"] === undefined && row["Bill ID"] ? { ...row, "PayInvoice ID": row["Bill ID"] } : row));
+  const docs = docsFromCsv(spec, read);
   kinds.push(docs);
   console.log(file, await saveDocs(db, docs, apply), `${Math.round((Date.now() - t0) / 1000)}s`);
 }
@@ -187,5 +190,7 @@ for (const [name, kind] of [
 }
 console.log("vendors' opening credits", await openingCredits(db, jsonlRaw("list_vendors"), apply));
 console.log("customers' opening figures", await customerOpenings(db, jsonlRaw("list_contacts"), apply));
+// Zoho's documents' debits and credits, written down again for the chart and the banks.
+if (apply) console.log("ledger written down", await refreshLedger(db));
 console.log(`done in ${Math.round((Date.now() - t0) / 1000)}s`);
 process.exit(0);

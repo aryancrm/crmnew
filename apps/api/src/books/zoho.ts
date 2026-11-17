@@ -22,7 +22,8 @@ export type BookKind =
   | "package"
   | "shipment"
   | "transfer_order"
-  | "adjustment";
+  | "adjustment"
+  | "expense" | "journal" | "transfer_fund" | "deposit" | "refund" | "recurring_bill" | "recurring_expense" | "fixed_asset";
 
 export type Row = Record<string, string>;
 type Fields = Record<string, string | number | boolean | null | unknown>;
@@ -455,8 +456,9 @@ export function docsFromCsv(spec: CsvSpec, all: Row[], knownLineCols?: Set<strin
     if (hasItems) {
       // Rows that differ only in their batch are one line received or billed from several batches.
       const byLine = new Map<string, BookLineInput>();
-      for (const row of group) {
-        const key = lineOnly.filter((column) => !batchCols.has(column)).map((column) => row[column] ?? "").join("\u0001");
+      for (const [at, row] of group.entries()) {
+        // Without batch columns every row is a line of its own (two equal lines are two lines).
+        const key = batchCols.size ? lineOnly.filter((column) => !batchCols.has(column)).map((column) => row[column] ?? "").join("\u0001") : String(at);
         const batch = rest(row, [...batchCols], new Set());
         const found = byLine.get(key);
         if (found) {
@@ -729,7 +731,8 @@ export async function saveDocs(db: Database, docs: BookDocInput[], apply: boolea
   const skus = new Map(
     (await rows<{ sku: string; id: number }>(db, sql`select lower(sku) as sku, medicine_id::int as id from medicine_sku`)).map((row) => [row.sku, row.id]),
   );
-  const vendor = kind === "purchase_order" || kind === "purchase_receive" || kind === "bill" || kind === "vendor_payment" || kind === "vendor_credit";
+  // Books' expenses and recurring bills name a vendor too.
+  const vendor = ["purchase_order", "purchase_receive", "bill", "vendor_payment", "vendor_credit", "expense", "recurring_bill", "recurring_expense"].includes(kind);
   const parties = new Map<string, number>(
     vendor
       ? (await rows<{ key: string; id: number }>(db, sql`select lower(name) as key, id::int as id from supplier union all select zoho_id, id::int from supplier where zoho_id is not null`)).map((row) => [row.key, row.id])

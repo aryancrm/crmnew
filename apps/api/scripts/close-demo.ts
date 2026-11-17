@@ -1,6 +1,7 @@
 // Closes what the demo company left behind once a database holds the real company: the demo
 // people (…@2mg.test, already left) placed orders, added customers, opened enquiries, tenders,
-// pipeline products and registrations, set promos and targets. None of it is deleted: orders are
+// pipeline products and registrations, set promos and targets, and tried the Books forms (a purchase
+// order, its receive, a bill and a payment). None of it is deleted: orders are
 // cancelled (their invoices with them; a payment on a delivered demo order is taken off first, so
 // no refund is owed for money that never came), customers and medicines archived, the rest closed
 // the way its desk closes it, each with the reason. Real records (Zoho's, the real people's) are
@@ -13,6 +14,7 @@
 
 import { sql } from "drizzle-orm";
 import { rows } from "../src/db/index";
+import { voidDoc } from "../src/books/actions";
 import { cancelInvoiceOf } from "../src/finance/service";
 import { logEvent, peso } from "../src/orders/events";
 import { actOnOrder } from "../src/orders/service";
@@ -108,7 +110,28 @@ said("Demo orders cancelled (not gone yet)", cancelled);
 said("Demo orders cancelled (shipped or delivered)", gone);
 said("Their payments taken off", paymentsOff);
 
-// 2. What each desk had open.
+// 2. Books documents the demo people made trying the Books forms: money first (a payment or a credit
+// voided puts its amount back on the bill), then the bills, then the orders and receives behind them.
+const bookDocs = await rows<{ id: number; kind: string; number: string }>(
+  db,
+  sql`select id::int as id, kind, number from book_doc where created_by in ${demo} and voided_at is null and status <> 'void'
+      order by case kind when 'vendor_payment' then 0 when 'customer_payment' then 0 when 'vendor_credit' then 1 when 'credit_note' then 1
+        when 'bill' then 2 else 3 end, id`,
+);
+let booksVoided = 0;
+for (const doc of bookDocs) {
+  booksVoided += 1;
+  if (!apply) continue;
+  if (["bill", "vendor_payment", "vendor_credit", "customer_payment", "credit_note"].includes(doc.kind)) await voidDoc(db, admin, doc.id, WHY);
+  // An order or a receive has no void of its own here: it is marked so, with the reason.
+  else
+    await db.execute(
+      sql`update book_doc set status = 'void', voided_by = ${admin.id}, voided_at = now(), void_reason = ${WHY} where id = ${doc.id}`,
+    );
+}
+said("Demo books documents voided", booksVoided);
+
+// 3. What each desk had open.
 type Step = { what: string; count: ReturnType<typeof sql>; change: ReturnType<typeof sql>[] };
 const steps: Step[] = [
   {

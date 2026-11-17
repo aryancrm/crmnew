@@ -8,6 +8,9 @@ import { b2bRole, seatWords } from "./seat-words";
 import type { Me, Role } from "@2mg/api/types";
 import {
   ArrowLeftRight,
+  BookOpenCheck,
+  Landmark,
+  ListTree,
   Link2,
   Banknote,
   BarChart3,
@@ -269,6 +272,15 @@ const moneyLinks: MenuItem[] = [
   { to: "/returns", label: "Returns", icon: PackageX },
 ];
 
+/** Zoho Books' own, moved in (docs/PLAN.md 17): the banks, expenses, journals and the chart of
+ *  accounts, for Finance, the CEO and the Admin. */
+const booksLinks: MenuItem[] = [
+  { to: "/books/banking", label: "Banking", icon: Landmark },
+  { to: "/books/expenses", label: "Expenses", icon: Receipt },
+  { to: "/books/journals", label: "Manual journals", icon: BookOpenCheck },
+  { to: "/books/accounts", label: "Chart of accounts", icon: ListTree },
+];
+
 const financeApp: Space = {
   key: "finance",
   label: "Finance",
@@ -281,6 +293,7 @@ const financeApp: Space = {
         ...moneyLinks,
       ],
     },
+    { title: "Books", items: booksLinks },
   ],
 };
 
@@ -1066,6 +1079,7 @@ function ownDesk(me: Me): Space {
               { to: "/orders", label: "All orders", icon: ClipboardList },
               { to: "/finance/mine", label: "My confirmations", icon: CheckCheck },
               folder("Money", Banknote, moneyLinks, "Money"),
+              folder("Books", Landmark, booksLinks, "Books"),
             ],
           },
           {

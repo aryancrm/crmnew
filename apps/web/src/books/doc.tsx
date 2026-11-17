@@ -28,6 +28,14 @@ const TITLE: Partial<Record<BookKind, string>> = {
   vendor_credit: "VENDOR CREDITS",
   sales_return: "SALES RETURN",
   credit_note: "CREDIT NOTE",
+  expense: "EXPENSE",
+  journal: "JOURNAL",
+  transfer_fund: "TRANSFER FUND",
+  deposit: "DEPOSIT",
+  refund: "REFUND",
+  recurring_bill: "RECURRING BILL",
+  recurring_expense: "RECURRING EXPENSE",
+  fixed_asset: "FIXED ASSET",
 };
 const LINKED_TITLE: Partial<Record<BookKind, string>> = {
   package: "Packages",
@@ -57,7 +65,24 @@ const EXTRA_LABEL: Record<string, string> = {
   package: "Package#",
   carrier: "Carrier",
   tracking: "Tracking#",
+  account: "Expense Account",
+  paidThrough: "Paid Through",
+  customer: "Customer",
+  report: "Expense Report",
+  notes: "Notes",
+  frequency: "Frequency",
+  every: "Repeat Every",
+  last: "Last Made",
+  mode: "Mode",
+  creditNote: "Credit Note#",
+  name: "Asset Name",
+  method: "Depreciation",
+  life: "Asset Life",
 };
+/** The same key read differently on Books' money documents. */
+const MONEY_LABEL: Record<string, string> = { from: "From Account", to: "To Account", account: "Account" };
+const extraLabel = (kind: BookKind, key: string) =>
+  (["transfer_fund", "deposit", "refund", "fixed_asset"].includes(kind) ? MONEY_LABEL[key] : undefined) ?? EXTRA_LABEL[key] ?? key;
 
 const step = (label: string, value: string, done: boolean) => (
   <div className="flex items-center gap-3 py-1">
@@ -155,10 +180,102 @@ function Fields({ fields }: { fields: Record<string, unknown> }) {
   );
 }
 
+/** A journal's or an expense's lines: each account with its words and its money. */
+function AccountLines({ doc }: { doc: BookDoc }) {
+  const journal = doc.kind === "journal";
+  return (
+    <table className="mt-6 w-full border-collapse text-[12.5px]">
+      <thead>
+        <tr className="bg-[#3c3d3a] text-left text-white">
+          <th className="px-2 py-2 font-normal">Account</th>
+          <th className="px-2 py-2 font-normal">Description</th>
+          {journal ? (
+            <>
+              <th className="px-2 py-2 text-right font-normal">Debits</th>
+              <th className="px-2 py-2 text-right font-normal">Credits</th>
+            </>
+          ) : (
+            <th className="px-2 py-2 text-right font-normal">Amount</th>
+          )}
+        </tr>
+      </thead>
+      <tbody>
+        {doc.lines.map((line) => (
+          <tr key={line.id} className="border-b border-[#ebeaf2] align-top">
+            <td className="px-2 py-2.5 font-medium">{line.account}</td>
+            <td className="px-2 py-2.5 whitespace-pre-wrap text-[#4b4f63]">
+              {line.description}
+              {line.taxName && line.taxName !== "No Tax" && (
+                <div className="text-[11px] text-[#6c718a]">
+                  {line.taxName}
+                  {line.taxPct ? ` (${line.taxPct}%)` : ""}
+                </div>
+              )}
+            </td>
+            {journal ? (
+              <>
+                <td className="px-2 py-2.5 text-right">{(line.amount ?? 0) > 0 ? zMoney(line.amount, "") : ""}</td>
+                <td className="px-2 py-2.5 text-right">{(line.amount ?? 0) < 0 ? zMoney(-(line.amount ?? 0), "") : ""}</td>
+              </>
+            ) : (
+              <td className="px-2 py-2.5 text-right">{zMoney(line.amount, "")}</td>
+            )}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+/** Zoho's "Journal" of a transaction: what it put on each account. */
+function Entries({ doc }: { doc: BookDoc }) {
+  const entries = doc.entries ?? [];
+  if (!entries.length) return null;
+  const debit = entries.reduce((sum, e) => sum + e.debit, 0);
+  const credit = entries.reduce((sum, e) => sum + e.credit, 0);
+  return (
+    <section className="mx-auto max-w-[820px] rounded-md border border-[#ebeaf2]">
+      <h2 className="border-b border-[#ebeaf2] px-4 py-2 font-medium">Journal</h2>
+      <table className="w-full border-collapse text-[12.5px]">
+        <thead>
+          <tr className="text-[11px] text-[#6c718a] uppercase">
+            <th className="px-4 py-1.5 text-left font-normal">Account</th>
+            <th className="px-2 py-1.5 text-right font-normal">Debit</th>
+            <th className="px-4 py-1.5 text-right font-normal">Credit</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries.map((entry, i) => (
+            <tr key={i} className="border-t border-[#ebeaf2]">
+              <td className="px-4 py-1.5">
+                {entry.accountId ? (
+                  <Link to={`/books/accounts/${entry.accountId}`} className="text-[#1c5bd9]">
+                    {entry.account}
+                  </Link>
+                ) : (
+                  entry.account
+                )}
+              </td>
+              <td className="px-2 py-1.5 text-right">{entry.debit ? zMoney(entry.debit, "") : ""}</td>
+              <td className="px-4 py-1.5 text-right">{entry.credit ? zMoney(entry.credit, "") : ""}</td>
+            </tr>
+          ))}
+          <tr className="border-t border-[#ebeaf2] font-semibold">
+            <td className="px-4 py-1.5" />
+            <td className="px-2 py-1.5 text-right">{zMoney(debit, "")}</td>
+            <td className="px-4 py-1.5 text-right">{zMoney(credit, "")}</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+  );
+}
+
 function LineItems({ doc }: { doc: BookDoc }) {
   const order = doc.kind === "purchase_order";
   const payment = doc.kind === "vendor_payment" || doc.kind === "customer_payment";
   if (payment || !doc.lines.length) return null;
+  if (["journal", "expense", "recurring_expense", "recurring_bill"].includes(doc.kind)) return <AccountLines doc={doc} />;
   return (
     <table className="mt-6 w-full border-collapse text-[12.5px]">
       <thead>
@@ -336,7 +453,7 @@ export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onC
                   .filter(([, value]) => value !== null && value !== "")
                   .map(([key, value]) => (
                     <div key={key} className="contents">
-                      <dt className="text-[11px] text-[#6c718a] uppercase">{EXTRA_LABEL[key] ?? key}</dt>
+                      <dt className="text-[11px] text-[#6c718a] uppercase">{extraLabel(doc.kind, key)}</dt>
                       <dd>{String(value)}</dd>
                     </div>
                   ))}
@@ -357,7 +474,7 @@ export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onC
               </dl>
             </div>
             <div className="max-w-xs">
-              <div className="text-[11px] text-[#6c718a] uppercase">{info.section === "Sales" ? "Customer" : "Vendor Address"}</div>
+              <div className="text-[11px] text-[#6c718a] uppercase">{info.section === "Sales" ? "Customer" : info.section === "Purchases" ? "Vendor Address" : "Contact"}</div>
               {doc.vendor ? (
                 <Link to={`/books/vendors/${doc.vendor.id}`} className="font-medium text-[#1c5bd9]">
                   {doc.vendor.name}
@@ -419,6 +536,7 @@ export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onC
             </div>
           )}
         </article>
+        <Entries doc={doc} />
         {Object.keys(doc.fields).some((key) => !SHOWN_ELSEWHERE.has(key) && key !== "Warehouse Name") && (
           <section className="mx-auto max-w-[820px] print:hidden">
             <h2 className="mb-2 text-[14px] font-semibold text-[#212529]">Everything else on it</h2>

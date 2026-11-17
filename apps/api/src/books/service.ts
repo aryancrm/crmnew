@@ -8,16 +8,20 @@ import { allow, Refusal } from "../http";
 import { COST_ROLES } from "../inventory/rules";
 import { todayManila } from "../inventory/rules";
 import { bytesOf } from "../files/store";
+import { LEDGER_ROLES, mayReadLedger } from "./accounts";
 import { crmDoc, crmLight, crmRows } from "./crm";
 import type { BookDoc, BookKind, BookLine, BookLinked, BookList, BookRow, Me, VendorDetail, VendorList, VendorRow } from "../types";
 
 export const PURCHASE_KINDS: BookKind[] = ["purchase_order", "purchase_receive", "bill", "vendor_payment", "vendor_credit"];
 export const SALES_KINDS: BookKind[] = ["sales_order", "invoice", "customer_payment", "sales_return", "credit_note"];
-const ALL_KINDS: BookKind[] = [...PURCHASE_KINDS, ...SALES_KINDS, "package", "shipment", "transfer_order", "adjustment"];
+/** Zoho Books' own documents: money (expenses, journals, banks), for the ledger's desks only. */
+export const LEDGER_KINDS: BookKind[] = ["expense", "journal", "transfer_fund", "deposit", "refund", "recurring_bill", "recurring_expense", "fixed_asset"];
+const ALL_KINDS: BookKind[] = [...PURCHASE_KINDS, ...SALES_KINDS, "package", "shipment", "transfer_order", "adjustment", ...LEDGER_KINDS];
 export const isBookKind = (value: string): value is BookKind => (ALL_KINDS as string[]).includes(value);
 
-/** Who reads the books: purchases and their money are for the stock and money desks. */
-const mayRead = (me: Me) => allow(me, COST_ROLES, "see the purchases");
+/** Who reads the books: purchases and their money are for the stock and money desks; Books' own
+ *  money (expenses, journals, banks) for Finance, the CEO and the Admin. */
+const mayRead = (me: Me, kind?: BookKind) => (kind && LEDGER_KINDS.includes(kind) ? mayReadLedger(me) : allow(me, COST_ROLES, "see the purchases"));
 
 
 /** A bill or invoice with money owed past its due day reads "overdue", whatever Zoho last said. */
@@ -48,6 +52,16 @@ const salesDots = sql`case when d.kind = 'sales_order' then ${dotOf(sql`d.fields
         'from', d.fields->>'From Warehouse Name', 'to', d.fields->>'To Warehouse Name')
       when d.kind = 'package' then jsonb_build_object('so', d.reference, 'qty', (select sum(l.qty) from book_line l where l.doc_id = d.id), 'carrier', coalesce(d.fields->>'CF.Carrier', d.fields->>'carrier'))
       when d.kind = 'shipment' then jsonb_build_object('so', d.fields->>'SO Number', 'package', d.fields->>'Packing Number', 'carrier', d.fields->>'Carrier Name', 'tracking', d.reference)
+      -- Zoho Books' own documents (docs/PLAN.md 17).
+      when d.kind in ('expense', 'recurring_expense', 'recurring_bill') then jsonb_build_object(
+        'account', (select case when count(distinct l.account) > 1 then 'Itemized' else max(l.account) end from book_line l where l.doc_id = d.id),
+        'paidThrough', d.fields->>'Paid Through', 'customer', d.fields->>'Customer Name', 'by', d.fields->>'user_name', 'report', d.fields->>'report_number',
+        'frequency', d.fields->>'Recurrence Frequency', 'every', d.fields->>'Repeat Every', 'last', d.fields->>'Last Sent Date')
+      when d.kind = 'journal' then jsonb_build_object('notes', d.notes, 'by', d.fields->>'Journal Created By', 'type', d.fields->>'Journal Type')
+      when d.kind in ('transfer_fund', 'deposit') then jsonb_build_object('from', d.fields->>'From Account', 'to', d.fields->>'To Account', 'type', d.fields->>'Transaction Type', 'description', d.notes)
+      when d.kind = 'refund' then jsonb_build_object('from', d.fields->>'Refund From Account', 'mode', d.fields->>'Mode of Refund', 'creditNote', d.fields->>'Credit Note Number')
+      when d.kind = 'fixed_asset' then jsonb_build_object('name', d.fields->>'Fixed Asset Name', 'type', d.fields->>'Fixed Asset Type', 'method', d.fields->>'Depreciation Method',
+        'account', d.fields->>'Fixed Asset Account', 'life', d.fields->>'Asset Life')
       end as extra`;
 
 const rowSelect = (today: string) => sql`select d.id::int as id, d.number, d.reference, to_char(d.doc_date, 'YYYY-MM-DD') as date,
@@ -85,7 +99,7 @@ export async function bookList(
   kind: BookKind,
   asked: { view?: string; page?: number; perPage?: number; q?: string; sort?: string; dir?: string; party?: number },
 ): Promise<BookList> {
-  mayRead(me);
+  mayRead(me, kind);
   const today = todayManila();
   // First the light rows (Zoho's documents and this CRM's own of the kind) to count, filter, sort
   // and page; then everything a row shows, for the page's rows only.
@@ -150,7 +164,7 @@ const LIGHT_SORTS: Record<string, SQL> = {
 };
 
 export async function bookDoc(db: Database, me: Me, kind: BookKind, id: number): Promise<BookDoc> {
-  mayRead(me);
+  mayRead(me, kind);
   const today = todayManila();
   if (id < 0) return crmDoc(db, kind, -id, today);
   const [row] = await rows<BookRow & { kind: BookKind; fxRate: number; subTotal: number | null; paymentTerms: string | null; notes: string | null; fields: Record<string, unknown>; fromZoho: boolean; zohoCreated: string | null; supplierId: number | null }>(
@@ -192,8 +206,16 @@ export async function bookDoc(db: Database, me: Me, kind: BookKind, id: number):
     db,
     sql`select id::int as id, name, mime, size, uploaded_by as "uploadedBy", uploaded_on as "uploadedOn" from book_file where doc_id = ${id} order by id`,
   );
+  // Its debits and credits on the accounts (Zoho's "Journal" of a transaction), for the ledger's desks.
+  const entries = LEDGER_ROLES.includes(me.role)
+    ? await rows<NonNullable<BookDoc["entries"]>[number]>(
+        db,
+        sql`select e.account, a.id::int as "accountId", e.debit::float8 as debit, e.credit::float8 as credit
+          from book_entry e left join book_account a on lower(a.name) = lower(e.account) where e.doc_id = ${id} order by e.debit desc, e.credit`,
+      )
+    : undefined;
   const { supplierId: _drop, ...doc } = row;
-  return { ...doc, vendor: vendors[0] ?? null, lines, linkedDocs, files };
+  return { ...doc, vendor: vendors[0] ?? null, lines, linkedDocs, files, entries };
 }
 
 // ------------------------------------------------------------------ vendors

@@ -22,7 +22,7 @@ export type KindInfo = {
   one: string;
   /** What the number column is called. */
   numberLabel: string;
-  section: "Sales" | "Purchases" | "Inventory";
+  section: "Sales" | "Purchases" | "Inventory" | "Banking" | "Accountant";
 };
 
 export const KINDS: KindInfo[] = [
@@ -40,7 +40,18 @@ export const KINDS: KindInfo[] = [
   { kind: "customer_payment", path: "paymentsreceived", plural: "Payments Received", one: "Payment Received", numberLabel: "Payment #", section: "Sales" },
   { kind: "sales_return", path: "salesreturns", plural: "Sales Returns", one: "Sales Return", numberLabel: "RMA#", section: "Sales" },
   { kind: "credit_note", path: "creditnotes", plural: "Credit Notes", one: "Credit Note", numberLabel: "Credit Note#", section: "Sales" },
+  // Zoho Books' own (docs/PLAN.md 17).
+  { kind: "refund", path: "refunds", plural: "Credit Note Refunds", one: "Refund", numberLabel: "Reference#", section: "Sales" },
+  { kind: "expense", path: "expenses", plural: "Expenses", one: "Expense", numberLabel: "Expense#", section: "Purchases" },
+  { kind: "recurring_expense", path: "recurringexpenses", plural: "Recurring Expenses", one: "Recurring Expense", numberLabel: "Profile Name", section: "Purchases" },
+  { kind: "recurring_bill", path: "recurringbills", plural: "Recurring Bills", one: "Recurring Bill", numberLabel: "Profile Name", section: "Purchases" },
+  { kind: "transfer_fund", path: "transfers", plural: "Transfers", one: "Transfer Fund", numberLabel: "Reference#", section: "Banking" },
+  { kind: "deposit", path: "deposits", plural: "Deposits", one: "Deposit", numberLabel: "Reference#", section: "Banking" },
+  { kind: "journal", path: "journals", plural: "Manual Journals", one: "Journal", numberLabel: "Journal#", section: "Accountant" },
+  { kind: "fixed_asset", path: "fixedassets", plural: "Fixed Assets", one: "Fixed Asset", numberLabel: "Asset#", section: "Accountant" },
 ];
+/** Books' own money lists: Finance, the CEO and the Admin read them. */
+export const LEDGER_ROLES = ["finance", "ceo", "admin"];
 export const kindByPath = (path: string | undefined) => KINDS.find((k) => k.path === path);
 export const kindInfo = (kind: BookKind) => KINDS.find((k) => k.kind === kind);
 
@@ -84,6 +95,14 @@ export const STATUS_COLOR: Record<string, string> = {
   partially_paid: "text-[#f76831]",
   pending: "text-[#f76831]",
   in_transit: "text-[#f76831]",
+  published: "text-[#22b378]",
+  posted: "text-[#22b378]",
+  nonbillable: "text-[#6c718a]",
+  unbilled: "text-[#f76831]",
+  reimbursed: "text-[#22b378]",
+  active: "text-[#22b378]",
+  stopped: "text-[#6c718a]",
+  expired: "text-[#6c718a]",
 };
 /** "partially_billed" → "PARTIALLY BILLED"; an overdue bill "OVERDUE BY 3 DAYS". */
 export function statusText(status: string, overdueDays?: number | null) {

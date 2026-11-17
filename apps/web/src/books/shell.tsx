@@ -3,14 +3,15 @@
 // (#408dfb), the light top bar with "Search in Bills ( / )", the company and the person. A screen
 // not moved into the books yet opens the CRM's own page for it.
 
-import { BarChart3, ChevronDown, ChevronRight, CircleUserRound, House, PackageOpen, Search, ShoppingBag, ShoppingBasket, ShoppingCart } from "lucide-react";
+import { BarChart3, BookOpenCheck, ChevronDown, ChevronRight, CircleUserRound, House, Landmark, PackageOpen, Search, ShoppingBag, ShoppingBasket, ShoppingCart } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useMe } from "../auth";
-import { kindByPath } from "./kinds";
+import { kindByPath, LEDGER_ROLES } from "./kinds";
 
-type NavItem = { label: string; to: string };
-type NavGroup = { label: string; icon: ReactNode; items: NavItem[] };
+/** `ledger`: Books' own money, for Finance, the CEO and the Admin only. */
+type NavItem = { label: string; to: string; ledger?: boolean };
+type NavGroup = { label: string; icon: ReactNode; items: NavItem[]; ledger?: boolean };
 
 const GROUPS: NavGroup[] = [
   {
@@ -41,6 +42,7 @@ const GROUPS: NavGroup[] = [
       { label: "Payments Received", to: "/books/paymentsreceived" },
       { label: "Sales Returns", to: "/books/salesreturns" },
       { label: "Credit Notes", to: "/books/creditnotes" },
+      { label: "Credit Note Refunds", to: "/books/refunds", ledger: true },
     ],
   },
   {
@@ -53,6 +55,30 @@ const GROUPS: NavGroup[] = [
       { label: "Bills", to: "/books/bills" },
       { label: "Payments Made", to: "/books/paymentsmade" },
       { label: "Vendor Credits", to: "/books/vendorcredits" },
+      { label: "Expenses", to: "/books/expenses", ledger: true },
+      { label: "Recurring Expenses", to: "/books/recurringexpenses", ledger: true },
+      { label: "Recurring Bills", to: "/books/recurringbills", ledger: true },
+    ],
+  },
+  // Zoho Books' own (docs/PLAN.md 17).
+  {
+    label: "Banking",
+    icon: <Landmark size={16} />,
+    ledger: true,
+    items: [
+      { label: "Banking Overview", to: "/books/banking" },
+      { label: "Transfers", to: "/books/transfers" },
+      { label: "Deposits", to: "/books/deposits" },
+    ],
+  },
+  {
+    label: "Accountant",
+    icon: <BookOpenCheck size={16} />,
+    ledger: true,
+    items: [
+      { label: "Manual Journals", to: "/books/journals" },
+      { label: "Chart of Accounts", to: "/books/accounts" },
+      { label: "Fixed Assets", to: "/books/fixedassets" },
     ],
   },
 ];
@@ -64,12 +90,15 @@ export function BooksShell() {
   const me = useMe();
   const location = useLocation();
   const segment = location.pathname.split("/")[2];
-  const openGroup = GROUPS.find((group) => group.items.some((item) => item.to === `/books/${segment}`))?.label ?? "Purchases";
+  const openGroup = GROUPS.find((group) => group.items.some((item) => item.to === `/books/${segment}`))?.label ?? (segment === "banking" ? "Banking" : "Purchases");
   const [open, setOpen] = useState<Record<string, boolean>>({ [openGroup]: true });
   if (me.isPending) return null;
   if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   if (!BOOK_ROLES.includes(me.data.role)) return <Navigate to="/" replace />;
-  const listName = segment === "vendors" ? "Vendors" : segment === "customers" ? "Customers" : segment === "items" ? "Items" : (kindByPath(segment)?.plural ?? "Purchases");
+  const ledger = LEDGER_ROLES.includes(me.data.role);
+  const groups = GROUPS.filter((group) => ledger || !group.ledger).map((group) => ({ ...group, items: group.items.filter((item) => ledger || !item.ledger) }));
+  const listName =
+    segment === "vendors" ? "Vendors" : segment === "customers" ? "Customers" : segment === "items" ? "Items" : segment === "accounts" ? "Chart of Accounts" : segment === "banking" ? "Banking" : (kindByPath(segment)?.plural ?? "Purchases");
   return (
     <div className="flex h-dvh overflow-hidden bg-white font-sans text-[13px] leading-[1.6] text-black">
       <nav aria-label="Books menu" className="flex w-[220px] shrink-0 flex-col overflow-y-auto bg-[#21263c] pb-4 text-[#f0f0f0] print:hidden">
@@ -80,7 +109,7 @@ export function BooksShell() {
           <NavLink to="/" className="flex h-[30px] items-center gap-2.5 rounded-md px-2 hover:bg-white/5">
             <House size={16} aria-hidden="true" /> Home
           </NavLink>
-          {GROUPS.map((group) => {
+          {groups.map((group) => {
             const isOpen = open[group.label] ?? false;
             return (
               <div key={group.label}>

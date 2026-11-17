@@ -24,6 +24,14 @@ const NEW_HINT: Partial<Record<string, string>> = {
   purchase_receive: "A receive is made from its purchase order: open the order and press Receive.",
   sales_return: "Sales returns are made from the order (Sales comes next).",
   credit_note: "Credit notes come with Sales (next).",
+  expense: "Expenses are still entered in Zoho until the switch; they come over with each backup.",
+  journal: "Manual journals are still made in Zoho until the switch.",
+  transfer_fund: "Transfers between accounts are still made in Zoho until the switch.",
+  deposit: "Deposits are still made in Zoho until the switch.",
+  refund: "A refund is made from its credit note.",
+  recurring_bill: "Recurring bills are still kept in Zoho until the switch.",
+  recurring_expense: "Recurring expenses are still kept in Zoho until the switch.",
+  fixed_asset: "Fixed assets are still kept in Zoho until the switch.",
 };
 
 /** Columns that stay on one line, as in Zoho. */
@@ -38,9 +46,85 @@ const dot = (state: DoneState | null) =>
   );
 const status = (row: BookRow) => <span className={`text-[12px] uppercase ${statusClass(row.status)}`}>{statusText(row.status, row.overdueDays)}</span>;
 const amount = (value: number | null, row: BookRow) => zMoney(value, row.currency);
+/** A card's name when the document has no party: a transfer's accounts, a journal's notes. */
+const cardName = (row: BookRow) =>
+  row.extra?.from || row.extra?.to ? `${String(row.extra?.from ?? "")} → ${String(row.extra?.to ?? "")}` : String(row.extra?.notes ?? row.extra?.account ?? row.extra?.name ?? "—");
 const num = (row: BookRow) => <span className="font-medium text-[#1c5bd9]">{row.number}</span>;
 
+const text = (value: unknown) => (value === null || value === undefined ? "" : String(value));
+
 export const COLUMNS: Record<string, Column[]> = {
+  // Zoho Books' own lists, with Zoho's headings (docs/PLAN.md 17).
+  expense: [
+    { key: "date", label: "Date", sort: "date", cell: (r) => zDate(r.date) },
+    { key: "account", label: "Expense Account", cell: (r) => text(r.extra?.account) },
+    { key: "reference", label: "Reference#", sort: "reference", cell: (r) => r.reference ?? "" },
+    { key: "party", label: "Vendor Name", sort: "party", cell: (r) => r.party ?? "" },
+    { key: "paid", label: "Paid Through", cell: (r) => text(r.extra?.paidThrough) },
+    { key: "customer", label: "Customer Name", cell: (r) => text(r.extra?.customer) },
+    { key: "status", label: "Status", sort: "status", cell: status },
+    { key: "total", label: "Amount", sort: "total", align: "right", cell: (r) => amount(r.total, r) },
+  ],
+  recurring_expense: [
+    { key: "number", label: "Profile Name", sort: "number", cell: num },
+    { key: "account", label: "Expense Account", cell: (r) => text(r.extra?.account) },
+    { key: "party", label: "Vendor Name", sort: "party", cell: (r) => r.party ?? "" },
+    { key: "frequency", label: "Frequency", cell: (r) => `Every ${text(r.extra?.every) || "1"} ${text(r.extra?.frequency)}` },
+    { key: "date", label: "Start Date", sort: "date", cell: (r) => zDate(r.date) },
+    { key: "status", label: "Status", sort: "status", cell: status },
+    { key: "total", label: "Amount", sort: "total", align: "right", cell: (r) => amount(r.total, r) },
+  ],
+  recurring_bill: [
+    { key: "party", label: "Vendor Name", sort: "party", cell: (r) => r.party ?? "" },
+    { key: "number", label: "Profile Name", sort: "number", cell: num },
+    { key: "frequency", label: "Frequency", cell: (r) => `Every ${text(r.extra?.every) || "1"} ${text(r.extra?.frequency)}` },
+    { key: "last", label: "Last Bill Date", cell: (r) => zDate(text(r.extra?.last)) },
+    { key: "status", label: "Status", sort: "status", cell: status },
+    { key: "total", label: "Amount", sort: "total", align: "right", cell: (r) => amount(r.total, r) },
+  ],
+  journal: [
+    { key: "date", label: "Date", sort: "date", cell: (r) => zDate(r.date) },
+    { key: "number", label: "Journal#", sort: "number", cell: num },
+    { key: "reference", label: "Reference Number", sort: "reference", cell: (r) => r.reference ?? "" },
+    { key: "status", label: "Status", sort: "status", cell: status },
+    { key: "notes", label: "Notes", cell: (r) => text(r.extra?.notes) },
+    { key: "total", label: "Amount", sort: "total", align: "right", cell: (r) => amount(r.total, r) },
+    { key: "by", label: "Created By", cell: (r) => text(r.extra?.by) },
+  ],
+  transfer_fund: [
+    { key: "date", label: "Date", sort: "date", cell: (r) => zDate(r.date) },
+    { key: "number", label: "Reference#", sort: "number", cell: num },
+    { key: "from", label: "From Account", cell: (r) => text(r.extra?.from) },
+    { key: "to", label: "To Account", cell: (r) => text(r.extra?.to) },
+    { key: "description", label: "Description", cell: (r) => text(r.extra?.description) },
+    { key: "total", label: "Amount", sort: "total", align: "right", cell: (r) => amount(r.total, r) },
+  ],
+  deposit: [
+    { key: "date", label: "Date", sort: "date", cell: (r) => zDate(r.date) },
+    { key: "type", label: "Type", cell: (r) => text(r.extra?.type) },
+    { key: "number", label: "Reference#", sort: "number", cell: num },
+    { key: "from", label: "From Account", cell: (r) => text(r.extra?.from) },
+    { key: "to", label: "Deposited To", cell: (r) => text(r.extra?.to) },
+    { key: "description", label: "Description", cell: (r) => text(r.extra?.description) },
+    { key: "total", label: "Amount", sort: "total", align: "right", cell: (r) => amount(r.total, r) },
+  ],
+  refund: [
+    { key: "date", label: "Date", sort: "date", cell: (r) => zDate(r.date) },
+    { key: "creditNote", label: "Credit Note#", cell: (r) => text(r.extra?.creditNote) },
+    { key: "party", label: "Customer Name", sort: "party", cell: (r) => r.party ?? "" },
+    { key: "mode", label: "Mode", cell: (r) => text(r.extra?.mode) },
+    { key: "from", label: "Refunded From", cell: (r) => text(r.extra?.from) },
+    { key: "total", label: "Amount", sort: "total", align: "right", cell: (r) => amount(r.total, r) },
+  ],
+  fixed_asset: [
+    { key: "number", label: "Asset Number", sort: "number", cell: num },
+    { key: "name", label: "Asset Name", cell: (r) => text(r.extra?.name) },
+    { key: "type", label: "Asset Type", cell: (r) => text(r.extra?.type) },
+    { key: "date", label: "Purchase Date", sort: "date", cell: (r) => zDate(r.date) },
+    { key: "status", label: "Status", sort: "status", cell: status },
+    { key: "total", label: "Purchase Value", sort: "total", align: "right", cell: (r) => amount(r.total, r) },
+    { key: "balance", label: "Current Value", sort: "balance", align: "right", cell: (r) => amount(r.balance, r) },
+  ],
   purchase_order: [
     { key: "date", label: "Date", sort: "date", cell: (r) => zDate(r.date) },
     { key: "number", label: "Purchase Order#", sort: "number", cell: num },
@@ -325,7 +409,7 @@ export function BookListPage() {
                   className={`block border-b border-[#ebeaf2] px-4 py-2.5 hover:bg-[#f1f1fa] ${String(row.id) === id ? "bg-[#f1f1fa]" : ""}`}
                 >
                   <div className="flex justify-between gap-2">
-                    <span className="truncate font-medium text-[#212529]">{row.party ?? "—"}</span>
+                    <span className="truncate font-medium text-[#212529]">{row.party ?? cardName(row)}</span>
                     <span className="shrink-0">{info.kind === "purchase_receive" ? `${zQty(row.qty)} qty` : zMoney(row.total, row.currency)}</span>
                   </div>
                   <div className="text-[12px] text-[#6c718a]">

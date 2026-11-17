@@ -1657,6 +1657,42 @@ Books the same way: Zoho's documents stay as history beside the CRM's own (the C
 Collections and We owe read both, nothing counted twice); new sales invoices come only from the order
 line, purchases and bills from the Books screens, and Zoho's open invoices are paid here.
 
+**Zoho Books moved in (17 Nov).** Books' own backup (16 Nov 12:51, `.data/zoho-books-backup`,
+never committed) brought what Inventory's had not: the chart of accounts (244 accounts, `book_account`;
+Zoho's API list adds the system ones), 8,717 expenses (10,399 lines, with Zoho's status, who made them
+and the expense report from Zoho's list), 2,493 manual journals (8,869 lines), 106 transfers between
+accounts, 22 deposits, 39 credit-note refunds, 390 credit notes put on invoices, 5 recurring bills,
+6 recurring expenses, 2 fixed assets and Zoho's activity log (25,000 lines, 29 Oct–16 Nov). The
+documents already here got Books' extra columns (each one's accounts, payment numbers, withholding
+tax, bank charges, salesperson; Books calls a bill's id "Bill ID"). Zoho's bank accounts gave 15
+refunds of customers' payments the backup lacks. `scripts/import-zoho-ledger.ts` brings all of it
+(dry run by default), then `import-zoho-books.ts` with `ZOHO_DIR=.data/zoho-books-backup`.
+
+Every document's debits and credits are worked out from the document itself (`book_entry_calc`):
+payments into or out of their bank (less or plus the bank's charge, which goes to Bank Fees and
+Charges), expenses line by line with their tax, journals line by line, transfers, deposits, refunds,
+bills and invoices against payables and receivables. Zoho's documents' are written down once
+(`book_ledger`, refreshed by every import; a void here takes a document out) and this CRM's own are
+worked out as they are read (`book_entry`): the whole chart adds up in about a second. The whole
+ledger balances (debits = credits to 3 centavos of ₱3.85 billion), and every expense, journal,
+transfer, deposit and refund balances on its own. A balance counts documents up to today, as Zoho's
+(next year's rent journals wait for their day).
+
+Checked against Zoho Books' own Banking on 17 Nov: 35 of the 44 bank, cash and card accounts are the
+same to the centavo; each of the other 9 differs only by what was entered in Zoho after its backup
+(16 Nov payments, 17 Nov journals), a USD transfer's 12 centavos, and one Zoho deposit dated in the
+year 6889 (BDO - Getmeds 6889, ₱7,800: a typo in Zoho, which leaves it out of today's balance).
+Payables and receivables are built from the documents and not yet tied to Zoho's Balance Sheet; Zoho
+never exported its cost-of-goods and stock postings, so those accounts don't show them.
+
+Screens, in Zoho's frame, for Finance, the CEO and the Admin (the API checks it; Inventory and
+Management keep the purchases without the accounts): Banking (Overview with Cash In Hand, Bank and
+Card balances, each account's transactions; Transfers; Deposits), Accountant (Manual Journals, Chart
+of Accounts with every account's balance and transactions, Fixed Assets), Purchases → Expenses,
+Recurring Expenses, Recurring Bills, Sales → Credit Note Refunds. Every document shows its
+"Journal" (what it put on each account). Making expenses, journals, transfers and deposits here comes
+with the switch; until then they come over with each backup.
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -2111,3 +2147,4 @@ line, purchases and bills from the Books screens, and Zoho's open invoices are p
 - 17 Nov (70), Aryan: onboard the chart's people with one common password. `scripts/onboard-company.ts` puts every person of HR's 2026 chart (docs/company-map.units.js) into the CRM: 9 boxes added (NCR 2, North & Central Luzon, South Luzon, Visayas, Onco-Hema Division, Executive and Admin, Supply Chain, Pharmacy Operations, Finance Department), 117 people in their seats with the seat's login ID, 2 vacant seats, the demo company's people left (local database; backup in .data/pg.before-onboard-2026-11-17). Zoho's salespeople tied to the seats that are the same person (2,963 customers now under them); 102 Zoho names wait for the heads (Rx districts, Blood & Bone, MD Telesales regions, people who left): docs/PEOPLE-2026.md. The password is the server's JOIN_PASSWORD (never in code), the same for everyone, never forced to change; HR's New joiner and Admin's Add person ask only the login and the employee ID. No employee IDs exist yet (not on the chart, not in the old CRM). SEFMED was not imported (Aryan, 16 Nov: read for the plan only). Phase 1 of section 15 done locally, monthly targets per seat still to type.
 - 17 Nov (71), Aryan: one stock before going live. `scripts/go-live-stock.ts` makes Getmeds Philippines Inc. the default warehouse (Approve picks it first) and, with --demo-out, takes the demo people's stock off the shelves by stock counts with their reason (19,710 pieces from the demo "Main warehouse", now closed; 2,060 from Cebu, whose 47,815 pieces from Zoho stay). Local database; backup in .data/pg.before-stock-2026-11-17. Data checks: shelves equal their moves, none below zero; the one failing check (two demo orders packed without picks) was there before. Section 17 says how the stock and the books run as one.
 - 17 Nov (72), Aryan: the demo company's leftovers closed in the local database, nothing deleted (`scripts/close-demo.ts`; backup in .data/pg.before-demo-close-2026-11-17). The demo people's 29 orders cancelled with their 16 invoices (the 8 payments recorded on them taken off first, so Finance owes no refund for money that never came; the 18 not yet gone through the desk's own Cancel); their 38 customers archived (none was a Zoho customer); the 2 medicines Zoho never had (Imatinib 400 mg, Capecitabine 500 mg, no stock) archived; 11 enquiries closed as lost, 5 tenders dropped, 2 purchase orders cancelled, 4 pipeline products dropped, 5 registrations withdrawn, 2 care groups closed, 7 B2B accounts dropped, 2 stock notices closed, 1 promo ended, 4 targets cleared from seats the real people hold now. Kept for Bidding to replace: 4 company papers the demo added (PhilGEPS, Mayor's permit, BIR clearance, FDA LTO). Every desk's queue is empty now for the real people; the 17 data checks pass.
+- 17 Nov (73), Aryan: Zoho Books' backup moved in (section 17): the chart of accounts, expenses, manual journals, transfers, deposits, refunds, recurring bills and expenses, fixed assets and the activity log; the documents already here got Books' columns; Banking and the Chart of Accounts read each account's balance from the documents' debits and credits (migrations 0077–0081). Checked against Zoho Books' Banking: 35 of 44 accounts to the centavo, the rest only by what Zoho got after its backup. The demo people's four Books test documents (a purchase order, its receive, a bill and a payment) voided by `scripts/close-demo.ts`. Local database; backup in .data/pg.before-books-2026-11-17.
