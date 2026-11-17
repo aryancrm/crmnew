@@ -7,9 +7,10 @@ import type { Me } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ChevronDown, ChevronRight, Eye, EyeOff, KeyRound, LoaderCircle, Search, UserRound, X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiFailure, api } from "../api";
 import { ME, useMe } from "../auth";
+import { ClassicLogin } from "./login-classic";
 import { TILE_GLOW, TILE_ICONS } from "../portal/tiles";
 import { lastWorkspace, rememberWorkspace, type Workspace, WORKSPACES, workspaceOf } from "../workspaces";
 
@@ -20,11 +21,18 @@ const GROUPS = [
   { key: "office", label: "Office" },
 ] as const;
 
+/** The sign-in: the workspace launcher, or (Log in with ID and password) the screen as it was. */
 export function Login() {
+  const [params] = useSearchParams();
+  return params.get("with") === "password" ? <ClassicLogin /> : <Launcher />;
+}
+
+function Launcher() {
   const me = useMe();
   const queries = useQueryClient();
   const navigate = useNavigate();
-  const from = (useLocation().state as { from?: string } | null)?.from ?? "/";
+  const location = useLocation();
+  const from = (location.state as { from?: string } | null)?.from ?? "/";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [shown, setShown] = useState(false);
@@ -70,7 +78,8 @@ export function Login() {
     "h-12 w-full rounded-2xl border border-white/70 bg-white/70 pl-11 text-[15px] text-[#1f2733] shadow-[inset_0_1px_2px_rgba(20,30,50,0.06)] outline-none backdrop-blur placeholder:text-[#9aa2b0] focus:border-[#f36b21]/60 focus:bg-white focus:ring-4 focus:ring-[#f36b21]/15";
 
   return (
-    <main className="relative isolate min-h-dvh overflow-hidden bg-[#f6f7fb] font-[Inter_Variable,Inter,sans-serif] text-[#1f2733]">
+    <main className="relative isolate flex min-h-dvh flex-col overflow-hidden bg-[#f6f7fb] font-[Inter_Variable,Inter,sans-serif] text-[#1f2733] md:h-dvh">
+      <Orbits />
       {/* Soft colour behind the glass, faded. */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute -top-40 -left-32 size-[34rem] rounded-full bg-[#ffd9c2] opacity-60 blur-[120px]" />
@@ -78,7 +87,7 @@ export function Login() {
         <div className="absolute -bottom-48 left-1/3 size-[32rem] rounded-full bg-[#dcd6ff] opacity-50 blur-[120px]" />
       </div>
 
-      <header className="mx-auto flex w-[min(1180px,calc(100%-32px))] items-center gap-4 py-6">
+      <header className="mx-auto flex w-[min(1180px,calc(100%-32px))] shrink-0 items-center gap-4 py-5">
         <span className="flex shrink-0 items-center gap-2.5">
           <img src="/brand/bishnoi-one-mark.png" alt="" className="size-10" />
           <span className="hidden text-[22px] font-semibold tracking-[-0.03em] sm:inline">Bishnoi One</span>
@@ -123,23 +132,35 @@ export function Login() {
         </div>
       </header>
 
+      {/* A word on what this is. */}
+      <div className="mx-auto w-[min(1000px,calc(100%-32px))] shrink-0 pt-[clamp(0.5rem,3vh,2.5rem)] text-center">
+        <p className="text-[11px] font-semibold tracking-[0.22em] text-[#c2410c] uppercase">2MG Inc. · Company portal</p>
+        <h1 className="mt-2 text-[clamp(26px,4.2vh,44px)] leading-tight font-semibold tracking-[-0.035em]">
+          One company. <span className="text-[#f36b21]">Every department</span>, <span className="text-[#1f9d55]">one place</span>.
+        </h1>
+        <p className="mx-auto mt-2 max-w-lg text-[clamp(13px,1.8vh,15px)] text-[#5b6472]">
+          Pick your workspace and sign in as yourself. Sales, approvals, money, stock, dispatch and people work from the
+          same records.
+        </p>
+      </div>
+
       {/* The tiles; every one opens the same sign-in. */}
-      <section aria-label="Workspaces" className="mx-auto w-[min(1000px,calc(100%-32px))] pt-8 pb-28">
-        <ul className="mx-auto flex max-w-[52rem] flex-wrap justify-center gap-x-8 gap-y-10">
+      <section aria-label="Workspaces" className="mx-auto flex w-[min(1100px,calc(100%-32px))] flex-1 items-center py-[clamp(1rem,4vh,3rem)]">
+        <ul className="mx-auto flex max-w-[60rem] flex-wrap justify-center gap-x-[clamp(1rem,2.4vw,2.25rem)] gap-y-[clamp(1rem,3.2vh,2.25rem)]">
           {shownTiles.map((one) => {
             const Icon = TILE_ICONS[one.key];
             return (
-              <li key={one.key} className="flex w-[8.5rem] justify-center">
-                <button type="button" onClick={() => setPicked(one)} className="group flex flex-col items-center gap-3.5 focus-visible:outline-none">
-                  <span className="relative grid size-[7.5rem] place-items-center">
+              <li key={one.key} className="flex w-[clamp(6.5rem,13vh,8.5rem)] justify-center">
+                <button type="button" onClick={() => setPicked(one)} className="group flex flex-col items-center gap-2.5 focus-visible:outline-none">
+                  <span className="relative grid size-[clamp(4.75rem,12vh,7rem)] place-items-center">
                     {/* The tile's own colour, faded, behind the glass. */}
                     <span
                       aria-hidden="true"
                       className="absolute inset-3 rounded-[2rem] opacity-25 blur-2xl transition-opacity duration-300 group-hover:opacity-45"
                       style={{ background: TILE_GLOW[one.key] }}
                     />
-                    <span className="relative grid size-[7.5rem] place-items-center rounded-[2rem] border border-white/90 bg-white/75 shadow-[0_18px_40px_-18px_rgba(20,30,50,0.28),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl transition duration-300 group-hover:-translate-y-1 group-hover:shadow-[0_26px_50px_-20px_rgba(20,30,50,0.35)] group-focus-visible:ring-4 group-focus-visible:ring-[#f36b21]/30">
-                      <span className="size-16 transition-transform duration-300 group-hover:scale-105">{Icon && <Icon />}</span>
+                    <span className="relative grid size-[clamp(4.75rem,12vh,7rem)] place-items-center rounded-[2rem] border border-white/90 bg-white/75 shadow-[0_18px_40px_-18px_rgba(20,30,50,0.28),inset_0_1px_0_rgba(255,255,255,0.9)] backdrop-blur-xl transition duration-300 group-hover:-translate-y-1 group-hover:shadow-[0_26px_50px_-20px_rgba(20,30,50,0.35)] group-focus-visible:ring-4 group-focus-visible:ring-[#f36b21]/30">
+                      <span className="size-[56%] transition-transform duration-300 group-hover:scale-105">{Icon && <Icon />}</span>
                       {last === one.key && <span className="absolute top-3 right-3 size-2.5 rounded-full bg-[#f36b21] ring-2 ring-white" title="Last used" />}
                     </span>
                   </span>
@@ -152,11 +173,18 @@ export function Login() {
         {!shownTiles.length && <p className="text-center text-sm text-[#7a8394]">No workspace by that name.</p>}
       </section>
 
-      {/* The page fades at the bottom, with the way to ask for access. */}
-      <div aria-hidden="true" className="pointer-events-none fixed inset-x-0 bottom-0 h-28 bg-gradient-to-t from-[#f6f7fb] via-[#f6f7fb]/85 to-transparent" />
-      <p className="fixed right-6 bottom-6 z-10 flex items-center gap-1 text-sm font-medium text-[#3c4452]">
-        Need access? Ask your administrator <ChevronRight className="size-4" aria-hidden="true" />
-      </p>
+      {/* The other way in: the sign-in as it was. */}
+      <footer className="mx-auto flex w-[min(1180px,calc(100%-32px))] shrink-0 flex-wrap items-center justify-between gap-3 pb-5">
+        <span className="text-xs text-[#8a93a3]">Bishnoi One · each person signs in as themselves</span>
+        <Link
+          to="/login?with=password"
+          state={location.state}
+          className="flex items-center gap-1.5 rounded-full border border-white/90 bg-white/70 px-4 py-2 text-sm font-semibold text-[#1f2733] shadow-[0_8px_24px_-12px_rgba(20,30,50,0.25)] backdrop-blur-xl hover:text-[#c2410c]"
+        >
+          Log in with ID and password <ChevronRight className="size-4" aria-hidden="true" />
+        </Link>
+        <span className="text-xs text-[#8a93a3]">Need access? Ask your administrator</span>
+      </footer>
 
       {/* The same sign-in, whichever tile was pressed. */}
       {picked && (
@@ -247,5 +275,23 @@ export function Login() {
         </div>
       )}
     </main>
+  );
+}
+
+/** The logo's orbit, drawn wide and quiet behind the board: orange and green lines and a star. */
+function Orbits() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" className="pointer-events-none absolute inset-0 -z-10 h-full w-full">
+      <path d="M-80 700C220 560 520 820 860 690S1300 420 1540 520" stroke="#f36b21" strokeOpacity=".28" strokeWidth="2" fill="none" />
+      <path d="M-80 742C240 610 540 860 880 734S1320 470 1540 566" stroke="#f36b21" strokeOpacity=".14" strokeWidth="1.5" fill="none" />
+      <path d="M-60 210C260 120 470 300 760 220S1210 40 1520 150" stroke="#1f9d55" strokeOpacity=".26" strokeWidth="2" fill="none" />
+      <path d="M-60 250C280 165 490 342 780 262S1230 84 1520 194" stroke="#1f9d55" strokeOpacity=".12" strokeWidth="1.5" fill="none" />
+      <ellipse cx="1210" cy="760" rx="380" ry="110" transform="rotate(-12 1210 760)" stroke="#1f9d55" strokeOpacity=".16" strokeWidth="1.5" fill="none" />
+      <ellipse cx="200" cy="130" rx="300" ry="80" transform="rotate(-8 200 130)" stroke="#f36b21" strokeOpacity=".14" strokeWidth="1.5" fill="none" />
+      <path d="M1335 118l6 15 15 6-15 6-6 15-6-15-15-6 15-6z" fill="#1f9d55" fillOpacity=".55" />
+      <path d="M110 640l4 10 10 4-10 4-4 10-4-10-10-4 10-4z" fill="#f36b21" fillOpacity=".5" />
+      <circle cx="1060" cy="250" r="4" fill="#f36b21" fillOpacity=".45" />
+      <circle cx="360" cy="800" r="3" fill="#1f9d55" fillOpacity=".45" />
+    </svg>
   );
 }
