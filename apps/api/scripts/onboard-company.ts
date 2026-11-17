@@ -12,7 +12,9 @@
 //   (the live database only with --live and Aryan's word; 17 Nov: live with --no-zoho, no Zoho data yet)
 //
 // A fresh CRM's boxes (one per channel: "Hospitals", "Doctors"…) are taken over and renamed to the
-// chart's, each box gets its channel, and a CEO's seat is made at the top when there is none.
+// chart's, each box gets its channel, and a CEO's seat is made at the top when there is none. Then
+// scripts/fix-chart-17nov.ts puts in what the chart file doesn't hold yet (Uro & Onco Care and
+// Blood & Bone Care inside the Onco-Hema Division, Claire Gallana beside Jessa Domino).
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -20,7 +22,7 @@ import { runInNewContext } from "node:vm";
 import { sql } from "drizzle-orm";
 import { joinPassword } from "../src/auth/password";
 import { type Database, rows } from "../src/db/index";
-import { addPerson, addSeat, addUnit, fillSeat, fillSeatLogins, projectOrg } from "../src/org/service";
+import { addPerson, addSeat, addUnit, fillSeat, fillSeatLogins, projectOrg, updateUnit } from "../src/org/service";
 import type { Me, OrgUnitKind, Role } from "../src/types";
 import { tieZohoSeller } from "../src/zoho/sellers";
 import { openTarget, ROOT } from "./zoho-files";
@@ -61,7 +63,7 @@ const UNITS: Record<string, { names: string[]; kind: Exclude<OrgUnitKind, "compa
   "hos-pap": { names: ["Patient Assistance", "Patient Assistance Program"], kind: "team", channel: "PAP", live: ["Patient assistance"] },
   rx: { names: ["Prescription Business"], kind: "business", channel: "RX", live: ["Doctors"] },
   "rx-onco": { names: ["Onco-Hema Division"], kind: "line" },
-  "rx-mdts": { names: ["MD Telesales", "MD Telesales Oncology"], kind: "line", channel: "TS", live: ["Telesales"] },
+  "rx-mdts": { names: ["MD Telesales Oncology", "MD Telesales"], kind: "line", channel: "TS", live: ["Telesales"] },
   "rx-b2c": { names: ["B2C Sales Coaching"], kind: "team", channel: "ONLINE" },
   sm: { names: ["Sales & Marketing", "Sales and Marketing"], kind: "business", channel: "B2B" },
   "sm-clidp": { names: ["CLIDP"], kind: "line", channel: "B2B" },
@@ -305,14 +307,19 @@ for (const unit of chart) {
   const lower = known.names.map((name) => name.toLowerCase());
   const [channel] = known.channel ? await rows<{ id: number }>(db, sql`select id::int as id from channel where code = ${known.channel}`) : [];
   const parentId = unitIds.get(unit.parent ?? "company");
-  const [found] = await rows<{ id: number; channelId: number | null }>(
+  const [found] = await rows<{ id: number; channelId: number | null; parentId: number | null }>(
     db,
-    sql`select id::int as id, channel_id::int as "channelId" from org_unit where active and lower(name) in (${sql.join(lower.map((name) => sql`${name}`), sql`, `)}) order by id limit 1`,
+    sql`select id::int as id, channel_id::int as "channelId", parent_id::int as "parentId" from org_unit where active and lower(name) in (${sql.join(lower.map((name) => sql`${name}`), sql`, `)}) order by id limit 1`,
   );
   if (found) {
     unitIds.set(unit.id, found.id);
     // A box made before it knew its channel gets it.
     if (apply && channel && !found.channelId) await db.execute(sql`update org_unit set channel_id = ${channel.id} where id = ${found.id}`);
+    // A box found somewhere else than the chart has it goes where the chart has it.
+    if (apply && parentId && parentId > 0 && found.parentId !== parentId && found.id !== parentId) {
+      await updateUnit(db, me, found.id, { parentId });
+      madeUnits.push(`${known.names[0]} (moved to its place on the chart)`);
+    }
     continue;
   }
   // A fresh CRM's box for this channel ("Hospitals"): taken over, renamed, put in its place.

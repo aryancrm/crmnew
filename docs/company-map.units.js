@@ -75,7 +75,8 @@ window.COMPANY_UNITS = [
     { role: "rx-chc", places: "Davao (Onco)", who: "Meryanie Arcangel" },
     { role: "rx-chc", places: "Blood & Bone Care", n: 2, who: "Merry Joyce Sebastian, Marwin Dy" },
   ] },
-  { id: "rx-mdts", parent: "rx", name: "MD Telesales Oncology", seats: [
+  // Inside the Onco-Hema Division, beside Uro & Onco Care and Blood & Bone Care (HR's chart, 10 Oct 2026).
+  { id: "rx-mdts", parent: "rx-onco", name: "MD Telesales Oncology", seats: [
     { role: "telesales-coach", who: "Honey Cordero" },
     { role: "sales-admin", title: "Sales Admin", who: "Sheila Mae Bazar" },
     { role: "md-telesales", n: 4, who: "Mitzi Francisco, Emmanuel Greg Escalona, Ailyn Mancilla, Khalygen Boayes" },
