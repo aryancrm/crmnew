@@ -7,6 +7,8 @@ import { ChevronDown, ChevronLeft, ChevronRight, Network, User, Users } from "lu
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useMe } from "../auth";
+import { reportsFor } from "../books/reports";
 import { exactPeso, monthName, shiftMonth, shortPeso } from "../ceo";
 import { Bars } from "../team/charts";
 import { Card, count, PageHead, PageState } from "../ui";
@@ -35,6 +37,26 @@ const REPORTS = [
   },
 ];
 
+/** The books' reports this person opens (sales, stock, taxes; the statements for the money desks). */
+function MoreReports() {
+  const me = useMe();
+  const shown = reportsFor(me.data?.role ?? "");
+  if (!shown.length) return null;
+  return (
+    <section className="mt-6">
+      <h2 className="mb-2 text-sm font-semibold text-slate-900">More reports</h2>
+      <div className="grid gap-2 sm:grid-cols-2">
+        {shown.map((one) => (
+          <Link key={one.key} to={`/books/reports/${one.key}`} className="rounded-xl border border-slate-200 bg-white px-4 py-3 hover:border-emerald-300">
+            <div className="text-sm font-semibold text-slate-900">{one.title}</div>
+            <div className="text-xs text-slate-500">{one.about}</div>
+          </Link>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 export function Reports() {
   return (
     <div className="mx-auto max-w-4xl">
@@ -57,6 +79,7 @@ export function Reports() {
           </Link>
         ))}
       </Card>
+      <MoreReports />
     </div>
   );
 }

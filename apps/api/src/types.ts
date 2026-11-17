@@ -5368,3 +5368,11 @@ export type AuditTrail = {
   more: boolean;
   lines: { at: string; who: string; kind: string; record: string | null; link: string | null; what: string }[];
 };
+/** One of the old CRM's insight reports (ERP phase 2): its columns, rows and totals, ready to show and export. */
+export type Insight = {
+  title: string;
+  note: string;
+  columns: { key: string; label: string; kind: "text" | "money" | "number" | "percent" }[];
+  rows: Record<string, string | number | null>[];
+  totals: Record<string, string | number>;
+};

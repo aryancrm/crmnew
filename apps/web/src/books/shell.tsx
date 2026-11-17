@@ -85,13 +85,13 @@ const GROUPS: NavGroup[] = [
   {
     label: "Reports",
     icon: <BarChart3 size={16} />,
-    ledger: true,
     items: [
       { label: "All Reports", to: "/books/reports" },
-      { label: "Profit and Loss", to: "/books/reports/profit-and-loss" },
-      { label: "Balance Sheet", to: "/books/reports/balance-sheet" },
-      { label: "Cash Flow", to: "/books/reports/cash-flow" },
-      { label: "Gross Profit", to: "/books/reports/gross-profit" },
+      { label: "Profit and Loss", to: "/books/reports/profit-and-loss", ledger: true },
+      { label: "Balance Sheet", to: "/books/reports/balance-sheet", ledger: true },
+      { label: "Cash Flow", to: "/books/reports/cash-flow", ledger: true },
+      { label: "Gross Profit", to: "/books/reports/gross-profit", ledger: true },
+      { label: "Stock by Age", to: "/books/reports/stock-aging" },
     ],
   },
 ];

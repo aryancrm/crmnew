@@ -7,7 +7,7 @@ import { type Database, openDatabase } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { seedDemo } from "../seed";
-import type { AuditTrail, Catalogue, Decisions } from "../types";
+import type { AuditTrail, Catalogue, Decisions, Insight } from "../types";
 
 const PASSWORD = "test-password-1";
 let db: Database;
@@ -84,5 +84,23 @@ describe("to decide", () => {
     expect(ryans.lines.every((one) => one.who.includes("Ryan"))).toBe(true);
     expect((await app.request("/api/audit", { headers: { cookie: cookies.ryan as string } })).status).toBe(403);
     expect((await app.request("/api/audit", { headers: { cookie: cookies.sarla as string } })).status).toBe(403);
+  });
+  it("gives the old CRM's insight reports to the desks they serve", async () => {
+    for (const key of ["sales-trend", "top-medicines", "stock-aging", "stock-turnover", "abc", "purchases", "cases", "senior-pwd"]) {
+      const response = await app.request(`/api/books/insights/${key}`, { headers: { cookie: cookies.naresh as string } });
+      expect(response.status, key).toBe(200);
+      const report = (await response.json()) as Insight;
+      expect(report.columns.length, key).toBeGreaterThan(1);
+    }
+    // The stock on the fixture's shelves, at cost.
+    const stock = await read<Insight>("naresh", "/api/books/insights/stock-aging");
+    expect(stock.rows.length).toBeGreaterThan(0);
+    expect(Number(stock.totals.value)).toBeGreaterThan(0);
+    // The order billed above shows among the top medicines.
+    const top = await read<Insight>("sarla", "/api/books/insights/top-medicines");
+    expect(top.rows.length).toBeGreaterThan(0);
+    expect((await app.request("/api/books/insights/top-medicines", { headers: { cookie: cookies.ryan as string } })).status).toBe(403);
+    expect((await app.request("/api/books/insights/stock-aging", { headers: { cookie: cookies.marco as string } })).status).toBe(403);
+    expect((await app.request("/api/books/insights/nothing", { headers: { cookie: cookies.naresh as string } })).status).toBe(404);
   });
 });

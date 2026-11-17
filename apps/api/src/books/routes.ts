@@ -20,6 +20,7 @@ import {
   voidDoc,
 } from "./actions";
 import { accountDetail, accountList, banking } from "./accounts";
+import { insight } from "./insights";
 import { balanceSheet, cashFlow, grossProfit, moneySummary, payablesAging, profitAndLoss, trialBalance, vatSummary } from "./statements";
 import { customerDetail, customerList } from "./customers";
 import { itemDetail, itemList, priceLists } from "./items";
@@ -77,6 +78,10 @@ export function bookRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHan
   app.get("/api/books/reports/payables-aging", async (c) => c.json(await payablesAging(db, c.get("me"))));
   app.get("/api/books/reports/gross-profit", async (c) => c.json(await grossProfit(db, c.get("me"), { ...days(c), by: c.req.query("by") })));
   app.get("/api/books/reports/money-summary", async (c) => c.json(await moneySummary(db, c.get("me"))));
+  // The old CRM's insight reports (sales, stock, purchases, cases), each for the desks it serves.
+  app.get("/api/books/insights/:key", async (c) =>
+    c.json(await insight(db, c.get("me"), c.req.param("key"), { ...days(c), by: c.req.query("by") })),
+  );
   app.get("/api/books/:kind", async (c) => {
     const kind = c.req.param("kind");
     if (!isBookKind(kind)) throw new Refusal(404, "not_found", "No such list.");

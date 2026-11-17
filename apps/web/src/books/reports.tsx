@@ -4,6 +4,7 @@
 
 import type {
   BalanceSheet,
+  Insight,
   CashFlow,
   GrossProfit,
   PayablesAging,
@@ -17,9 +18,24 @@ import { ChevronLeft, Download, Printer } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useMe } from "../auth";
 import { zDate, zMoney } from "./kinds";
 
-type Report = { key: string; title: string; about: string; group: string; days: "range" | "asOf" | "none" };
+type Report = {
+  key: string;
+  title: string;
+  about: string;
+  group: string;
+  days: "range" | "asOf" | "none";
+  /** One of the old CRM's insight reports (its own API and the desks it serves). */
+  insight?: boolean;
+  /** Who opens it; none: the books' money desks (Finance, the CEO, the Admin). */
+  roles?: string[];
+  /** Ways to group it ("By supplier", "By item"…). */
+  by?: { key: string; label: string }[];
+};
+const SALES = ["ceo", "admin", "management", "finance"];
+const STOCK = [...SALES, "inventory"];
 export const REPORTS: Report[] = [
   { key: "profit-and-loss", title: "Profit and Loss", about: "Income, cost of goods, expenses and the profit, with the days before beside it.", group: "Business Overview", days: "range" },
   { key: "balance-sheet", title: "Balance Sheet", about: "What the business holds, owes and is worth on a day.", group: "Business Overview", days: "asOf" },
@@ -28,7 +44,41 @@ export const REPORTS: Report[] = [
   { key: "payables-aging", title: "Payables Aging", about: "Unpaid bills by supplier and by how late they are.", group: "Payables", days: "none" },
   { key: "vat", title: "VAT Summary", about: "Output VAT on sales, input VAT on bills and expenses, tax withheld (2307), month by month.", group: "Taxes", days: "range" },
   { key: "trial-balance", title: "Trial Balance", about: "Every account's balance on a day; debits equal credits.", group: "Accountant", days: "asOf" },
+  { key: "sales-trend", title: "Sales by Channel, Month by Month", about: "Six months of billing (Zoho's and the CRM's) by channel, to the day picked.", group: "Sales", days: "range", insight: true, roles: SALES },
+  { key: "top-medicines", title: "Top Medicines", about: "What sold most in these days, against the same number of days before.", group: "Sales", days: "range", insight: true, roles: SALES },
+  { key: "abc", title: "ABC Classes", about: "The last 12 months' sales by medicine: A the first 80%, B the next 15%, C the rest.", group: "Sales", days: "none", insight: true, roles: SALES },
+  { key: "senior-pwd", title: "Senior Citizen and PWD Sales", about: "Lines sold with the relief, the ID on file and the relief given: for the BIR.", group: "Taxes", days: "range", insight: true, roles: SALES },
+  { key: "stock-aging", title: "Stock by Age and Expiry", about: "Every batch on a shelf: days held, expiry, value at cost.", group: "Inventory", days: "none", insight: true, roles: STOCK },
+  { key: "stock-turnover", title: "Days of Stock Left", about: "On hand against the last 90 days' sales: how long each medicine lasts.", group: "Inventory", days: "none", insight: true, roles: STOCK },
+  {
+    key: "purchases",
+    title: "Purchases",
+    about: "Bills in these days, by supplier or by item.",
+    group: "Payables",
+    days: "range",
+    insight: true,
+    roles: ["ceo", "admin", "finance", "inventory"],
+    by: [
+      { key: "supplier", label: "By supplier" },
+      { key: "item", label: "By item" },
+    ],
+  },
+  {
+    key: "cases",
+    title: "Online Cases",
+    about: "Cases opened, how many became an order, by source or by person.",
+    group: "Sales",
+    days: "range",
+    insight: true,
+    roles: [...SALES, "online"],
+    by: [
+      { key: "source", label: "By source" },
+      { key: "person", label: "By person" },
+    ],
+  },
 ];
+/** The reports this role opens. */
+export const reportsFor = (role: string) => REPORTS.filter((one) => (one.roles ?? ["finance", "ceo", "admin"]).includes(role));
 
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
 const shift = (day: string, days: number) => new Date(Date.parse(`${day}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
@@ -71,7 +121,9 @@ export function ReportsPage() {
 }
 
 function ReportsIndex() {
-  const groups = [...new Set(REPORTS.map((one) => one.group))];
+  const me = useMe();
+  const shown = reportsFor(me.data?.role ?? "");
+  const groups = [...new Set(shown.map((one) => one.group))];
   return (
     <div className="h-full overflow-y-auto">
       <div className="border-b border-[#ebeaf2] px-6 py-4">
@@ -83,7 +135,7 @@ function ReportsIndex() {
           <section key={group}>
             <h2 className="mb-2 text-[12px] font-semibold tracking-wide text-[#6c718a] uppercase">{group}</h2>
             <ul className="space-y-1">
-              {REPORTS.filter((one) => one.group === group).map((one) => (
+              {shown.filter((one) => one.group === group).map((one) => (
                 <li key={one.key}>
                   <Link to={`/books/reports/${one.key}`} className="text-[14px] text-[#1c5bd9] hover:underline">
                     {one.title}
@@ -105,13 +157,14 @@ function ReportPage({ report }: { report: Report }) {
   const from = params.get("from") ?? range.from;
   const to = params.get("to") ?? range.to;
   const asOf = params.get("asOf") ?? today();
-  const by = params.get("by") ?? "medicine";
-  const qs = new URLSearchParams(
-    report.days === "range" ? { from, to, ...(report.key === "gross-profit" ? { by } : {}) } : report.days === "asOf" ? { asOf } : {},
-  );
+  const by = params.get("by") ?? (report.by?.[0]?.key ?? "medicine");
+  const qs = new URLSearchParams({
+    ...(report.days === "range" ? { from, to } : report.days === "asOf" ? { asOf } : {}),
+    ...(report.key === "gross-profit" || report.by ? { by } : {}),
+  });
   const query = useQuery({
     queryKey: ["books", "reports", report.key, qs.toString()],
-    queryFn: () => api<unknown>(`/api/books/reports/${report.key}?${qs}`),
+    queryFn: () => api<unknown>(`/api/books/${report.insight ? "insights" : "reports"}/${report.key}?${qs}`),
     placeholderData: keepPreviousData,
   });
   const set = (next: Record<string, string>) =>
@@ -122,7 +175,7 @@ function ReportPage({ report }: { report: Report }) {
     });
   const period =
     report.days === "range" ? `From ${zDate(from)} To ${zDate(to)}` : report.days === "asOf" ? `As of ${zDate(asOf)}` : `As of ${zDate(today())}`;
-  const table = query.data ? tableOf(report.key, query.data) : null;
+  const table = query.data ? (report.insight ? insightTable(query.data as Insight) : tableOf(report.key, query.data)) : null;
   return (
     <div className="flex h-full flex-col">
       <div className="flex flex-wrap items-center gap-3 border-b border-[#ebeaf2] px-5 py-3 print:hidden">
@@ -154,6 +207,15 @@ function ReportPage({ report }: { report: Report }) {
             As of
             <input type="date" className="h-8 rounded border border-[#d7d5e2] px-2" value={asOf} onChange={(event) => event.target.value && set({ asOf: event.target.value })} />
           </label>
+        )}
+        {report.by && (
+          <div className="flex overflow-hidden rounded border border-[#d7d5e2]">
+            {report.by.map((one) => (
+              <button key={one.key} type="button" onClick={() => set({ by: one.key })} className={`px-3 py-1 ${by === one.key ? "bg-[#408dfb] text-white" : "hover:bg-[#f4f6fb]"}`}>
+                {one.label}
+              </button>
+            ))}
+          </div>
         )}
         {report.key === "gross-profit" && (
           <div className="flex overflow-hidden rounded border border-[#d7d5e2]">
@@ -580,4 +642,63 @@ function tableOf(key: string, data: unknown): Shown {
     default:
       return { view: null, csvHead: [], csv: [] };
   }
+}
+
+/** An insight report as its columns say: money, numbers, percents, words. */
+function insightTable(data: Insight): Shown {
+  const show = (kind: string, value: string | number | null | undefined) =>
+    value === null || value === undefined || value === ""
+      ? ""
+      : typeof value === "string"
+        ? value
+        : kind === "money"
+          ? zMoney(value)
+          : kind === "percent"
+            ? `${value}%`
+            : kind === "number"
+              ? value.toLocaleString("en-PH")
+              : String(value);
+  const raw = (kind: string, value: string | number | null | undefined) =>
+    value === null || value === undefined ? "" : kind === "money" && typeof value === "number" ? pesos(value) : value;
+  return {
+    view: (
+      <>
+        <p className="mb-3 text-[12.5px] text-[#6c718a]">{data.note}</p>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-[#d7d5e2]">
+                {data.columns.map((column) => (
+                  <th key={column.key} className={`${TH} ${column.kind === "text" ? "" : "text-right"}`}>
+                    {column.label}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.rows.map((row, n) => (
+                <tr key={`${row[data.columns[0]?.key ?? ""]}-${n}`} className="border-t border-[#f2f1f7]">
+                  {data.columns.map((column) => (
+                    <td key={column.key} className={column.kind === "text" ? TD : NUM}>
+                      {show(column.kind, row[column.key])}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+              <tr className="border-y-2 border-[#21263c] font-semibold">
+                {data.columns.map((column) => (
+                  <td key={column.key} className={column.kind === "text" ? TD : NUM}>
+                    {show(column.kind, data.totals[column.key])}
+                  </td>
+                ))}
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        {!data.rows.length && <p className="py-6 text-center text-[#6c718a]">Nothing in these days.</p>}
+      </>
+    ),
+    csvHead: data.columns.map((column) => column.label),
+    csv: data.rows.map((row) => data.columns.map((column) => raw(column.kind, row[column.key]))),
+  };
 }
