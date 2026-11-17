@@ -128,6 +128,56 @@ My Team (the team's orders and figures, **view only**), Team performance (per pe
 not open to the sales teams yet"), Clients Directory, Announcements, Create New Order. A Team
 Lead approves nothing.
 
+## Order page, every button (walked again as Management)
+
+- **Order overview**: a summary card (customer, credit / direct, status, date, MedRep, salesperson,
+  division, invoicing from, address, remarks, then the additional details).
+- **Request refund** (also the MedRep's): why; **where are the goods** (Not shipped / Shipped,
+  coming back to us / Delivered, customer returns them / Customer keeps them); amount (less for a
+  partial refund). The order then shows "Refund requested: waiting for Management · ₱… ·
+  Withdraw this request".
+- **Edit Details**: delivery address, delivery notes, division, sub-division, headquarter,
+  salesperson (from Zoho's list), doctor, receiver, receiver contact, source, delivery method,
+  payment terms, invoicing from, TIN, terms; Cancel / Save Changes. Once in Zoho: "an edit here
+  updates the real Sales Order too".
+- **Put on Hold / Mark Exception** (and Send back / Reject on the order page): a plain browser
+  prompt asking the reason (the queue's Send back has a proper box).
+- **Attachments** (Management, MedRep and their Team Lead may attach; Finance only reads): each
+  file is a card with its kind and who checks it ("Prescription — reviewed by Pharmacy"; "Valid
+  ID / Purchase Order — informational only, not reviewed by Finance"), file, size, uploaded by,
+  uploaded at, the document shown, Open / Download / Refresh link, **Request deletion** (why;
+  "Management sees this and decides — the file stays until they approve") → Management sees
+  "Deletion requested — awaiting Management · Reason · **Approve — delete it / Decline**"
+  (Decline asks Confirm decline) and the card keeps "Deletion request declined · asked because …".
+  The upload box: "Attach File(s) to Sales Order", **Attach as** Proof of Payment / Guarantee
+  Letter / Prescription / Valid ID / Purchase Order / Other, drag & drop, browse or paste a copied
+  image (Ctrl+V), up to 15 MB, several pages as one PDF.
+- **Notifications** (the bell): e.g. Finance gets "Refund to arrange: … first create the credit
+  note in Zoho", and an edit made in Zoho shows field by field (Doctor → blank…).
+
+## Returns, walked end to end
+
+MedRep (or Management) **Request refund** → Management **Refund requests: Needs decision →
+Approve** ("Dispatch was told to check the goods when they are back") → Dispatch **Return checks:
+Good condition / Damaged — Record the check, send to Management** → Management **Ready to refund →
+Refund** ("Sent to Finance's refund list. The order is cancelled.") → Finance **Refunds: Refund
+pending → Zoho steps (credit note) → Refund done**.
+Flaw seen: a partial refund (₱312.50 of ₱937.50, 10 boxes back) cancelled the **whole** order and
+Finance shows ₱937.50 held. crmnew must return part of an order without cancelling it.
+
+## The Admin page: the hub's against crmnew's
+
+- Hub: the menu is three folding groups (Operations, Customers & stock, Administration) with about
+  eight links; the company's structure lives in **one** place (User Management: Accounts by
+  department, and Team Structure as one tree with territories, vacancies and targets); each page is
+  a title, one line saying what it is for, and white cards with room around them; actions open a
+  small window; a toast confirms.
+- crmnew: eleven links for the Admin, and the structure is spread over four (Channels, Teams &
+  people, Areas, Company chart as built), with dense cards (Channels: head, teams, team leads,
+  MedReps, every team as a chip, areas). To do: one "People & structure" page like the hub's
+  (Department → Division → Head → Team Lead → Territory with targets), folding menu groups, less on
+  each card.
+
 ## What goes to Zoho (hub)
 
 Nothing until Management approves. On approval the hub makes the Zoho **Sales Order** (draft):
