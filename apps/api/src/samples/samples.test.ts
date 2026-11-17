@@ -90,6 +90,14 @@ describe("samples and gifts", () => {
     expect((await post("ryan", `/api/samples/requests/${asked.id}/issue`)).status).toBe(403);
     await ok("marco", `/api/samples/requests/${asked.id}/issue`);
     expect(await onShelf()).toBe(before - 30);
+    // In the books: their cost from Inventory Asset onto the samples expense, balanced.
+    const posted = await rows<{ account: string; debit: number; credit: number }>(
+      db,
+      sql`select account, sum(debit)::int as debit, sum(credit)::int as credit from book_entry where kind = 'crm_sample' and number = ${asked.code} group by account order by account`,
+    );
+    expect(posted.map((one) => one.account)).toEqual(["Inventory Asset", "Product Samples to clients"]);
+    expect(posted[0]?.credit).toBe(posted[1]?.debit);
+    expect(posted[1]?.debit).toBeGreaterThan(0);
     let mine = await read<SamplesOfPerson>("ryan", "/api/samples");
     expect(mine.held).toEqual([]);
     expect(mine.requests.find((one) => one.id === asked.id)?.status).toBe("issued");

@@ -5132,7 +5132,7 @@ export type BookEntryRow = {
   link: string | null;
 };
 /** This CRM's own documents in the books (migration 0096). */
-export type CrmEntryKind = "crm_invoice" | "crm_payment" | "crm_refund" | "crm_return" | "crm_stock";
+export type CrmEntryKind = "crm_invoice" | "crm_payment" | "crm_refund" | "crm_return" | "crm_stock" | "crm_sample";
 export type BookAccountDetail = BookAccountRow & {
   description: string | null;
   currency: string;

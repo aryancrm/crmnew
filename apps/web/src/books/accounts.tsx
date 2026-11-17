@@ -17,6 +17,7 @@ const CRM_KIND: Record<string, string> = {
   crm_refund: "Refund (CRM)",
   crm_return: "Return credited (CRM)",
   crm_stock: "Stock out / back (CRM)",
+  crm_sample: "Samples / gifts to reps (CRM)",
 };
 const CRM_PLURAL: Record<string, string> = {
   crm_invoice: "CRM invoices",
@@ -24,6 +25,7 @@ const CRM_PLURAL: Record<string, string> = {
   crm_refund: "CRM refunds",
   crm_return: "CRM returns",
   crm_stock: "CRM stock",
+  crm_sample: "CRM samples and gifts",
 };
 
 /** "other_current_asset" → "Other Current Asset". */
