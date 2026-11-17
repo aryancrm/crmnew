@@ -470,8 +470,13 @@ export function RecordPaymentDialog({
   // Tax the customer withheld (EWT) with its BIR Form 2307: it settles the invoice too.
   const [withheld, setWithheld] = useState("");
   const [form2307, setForm2307] = useState("");
+  // What the customer deducted (a chain's near-expiry return kept, a listing fee…), why, and their memo.
+  const [deducted, setDeducted] = useState("");
+  const [deductionKind, setDeductionKind] = useState("");
+  const [deductionRef, setDeductionRef] = useState("");
   const typed = centavos(amount);
   const withheldTyped = withheld.trim() ? centavos(withheld) : 0;
+  const deductedTyped = deducted.trim() ? centavos(deducted) : 0;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -486,6 +491,9 @@ export function RecordPaymentDialog({
       proofId: proofId ? Number(proofId) : null,
       withheld: Number.isFinite(withheldTyped) && withheldTyped > 0 ? withheldTyped : null,
       form2307: form2307.trim() || null,
+      deducted: Number.isFinite(deductedTyped) && deductedTyped > 0 ? deductedTyped : null,
+      deductionKind: deductionKind || null,
+      deductionRef: deductionRef.trim() || null,
     });
     if (done) onClose();
   }
@@ -528,10 +536,42 @@ export function RecordPaymentDialog({
             )}
           </Field>
         </div>
-        {withheldTyped > 0 && Number.isFinite(withheldTyped) && Number.isFinite(typed) && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label="Deducted by them (optional)" error={money.at("deducted")}>
+            {(field) => (
+              <input
+                {...field}
+                className={INPUT}
+                inputMode="decimal"
+                placeholder="₱0.00"
+                value={deducted}
+                onChange={(event) => setDeducted(event.target.value)}
+              />
+            )}
+          </Field>
+          <Field label="Why" error={money.at("deductionKind")}>
+            {(field) => (
+              <select {...field} className={INPUT} disabled={!deducted.trim()} value={deductionKind} onChange={(event) => setDeductionKind(event.target.value)}>
+                <option value="">Pick…</option>
+                <option value="near_expiry">Near-expiry goods kept</option>
+                <option value="listing_fee">Listing fee</option>
+                <option value="promo">Promo / rebate</option>
+                <option value="penalty">Penalty</option>
+                <option value="other">Other</option>
+              </select>
+            )}
+          </Field>
+          <Field label="Their debit memo #" error={money.at("deductionRef")}>
+            {(field) => (
+              <input {...field} className={INPUT} disabled={!deducted.trim()} value={deductionRef} onChange={(event) => setDeductionRef(event.target.value)} />
+            )}
+          </Field>
+        </div>
+        {(withheldTyped > 0 || deductedTyped > 0) && Number.isFinite(withheldTyped) && Number.isFinite(deductedTyped) && Number.isFinite(typed) && (
           <div className="-mt-2 text-[13px] text-ink-2">
-            Settles {peso(typed + withheldTyped)} of the {peso(balance)} owed (money and the tax
-            withheld).
+            Settles {peso(typed + withheldTyped + deductedTyped)} of the {peso(balance)} owed (money
+            {withheldTyped > 0 ? ", the tax withheld" : ""}
+            {deductedTyped > 0 ? ", what they deducted" : ""}).
           </div>
         )}
         <HowFields
@@ -612,7 +652,7 @@ export function RecordPaymentDialog({
           )}
         </Field>
         <Problem
-          message={money.general(["amount", "method", "reference", "paidOn", "note", "moneyAccount", "proofId"])}
+          message={money.general(["amount", "method", "reference", "paidOn", "note", "moneyAccount", "proofId", "deducted", "deductionKind", "deductionRef"])}
         />
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
           <Button onClick={onClose} disabled={money.busy}>

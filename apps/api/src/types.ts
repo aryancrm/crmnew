@@ -1364,7 +1364,10 @@ export type PaymentMethod =
   | "other"
   | "points"
   | "withholding"
-  | "credit";
+  | "credit"
+  /** What the customer deducted (a near-expiry return kept, a listing fee…): a settlement, not cash. */
+  | "deduction";
+export type DeductionKind = "near_expiry" | "listing_fee" | "promo" | "penalty" | "other";
 
 /** A customer's credit: Zoho's open credit notes, and money paid beyond a bill kept for the next. */
 export type CustomerCredit = {
@@ -1611,6 +1614,10 @@ export type PaymentInput = {
    *  payment of its own, settling the invoice too. */
   withheld?: number | null;
   form2307?: string | null;
+  /** What the customer deducted from it, why, and their debit memo's number. */
+  deducted?: number | null;
+  deductionKind?: DeductionKind | null;
+  deductionRef?: string | null;
 };
 
 export type RefundInput = {

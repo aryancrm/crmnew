@@ -254,4 +254,22 @@ describe("this CRM's money in the books", () => {
     expect((await get("ryan", `/api/trace?batch=${batch?.batchNo}`)).status).toBe(403);
     expect((await get("sarla", "/api/trace")).status).toBe(400);
   });
+  it("takes what a chain deducted as settling the invoice, off the sale on Discount, never as cash", async () => {
+    await db.execute(sql`insert into book_account (name, type) values ('Discount', 'income') on conflict do nothing`);
+    const { invoiceId, total } = await delivered(10);
+    const pay = { amount: total - 5000, method: "bank", reference: "BDO-9", paidOn: todayManila(), moneyAccount: BANK };
+    expect((await post("fiona", `/api/invoices/${invoiceId}/payments`, { ...pay, deducted: 5000 })).status).toBe(400);
+    await ok("fiona", `/api/invoices/${invoiceId}/payments`, { ...pay, deducted: 5000, deductionKind: "near_expiry", deductionRef: "DM-77" });
+    const [invoice] = await rows<{ status: string; paid: number }>(db, sql`select status, paid::int as paid from invoice where id = ${invoiceId}`);
+    expect(invoice).toEqual({ status: "paid", paid: total });
+    const [deduction] = await rows<{ kind: string; reference: string; note: string }>(
+      db,
+      sql`select deduction_kind as kind, reference, note from payment where invoice_id = ${invoiceId} and method = 'deduction'`,
+    );
+    expect(deduction).toEqual({ kind: "near_expiry", reference: "DM-77", note: "Near-expiry goods kept" });
+    const posted = await entries(sql`kind = 'crm_payment' and doc_id in (select id from payment where invoice_id = ${invoiceId})`);
+    expect(on(posted, "Discount")).toBe(5000);
+    expect(on(posted, BANK)).toBe(total - 5000);
+    expect(on(posted, "Accounts Receivable")).toBe(-total);
+  });
 });

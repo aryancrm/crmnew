@@ -26,6 +26,7 @@ import { POINT_CENTAVOS, settleOrderPoints } from "../points/service";
 import { companyInfo } from "../settings/service";
 import type {
   ConfirmPaymentInput,
+  DeductionKind,
   InvoiceDetail,
   InvoiceFrom,
   InvoiceList,
@@ -62,6 +63,7 @@ import {
   METHOD_LABEL,
   METHODS,
   NOT_CASH,
+  DEDUCTION_LABEL,
   vatSplit,
 } from "./rules";
 import { MONEY_TYPES } from "../books/accounts";
@@ -195,7 +197,7 @@ export async function financeCounts(
     db,
     sql`select (select count(*) from sales_order where status = 'finance_check')::int as "toConfirm",
         (select count(*) from sales_order where status = 'ready_for_invoice')::int as "toInvoice",
-        (select count(*) from invoice i join sales_order o on o.id = i.order_id where i.status = 'cancelled' and o.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit')) > i.refunded)::int as refunds`,
+        (select count(*) from invoice i join sales_order o on o.id = i.order_id where i.status = 'cancelled' and o.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit', 'deduction')) > i.refunded)::int as refunds`,
   );
   return counted ?? { toConfirm: 0, toInvoice: 0, refunds: 0 };
 }
@@ -792,15 +794,18 @@ export async function recordPayment(
         `${invoice.code} is paid in advance: confirm the money on the order's payment check.`,
       );
     const withheld = Math.max(0, Math.round(input.withheld ?? 0));
-    if (input.amount + withheld > owed)
+    const deducted = Math.max(0, Math.round(input.deducted ?? 0));
+    if (input.amount + withheld + deducted > owed)
       throw new Refusal(
         400,
         "invalid",
         `That is more than the ${peso(owed)} still owed on ${invoice.code}.`,
-        withheld ? "withheld" : "amount",
+        deducted ? "deducted" : withheld ? "withheld" : "amount",
       );
     if (withheld && !clean(input.form2307))
       throw new Refusal(400, "invalid", "Type the BIR Form 2307's number for the tax withheld.", "form2307");
+    if (deducted && !input.deductionKind)
+      throw new Refusal(400, "invalid", "Say why they deducted it.", "deductionKind");
     if (input.proofId) {
       const [proof] = await rows<{ id: number }>(
         tx,
@@ -811,7 +816,7 @@ export async function recordPayment(
     }
     const first = await addPayment(tx, me, invoice, input);
     // The tax withheld settles the invoice as well (Zoho kept it on the payment).
-    const { left } = withheld
+    let { left } = withheld
       ? await addPayment(tx, me, invoice, {
           amount: withheld,
           method: "withholding",
@@ -821,12 +826,27 @@ export async function recordPayment(
           proofId: null,
         })
       : first;
+    // What the customer deducted (a chain's near-expiry return kept, a listing fee…) settles the
+    // invoice too, never as cash.
+    if (deducted) {
+      ({ left } = await addPayment(tx, me, invoice, {
+        amount: deducted,
+        method: "deduction",
+        reference: clean(input.deductionRef),
+        paidOn: input.paidOn,
+        note: DEDUCTION_LABEL[input.deductionKind as DeductionKind],
+        proofId: null,
+      }));
+      await tx.execute(
+        sql`update payment set deduction_kind = ${input.deductionKind} where id = (select max(id) from payment where invoice_id = ${invoice.id} and method = 'deduction')`,
+      );
+    }
     await logEvent(
       tx,
       invoice.orderId,
       me,
       "payment",
-      `${how(input)}${withheld ? `, and ${peso(withheld)} tax withheld (Form 2307 ${clean(input.form2307)})` : ""} received for ${invoice.code}. ${left > 0 ? `${peso(left)} still owed.` : "Paid in full."}`,
+      `${how(input)}${withheld ? `, and ${peso(withheld)} tax withheld (Form 2307 ${clean(input.form2307)})` : ""}${deducted ? `, and ${peso(deducted)} deducted by the customer (${DEDUCTION_LABEL[input.deductionKind as DeductionKind].toLowerCase()}${clean(input.deductionRef) ? `, memo ${clean(input.deductionRef)}` : ""})` : ""} received for ${invoice.code}. ${left > 0 ? `${peso(left)} still owed.` : "Paid in full."}`,
       left > 0 ? null : "paid",
     );
     if (left === 0) {
@@ -853,7 +873,7 @@ export async function recordPayment(
 async function notCashPaid(tx: Runner, invoiceId: number): Promise<number> {
   const [found] = await rows<{ amount: number }>(
     tx,
-    sql`select coalesce(sum(amount), 0)::int as amount from payment where invoice_id = ${invoiceId} and active and method in ('points', 'withholding', 'credit')`,
+    sql`select coalesce(sum(amount), 0)::int as amount from payment where invoice_id = ${invoiceId} and active and method in ('points', 'withholding', 'credit', 'deduction')`,
   );
   return found?.amount ?? 0;
 }
@@ -1253,10 +1273,10 @@ export async function refundsOwed(db: Database, me: Me): Promise<RefundList> {
     rows<Omit<RefundOwed, "days" | "owed"> & { cancelledDay: string | null }>(
       db,
       sql`select i.id::int as "invoiceId", i.code as "invoiceCode", i.order_id::int as "orderId", o.code as "orderCode",
-          i.customer_id::int as "customerId", c.name as customer, (i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit')))::int as received, i.refunded::int as refunded,
+          i.customer_id::int as "customerId", c.name as customer, (i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit', 'deduction')))::int as received, i.refunded::int as refunded,
           i.cancelled_reason as reason, ${iso("i.cancelled_at")} as "cancelledAt",
           to_char(i.cancelled_at at time zone 'Asia/Manila', 'YYYY-MM-DD') as "cancelledDay"
-        ${invoiceFrom} where i.status = 'cancelled' and o.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit')) > i.refunded order by i.cancelled_at, i.id`,
+        ${invoiceFrom} where i.status = 'cancelled' and o.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit', 'deduction')) > i.refunded order by i.cancelled_at, i.id`,
     ),
     // Paid beyond the bill (a return lowered it, or the order was changed after the money came
     // in): given back as well.
@@ -1265,7 +1285,7 @@ export async function refundsOwed(db: Database, me: Me): Promise<RefundList> {
       sql`select i.id::int as "invoiceId", i.code as "invoiceCode", i.order_id::int as "orderId", o.code as "orderCode",
           i.customer_id::int as "customerId", c.name as customer, i.paid::int as received, i.refunded::int as refunded,
           least(i.paid - i.refunded - i.total,
-            i.paid - i.refunded - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit')))::int as owed,
+            i.paid - i.refunded - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit', 'deduction')))::int as owed,
           case when i.credited > 0
             then 'Goods returned: ' || coalesce((select string_agg(r.code, ', ') from sales_return r where r.order_id = i.order_id and r.status = 'received'), 'credit')
             else 'Paid more than the bill' end as reason,
@@ -1273,7 +1293,7 @@ export async function refundsOwed(db: Database, me: Me): Promise<RefundList> {
           to_char((select max(coalesce(r.credited_at, r.received_at)) from sales_return r where r.order_id = i.order_id) at time zone 'Asia/Manila', 'YYYY-MM-DD') as "cancelledDay"
         ${invoiceFrom} where i.status <> 'cancelled'
           and least(i.paid - i.refunded - i.total,
-            i.paid - i.refunded - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit'))) > 0
+            i.paid - i.refunded - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit', 'deduction'))) > 0
         order by i.id`,
     ),
     rows<RefundList["done"][number]>(

@@ -149,7 +149,7 @@ async function ceoMorning(db: Database, day: string, hour: number): Promise<numb
     db,
     sql`select
         coalesce((select sum(total) from sale_invoice where status <> 'cancelled' and issued_on = ${yesterday}::date), 0)::float8 as sold,
-        coalesce((select sum(amount) from payment where active and method not in ('points', 'withholding', 'credit') and paid_on = ${yesterday}::date), 0)::float8 as collected,
+        coalesce((select sum(amount) from payment where active and method not in ('points', 'withholding', 'credit', 'deduction') and paid_on = ${yesterday}::date), 0)::float8 as collected,
         coalesce((select sum(balance) from ${duesSql(day)} d where not d.on_delivery), 0)::float8 as owed,
         coalesce((select sum(balance) from ${duesSql(day)} d where not d.on_delivery and d.late > 0), 0)::float8 as late,
         (select count(*) from sales_order o where o.status not in (${list(NEVER_STUCK)}) and ${stuckNow()})::int as stuck`,

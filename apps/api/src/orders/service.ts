@@ -192,7 +192,7 @@ const takeBackSql = sql`(o.approved_by is not null
     and (e.stage in ('finance_verified', 'paid', 'packed', 'shipped', 'delivered', 'completed')
       or (e.stage = 'invoiced' and e.by_person <> o.approved_by)))
   and not exists (select 1 from invoice i where i.order_id = o.id and i.status <> 'cancelled'
-    and i.paid > (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit'))))`;
+    and i.paid > (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit', 'deduction'))))`;
 /** A cancelled order (alias `o`) Management can bring back (the hub's Restore): no money given
  *  back on it, no points (they went back to the customer), not an Online or PAP case's (its case
  *  places its next order itself). */
@@ -208,7 +208,7 @@ const beforeDispatch = (order: { status: OrderStatus; heldFrom: OrderStatus | nu
     (!order.heldFrom || ["pending_approval", "finance_check", "ready_for_invoice"].includes(order.heldFrom)));
 /** Money is on the order's invoice (alias `o`): points paid on it as it was made don't count. */
 const paidInSql = sql`exists (select 1 from invoice i where i.order_id = o.id and i.status <> 'cancelled'
-  and i.paid > (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit')))`;
+  and i.paid > (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit', 'deduction')))`;
 /** Sent back to the MedRep (alias `o`): its last reason, who sent it, the MedRep's answer. */
 const sentBackColumns = sql`o.sent_back_count::int as "sentBackCount", o.sent_back_reason as "sentBackReason",
   (select p.name from person p where p.id = o.sent_back_by) as "sentBackBy", o.reply`;

@@ -53,6 +53,10 @@ const paymentInput = z.object({
   // Tax the customer withheld (EWT) with its BIR Form 2307 number.
   withheld: z.number().int().min(0).nullish(),
   form2307: optional(60),
+  // What the customer deducted, why, and their debit memo.
+  deducted: z.number().int().min(0).nullish(),
+  deductionKind: z.enum(["near_expiry", "listing_fee", "promo", "penalty", "other"]).nullish(),
+  deductionRef: optional(60),
 });
 
 export function financeRoutes(

@@ -2,7 +2,7 @@
 // split for VAT, when it falls due, and how an unpaid one reads ("Overdue by 12 days").
 
 import type { Role } from "../people/roles";
-import type { InvoiceFrom, InvoiceState, PaymentMethod, PaymentTerms, Vat } from "../types";
+import type { DeductionKind, InvoiceFrom, InvoiceState, PaymentMethod, PaymentTerms, Vat } from "../types";
 
 /** Who confirms payments, makes invoices and records money. */
 export const FINANCE_ROLES: readonly Role[] = ["finance", "admin"];
@@ -18,15 +18,24 @@ export const METHOD_LABEL: Record<PaymentMethod, string> = {
   points: "Points",
   withholding: "Tax withheld (2307)",
   credit: "Customer's credit",
+  deduction: "Deducted by the customer",
+};
+/** Why a customer deducted (Modern Trade's chains, mostly). */
+export const DEDUCTION_LABEL: Record<DeductionKind, string> = {
+  near_expiry: "Near-expiry goods kept",
+  listing_fee: "Listing fee",
+  promo: "Promo / rebate",
+  penalty: "Penalty",
+  other: "Other",
 };
 export const METHODS = Object.keys(METHOD_LABEL) as PaymentMethod[];
 /** What a person records by hand: points are paid only by the points the order used; tax withheld
  *  comes with the money it was withheld from. */
 export const STAFF_METHODS = METHODS.filter(
-  (method) => method !== "points" && method !== "withholding" && method !== "credit",
+  (method) => method !== "points" && method !== "withholding" && method !== "credit" && method !== "deduction",
 );
 /** Settled without cash: never counted as money in, never given back as money. */
-export const NOT_CASH = ["points", "withholding", "credit"] as const;
+export const NOT_CASH = ["points", "withholding", "credit", "deduction"] as const;
 
 /** Each company's own invoice series. */
 const SERIES: Record<InvoiceFrom, string> = { "2mg": "2MG-SI-", getmeds: "INV-" };
