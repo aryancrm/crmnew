@@ -127,6 +127,17 @@ Administration (**User Management**, Order Ownership, Refunds, Zoho Sync Health)
 My Team (the team's orders and figures, **view only**), Team performance (per person; "KPIs are
 not open to the sales teams yet"), Clients Directory, Announcements, Create New Order. A Team
 Lead approves nothing.
+- **Whose team**: the MedReps whose account names this person as **Team Lead** (Admin → User
+  Management → the account → Edit → Team Lead: "who this person reports to; their orders show on
+  that person's team dashboard, and on everyone above them"), at any depth; a Channel Head sees the
+  whole channel. With nobody assigned the Team Lead sees nothing.
+- After Juan was put under the test Team Lead: My Team showed his open order (status, total) and
+  the team's **Recent activity** (Sent back, Marked exception, Approved, Finance verified, with
+  who). The Team Lead's bell stayed **empty** (no messages about the team's orders). On the order
+  the Team Lead has Order overview, Request refund, Edit Details and the tabs; no approve, hold or
+  send back.
+- The account panel (Admin): first / last name, username, email, role, Team Lead, Zoho
+  salesperson(s) (several, one starred), **Move / change role**, Edit, Delete, Deactivate.
 
 ## Order page, every button (walked again as Management)
 
@@ -178,14 +189,127 @@ Finance shows ₱937.50 held. crmnew must return part of an order without cancel
   (Department → Division → Head → Team Lead → Territory with targets), folding menu groups, less on
   each card.
 
-## What goes to Zoho (hub)
+## Conditions walked one by one
 
-Nothing until Management approves. On approval the hub makes the Zoho **Sales Order** (draft):
-customer, lines (item, qty, rate as given), salesperson ("DIVISION | Name"), doctor name, source,
-invoicing from, payment terms, warehouse per line. Finance's Confirm moves it Draft → Confirmed;
-invoice, package and shipment are then made in Zoho, and the hub follows Zoho's status by
-webhook. An edit made in Zoho comes back into the order's timeline. (crmnew replaces Zoho: the
-same records are crmnew's own sales order, invoice and stock moves.)
+**A MedRep puts a wrong price (order GM-20261117-0002, a direct patient):** Amoxicillin's catalog
+price ₱8.50 changed to ₱1.00, Losartan given a ₱5 discount and VAT 12%.
+- The form takes it with **no warning** (the price remark is optional); the bottom shows Total
+  Discount −₱5.00 and "Tax (included in the rates above) ₱2.04".
+- The Confirm window lists the lines with price, discount and tax, but marks nothing as off.
+- Management's order page shows ₱1.00 like any price: **no catalog price beside it, no flag**,
+  and the Order Items table has **no Discount column** (the ₱5 shows only in the amount, ₱19).
+- Management fixes it with Edit Items (price back to ₱8.50 → Confirm changes). The timeline then
+  says "Order items changed … was: 5x Amoxicillin, 2x Losartan; now: 5x Amoxicillin, 2x Losartan.
+  New total ₱61.50": **the price change itself is not written down**, only quantities and total.
+- A direct (advance-pay) customer's order still goes to Management first; the form says "requires
+  Finance payment verification before picking".
+
+**Hold, exception, resume (Management, same order):**
+- **Put on Hold** asks "Reason for hold?" (a browser prompt) → status **On Hold**; the reason is
+  posted under "Remarks from MedRep / Management". The order then shows **▶ Resume order, Put on
+  Hold, Mark Exception**, "Exception/Hold Reason: …", **↩ Re-submit to Management approval** and
+  **🚫 Cancel & Archive**.
+- **Exception Hub** counts it (Orders on hold / Critical exceptions / Cancelled) and lists it with
+  the reason, **▶ Resume order** and View.
+- **Mark Exception** asks "Exception reason?" → status **Exception**, the same buttons.
+- **Resume order** opens a proper window: "Takes the order off Exception so it can be processed
+  again. Nothing is changed in Zoho", Held for: reason, **Continue from** (where it was before —
+  Management approval, Finance verification, Draft invoice, Invoice to send, Ready for dispatch,
+  Picking & packing, Dispatched, Tracking shared), **Why can it continue?** (required); "The
+  MedRep, Management and the team at that stage are notified". Resumed → Pending Management
+  Approval.
+- A direct order not yet in Zoho shows **Retry Zoho Sync** in the Zoho box.
+
+**What the MedRep was told (the bell, 19 messages for the two test orders):** submitted and
+waiting for Management; submitted with the Sales Order drafted in Zoho; sent back with the reason;
+now on_hold / now exception with the reason; taken off Exception "continues at
+pending_management_approval" with the reason; waiting for stock (item, reason, "you can also
+press Stock is back"); released, stock is back; draft cancelled ("payment is on record — Finance
+will arrange the refund"); restored ("back with Management for approval"); passed finance
+verification; tracking number and courier; refund request approved; refund with Finance; and
+"Invoicing From → (blank)…" when a field changed in Zoho. **Not told:** Management's own line
+edits — the price ₱1 → ₱8.50, the quantity 5 → 6,000, and the free Paracetamol added on the first
+order reached the MedRep only by opening the order.
+
+**Stock short, line warehouse, drafts (Management, same order):**
+- Edit Items: each line has **"see the stock in every warehouse and choose one"** → a Warehouses
+  window like Zoho's: View Stock on Hand / Committed Stock / Available for Sale, **Accounting
+  Stock / Physical Stock**, a row per warehouse marked "short", a radio to pick the line's
+  warehouse, Done. Raising a quantity to 6,000 (5,000 on hand) gives **no warning** while editing.
+- Approve and check stock: every warehouse "Short on 1 line / 2 lines", the line "Short by 1,000",
+  and "Getmeds Philippines Inc. cannot fill 1 line of this order. Choose another warehouse above,
+  or tick this to approve anyway" (approve only after the tick).
+- **Send back** (order page) asks "What does the MedRep need to fix?" → **Draft**. Management then
+  sees **⏳ Wait for stock, 🚫 Cancel draft, Put on Hold, Mark Exception**, and the sent-back band
+  with **Resubmit to Management** (Management can resubmit it too) and "attach the corrected
+  document".
+- **Wait for stock?**: "not cancelled and no refund starts; stays a draft with its payment on
+  record, marked Waiting for stock; the MedRep is told and you are reminded every 3 days; when the
+  stock is back press Stock is back"; Item out of stock (optional), Reason. The order then shows
+  "⏳ Waiting for stock: item · Reason · since date (n days) · not cancelled" and **✓ Stock is
+  back, send for approval** → straight to Pending Management Approval.
+- **Cancel this draft?**: choose **Delete permanently** ("no money involved; draft, items,
+  attachments and history removed for good; the MedRep is told"; type the order number to
+  confirm) or **Cancel and keep record** ("the customer paid in advance; kept permanently;
+  Finance is told; shows Refund pending until Finance records the refund"); Reason required.
+  Kept: "This draft was cancelled — kept on record · Reason · **↩ Restore order** · Refund
+  pending: Finance has been told".
+- **Restore this order?**: "goes back to Management approval with its items, customer and payment
+  proof as they were; the cancellation stays on the timeline; restoring closes the pending refund
+  and tells Finance not to pay it out"; Why is it being restored? → Pending Management Approval.
+
+## The hub and Zoho (from the code; one Zoho Inventory org, OAuth, every call through one gateway)
+
+crmnew replaces Zoho, so every record below becomes crmnew's own; this is what must not be lost.
+
+**Written to Zoho, step by step**
+- *Management Approve* (also a non-B2B order placed by Management/Admin; MedRep, Team Lead and
+  every B2B order wait for approval): **Sales Order as Draft**. Header: customer, date today,
+  reference "GM-…", notes "Order No.: GM-…". Lines: item, quantity, **rate as given**, warehouse
+  (line's own, else the order's), tax only for 12% or 0%. Also tax-inclusive flag, delivery
+  method, terms, payment terms (days + label), **salesperson** (must already exist in Zoho), and
+  custom fields **doctor name, source, invoicing from, division, sub-division, headquarter, lead
+  id**; the PDF template follows Invoicing From; shipment date if today or later. Before it: the
+  customer's TIN is written to the contact. Stored back: SO id, number, status draft.
+- A line with a different Invoicing From makes a **second Sales Order** for that company.
+- *Attachments* (proof, PO…) are attached to the SO; a prescription only once Pharmacy verifies.
+- *Finance Verify*: the SO is **confirmed** in Zoho (Draft → Confirmed).
+- *Edit Items / Edit Details after the SO exists*: the SO is rewritten from the hub's data (date
+  never changes).
+- *New customer* from the order form: a Zoho contact (name, business / individual, email, phone,
+  contact person, billing and shipping address; custom fields licence owner, **LTO number**
+  (unique), LTO type, licence issue and expiry, is doctor, contact number, TIN).
+- *Retry Zoho Sync*: creates or confirms the SO again through a retry queue (never a second SO).
+- With the V2 switch on (off in the live settings): Create invoice (+ mark sent), Mark packed
+  (package), Ship (shipment with courier and tracking), Mark delivered — all in Zoho from the hub.
+- **Never sent**: the line discount, delivery address, remarks, receiver; stock adjustments; new
+  salespersons; payments, credit notes, refunds, voids.
+
+**Read from Zoho**
+- Contacts (Quick by last change / Full): name, business = **credit**, individual = **direct**,
+  phone, address, active, TIN, **outstanding receivable** (pulled, not shown at ordering).
+- Items: **rate** (one selling price), stock on hand, tax, SKU, unit; stock per warehouse and
+  batches at approval.
+- Salespersons (every 5 min); Sales Orders for "Imported history" (with their comments as
+  timeline entries); each open order re-checked every 5 minutes and when opened (status, invoices,
+  packages, shipments, lines, total); invoices and credit notes copied every 15 min for reports.
+
+**Webhooks from Zoho** (Zoho Workflow Rules call the hub): payment / invoice paid → payment
+recorded; invoice created → Invoice to send; invoice sent → Ready for dispatch; SO confirmed →
+Finance verified stage; package created → Picking & packing; shipment created → Dispatched /
+Tracking shared; SO cancelled / deleted → cancelled / deleted; **SO edited** → 7 fields compared
+(Invoicing From, Doctor, Source, Delivery Method, Terms, Payment Terms, Salesperson), written to
+the timeline ("Payment Terms: net → 30 days"), lines and total replaced from Zoho, MedRep and
+Finance told. An order completes when it is both shipped and paid.
+
+**Done by hand in Zoho today (V2 off):** invoice and mark sent, package, shipment with courier and
+tracking, mark delivered; and always: payments received, refunds and credit notes, voids and
+cancels, changing an SO's customer, fixing a raised invoice, stock adjustments, items / taxes /
+warehouses / salespersons set-up, and **Finance's look at the customer's account in Zoho Books
+before Verify**.
+
+**Safety:** mock / live mode (live only for the allowed org), dry run (a made-up SO), test
+customers only, a write lock (no deletes), a retry queue with a Zoho Sync Health page.
 
 ## Not walked on localhost (needs the hub's Supabase file storage, read from the code instead)
 
