@@ -4,8 +4,8 @@ import { type Database, openDatabase } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedDemo } from "../seed";
 import type { BookAccountDetail, BookAccountList, BookDoc, BookList, Banking } from "../types";
-import { bankOtherDocs, importAccounts, ledgerDocs, refreshLedger, zohoClock } from "./ledger";
-import { type Row, saveDocs } from "./zoho";
+import { bankOtherDocs, importAccounts, ledgerDocs, openingJournal, refreshLedger, zohoClock } from "./ledger";
+import { type BookDocInput, type Row, saveDocs } from "./zoho";
 
 const PASSWORD = "test-password-1";
 let db: Database;
@@ -135,6 +135,37 @@ describe("Zoho Books' own part", () => {
     expect((await get("irene", "/api/books/expense")).status).toBe(403);
     // Inventory still reads the purchases, without the journal behind them.
     expect((await get("irene", "/api/books/bill")).status).toBe(200);
+  });
+
+  it("a payment's withheld tax clears what the customer owed and is kept as Advance Tax", async () => {
+    const payment: BookDocInput = {
+      kind: "customer_payment", zohoId: "cp-wht", number: "P-1", reference: null, date: "2026-11-06", dueDate: null, status: "paid",
+      party: "Makati Med", partyZohoId: null, currency: "PHP", fxRate: 1, subTotal: null, total: 98000, balance: 0, paymentTerms: null,
+      notes: null, zohoCreated: null, zohoModified: null, lines: [], links: [],
+      fields: { "Deposit To": "BDO - 2MG 6722", "Withholding Tax Amount": "20.00", "Tax Account": "Advance Tax", "Bank Charges": "15.00" },
+    };
+    await saveDocs(db, [payment], true);
+    await refreshLedger(db);
+    const rows = (await (await get("naresh", "/api/books/accounts?view=all")).json()) as BookAccountList;
+    const doc = (await (await get("naresh", "/api/books/customer_payment")).json()) as BookList;
+    const entries = ((await (await get("naresh", `/api/books/customer_payment/${doc.rows.find((r) => r.number === "P-1")?.id}`)).json()) as BookDoc).entries;
+    // 980 came in: 965 into the bank, 15 the bank's charge; 20 withheld; 1,000 off what was owed.
+    expect(entries?.map((e) => [e.account, e.debit, e.credit])).toEqual([
+      ["BDO - 2MG 6722", 96500, 0],
+      ["Advance Tax", 2000, 0],
+      ["Bank Fees and Charges", 1500, 0],
+      ["Accounts Receivable", 0, 100000],
+    ]);
+    expect(rows.rows.length).toBeGreaterThan(0);
+  });
+
+  it("Zoho's opening balances are one journal that balances on Opening Balance Adjustments", () => {
+    const journal = openingJournal({ date: "2020-05-02", accounts: [
+      { account_name: "Inventory Asset", debit_or_credit: "debit", bcy_amount: 100.5 },
+      { account_name: "Opening Balance Adjustments", debit_or_credit: "credit", bcy_amount: 99 },
+    ] });
+    expect(journal.lines.map((l) => [l.account, l.amount])).toEqual([["Inventory Asset", 10050], ["Opening Balance Adjustments", -10050]]);
+    expect(journal.total).toBe(10050);
   });
 
   it("reads Zoho's clock in Manila time", () => {

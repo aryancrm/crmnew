@@ -181,6 +181,9 @@ export type CsvSpec = {
   /** Line columns that name another document: kind and column. */
   linksFromLines?: { kind: BookKind; column: string; amount?: string; on?: string }[];
   linksFromHeader?: { kind: BookKind; column: string }[];
+  /** Amounts a payment carries per bill or invoice it was put on (the tax withheld on each),
+   *  added up into the document's own field of the same name. */
+  sumFromRows?: string[];
 };
 
 const BATCH = ["Batch ID", "Batch Reference#", "Manufacturer Batch#", "Manufactured Date", "Expiry Date", "Quantity In", "Quantity Out"];
@@ -280,6 +283,7 @@ export const CSV_SPECS: Record<string, CsvSpec> = {
     // A payment has no item lines: each row is a bill it was put on.
     line: {},
     linksFromLines: [{ kind: "bill", column: "Bill Number", on: "Bill Date" }],
+    sumFromRows: ["Withholding Tax Amount", "Withholding Tax Amount (BCY)"],
   },
   "Sales_Order": {
     kind: "sales_order",
@@ -362,6 +366,7 @@ export const CSV_SPECS: Record<string, CsvSpec> = {
     // A payment has no item lines: each row is an invoice it was put on, with the amount.
     line: {},
     linksFromLines: [{ kind: "invoice", column: "Invoice Number", amount: "Invoice Amount", on: "Date" }],
+    sumFromRows: ["Withholding Tax Amount"],
   },
   "Inventory_Adjustment": {
     kind: "adjustment",
@@ -530,6 +535,11 @@ export function docsFromCsv(spec: CsvSpec, all: Row[], knownLineCols?: Set<strin
       fields: {
         ...rest(head, headerCols, headerTaken),
         ...(/^\d+$/.test(rawStatus) ? { "Bill Status": rawStatus } : {}),
+        ...Object.fromEntries(
+          (spec.sumFromRows ?? [])
+            .filter((column) => column in head)
+            .map((column) => [column, (Math.round(group.reduce((sum, row) => sum + (num(row[column]) ?? 0), 0) * 100) / 100).toFixed(2)]),
+        ),
       },
       lines,
       links,

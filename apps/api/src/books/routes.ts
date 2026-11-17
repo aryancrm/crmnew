@@ -55,7 +55,7 @@ export function bookRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHan
     });
   });
   app.get("/api/books/bill/payables", async (c) => c.json(await payables(db, c.get("me"))));
-  app.get("/api/books/accounts", async (c) => c.json(await accountList(db, c.get("me"), { view: c.req.query("view"), q: c.req.query("q") })));
+  app.get("/api/books/accounts", async (c) => c.json(await accountList(db, c.get("me"), { view: c.req.query("view"), q: c.req.query("q"), asOf: c.req.query("asOf") })));
   app.get("/api/books/accounts/:id", async (c) =>
     c.json(
       await accountDetail(db, c.get("me"), Number(c.req.param("id")), {

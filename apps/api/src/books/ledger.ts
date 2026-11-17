@@ -400,3 +400,43 @@ export function bankOtherDocs(all: Row[]): BookDocInput[] {
   }
   return out;
 }
+
+/**
+ * Zoho's opening balances (Settings → Opening Balances, read from Zoho's API; not in the backup) as
+ * one journal on the day the books opened. Zoho balances them on Opening Balance Adjustments, so
+ * that line takes whatever the others leave.
+ */
+export function openingJournal(opening: { date: string; accounts: { account_name: string; debit_or_credit: string; bcy_amount: number }[] }): BookDocInput {
+  const lines = opening.accounts
+    .filter((a) => a.account_name !== "Opening Balance Adjustments")
+    .map((a) => ({ account: a.account_name, amount: Math.round(a.bcy_amount * 100) * (a.debit_or_credit === "debit" ? 1 : -1) }));
+  const rest = -lines.reduce((sum, line) => sum + line.amount, 0);
+  if (rest) lines.push({ account: "Opening Balance Adjustments", amount: rest });
+  const total = lines.reduce((sum, line) => sum + Math.max(line.amount, 0), 0);
+  return {
+    kind: "journal",
+    zohoId: "opening-balance",
+    number: "Opening Balance",
+    reference: null,
+    date: opening.date,
+    dueDate: null,
+    status: "published",
+    party: null,
+    partyZohoId: null,
+    currency: "PHP",
+    fxRate: 1,
+    subTotal: null,
+    total,
+    balance: 0,
+    paymentTerms: null,
+    notes: "Zoho's opening balances",
+    zohoCreated: null,
+    zohoModified: null,
+    fields: { "Journal Type": "Opening balance", source: "Zoho's opening balances (not in the backup)" },
+    lines: lines.map((line) => ({
+      itemName: null, sku: null, description: null, account: line.account, warehouse: null, unit: null, qty: null, rate: null,
+      taxName: null, taxPct: null, taxAmount: null, amount: line.amount, qtyDone: {}, batches: [], fields: {},
+    })),
+    links: [],
+  };
+}

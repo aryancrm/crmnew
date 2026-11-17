@@ -1682,8 +1682,18 @@ Checked against Zoho Books' own Banking on 17 Nov: 35 of the 44 bank, cash and c
 same to the centavo; each of the other 9 differs only by what was entered in Zoho after its backup
 (16 Nov payments, 17 Nov journals), a USD transfer's 12 centavos, and one Zoho deposit dated in the
 year 6889 (BDO - Getmeds 6889, ₱7,800: a typo in Zoho, which leaves it out of today's balance).
-Payables and receivables are built from the documents and not yet tied to Zoho's Balance Sheet; Zoho
-never exported its cost-of-goods and stock postings, so those accounts don't show them.
+Tied to Zoho's Balance Sheet as of 15 Nov (the day before its backup): 27 of its 36 other accounts
+are the same to the centavo (Advance Tax, Withholding Tax Payable, Accrued Expense, Employee
+Reimbursements, Opening Balance Adjustments, the fixed assets and their depreciation, the payroll
+payables, the advances…), once a payment's withheld tax was added up from every invoice or bill it
+was put on (a customer's on Advance Tax, ours on the account the payment names) and Zoho's opening
+balances (2 May 2020, read from Zoho's settings) came in as a journal. Still apart: Accounts
+Receivable (₱248,672 lower here) and Unearned Revenue (₱3.21M in Zoho: it keeps some payments not yet
+put on an invoice there, this CRM takes them off receivables), Accounts Payable (₱2.87M higher here),
+Tax Payable (Zoho's own split of each invoice's and bill's tax, discount, shipping and adjustment),
+Prepaid Expenses, and the stock accounts (Zoho never exported its cost of goods sold). Making these
+exact needs Zoho's own general ledger (its Account Transactions report, readable only from Zoho
+Books' page).
 
 Screens, in Zoho's frame, for Finance, the CEO and the Admin (the API checks it; Inventory and
 Management keep the purchases without the accounts): Banking (Overview with Cash In Hand, Bank and
@@ -2148,3 +2158,4 @@ with the switch; until then they come over with each backup.
 - 17 Nov (71), Aryan: one stock before going live. `scripts/go-live-stock.ts` makes Getmeds Philippines Inc. the default warehouse (Approve picks it first) and, with --demo-out, takes the demo people's stock off the shelves by stock counts with their reason (19,710 pieces from the demo "Main warehouse", now closed; 2,060 from Cebu, whose 47,815 pieces from Zoho stay). Local database; backup in .data/pg.before-stock-2026-11-17. Data checks: shelves equal their moves, none below zero; the one failing check (two demo orders packed without picks) was there before. Section 17 says how the stock and the books run as one.
 - 17 Nov (72), Aryan: the demo company's leftovers closed in the local database, nothing deleted (`scripts/close-demo.ts`; backup in .data/pg.before-demo-close-2026-11-17). The demo people's 29 orders cancelled with their 16 invoices (the 8 payments recorded on them taken off first, so Finance owes no refund for money that never came; the 18 not yet gone through the desk's own Cancel); their 38 customers archived (none was a Zoho customer); the 2 medicines Zoho never had (Imatinib 400 mg, Capecitabine 500 mg, no stock) archived; 11 enquiries closed as lost, 5 tenders dropped, 2 purchase orders cancelled, 4 pipeline products dropped, 5 registrations withdrawn, 2 care groups closed, 7 B2B accounts dropped, 2 stock notices closed, 1 promo ended, 4 targets cleared from seats the real people hold now. Kept for Bidding to replace: 4 company papers the demo added (PhilGEPS, Mayor's permit, BIR clearance, FDA LTO). Every desk's queue is empty now for the real people; the 17 data checks pass.
 - 17 Nov (73), Aryan: Zoho Books' backup moved in (section 17): the chart of accounts, expenses, manual journals, transfers, deposits, refunds, recurring bills and expenses, fixed assets and the activity log; the documents already here got Books' columns; Banking and the Chart of Accounts read each account's balance from the documents' debits and credits (migrations 0077–0081). Checked against Zoho Books' Banking: 35 of 44 accounts to the centavo, the rest only by what Zoho got after its backup. The demo people's four Books test documents (a purchase order, its receive, a bill and a payment) voided by `scripts/close-demo.ts`. Local database; backup in .data/pg.before-books-2026-11-17.
+- 17 Nov (74), Aryan: the books tied to Zoho's Balance Sheet (section 17): a payment's withheld tax (Advance Tax, Withholding Tax Payable), Zoho's opening balances as a journal, balances as of a day (`?asOf=`); 27 of 36 balance-sheet accounts and 35 of 44 banks to the centavo; what is still apart and why is in section 17 (migration 0082).

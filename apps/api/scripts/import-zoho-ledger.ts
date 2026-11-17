@@ -19,7 +19,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { sql } from "drizzle-orm";
 import { rows } from "../src/db/index";
-import { bankOtherDocs, creditsApplied, expenseExtras, importAccounts, importActivity, LEDGER_SPECS, ledgerDocs, refreshLedger } from "../src/books/ledger";
+import { bankOtherDocs, creditsApplied, openingJournal, expenseExtras, importAccounts, importActivity, LEDGER_SPECS, ledgerDocs, refreshLedger } from "../src/books/ledger";
 import { linkDocs, type Row, saveDocs } from "../src/books/zoho";
 import { openTarget, ROOT, rowsOf } from "./zoho-files";
 
@@ -64,6 +64,9 @@ if (existsSync(otherPath)) {
     if (docs.length) console.log(`bank ${kind}s not in the backup`, await saveDocs(db, docs, apply));
   }
 }
+// Zoho's opening balances, read from Zoho's settings.
+const openingPath = join(API_DIR, "books_opening.json");
+if (existsSync(openingPath)) console.log("opening balances", await saveDocs(db, [openingJournal(JSON.parse(readFileSync(openingPath, "utf8")))], apply));
 console.log("expenses from Zoho's list", await expenseExtras(db, jsonl("books_expenses"), apply));
 linked.push(await creditsApplied(db, csv("Creditnotes_Invoice.csv")));
 for (const docs of linked) console.log("links", docs[0]?.kind, await linkDocs(db, docs, apply));

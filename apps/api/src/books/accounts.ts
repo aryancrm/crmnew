@@ -24,17 +24,19 @@ export const MONEY_TYPES = ["bank", "cash", "credit_card", "payment_clearing"];
 
 /** Each account's movements up to today, once: debits, credits, how many and the last day. A
  *  document dated ahead (next year's rent journals) counts on its day, as in Zoho. */
-const totals = () => sql`(select lower(account) as key, sum(debit)::bigint as debit, sum(credit)::bigint as credit, count(*)::int as n, max(on_date) as last
-    from book_entry where account is not null and on_date <= ${todayManila()}::date group by 1)`;
+const totals = (asOf?: string) => sql`(select lower(account) as key, sum(debit)::bigint as debit, sum(credit)::bigint as credit, count(*)::int as n, max(on_date) as last
+    from book_entry where account is not null and on_date <= ${asOf ?? todayManila()}::date group by 1)`;
 
-const accountSelect = () => sql`select a.id::int as id, a.name, a.code, a.type, p.name as parent, a.parent_id::int as "parentId", a.active,
+const accountSelect = (asOf?: string) => sql`select a.id::int as id, a.name, a.code, a.type, p.name as parent, a.parent_id::int as "parentId", a.active,
     coalesce(t.debit - t.credit, 0)::float8 as balance, coalesce(t.debit, 0)::float8 as debits, coalesce(t.credit, 0)::float8 as credits,
     coalesce(t.n, 0)::int as moves, to_char(t.last, 'YYYY-MM-DD') as "lastOn"
-  from book_account a left join book_account p on p.id = a.parent_id left join ${totals()} t on t.key = lower(a.name)`;
+  from book_account a left join book_account p on p.id = a.parent_id left join ${totals(asOf)} t on t.key = lower(a.name)`;
 
-export async function accountList(db: Database, me: Me, asked: { view?: string; q?: string }): Promise<BookAccountList> {
+export async function accountList(db: Database, me: Me, asked: { view?: string; q?: string; asOf?: string }): Promise<BookAccountList> {
   mayReadLedger(me);
-  const all = await rows<BookAccountRow>(db, sql`${accountSelect()} order by a.type, lower(a.name)`);
+  // Balances as they stood at the end of a day (Zoho's "as of"), today unless asked.
+  const asOf = /^\d{4}-\d{2}-\d{2}$/.test(asked.asOf ?? "") ? asked.asOf : undefined;
+  const all = await rows<BookAccountRow>(db, sql`${accountSelect(asOf)} order by a.type, lower(a.name)`);
   const headOf = (type: string) => Object.entries(ACCOUNT_HEADS).find(([, types]) => types.includes(type))?.[0] ?? "asset";
   const views = [
     { key: "active", count: all.filter((a) => a.active).length },
