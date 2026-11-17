@@ -78,7 +78,9 @@ function Launcher() {
     "h-12 w-full rounded-2xl border border-white/70 bg-white/70 pl-11 text-[15px] text-[#1f2733] shadow-[inset_0_1px_2px_rgba(20,30,50,0.06)] outline-none backdrop-blur placeholder:text-[#9aa2b0] focus:border-[#f36b21]/60 focus:bg-white focus:ring-4 focus:ring-[#f36b21]/15";
 
   return (
-    <main className="relative isolate flex min-h-dvh flex-col overflow-hidden bg-[#f6f7fb] font-[Inter_Variable,Inter,sans-serif] text-[#1f2733] md:h-dvh">
+    <main className="relative isolate overflow-x-hidden bg-[#f6f7fb] font-[Inter_Variable,Inter,sans-serif] text-[#1f2733]">
+      {/* The first screen: the launcher, whole in the window. */}
+      <div className="relative isolate flex min-h-dvh flex-col overflow-hidden md:h-dvh">
       <Orbits />
       {/* Soft colour behind the glass, faded. */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
@@ -134,7 +136,7 @@ function Launcher() {
 
       {/* A word on what this is. */}
       <div className="mx-auto w-[min(1000px,calc(100%-32px))] shrink-0 pt-[clamp(0.5rem,3vh,2.5rem)] text-center">
-        <p className="text-[11px] font-semibold tracking-[0.22em] text-[#c2410c] uppercase">2MG Inc. · Company portal</p>
+        <p className="text-[11px] font-semibold tracking-[0.22em] text-[#c2410c] uppercase">Bishnoi One · Company portal</p>
         <h1 className="mt-2 text-[clamp(26px,4.2vh,44px)] leading-tight font-semibold tracking-[-0.035em]">
           One company. <span className="text-[#f36b21]">Every department</span>, <span className="text-[#1f9d55]">one place</span>.
         </h1>
@@ -175,7 +177,7 @@ function Launcher() {
 
       {/* The other way in: the sign-in as it was. */}
       <footer className="mx-auto flex w-[min(1180px,calc(100%-32px))] shrink-0 flex-wrap items-center justify-between gap-3 pb-5">
-        <span className="text-xs text-[#8a93a3]">Bishnoi One · each person signs in as themselves</span>
+        <a href="#about" className="text-xs font-medium text-[#5b6472] hover:text-[#c2410c]">What is Bishnoi One? ↓</a>
         <Link
           to="/login?with=password"
           state={location.state}
@@ -185,6 +187,9 @@ function Launcher() {
         </Link>
         <span className="text-xs text-[#8a93a3]">Need access? Ask your administrator</span>
       </footer>
+      </div>
+
+      <About />
 
       {/* The same sign-in, whichever tile was pressed. */}
       {picked && (
@@ -211,7 +216,7 @@ function Launcher() {
                 <UserRound className="pointer-events-none absolute top-1/2 left-4 z-10 size-4 -translate-y-1/2 text-[#9aa2b0]" aria-hidden="true" />
                 <input
                   type="text"
-                  placeholder="Login ID (hos1, tl1 or email)"
+                  placeholder="Enter your login ID"
                   autoCapitalize="none"
                   spellCheck={false}
                   autoComplete="username"
@@ -233,7 +238,7 @@ function Launcher() {
                 <KeyRound className="pointer-events-none absolute top-1/2 left-4 z-10 size-4 -translate-y-1/2 text-[#9aa2b0]" aria-hidden="true" />
                 <input
                   type={shown ? "text" : "password"}
-                  placeholder="Password"
+                  placeholder="Enter your login password"
                   autoComplete="current-password"
                   required
                   disabled={busy}
@@ -270,7 +275,7 @@ function Launcher() {
                 {busy ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <ArrowRight className="size-4" aria-hidden="true" />}
               </button>
             </form>
-            <p className="mt-4 text-xs text-[#9aa2b0]">2MG Inc. · GetMeds Philippines Inc.</p>
+            <p className="mt-4 text-xs text-[#9aa2b0]">Bishnoi One · your workspace</p>
           </div>
         </div>
       )}
@@ -282,16 +287,83 @@ function Launcher() {
 function Orbits() {
   return (
     <svg aria-hidden="true" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" className="pointer-events-none absolute inset-0 -z-10 h-full w-full">
-      <path d="M-80 700C220 560 520 820 860 690S1300 420 1540 520" stroke="#f36b21" strokeOpacity=".28" strokeWidth="2" fill="none" />
-      <path d="M-80 742C240 610 540 860 880 734S1320 470 1540 566" stroke="#f36b21" strokeOpacity=".14" strokeWidth="1.5" fill="none" />
-      <path d="M-60 210C260 120 470 300 760 220S1210 40 1520 150" stroke="#1f9d55" strokeOpacity=".26" strokeWidth="2" fill="none" />
-      <path d="M-60 250C280 165 490 342 780 262S1230 84 1520 194" stroke="#1f9d55" strokeOpacity=".12" strokeWidth="1.5" fill="none" />
-      <ellipse cx="1210" cy="760" rx="380" ry="110" transform="rotate(-12 1210 760)" stroke="#1f9d55" strokeOpacity=".16" strokeWidth="1.5" fill="none" />
-      <ellipse cx="200" cy="130" rx="300" ry="80" transform="rotate(-8 200 130)" stroke="#f36b21" strokeOpacity=".14" strokeWidth="1.5" fill="none" />
-      <path d="M1335 118l6 15 15 6-15 6-6 15-6-15-15-6 15-6z" fill="#1f9d55" fillOpacity=".55" />
-      <path d="M110 640l4 10 10 4-10 4-4 10-4-10-10-4 10-4z" fill="#f36b21" fillOpacity=".5" />
-      <circle cx="1060" cy="250" r="4" fill="#f36b21" fillOpacity=".45" />
-      <circle cx="360" cy="800" r="3" fill="#1f9d55" fillOpacity=".45" />
+      <g className="orbit-drift">
+        <path d="M-80 700C220 560 520 820 860 690S1300 420 1540 520" stroke="#f36b21" strokeOpacity=".3" strokeWidth="2" fill="none" />
+        <path className="orbit-flow" d="M-80 742C240 610 540 860 880 734S1320 470 1540 566" stroke="#f36b21" strokeOpacity=".22" strokeWidth="1.6" fill="none" />
+        <ellipse cx="200" cy="130" rx="300" ry="80" transform="rotate(-8 200 130)" stroke="#f36b21" strokeOpacity=".14" strokeWidth="1.5" fill="none" />
+      </g>
+      <g className="orbit-drift-back">
+        <path d="M-60 210C260 120 470 300 760 220S1210 40 1520 150" stroke="#1f9d55" strokeOpacity=".28" strokeWidth="2" fill="none" />
+        <path className="orbit-flow" d="M-60 250C280 165 490 342 780 262S1230 84 1520 194" stroke="#1f9d55" strokeOpacity=".2" strokeWidth="1.6" fill="none" />
+        <ellipse cx="1210" cy="760" rx="380" ry="110" transform="rotate(-12 1210 760)" stroke="#1f9d55" strokeOpacity=".16" strokeWidth="1.5" fill="none" />
+      </g>
+      <path className="orbit-twinkle" d="M1335 118l6 15 15 6-15 6-6 15-6-15-15-6 15-6z" fill="#1f9d55" fillOpacity=".6" />
+      <path className="orbit-twinkle" style={{ animationDelay: "1.6s" }} d="M110 640l4 10 10 4-10 4-4 10-4-10-10-4 10-4z" fill="#f36b21" fillOpacity=".55" />
+      <circle className="orbit-twinkle" style={{ animationDelay: "0.8s" }} cx="1060" cy="250" r="4" fill="#f36b21" fillOpacity=".5" />
+      <circle className="orbit-twinkle" style={{ animationDelay: "2.4s" }} cx="360" cy="800" r="3" fill="#1f9d55" fillOpacity=".5" />
     </svg>
+  );
+}
+
+/** Below the first screen: what Bishnoi One is, how signing in works, and what is inside. */
+function About() {
+  const steps = [
+    { n: "1", title: "Pick your workspace", text: "Sales and field, management, finance, stock, dispatch, people: each department has its own." },
+    { n: "2", title: "Sign in as yourself", text: "Your own login ID and password. Your role decides what you see and what you can do." },
+    { n: "3", title: "Work from one record", text: "An order, its stock, its invoice and its payment are the same record for everyone who touches it." },
+  ];
+  const inside = [
+    ["Orders", "From the field to approval, payment, packing and delivery, with every step timed."],
+    ["Customers", "Hospitals, doctors, pharmacies and patients, with their papers, dues and history."],
+    ["Stock", "Every batch and expiry in every warehouse; a recall traced to each customer."],
+    ["Money", "Invoices, payments, refunds and credits posted to the books by themselves."],
+    ["People", "The company chart, attendance, leave, payroll, targets and scorecards."],
+    ["Reports", "Profit and loss, cash flow, sales by channel and branch, every one exportable."],
+  ];
+  return (
+    <div id="about" className="relative">
+      <section className="mx-auto w-[min(1100px,calc(100%-32px))] py-20">
+        <p className="text-center text-[11px] font-semibold tracking-[0.22em] text-[#c2410c] uppercase">How it works</p>
+        <h2 className="mt-3 text-center text-[clamp(28px,4vw,44px)] leading-tight font-semibold tracking-[-0.035em]">
+          One portal. <span className="text-[#f36b21]">Your own login.</span> The same records.
+        </h2>
+        <ol className="mt-12 grid gap-5 md:grid-cols-3">
+          {steps.map((step) => (
+            <li key={step.n} className="rounded-[1.75rem] border border-white/90 bg-white/70 p-7 shadow-[0_18px_40px_-24px_rgba(20,30,50,0.3)] backdrop-blur-xl">
+              <span className="grid size-10 place-items-center rounded-2xl bg-[#f36b21]/10 text-base font-bold text-[#c2410c]">{step.n}</span>
+              <h3 className="mt-4 text-lg font-semibold tracking-[-0.02em]">{step.title}</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-[#5b6472]">{step.text}</p>
+            </li>
+          ))}
+        </ol>
+      </section>
+      <section className="bg-[#0f1a14] text-white">
+        <div className="mx-auto w-[min(1100px,calc(100%-32px))] py-20">
+          <p className="text-[11px] font-semibold tracking-[0.22em] text-[#ff8a4c] uppercase">What is inside</p>
+          <h2 className="mt-3 max-w-2xl text-[clamp(28px,4vw,44px)] leading-tight font-semibold tracking-[-0.035em]">
+            Every part of the company, <span className="text-[#5fd08b]">joined up</span>.
+          </h2>
+          <ul className="mt-10 grid gap-px overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/10 sm:grid-cols-2 lg:grid-cols-3">
+            {inside.map(([title, text]) => (
+              <li key={title} className="bg-[#0f1a14] p-7">
+                <h3 className="text-lg font-semibold">{title}</h3>
+                <p className="mt-1.5 text-sm leading-relaxed text-white/65">{text}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+      <section className="mx-auto w-[min(1100px,calc(100%-32px))] py-20 text-center">
+        <h2 className="text-[clamp(26px,3.6vw,40px)] leading-tight font-semibold tracking-[-0.035em]">Safe by design</h2>
+        <p className="mx-auto mt-3 max-w-2xl text-[15px] leading-relaxed text-[#5b6472]">
+          Nobody shares an account. Every person signs in as themselves, every page checks what their role may do,
+          and every change is kept: who did it and when. Nothing with history is ever deleted.
+        </p>
+        <a href="#top" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} className="mt-8 inline-flex items-center gap-2 rounded-full bg-[#f36b21] px-6 py-3 text-sm font-semibold text-white shadow-[0_14px_30px_-12px_rgba(243,107,33,0.7)] hover:bg-[#e05a12]">
+          Choose your workspace <ArrowRight className="size-4" aria-hidden="true" />
+        </a>
+        <p className="mt-10 text-xs text-[#8a93a3]">Bishnoi One · each person signs in as themselves</p>
+      </section>
+    </div>
   );
 }

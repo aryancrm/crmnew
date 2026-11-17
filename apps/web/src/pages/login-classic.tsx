@@ -95,8 +95,7 @@ export function ClassicLogin() {
         <div aria-hidden="true" className="pointer-events-none absolute -right-36 -top-40 -z-10 size-[600px] rounded-full bg-emerald-500/10 blur-3xl" />
         <div aria-hidden="true" className="pointer-events-none absolute -bottom-64 -left-40 -z-10 size-[600px] rounded-full bg-[#80a78c]/10 blur-3xl" />
         <div className="flex items-center gap-3">
-          <span className="grid size-10 place-items-center rounded-xl border border-white/20 bg-white/5 text-base font-semibold">2MG</span>
-          <span className="text-xl font-semibold tracking-tight">2MG Inc.</span>
+          <span className="text-xl font-semibold tracking-tight">Bishnoi One</span>
         </div>
         <div className="mx-auto w-full max-w-md">
           <PharmacyMark />
@@ -116,7 +115,7 @@ export function ClassicLogin() {
       </section>
       <section className="flex min-w-0 flex-col px-5 py-5 sm:px-12 lg:px-16 lg:py-8">
         <div className="flex items-center justify-between">
-          <span className="text-lg font-semibold tracking-tight text-[#153e32] lg:invisible">2MG Inc.</span>
+          <span className="text-lg font-semibold tracking-tight text-[#153e32] lg:invisible">Bishnoi One</span>
           <span className="flex items-center gap-1.5 text-[11px] text-slate-500">
             <LockKeyhole className="size-3" aria-hidden="true" />
             Team access
@@ -125,14 +124,14 @@ export function ClassicLogin() {
         <div className="mx-auto my-auto w-full max-w-[420px] py-8">
           <div className="rounded-2xl border border-slate-200/80 bg-white p-6 shadow-[0_16px_60px_-24px_rgba(15,55,40,0.18)] sm:p-9">
             <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-800">Welcome back</p>
-            <h1 className="mt-2 text-[26px] font-semibold leading-tight tracking-tight text-slate-950 sm:text-[30px]">Welcome to your workspace</h1>
+            <h1 className="mt-2 text-[26px] font-semibold leading-tight tracking-tight text-slate-950 sm:text-[30px]">Welcome to your Bishnoi workspace</h1>
             <p className="mt-2 text-sm leading-6 text-slate-500">Sign in with your login ID or work email.</p>
             <form onSubmit={submit} className="mt-6" aria-busy={busy}>
               <label htmlFor="email" className="text-xs font-semibold text-slate-700">Login ID</label>
               <input
                 id="email"
                 type="text"
-                placeholder="hos1, tl1 or name@2mginc.com"
+                placeholder="Enter your login ID"
                 autoCapitalize="none"
                 spellCheck={false}
                 autoComplete="username"
@@ -150,6 +149,7 @@ export function ClassicLogin() {
                 <input
                   id="password"
                   type={shown ? "text" : "password"}
+                  placeholder="Enter your login password"
                   autoComplete="current-password"
                   required
                   disabled={busy}
@@ -189,7 +189,7 @@ export function ClassicLogin() {
             </form>
           </div>
         </div>
-        <footer className="text-center text-[11px] text-slate-400">2MG Inc. · Your company workspace</footer>
+        <footer className="text-center text-[11px] text-slate-400">Bishnoi One · Your company workspace</footer>
       </section>
     </main>
   );
