@@ -170,15 +170,21 @@ select.field {
   padding-right: 2.25rem;
 }
 
-/* The portal's orbit lines move gently (pages/login.tsx); still for people who ask for less motion. */
-@keyframes orbit-drift { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(-36px, 14px, 0); } }
-@keyframes orbit-drift-back { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(30px, -12px, 0); } }
+/* The portal's orbit lines move (pages/login.tsx): the orange line rocks and rises, the green one the
+   other way, the stars twinkle; the space section's stars too. Still for people who ask for less motion. */
+@keyframes orbit-rock { from { transform: translateY(34px) rotate(-3deg); } to { transform: translateY(-34px) rotate(3deg); } }
+@keyframes orbit-rock-back { from { transform: translateY(-30px) rotate(2.5deg); } to { transform: translateY(30px) rotate(-2.5deg); } }
 @keyframes orbit-flow { to { stroke-dashoffset: -400; } }
-@keyframes orbit-twinkle { 0%, 100% { opacity: .35; transform: scale(.85); } 50% { opacity: .9; transform: scale(1.1); } }
-.orbit-drift { animation: orbit-drift 14s ease-in-out infinite alternate; }
-.orbit-drift-back { animation: orbit-drift-back 17s ease-in-out infinite alternate; }
-.orbit-flow { stroke-dasharray: 6 14; animation: orbit-flow 22s linear infinite; }
-.orbit-twinkle { transform-box: fill-box; transform-origin: center; animation: orbit-twinkle 4.5s ease-in-out infinite; }
+@keyframes orbit-twinkle { 0%, 100% { opacity: .15; transform: scale(.6); } 50% { opacity: 1; transform: scale(1.25); } }
+@keyframes star-twinkle { 0%, 100% { opacity: .25; } 50% { opacity: 1; } }
+@keyframes sun-breathe { 0%, 100% { opacity: .85; transform: scale(1); } 50% { opacity: 1; transform: scale(1.06); } }
+.orbit-drift, .orbit-drift-back { transform-box: view-box; transform-origin: 50% 50%; }
+.orbit-drift { animation: orbit-rock 7s ease-in-out infinite alternate; }
+.orbit-drift-back { animation: orbit-rock-back 8.5s ease-in-out infinite alternate; }
+.orbit-flow { stroke-dasharray: 6 14; animation: orbit-flow 18s linear infinite; }
+.orbit-twinkle { transform-box: fill-box; transform-origin: center; animation: orbit-twinkle 3.2s ease-in-out infinite; }
+.star-twinkle { animation: star-twinkle 3.6s ease-in-out infinite; }
+.sun-breathe { transform-box: fill-box; transform-origin: center; animation: sun-breathe 6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .orbit-drift, .orbit-drift-back, .orbit-flow, .orbit-twinkle { animation: none; }
+  .orbit-drift, .orbit-drift-back, .orbit-flow, .orbit-twinkle, .star-twinkle, .sun-breathe { animation: none; }
 }
