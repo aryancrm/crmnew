@@ -396,7 +396,9 @@ export function MedicineDialog({
   const [manufacturer, setManufacturer] = useState(medicine?.manufacturer ?? "");
   const [brand, setBrand] = useState(medicine?.brand ?? "");
   const [rx, setRx] = useState(medicine?.rx ?? true);
-  const [cold, setCold] = useState(medicine?.coldChain ?? false);
+  const [storage, setStorage] = useState<"room" | "cold" | "box">(
+    medicine?.coldBox ? "box" : medicine?.coldChain ? "cold" : "room",
+  );
   const [vat, setVat] = useState<Vat>(medicine?.vat ?? "exempt");
   const [reorder, setReorder] = useState(String(medicine?.reorderLevel ?? 0));
 
@@ -424,7 +426,8 @@ export function MedicineDialog({
               manufacturer,
               brand,
               rx,
-              coldChain: cold,
+              coldChain: storage === "cold",
+              coldBox: storage === "box",
               vat,
               reorderLevel: whole(reorder),
             },
@@ -599,11 +602,12 @@ export function MedicineDialog({
           <select
             {...field}
             className={INPUT}
-            value={cold ? "cold" : "room"}
-            onChange={(event) => setCold(event.target.value === "cold")}
+            value={storage}
+            onChange={(event) => setStorage(event.target.value as typeof storage)}
           >
             <option value="room">Room temperature</option>
             <option value="cold">Cold chain: kept cold to the customer (packed in a styro box with ice)</option>
+            <option value="box">A cold-chain box (styro): Management types its price on each order</option>
           </select>
         )}
       </Field>

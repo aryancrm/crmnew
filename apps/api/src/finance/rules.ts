@@ -17,13 +17,16 @@ export const METHOD_LABEL: Record<PaymentMethod, string> = {
   other: "Other",
   points: "Points",
   withholding: "Tax withheld (2307)",
+  credit: "Customer's credit",
 };
 export const METHODS = Object.keys(METHOD_LABEL) as PaymentMethod[];
 /** What a person records by hand: points are paid only by the points the order used; tax withheld
  *  comes with the money it was withheld from. */
-export const STAFF_METHODS = METHODS.filter((method) => method !== "points" && method !== "withholding");
+export const STAFF_METHODS = METHODS.filter(
+  (method) => method !== "points" && method !== "withholding" && method !== "credit",
+);
 /** Settled without cash: never counted as money in, never given back as money. */
-export const NOT_CASH = ["points", "withholding"] as const;
+export const NOT_CASH = ["points", "withholding", "credit"] as const;
 
 /** Each company's own invoice series. */
 const SERIES: Record<InvoiceFrom, string> = { "2mg": "2MG-SI-", getmeds: "INV-" };

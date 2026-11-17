@@ -65,8 +65,8 @@ export async function financeBoard(db: Database, me: Me): Promise<FinanceBoard> 
     rows<FinanceBoard["money"]>(
       db,
       sql`select
-          (select coalesce(sum(p.amount), 0) from payment p where p.active and p.method not in ('points', 'withholding') and p.paid_on = ${today}::date)::int as "inToday",
-          (select coalesce(sum(p.amount), 0) from payment p where p.active and p.method not in ('points', 'withholding')
+          (select coalesce(sum(p.amount), 0) from payment p where p.active and p.method not in ('points', 'withholding', 'credit') and p.paid_on = ${today}::date)::int as "inToday",
+          (select coalesce(sum(p.amount), 0) from payment p where p.active and p.method not in ('points', 'withholding', 'credit')
             and date_trunc('month', p.paid_on) = date_trunc('month', ${today}::date))::int as "inMonth",
           (select coalesce(sum(i.total), 0) from invoice i where i.status <> 'cancelled'
             and date_trunc('month', i.issued_on) = date_trunc('month', ${today}::date))::int as "invoicedMonth",
@@ -74,7 +74,7 @@ export async function financeBoard(db: Database, me: Me): Promise<FinanceBoard> 
           (select coalesce(sum(dd.balance), 0) from ${duesSql(today)} dd where not dd.on_delivery and dd.late > 0)::float8 as overdue,
           (select coalesce(sum(i.total - i.paid), 0) from invoice i join sales_order o on o.id = i.order_id
             where i.status = 'open' and ${onDelivery})::int as "onDelivery",
-          (select count(*) from invoice i join sales_order o on o.id = i.order_id where i.status = 'cancelled' and o.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding')) > i.refunded)::int as refunds,
+          (select count(*) from invoice i join sales_order o on o.id = i.order_id where i.status = 'cancelled' and o.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit')) > i.refunded)::int as refunds,
           (select count(*) from sales_order o where o.status in ('on_hold', 'exception')
             and (o.held_role = 'finance' or o.held_from in ('finance_check', 'ready_for_invoice')))::int as held,
           (select count(*) from sales_order o where o.status = 'pending_approval')::int as coming,

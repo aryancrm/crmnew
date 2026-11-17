@@ -3,7 +3,12 @@
 // at their buying inside it, then their parts on the left (orders, medicines, money, enquiries,
 // doctors, details, activity) with the open one on the right. Everything comes from one read.
 
-import type { CustomerPage, CustomerPaperKind, CustomerPrices } from "@2mg/api/types";
+import type {
+  CustomerCredit,
+  CustomerPage,
+  CustomerPaperKind,
+  CustomerPrices,
+} from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity as ActivityIcon,
@@ -378,6 +383,9 @@ export function Customer() {
               </button>
             )}
           </SideCard>
+          {me && ["finance", "admin", "ceo", "management"].includes(me.role) && (
+            <CreditCard customerId={customer.id} />
+          )}
           <Details data={data} />
           {["hospital", "distributor", "drugstore"].includes(customer.kind) && (
             <LicencePapers data={data} />
@@ -936,5 +944,35 @@ function TermsDialog({
         </div>
       </div>
     </Dialog>
+  );
+}
+
+/** The customer's credit: Zoho's open credit notes and money kept from a bill, used on an invoice
+ *  by Finance (the order's Paid step). Shown only when there is some. */
+function CreditCard({ customerId }: { customerId: number }) {
+  const query = useQuery({
+    queryKey: ["finance", "credit", customerId],
+    queryFn: () => api<CustomerCredit>(`/api/customers/${customerId}/credit`),
+  });
+  const credit = query.data;
+  if (!credit || credit.total === 0) return null;
+  return (
+    <section className="rounded-2xl border border-emerald-200 bg-emerald-50/60 p-4 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">Credit · {peso(credit.total)}</h2>
+      <p className="mt-0.5 text-[12px] text-slate-600">
+        Theirs to use on an invoice (Finance, on the order's Paid step).
+      </p>
+      <ul className="mt-2 flex flex-col gap-1 text-[13px]">
+        {credit.sources.map((one) => (
+          <li key={`${one.kind}:${one.id}`} className="flex justify-between gap-2">
+            <span>
+              {one.kind === "zoho" ? `Zoho credit note ${one.number}` : `Kept from ${one.number}`}
+              <span className="block text-[11px] text-slate-500">{dayLabel(one.day)}</span>
+            </span>
+            <b className="tabular-nums">{peso(one.left)}</b>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

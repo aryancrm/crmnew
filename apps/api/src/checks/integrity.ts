@@ -107,7 +107,7 @@ const CHECKS: Check[] = [
     query: sql`select o.code || ' ' || m.name || ': ' || i.qty || ' delivered, ' || l.sum || ' back' as problem
       from order_item i join sales_order o on o.id = i.order_id join medicine m on m.id = i.medicine_id
       join (select l.order_item_id, sum(l.qty) as sum from sales_return_line l join sales_return r on r.id = l.return_id
-        where r.status in ('requested', 'approved', 'received') and coalesce(l.outcome, '') <> 'missing' group by 1) l on l.order_item_id = i.id
+        where r.status in ('requested', 'approved', 'checked', 'received') and coalesce(l.outcome, '') <> 'missing' group by 1) l on l.order_item_id = i.id
       where l.sum > i.qty`,
   },
   {

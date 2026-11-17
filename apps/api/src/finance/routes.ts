@@ -7,6 +7,7 @@ import { type Env, idParam, Refusal, readBody } from "../http";
 import { tellCustomer } from "../online/tell";
 import type { ConfirmPaymentInput, PaymentInput, RefundInput } from "../types";
 import { financeBoard } from "./board";
+import { readCustomerCredit, useCredit } from "./credit";
 import { STAFF_METHODS } from "./rules";
 import {
   addHoldProof,
@@ -144,9 +145,34 @@ export function financeRoutes(
   app.post("/api/invoices/:id/refunds", async (c) => {
     const input = await readBody(
       c,
-      z.object({ amount, method, reference: optional(80), refundedOn: day, note: optional(300) }),
+      z.object({
+        amount,
+        // "credit": kept as the customer's credit for their next invoice, not given back.
+        method: z.enum([...STAFF_METHODS, "credit"] as unknown as [string, ...string[]], {
+          error: "Pick how it was given back.",
+        }),
+        reference: optional(80),
+        refundedOn: day,
+        note: optional(300),
+      }),
     );
     await recordRefund(db, c.get("me"), idParam(c), input as RefundInput);
+    return c.json({ ok: true });
+  });
+  // A customer's credit, and using some of it on an invoice.
+  app.get("/api/customers/:id/credit", signedIn, async (c) =>
+    c.json(await readCustomerCredit(db, c.get("me"), idParam(c))),
+  );
+  app.post("/api/invoices/:id/credit", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        kind: z.enum(["zoho", "kept"]),
+        sourceId: z.number().int().positive(),
+        amount: z.number({ error: "Type how much." }).int().positive("Type how much."),
+      }),
+    );
+    await useCredit(db, c.get("me"), idParam(c), input);
     return c.json({ ok: true });
   });
 

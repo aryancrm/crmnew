@@ -178,6 +178,8 @@ export type MedicineInput = {
   reorderLevel: number;
   /** Kept cold from the shelf to the customer (the list's "[COLD CHAIN]"): Dispatch packs it cold. */
   coldChain?: boolean;
+  /** A cold-chain box (a styro box): kept in stock, priced by Management on each order. */
+  coldBox?: boolean;
 };
 
 export type MedicineDetail = {
@@ -1162,6 +1164,8 @@ export type OrderDetail = {
     offerId: number | null;
     /** Kept cold from the shelf to the customer (Inventory's cold-chain mark): packed cold. */
     cold: boolean;
+    /** A cold-chain box (styro): its price is what Management typed on this order. */
+    coldBox: boolean;
   }[];
   /** Every version of its lines, oldest first: as placed, each MedRep fix, each change
    *  Management made before approving. The last is what the order is now. */
@@ -1202,6 +1206,8 @@ export type OrderDetail = {
     /** Of owed, what is in Zoho (its unpaid invoices and opening balance). */
     zoho: number;
     creditLimit: number | null;
+    /** The customer's credit left to use (Zoho's open credit notes, money kept from a bill). */
+    credit: number;
   };
   /** For whoever approves it: each warehouse and what it can't fill of this order (stock
    *  unexpired, less what other approved orders from it hold). Null for anyone else. */
@@ -1316,7 +1322,31 @@ export type TargetList = {
 // ---------------------------------------------------------------- finance
 
 /** "withholding": tax the customer withheld (BIR Form 2307), a settlement, not cash. */
-export type PaymentMethod = "bank" | "cash" | "check" | "ewallet" | "other" | "points" | "withholding";
+export type PaymentMethod =
+  | "bank"
+  | "cash"
+  | "check"
+  | "ewallet"
+  | "other"
+  | "points"
+  | "withholding"
+  | "credit";
+
+/** A customer's credit: Zoho's open credit notes, and money paid beyond a bill kept for the next. */
+export type CustomerCredit = {
+  /** What is left to use, all sources together (centavos). */
+  total: number;
+  sources: {
+    /** zoho: a Zoho credit note's balance; kept: paid beyond one of our bills, kept as credit. */
+    kind: "zoho" | "kept";
+    id: number;
+    /** The credit note's number, or the invoice the money was paid on. */
+    number: string;
+    day: string;
+    amount: number;
+    left: number;
+  }[];
+};
 
 /** How an invoice stands today: "Paid", "Overdue by 12 days", "Due in 5 days". */
 export type InvoiceState = {
@@ -4246,10 +4276,16 @@ export type MyConfirmations = {
 // ---------------------------------------------------------------- returns
 
 export type ReturnReason = "expired" | "damaged" | "wrong_item" | "not_needed" | "other";
-export type ReturnOutcome = "restocked" | "damaged" | "missing";
+/** What Dispatch found of a line (or `kept`: the customer kept it, credited without coming back). */
+export type ReturnOutcome = "restocked" | "damaged" | "missing" | "kept";
+/** Where the goods are (the hub's question): it decides the return's road. */
+export type ReturnGoods = "coming_back" | "customer_keeps" | "not_shipped";
 export type ReturnInput = {
   reason: ReturnReason;
+  /** Coming back (Dispatch checks them) unless said otherwise. */
+  goods?: ReturnGoods;
   note?: string | null;
+  /** What comes back; not asked for "not shipped yet" (the whole order is cancelled). */
   lines: { orderItemId: number; qty: number }[];
 };
 /** Goods that came back after delivery, and what happened to them. */
@@ -4260,8 +4296,10 @@ export type ReturnRow = {
   orderCode: string;
   customer: string;
   medrep: string;
-  status: "requested" | "approved" | "received" | "rejected" | "cancelled";
+  status: "requested" | "approved" | "checked" | "received" | "rejected" | "cancelled";
   statusLabel: string;
+  goods: ReturnGoods;
+  goodsLabel: string;
   reason: ReturnReason;
   reasonLabel: string;
   note: string | null;
@@ -4273,7 +4311,10 @@ export type ReturnRow = {
   decidedAt: string | null;
   receivedBy: string | null;
   receivedAt: string | null;
-  /** What was taken off the bill. */
+  /** Who credited the bill (Management, after the goods were checked or on approving), when. */
+  creditedBy: string | null;
+  creditedAt: string | null;
+  /** What was taken off the bill (checked: what will be, if Management credits it). */
   credit: number;
   lines: {
     id: number;
@@ -4282,7 +4323,8 @@ export type ReturnRow = {
     unitPrice: number;
     outcome: ReturnOutcome | null;
   }[];
-  can: { decide: boolean; receive: boolean; cancel: boolean };
+  /** credit: Management credits the bill after Dispatch checked the goods (or doesn't). */
+  can: { decide: boolean; receive: boolean; credit: boolean; cancel: boolean };
 };
 export type ReturnList = {
   rows: ReturnRow[];
@@ -4300,7 +4342,8 @@ export type OrderReturns = {
     unitPrice: number;
     free: boolean;
   }[];
-  can: { ask: boolean };
+  /** ask: this person may ask for a return; goods: where the goods may be on this order now. */
+  can: { ask: boolean; goods: ReturnGoods[] };
 };
 
 // ---------------------------------------------------------------- data checks

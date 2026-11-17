@@ -12,6 +12,7 @@ const TABS: { key: "" | ReturnRow["status"]; label: string }[] = [
   { key: "", label: "All" },
   { key: "requested", label: "Waiting for Management" },
   { key: "approved", label: "Goods to check" },
+  { key: "checked", label: "Checked: to credit" },
   { key: "received", label: "Credited" },
   { key: "rejected", label: "Not approved" },
 ];
@@ -27,7 +28,10 @@ export function Returns() {
   const data = query.data;
   return (
     <div className="mx-auto max-w-5xl">
-      <PageHead title="Returns" sub="Goods that come back after delivery" />
+      <PageHead
+        title="Returns & refunds"
+        sub="Asked on an order with where the goods are: Management decides, Dispatch checks what comes back"
+      />
       <div className="mb-4 flex flex-wrap gap-1">
         {TABS.map((tab) => {
           const on = status === tab.key;

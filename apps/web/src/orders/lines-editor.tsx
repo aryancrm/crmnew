@@ -294,8 +294,14 @@ export function LinesEditor({ data, onDone }: { data: OrderDetail; onDone: () =>
           <tbody className="divide-y divide-slate-100">
             {lines.map((line) => {
               const price = line.free ? 0 : typed(line.price);
+              // A cold-chain box is priced here, on each order: no list to explain against.
+              const box = Boolean(rowOf(line.medicineId)?.coldBox);
               const differs =
-                !line.free && !line.relief && Number.isFinite(price) && price !== line.listPrice;
+                !box &&
+                !line.free &&
+                !line.relief &&
+                Number.isFinite(price) &&
+                price !== line.listPrice;
               return (
                 <tr key={line.key} className="align-top">
                   <td className="px-3 py-2">
@@ -305,7 +311,11 @@ export function LinesEditor({ data, onDone }: { data: OrderDetail; onDone: () =>
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-500">
                       {line.sku ?? ""} ·
-                      {!line.free && rowOf(line.medicineId) ? (
+                      {box ? (
+                        <span className="text-sky-800">
+                          Cold-chain box: type what the cold chain costs
+                        </span>
+                      ) : !line.free && rowOf(line.medicineId) ? (
                         <select
                           aria-label={`Price list for ${line.medicine}`}
                           value={line.priceKind}

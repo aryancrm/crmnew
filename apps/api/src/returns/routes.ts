@@ -4,13 +4,15 @@ import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
 import { type Env, idParam, Refusal, readBody } from "../http";
-import type { ReturnReason } from "../types";
+import type { ReturnGoods, ReturnReason } from "../types";
 import {
   cancelReturn,
+  creditReturn,
   decideReturn,
   listReturns,
   mayReadReturnOrder,
   orderReturns,
+  RETURN_GOODS,
   RETURN_REASONS,
   receiveReturn,
   requestReturn,
@@ -36,7 +38,9 @@ export function returnRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
         reason: z.enum(RETURN_REASONS as [ReturnReason, ...ReturnReason[]], {
           error: "Say why it comes back.",
         }),
+        goods: z.enum(RETURN_GOODS as [ReturnGoods, ...ReturnGoods[]]).optional(),
         note: z.string().trim().max(500).nullish(),
+        // Not shipped yet: none (the whole order); otherwise the service asks for some.
         lines: z
           .array(
             z.object({
@@ -44,8 +48,8 @@ export function returnRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
               qty: z.number({ error: "Type how many." }).int("Use whole pieces.").min(0),
             }),
           )
-          .min(1, "Say what comes back.")
-          .max(40),
+          .max(40)
+          .default([]),
       }),
     );
     return c.json({ id: await requestReturn(db, c.get("me"), idParam(c), input) });
@@ -73,6 +77,14 @@ export function returnRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
       }),
     );
     return c.json(await receiveReturn(db, c.get("me"), idParam(c), input));
+  });
+  app.post("/api/returns/:id/credit", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({ credit: z.boolean(), note: z.string().trim().max(500).nullish() }),
+    );
+    await creditReturn(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
   });
   app.post("/api/returns/:id/cancel", async (c) => {
     await cancelReturn(db, c.get("me"), idParam(c));

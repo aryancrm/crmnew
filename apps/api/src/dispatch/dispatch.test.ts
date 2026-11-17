@@ -279,6 +279,68 @@ describe("cold chain", () => {
   });
 });
 
+describe("the cold-chain box", () => {
+  it("is pointed out on a cold order, priced by Management, and packed from the shelf", async () => {
+    // Inventory marks the medicine cold and keeps a styro box as an item with stock.
+    await db.execute(sql`update medicine set cold_chain = true where id = ${medicineId}`);
+    const [box] = await rows<{ id: number }>(
+      db,
+      sql`insert into medicine (name, unit) values ('Packaging : Cake Roll with Cover-Styro', 'pcs') returning id::int as id`,
+    );
+    const boxId = box?.id as number;
+    const detail = await read<{ medicine: Record<string, unknown> }>(
+      "irene",
+      `/api/inventory/medicines/${boxId}`,
+    );
+    const { id: _id, code: _code, active: _active, ...input } = detail.medicine;
+    expect(
+      (await post("irene", `/api/inventory/medicines/${boxId}`, { ...input, coldBox: true })).status,
+    ).toBe(200);
+    const [shelf] = await rows<{ id: number }>(
+      db,
+      sql`insert into batch (medicine_id, batch_no, expires_on, unit_cost) values (${boxId}, 'STYRO', '2030-12-31', 4000) returning id::int as id`,
+    );
+    await db.execute(sql`insert into stock (batch_id, warehouse_id, qty) values (${shelf?.id}, ${main}, 20)`);
+
+    const placed = (await (
+      await post("ryan", "/api/orders", {
+        customerId: credit,
+        items: [{ medicineId, qty: 2, priceKind: "hospital" }],
+      })
+    ).json()) as { id: number };
+    const before = await order("sarla", placed.id);
+    expect(before.findings.map((finding) => finding.short)).toContain("No cold box");
+
+    // Management adds the box at what the cold chain costs: no list, no reason needed.
+    const changed = await post("sarla", `/api/orders/${placed.id}/change`, {
+      customerId: credit,
+      items: [
+        { medicineId, qty: 2, priceKind: "hospital" },
+        { medicineId: boxId, qty: 1, priceKind: "hospital", unitPrice: 8900 },
+      ],
+      answer: "Cold chain box added",
+    });
+    expect(changed.status, await changed.clone().text()).toBe(200);
+    const after = await order("sarla", placed.id);
+    const line = after.items.find((item) => item.medicineId === boxId);
+    expect(line).toMatchObject({ unitPrice: 8900, coldBox: true, reason: "Cold-chain packaging" });
+    expect(after.findings.map((finding) => finding.short)).not.toContain("No cold box");
+    expect(after.findings.filter((finding) => finding.kind === "price")).toEqual([]);
+    expect(after.order.total).toBe(2 * 1000 + 8900);
+
+    // It goes on like any order, and the box comes off the shelf when packed.
+    expect((await post("sarla", `/api/orders/${placed.id}/approve`)).status).toBe(200);
+    expect((await post("fiona", `/api/finance/orders/${placed.id}/invoice`)).status).toBe(200);
+    expect((await pack("marco", placed.id)).status).toBe(200);
+    const [left] = await rows<{ qty: number }>(
+      db,
+      sql`select qty::int as qty from stock where batch_id = ${shelf?.id} and warehouse_id = ${main}`,
+    );
+    expect(left?.qty).toBe(19);
+    await db.execute(sql`update medicine set cold_chain = false where id = ${medicineId}`);
+  });
+});
+
 describe("shipping and delivery", () => {
   it("ships with a courier, takes the tracking later, comes back, goes out with our rider, is delivered", async () => {
     const id = await readyToPack(credit, 10);

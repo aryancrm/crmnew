@@ -357,7 +357,7 @@ export async function ceoHome(
           coalesce(sum(i.total - i.paid) filter (where i.status = 'open' and i.terms = 'cod' and o.status = 'shipped'), 0)::float8 as cod,
           coalesce(sum(i.total - i.paid) filter (where i.status = 'open' and i.due_on < ${today}::date and not (i.terms in ('cod', 'days') and o.status <> 'completed')), 0)::float8 as overdue,
           count(distinct i.customer_id) filter (where i.status = 'open' and i.due_on < (${today}::date - 60) and not (i.terms in ('cod', 'days') and o.status <> 'completed'))::int as late,
-          coalesce(sum(i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding')) - i.refunded) filter (where i.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding')) > i.refunded), 0)::float8 as refunds
+          coalesce(sum(i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit')) - i.refunded) filter (where i.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit')) > i.refunded), 0)::float8 as refunds
         from invoice i join sales_order o on o.id = i.order_id`,
     ),
     rows<CeoHome["orders"]>(

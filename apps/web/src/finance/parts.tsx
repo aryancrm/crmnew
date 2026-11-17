@@ -2,7 +2,13 @@
 // the dialogs that move money: confirm an advance payment, record a payment, give money back,
 // take a mistaken payment off.
 
-import type { InvoiceState, OrderDetail, OrderPaper, PaymentMethod } from "@2mg/api/types";
+import type {
+  CustomerCredit,
+  InvoiceState,
+  OrderDetail,
+  OrderPaper,
+  PaymentMethod,
+} from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, FileText } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
@@ -554,6 +560,9 @@ export function RefundDialog({
   const money = useMoney();
   const [amount, setAmount] = useState(asTyped(owed));
   const [method, setMethod] = useState<PaymentMethod>("bank");
+  // Finance gives it back, or keeps it as the customer's credit for their next invoice (as Zoho's
+  // open credit notes did).
+  const [keep, setKeep] = useState(false);
   const [reference, setReference] = useState("");
   const [day, setDay] = useState(todayManila());
   const [note, setNote] = useState("");
@@ -562,37 +571,61 @@ export function RefundDialog({
     if (
       await money.send(`/api/invoices/${invoiceId}/refunds`, {
         amount: centavos(amount),
-        method,
-        reference,
+        method: keep ? "credit" : method,
+        reference: keep ? null : reference,
         refundedOn: day,
         note,
       })
     )
       onClose();
   }
+  const choice = (value: boolean, label: string) => (
+    <label
+      className={`flex flex-1 cursor-pointer items-center justify-center rounded-[10px] border px-3 py-2 text-center text-sm font-semibold ${keep === value ? "border-emerald-600 bg-emerald-50 text-emerald-900" : "border-line text-slate-600 hover:bg-hover"}`}
+    >
+      <input
+        type="radio"
+        name="keep"
+        className="sr-only"
+        checked={keep === value}
+        onChange={() => setKeep(value)}
+      />
+      {label}
+    </label>
+  );
   return (
-    <Dialog title={`Give money back · ${code}`} onClose={onClose} busy={money.busy}>
+    <Dialog title={`Money owed back · ${code}`} onClose={onClose} busy={money.busy}>
       <form onSubmit={submit} className="flex flex-col gap-4">
         <div className="flex items-center justify-between rounded-xl border border-line-soft bg-hover px-4 py-3 text-[13px]">
           <span>Owed back to the customer</span>
           <span className="text-lg font-bold tabular-nums">{peso(owed)}</span>
         </div>
+        <div className="flex gap-2">
+          {choice(false, "Give the money back")}
+          {choice(true, "Keep as their credit")}
+        </div>
         <AmountField
-          label="Amount given back"
+          label={keep ? "Amount kept as credit" : "Amount given back"}
           value={amount}
           onChange={setAmount}
           error={money.at("amount")}
         />
-        <HowFields
-          method={method}
-          setMethod={setMethod}
-          reference={reference}
-          setReference={setReference}
-          day={day}
-          setDay={setDay}
-          dayLabel="Given back on"
-          at={money.at}
-        />
+        {keep ? (
+          <div className="text-[13px] text-ink-2">
+            No money goes out: it is the customer's credit, used on their next invoice.
+          </div>
+        ) : (
+          <HowFields
+            method={method}
+            setMethod={setMethod}
+            reference={reference}
+            setReference={setReference}
+            day={day}
+            setDay={setDay}
+            dayLabel="Given back on"
+            at={money.at}
+          />
+        )}
         <Field label="Note (optional)" error={money.at("note")}>
           {(field) => (
             <input
@@ -609,7 +642,97 @@ export function RefundDialog({
             Close
           </Button>
           <Button type="submit" variant="primary" disabled={money.busy}>
-            {money.busy ? "Saving…" : "Record refund"}
+            {money.busy ? "Saving…" : keep ? "Keep as credit" : "Record refund"}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+/** Finance uses the customer's credit (a Zoho credit note, or money kept from a bill) on an invoice. */
+export function UseCreditDialog({
+  invoiceId,
+  code,
+  owed,
+  customerId,
+  onClose,
+}: {
+  invoiceId: number;
+  code: string;
+  owed: number;
+  customerId: number;
+  onClose: () => void;
+}) {
+  const money = useMoney();
+  const query = useQuery({
+    queryKey: ["finance", "credit", customerId],
+    queryFn: () => api<CustomerCredit>(`/api/customers/${customerId}/credit`),
+  });
+  const sources = query.data?.sources ?? [];
+  const [picked, setPicked] = useState("");
+  const source = sources.find((one) => `${one.kind}:${one.id}` === picked) ?? sources[0];
+  const [amount, setAmount] = useState("");
+  useEffect(() => {
+    if (source) setAmount(asTyped(Math.min(source.left, owed)));
+  }, [source, owed]);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (!source) return;
+    if (
+      await money.send(`/api/invoices/${invoiceId}/credit`, {
+        kind: source.kind,
+        sourceId: source.id,
+        amount: centavos(amount),
+      })
+    )
+      onClose();
+  }
+  return (
+    <Dialog title={`Use the customer's credit · ${code}`} onClose={onClose} busy={money.busy}>
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <div className="flex items-center justify-between rounded-xl border border-line-soft bg-hover px-4 py-3 text-[13px]">
+          <span>Still owed on {code}</span>
+          <span className="text-lg font-bold tabular-nums">{peso(owed)}</span>
+        </div>
+        {!query.data ? (
+          <div className="text-[13px] text-ink-2">Reading their credit…</div>
+        ) : sources.length === 0 ? (
+          <div className="text-[13px] text-ink-2">No credit left for this customer.</div>
+        ) : (
+          <>
+            <Field label="From" error={money.at("sourceId")}>
+              {(field) => (
+                <select
+                  {...field}
+                  className={INPUT}
+                  value={source ? `${source.kind}:${source.id}` : ""}
+                  onChange={(event) => setPicked(event.target.value)}
+                >
+                  {sources.map((one) => (
+                    <option key={`${one.kind}:${one.id}`} value={`${one.kind}:${one.id}`}>
+                      {one.kind === "zoho" ? `Zoho credit note ${one.number}` : `Kept from ${one.number}`} ·{" "}
+                      {peso(one.left)} left
+                    </option>
+                  ))}
+                </select>
+              )}
+            </Field>
+            <AmountField
+              label="Amount to use"
+              value={amount}
+              onChange={setAmount}
+              error={money.at("amount")}
+            />
+          </>
+        )}
+        <Problem message={money.general(["sourceId", "amount"])} />
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button onClick={onClose} disabled={money.busy}>
+            Close
+          </Button>
+          <Button type="submit" variant="primary" disabled={money.busy || !source}>
+            {money.busy ? "Saving…" : "Use the credit"}
           </Button>
         </div>
       </form>

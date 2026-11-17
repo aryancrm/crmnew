@@ -87,6 +87,7 @@ import {
   STATUSES,
   STEP_OF,
 } from "./rules";
+import { customerCredit } from "../finance/credit";
 import { duesSql } from "../finance/dues";
 import { activeOffers, withOfferLines } from "./offers";
 import { shortLines, shortWords } from "./stock-wait";
@@ -175,7 +176,7 @@ const takeBackSql = sql`(o.approved_by is not null
     and (e.stage in ('finance_verified', 'paid', 'packed', 'shipped', 'delivered', 'completed')
       or (e.stage = 'invoiced' and e.by_person <> o.approved_by)))
   and not exists (select 1 from invoice i where i.order_id = o.id and i.status <> 'cancelled'
-    and i.paid > (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding'))))`;
+    and i.paid > (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit'))))`;
 /** A cancelled order (alias `o`) Management can bring back (the hub's Restore): no money given
  *  back on it, no points (they went back to the customer), not an Online or PAP case's (its case
  *  places its next order itself). */
@@ -191,7 +192,7 @@ const beforeDispatch = (order: { status: OrderStatus; heldFrom: OrderStatus | nu
     (!order.heldFrom || ["pending_approval", "finance_check", "ready_for_invoice"].includes(order.heldFrom)));
 /** Money is on the order's invoice (alias `o`): points paid on it as it was made don't count. */
 const paidInSql = sql`exists (select 1 from invoice i where i.order_id = o.id and i.status <> 'cancelled'
-  and i.paid > (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding')))`;
+  and i.paid > (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit')))`;
 /** Sent back to the MedRep (alias `o`): its last reason, who sent it, the MedRep's answer. */
 const sentBackColumns = sql`o.sent_back_count::int as "sentBackCount", o.sent_back_reason as "sentBackReason",
   (select p.name from person p where p.id = o.sent_back_by) as "sentBackBy", o.reply`;
@@ -350,7 +351,7 @@ const itemsOf = (db: Runner, orderIds: number[]) =>
             m.name || coalesce(' ' || m.strength, '') as medicine, m.sku, m.unit, m.pack_size::int as "packSize",
             i.qty::int as qty, i.price_kind as "priceKind", i.list_price::int as "listPrice",
             i.unit_price::int as "unitPrice", i.price_reason as reason, (i.qty * i.unit_price)::int as amount, i.relief, m.vat, i.free, m.rx,
-            i.offer_id::int as "offerId", m.cold_chain as cold,
+            i.offer_id::int as "offerId", m.cold_chain as cold, m.cold_box as "coldBox",
             -- Free for this order: sellable on the shelf, less what orders placed before it are
             -- promised and not packed yet (first placed, first served).
             greatest(0, coalesce((select sum(s.qty) from stock s join batch b on b.id = s.batch_id
@@ -467,9 +468,11 @@ function findingsOf(
         decide: `${item.medicine} × ${item.qty.toLocaleString("en-PH")} given free`,
         text: `Free: ${item.medicine} × ${item.qty.toLocaleString("en-PH")}${item.reason && item.reason !== "Free" ? ` (${item.reason})` : ""}`,
       });
+    // A cold-chain box is priced by Management on each order (Aryan): no list to compare with.
+    const priced = !item.free && !item.coldBox;
     // A senior citizen's or PWD's line is below the list by law; only lower than that is a finding.
     const floor = item.relief ? reliefPrice(item.listPrice, item.vat) : item.listPrice;
-    if (!item.free && item.unitPrice < floor)
+    if (priced && item.unitPrice < floor)
       found.push({
         kind: "price",
         short: `Below ${item.priceLabel.toLowerCase()} price`,
@@ -477,7 +480,7 @@ function findingsOf(
         text: `${item.medicine}: given at ${peso(item.unitPrice)}, ${item.priceLabel} price is ${peso(item.listPrice)} (${peso((item.listPrice - item.unitPrice) * item.qty)} less in all)${item.reason ? `. Reason: ${item.reason}` : ""}`,
       });
     // Above the list: not wrong in itself, but Management sees every price that isn't the list's.
-    if (!item.free && !item.relief && item.unitPrice > item.listPrice)
+    if (priced && !item.relief && item.unitPrice > item.listPrice)
       found.push({
         kind: "price",
         short: `Above ${item.priceLabel.toLowerCase()} price`,
@@ -487,7 +490,7 @@ function findingsOf(
     // Priced as another kind of buyer, cheaper than this customer's own (a distributor's price
     // given to a hospital): Management sees it, whatever the reason typed.
     if (
-      !item.free &&
+      priced &&
       !item.relief &&
       item.priceKind !== "promo" &&
       // An offer's price was set in Inventory by those who set prices: not a question here.
@@ -513,6 +516,15 @@ function findingsOf(
       });
     }
   }
+  // A cold medicine goes in a styro box, which Management adds and prices (Aryan, 17 Nov).
+  const cold = [...new Set(items.filter((item) => item.cold).map((item) => item.medicine))];
+  if (cold.length > 0 && !items.some((item) => item.coldBox))
+    found.push({
+      kind: "stock",
+      short: "No cold box",
+      decide: `${cold.join(", ")} kept cold: add the styro box and its price`,
+      text: `${cold.join(", ")} must be kept cold: no styro box on the order yet. Add the box and what the cold chain costs.`,
+    });
   if (customer.review === "to_review")
     found.push({
       kind: "customer",
@@ -1484,6 +1496,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         )
       )[0] ?? { owed: 0, overdue: 0, days: 0, zoho: 0 },
       creditLimit,
+      credit: (await customerCredit(db, order.customerId)).total,
     },
     warehouseFill: can.approve ? await warehouseFill(db, id) : null,
     money,
@@ -1570,9 +1583,9 @@ async function checkedLines(
     sql`, `,
   );
   const [medicines, prices, promos] = await Promise.all([
-    rows<{ id: number; name: string; vat: Vat }>(
+    rows<{ id: number; name: string; vat: Vat; coldBox: boolean }>(
       db,
-      sql`select id::int as id, name || coalesce(' ' || strength, '') as name, vat from medicine where active and id in (${inIds})`,
+      sql`select id::int as id, name || coalesce(' ' || strength, '') as name, vat, cold_box as "coldBox" from medicine where active and id in (${inIds})`,
     ),
     rows<{ medicineId: number; kind: string; amount: number }>(
       db,
@@ -1618,6 +1631,16 @@ async function checkedLines(
         unitPrice: 0,
         reason: clean(item.reason) ?? "Free",
         free: true,
+        relief: false,
+      };
+    // A cold-chain box: whatever price is typed on the order (Management's), its list or none.
+    if (medicine.coldBox)
+      return {
+        ...item,
+        listPrice: found ?? 0,
+        unitPrice: Math.max(0, item.unitPrice ?? found ?? 0),
+        reason: clean(item.reason) ?? "Cold-chain packaging",
+        free: false,
         relief: false,
       };
     const listPrice = found;

@@ -54,6 +54,7 @@ import {
   ConfirmPaymentDialog,
   InvoiceStatus,
   RecordPaymentDialog,
+  UseCreditDialog,
   useMoney,
 } from "../finance/parts";
 import { MedicinePopup } from "../inventory/medicine-popup";
@@ -62,7 +63,7 @@ import { ApproveDialog } from "../orders/approve-dialog";
 import { checksOf } from "../orders/checks";
 import { LinesEditor } from "../orders/lines-editor";
 import { ReasonDialog, StatusPill, shortSpan, useOrderAction } from "../orders/parts";
-import { OrderReturnsBox } from "../orders/returns";
+import { OrderReturnsBox, RefundButton } from "../orders/returns";
 import { SendToCustomer } from "../orders/send-update";
 import { OrderVersions } from "../orders/versions";
 import { VAT_WORDS } from "../inventory/vat";
@@ -586,6 +587,7 @@ export function Order() {
                 <FileText className="size-3.5" aria-hidden="true" /> Sales order
               </Link>
               <SendToCustomer orderId={order.id} small />
+              <RefundButton orderId={order.id} />
             </div>
           </div>
           <div className="flex flex-col items-end gap-2 text-right">
@@ -853,7 +855,7 @@ export function Order() {
           {tab === "documents" && (
             <div className="flex flex-col gap-4">
               <Documents data={data} />
-              {order.status === "completed" && <OrderReturnsBox orderId={order.id} />}
+              <OrderReturnsBox orderId={order.id} />
             </div>
           )}
         </div>
@@ -1075,6 +1077,11 @@ function Lines({ data, compare }: { data: OrderDetail; compare?: boolean }) {
                       {item.cold && (
                         <span className="inline-flex items-center gap-0.5 rounded bg-sky-50 px-1.5 py-0.5 text-sky-800">
                           <Snowflake className="size-3" aria-hidden="true" /> Cold chain
+                        </span>
+                      )}
+                      {item.coldBox && (
+                        <span className="inline-flex items-center gap-0.5 rounded bg-sky-50 px-1.5 py-0.5 text-sky-800">
+                          <Snowflake className="size-3" aria-hidden="true" /> Cold-chain box · priced by Management
                         </span>
                       )}
                     </div>
@@ -2198,6 +2205,12 @@ function DuesVerdict({ data }: { data: OrderDetail }) {
           {peso(dues.creditLimit ?? 0)}.
         </span>
       )}
+      {dues.credit > 0 && (
+        <span className="text-good">
+          They have {peso(dues.credit)} of credit (Zoho's open credit notes, or money kept from a
+          bill): use it on the invoice from the Payment tab.
+        </span>
+      )}
       <Link to={`/customers/${order.customerId}`} className="text-xs font-semibold underline">
         Their whole history, Zoho's too
       </Link>
@@ -2561,6 +2574,9 @@ function PaidStep({
 }) {
   const { order, can } = data;
   const [paying, setPaying] = useState(false);
+  const [using, setUsing] = useState(false);
+  const me = useMe().data;
+  const finance = me?.role === "finance" || me?.role === "admin";
   const invoice = data.money.invoice;
   const proofs = data.papers.filter((paper) => paper.kind === "payment_proof");
   return (
@@ -2627,14 +2643,30 @@ function PaidStep({
                 .join(", ")}
             </div>
           )}
-          {can.recordPayment && (
-            <div>
-              <Button variant="primary" onClick={() => setPaying(true)}>
-                Record payment received
-              </Button>
+          {(can.recordPayment || (finance && invoice.balance > 0 && data.dues.credit > 0)) && (
+            <div className="flex flex-wrap gap-2">
+              {can.recordPayment && (
+                <Button variant="primary" onClick={() => setPaying(true)}>
+                  Record payment received
+                </Button>
+              )}
+              {finance && invoice.status === "open" && invoice.balance > 0 && data.dues.credit > 0 && (
+                <Button onClick={() => setUsing(true)}>
+                  Use their credit ({peso(data.dues.credit)})
+                </Button>
+              )}
             </div>
           )}
         </>
+      )}
+      {using && invoice && (
+        <UseCreditDialog
+          invoiceId={invoice.id}
+          code={invoice.code}
+          owed={invoice.balance}
+          customerId={order.customerId}
+          onClose={() => setUsing(false)}
+        />
       )}
       {paying && invoice && (
         <RecordPaymentDialog

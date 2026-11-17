@@ -1931,7 +1931,10 @@ on the local copy (database copied first, put back after), with what was seen wr
     prescription medicine needs Regulatory clearance: 92 such are held back — load them once
     cleared? 11 SKUs in the file aren't in our list (GM-4313, GM-4640, GM-4340, GM-4539, GM-4316,
     GM-3185, GM-4283, GM-3398, GM-3690, GM-1752, GM-3545): add them, or leave them out?
-27. **The cold-packaging fee and the shipping charge** (plan 18 step 3; neither is in the hub,
+27. ~~Cold packaging~~ Answered 17 Nov (Aryan): the styro box is an item in stock like a medicine,
+    any price on it in Inventory, and **Management types what the cold chain costs on the order**.
+    Built (change log 92). **Still open: the shipping charge** below.
+    The question as asked: **The cold-packaging fee and the shipping charge** (plan 18 step 3; neither is in the hub,
     both were typed in Zoho). Cold: Zoho's 2026 invoices carry "Packaging : Cake Roll with
     Cover-Styro" or "Split Box Styro" on 607 of 11,552 invoices, at a price typed each time (Cake
     Roll ₱89 most often, ₱0 on 104, also ₱54, ₱44, ₱154…; Split Box mostly ₱0), and the old price
@@ -1941,6 +1944,10 @@ on the local copy (database copied first, put back after), with what was seen wr
     stock (Zoho counted 441 Cake Roll, 462 Split Box) or only a fee? Shipping: Zoho put a shipping
     charge on 120 of this year's invoices (₱150–₱300): does Management add it when approving?
     Until then the cold medicines are marked and packed cold, and the fee is not added.
+28. **A credit memo for each credited return**: Zoho made a credit note with its own number
+    (CN-00893…) for every return; crmnew takes the credit off the invoice and keeps the return's
+    RET- number, with no printable credit memo. Does the BIR need one (a "credit memo" with its own
+    series per company, like the invoices: GetMeds going on from Zoho's CN-00893, 2MG its own)?
 
 ## 14. Change log
 
@@ -2508,4 +2515,35 @@ on the local copy (database copied first, put back after), with what was seen wr
   Sarla; card "Keep cold"; slip printed; packed; Ship refused without the tick, then shipped with
   LBC "waiting for the waybill"; tracking added, the wait gone; hold choices fill the reason; data
   checks clean; the copy put back.
+- 17 Nov (92), Aryan on question 27 (cold packaging): the styro box is an item in stock like a
+  medicine, with any price in Inventory, and Management types what the cold chain costs on the
+  order. Built: Inventory's Storage has a third choice, **"A cold-chain box (styro): Management
+  types its price on each order"** (migration 0090; the three Zoho styro items marked on the local
+  database); a box line takes whatever price Management types, with no "below/above the list"
+  finding; an order with a cold medicine and no box tells Management **"No cold box"** (the check
+  done by hand before); the box is packed from the shelf by batch like any item (its stock comes
+  with the switch-day count: Zoho held 441 Cake Roll and 462 Split Box). Inventory's SKU limit
+  raised to 80 (5 imported Zoho SKUs were too long to save). Shipping charge still open (27).
+- 17 Nov (93), plan 19 step C part 3 (returns and refunds), the hub's refund requests, crmnew's
+  returns and Zoho's sales returns, credit notes and refunds side by side, then built the hub's way
+  (Aryan: "hub wale jaise h waisa kro"). **Where the goods are** decides the road (migration 0091):
+  coming back (Management approves, Dispatch checks good / damaged / not received, then
+  **Management presses Credit ₱X or Don't credit with why** — the hub's Refund after the goods
+  check); the customer keeps them (credited on approval); **not shipped yet** (the MedRep asks,
+  Management approving cancels the order; what was paid goes on Refunds owed). "Request refund"
+  in the order's header (the hub's place), the Returns & refunds page with a "Checked: to credit"
+  tab. Kept from crmnew: line by line, a partial return credits only those lines. **The customer's
+  credit** (migration 0092): Zoho left 508 credit notes open (₱2.54M over 443 customers, e.g. East
+  Avenue Medical Center ₱96,655 on CN-00724) that Finance applied in Zoho; now Finance sees the
+  credit on the order's money check and the customer's page and **uses it on an invoice** (a
+  payment "Customer's credit · CN-…", no cash in, back with the customer if the invoice is
+  cancelled), and money owed back can be **kept as their credit** for the next invoice instead of
+  given back (as Zoho's open credit notes were). Walked on a copy: Ryan asked "the customer keeps
+  them" on De Ocampo's RocuGet, Kate approved → ₱680 credited; "coming back" × 3 → Glyssa checked
+  → Kate credited ₱1,020 (bill ₱3,400 → ₱1,700); "not shipped yet" → order cancelled; Sarla saw East
+  Avenue's ₱5.37M Zoho dues and ₱96,655 credit, used ₱6,800 of CN-00724 → paid in full, money in
+  ₱0, credit left ₱89,855; data checks clean; the copy put back. Still to come with step D: a Team
+  Lead asking on the team's orders (the hub lets them). Not built: a credit memo document of its
+  own (Zoho numbered CN-…; question 28).
+- 17 Nov (94), question 28 added: the credit memo.
 

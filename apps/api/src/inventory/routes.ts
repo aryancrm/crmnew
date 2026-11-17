@@ -44,7 +44,8 @@ const date = z
 
 const medicineInput = z.object({
   name: text(120).min(1, "Type the medicine's name."),
-  sku: optional(40),
+  // Zoho's SKUs carry the strength and form ("GM-3398 ( 100 MG ) ( POWDER FOR INJECTION… )").
+  sku: optional(80),
   generic: optional(120),
   strength: optional(60),
   form: optional(60),
@@ -61,6 +62,7 @@ const medicineInput = z.object({
   brand: optional(80),
   rx: z.boolean(),
   coldChain: z.boolean().optional(),
+  coldBox: z.boolean().optional(),
   vat: z.enum(["exempt", "vat12", "zero"]),
   reorderLevel: z.number().int("Use a whole number.").min(0, "Use zero or more.").max(1_000_000),
 });

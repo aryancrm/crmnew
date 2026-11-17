@@ -276,7 +276,7 @@ export async function teamBoard(
       db,
       sql`select o.seat_id::int as "seatId", ${day("p.paid_on")} as day, sum(p.amount)::float8 as amount
           from payment p join invoice i on i.id = p.invoice_id join sales_order o on o.id = i.order_id
-          where o.seat_id in (${list}) and p.active and p.method <> 'points' and ${inRange(sql`p.paid_on`)} group by 1, 2`,
+          where o.seat_id in (${list}) and p.active and p.method not in ('points', 'credit') and ${inRange(sql`p.paid_on`)} group by 1, 2`,
     ),
     rows<{ seatId: number; day: string; count: number; amount: number }>(
       db,
