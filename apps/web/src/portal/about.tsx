@@ -5,6 +5,7 @@
 import { ArrowRight, Check } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { Cosmos } from "./cosmos";
 import { TILE_GLOW, TILE_ICONS } from "./tiles";
 import { WORKSPACES } from "../workspaces";
 
@@ -99,7 +100,7 @@ const CLOSE = [
 
 function Sky() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 1440 1800" preserveAspectRatio="xMidYMid slice" className="pointer-events-none absolute inset-0 h-full w-full">
+    <svg aria-hidden="true" viewBox="0 0 1440 1800" preserveAspectRatio="xMidYMid slice" className="pointer-events-none absolute inset-0 h-full w-full [mask-image:linear-gradient(to_bottom,transparent_0,black_280px,black_calc(100%-280px),transparent_100%)]">
       {STARS.map((star, i) => (
         <circle
           // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list
@@ -113,143 +114,6 @@ function Sky() {
           style={star.twinkle ? { animationDelay: `${star.delay}s`, animationDuration: `${star.dur}s` } : undefined}
         />
       ))}
-    </svg>
-  );
-}
-
-/** The sun is the one record; the departments turn around it. Each planet is a lit sphere whose
- *  bright side always faces the sun (it turns as it travels), with a glass label that stays upright. */
-const PLANETS = [
-  { name: "Orders", rx: 175, color: "#34b261", light: "#b8f5cc", r: 10, dur: 18, at: 3 },
-  { name: "Money", rx: 280, color: "#8b5cf6", light: "#dccbff", r: 13, dur: 28, at: 17 },
-  { name: "Stock", rx: 395, color: "#f5a524", light: "#ffe7a8", r: 15, dur: 40, at: 6, ring: true },
-  { name: "Delivery", rx: 515, color: "#ff6b4a", light: "#ffd0c2", r: 12, dur: 54, at: 41 },
-  { name: "People", rx: 640, color: "#3b82f6", light: "#c7dcff", r: 17, dur: 72, at: 26 },
-];
-const SUN = { x: 720, y: 300 };
-const TILT = 0.3;
-const orbit = (rx: number) => {
-  const ry = rx * TILT;
-  return `M${SUN.x - rx},${SUN.y} a${rx},${ry} 0 1,0 ${rx * 2},0 a${rx},${ry} 0 1,0 ${-rx * 2},0`;
-};
-
-function SolarSystem() {
-  return (
-    <svg viewBox="0 0 1440 600" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Orders, money, stock, delivery and people turning around one record" className="h-full w-full overflow-visible">
-      <defs>
-        <radialGradient id="sun-core" cx=".5" cy=".5" r=".5" fx=".42" fy=".4">
-          <stop offset="0" stopColor="#fffef8" />
-          <stop offset=".3" stopColor="#fff1c9" />
-          <stop offset=".62" stopColor="#ffbe6b" />
-          <stop offset=".88" stopColor="#ff8a3d" />
-          <stop offset="1" stopColor="#f0641e" />
-        </radialGradient>
-        <radialGradient id="sun-corona">
-          <stop offset=".45" stopColor="#ffb26b" stopOpacity=".55" />
-          <stop offset=".7" stopColor="#ff7a2e" stopOpacity=".16" />
-          <stop offset="1" stopColor="#ff7a2e" stopOpacity="0" />
-        </radialGradient>
-        <radialGradient id="sun-wide">
-          <stop offset="0" stopColor="#ff9a4a" stopOpacity=".22" />
-          <stop offset=".5" stopColor="#f36b21" stopOpacity=".07" />
-          <stop offset="1" stopColor="#f36b21" stopOpacity="0" />
-        </radialGradient>
-        <linearGradient id="flare" x1="0" x2="1">
-          <stop offset="0" stopColor="#fff" stopOpacity="0" />
-          <stop offset=".5" stopColor="#ffe9cc" stopOpacity=".55" />
-          <stop offset="1" stopColor="#fff" stopOpacity="0" />
-        </linearGradient>
-        {/* An orbit is faint behind the sun and brighter in front. */}
-        <linearGradient id="orbit-line" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stopColor="#fff" stopOpacity=".05" />
-          <stop offset=".5" stopColor="#fff" stopOpacity=".1" />
-          <stop offset="1" stopColor="#fff" stopOpacity=".28" />
-        </linearGradient>
-        <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="6" />
-        </filter>
-        {PLANETS.map((planet) => (
-          <radialGradient key={planet.name} id={`planet-${planet.name}`} cx=".5" cy=".5" r=".55" fx=".5" fy=".18">
-            <stop offset="0" stopColor={planet.light} />
-            <stop offset=".35" stopColor={planet.color} />
-            <stop offset=".8" stopColor={planet.color} stopOpacity=".55" />
-            <stop offset="1" stopColor="#05060c" />
-          </radialGradient>
-        ))}
-        <linearGradient id="ring-line" x1="0" x2="1">
-          <stop offset="0" stopColor="#ffe7a8" stopOpacity=".1" />
-          <stop offset=".5" stopColor="#ffe7a8" stopOpacity=".75" />
-          <stop offset="1" stopColor="#ffe7a8" stopOpacity=".1" />
-        </linearGradient>
-      </defs>
-
-      {PLANETS.map((planet) => (
-        <path key={planet.name} d={orbit(planet.rx)} fill="none" stroke="url(#orbit-line)" strokeWidth="1" />
-      ))}
-
-      {/* The sun: a wide warm light, a corona, slow rays, a lens streak and the bright core. */}
-      <circle cx={SUN.x} cy={SUN.y} r="420" fill="url(#sun-wide)" />
-      <circle cx={SUN.x} cy={SUN.y} r="130" fill="url(#sun-corona)" className="sun-breathe" />
-      <g opacity=".5">
-        {Array.from({ length: 36 }, (_, i) => (
-          <line
-            // biome-ignore lint/suspicious/noArrayIndexKey: a fixed ring
-            key={i}
-            x1={SUN.x}
-            y1={SUN.y - 66}
-            x2={SUN.x}
-            y2={SUN.y - (i % 3 === 0 ? 150 : 108)}
-            stroke="#ffcf94"
-            strokeOpacity={i % 3 === 0 ? 0.22 : 0.12}
-            strokeWidth="1.2"
-            strokeLinecap="round"
-            transform={`rotate(${i * 10} ${SUN.x} ${SUN.y})`}
-          />
-        ))}
-        <animateTransform attributeName="transform" type="rotate" from={`0 ${SUN.x} ${SUN.y}`} to={`360 ${SUN.x} ${SUN.y}`} dur="140s" repeatCount="indefinite" />
-      </g>
-      <rect x={SUN.x - 420} y={SUN.y - 1} width="840" height="2" rx="1" fill="url(#flare)" />
-      <circle cx={SUN.x} cy={SUN.y} r="66" fill="#ffb066" opacity=".55" filter="url(#soft)" />
-      <circle cx={SUN.x} cy={SUN.y} r="58" fill="url(#sun-core)" />
-      <text x={SUN.x} y={SUN.y + 104} textAnchor="middle" fill="#ffd9b8" fillOpacity=".9" fontSize="11" fontWeight="600" letterSpacing="4">
-        ONE RECORD
-      </text>
-
-      {PLANETS.map((planet) => {
-        const move = { dur: `${planet.dur}s`, begin: `-${planet.at}s`, repeatCount: "indefinite", path: orbit(planet.rx) } as const;
-        const width = planet.name.length * 7 + 22;
-        return (
-          <g key={planet.name}>
-            {planet.ring && (
-              <g>
-                <path d={`M${-planet.r * 2.1},0 A${planet.r * 2.1},${planet.r * 0.55} 0 0,1 ${planet.r * 2.1},0`} fill="none" stroke="url(#ring-line)" strokeWidth="2" />
-                <animateMotion {...move} />
-              </g>
-            )}
-            <g>
-              <circle r={planet.r * 1.9} fill={planet.color} opacity=".14" filter="url(#soft)" />
-              <circle r={planet.r} fill={`url(#planet-${planet.name})`} />
-              <circle r={planet.r} fill="none" stroke={planet.light} strokeOpacity=".25" strokeWidth=".8" />
-              <animateMotion {...move} rotate="auto" />
-            </g>
-            {planet.ring && (
-              <g>
-                <path d={`M${-planet.r * 2.1},0 A${planet.r * 2.1},${planet.r * 0.55} 0 0,0 ${planet.r * 2.1},0`} fill="none" stroke="url(#ring-line)" strokeWidth="2" />
-                <animateMotion {...move} />
-              </g>
-            )}
-            <g>
-              <g transform={`translate(0 ${planet.r + 20})`}>
-                <rect x={-width / 2} y="-11" width={width} height="22" rx="11" fill="#0b0d18" fillOpacity=".7" stroke="#fff" strokeOpacity=".14" />
-                <text y="4" textAnchor="middle" fill="#fff" fillOpacity=".86" fontSize="11" fontWeight="500" letterSpacing=".4">
-                  {planet.name}
-                </text>
-              </g>
-              <animateMotion {...move} />
-            </g>
-          </g>
-        );
-      })}
     </svg>
   );
 }
@@ -293,7 +157,7 @@ function Seats() {
     );
   };
   return (
-    <section className="border-y border-white/80 bg-white/50 backdrop-blur">
+    <section className="relative">
       <div className={`${wrap} py-24`}>
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
@@ -349,29 +213,31 @@ export function About() {
       <Seats />
 
       {/* The night sky: everything turns around one record. */}
-      <section className="relative overflow-hidden bg-[#03040a] text-white">
+      <section className="relative overflow-hidden bg-[linear-gradient(to_bottom,rgba(3,4,10,0)_0,rgba(3,4,10,0.35)_90px,rgba(3,4,10,0.85)_200px,#03040a_300px,#03040a_calc(100%-300px),rgba(3,4,10,0.85)_calc(100%-200px),rgba(3,4,10,0.35)_calc(100%-90px),rgba(3,4,10,0)_100%)] text-white">
         <Sky />
         <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-          <div className="absolute -top-40 -left-40 size-[40rem] rounded-full bg-[#3b2a8f] opacity-20 blur-[140px]" />
-          <div className="absolute -right-40 -bottom-40 size-[34rem] rounded-full bg-[#0f6b45] opacity-15 blur-[140px]" />
+          <div className="absolute top-[320px] -left-40 size-[40rem] rounded-full bg-[#3b2a8f] opacity-20 blur-[140px]" />
+          <div className="absolute -right-40 bottom-[320px] size-[34rem] rounded-full bg-[#0f6b45] opacity-15 blur-[140px]" />
         </div>
-        <div className={`relative ${wrap} pt-28 text-center`}>
-          <p className={`${eyebrow} text-[#ff9a5a]`}>What is inside</p>
-          <h2 className={`${h2} mx-auto mt-4 max-w-3xl`}>
-            Every part of the company, around{" "}
-            <span className="bg-gradient-to-r from-[#ffd38a] via-[#ff8a3d] to-[#f36b21] bg-clip-text text-transparent">one record</span>.
+        <div className={`relative ${wrap} pt-[22rem] text-center`}>
+          <p className="text-[11px] font-medium tracking-[0.42em] text-white/45 uppercase">What is inside</p>
+          <h2 className="mx-auto mt-6 max-w-3xl text-[clamp(34px,5vw,64px)] leading-[1.02] font-medium tracking-[-0.045em] text-white">
+            Every part of the company,
+            <br />
+            around <span className="font-[Iowan_Old_Style,Palatino,Georgia,serif] font-normal tracking-[-0.02em] text-[#ffd9b3] italic">one record.</span>
           </h2>
-          <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-white/60">
+          <p className="mx-auto mt-6 max-w-lg text-[15px] leading-relaxed text-white/50">
             An order is entered once. Approval, payment, stock, delivery and the books all read and write the same record, so
             nobody types it twice and nobody works from an old copy.
           </p>
         </div>
-        <div className="relative mx-auto h-[clamp(320px,50vw,700px)] w-[min(1440px,100%)] pb-10">
-          <SolarSystem />
+        <div className="relative mx-auto mt-6 mb-[18rem] h-[clamp(380px,52vw,720px)] w-[min(1440px,100%)]">
+          <Cosmos />
         </div>
       </section>
 
       {/* One order, start to finish. */}
+      <div className="relative">
       <section className={`${wrap} py-24`}>
         <p className={`${eyebrow} text-[#1f9d55]`}>One order, start to finish</p>
         <h2 className={`${h2} mt-4 max-w-3xl`}>
@@ -393,8 +259,7 @@ export function About() {
       </section>
 
       {/* The close: how it works, in three lines, and the way in. */}
-      <section className="relative overflow-hidden border-t border-white/80 bg-gradient-to-b from-white/60 to-[#fdf3ec]">
-        <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 left-1/2 size-[46rem] -translate-x-1/2 rounded-full bg-[#ffd9c2] opacity-50 blur-[140px]" />
+      <section className="relative">
         <div className={`relative ${wrap} py-28 text-center`}>
           <p className={`${eyebrow} text-[#c2410c]`}>How it works</p>
           <h2 className={`${h2} mx-auto mt-4 max-w-3xl`}>
@@ -424,54 +289,16 @@ export function About() {
         </div>
       </section>
 
-      <footer className="bg-[#0b0d14] text-white">
-        <div className={`${wrap} grid gap-12 py-16 md:grid-cols-[1.4fr_1fr_1fr_1fr]`}>
-          <div>
-            <span className="flex items-center gap-3">
-              <img src="/brand/bishnoi-one-mark.png" alt="" className="size-10" />
-              <span className="text-xl font-semibold tracking-[-0.03em]">Bishnoi One</span>
-            </span>
-            <p className="mt-4 max-w-xs text-sm leading-relaxed text-white/55">One company. Every department, one place. Each person signs in as themselves.</p>
-          </div>
-          <div>
-            <p className="text-xs font-semibold tracking-[0.18em] text-white/40 uppercase">Selling</p>
-            <ul className="mt-4 grid gap-2.5 text-sm text-white/75">
-              {WORKSPACES.filter((one) => one.group === "selling").map((one) => <li key={one.key}>{one.label}</li>)}
-            </ul>
-            <p className="mt-7 text-xs font-semibold tracking-[0.18em] text-white/40 uppercase">Operations</p>
-            <ul className="mt-4 grid gap-2.5 text-sm text-white/75">
-              {WORKSPACES.filter((one) => one.group === "operations").map((one) => <li key={one.key}>{one.label}</li>)}
-            </ul>
-          </div>
-          <div>
-            <p className="text-xs font-semibold tracking-[0.18em] text-white/40 uppercase">Office</p>
-            <ul className="mt-4 grid gap-2.5 text-sm text-white/75">
-              {WORKSPACES.filter((one) => one.group === "office").map((one) => <li key={one.key}>{one.label}</li>)}
-            </ul>
-          </div>
-          <div>
-            <p className="text-xs font-semibold tracking-[0.18em] text-white/40 uppercase">Sign in</p>
-            <ul className="mt-4 grid gap-2.5 text-sm text-white/75">
-              <li>
-                <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} className="hover:text-white">
-                  Choose your workspace
-                </button>
-              </li>
-              <li>
-                <Link to="/login?with=password" className="hover:text-white">Log in with ID and password</Link>
-              </li>
-            </ul>
-            <p className="mt-7 text-xs font-semibold tracking-[0.18em] text-white/40 uppercase">Help</p>
-            <p className="mt-4 text-sm leading-relaxed text-white/75">Need access or a new password? Ask your administrator.</p>
-          </div>
-        </div>
-        <div className="border-t border-white/10">
-          <div className={`${wrap} flex flex-wrap items-center justify-between gap-3 py-6 text-xs text-white/40`}>
-            <span>© {new Date().getFullYear()} Bishnoi One</span>
-            <span>Every change is kept: who did it and when.</span>
-          </div>
+      <footer className="border-t border-black/5">
+        <div className={`${wrap} flex flex-wrap items-center justify-between gap-3 py-8 text-sm text-[#8a93a3]`}>
+          <span className="flex items-center gap-2.5">
+            <img src="/brand/bishnoi-one-mark.png" alt="" className="size-7" />
+            <span className="font-semibold text-[#1f2733]">Bishnoi One</span>
+          </span>
+          <span>Each person signs in as themselves · Need access? Ask your administrator</span>
         </div>
       </footer>
+      </div>
     </div>
   );
 }

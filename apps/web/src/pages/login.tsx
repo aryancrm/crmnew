@@ -71,15 +71,20 @@ function Launcher() {
 
   return (
     <main className="relative isolate overflow-x-hidden bg-[#f6f7fb] font-[Inter_Variable,Inter,sans-serif] text-[#1f2733]">
+      {/* Soft colour behind the glass, faded, one layer down the whole page so the sections run on. */}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-20 overflow-hidden">
+        <div className="absolute -top-40 -left-32 size-[34rem] rounded-full bg-[#ffd9c2] opacity-60 blur-[120px]" />
+        <div className="absolute top-[33vh] -right-40 size-[36rem] rounded-full bg-[#cfe8d8] opacity-60 blur-[120px]" />
+        <div className="absolute top-[calc(100vh-20rem)] left-1/3 size-[32rem] rounded-full bg-[#dcd6ff] opacity-50 blur-[120px]" />
+        <div className="absolute top-[calc(100vh+16rem)] -right-48 size-[34rem] rounded-full bg-[#ffd9c2] opacity-50 blur-[130px]" />
+        <div className="absolute top-[calc(100vh+38rem)] -left-48 size-[34rem] rounded-full bg-[#cfe8d8] opacity-50 blur-[130px]" />
+        <div className="absolute bottom-[44rem] -left-48 size-[34rem] rounded-full bg-[#ffd9c2] opacity-50 blur-[130px]" />
+        <div className="absolute bottom-[24rem] -right-48 size-[34rem] rounded-full bg-[#cfe8d8] opacity-50 blur-[130px]" />
+        <div className="absolute bottom-0 left-1/3 size-[32rem] rounded-full bg-[#dcd6ff] opacity-45 blur-[130px]" />
+      </div>
       {/* The first screen: the launcher, whole in the window. */}
       <div className="relative isolate flex min-h-dvh flex-col overflow-hidden md:h-dvh">
       <Orbits />
-      {/* Soft colour behind the glass, faded. */}
-      <div aria-hidden="true" className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute -top-40 -left-32 size-[34rem] rounded-full bg-[#ffd9c2] opacity-60 blur-[120px]" />
-        <div className="absolute top-1/3 -right-40 size-[36rem] rounded-full bg-[#cfe8d8] opacity-60 blur-[120px]" />
-        <div className="absolute -bottom-48 left-1/3 size-[32rem] rounded-full bg-[#dcd6ff] opacity-50 blur-[120px]" />
-      </div>
 
       <header className="mx-auto flex w-[min(1180px,calc(100%-32px))] shrink-0 items-center gap-4 py-5">
         <span className="flex shrink-0 items-center gap-2.5">
