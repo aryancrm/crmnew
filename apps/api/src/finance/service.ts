@@ -241,13 +241,19 @@ function payable(input: { amount: number; paidOn: string }, field = "paidOn") {
 }
 
 /** What the order's invoice holds: its lines split by VAT (a senior's or PWD's line exempt) and
- *  the delivery fee. */
+ *  the delivery fee. The lines are kept as billed first (name, strength, form, VAT): an invoice
+ *  never changes when Inventory renames a medicine or changes its VAT later. */
 async function invoiceFigures(tx: Runner, orderId: number) {
+  await tx.execute(
+    sql`update order_item i set name_then = m.name, strength_then = m.strength, form_then = m.form,
+        vat_then = case when i.relief then 'exempt' else m.vat end
+      from medicine m where m.id = i.medicine_id and i.order_id = ${orderId}`,
+  );
   const lines = await rows<{ amount: number; vat: Vat }>(
     tx,
     // A senior's or PWD's line is sold VAT-exempt (the law), whatever the medicine's own VAT.
-    sql`select (i.qty * i.unit_price)::int as amount, case when i.relief then 'exempt' else m.vat end as vat
-      from order_item i join medicine m on m.id = i.medicine_id where i.order_id = ${orderId}`,
+    sql`select (i.qty * i.unit_price)::int as amount, i.vat_then as vat
+      from order_item i where i.order_id = ${orderId}`,
   );
   // Delivery is a service the company sells: VAT-able, on the same invoice.
   const [fee] = await rows<{ fee: number }>(
@@ -998,9 +1004,10 @@ export async function invoiceDetail(db: Database, me: Me, id: number): Promise<I
   const [items, money, proofs, company] = await Promise.all([
     rows<InvoiceDetail["items"][number]>(
       db,
-      sql`select i.id::int as id, m.name || coalesce(' ' || m.strength, '') as medicine, i.qty::int as qty, m.unit,
-          i.unit_price::int as "unitPrice", (i.qty * i.unit_price)::int as amount, m.vat, i.free,
-          m.strength, m.form, i.relief
+      sql`select i.id::int as id, coalesce(i.name_then, m.name) || coalesce(' ' || coalesce(i.strength_then, m.strength), '') as medicine,
+          i.qty::int as qty, m.unit, i.unit_price::int as "unitPrice", (i.qty * i.unit_price)::int as amount,
+          coalesce(i.vat_then, m.vat) as vat, i.free, coalesce(i.strength_then, m.strength) as strength,
+          coalesce(i.form_then, m.form) as form, i.relief
         from order_item i join medicine m on m.id = i.medicine_id where i.order_id = ${invoice.orderId} order by i.id`,
     ),
     orderMoney(db, invoice.orderId),
@@ -1198,8 +1205,8 @@ export async function refundsOwed(db: Database, me: Me): Promise<RefundList> {
           case when i.credited > 0
             then 'Goods returned: ' || coalesce((select string_agg(r.code, ', ') from sales_return r where r.order_id = i.order_id and r.status = 'received'), 'credit')
             else 'Paid more than the bill' end as reason,
-          ${iso("(select max(r.received_at) from sales_return r where r.order_id = i.order_id)")} as "cancelledAt",
-          to_char((select max(r.received_at) from sales_return r where r.order_id = i.order_id) at time zone 'Asia/Manila', 'YYYY-MM-DD') as "cancelledDay"
+          ${iso("(select max(coalesce(r.credited_at, r.received_at)) from sales_return r where r.order_id = i.order_id)")} as "cancelledAt",
+          to_char((select max(coalesce(r.credited_at, r.received_at)) from sales_return r where r.order_id = i.order_id) at time zone 'Asia/Manila', 'YYYY-MM-DD') as "cancelledDay"
         ${invoiceFrom} where i.status <> 'cancelled'
           and least(i.paid - i.refunded - i.total,
             i.paid - i.refunded - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit'))) > 0

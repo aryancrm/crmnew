@@ -8,7 +8,7 @@ import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../app";
 import { runChecks } from "../checks/integrity";
-import { type Database, openDatabase } from "../db/index";
+import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { todayManila } from "../inventory/rules";
@@ -191,6 +191,20 @@ describe("the invoice made at approval", () => {
       before + total - withheld,
     );
     expect(await overpaid()).toBe(true);
+  });
+
+  it("keeps an invoice's lines as billed when Inventory renames the medicine or changes its VAT", async () => {
+    const id = await approved(credit);
+    const invoice = (await order(id)).money.invoice;
+    const before = await read<{ items: { medicine: string; vat: string }[] }>("fiona", `/api/invoices/${invoice?.id}`);
+    const [was] = await rows<{ name: string; vat: string }>(db, sql`select name, vat from medicine where id = ${medicine.id}`);
+    await db.execute(
+      sql`update medicine set name = name || ' (new pack)', vat = case when vat = 'vat12' then 'exempt' else 'vat12' end where id = ${medicine.id}`,
+    );
+    const after = await read<{ items: { medicine: string; vat: string }[] }>("fiona", `/api/invoices/${invoice?.id}`);
+    expect(after.items).toEqual(before.items);
+    expect(after.items[0]?.vat).toBe(was?.vat);
+    await db.execute(sql`update medicine set name = ${was?.name}, vat = ${was?.vat} where id = ${medicine.id}`);
   });
 
   it("holds Management's own order for a patient until its prescription is on it", async () => {

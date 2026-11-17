@@ -108,8 +108,10 @@ export async function salesOrderDoc(db: Database, me: Me, id: number): Promise<S
       relief: boolean;
     }>(
       db,
-      sql`select i.id::int as id, m.name, m.strength, m.form, i.qty::int as qty, i.unit_price::int as "unitPrice",
-          (i.qty * i.unit_price)::int as amount, case when i.relief then 'exempt' else m.vat end as vat, i.free, i.relief
+      sql`select i.id::int as id, coalesce(i.name_then, m.name) as name, coalesce(i.strength_then, m.strength) as strength,
+          coalesce(i.form_then, m.form) as form, i.qty::int as qty, i.unit_price::int as "unitPrice",
+          (i.qty * i.unit_price)::int as amount, coalesce(i.vat_then, case when i.relief then 'exempt' else m.vat end) as vat,
+          i.free, i.relief
         from order_item i join medicine m on m.id = i.medicine_id where i.order_id = ${id} order by i.id`,
     ),
     companyInfo(db),

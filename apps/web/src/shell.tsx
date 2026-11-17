@@ -29,6 +29,7 @@ import { LiveLocationSender } from "./field/live-sender";
 import { UndoConfirmBar } from "./finance/undo";
 import { MyDayButton } from "./hr/parts";
 import { allItems, type Badge, type MenuGroup, type MenuItem, spaceFor } from "./menus";
+import { Toasts } from "./toast";
 import { unreadIn, useUpdates } from "./updates";
 
 export function Shell() {
@@ -215,6 +216,7 @@ export function Shell() {
             )}
           <Outlet />
           <UndoConfirmBar />
+          <Toasts />
         </main>
       </div>
 

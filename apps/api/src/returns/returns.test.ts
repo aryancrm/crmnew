@@ -335,7 +335,12 @@ describe("returns", () => {
     await post("marco", `/api/returns/${returnId}/receive`, {
       lines: [{ lineId: row.lines[0]?.id, outcome: "restocked" }],
     });
+    const badge = async () =>
+      (await read<{ money: { refunds: number } }>("fiona", "/api/finance/board")).money.refunds;
+    const before = await badge();
     await post("sarla", `/api/returns/${returnId}/credit`, { credit: true });
+    // Finance's Refunds badge counts it with the cancelled orders' money (plan 18 step 3).
+    expect(await badge()).toBe(before + 1);
     const owed = (await read<RefundList>("fiona", "/api/finance/refunds")).owed.find(
       (one) => one.orderId === orderId,
     );
@@ -354,6 +359,7 @@ describe("returns", () => {
       (one) => one.orderId === orderId,
     );
     expect(left).toBeUndefined();
+    expect(await badge()).toBe(before);
   });
 
   it("a rejected return needs a reason and changes nothing", async () => {

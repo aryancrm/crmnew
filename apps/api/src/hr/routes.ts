@@ -45,6 +45,7 @@ import {
   hrPerson,
   joinerForm,
   markLeft,
+  personBack,
   setLogin,
   updateRecord,
 } from "./people";
@@ -246,6 +247,10 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
       z.object({ email: words(200), password: z.string().max(200).nullish() }),
     );
     return c.json(await setLogin(db, c.get("me"), idParam(c), input));
+  });
+  app.post("/api/hr/people/:id/back", async (c) => {
+    await personBack(db, c.get("me"), idParam(c));
+    return c.json({ ok: true });
   });
   app.post("/api/hr/people/:id/left", async (c) => {
     const input = await readBody(c, z.object({ lastDay: day.nullish(), reason: words(300) }));

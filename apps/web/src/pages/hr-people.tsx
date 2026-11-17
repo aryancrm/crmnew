@@ -759,6 +759,7 @@ export function HrPersonPage() {
                 Mark as left
               </Button>
             )}
+            {data.can.back && <BackAtWork personId={data.personId} />}
           </>
         }
       />
@@ -1318,5 +1319,28 @@ function LeftDialog({
         </div>
       </form>
     </Dialog>
+  );
+}
+
+/** Marked as left by mistake, or rehired: their login works again; a seat is given from Teams &
+ *  people (they show there as "no seat"). */
+function BackAtWork({ personId }: { personId: number }) {
+  const action = useAction();
+  const queries = useQueryClient();
+  async function back() {
+    if (
+      await action.run(async () => {
+        await api(`/api/hr/people/${personId}/back`, { body: {} });
+      })
+    )
+      await queries.invalidateQueries();
+  }
+  return (
+    <>
+      <Button onClick={back} disabled={action.busy}>
+        {action.busy ? "Saving…" : "Back at work"}
+      </Button>
+      {action.problem && <span className="text-xs text-rose-700">{action.problem.message}</span>}
+    </>
   );
 }

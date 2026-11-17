@@ -315,6 +315,8 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
       edit: works,
       login: works && one.active && one.role !== "ceo" && one.role !== "admin",
       leave: works && one.active && me.id !== one.personId && one.role !== "ceo",
+      // Marked as left by mistake, or back after leaving (the hub couldn't reactivate anyone).
+      back: works && !one.active,
     },
   };
 }
@@ -635,6 +637,21 @@ export async function updateRecord(
 }
 
 /** HR marks someone as left: the login stops, the seat falls vacant, the record is kept. */
+/** Someone marked as left is back (a mistake, or rehired): their login works again with the
+ *  company's password; they are put in a seat from Teams & people (they show as "no seat"). */
+export async function personBack(db: Database, me: Me, personId: number): Promise<void> {
+  allow(me, HR_WRITE_ROLES, "bring someone back");
+  const changed = await rows<{ name: string }>(
+    db,
+    sql`update person set active = true where id = ${personId} and not active returning name`,
+  );
+  if (!changed.length) throw new Refusal(409, "not_now", "They are at work already.");
+  await db.execute(
+    sql`update employee set status = 'active', left_on = null, left_reason = null, updated_at = now(), updated_by = ${me.id}
+      where person_id = ${personId}`,
+  );
+}
+
 export async function markLeft(
   db: Database,
   me: Me,

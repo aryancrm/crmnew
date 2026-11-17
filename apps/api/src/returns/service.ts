@@ -260,7 +260,8 @@ async function applyCredit(
     tx,
     sql`select l.qty::int as qty, l.unit_price::int as "unitPrice",
         -- A senior's or PWD's line was sold VAT-exempt: its credit is too.
-        case when (select oi.relief from order_item oi where oi.id = l.order_item_id) then 'exempt' else m.vat end as vat
+        coalesce((select oi.vat_then from order_item oi where oi.id = l.order_item_id),
+          case when (select oi.relief from order_item oi where oi.id = l.order_item_id) then 'exempt' else m.vat end) as vat
       from sales_return_line l join medicine m on m.id = l.medicine_id
       where l.return_id = ${found.id} and l.outcome <> 'missing'`,
   );

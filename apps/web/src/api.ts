@@ -1,6 +1,7 @@
 // The one way the screens talk to the API.
 
 import type { ApiError } from "@2mg/api/types";
+import { toastFor } from "./toast";
 
 export class ApiFailure extends Error {
   constructor(
@@ -20,9 +21,10 @@ export async function api<T>(
 ): Promise<T> {
   let response: Response;
   const form = options.body instanceof FormData;
+  const method = options.method ?? (options.body === undefined ? "GET" : "POST");
   try {
     response = await fetch(path, {
-      method: options.method ?? (options.body === undefined ? "GET" : "POST"),
+      method,
       credentials: "include",
       // A FormData body (a file upload) sets its own content type.
       headers:
@@ -52,5 +54,6 @@ export async function api<T>(
       error?.fields,
     );
   }
+  toastFor(method, path);
   return data;
 }

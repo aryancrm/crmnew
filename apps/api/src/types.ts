@@ -3794,7 +3794,8 @@ export type HrPerson = {
   };
   missing: string[];
   /** edit: the record; login: the login email and password; leave: mark as left. */
-  can: { edit: boolean; login: boolean; leave: boolean };
+  /** back: marked as left, and can be brought back. */
+  can: { edit: boolean; login: boolean; leave: boolean; back: boolean };
 };
 
 export type HrRecordInput = Partial<{

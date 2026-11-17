@@ -2569,4 +2569,17 @@ on the local copy (database copied first, put back after), with what was seen wr
   12%-below order, Daniel answered Yes from Needs you, Kate saw it and approved; Kate sent back
   another, Daniel heard and sent it again; Kate set to BID lost Ryan's HOS order from her pile and
   approving it was refused; data checks clean; the copy put back.
+- 17 Nov (96), Aryan: "sab kaam ho gaya? kuch bacha dekh le" before pushing. Plan 19 parts 1–10,
+  plan 18 step 3 and the hub's gaps checked again; four left over, built: **Finance's Refunds
+  badge** now counts money paid beyond a bill a return lowered, as its Refunds list does (plan 18
+  step 3; it counted only cancelled orders); **an invoice keeps its lines as billed** — the
+  medicine's name, strength, form and VAT kept on the lines when the invoice is made (migration
+  0095; lines already billed keep what they show today), so the invoice, the sales order and a
+  return's credit never change when Inventory renames a medicine or changes its VAT (plan 18 step
+  3); **the hub's toast** — a short word at the bottom when something is done ("Approved", "Payment
+  recorded", "Shipped", "Saved"…, plan 19 part 10); **Back at work** on HR's person page for
+  someone marked as left (a mistake, or rehired: the login works again, a seat from Teams & people;
+  the hub couldn't reactivate anyone). Checked and already so: the prescription is checked by
+  Management's approval (a patient's order isn't approved without it; Send back is the hub's
+  "reject and tell the MedRep" / "ask for one").
 
