@@ -54,50 +54,10 @@ import { RangePicker, short } from "../team/range";
 import { TeamChart } from "../team/tree";
 import { ZoomBox } from "../team/zoom";
 import { count, PageState } from "../ui";
+import { TONE, type Tone, toneOf } from "../team/pace";
 import { OrderCardItem } from "./orders-board";
 
 const CARD = "rounded-2xl border border-slate-200/90 bg-white shadow-sm";
-type Tone = "on" | "behind" | "far" | "none" | "vacant";
-const TONE: Record<Tone, { word: string; pill: string; bar: string; ring: string }> = {
-  on: {
-    word: "On pace",
-    pill: "bg-emerald-50 text-emerald-800 ring-emerald-200",
-    bar: "bg-emerald-500",
-    ring: "#10b981",
-  },
-  behind: {
-    word: "Behind",
-    pill: "bg-amber-50 text-amber-900 ring-amber-200",
-    bar: "bg-amber-400",
-    ring: "#f59e0b",
-  },
-  far: {
-    word: "Far behind",
-    pill: "bg-rose-50 text-rose-700 ring-rose-200",
-    bar: "bg-rose-500",
-    ring: "#f43f5e",
-  },
-  none: {
-    word: "No target",
-    pill: "bg-slate-50 text-slate-600 ring-slate-200",
-    bar: "bg-slate-400",
-    ring: "#94a3b8",
-  },
-  vacant: {
-    word: "Vacant",
-    pill: "bg-amber-100 text-amber-900 ring-amber-300",
-    bar: "bg-slate-300",
-    ring: "#cbd5e1",
-  },
-};
-
-/** The CRM's one pace rule: on pace, behind, or far behind (under half the pace). */
-function toneOf(sold: number, target: number | null, pace: number): Exclude<Tone, "vacant"> {
-  if (!target || target <= 0) return "none";
-  const share = sold / target;
-  if (share >= pace) return "on";
-  return pace >= 0.2 && share < pace / 2 ? "far" : "behind";
-}
 
 const STEP_SHORT: Record<string, string> = {
   pending_approval: "at Management",
@@ -692,6 +652,19 @@ export function MyTeamPage() {
             className="rounded-lg px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
           >
             Targets
+          </Link>
+          {/* The same people as a tree and on the map (the old reports, live), for this box. */}
+          <Link
+            to={`/company/sales${unit ? `?unit=${unit}` : ""}`}
+            className="rounded-lg px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
+          >
+            Tree
+          </Link>
+          <Link
+            to={`/company/map${unit ? `?unit=${unit}` : ""}`}
+            className="rounded-lg px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50"
+          >
+            Map
           </Link>
           {places && (
             <Link to="/orders/new" className={PRIMARY_SM}>

@@ -6,7 +6,15 @@ import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { divisionOfChannel } from "../orders/divisions";
 import { seedDemo } from "../seed";
-import type { CustomerList, Me, MyOrders, OrderForList, OrgTree, TeamBoard } from "../types";
+import type {
+  CustomerList,
+  Me,
+  MyOrders,
+  OrderForList,
+  OrgTree,
+  TeamBoard,
+  TeamTerritories,
+} from "../types";
 
 const PASSWORD = "test-password-1";
 let db: Database;
@@ -225,5 +233,43 @@ describe("a team lead's team", () => {
       items: [{ medicineId, qty: 2, priceKind: "hospital" }],
     });
     expect(wrong.status).toBe(400);
+  });
+});
+
+describe("the map's territories", () => {
+  it("reads each area's cities as places, with who covers it and under whom, in the viewer's scope", async () => {
+    const ncr1 = (await tree()).units.find((unit) => unit.name === "NCR 1");
+    const made = await send("naresh", "/api/org/seats", {
+      unitId: ncr1?.id,
+      title: "MedRep",
+      module: "medrep",
+      newArea: { name: "HOS | Map test", cities: ["Pasay", "Makati", "Nowhere Town"] },
+    });
+    expect(made.ok).toBe(true);
+    // The Zoho way of writing a place: "Gen San" is General Santos, "Davao South" Davao del Sur.
+    const south = await send("naresh", "/api/org/seats", {
+      unitId: ncr1?.id,
+      title: "MedRep",
+      module: "medrep",
+      newArea: { name: "HOS | Map test south", cities: ["Gen San", "Davao South"] },
+    });
+    expect(south.ok).toBe(true);
+    const company = await read<TeamTerritories>("naresh", "/api/team/territories");
+    const mine = company.territories.find((one) => one.area === "HOS | Map test");
+    // Nobody sits in it yet; NCR 1's lead is who it is under; a name not known is listed apart.
+    expect(mine?.holder).toBeNull();
+    expect(mine?.lead).toBe("Daniel");
+    expect(mine?.places).toEqual(["Pasay City", "City of Makati"]);
+    expect(mine?.shapes).toEqual(["1381100000", "1380300000"]);
+    expect(mine?.unread).toEqual(["Nowhere Town"]);
+    const other = company.territories.find((one) => one.area === "HOS | Map test south");
+    expect(other?.places).toEqual(["City of General Santos", "Davao del Sur"]);
+    expect(other?.unread).toEqual([]);
+    // The head of the hospitals sees it; not another head's box; a MedRep has no team map.
+    const head = await read<TeamTerritories>("vanessa", "/api/team/territories");
+    expect(head.territories.some((one) => one.seatId === mine?.seatId)).toBe(true);
+    const rx = (await tree()).units.find((unit) => unit.name === "Prescription Business");
+    expect((await get("vanessa", `/api/team/territories?unit=${rx?.id}`)).status).toBe(403);
+    expect((await get("ryan", "/api/team/territories")).status).toBe(403);
   });
 });

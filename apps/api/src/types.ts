@@ -3274,6 +3274,26 @@ export type TeamBoard = {
   stepTimes: { step: TeamStep; minutes: number; orders: number }[];
 };
 
+/** The map's territories: each area in view, the map shapes its cities cover, its seat and lead. */
+export type TeamTerritories = {
+  territories: {
+    seatId: number;
+    title: string;
+    areaId: number;
+    area: string;
+    channel: string | null;
+    cities: string[];
+    holder: string | null;
+    /** Who the seat reports to (its lead's holder). */
+    lead: string | null;
+    /** The places its cities read as, and the map's shapes (PSGC codes) they cover. */
+    places: string[];
+    shapes: string[];
+    /** Names that couldn't be read as a place: a person puts them right on the area. */
+    unread: string[];
+  }[];
+};
+
 // ---- Messages between the people of the company ----
 
 export type MessageKind = "direct" | "group" | "announcement";

@@ -4,7 +4,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { SQL } from "drizzle-orm";
+import { type SQL, sql as sqlTag } from "drizzle-orm";
 import { drizzle as drizzlePglite } from "drizzle-orm/pglite";
 import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
@@ -40,6 +40,26 @@ export async function rows<T = Record<string, unknown>>(
   const result = (await db.execute(query)) as unknown;
   if (Array.isArray(result)) return result as T[];
   return ((result as { rows?: T[] }).rows ?? []) as T[];
+}
+
+/**
+ * PGlite has no autovacuum, so nothing tells its planner how big the tables are or what is in
+ * them: on the company's real data it picked plans that took minutes (Customers owe: 209 s, and
+ * under 1 s once analysed). This analyses the tables never analysed or grown to more than twice
+ * their size since. Cheap when nothing changed. Postgres online does this by itself.
+ */
+export async function freshenPlanner(db: Database): Promise<string[]> {
+  const stale = await rows<{ name: string }>(
+    db,
+    sqlTag`select c.relname as name from pg_class c join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'public' and c.relkind = 'r'
+        and (c.reltuples < 0 or pg_relation_size(c.oid) / 8192 > 2 * greatest(c.relpages, 8))
+      order by c.relname`,
+  );
+  if (!stale.length) return [];
+  const names = stale.map((one) => `"${one.name.replaceAll('"', '""')}"`).join(", ");
+  await db.execute(sqlTag.raw(`analyze ${names}`));
+  return stale.map((one) => one.name);
 }
 
 /** `memory` = a database that lives as long as the process (tests). */

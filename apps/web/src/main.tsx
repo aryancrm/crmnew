@@ -41,7 +41,9 @@ import { Moves } from "./pages/moves";
 import { MyConfirmations } from "./pages/my-confirmations";
 import { MyLeavePage } from "./pages/my-leave";
 import { MyPayslipsPage } from "./pages/my-payslips";
+import { CompanyMapPage } from "./pages/company-map";
 import { MyTeamPage, TeamSeatPage } from "./pages/my-team";
+import { SalesTreePage } from "./pages/sales-tree";
 import { NotBuilt } from "./pages/not-built";
 import { Order } from "./pages/order";
 import { OrderNew } from "./pages/order-new";
@@ -210,6 +212,8 @@ createRoot(root).render(
             <Route path="team-scores" element={<TeamScoresPage />} />
             <Route path="team" element={<TeamSalesPage />} />
             <Route path="company" element={<OrgChartPage />} />
+            <Route path="company/map" element={<CompanyMapPage />} />
+            <Route path="company/sales" element={<SalesTreePage />} />
             <Route path="people" element={<OrgPage />} />
             <Route path="hr/people" element={<HrPeoplePage />} />
             <Route path="hr/people/:id" element={<HrPersonPage key="person" />} />

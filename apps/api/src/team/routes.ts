@@ -3,10 +3,15 @@
 import type { Hono, MiddlewareHandler } from "hono";
 import type { Database } from "../db/index";
 import type { Env } from "../http";
-import { teamBoard } from "./service";
+import { teamBoard, territories } from "./service";
 
 export function teamRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandler<Env>): void {
   app.use("/api/team/board", signedIn);
+  app.use("/api/team/territories", signedIn);
+  // The map: each area of the seats in view, the shapes its cities cover (read, never typed).
+  app.get("/api/team/territories", async (c) =>
+    c.json(await territories(db, c.get("me"), { unitId: Number(c.req.query("unit")) || null })),
+  );
   app.get("/api/team/board", async (c) =>
     c.json(
       await teamBoard(db, c.get("me"), {

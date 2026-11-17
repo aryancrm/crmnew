@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
 import { seedDemoCustomers } from "./customers/seed";
-import { openDatabase } from "./db/index";
+import { freshenPlanner, openDatabase } from "./db/index";
 import { migrate } from "./db/migrate";
 import { seedDemoDispatch } from "./dispatch/seed";
 import { seedDemoFinance } from "./finance/seed";
@@ -41,6 +41,15 @@ const db = openDatabase({
 
 const applied = await migrate(db);
 if (applied.length) console.log(`database: applied ${applied.join(", ")}`);
+
+// The embedded database learns its tables' sizes (no autovacuum there); online Postgres does it.
+const freshen = () =>
+  process.env.DATABASE_URL
+    ? Promise.resolve()
+    : freshenPlanner(db)
+        .then((names) => names.length && console.log(`database: analysed ${names.length} tables`))
+        .catch((error) => console.error("database: couldn't analyse the tables", error));
+await freshen();
 
 if (await makeFirstAdmin(db)) console.log("database: the first System admin made");
 if (await ensureCompanyTree(db)) console.log("database: the company's tree made (one box per channel)");
@@ -89,6 +98,7 @@ setInterval(
       console.error("org: couldn't bring the tree up to date", error),
     );
     void lockScores();
+    void freshen();
   },
   15 * 60 * 1000,
 ).unref();

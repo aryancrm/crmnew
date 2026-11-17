@@ -24,6 +24,23 @@ function presets(today: string): { key: string; label: string; from: string; to:
     { key: "year", label: "This year", from: `${y}-01-01`, to: today },
   ].map((one) => ({ ...one, from: one.from, to: one.to, m }));
 }
+/**
+ * The days a company report asks the board for. This month (the first look, or the chip) is the
+ * whole month: the month's target, and the pace mark where day N of the month should be (the old
+ * reports' way). Any other range as picked.
+ */
+export function reportRange(params: URLSearchParams): { from: string; to: string } {
+  const today = manilaToday();
+  const first = `${today.slice(0, 7)}-01`;
+  const from = params.get("from");
+  const to = params.get("to");
+  if (!to || (from === first && to === today)) {
+    const [y, m] = today.split("-").map(Number) as [number, number];
+    const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+    return { from: first, to: `${today.slice(0, 7)}-${String(last).padStart(2, "0")}` };
+  }
+  return { from: from ?? first, to };
+}
 export const short = (day: string) =>
   new Date(`${day}T00:00:00Z`).toLocaleDateString("en-PH", {
     day: "numeric",

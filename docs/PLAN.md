@@ -1937,6 +1937,9 @@ Next and the coaching talk, and the CEO's Head › channel › manager sheet.
    listings and Bidding tenders reaching the orders they make; every lead's "stuck" list the same;
    every page's people from the one chart.
 
+*The old CRM's reports, back* (Aryan's screenshots, change log 98): Company › Sales organisation (the
+tree) and Company › Map, live from the chart; Tree and Map on every lead's My team.
+
 Then the money (one ledger): every invoice, payment, 2307, refund, credit and return posted to the
 books, with the bank each payment went into.
 
@@ -2673,4 +2676,31 @@ books, with the bank each payment went into.
   the hub couldn't reactivate anyone). Checked and already so: the prescription is checked by
   Management's approval (a patient's order isn't approved without it; Send back is the hub's
   "reject and tell the MedRep" / "ask for one").
+- 17 Nov (98), Aryan sent seven screenshots of the old CRM's reports ("pehle kitne acche tarah se
+  report banti thi… functional honi chahiye", and "kuch bigaad mat diyo existing… modular… koi
+  channel juda to uska data apne aap aa jaye… bande aate jaate rahenge"). Brought back, live and
+  built only from the chart, the seats, Targets and the invoices (nothing typed for them, so a new
+  channel or team, a person joining, leaving or moving shows by itself and rolls up):
+  **Company › Sales organisation** (`/company/sales`) — the old company tree: the company, each
+  head's division, its teams by their lead, the people, every box with achieved, % of the month's
+  target and the pace mark (day N of the month), On pace / Behind / Far behind / No target /
+  VACANT, Open all, Heads only, Every team (the non-selling teams too), search, zoom and Fit; a box
+  opens its details: Target, Achieved, Balance to do, Today, People under, Territories, "Under X ·
+  best first", and the seat's page. **Company › Map** (`/company/map`) — the old territory map:
+  every province and city an area's cities name (read as PSGC codes by the API, `GET
+  /api/team/territories`, scoped like My team; aliases for Zoho's "Gen San", "Davao North/South",
+  "Cebu North/South"), coloured by how its seat is doing, a Metro Manila inset, a hover with the
+  place, who covers it, under whom and sold of target, a channel filter, and the areas whose cities
+  aren't read listed apart; a click opens the seat. Both have the team switch and the days, and
+  every lead's My team has **Tree** and **Map** beside Targets (a head sees only their own
+  division). Checked as the CEO and as Vanessa Escalderon. Customers owe us (By customer / MedRep /
+  team, the aging), Sales by channel and the CEO's Home were already there; **Customers owe us took
+  over two minutes on the real data** (the embedded database had never analysed its tables, so its
+  planner guessed: 209 s for Zoho's unpaid invoices) — the API now analyses the tables at start
+  and every 15 minutes when one has grown (`freshenPlanner`; Postgres online does it itself):
+  0.9 s. Open: no November targets are typed yet (the 10 Nov sheet's first names match only 27 of
+  57 people, so they weren't loaded), so the boxes show what was sold until the heads type the
+  month on Targets; and ₱5.4M of November is Zoho's ten "RX | …" salespeople (RX | TAFT, CEBU NORTH,
+  SL NORTH, EAST AVE…) not yet tied to a seat (Admin panel → Zoho's salespeople), which the
+  Home's total counts but no channel, team or person does.
 

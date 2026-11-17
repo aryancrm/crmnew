@@ -1194,6 +1194,8 @@ function ownDesk(me: Me): Space {
                 Network,
                 [
                   { to: "/my-team", label: "Company view", icon: BarChart3, teams: true },
+                  { to: "/company/sales", label: "Sales organisation", icon: Network },
+                  { to: "/company/map", label: "Map", icon: MapPin },
                   { to: "/company", label: "Company chart", icon: Network },
                 ],
                 "Company",

@@ -14,7 +14,16 @@ import { lateNow } from "../orders/clock";
 import { STATUS_LABEL } from "../orders/rules";
 import { inForce, ledUnits } from "../org/service";
 import { ROLE_LABEL, type Role } from "../people/roles";
-import type { Me, OrderStatus, OrgUnitKind, TeamBoard, TeamNeed, TeamSeatCard } from "../types";
+import { mapAreasOf, readPlaces } from "../places/psgc";
+import type {
+  Me,
+  OrderStatus,
+  OrgUnitKind,
+  TeamBoard,
+  TeamNeed,
+  TeamSeatCard,
+  TeamTerritories,
+} from "../types";
 
 const LEADS: Role[] = ["team_lead", "manager"];
 const WHOLE: Role[] = ["ceo", "admin"];
@@ -663,3 +672,61 @@ async function teamNeeds(db: Database, seatIds: number[], today: string): Promis
 
 /** The seats a person's team view covers (for the scorecards). */
 export const teamSeats = viewOf;
+
+/**
+ * The map's territories (the old CRM's Company → Map, brought back live): each area of the seats
+ * this person may see, the places its cities read as (PSGC, the one rule in places/psgc.ts) and the
+ * map's shapes they cover, with the seat, who holds it and the lead they report to. Nothing is
+ * typed for the map: a new area, a city added, a seat filled or emptied shows by itself. The
+ * figures (sold, target) come from the team board, seat by seat. Names that can't be read are
+ * listed for a person to put right on the area.
+ */
+export async function territories(
+  db: Database,
+  me: Me,
+  asked: { unitId?: number | null } = {},
+): Promise<TeamTerritories> {
+  const view = await viewOf(db, me, asked.unitId ?? null);
+  const found = view.seatIds.length
+    ? await rows<{
+        seatId: number;
+        title: string;
+        areaId: number;
+        area: string;
+        channel: string | null;
+        cities: string[];
+        holder: string | null;
+        lead: string | null;
+      }>(
+        db,
+        sql`select s.id::int as "seatId", s.title, a.id::int as "areaId", a.name as area, ch.code as channel, a.cities,
+            (select p.name from seat_holder h join person p on p.id = h.person_id
+              where h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", todayManila())} order by h.starts_on desc limit 1) as holder,
+            -- Their lead: the seat it reports to, else the nearest lead seat up its boxes.
+            coalesce(
+              (select p.name from seat b join seat_holder h on h.seat_id = b.id and h.kind = 'holder' and ${inForce("h", todayManila())}
+                join person p on p.id = h.person_id where b.id = s.reports_to_seat_id limit 1),
+              (with recursive up as (select s.unit_id as id, 0 as depth
+                  union all select u.parent_id, up.depth + 1 from org_unit u join up on u.id = up.id
+                  where u.parent_id is not null and up.depth < 10)
+                select p.name from up join seat b on b.unit_id = up.id and b.active and b.lead and b.id <> s.id
+                  join seat_holder h on h.seat_id = b.id and h.kind = 'holder' and ${inForce("h", todayManila())}
+                  join person p on p.id = h.person_id order by up.depth limit 1)) as lead
+          from seat s join area a on a.id = s.area_id left join channel ch on ch.id = a.channel_id
+          where s.active and s.id in (${ids(view.seatIds)})
+          order by ch.code, a.name`,
+      )
+    : [];
+  return {
+    territories: found.map((one) => {
+      // An area with no cities (a telesales line sells everywhere) is on no shape of the map.
+      const read = one.cities.length ? readPlaces(one.cities) : { places: [], unread: [] };
+      return {
+        ...one,
+        places: read.places.map((place) => place.name),
+        shapes: [...new Set(read.places.flatMap((place) => mapAreasOf(place.code)))],
+        unread: read.unread.map((one) => one.name),
+      };
+    }),
+  };
+}
