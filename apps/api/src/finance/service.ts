@@ -4,7 +4,7 @@
 // Every change is one transaction that also writes the order's timeline.
 
 import { keepFile } from "../files/store";
-import { duesSql } from "./dues";
+import { awaitingPaymentSql, duesSql, notDueSql } from "./dues";
 import { type SQL, sql } from "drizzle-orm";
 import { customerDetail } from "../customers/service";
 import { type Database, rows } from "../db/index";
@@ -82,9 +82,10 @@ const invoiceColumns = sql`i.id::int as id, i.code, i.order_id::int as "orderId"
   i.paid::int as paid, i.refunded::int as refunded, i.status, (o.status = 'completed') as delivered`;
 const invoiceFrom = sql`from invoice i join sales_order o on o.id = i.order_id join customer c on c.id = i.customer_id`;
 
-/** Unpaid and past its due day; cash on delivery is never late before the goods arrive. */
+/** Unpaid and past its due day; cash on delivery is never late before the goods arrive, nor
+ *  advance pay before Finance has checked the money. */
 const overdue = (today: string): SQL =>
-  sql`(i.status = 'open' and i.due_on < ${today}::date and not (i.terms in ('cod', 'days') and o.status <> 'completed'))`;
+  sql`(i.status = 'open' and i.due_on < ${today}::date and not ${notDueSql})`;
 
 const shown = (row: InvoiceSql, today: string): InvoiceRow => {
   const { delivered, ...rest } = row;
@@ -114,6 +115,8 @@ const refundColumns = sql`r.id::int as id, r.invoice_id::int as "invoiceId", r.a
 export async function moneyOf(
   db: Runner,
   customerIds: number[],
+  /** Looking at this order: its own invoice isn't what the customer owed before it. */
+  leaveOut?: number,
 ): Promise<Map<number, { owed: number; overdue: number; days: number }>> {
   if (customerIds.length === 0) return new Map();
   const today = todayManila();
@@ -126,10 +129,28 @@ export async function moneyOf(
         coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late > 0), 0)::float8 as overdue,
         coalesce(max(dd.late) filter (where not dd.on_delivery and dd.late > 0), 0)::int as days
       from ${duesSql(today)} dd where dd.customer_id in (${ids([...new Set(customerIds)])})
+        ${leaveOut ? sql`and dd.order_id is distinct from ${leaveOut}` : sql``}
       group by dd.customer_id
       having coalesce(sum(dd.balance) filter (where not dd.cod_waiting), 0) > 0`,
   );
   return new Map(found.map(({ customerId, ...money }) => [customerId, money]));
+}
+
+/** What each order's own invoice adds to its customer's dues (made when Management approved
+ *  it): taken off when a card asks what the customer owed before that order. */
+export async function ownDues(
+  db: Runner,
+  orderIds: number[],
+): Promise<Map<number, { owed: number; overdue: number }>> {
+  if (orderIds.length === 0) return new Map();
+  const found = await rows<{ orderId: number; owed: number; overdue: number }>(
+    db,
+    sql`select dd.order_id::int as "orderId",
+        coalesce(sum(dd.balance) filter (where not dd.cod_waiting), 0)::float8 as owed,
+        coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late > 0), 0)::float8 as overdue
+      from ${duesSql(todayManila())} dd where dd.order_id in (${ids(orderIds)}) group by dd.order_id`,
+  );
+  return new Map(found.map(({ orderId, ...money }) => [orderId, money]));
 }
 
 /** An order's invoice, the money received against it and any given back: for the order page. */
@@ -170,7 +191,7 @@ export async function financeCounts(
     db,
     sql`select (select count(*) from sales_order where status = 'finance_check')::int as "toConfirm",
         (select count(*) from sales_order where status = 'ready_for_invoice')::int as "toInvoice",
-        (select count(*) from invoice i where i.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points') > i.refunded)::int as refunds`,
+        (select count(*) from invoice i join sales_order o on o.id = i.order_id where i.status = 'cancelled' and o.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points') > i.refunded)::int as refunds`,
   );
   return counted ?? { toConfirm: 0, toInvoice: 0, refunds: 0 };
 }
@@ -422,28 +443,34 @@ export async function confirmPayment(
       "Tick that you checked the proof and the money is in our account.",
       "checked",
     );
-  payable(input);
   const today = todayManila();
   return db.transaction(async (tx) => {
     const order = await lockOrder(tx, orderId);
     if (!orderActions(me, order).confirm_payment) throw notNow(order);
-    const [used] = await rows<{ points: number }>(
+    // Its invoice was made when Management approved it. What it still waits for is what the
+    // invoice still lacks: points are paid on it already, and money received before (an order
+    // brought back after a cancel) counts, so the money is never taken in twice.
+    const invoice = await invoiceOnApproval(tx, me, orderId);
+    const [bill] = await rows<{ total: number; paid: number }>(
       tx,
-      sql`select points_used::int as points from sales_order where id = ${orderId}`,
+      sql`select total::int as total, paid::int as paid from invoice where id = ${invoice.id}`,
     );
-    const due = order.total - (used?.points ?? 0) * POINT_CENTAVOS;
+    const due = Math.max(0, (bill?.total ?? order.total) - (bill?.paid ?? 0));
+    if (due > 0 || input.amount > 0) payable(input);
     if (input.amount > due)
       throw new Refusal(
         400,
         "invalid",
-        `That is more than the ${peso(due)} the customer pays.`,
+        due === 0
+          ? `${invoice.code} is paid already: confirm with 0.`
+          : `That is more than the ${peso(due)} the customer still pays.`,
         "amount",
       );
     const [proof] = await rows<{ id: number }>(
       tx,
       sql`select id::int as id from order_file where order_id = ${orderId} and active and kind = 'payment_proof' order by at desc, id desc limit 1`,
     );
-    if (!proof && !clean(input.reference))
+    if (!proof && !clean(input.reference) && input.amount > 0)
       throw new Refusal(
         400,
         "invalid",
@@ -460,17 +487,16 @@ export async function confirmPayment(
       orderId,
       me,
       "status",
-      `Payment checked: ${how(input)}${proof ? ", proof of payment on file" : ""}.${left > 0 ? ` ${peso(left)} still to pay.` : ""} It goes to Dispatch.${clean(input.note) ? ` ${clean(input.note)}` : ""}`,
+      `Payment checked: ${input.amount > 0 ? how(input) : `already paid on ${invoice.code}`}${proof ? ", proof of payment on file" : ""}.${left > 0 ? ` ${peso(left)} still to pay.` : ""} It goes to Dispatch.${clean(input.note) ? ` ${clean(input.note)}` : ""}`,
       "finance_verified",
     );
-    // A check undone left its invoice: the same one takes the payment again.
-    const invoice = await invoiceOnApproval(tx, me, orderId);
-    await addPayment(
-      tx,
-      me,
-      { id: invoice.id, customerId: order.customerId },
-      { ...input, proofId: proof?.id ?? null },
-    );
+    if (input.amount > 0)
+      await addPayment(
+        tx,
+        me,
+        { id: invoice.id, customerId: order.customerId },
+        { ...input, proofId: proof?.id ?? null },
+      );
     if (left === 0)
       await logEvent(tx, orderId, me, "payment", `Paid in full (invoice ${invoice.code}).`, "paid");
     return { invoiceId: invoice.id };
@@ -675,9 +701,9 @@ export async function recordPayment(
     const owed = invoice.total - invoice.paid;
     if (owed <= 0)
       throw new Refusal(409, "not_now", `Invoice ${invoice.code} is already paid in full.`);
-    const [cod] = await rows<{ waiting: boolean }>(
+    const [cod] = await rows<{ waiting: boolean; awaiting: boolean }>(
       tx,
-      sql`select (i.terms = 'cod' and o.status <> 'completed') as waiting
+      sql`select (i.terms = 'cod' and o.status <> 'completed') as waiting, ${awaitingPaymentSql} as awaiting
         from invoice i join sales_order o on o.id = i.order_id where i.id = ${invoice.id}`,
     );
     if (cod?.waiting)
@@ -685,6 +711,13 @@ export async function recordPayment(
         409,
         "not_now",
         `${invoice.code} is cash on delivery: record the money once the goods are delivered.`,
+      );
+    // Paid in advance: the money is taken in once, with Finance's payment check on the order.
+    if (cod?.awaiting)
+      throw new Refusal(
+        409,
+        "not_now",
+        `${invoice.code} is paid in advance: confirm the money on the order's payment check.`,
       );
     if (input.amount > owed)
       throw new Refusal(
@@ -1128,17 +1161,20 @@ export async function refundsOwed(db: Database, me: Me): Promise<RefundList> {
           to_char(i.cancelled_at at time zone 'Asia/Manila', 'YYYY-MM-DD') as "cancelledDay"
         ${invoiceFrom} where i.status = 'cancelled' and o.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points') > i.refunded order by i.cancelled_at, i.id`,
     ),
-    // Paid beyond the bill a return left: given back as well.
+    // Paid beyond the bill (a return lowered it, or the order was changed after the money came
+    // in): given back as well.
     rows<Omit<RefundOwed, "days"> & { cancelledDay: string | null }>(
       db,
       sql`select i.id::int as "invoiceId", i.code as "invoiceCode", i.order_id::int as "orderId", o.code as "orderCode",
           i.customer_id::int as "customerId", c.name as customer, i.paid::int as received, i.refunded::int as refunded,
           least(i.paid - i.refunded - i.total,
             i.paid - i.refunded - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points'))::int as owed,
-          'Goods returned: ' || coalesce((select string_agg(r.code, ', ') from sales_return r where r.order_id = i.order_id and r.status = 'received'), 'credit') as reason,
+          case when i.credited > 0
+            then 'Goods returned: ' || coalesce((select string_agg(r.code, ', ') from sales_return r where r.order_id = i.order_id and r.status = 'received'), 'credit')
+            else 'Paid more than the bill' end as reason,
           ${iso("(select max(r.received_at) from sales_return r where r.order_id = i.order_id)")} as "cancelledAt",
           to_char((select max(r.received_at) from sales_return r where r.order_id = i.order_id) at time zone 'Asia/Manila', 'YYYY-MM-DD') as "cancelledDay"
-        ${invoiceFrom} where i.status <> 'cancelled' and i.credited > 0
+        ${invoiceFrom} where i.status <> 'cancelled'
           and least(i.paid - i.refunded - i.total,
             i.paid - i.refunded - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points')) > 0
         order by i.id`,
@@ -1228,10 +1264,10 @@ export async function customerStatement(
   const [aging] = await rows<Statement["aging"]>(
     db,
     sql`select
-        coalesce(sum(i.total - i.paid) filter (where i.due_on is null or i.due_on >= ${today}::date or (i.terms in ('cod', 'days') and o.status <> 'completed')), 0)::int as current,
-        coalesce(sum(i.total - i.paid) filter (where i.due_on < ${today}::date and ${today}::date - i.due_on <= 30 and not (i.terms in ('cod', 'days') and o.status <> 'completed')), 0)::int as d30,
-        coalesce(sum(i.total - i.paid) filter (where ${today}::date - i.due_on between 31 and 60 and not (i.terms in ('cod', 'days') and o.status <> 'completed')), 0)::int as d60,
-        coalesce(sum(i.total - i.paid) filter (where ${today}::date - i.due_on > 60 and not (i.terms in ('cod', 'days') and o.status <> 'completed')), 0)::int as older
+        coalesce(sum(i.total - i.paid) filter (where i.due_on is null or i.due_on >= ${today}::date or ${notDueSql}), 0)::int as current,
+        coalesce(sum(i.total - i.paid) filter (where i.due_on < ${today}::date and ${today}::date - i.due_on <= 30 and not ${notDueSql}), 0)::int as d30,
+        coalesce(sum(i.total - i.paid) filter (where ${today}::date - i.due_on between 31 and 60 and not ${notDueSql}), 0)::int as d60,
+        coalesce(sum(i.total - i.paid) filter (where ${today}::date - i.due_on > 60 and not ${notDueSql}), 0)::int as older
       from invoice i join sales_order o on o.id = i.order_id
       where i.customer_id = ${customerId} and i.status = 'open'`,
   );
@@ -1278,12 +1314,13 @@ export async function owedInvoices(db: Database, me: Me): Promise<OwedInvoices> 
         case when i.terms = 'cod' and o.status <> 'completed' then 'on_delivery'
              when i.terms = 'days' and o.status <> 'completed' then 'due'
              when i.due_on < ${today}::date then 'late' else 'due' end as state,
-        case when not (i.terms in ('cod', 'days') and o.status <> 'completed') and i.due_on < ${today}::date
+        case when not ${notDueSql} and i.due_on < ${today}::date
              then (${today}::date - i.due_on)::int else 0 end as "daysLate"
       from invoice i join sales_order o on o.id = i.order_id join customer c on c.id = i.customer_id
         join person rep on rep.id = o.medrep_id
         left join seat s on s.id = o.seat_id left join org_unit u on u.id = s.unit_id
-      where i.status = 'open' and i.total > i.paid
+      -- Advance pay waiting for Finance's check isn't collected here: Finance confirms it there.
+      where i.status = 'open' and i.total > i.paid and not ${awaitingPaymentSql}
       order by (case when i.terms = 'cod' and o.status <> 'completed' then 1 else 0 end),
         "daysLate" desc, (i.total - i.paid) desc
       limit 2000`,

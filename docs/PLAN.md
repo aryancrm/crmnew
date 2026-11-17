@@ -1892,6 +1892,27 @@ on the local copy (database copied first, put back after), with what was seen wr
     channel (B2B, B2C, Government, hospitals…); nothing skips it.
 15. ~~The invoice~~ Answered 17 Nov: made when Management approves.
 16. ~~Look~~ Answered 17 Nov: the hub's look — its text style, sizes, colours and background.
+17. **Medicines with no price** (17 Nov check): 22 of 280 have no price for any buyer, 15 of them
+    in stock (FinaGet 5 mg, SevelaMed, Cizigla, TemoGet-20…; list in `.data/lists/medicines-without-price.csv`).
+    Who sets them, and from which list?
+18. **One price for everyone**: on 151 medicines the hospital, doctor, distributor and drugstore
+    prices equal the patient price (as the 2026 price list gave them). Right, or do they need their own?
+19. **VAT, crmnew vs Zoho**: crmnew takes VAT from the 2026 price list's Tax column (VAT / VE); on
+    33 medicines Zoho says otherwise (AmloGet, Anastrozole, Letrozole, OndaGet: VE in the list, 12%
+    in Zoho; AmioGet, CefazoGet…: 12% in the list, no tax in Zoho). List in
+    `.data/lists/vat-crm-vs-zoho.csv`. Zoho's own taxes: 12% or none on 143,158 invoice lines; no 15%.
+20. **Demo prices left on real medicines**: HydroxyGet has a bidding (Government) price of ₱9,200 a
+    piece from the demo (its patient price is ₱31.25; it is the only bidding price there is), and
+    Anastrozole / Letrozole carry demo prices and a demo "November promo". Clear them? And where do
+    Government (bidding) prices come from?
+21. **Billing company changed after the invoice**: the invoice keeps its row and takes a number in
+    the other company's series (the old number stays only on the timeline). Allow that, or refuse
+    changing the company once the invoice is made?
+22. **Withholding tax** (EWT 1–2%, Form 2307): Zoho recorded it on customer payments; crmnew's
+    Finance can't yet, so a hospital paying less by its withholding stays "owing" that. For step C.
+23. **Businesses filed as patients**: 93 customers named like businesses (pharma, trading,
+    medical…) are kind "patient" from the Zoho import; with the Rx rule their orders would wait
+    for a prescription. List in `.data/lists/patients-that-look-like-businesses.csv` for the heads.
 
 ## 14. Change log
 
@@ -2342,3 +2363,23 @@ on the local copy (database copied first, put back after), with what was seen wr
 - 17 Nov (81), Aryan: a prescription is required whenever a patient buys; Management approves every order of every channel; the hub's look (text, sizes, colours, background); crmnew itself is reshaped to the plan (no new project), the hub and Zoho brought together, nothing extra.
 - 17 Nov (82), plan 19 step A begun: the hub's look in crmnew (Poppins, the GetMeds blue for what you press, the pharmacy green for what is fine, the pale blue-grey ground; the old green accents follow the blue); every order of every channel now waits for Management (Online and PAP case orders too; only Management's own goes on); the order page in the hub's shape (Order ID, customer, MedRep, status and total; delivery address, invoice, order details; this person's step under it — Management's approval with Approve / Send back / Reject; then the tabs Timeline · Items · Payment · Dispatch · Documents); **the invoice is made when Management approves** (Finance's step is now "Check what they owe and send it on", status "Finance Check"; details changed before Finance's check update the unpaid invoice's terms, due day and company); **a patient's order is approved only with its prescription**; Management's cards Approve / Send back / Reject. Sold figures count from the invoice, so from approval. All 354 tests green; walked as MedRep (via API), Management and Finance on a copy of the local database (put back after).
 - 17 Nov (83), plan 19 step A finished (Management's tools from the hub): **Take off hold** asks Management "Why can it go on?" and **Continue from** — where it stopped, or back to an earlier desk (Finance's check, or Management's approval to change it and approve afresh); never further than it was, and once money is on its invoice or it was packed it goes on only from where it stopped; Finance and Dispatch still lift their own holds with one press; the MedRep and the desk it goes to are told. **Restore**: Management brings a cancelled order back to its approval with a reason (not when money was given back, points were used, or it is an Online case's); the cancel stays on the timeline. **An order keeps one invoice**: approved again after a take-back, a move back to approval or a restore, its cancelled invoice is made good again with the same number and the order's lines as they stand (fixes a bug from (82): approving again after taking an approval back failed); a restored order's money is off Finance's "Refunds owed" until then. **Waiting for stock** shows since when and who held it, and "Stock is back… take it off hold" once the shelf covers it (crmnew watches the shelf and tells the holder and the MedRep). **Edit medicines** now shows **Confirm changes** (each line old → new, total old → new, "the MedRep is told") before saving. Management's board gets a **Cancelled** tab (the hub's Exception Hub lists cancelled with held). Management's hold no longer offers Finance's screenshots. 355 tests green; walked as Kate (Management): approve → hold → back to approval → approve (same invoice) → cancel → restore → edit 100 → 120 at ₱8 with Confirm changes → approve (invoice ₱960) and wait for stock → Dispatch receives → "Stock is back", with Ryan's notices checked; on a copy of the local database (put back after).
+- 17 Nov (84), step A checked again (Aryan: check it all before going on), by an independent review
+  of the two commits and a walk of the whole line in each login (MedRep places, Management approves,
+  Finance checks, Dispatch packs / ships / delivers with the signed receipt, Finance records the
+  money, a return of 50 credited ₱425 with VAT worked again and refunded, a paid order cancelled →
+  Refunds owed → restored → approved again with the same invoice, paid). Fixed: **an advance-pay
+  invoice is not owed or late until Finance checks the money** (it no longer shows on Collect, and
+  recording a payment on it is refused: the money is taken in once, with the payment check);
+  **Confirm payment asks only what the invoice still lacks** (an order brought back already paid is
+  confirmed with ₱0); **Finance and Management weigh an order against what the customer owed
+  before it** (its own invoice no longer counted twice into "over credit limit"), and the order
+  page shows the money checks until the order is past Finance; any invoice paid beyond its bill is
+  listed in Refunds owed; the refunds badge counts only cancelled orders' money; **Management's own
+  order for a patient waits for its prescription**, and Management's own order gets its invoice as
+  it goes on; Online cases always ask for the prescription and their cards show it missing;
+  Restore skips Online and PAP case orders; points paid on an invoice don't block taking an approval
+  back; Admin's Take off hold asks why on every board; a customer's page counts their Zoho orders
+  in its tiles. Checked and fine: prices come from the 2026 price list (cost hidden from MedRep and
+  Dispatch, the same prices for every other role), the history of a hospital from Zoho (orders,
+  prices given, dues). Questions 17–23 written for Aryan. 359 tests green.
+

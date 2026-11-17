@@ -186,8 +186,9 @@ function factsOf(row: LeadRow): CaseFacts {
     agency: row.agency,
     lost: row.state === "lost",
     quoted: quotedFor(row),
-    // A prescription is asked for until the quotation shows every medicine is over the counter.
-    rxNeeded: row.quoteLines.length === 0 || row.quoteLines.some((line) => line.rx),
+    // A prescription is asked for whenever a patient buys (Aryan, 17 Nov), over the counter or not:
+    // Management approves the order only with it.
+    rxNeeded: true,
     files: new Set(row.kinds),
     glApplied: Boolean(row.glAppliedOn),
     glLetter: Boolean(row.glLetterNo) || row.kinds.includes("gl_letter"),
@@ -1599,15 +1600,12 @@ export async function orderFromLead(
           );
           return;
         }
-        // Where it goes next is the order line's (routeOrder): Management only for a discount,
-        // credit or a business buyer to check; else straight to Dispatch with its invoice.
+        // Management approves every order (Aryan, 17 Nov); the case's own note says what it will look at.
         const checks = await caseOrderChecks(tx, orderId);
         const where =
           checks.length > 0
             ? `Management checks it first (${checks.map((check) => check.short.toLowerCase()).join(", ")})`
-            : toManagement
-              ? "sent to Management to check"
-              : "it goes to Dispatch";
+            : "it waits for Management's approval";
         await tx.execute(
           sql`insert into lead_event (lead_id, kind, message, by_person) values (${id}, 'status', ${`Order ${code?.code} placed: ${where}.`}, ${me.id})`,
         );

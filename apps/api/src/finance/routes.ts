@@ -58,7 +58,11 @@ export function financeRoutes(
   app.post("/api/finance/orders/:id/confirm-payment", async (c) => {
     const input = await readBody(
       c,
-      paymentInput.omit({ proofId: true }).extend({ checked: z.boolean().default(false) }),
+      // 0 when its invoice is paid already (an order brought back after a cancel).
+      paymentInput.omit({ proofId: true }).extend({
+        amount: z.number({ error: "Type the amount." }).int("Type the amount in pesos and centavos.").min(0),
+        checked: z.boolean().default(false),
+      }),
     );
     const done = await confirmPayment(db, c.get("me"), idParam(c), input as ConfirmPaymentInput);
     void tellCustomer(db, c.get("me"), idParam(c), "confirmed");

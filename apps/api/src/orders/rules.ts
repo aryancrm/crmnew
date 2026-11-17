@@ -104,7 +104,7 @@ const OPEN: OrderStatus[] = [
 
 /**
  * Of what the system found on an Online case's order, what holds it for Management: a price below
- * its list (the agent's discount), and for a business buyer (never a patient) an unchecked
+ * its list (the agent's discount), a patient's missing prescription, and for a business buyer (never a patient) an unchecked
  * account, an expired licence, money owed or a sale on credit. Short stock is Dispatch's to sort
  * and the payment is the agent's, so neither stops it. A guarantee letter's bill to the agency
  * isn't credit.
@@ -114,9 +114,12 @@ export function caseChecksOf(
   customer: { kind: string; terms: string; gl: boolean },
 ): OrderFinding[] {
   const business = customer.kind !== "patient";
+  // A patient's missing prescription too: Management can't approve the order without it
+  // (Aryan, 17 Nov: Rx whenever a patient buys). The case asks for its own IDs by its road.
   const kept = found.filter(
     (finding) =>
       finding.kind === "price" ||
+      (finding.kind === "rx" && finding.short === "No prescription") ||
       (business && ["customer", "licence", "owes", "credit"].includes(finding.kind)),
   );
   if (

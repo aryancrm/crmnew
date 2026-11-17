@@ -13,6 +13,7 @@ import {
   refreshInvoice,
   financeCounts,
   moneyOf,
+  ownDues,
   orderMoney,
 } from "../finance/service";
 import { Refusal } from "../http";
@@ -169,14 +170,24 @@ const takeBackSql = sql`(o.approved_by is not null
   and not exists (select 1 from order_event e where e.order_id = o.id and e.at >= o.approved_at
     and (e.stage in ('finance_verified', 'paid', 'packed', 'shipped', 'delivered', 'completed')
       or (e.stage = 'invoiced' and e.by_person <> o.approved_by)))
-  and not exists (select 1 from invoice i where i.order_id = o.id and i.status <> 'cancelled' and i.paid > 0))`;
+  and not exists (select 1 from invoice i where i.order_id = o.id and i.status <> 'cancelled'
+    and i.paid > (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points')))`;
 /** A cancelled order (alias `o`) Management can bring back (the hub's Restore): no money given
- *  back on it, no points (they went back to the customer), not an Online case's (its case moved on). */
+ *  back on it, no points (they went back to the customer), not an Online or PAP case's (its case
+ *  places its next order itself). */
 const restorableSql = sql`(o.status = 'cancelled' and o.lead_id is null and coalesce(o.points_used, 0) = 0
   and not exists (select 1 from invoice i where i.order_id = o.id and i.refunded > 0)
-  and not exists (select 1 from sales_return r where r.order_id = o.id))`;
-/** Money is on the order's invoice (alias `o`). */
-const paidInSql = sql`exists (select 1 from invoice i where i.order_id = o.id and i.status <> 'cancelled' and i.paid > 0)`;
+  and not exists (select 1 from sales_return r where r.order_id = o.id)
+  and not exists (select 1 from lead l where l.order_id = o.id)
+  and not exists (select 1 from channel ch where ch.id = o.channel_id and ch.code = 'PAP'))`;
+/** Not yet with Dispatch: waiting for Management or Finance, or stopped before Dispatch. */
+const beforeDispatch = (order: { status: OrderStatus; heldFrom: OrderStatus | null }) =>
+  ["pending_approval", "finance_check", "ready_for_invoice"].includes(order.status) ||
+  ((order.status === "on_hold" || order.status === "exception") &&
+    (!order.heldFrom || ["pending_approval", "finance_check", "ready_for_invoice"].includes(order.heldFrom)));
+/** Money is on the order's invoice (alias `o`): points paid on it as it was made don't count. */
+const paidInSql = sql`exists (select 1 from invoice i where i.order_id = o.id and i.status <> 'cancelled'
+  and i.paid > (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points'))`;
 /** Sent back to the MedRep (alias `o`): its last reason, who sent it, the MedRep's answer. */
 const sentBackColumns = sql`o.sent_back_count::int as "sentBackCount", o.sent_back_reason as "sentBackReason",
   (select p.name from person p where p.id = o.sent_back_by) as "sentBackBy", o.reply`;
@@ -602,10 +613,17 @@ export async function routeOrder(
   if (!read) return "management";
   const { order, found } = read;
   const fromCase = Boolean(order.leadId);
-  const manages = ORDER_MANAGE_ROLES.includes(me.role);
+  const manager = ORDER_MANAGE_ROLES.includes(me.role);
   // Who checks an order is Management's call (Aryan, 17 Nov: MedRep → Management → Finance →
   // Dispatch). Anyone else's switch is not read: the API, not only the form, keeps the line.
-  const allowed = manages || fromCase ? choice : undefined;
+  const allowed = manager || fromCase ? choice : undefined;
+  // Management's own order goes on by itself, unless it was placed to wait (a patient's order
+  // waits for its prescription): then it is approved like any other.
+  const [placed] = await rows<{ status: OrderStatus }>(
+    tx,
+    sql`select status from sales_order where id = ${orderId}`,
+  );
+  const manages = manager && placed?.status !== "pending_approval";
   const [kept] = await rows<{ finance: boolean }>(
     tx,
     sql`select finance_check as finance from sales_order where id = ${orderId}`,
@@ -641,6 +659,8 @@ export async function routeOrder(
   }
   const why = "Nothing for Management to check";
   if (financeStep) {
+    // Management's own order: its invoice is made as it goes on (it was approved when placed).
+    if (manages) await invoiceOnApproval(tx, me, orderId);
     if (!manages) {
       const next = afterApproval(order.terms);
       const [place] = await rows<{ id: number }>(
@@ -845,14 +865,24 @@ async function toCards(
   viewer: Viewer = viewerOf(me),
 ): Promise<OrderCard[]> {
   const ids = found.map((row) => row.id);
-  const [items, papers, money] = await Promise.all([
+  const [items, papers, money, ownBills] = await Promise.all([
     itemsOf(db, ids),
     papersOf(db, ids),
     moneyOf(
       db,
       found.map((row) => row.customerId),
     ),
+    ownDues(db, ids),
   ]);
+  // What the customer owed before this order: its own invoice (made when Management approved
+  // it) is the order itself, not a debt Finance weighs it against.
+  const owedBefore = (row: CardRow) => {
+    const all = money.get(row.customerId);
+    const own = ownBills.get(row.id);
+    return all && own
+      ? { ...all, owed: all.owed - own.owed, overdue: all.overdue - own.overdue }
+      : all;
+  };
   return found.map((row) => {
     const { review, licenceExpired, creditLimit, gl, ...shown } = row;
     const { heldFrom } = row;
@@ -878,7 +908,7 @@ async function toCards(
             patientOrder: row.patientOrder,
             note: row.note,
           },
-          { owes: money.get(row.customerId), creditLimit, total: row.total },
+          { owes: owedBefore(row), creditLimit, total: row.total },
         )
       : [];
     // An Online case's order waits only on what sent it to Management.
@@ -1281,7 +1311,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         where f.order_id = ${id} and f.active and f.hold_event_id is null order by f.at, f.id`,
     ),
     orderMoney(db, id),
-    moneyOf(db, [order.customerId]),
+    moneyOf(db, [order.customerId], id),
     rows<OrderPick>(
       db,
       sql`select p.id::int as id, p.order_item_id::int as "itemId", m.name || coalesce(' ' || m.strength, '') as medicine,
@@ -1342,9 +1372,11 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
       patientOrder: order.patientOrder,
       note: order.note,
     },
-    money.invoice
-      ? undefined
-      : { owes: owes.get(order.customerId), creditLimit, total: order.total },
+    // What the customer owes counts until the order is past Finance (its own invoice, made when
+    // Management approved it, left out).
+    beforeDispatch(order)
+      ? { owes: owes.get(order.customerId), creditLimit, total: order.total }
+      : undefined,
   );
   return {
     order: {
@@ -1412,9 +1444,12 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
       addProof: mayAddPaper(me, who, "payment_proof"),
       addDr: mayAddPaper(me, who, "dr"),
       // Finance, or for an Online case's order the Online desk, records the money received.
+      // Not while an advance order waits for Finance's payment check: the money comes in there.
       recordPayment:
         (orderCan(me).finance || (Boolean(order.leadId) && CASE_AGENT_ROLES.includes(me.role))) &&
-        money.invoice?.status === "open",
+        money.invoice?.status === "open" &&
+        order.status !== "finance_check" &&
+        !(held && order.heldFrom === "finance_check"),
       waitStock: can.hold && (await shortLines(db, id)).length > 0,
       undoConfirm: orderCan(me).finance && Boolean(undoable),
     },
@@ -1728,7 +1763,10 @@ export async function placeOrder(
   const deliveryFee = Math.max(0, Math.round(options.deliveryFee ?? 0));
   const total = lines.reduce((sum, line) => sum + line.qty * line.unitPrice, 0) + deliveryFee;
 
-  const manages = orderCan(me).manage;
+  // Management's own order is approved as it is placed, but a patient's waits for its
+  // prescription (Aryan, 17 Nov: Rx whenever a patient buys): Management approves it once on file.
+  const patientBuys = customer.kind === "patient" || Boolean(input.patientOrder);
+  const manages = orderCan(me).manage && !patientBuys;
   // Whose order it is: the MedRep who placed it; for one a team lead or Management places, the
   // MedRep they pick (one of the lead's own people), else the MedRep of the customer's area.
   const picked = input.medrepId ? await pickedMedrep(db, me, input.medrepId) : null;

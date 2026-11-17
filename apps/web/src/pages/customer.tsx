@@ -3,7 +3,7 @@
 // at their buying inside it, then their parts on the left (orders, medicines, money, enquiries,
 // doctors, details, activity) with the open one on the right. Everything comes from one read.
 
-import type { CustomerPage } from "@2mg/api/types";
+import type { CustomerPage, CustomerPrices } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity as ActivityIcon,
@@ -87,6 +87,12 @@ export function Customer() {
     queryKey: ["customers", "one", id, "page"],
     queryFn: () => api<CustomerPage>(`/api/customers/${id}/page`),
   });
+  // Their orders before this CRM (Zoho), shared with "Prices given" below: an old customer's
+  // tiles say what they bought there too, not "none yet".
+  const before = useQuery({
+    queryKey: ["customers", "prices", id],
+    queryFn: () => api<CustomerPrices>(`/api/customers/${id}/prices`),
+  }).data?.past;
 
   const data = query.data;
   if (!data) return <PageState query={query} what="this customer" />;
@@ -293,9 +299,17 @@ export function Customer() {
             {
               label: "Orders",
               value: count(totals.orders),
-              sub: totals.lastOrderAt ? `last ${day(totals.lastOrderAt)}` : "none yet",
+              sub: before?.orders
+                ? `+ ${count(before.orders)} in Zoho${before.lastOn ? `, last ${day(before.lastOn)}` : ""}`
+                : totals.lastOrderAt
+                  ? `last ${day(totals.lastOrderAt)}`
+                  : "none yet",
             },
-            { label: "Bought", value: peso(totals.bought), sub: "all orders" },
+            {
+              label: "Bought",
+              value: peso(totals.bought),
+              sub: before?.bought ? `+ ${peso(before.bought)} in Zoho` : "all orders",
+            },
             { label: "Paid", value: peso(totals.paid), tone: "good" },
             {
               label: "Owed now",

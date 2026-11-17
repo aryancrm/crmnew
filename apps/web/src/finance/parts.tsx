@@ -5,7 +5,7 @@
 import type { InvoiceState, OrderDetail, OrderPaper, PaymentMethod } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, FileText } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import { api } from "../api";
 import { PAPER_ACCEPT, uploadPaper } from "../photo";
 import { Button, Dialog, Field, INPUT, Problem, peso, Status, useAction } from "../ui";
@@ -207,8 +207,17 @@ export function ConfirmPaymentDialog({
   const [checked, setChecked] = useState(false);
   const [note, setNote] = useState("");
   const proofs = (detail.data?.papers ?? []).filter((paper) => paper.kind === "payment_proof");
+  // What the invoice (made when Management approved) still lacks: points, or money received
+  // before (an order brought back after a cancel), are on it already.
+  const bill = detail.data?.money.invoice;
+  const due = bill && bill.status !== "cancelled" ? Math.max(0, bill.total - bill.paid) : total;
+  const paidBefore = bill && bill.status !== "cancelled" ? bill.paid : 0;
+  const [typedByHand, setTypedByHand] = useState(false);
+  useEffect(() => {
+    if (!typedByHand) setAmount(asTyped(due));
+  }, [due, typedByHand]);
   const typed = centavos(amount);
-  const short = Number.isFinite(typed) && typed > 0 && typed < total ? total - typed : 0;
+  const short = Number.isFinite(typed) && typed > 0 && typed < due ? due - typed : 0;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -234,9 +243,12 @@ export function ConfirmPaymentDialog({
         <div className="flex items-center justify-between gap-3 rounded-xl border border-line-soft bg-hover px-4 py-3">
           <div className="min-w-0">
             <div className="truncate font-semibold">{customer}</div>
-            <div className="text-xs text-ink-2">Pays in advance</div>
+            <div className="text-xs text-ink-2">
+              Pays in advance
+              {paidBefore > 0 ? ` · ${peso(paidBefore)} on the invoice already` : ""}
+            </div>
           </div>
-          <div className="text-lg font-bold tabular-nums">{peso(total)}</div>
+          <div className="text-lg font-bold tabular-nums">{peso(due)}</div>
         </div>
 
         <div>
@@ -274,9 +286,17 @@ export function ConfirmPaymentDialog({
         <AmountField
           label="Amount received"
           value={amount}
-          onChange={setAmount}
+          onChange={(value) => {
+            setTypedByHand(true);
+            setAmount(value);
+          }}
           error={money.at("amount")}
         />
+        {due === 0 && (
+          <div className="-mt-2 text-[13px] text-good">
+            Paid already: confirm with ₱0.00 and it goes to Dispatch.
+          </div>
+        )}
         {short > 0 && (
           <div className="-mt-2 text-[13px] text-amber-800">
             {peso(short)} less than the order: it stays owed on the invoice.

@@ -179,6 +179,8 @@ export function OrdersToCheck({
   aside?: ReactNode;
 }) {
   const navigate = useNavigate();
+  // Management and Admin say why a held order goes on, on any desk's board (the API asks them).
+  const manager = ["management", "admin"].includes(useMe().data?.role ?? "");
   const TABS = all
     ? [{ key: "all" as const, label: "All orders" }, ...DESK_TABS.management]
     : DESK_TABS[desk];
@@ -366,7 +368,7 @@ export function OrdersToCheck({
       onApprove={() => navigate(`/orders/${card.id}?step=management&check=approve&approve=1`)}
       // Management says why it can go on (the hub's Resume); Finance and Dispatch lift their own.
       onResume={() =>
-        data.desk === "management" ? setAsking({ card, what: "resume" }) : order.act(card.id, "resume")
+        manager ? setAsking({ card, what: "resume" }) : order.act(card.id, "resume")
       }
       onAsk={(what) => setAsking({ card, what })}
       onTake={dispatch && data.can.dispatch ? (release) => take(card.id, release) : undefined}
