@@ -1791,6 +1791,70 @@ before); SC/PWD on the order form (No / Senior citizen / PWD, ID number, name), 
 Customers owe list, the customer list's "owes" and the customer's history count Zoho's unpaid
 invoices and opening balance with this CRM's (`src/finance/dues.ts`).
 
+## 19. Simple like the hub: the plan (17 Nov 2026, night)
+
+Aryan, 17 Nov: crmnew got complicated; make it as simple and clean as the old hub, every step in
+its own person's login, nothing done from the Admin panel. The hub was run locally and walked role
+by role, button by button (docs/HUB-WALKTHROUGH.md, docs/HUB-CHECKLIST.md). This plan copies the
+hub's line and look, keeps what crmnew already does better, fixes what the hub got wrong, and
+puts in crmnew what people did by hand in Zoho (crmnew replaces Zoho).
+
+**Keep from crmnew (the hub lacks it)**: prices per kind of buyer from Inventory with the list
+price beside the given price; SC/PWD from the patient price; VAT per medicine shown; the
+customer's dues (Zoho's too) in front of Management and Finance; every version of an order;
+returns line by line; invoice, packing, shipping, payments and credit notes inside crmnew (no
+Zoho, no webhooks, no manual steps).
+
+**Fix what the hub got wrong**: a price below or above the list is flagged to Management (and
+needs a reason); Management's changes (price, quantity, added or free medicines) are written on
+the timeline old → new and the MedRep is told; a discount is never lost; Finance's Undo really
+undoes; an advance-pay order needs its proof (or Management's word) before Finance confirms; a
+partial return refunds only what came back; the Team Lead is told about the team's orders;
+"needs approval" goes only to the managers of that division.
+
+**The line, screen by screen (each step checked in that person's own login before the next)**
+1. *MedRep's order form* — the hub's five sections: (1) who it is for, division, sub-division,
+   salesperson; (2) customer (credit / direct shown), address, receiver, payment terms, source,
+   doctor, invoicing from, delivery method, remarks, date wanted; (3) medicines: price comes from
+   Inventory by the buyer's kind, VAT shown, discount, Buy 1 Take 1 added by itself, Dispatch's
+   stock notes shown, an out-of-stock item asks "why are you proceeding?"; (4) documents: proof of
+   payment or "no proof? say why", prescription or "no prescription? say why" (by channel),
+   hospital papers; (5) terms. A "Missing: …" list keeps Submit off; a Confirm summary before it
+   goes. New customer from the form as in the hub (a hospital needs TIN, LTO details and BIR 2303,
+   LTO permit, business permit; a distributor may follow up; Management reviews what is missing).
+2. *Order page* (one page for everyone, the buttons by role) — header (number, customer, status,
+   total, Order overview, Request refund), details with Edit Details, the step's band (Management
+   approval, sent back, on hold, waiting for stock, cancelled), tabs **Timeline · Items · Payment ·
+   Dispatch · Documents**.
+3. *Management* — Approval Queue rows (Approve / Send back / Reject); the order page; Approve and
+   check stock (every warehouse, tick to approve short); Edit Items with Confirm changes; Hold,
+   Exception, Resume ("continue from" + why); drafts: Wait for stock / Stock is back, Cancel draft
+   (delete for good, or keep record when paid), Restore; Exception Hub; Refund requests;
+   Pending customers.
+4. *Finance* — Orders with stage tiles; Details drawer with the customer's dues and history;
+   Confirm (tick, note, Undo that works); Hold with screenshots; Bring back; Refunds (pending →
+   done) and payments recorded in crmnew.
+5. *Pharmacy* — prescriptions checked beside Finance (Verify / Reject and tell the MedRep / Ask
+   for one / Not needed); Dispatch can't ship until it is cleared (question 12).
+6. *Dispatch* — to pack / to ship / on the road; Cater and Release, Print address, Confirm for
+   delivery against the printed slip, courier and tracking (or "not ready yet"), proof photo,
+   Hold, Mark delivered; packing and the invoice made in crmnew.
+7. *Returns* — Request refund (where the goods are, how much); Management decides; Dispatch checks
+   what came back (good / damaged); Finance refunds or credits; only those lines.
+8. *Team Lead* — My team (orders and activity of the people who report to them, at any depth),
+   team performance, raise an order for a team member; told about the team's orders.
+9. *Admin* — one "People & structure" page like the hub's User Management: departments, divisions
+   with their head, team leads, seats / territories with targets; Management (Approval): which
+   divisions each manager approves; create / edit / move a person. The menu in a few folding
+   groups; the rest of today's admin pages folded in or reached from there.
+10. *Look* — the hub's calm layout: a title and one line saying what the page is for, white cards
+    with room, small windows for actions, a toast when done, folding menu groups.
+
+**Order of work** (Aryan picks the first): A) the order page and Management (steps 2–3), B) the
+MedRep form (1), C) Finance, Pharmacy, Dispatch, Returns (4–7), D) Team Lead and Admin (8–9), the
+look (10) going along with each. Each part: built, tested, then walked in every login it touches
+on the local copy (database copied first, put back after), with what was seen written here.
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -1814,6 +1878,14 @@ invoices and opening balance with this CRM's (`src/finance/dues.ts`).
     And "Extra": one more price per medicine set in Inventory (higher), that the MedRep can pick?
 11. A guarantee-letter case (18): when an Online case becomes GL, does it move to the PAP head (who
     gives it to a PAP MedRep) or straight to one PAP person?
+12. Pharmacy (19): who checks prescriptions — the Pharmacy team in the chart, beside Finance as in
+    the hub? Which channels need a prescription (hub: URO, STC, B&B, B2C required; HOS a nudge)?
+13. Advance-pay customers (19): may Finance confirm with no proof of payment, or only with
+    Management's word?
+14. Approvals (19): which manager approves which divisions (the hub ticks divisions per manager)?
+    And may an exception go to the Team Lead / Business Mentor (question 9)?
+15. The invoice (19): made by Finance after its check (crmnew today), or when Management approves?
+16. Look (19): keep 2MG's green with the hub's layout, or the hub's blue too?
 
 ## 14. Change log
 
@@ -2259,3 +2331,4 @@ invoices and opening balance with this CRM's (`src/finance/dues.ts`).
 - 17 Nov (76), Aryan: the company on the live CRM for testing, no Zoho data. `onboard-company.ts --live --no-zoho --apply`: the fresh CRM's boxes taken over as the chart's (Hospitals → Hospital Division, Doctors → Prescription Business, Telesales → MD Telesales, Government tenders → Government Bidding, Distributors and drugstores → B2B Telesales), every box with its channel, a CEO's seat at the top; 117 people and 2 vacant seats, the early accounts Mary Jane and Saroj taken as Mary Jane Viñas and Saroj Kumar (their seats moved to their chart places, their logins kept), Aryan & Saurav and Veronica left as they were. Checked on live: 120 of 121 sign in with the common password (Aryan & Saurav keep their own), JOIN_PASSWORD is set on Render, and every person's role, channel, business and boss is the local one's. Login IDs are numbered afresh on live: docs/LOGINS-LIVE.md (`scripts/list-logins.ts --live`).
 - 17 Nov (77), Aryan ("check the chart, you often get things wrong"): the CRM's tree read box by box against HR's 2026 chart PDF. Three places differed and are put right on live and locally (`scripts/fix-chart-17nov.ts`): the Patient Assistance Program sits in the Hospital Division (Fhaye Norella now reports to Vanessa Escalderon, not the CEO); MD Telesales Oncology sits inside the Onco-Hema Division, beside its two lines Uro & Onco Care (9 Rx CHCs) and Blood & Bone Care (2), which were missing; Claire Gallana sits beside Jessa Domino under B2B Telesales (reports to Subir Dey). Nobody's work, channel or desk changed, only those bosses and boxes. Everything else (Hospital's six regions, Government Account, MD Telesales Anesthesia, Sales & Marketing, Modern Trade, Executive and Admin, Digital Marketing, IT, In-licensing & Regulatory, HR, Supply Chain, Pharmacy, Finance) matches the PDF name by name. The chart file and onboarding now put a box found elsewhere where the chart has it.
 - 17 Nov (78), Aryan (plan 18, step 1 "safe line", and his answers: SC/PWD on any order with the ID, 20% off and no VAT; Management approves, an exception goes to the Team Lead, Management's own to the Business Mentor, all by a CRM button): a MedRep can't skip Management or Finance through the API; every version of an order is kept and the MedRep sees Management's change before → after with its reason ("Changed by Mgmt" on his list); the MedRep's note and any price above the list are on Management's card; SC/PWD on any order, from the patient price (VAT out, 20% off), priced by the API, VAT-exempt on the invoice with the ID number printed; VAT and "Prescription" shown on every line of the MedRep's form and Management's order; Management's customer check shows first order or not, orders here and in Zoho, what they owe now (Zoho's too) and a link to the whole history; Finance's checks, Customers owe, the customer list and history count Zoho's unpaid invoices and opening balances (`src/finance/dues.ts`). Tests: `src/orders/safe-line.test.ts`. The ask-up step for exceptions waits for Aryan (question 9).
+- 17 Nov (79), Aryan ("crmnew is too complicated; make it simple like the hub, see every screen in each login"): the hub was run locally and walked role by role, button by button, with its Zoho link read from the code (docs/HUB-WALKTHROUGH.md, docs/HUB-CHECKLIST.md); section 19 is the plan: the hub's line and look, crmnew's prices, dues, versions and line returns kept, the hub's gaps fixed (unflagged prices, silent changes, lost discounts, dead Undo, advance orders without proof, whole-order refunds, silent Team Leads, approval alerts to every manager), Zoho's manual steps inside crmnew; questions 12–16 wait for Aryan.
