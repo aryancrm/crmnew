@@ -78,9 +78,10 @@ export async function companyKpis(
     }>(
       db,
       sql`select
-          count(*) filter (where ${placedOn} = ${today}::date)::int as "todayN",
+          -- Cancelled orders count for nothing here, in number as in value.
+          count(*) filter (where ${placedOn} = ${today}::date and o.status <> 'cancelled')::int as "todayN",
           coalesce(sum(o.total) filter (where ${placedOn} = ${today}::date and o.status <> 'cancelled'), 0)::int as "todayValue",
-          count(*) filter (where date_trunc('month', ${placedOn}) = ${month})::int as "monthN",
+          count(*) filter (where date_trunc('month', ${placedOn}) = ${month} and o.status <> 'cancelled')::int as "monthN",
           coalesce(sum(o.total) filter (where date_trunc('month', ${placedOn}) = ${month} and o.status <> 'cancelled'), 0)::int as "monthValue",
           coalesce((select sum(i.total) from invoice i where i.status <> 'cancelled'
             and date_trunc('month', i.issued_on) = ${month}), 0)::float8 as sales,

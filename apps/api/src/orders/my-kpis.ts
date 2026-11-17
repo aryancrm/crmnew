@@ -72,12 +72,12 @@ export async function myKpis(
     ),
     rows<{ n: number; value: number }>(
       db,
-      sql`select count(*)::int as n, coalesce(sum(o.total) filter (where o.status <> 'cancelled'), 0)::int as value from sales_order o
+      sql`select count(*) filter (where o.status <> 'cancelled')::int as n, coalesce(sum(o.total) filter (where o.status <> 'cancelled'), 0)::int as value from sales_order o
         where ${mine} and ${placedOn} = ${today}::date`,
     ),
     rows<{ n: number; value: number }>(
       db,
-      sql`select count(*)::int as n, coalesce(sum(o.total) filter (where o.status <> 'cancelled'), 0)::int as value from sales_order o
+      sql`select count(*) filter (where o.status <> 'cancelled')::int as n, coalesce(sum(o.total) filter (where o.status <> 'cancelled'), 0)::int as value from sales_order o
         where ${mine} and date_trunc('month', ${placedOn}) = date_trunc('month', ${today}::date)`,
     ),
   ]);

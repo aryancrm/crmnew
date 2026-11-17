@@ -269,9 +269,8 @@ export async function customerDetail(db: Database, me: Me, id: number): Promise<
               where o.customer_id = c.id and o.status <> 'cancelled') as "lastOrderOn",
             coalesce(c.area_id = ${me.area?.id ?? null}, false) as "inMyArea",
             ${owedOf(today)} as owed, ${overdueOf(today)} as overdue,
-            coalesce((select max(${today}::date - i.due_on)::int from invoice i join sales_order o on o.id = i.order_id
-              where i.customer_id = c.id and i.status = 'open' and i.due_on < ${today}::date
-                and not (i.terms in ('cod', 'days') and o.status <> 'completed')), 0) as "overdueDays"
+            coalesce((select max(dd.late)::int from ${duesSql(today)} dd
+              where dd.customer_id = c.id and not dd.on_delivery and dd.late > 0), 0) as "overdueDays"
           from customer c
           left join area a on a.id = c.area_id
           left join channel ch on ch.id = a.channel_id
