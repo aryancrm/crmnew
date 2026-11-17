@@ -1943,6 +1943,12 @@ tree) and Company › Map, live from the chart; Tree and Map on every lead's My 
 Then the money (one ledger): every invoice, payment, 2307, refund, credit and return posted to the
 books, with the bank each payment went into.
 
+## 21. crmnew as the company's ERP (plan, 18 Nov 2026)
+
+Aryan asked for crmnew to become a complete ERP (SAP / Odoo / Salesforce class) without breaking
+what works. The plan, what exists today, the phases and his questions: [ERP-PLAN.md](ERP-PLAN.md).
+Nothing built until he picks a phase.
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -2703,4 +2709,4 @@ books, with the bank each payment went into.
   month on Targets; and ₱5.4M of November is Zoho's ten "RX | …" salespeople (RX | TAFT, CEBU NORTH,
   SL NORTH, EAST AVE…) not yet tied to a seat (Admin panel → Zoho's salespeople), which the
   Home's total counts but no channel, team or person does.
-
+- 18 Nov (99), Aryan: the ERP plan written (docs/ERP-PLAN.md, section 21): crmnew today area by area, one-system shape, navigation, dashboards, flows, enterprise features, architecture, six phases and seven questions. Live the same day: 278 medicines with prices and stock, 410 offers, styro cold boxes; customers wait for his word.
