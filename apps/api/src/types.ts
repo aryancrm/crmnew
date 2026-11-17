@@ -5420,3 +5420,48 @@ export type TeamSamples = {
 export type CustomerFiles = {
   files: { source: "customer" | "order" | "case" | "sample"; kind: string; name: string; mime: string; at: string; by: string; record: string | null; link: string | null; url: string }[];
 };
+
+// ---------------------------------------------------------------- complaints and side-effects
+
+export type ComplaintKind = "quality" | "side_effect" | "delivery" | "service" | "other";
+export type ComplaintInput = {
+  kind: ComplaintKind;
+  serious?: boolean;
+  customerId?: number | null;
+  patientName?: string | null;
+  medicineId?: number | null;
+  batchNo?: string | null;
+  orderId?: number | null;
+  description: string;
+  receivedOn?: string | null;
+};
+export type ComplaintList = {
+  view: "open" | "closed" | "all";
+  rows: {
+    id: number;
+    code: string;
+    kind: ComplaintKind;
+    kindLabel: string;
+    serious: boolean;
+    status: "open" | "investigating" | "closed";
+    description: string;
+    receivedOn: string;
+    dueOn: string;
+    late: boolean;
+    customerId: number | null;
+    customer: string | null;
+    patientName: string | null;
+    medicine: string | null;
+    batchNo: string | null;
+    orderId: number | null;
+    orderCode: string | null;
+    reportedBy: string;
+    owner: string | null;
+    ownerId: number | null;
+    fdaRef: string | null;
+    outcome: string | null;
+    events: { at: string; message: string }[];
+  }[];
+  counts: { open: number; late: number; serious: number };
+  can: { handle: boolean };
+};

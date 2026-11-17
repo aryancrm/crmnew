@@ -393,6 +393,9 @@ export function Customer() {
           )}
           {customer.kind === "hospital" && <Doctors data={data} />}
           <FilesPanel customerId={customer.id} />
+          <Link to={`/complaints?report=1&customer=${customer.id}`} className="text-sm font-semibold text-brand hover:underline">
+            Report a complaint or side-effect for {customer.name}
+          </Link>
           <Activity data={data} />
         </div>
       </div>

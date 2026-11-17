@@ -29,6 +29,7 @@ import {
   FileText,
   Gauge,
   Gift,
+  ShieldAlert,
   HandCoins,
   HeartHandshake,
   House,
@@ -436,6 +437,8 @@ const messagesLink: MenuItem = folder(
   [
     // Every decision waiting on the person, from every desk, in one list (ERP phase 2).
     { to: "/decisions", label: "To decide", icon: ListChecks, badge: "decisions" },
+    // A customer's complaint or a side-effect, reported by anyone, handled by Regulatory.
+    { to: "/complaints", label: "Complaints & side-effects", icon: ShieldAlert },
     { to: "/messages?box=important", label: "Needs you", icon: BellRing, badge: "important" },
     { to: "/messages?box=updates", label: "Updates", icon: Inbox, badge: "updates" },
     { to: "/messages", label: "Chats", icon: MessageCircle, badge: "messages" },

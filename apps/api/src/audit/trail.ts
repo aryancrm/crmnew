@@ -16,6 +16,7 @@ export const AUDIT_KINDS: Record<string, string> = {
   stock: "Stock",
   money: "Payments and refunds",
   people: "Seats and people",
+  complaint: "Complaints",
   zoho: "Zoho's own log",
 };
 
@@ -57,6 +58,9 @@ const TRAIL = sql`(
   select h.ends_on::timestamptz, p.name, 'people', s.title, null,
       who.name || ' left ' || s.title || ' on ' || to_char(h.ends_on, 'DD Mon YYYY') || coalesce(': ' || h.end_reason, '')
     from seat_holder h join person p on p.id = h.ended_by join person who on who.id = h.person_id join seat s on s.id = h.seat_id where h.ends_on is not null
+  union all
+  select e.at, p.name, 'complaint', k.code, '/complaints?open=' || k.id, e.message
+    from complaint_event e join person p on p.id = e.by_person join complaint k on k.id = e.complaint_id
   union all
   select a.at, coalesce(a.user_name, 'Zoho'), 'zoho', a.transaction_name, null,
       concat_ws(' · ', a.operation, a.transaction_type, a.customer_name, a.description)

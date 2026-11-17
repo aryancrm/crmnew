@@ -13,6 +13,7 @@ import { Refusal } from "../http";
 import { orderDashboard } from "../orders/service";
 import { listReturns } from "../returns/service";
 import { teamSamples } from "../samples/service";
+import { COMPLAINT_ROLES } from "../complaints/service";
 import type { Decisions, DecisionLine, Me, Role } from "../types";
 
 /** A desk's list the person may not open counts as nothing waiting there. */
@@ -101,6 +102,15 @@ export async function decisions(db: Database, me: Me): Promise<Decisions> {
   );
   for (const ask of asks)
     forMe.push({ key: `ask:${ask.orderId}`, label: `${ask.by} asks your yes on ${ask.code}`, count: 1, to: `/orders/${ask.orderId}`, kind: "orders", since: ask.at });
+
+  // Complaints and side-effects open (Regulatory's, with Management, the CEO, the Admin).
+  if (COMPLAINT_ROLES.includes(me.role)) {
+    const [open] = await rows<{ n: number; late: number }>(
+      db,
+      sql`select count(*)::int as n, count(*) filter (where due_on < current_date)::int as late from complaint where status <> 'closed'`,
+    );
+    add(forMe, { key: "complaints", label: `Complaints and side-effects open${open?.late ? ` (${open.late} past due)` : ""}`, count: open?.n ?? 0, to: "/complaints", kind: "people" });
+  }
 
   // Asks for people, regions and areas: the CEO's and the Admin's to decide.
   if (["ceo", "admin"].includes(me.role)) {

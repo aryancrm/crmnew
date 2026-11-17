@@ -2,6 +2,7 @@
 
 import { decisionRoutes } from "./decisions/routes";
 import { sampleRoutes } from "./samples/routes";
+import { complaintRoutes } from "./complaints/routes";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -288,6 +289,7 @@ export function createApp(db: Database, options: AppOptions) {
   bookRoutes(app, db, signedIn);
   decisionRoutes(app, db, signedIn);
   sampleRoutes(app, db, signedIn);
+  complaintRoutes(app, db, signedIn);
 
   return app;
 }
