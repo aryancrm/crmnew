@@ -79,71 +79,22 @@ const FIELD = [
   "Your score, always up to date",
 ];
 
-const BOOKS = [
-  ["Profit and loss", "By month, branch and channel."],
-  ["Balance sheet", "What the company owns and owes, today."],
-  ["Cash flow", "Where the money came from and went."],
-  ["VAT", "Output and input tax, ready to file."],
-  ["Customers owe", "Every unpaid invoice, by age."],
-  ["Payables", "What the company owes its vendors, by age."],
-  ["Gross profit", "By medicine, channel, customer and order."],
-  ["Trial balance", "Every account, debits against credits."],
-];
-
-const QUESTIONS = [
-  ["Which workspace do I press?", "Your own department's. Whichever you press, your login opens your own pages."],
-  ["I forgot my password.", "Ask your administrator; they will set a new one."],
-  ["Can I see other people's work?", "Only what your role allows. Leads and heads see their own team's."],
-  ["Does it work on the phone?", "Yes, in the phone's browser. The field pages are made for it."],
-  ["Is anything ever deleted?", "No. A mistake is cancelled or reversed, and the audit keeps who did what and when."],
-];
-
-/** A thin line between two sections. */
+/** Between two sections: a thin wave in the portal's orange and green, with a star, and room around it. */
 const Rule = () => (
-  <div aria-hidden="true" className="mx-auto h-px w-[min(1140px,calc(100%-32px))] bg-gradient-to-r from-transparent via-[#1f2733]/15 to-transparent" />
+  <div aria-hidden="true" className="mx-auto w-[min(1140px,calc(100%-32px))] py-10">
+    <svg viewBox="0 0 1140 24" preserveAspectRatio="none" className="h-6 w-full">
+      <defs>
+        <linearGradient id="rule-line" x1="0" x2="1">
+          <stop offset="0" stopColor="#f36b21" stopOpacity="0" />
+          <stop offset=".3" stopColor="#f36b21" stopOpacity=".45" />
+          <stop offset=".7" stopColor="#1f9d55" stopOpacity=".45" />
+          <stop offset="1" stopColor="#1f9d55" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d="M0 12C180 4 340 20 520 12S860 4 1140 12" stroke="url(#rule-line)" strokeWidth="1.4" fill="none" vectorEffect="non-scaling-stroke" />
+    </svg>
+  </div>
 );
-
-/** A phone with a rep's day on it, drawn, not a photo. */
-function Phone() {
-  const rows = [
-    ["9:00", "Visit", "#34b261"],
-    ["10:30", "Order", "#f36b21"],
-    ["12:00", "Collection", "#8b5cf6"],
-    ["14:30", "Visit", "#34b261"],
-    ["16:00", "Samples", "#f5a524"],
-  ];
-  return (
-    <div className="relative mx-auto w-[min(300px,80vw)]">
-      <div aria-hidden="true" className="absolute inset-8 rounded-full bg-[#34b261] opacity-25 blur-[80px]" />
-      <div className="relative rounded-[2.75rem] border border-white bg-[#11151c] p-2.5 shadow-[0_50px_90px_-40px_rgba(20,30,50,0.6)]">
-        <div className="overflow-hidden rounded-[2.2rem] bg-[#f6f7fb]">
-          <div className="flex items-center justify-between px-6 pt-4 text-[11px] font-semibold text-[#1f2733]">
-            <span>9:41</span>
-            <span className="h-5 w-20 rounded-full bg-[#11151c]" />
-            <span>100%</span>
-          </div>
-          <div className="px-5 pt-5 pb-6">
-            <p className="text-[11px] font-semibold tracking-[0.16em] text-[#8a93a3] uppercase">Today</p>
-            <p className="mt-1 text-xl font-semibold tracking-[-0.02em]">Your visits</p>
-            <ul className="mt-4 grid gap-2">
-              {rows.map(([time, what, tone]) => (
-                <li key={time} className="flex items-center gap-3 rounded-2xl bg-white p-3 shadow-[0_6px_16px_-12px_rgba(20,30,50,0.4)]">
-                  <span className="w-11 text-xs font-semibold text-[#5b6472] tabular-nums">{time}</span>
-                  <span className="size-2 rounded-full" style={{ background: tone }} />
-                  <span className="flex-1">
-                    <span className="block text-[13px] font-medium">{what}</span>
-                    <span className="mt-1 block h-1.5 w-2/3 rounded-full bg-[#1f2733]/[0.07]" />
-                  </span>
-                </li>
-              ))}
-            </ul>
-            <span className="mt-4 flex h-11 items-center justify-center rounded-2xl bg-[#f36b21] text-sm font-semibold text-white">New order</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 const CLOSE = [
   { title: "Pick your workspace", text: "Each department has its own door: sales and field, management, finance, stock, dispatch, people." },
@@ -198,7 +149,6 @@ function Seats() {
             <p className={`${eyebrow} text-[#c2410c]`}>Built for every seat</p>
             <h2 className={`${h2} mt-4 max-w-2xl`}>{WORKSPACES.length} workspaces, one company.</h2>
           </div>
-          <p className="max-w-sm text-[15px] leading-relaxed text-[#5b6472]">Press a workspace to see who it is for and what is inside.</p>
         </div>
         <div className="mt-12 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
           <ul className="grid gap-2 sm:grid-cols-2">
@@ -252,13 +202,15 @@ export function About() {
       {/* The black hole: everything turns around one record. */}
       <section className="relative isolate overflow-hidden bg-[#020203] text-white">
         <div className="relative h-[clamp(560px,86vh,820px)]">
-          {/* One bright light in the middle: the record everything turns around. */}
+          {/* The sun in the middle: the record everything turns around. */}
           <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-            <div className="sun-breathe absolute top-[58%] left-1/2 size-[42rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(255,170,90,0.45),rgba(243,107,33,0.12)_55%,transparent)]" />
-            <div className="absolute top-[58%] left-1/2 size-56 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,#ffffff,#fff3dc_30%,rgba(255,196,120,0.75)_55%,transparent)] blur-[2px]" />
-            <div className="absolute top-[58%] left-1/2 size-16 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_60px_30px_rgba(255,236,210,0.9),0_0_160px_80px_rgba(255,170,90,0.45)]" />
-            <div className="absolute top-[58%] left-1/2 h-[2px] w-[80%] -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-transparent via-[#fff4e6] to-transparent" />
-            <div className="absolute top-[58%] left-1/2 h-10 w-[46%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(255,220,180,0.35),transparent)] blur-md" />
+            <div className="sun-breathe absolute top-[60%] left-1/2 size-[48rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(255,160,80,0.32),rgba(243,107,33,0.1)_50%,transparent)]" />
+            <div
+              className="absolute top-[60%] left-1/2 size-[32rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[repeating-conic-gradient(rgba(255,214,160,0.14)_0deg_1.5deg,transparent_1.5deg_9deg)] [mask-image:radial-gradient(closest-side,black_25%,transparent_100%)]"
+              style={{ animation: "spin 160s linear infinite" }}
+            />
+            <div className="absolute top-[60%] left-1/2 size-[16rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(255,220,160,0.85),rgba(255,150,60,0.3)_55%,transparent)]" />
+            <div className="absolute top-[60%] left-1/2 size-28 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle_at_40%_38%,#fffef8_0%,#fff1c9_30%,#ffc06b_68%,#f36b21_100%)] shadow-[0_0_40px_12px_rgba(255,206,140,0.75),0_0_140px_50px_rgba(255,140,60,0.35)]" />
           </div>
           <div className={`relative ${wrap} pt-24 text-center`}>
             <p className="text-[11px] font-medium tracking-[0.42em] text-white/50 uppercase">What is inside</p>
@@ -307,7 +259,8 @@ export function About() {
           <p className="mt-5 max-w-md text-[15px] leading-relaxed text-[#5b6472]">
             Made for the phone first. Everything a rep needs between two visits, without calling the office.
           </p>
-          <ul className="mt-8 grid gap-3.5">
+        </div>
+          <ul className="grid gap-4 lg:pl-12">
             {FIELD.map((point) => (
               <li key={point} className="flex items-start gap-3 text-[15px] text-[#2b3340]">
                 <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-[#1f9d55] text-white">
@@ -317,32 +270,6 @@ export function About() {
               </li>
             ))}
           </ul>
-        </div>
-        <Phone />
-      </section>
-
-      <Rule />
-
-      {/* The books. */}
-      <section className={`${wrap} py-24`}>
-        <div className="grid gap-10 lg:grid-cols-[1fr_1.2fr] lg:items-end">
-          <div>
-            <p className={`${eyebrow} text-[#7c3aed]`}>Money</p>
-            <h2 className={`${h2} mt-4`}>Books that keep themselves.</h2>
-          </div>
-          <p className="max-w-lg text-[15px] leading-relaxed text-[#5b6472]">
-            Every invoice, payment, refund, return and stock movement posts to the right accounts as it happens. Finance checks; nobody
-            re-enters.
-          </p>
-        </div>
-        <ul className="mt-12 grid gap-px overflow-hidden rounded-[2rem] border border-white bg-[#1f2733]/[0.06] shadow-[0_30px_60px_-40px_rgba(20,30,50,0.4)] sm:grid-cols-2 lg:grid-cols-4">
-          {BOOKS.map(([title, text]) => (
-            <li key={title} className="bg-white/80 p-6 backdrop-blur">
-              <h3 className="font-semibold tracking-[-0.01em]">{title}</h3>
-              <p className="mt-1.5 text-sm leading-relaxed text-[#5b6472]">{text}</p>
-            </li>
-          ))}
-        </ul>
       </section>
 
       <Rule />
@@ -375,27 +302,6 @@ export function About() {
               Log in with ID and password
             </Link>
           </div>
-        </div>
-      </section>
-
-      <Rule />
-
-      {/* Questions. */}
-      <section className={`${wrap} grid gap-10 py-24 lg:grid-cols-[1fr_1.6fr]`}>
-        <div>
-          <p className={`${eyebrow} text-[#c2410c]`}>Questions</p>
-          <h2 className={`${h2} mt-4`}>Before you sign in.</h2>
-        </div>
-        <div className="divide-y divide-[#1f2733]/10 border-y border-[#1f2733]/10">
-          {QUESTIONS.map(([question, answer]) => (
-            <details key={question} className="group py-5">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[17px] font-medium tracking-[-0.01em] [&::-webkit-details-marker]:hidden">
-                {question}
-                <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-full border border-[#1f2733]/10 text-[#8a93a3] transition group-open:rotate-45">+</span>
-              </summary>
-              <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-[#5b6472]">{answer}</p>
-            </details>
-          ))}
         </div>
       </section>
 
