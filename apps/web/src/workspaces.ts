@@ -5,20 +5,20 @@
 
 import type { Me } from "@2mg/api/types";
 
-export type Workspace = { key: string; label: string; about: string; roles: string[] };
+export type Workspace = { key: string; label: string; about: string; roles: string[]; group?: "selling" | "operations" | "office" };
 
 export const WORKSPACES: Workspace[] = [
-  { key: "sales", label: "Sales and field", about: "MedReps, team leads, heads", roles: ["medrep", "team_lead", "manager"] },
-  { key: "management", label: "Management", about: "Order approvals, customers", roles: ["management"] },
-  { key: "finance", label: "Finance", about: "Payments, invoices, the books", roles: ["finance"] },
-  { key: "inventory", label: "Inventory", about: "Stock, purchasing", roles: ["inventory"] },
-  { key: "dispatch", label: "Dispatch", about: "Packing and delivery", roles: ["dispatch"] },
-  { key: "online", label: "Online desk", about: "Messenger, websites, cases", roles: ["online"] },
-  { key: "hr", label: "HR", about: "People, attendance, payroll", roles: ["hr"] },
-  { key: "regulatory", label: "Regulatory", about: "Registrations, complaints", roles: ["regulatory"] },
-  { key: "office", label: "Office staff", about: "Work log", roles: ["staff"] },
-  { key: "ceo", label: "CEO", about: "The whole company", roles: ["ceo"] },
-  { key: "admin", label: "Administration", about: "Setup, logins, audit", roles: ["admin"] },
+  { key: "sales", group: "selling", label: "Sales and field", about: "MedReps, team leads, heads", roles: ["medrep", "team_lead", "manager"] },
+  { key: "management", group: "operations", label: "Management", about: "Order approvals, customers", roles: ["management"] },
+  { key: "finance", group: "operations", label: "Finance", about: "Payments, invoices, the books", roles: ["finance"] },
+  { key: "inventory", group: "operations", label: "Inventory", about: "Stock, purchasing", roles: ["inventory"] },
+  { key: "dispatch", group: "operations", label: "Dispatch", about: "Packing and delivery", roles: ["dispatch"] },
+  { key: "online", group: "selling", label: "Online desk", about: "Messenger, websites, cases", roles: ["online"] },
+  { key: "hr", group: "office", label: "HR", about: "People, attendance, payroll", roles: ["hr"] },
+  { key: "regulatory", group: "office", label: "Regulatory", about: "Registrations, complaints", roles: ["regulatory"] },
+  { key: "office", group: "office", label: "Office staff", about: "Work log", roles: ["staff"] },
+  { key: "ceo", group: "office", label: "CEO", about: "The whole company", roles: ["ceo"] },
+  { key: "admin", group: "office", label: "Administration", about: "Setup, logins, audit", roles: ["admin"] },
 ];
 
 /** The workspace a person's own login opens (their role decides, not the tile pressed). */
