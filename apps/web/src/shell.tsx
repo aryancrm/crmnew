@@ -1,6 +1,7 @@
 // The frame every signed-in screen sits in: the top bar, the role's menu down the left on a
 // desk, the same menu as a tab bar on a phone.
 
+import { workspaceOf } from "./workspaces";
 import type {
   Decisions,
   FormList,
@@ -12,6 +13,7 @@ import type {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
+  ArrowLeftRight,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -175,13 +177,10 @@ export function Shell() {
         >
           <Menu size={20} aria-hidden="true" />
         </button>
-        {/* The company's mark, then the workspace: the old CRM's top bar as it is. */}
-        <NavLink to="/" aria-label="Home" className="hidden shrink-0 items-center gap-2 md:flex">
-          <img
-            src="/2mg-inc-logo.png"
-            alt="2MG Inc."
-            className="h-7 w-auto max-w-[120px] object-contain"
-          />
+        {/* Bishnoi One's mark, then the desk. */}
+        <NavLink to="/" aria-label="Bishnoi One home" className="hidden shrink-0 items-center gap-2 md:flex">
+          <img src="/brand/bishnoi-one-mark.png" alt="" className="size-8" />
+          <span className="text-[15px] font-semibold tracking-tight text-slate-900">Bishnoi One</span>
         </NavLink>
         <span aria-hidden="true" className="hidden h-6 w-px bg-slate-200 md:block" />
         <NavLink
@@ -194,6 +193,8 @@ export function Shell() {
         <div className="ml-auto flex w-full min-w-0 max-w-xl justify-end">
           <SearchBox />
         </div>
+        {/* Back to the portal's workspace board: signs this person out, so the next one signs in. */}
+        <SwitchWorkspace label={workspaceOf(me.data).label} />
         {/* The person's working day: when it started, Start / End my day. */}
         <MyDayButton />
         <LiveLocationSender />
@@ -865,4 +866,28 @@ function LookingBar({ name, role, viewer }: { name: string; role: string; viewer
 export async function lookAs(personId: number): Promise<void> {
   await api(`/api/auth/view/${personId}`, { method: "POST" });
   window.location.href = "/";
+}
+
+/** The workspace this login opens, and the way back to the portal's board (signing out). */
+function SwitchWorkspace({ label }: { label: string }) {
+  const navigate = useNavigate();
+  const queries = useQueryClient();
+  async function leave() {
+    await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+    queries.clear();
+    navigate("/login", { replace: true });
+  }
+  return (
+    <button
+      type="button"
+      onClick={leave}
+      title="Switch workspace: sign out and choose another"
+      className="hidden h-9 shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white pr-3 pl-1.5 text-[13px] font-medium text-slate-700 hover:border-orange-300 hover:text-slate-900 lg:flex"
+    >
+      <span className="grid size-6 place-items-center rounded-full bg-orange-50 text-orange-600">
+        <ArrowLeftRight size={13} aria-hidden="true" />
+      </span>
+      {label}
+    </button>
+  );
 }
