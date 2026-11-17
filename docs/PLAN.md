@@ -1638,6 +1638,25 @@ the Admin; Management, the Founder read. The Inventory menu's Purchases now open
 CRM's earlier purchase pages (/purchases, /suppliers) stay reachable but are no longer in the menu.
 Stock is counted in Zoho's own units (pieces), as the opening stock was.
 
+**One stock, not two (17 Nov).** Only the CRM's shelves move: warehouse → batch → pieces, changed
+the moment an order is packed, a purchase received, stock moved or counted, each change in the stock
+log. Zoho's copy (the items' stock on hand, Zoho's adjustments, packages and transfers) is history
+and the figure to compare with; it never changes the shelves. Zoho's opening stock came in by
+warehouse: Getmeds Philippines Inc. (about 3.0 million pieces, the default warehouse since 17 Nov:
+Approve picks it first), Consignment, Cebu (Zoho's Cebu warehouse, the Cebu pharmacist's), Davao,
+the homestocks, Expired stocks, Gloria Diaz. The demo stock is off the local shelves
+(`scripts/go-live-stock.ts --demo-out`: 21,770 pieces taken off by stock counts with their reason,
+the demo-only "Main warehouse" closed; backup in .data/pg.before-stock-2026-11-17). Now 207 of the
+280 medicines tied to Zoho items hold exactly Zoho's figure; of the 73 that differ, 54 have no batch
+in Zoho's backup (packaging, Zoho's test items, a few medicines) and the rest are short by a few
+hundred pieces Zoho holds without a batch.
+
+On the switch day: read Zoho's stock once more (the opening stock import refreshes what changed),
+count the medicines that still differ, then Zoho's stock stops and only the CRM's moves.
+Books the same way: Zoho's documents stay as history beside the CRM's own (the CEO, team,
+Collections and We owe read both, nothing counted twice); new sales invoices come only from the order
+line, purchases and bills from the Books screens, and Zoho's open invoices are paid here.
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -2090,3 +2109,4 @@ Stock is counted in Zoho's own units (pieces), as the opening stock was.
 - 17 Nov (68), Aryan: less clutter. The orders link in every seller's and lead's menu is one link to all their orders (sent-back count on it); the stages and Returns are tabs on the page. The order line walked in the browser (Ryan placed, Sarla approved, Fiona invoiced, Marco packed, shipped, delivered): a delivered order now says "Delivered" (complete only once paid); Approve shows only the warehouses that can fill the order (the short ones behind "more"); Dispatch's order page drops the earlier prices; the CEO's "We owe" counts the suppliers' unpaid bills (PHP 331M, as Zoho). Zoho's salespeople wait to be tied until the real people's seats are in (the demo has 16 seats).
 - 17 Nov (69), Aryan: an order placed in every channel and taken to the end (HOSP, RX, TS, B2B, BID, PAP, MT, Online: approve, invoice or payment, pack, ship, deliver; two credit orders paid). Fixed: the medicine search finds "letrozole 2.5" (the strength is kept apart from the name); a PAP patient's button says "Start a PAP case" (a guarantee-letter patient never was a plain order); a delivered order reads Completed only once paid. Rule from Aryan: less clutter never removes anything useful. The leads' and heads' long menus now sit under three headings (the day's work, Team, Look up), every link kept, the phone's tab bar as it was.
 - 17 Nov (70), Aryan: onboard the chart's people with one common password. `scripts/onboard-company.ts` puts every person of HR's 2026 chart (docs/company-map.units.js) into the CRM: 9 boxes added (NCR 2, North & Central Luzon, South Luzon, Visayas, Onco-Hema Division, Executive and Admin, Supply Chain, Pharmacy Operations, Finance Department), 117 people in their seats with the seat's login ID, 2 vacant seats, the demo company's people left (local database; backup in .data/pg.before-onboard-2026-11-17). Zoho's salespeople tied to the seats that are the same person (2,963 customers now under them); 102 Zoho names wait for the heads (Rx districts, Blood & Bone, MD Telesales regions, people who left): docs/PEOPLE-2026.md. The password is the server's JOIN_PASSWORD (never in code), the same for everyone, never forced to change; HR's New joiner and Admin's Add person ask only the login and the employee ID. No employee IDs exist yet (not on the chart, not in the old CRM). SEFMED was not imported (Aryan, 16 Nov: read for the plan only). Phase 1 of section 15 done locally, monthly targets per seat still to type.
+- 17 Nov (71), Aryan: one stock before going live. `scripts/go-live-stock.ts` makes Getmeds Philippines Inc. the default warehouse (Approve picks it first) and, with --demo-out, takes the demo people's stock off the shelves by stock counts with their reason (19,710 pieces from the demo "Main warehouse", now closed; 2,060 from Cebu, whose 47,815 pieces from Zoho stay). Local database; backup in .data/pg.before-stock-2026-11-17. Data checks: shelves equal their moves, none below zero; the one failing check (two demo orders packed without picks) was there before. Section 17 says how the stock and the books run as one.
