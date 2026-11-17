@@ -795,7 +795,8 @@ export function OfferDialog({ detail, onClose }: { detail: MedicineDetail; onClo
             price: price.trim() ? centavos(price) : null,
             name: name.trim() || null,
             startsOn,
-            endsOn,
+            // None: it runs until someone ends it.
+            endsOn: endsOn || null,
           },
         }),
       )}
@@ -866,7 +867,7 @@ export function OfferDialog({ detail, onClose }: { detail: MedicineDetail; onClo
             <input {...field} className={INPUT} type="date" value={startsOn} onChange={(event) => setStartsOn(event.target.value)} />
           )}
         </Field>
-        <Field label="To" error={action.at("endsOn")}>
+        <Field label="To (optional: until ended)" error={action.at("endsOn")}>
           {(field) => (
             <input {...field} className={INPUT} type="date" value={endsOn} onChange={(event) => setEndsOn(event.target.value)} />
           )}

@@ -16,7 +16,8 @@ export type ActiveOffer = {
   take: number;
   price: number | null;
   name: string;
-  endsOn: string;
+  /** The day it ends, if one was set; none: until someone ends it. */
+  endsOn: string | null;
 };
 
 /** What an offer is, in the words of the offers file. */
@@ -42,7 +43,7 @@ export async function activeOffers(
         medicineIds.map((id) => sql`${id}`),
         sql`, `,
       )})
-        and o.ended_at is null and o.starts_on <= ${today}::date and o.ends_on >= ${today}::date
+        and o.ended_at is null and o.starts_on <= ${today}::date and (o.ends_on is null or o.ends_on >= ${today}::date)
         and (o.buyer_kind is null or o.buyer_kind = ${buyer})
       order by o.medicine_id, (o.buyer_kind is null), o.created_at desc`,
   );

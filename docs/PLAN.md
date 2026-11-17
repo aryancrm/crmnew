@@ -1921,9 +1921,8 @@ on the local copy (database copied first, put back after), with what was seen wr
     list") and Management sees the order's own % and the customer's past prices. To let the system
     say "fine to approve" by itself, what counts as fine? (e.g. up to N% below the list, or not below
     the price this customer paid last time.)
-26. **Christmas offers: when, and the patient ones**: the file is ready to load (410 offers: 285
-    Buy X Take Y at the buyer's own price, 58 at the file's own price, 67 special prices). Which
-    days does the Christmas promo run (start and end)? The file says a patient promo on a
+26. **Christmas offers, the patient ones** (Aryan, 17 Nov: "Christmas offer" is only a name, no
+    days — loaded, running until ended). The file says a patient promo on a
     prescription medicine needs Regulatory clearance: 92 such are held back — load them once
     cleared? 11 SKUs in the file aren't in our list (GM-4313, GM-4640, GM-4340, GM-4539, GM-4316,
     GM-3185, GM-4283, GM-3398, GM-3690, GM-1752, GM-3545): add them, or leave them out?
@@ -2444,4 +2443,13 @@ on the local copy (database copied first, put back after), with what was seen wr
   medicines held back as the file says; needs the promo's days to apply) — waiting for question 26.
   Walked on a copy (offers loaded there only): Kate saw AbiraGet's four offers; Ryan's order of 120
   got 120 free by itself; Kate saw the free line marked Offer, not as a question.
+- 17 Nov (88), Aryan: "Christmas offer" is only a name — an offer has no days unless one is set; it
+  runs until someone ends it (migration 0087). The aim restated: the hub and Zoho did the work, the
+  trouble was going to Zoho and to the price sheet again and again — so the MedRep sees every price
+  where he orders, Management sees whether a price is right there (prices and offers in Inventory,
+  checked by the system), Finance sees the customer's old dues there (Zoho's history in the CRM),
+  and the orders, invoices and the rest are made in crmnew: no Zoho. **The Christmas offers sheet is
+  loaded on the local database** (410 offers from today, until ended; 92 patient offers on
+  prescription medicines held back as the sheet says; 11 SKUs not in the list left out; a safety
+  copy at .data/pg.before-offers-2026-11-17). Not on live yet.
 

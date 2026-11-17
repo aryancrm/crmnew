@@ -165,7 +165,8 @@ export function inventoryRoutes(
         name: text(80).nullish(),
         note: text(300).nullish(),
         startsOn: date,
-        endsOn: date,
+        // None: it runs until someone ends it.
+        endsOn: date.nullish(),
       }),
     );
     return c.json({ id: await addOffer(db, c.get("me"), idParam(c), input) });

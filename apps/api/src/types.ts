@@ -124,7 +124,8 @@ export type CatalogueOffer = {
   /** Centavos per piece bought while it runs; null: the buyer's own price. */
   price: number | null;
   name: string;
-  endsOn: string;
+  /** None: it runs until someone ends it. */
+  endsOn: string | null;
 };
 
 export type MedicineOffer = CatalogueOffer & {
@@ -143,7 +144,7 @@ export type OfferInput = {
   name?: string | null;
   note?: string | null;
   startsOn: string;
-  endsOn: string;
+  endsOn?: string | null;
 };
 
 export type Catalogue = {

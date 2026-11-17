@@ -158,13 +158,13 @@ describe("offers", () => {
           price,
           name: "Christmas: Buy 2 Take 1",
           startsOn: todayManila(),
-          endsOn: later(30),
+          // No end day: it runs until someone ends it.
         })
       ).status,
     ).toBe(200);
     const catalogue = await read<Catalogue>("ryan", "/api/inventory/medicines");
     expect(catalogue.rows.find((row) => row.id === medicine.id)?.offers).toMatchObject([
-      { buyerKind: "doctor", buy: 2, take: 1, price },
+      { buyerKind: "doctor", buy: 2, take: 1, price, endsOn: null },
     ]);
     const order = await place({
       customerId: doctor,

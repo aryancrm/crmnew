@@ -436,7 +436,8 @@ export function Medicine() {
                     {offer.price !== null ? ` · ${peso(offer.price)} a piece` : ""}
                     <span className="text-slate-500">
                       {" "}
-                      · {offer.buyerLabel} · {dayLabel(offer.startsOn, today)} to {dayLabel(offer.endsOn, today)}
+                      · {offer.buyerLabel} · from {dayLabel(offer.startsOn, today)}
+                      {offer.endsOn ? ` to ${dayLabel(offer.endsOn, today)}` : ", until ended"}
                     </span>
                   </span>
                   <span className="flex items-center gap-2">

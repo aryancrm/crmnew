@@ -30,7 +30,7 @@ export async function runningOffers(db: Runner, today: string): Promise<Map<numb
     db,
     sql`select id::int as id, medicine_id::int as "medicineId", buyer_kind as "buyerKind", buy::int as buy, take::int as take,
         price::int as price, name, ${day("ends_on")} as "endsOn"
-      from offer where ended_at is null and starts_on <= ${today}::date and ends_on >= ${today}::date
+      from offer where ended_at is null and starts_on <= ${today}::date and (ends_on is null or ends_on >= ${today}::date)
       order by medicine_id, buyer_kind nulls last, id`,
   );
   const out = new Map<number, CatalogueOffer[]>();
@@ -45,9 +45,9 @@ export async function offersOf(db: Runner, medicineId: number): Promise<Medicine
     db,
     sql`select o.id::int as id, o.buyer_kind as "buyerKind", o.buy::int as buy, o.take::int as take, o.price::int as price,
         o.name, o.note, ${day("o.starts_on")} as "startsOn", ${day("o.ends_on")} as "endsOn", p.name as by,
-        (o.ended_at is not null or o.ends_on < ${today}::date) as ended
+        (o.ended_at is not null or coalesce(o.ends_on >= ${today}::date, true) = false) as ended
       from offer o join person p on p.id = o.created_by
-      where o.medicine_id = ${medicineId} and coalesce(o.ended_at::date, o.ends_on) >= ${addDays(today, -90)}::date
+      where o.medicine_id = ${medicineId} and coalesce(o.ended_at::date, o.ends_on, ${today}::date) >= ${addDays(today, -90)}::date
       order by o.starts_on desc, o.id desc`,
   );
   return found.map(({ ended, ...offer }) => ({
@@ -60,9 +60,10 @@ export async function offersOf(db: Runner, medicineId: number): Promise<Medicine
 /** Adds an offer. One running offer per medicine and kind of buyer at a time: the new one is
  *  refused while another overlaps it (end that one first). */
 export async function addOffer(db: Database, me: Me, medicineId: number, input: OfferInput): Promise<number> {
-  if (input.endsOn < input.startsOn)
+  // No end day: it runs until someone ends it (Aryan, 17 Nov).
+  if (input.endsOn && input.endsOn < input.startsOn)
     throw new Refusal(400, "invalid", "The offer can't end before it starts.", "endsOn");
-  if (input.endsOn < todayManila())
+  if (input.endsOn && input.endsOn < todayManila())
     throw new Refusal(400, "invalid", "That end date has already passed.", "endsOn");
   if (input.take === 0 && input.price === null)
     throw new Refusal(400, "invalid", "Give pieces free (Take), or a special price.", "take");
@@ -73,7 +74,8 @@ export async function addOffer(db: Database, me: Me, medicineId: number, input: 
       tx,
       sql`select name from offer where medicine_id = ${medicineId} and ended_at is null
         and buyer_kind is not distinct from ${input.buyerKind}
-        and starts_on <= ${input.endsOn}::date and ends_on >= ${input.startsOn}::date limit 1`,
+        and (${input.endsOn ?? null}::date is null or starts_on <= ${input.endsOn ?? null}::date)
+        and (ends_on is null or ends_on >= ${input.startsOn}::date) limit 1`,
     );
     if (overlap)
       throw new Refusal(
@@ -86,12 +88,12 @@ export async function addOffer(db: Database, me: Me, medicineId: number, input: 
       tx,
       sql`insert into offer (medicine_id, buyer_kind, buy, take, price, name, note, starts_on, ends_on, created_by)
         values (${medicineId}, ${input.buyerKind}, ${input.buy}, ${input.take}, ${input.price}, ${name},
-          ${input.note?.trim() || null}, ${input.startsOn}::date, ${input.endsOn}::date, ${me.id})
+          ${input.note?.trim() || null}, ${input.startsOn}::date, ${input.endsOn ?? null}::date, ${me.id})
         returning id::int as id`,
     );
     await tx.execute(
       sql`insert into price_change (medicine_id, what, old_amount, new_amount, by_person)
-          values (${medicineId}, ${`Offer "${name}" for ${offerBuyerLabel(input.buyerKind).toLowerCase()}, ${input.startsOn} to ${input.endsOn}${input.price !== null ? `, ${peso(input.price)} a piece` : ""}`},
+          values (${medicineId}, ${`Offer "${name}" for ${offerBuyerLabel(input.buyerKind).toLowerCase()}, from ${input.startsOn}${input.endsOn ? ` to ${input.endsOn}` : ", until ended"}${input.price !== null ? `, ${peso(input.price)} a piece` : ""}`},
             null, ${input.price}, ${me.id})`,
     );
     return made?.id as number;

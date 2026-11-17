@@ -7,9 +7,11 @@
 // needs Regulatory clearance: those are skipped unless --patient-rx. An offer already running for
 // that medicine and buyer in those days is left as it is.
 //
-// Dry run by default (counts only, dates not needed); --apply writes, with the promo's days.
-// A local database with TEST_PGLITE_DIR; the live one needs --live (Aryan's word first).
-//   TEST_PGLITE_DIR=../../.data/pg npx tsx scripts/import-offers.ts <file.xlsx> [--from 2026-12-01 --to 2026-12-31 --apply] [--patient-rx]
+// "Christmas offer" is only a name (Aryan, 17 Nov): the offers run from today until someone ends
+// them (--from / --to set days when wanted).
+// Dry run by default; --apply writes. A local database with TEST_PGLITE_DIR; the live one needs
+// --live (Aryan's word first).
+//   TEST_PGLITE_DIR=../../.data/pg npx tsx scripts/import-offers.ts <file.xlsx> [--apply] [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--patient-rx]
 
 import { sql } from "drizzle-orm";
 import { rows } from "../src/db/index";
@@ -24,12 +26,13 @@ const valueOf = (flag: string) => {
 };
 const apply = args.includes("--apply");
 const patientRx = args.includes("--patient-rx");
-const from = valueOf("--from");
-const to = valueOf("--to");
+const today = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date());
+const from = valueOf("--from") ?? today;
+const to = valueOf("--to") ?? null;
 const isDay = (value: string | undefined) => Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
 if (!file) throw new Error("Give the offers .xlsx file.");
-if (apply && (!isDay(from) || !isDay(to) || (to as string) < (from as string)))
-  throw new Error("--apply needs the promo's days: --from YYYY-MM-DD --to YYYY-MM-DD.");
+if (!isDay(from) || (to !== null && (!isDay(to) || to < from)))
+  throw new Error("Days as YYYY-MM-DD, and --to not before --from.");
 if (!process.env.TEST_PGLITE_DIR && !args.includes("--live"))
   throw new Error("Give TEST_PGLITE_DIR (a local database), or --live for the live one.");
 
@@ -99,7 +102,7 @@ for (const row of sheet.rows.filter((one) => /^GM-/i.test(one.cells[0] ?? ""))) 
         buy,
         take,
         price,
-        name: `Christmas: ${take > 0 ? `Buy ${buy} Take ${take}` : "Special price"}`,
+        name: `Christmas offer · ${take > 0 ? `Buy ${buy} Take ${take}` : "Special price"}`,
       });
     }
   }
@@ -109,7 +112,7 @@ console.log(`  Buy X Take Y at the buyer's own price: ${said.ownPrice}; at the f
 console.log(`  skipped: ${said.regular} regular price, ${said.patientRx} patient offers on a prescription medicine (needs Regulatory clearance; --patient-rx to take them)`);
 console.log(`  SKUs not in our list (${said.noSku.size}): ${[...said.noSku].join(", ")}`);
 if (!apply) {
-  console.log("Dry run: add --from, --to and --apply to write.");
+  console.log("Dry run: add --apply to write.");
   process.exit(0);
 }
 const [admin] = await rows<{ id: number }>(db, sql`select id::int as id from person where role = 'admin' order by id limit 1`);
@@ -119,7 +122,7 @@ for (const one of toMake) {
   const [overlap] = await rows<{ id: number }>(
     db,
     sql`select id::int as id from offer where medicine_id = ${one.medicineId} and buyer_kind = ${one.kind} and ended_at is null
-      and starts_on <= ${to}::date and ends_on >= ${from}::date limit 1`,
+      and (${to}::date is null or starts_on <= ${to}::date) and (ends_on is null or ends_on >= ${from}::date) limit 1`,
   );
   if (overlap) {
     kept += 1;
