@@ -140,6 +140,40 @@ channels; today ₱5.4M of Zoho's history isn't on any seat yet, see question 2)
   P&L says Zoho's invoices carry no cost of goods yet (Zoho's Account Transactions file brings it).
 - Open for Aryan: points paid on an order are posted to **Discount** — say if another account.
 
+## 7.2 Phases 2–4, as built (18 Nov 2026, all local until everything is done)
+
+- **To decide** (Messages → To decide, with a count): every decision waiting on the person, read
+  from each desk's own list (orders to approve / confirm / invoice / pack / ship, held, refunds,
+  medicine requests, leave, forms, field expenses, visit plans, returns to decide / check in /
+  credit, asks up, asks for people, samples to approve / issue / receive), and what they asked
+  others for. Same rules as each desk, so the numbers match the pages.
+- **Audit** (CEO and Admin; Company → Audit, Admin panel → Audit): who did what, when — order
+  steps, cases, tenders, registrations, stock moves, payments, refunds, seat changes, Zoho's log.
+- **Reports** (Books → Reports and More reports on the CRM's Reports page, each for its desks):
+  sales by channel month by month, top medicines vs before, ABC classes, senior/PWD sales, stock
+  by age and expiry, days of stock left, purchases by supplier / item, online cases by source /
+  person; Print and Export CSV on all.
+- **Batch trace** (Inventory → Batch trace): for a recall, a batch's customers with phone and
+  address, every move; print or CSV.
+- **Samples and gifts** (the old CRM's rules, migration 0097): ask → lead approves → stock desk
+  issues (unexpired, expiring first; pieces leave company stock) → rep marks received → given to a
+  doctor at a visit with the signed acknowledgement → monthly count with reasons. My samples &
+  gifts, Team samples & gifts, Give on a doctor's visit; Inventory can mark a medicine "never a
+  sample". Not copied: selling from the rep's bag (crmnew's rule: Dispatch delivers).
+- **Import customers from a sheet** (Management, Admin): checked row by row as if typed, then kept.
+- **Files on the customer page**: their papers, their orders' papers, cases' files, sample
+  acknowledgements.
+
+Waiting on Aryan before building (nothing guessed):
+- Samples issued leave the stock but post nothing to the books yet: which expense account
+  (e.g. "Samples and Promotions")?
+- Selling from a rep's bag (the old CRM had it): wanted, given Dispatch delivers in crmnew?
+- Automations ("when X, notify / do Y"): which ones?
+- Report emails and notifications by mail/SMS: who gets what, and which mail/SMS service?
+- Branches: is a branch a warehouse (Main, Cebu, Davao), or something else?
+- Modern Trade near-expiry returns and deductions; doctor rebates (after the lawyer).
+- Phase 5 modules: repacking/manufacturing, projects, fixed assets, a complaints desk.
+
 ## 8. Questions for Aryan (nothing assumed)
 
 1. Which phase first? (Suggested: 0, then 1.)
