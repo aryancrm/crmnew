@@ -392,6 +392,10 @@ export type CustomerInput = {
   worksAt?: number | null;
   licenceNo?: string | null;
   licenceExpires?: string | null;
+  /** The licence to operate as Zoho kept it: who holds it, what it is for, the day it was issued. */
+  licenceOwner?: string | null;
+  ltoType?: string | null;
+  licenceIssued?: string | null;
   tin?: string | null;
   note?: string | null;
   /** Only those who manage customers set these; from anyone else they are ignored. */
@@ -401,11 +405,26 @@ export type CustomerInput = {
   creditLimit?: number | null;
 };
 
+/** A business customer's paper (the hub asked a hospital for all three). */
+export type CustomerPaperKind = "bir_2303" | "lto_permit" | "business_permit";
+export type CustomerPaper = {
+  id: number;
+  kind: CustomerPaperKind;
+  kindLabel: string;
+  name: string;
+  by: string;
+  at: string;
+};
+
 export type CustomerDetail = {
   can: CustomerCan;
   today: string;
   kinds: CustomerList["kinds"];
   areas: { id: number; name: string; channel: string }[];
+  /** A hospital's, distributor's or drugstore's papers, and what of the hub's list is not there
+   *  yet (the licence's details and the three papers): Management checks the customer with it. */
+  papers: CustomerPaper[];
+  missing: string[];
   customer: Required<Omit<CustomerInput, "worksAt">> & {
     id: number;
     code: string;
@@ -1010,6 +1029,8 @@ export type OrderDetail = {
     noProofNote: string | null;
     /** Where the order came from (the hub's Source list). */
     source: string | null;
+    /** A hospital's, distributor's or drugstore's licence and papers still missing (the hub's list). */
+    customerMissing: string[];
     /** Placed though a medicine was short: why the MedRep went on. */
     stockReason: string | null;
     /** Who approves it instead of Management (a PAP order's head), when someone does. */

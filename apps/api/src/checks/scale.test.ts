@@ -159,6 +159,13 @@ beforeAll(async () => {
       kind: "hospital",
       name: `Hospital of ${who}`,
       city,
+      // From the field a hospital comes with its licence (the hub's rule).
+      tin: "000-000-000-000",
+      licenceOwner: `Owner of ${who}`,
+      licenceNo: `LTO-${who}`,
+      ltoType: "Hospital",
+      licenceIssued: "2025-01-01",
+      licenceExpires: "2028-01-01",
     });
     expect(made.status, `${who} adds a customer`).toBe(200);
     customers[who] = ((await made.json()) as { id: number }).id;

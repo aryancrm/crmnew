@@ -133,6 +133,13 @@ export async function seedDemoTeam(db: Database, password: string): Promise<bool
     city: "Taguig",
     address: "Rizal Drive cor. 32nd St, Bonifacio Global City",
     phone: "(02) 8789 7700",
+    // From the field a hospital comes with its licence (the hub's rule): a demo one.
+    tin: "000-123-456-000",
+    licenceOwner: "St. Luke's Medical Center, Inc.",
+    licenceNo: "LTO-DEMO-0001",
+    ltoType: "Hospital",
+    licenceIssued: "2025-01-15",
+    licenceExpires: "2028-01-15",
   });
   const spmc = await addCustomer(db, sarla, {
     kind: "hospital",

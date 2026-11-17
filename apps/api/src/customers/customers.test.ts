@@ -166,6 +166,67 @@ describe("adding a customer", () => {
     });
   });
 
+  it("takes a hospital from the field only with its licence, then its three papers (the hub's form)", async () => {
+    const bare = await post("ryan", "/api/customers", {
+      kind: "hospital",
+      name: "Pasay Licensed Hospital",
+      city: "Pasay",
+      phone: "0918 777 1212",
+    });
+    expect(bare.status).toBe(400);
+    expect((await bare.json()).error.message).toContain("TIN, licence owner, LTO number");
+    const made = await post("ryan", "/api/customers", {
+      kind: "hospital",
+      name: "Pasay Licensed Hospital",
+      city: "Pasay",
+      phone: "0918 777 1212",
+      tin: "123-456-789-000",
+      licenceOwner: "Dr. Ana Cruz",
+      licenceNo: "LTO-3000-001",
+      ltoType: "Hospital",
+      licenceIssued: "2025-01-10",
+      licenceExpires: "2028-01-10",
+    });
+    expect(made.status).toBe(200);
+    const id = (await made.json()).id as number;
+    const first = await page("sarla", id);
+    expect(first.customer).toMatchObject({ licenceOwner: "Dr. Ana Cruz", ltoType: "Hospital", review: "to_review" });
+    expect(first.missing).toEqual(["BIR 2303", "LTO permit", "Business permit"]);
+    for (const kind of ["bir_2303", "lto_permit", "business_permit"]) {
+      const form = new FormData();
+      form.set("kind", kind);
+      form.set("file", new File([new Uint8Array([37, 80, 68, 70, 45, 49])], `${kind}.pdf`, { type: "application/pdf" }));
+      const sent = await app.request(`/api/customers/${id}/papers`, {
+        method: "POST",
+        headers: { cookie: cookies.ryan as string },
+        body: form,
+      });
+      expect(sent.status).toBe(200);
+    }
+    const done = await page("sarla", id);
+    expect(done.missing).toEqual([]);
+    expect(done.papers.map((paper) => paper.kindLabel)).toEqual(["BIR 2303", "LTO permit", "Business permit"]);
+    const paper = await get("sarla", `/api/customer-papers/${done.papers[0]?.id}`);
+    expect(paper.status).toBe(200);
+    expect(paper.headers.get("content-type")).toBe("application/pdf");
+    // Management may add a hospital and complete it later; a distributor may follow up its papers.
+    expect(
+      (await post("sarla", "/api/customers", { kind: "hospital", name: "Office Added Hospital", city: "Pasay" })).status,
+    ).toBe(200);
+    const distributor = await post("ryan", "/api/customers", {
+      kind: "distributor",
+      name: "Pasay Pharma Trading",
+      city: "Pasay",
+      phone: "0918 777 3434",
+    });
+    expect(distributor.status).toBe(200);
+    const distributorId = (await distributor.json()).id as number;
+    expect((await page("sarla", distributorId)).missing).toContain("BIR 2303");
+    // Management checks both; the next tests count what waits for review.
+    for (const one of [id, distributorId])
+      expect((await post("sarla", `/api/customers/${one}/review`)).status).toBe(200);
+  });
+
   it("is refused for a hospital already listed, naming who looks after it", async () => {
     const twin = await post("jane", "/api/customers", {
       kind: "hospital",

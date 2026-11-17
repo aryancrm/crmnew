@@ -181,7 +181,8 @@ export async function addProspect(db: Database, me: Me, input: { customerId?: nu
     if (!input.customer) throw new Refusal(400, "invalid", "Pick the business or type its details.", "customer");
     if (!(B2B_KINDS as readonly string[]).includes(input.customer.kind))
       throw new Refusal(400, "invalid", "A prospect is a drugstore, a distributor or a clinic / hospital.", "kind");
-    customerId = await addCustomer(db, me, input.customer);
+    // A prospect: B2B works its papers in as the account grows (they make its stage).
+    customerId = await addCustomer(db, me, input.customer, { prospect: true });
   }
   const [taken] = await rows<{ nbd: string | null }>(
     db,

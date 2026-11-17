@@ -8,13 +8,35 @@ import type {
   CustomerKind,
   CustomerList,
   CustomerMatch,
+  CustomerPaperKind,
   PaymentTerms,
 } from "@2mg/api/types";
+import { FileCheck2, Paperclip, X } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { PAPER_ACCEPT } from "../photo";
 import { Button, Dialog, Field, INPUT, Problem, useAction } from "../ui";
+
+/** The kinds that buy with a licence to operate: the hub asked them for it and three papers. */
+const LICENSED: CustomerKind[] = ["hospital", "distributor", "drugstore"];
+const CUSTOMER_PAPERS: { kind: CustomerPaperKind; label: string }[] = [
+  { kind: "bir_2303", label: "BIR 2303" },
+  { kind: "lto_permit", label: "LTO permit" },
+  { kind: "business_permit", label: "Business permit" },
+];
+/** What a licence to operate is for, as Zoho's customers had it (any other can be typed). */
+const LTO_TYPES = [
+  "Hospital",
+  "Drugstore",
+  "Drug Wholesaler",
+  "Drug Distributor-Wholesaler",
+  "Drug Importer/Wholesaler",
+  "Drug Importer/Exporter/Wholesaler",
+  "Drug Importer",
+  "Medical Device Distributor-Wholesaler",
+];
 
 /** The value, a moment after it stops changing. */
 function useSettled<T>(value: T, ms = 300): T {
@@ -55,6 +77,13 @@ export function CustomerDialog(props: {
   const [licenceNo, setLicenceNo] = useState(now?.licenceNo ?? "");
   const [licenceExpires, setLicenceExpires] = useState(now?.licenceExpires ?? "");
   const [tin, setTin] = useState(now?.tin ?? "");
+  const [licenceOwner, setLicenceOwner] = useState(now?.licenceOwner ?? "");
+  const [ltoType, setLtoType] = useState(now?.ltoType ?? "");
+  const [licenceIssued, setLicenceIssued] = useState(now?.licenceIssued ?? "");
+  const [files, setFiles] = useState<Partial<Record<CustomerPaperKind, File>>>({});
+  // A distributor or drugstore may follow up its papers (the hub's "submit anyway").
+  const [followUp, setFollowUp] = useState(false);
+  const [fileProblem, setFileProblem] = useState<string | null>(null);
   const [note, setNote] = useState(now?.note ?? "");
   const [areaId, setAreaId] = useState(String(now?.areaId ?? ""));
   const [terms, setTerms] = useState<PaymentTerms>(now?.paymentTerms ?? "advance");
@@ -62,6 +91,29 @@ export function CustomerDialog(props: {
   const [credit, setCredit] = useState(now?.creditLimit ? String(now.creditLimit / 100) : "");
 
   const business = kind !== "patient";
+  const licensed = LICENSED.includes(kind);
+  const onFile = new Set((props.detail?.papers ?? []).map((paper) => paper.kind));
+  // The hub's list, missing from what is typed and attached.
+  const lacking = licensed
+    ? [
+        ...(tin.trim() ? [] : ["TIN"]),
+        ...(licenceOwner.trim() ? [] : ["licence owner"]),
+        ...(licenceNo.trim() ? [] : ["LTO number"]),
+        ...(ltoType.trim() ? [] : ["LTO type"]),
+        ...(licenceIssued ? [] : ["issue date"]),
+        ...(licenceExpires ? [] : ["expiry date"]),
+        ...CUSTOMER_PAPERS.filter((paper) => !files[paper.kind] && !onFile.has(paper.kind)).map(
+          (paper) => paper.label,
+        ),
+      ]
+    : [];
+  // From the field a hospital is added whole (the hub's "Hospital Creation Restricted"); a
+  // distributor or drugstore with something missing goes on once its follow-up is promised.
+  const blocked =
+    !now &&
+    !props.can.manage &&
+    lacking.length > 0 &&
+    (kind === "hospital" || !followUp);
   const typed = useSettled({ name: name.trim(), phone: phone.trim(), kind });
   const check = useQuery({
     queryKey: ["customers", "check", typed],
@@ -95,6 +147,9 @@ export function CustomerDialog(props: {
         licenceNo,
         licenceExpires: licenceExpires || null,
         tin,
+        licenceOwner: licensed ? licenceOwner : null,
+        ltoType: licensed ? ltoType : null,
+        licenceIssued: licensed ? licenceIssued || null : null,
         note,
         ...(props.can.manage
           ? {
@@ -111,7 +166,27 @@ export function CustomerDialog(props: {
       else saved = (await api<{ id: number }>("/api/customers", { body })).id;
     });
     if (!done) return;
+    // Its papers, each on its own: one that fails can be added again from the customer's page.
+    const failed: string[] = [];
+    for (const paper of CUSTOMER_PAPERS) {
+      const file = files[paper.kind];
+      if (!file || !saved) continue;
+      const form = new FormData();
+      form.set("kind", paper.kind);
+      form.set("file", file);
+      try {
+        await api(`/api/customers/${saved}/papers`, { body: form });
+      } catch {
+        failed.push(paper.label);
+      }
+    }
     await queries.invalidateQueries({ queryKey: ["customers"] });
+    if (failed.length) {
+      setFileProblem(
+        `Saved, but ${failed.join(" and ")} didn't upload: add it again on the customer's page.`,
+      );
+      return;
+    }
     props.onClose();
     if (saved) props.onSaved?.(saved);
   }
@@ -264,15 +339,168 @@ export function CustomerDialog(props: {
             </label>
           </div>
         </div>
+        {licensed && (
+          // The hub's new-customer form for a business: its licence to operate and three papers.
+          <div className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-3">
+            <div className="flex items-center gap-2 text-xs font-semibold text-slate-700">
+              <Paperclip className="size-4 text-brand" aria-hidden="true" /> Licence and papers
+              <span className="font-normal text-slate-500">
+                {kind === "hospital"
+                  ? "· all needed for a hospital"
+                  : "· Management checks what is missing"}
+              </span>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Field label="TIN" error={action.at("tin")}>
+                {(field) => (
+                  <input {...field} className={INPUT} value={tin} onChange={(event) => setTin(event.target.value)} />
+                )}
+              </Field>
+              <Field label="Licence owner">
+                {(field) => (
+                  <input
+                    {...field}
+                    className={INPUT}
+                    value={licenceOwner}
+                    onChange={(event) => setLicenceOwner(event.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="LTO number" error={action.at("licenceNo")}>
+                {(field) => (
+                  <input
+                    {...field}
+                    className={INPUT}
+                    value={licenceNo}
+                    onChange={(event) => setLicenceNo(event.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="LTO type">
+                {(field) => (
+                  <>
+                    <input
+                      {...field}
+                      list="lto-types"
+                      className={INPUT}
+                      value={ltoType}
+                      onChange={(event) => setLtoType(event.target.value)}
+                    />
+                    <datalist id="lto-types">
+                      {LTO_TYPES.map((type) => (
+                        <option key={type} value={type} />
+                      ))}
+                    </datalist>
+                  </>
+                )}
+              </Field>
+              <Field label="Issued on">
+                {(field) => (
+                  <input
+                    {...field}
+                    type="date"
+                    className={INPUT}
+                    value={licenceIssued}
+                    onChange={(event) => setLicenceIssued(event.target.value)}
+                  />
+                )}
+              </Field>
+              <Field label="Valid until" error={action.at("licenceExpires")}>
+                {(field) => (
+                  <input
+                    {...field}
+                    type="date"
+                    className={INPUT}
+                    value={licenceExpires}
+                    onChange={(event) => setLicenceExpires(event.target.value)}
+                  />
+                )}
+              </Field>
+            </div>
+            <ul className="flex flex-col divide-y divide-slate-100 rounded-lg border border-slate-200">
+              {CUSTOMER_PAPERS.map((paper) => {
+                const file = files[paper.kind];
+                return (
+                  <li key={paper.kind} className="flex min-h-11 items-center justify-between gap-3 px-3 py-1.5">
+                    <span className="text-[13px] text-slate-900">
+                      {paper.label}
+                      {onFile.has(paper.kind) && !file && (
+                        <span className="ml-2 text-[11px] text-good">On file</span>
+                      )}
+                    </span>
+                    {file ? (
+                      <span className="flex min-w-0 items-center gap-2 text-xs">
+                        <FileCheck2 className="size-4 shrink-0 text-good" aria-hidden="true" />
+                        <span className="max-w-40 truncate font-semibold text-good" title={file.name}>
+                          {file.name}
+                        </span>
+                        <button
+                          type="button"
+                          aria-label={`Remove the ${paper.label}`}
+                          onClick={() => setFiles((all) => ({ ...all, [paper.kind]: undefined }))}
+                          className="grid size-7 place-items-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                        >
+                          <X className="size-3.5" />
+                        </button>
+                      </span>
+                    ) : (
+                      <label className="inline-flex h-9 cursor-pointer items-center rounded-lg px-2 text-xs font-semibold text-brand hover:bg-brand-tint">
+                        {onFile.has(paper.kind) ? "Add newer" : "Attach"}
+                        <input
+                          type="file"
+                          accept={PAPER_ACCEPT}
+                          className="sr-only"
+                          onChange={(event) => {
+                            const chosen = event.target.files?.[0];
+                            if (chosen) setFiles((all) => ({ ...all, [paper.kind]: chosen }));
+                            event.target.value = "";
+                          }}
+                        />
+                      </label>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+            {lacking.length > 0 && !now && (
+              <div
+                className={`rounded-lg px-3 py-2 text-xs ${kind === "hospital" && !props.can.manage ? "bg-bad-tint text-bad" : "bg-amber-50 text-amber-900"}`}
+              >
+                {kind === "hospital" && !props.can.manage ? (
+                  <>
+                    <b>A hospital can't be added yet.</b> Missing: {lacking.join(", ")}.
+                  </>
+                ) : (
+                  <>
+                    Missing: {lacking.join(", ")}.{" "}
+                    {props.can.manage ? "Add them when you have them." : null}
+                  </>
+                )}
+                {kind !== "hospital" && !props.can.manage && (
+                  <label className="mt-1.5 flex items-center gap-2 font-semibold">
+                    <input
+                      type="checkbox"
+                      checked={followUp}
+                      onChange={(event) => setFollowUp(event.target.checked)}
+                    />
+                    I'll follow up on the missing ones: add it anyway (Management reviews it)
+                  </label>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* What isn't needed to place an order, folded: open it to add more. */}
         <details
-          open={Boolean(address || specialty || licenceNo || licenceExpires || tin || note)}
+          open={Boolean(address || specialty || (!licensed && (licenceNo || licenceExpires || tin)) || note)}
           className="group rounded-xl border border-slate-200 bg-white"
         >
           <summary className="flex cursor-pointer list-none items-center justify-between px-3 py-2.5 text-xs font-semibold text-slate-600 hover:text-slate-900">
             More details
             <span className="text-[11px] font-normal text-slate-400">
-              Address{business ? (kind === "doctor" ? ", PRC licence" : ", LTO, TIN") : ""}, note ·
+              Address
+              {business && !licensed ? (kind === "doctor" ? ", PRC licence" : ", LTO, TIN") : ""}, note ·
               optional
             </span>
           </summary>
@@ -300,7 +528,7 @@ export function CustomerDialog(props: {
                 )}
               </Field>
             )}
-            {business && (
+            {business && !licensed && (
               <div className="grid gap-3 sm:grid-cols-3">
                 <Field label={kind === "doctor" ? "PRC licence no." : "LTO number"}>
                   {(field) => (
@@ -421,6 +649,7 @@ export function CustomerDialog(props: {
             You can use this customer at once. Management looks the details over afterwards.
           </div>
         )}
+        {fileProblem && <div className="text-[13px] text-bad">{fileProblem}</div>}
         <Problem
           message={action.general([
             "name",
@@ -436,7 +665,12 @@ export function CustomerDialog(props: {
           <Button onClick={props.onClose} disabled={action.busy}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary" disabled={action.busy}>
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={action.busy || blocked}
+            title={blocked ? `Missing: ${lacking.join(", ")}` : undefined}
+          >
             {action.busy ? "Saving…" : now ? "Save" : `Add ${label.toLowerCase()}`}
           </Button>
         </div>

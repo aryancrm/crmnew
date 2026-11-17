@@ -10,12 +10,14 @@ import { addDays, EXPIRING_DAYS, todayManila } from "../inventory/rules";
 import { clean, day, iso, type Runner } from "../inventory/service";
 import { inForce } from "../org/service";
 import type { Role } from "../people/roles";
+import { bytesOf, keepFile } from "../files/store";
 import { formatPhone } from "../phone";
 import type {
   CustomerCan,
   CustomerDetail,
   CustomerInput,
   CustomerKind,
+  CustomerPaperKind,
   CustomerList,
   CustomerMatch,
   CustomerRow,
@@ -32,6 +34,45 @@ export const CUSTOMER_KINDS: CustomerList["kinds"] = [
   { key: "distributor", label: "Distributor", plural: "Distributors" },
   { key: "government", label: "Government buyer", plural: "Government buyers" },
 ];
+
+/** A business customer's papers, as the hub asked for them. */
+export const CUSTOMER_PAPER_LABEL: Record<CustomerPaperKind, string> = {
+  bir_2303: "BIR 2303",
+  lto_permit: "LTO permit",
+  business_permit: "Business permit",
+};
+export const CUSTOMER_PAPER_KINDS = Object.keys(CUSTOMER_PAPER_LABEL) as CustomerPaperKind[];
+/** The kinds that buy as a business with a licence to operate: their licence and papers are
+ *  asked for (a hospital's before it is added from the field; the others may follow). */
+export const LICENSED_KINDS: readonly CustomerKind[] = ["hospital", "distributor", "drugstore"];
+
+/** What of the hub's list a licensed customer doesn't have yet: the licence's details, the TIN,
+ *  the three papers. */
+export function missingOf(
+  customer: {
+    kind: CustomerKind;
+    tin: string | null;
+    licenceOwner: string | null;
+    licenceNo: string | null;
+    ltoType: string | null;
+    licenceIssued: string | null;
+    licenceExpires: string | null;
+  },
+  papers: CustomerPaperKind[],
+): string[] {
+  if (!LICENSED_KINDS.includes(customer.kind)) return [];
+  return [
+    ...(customer.tin ? [] : ["TIN"]),
+    ...(customer.licenceOwner ? [] : ["licence owner"]),
+    ...(customer.licenceNo ? [] : ["LTO number"]),
+    ...(customer.ltoType ? [] : ["LTO type"]),
+    ...(customer.licenceIssued ? [] : ["licence issue date"]),
+    ...(customer.licenceExpires ? [] : ["licence expiry"]),
+    ...CUSTOMER_PAPER_KINDS.filter((kind) => !papers.includes(kind)).map(
+      (kind) => CUSTOMER_PAPER_LABEL[kind],
+    ),
+  ];
+}
 
 /** Who adds a customer and keeps its contact details right. */
 export const CUSTOMER_ADD_ROLES: readonly Role[] = [
@@ -255,13 +296,14 @@ export async function listCustomers(
 
 export async function customerDetail(db: Database, me: Me, id: number): Promise<CustomerDetail> {
   const today = todayManila();
-  const [found, doctors, areas] = await Promise.all([
+  const [found, doctors, areas, papers] = await Promise.all([
     rows<CustomerDetail["customer"] & { licenceExpires: string | null }>(
       db,
       sql`${team(me)}
           select c.id::int as id, c.code, c.kind, c.name, c.phone, c.email, c.address, c.city,
             c.specialty, c.works_at::int as "worksAtId", h.name as "worksAt",
             c.licence_no as "licenceNo", ${day("c.licence_expires")} as "licenceExpires", c.tin, c.note,
+            c.licence_owner as "licenceOwner", c.lto_type as "ltoType", ${day("c.licence_issued")} as "licenceIssued",
             c.area_id::int as "areaId", a.name as area, ch.code as channel, ${holder} as medrep,
             c.payment_terms as "paymentTerms", c.payment_days::int as "paymentDays", c.credit_limit::int as "creditLimit",
             c.review, r.name as "reviewedBy", p.name as "addedBy", ${iso("c.created_at")} as "addedAt",
@@ -287,6 +329,12 @@ export async function customerDetail(db: Database, me: Me, id: number): Promise<
       db,
       sql`select a.id::int as id, a.name, ch.code as channel from area a join channel ch on ch.id = a.channel_id order by a.name`,
     ),
+    rows<Omit<CustomerDetail["papers"][number], "kindLabel">>(
+      db,
+      sql`select f.id::int as id, f.kind, f.name, p.name as by, ${iso("f.at")} as at
+        from customer_file f join person p on p.id = f.by_person
+        where f.customer_id = ${id} and f.active order by f.at, f.id`,
+    ),
   ]);
   const customer = found[0];
   if (!customer) throw new Refusal(404, "not_found", "No such customer, or it isn't one of yours.");
@@ -305,7 +353,75 @@ export async function customerDetail(db: Database, me: Me, id: number): Promise<
     areas,
     customer: { ...customer, licenceState },
     doctors,
+    papers: papers.map((paper) => ({ ...paper, kindLabel: CUSTOMER_PAPER_LABEL[paper.kind] })),
+    missing: missingOf(
+      customer,
+      papers.map((paper) => paper.kind),
+    ),
   };
+}
+
+const PAPER_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"];
+const PAPER_MAX_BYTES = 10 * 1024 * 1024;
+
+/** Adds a business customer's paper (BIR 2303, LTO permit, business permit): whoever may see the
+ *  customer and adds customers. A newer one is shown first; the older stays. */
+export async function addCustomerPaper(
+  db: Database,
+  me: Me,
+  customerId: number,
+  paper: { kind: string; name: string; mime: string; bytes: Uint8Array },
+): Promise<number> {
+  allow(me, CUSTOMER_ADD_ROLES, "add a customer's papers");
+  if (!CUSTOMER_PAPER_KINDS.includes(paper.kind as CustomerPaperKind))
+    throw new Refusal(400, "invalid", "Say which paper it is.", "kind");
+  if (!PAPER_TYPES.includes(paper.mime))
+    throw new Refusal(400, "invalid", "Attach a photo or a PDF.", "file");
+  if (paper.bytes.byteLength === 0) throw new Refusal(400, "invalid", "That file is empty.", "file");
+  if (paper.bytes.byteLength > PAPER_MAX_BYTES)
+    throw new Refusal(400, "invalid", "That file is over 10 MB. Take the photo again.", "file");
+  const [seenIt] = await rows<{ id: number }>(
+    db,
+    sql`${team(me)} select c.id::int as id from customer c where c.id = ${customerId} and c.active and ${seen(me)}`,
+  );
+  if (!seenIt) throw new Refusal(404, "not_found", "No such customer, or it isn't one of yours.");
+  const kept = await keepFile("customers", {
+    name: paper.name.trim().slice(0, 120) || "paper",
+    mime: paper.mime,
+    bytes: paper.bytes,
+  });
+  const [made] = await rows<{ id: number }>(
+    db,
+    sql`insert into customer_file (customer_id, kind, name, mime, size, data, store_key, by_person)
+      values (${customerId}, ${paper.kind}, ${kept.name}, ${kept.mime}, ${kept.size}, ${kept.data}, ${kept.key}, ${me.id})
+      returning id::int as id`,
+  );
+  return made?.id as number;
+}
+
+/** A customer's paper, for whoever may see the customer. */
+export async function readCustomerPaper(
+  db: Database,
+  me: Me,
+  paperId: number,
+): Promise<{ name: string; mime: string; bytes: Uint8Array }> {
+  const [paper] = await rows<{
+    customerId: number;
+    name: string;
+    mime: string;
+    data: Uint8Array | null;
+    key: string | null;
+  }>(
+    db,
+    sql`select customer_id::int as "customerId", name, mime, data, store_key as key from customer_file where id = ${paperId} and active`,
+  );
+  if (!paper) throw new Refusal(404, "not_found", "That paper isn't there any more.");
+  const [seenIt] = await rows<{ id: number }>(
+    db,
+    sql`${team(me)} select c.id::int as id from customer c where c.id = ${paper.customerId} and ${seen(me)}`,
+  );
+  if (!seenIt) throw new Refusal(404, "not_found", "That paper isn't there any more.");
+  return { name: paper.name, mime: paper.mime, bytes: await bytesOf(paper) };
 }
 
 /**
@@ -443,7 +559,13 @@ async function samePhoneRefused(
 }
 
 /** Adds a customer. A hospital, doctor or business is listed once per city. */
-export async function addCustomer(db: Database, me: Me, input: CustomerInput): Promise<number> {
+export async function addCustomer(
+  db: Database,
+  me: Me,
+  input: CustomerInput,
+  /** prospect: a business B2B Telesales starts to work (its papers make its stage, later). */
+  options: { prospect?: boolean } = {},
+): Promise<number> {
   const can = customerCan(me);
   const name = input.name.trim();
   const city = clean(input.city);
@@ -463,6 +585,29 @@ export async function addCustomer(db: Database, me: Me, input: CustomerInput): P
           "name",
         );
     }
+    // The hub's "Hospital Creation Restricted": from the field a hospital comes with its licence
+    // whole (its papers follow on the same screen); Management adds one and completes it later.
+    if (input.kind === "hospital" && !can.manage && !options.prospect) {
+      const lacking = missingOf(
+        {
+          kind: "hospital",
+          tin: clean(input.tin),
+          licenceOwner: clean(input.licenceOwner),
+          licenceNo: clean(input.licenceNo),
+          ltoType: clean(input.ltoType),
+          licenceIssued: clean(input.licenceIssued),
+          licenceExpires: clean(input.licenceExpires),
+        },
+        [...CUSTOMER_PAPER_KINDS],
+      );
+      if (lacking.length)
+        throw new Refusal(
+          400,
+          "invalid",
+          `A hospital is added with its ${lacking.join(", ")}.`,
+          lacking[0] === "TIN" ? "tin" : "licenceNo",
+        );
+    }
     const worksAt = input.kind === "doctor" ? await hospitalOrNull(tx, input.worksAt) : null;
     const areaId =
       can.manage && input.areaId !== undefined ? input.areaId : await areaFor(tx, me, city);
@@ -471,10 +616,12 @@ export async function addCustomer(db: Database, me: Me, input: CustomerInput): P
     const [made] = await rows<{ id: number }>(
       tx,
       sql`insert into customer (kind, name, phone, phone_key, email, address, city, area_id, specialty, works_at,
-            licence_no, licence_expires, tin, payment_terms, payment_days, credit_limit, note, review, added_by)
+            licence_no, licence_expires, tin, licence_owner, lto_type, licence_issued,
+            payment_terms, payment_days, credit_limit, note, review, added_by)
           values (${input.kind}, ${name}, ${formatPhone(input.phone)}, ${phoneKey(input.phone)}, ${clean(input.email)},
             ${clean(input.address)}, ${city}, ${areaId}, ${clean(input.specialty)}, ${worksAt},
             ${clean(input.licenceNo)}, ${clean(input.licenceExpires)}::date, ${clean(input.tin)},
+            ${clean(input.licenceOwner)}, ${clean(input.ltoType)}, ${clean(input.licenceIssued)}::date,
             ${terms}, ${days}, ${can.manage ? (input.creditLimit ?? null) : null}, ${clean(input.note)},
             ${can.manage ? "ok" : "to_review"}, ${me.id})
           returning id::int as id`,
@@ -524,7 +671,9 @@ export async function saveCustomer(
             email = ${clean(input.email)}, address = ${clean(input.address)}, city = ${city},
             specialty = ${clean(input.specialty)}, works_at = ${worksAt},
             licence_no = ${clean(input.licenceNo)}, licence_expires = ${clean(input.licenceExpires)}::date,
-            tin = ${clean(input.tin)}, note = ${clean(input.note)}
+            tin = ${clean(input.tin)}, note = ${clean(input.note)},
+            licence_owner = ${clean(input.licenceOwner)}, lto_type = ${clean(input.ltoType)},
+            licence_issued = ${clean(input.licenceIssued)}::date
           where id = ${id}`,
     );
     if (can.manage) {

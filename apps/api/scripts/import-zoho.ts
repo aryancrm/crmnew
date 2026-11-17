@@ -225,6 +225,7 @@ for (const row of rowsOf("Contacts")) {
   const hint = seen ? [...seen.kinds].sort((a, b) => b[1] - a[1])[0]?.[0] : undefined;
   const created = said(row["Created Time"]);
   const expires = said(row["CF.License Expiry Date"]);
+  const issued = said(row["CF.License Issuance Date"]);
   const shared = (namesOn.get(digits(row))?.size ?? 0) >= 3;
   if (digits(row)) withPhone += 1;
   if (shared) sharedLines += 1;
@@ -249,6 +250,8 @@ for (const row of rowsOf("Contacts")) {
     licenceNo: cut(said(row["CF.LTO License Number"]), 80),
     licenceType: cut(said(row["CF.LTO Type"]), 80),
     licenceExpires: isDay(expires) ? expires : null,
+    licenceOwner: cut(said(row["CF.License Owner"]), 120),
+    licenceIssued: isDay(issued) ? issued : null,
     seller: cut(seen?.seller ?? "", 200),
     sellerOn: seen && isDay(seen.sellerOn) ? seen.sellerOn : null,
     division: cut(seen?.division ?? "", 120),

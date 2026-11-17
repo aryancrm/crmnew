@@ -4,12 +4,13 @@
 import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
-import { allow, type Env, idParam, readBody } from "../http";
+import { allow, type Env, idParam, Refusal, readBody } from "../http";
 import { customerPage } from "./page";
 import { customerPrices } from "./prices";
 import { reorders } from "./reorders";
 import {
   addCustomer,
+  addCustomerPaper,
   CUSTOMER_ADD_ROLES,
   CUSTOMER_KINDS,
   CUSTOMER_MANAGE_ROLES,
@@ -17,6 +18,7 @@ import {
   customerDetail,
   listCustomers,
   myArea,
+  readCustomerPaper,
   reviewCustomer,
   saveCustomer,
   saveCustomerCredit,
@@ -51,6 +53,13 @@ const customerInput = z.object({
     .nullish()
     .or(z.literal("")),
   tin: optional(40),
+  licenceOwner: optional(120),
+  ltoType: optional(80),
+  licenceIssued: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Pick a date.")
+    .nullish()
+    .or(z.literal("")),
   note: optional(500),
   areaId: z.number().int().positive().nullish(),
   paymentTerms: z.enum(["advance", "cod", "days"]).optional(),
@@ -69,7 +78,13 @@ export function customerRoutes(
   signedIn: MiddlewareHandler<Env>,
 ): void {
   // "/path/*" also covers "/path" itself.
-  for (const path of ["/api/customers/*", "/api/my/area", "/api/my/collect", "/api/my/reorders"])
+  for (const path of [
+    "/api/customers/*",
+    "/api/customer-papers/*",
+    "/api/my/area",
+    "/api/my/collect",
+    "/api/my/reorders",
+  ])
     app.use(path, signedIn);
 
   app.get("/api/customers", async (c) => {
@@ -138,6 +153,32 @@ export function customerRoutes(
     const input = await readBody(c, customerInput);
     await saveCustomer(db, c.get("me"), idParam(c), input as Parameters<typeof saveCustomer>[3]);
     return c.json({ ok: true });
+  });
+
+  // A business customer's papers (BIR 2303, LTO permit, business permit), a photo or PDF each.
+  app.post("/api/customers/:id/papers", async (c) => {
+    const length = Number(c.req.header("content-length") ?? 0);
+    if (length > 10 * 1024 * 1024 + 64 * 1024)
+      throw new Refusal(400, "invalid", "That file is over 10 MB. Take the photo again.", "file");
+    const body = await c.req.parseBody().catch(() => ({}) as Record<string, unknown>);
+    const file = body.file;
+    if (!(file instanceof File)) throw new Refusal(400, "invalid", "Attach a photo or a PDF.", "file");
+    const id = await addCustomerPaper(db, c.get("me"), idParam(c), {
+      kind: String(body.kind ?? ""),
+      name: file.name,
+      mime: file.type,
+      bytes: new Uint8Array(await file.arrayBuffer()),
+    });
+    return c.json({ id });
+  });
+  app.get("/api/customer-papers/:id", async (c) => {
+    const paper = await readCustomerPaper(db, c.get("me"), idParam(c));
+    return c.body(paper.bytes as Uint8Array<ArrayBuffer>, 200, {
+      "content-type": paper.mime,
+      "content-disposition": `inline; filename="${encodeURIComponent(paper.name)}"`,
+      "x-content-type-options": "nosniff",
+      "cache-control": "private, max-age=604800, immutable",
+    });
   });
 
   app.post("/api/customers/:id/review", async (c) => {

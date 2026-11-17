@@ -1081,6 +1081,16 @@ function Lines({ data, compare }: { data: OrderDetail; compare?: boolean }) {
                     className={`num whitespace-nowrap ${item.unitPrice < item.listPrice ? "font-semibold text-amber-700" : ""}`}
                   >
                     {peso(item.unitPrice)}
+                    {/* Worked out for Management, not by hand (Aryan, 17 Nov): how far from the list. */}
+                    {!item.free && !item.relief && item.listPrice > 0 && item.unitPrice !== item.listPrice && (
+                      <div
+                        className={`text-[11px] font-semibold ${item.unitPrice < item.listPrice ? "text-amber-700" : "text-brand-dark"}`}
+                        title={`${peso(Math.abs(item.listPrice - item.unitPrice) * item.qty)} ${item.unitPrice < item.listPrice ? "less" : "more"} on this line`}
+                      >
+                        {item.unitPrice < item.listPrice ? "−" : "+"}
+                        {Math.round((Math.abs(item.listPrice - item.unitPrice) / item.listPrice) * 1000) / 10}% vs list
+                      </div>
+                    )}
                   </td>
                   <td
                     className={`num ${item.inStock < item.qty ? "font-semibold text-bad" : "text-emerald-700"}`}
@@ -1497,11 +1507,14 @@ function LicenceFacts({ order }: { order: OrderDetail["order"] }) {
   const name = order.customerKind === "doctor" ? "PRC licence" : "LTO number";
   const today = manilaToday();
   const expired = Boolean(order.licenceExpires && order.licenceExpires < today);
-  const missing = [
-    order.licenceNo ? null : name,
-    order.customerKind !== "doctor" && !order.licenceExpires ? "licence expiry" : null,
-    order.tin ? null : "TIN",
-  ].filter(Boolean);
+  // A hospital, distributor or drugstore: the hub's whole list (licence and the three papers).
+  const missing = ["hospital", "distributor", "drugstore"].includes(order.customerKind)
+    ? order.customerMissing
+    : [
+        order.licenceNo ? null : name,
+        order.customerKind !== "doctor" && !order.licenceExpires ? "licence expiry" : null,
+        order.tin ? null : "TIN",
+      ].filter(Boolean);
   return (
     <div
       className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-[13px] ${

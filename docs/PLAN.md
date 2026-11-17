@@ -1917,6 +1917,10 @@ on the local copy (database copied first, put back after), with what was seen wr
     keeps your 14 Nov rule that the MedRep doesn't choose delivery and Dispatch picks it when it
     ships. Keep it with Dispatch? (Likewise the hub let a MedRep raise an order for another MedRep;
     crmnew keeps "a MedRep places only his own".)
+25. **Price check made automatic**: each line now shows how far it is from the list ("−5.9% vs
+    list") and Management sees the order's own % and the customer's past prices. To let the system
+    say "fine to approve" by itself, what counts as fine? (e.g. up to N% below the list, or not below
+    the price this customer paid last time.)
 
 ## 14. Change log
 
@@ -2402,4 +2406,21 @@ on the local copy (database copied first, put back after), with what was seen wr
   page showing it all; a patient order missing its prescription) on a copy of the local database.
   Next (B part 2): Buy 1 Take 1 added by itself (with the price book's promos) and the new-customer
   form with a hospital's TIN, LTO and BIR 2303 / LTO / business permit papers. Question 24 written.
+- 17 Nov (86), Aryan: work with the hub, crmnew and Zoho side by side and make crmnew better than
+  both, checks automatic (memory). Step B part 2 begun: the sent-back Fix form checked as Ryan (the
+  form fills from the order; only "your answer" missing; sent again, versions kept); every line
+  shows **"−x% vs list"** for Management (question 25 asks what counts as fine to approve). **The
+  hub's new-customer form**: a hospital, distributor or drugstore gets a "Licence and papers" part —
+  TIN, licence owner, LTO number, LTO type (Zoho's kinds offered), issued, valid until, and the
+  **BIR 2303, LTO permit and business permit** (customer_file, migration 0085, kept by the file
+  store); from the field **a hospital is added only with its licence whole** (the hub's "Hospital
+  Creation Restricted"; the API refuses it too) and its papers attached on the same screen; a
+  distributor or drugstore may follow up ("I'll follow up… Management reviews it"); Management may
+  add one and complete it later; a B2B Telesales prospect (a clinic or hospital it starts to work)
+  is not held by it either, since B2B's papers make the account's stage as it grows. The customer page shows the licence and a **Licence and papers**
+  card (open a paper, add a newer one, what is missing); Management's order check shows the whole
+  missing list. Zoho kept the licence owner, LTO type and issue day (CF.License Owner / LTO Type /
+  Issuance Date): the importer keeps them now, and `scripts/backfill-licence.ts` filled 768 local
+  customers from the Zoho backup (local only; a safety copy at .data/pg.before-licence-2026-11-17).
+  Walked as Ryan and Kate on a copy of the local database.
 

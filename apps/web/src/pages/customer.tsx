@@ -3,7 +3,7 @@
 // at their buying inside it, then their parts on the left (orders, medicines, money, enquiries,
 // doctors, details, activity) with the open one on the right. Everything comes from one read.
 
-import type { CustomerPage, CustomerPrices } from "@2mg/api/types";
+import type { CustomerPage, CustomerPaperKind, CustomerPrices } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Activity as ActivityIcon,
@@ -14,6 +14,7 @@ import {
   Inbox,
   Mail,
   MapPin,
+  Paperclip,
   Phone,
   Pill as PillIcon,
   Plus,
@@ -27,6 +28,7 @@ import { api } from "../api";
 import { useMe } from "../auth";
 import { CustomerDialog } from "../customers/dialog";
 import { PricesGiven } from "../customers/prices";
+import { PAPER_ACCEPT } from "../photo";
 import {
   type BadgeTone,
   CodeChip,
@@ -377,6 +379,9 @@ export function Customer() {
             )}
           </SideCard>
           <Details data={data} />
+          {["hospital", "distributor", "drugstore"].includes(customer.kind) && (
+            <LicencePapers data={data} />
+          )}
           {customer.kind === "hospital" && <Doctors data={data} />}
           <Activity data={data} />
         </div>
@@ -680,6 +685,80 @@ function Doctors({ data }: { data: CustomerPage }) {
   );
 }
 
+const PAPER_NAMES: { kind: CustomerPaperKind; label: string }[] = [
+  { kind: "bir_2303", label: "BIR 2303" },
+  { kind: "lto_permit", label: "LTO permit" },
+  { kind: "business_permit", label: "Business permit" },
+];
+
+/** A licensed customer's papers (the hub's three) and what of its list is still missing:
+ *  Management checks the customer with it; anyone who looks after it can add a paper. */
+function LicencePapers({ data }: { data: CustomerPage }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  async function add(kind: CustomerPaperKind, file: File) {
+    await action.run(async () => {
+      const form = new FormData();
+      form.set("kind", kind);
+      form.set("file", file);
+      await api(`/api/customers/${data.customer.id}/papers`, { body: form });
+    });
+    await queries.invalidateQueries({ queryKey: ["customers"] });
+  }
+  return (
+    <SectionPanel icon={Paperclip} title="Licence and papers">
+      {data.missing.length > 0 ? (
+        <div className="mb-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-900">
+          <b>Missing:</b> {data.missing.join(", ")}
+        </div>
+      ) : (
+        <div className="mb-2 text-xs text-good">Licence and papers complete.</div>
+      )}
+      <ul className="flex flex-col">
+        {PAPER_NAMES.map((paper) => {
+          const kept = data.papers.filter((one) => one.kind === paper.kind);
+          const latest = kept.at(-1);
+          return (
+            <li
+              key={paper.kind}
+              className="flex items-center justify-between gap-3 border-b border-slate-100 py-2 text-sm last:border-b-0"
+            >
+              <span className="min-w-0">
+                <span className="block text-slate-900">{paper.label}</span>
+                {latest && (
+                  <a
+                    href={`/api/customer-papers/${latest.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block truncate text-xs text-brand hover:underline"
+                  >
+                    {latest.name} · {latest.by}, {timeLabel(latest.at)}
+                  </a>
+                )}
+              </span>
+              <label className="inline-flex h-8 shrink-0 cursor-pointer items-center rounded-lg px-2 text-xs font-semibold text-brand hover:bg-brand-tint">
+                {latest ? "Add newer" : "Attach"}
+                <input
+                  type="file"
+                  accept={PAPER_ACCEPT}
+                  className="sr-only"
+                  disabled={action.busy}
+                  onChange={(event) => {
+                    const chosen = event.target.files?.[0];
+                    if (chosen) void add(paper.kind, chosen);
+                    event.target.value = "";
+                  }}
+                />
+              </label>
+            </li>
+          );
+        })}
+      </ul>
+      <Problem message={action.problem?.message} />
+    </SectionPanel>
+  );
+}
+
 function Details({ data }: { data: CustomerPage }) {
   const { customer } = data;
   const rows: [string, ReactNode][] = [
@@ -699,6 +778,9 @@ function Details({ data }: { data: CustomerPage }) {
     ["Specialty", customer.specialty],
     ["Works at", customer.worksAt],
     [customer.kind === "doctor" ? "PRC licence" : "Licence to operate", customer.licenceNo],
+    ["Licence owner", customer.licenceOwner],
+    ["LTO type", customer.ltoType],
+    ["Licence issued", customer.licenceIssued ? dayLabel(customer.licenceIssued) : null],
     ["Licence valid until", customer.licenceExpires ? dayLabel(customer.licenceExpires) : null],
     ["TIN", customer.tin],
     [

@@ -3,7 +3,7 @@
 
 import { bytesOf, keepFile } from "../files/store";
 import { type SQL, sql } from "drizzle-orm";
-import { customerDetail } from "../customers/service";
+import { customerDetail, missingOf } from "../customers/service";
 import { type Database, rows } from "../db/index";
 import { dispatchCounts, putBack } from "../dispatch/service";
 import {
@@ -26,6 +26,7 @@ import { ROLE_LABEL, type Role } from "../people/roles";
 import { releaseOrderPoints } from "../points/service";
 import { releaseReservationOf } from "../points/website";
 import type {
+  CustomerPaperKind,
   BoardRep,
   BoardTab,
   Desk,
@@ -1241,6 +1242,10 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
       paidIn: boolean;
       waitingSince: string | null;
       waitingBy: string | null;
+      licenceOwner: string | null;
+      ltoType: string | null;
+      licenceIssued: string | null;
+      customerPapers: CustomerPaperKind[];
     }
   >(
     db,
@@ -1249,6 +1254,8 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         c.licence_no as "licenceNo", ${day("c.licence_expires")} as "licenceExpires", c.tin,
         o.no_proof_reason as "noProofReason", o.no_proof_note as "noProofNote", ${approverSql} as "approverId",
         o.source, o.stock_reason as "stockReason",
+        c.licence_owner as "licenceOwner", c.lto_type as "ltoType", ${day("c.licence_issued")} as "licenceIssued",
+        (select coalesce(array_agg(distinct f.kind), '{}') from customer_file f where f.customer_id = c.id and f.active) as "customerPapers",
         (select ap.name from person ap where ap.id = ${approverSql}) as "approverName",
         (o.finance_checked_by = ${me.id} and o.status = 'ready_for_dispatch' and coalesce(o.points_used, 0) = 0
           and now() - o.finance_checked_at <= interval '90 seconds') as undoable,
@@ -1346,6 +1353,10 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
     paidIn,
     waitingSince,
     waitingBy,
+    licenceOwner,
+    ltoType,
+    licenceIssued,
+    customerPapers,
     ...shown
   } = order;
   const onFile = [...new Set(papers.map((paper) => paper.kind))];
@@ -1387,6 +1398,18 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         ? { statusLabel: "Completed" }
         : {}),
       invoiceFromLabel: INVOICE_FROM_LABEL[order.invoiceFrom],
+      customerMissing: missingOf(
+        {
+          kind: order.customerKind,
+          tin: order.tin,
+          licenceOwner,
+          licenceNo: order.licenceNo,
+          ltoType,
+          licenceIssued,
+          licenceExpires: order.licenceExpires,
+        },
+        customerPapers,
+      ),
     },
     items: items.map(({ orderId: _orderId, ...item }) => item),
     versions: versions.map(({ role, ...version }) => ({

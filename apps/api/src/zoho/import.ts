@@ -43,6 +43,12 @@ export const zohoCustomer = z.object({
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/)
     .nullish(),
+  /** Who holds the licence, and the day it was issued (Zoho's CF.License Owner / Issuance Date). */
+  licenceOwner: text(120),
+  licenceIssued: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .nullish(),
   /** The salesperson on their latest order ("HOS | Juan"), its day, and its Division,
    *  Sub-division and Headquarter. */
   seller: text(200),
@@ -259,6 +265,9 @@ export async function importZohoCustomers(
         tin: clip(one.tin, 40),
         licenceNo: clip(one.licenceNo, 60),
         licenceExpires: one.licenceExpires ?? null,
+        licenceOwner: clip(one.licenceOwner, 120),
+        ltoType: clip(one.licenceType, 80),
+        licenceIssued: one.licenceIssued ?? null,
       });
     } else if (seenIds.has(one.id)) said.skipped += 1;
     else {
@@ -333,6 +342,9 @@ export async function importZohoCustomers(
       tin: clip(one.tin, 40),
       licenceNo: kind === "patient" ? null : clip(one.licenceNo, 60),
       licenceExpires: kind === "patient" ? null : (one.licenceExpires ?? null),
+      licenceOwner: kind === "patient" ? null : clip(one.licenceOwner, 120),
+      ltoType: kind === "patient" ? null : clip(one.licenceType, 80),
+      licenceIssued: kind === "patient" ? null : (one.licenceIssued ?? null),
       terms,
       days,
       createdAt: made && !Number.isNaN(made.getTime()) ? made.toISOString() : null,
@@ -347,23 +359,28 @@ export async function importZohoCustomers(
             email = coalesce(c.email, x.email), address = coalesce(c.address, x.address), city = coalesce(c.city, x.city),
             tin = coalesce(c.tin, x.tin),
             licence_no = case when c.kind = 'patient' then c.licence_no else coalesce(c.licence_no, x."licenceNo") end,
-            licence_expires = case when c.kind = 'patient' then c.licence_expires else coalesce(c.licence_expires, x."licenceExpires"::date) end
+            licence_expires = case when c.kind = 'patient' then c.licence_expires else coalesce(c.licence_expires, x."licenceExpires"::date) end,
+            licence_owner = case when c.kind = 'patient' then c.licence_owner else coalesce(c.licence_owner, x."licenceOwner") end,
+            lto_type = case when c.kind = 'patient' then c.lto_type else coalesce(c.lto_type, x."ltoType") end,
+            licence_issued = case when c.kind = 'patient' then c.licence_issued else coalesce(c.licence_issued, x."licenceIssued"::date) end
           from jsonb_to_recordset(${JSON.stringify(known)}::jsonb) as x("zohoId" text, phone text, "phoneKey" text, email text,
-            address text, city text, tin text, "licenceNo" text, "licenceExpires" text)
+            address text, city text, tin text, "licenceNo" text, "licenceExpires" text, "licenceOwner" text,
+            "ltoType" text, "licenceIssued" text)
           where c.zoho_id = x."zohoId"`,
       );
     const made = toMake.length
       ? await rows<{ id: number; zohoId: string }>(
           tx,
           sql`insert into customer (kind, name, phone, phone_key, email, address, city, tin,
-              licence_no, licence_expires, payment_terms, payment_days, review, added_by, created_at, zoho_id)
+              licence_no, licence_expires, licence_owner, lto_type, licence_issued,
+              payment_terms, payment_days, review, added_by, created_at, zoho_id)
             select x.kind, x.name, x.phone, x."phoneKey", x.email, x.address, x.city, x.tin,
-              x."licenceNo", x."licenceExpires"::date,
+              x."licenceNo", x."licenceExpires"::date, x."licenceOwner", x."ltoType", x."licenceIssued"::date,
               x.terms, x.days, 'ok', ${admin}, coalesce(x."createdAt"::timestamptz, now()), x."zohoId"
             from jsonb_to_recordset(${JSON.stringify(toMake)}::jsonb) as x(kind text, name text, phone text,
               "phoneKey" text, email text, address text, city text, tin text,
-              "licenceNo" text, "licenceExpires" text, terms text,
-              days integer, "createdAt" text, "zohoId" text)
+              "licenceNo" text, "licenceExpires" text, "licenceOwner" text, "ltoType" text,
+              "licenceIssued" text, terms text, days integer, "createdAt" text, "zohoId" text)
             on conflict do nothing
             returning id::int as id, zoho_id as "zohoId"`,
         )
