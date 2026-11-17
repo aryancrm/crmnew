@@ -1703,6 +1703,60 @@ Recurring Expenses, Recurring Bills, Sales → Credit Note Refunds. Every docume
 "Journal" (what it put on each account). Making expenses, journals, transfers and deposits here comes
 with the switch; until then they come over with each backup.
 
+## 18. One price book, one order line (plan, 17 Nov 2026)
+
+Aryan, 17 Nov: Inventory is where medicines and every price live, and the whole company reads them
+from there: change a price once and every screen has it. Prices change often: the selling price,
+a discounted price, the SC/PWD price, promo prices, offers (Christmas, Buy 1 Take 1, Buy 2 Take 1).
+The MedRep picks a medicine and its price comes by itself; if he changes it or writes a note, it
+goes to Management, which sees on that line what the price was and what he put, and approves or
+not; Management can add medicines, give free goods and add the cold-packaging fee (an Inventory
+item, "Cold Management", its fee as set there, on every cold delivery). The MedRep sees what
+Management changed. Finance checks what the hospital or patient already owes (Zoho's too) before
+it goes on. Dispatch checks the delivery address and that the invoice is attached, then ships by
+Lalamove, LBC… A return is Finance's to decide (refund or replace), and Management is told. "No
+mistakes": every link from the top to the bottom.
+
+**What the order line has today** (audited 17 Nov, file by file): one price per buyer kind and a
+pack price per medicine, dated promos, a price-change log; the order form fills the price and asks
+a reason for a lower one (flagged "Below price" for Management); Management's price check (list
+against given, what this customer paid before) and its line editor (add, free, price); Finance's
+cards with what the customer owes in this CRM and the credit limit; Dispatch packing by batch and
+shipping by courier (LBC, Lalamove…) with the signed receipt; returns credited and refunds owed.
+
+**Wrong today (to fix first)**
+1. The API lets a MedRep send his order past Management and Finance (the form doesn't, the API
+   does; a test even expects it). Only Management may decide that.
+2. Management's change deletes the order's lines and writes them again: the MedRep's own lines are
+   gone, and an SC/PWD line loses its relief.
+3. SC/PWD exists only on Online/PAP cases, and its invoice still splits VAT as if it were charged.
+4. What a customer owes in Zoho (and their opening balance) is missing from every check at order
+   time: Finance's cards, the credit limit, the customer's page.
+5. A price above the list goes through unseen, and the MedRep's note is not on Management's cards.
+
+**The plan, in three steps (each checked end to end, MedRep → Management → Finance → Dispatch →
+return, as the people who will do it, before the next)**
+1. *Safe line.* The API sends every field order to Management and every approved order to Finance
+   (only Management decides otherwise, and it is shown); an order's lines are never deleted: each
+   change is a version, the MedRep sees before → after line by line (price kind, list, given,
+   free, reason) on the order and a "changed" mark on his list; SC/PWD on any order (ID number and
+   name kept, 20% off and no VAT, the higher of SC/PWD or a promo, never both) with the invoice,
+   sales order and return credit right; Finance's checks count Zoho's unpaid invoices and opening
+   balances; any price changed (up or down) and any note are on Management's card.
+2. *Price book.* Inventory holds, per medicine and buyer kind: the list price, the pack price, and
+   offers with a name and dates (special price, Buy X Take Y) for the channels they are for; the
+   Christmas 2026 list (`GetMeds_Christmas_Offers_Team_Price_List_CORRECTED.xlsx`, 110 medicines ×
+   doctor / hospital-drugstore / patient / distributor) comes in as the first offers. The order form
+   offers the running offer by itself (Buy 1 Take 1 adds its free piece), Management's editor offers
+   the same, and the order keeps which offer it used.
+3. *Fees, Dispatch, returns.* "Cold Management" is an Inventory item that is a fee, not stock (no
+   batch, no packing), with its price per buyer kind; a medicine's cold-chain mark is kept in
+   Inventory, an order with a cold medicine gets the fee line (Management can take it off with a
+   reason) and Dispatch sees "cold pack". Dispatch ticks "address checked", sees the invoice on the
+   card, keeps the courier's cost and tracking. A return: Finance chooses refund or replacement,
+   Management is told; refunds from returns counted on Finance's badge. Old invoices keep the
+   medicine's name and VAT as they were.
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
