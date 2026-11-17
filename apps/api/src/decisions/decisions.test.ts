@@ -88,7 +88,7 @@ describe("to decide", () => {
     expect((await app.request("/api/audit", { headers: { cookie: cookies.sarla as string } })).status).toBe(403);
   });
   it("gives the old CRM's insight reports to the desks they serve", async () => {
-    for (const key of ["sales-trend", "top-medicines", "stock-aging", "stock-turnover", "abc", "purchases", "cases", "senior-pwd"]) {
+    for (const key of ["sales-trend", "sales-by-branch", "top-medicines", "stock-aging", "stock-turnover", "abc", "purchases", "cases", "senior-pwd"]) {
       const response = await app.request(`/api/books/insights/${key}`, { headers: { cookie: cookies.naresh as string } });
       expect(response.status, key).toBe(200);
       const report = (await response.json()) as Insight;

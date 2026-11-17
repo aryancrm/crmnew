@@ -228,6 +228,8 @@ describe("this CRM's money in the books", () => {
     expect(gp.totals.profit).toBe(pl.totals.grossProfit);
     const byOrder = await read<GrossProfit>("fiona", "/api/books/reports/gross-profit?by=order");
     expect(byOrder.rows[0]?.link).toMatch(/^\/orders\//);
+    const byBranch = await read<GrossProfit>("fiona", "/api/books/reports/gross-profit?by=branch");
+    expect(byBranch.totals.profit).toBe(gp.totals.profit);
 
     const summary = await read<MoneySummary>("naresh", "/api/books/reports/money-summary");
     expect(summary.profit.profit).toBe(gp.totals.profit);

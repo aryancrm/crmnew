@@ -5337,7 +5337,7 @@ export type PayablesAging = {
   suppliers: { supplier: string; supplierId: number | null; bills: number; current: number; d30: number; d60: number; d90: number; older: number; total: number }[];
   totals: { current: number; d30: number; d60: number; d90: number; older: number; total: number; bills: number };
 };
-export type GrossProfitBy = "medicine" | "channel" | "customer" | "order";
+export type GrossProfitBy = "medicine" | "channel" | "customer" | "order" | "branch";
 export type GrossProfit = {
   from: string;
   to: string;

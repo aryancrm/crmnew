@@ -45,6 +45,7 @@ export const REPORTS: Report[] = [
   { key: "vat", title: "VAT Summary", about: "Output VAT on sales, input VAT on bills and expenses, tax withheld (2307), month by month.", group: "Taxes", days: "range" },
   { key: "trial-balance", title: "Trial Balance", about: "Every account's balance on a day; debits equal credits.", group: "Accountant", days: "asOf" },
   { key: "sales-trend", title: "Sales by Channel, Month by Month", about: "Six months of billing (Zoho's and the CRM's) by channel, to the day picked.", group: "Sales", days: "range", insight: true, roles: SALES },
+  { key: "sales-by-branch", title: "Sales by Branch, Month by Month", about: "Six months of billing by warehouse (Main, Cebu, Davao…).", group: "Sales", days: "range", insight: true, roles: SALES },
   { key: "top-medicines", title: "Top Medicines", about: "What sold most in these days, against the same number of days before.", group: "Sales", days: "range", insight: true, roles: SALES },
   { key: "abc", title: "ABC Classes", about: "The last 12 months' sales by medicine: A the first 80%, B the next 15%, C the rest.", group: "Sales", days: "none", insight: true, roles: SALES },
   { key: "senior-pwd", title: "Senior Citizen and PWD Sales", about: "Lines sold with the relief, the ID on file and the relief given: for the BIR.", group: "Taxes", days: "range", insight: true, roles: SALES },
@@ -219,7 +220,7 @@ function ReportPage({ report }: { report: Report }) {
         )}
         {report.key === "gross-profit" && (
           <div className="flex overflow-hidden rounded border border-[#d7d5e2]">
-            {(["medicine", "channel", "customer", "order"] as const).map((one) => (
+            {(["medicine", "channel", "customer", "order", "branch"] as const).map((one) => (
               <button
                 key={one}
                 type="button"

@@ -295,6 +295,8 @@ const GP_KEY: Record<GrossProfitBy, { key: SQL; label: SQL; link: SQL }> = {
   channel: { key: sql`coalesce(o.channel_id::text, '-')`, label: sql`coalesce(max(ch.name), 'No channel')`, link: sql`null::text` },
   customer: { key: sql`o.customer_id::text`, label: sql`max(c.name)`, link: sql`'/customers/' || o.customer_id::text` },
   order: { key: sql`o.id::text`, label: sql`max(o.code || ' · ' || c.name)`, link: sql`'/orders/' || o.id::text` },
+  // A branch is a warehouse (Main, Cebu, Davao…), decided 18 Nov on Aryan's word.
+  branch: { key: sql`coalesce(o.warehouse_id::text, '-')`, label: sql`coalesce(max(wh.name), 'No warehouse yet')`, link: sql`null::text` },
 };
 
 /**
@@ -309,7 +311,7 @@ export async function grossProfit(
 ): Promise<GrossProfit> {
   allow(me, ["finance", "ceo", "admin", "management"], "see gross profit");
   const { from, to } = period(asked);
-  const by: GrossProfitBy = (["medicine", "channel", "customer", "order"] as const).find((one) => one === asked.by) ?? "medicine";
+  const by: GrossProfitBy = (["medicine", "channel", "customer", "order", "branch"] as const).find((one) => one === asked.by) ?? "medicine";
   const pick = GP_KEY[by];
   const found = await rows<GrossProfit["rows"][number]>(
     db,
@@ -348,7 +350,7 @@ export async function grossProfit(
         sum(l.revenue)::float8 as revenue, sum(l.cost)::float8 as cost, sum(l.revenue - l.cost)::float8 as profit,
         bool_or(l.uncosted) as uncosted
       from l join sales_order o on o.id = l.order_id join medicine m on m.id = l.medicine_id
-        join customer c on c.id = o.customer_id left join channel ch on ch.id = o.channel_id
+        join customer c on c.id = o.customer_id left join channel ch on ch.id = o.channel_id left join warehouse wh on wh.id = o.warehouse_id
       group by 1 order by 7 desc`,
   );
   const out = found.map((row) => ({ ...row, margin: row.revenue ? Math.round((row.profit / row.revenue) * 1000) / 10 : null }));

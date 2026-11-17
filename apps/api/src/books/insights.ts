@@ -80,6 +80,52 @@ async function salesTrend(db: Database, asked: { to?: string | null }): Promise<
   };
 }
 
+/** Sales by branch (a branch is a warehouse), month by month: the CRM's billed orders by the
+ *  warehouse they went out of, Zoho's invoice lines by the warehouse Zoho wrote on them. */
+async function salesByBranch(db: Database, asked: { to?: string | null }): Promise<Insight> {
+  const to = isDay(asked.to) ? (asked.to as string) : todayManila();
+  const last = `${to.slice(0, 7)}-01`;
+  const first = new Date(Date.UTC(Number(to.slice(0, 4)), Number(to.slice(5, 7)) - 6, 1)).toISOString().slice(0, 10);
+  const found = await rows<{ branch: string; month: string; amount: number }>(
+    db,
+    sql`select branch, month, sum(amount)::float8 as amount from (
+        select coalesce(w.name, 'No warehouse yet') as branch, to_char(i.issued_on, 'YYYY-MM') as month, i.total::bigint as amount
+        from invoice i join sales_order o on o.id = i.order_id left join warehouse w on w.id = o.warehouse_id
+        where i.status <> 'cancelled' and i.issued_on between ${first}::date and ${to}::date
+        union all
+        select coalesce(nullif(l.warehouse, ''), 'Not written in Zoho'), to_char(d.doc_date, 'YYYY-MM'), round(coalesce(l.amount, 0) * d.fx_rate)::bigint
+        from book_doc d join book_line l on l.doc_id = d.id
+        where d.kind = 'invoice' and d.zoho_id is not null and d.status not in ('void', 'draft') and d.doc_date between ${first}::date and ${to}::date
+      ) x group by 1, 2`,
+  );
+  const months: string[] = [];
+  for (let at = new Date(`${first}T00:00:00Z`); at.toISOString().slice(0, 10) <= last; at.setUTCMonth(at.getUTCMonth() + 1))
+    months.push(at.toISOString().slice(0, 7));
+  const branches = [...new Set(found.map((one) => one.branch))];
+  const table = branches
+    .map((branch) => {
+      const row: Record<string, string | number> = { branch };
+      let total = 0;
+      for (const month of months) {
+        const amount = found.find((one) => one.branch === branch && one.month === month)?.amount ?? 0;
+        row[month] = amount;
+        total += amount;
+      }
+      row.total = total;
+      return row;
+    })
+    .sort((a, b) => Number(b.total) - Number(a.total));
+  const totals: Record<string, string | number> = { branch: "Total" };
+  for (const key of [...months, "total"]) totals[key] = table.reduce((sum, row) => sum + Number(row[key] ?? 0), 0);
+  return {
+    title: "Sales by branch, month by month",
+    note: "A branch is a warehouse. The CRM's orders by the warehouse they went out of; Zoho's invoices by the warehouse on each line (lines before VAT).",
+    columns: [col("branch", "Branch (warehouse)"), ...months.map((month) => col(month, month, "money")), col("total", "Six months", "money")],
+    rows: table,
+    totals,
+  };
+}
+
 async function topMedicines(db: Database, asked: { from?: string | null; to?: string | null }): Promise<Insight> {
   const { from, to, beforeFrom, beforeTo } = period(asked);
   const found = await rows<{ medicine: string; qty: number; amount: number; qtyBefore: number; amountBefore: number }>(
@@ -251,6 +297,7 @@ async function seniorPwd(db: Database, asked: { from?: string | null; to?: strin
 
 export const INSIGHTS: Record<string, { roles: Role[]; run: (db: Database, asked: { from?: string | null; to?: string | null; by?: string | null }) => Promise<Insight> }> = {
   "sales-trend": { roles: SALES_ROLES, run: (db, asked) => salesTrend(db, asked) },
+  "sales-by-branch": { roles: SALES_ROLES, run: (db, asked) => salesByBranch(db, asked) },
   "top-medicines": { roles: SALES_ROLES, run: topMedicines },
   "stock-aging": { roles: STOCK_ROLES, run: (db) => stockAging(db) },
   "stock-turnover": { roles: STOCK_ROLES, run: (db) => stockTurnover(db) },
