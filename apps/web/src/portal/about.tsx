@@ -1,11 +1,10 @@
 // Below the portal's first screen (Aryan, 18 Nov): what Bishnoi One is and how it works, as one
-// long page: what each workspace holds, a night sky with every part of the company turning around
-// one record, one order from start to finish, how it works, and the footer. Only words and a look.
+// long page: what each workspace holds, a black hole with every part of the company around one
+// record, one order from start to finish, the field, the books, how it works, questions, the footer. Only words and a look.
 
 import { ArrowRight, Check } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Cosmos } from "./cosmos";
 import { TILE_GLOW, TILE_ICONS } from "./tiles";
 import { WORKSPACES } from "../workspaces";
 
@@ -13,26 +12,6 @@ const wrap = "mx-auto w-[min(1140px,calc(100%-32px))]";
 const eyebrow = "text-[11px] font-semibold tracking-[0.24em] uppercase";
 const h2 = "text-[clamp(30px,4.2vw,52px)] leading-[1.05] font-semibold tracking-[-0.04em]";
 
-/** Same numbers every time, so the sky doesn't jump between visits. */
-function seeded(seed: number) {
-  let a = seed;
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-const random = seeded(18_11_2026);
-const STARS = Array.from({ length: 260 }, (_, i) => ({
-  x: random() * 1440,
-  y: random() * 1800,
-  r: random() < 0.08 ? 1.6 + random() : 0.4 + random() * 0.9,
-  o: 0.25 + random() * 0.6,
-  twinkle: i % 4 === 0,
-  delay: random() * 4,
-  dur: 2.4 + random() * 3,
-}));
 
 
 const JOURNEY = [
@@ -92,31 +71,86 @@ const DETAILS: Record<string, { who: string; points: string[] }> = {
   },
 };
 
+const FIELD = [
+  "Today's visits, the plan and the calendar",
+  "An order taken at the counter, with the patient's Rx",
+  "What each hospital owes, before you walk in",
+  "Samples and gifts handed out, counted",
+  "Your score, always up to date",
+];
+
+const BOOKS = [
+  ["Profit and loss", "By month, branch and channel."],
+  ["Balance sheet", "What the company owns and owes, today."],
+  ["Cash flow", "Where the money came from and went."],
+  ["VAT", "Output and input tax, ready to file."],
+  ["Customers owe", "Every unpaid invoice, by age."],
+  ["Payables", "What the company owes its vendors, by age."],
+  ["Gross profit", "By medicine, channel, customer and order."],
+  ["Trial balance", "Every account, debits against credits."],
+];
+
+const QUESTIONS = [
+  ["Which workspace do I press?", "Your own department's. Whichever you press, your login opens your own pages."],
+  ["I forgot my password.", "Ask your administrator; they will set a new one."],
+  ["Can I see other people's work?", "Only what your role allows. Leads and heads see their own team's."],
+  ["Does it work on the phone?", "Yes, in the phone's browser. The field pages are made for it."],
+  ["Is anything ever deleted?", "No. A mistake is cancelled or reversed, and the audit keeps who did what and when."],
+];
+
+/** A thin line between two sections. */
+const Rule = () => (
+  <div aria-hidden="true" className="mx-auto h-px w-[min(1140px,calc(100%-32px))] bg-gradient-to-r from-transparent via-[#1f2733]/15 to-transparent" />
+);
+
+/** A phone with a rep's day on it, drawn, not a photo. */
+function Phone() {
+  const rows = [
+    ["9:00", "Visit", "#34b261"],
+    ["10:30", "Order", "#f36b21"],
+    ["12:00", "Collection", "#8b5cf6"],
+    ["14:30", "Visit", "#34b261"],
+    ["16:00", "Samples", "#f5a524"],
+  ];
+  return (
+    <div className="relative mx-auto w-[min(300px,80vw)]">
+      <div aria-hidden="true" className="absolute inset-8 rounded-full bg-[#34b261] opacity-25 blur-[80px]" />
+      <div className="relative rounded-[2.75rem] border border-white bg-[#11151c] p-2.5 shadow-[0_50px_90px_-40px_rgba(20,30,50,0.6)]">
+        <div className="overflow-hidden rounded-[2.2rem] bg-[#f6f7fb]">
+          <div className="flex items-center justify-between px-6 pt-4 text-[11px] font-semibold text-[#1f2733]">
+            <span>9:41</span>
+            <span className="h-5 w-20 rounded-full bg-[#11151c]" />
+            <span>100%</span>
+          </div>
+          <div className="px-5 pt-5 pb-6">
+            <p className="text-[11px] font-semibold tracking-[0.16em] text-[#8a93a3] uppercase">Today</p>
+            <p className="mt-1 text-xl font-semibold tracking-[-0.02em]">Your visits</p>
+            <ul className="mt-4 grid gap-2">
+              {rows.map(([time, what, tone]) => (
+                <li key={time} className="flex items-center gap-3 rounded-2xl bg-white p-3 shadow-[0_6px_16px_-12px_rgba(20,30,50,0.4)]">
+                  <span className="w-11 text-xs font-semibold text-[#5b6472] tabular-nums">{time}</span>
+                  <span className="size-2 rounded-full" style={{ background: tone }} />
+                  <span className="flex-1">
+                    <span className="block text-[13px] font-medium">{what}</span>
+                    <span className="mt-1 block h-1.5 w-2/3 rounded-full bg-[#1f2733]/[0.07]" />
+                  </span>
+                </li>
+              ))}
+            </ul>
+            <span className="mt-4 flex h-11 items-center justify-center rounded-2xl bg-[#f36b21] text-sm font-semibold text-white">New order</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 const CLOSE = [
   { title: "Pick your workspace", text: "Each department has its own door: sales and field, management, finance, stock, dispatch, people." },
   { title: "Sign in as yourself", text: "Your own login ID and password. Your role decides what you see and what you can do." },
   { title: "Every change kept", text: "Who did it and when, in the audit. Nothing with history is ever deleted." },
 ];
 
-function Sky() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 1440 1800" preserveAspectRatio="xMidYMid slice" className="pointer-events-none absolute inset-0 h-full w-full [mask-image:linear-gradient(to_bottom,transparent_0,black_280px,black_calc(100%-280px),transparent_100%)]">
-      {STARS.map((star, i) => (
-        <circle
-          // biome-ignore lint/suspicious/noArrayIndexKey: a fixed list
-          key={i}
-          cx={star.x}
-          cy={star.y}
-          r={star.r}
-          fill="#fff"
-          opacity={star.o}
-          className={star.twinkle ? "star-twinkle" : undefined}
-          style={star.twinkle ? { animationDelay: `${star.delay}s`, animationDuration: `${star.dur}s` } : undefined}
-        />
-      ))}
-    </svg>
-  );
-}
 
 function Seats() {
   const [open, setOpen] = useState(WORKSPACES[0]?.key ?? "sales");
@@ -210,29 +244,34 @@ function Seats() {
 export function About() {
   return (
     <div id="about" className="relative">
+      <Rule />
       <Seats />
 
-      {/* The night sky: everything turns around one record. */}
-      <section className="relative overflow-hidden bg-[linear-gradient(to_bottom,rgba(3,4,10,0)_0,rgba(3,4,10,0.35)_90px,rgba(3,4,10,0.85)_200px,#03040a_300px,#03040a_calc(100%-300px),rgba(3,4,10,0.85)_calc(100%-200px),rgba(3,4,10,0.35)_calc(100%-90px),rgba(3,4,10,0)_100%)] text-white">
-        <Sky />
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-          <div className="absolute top-[320px] -left-40 size-[40rem] rounded-full bg-[#3b2a8f] opacity-20 blur-[140px]" />
-          <div className="absolute -right-40 bottom-[320px] size-[34rem] rounded-full bg-[#0f6b45] opacity-15 blur-[140px]" />
-        </div>
-        <div className={`relative ${wrap} pt-[22rem] text-center`}>
-          <p className="text-[11px] font-medium tracking-[0.42em] text-white/45 uppercase">What is inside</p>
-          <h2 className="mx-auto mt-6 max-w-3xl text-[clamp(34px,5vw,64px)] leading-[1.02] font-medium tracking-[-0.045em] text-white">
-            Every part of the company,
-            <br />
-            around <span className="font-[Iowan_Old_Style,Palatino,Georgia,serif] font-normal tracking-[-0.02em] text-[#ffd9b3] italic">one record.</span>
-          </h2>
-          <p className="mx-auto mt-6 max-w-lg text-[15px] leading-relaxed text-white/50">
+      <Rule />
+
+      {/* The black hole: everything turns around one record. */}
+      <section className="relative isolate overflow-hidden bg-[#020203] text-white">
+        <div className="relative h-[clamp(560px,86vh,820px)]">
+          {/* One bright light in the middle: the record everything turns around. */}
+          <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+            <div className="sun-breathe absolute top-[58%] left-1/2 size-[42rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(255,170,90,0.45),rgba(243,107,33,0.12)_55%,transparent)]" />
+            <div className="absolute top-[58%] left-1/2 size-56 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,#ffffff,#fff3dc_30%,rgba(255,196,120,0.75)_55%,transparent)] blur-[2px]" />
+            <div className="absolute top-[58%] left-1/2 size-16 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_0_60px_30px_rgba(255,236,210,0.9),0_0_160px_80px_rgba(255,170,90,0.45)]" />
+            <div className="absolute top-[58%] left-1/2 h-[2px] w-[80%] -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-transparent via-[#fff4e6] to-transparent" />
+            <div className="absolute top-[58%] left-1/2 h-10 w-[46%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(255,220,180,0.35),transparent)] blur-md" />
+          </div>
+          <div className={`relative ${wrap} pt-24 text-center`}>
+            <p className="text-[11px] font-medium tracking-[0.42em] text-white/50 uppercase">What is inside</p>
+            <h2 className="mx-auto mt-6 max-w-3xl text-[clamp(34px,5vw,64px)] leading-[1.02] font-medium tracking-[-0.045em] text-white [text-shadow:0_2px_30px_rgba(0,0,0,0.6)]">
+              Every part of the company,
+              <br />
+              around <span className="font-[Iowan_Old_Style,Palatino,Georgia,serif] font-normal tracking-[-0.02em] text-[#ffd9b3] italic">one record.</span>
+            </h2>
+          </div>
+          <p className={`absolute inset-x-0 bottom-16 mx-auto max-w-lg px-4 text-center text-[15px] leading-relaxed text-white/60 [text-shadow:0_2px_20px_rgba(0,0,0,0.8)]`}>
             An order is entered once. Approval, payment, stock, delivery and the books all read and write the same record, so
             nobody types it twice and nobody works from an old copy.
           </p>
-        </div>
-        <div className="relative mx-auto mt-6 mb-[18rem] h-[clamp(380px,52vw,720px)] w-[min(1440px,100%)]">
-          <Cosmos />
         </div>
       </section>
 
@@ -257,6 +296,56 @@ export function About() {
           ))}
         </ol>
       </section>
+
+      <Rule />
+
+      {/* In the field. */}
+      <section className={`${wrap} grid items-center gap-14 py-24 lg:grid-cols-2`}>
+        <div>
+          <p className={`${eyebrow} text-[#1f9d55]`}>In the field</p>
+          <h2 className={`${h2} mt-4`}>The office in a MedRep's pocket.</h2>
+          <p className="mt-5 max-w-md text-[15px] leading-relaxed text-[#5b6472]">
+            Made for the phone first. Everything a rep needs between two visits, without calling the office.
+          </p>
+          <ul className="mt-8 grid gap-3.5">
+            {FIELD.map((point) => (
+              <li key={point} className="flex items-start gap-3 text-[15px] text-[#2b3340]">
+                <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-[#1f9d55] text-white">
+                  <Check className="size-3" strokeWidth={3} aria-hidden="true" />
+                </span>
+                {point}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <Phone />
+      </section>
+
+      <Rule />
+
+      {/* The books. */}
+      <section className={`${wrap} py-24`}>
+        <div className="grid gap-10 lg:grid-cols-[1fr_1.2fr] lg:items-end">
+          <div>
+            <p className={`${eyebrow} text-[#7c3aed]`}>Money</p>
+            <h2 className={`${h2} mt-4`}>Books that keep themselves.</h2>
+          </div>
+          <p className="max-w-lg text-[15px] leading-relaxed text-[#5b6472]">
+            Every invoice, payment, refund, return and stock movement posts to the right accounts as it happens. Finance checks; nobody
+            re-enters.
+          </p>
+        </div>
+        <ul className="mt-12 grid gap-px overflow-hidden rounded-[2rem] border border-white bg-[#1f2733]/[0.06] shadow-[0_30px_60px_-40px_rgba(20,30,50,0.4)] sm:grid-cols-2 lg:grid-cols-4">
+          {BOOKS.map(([title, text]) => (
+            <li key={title} className="bg-white/80 p-6 backdrop-blur">
+              <h3 className="font-semibold tracking-[-0.01em]">{title}</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-[#5b6472]">{text}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <Rule />
 
       {/* The close: how it works, in three lines, and the way in. */}
       <section className="relative">
@@ -286,6 +375,27 @@ export function About() {
               Log in with ID and password
             </Link>
           </div>
+        </div>
+      </section>
+
+      <Rule />
+
+      {/* Questions. */}
+      <section className={`${wrap} grid gap-10 py-24 lg:grid-cols-[1fr_1.6fr]`}>
+        <div>
+          <p className={`${eyebrow} text-[#c2410c]`}>Questions</p>
+          <h2 className={`${h2} mt-4`}>Before you sign in.</h2>
+        </div>
+        <div className="divide-y divide-[#1f2733]/10 border-y border-[#1f2733]/10">
+          {QUESTIONS.map(([question, answer]) => (
+            <details key={question} className="group py-5">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[17px] font-medium tracking-[-0.01em] [&::-webkit-details-marker]:hidden">
+                {question}
+                <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-full border border-[#1f2733]/10 text-[#8a93a3] transition group-open:rotate-45">+</span>
+              </summary>
+              <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-[#5b6472]">{answer}</p>
+            </details>
+          ))}
         </div>
       </section>
 
