@@ -174,6 +174,22 @@ Waiting on Aryan before building (nothing guessed):
 - Modern Trade near-expiry returns and deductions; doctor rebates (after the lawyer).
 - Phase 5 modules: repacking/manufacturing, projects, fixed assets, a complaints desk.
 
+## 7.3 Decided by Claude on Aryan's word (18 Nov: "what you think is most accurate, valuable, correct to the business, do that yourself")
+
+Each is the safe, standard, reversible choice; any can be changed in a line.
+
+| Question | Decided | Built |
+|---|---|---|
+| Samples in the books | Issued samples leave Inventory Asset at cost onto Zoho's own "Product Samples to clients"; gifts onto "Promotional Materials" | Migration 0098 |
+| Selling from a rep's bag | Not copied: Dispatch delivers every order (Aryan's own rule) | — |
+| Automations | Tell only, never act, each event once: stuck orders → the MedRep's lead; licences expiring in 30 days → the MedRep (else Management); Mondays: customers over 60 days late → their MedRep, batches expiring in 90 days → Inventory; from the 25th: reps who haven't counted samples; 8 AM: the CEO's summary of yesterday | `src/automations/daily.ts` |
+| Report emails / SMS | Not sent outside yet (free plans, no mail service set up): the morning summary and alerts are in Messages | — |
+| Branches | A branch is a warehouse: Sales by Branch report, Gross Profit by branch | |
+| Modern Trade deductions | "Deducted by the customer" on Record payment (near-expiry goods kept, listing fee, promo, penalty, other; their debit memo): settles the invoice like 2307, never cash, off the sale on Discount. Goods that come back still go through Returns | Migration 0099 |
+| Points paid on an order | Stay on Discount | — |
+| Doctor rebates | Wait for the lawyer | — |
+| Phase 5 | No manufacturing or projects (an importer and distributor); fixed assets are in Books already (Zoho's); a complaints and side-effects desk built (a serious side-effect due in 15 days, the FDA's window; else 30) | Migration 0100 |
+
 ## 8. Questions for Aryan (nothing assumed)
 
 1. Which phase first? (Suggested: 0, then 1.)
