@@ -6,7 +6,7 @@
 // (.data/zoho-api/item_batches.jsonl). The books' item is tied to the medicine.
 //
 //   TEST_PGLITE_DIR=<a local database>   (the API must be stopped)
-//   npx tsx scripts/import-pharmacy-items.ts [--apply]
+//   npx tsx scripts/import-pharmacy-items.ts [--apply] [--live]
 //
 // Never point it at the live database without Aryan's word.
 
@@ -18,7 +18,8 @@ import { importMedicines, importOpeningStock, type ListMedicine, type OpeningBat
 import { openTarget, ROOT, rowsOf, ZOHO_DIR } from "./zoho-files";
 
 const apply = process.argv.includes("--apply");
-if (!process.env.TEST_PGLITE_DIR) throw new Error("Give TEST_PGLITE_DIR (a local database); the live database needs Aryan's word.");
+if (!process.env.TEST_PGLITE_DIR && !process.argv.includes("--live"))
+  throw new Error("Give TEST_PGLITE_DIR (a local database), or --live (on Aryan's word: given 18 Nov).");
 const API_DIR = join(ROOT, ".data/zoho-api");
 const jsonl = (name: string) =>
   existsSync(join(API_DIR, `${name}.jsonl`))

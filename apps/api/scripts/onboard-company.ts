@@ -8,7 +8,7 @@
 // Safe to run again: a person already here by name is skipped, a unit already here is reused.
 // Dry run by default (prints what it would do); --apply writes.
 //
-//   TEST_PGLITE_DIR=<a local database> JOIN_PASSWORD=… npx tsx scripts/onboard-company.ts [--apply] [--retire-demo] [--no-zoho]
+//   TEST_PGLITE_DIR=<a local database> JOIN_PASSWORD=… npx tsx scripts/onboard-company.ts [--apply] [--retire-demo] [--no-zoho] [--zoho-only]
 //   (the live database only with --live and Aryan's word; 17 Nov: live with --no-zoho, no Zoho data yet)
 //
 // A fresh CRM's boxes (one per channel: "Hospitals", "Doctors"…) are taken over and renamed to the
@@ -31,11 +31,14 @@ const apply = process.argv.includes("--apply");
 const retireDemo = process.argv.includes("--retire-demo");
 // The live CRM gets no Zoho data yet (Aryan, 17 Nov): its people without Zoho's salespeople tied.
 const noZoho = process.argv.includes("--no-zoho");
+// Only Zoho's salespeople tied to the seats of people already here (no one added, so no password).
+const zohoOnly = process.argv.includes("--zoho-only");
+const write = apply && !zohoOnly;
 if (!process.env.TEST_PGLITE_DIR && !process.argv.includes("--live")) {
   console.log("Give TEST_PGLITE_DIR (a local database). The live one only with --live, on Aryan's word.");
   process.exit(1);
 }
-if (apply && !joinPassword()) {
+if (write && !joinPassword()) {
   console.log("Set JOIN_PASSWORD (the company's common password, at least 8 characters).");
   process.exit(1);
 }
@@ -255,7 +258,7 @@ const demo = await rows<{ id: number; name: string; role: Role }>(
   sql`select id::int as id, name, role from person where active and email like '%@2mg.test' and role <> 'admin' order by id`,
 );
 console.log(`Demo people to leave: ${retireDemo ? demo.length : 0}${retireDemo ? "" : " (not asked: --retire-demo)"}`);
-if (apply && retireDemo && demo.length) {
+if (write && retireDemo && demo.length) {
   const ids = demo.map((person) => person.id);
   const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
   await db.transaction(async (tx) => {
@@ -314,9 +317,9 @@ for (const unit of chart) {
   if (found) {
     unitIds.set(unit.id, found.id);
     // A box made before it knew its channel gets it.
-    if (apply && channel && !found.channelId) await db.execute(sql`update org_unit set channel_id = ${channel.id} where id = ${found.id}`);
+    if (write && channel && !found.channelId) await db.execute(sql`update org_unit set channel_id = ${channel.id} where id = ${found.id}`);
     // A box found somewhere else than the chart has it goes where the chart has it.
-    if (apply && parentId && parentId > 0 && found.parentId !== parentId && found.id !== parentId) {
+    if (write && parentId && parentId > 0 && found.parentId !== parentId && found.id !== parentId) {
       await updateUnit(db, me, found.id, { parentId });
       madeUnits.push(`${known.names[0]} (moved to its place on the chart)`);
     }
@@ -332,7 +335,7 @@ for (const unit of chart) {
     : [];
   if (taken) {
     madeUnits.push(`${known.names[0]} (was ${known.live?.join("/")})`);
-    if (apply && parentId && parentId > 0)
+    if (write && parentId && parentId > 0)
       await db.execute(
         sql`update org_unit set name = ${known.names[0] as string}, kind = ${known.kind}, parent_id = ${parentId}, channel_id = coalesce(${channel?.id ?? null}, channel_id) where id = ${taken.id}`,
       );
@@ -341,7 +344,7 @@ for (const unit of chart) {
   }
   if (!parentId) throw new Error(`No parent for ${unit.id}`);
   madeUnits.push(known.names[0] as string);
-  if (apply) {
+  if (write) {
     const { unitId } = await addUnit(db, me, { name: known.names[0] as string, kind: known.kind, parentId, channelId: channel?.id ?? null });
     unitIds.set(unit.id, unitId);
   } else unitIds.set(unit.id, -1);
@@ -417,7 +420,7 @@ for (const seat of seats) {
       continue;
     }
   }
-  if (!apply) {
+  if (!write) {
     row.status = seat.who ? "to add" : "vacant seat to add";
     continue;
   }
@@ -484,23 +487,23 @@ const [ceoSeat] = await rows<{ id: number; holder: string | null }>(
       where h.seat_id = s.id and (h.ends_on is null or h.ends_on >= current_date) limit 1) as holder
     from seat s where s.active and s.module = 'ceo' order by s.id limit 1`,
 );
-if (apply && ceoSeat && !ceoSeat.holder && !byName.has("naresh bishnoi")) {
+if (write && ceoSeat && !ceoSeat.holder && !byName.has("naresh bishnoi")) {
   const made = await addPerson(db, me, { name: "Naresh Bishnoi", seatId: ceoSeat.id });
   byName.set("naresh bishnoi", made.personId);
   console.log("  Naresh Bishnoi in the CEO's seat.");
 }
 // A fresh CRM has no CEO's seat yet: it is made at the top, leading the company.
-if (apply && !ceoSeat && !byName.has("naresh bishnoi")) {
+if (write && !ceoSeat && !byName.has("naresh bishnoi")) {
   const companyId = unitIds.get("company") as number;
   const [lead] = await rows<{ id: number }>(db, sql`select id::int as id from seat where unit_id = ${companyId} and active and lead limit 1`);
   const made = await addPerson(db, me, { name: "Naresh Bishnoi", unitId: companyId, module: "ceo", title: "CEO", lead: !lead });
   byName.set("naresh bishnoi", made.personId);
   console.log("  Naresh Bishnoi in a new CEO's seat at the top.");
 }
-if (apply) await fillSeatLogins(db);
+if (write) await fillSeatLogins(db);
 
 // The demo's seats nobody took, and its boxes left empty, close (their history stays).
-if (apply && retireDemo) {
+if (write && retireDemo) {
   await db.transaction(async (tx) => {
     await tx.execute(
       sql`update seat s set active = false, closed_at = now() where s.active
@@ -568,7 +571,7 @@ for (const row of done) {
 }
 
 // ---- 5. What each one signs in with ----
-if (apply)
+if (write)
   for (const row of done) {
     const [found] = await rows<{ login: string | null }>(
       db,
