@@ -220,6 +220,19 @@ price ₱8.50 changed to ₱1.00, Losartan given a ₱5 discount and VAT 12%.
   Approval.
 - A direct order not yet in Zoho shows **Retry Zoho Sync** in the Zoho box.
 
+**Reject, approve anyway, and the discount lost (same order):**
+- Reject from the queue asks "Why is this order being rejected?" → **On Hold** with the reason (the
+  same as a hold). A restored order shows in the queue as "↩ RESUBMITTED — sent back by …" with the
+  old reason.
+- Approving with a line short: the Approve button stays disabled until "tick this to approve
+  anyway" is ticked; then the Zoho Sales Order SO-00002 is made.
+- **After the Zoho sync the order's total went from ₱51,019 to ₱51,024**: the MedRep's ₱5
+  discount on Losartan was gone (Finance's drawer shows Disc. "—"). The hub never sends a discount
+  to Zoho and later replaces the lines from Zoho, so the discount is lost.
+- Finance's Confirm payment on this **direct (advance-pay) order with no proof** is the same
+  window: "I have checked the proof of payment (or confirmed there is none on file)" — nothing
+  stops confirming an advance order without proof.
+
 **What the MedRep was told (the bell, 19 messages for the two test orders):** submitted and
 waiting for Management; submitted with the Sales Order drafted in Zoho; sent back with the reason;
 now on_hold / now exception with the reason; taken off Exception "continues at

@@ -38,8 +38,10 @@ pressed on localhost, the rest are to press. Gaps the hub has are marked **Gap**
   (optional, 300 chars) ✅; tax inclusive / exclusive ✅; per-line Invoicing From → "split order:
   two Zoho Sales Orders"; Dispatch's stock announcements shown on the items; submitting with a
   flagged item opens "Dispatch has flagged an item…" with a required "Why are you proceeding?"
-  (Go back / Proceed anyway; Dispatch and Management told); **Buy 1 Take 1** badge "+N free" and a
-  locked ₱0 line (added by the server).
+  (Go back / Proceed anyway; Dispatch and Management told) ✅; **Buy 1 Take 1** ✅ (posted from
+  Announcements by Dispatch / Management / Finance: "every new order with this product gets the
+  same quantity again, free (₱0) until you end it"): the form shows "📢 Announcements about items
+  in this order", the line "🎁 Buy 1 Take 1 · +N free" and a locked ₱0 line marked "auto".
 - Section 4: files by drag, paste, camera; type per file ✅; "No proof of payment? Say why" (not
   for Management) ✅; "No prescription? Say why" required for URO, STC, B&B, B2C (HOS only a nudge).
   **Gap**: Pharmacy also covers TeleSales, TeleSales Anesthesia, MD Telesales, which the form does
@@ -55,6 +57,144 @@ pressed on localhost, the rest are to press. Gaps the hub has are marked **Gap**
   (reason, refund yes / no → Finance and Admin told). Prescription → Re-submit / Upload for
   Pharmacy. **Stock is back** ✅. **Mark Delivery Complete** (receiver, date; owner, raiser,
   Management told). **Request refund** / Withdraw ✅. Attachments: upload, Request deletion ✅.
+
+### New customer from the order form ✅ (all four types opened)
+
+"This creates the customer in Zoho straight away, and selects them for this order." Type buttons
+Patient / Doctor / Hospital / Distributor.
+- **Patient** (Zoho individual): salutation, first*, last*, display name*, email, phone*, TIN,
+  street address*, city, country, shipping same as address.
+- **Doctor** (individual, "Dr." pre-filled): first*, last*, display name*, hospital / clinic,
+  email, phone*, TIN, licence owner, LTO number, LTO type, address*.
+- **Hospital** (Zoho business): display name*, company, email, phone*, primary contact; **TIN*,
+  licence owner*, LTO number* (unique in Zoho), LTO type*, licence issue date*, expiry date***;
+  **documents BIR 2303*, LTO permit*, business permit*** (PDF or image, 10 MB); "Hospital Creation
+  Restricted" lists what is missing and blocks Create.
+- **Distributor** (business): the same fields and three documents, but optional, with "I'll
+  follow up on the missing documents — submit anyway"; anything missing → Management reviews the
+  customer before it goes to Zoho (the order can still be raised).
+- An email left blank → Management reviews the customer before Zoho.
+
+## Order statuses and Management (from the code; ✅ = pressed)
+
+- Statuses: draft, pending_management_approval, (submitted, validating, so_pending, so_created —
+  logged only), ready_for_finance_verified, ready_for_draft_invoice, ready_for_invoice_sent,
+  ready_for_dispatch, picking_packing, dispatched, tracking_shared, on_hold, exception, completed,
+  cancelled, deleted.
+- Who goes to approval: a MedRep's or Team Lead's order, and **every B2B order** ✅; Management /
+  Admin non-B2B orders skip approval and go to Zoho at once (only the raiser told). **Trap**: if
+  Management presses Submit / Resubmit on a non-B2B draft, it skips approval and gets a new GM id.
+- **No "save draft" button** on the form (drafts come only from send back or the API).
+- Approve ✅ → Finance stage; told: MedRep, then Finance (direct) or Dispatch (credit); not the
+  raiser or other managers. Send back ✅ / Reject ✅ → MedRep only.
+- **Hold ✅ / Exception ✅** on every open status (browser prompt). Hold works from pending, Finance
+  stages, ready for dispatch, picking; refused from draft, dispatched, tracking shared. Exception
+  works only from dispatched, tracking shared, on hold. Told: MedRep + all Management.
+- **Resume ✅** writes the chosen stage directly; **Re-submit to <stage>** (MedRep / Team Lead /
+  Management) offers "Proof of payment uploaded", "Customer has settled the overdue balance",
+  "Missing document attached", "Order details corrected", Other + note + file; a hold placed at the
+  Finance stage goes back to Finance.
+- **Cancel & Archive** (on hold / exception): reason + refund needed or not → cancelled, kept.
+- Drafts ✅: Wait for stock (item ≤ 200, reason ≤ 500; reminders every 3 days by a nightly job),
+  Stock is back, Cancel draft (Delete permanently disabled when paid; **Gap**: keep-record allowed
+  on an unpaid draft makes a false refund-pending), Restore (refused once refunded).
+- Exception Hub ✅ reads only the newest 100 orders (**Gap**: an older held order disappears).
+- **Price ✅**: anyone may change price, discount, tax on the form; the only check is ≥ 0; no
+  catalog comparison anywhere; Management sees total only in the queue and no catalog column on
+  the order; MedRep's Edit Items locks price and discount (screen only — the API accepts any).
+  Buy 1 Take 1 is added on create only, not when lines are edited.
+- **Management Edit Items ✅** (search & add, qty, price, discount, tax, warehouse per line,
+  Invoicing From split, remark, remove): Confirm changes old → new, "Already in Zoho — confirming
+  updates the real Sales Order"; **nobody told** ✅. Edit Details: Division and Salesperson for
+  Management only; nobody told.
+- **Approval scope ✅**: per manager Everything / Only these divisions (none = sees nothing); orders
+  with no division only for full-access managers; enforced on the queue, dashboard and order pages,
+  not on the All Orders list (rows show, opening gives 403); "needs your approval" still goes to
+  **all** managers; nothing stops approving your own order.
+- Stock at approval ✅: per warehouse "Can fill every line" / "Short on N", per line "N held for
+  other orders", "Switch to X", tick to approve anyway ✅; if Zoho can't be reached: "Stock could
+  not be checked" and approval goes ahead.
+- Management menu ✅ (+ by address only: Clients, Inventory, Order Ownership). Dashboard ✅ (Sync
+  from Zoho: Quick / Retrieve all; Needs your attention incl. Stuck 48h, Customers pending). All
+  Orders Log is titled "My Orders" with old status filters (**Gap**). Pending Customers: Push N to
+  Zoho, Same customer — use Zoho's, Different — push as new, Update details, Link to existing,
+  Delete. Not yet with Finance: Management can press Finance's Verify there (not role-gated).
+- Order page header: Order overview ✅, Request refund ✅, Retry Zoho Sync ✅, **Fix customer
+  link** (sync failed, no SO), Sync from Zoho ✅.
+
+## Finance (from the code; ✅ = pressed)
+
+- Orders page: stage tiles ✅, period, GetMeds / Zoho / All ✅, search ✅, Refresh ✅; Export CSV
+  ("coming soon"); **Refunds pending badge** (red after 3 days).
+- Details drawer ✅: hold and re-submission history, a hospital's missing-documents warning, the
+  price remark under each line, no-proof reason, customer type. **No customer history** (Finance
+  cannot open customers; the account is checked in Zoho Books) ✅.
+- **Confirm payment…** ✅ only with a Zoho SO (else "Not in Zoho yet"); one tick ✅; → Ready for
+  draft invoice, pending proofs marked verified, SO confirmed in Zoho; MedRep + Management told.
+  **Gap**: the second "I checked the prices" tick is shown but not enforced; **Undo** ✅ (toast 8 s)
+  **does nothing** (server bug); no screen to reject a payment proof.
+- **Hold** ✅ (reason, up to 5 screenshots) → On hold; **Bring back for verification** (only a
+  Finance hold; also automatic when the MedRep attaches a file).
+- Split orders: Verify / Hold per company; any hold holds the whole order.
+- Direct vs credit: the same buttons ✅; direct adds a payment row and tells Finance; credit tells
+  Dispatch.
+- My Confirmations ✅, Reports ✅, Payment History ✅ (**Gap**: a confirmed order shows "Awaiting
+  Zoho"), Refunds ✅, Announcements (Finance may post Buy 1 Take 1 promos only).
+
+## Pharmacy (Dispatch login)
+
+- Channels HOS, Telesales, B&B, STC, URO, B2C ✅; an order appears from Finance verification to
+  packing when it has a prescription or is marked not needed; tabs Awaiting review / Needs
+  attention / Rejected / Verified / All ✅. Only Dispatch / Admin decide.
+- **Verify prescription** (pushed to the Zoho SO; nobody told); **Reject and tell the MedRep**
+  (reason; MedRep + raiser told); **Re-review**: override to verified / edit the reason / back to
+  awaiting; **Undo verification**; **Decide on this** (no file): **Request prescription** (blocks
+  Dispatch; MedRep told) or **Mark not required**; **Mark as Prescription** on a mislabelled file.
+- The MedRep then sees "💊 Pharmacy rejected the prescription" → **Re-submit prescription to
+  Pharmacy** / **Upload prescription for Pharmacy** (note required) → Dispatch told.
+- Dispatch is blocked (confirm delivery, tracking, invoice, pack, ship…) while a prescription is
+  pending, rejected or requested.
+
+## Dispatch / Operation
+
+- Pages ✅: Zoho Dispatch Status, Return checks, Pharmacy, Clients (click a client → their orders
+  with prescription state), My Catered Orders (mine / all), Tracking Log, Inventory (Refresh, Quick
+  Sync, Full Resync; read-only), Announcements.
+- Low Stock Checker: **Announce Out of Stock / Low Stock**; announcements: Post, **Resolved — take
+  down**, **End promo**.
+- Buttons ✅: Cater / Take over, Release, Print address, **Confirm for delivery** (if no tracking:
+  Add it now, or Not ready yet — waiting for waybill / courier pickup / courier not assigned /
+  other), Add / Update tracking, **Hold tracking number**, **Hold order** (out of stock / not
+  enough stock / wrong item or quantity / address or receiver / other; MedRep, raiser, Management
+  told), Lift hold, **Upload proof photo** (attached to the Zoho SO).
+- Couriers (free text, suggested): Own Rider, LBC Express, Grab, J&T, Lalamove, Air Asia, Victory
+  Liner, Partas, Homestocks, AO Freight, Daily Overland, AP Cargo, Customer pick-up, Distributor
+  delivery.
+- Behind switches (off): DR workflow (batches, delivery receipt, Oojeema SI, convert to Zoho
+  invoice) and V2 (Create & send invoice, Mark packed, Ship, Mark delivered in the hub).
+- **Gaps**: "Tracking ready" has no button; stock adjust removed from the screen.
+
+## Delivery and completion
+
+- **Mark Delivery Complete** (MedRep owner / raiser, Team Lead, Management, Admin; not Dispatch or
+  Finance), only after dispatch: received date, received by, notes, proof file → Completed;
+  MedRep, raiser, Management told.
+- Auto-complete when shipped **and** paid (paid = Zoho's payment webhook; Finance's Confirm does
+  not count).
+
+## Refunds and returns ✅ (walked)
+
+- Request refund (owner, Team Lead, Management, Admin; one open per order): where the goods are,
+  amount ≤ total; Withdraw.
+- Management: not shipped / customer keeps → **Approve & refund** (order cancelled at once, even if
+  completed; Finance told); coming back / returned → **Approve** (Dispatch told) → Return check
+  (good / damaged + note) → **Refund** (order cancelled); **Reject** (reason).
+- Finance Refunds: Refund pending / **Zoho steps** ("Payment is in Zoho, check", "Credit note is
+  in Zoho, check" with number) / Refund done / No refund due / All; **Record refund**: outcome
+  done / still pending / no refund due, amount received, refunded, reference, date, note; "done"
+  only after the Zoho step. **Gap** ✅: a partial refund cancels the whole order.
+- Cancelled with payment also lands here (Management's cancel with payment; Cancel & Archive with
+  "refund required").
 
 ## Team Lead
 
