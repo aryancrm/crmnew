@@ -132,19 +132,28 @@ function Stars() {
   );
 }
 
-/** The first screen's orange and green lines, waving slowly behind a light section. */
-function Lines({ flip }: { flip?: boolean }) {
-  const wave = (a: string, b: string, dur: number, tone: string, width: string, opacity: string) => (
-    <path d={a} stroke={tone} strokeOpacity={opacity} strokeWidth={width} fill="none">
-      <animate attributeName="d" values={`${a};${b};${a}`} keyTimes="0;0.5;1" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1" dur={`${dur}s`} repeatCount="indefinite" />
-    </path>
-  );
+/** A small drawing beside "One order": a pin, the road, the van, the box, in the portal's colours. */
+function Route() {
   return (
-    <svg aria-hidden="true" viewBox="0 0 1440 900" preserveAspectRatio="none" className={`pointer-events-none absolute inset-0 -z-10 h-full w-full ${flip ? "-scale-x-100" : ""}`}>
-      {wave("M-80 240C260 150 520 330 820 250S1240 90 1540 190", "M-80 228C260 190 520 290 820 262S1240 135 1540 178", 10, "#1f9d55", "1.6", ".3")}
-      {wave("M-80 690C220 560 520 800 860 690S1300 450 1540 540", "M-80 678C220 605 520 755 860 702S1300 495 1540 528", 9, "#f36b21", "1.6", ".32")}
-      <path className="orbit-twinkle" d="M1320 140l4 10 10 4-10 4-4 10-4-10-10-4 10-4z" fill="#1f9d55" fillOpacity=".5" />
-      <path className="orbit-twinkle" style={{ animationDelay: "1.4s" }} d="M120 600l3 8 8 3-8 3-3 8-3-8-8-3 8-3z" fill="#f36b21" fillOpacity=".5" />
+    <svg viewBox="0 0 360 120" aria-hidden="true" className="h-auto w-[min(360px,80vw)]">
+      <path d="M30 78C90 20 150 110 205 60S300 30 330 62" fill="none" stroke="#1f2733" strokeOpacity=".18" strokeWidth="2" strokeDasharray="2 7" strokeLinecap="round" />
+      <path d="M30 32c-10 0-17 8-17 17 0 13 17 29 17 29s17-16 17-29c0-9-7-17-17-17z" fill="#34b261" />
+      <circle cx="30" cy="49" r="6" fill="#fff" />
+      <g transform="translate(176 38)">
+        <rect x="0" y="6" width="34" height="24" rx="5" fill="#f36b21" />
+        <path d="M34 13h10l8 9v8H34z" fill="#ff9a5a" />
+        <circle cx="10" cy="32" r="5.5" fill="#1f2733" />
+        <circle cx="42" cy="32" r="5.5" fill="#1f2733" />
+        <circle cx="10" cy="32" r="2" fill="#fff" />
+        <circle cx="42" cy="32" r="2" fill="#fff" />
+      </g>
+      <g transform="translate(310 36)">
+        <path d="M20 0l20 10v22L20 42 0 32V10z" fill="#f5a524" />
+        <path d="M20 0l20 10-20 10L0 10z" fill="#fbbf24" />
+        <path d="M20 20v22L0 32V10z" fill="#d97706" />
+      </g>
+      <path className="orbit-twinkle" d="M120 22l3 8 8 3-8 3-3 8-3-8-8-3 8-3z" fill="#f36b21" fillOpacity=".7" />
+      <path className="orbit-twinkle" style={{ animationDelay: "1.5s" }} d="M262 96l2.5 6 6 2.5-6 2.5-2.5 6-2.5-6-6-2.5 6-2.5z" fill="#1f9d55" fillOpacity=".7" />
     </svg>
   );
 }
@@ -213,7 +222,6 @@ function Seats() {
   };
   return (
     <section className="relative isolate">
-      <Lines />
       <div className={`${wrap} py-24`}>
         <div className="flex flex-wrap items-end justify-between gap-6">
           <div>
@@ -271,21 +279,17 @@ export function About() {
       <Rule />
 
       {/* The black hole: everything turns around one record. */}
-      <section className="relative isolate overflow-hidden bg-[linear-gradient(to_bottom,rgba(8,7,12,0)_0,rgba(8,7,12,0.55)_70px,#08070c_160px,#08070c_calc(100%-160px),rgba(8,7,12,0.55)_calc(100%-70px),rgba(8,7,12,0)_100%)] text-white">
-        <div className="relative h-[clamp(640px,96vh,920px)]">
+      <section className="relative isolate overflow-hidden bg-[linear-gradient(to_bottom,rgba(8,7,12,0)_0,#08070c_48px,#08070c_calc(100%-48px),rgba(8,7,12,0)_100%)] text-white">
+        <div className="relative h-[clamp(560px,86vh,820px)]">
           {/* The sun: its light over the whole sky, the stars twinkling around it. */}
-          <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-[160px] bottom-[160px] bg-[radial-gradient(ellipse_75%_80%_at_50%_58%,rgba(255,150,70,0.30),rgba(243,107,33,0.12)_40%,rgba(120,60,140,0.08)_65%,transparent_85%)]" />
+          <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-12 bottom-12 bg-[radial-gradient(ellipse_75%_80%_at_50%_58%,rgba(255,150,70,0.30),rgba(243,107,33,0.12)_40%,rgba(120,60,140,0.08)_65%,transparent_85%)]" />
           <Stars />
           <div aria-hidden="true" className="pointer-events-none absolute inset-0">
             <div className="sun-breathe absolute top-[60%] left-1/2 size-[64rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(255,160,80,0.32),rgba(243,107,33,0.1)_50%,transparent)]" />
-            <div
-              className="absolute top-[60%] left-1/2 size-[32rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[repeating-conic-gradient(rgba(255,214,160,0.14)_0deg_1.5deg,transparent_1.5deg_9deg)] [mask-image:radial-gradient(closest-side,black_25%,transparent_100%)]"
-              style={{ animation: "spin 160s linear infinite" }}
-            />
             <div className="absolute top-[60%] left-1/2 size-[16rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(255,220,160,0.85),rgba(255,150,60,0.3)_55%,transparent)]" />
             <div className="absolute top-[60%] left-1/2 size-28 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle_at_40%_38%,#fffef8_0%,#fff1c9_30%,#ffc06b_68%,#f36b21_100%)] shadow-[0_0_40px_12px_rgba(255,206,140,0.75),0_0_140px_50px_rgba(255,140,60,0.35)]" />
           </div>
-          <div className={`relative ${wrap} pt-44 text-center`}>
+          <div className={`relative ${wrap} pt-28 text-center`}>
             <p className="text-[11px] font-medium tracking-[0.42em] text-white/50 uppercase">What is inside</p>
             <h2 className="mx-auto mt-6 max-w-3xl text-[clamp(34px,5vw,64px)] leading-[1.02] font-medium tracking-[-0.045em] text-white [text-shadow:0_2px_30px_rgba(0,0,0,0.6)]">
               Every part of the company,
@@ -293,7 +297,7 @@ export function About() {
               around <span className="font-[Iowan_Old_Style,Palatino,Georgia,serif] font-normal tracking-[-0.02em] text-[#ffd9b3] italic">one record.</span>
             </h2>
           </div>
-          <p className={`absolute inset-x-0 bottom-44 mx-auto max-w-lg px-4 text-center text-[15px] leading-relaxed text-white/60 [text-shadow:0_2px_20px_rgba(0,0,0,0.8)]`}>
+          <p className={`absolute inset-x-0 bottom-20 mx-auto max-w-lg px-4 text-center text-[15px] leading-relaxed text-white/60 [text-shadow:0_2px_20px_rgba(0,0,0,0.8)]`}>
             An order is entered once. Approval, payment, stock, delivery and the books all read and write the same record, so
             nobody types it twice and nobody works from an old copy.
           </p>
@@ -301,13 +305,17 @@ export function About() {
       </section>
 
       {/* One order, start to finish. */}
-      <div className="relative isolate">
-      <Lines flip />
+      <div className="relative">
       <section className={`${wrap} py-24`}>
-        <p className={`${eyebrow} text-[#1f9d55]`}>One order, start to finish</p>
-        <h2 className={`${h2} mt-4 max-w-3xl`}>
-          Six hands, <span className="text-[#1f9d55]">one record</span>, no retyping.
-        </h2>
+        <div className="flex flex-wrap items-end justify-between gap-8">
+          <div>
+            <p className={`${eyebrow} text-[#1f9d55]`}>One order, start to finish</p>
+            <h2 className={`${h2} mt-4 max-w-3xl`}>
+              Six hands, <span className="text-[#1f9d55]">one record</span>, no retyping.
+            </h2>
+          </div>
+          <Route />
+        </div>
         <ol className="mt-14 grid gap-6 md:grid-cols-3 lg:grid-cols-6">
           {JOURNEY.map((step, i) => (
             <li key={step.who} className="relative">
