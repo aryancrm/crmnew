@@ -23,6 +23,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { AreasTab, RequestsTab } from "../org/areas-requests";
+import { OrgChart } from "../org/chart";
 import {
   AddPersonDialog,
   CoverDialog,
@@ -55,7 +56,7 @@ const ADD_FOR: Record<OrgUnit["kind"], Role[]> = {
 };
 
 export type Pop =
-  | { kind: "add"; unit: OrgUnit; module?: Role; seat?: OrgSeat; title?: string }
+  | { kind: "add"; unit: OrgUnit; module?: Role; seat?: OrgSeat; title?: string; reportsTo?: number }
   | { kind: "seat"; unit: OrgUnit; seat?: OrgSeat; module?: Role }
   | { kind: "cover"; seat: OrgSeat }
   | { kind: "leave"; holder: OrgHolder }
@@ -81,7 +82,8 @@ function Org({ tree }: { tree: OrgTree }) {
   const root = tree.units.find((unit) => unit.kind === "company") ?? tree.units[0];
   const picked = tree.units.find((unit) => String(unit.id) === params.get("unit")) ?? root;
   const q = params.get("q") ?? "";
-  const tab = (["areas", "requests"] as const).find((one) => one === params.get("tab")) ?? "teams";
+  // The chart first (Aryan, 17 Nov: "as a chart"); the teams list stays a tab away.
+  const tab = (["teams", "areas", "requests"] as const).find((one) => one === params.get("tab")) ?? "chart";
   const openAsks = tree.requests.filter((request) => request.status === "open").length;
   const set = (next: Record<string, string | null>) =>
     setParams(
@@ -136,6 +138,8 @@ function Org({ tree }: { tree: OrgTree }) {
         title="Teams & people"
         sub="Every job is a seat in a team; its customers and orders stay with the seat."
         actions={
+          // The chart has its own search.
+          tab !== "chart" && (
           <label className="relative flex items-center">
             <Search size={16} className="pointer-events-none absolute left-3 text-slate-400" />
             <input
@@ -145,6 +149,7 @@ function Org({ tree }: { tree: OrgTree }) {
               className="h-10 w-72 max-w-full rounded-lg border border-slate-300 bg-white pr-3 pl-9 text-sm focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 focus:outline-none"
             />
           </label>
+          )
         }
       >
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -162,6 +167,7 @@ function Org({ tree }: { tree: OrgTree }) {
       <div className="flex gap-1 border-b border-slate-200">
         {(
           [
+            ["chart", "Chart"],
             ["teams", "Teams"],
             ["areas", `Areas · ${tree.areas.length}`],
             ["requests", `Asks for people${openAsks ? ` · ${openAsks} waiting` : ""}`],
@@ -170,13 +176,14 @@ function Org({ tree }: { tree: OrgTree }) {
           <button
             key={key}
             type="button"
-            onClick={() => set({ tab: key === "teams" ? null : key })}
+            onClick={() => set({ tab: key === "chart" ? null : key })}
             className={`-mb-px border-b-2 px-3 py-2 text-sm font-semibold ${tab === key ? "border-emerald-600 text-emerald-800" : "border-transparent text-slate-500 hover:text-slate-800"} ${key === "requests" && openAsks ? "text-amber-700" : ""}`}
           >
             {label}
           </button>
         ))}
       </div>
+      {tab === "chart" && <OrgChart tree={tree} open={setPop} />}
       {tab === "areas" && <AreasTab tree={tree} />}
       {tab === "requests" && <RequestsTab tree={tree} />}
       {tab === "teams" && (
@@ -271,6 +278,7 @@ export function OrgPops({
           seat={pop.seat}
           module={pop.module}
           title={pop.title}
+          reportsTo={pop.reportsTo}
           onClose={() => setPop(null)}
           onLogin={(name, login) => setPop({ kind: "login", name, login })}
         />

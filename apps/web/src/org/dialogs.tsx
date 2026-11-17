@@ -397,6 +397,7 @@ export function AddPersonDialog({
   seat,
   module = "medrep",
   title,
+  reportsTo,
   onClose,
   onLogin,
 }: {
@@ -407,6 +408,8 @@ export function AddPersonDialog({
   module?: Role;
   /** The new seat's title, when the work's own isn't right ("URO head"). */
   title?: string;
+  /** The seat they report to, when added from someone's box on the chart. */
+  reportsTo?: number;
   onClose: () => void;
   onLogin: (name: string, login: OrgLogin) => void;
 }) {
@@ -418,9 +421,11 @@ export function AddPersonDialog({
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [startsOn, setStartsOn] = useState(tree.today);
+  const [employeeCode, setEmployeeCode] = useState("");
   const [job, setJobState] = useState<JobState>(() => ({
-    ...freshJob(module, module !== "medrep" && !unit.seats.some((one) => one.lead)),
+    ...freshJob(module, !reportsTo && module !== "medrep" && !unit.seats.some((one) => one.lead)),
     ...(title ? { title } : {}),
+    ...(reportsTo ? { reportsTo: String(reportsTo) } : {}),
   }));
   const setJob = (next: Partial<JobState>) => setJobState((state) => ({ ...state, ...next }));
   const [personId, setPersonId] = useState("");
@@ -460,6 +465,7 @@ export function AddPersonDialog({
           email: email || null,
           phone: phone || null,
           password: password || null,
+          employeeCode: employeeCode || null,
           startsOn,
           ...(seat ? { seatId: seat.id } : { unitId: unit.id, ...jobBody(job) }),
         },
@@ -551,6 +557,15 @@ export function AddPersonDialog({
                     required
                   />
                 </Label>
+                <Label text="Employee ID" error={action.at("employeeCode")}>
+                  <input
+                    value={employeeCode}
+                    onChange={(event) => setEmployeeCode(event.target.value)}
+                    className={FIELD}
+                    placeholder="From HR, if they have one"
+                    autoComplete="off"
+                  />
+                </Label>
                 <Label text="Phone" error={action.at("phone")}>
                   <input
                     value={phone}
@@ -612,6 +627,7 @@ export function AddPersonDialog({
             "areaId",
             "newArea.name",
             "personId",
+            "employeeCode",
           ])}
         />
         <Footer
@@ -655,11 +671,17 @@ export function SeatDialog({
       : freshJob(module),
   );
   const setJob = (next: Partial<JobState>) => setJobState((state) => ({ ...state, ...next }));
+  // Moving the seat (and whoever sits in it) to another team.
+  const [teamId, setTeamId] = useState(String(unit.id));
+  const team = tree.units.find((one) => String(one.id) === teamId) ?? unit;
   async function submit(event: FormEvent) {
     event.preventDefault();
     const done = await action.run(() =>
       seat
-        ? api(`/api/org/seats/${seat.id}`, { method: "PATCH", body: jobBody(job) })
+        ? api(`/api/org/seats/${seat.id}`, {
+            method: "PATCH",
+            body: { ...jobBody(job), ...(team.id !== unit.id ? { unitId: team.id } : {}) },
+          })
         : api("/api/org/seats", { body: { unitId: unit.id, ...jobBody(job) } }),
     );
     if (done) {
@@ -680,9 +702,33 @@ export function SeatDialog({
       wide
     >
       <form onSubmit={submit} className="flex flex-col gap-4">
+        {seat && (
+          <Label text="Team" error={action.at("unitId")}>
+            <select
+              value={teamId}
+              onChange={(event) => {
+                setTeamId(event.target.value);
+                setJob({ reportsTo: "", lead: false });
+              }}
+              className={FIELD}
+            >
+              {tree.units
+                .filter((one) => one.kind !== "company" || one.id === unit.id)
+                .map((one) => (
+                  <option key={one.id} value={one.id}>
+                    {lineUp(tree, one.id)
+                      .reverse()
+                      .slice(1)
+                      .map((part) => part.name)
+                      .join(" › ") || one.name}
+                  </option>
+                ))}
+            </select>
+          </Label>
+        )}
         <JobFields
           tree={tree}
-          unit={unit}
+          unit={team}
           job={job}
           setJob={setJob}
           at={action.at}
@@ -697,6 +743,7 @@ export function SeatDialog({
             "areaId",
             "newArea.name",
             "lead",
+            "unitId",
           ])}
         />
         <Footer

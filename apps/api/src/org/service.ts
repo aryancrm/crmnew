@@ -705,10 +705,18 @@ export async function addPerson(db: Database, me: Me, input: OrgPersonInput): Pr
       sql`insert into seat_holder (seat_id, person_id, kind, starts_on, reason, by_person)
         values (${seatId}, ${personId}, 'holder', ${starts}::date, 'Joined', ${me.id})`,
     );
-    // Everyone has an employee record; HR fills in the rest.
+    // Everyone has an employee record (with the employee ID when it is known); HR fills in the rest.
+    const code = clean(input.employeeCode)?.toUpperCase() ?? null;
+    if (code) {
+      const [taken] = await rows<{ name: string }>(
+        tx,
+        sql`select p.name from employee e join person p on p.id = e.person_id where upper(e.employee_code) = ${code} and p.active`,
+      );
+      if (taken) throw new Refusal(409, "taken", `${code} is already ${taken.name}'s employee ID.`, "employeeCode");
+    }
     await tx.execute(
-      sql`insert into employee (person_id, hire_date, position, mobile, created_by)
-        values (${personId}, ${starts}::date, ${seat.title}, ${clean(input.phone)}, ${me.id})`,
+      sql`insert into employee (person_id, hire_date, position, mobile, employee_code, created_by)
+        values (${personId}, ${starts}::date, ${seat.title}, ${clean(input.phone)}, ${code}, ${me.id})`,
     );
     // Its login ID now signs this person in.
     await fillSeatLogins(tx);

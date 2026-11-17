@@ -148,6 +148,35 @@ describe("the company's tree", () => {
     expect(lead.status).toBe(409);
   });
 
+  it("adds someone under a person from the chart, with their employee ID, and moves them to another team", async () => {
+    const ncr1 = await unitNamed("NCR 1");
+    const ryanSeat = ncr1?.seats.find((seat) => seat.holder?.name === "Ryan");
+    const response = await send("naresh", "/api/org/people", {
+      name: "Chart Person",
+      unitId: ncr1?.id,
+      title: "MedRep",
+      module: "medrep",
+      reportsToSeatId: ryanSeat?.id,
+      employeeCode: "2mg-0907",
+    });
+    expect(response.status).toBe(201);
+    const added = (await response.json()) as OrgLogin & { seatId: number };
+    const seat = (await unitNamed("NCR 1"))?.seats.find((one) => one.id === added.seatId);
+    expect(seat?.boss).toBe("Ryan");
+    const [code] = await rows<{ code: string }>(db, sql`select e.employee_code as code from employee e join person p on p.id = e.person_id where p.name = 'Chart Person'`);
+    expect(code?.code).toBe("2MG-0907");
+    // The same employee ID can't be given twice.
+    const twice = await send("naresh", "/api/org/people", { name: "Other", unitId: ncr1?.id, title: "MedRep", module: "medrep", employeeCode: "2MG-0907" });
+    expect(twice.status).toBe(409);
+    expect(await fieldOf(twice)).toBe("employeeCode");
+    // Moved across: to another team, under that team's lead.
+    const other = (await tree()).units.find((unit) => unit.kind === "team" && unit.id !== ncr1?.id && unit.seats.some((one) => one.lead && one.holder));
+    const moved = await send("naresh", `/api/org/seats/${added.seatId}`, { unitId: other?.id, reportsToSeatId: null }, "PATCH");
+    expect(moved.status).toBe(200);
+    const after = (await tree()).units.find((unit) => unit.id === other?.id)?.seats.find((one) => one.id === added.seatId);
+    expect(after?.boss).toBe(other?.seats.find((one) => one.lead)?.holder?.name);
+  });
+
   it("puts the people of a team under whoever fills its empty lead seat", async () => {
     const mindanao = await unitNamed("Mindanao");
     const rep = (await (

@@ -2858,6 +2858,8 @@ export type OrgPersonInput = {
   areaId?: number | null;
   newArea?: { name: string; cities: string[] } | null;
   startsOn?: string | null;
+  /** The company's employee ID ("2MG-0042"), when HR has it. */
+  employeeCode?: string | null;
 };
 
 export type OrgSeatInput = {

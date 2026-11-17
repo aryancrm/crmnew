@@ -63,6 +63,7 @@ const personBody = z.object({
   areaId: id("Pick the area.").nullable().optional(),
   newArea,
   startsOn: dayText.nullable().optional(),
+  employeeCode: text(40).nullable().optional(),
 });
 
 export function orgRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandler<Env>): void {
