@@ -95,7 +95,8 @@ describe("one medicine", () => {
   it("shows its batches, every price, the running promo and its history", async () => {
     const { medicine } = await named("Anastrozole");
     const response = await get("sarla", `/api/inventory/medicines/${medicine.id}`);
-    expect(queries(response)).toBe(10);
+    // With one for its offers.
+    expect(queries(response)).toBe(11);
     const page = (await response.json()) as MedicineDetail;
     expect(page.batches).toMatchObject([
       { batchNo: "AN2291", qty: 35, state: "ok", unitCost: 90500 },
@@ -331,8 +332,8 @@ describe("all medicines", () => {
   it("lists every medicine with its details, every price, the promo and its stock", async () => {
     const response = await get("ryan", "/api/inventory/medicines");
     expect(response.status).toBe(200);
-    // The catalogue's reads, plus one of what placed orders have promised.
-    expect(queries(response)).toBe(6);
+    // The catalogue's reads, plus one of what placed orders have promised and one of the offers.
+    expect(queries(response)).toBe(7);
     const page = (await response.json()) as import("../types").Catalogue;
     const anastrozole = page.rows.find((row) => row.name === "Anastrozole");
     expect(anastrozole).toMatchObject({

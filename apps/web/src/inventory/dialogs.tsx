@@ -766,6 +766,116 @@ export function PromoDialog({ detail, onClose }: { detail: MedicineDetail; onClo
   );
 }
 
+/** An offer (the hub's Buy 1 Take 1, the Christmas offers): for a kind of buyer or every buyer,
+ *  Buy X Take Y and / or a special price per piece bought, between two days. */
+export function OfferDialog({ detail, onClose }: { detail: MedicineDetail; onClose: () => void }) {
+  const action = useSave(onClose);
+  const [buyerKind, setBuyerKind] = useState("");
+  const [buy, setBuy] = useState("1");
+  const [take, setTake] = useState("1");
+  const [price, setPrice] = useState("");
+  const [name, setName] = useState("");
+  const [startsOn, setStartsOn] = useState(detail.today);
+  const [endsOn, setEndsOn] = useState("");
+  const buying = Math.max(1, Number(buy) || 1);
+  const free = Math.max(0, Number(take) || 0);
+  return (
+    <Form
+      title="Add an offer"
+      action={action}
+      fields={["buyerKind", "buy", "take", "price", "name", "startsOn", "endsOn"]}
+      submit="Add offer"
+      onClose={onClose}
+      onSubmit={action.save(() =>
+        api(`/api/inventory/medicines/${detail.medicine.id}/offers`, {
+          body: {
+            buyerKind: buyerKind || null,
+            buy: buying,
+            take: free,
+            price: price.trim() ? centavos(price) : null,
+            name: name.trim() || null,
+            startsOn,
+            endsOn,
+          },
+        }),
+      )}
+    >
+      <Row>
+        <Field label="For" error={action.at("buyerKind")}>
+          {(field) => (
+            <select
+              {...field}
+              className={INPUT}
+              value={buyerKind}
+              onChange={(event) => setBuyerKind(event.target.value)}
+            >
+              <option value="">Every buyer</option>
+              <option value="hospital">Hospitals</option>
+              <option value="drugstore">Drugstores</option>
+              <option value="doctor">Doctors</option>
+              <option value="distributor">Distributors</option>
+              <option value="patient">Patients</option>
+              <option value="government">Government buyers</option>
+            </select>
+          )}
+        </Field>
+        <Field label="Name (optional)" error={action.at("name")}>
+          {(field) => (
+            <input
+              {...field}
+              className={INPUT}
+              placeholder={free > 0 ? `Buy ${buying} Take ${free}` : "Special price"}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          )}
+        </Field>
+      </Row>
+      <Row>
+        <Field label="Buy" error={action.at("buy")}>
+          {(field) => (
+            <input {...field} className={INPUT} inputMode="numeric" value={buy} onChange={(event) => setBuy(event.target.value)} />
+          )}
+        </Field>
+        <Field label="Take free" error={action.at("take")}>
+          {(field) => (
+            <input {...field} className={INPUT} inputMode="numeric" value={take} onChange={(event) => setTake(event.target.value)} />
+          )}
+        </Field>
+        <Field label="Price a piece (₱, optional)" error={action.at("price")}>
+          {(field) => (
+            <input
+              {...field}
+              className={INPUT}
+              inputMode="decimal"
+              placeholder="Their own price"
+              value={price}
+              onChange={(event) => setPrice(event.target.value)}
+            />
+          )}
+        </Field>
+      </Row>
+      <div className="text-[12px] text-slate-500">
+        {free > 0
+          ? `Every ${buying} bought, ${free} more free: an order of ${buying * 10} gets ${free * 10} free, added by itself.`
+          : "No free pieces: a special price only."}
+      </div>
+      <Row>
+        <Field label="From" error={action.at("startsOn")}>
+          {(field) => (
+            <input {...field} className={INPUT} type="date" value={startsOn} onChange={(event) => setStartsOn(event.target.value)} />
+          )}
+        </Field>
+        <Field label="To" error={action.at("endsOn")}>
+          {(field) => (
+            <input {...field} className={INPUT} type="date" value={endsOn} onChange={(event) => setEndsOn(event.target.value)} />
+          )}
+        </Field>
+      </Row>
+    </Form>
+  );
+}
+
 // ---------------------------------------------------------------- news and deliveries
 
 const NEWS: { key: NewsKind; label: string }[] = [

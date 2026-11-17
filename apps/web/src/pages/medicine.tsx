@@ -14,6 +14,7 @@ import {
   MoveDialog,
   NewsDialog,
   PricesDialog,
+  OfferDialog,
   PromoDialog,
   ReceiveDialog,
 } from "../inventory/dialogs";
@@ -37,7 +38,7 @@ import { StatusPill } from "./inventory";
 
 type Line = MedicineDetail["batches"][number];
 type Open =
-  | { kind: "receive" | "move" | "edit" | "prices" | "promo" | "news" }
+  | { kind: "receive" | "move" | "edit" | "prices" | "promo" | "offer" | "news" }
   | { kind: "count"; line?: Line }
   | null;
 
@@ -76,6 +77,10 @@ export function Medicine() {
   const piece = medicine.unit ?? "piece";
   const choice = [{ id: medicine.id, name: medicine.name, strength: medicine.strength ?? null }];
 
+  async function endOffer(offerId: number) {
+    await api(`/api/inventory/offers/${offerId}/end`, { method: "POST" }).catch(() => undefined);
+    await queries.invalidateQueries({ queryKey: ["inventory"] });
+  }
   async function endPromo(promoId: number) {
     await api(`/api/inventory/promos/${promoId}/end`, { method: "POST" }).catch(() => undefined);
     await queries.invalidateQueries({ queryKey: ["inventory"] });
@@ -409,6 +414,48 @@ export function Medicine() {
                 </div>
               ))}
             </div>
+            {/* Offers (the hub's Buy 1 Take 1, the Christmas offers): orders take them by themselves. */}
+            <div className="mt-2 flex flex-col gap-1.5 border-t border-slate-100 pt-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-xs font-semibold text-slate-500">Offers</div>
+                {can.price && (
+                  <button
+                    type="button"
+                    onClick={() => setOpen({ kind: "offer" })}
+                    className="text-[13px] font-medium text-brand"
+                  >
+                    Add an offer
+                  </button>
+                )}
+              </div>
+              {data.offers.length === 0 && <div className="text-slate-500">No offer.</div>}
+              {data.offers.map((offer) => (
+                <div key={offer.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                  <span>
+                    {offer.name}
+                    {offer.price !== null ? ` · ${peso(offer.price)} a piece` : ""}
+                    <span className="text-slate-500">
+                      {" "}
+                      · {offer.buyerLabel} · {dayLabel(offer.startsOn, today)} to {dayLabel(offer.endsOn, today)}
+                    </span>
+                  </span>
+                  <span className="flex items-center gap-2">
+                    <Pill tone={offer.state === "now" ? "brand" : "plain"}>
+                      {offer.state === "now" ? "Running" : offer.state === "later" ? "Not started" : "Ended"}
+                    </Pill>
+                    {can.price && offer.state !== "ended" && (
+                      <button
+                        type="button"
+                        onClick={() => endOffer(offer.id)}
+                        className="text-[13px] font-medium text-bad"
+                      >
+                        End
+                      </button>
+                    )}
+                  </span>
+                </div>
+              ))}
+            </div>
           </Card>
 
           <Card className="p-4">
@@ -481,6 +528,7 @@ export function Medicine() {
       {open?.kind === "edit" && <MedicineDialog medicine={medicine} onClose={close} />}
       {open?.kind === "prices" && <PricesDialog detail={data} onClose={close} />}
       {open?.kind === "promo" && <PromoDialog detail={data} onClose={close} />}
+      {open?.kind === "offer" && <OfferDialog detail={data} onClose={close} />}
       {open?.kind === "news" && (
         <NewsDialog medicines={choice} medicineId={medicine.id} onClose={close} />
       )}

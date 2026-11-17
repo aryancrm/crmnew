@@ -5,6 +5,7 @@ import { randomUUID } from "node:crypto";
 import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
+import { offersOf, runningOffers } from "./offers";
 import type {
   BuyerType,
   Catalogue,
@@ -234,6 +235,7 @@ export async function catalogue(db: Database, me: Me): Promise<Catalogue> {
   const promoBy = new Map(
     promos.map((row) => [row.medicine, { name: row.name, amount: row.amount, endsOn: row.endsOn }]),
   );
+  const offerBy = await runningOffers(db, today);
   const shelfBy = new Map(shelf.map((row) => [row.medicine, row]));
   // Pieces on placed orders not packed yet: on the shelf, but sold.
   const promised = await rows<{ medicine: number; qty: number }>(
@@ -253,6 +255,7 @@ export async function catalogue(db: Database, me: Me): Promise<Catalogue> {
       prices: priceBy.get(medicine.id) ?? {},
       packPrices: packBy.get(medicine.id) ?? {},
       promo: promoBy.get(medicine.id) ?? null,
+      offers: offerBy.get(medicine.id) ?? [],
       total,
       promised: held,
       free: Math.max(0, total - held),
@@ -387,6 +390,7 @@ export async function medicineDetail(db: Database, me: Me, id: number): Promise<
       ...promo,
       state: promo.endsOn < today ? "ended" : promo.startsOn > today ? "later" : "now",
     })),
+    offers: await offersOf(db, id),
     coming,
     moves,
     priceChanges: changes,

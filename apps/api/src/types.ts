@@ -102,6 +102,8 @@ export type CatalogueRow = MedicineInput & {
   packPrices: Partial<Record<BuyerType, number>>;
   /** The promo running today, if any. */
   promo: { name: string; amount: number; endsOn: string } | null;
+  /** The offers running today (Buy X Take Y, a special price), each for a kind of buyer or all. */
+  offers: CatalogueOffer[];
   /** Sellable pieces in all warehouses. */
   total: number;
   /** Of it, promised to placed orders not packed yet; and what is still free to sell. */
@@ -110,6 +112,38 @@ export type CatalogueRow = MedicineInput & {
   status: StockStatus;
   /** Average landed cost of what is on the shelf (centavos). Null when not known or not yours to see. */
   cost: number | null;
+};
+
+/** An offer on a medicine (the hub's Buy 1 Take 1, the Christmas offers file). */
+export type CatalogueOffer = {
+  id: number;
+  /** The customer kind it is for; null: every buyer. */
+  buyerKind: CustomerKind | null;
+  buy: number;
+  take: number;
+  /** Centavos per piece bought while it runs; null: the buyer's own price. */
+  price: number | null;
+  name: string;
+  endsOn: string;
+};
+
+export type MedicineOffer = CatalogueOffer & {
+  buyerLabel: string;
+  note: string | null;
+  startsOn: string;
+  state: "now" | "later" | "ended";
+  by: string;
+};
+
+export type OfferInput = {
+  buyerKind: CustomerKind | null;
+  buy: number;
+  take: number;
+  price: number | null;
+  name?: string | null;
+  note?: string | null;
+  startsOn: string;
+  endsOn: string;
 };
 
 export type Catalogue = {
@@ -174,6 +208,8 @@ export type MedicineDetail = {
     endsOn: string;
     state: "now" | "later" | "ended";
   }[];
+  /** Its offers: running, coming and ended lately. */
+  offers: MedicineOffer[];
   coming: ComingRow[];
   moves: {
     id: number;
@@ -1115,6 +1151,8 @@ export type OrderDetail = {
     /** The medicine's VAT as Inventory keeps it, and whether it needs a prescription. */
     vat: Vat;
     rx: boolean;
+    /** Priced by an offer, or the free pieces an offer added (worked out by the system). */
+    offerId: number | null;
   }[];
   /** Every version of its lines, oldest first: as placed, each MedRep fix, each change
    *  Management made before approving. The last is what the order is now. */

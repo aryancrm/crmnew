@@ -1066,6 +1066,10 @@ function Lines({ data, compare }: { data: OrderDetail; compare?: boolean }) {
                           Prescription
                         </span>
                       )}
+                      {item.offerId && (
+                        // Priced or given free by an offer set in Inventory: worked out by the system.
+                        <span className="rounded bg-good-tint px-1.5 py-0.5 text-good">Offer</span>
+                      )}
                     </div>
                   </td>
                   <td className="num">

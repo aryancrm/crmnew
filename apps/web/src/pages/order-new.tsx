@@ -33,6 +33,7 @@ import {
   Check,
   ClipboardCheck,
   FileCheck2,
+  Gift,
   MapPin,
   Megaphone,
   Minus,
@@ -472,9 +473,20 @@ export function OrderNew({
   const medicines = catalogue.data?.rows ?? [];
   const byId = useMemo(() => new Map(medicines.map((row) => [row.id, row])), [medicines]);
   const stockOf = (id: number) => stock.data?.medicines.find((row) => row.id === id);
+  /** The offer running for this buyer on a medicine: one for their kind first, else every
+   *  buyer's (the server picks the same). */
+  const offerOf = (row: CatalogueRow) =>
+    (row.offers ?? []).find((one) => picked && one.buyerKind === picked.kind) ??
+    (row.offers ?? []).find((one) => one.buyerKind === null) ??
+    null;
   const pricesOf = (row: CatalogueRow) => {
     const usual = picked ? USUAL[picked.kind] : "";
+    const offer = offerOf(row);
     const options = [
+      // An offer's own price (the Christmas offers' "customer pays") comes first.
+      ...(offer && offer.price !== null
+        ? [{ kind: "offer", label: offer.name, amount: offer.price }]
+        : []),
       ...(catalogue.data?.buyerTypes ?? [])
         .filter((type) => row.prices[type.key] !== undefined)
         .map((type) => ({
@@ -495,6 +507,7 @@ export function OrderNew({
     // The customer's own kind of price first, then the promo, then the rest.
     return options.sort(
       (a, b) =>
+        Number(b.kind === "offer") - Number(a.kind === "offer") ||
         Number(b.kind === usual) - Number(a.kind === usual) ||
         Number(b.kind === "promo") - Number(a.kind === "promo"),
     );
@@ -515,6 +528,17 @@ export function OrderNew({
     if (row.promo) options.push(exVat(row.promo.amount, row.vat));
     if (line.kept !== undefined) options.push(line.kept);
     return Math.min(...options);
+  };
+  /** The free pieces an offer adds to a paid line, worked out as the server does (Buy X Take Y:
+   *  Y for every X bought); none with an SC/PWD price (the law: never both). */
+  const offerTakes = (medicineId: number) => {
+    const row = byId.get(medicineId);
+    const offer = row ? offerOf(row) : null;
+    return offer && offer.take > 0 && !withRelief ? offer : null;
+  };
+  const offerFree = (line: Line) => {
+    const offer = line.free ? null : offerTakes(line.medicineId);
+    return offer ? Math.floor(line.qty / offer.buy) * offer.take : 0;
   };
   const eachOf = (line: Line) =>
     line.free
@@ -705,7 +729,7 @@ export function OrderNew({
     const body: OrderInput = {
       customerId: customerId ?? 0,
       ...(forWhom.data?.can ? { medrepId } : {}),
-      items: lines.map((line) => ({
+      items: lines.filter((line) => !(line.free && offerTakes(line.medicineId))).map((line) => ({
         medicineId: line.medicineId,
         qty: line.qty,
         priceKind: line.priceKind,
@@ -1526,6 +1550,8 @@ export function OrderNew({
         {lines.map((line, index) => {
           const row = byId.get(line.medicineId);
           if (!row) return null;
+          // A medicine with a Buy X Take Y running: its free pieces come by themselves (below).
+          if (line.free && offerTakes(line.medicineId)) return null;
           if (line.free)
             return (
               <div
@@ -1813,15 +1839,26 @@ export function OrderNew({
                       Give another price
                     </button>
                   )}
-                  {!lines.some((other) => other.free && other.medicineId === line.medicineId) && (
-                    <button
-                      type="button"
-                      onClick={() => addFree(line)}
-                      className="self-start text-xs font-medium text-emerald-700 hover:underline"
-                    >
-                      + Free (Buy 1 Take 1)
-                    </button>
-                  )}
+                  {!offerTakes(line.medicineId) &&
+                    !lines.some((other) => other.free && other.medicineId === line.medicineId) && (
+                      <button
+                        type="button"
+                        onClick={() => addFree(line)}
+                        className="self-start text-xs font-medium text-emerald-700 hover:underline"
+                      >
+                        + Free (a sample, a deal)
+                      </button>
+                    )}
+                </div>
+              )}
+              {offerTakes(line.medicineId) && (
+                // The hub's "🎁 Buy 1 Take 1 · +N free": added by the system, as the offer gives it.
+                <div className="flex items-center gap-2 rounded-lg bg-good-tint px-3 py-2 text-xs font-semibold text-good">
+                  <Gift className="size-4 shrink-0" aria-hidden="true" />
+                  {offerTakes(line.medicineId)?.name} · +{count(offerFree(line))} free, added by itself
+                  {offerFree(line) === 0
+                    ? ` (from ${count(offerTakes(line.medicineId)?.buy ?? 1)} bought)`
+                    : ""}
                 </div>
               )}
             </div>
@@ -2139,15 +2176,20 @@ export function OrderNew({
               ))}
             </dl>
             <ul className="flex flex-col divide-y divide-slate-100 rounded-lg border border-slate-200">
-              {lines.map((line) => {
+              {lines.filter((line) => !(line.free && offerTakes(line.medicineId))).map((line) => {
                 const row = byId.get(line.medicineId);
                 return (
-                  <li key={line.key} className="flex justify-between gap-3 px-3 py-1.5">
+                  <li key={line.key} className="flex flex-wrap justify-between gap-x-3 px-3 py-1.5">
                     <span className="min-w-0 truncate">
                       {[row?.name, row?.strength].filter(Boolean).join(" ")} × {count(line.qty)}
                       {line.free ? " (free)" : ""}
                     </span>
                     <span className="shrink-0 tabular-nums">{peso(line.qty * eachOf(line))}</span>
+                    {offerFree(line) > 0 && (
+                      <span className="basis-full text-xs text-good">
+                        + {count(offerFree(line))} free ({offerTakes(line.medicineId)?.name})
+                      </span>
+                    )}
                   </li>
                 );
               })}

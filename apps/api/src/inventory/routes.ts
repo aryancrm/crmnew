@@ -2,6 +2,7 @@
 
 import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
+import { addOffer, endOffer } from "./offers";
 import type { Database } from "../db/index";
 import { allow, type Env, idParam, may, readBody } from "../http";
 import { afterStockIn } from "../orders/stock-wait";
@@ -146,6 +147,32 @@ export function inventoryRoutes(
       }),
     );
     await addPromo(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+
+  // Offers: Buy X Take Y and / or a special price, for a kind of buyer or every buyer.
+  app.post("/api/inventory/medicines/:id/offers", async (c) => {
+    allow(c.get("me"), PRICE_ROLES, "add an offer");
+    const input = await readBody(
+      c,
+      z.object({
+        buyerKind: z
+          .enum(["hospital", "doctor", "patient", "drugstore", "distributor", "government"])
+          .nullable(),
+        buy: z.number({ error: "Say how many are bought." }).int().min(1, "At least one is bought.").max(1000),
+        take: z.number({ error: "Say how many are free." }).int().min(0).max(1000),
+        price: centavos.nullable(),
+        name: text(80).nullish(),
+        note: text(300).nullish(),
+        startsOn: date,
+        endsOn: date,
+      }),
+    );
+    return c.json({ id: await addOffer(db, c.get("me"), idParam(c), input) });
+  });
+  app.post("/api/inventory/offers/:id/end", async (c) => {
+    allow(c.get("me"), PRICE_ROLES, "end an offer");
+    await endOffer(db, c.get("me"), idParam(c));
     return c.json({ ok: true });
   });
 

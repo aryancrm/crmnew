@@ -1921,6 +1921,12 @@ on the local copy (database copied first, put back after), with what was seen wr
     list") and Management sees the order's own % and the customer's past prices. To let the system
     say "fine to approve" by itself, what counts as fine? (e.g. up to N% below the list, or not below
     the price this customer paid last time.)
+26. **Christmas offers: when, and the patient ones**: the file is ready to load (410 offers: 285
+    Buy X Take Y at the buyer's own price, 58 at the file's own price, 67 special prices). Which
+    days does the Christmas promo run (start and end)? The file says a patient promo on a
+    prescription medicine needs Regulatory clearance: 92 such are held back — load them once
+    cleared? 11 SKUs in the file aren't in our list (GM-4313, GM-4640, GM-4340, GM-4539, GM-4316,
+    GM-3185, GM-4283, GM-3398, GM-3690, GM-1752, GM-3545): add them, or leave them out?
 
 ## 14. Change log
 
@@ -2423,4 +2429,19 @@ on the local copy (database copied first, put back after), with what was seen wr
   Issuance Date): the importer keeps them now, and `scripts/backfill-licence.ts` filled 768 local
   customers from the Zoho backup (local only; a safety copy at .data/pg.before-licence-2026-11-17).
   Walked as Ryan and Kate on a copy of the local database.
+- 17 Nov (87), plan 19 step B part 2b (and plan 18 step 2's offers): **offers on a medicine** — the
+  hub's Buy 1 Take 1 grown into what Aryan's Christmas offers file needs: for a kind of buyer or
+  every buyer, **Buy X Take Y** and / or **a price per piece bought** ("Special price"), between two
+  days (table offer, migration 0086; one running per medicine and buyer at a time). Set in Inventory
+  on the medicine's page ("Offers": add, end; Management, the CEO and Admin, as prices) and written
+  in its price history. **An order takes them by itself**: the offer's price is offered first, and
+  **the free pieces are worked out by the server** (Y for every X bought, the hub's rule: a free line
+  typed by hand for that medicine is replaced), following the order when it is fixed or changed; not
+  with an SC/PWD price (the law: never both); an ended offer is not taken. The order form shows
+  "Christmas: Buy 1 Take 1 · +N free, added by itself" (and in the Confirm window); the order page
+  marks such lines "Offer", and Management isn't asked about an offer's free pieces or price.
+  `scripts/import-offers.ts` loads the file (dry run: 410 offers; patient offers on prescription
+  medicines held back as the file says; needs the promo's days to apply) — waiting for question 26.
+  Walked on a copy (offers loaded there only): Kate saw AbiraGet's four offers; Ryan's order of 120
+  got 120 free by itself; Kate saw the free line marked Offer, not as a question.
 

@@ -26,6 +26,7 @@ import { ROLE_LABEL, type Role } from "../people/roles";
 import { releaseOrderPoints } from "../points/service";
 import { releaseReservationOf } from "../points/website";
 import type {
+  CustomerKind,
   CustomerPaperKind,
   BoardRep,
   BoardTab,
@@ -86,6 +87,7 @@ import {
   STATUSES,
   STEP_OF,
 } from "./rules";
+import { activeOffers, withOfferLines } from "./offers";
 import { shortLines, shortWords } from "./stock-wait";
 
 const PAGE = 25;
@@ -347,6 +349,7 @@ const itemsOf = (db: Runner, orderIds: number[]) =>
             m.name || coalesce(' ' || m.strength, '') as medicine, m.sku, m.unit, m.pack_size::int as "packSize",
             i.qty::int as qty, i.price_kind as "priceKind", i.list_price::int as "listPrice",
             i.unit_price::int as "unitPrice", i.price_reason as reason, (i.qty * i.unit_price)::int as amount, i.relief, m.vat, i.free, m.rx,
+            i.offer_id::int as "offerId",
             -- Free for this order: sellable on the shelf, less what orders placed before it are
             -- promised and not packed yet (first placed, first served).
             greatest(0, coalesce((select sum(s.qty) from stock s join batch b on b.id = s.batch_id
@@ -369,7 +372,12 @@ const itemsOf = (db: Runner, orderIds: number[]) =>
       ).then((found) =>
         found.map((item) => ({
           ...item,
-          priceLabel: item.priceKind === "promo" ? "Promo" : buyerLabel(item.priceKind),
+          priceLabel:
+            item.priceKind === "promo"
+              ? "Promo"
+              : item.priceKind === "offer"
+                ? "Offer"
+                : buyerLabel(item.priceKind),
         })),
       );
 
@@ -449,8 +457,9 @@ function findingsOf(
       text: "Sold at the senior citizen / PWD price (20% off, no VAT) and their senior citizen or PWD ID isn't attached",
     });
   for (const item of items) {
-    // Free goods (a Buy 1 Take 1, a sample) are Management's to agree to.
-    if (item.free)
+    // Free goods typed on the order (a sample) are Management's to agree to; an offer's free
+    // pieces are the offer's (worked out by the system).
+    if (item.free && !item.offerId)
       found.push({
         kind: "price",
         short: "Free goods",
@@ -480,6 +489,8 @@ function findingsOf(
       !item.free &&
       !item.relief &&
       item.priceKind !== "promo" &&
+      // An offer's price was set in Inventory by those who set prices: not a question here.
+      item.priceKind !== "offer" &&
       item.priceKind !== item.ownKind &&
       item.ownPrice != null &&
       item.unitPrice < item.ownPrice
@@ -1518,6 +1529,8 @@ async function checkedLines(
   /** A changed order's SC/PWD lines as they were, by medicine: one sent back at the same price
    *  keeps it (already without VAT). */
   keptRelief?: Map<number, KeptRelief>,
+  /** The buyer's kind: the offers running for it (Buy X Take Y, a special price) apply. */
+  buyer: CustomerKind | null = null,
 ) {
   if (input.items.length === 0)
     throw new Refusal(400, "invalid", "Add at least one medicine.", "items");
@@ -1557,6 +1570,7 @@ async function checkedLines(
         order by medicine_id, amount`,
     ),
   ]);
+  const offers = await activeOffers(db, ids, buyer, today);
   const law = relief
     ? relief.kind === "senior"
       ? "Senior citizen: patient price, no VAT, 20% off (RA 9994)"
@@ -1573,11 +1587,14 @@ async function checkedLines(
         `items.${index}.medicineId`,
       );
     const promo = promos.find((row) => row.medicineId === item.medicineId)?.amount;
+    const offer = offers.get(item.medicineId);
     const found =
       item.priceKind === "promo"
         ? promo
-        : prices.find((row) => row.medicineId === item.medicineId && row.kind === item.priceKind)
-            ?.amount;
+        : item.priceKind === "offer"
+          ? (offer?.price ?? undefined)
+          : prices.find((row) => row.medicineId === item.medicineId && row.kind === item.priceKind)
+              ?.amount;
     // A free line is given at no charge whatever its price.
     if (item.free)
       return {
@@ -1593,7 +1610,7 @@ async function checkedLines(
       throw new Refusal(
         400,
         "invalid",
-        `${medicine.name} has no ${item.priceKind === "promo" ? "promo" : buyerLabel(item.priceKind)} price. Pick another price.`,
+        `${medicine.name} has no ${item.priceKind === "promo" ? "promo" : item.priceKind === "offer" ? "offer" : buyerLabel(item.priceKind)} price${item.priceKind === "offer" ? " running for this buyer" : ""}. Pick another price.`,
         `items.${index}.priceKind`,
       );
     const reason = clean(item.reason);
@@ -1640,6 +1657,17 @@ async function checkedLines(
       };
     }
     const unitPrice = item.unitPrice ?? listPrice;
+    // Bought at an offer's price: the offer is the reason.
+    if (item.priceKind === "offer" && offer && unitPrice === listPrice)
+      return {
+        ...item,
+        listPrice,
+        unitPrice,
+        reason: offer.name,
+        free: false,
+        relief: false,
+        offerId: offer.id,
+      };
     if (unitPrice !== listPrice && !reason)
       throw new Refusal(
         400,
@@ -1656,7 +1684,13 @@ async function checkedLines(
       relief: false,
     };
   });
-  return lines;
+  // The offers' free pieces, worked out here (never typed); not with an SC/PWD price (the law:
+  // the discount or a promo, never both).
+  const priced = lines.map((line) => ({
+    ...line,
+    offerId: ("offerId" in line ? line.offerId : null) as number | null,
+  }));
+  return relief ? priced : withOfferLines(priced, offers);
 }
 
 /** A price with its VAT taken out (a 12% medicine); a VAT-exempt one as it is. */
@@ -1780,7 +1814,15 @@ export async function placeOrder(
 
   // A senior's or PWD's own order: its ID is typed on the form (a case's is on its papers).
   const relief = await checkedRelief(input, !options.reliefFromCase);
-  const lines = await checkedLines(db, input, today, relief, Boolean(options.reliefFromCase));
+  const lines = await checkedLines(
+    db,
+    input,
+    today,
+    relief,
+    Boolean(options.reliefFromCase),
+    undefined,
+    customer.kind,
+  );
   const division = clean(input.division);
   if (division && !(DIVISIONS as readonly string[]).includes(division))
     throw new Refusal(400, "invalid", "Pick the Division from the list.", "division");
@@ -1862,8 +1904,8 @@ export async function placeOrder(
     );
     for (const line of lines)
       await tx.execute(
-        sql`insert into order_item (order_id, medicine_id, qty, price_kind, list_price, unit_price, price_reason, relief, free)
-          values (${id}, ${line.medicineId}, ${line.qty}, ${line.priceKind}, ${line.listPrice}, ${line.unitPrice}, ${line.reason}, ${line.relief}, ${line.free})`,
+        sql`insert into order_item (order_id, medicine_id, qty, price_kind, list_price, unit_price, price_reason, relief, free, offer_id)
+          values (${id}, ${line.medicineId}, ${line.qty}, ${line.priceKind}, ${line.listPrice}, ${line.unitPrice}, ${line.reason}, ${line.relief}, ${line.free}, ${line.offerId ?? null})`,
       );
     // The order as it was placed: its first version, kept whatever is changed after.
     await saveVersion(tx, id, "placed", me, null);
@@ -2269,9 +2311,17 @@ export async function reviseOrder(
   if (division && !(DIVISIONS as readonly string[]).includes(division))
     throw new Refusal(400, "invalid", "Pick the Division from the list.", "division");
   // SC/PWD stays as the order has it unless the MedRep's fix says otherwise: a change never loses it.
-  const [stored] = await rows<{ kind: "senior" | "pwd" | null; idNo: string | null; name: string | null; lead: number | null }>(
+  const [stored] = await rows<{
+    kind: "senior" | "pwd" | null;
+    idNo: string | null;
+    name: string | null;
+    lead: number | null;
+    buyer: CustomerKind | null;
+  }>(
     db,
-    sql`select relief_kind as kind, relief_id_no as "idNo", relief_name as name, lead_id::int as lead from sales_order where id = ${id}`,
+    sql`select relief_kind as kind, relief_id_no as "idNo", relief_name as name, lead_id::int as lead,
+        (select c.kind from customer c where c.id = sales_order.customer_id) as buyer
+      from sales_order where id = ${id}`,
   );
   const relief =
     by === "medrep" && input.relief !== undefined
@@ -2294,6 +2344,7 @@ export async function reviseOrder(
     relief,
     false,
     new Map(kept.map(({ medicineId, ...line }) => [medicineId, line])),
+    stored?.buyer ?? null,
   );
   await db.transaction(async (tx) => {
     const [order] = await rows<{
@@ -2428,8 +2479,8 @@ export async function reviseOrder(
     await tx.execute(sql`delete from order_item where order_id = ${id}`);
     for (const line of lines)
       await tx.execute(
-        sql`insert into order_item (order_id, medicine_id, qty, price_kind, list_price, unit_price, price_reason, relief, free)
-          values (${id}, ${line.medicineId}, ${line.qty}, ${line.priceKind}, ${line.listPrice}, ${line.unitPrice}, ${line.reason}, ${line.relief}, ${line.free})`,
+        sql`insert into order_item (order_id, medicine_id, qty, price_kind, list_price, unit_price, price_reason, relief, free, offer_id)
+          values (${id}, ${line.medicineId}, ${line.qty}, ${line.priceKind}, ${line.listPrice}, ${line.unitPrice}, ${line.reason}, ${line.relief}, ${line.free}, ${line.offerId ?? null})`,
       );
     await tx.execute(
       sql`update sales_order set relief_kind = ${relief?.kind ?? null}, relief_id_no = ${relief?.idNo ?? null}, relief_name = ${relief?.name ?? null} where id = ${id}`,
