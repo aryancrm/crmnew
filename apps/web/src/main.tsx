@@ -81,6 +81,7 @@ import { ItemsPage, PriceListsPage } from "./books/items";
 import { AccountsPage as ChartOfAccountsPage, BankingPage } from "./books/accounts";
 import { ReportsPage } from "./books/reports";
 import { DecisionsPage } from "./pages/decisions";
+import { AuditPage } from "./pages/audit";
 import { BillFromOrderPage, NewBillPage, NewPaymentPage, NewReceiptPage, NewPurchaseOrderPage, NewVendorCreditPage, NewVendorPage, ReceivePage } from "./books/forms";
 import { CompanyPapersPage, TenderPage, TendersPage } from "./pages/tenders";
 import { ClidpListingsPage, ClidpTeamPage } from "./pages/clidp";
@@ -190,6 +191,7 @@ createRoot(root).render(
             <Route path="finance/mine" element={<MyConfirmations />} />
             <Route path="returns" element={<Returns />} />
             <Route path="decisions" element={<DecisionsPage />} />
+            <Route path="audit" element={<AuditPage />} />
             <Route path="inventory/overview" element={<InventoryOverview />} />
             <Route path="inventory/requests" element={<MedicineRequestsPage />} />
             <Route path="targets" element={<Targets />} />

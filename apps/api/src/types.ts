@@ -5361,3 +5361,10 @@ export type MoneySummary = {
 /** One kind of decision waiting (or one ask), how many, and the page where it is made. */
 export type DecisionLine = { key: string; label: string; count: number; to: string; kind: "orders" | "people"; since?: string };
 export type Decisions = { forMe: DecisionLine[]; mine: DecisionLine[]; total: number };
+/** Who did what, when (ERP phase 2): one line of any of the CRM's logs. */
+export type AuditTrail = {
+  kinds: { key: string; label: string }[];
+  page: number;
+  more: boolean;
+  lines: { at: string; who: string; kind: string; record: string | null; link: string | null; what: string }[];
+};

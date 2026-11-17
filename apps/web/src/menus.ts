@@ -65,6 +65,7 @@ import {
   Users,
   Wallet,
   ListChecks,
+  ScrollText,
 } from "lucide-react";
 
 /** A count from the orders dashboard shown beside a link. "finance" is Finance's own work:
@@ -1201,6 +1202,7 @@ function ownDesk(me: Me): Space {
                   { to: "/company/sales", label: "Sales organisation", icon: Network },
                   { to: "/company/map", label: "Map", icon: MapPin },
                   { to: "/company", label: "Company chart", icon: Network },
+                  { to: "/audit", label: "Audit", icon: ScrollText },
                 ],
                 "Company",
               ),
@@ -1258,6 +1260,7 @@ function adminPanel(me: Me): Space {
           { to: "/channels", label: "Online pages & mail", icon: Radio },
           // The data checked against itself: every bill, payment, return and shelf adds up.
           { to: "/admin/data-checks", label: "Data checks", icon: ShieldCheck },
+          { to: "/audit", label: "Audit", icon: ScrollText },
         ],
       },
     ],

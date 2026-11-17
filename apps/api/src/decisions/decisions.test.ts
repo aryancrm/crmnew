@@ -7,7 +7,7 @@ import { type Database, openDatabase } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { seedDemo } from "../seed";
-import type { Catalogue, Decisions } from "../types";
+import type { AuditTrail, Catalogue, Decisions } from "../types";
 
 const PASSWORD = "test-password-1";
 let db: Database;
@@ -75,5 +75,14 @@ describe("to decide", () => {
     const lead = await read<Decisions>("daniel", "/api/decisions");
     expect(line(lead.forMe, "leave")).toBe(1);
     expect(lead.forMe.find((one) => one.key === "leave")?.to).toBe("/hr/leave");
+  });
+  it("keeps who did what in the audit, for the CEO and the Admin only", async () => {
+    const trail = await read<AuditTrail>("naresh", "/api/audit?kind=order");
+    expect(trail.lines.length).toBeGreaterThan(0);
+    expect(trail.lines.every((one) => one.kind === "order" && one.link?.startsWith("/orders/"))).toBe(true);
+    const ryans = await read<AuditTrail>("naresh", "/api/audit?who=Ryan");
+    expect(ryans.lines.every((one) => one.who.includes("Ryan"))).toBe(true);
+    expect((await app.request("/api/audit", { headers: { cookie: cookies.ryan as string } })).status).toBe(403);
+    expect((await app.request("/api/audit", { headers: { cookie: cookies.sarla as string } })).status).toBe(403);
   });
 });
