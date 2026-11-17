@@ -125,7 +125,8 @@ export const CHART_2026: ChartUnit[] = [
       },
       {
         name: "B2B Telesales", kind: "line", channel: "B2B",
-        seats: [{ title: "B2B Sales Coach", module: "team_lead", lead: true }, { title: "B2B District Sales Coach – Mindanao", module: "team_lead" }],
+        // Claire Gallana's B2B District Sales Coach – Mindanao is off the chart (Aryan, 17 Nov).
+        seats: [{ title: "B2B Sales Coach", module: "team_lead", lead: true }],
         units: [
           { name: "Client Retention & Reorder", kind: "team", channel: "B2B", seats: [{ title: "CRR", module: "medrep", area: "B2B CRR" }] },
           { name: "New Business Development", kind: "team", channel: "B2B", seats: [{ title: "NBD", module: "medrep", n: 4, area: "B2B NBD" }] },

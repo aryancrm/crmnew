@@ -37,6 +37,7 @@ import {
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { TeamSwitch } from "../team/switch";
 import { useMe } from "../auth";
 
 /** Who may place an order (the API's ORDER_PLACE_ROLES); the CEO watches, he doesn't order. */
@@ -415,6 +416,95 @@ const KIND_WORD: Record<string, string> = {
   government: "Government",
 };
 
+// ---- Team performance (the hub's table) ----
+
+/** Person by person, the hub's Team performance: today, the days picked, the target and how much
+ *  of it is reached, what waits, what is owed; each opens their own page (read-only). */
+function PerformanceTable({
+  seats,
+  units,
+  pace,
+  seatHref,
+}: {
+  seats: TeamSeatCard[];
+  units: { id: number; name: string }[];
+  pace: number;
+  seatHref: (seatId: number) => string;
+}) {
+  const unitName = new Map(units.map((one) => [one.id, one.name]));
+  const rows = seats
+    .filter((seat) => seat.person)
+    .sort((a, b) => b.sold - a.sold || b.today - a.today);
+  if (!rows.length) return <p className="text-sm text-slate-500">No one in these seats yet.</p>;
+  return (
+    <div className="-mx-4 overflow-x-auto sm:-mx-5">
+      <table className="t">
+        <thead>
+          <tr>
+            <th>Person</th>
+            <th>Team</th>
+            <th className="num">Today</th>
+            <th className="num">Sold</th>
+            <th className="num">Target</th>
+            <th className="num">% of target</th>
+            <th className="num">Orders</th>
+            <th className="num">Stopped</th>
+            <th className="num">Owed</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((seat, n) => {
+            const share = seat.target ? seat.sold / seat.target : null;
+            const tone = TONE[toneOf(seat.sold, seat.target, pace)];
+            const stopped = seat.stages.held + seat.stages.sentBack;
+            return (
+              <tr key={seat.seatId}>
+                <td>
+                  <span className="mr-1.5 text-[11px] text-slate-400 tabular-nums">
+                    {seat.today > 0 ? n + 1 : "–"}
+                  </span>
+                  <Link to={seatHref(seat.seatId)} className="font-semibold text-slate-900 hover:underline">
+                    {seat.person?.name}
+                  </Link>
+                  <span className="block text-[11px] text-slate-500">{seat.title}</span>
+                </td>
+                <td className="whitespace-nowrap text-slate-600">{unitName.get(seat.unitId) ?? "—"}</td>
+                <td className="num" title={exactPeso(seat.today)}>
+                  {seat.today ? shortPeso(seat.today) : "—"}
+                </td>
+                <td className="num font-semibold" title={exactPeso(seat.sold)}>
+                  {shortPeso(seat.sold)}
+                </td>
+                <td className="num">{seat.target ? shortPeso(seat.target) : "No target"}</td>
+                <td className="num">
+                  {share === null ? (
+                    "—"
+                  ) : (
+                    <span className={`rounded-full px-1.5 py-0.5 text-[11px] font-bold ring-1 ${tone.pill}`}>
+                      {Math.round(share * 100)}%
+                    </span>
+                  )}
+                </td>
+                <td className="num">{seat.placed || "—"}</td>
+                <td className={`num ${stopped ? "font-semibold text-rose-700" : ""}`}>{stopped || "—"}</td>
+                <td className="num" title={exactPeso(seat.owed)}>
+                  {seat.owed ? shortPeso(seat.owed) : "—"}
+                </td>
+                <td>
+                  <Link to={seatHref(seat.seatId)} className="text-xs font-semibold whitespace-nowrap text-brand hover:underline">
+                    Dashboard →
+                  </Link>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ---- The page ----
 
 export function MyTeamPage() {
@@ -610,6 +700,9 @@ export function MyTeamPage() {
           )}
         </div>
       </header>
+
+      {/* The hub's switch: All · each team by its lead, one press turns the whole page. */}
+      <TeamSwitch />
 
       {unit && rootLead && !rootLead.person && (
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-[13px] text-amber-900">
@@ -813,6 +906,20 @@ export function MyTeamPage() {
         </div>
       )}
 
+      {selling && (
+        <Panel
+          title="Team performance"
+          note={`${data.seats.filter((seat) => seat.person && seat.today > 0).length} of ${data.seats.filter((seat) => seat.person).length} sold today · ${rangeWords}`}
+        >
+          <PerformanceTable
+            seats={data.seats}
+            units={data.units}
+            pace={pace}
+            seatHref={seatHref}
+          />
+        </Panel>
+      )}
+
       <section aria-label="People" className="space-y-2.5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-slate-900">
@@ -962,14 +1069,88 @@ export function TeamSeatPage() {
     collected: 0,
   }));
 
+  // The hub's ‹ Previous / Next ›: through the team's people, in Team performance's order.
+  const order = board.data.seats
+    .filter((one) => one.person)
+    .sort((a, b) => b.sold - a.sold || b.today - a.today);
+  const at = order.findIndex((one) => one.seatId === seat.seatId);
+  const near = (step: number) => (at < 0 ? undefined : order[at + step]);
+  const hrefOf = (seatId: number) => `/my-team/seat/${seatId}${keep.size ? `?${keep}` : ""}`;
+  // What to talk about with them (the hub's "For the coaching talk"), from their figures.
+  const daysLeft = Math.max(
+    0,
+    Math.round(
+      (Date.parse(`${board.data.to}T00:00:00Z`) - Date.parse(`${board.data.today}T00:00:00Z`)) /
+        86_400_000,
+    ),
+  );
+  const stopped = seat.stages.held + seat.stages.sentBack;
+  const talk = seat.person
+    ? [
+        seat.target
+          ? seat.sold >= seat.target
+            ? `Target reached: ${shortPeso(seat.sold)} of ${shortPeso(seat.target)}.`
+            : `Needs ${shortPeso(seat.target - seat.sold)} more to reach the target (${daysLeft} day${daysLeft === 1 ? "" : "s"} left).`
+          : "No target set for these days: set it on Targets.",
+        stopped
+          ? `${stopped} order${stopped === 1 ? "" : "s"} stopped (on hold or sent back): see why below.`
+          : "Nothing stopped.",
+        `${seat.newCustomers} new customer${seat.newCustomers === 1 ? "" : "s"} in these days.`,
+        seat.owed
+          ? `${shortPeso(seat.owed)} owed by their customers${seat.overdue ? `, ${shortPeso(seat.overdue)} of it past due` : ""}.`
+          : "Their customers owe nothing.",
+        // Their last order placed in this CRM (Zoho's history counts in Sold, not here).
+        seat.lastOrderAt ? `Last order placed ${short(seat.lastOrderAt.slice(0, 10))}.` : null,
+      ].filter((line): line is string => Boolean(line))
+    : [];
+
   return (
     <div className="mx-auto w-full max-w-screen-2xl space-y-5">
-      <Link
-        to={back}
-        className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"
-      >
-        <ChevronLeft className="size-4" /> {board.data.viewing ?? "My team"}
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Link
+          to={back}
+          className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"
+        >
+          <ChevronLeft className="size-4" /> {board.data.viewing ?? "My team"}
+        </Link>
+        {order.length > 1 && at >= 0 && (
+          <div className="flex items-center gap-1 text-sm">
+            {near(-1) ? (
+              <Link
+                to={hrefOf(near(-1)?.seatId as number)}
+                className="rounded-lg px-2.5 py-1 font-semibold text-slate-600 hover:bg-slate-100"
+                title={near(-1)?.person?.name}
+              >
+                ‹ Previous
+              </Link>
+            ) : null}
+            <span className="text-xs text-slate-400 tabular-nums">
+              {at + 1} of {order.length}
+            </span>
+            {near(1) ? (
+              <Link
+                to={hrefOf(near(1)?.seatId as number)}
+                className="rounded-lg px-2.5 py-1 font-semibold text-slate-600 hover:bg-slate-100"
+                title={near(1)?.person?.name}
+              >
+                Next ›
+              </Link>
+            ) : null}
+          </div>
+        )}
+      </div>
+      {talk.length > 0 && (
+        <section className="rounded-2xl border border-sky-200 bg-sky-50/60 px-4 py-3 text-[13px] text-slate-700">
+          <h2 className="mb-1 text-xs font-semibold tracking-wide text-sky-900 uppercase">
+            For the coaching talk
+          </h2>
+          <ul className="list-disc space-y-0.5 pl-5">
+            {talk.map((line) => (
+              <li key={line}>{line}</li>
+            ))}
+          </ul>
+        </section>
+      )}
       <section className={`${CARD} p-4 sm:p-5`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-4">

@@ -2644,6 +2644,22 @@ books, with the bank each payment went into.
   12%-below order, Daniel answered Yes from Needs you, Kate saw it and approved; Kate sent back
   another, Daniel heard and sent it again; Kate set to BID lost Ryan's HOS order from her pile and
   approving it was refused; data checks clean; the copy put back.
+- 17 Nov (97), plan 20 step 1 for Subir Dey's branch (Aryan sent the chart: Subir › CLIDP (2),
+  Government Bidding (5), B2B Telesales › Jessa Domino › CRR (1), NBD (4); "Claire Gallana ko hata
+  de, wo nahi hai"). The code's chart matched it but for Claire: marked left and her seat closed on
+  the local database (her record stays; her 5 Zoho customers wait for a seat), and taken out of
+  the chart's sources (company-map.units.js, chart-2026.ts) so onboarding never brings her back;
+  live waits for Aryan's word. Every seat of the branch walked in its own login (Subir, Jessa,
+  Fritzie CRR, Floremel NBD, Ma. Anicia CLIDP, Jimmy, Angelica, Arron, Aljean): each already has its
+  own desk. Built: **the hub's team switch** on My team for every lead and the CEO, read from the
+  chart (`/api/org/menu` now gives every level, the box above and its lead): Subir "All · Sales &
+  Marketing (14) · CLIDP (2) · B2B Telesales · Jessa Domino (6) · Government Bidding · Jimmy Boy
+  Saturinas (5)", B2B Telesales opening "All of B2B Telesales · CRR (1) · NBD (4)"; Jessa "All ·
+  CRR · NBD"; the CEO every division by its head; one press turns the whole page. **Team
+  performance** on My team (the hub's table): person, team, today, sold, target, % of target,
+  orders, stopped, owed, Dashboard →. A member's page: **‹ Previous / Next ›** through the team and
+  **For the coaching talk** (to target in N days, stopped orders, new customers, owed and past due).
+  Targets are still empty (step 4).
 - 17 Nov (96), Aryan: "sab kaam ho gaya? kuch bacha dekh le" before pushing. Plan 19 parts 1–10,
   plan 18 step 3 and the hub's gaps checked again; four left over, built: **Finance's Refunds
   badge** now counts money paid beyond a bill a return lowered, as its Refunds list does (plan 18

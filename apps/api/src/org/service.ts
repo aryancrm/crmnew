@@ -1356,13 +1356,18 @@ export async function menuUnits(
       )}))`;
   const units = await rows<OrgMenuUnit>(
     db,
-    sql`with top as (${tops}),
+    // Every box under the lead's own, at any depth (the sidebar shows two levels; the team switch
+    // on My team goes down the chart: Sales & Marketing › B2B Telesales › CRR, NBD).
+    sql`with recursive top as (${tops}),
         shown as (
           select u.id, u.parent_id, 0 as level, u.sort, u.name, u.id as top_id from org_unit u where u.id in (select id from top)
           union all
-          select u.id, u.parent_id, 1, u.sort, u.name, u.parent_id from org_unit u where u.active and u.parent_id in (select id from top)
+          select u.id, u.parent_id, s.level + 1, u.sort, u.name, s.top_id from org_unit u join shown s on u.parent_id = s.id
+          where u.active and s.level < 8
         )
-      select s.id::int as id, s.name, s.level::int as level, s.top_id::int as "topId",
+      select s.id::int as id, s.name, s.level::int as level, s.top_id::int as "topId", s.parent_id::int as "parentId",
+        (select p.name from seat st join seat_holder h on h.seat_id = st.id and h.kind = 'holder' and ${inForce("h", today)}
+          join person p on p.id = h.person_id where st.unit_id = s.id and st.active and st.lead order by st.id limit 1) as lead,
         (with recursive down as (select s.id as id union all select u.id from org_unit u join down on u.parent_id = down.id where u.active)
           select count(distinct h.person_id)::int from seat_holder h join seat st on st.id = h.seat_id and st.active
           where st.unit_id in (select id from down) and ${inForce("h", today)}) as people

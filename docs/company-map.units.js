@@ -102,7 +102,7 @@ window.COMPANY_UNITS = [
   ] },
   { id: "sm-b2b", parent: "sm", name: "B2B Telesales", seats: [
     { role: "b2b-coach", who: "Jessa Domino" },
-    { role: "b2b-coach", title: "B2B District Sales Coach", places: "Mindanao", who: "Claire Gallana" },
+    // Claire Gallana (B2B District Sales Coach – Mindanao) is not on the chart (Aryan, 17 Nov).
   ] },
   { id: "sm-crr", parent: "sm-b2b", name: "Client Retention & Reorder (CRR)", note: "Keeps onboarded accounts buying every month.", seats: [
     { role: "crr", who: "Fritzie Mier" },

@@ -11,6 +11,7 @@ import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { seedDemo } from "../seed";
 import type { Catalogue, CeoHome, Me, OrderDetail, OrgLogin, OrgTree } from "../types";
+import type { OrgMenuUnit } from "../types";
 
 const PASSWORD = "test-password-1";
 let db: Database;
@@ -218,5 +219,15 @@ describe("the Admin panel's channels", () => {
       (await send("admin", `/api/org/channels/${channelId}`, { active: true }, "PATCH")).status,
     ).toBe(200);
     expect((await tree()).channels.find((one) => one.id === channelId)?.active).toBe(true);
+  });
+
+  it("gives the team switch every box under a lead, with the box above and who leads it", async () => {
+    const menu = await read<{ units: OrgMenuUnit[] }>("naresh", "/api/org/menu");
+    const ids = new Set(menu.units.map((unit) => unit.id));
+    // Every box below the top hangs from a box in the list, at any depth.
+    for (const unit of menu.units.filter((one) => one.level > 0))
+      expect(ids.has(unit.parentId as number), unit.name).toBe(true);
+    // A box whose lead seat is held names its lead.
+    expect(menu.units.some((unit) => unit.lead)).toBe(true);
   });
 });

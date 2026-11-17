@@ -3446,6 +3446,10 @@ export type OrgMenuUnit = {
   name: string;
   level: number;
   topId: number;
+  /** The box above it (null at the top of the company). */
+  parentId: number | null;
+  /** Who sits in its lead seat, if anyone. */
+  lead: string | null;
   people: number;
 };
 

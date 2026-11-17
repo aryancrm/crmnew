@@ -165,7 +165,7 @@ Every person on HR's 2026 chart (`docs/company-map.units.js`) is in the CRM with
 | Name | Seat | Login ID | Zoho salesperson (customers now under the seat) | Old CRM login |
 |---|---|---|---|---|
 | Jessa Domino | B2B Sales Coach | tl8 | B2B \| Jessa Domino (23) | Jessa Domino |
-| Claire Gallana | B2B District Sales Coach – Mindanao | tl14 | B2B \| CLAIRE (5) | Claire (first name only) |
+| ~~Claire Gallana~~ | ~~B2B District Sales Coach – Mindanao~~ (off the chart, Aryan 17 Nov: marked left, seat closed; her 5 customers wait for a seat) | tl14 | B2B \| CLAIRE (5) | Claire (first name only) |
 
 ### 2MG Inc. › Sales & Marketing › B2B Telesales › Client Retention & Reorder
 
