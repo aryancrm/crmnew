@@ -29,6 +29,12 @@ const NEEDS_YOU = new Set([
   // Management asks a team lead or a Business Mentor for a yes; their answer comes back.
   "ask_up",
   "ask_answered",
+  // The CRM's own alerts (automations) and samples asked, approved or on the way.
+  "licence_expiring",
+  "late_customers",
+  "stock_expiring",
+  "samples_count",
+  "sample_request",
 ]);
 
 export type UpdatesBox = "important" | "updates";

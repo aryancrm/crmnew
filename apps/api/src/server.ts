@@ -3,6 +3,7 @@
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
+import { runAutomations } from "./automations/daily";
 import { seedDemoCustomers } from "./customers/seed";
 import { freshenPlanner, openDatabase } from "./db/index";
 import { migrate } from "./db/migrate";
@@ -92,6 +93,16 @@ const lockScores = () =>
     .then((locked) => locked && console.log(`scores: ${locked} monthly cards locked`))
     .catch((error) => console.error("scores: couldn't lock the month", error));
 await lockScores();
+// The CRM tells the right person what needs them (stuck orders, expiring licences and stock, late
+// customers, samples to count, the CEO's morning): only messages, each told once.
+const automate = () =>
+  runAutomations(db)
+    .then((told) => {
+      const sum = Object.values(told).reduce((total, n) => total + n, 0);
+      if (sum) console.log(`automations: ${JSON.stringify(told)}`);
+    })
+    .catch((error) => console.error("automations: couldn't run", error));
+void automate();
 setInterval(
   () => {
     projectOrg(db).catch((error) =>
@@ -99,6 +110,7 @@ setInterval(
     );
     void lockScores();
     void freshen();
+    void automate();
   },
   15 * 60 * 1000,
 ).unref();
