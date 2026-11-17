@@ -8,8 +8,11 @@
 // Safe to run again: a person already here by name is skipped, a unit already here is reused.
 // Dry run by default (prints what it would do); --apply writes.
 //
-//   TEST_PGLITE_DIR=<a local database> JOIN_PASSWORD=… npx tsx scripts/onboard-company.ts [--apply] [--retire-demo]
-//   (the live database only with --live and Aryan's word)
+//   TEST_PGLITE_DIR=<a local database> JOIN_PASSWORD=… npx tsx scripts/onboard-company.ts [--apply] [--retire-demo] [--no-zoho]
+//   (the live database only with --live and Aryan's word; 17 Nov: live with --no-zoho, no Zoho data yet)
+//
+// A fresh CRM's boxes (one per channel: "Hospitals", "Doctors"…) are taken over and renamed to the
+// chart's, each box gets its channel, and a CEO's seat is made at the top when there is none.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -24,6 +27,8 @@ import { openTarget, ROOT } from "./zoho-files";
 
 const apply = process.argv.includes("--apply");
 const retireDemo = process.argv.includes("--retire-demo");
+// The live CRM gets no Zoho data yet (Aryan, 17 Nov): its people without Zoho's salespeople tied.
+const noZoho = process.argv.includes("--no-zoho");
 if (!process.env.TEST_PGLITE_DIR && !process.argv.includes("--live")) {
   console.log("Give TEST_PGLITE_DIR (a local database). The live one only with --live, on Aryan's word.");
   process.exit(1);
@@ -40,29 +45,31 @@ runInNewContext(readFileSync(join(ROOT, "docs/company-map.units.js"), "utf8"), s
 const chart = sandbox.window.COMPANY_UNITS ?? [];
 
 /** Each chart unit: the CRM unit it is (by these names, first found), its kind when made here. */
-const UNITS: Record<string, { names: string[]; kind: Exclude<OrgUnitKind, "company"> }> = {
-  hospital: { names: ["Hospital Division"], kind: "business" },
+// `channel`: the channel a box's orders are sold in (as the local database has them); `live`: the
+// box a fresh CRM made for that channel ("one box per channel"), taken over and renamed to the chart's.
+const UNITS: Record<string, { names: string[]; kind: Exclude<OrgUnitKind, "company">; channel?: string; live?: string[] }> = {
+  hospital: { names: ["Hospital Division"], kind: "business", channel: "HOSP", live: ["Hospitals"] },
   "hos-ncr1": { names: ["NCR 1"], kind: "team" },
   "hos-ncr2": { names: ["NCR 2"], kind: "team" },
   "hos-ncl": { names: ["North & Central Luzon"], kind: "team" },
   "hos-sl": { names: ["South Luzon"], kind: "team" },
   "hos-vis": { names: ["Visayas"], kind: "team" },
   "hos-min": { names: ["Mindanao"], kind: "team" },
-  "hos-gov": { names: ["Government Account"], kind: "team" },
-  "hos-mdts": { names: ["MD Telesales Anesthesia"], kind: "team" },
+  "hos-gov": { names: ["Government Account"], kind: "team", channel: "HOSP" },
+  "hos-mdts": { names: ["MD Telesales Anesthesia"], kind: "team", channel: "TS" },
   // The PAP desk works on the PAP channel's own box.
-  "hos-pap": { names: ["Patient Assistance", "Patient Assistance Program"], kind: "team" },
-  rx: { names: ["Prescription Business"], kind: "business" },
+  "hos-pap": { names: ["Patient Assistance", "Patient Assistance Program"], kind: "team", channel: "PAP", live: ["Patient assistance"] },
+  rx: { names: ["Prescription Business"], kind: "business", channel: "RX", live: ["Doctors"] },
   "rx-onco": { names: ["Onco-Hema Division"], kind: "line" },
-  "rx-mdts": { names: ["MD Telesales", "MD Telesales Oncology"], kind: "line" },
-  "rx-b2c": { names: ["B2C Sales Coaching"], kind: "team" },
-  sm: { names: ["Sales & Marketing", "Sales and Marketing"], kind: "business" },
-  "sm-clidp": { names: ["CLIDP"], kind: "line" },
-  "sm-bid": { names: ["Government Bidding"], kind: "line" },
-  "sm-b2b": { names: ["B2B Telesales"], kind: "line" },
-  "sm-crr": { names: ["Client Retention & Reorder"], kind: "team" },
-  "sm-nbd": { names: ["New Business Development"], kind: "team" },
-  mt: { names: ["Modern Trade"], kind: "business" },
+  "rx-mdts": { names: ["MD Telesales", "MD Telesales Oncology"], kind: "line", channel: "TS", live: ["Telesales"] },
+  "rx-b2c": { names: ["B2C Sales Coaching"], kind: "team", channel: "ONLINE" },
+  sm: { names: ["Sales & Marketing", "Sales and Marketing"], kind: "business", channel: "B2B" },
+  "sm-clidp": { names: ["CLIDP"], kind: "line", channel: "B2B" },
+  "sm-bid": { names: ["Government Bidding"], kind: "line", channel: "BID", live: ["Government tenders"] },
+  "sm-b2b": { names: ["B2B Telesales"], kind: "line", channel: "B2B", live: ["Distributors and drugstores"] },
+  "sm-crr": { names: ["Client Retention & Reorder"], kind: "team", channel: "B2B" },
+  "sm-nbd": { names: ["New Business Development"], kind: "team", channel: "B2B" },
+  mt: { names: ["Modern Trade"], kind: "business", channel: "MT", live: ["Modern trade"] },
   exec: { names: ["Executive and Admin"], kind: "department" },
   dm: { names: ["Digital Marketing Coaching Department", "Digital Marketing"], kind: "department" },
   it: { names: ["IT Division"], kind: "department" },
@@ -296,19 +303,39 @@ for (const unit of chart) {
   const known = UNITS[unit.id];
   if (!known) throw new Error(`No unit for the chart's ${unit.id}`);
   const lower = known.names.map((name) => name.toLowerCase());
-  const [found] = await rows<{ id: number }>(
+  const [channel] = known.channel ? await rows<{ id: number }>(db, sql`select id::int as id from channel where code = ${known.channel}`) : [];
+  const parentId = unitIds.get(unit.parent ?? "company");
+  const [found] = await rows<{ id: number; channelId: number | null }>(
     db,
-    sql`select id::int as id from org_unit where active and lower(name) in (${sql.join(lower.map((name) => sql`${name}`), sql`, `)}) order by id limit 1`,
+    sql`select id::int as id, channel_id::int as "channelId" from org_unit where active and lower(name) in (${sql.join(lower.map((name) => sql`${name}`), sql`, `)}) order by id limit 1`,
   );
   if (found) {
     unitIds.set(unit.id, found.id);
+    // A box made before it knew its channel gets it.
+    if (apply && channel && !found.channelId) await db.execute(sql`update org_unit set channel_id = ${channel.id} where id = ${found.id}`);
     continue;
   }
-  const parentId = unitIds.get(unit.parent ?? "company");
+  // A fresh CRM's box for this channel ("Hospitals"): taken over, renamed, put in its place.
+  const liveNames = (known.live ?? []).map((name) => name.toLowerCase());
+  const [taken] = liveNames.length
+    ? await rows<{ id: number }>(
+        db,
+        sql`select id::int as id from org_unit where active and lower(name) in (${sql.join(liveNames.map((name) => sql`${name}`), sql`, `)}) order by id limit 1`,
+      )
+    : [];
+  if (taken) {
+    madeUnits.push(`${known.names[0]} (was ${known.live?.join("/")})`);
+    if (apply && parentId && parentId > 0)
+      await db.execute(
+        sql`update org_unit set name = ${known.names[0] as string}, kind = ${known.kind}, parent_id = ${parentId}, channel_id = coalesce(${channel?.id ?? null}, channel_id) where id = ${taken.id}`,
+      );
+    unitIds.set(unit.id, taken.id);
+    continue;
+  }
   if (!parentId) throw new Error(`No parent for ${unit.id}`);
   madeUnits.push(known.names[0] as string);
   if (apply) {
-    const { unitId } = await addUnit(db, me, { name: known.names[0] as string, kind: known.kind, parentId });
+    const { unitId } = await addUnit(db, me, { name: known.names[0] as string, kind: known.kind, parentId, channelId: channel?.id ?? null });
     unitIds.set(unit.id, unitId);
   } else unitIds.set(unit.id, -1);
 }
@@ -455,6 +482,14 @@ if (apply && ceoSeat && !ceoSeat.holder && !byName.has("naresh bishnoi")) {
   byName.set("naresh bishnoi", made.personId);
   console.log("  Naresh Bishnoi in the CEO's seat.");
 }
+// A fresh CRM has no CEO's seat yet: it is made at the top, leading the company.
+if (apply && !ceoSeat && !byName.has("naresh bishnoi")) {
+  const companyId = unitIds.get("company") as number;
+  const [lead] = await rows<{ id: number }>(db, sql`select id::int as id from seat where unit_id = ${companyId} and active and lead limit 1`);
+  const made = await addPerson(db, me, { name: "Naresh Bishnoi", unitId: companyId, module: "ceo", title: "CEO", lead: !lead });
+  byName.set("naresh bishnoi", made.personId);
+  console.log("  Naresh Bishnoi in a new CEO's seat at the top.");
+}
 if (apply) await fillSeatLogins(db);
 
 // The demo's seats nobody took, and its boxes left empty, close (their history stays).
@@ -479,7 +514,7 @@ if (apply && retireDemo) {
 // ---- 4. Zoho's salespeople onto their seats ----
 let moved = 0;
 for (const row of done) {
-  if (!apply || !row.zoho.length) continue;
+  if (!apply || noZoho || !row.zoho.length) continue;
   const seatId =
     row.seatId ??
     (row.personId

@@ -1,5 +1,8 @@
 # The company's people in the CRM (17 Nov 2026)
 
+> **Live CRM login IDs are in [LOGINS-LIVE.md](LOGINS-LIVE.md)** (crmnew-psi.vercel.app, from 17 Nov). The IDs below are the local database's; on live they are numbered afresh, so many differ.
+
+
 Every person on HR's 2026 chart (`docs/company-map.units.js`) is in the CRM with a seat, the seat's login ID and the company's common password. Built by `apps/api/scripts/onboard-company.ts` (safe to run again); on the live database only with Aryan's word.
 
 - **Sign in**: the login ID below (or the same with `@2mginc.com`) and the company's common password. The password lives only in the server's `JOIN_PASSWORD` setting, not in the code. Nobody is asked to change it (Aryan, 17 Nov). A new joiner (HR's New joiner, or Add person in Teams & people) gets the same password; HR types only their name, login and employee ID.
