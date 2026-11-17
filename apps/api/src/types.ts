@@ -176,6 +176,8 @@ export type MedicineInput = {
   rx: boolean;
   vat: Vat;
   reorderLevel: number;
+  /** Kept cold from the shelf to the customer (the list's "[COLD CHAIN]"): Dispatch packs it cold. */
+  coldChain?: boolean;
 };
 
 export type MedicineDetail = {
@@ -696,6 +698,8 @@ export type CardItem = {
   unitPrice: number;
   free: boolean;
   reason: string | null;
+  /** Kept cold (Inventory's cold-chain mark). */
+  cold: boolean;
 };
 
 /** One order as a card on Management's board. */
@@ -1099,6 +1103,8 @@ export type OrderDetail = {
     deliveryMethod: DeliveryMethod | null;
     courier: string | null;
     tracking: string | null;
+    /** With a courier and no tracking number yet: why (the hub's "not ready yet"). */
+    trackingWait: string | null;
     rider: string | null;
     packedAt: string | null;
     packedBy: string | null;
@@ -1154,6 +1160,8 @@ export type OrderDetail = {
     rx: boolean;
     /** Priced by an offer, or the free pieces an offer added (worked out by the system). */
     offerId: number | null;
+    /** Kept cold from the shelf to the customer (Inventory's cold-chain mark): packed cold. */
+    cold: boolean;
   }[];
   /** Every version of its lines, oldest first: as placed, each MedRep fix, each change
    *  Management made before approving. The last is what the order is now. */
@@ -1587,7 +1595,12 @@ export type ShipInput = {
   method: "courier" | "rider";
   courier?: string | null;
   tracking?: string | null;
+  /** No tracking number yet: why (the hub's "not ready yet" choices, or the person's own words). */
+  trackingWait?: string | null;
   rider?: string | null;
+  /** The parcel's printed address slip checked against the order's (the hub's Confirm for
+   *  delivery): nothing goes out unchecked. */
+  addressChecked?: boolean;
   note?: string | null;
 };
 export type DeliverInput = { receivedBy: string; deliveredOn: string; note?: string | null };
@@ -1606,6 +1619,8 @@ export type ShipmentRow = {
   deliveryMethod: DeliveryMethod | null;
   courier: string | null;
   tracking: string | null;
+  /** No tracking number yet: why. */
+  trackingWait: string | null;
   rider: string | null;
   shippedAt: string | null;
   deliveredOn: string | null;
@@ -2801,7 +2816,8 @@ export type DispatchCard = {
   status: OrderStatus;
   pieces: number;
   /** What to pick. */
-  items: { name: string; qty: number; packSize: number; unit: string | null; free: boolean }[];
+  /** `cold`: kept cold (Inventory's cold-chain mark), packed cold. */
+  items: { name: string; qty: number; packSize: number; unit: string | null; free: boolean; cold: boolean }[];
   /** What is in the box, batch by batch (once packed). */
   picks: { medicine: string; batchNo: string; expiresOn: string; qty: number }[];
   papers: PaperKind[];

@@ -396,6 +396,7 @@ export function MedicineDialog({
   const [manufacturer, setManufacturer] = useState(medicine?.manufacturer ?? "");
   const [brand, setBrand] = useState(medicine?.brand ?? "");
   const [rx, setRx] = useState(medicine?.rx ?? true);
+  const [cold, setCold] = useState(medicine?.coldChain ?? false);
   const [vat, setVat] = useState<Vat>(medicine?.vat ?? "exempt");
   const [reorder, setReorder] = useState(String(medicine?.reorderLevel ?? 0));
 
@@ -423,6 +424,7 @@ export function MedicineDialog({
               manufacturer,
               brand,
               rx,
+              coldChain: cold,
               vat,
               reorderLevel: whole(reorder),
             },
@@ -592,6 +594,19 @@ export function MedicineDialog({
           )}
         </Field>
       </Row>
+      <Field label="Storage">
+        {(field) => (
+          <select
+            {...field}
+            className={INPUT}
+            value={cold ? "cold" : "room"}
+            onChange={(event) => setCold(event.target.value === "cold")}
+          >
+            <option value="room">Room temperature</option>
+            <option value="cold">Cold chain: kept cold to the customer (packed in a styro box with ice)</option>
+          </select>
+        )}
+      </Field>
       <Field
         label="Low-stock level, in pieces (0 = never flag as low)"
         error={action.at("reorderLevel")}

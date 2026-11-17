@@ -1,10 +1,11 @@
 // Shipments, as Zoho Inventory lists them: every parcel that left, with its courier and
-// tracking or rider, and who received it. And one order's delivery receipt, to print and have
-// signed.
+// tracking or rider, and who received it. One order's delivery receipt, to print and have
+// signed; and its address slip (the hub's Print address), stuck on the parcel and checked
+// against the order before it is shipped.
 
 import type { OrderDetail, ShipmentList, ShipmentTab } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, Printer, Search } from "lucide-react";
+import { ArrowLeft, Printer, Search, Snowflake } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
@@ -35,6 +36,7 @@ export const howItWent = (row: {
   deliveryMethod: string | null;
   courier: string | null;
   tracking: string | null;
+  trackingWait?: string | null;
   rider: string | null;
 }) =>
   row.deliveryMethod === "pickup"
@@ -42,7 +44,7 @@ export const howItWent = (row: {
     : row.deliveryMethod === "rider"
       ? `Our rider · ${row.rider}`
       : row.courier
-        ? `${row.courier}${row.tracking ? ` · ${row.tracking}` : " · tracking to follow"}`
+        ? `${row.courier}${row.tracking ? ` · ${row.tracking}` : ` · tracking to follow${row.trackingWait ? ` (${row.trackingWait.toLowerCase()})` : ""}`}`
         : "—";
 
 export function Shipments() {
@@ -429,6 +431,68 @@ export function DeliveryReceipt() {
               <div className="mt-1 text-xs text-ink-2">{label}</div>
             </div>
           ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+/** The hub's Print address: a slip for the parcel, big enough to read at the door. Dispatch
+ *  checks it against the order when it ships (the Ship window asks). */
+export function AddressSlip() {
+  const id = Number(useParams().id);
+  const navigate = useNavigate();
+  const query = useQuery({
+    queryKey: ["orders", "one", id],
+    queryFn: () => api<OrderDetail>(`/api/orders/${id}`),
+  });
+  const data = query.data;
+  if (!data) return <PageState query={query} what="the address slip" />;
+  const { order } = data;
+  const cold = data.items.some((item) => item.cold);
+  return (
+    <div className="mx-auto flex max-w-xl flex-col gap-4">
+      <div className="flex items-center justify-between gap-3 print:hidden">
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          className="inline-flex items-center gap-1.5 text-[13px] font-medium text-slate-600 hover:text-ink"
+        >
+          <ArrowLeft size={15} aria-hidden="true" /> Back
+        </button>
+        <Button variant="primary" onClick={() => window.print()}>
+          <Printer size={16} aria-hidden="true" /> Print
+        </Button>
+      </div>
+      <Card className="flex flex-col gap-4 border-2 border-slate-800 p-6 print:shadow-none">
+        <div className="flex items-start justify-between gap-4">
+          <div className="text-xs font-semibold tracking-[0.12em] text-slate-500 uppercase">
+            Deliver to
+          </div>
+          <div className="text-right text-[13px]">
+            <div className="font-mono font-semibold">{order.code}</div>
+            {data.money.invoice && <div className="text-ink-2">{data.money.invoice.code}</div>}
+          </div>
+        </div>
+        <div>
+          <div className="text-2xl leading-tight font-bold">{order.receiver || order.customer}</div>
+          {order.receiver && order.receiver !== order.customer && (
+            <div className="text-lg">{order.customer}</div>
+          )}
+          <div className="mt-2 text-lg leading-snug">
+            {order.deliveryAddress ?? "No delivery address on the order"}
+          </div>
+          {order.receiverPhone && (
+            <div className="mt-1 text-lg font-semibold tabular-nums">{order.receiverPhone}</div>
+          )}
+        </div>
+        {cold && (
+          <div className="flex items-center gap-2 rounded-lg border-2 border-sky-700 px-3 py-2 text-lg font-bold text-sky-800">
+            <Snowflake size={20} aria-hidden="true" /> KEEP COLD
+          </div>
+        )}
+        <div className="border-t border-slate-300 pt-3 text-[13px] text-ink-2">
+          From {order.invoiceFromLabel} · {order.warehouse ?? "the main warehouse"}
         </div>
       </Card>
     </div>

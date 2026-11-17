@@ -132,6 +132,7 @@ export function Medicine() {
             ["Pack", medicine.pack],
             ["Form", medicine.form],
             ["Type", medicine.rx ? "Prescription" : "Over the counter"],
+            ["Storage", medicine.coldChain ? "Cold chain (packed cold)" : "Room temperature"],
             ["VAT", VAT[medicine.vat]],
             [
               "Low-stock level",

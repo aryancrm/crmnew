@@ -68,8 +68,9 @@ async function readyToPack(customerId: number, qty: number): Promise<number> {
 }
 const pack = (who: string, id: number, picks?: object[]) =>
   post(who, `/api/dispatch/orders/${id}/pack`, picks ? { picks } : {});
+/** Ships it; the address slip is checked unless the body says otherwise. */
 const ship = (who: string, id: number, body: object) =>
-  post(who, `/api/dispatch/orders/${id}/ship`, body);
+  post(who, `/api/dispatch/orders/${id}/ship`, { addressChecked: true, ...body });
 /** Delivers with the signed receipt's photo put on the order first (unless `receipt` is false). */
 const deliver = async (who: string, id: number, body: object, receipt = true) => {
   if (receipt) await attachReceipt(app, cookies.marco as string, id);
@@ -82,7 +83,7 @@ beforeAll(async () => {
   await seedDemo(db, PASSWORD);
   await seedFixture(db);
   app = createApp(db, { webUrl: "http://localhost:5180" });
-  for (const name of ["ryan", "sarla", "fiona", "marco", "naresh"]) {
+  for (const name of ["ryan", "sarla", "fiona", "marco", "naresh", "irene"]) {
     const response = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -249,13 +250,70 @@ describe("packing", () => {
   });
 });
 
+describe("cold chain", () => {
+  it("is set in Inventory and follows the order to Dispatch: the lines, the cards, the slip", async () => {
+    const detail = await read<{ medicine: Record<string, unknown> }>(
+      "sarla",
+      `/api/inventory/medicines/${medicineId}`,
+    );
+    const { id: _id, code: _code, active: _active, ...input } = detail.medicine;
+    expect(detail.medicine.coldChain).toBe(false);
+    expect(
+      (await post("irene", `/api/inventory/medicines/${medicineId}`, { ...input, coldChain: true }))
+        .status,
+    ).toBe(200);
+    // Saved again without the field (an older screen): the mark stays.
+    const { coldChain: _cold, ...without } = input;
+    expect((await post("irene", `/api/inventory/medicines/${medicineId}`, without)).status).toBe(200);
+    const id = await readyToPack(credit, 2);
+    expect((await order("marco", id)).items.map((item) => item.cold)).toEqual([true]);
+    const cards = await read<OrderBoard>("marco", "/api/orders/board?desk=dispatch&tab=needs");
+    expect(cards.cards.find((card) => card.id === id)?.items[0]?.cold).toBe(true);
+    // Back to room temperature for the other tests.
+    expect(
+      (await post("irene", `/api/inventory/medicines/${medicineId}`, { ...input, coldChain: false }))
+        .status,
+    ).toBe(200);
+    expect((await order("marco", id)).items[0]?.cold).toBe(false);
+    expect((await post("sarla", `/api/orders/${id}/cancel`, { reason: "Test order" })).status).toBe(200);
+  });
+});
+
 describe("shipping and delivery", () => {
   it("ships with a courier, takes the tracking later, comes back, goes out with our rider, is delivered", async () => {
     const id = await readyToPack(credit, 10);
     await pack("marco", id);
     expect(await fieldOf(await ship("marco", id, { method: "courier" }))).toBe("courier");
     expect(await fieldOf(await ship("marco", id, { method: "rider" }))).toBe("rider");
-    expect((await ship("marco", id, { method: "courier", courier: "LBC" })).status).toBe(200);
+    // No tracking number yet: why (the hub's "not ready yet").
+    expect(await fieldOf(await ship("marco", id, { method: "courier", courier: "LBC" }))).toBe(
+      "trackingWait",
+    );
+    // The slip on the parcel checked against the order first (the hub's Confirm for delivery).
+    expect(
+      await fieldOf(
+        await ship("marco", id, {
+          method: "courier",
+          courier: "LBC",
+          trackingWait: "Waiting for the waybill",
+          addressChecked: false,
+        }),
+      ),
+    ).toBe("addressChecked");
+    expect(
+      (
+        await ship("marco", id, {
+          method: "courier",
+          courier: "LBC",
+          trackingWait: "Waiting for the waybill",
+        })
+      ).status,
+    ).toBe(200);
+    const shipped = await order("marco", id);
+    expect(shipped.order.trackingWait).toBe("Waiting for the waybill");
+    expect(shipped.events.map((event) => event.message).join(" ")).toMatch(
+      /tracking to follow \(waiting for the waybill\)\. Address slip checked against the order/,
+    );
     const mine = async () =>
       (
         await read<{ cards: { id: number; next: string }[] }>("ryan", "/api/orders/mine")
@@ -266,6 +324,7 @@ describe("shipping and delivery", () => {
         .status,
     ).toBe(200);
     expect(await mine()).toBe("On the way with LBC · LBC-5521-8890");
+    expect((await order("marco", id)).order.trackingWait).toBeNull();
     // On the road it can't be cancelled: it must come back first.
     expect((await order("sarla", id)).can.cancel).toBe(false);
     expect((await post("sarla", `/api/orders/${id}/cancel`, { reason: "x" })).status).toBe(409);

@@ -392,6 +392,7 @@ describe("the agent takes the case to Paid", () => {
       (
         await post("marco", `/api/dispatch/orders/${orderId}/ship`, {
           method: "courier",
+          addressChecked: true,
           courier: "LBC",
           tracking: "7781 2290",
         })

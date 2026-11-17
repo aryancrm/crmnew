@@ -72,7 +72,7 @@ export async function dispatchBoard(db: Database, me: Me): Promise<DispatchBoard
     rows<DispatchCard["items"][number] & { orderId: number }>(
       db,
       sql`select i.order_id::int as "orderId", m.name || coalesce(' ' || m.strength, '') as name, i.qty::int as qty,
-          m.pack_size::int as "packSize", m.unit, i.free
+          m.pack_size::int as "packSize", m.unit, i.free, m.cold_chain as cold
         from order_item i join medicine m on m.id = i.medicine_id where i.order_id in (${list}) order by i.id`,
     ),
     rows<DispatchCard["picks"][number] & { orderId: number }>(

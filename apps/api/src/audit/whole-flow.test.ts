@@ -101,7 +101,7 @@ const place = async (customerId: number, qty: number) => {
 const order = (who: string, id: number) => read<OrderDetail>(who, `/api/orders/${id}`);
 const pack = (id: number) => ok("marco", `/api/dispatch/orders/${id}/pack`);
 const ship = (id: number) =>
-  ok("marco", `/api/dispatch/orders/${id}/ship`, { method: "rider", rider: "Jun" });
+  ok("marco", `/api/dispatch/orders/${id}/ship`, { method: "rider", rider: "Jun", addressChecked: true });
 const deliver = async (id: number) => {
   // No signed receipt, no delivery; with its photo, delivered.
   expect(

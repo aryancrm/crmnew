@@ -29,6 +29,7 @@ import {
   MapPin,
   Plus,
   Search,
+  Snowflake,
   Undo2,
   UserRound,
   X,
@@ -37,7 +38,7 @@ import { lazy, type ReactNode, Suspense, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
-import { type DispatchAsk, DispatchDialogs } from "../dispatch/parts";
+import { DISPATCH_HOLDS, type DispatchAsk, DispatchDialogs } from "../dispatch/parts";
 import { ConfirmPaymentDialog, useMoney } from "../finance/parts";
 import { avatarTone, dayHeading, initials, PRIMARY_SM, QUIET_SM } from "../look";
 import { Checks, checksOf } from "../orders/checks";
@@ -668,6 +669,7 @@ export function OrdersToCheck({
           financeHold={
             data.desk === "finance" && ["finance_check", "ready_for_invoice"].includes(asking.card.status)
           }
+          presets={asking.what === "hold" && data.desk === "dispatch" ? DISPATCH_HOLDS : []}
           onClose={() => setAsking(null)}
         />
       )}
@@ -1045,6 +1047,11 @@ export function OrderCardItem({
                 </span>
               )}
               {!checking && <Checks card={card} small />}
+            </div>
+          )}
+          {warehouse && atDispatch && card.items.some((item) => item.cold) && (
+            <div className="mt-2 inline-flex w-fit items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-800">
+              <Snowflake className="size-3" aria-hidden="true" /> Keep cold
             </div>
           )}
           {warehouse &&

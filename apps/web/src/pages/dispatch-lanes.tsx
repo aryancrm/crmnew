@@ -7,7 +7,7 @@
 
 import type { DispatchBoard, DispatchCard } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCheck, MapPin, Phone, Printer, StickyNote } from "lucide-react";
+import { CheckCheck, MapPin, Phone, Printer, Snowflake, StickyNote } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
@@ -386,6 +386,11 @@ function WorkCard({
                 {item.name}
                 {item.free && (
                   <span className="ml-1 text-[10px] font-semibold text-emerald-700">free</span>
+                )}
+                {item.cold && (
+                  <span className="ml-1 inline-flex items-center gap-0.5 text-[10px] font-semibold text-sky-700">
+                    <Snowflake className="size-2.5" aria-hidden="true" /> cold
+                  </span>
                 )}
               </span>
               <span className="shrink-0 text-right tabular-nums">

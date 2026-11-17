@@ -30,6 +30,7 @@ import {
   Printer,
   ReceiptText,
   RotateCcw,
+  Snowflake,
   TriangleAlert,
   Truck,
   Undo2,
@@ -47,7 +48,7 @@ import {
   useLineLook,
   useOrderPrices,
 } from "../customers/prices";
-import { type DispatchAsk, DispatchDialogs } from "../dispatch/parts";
+import { DISPATCH_HOLDS, type DispatchAsk, DispatchDialogs } from "../dispatch/parts";
 import { noProofWords } from "../finance/no-proof";
 import {
   ConfirmPaymentDialog,
@@ -866,6 +867,7 @@ export function Order() {
           // Finance's hold carries screenshots for the MedRep; Management's is words only.
           financeHold={desk === "finance" && ["finance_check", "ready_for_invoice"].includes(order.status)}
           choices={asking === "resume" ? data.resumeTo : []}
+          presets={asking === "hold" && desk === "dispatch" ? DISPATCH_HOLDS : []}
           onClose={() => setAsking(null)}
         />
       )}
@@ -1069,6 +1071,11 @@ function Lines({ data, compare }: { data: OrderDetail; compare?: boolean }) {
                       {item.offerId && (
                         // Priced or given free by an offer set in Inventory: worked out by the system.
                         <span className="rounded bg-good-tint px-1.5 py-0.5 text-good">Offer</span>
+                      )}
+                      {item.cold && (
+                        <span className="inline-flex items-center gap-0.5 rounded bg-sky-50 px-1.5 py-0.5 text-sky-800">
+                          <Snowflake className="size-3" aria-hidden="true" /> Cold chain
+                        </span>
                       )}
                     </div>
                   </td>
@@ -2377,7 +2384,7 @@ function DispatchStep({
           <b>Shipped</b>{" "}
           {order.deliveryMethod === "rider"
             ? `with our rider ${order.rider}`
-            : `with ${order.courier ?? "the courier"}${order.tracking ? ` · ${order.tracking}` : ", tracking to follow"}`}{" "}
+            : `with ${order.courier ?? "the courier"}${order.tracking ? ` · ${order.tracking}` : `, tracking to follow${order.trackingWait ? ` (${order.trackingWait.toLowerCase()})` : ""}`}`}{" "}
           · {order.shippedBy}
         </Fact>
       ) : order.status !== "completed" ? (
@@ -2412,7 +2419,29 @@ function DispatchStep({
         </div>
       )}
       {data.picks.length === 0 && <Lines data={data} />}
+      {data.items.some((item) => item.cold) && order.status !== "completed" && (
+        <div className="flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-[13px] text-sky-900">
+          <Snowflake size={16} aria-hidden="true" />
+          <span>
+            <b>Keep cold:</b>{" "}
+            {[...new Set(data.items.filter((item) => item.cold).map((item) => item.medicine))].join(
+              ", ",
+            )}{" "}
+            — pack in a styro box with ice packs.
+          </span>
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
+        {me &&
+          ["dispatch", "admin", "management"].includes(me.role) &&
+          ["ready_for_dispatch", "packing", "shipped"].includes(order.status) && (
+            <Link
+              to={`/orders/${order.id}/address`}
+              className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-line bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm hover:bg-hover"
+            >
+              <Printer size={16} aria-hidden="true" /> Print address
+            </Link>
+          )}
         {can.pack && (
           <Button variant="primary" onClick={() => ask("pack")}>
             <Box size={16} aria-hidden="true" /> Pack

@@ -265,6 +265,7 @@ export function Medicines() {
                 <td className="px-3 py-3">{row.manufacturer ?? <Blank />}</td>
                 <td className="px-3 py-3">
                   {row.rx ? "Rx" : "OTC"} · VAT {VAT[row.vat]}
+                  {row.coldChain && <span className="text-sky-700"> · Cold chain</span>}
                 </td>
                 {buyerTypes.map((type) => (
                   <td key={type.key} className="px-3 py-3 text-right">
@@ -371,6 +372,7 @@ function MedicineCard({ row, data }: { row: CatalogueRow; data: Catalogue }) {
         {row.pack && <Pill>{row.pack}</Pill>}
         {row.category && <Pill>{row.category}</Pill>}
         <Pill>{row.rx ? "Rx" : "OTC"}</Pill>
+        {row.coldChain && <Pill>Cold chain</Pill>}
         {row.manufacturer && <Pill>{row.manufacturer}</Pill>}
       </div>
       <dl className="grid grid-cols-1 gap-x-4 gap-y-1 border-t border-line-soft pt-2.5 text-[13px]">

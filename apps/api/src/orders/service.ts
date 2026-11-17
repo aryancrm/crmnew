@@ -350,7 +350,7 @@ const itemsOf = (db: Runner, orderIds: number[]) =>
             m.name || coalesce(' ' || m.strength, '') as medicine, m.sku, m.unit, m.pack_size::int as "packSize",
             i.qty::int as qty, i.price_kind as "priceKind", i.list_price::int as "listPrice",
             i.unit_price::int as "unitPrice", i.price_reason as reason, (i.qty * i.unit_price)::int as amount, i.relief, m.vat, i.free, m.rx,
-            i.offer_id::int as "offerId",
+            i.offer_id::int as "offerId", m.cold_chain as cold,
             -- Free for this order: sellable on the shelf, less what orders placed before it are
             -- promised and not packed yet (first placed, first served).
             greatest(0, coalesce((select sum(s.qty) from stock s join batch b on b.id = s.batch_id
@@ -950,6 +950,7 @@ async function toCards(
         unitPrice: item.unitPrice,
         free: item.free,
         reason: item.reason,
+        cold: item.cold,
       })),
       findings,
       papers: onFile,
@@ -1284,7 +1285,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         ${day("o.expected_on")} as "expectedOn", o.warehouse_id::int as "warehouseId", w.name as warehouse,
         o.held_from as "heldFrom", ${iso("o.submitted_at")} as "submittedAt", ${iso("o.approved_at")} as "approvedAt",
         approver.name as "approvedBy", c.credit_limit::int as "creditLimit", o.held_role as "heldRole",
-        o.delivery_method as "deliveryMethod", o.courier, o.tracking, o.rider,
+        o.delivery_method as "deliveryMethod", o.courier, o.tracking, o.tracking_wait as "trackingWait", o.rider,
         ${iso("o.packed_at")} as "packedAt", packer.name as "packedBy", ${iso("o.shipped_at")} as "shippedAt", shipper.name as "shippedBy",
         ${day("o.delivered_on")} as "deliveredOn", deliverer.name as "deliveredBy", o.received_by as "receivedBy",
         o.division, o.sub_division as "subDivision", o.payment_term as "paymentTerm", o.finance_check as "financeCheck",

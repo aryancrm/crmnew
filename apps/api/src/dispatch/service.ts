@@ -389,32 +389,56 @@ export async function shipOrder(
   allow(me, DISPATCH_ROLES, "ship an order");
   const courier = clean(input.courier);
   const tracking = clean(input.tracking);
+  const wait = input.method === "courier" && !tracking ? clean(input.trackingWait) : null;
   const rider = clean(input.rider);
   if (input.method === "courier" && !courier)
     throw new Refusal(400, "invalid", "Say which courier takes it.", "courier");
   if (input.method === "rider" && !rider)
     throw new Refusal(400, "invalid", "Say which rider takes it.", "rider");
+  // The hub's "not ready yet": no tracking number now, so say why (it is added when it comes).
+  if (input.method === "courier" && !tracking && !wait)
+    throw new Refusal(
+      400,
+      "invalid",
+      "Type the tracking number, or say why it isn't ready yet.",
+      "trackingWait",
+    );
+  // The hub's Confirm for delivery: the slip on the parcel is checked against the order first.
+  if (!input.addressChecked)
+    throw new Refusal(
+      400,
+      "invalid",
+      "Check the address slip on the parcel against the order's address first.",
+      "addressChecked",
+    );
   await db.transaction(async (tx) => {
     const order = await lockOrder(tx, orderId);
     if (!orderActions(me, order).ship) throw notNow(order);
     await mustBePicked(tx, orderId);
+    const [to] = await rows<{ address: string | null; receiver: string | null; phone: string | null }>(
+      tx,
+      sql`select coalesce(o.delivery_address, c.address, c.city) as address, o.receiver, coalesce(o.receiver_phone, c.phone) as phone
+        from sales_order o join customer c on c.id = o.customer_id where o.id = ${orderId}`,
+    );
     await tx.execute(
       sql`update sales_order set status = 'shipped', delivery_method = ${input.method},
           courier = ${input.method === "courier" ? courier : null}, tracking = ${input.method === "courier" ? tracking : null},
-          rider = ${input.method === "rider" ? rider : null}, shipped_at = now(), shipped_by = ${me.id},
+          tracking_wait = ${wait}, rider = ${input.method === "rider" ? rider : null}, shipped_at = now(), shipped_by = ${me.id},
+          address_checked_at = now(), address_checked_by = ${me.id},
           dispatch_by = coalesce(dispatch_by, ${me.id}), came_back_at = null, updated_at = now()
         where id = ${orderId}`,
     );
     const how =
       input.method === "courier"
-        ? `with ${courier}${tracking ? ` (tracking ${tracking})` : ", tracking to follow"}`
+        ? `with ${courier}${tracking ? ` (tracking ${tracking})` : `, tracking to follow (${wait?.toLowerCase()})`}`
         : `with our rider ${rider}`;
+    const slip = [to?.receiver, to?.address, to?.phone].filter(Boolean).join(", ");
     await logEvent(
       tx,
       orderId,
       me,
       "status",
-      `Shipped ${how}.${clean(input.note) ? ` ${clean(input.note)}` : ""}`,
+      `Shipped ${how}. Address slip checked against the order${slip ? `: ${slip}` : ""}.${clean(input.note) ? ` ${clean(input.note)}` : ""}`,
       "shipped",
     );
   });
@@ -444,7 +468,7 @@ export async function setTracking(
       );
     const courier = clean(input.courier) ?? shipped.courier;
     await tx.execute(
-      sql`update sales_order set tracking = ${tracking}, courier = ${courier}, updated_at = now() where id = ${orderId}`,
+      sql`update sales_order set tracking = ${tracking}, tracking_wait = null, courier = ${courier}, updated_at = now() where id = ${orderId}`,
     );
     await logEvent(tx, orderId, me, "dispatch", `Tracking number ${tracking} (${courier}).`);
   });
@@ -530,7 +554,8 @@ export async function failedDelivery(
     const order = await lockOrder(tx, orderId);
     if (!orderActions(me, order).failed) throw notNow(order);
     await tx.execute(
-      sql`update sales_order set status = 'packing', delivery_method = null, courier = null, tracking = null, rider = null,
+      sql`update sales_order set status = 'packing', delivery_method = null, courier = null, tracking = null, tracking_wait = null, rider = null,
+          address_checked_at = null, address_checked_by = null,
           came_back_count = came_back_count + 1, came_back_reason = ${why}, came_back_at = now(),
           shipped_at = null, shipped_by = null, updated_at = now() where id = ${orderId}`,
     );
@@ -597,7 +622,7 @@ export async function listShipments(
     rows<Omit<ShipmentRow, "statusLabel">>(
       db,
       sql`select o.id::int as id, o.code, o.customer_id::int as "customerId", c.name as customer, c.city, rep.name as medrep, o.status,
-          o.delivery_method as "deliveryMethod", o.courier, o.tracking, o.rider, ${iso("o.shipped_at")} as "shippedAt",
+          o.delivery_method as "deliveryMethod", o.courier, o.tracking, o.tracking_wait as "trackingWait", o.rider, ${iso("o.shipped_at")} as "shippedAt",
           ${day("o.delivered_on")} as "deliveredOn", o.received_by as "receivedBy", o.total::int as total
         ${from} where ${scope} and ${SHIPMENT_TABS[tab]}
         order by ${tab === "road" ? sql`o.shipped_at asc nulls last, o.id` : sql`coalesce(o.delivered_at, o.shipped_at) desc nulls last, o.id desc`}

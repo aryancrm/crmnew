@@ -104,6 +104,7 @@ describe("the role audit's fixes", () => {
     const ship = await send("marco", `/api/dispatch/orders/${id}/ship`, {
       method: "rider",
       rider: "Jun",
+      addressChecked: true,
     });
     expect(ship.status).toBe(409);
   });

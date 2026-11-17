@@ -141,6 +141,7 @@ describe("a hospital's order", () => {
     await ok(
       await post("marco", `/api/dispatch/orders/${orderId}/ship`, {
         method: "courier",
+        addressChecked: true,
         courier: "LBC",
         tracking: "7781 2290",
       }),

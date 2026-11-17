@@ -199,7 +199,7 @@ export async function catalogue(db: Database, me: Me): Promise<Catalogue> {
     >(
       db,
       sql`select id::int as id, code, sku, name, generic, strength, form, pack, unit, pack_size::int as "packSize",
-            category, manufacturer, brand, rx, vat, reorder_level::int as reorder
+            category, manufacturer, brand, rx, vat, cold_chain as "coldChain", reorder_level::int as reorder
           from medicine where active order by lower(name), lower(coalesce(strength, ''))`,
     ),
     rows<{ medicine: number; buyer: BuyerType; amount: number; pack: number | null }>(
@@ -281,7 +281,7 @@ export async function medicineDetail(db: Database, me: Me, id: number): Promise<
     rows<MedicineDetail["medicine"] & { reorder: number }>(
       db,
       sql`select id::int as id, code, sku, name, generic, strength, form, pack, unit, pack_size::int as "packSize",
-            category, manufacturer, brand, rx, vat, reorder_level::int as reorder, active
+            category, manufacturer, brand, rx, vat, cold_chain as "coldChain", reorder_level::int as reorder, active
           from medicine where id = ${id}`,
     ),
     rows<{
@@ -457,10 +457,10 @@ export async function saveMedicine(
     if (id === null) {
       const [made] = await rows<{ id: number }>(
         tx,
-        sql`insert into medicine (name, sku, generic, strength, form, pack, unit, pack_size, category, manufacturer, brand, rx, vat, reorder_level)
+        sql`insert into medicine (name, sku, generic, strength, form, pack, unit, pack_size, category, manufacturer, brand, rx, vat, reorder_level, cold_chain)
             values (${name}, ${sku}, ${clean(input.generic)}, ${strength}, ${clean(input.form)}, ${clean(input.pack)},
                     ${clean(input.unit)}, ${input.packSize ?? 1}, ${clean(input.category)}, ${clean(input.manufacturer)}, ${clean(input.brand)},
-                    ${input.rx}, ${input.vat}, ${input.reorderLevel})
+                    ${input.rx}, ${input.vat}, ${input.reorderLevel}, ${input.coldChain ?? false})
             returning id::int as id`,
       );
       const madeId = made?.id as number;
@@ -476,7 +476,8 @@ export async function saveMedicine(
             form = ${clean(input.form)}, pack = ${clean(input.pack)}, unit = ${clean(input.unit)},
             pack_size = ${input.packSize ?? 1},
             category = ${clean(input.category)}, manufacturer = ${clean(input.manufacturer)}, brand = ${clean(input.brand)},
-            rx = ${input.rx}, vat = ${input.vat}, reorder_level = ${input.reorderLevel}
+            rx = ${input.rx}, vat = ${input.vat}, reorder_level = ${input.reorderLevel},
+            cold_chain = coalesce(${input.coldChain ?? null}::boolean, cold_chain)
           where id = ${id} returning id`,
     );
     if (!changed.length) throw new Refusal(404, "not_found", "No such medicine.");

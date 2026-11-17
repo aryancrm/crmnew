@@ -199,6 +199,7 @@ describe("PAP cases", () => {
     expect((await post("marco", `/api/dispatch/orders/${orderId}/pack`, {})).status).toBe(200);
     await post("marco", `/api/dispatch/orders/${orderId}/ship`, {
       method: "courier",
+      addressChecked: true,
       courier: "LBC",
       tracking: "5512",
     });

@@ -67,7 +67,9 @@ export function dispatchRoutes(
         method: z.enum(["courier", "rider"], { error: "Pick how it goes." }),
         courier: optional(60),
         tracking: optional(200),
+        trackingWait: optional(120),
         rider: optional(80),
+        addressChecked: z.boolean().optional(),
         note: optional(300),
       }),
     );

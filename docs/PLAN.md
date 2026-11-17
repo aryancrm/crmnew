@@ -1714,8 +1714,10 @@ not; Management can add medicines, give free goods and add the cold-packaging fe
 item, "Cold Management", its fee as set there, on every cold delivery). The MedRep sees what
 Management changed. Finance checks what the hospital or patient already owes (Zoho's too) before
 it goes on. Dispatch checks the delivery address and that the invoice is attached, then ships by
-Lalamove, LBC… A return is Finance's to decide (refund or replace), and Management is told. "No
-mistakes": every link from the top to the bottom.
+Lalamove, LBC… A return is Finance's to decide (refund or replace), and Management is told
+(changed by Aryan the same day: returns go the hub's way — Management decides, Dispatch checks
+what came back, Finance refunds; change log 90). "No mistakes": every link from the top to the
+bottom.
 
 **What the order line has today** (audited 17 Nov, file by file): one price per buyer kind and a
 pack price per medicine, dated promos, a price-change log; the order form fills the price and asks
@@ -1752,10 +1754,12 @@ return, as the people who will do it, before the next)**
 3. *Fees, Dispatch, returns.* "Cold Management" is an Inventory item that is a fee, not stock (no
    batch, no packing), with its price per buyer kind; a medicine's cold-chain mark is kept in
    Inventory, an order with a cold medicine gets the fee line (Management can take it off with a
-   reason) and Dispatch sees "cold pack". Dispatch ticks "address checked", sees the invoice on the
-   card, keeps the courier's cost and tracking. A return: Finance chooses refund or replacement,
-   Management is told; refunds from returns counted on Finance's badge. Old invoices keep the
-   medicine's name and VAT as they were.
+   reason) and Dispatch sees "cold pack". Dispatch confirms the address against the printed slip
+   (the hub's "Confirm for delivery"), sees the invoice on the card, keeps the tracking (the
+   courier's cost is not kept: neither the hub nor Aryan asked for it). A return goes the hub's
+   way (Aryan, 17 Nov, change log 90): Management decides, Dispatch checks what came back, Finance
+   refunds; refunds from returns counted on Finance's badge. Old invoices keep the medicine's name
+   and VAT as they were. Dispatch marks an order delivered (with the signed receipt), as now.
 
 **Rules Aryan gave on 17 Nov (answers)**
 - *SC/PWD* goes on any order whose buyer shows a senior citizen's or PWD's ID, not only a
@@ -1875,10 +1879,11 @@ on the local copy (database copied first, put back after), with what was seen wr
    different), and should Zoho's SKU stay the medicine's SKU so old prices join by themselves?
 8. Zoho's customers come over as they are (50,000+, patients included). Kinds are read from
    names and orders (12.18): look over the hospitals / drugstores / distributors after the import.
-9. Asking up for an exception (18): Management presses "Ask Team Lead" (the MedRep's) or "Ask
-   Business Mentor" on the order with what it is asking; that person sees it on their screen and
-   answers Yes / No with a word; it comes back to Management, which approves. Is that the way, and
-   what counts as an exception (a discount over some %, free goods, a customer who owes)?
+9. ~~Asking up for an exception~~ Answered 17 Nov: **both** — the automatic price check on every
+   line, and Management's "Ask Team Lead" (the MedRep's) / "Ask Business Mentor" on the order with
+   what it is asking; that person answers Yes / No with a word on their screen; it comes back to
+   Management, which approves. Management decides when to ask. Built with step D (the Team Lead's
+   screen).
 10. Price kinds (18): keep doctor, distributor and bidding beside patient, hospital and drugstore?
     And "Extra": one more price per medicine set in Inventory (higher), that the MedRep can pick?
 11. A guarantee-letter case (18): when an Online case becomes GL, does it move to the PAP head (who
@@ -1926,6 +1931,16 @@ on the local copy (database copied first, put back after), with what was seen wr
     prescription medicine needs Regulatory clearance: 92 such are held back — load them once
     cleared? 11 SKUs in the file aren't in our list (GM-4313, GM-4640, GM-4340, GM-4539, GM-4316,
     GM-3185, GM-4283, GM-3398, GM-3690, GM-1752, GM-3545): add them, or leave them out?
+27. **The cold-packaging fee and the shipping charge** (plan 18 step 3; neither is in the hub,
+    both were typed in Zoho). Cold: Zoho's 2026 invoices carry "Packaging : Cake Roll with
+    Cover-Styro" or "Split Box Styro" on 607 of 11,552 invoices, at a price typed each time (Cake
+    Roll ₱89 most often, ₱0 on 104, also ₱54, ₱44, ₱154…; Split Box mostly ₱0), and the old price
+    list said Docetaxel's price "incl. of cold chain pack". You said "Cold Management" is an
+    Inventory item with its fee set there, on every cold delivery. How much is it (one fee, or by
+    box size), is it charged on top of the price or already in it, and is the styro box kept as
+    stock (Zoho counted 441 Cake Roll, 462 Split Box) or only a fee? Shipping: Zoho put a shipping
+    charge on 120 of this year's invoices (₱150–₱300): does Management add it when approving?
+    Until then the cold medicines are marked and packed cold, and the fee is not added.
 
 ## 14. Change log
 
@@ -2464,4 +2479,33 @@ on the local copy (database copied first, put back after), with what was seen wr
   settles the invoice, is not counted as money in, and is never given back as cash. Walked on a
   copy as Sarla: DE OCAMPO's order showed "₱4,800 overdue, the oldest 11 days late, all from Zoho";
   ₱833 by bank and ₱17 withheld paid the ₱850 invoice; money in today ₱833; data checks clean.
+- 17 Nov (90), Aryan: the earlier pending steps checked against the new aim (the hub's way, no
+  trips to Zoho or the price sheet, nothing extra); three clashes put to him and answered:
+  **returns go the hub's way** (Management decides, Dispatch checks, Finance refunds — not
+  "Finance decides" as plan 18 said); **Dispatch marks an order delivered** (with the signed
+  receipt, as crmnew does; not the MedRep as in the hub); **asking up (question 9): both** the
+  automatic price check and Management's Ask Team Lead / Ask Business Mentor, built with step D.
+  Dropped as extra: the courier's cost (plan 18 step 3). Plan 18 step 3's "address checked" is the
+  hub's Confirm for delivery against the printed slip (one, not two). Order of work kept: C2
+  Dispatch (with plan 18 step 3's cold fee), C3 Returns, D Team Lead + ask-up + Admin; then the
+  Zoho ledger import, targets, going live on Aryan's word.
+- 17 Nov (91), plan 19 step C part 2 (Dispatch), the hub, crmnew and Zoho side by side: crmnew
+  already packed by batch, shipped, tracked and delivered inside itself (the hub sent Dispatch to
+  Zoho to make the package and shipment), and had Take / Let go (the hub's Cater / Release), the
+  delivery receipt, Came back and Hold. Added from the hub: **Print address** (a slip for the
+  parcel: receiver, customer, address, phone, order and invoice number, KEEP COLD) from Ready for
+  dispatch on; **Confirm against the printed slip** — the Ship window shows Deliver to and asks a
+  tick "I checked the address slip on the parcel against this", refused without it (who and when
+  kept, the address written on the timeline); **Not ready yet** — a courier parcel shipped without
+  its tracking number says why (waiting for the waybill / the courier to pick it up / courier not
+  assigned / other), shown on the order and On the road, cleared when the number is added;
+  **Dispatch's hold reasons** as one-press choices (out of stock, not enough stock, wrong item or
+  quantity, address or receiver problem). **Cold chain** (plan 18 step 3): Inventory's cold mark
+  (from the price list's "[COLD CHAIN]") shown and set in Inventory (Storage), "Cold chain" on the
+  order's lines, "Keep cold" on Dispatch's cards, the order's Pack & ship step, the Pack window and
+  the slip. Migration 0089. The fee itself waits for question 27. Walked as Glyssa on a copy: Ryan's
+  order for De Ocampo (GetFil with the Christmas Buy 1 Take 1, RocuGet) approved by Kate, passed by
+  Sarla; card "Keep cold"; slip printed; packed; Ship refused without the tick, then shipped with
+  LBC "waiting for the waybill"; tracking added, the wait gone; hold choices fill the reason; data
+  checks clean; the copy put back.
 

@@ -71,6 +71,7 @@ async function delivered(customerId: number, qty: number, advance = false): Prom
     (
       await post("marco", `/api/dispatch/orders/${id}/ship`, {
         method: "courier",
+        addressChecked: true,
         courier: "LBC",
         tracking: "1",
       })

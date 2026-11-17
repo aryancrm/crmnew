@@ -58,7 +58,7 @@ import { ChannelsReport, Reports } from "./pages/reports";
 import { Returns } from "./pages/returns";
 import { SalesOrderPage } from "./pages/sales-order";
 import { SettingsPage } from "./pages/settings";
-import { DeliveryReceipt, Shipments } from "./pages/shipments";
+import { AddressSlip, DeliveryReceipt, Shipments } from "./pages/shipments";
 import { SpeedPage } from "./pages/speed";
 import { StatementPage } from "./pages/statement";
 import { Suppliers } from "./pages/suppliers";
@@ -175,6 +175,7 @@ createRoot(root).render(
             />
             <Route path="shipments" element={<Shipments />} />
             <Route path="orders/:id/receipt" element={<DeliveryReceipt />} />
+            <Route path="orders/:id/address" element={<AddressSlip />} />
             <Route path="invoices" element={<Invoices />} />
             <Route path="invoices/:id" element={<Invoice />} />
             <Route path="payments" element={<Payments />} />

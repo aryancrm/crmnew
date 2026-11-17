@@ -1,14 +1,49 @@
 // What Dispatch's screens share: the dialogs that pack (batch by batch, nearest expiry first),
 // ship, mark delivered, say a parcel came back, and add a tracking number.
 
-import type { PackPlan } from "@2mg/api/types";
+import type { OrderDetail, PackPlan } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, Plus, Trash2 } from "lucide-react";
+import { Camera, Plus, Snowflake, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { api } from "../api";
 import { todayManila } from "../finance/parts";
 import { PAPER_ACCEPT, uploadPaper } from "../photo";
 import { Button, count, Dialog, Field, INPUT, inPacks, Problem, useAction } from "../ui";
+
+/** Why a courier's parcel has no tracking number yet (the hub's "Not ready yet"). */
+export const TRACKING_WAITS = [
+  "Waiting for the waybill",
+  "Waiting for the courier to pick it up",
+  "Courier not assigned yet",
+];
+
+/** Why Dispatch holds an order (the hub's list); anything else is typed. */
+export const DISPATCH_HOLDS = [
+  "Out of stock",
+  "Not enough stock",
+  "Wrong item or quantity",
+  "Address or receiver problem",
+];
+
+/** Where it goes, as the parcel's slip must say: checked before it leaves. */
+export function DeliverTo({ order, cold }: { order: OrderDetail["order"]; cold: boolean }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[13px]">
+      <div className="text-xs font-semibold tracking-wide text-ink-2 uppercase">Deliver to</div>
+      <div className="font-semibold">{order.receiver || order.customer}</div>
+      {order.receiver && order.receiver !== order.customer && (
+        <div className="text-ink-2">{order.customer}</div>
+      )}
+      <div>{order.deliveryAddress ?? "No delivery address on the order"}</div>
+      {order.receiverPhone && <div className="tabular-nums">{order.receiverPhone}</div>}
+      {cold && (
+        <div className="mt-1.5 inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-semibold text-sky-800">
+          <Snowflake size={12} aria-hidden="true" /> Keep cold: styro box with ice packs
+        </div>
+      )}
+    </div>
+  );
+}
 
 export const COURIERS = [
   "LBC",
@@ -137,6 +172,13 @@ export function PackDialog({
     queryFn: () => api<PackPlan>(`/api/dispatch/orders/${orderId}/pack`),
   });
   const work = useDispatch();
+  const detail = useQuery({
+    queryKey: ["orders", "one", orderId],
+    queryFn: () => api<OrderDetail>(`/api/orders/${orderId}`),
+  });
+  const cold = [
+    ...new Set(detail.data?.items.filter((item) => item.cold).map((item) => item.medicine) ?? []),
+  ];
   const [picks, setPicks] = useState<Record<number, { batchId: number; qty: string }[]>>({});
   useEffect(() => {
     if (plan.data)
@@ -176,6 +218,14 @@ export function PackDialog({
             From <span className="font-semibold text-ink">{data.warehouse}</span>. The batch that
             expires first is filled in; change it if the customer needs a longer expiry.
           </div>
+          {cold.length > 0 && (
+            <div className="flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-[13px] text-sky-900">
+              <Snowflake size={16} aria-hidden="true" />
+              <span>
+                <b>Keep cold:</b> {cold.join(", ")} — into a styro box with ice packs.
+              </span>
+            </div>
+          )}
           {data.lines.map((line, index) => {
             const rows = picks[line.itemId] ?? [];
             const picked = rows.reduce((sum, row) => sum + (Number(row.qty) || 0), 0);
@@ -309,10 +359,17 @@ export function ShipDialog({
   const [courier, setCourier] = useState(COURIERS[0] as string);
   const [other, setOther] = useState("");
   const [tracking, setTracking] = useState("");
+  const [wait, setWait] = useState(TRACKING_WAITS[0] as string);
+  const [waitOther, setWaitOther] = useState("");
   const [rider, setRider] = useState("");
+  const [checked, setChecked] = useState(false);
   const [receivedBy, setReceivedBy] = useState("");
   const [day, setDay] = useState(todayManila());
   const receipt = useReceipt(orderId);
+  const detail = useQuery({
+    queryKey: ["orders", "one", orderId],
+    queryFn: () => api<OrderDetail>(`/api/orders/${orderId}`),
+  });
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -327,7 +384,9 @@ export function ShipDialog({
             method,
             courier: courier === "Other" ? other : courier,
             tracking,
+            trackingWait: tracking.trim() ? null : wait === "Other" ? waitOther : wait,
             rider,
+            addressChecked: checked,
           });
     if (done) onClose();
   }
@@ -385,7 +444,7 @@ export function ShipDialog({
                 </Field>
               )}
             </div>
-            <Field label="Tracking number (can be added later)" error={work.at("tracking")}>
+            <Field label="Tracking number" error={work.at("tracking")}>
               {(field) => (
                 <input
                   {...field}
@@ -395,6 +454,36 @@ export function ShipDialog({
                 />
               )}
             </Field>
+            {!tracking.trim() && (
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <Field label="Not ready yet? Why" error={work.at("trackingWait")}>
+                  {(field) => (
+                    <select
+                      {...field}
+                      className={INPUT}
+                      value={wait}
+                      onChange={(event) => setWait(event.target.value)}
+                    >
+                      {[...TRACKING_WAITS, "Other"].map((name) => (
+                        <option key={name}>{name}</option>
+                      ))}
+                    </select>
+                  )}
+                </Field>
+                {wait === "Other" && (
+                  <Field label="What is it waiting for" error={work.at("trackingWait")}>
+                    {(field) => (
+                      <input
+                        {...field}
+                        className={INPUT}
+                        value={waitOther}
+                        onChange={(event) => setWaitOther(event.target.value)}
+                      />
+                    )}
+                  </Field>
+                )}
+              </div>
+            )}
           </>
         )}
         {method === "rider" && (
@@ -408,6 +497,29 @@ export function ShipDialog({
               />
             )}
           </Field>
+        )}
+        {method !== "pickup" && detail.data && (
+          <div className="flex flex-col gap-2">
+            <DeliverTo
+              order={detail.data.order}
+              cold={detail.data.items.some((item) => item.cold)}
+            />
+            <label className="flex items-start gap-2 text-[13px]">
+              <input
+                type="checkbox"
+                className="mt-0.5 size-4 accent-emerald-600"
+                checked={checked}
+                onChange={(event) => setChecked(event.target.checked)}
+              />
+              <span>
+                I checked the address slip on the parcel against this: name, address and phone
+                match.
+              </span>
+            </label>
+            {work.at("addressChecked") && (
+              <span className="text-xs font-medium text-rose-700">{work.at("addressChecked")}</span>
+            )}
+          </div>
         )}
         {method === "pickup" && (
           <ReceiptPicker receipt={receipt} error={receipt.problem ?? work.at("proof")} />
@@ -442,6 +554,8 @@ export function ShipDialog({
           message={work.general([
             "courier",
             "tracking",
+            "trackingWait",
+            "addressChecked",
             "rider",
             "receivedBy",
             "deliveredOn",

@@ -150,6 +150,7 @@ export function ReasonDialog({
   initial = "",
   financeHold = false,
   choices = [],
+  presets = [],
   onClose,
 }: {
   orderId: number;
@@ -161,6 +162,8 @@ export function ReasonDialog({
   initial?: string;
   /** Finance holds it: screenshots (the bank, the slip) go with the reason, for the MedRep. */
   financeHold?: boolean;
+  /** Reasons to pick with one press (Dispatch's hold, the hub's list); anything else is typed. */
+  presets?: string[];
   onClose: () => void;
 }) {
   const [reason, setReason] = useState(initial);
@@ -229,13 +232,29 @@ export function ReasonDialog({
           error={order.at("reason")}
         >
           {(field) => (
-            <textarea
+            <>
+              {presets.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {presets.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setReason(preset)}
+                      className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${reason === preset ? "border-emerald-600 bg-emerald-50 text-emerald-900" : "border-line text-slate-600 hover:bg-hover"}`}
+                    >
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <textarea
               {...field}
               className={`${INPUT} min-h-24`}
               value={reason}
               onChange={(event) => setReason(event.target.value)}
               autoFocus
             />
+            </>
           )}
         </Field>
         {withShots && (
