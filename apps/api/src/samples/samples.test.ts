@@ -11,7 +11,7 @@ import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { todayManila } from "../inventory/rules";
 import { seedDemo } from "../seed";
-import type { Catalogue, SamplesOfPerson, TeamSamples } from "../types";
+import type { Catalogue, CustomerFiles, SamplesOfPerson, TeamSamples } from "../types";
 
 const PASSWORD = "test-password-1";
 let db: Database;
@@ -110,6 +110,10 @@ describe("samples and gifts", () => {
     expect(mine.month_.doctors).toBe(1);
     const [given] = await rows<{ id: number }>(db, sql`select id::int as id from sample_move where what = 'given' limit 1`);
     expect((await app.request(`/api/samples/given/${given?.id}/ack`, { headers: { cookie: cookies.daniel as string } })).status).toBe(200);
+    // The acknowledgement is among the doctor's files.
+    const [doctor] = await rows<{ id: number }>(db, sql`select customer_id::int as id from visit where id = ${doctorVisit}`);
+    const files = await read<CustomerFiles>("sarla", `/api/customers/${doctor?.id}/files`);
+    expect(files.files.map((one) => one.source)).toContain("sample");
 
     // The month's count: a difference needs a reason.
     const batchId = mine.held[0]?.batchId as number;

@@ -5,6 +5,7 @@
 
 import type {
   CustomerCredit,
+  CustomerFiles,
   CustomerPage,
   CustomerPaperKind,
   CustomerPrices,
@@ -391,6 +392,7 @@ export function Customer() {
             <LicencePapers data={data} />
           )}
           {customer.kind === "hospital" && <Doctors data={data} />}
+          <FilesPanel customerId={customer.id} />
           <Activity data={data} />
         </div>
       </div>
@@ -974,5 +976,47 @@ function CreditCard({ customerId }: { customerId: number }) {
         ))}
       </ul>
     </section>
+  );
+}
+
+const FILE_FROM: Record<CustomerFiles["files"][number]["source"], string> = {
+  customer: "Customer's papers",
+  order: "Order",
+  case: "Online case",
+  sample: "Samples given",
+};
+/** Every file about the customer in one list (ERP phase 4): their papers, their orders' papers,
+ *  their cases' files, the doctor's acknowledgements of samples; each opens in a new tab. */
+function FilesPanel({ customerId }: { customerId: number }) {
+  const query = useQuery({
+    queryKey: ["customers", "files", customerId],
+    queryFn: () => api<CustomerFiles>(`/api/customers/${customerId}/files`),
+  });
+  const files = query.data?.files ?? [];
+  return (
+    <SectionPanel icon={Paperclip} title={`Files${files.length ? ` (${files.length})` : ""}`}>
+      {!files.length && <p className="text-sm text-slate-500">{query.isPending ? "Reading…" : "No file yet."}</p>}
+      <ul className="divide-y divide-slate-100">
+        {files.slice(0, 50).map((file) => (
+          <li key={file.url} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-2 text-sm">
+            <a href={file.url} target="_blank" rel="noreferrer" className="min-w-0 truncate font-medium text-brand hover:underline">
+              {file.name}
+            </a>
+            <span className="text-xs text-slate-500">
+              {FILE_FROM[file.source]} · {file.kind.replace(/_/g, " ")}
+              {file.record && file.link && (
+                <>
+                  {" · "}
+                  <Link to={file.link} className="hover:underline">
+                    {file.record}
+                  </Link>
+                </>
+              )}{" "}
+              · {file.by} · {new Date(file.at.replace(" ", "T").replace(/([+-]\d{2})$/, "$1:00")).toLocaleDateString("en-PH", { day: "numeric", month: "short", year: "numeric" })}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </SectionPanel>
   );
 }

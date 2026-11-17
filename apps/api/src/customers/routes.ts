@@ -5,6 +5,7 @@ import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
 import { allow, type Env, idParam, Refusal, readBody } from "../http";
+import { customerFiles } from "./files";
 import { customerPage } from "./page";
 import { customerPrices } from "./prices";
 import { reorders } from "./reorders";
@@ -212,6 +213,7 @@ export function customerRoutes(
     });
     return c.json({ id });
   });
+  app.get("/api/customers/:id/files", async (c) => c.json(await customerFiles(db, c.get("me"), idParam(c))));
   app.get("/api/customer-papers/:id", async (c) => {
     const paper = await readCustomerPaper(db, c.get("me"), idParam(c));
     return c.body(paper.bytes as Uint8Array<ArrayBuffer>, 200, {

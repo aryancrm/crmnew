@@ -5409,3 +5409,7 @@ export type TeamSamples = {
   doctors: { customerId: number; doctor: string; person: string; medicines: string; pieces: number; visits: number }[];
   can: { send: boolean };
 };
+/** Every file about a customer (ERP phase 4): where it came from, what it is, where it opens. */
+export type CustomerFiles = {
+  files: { source: "customer" | "order" | "case" | "sample"; kind: string; name: string; mime: string; at: string; by: string; record: string | null; link: string | null; url: string }[];
+};
