@@ -33,6 +33,7 @@ import type {
   InvoiceTab,
   LeadSource,
   Me,
+  MoneyAccounts,
   MyConfirmations,
   OrderPaper,
   OrderStatus,
@@ -60,8 +61,10 @@ import {
   invoiceState,
   METHOD_LABEL,
   METHODS,
+  NOT_CASH,
   vatSplit,
 } from "./rules";
+import { MONEY_TYPES } from "../books/accounts";
 
 const PAGE = 25;
 const ids = (values: number[]) =>
@@ -385,6 +388,64 @@ async function reissueInvoice(
   return invoice;
 }
 
+const NOT_CASH_SET = new Set<string>(NOT_CASH);
+
+/** The bank, cash or e-wallet account money went into or out of: one of the books' money accounts
+ *  (Banking), by name. None named: Zoho's own default (Undeposited Funds; Petty Cash for a refund). */
+async function moneyAccountOf(tx: Runner, name?: string | null): Promise<string | null> {
+  const asked = clean(name);
+  if (!asked) return null;
+  const [found] = await rows<{ name: string }>(
+    tx,
+    sql`select name from book_account where lower(name) = lower(${asked}) and active
+      and type in (${sql.join(MONEY_TYPES.map((type) => sql`${type}`), sql`, `)}) limit 1`,
+  );
+  if (!found) throw new Refusal(400, "invalid", `"${asked}" isn't one of the bank, cash or e-wallet accounts.`, "moneyAccount");
+  return found.name;
+}
+
+/** The accounts money can go into or out of, for the payment and refund forms. */
+export async function moneyAccounts(db: Database, me: Me): Promise<MoneyAccounts> {
+  allow(me, [...FINANCE_ROLES, ...CASE_AGENT_ROLES, "ceo"], "see the money accounts");
+  const accounts = await rows<MoneyAccounts["accounts"][number]>(
+    db,
+    sql`select name, type from book_account where active and type in (${sql.join(MONEY_TYPES.map((type) => sql`${type}`), sql`, `)})
+      order by case type when 'bank' then 0 when 'cash' then 1 else 2 end, lower(name)`,
+  );
+  return { accounts };
+}
+
+/** Finance puts a payment (or a refund) on the account it really went through. */
+export async function setMoneyAccount(
+  db: Database,
+  me: Me,
+  what: { kind: "payment" | "refund"; id: number },
+  name: string,
+): Promise<void> {
+  allow(me, FINANCE_ROLES, "change the account of a payment");
+  await db.transaction(async (tx) => {
+    const account = await moneyAccountOf(tx, name);
+    if (!account) throw new Refusal(400, "invalid", "Pick the account.", "moneyAccount");
+    const [found] = await rows<{ orderId: number; before: string | null; method: string; code: string }>(
+      tx,
+      what.kind === "payment"
+        ? sql`select i.order_id::int as "orderId", p.money_account as before, p.method, i.code from payment p join invoice i on i.id = p.invoice_id where p.id = ${what.id} and p.active for update of p`
+        : sql`select i.order_id::int as "orderId", r.money_account as before, r.method, i.code from refund r join invoice i on i.id = r.invoice_id where r.id = ${what.id} for update of r`,
+    );
+    if (!found) throw new Refusal(404, "not_found", `That ${what.kind} isn't here.`);
+    if (NOT_CASH_SET.has(found.method)) throw new Refusal(409, "not_now", "It moved no money: it has no account.");
+    if (what.kind === "payment") await tx.execute(sql`update payment set money_account = ${account} where id = ${what.id}`);
+    else await tx.execute(sql`update refund set money_account = ${account} where id = ${what.id}`);
+    await logEvent(
+      tx,
+      found.orderId,
+      me,
+      "payment",
+      `The ${what.kind} on ${found.code} put on ${account}${found.before ? ` (was ${found.before})` : ""} by ${me.name}.`,
+    );
+  });
+}
+
 async function addPayment(
   tx: Runner,
   me: Me,
@@ -396,8 +457,10 @@ async function addPayment(
     paidOn: string;
     note?: string | null;
     proofId?: number | null;
+    moneyAccount?: string | null;
   },
 ) {
+  const into = NOT_CASH_SET.has(input.method) ? null : await moneyAccountOf(tx, input.moneyAccount);
   // On a guarantee letter's order the money is the agency's (a patient's top-up is told apart later).
   const [road] = await rows<{ gl: boolean }>(
     tx,
@@ -405,9 +468,9 @@ async function addPayment(
   );
   const payer = input.method !== "points" && road?.gl ? "agency" : "customer";
   await tx.execute(
-    sql`insert into payment (invoice_id, customer_id, amount, method, reference, paid_on, proof_id, note, by_person, payer)
+    sql`insert into payment (invoice_id, customer_id, amount, method, reference, paid_on, proof_id, note, by_person, payer, money_account)
       values (${invoice.id}, ${invoice.customerId}, ${input.amount}, ${input.method}, ${clean(input.reference)}, ${input.paidOn}::date,
-        ${input.proofId ?? null}, ${clean(input.note)}, ${me.id}, ${payer})`,
+        ${input.proofId ?? null}, ${clean(input.note)}, ${me.id}, ${payer}, ${into})`,
   );
   const [after] = await rows<{ paid: number; total: number }>(
     tx,
@@ -888,8 +951,9 @@ export async function recordRefund(
     if (input.amount > owed)
       throw new Refusal(400, "invalid", `That is more than the ${peso(owed)} owed back.`, "amount");
     await tx.execute(
-      sql`insert into refund (invoice_id, amount, method, reference, refunded_on, note, by_person)
-        values (${invoice.id}, ${input.amount}, ${input.method}, ${clean(input.reference)}, ${input.refundedOn}::date, ${clean(input.note)}, ${me.id})`,
+      sql`insert into refund (invoice_id, amount, method, reference, refunded_on, note, by_person, money_account)
+        values (${invoice.id}, ${input.amount}, ${input.method}, ${clean(input.reference)}, ${input.refundedOn}::date, ${clean(input.note)}, ${me.id},
+          ${input.method === "credit" ? null : await moneyAccountOf(tx, input.moneyAccount)})`,
     );
     await tx.execute(
       sql`update invoice set refunded = refunded + ${input.amount} where id = ${invoice.id}`,

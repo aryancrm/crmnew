@@ -79,6 +79,7 @@ import { VendorsPage } from "./books/vendors";
 import { CustomersPage } from "./books/customers";
 import { ItemsPage, PriceListsPage } from "./books/items";
 import { AccountsPage as ChartOfAccountsPage, BankingPage } from "./books/accounts";
+import { ReportsPage } from "./books/reports";
 import { BillFromOrderPage, NewBillPage, NewPaymentPage, NewReceiptPage, NewPurchaseOrderPage, NewVendorCreditPage, NewVendorPage, ReceivePage } from "./books/forms";
 import { CompanyPapersPage, TenderPage, TendersPage } from "./pages/tenders";
 import { ClidpListingsPage, ClidpTeamPage } from "./pages/clidp";
@@ -133,6 +134,8 @@ createRoot(root).render(
             <Route path="accounts" element={<ChartOfAccountsPage />} />
             <Route path="accounts/:id" element={<ChartOfAccountsPage />} />
             <Route path="banking" element={<BankingPage />} />
+            <Route path="reports" element={<ReportsPage />} />
+            <Route path="reports/:report" element={<ReportsPage />} />
             <Route path=":list" element={<BookListPage />} />
             <Route path=":list/:id" element={<BookListPage />} />
           </Route>

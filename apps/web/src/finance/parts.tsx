@@ -4,6 +4,7 @@
 
 import type {
   CustomerCredit,
+  MoneyAccounts,
   InvoiceState,
   OrderDetail,
   OrderPaper,
@@ -90,6 +91,39 @@ function AmountField({
   );
 }
 
+/** The bank, cash or e-wallet account the money went through (the books' Banking accounts): picked
+ *  on every payment and refund, remembered per way of paying on this computer. */
+export function useMoneyAccount(method: PaymentMethod) {
+  const key = `crm:money-account:${method}`;
+  const read = () => {
+    try {
+      return localStorage.getItem(key) ?? "";
+    } catch {
+      return "";
+    }
+  };
+  const [value, setValue] = useState(read);
+  const [missing, setMissing] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new way of paying brings its own last account
+  useEffect(() => setValue(read()), [key]);
+  return {
+    value,
+    missing,
+    set(next: string) {
+      setValue(next);
+      setMissing(false);
+      try {
+        if (next) localStorage.setItem(key, next);
+      } catch {}
+    },
+    /** True when one is picked; else the form says so. */
+    ready() {
+      setMissing(!value);
+      return Boolean(value);
+    },
+  };
+}
+
 function HowFields({
   method,
   setMethod,
@@ -99,6 +133,8 @@ function HowFields({
   setDay,
   dayLabel,
   at,
+  account,
+  accountLabel = "Into account",
 }: {
   method: PaymentMethod;
   setMethod: (value: PaymentMethod) => void;
@@ -108,7 +144,15 @@ function HowFields({
   setDay: (value: string) => void;
   dayLabel: string;
   at: (field: string) => string | undefined;
+  account: ReturnType<typeof useMoneyAccount>;
+  accountLabel?: string;
 }) {
+  const accounts = useQuery({
+    queryKey: ["finance", "money-accounts"],
+    queryFn: () => api<MoneyAccounts>("/api/finance/money-accounts"),
+    staleTime: 10 * 60_000,
+  });
+  const list = accounts.data?.accounts ?? [];
   return (
     <>
       <div className="flex flex-col gap-3 sm:flex-row">
@@ -141,6 +185,36 @@ function HowFields({
           )}
         </Field>
       </div>
+      <Field
+        label={accountLabel}
+        error={account.missing ? "Pick the account the money went through." : at("moneyAccount")}
+      >
+        {(field) => (
+          <select
+            {...field}
+            className={INPUT}
+            value={account.value}
+            onChange={(event) => account.set(event.target.value)}
+          >
+            <option value="">Pick the bank, cash or e-wallet account…</option>
+            {account.value && !list.some((one) => one.name === account.value) && (
+              <option value={account.value}>{account.value}</option>
+            )}
+            {(["bank", "cash", "payment_clearing", "credit_card"] as const).map((type) => {
+              const here = list.filter((one) => one.type === type);
+              return here.length ? (
+                <optgroup key={type} label={{ bank: "Banks and e-wallets", cash: "Cash", payment_clearing: "Clearing", credit_card: "Cards" }[type]}>
+                  {here.map((one) => (
+                    <option key={one.name} value={one.name}>
+                      {one.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null;
+            })}
+          </select>
+        )}
+      </Field>
       <Field
         label={method === "check" ? "Check number and bank" : "Reference (bank or GCash reference)"}
         error={at("reference")}
@@ -208,6 +282,7 @@ export function ConfirmPaymentDialog({
   const money = useMoney();
   const [amount, setAmount] = useState(asTyped(total));
   const [method, setMethod] = useState<PaymentMethod>("bank");
+  const account = useMoneyAccount(method);
   const [reference, setReference] = useState("");
   const [day, setDay] = useState(todayManila());
   const [checked, setChecked] = useState(false);
@@ -227,9 +302,11 @@ export function ConfirmPaymentDialog({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (typed > 0 && !account.ready()) return;
     const done = await money.send(`/api/finance/orders/${orderId}/confirm-payment`, {
       amount: typed,
       method,
+      moneyAccount: account.value || null,
       reference,
       paidOn: day,
       checked,
@@ -317,6 +394,7 @@ export function ConfirmPaymentDialog({
           setDay={setDay}
           dayLabel="Paid on"
           at={money.at}
+          account={account}
         />
         <Field label="Note (optional)" error={money.at("note")}>
           {(field) => (
@@ -343,7 +421,7 @@ export function ConfirmPaymentDialog({
           <div className="-mt-2 text-[13px] text-bad">{money.at("checked")}</div>
         )}
         <Problem
-          message={money.general(["amount", "method", "reference", "paidOn", "note", "checked"])}
+          message={money.general(["amount", "method", "reference", "paidOn", "note", "moneyAccount", "checked"])}
         />
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
           <Button onClick={onClose} disabled={money.busy}>
@@ -381,6 +459,7 @@ export function RecordPaymentDialog({
   const queries = useQueryClient();
   const [amount, setAmount] = useState(asTyped(balance));
   const [method, setMethod] = useState<PaymentMethod>("bank");
+  const account = useMoneyAccount(method);
   const [reference, setReference] = useState("");
   const [day, setDay] = useState(todayManila());
   const [note, setNote] = useState("");
@@ -396,9 +475,11 @@ export function RecordPaymentDialog({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (!account.ready()) return;
     const done = await money.send(`/api/invoices/${invoiceId}/payments`, {
       amount: typed,
       method,
+      moneyAccount: account.value,
       reference,
       paidOn: day,
       note,
@@ -462,6 +543,7 @@ export function RecordPaymentDialog({
           setDay={setDay}
           dayLabel="Paid on"
           at={money.at}
+          account={account}
         />
         <Field label="Slip (optional)" error={money.at("proofId")}>
           {(field) => (
@@ -530,7 +612,7 @@ export function RecordPaymentDialog({
           )}
         </Field>
         <Problem
-          message={money.general(["amount", "method", "reference", "paidOn", "note", "proofId"])}
+          message={money.general(["amount", "method", "reference", "paidOn", "note", "moneyAccount", "proofId"])}
         />
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
           <Button onClick={onClose} disabled={money.busy}>
@@ -563,15 +645,18 @@ export function RefundDialog({
   // Finance gives it back, or keeps it as the customer's credit for their next invoice (as Zoho's
   // open credit notes did).
   const [keep, setKeep] = useState(false);
+  const account = useMoneyAccount(method);
   const [reference, setReference] = useState("");
   const [day, setDay] = useState(todayManila());
   const [note, setNote] = useState("");
   async function submit(event: FormEvent) {
     event.preventDefault();
+    if (!keep && !account.ready()) return;
     if (
       await money.send(`/api/invoices/${invoiceId}/refunds`, {
         amount: centavos(amount),
         method: keep ? "credit" : method,
+        moneyAccount: keep ? null : account.value,
         reference: keep ? null : reference,
         refundedOn: day,
         note,
@@ -624,6 +709,8 @@ export function RefundDialog({
             setDay={setDay}
             dayLabel="Given back on"
             at={money.at}
+            account={account}
+            accountLabel="Out of account"
           />
         )}
         <Field label="Note (optional)" error={money.at("note")}>
@@ -636,7 +723,7 @@ export function RefundDialog({
             />
           )}
         </Field>
-        <Problem message={money.general(["amount", "method", "reference", "refundedOn", "note"])} />
+        <Problem message={money.general(["amount", "method", "reference", "refundedOn", "note", "moneyAccount"])} />
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
           <Button onClick={onClose} disabled={money.busy}>
             Close

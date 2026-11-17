@@ -211,7 +211,7 @@ export async function bookDoc(db: Database, me: Me, kind: BookKind, id: number):
     ? await rows<NonNullable<BookDoc["entries"]>[number]>(
         db,
         sql`select e.account, a.id::int as "accountId", e.debit::float8 as debit, e.credit::float8 as credit
-          from book_entry e left join book_account a on lower(a.name) = lower(e.account) where e.doc_id = ${id} order by e.debit desc, e.credit`,
+          from book_entry e left join book_account a on lower(a.name) = lower(e.account) where e.doc_id = ${id} and e.source = 'books' order by e.debit desc, e.credit`,
       )
     : undefined;
   const { supplierId: _drop, ...doc } = row;

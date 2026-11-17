@@ -73,9 +73,10 @@ export async function accountDetail(db: Database, me: Me, id: number, asked: { p
     rows<{ n: number }>(db, sql`select count(*)::int as n from book_entry e where lower(e.account) = lower(${account.name}) ${kindFilter}`),
     rows<BookAccountDetail["entries"][number]>(
       db,
-      sql`select e.doc_id::int as "docId", e.kind, d.number, to_char(e.on_date, 'YYYY-MM-DD') as date, d.reference,
-          coalesce(s.name, c.name, d.party_name) as party, e.debit::float8 as debit, e.credit::float8 as credit
-        from book_entry e join book_doc d on d.id = e.doc_id left join supplier s on s.id = d.supplier_id left join customer c on c.id = d.customer_id
+      sql`select e.doc_id::int as "docId", e.kind, coalesce(d.number, e.number) as number, to_char(e.on_date, 'YYYY-MM-DD') as date, d.reference,
+          coalesce(s.name, c.name, d.party_name) as party, e.debit::float8 as debit, e.credit::float8 as credit, e.link
+        from book_entry e left join book_doc d on d.id = e.doc_id and e.source = 'books' left join supplier s on s.id = d.supplier_id
+          left join customer c on c.id = coalesce(d.customer_id, e.customer_id)
         where lower(e.account) = lower(${account.name}) ${kindFilter}
         order by e.on_date desc, e.doc_id desc limit ${perPage} offset ${(page - 1) * perPage}`,
     ),

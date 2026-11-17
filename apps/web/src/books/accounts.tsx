@@ -3,12 +3,28 @@
 // it, document by document), and the banks, cash and cards with what is in each. Every figure is
 // the documents' own debits and credits.
 
-import type { BookAccountDetail, BookAccountList, BookAccountRow, Banking } from "@2mg/api/types";
+import type { BookAccountDetail, BookAccountList, BookAccountRow, BookKind, Banking } from "@2mg/api/types";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Landmark, Wallet, CreditCard } from "lucide-react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { kindInfo, zDate, zMoney } from "./kinds";
+
+/** This CRM's own documents on an account (its invoices, payments… posted by themselves). */
+const CRM_KIND: Record<string, string> = {
+  crm_invoice: "Invoice (CRM)",
+  crm_payment: "Payment (CRM)",
+  crm_refund: "Refund (CRM)",
+  crm_return: "Return credited (CRM)",
+  crm_stock: "Stock out / back (CRM)",
+};
+const CRM_PLURAL: Record<string, string> = {
+  crm_invoice: "CRM invoices",
+  crm_payment: "CRM payments",
+  crm_refund: "CRM refunds",
+  crm_return: "CRM returns",
+  crm_stock: "CRM stock",
+};
 
 /** "other_current_asset" → "Other Current Asset". */
 export const typeLabel = (type: string) => type.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -164,7 +180,7 @@ function AccountPage({ id }: { id: number }) {
                 onClick={() => setParams({ kind: k.kind })}
                 className={`rounded-full border px-3 py-1 text-[12px] ${kind === k.kind ? "border-[#408dfb] bg-[#408dfb] text-white" : "border-[#d7d5e2]"}`}
               >
-                {kindInfo(k.kind)?.plural ?? k.kind} ({k.count.toLocaleString("en-US")})
+                {CRM_PLURAL[k.kind] ?? kindInfo(k.kind as BookKind)?.plural ?? k.kind} ({k.count.toLocaleString("en-US")})
               </button>
             ))}
           </div>
@@ -183,13 +199,14 @@ function AccountPage({ id }: { id: number }) {
             </thead>
             <tbody>
               {a.entries.map((e, i) => {
-                const info = kindInfo(e.kind);
+                const info = e.kind.startsWith("crm_") ? undefined : kindInfo(e.kind as BookKind);
+                const crm = CRM_KIND[e.kind];
                 return (
                   <tr key={`${e.docId}-${i}`} className="border-t border-[#ebeaf2] align-top">
                     <td className="px-4 py-2 whitespace-nowrap">{zDate(e.date)}</td>
                     <td className="px-2 py-2">
-                      {info ? (
-                        <Link to={`/books/${info.path}/${e.docId}`} className="text-[#1c5bd9]">
+                      {info || e.link ? (
+                        <Link to={e.link ?? `/books/${info?.path}/${e.docId}`} className="text-[#1c5bd9]">
                           {e.number}
                         </Link>
                       ) : (
@@ -198,7 +215,7 @@ function AccountPage({ id }: { id: number }) {
                       {e.party && <span className="text-[#4b4f63]"> · {e.party}</span>}
                       {e.reference && <div className="text-[11.5px] text-[#6c718a]">Ref: {e.reference}</div>}
                     </td>
-                    <td className="px-2 py-2">{info?.one ?? e.kind}</td>
+                    <td className="px-2 py-2">{crm ?? info?.one ?? e.kind}</td>
                     <td className="px-2 py-2 text-right whitespace-nowrap">{e.debit ? zMoney(e.debit) : ""}</td>
                     <td className="px-4 py-2 text-right whitespace-nowrap">{e.credit ? zMoney(e.credit) : ""}</td>
                   </tr>

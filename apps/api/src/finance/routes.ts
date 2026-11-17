@@ -19,6 +19,7 @@ import {
   listInvoices,
   listPayments,
   makeInvoice,
+  moneyAccounts,
   myConfirmations,
   orderOfInvoice,
   owedInvoices,
@@ -26,6 +27,7 @@ import {
   recordRefund,
   refundsOwed,
   removePayment,
+  setMoneyAccount,
   undoConfirm,
 } from "./service";
 
@@ -46,6 +48,8 @@ const paymentInput = z.object({
   paidOn: day,
   note: optional(300),
   proofId: z.number().int().positive().nullish(),
+  // The bank, cash or e-wallet account it went into.
+  moneyAccount: optional(120),
   // Tax the customer withheld (EWT) with its BIR Form 2307 number.
   withheld: z.number().int().min(0).nullish(),
   form2307: optional(60),
@@ -56,7 +60,7 @@ export function financeRoutes(
   db: Database,
   signedIn: MiddlewareHandler<Env>,
 ): void {
-  for (const path of ["/api/finance/*", "/api/invoices/*", "/api/payments/*"])
+  for (const path of ["/api/finance/*", "/api/invoices/*", "/api/payments/*", "/api/refunds/*"])
     app.use(path, signedIn);
 
   app.post("/api/finance/orders/:id/confirm-payment", async (c) => {
@@ -142,6 +146,13 @@ export function financeRoutes(
     );
     return c.json({ ok: true });
   });
+  app.get("/api/finance/money-accounts", async (c) => c.json(await moneyAccounts(db, c.get("me"))));
+  for (const kind of ["payment", "refund"] as const)
+    app.post(`/api/${kind}s/:id/account`, async (c) => {
+      const input = await readBody(c, z.object({ moneyAccount: z.string().trim().min(1, "Pick the account.").max(120) }));
+      await setMoneyAccount(db, c.get("me"), { kind, id: idParam(c) }, input.moneyAccount);
+      return c.json({ ok: true });
+    });
   app.post("/api/invoices/:id/refunds", async (c) => {
     const input = await readBody(
       c,
@@ -154,6 +165,7 @@ export function financeRoutes(
         reference: optional(80),
         refundedOn: day,
         note: optional(300),
+        moneyAccount: optional(120),
       }),
     );
     await recordRefund(db, c.get("me"), idParam(c), input as RefundInput);

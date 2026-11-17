@@ -1603,6 +1603,8 @@ export type PaymentInput = {
   paidOn: string;
   note?: string | null;
   proofId?: number | null;
+  /** The bank, cash or e-wallet account it went into (Banking's names). */
+  moneyAccount?: string | null;
   /** Tax the customer withheld from it (EWT, with their BIR Form 2307): recorded with it as a
    *  payment of its own, settling the invoice too. */
   withheld?: number | null;
@@ -1615,7 +1617,11 @@ export type RefundInput = {
   reference?: string | null;
   refundedOn: string;
   note?: string | null;
+  /** The bank, cash or e-wallet account it went out of (Banking's names). */
+  moneyAccount?: string | null;
 };
+/** The books' bank, cash and e-wallet accounts, for the payment and refund forms. */
+export type MoneyAccounts = { accounts: { name: string; type: string }[] };
 
 // ---------------------------------------------------------------- dispatch
 
@@ -5112,14 +5118,19 @@ export type BookAccountRow = {
 export type BookAccountList = { views: { key: string; count: number }[]; view: string; rows: BookAccountRow[] };
 export type BookEntryRow = {
   docId: number;
-  kind: BookKind;
+  /** A book document's kind, or this CRM's own ("crm_invoice", "crm_payment"…). */
+  kind: BookKind | CrmEntryKind;
   number: string;
   date: string;
   reference: string | null;
   party: string | null;
   debit: number;
   credit: number;
+  /** This CRM's own entries: where the record opens. */
+  link: string | null;
 };
+/** This CRM's own documents in the books (migration 0096). */
+export type CrmEntryKind = "crm_invoice" | "crm_payment" | "crm_refund" | "crm_return" | "crm_stock";
 export type BookAccountDetail = BookAccountRow & {
   description: string | null;
   currency: string;
@@ -5263,3 +5274,84 @@ export type BookItem = BookItemRow & {
   recent: (BookRow & { kind: BookKind; qty: number | null })[];
 };
 export type BookPriceList = { id: number; name: string; currency: string | null; kind: string | null; details: string | null; scheme: string | null; rounding: string | null; status: string | null };
+
+// ---------------------------------------------------------------- statements (ERP phase 1)
+
+/** One account's line on a statement (its amount on the statement's own side). */
+export type StatementLine = { account: string; accountId: number | null; type: string | null; amount: number };
+export type TrialBalance = {
+  asOf: string;
+  lines: (StatementLine & { head: string; debit: number; credit: number })[];
+  totals: { debit: number; credit: number; difference: number };
+};
+export type PlTotals = {
+  income: number;
+  costOfSales: number;
+  grossProfit: number;
+  /** Gross profit over income, in %. */
+  grossMargin: number | null;
+  expenses: number;
+  operatingProfit: number;
+  otherIncome: number;
+  otherExpenses: number;
+  netProfit: number;
+};
+export type ProfitAndLoss = {
+  from: string;
+  to: string;
+  parts: { income: StatementLine[]; costOfSales: StatementLine[]; expenses: StatementLine[]; otherIncome: StatementLine[]; otherExpenses: StatementLine[] };
+  totals: PlTotals;
+  /** The same number of days just before. */
+  before: { from: string; to: string; totals: PlTotals };
+  notes: string[];
+};
+export type BalanceSheet = {
+  asOf: string;
+  assets: StatementLine[];
+  liabilities: StatementLine[];
+  equity: StatementLine[];
+  /** Earned and not yet closed into equity. */
+  profitToDate: number;
+  /** Accounts the documents name that the chart doesn't have (debit less credit). */
+  notInChart: StatementLine[];
+  totals: { assets: number; liabilities: number; equity: number; difference: number };
+};
+export type CashFlow = {
+  from: string;
+  to: string;
+  accounts: { account: string; accountId: number; type: string; opening: number; in: number; out: number; closing: number }[];
+  what: { what: string; in: number; out: number; net: number }[];
+  totals: { opening: number; in: number; out: number; closing: number };
+};
+export type VatSummary = {
+  from: string;
+  to: string;
+  /** Output VAT on sales, input VAT on bills and expenses, other Tax Payable moves, tax withheld from us (2307). */
+  months: { month: string; output: number; input: number; other: number; withheld: number; net: number }[];
+  totals: { output: number; input: number; other: number; withheld: number; net: number };
+};
+export type PayablesAging = {
+  today: string;
+  suppliers: { supplier: string; supplierId: number | null; bills: number; current: number; d30: number; d60: number; d90: number; older: number; total: number }[];
+  totals: { current: number; d30: number; d60: number; d90: number; older: number; total: number; bills: number };
+};
+export type GrossProfitBy = "medicine" | "channel" | "customer" | "order";
+export type GrossProfit = {
+  from: string;
+  to: string;
+  by: GrossProfitBy;
+  rows: { key: string; label: string; link: string | null; qty: number; revenue: number; cost: number; profit: number; margin: number | null; uncosted: boolean }[];
+  totals: { revenue: number; cost: number; profit: number; margin: number | null };
+  /** Billed in these days with the goods not out yet: no cost to count yet. */
+  notOut: { invoices: number; total: number };
+};
+export type MoneySummary = {
+  today: string;
+  /** Gross profit this month on the CRM's orders whose goods have left. */
+  profit: GrossProfit["totals"];
+  notOut: GrossProfit["notOut"];
+  owed: number;
+  billed90: number;
+  /** Days of sales owed: owed now against the last 90 days' billing. */
+  dso: number | null;
+};

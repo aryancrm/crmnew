@@ -4,7 +4,7 @@
 // company as eight summaries, each opening its app; the channels against their targets; and
 // what needs the CEO now. One read, `/api/ceo/home`.
 
-import type { CeoAlert, CeoHome as Data, PaceTone } from "@2mg/api/types";
+import type { CeoAlert, CeoHome as Data, MoneySummary, PaceTone } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import {
   CheckCircle2,
@@ -463,6 +463,9 @@ export function CeoHomePage() {
         />
       </section>
 
+      {/* The month's profit and how fast customers pay (ERP phase 1: from the books). */}
+      <ProfitStrip />
+
       {/* 4. The day's work and who sells, open: the cards of My team and Speed */}
       <AtAGlance money={money} stock={stock} />
 
@@ -512,5 +515,49 @@ export function CeoHomePage() {
         </section>
       </div>
     </div>
+  );
+}
+
+/** Gross profit and margin this month on the CRM's orders whose goods have left (their batches'
+ *  cost), and the company's days of sales owed; each opens its report in the books. */
+function ProfitStrip() {
+  const query = useQuery({
+    queryKey: ["books", "money-summary"],
+    queryFn: () => api<MoneySummary>("/api/books/reports/money-summary"),
+    staleTime: 60_000,
+  });
+  const data = query.data;
+  if (!data) return null;
+  const tile = (to: string, label: string, value: string, line: string, tone = "text-slate-900") => (
+    <Link to={to} className={`${CARD} block min-w-0 px-4 py-3 hover:border-emerald-300`}>
+      <div className="text-xs font-medium text-slate-500">{label}</div>
+      <div className={`text-2xl font-semibold tracking-tight tabular-nums ${tone}`}>{value}</div>
+      <div className="truncate text-xs text-slate-500">{line}</div>
+    </Link>
+  );
+  const { profit } = data;
+  return (
+    <section aria-label="Profit and how fast customers pay" className="grid gap-3 sm:grid-cols-3">
+      {tile(
+        "/books/reports/gross-profit",
+        "Gross profit this month",
+        shortPeso(profit.profit),
+        profit.revenue ? `on ${shortPeso(profit.revenue)} sold (less VAT) · CRM orders out` : "No CRM order's goods out yet this month",
+        profit.profit < 0 ? "text-rose-700" : "text-emerald-700",
+      )}
+      {tile(
+        "/books/reports/gross-profit?by=channel",
+        "Gross margin",
+        profit.margin === null ? "—" : `${profit.margin}%`,
+        data.notOut.invoices ? `${data.notOut.invoices} billed, goods not out yet` : "sales less the batches' cost",
+      )}
+      {tile(
+        "/owed",
+        "Days customers take to pay (DSO)",
+        data.dso === null ? "—" : `${data.dso} days`,
+        `${shortPeso(data.owed)} owed against ${shortPeso(data.billed90)} billed in 90 days`,
+        data.dso !== null && data.dso > 60 ? "text-amber-700" : "text-slate-900",
+      )}
+    </section>
   );
 }

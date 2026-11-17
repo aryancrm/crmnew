@@ -119,6 +119,27 @@ channels; today ₱5.4M of Zoho's history isn't on any seat yet, see question 2)
 | **4. Platform** | Files tab everywhere, CSV import screen, simple automations, per-branch reports, notifications by mail/SMS | Fewer scripts, less hand work |
 | **5. Only if the business needs it** | Repacking / manufacturing, projects, fixed assets, support tickets and complaints, pharmacovigilance | Ask first; don't build what nobody uses |
 
+## 7.1 Phase 1, as built (18 Nov 2026)
+
+- **Every CRM document posts itself** (migration 0096, view `crm_entry` inside `book_entry`):
+  invoice → Accounts Receivable / Sales / Shipping Charge / Tax Payable; payment → the bank Finance
+  picks (Undeposited Funds if none) / AR, 2307 → Advance Tax, points → Discount, customer credit →
+  nothing (already off AR); refund → AR / the bank (Petty Cash if none); return credited → Sales and
+  VAT back / AR on the day credited; stock out → Cost of Goods Sold / Inventory Asset at the batch's
+  cost (back from a return the other way; a count's difference on COGS, Zoho's default). Same
+  accounts Zoho used; Zoho kept both companies in one set of books, so this does too.
+- **Bank on each payment and refund**: "Into account" / "Out of account" on Confirm payment, Record
+  payment and Money owed back (the books' bank, cash and e-wallet accounts, remembered per way of
+  paying); Finance can move a payment to the right account later (`/api/payments/:id/account`).
+- **Books → Reports**: Profit and Loss (with the days before), Balance Sheet, Cash Flow, Gross
+  Profit (by medicine, channel, customer, order), Payables Aging, VAT Summary, Trial Balance; each
+  with Print and Export CSV; every account opens its transactions; CRM entries open their invoice
+  or order.
+- **CEO Home**: gross profit and margin this month (CRM orders whose goods left), company DSO.
+- Checked on the real local data: trial balance off by 3 centavos (Zoho's own currency rounding);
+  P&L says Zoho's invoices carry no cost of goods yet (Zoho's Account Transactions file brings it).
+- Open for Aryan: points paid on an order are posted to **Discount** — say if another account.
+
 ## 8. Questions for Aryan (nothing assumed)
 
 1. Which phase first? (Suggested: 0, then 1.)
