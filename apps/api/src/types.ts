@@ -5355,3 +5355,9 @@ export type MoneySummary = {
   /** Days of sales owed: owed now against the last 90 days' billing. */
   dso: number | null;
 };
+
+// ---------------------------------------------------------------- to decide (ERP phase 2)
+
+/** One kind of decision waiting (or one ask), how many, and the page where it is made. */
+export type DecisionLine = { key: string; label: string; count: number; to: string; kind: "orders" | "people"; since?: string };
+export type Decisions = { forMe: DecisionLine[]; mine: DecisionLine[]; total: number };

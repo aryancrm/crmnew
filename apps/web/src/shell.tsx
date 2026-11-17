@@ -2,6 +2,7 @@
 // desk, the same menu as a tab bar on a phone.
 
 import type {
+  Decisions,
   FormList,
   LeaveList,
   OrderDashboard,
@@ -445,6 +446,13 @@ function MenuList({
     enabled: wantsLeave,
     staleTime: 60_000,
   });
+  // Everything waiting on the person, beside To decide.
+  const decisions = useQuery({
+    queryKey: ["decisions"],
+    queryFn: () => api<Decisions>("/api/decisions"),
+    staleTime: 60_000,
+    refetchInterval: () => (document.visibilityState === "visible" ? 120_000 : false),
+  });
   // The asks for people, regions and areas waiting (the CEO's) count beside Requests.
   const news = useUpdates();
   const counts = (
@@ -455,6 +463,7 @@ function MenuList({
           important: unreadIn(news.data, "important"),
           updates: unreadIn(news.data, "updates"),
           leave: (leave.data?.counts.waiting ?? 0) + (forms.data?.counts.waiting ?? 0),
+          decisions: decisions.data?.total ?? 0,
         }
       : undefined
   ) as Record<Badge, number> | undefined;

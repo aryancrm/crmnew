@@ -64,6 +64,7 @@ import {
   UserPlus,
   Users,
   Wallet,
+  ListChecks,
 } from "lucide-react";
 
 /** A count from the orders dashboard shown beside a link. "finance" is Finance's own work:
@@ -84,7 +85,8 @@ export type Badge =
   | "orgRequests"
   | "important"
   | "updates"
-  | "leave";
+  | "leave"
+  | "decisions";
 export type MenuItem = {
   to: string;
   label: string;
@@ -426,6 +428,8 @@ const messagesLink: MenuItem = folder(
   "Messages",
   MessageCircle,
   [
+    // Every decision waiting on the person, from every desk, in one list (ERP phase 2).
+    { to: "/decisions", label: "To decide", icon: ListChecks, badge: "decisions" },
     { to: "/messages?box=important", label: "Needs you", icon: BellRing, badge: "important" },
     { to: "/messages?box=updates", label: "Updates", icon: Inbox, badge: "updates" },
     { to: "/messages", label: "Chats", icon: MessageCircle, badge: "messages" },
