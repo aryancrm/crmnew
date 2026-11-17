@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { Database } from "../db/index";
 import { type Env, idParam, readBody } from "../http";
 import { ROLES } from "../people/roles";
+import { approvers, setApproves } from "./approvers";
 import {
   addArea,
   addChannel,
@@ -70,6 +71,16 @@ export function orgRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHand
   app.use("/api/org", signedIn);
   app.use("/api/org/*", signedIn);
   app.get("/api/org", async (c) => c.json(await orgTree(db, c.get("me"))));
+  // Who approves what: each Management person's divisions (none picked: every division).
+  app.get("/api/org/approvers", async (c) => c.json(await approvers(db, c.get("me"))));
+  app.post("/api/org/approvers/:id", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({ approves: z.array(z.string().max(40)).max(30).nullable() }),
+    );
+    await setApproves(db, c.get("me"), idParam(c), input.approves);
+    return c.json({ ok: true });
+  });
   app.get("/api/org/menu", async (c) => c.json(await menuUnits(db, c.get("me"))));
   app.post("/api/org/channels", async (c) => {
     const input = await readBody(

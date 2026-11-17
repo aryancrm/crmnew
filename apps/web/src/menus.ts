@@ -1237,6 +1237,7 @@ function adminPanel(me: Me): Space {
             icon: UserPlus,
             badge: "orgRequests",
           },
+          { to: "/people?tab=approvers", label: "Who approves what", icon: ShieldCheck },
           { to: "/targets", label: "Targets", icon: Target },
           // Once, from the old system's orders: who sold to each old customer, placed in a seat here.
           { to: "/admin/zoho-sellers", label: "Old customers to seats", icon: Link2 },

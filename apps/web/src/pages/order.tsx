@@ -63,6 +63,7 @@ import { ApproveDialog } from "../orders/approve-dialog";
 import { checksOf } from "../orders/checks";
 import { LinesEditor } from "../orders/lines-editor";
 import { ReasonDialog, StatusPill, shortSpan, useOrderAction } from "../orders/parts";
+import { AskUpBox } from "../orders/asks";
 import { OrderReturnsBox, RefundButton } from "../orders/returns";
 import { SendToCustomer } from "../orders/send-update";
 import { OrderVersions } from "../orders/versions";
@@ -787,6 +788,12 @@ export function Order() {
             autoApprove={params.get("approve") === "1"}
           />
         </section>
+      )}
+      {/* Asked up the line: the Team Lead or Business Mentor answers here; others read it. */}
+      {!managing && data.asks.length > 0 && (
+        <div className="mt-4">
+          <AskUpBox data={data} />
+        </div>
       )}
       {financeWork && (
         <div className="mt-4">
@@ -1947,6 +1954,7 @@ function ManagementGlance({
           {more && <span className="ml-auto flex flex-wrap items-center gap-1.5">{more}</span>}
         </div>
       </section>
+      <AskUpBox data={data} />
 
       {parts.map((key) => {
         const open = shown.includes(key);

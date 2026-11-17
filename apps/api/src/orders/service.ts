@@ -88,6 +88,7 @@ import {
   STEP_OF,
 } from "./rules";
 import { customerCredit } from "../finance/credit";
+import { asksOf, leadsUp } from "./asks";
 import { duesSql } from "../finance/dues";
 import { activeOffers, withOfferLines } from "./offers";
 import { shortLines, shortWords } from "./stock-wait";
@@ -106,6 +107,21 @@ const team = (me: Me): SQL => sql`
     union all
     select p.id from person p join team t on p.reports_to = t.id
   )`;
+
+/** Is the order (alias `o`) one of the team's for this lead: its MedRep is under them at any
+ *  depth. Never for anyone but a team lead or a manager. */
+export const inTeamSql = (me: Me): SQL =>
+  me.role === "team_lead" || me.role === "manager"
+    ? sql`(o.medrep_id in (with recursive under as (select id from person where reports_to = ${me.id}
+        union all select p.id from person p join under u on p.reports_to = u.id) select id from under))`
+    : sql`false`;
+
+/** Is the order (alias `o`) in this Management person's approval scope (Admin → Who approves
+ *  what): every division, or only theirs; an order with no division only for "everything". */
+export const inApprovalScopeSql = (me: Me): SQL =>
+  me.role === "management"
+    ? sql`(select p.approves is null or coalesce(o.division = any(p.approves), false) from person p where p.id = ${me.id})`
+    : sql`true`;
 
 /** Which orders (alias `o`) this person may see. Needs `team` in front of the query. */
 function seen(me: Me): SQL {
@@ -725,7 +741,7 @@ export async function approvalQueue(db: Database, me: Me): Promise<OrderRow[]> {
     sql`${team(me)} select ${rowColumns}, c.review, c.kind, o.payment_terms as terms, c.credit_limit::int as "creditLimit",
         coalesce(c.licence_expires < (now() at time zone 'Asia/Manila')::date, false) as "licenceExpired", ${caseColumns}
       from sales_order o ${rowJoins}
-      where ${seen(me)} and o.status = 'pending_approval'
+      where ${seen(me)} and o.status = 'pending_approval' and ${inApprovalScopeSql(me)}
         and (${approverSql} is null or ${approverSql} = ${me.id} or ${me.role} = 'admin')
       order by o.submitted_at, o.id limit 100`,
   );
@@ -1026,9 +1042,11 @@ export async function orderBoard(
   const scope = sql.join(narrowed, sql` and `);
   // A PAP order waiting for approval is its head's, not Management's: out of Management's piles
   // (All orders still lists it).
+  // Nor an order outside this Management person's divisions (Who approves what).
   const notMine =
     desk === "management"
-      ? sql` and not (o.status = 'pending_approval' and ${approverSql} is not null and ${approverSql} <> ${me.id})`
+      ? sql` and not (o.status = 'pending_approval' and ${approverSql} is not null and ${approverSql} <> ${me.id})
+          and ${inApprovalScopeSql(me)}`
       : sql``;
   const inTab = (key: BoardTab): SQL =>
     key === "all" ? inTabOf(key) : sql`(${inTabOf(key)})${notMine}`;
@@ -1265,6 +1283,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
       approverId: number | null;
       restorable: boolean;
       paidIn: boolean;
+      team: boolean;
       waitingSince: string | null;
       waitingBy: string | null;
       licenceOwner: string | null;
@@ -1278,7 +1297,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         coalesce(c.licence_expires < (now() at time zone 'Asia/Manila')::date, false) as "licenceExpired",
         c.licence_no as "licenceNo", ${day("c.licence_expires")} as "licenceExpires", c.tin,
         o.no_proof_reason as "noProofReason", o.no_proof_note as "noProofNote", ${approverSql} as "approverId",
-        o.source, o.stock_reason as "stockReason",
+        o.source, o.stock_reason as "stockReason", ${inTeamSql(me)} as team,
         c.licence_owner as "licenceOwner", c.lto_type as "ltoType", ${day("c.licence_issued")} as "licenceIssued",
         (select coalesce(array_agg(distinct f.kind), '{}') from customer_file f where f.customer_id = c.id and f.active) as "customerPapers",
         (select ap.name from person ap where ap.id = ${approverSql}) as "approverName",
@@ -1376,6 +1395,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
     approverId,
     restorable,
     paidIn,
+    team: inTeam,
     waitingSince,
     waitingBy,
     licenceOwner,
@@ -1395,6 +1415,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
     takeBack: Boolean(order.takeBackUntil),
     approverId,
     restorable,
+    team: inTeam,
   };
   const can = orderActions(me, who);
   const held = order.status === "on_hold" || order.status === "exception";
@@ -1437,6 +1458,11 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
       ),
     },
     items: items.map(({ orderId: _orderId, ...item }) => item),
+    asks: await asksOf(db, me, id),
+    askUp:
+      ORDER_MANAGE_ROLES.includes(me.role) && !["cancelled", "completed"].includes(order.status)
+        ? await leadsUp(db, medrepId)
+        : null,
     versions: versions.map(({ role, ...version }) => ({
       ...version,
       kindLabel: VERSION_LABEL[version.kind],
@@ -2016,16 +2042,26 @@ export async function actOnOrder(
       approved: boolean;
       restorable: boolean;
       paidIn: boolean;
+      team: boolean;
+      inScope: boolean;
     }>(
       tx,
       sql`select o.id::int as id, o.status, o.raised_by::int as "raisedBy", o.medrep_id::int as "medrepId", ${approverSql} as "approverId", o.held_from as "heldFrom",
           o.held_role as "heldRole", o.payment_terms as terms, o.code, o.lead_id::int as "leadId", o.finance_check as "financeCheck",
           ${takeBackSql} as "takeBack", (select p.name from person p where p.id = o.approved_by) as "approvedBy",
-          o.approved_at is not null as approved, ${restorableSql} as restorable, ${paidInSql} as "paidIn"
+          o.approved_at is not null as approved, ${restorableSql} as restorable, ${paidInSql} as "paidIn",
+          ${inTeamSql(me)} as team, ${inApprovalScopeSql(me)} as "inScope"
         from sales_order o where o.id = ${id} for update of o`,
     );
     if (!order) throw new Refusal(404, "not_found", "That order doesn't exist.");
     before = order.status;
+    // Approving is for those whose divisions it is in (Admin → Who approves what).
+    if (["approve", "send_back", "reject"].includes(action) && !order.inScope)
+      throw new Refusal(
+        403,
+        "forbidden",
+        `${order.code} is in a division you don't approve: it is for the Management of that division.`,
+      );
     if (!orderActions(me, order)[action])
       throw new Refusal(
         409,
@@ -2403,12 +2439,14 @@ export async function reviseOrder(
       note: string | null;
       division: string | null;
       subDivision: string | null;
+      team: boolean;
     }>(
       tx,
       sql`select o.status, o.raised_by::int as "raisedBy", o.medrep_id::int as "medrepId", o.customer_id::int as "customerId",
           o.code, o.delivery_fee::int as "deliveryFee", o.payment_term as "paymentTerm", o.payment_terms as "paymentTerms",
           o.payment_days::int as "paymentDays", ${day("o.expected_on")} as "expectedOn", o.delivery_address as "deliveryAddress",
-          o.receiver, o.receiver_phone as "receiverPhone", o.customer_po as "customerPo", o.note, o.division, o.sub_division as "subDivision"
+          o.receiver, o.receiver_phone as "receiverPhone", o.customer_po as "customerPo", o.note, o.division, o.sub_division as "subDivision",
+          ${inTeamSql(me)} as team
         from sales_order o where o.id = ${id} for update of o`,
     );
     if (!order) throw new Refusal(404, "not_found", "That order doesn't exist.");
@@ -2712,10 +2750,11 @@ async function visibleOrder(db: Runner, me: Me, id: number) {
     code: string;
     heldFrom: OrderStatus | null;
     leadId: number | null;
+    team: boolean;
   }>(
     db,
     sql`${team(me)} select o.status, o.raised_by::int as "raisedBy", o.medrep_id::int as "medrepId", o.code, o.held_from as "heldFrom",
-        o.lead_id::int as "leadId"
+        o.lead_id::int as "leadId", ${inTeamSql(me)} as team
       from sales_order o where o.id = ${id} and ${seen(me)}`,
   );
   if (!order)

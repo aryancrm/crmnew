@@ -47,6 +47,20 @@ export async function peopleIn(db: Runner, roles: string[]): Promise<number[]> {
 }
 
 /** What a person is told after deciding on an order: whose order it is, and who must act next. */
+/** The MedRep's team lead: the first team lead or manager up the line they report to. */
+async function leadOf(db: Database, medrepId: number): Promise<number | null> {
+  const [found] = await rows<{ id: number }>(
+    db,
+    sql`with recursive up as (
+        select p.reports_to as id, 1 as depth from person p where p.id = ${medrepId}
+        union all select p.reports_to, u.depth + 1 from person p join up u on p.id = u.id where u.depth < 12
+      )
+      select q.id::int as id from up join person q on q.id = up.id
+      where q.active and q.role in ('team_lead', 'manager') order by up.depth limit 1`,
+  );
+  return found?.id ?? null;
+}
+
 export async function tellAboutOrder(
   db: Database,
   me: Me,
@@ -58,6 +72,7 @@ export async function tellAboutOrder(
   const [order] = await rows<{
     code: string;
     customer: string;
+    medrep: string;
     medrepId: number;
     raisedBy: number;
     sentBackBy: number | null;
@@ -66,17 +81,26 @@ export async function tellAboutOrder(
     heldRole: string | null;
   }>(
     db,
-    sql`select o.code, c.name as customer, o.medrep_id::int as "medrepId", o.raised_by::int as "raisedBy",
+    sql`select o.code, c.name as customer, rep.name as medrep, o.medrep_id::int as "medrepId", o.raised_by::int as "raisedBy",
         o.sent_back_by::int as "sentBackBy", o.status, o.reply, o.held_role as "heldRole"
-      from sales_order o join customer c on c.id = o.customer_id where o.id = ${orderId}`,
+      from sales_order o join customer c on c.id = o.customer_id join person rep on rep.id = o.medrep_id where o.id = ${orderId}`,
   );
   if (!order) return;
   const label = `${order.code} · ${order.customer}`;
   const link = `/orders/${orderId}`;
   const seller = [order.medrepId, order.raisedBy].filter((id) => id !== me.id);
   const stamp = Date.now();
-  const say = (to: number[], kind: string, title: string, body: string | null) =>
-    notify(db, {
+  // The MedRep's team lead hears what happens to the team's orders (the hub told nobody but the
+  // MedRep): a stop is theirs to chase ("team_stop", under Needs you), the rest is news.
+  const lead = await leadOf(db, order.medrepId);
+  const say = async (
+    to: number[],
+    kind: string,
+    title: string,
+    body: string | null,
+    team?: { word: string; stop: boolean },
+  ) => {
+    await notify(db, {
       to: to.filter((id) => id !== me.id),
       kind,
       title,
@@ -85,6 +109,17 @@ export async function tellAboutOrder(
       orderId,
       key: `${kind}:${orderId}:${stamp}`,
     });
+    if (team && lead && lead !== me.id && !to.includes(lead))
+      await notify(db, {
+        to: [lead],
+        kind: team.stop ? "team_stop" : "team_news",
+        title: `${order.medrep}'s order ${team.word}: ${label}`,
+        body,
+        link,
+        orderId,
+        key: `team:${kind}:${orderId}:${stamp}`,
+      });
+  };
 
   switch (action) {
     case "send_back":
@@ -93,6 +128,7 @@ export async function tellAboutOrder(
         "sent_back",
         `Sent back to you: ${label}`,
         `${me.name}: ${reason ?? ""} Fix it and send it again.`,
+        { word: "sent back", stop: true },
       );
     case "approve":
       return say(
@@ -102,6 +138,7 @@ export async function tellAboutOrder(
         order.status === "finance_check" || order.status === "ready_for_invoice"
           ? `By ${me.name}. It is with Finance now.`
           : `By ${me.name}. It goes to Dispatch.`,
+        { word: "approved", stop: false },
       );
     case "reject":
     case "hold":
@@ -115,7 +152,10 @@ export async function tellAboutOrder(
           : order.heldRole === "dispatch"
             ? "Dispatch"
             : me.name;
-      return say([...seller, ...desk], "held", `On hold: ${label}`, `${by}: ${reason ?? ""}`);
+      return say([...seller, ...desk], "held", `On hold: ${label}`, `${by}: ${reason ?? ""}`, {
+        word: action === "reject" ? "rejected" : "put on hold",
+        stop: true,
+      });
     }
     case "resume":
     case "restore": {
@@ -133,10 +173,14 @@ export async function tellAboutOrder(
         "resumed",
         action === "restore" ? `Restored: ${label}` : `Taken off hold: ${label}`,
         `By ${me.name}. It goes on from ${STATUS_LABEL[order.status]}.${reason ? ` Why: ${reason}` : ""}`,
+        { word: action === "restore" ? "restored" : "taken off hold", stop: false },
       );
     }
     case "cancel":
-      return say(seller, "cancelled", `Cancelled: ${label}`, `${me.name}: ${reason ?? ""}`);
+      return say(seller, "cancelled", `Cancelled: ${label}`, `${me.name}: ${reason ?? ""}`, {
+        word: "cancelled",
+        stop: true,
+      });
     case "take_back": {
       // The desk it had reached stops seeing it; the MedRep had heard it was approved.
       const desk = ["finance_check", "ready_for_invoice"].includes(before)
@@ -149,6 +193,7 @@ export async function tellAboutOrder(
         "taken_back",
         `Approval taken back: ${label}`,
         `${me.name}: ${reason ?? ""} It is back with Management; nothing to do on it for now.`,
+        { word: "approval taken back", stop: false },
       );
     }
     case "resubmit":
@@ -178,6 +223,7 @@ export async function tellAboutOrder(
         "came_back",
         `Came back undelivered: ${label}`,
         `${me.name}: ${reason ?? ""} It is back at the warehouse, still packed.`,
+        { word: "came back undelivered", stop: true },
       );
     default:
       return;

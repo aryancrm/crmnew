@@ -193,6 +193,9 @@ export function orderActions(
     approverId?: number | null;
     /** Cancelled and can come back (the server says: no money given back, no points, not a case's). */
     restorable?: boolean;
+    /** One of the team's (a MedRep under this lead): the lead acts on it as its MedRep would (the
+     *  hub: a Team Lead submits, fixes, answers and cancels the team's orders; approves nothing). */
+    team?: boolean;
   },
 ): Record<OrderAction, boolean> {
   const managers = ORDER_MANAGE_ROLES.includes(me.role);
@@ -203,7 +206,7 @@ export function orderActions(
   const dispatch = DISPATCH_ROLES.includes(me.role);
   // An Online case's order: its agent hands it over (Dispatch still packs and ships it).
   const agent = Boolean(order.leadId) && may(me, CASE_AGENT_ROLES);
-  const mine = order.raisedBy === me.id || order.medrepId === me.id;
+  const mine = order.raisedBy === me.id || order.medrepId === me.id || Boolean(order.team);
   const pending = order.status === "pending_approval";
   const flagged = order.status === "on_hold" || order.status === "exception";
   const held = flagged ? holder(order) : null;
@@ -417,7 +420,14 @@ export function paperList(
  *  delivery), except to a cancelled order. */
 export function mayAddPaper(
   me: Me,
-  order: { status: OrderStatus; raisedBy: number; medrepId: number; leadId?: number | null },
+  order: {
+    status: OrderStatus;
+    raisedBy: number;
+    medrepId: number;
+    leadId?: number | null;
+    /** One of the team's, for its lead. */
+    team?: boolean;
+  },
   kind?: PaperKind,
 ): boolean {
   if (order.status === "cancelled") return false;
@@ -433,6 +443,9 @@ export function mayAddPaper(
     return true;
   if (order.status === "completed") return false;
   return (
-    ORDER_MANAGE_ROLES.includes(me.role) || order.raisedBy === me.id || order.medrepId === me.id
+    ORDER_MANAGE_ROLES.includes(me.role) ||
+    order.raisedBy === me.id ||
+    order.medrepId === me.id ||
+    Boolean(order.team)
   );
 }

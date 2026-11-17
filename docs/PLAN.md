@@ -1016,7 +1016,8 @@ sees every team under them, a cover brings the covered team in, and an empty sea
 - **Team lead vs Management:** a team lead never approves, sends back, holds or takes back an
   order (only Management does). The team lead's list is "Stuck in your team (you chase, the desk
   decides)" and each line says whose step it is ("Management sent it back to Ryan: …"). A team
-  lead places orders only for an empty seat's customers.
+  lead places orders for any MedRep of theirs (and an empty seat's customers), and works the
+  team's orders as their MedRep would (change log 95).
 - **Areas** (Teams & people → Areas): every channel's areas with their cities, the seat holding
   each (or vacant / none) and their customers; the CEO and the Admin add and change them. Customers
   of an area's cities who have no area yet join it.
@@ -2546,4 +2547,26 @@ on the local copy (database copied first, put back after), with what was seen wr
   Lead asking on the team's orders (the hub lets them). Not built: a credit memo document of its
   own (Zoho numbered CN-…; question 28).
 - 17 Nov (94), question 28 added: the credit memo.
+- 17 Nov (95), plan 19 step D (Aryan: "Haan, D kar"), the hub's Team Lead and Admin against
+  crmnew's. crmnew already had My team, Targets, Messages, asks for people and orders for any of
+  the lead's own MedReps (the "empty seats only" line in 12.5 was out of date). Added from the hub:
+  **the Team Lead works the team's orders as their MedRep would** — fixes and sends again a
+  sent-back order, answers a hold, cancels a draft, adds papers, asks a refund ("Request refund",
+  any road) — and still approves nothing; and, fixing the hub's gap, **the Team Lead hears about
+  the team's orders**: a stop (sent back, on hold, rejected, cancelled, came back) under Needs you,
+  the rest (approved, taken off hold, restored, approval taken back) under Updates, "Ryan Aninon's
+  order sent back: …". **Asking up (question 9, "dono chahiye")** (migration 0093): on the order
+  Management presses "Ask Daniel Cruz (Team Lead)" — the MedRep's first lead up the line — or "Ask
+  Vanessa Escalderon (Business Mentor)" — the top lead of the division — with what it asks; the
+  one asked sees it under Needs you and on the order, answers Yes or No (a No says why); it comes
+  back to Management under Needs you and stays on the order and its timeline; one open question to
+  a person at a time; it doesn't stop the approval (Management decides). **Who approves what**
+  (the hub's Management (Approval) access, migration 0094): Admin → Teams & people → Who approves
+  what: each Management person approves every division (as now) or only the ones ticked; their
+  piles and queue hold only those, approving another division's order is refused; an order with no
+  division is for "every division". Left at "every division" for all three (Aljean, Kate, Sheila):
+  which division each approves is the heads' call. Walked on a copy: Kate asked Daniel on Ryan's
+  12%-below order, Daniel answered Yes from Needs you, Kate saw it and approved; Kate sent back
+  another, Daniel heard and sent it again; Kate set to BID lost Ryan's HOS order from her pile and
+  approving it was refused; data checks clean; the copy put back.
 

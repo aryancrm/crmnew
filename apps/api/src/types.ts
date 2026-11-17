@@ -665,6 +665,34 @@ export type OrderFinding = {
   text: string;
 };
 
+/** Who approves what: each Management person, every division (null) or only these. */
+export type Approvers = {
+  people: { id: number; name: string; title: string | null; unit: string | null; approves: string[] | null }[];
+  divisions: string[];
+};
+
+/** Management asking up on an order (a Team Lead or the Business Mentor), and the answer. */
+export type OrderAsk = {
+  id: number;
+  asWho: "team_lead" | "business_mentor";
+  asWhoLabel: string;
+  askedBy: string;
+  askedTo: string;
+  question: string;
+  askedAt: string;
+  /** Null until answered. */
+  answer: boolean | null;
+  answerNote: string | null;
+  answeredAt: string | null;
+  /** Waiting on this person's answer. */
+  mine: boolean;
+};
+/** Whom Management may ask on an order: the MedRep's Team Lead and their division's Business Mentor. */
+export type OrderAskUp = {
+  teamLead: { id: number; name: string; title: string | null } | null;
+  mentor: { id: number; name: string; title: string | null } | null;
+};
+
 /** Whose board: Management's "Orders to check" or Finance's. */
 export type Desk = "management" | "finance" | "dispatch";
 
@@ -1167,6 +1195,10 @@ export type OrderDetail = {
     /** A cold-chain box (styro): its price is what Management typed on this order. */
     coldBox: boolean;
   }[];
+  /** Management's questions up the MedRep's line on it, and their answers. */
+  asks: OrderAsk[];
+  /** For Management on an open order: whom it may ask. Null for anyone else. */
+  askUp: OrderAskUp | null;
   /** Every version of its lines, oldest first: as placed, each MedRep fix, each change
    *  Management made before approving. The last is what the order is now. */
   versions: OrderVersion[];

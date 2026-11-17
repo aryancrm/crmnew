@@ -24,6 +24,11 @@ const NEEDS_YOU = new Set([
   "leave_request",
   "form_request",
   "stock_back",
+  // A team's order stopped: the team lead chases it.
+  "team_stop",
+  // Management asks a team lead or a Business Mentor for a yes; their answer comes back.
+  "ask_up",
+  "ask_answered",
 ]);
 
 export type UpdatesBox = "important" | "updates";
@@ -49,6 +54,10 @@ const TONE: Record<string, string> = {
   seat_request: "bg-violet-500",
   announcement: "bg-sky-500",
   message: "bg-sky-500",
+  team_stop: "bg-rose-500",
+  team_news: "bg-emerald-500",
+  ask_up: "bg-violet-500",
+  ask_answered: "bg-violet-500",
 };
 
 /** The person's news, read every 30 seconds while the page is in view (shared by the sidebar's

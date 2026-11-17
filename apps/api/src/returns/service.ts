@@ -17,7 +17,7 @@ import { clean, iso, logMove, putIn, type Runner } from "../inventory/service";
 import { notify } from "../notify/service";
 import { logEvent, peso } from "../orders/events";
 import { ORDER_MANAGE_ROLES } from "../orders/rules";
-import { actOnOrder, mayReadOrder } from "../orders/service";
+import { actOnOrder, inTeamSql, mayReadOrder } from "../orders/service";
 import { settleOrderPoints } from "../points/service";
 import type {
   Me,
@@ -87,10 +87,14 @@ export async function returnable(db: Runner, orderId: number) {
   );
 }
 
-/** May this person ask for a return on this order: who sold it, or Management. */
-function mayAsk(me: Me, order: { medrepId: number; raisedBy: number }) {
+/** May this person ask for a return on this order: who sold it, their team lead (the hub's
+ *  Request refund on the team's orders), or Management. */
+function mayAsk(me: Me, order: { medrepId: number; raisedBy: number; team?: boolean }) {
   return (
-    ORDER_MANAGE_ROLES.includes(me.role) || order.medrepId === me.id || order.raisedBy === me.id
+    ORDER_MANAGE_ROLES.includes(me.role) ||
+    order.medrepId === me.id ||
+    order.raisedBy === me.id ||
+    Boolean(order.team)
   );
 }
 
@@ -122,10 +126,12 @@ export async function requestReturn(
       status: string;
       medrepId: number;
       raisedBy: number;
+      team: boolean;
     }>(
       tx,
-      sql`select id::int as id, code, status, medrep_id::int as "medrepId", raised_by::int as "raisedBy"
-        from sales_order where id = ${orderId} for update`,
+      sql`select o.id::int as id, o.code, o.status, o.medrep_id::int as "medrepId", o.raised_by::int as "raisedBy",
+          ${inTeamSql(me)} as team
+        from sales_order o where o.id = ${orderId} for update`,
     );
     if (!order) throw new Refusal(404, "not_found", "That order doesn't exist.");
     if (!mayAsk(me, order))
@@ -625,13 +631,14 @@ export async function orderReturns(db: Runner, me: Me, orderId: number): Promise
       sql`select ${returnColumns} ${returnFrom} where r.order_id = ${orderId} order by r.requested_at desc`,
     ),
     returnable(db, orderId),
-    rows<{ status: string; medrepId: number; raisedBy: number }>(
+    rows<{ status: string; medrepId: number; raisedBy: number; team: boolean }>(
       db,
-      sql`select status, medrep_id::int as "medrepId", raised_by::int as "raisedBy" from sales_order where id = ${orderId}`,
+      sql`select o.status, o.medrep_id::int as "medrepId", o.raised_by::int as "raisedBy", ${inTeamSql(me)} as team
+        from sales_order o where o.id = ${orderId}`,
     ),
   ]);
   const one = order[0];
-  const asker = Boolean(one) && mayAsk(me, one as { medrepId: number; raisedBy: number });
+  const asker = Boolean(one) && mayAsk(me, one as { medrepId: number; raisedBy: number; team: boolean });
   // Where the goods may be now: delivered (coming back, or the customer keeps them), or not on
   // the road yet (the MedRep asks Management to cancel; Management cancels it itself).
   const goods: ReturnGoods[] =

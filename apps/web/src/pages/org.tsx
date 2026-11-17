@@ -22,6 +22,8 @@ import {
 import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useMe } from "../auth";
+import { ApproversTab } from "../org/approvers";
 import { AreasTab, RequestsTab } from "../org/areas-requests";
 import { OrgChart } from "../org/chart";
 import {
@@ -83,8 +85,12 @@ function Org({ tree }: { tree: OrgTree }) {
   const picked = tree.units.find((unit) => String(unit.id) === params.get("unit")) ?? root;
   const q = params.get("q") ?? "";
   // The chart first (Aryan, 17 Nov: "as a chart"); the teams list stays a tab away.
-  const tab = (["teams", "areas", "requests"] as const).find((one) => one === params.get("tab")) ?? "chart";
+  const tab =
+    (["teams", "areas", "requests", "approvers"] as const).find((one) => one === params.get("tab")) ??
+    "chart";
   const openAsks = tree.requests.filter((request) => request.status === "open").length;
+  const me = useMe().data;
+  const setsApprovers = me?.role === "ceo" || me?.role === "admin";
   const set = (next: Record<string, string | null>) =>
     setParams(
       (now) => {
@@ -171,8 +177,12 @@ function Org({ tree }: { tree: OrgTree }) {
             ["teams", "Teams"],
             ["areas", `Areas · ${tree.areas.length}`],
             ["requests", `Asks for people${openAsks ? ` · ${openAsks} waiting` : ""}`],
+            ["approvers", "Who approves what"],
           ] as const
-        ).map(([key, label]) => (
+        )
+          // Who approves what is the CEO's and the Admin's to set.
+          .filter(([key]) => key !== "approvers" || setsApprovers)
+          .map(([key, label]) => (
           <button
             key={key}
             type="button"
@@ -186,6 +196,7 @@ function Org({ tree }: { tree: OrgTree }) {
       {tab === "chart" && <OrgChart tree={tree} open={setPop} />}
       {tab === "areas" && <AreasTab tree={tree} />}
       {tab === "requests" && <RequestsTab tree={tree} />}
+      {tab === "approvers" && setsApprovers && <ApproversTab />}
       {tab === "teams" && (
         <div className="grid items-start gap-4 lg:grid-cols-[17.5rem_minmax(0,1fr)]">
           <nav

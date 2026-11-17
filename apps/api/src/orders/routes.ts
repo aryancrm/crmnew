@@ -5,6 +5,7 @@ import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
 import { allow, type Env, idParam, Refusal, readBody } from "../http";
+import { answerAsk, askUp } from "./asks";
 import { tellAboutOrder } from "../notify/service";
 import { orderPrices } from "../customers/prices";
 import { customerUpdate, noteSent, tellCustomer } from "../online/tell";
@@ -276,6 +277,26 @@ export function orderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
   app.post("/api/orders/:id/change", async (c) => {
     const input = await readBody(c, orderInput.extend({ answer: z.string().max(1000) }));
     await reviseOrder(db, c.get("me"), idParam(c), input as OrderRevision, "management");
+    return c.json({ ok: true });
+  });
+
+  // Management asks the MedRep's Team Lead or the Business Mentor; the one asked answers.
+  app.post("/api/orders/:id/ask", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        to: z.enum(["team_lead", "business_mentor"]),
+        question: z.string({ error: "Say what you are asking." }).trim().min(1, "Say what you are asking.").max(500),
+      }),
+    );
+    return c.json({ id: await askUp(db, c.get("me"), idParam(c), input) });
+  });
+  app.post("/api/order-asks/:id/answer", signedIn, async (c) => {
+    const input = await readBody(
+      c,
+      z.object({ yes: z.boolean(), note: z.string().trim().max(500).nullish() }),
+    );
+    await answerAsk(db, c.get("me"), idParam(c), input);
     return c.json({ ok: true });
   });
 
