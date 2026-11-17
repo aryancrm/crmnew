@@ -1,9 +1,10 @@
 // Below the portal's first screen (Aryan, 18 Nov): what Bishnoi One is and how it works, as one
-// long page: one order from start to finish, how signing in works, what each workspace holds, a
-// night sky with every part of the company around one record, and why it is safe. Only words and a look.
+// long page: what each workspace holds, a night sky with every part of the company turning around
+// one record, one order from start to finish, how it works, and the footer. Only words and a look.
 
 import { ArrowRight, Check } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { TILE_GLOW, TILE_ICONS } from "./tiles";
 import { WORKSPACES } from "../workspaces";
 
@@ -32,16 +33,6 @@ const STARS = Array.from({ length: 260 }, (_, i) => ({
   dur: 2.4 + random() * 3,
 }));
 
-const INSIDE = [
-  { key: "sales", title: "Orders", text: "Taken in the field or online, then approved, paid, packed and delivered, every step timed." },
-  { key: "management", title: "Approvals", text: "Management approves every order before it moves. Nothing ships unapproved." },
-  { key: "finance", title: "Money", text: "Invoices, payments, refunds and credits post to the books by themselves." },
-  { key: "inventory", title: "Stock", text: "Every batch and expiry in every warehouse; a recall traced to each customer." },
-  { key: "dispatch", title: "Delivery", text: "Packing and delivery, each order followed to the customer's door." },
-  { key: "online", title: "Online desk", text: "Messenger and website orders, with the patient's Rx, in one queue." },
-  { key: "hr", title: "People", text: "The company chart, attendance, leave, payroll, targets and scorecards." },
-  { key: "regulatory", title: "Quality", text: "Registrations, samples, complaints and side-effects, each to a due day." },
-];
 
 const JOURNEY = [
   { who: "MedRep or Online desk", what: "takes the order", more: "with the Rx for a patient's purchase" },
@@ -100,9 +91,9 @@ const DETAILS: Record<string, { who: string; points: string[] }> = {
   },
 };
 
-const SAFE = [
-  { title: "Your own login", text: "Nobody shares an account. Each person signs in with their own ID and password." },
-  { title: "Your role decides", text: "Every page and every button checks what your role may do, every time." },
+const CLOSE = [
+  { title: "Pick your workspace", text: "Each department has its own door: sales and field, management, finance, stock, dispatch, people." },
+  { title: "Sign in as yourself", text: "Your own login ID and password. Your role decides what you see and what you can do." },
   { title: "Every change kept", text: "Who did it and when, in the audit. Nothing with history is ever deleted." },
 ];
 
@@ -126,20 +117,140 @@ function Sky() {
   );
 }
 
-/** A giant planet's edge lit from behind: the night sky's one light. */
-function Horizon() {
+/** The sun is the one record; the departments turn around it. Each planet is a lit sphere whose
+ *  bright side always faces the sun (it turns as it travels), with a glass label that stays upright. */
+const PLANETS = [
+  { name: "Orders", rx: 175, color: "#34b261", light: "#b8f5cc", r: 10, dur: 18, at: 3 },
+  { name: "Money", rx: 280, color: "#8b5cf6", light: "#dccbff", r: 13, dur: 28, at: 17 },
+  { name: "Stock", rx: 395, color: "#f5a524", light: "#ffe7a8", r: 15, dur: 40, at: 6, ring: true },
+  { name: "Delivery", rx: 515, color: "#ff6b4a", light: "#ffd0c2", r: 12, dur: 54, at: 41 },
+  { name: "People", rx: 640, color: "#3b82f6", light: "#c7dcff", r: 17, dur: 72, at: 26 },
+];
+const SUN = { x: 720, y: 300 };
+const TILT = 0.3;
+const orbit = (rx: number) => {
+  const ry = rx * TILT;
+  return `M${SUN.x - rx},${SUN.y} a${rx},${ry} 0 1,0 ${rx * 2},0 a${rx},${ry} 0 1,0 ${-rx * 2},0`;
+};
+
+function SolarSystem() {
   return (
-    <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-[clamp(420px,46vw,470px)] bottom-0 overflow-visible">
-      <div className="sun-breathe absolute top-0 left-1/2 h-40 w-[70%] -translate-x-1/2 -translate-y-1/2 rounded-[100%] bg-[radial-gradient(closest-side,rgba(255,170,90,0.55),rgba(243,107,33,0.18)_55%,transparent)] blur-2xl" />
-      <div
-        className="absolute top-0 left-1/2 aspect-square w-[max(2600px,220vw)] -translate-x-1/2 rounded-full bg-[#04050b]"
-        style={{
-          boxShadow:
-            "0 -1px 0 0 rgba(255,214,170,0.95), 0 -6px 24px -4px rgba(255,150,70,0.65), 0 -40px 120px -10px rgba(243,107,33,0.35), 0 -90px 220px -40px rgba(95,208,139,0.18), inset 0 40px 120px -40px rgba(243,107,33,0.25)",
-        }}
-      />
-      <div className="absolute top-0 left-1/2 h-[3px] w-[38%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-gradient-to-r from-transparent via-[#fff3e2] to-transparent blur-[1px]" />
-    </div>
+    <svg viewBox="0 0 1440 600" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Orders, money, stock, delivery and people turning around one record" className="h-full w-full overflow-visible">
+      <defs>
+        <radialGradient id="sun-core" cx=".5" cy=".5" r=".5" fx=".42" fy=".4">
+          <stop offset="0" stopColor="#fffef8" />
+          <stop offset=".3" stopColor="#fff1c9" />
+          <stop offset=".62" stopColor="#ffbe6b" />
+          <stop offset=".88" stopColor="#ff8a3d" />
+          <stop offset="1" stopColor="#f0641e" />
+        </radialGradient>
+        <radialGradient id="sun-corona">
+          <stop offset=".45" stopColor="#ffb26b" stopOpacity=".55" />
+          <stop offset=".7" stopColor="#ff7a2e" stopOpacity=".16" />
+          <stop offset="1" stopColor="#ff7a2e" stopOpacity="0" />
+        </radialGradient>
+        <radialGradient id="sun-wide">
+          <stop offset="0" stopColor="#ff9a4a" stopOpacity=".22" />
+          <stop offset=".5" stopColor="#f36b21" stopOpacity=".07" />
+          <stop offset="1" stopColor="#f36b21" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="flare" x1="0" x2="1">
+          <stop offset="0" stopColor="#fff" stopOpacity="0" />
+          <stop offset=".5" stopColor="#ffe9cc" stopOpacity=".55" />
+          <stop offset="1" stopColor="#fff" stopOpacity="0" />
+        </linearGradient>
+        {/* An orbit is faint behind the sun and brighter in front. */}
+        <linearGradient id="orbit-line" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#fff" stopOpacity=".05" />
+          <stop offset=".5" stopColor="#fff" stopOpacity=".1" />
+          <stop offset="1" stopColor="#fff" stopOpacity=".28" />
+        </linearGradient>
+        <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="6" />
+        </filter>
+        {PLANETS.map((planet) => (
+          <radialGradient key={planet.name} id={`planet-${planet.name}`} cx=".5" cy=".5" r=".55" fx=".5" fy=".18">
+            <stop offset="0" stopColor={planet.light} />
+            <stop offset=".35" stopColor={planet.color} />
+            <stop offset=".8" stopColor={planet.color} stopOpacity=".55" />
+            <stop offset="1" stopColor="#05060c" />
+          </radialGradient>
+        ))}
+        <linearGradient id="ring-line" x1="0" x2="1">
+          <stop offset="0" stopColor="#ffe7a8" stopOpacity=".1" />
+          <stop offset=".5" stopColor="#ffe7a8" stopOpacity=".75" />
+          <stop offset="1" stopColor="#ffe7a8" stopOpacity=".1" />
+        </linearGradient>
+      </defs>
+
+      {PLANETS.map((planet) => (
+        <path key={planet.name} d={orbit(planet.rx)} fill="none" stroke="url(#orbit-line)" strokeWidth="1" />
+      ))}
+
+      {/* The sun: a wide warm light, a corona, slow rays, a lens streak and the bright core. */}
+      <circle cx={SUN.x} cy={SUN.y} r="420" fill="url(#sun-wide)" />
+      <circle cx={SUN.x} cy={SUN.y} r="130" fill="url(#sun-corona)" className="sun-breathe" />
+      <g opacity=".5">
+        {Array.from({ length: 36 }, (_, i) => (
+          <line
+            // biome-ignore lint/suspicious/noArrayIndexKey: a fixed ring
+            key={i}
+            x1={SUN.x}
+            y1={SUN.y - 66}
+            x2={SUN.x}
+            y2={SUN.y - (i % 3 === 0 ? 150 : 108)}
+            stroke="#ffcf94"
+            strokeOpacity={i % 3 === 0 ? 0.22 : 0.12}
+            strokeWidth="1.2"
+            strokeLinecap="round"
+            transform={`rotate(${i * 10} ${SUN.x} ${SUN.y})`}
+          />
+        ))}
+        <animateTransform attributeName="transform" type="rotate" from={`0 ${SUN.x} ${SUN.y}`} to={`360 ${SUN.x} ${SUN.y}`} dur="140s" repeatCount="indefinite" />
+      </g>
+      <rect x={SUN.x - 420} y={SUN.y - 1} width="840" height="2" rx="1" fill="url(#flare)" />
+      <circle cx={SUN.x} cy={SUN.y} r="66" fill="#ffb066" opacity=".55" filter="url(#soft)" />
+      <circle cx={SUN.x} cy={SUN.y} r="58" fill="url(#sun-core)" />
+      <text x={SUN.x} y={SUN.y + 104} textAnchor="middle" fill="#ffd9b8" fillOpacity=".9" fontSize="11" fontWeight="600" letterSpacing="4">
+        ONE RECORD
+      </text>
+
+      {PLANETS.map((planet) => {
+        const move = { dur: `${planet.dur}s`, begin: `-${planet.at}s`, repeatCount: "indefinite", path: orbit(planet.rx) } as const;
+        const width = planet.name.length * 7 + 22;
+        return (
+          <g key={planet.name}>
+            {planet.ring && (
+              <g>
+                <path d={`M${-planet.r * 2.1},0 A${planet.r * 2.1},${planet.r * 0.55} 0 0,1 ${planet.r * 2.1},0`} fill="none" stroke="url(#ring-line)" strokeWidth="2" />
+                <animateMotion {...move} />
+              </g>
+            )}
+            <g>
+              <circle r={planet.r * 1.9} fill={planet.color} opacity=".14" filter="url(#soft)" />
+              <circle r={planet.r} fill={`url(#planet-${planet.name})`} />
+              <circle r={planet.r} fill="none" stroke={planet.light} strokeOpacity=".25" strokeWidth=".8" />
+              <animateMotion {...move} rotate="auto" />
+            </g>
+            {planet.ring && (
+              <g>
+                <path d={`M${-planet.r * 2.1},0 A${planet.r * 2.1},${planet.r * 0.55} 0 0,0 ${planet.r * 2.1},0`} fill="none" stroke="url(#ring-line)" strokeWidth="2" />
+                <animateMotion {...move} />
+              </g>
+            )}
+            <g>
+              <g transform={`translate(0 ${planet.r + 20})`}>
+                <rect x={-width / 2} y="-11" width={width} height="22" rx="11" fill="#0b0d18" fillOpacity=".7" stroke="#fff" strokeOpacity=".14" />
+                <text y="4" textAnchor="middle" fill="#fff" fillOpacity=".86" fontSize="11" fontWeight="500" letterSpacing=".4">
+                  {planet.name}
+                </text>
+              </g>
+              <animateMotion {...move} />
+            </g>
+          </g>
+        );
+      })}
+    </svg>
   );
 }
 
@@ -235,6 +346,31 @@ function Seats() {
 export function About() {
   return (
     <div id="about" className="relative">
+      <Seats />
+
+      {/* The night sky: everything turns around one record. */}
+      <section className="relative overflow-hidden bg-[#03040a] text-white">
+        <Sky />
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+          <div className="absolute -top-40 -left-40 size-[40rem] rounded-full bg-[#3b2a8f] opacity-20 blur-[140px]" />
+          <div className="absolute -right-40 -bottom-40 size-[34rem] rounded-full bg-[#0f6b45] opacity-15 blur-[140px]" />
+        </div>
+        <div className={`relative ${wrap} pt-28 text-center`}>
+          <p className={`${eyebrow} text-[#ff9a5a]`}>What is inside</p>
+          <h2 className={`${h2} mx-auto mt-4 max-w-3xl`}>
+            Every part of the company, around{" "}
+            <span className="bg-gradient-to-r from-[#ffd38a] via-[#ff8a3d] to-[#f36b21] bg-clip-text text-transparent">one record</span>.
+          </h2>
+          <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-white/60">
+            An order is entered once. Approval, payment, stock, delivery and the books all read and write the same record, so
+            nobody types it twice and nobody works from an old copy.
+          </p>
+        </div>
+        <div className="relative mx-auto h-[clamp(320px,50vw,700px)] w-[min(1440px,100%)] pb-10">
+          <SolarSystem />
+        </div>
+      </section>
+
       {/* One order, start to finish. */}
       <section className={`${wrap} py-24`}>
         <p className={`${eyebrow} text-[#1f9d55]`}>One order, start to finish</p>
@@ -256,101 +392,84 @@ export function About() {
         </ol>
       </section>
 
-      {/* How signing in works. */}
-      <section className={`${wrap} pb-24`}>
-        <div className="rounded-[2.5rem] border border-white/90 bg-white/40 px-6 py-16 shadow-[0_30px_70px_-50px_rgba(20,30,50,0.4)] backdrop-blur md:px-12">
-          <p className={`${eyebrow} text-center text-[#c2410c]`}>How it works</p>
-          <h2 className={`${h2} mx-auto mt-4 max-w-3xl text-center`}>
+      {/* The close: how it works, in three lines, and the way in. */}
+      <section className="relative overflow-hidden border-t border-white/80 bg-gradient-to-b from-white/60 to-[#fdf3ec]">
+        <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 left-1/2 size-[46rem] -translate-x-1/2 rounded-full bg-[#ffd9c2] opacity-50 blur-[140px]" />
+        <div className={`relative ${wrap} py-28 text-center`}>
+          <p className={`${eyebrow} text-[#c2410c]`}>How it works</p>
+          <h2 className={`${h2} mx-auto mt-4 max-w-3xl`}>
             One portal. <span className="text-[#f36b21]">Your own login.</span> The same records.
           </h2>
-          <ol className="relative mt-14 grid gap-5 md:grid-cols-3">
-            <span aria-hidden="true" className="absolute top-12 right-[16%] left-[16%] hidden h-px bg-gradient-to-r from-[#f36b21]/0 via-[#f36b21]/40 to-[#1f9d55]/0 md:block" />
-            {[
-              ["Pick your workspace", "Sales and field, management, finance, stock, dispatch, people: each department has its own door."],
-              ["Sign in as yourself", "Your own login ID and password. Your role decides what you see and what you can do."],
-              ["Work from one record", "An order, its stock, its invoice and its payment are the same record for everyone who touches it."],
-            ].map(([title, text], i) => (
-              <li key={title} className="relative rounded-[2rem] border border-white/90 bg-white/80 p-8 shadow-[0_24px_50px_-30px_rgba(20,30,50,0.35)] backdrop-blur-xl">
-                <span className="grid size-11 place-items-center rounded-2xl bg-gradient-to-br from-[#ff9a5a] to-[#f36b21] text-base font-bold text-white shadow-[0_10px_20px_-8px_rgba(243,107,33,0.6)]">
-                  {i + 1}
-                </span>
-                <h3 className="mt-5 text-xl font-semibold tracking-[-0.02em]">{title}</h3>
-                <p className="mt-2 text-[15px] leading-relaxed text-[#5b6472]">{text}</p>
+          <ol className="mx-auto mt-16 grid max-w-4xl text-left md:grid-cols-3 md:divide-x md:divide-[#1f2733]/10">
+            {CLOSE.map((one, i) => (
+              <li key={one.title} className="px-2 py-5 md:px-8 md:py-0">
+                <span className="text-sm font-semibold text-[#f36b21] tabular-nums">0{i + 1}</span>
+                <h3 className="mt-2 text-xl font-semibold tracking-[-0.02em]">{one.title}</h3>
+                <p className="mt-2 text-[15px] leading-relaxed text-[#5b6472]">{one.text}</p>
               </li>
             ))}
           </ol>
+          <div className="mt-16 flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+              className="inline-flex items-center gap-2 rounded-full bg-[#1f2733] px-7 py-3.5 text-sm font-semibold text-white shadow-[0_16px_34px_-14px_rgba(20,30,50,0.6)] transition hover:bg-black"
+            >
+              Choose your workspace <ArrowRight className="size-4" aria-hidden="true" />
+            </button>
+            <Link to="/login?with=password" className="inline-flex items-center gap-2 rounded-full border border-[#1f2733]/15 bg-white/70 px-7 py-3.5 text-sm font-semibold text-[#1f2733] transition hover:bg-white">
+              Log in with ID and password
+            </Link>
+          </div>
         </div>
       </section>
 
-      <Seats />
-
-      {/* The night sky: everything turns around one record. */}
-      <section className="relative overflow-hidden bg-[#03040a] text-white">
-        <Sky />
-        <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-          <div className="absolute -top-40 -left-40 size-[40rem] rounded-full bg-[#3b2a8f] opacity-20 blur-[140px]" />
-          <div className="absolute -top-20 -right-40 size-[34rem] rounded-full bg-[#0f6b45] opacity-15 blur-[140px]" />
+      <footer className="bg-[#0b0d14] text-white">
+        <div className={`${wrap} grid gap-12 py-16 md:grid-cols-[1.4fr_1fr_1fr_1fr]`}>
+          <div>
+            <span className="flex items-center gap-3">
+              <img src="/brand/bishnoi-one-mark.png" alt="" className="size-10" />
+              <span className="text-xl font-semibold tracking-[-0.03em]">Bishnoi One</span>
+            </span>
+            <p className="mt-4 max-w-xs text-sm leading-relaxed text-white/55">One company. Every department, one place. Each person signs in as themselves.</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold tracking-[0.18em] text-white/40 uppercase">Selling</p>
+            <ul className="mt-4 grid gap-2.5 text-sm text-white/75">
+              {WORKSPACES.filter((one) => one.group === "selling").map((one) => <li key={one.key}>{one.label}</li>)}
+            </ul>
+            <p className="mt-7 text-xs font-semibold tracking-[0.18em] text-white/40 uppercase">Operations</p>
+            <ul className="mt-4 grid gap-2.5 text-sm text-white/75">
+              {WORKSPACES.filter((one) => one.group === "operations").map((one) => <li key={one.key}>{one.label}</li>)}
+            </ul>
+          </div>
+          <div>
+            <p className="text-xs font-semibold tracking-[0.18em] text-white/40 uppercase">Office</p>
+            <ul className="mt-4 grid gap-2.5 text-sm text-white/75">
+              {WORKSPACES.filter((one) => one.group === "office").map((one) => <li key={one.key}>{one.label}</li>)}
+            </ul>
+          </div>
+          <div>
+            <p className="text-xs font-semibold tracking-[0.18em] text-white/40 uppercase">Sign in</p>
+            <ul className="mt-4 grid gap-2.5 text-sm text-white/75">
+              <li>
+                <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} className="hover:text-white">
+                  Choose your workspace
+                </button>
+              </li>
+              <li>
+                <Link to="/login?with=password" className="hover:text-white">Log in with ID and password</Link>
+              </li>
+            </ul>
+            <p className="mt-7 text-xs font-semibold tracking-[0.18em] text-white/40 uppercase">Help</p>
+            <p className="mt-4 text-sm leading-relaxed text-white/75">Need access or a new password? Ask your administrator.</p>
+          </div>
         </div>
-        <Horizon />
-        <div className={`relative ${wrap} pt-28 text-center`}>
-          <p className={`${eyebrow} text-[#ff9a5a]`}>What is inside</p>
-          <h2 className={`${h2} mx-auto mt-4 max-w-3xl`}>
-            Every part of the company, around{" "}
-            <span className="bg-gradient-to-r from-[#ffd38a] via-[#ff8a3d] to-[#f36b21] bg-clip-text text-transparent">one record</span>.
-          </h2>
-          <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-white/60">
-            An order is entered once. Approval, payment, stock, delivery and the books all read and write the same record, so
-            nobody types it twice and nobody works from an old copy.
-          </p>
-        </div>
-        <div className={`relative ${wrap} pt-[clamp(150px,14vw,190px)] pb-28`}>
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {INSIDE.map((one) => {
-              const Icon = TILE_ICONS[one.key];
-              return (
-                <li
-                  key={one.title}
-                  className="group relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-6 backdrop-blur-md transition hover:border-white/20 hover:bg-white/[0.07]"
-                >
-                  <span aria-hidden="true" className="absolute -top-10 -right-10 size-32 rounded-full opacity-20 blur-3xl transition-opacity group-hover:opacity-40" style={{ background: TILE_GLOW[one.key] }} />
-                  <span className="relative block size-10">{Icon && <Icon />}</span>
-                  <h3 className="relative mt-5 text-lg font-semibold">{one.title}</h3>
-                  <p className="relative mt-1.5 text-sm leading-relaxed text-white/60">{one.text}</p>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      </section>
-
-      {/* Why it is safe. */}
-      <section className={`${wrap} py-24 text-center`}>
-        <p className={`${eyebrow} text-[#c2410c]`}>Safe by design</p>
-        <h2 className={`${h2} mx-auto mt-4 max-w-2xl`}>Your work, kept straight.</h2>
-        <ul className="mt-12 grid gap-5 text-left md:grid-cols-3">
-          {SAFE.map((one) => (
-            <li key={one.title} className="rounded-[2rem] border border-white/90 bg-white/70 p-8 shadow-[0_24px_50px_-30px_rgba(20,30,50,0.35)] backdrop-blur-xl">
-              <h3 className="text-xl font-semibold tracking-[-0.02em]">{one.title}</h3>
-              <p className="mt-2 text-[15px] leading-relaxed text-[#5b6472]">{one.text}</p>
-            </li>
-          ))}
-        </ul>
-        <button
-          type="button"
-          onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-          className="mt-14 inline-flex items-center gap-2 rounded-full bg-[#f36b21] px-7 py-3.5 text-sm font-semibold text-white shadow-[0_16px_34px_-12px_rgba(243,107,33,0.7)] transition hover:bg-[#e05a12]"
-        >
-          Choose your workspace <ArrowRight className="size-4" aria-hidden="true" />
-        </button>
-      </section>
-
-      <footer className="border-t border-black/5">
-        <div className={`${wrap} flex flex-wrap items-center justify-between gap-3 py-8 text-sm text-[#8a93a3]`}>
-          <span className="flex items-center gap-2.5">
-            <img src="/brand/bishnoi-one-mark.png" alt="" className="size-7" />
-            <span className="font-semibold text-[#1f2733]">Bishnoi One</span>
-          </span>
-          <span>Each person signs in as themselves · Need access? Ask your administrator</span>
+        <div className="border-t border-white/10">
+          <div className={`${wrap} flex flex-wrap items-center justify-between gap-3 py-6 text-xs text-white/40`}>
+            <span>© {new Date().getFullYear()} Bishnoi One</span>
+            <span>Every change is kept: who did it and when.</span>
+          </div>
         </div>
       </footer>
     </div>
