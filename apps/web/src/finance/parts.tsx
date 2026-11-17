@@ -382,7 +382,11 @@ export function RecordPaymentDialog({
   const [added, setAdded] = useState<{ id: number; name: string } | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProblem, setUploadProblem] = useState<string | null>(null);
+  // Tax the customer withheld (EWT) with its BIR Form 2307: it settles the invoice too.
+  const [withheld, setWithheld] = useState("");
+  const [form2307, setForm2307] = useState("");
   const typed = centavos(amount);
+  const withheldTyped = withheld.trim() ? centavos(withheld) : 0;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -393,6 +397,8 @@ export function RecordPaymentDialog({
       paidOn: day,
       note,
       proofId: proofId ? Number(proofId) : null,
+      withheld: Number.isFinite(withheldTyped) && withheldTyped > 0 ? withheldTyped : null,
+      form2307: form2307.trim() || null,
     });
     if (done) onClose();
   }
@@ -410,6 +416,37 @@ export function RecordPaymentDialog({
           onChange={setAmount}
           error={money.at("amount")}
         />
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Tax withheld, 2307 (optional)" error={money.at("withheld")}>
+            {(field) => (
+              <input
+                {...field}
+                className={INPUT}
+                inputMode="decimal"
+                placeholder="₱0.00"
+                value={withheld}
+                onChange={(event) => setWithheld(event.target.value)}
+              />
+            )}
+          </Field>
+          <Field label="Form 2307 number" error={money.at("form2307")}>
+            {(field) => (
+              <input
+                {...field}
+                className={INPUT}
+                disabled={!withheld.trim()}
+                value={form2307}
+                onChange={(event) => setForm2307(event.target.value)}
+              />
+            )}
+          </Field>
+        </div>
+        {withheldTyped > 0 && Number.isFinite(withheldTyped) && Number.isFinite(typed) && (
+          <div className="-mt-2 text-[13px] text-ink-2">
+            Settles {peso(typed + withheldTyped)} of the {peso(balance)} owed (money and the tax
+            withheld).
+          </div>
+        )}
         <HowFields
           method={method}
           setMethod={setMethod}

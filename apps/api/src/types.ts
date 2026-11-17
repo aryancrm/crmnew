@@ -1183,6 +1183,18 @@ export type OrderDetail = {
   resumeTo: { status: OrderStatus; label: string }[];
   /** Waiting for stock: since when, who held it, and what is still short (empty: it's in now). */
   waitingStock: { since: string; by: string | null; short: { name: string; need: number; free: number }[] } | null;
+  /** What the customer owed before this order (this CRM's invoices, Zoho's and its opening
+   *  balance; the order's own invoice left out), for Finance's check and Management's: worked out,
+   *  not looked up in Zoho (Aryan, 17 Nov). */
+  dues: {
+    owed: number;
+    overdue: number;
+    /** The oldest overdue amount's days late. */
+    days: number;
+    /** Of owed, what is in Zoho (its unpaid invoices and opening balance). */
+    zoho: number;
+    creditLimit: number | null;
+  };
   /** For whoever approves it: each warehouse and what it can't fill of this order (stock
    *  unexpired, less what other approved orders from it hold). Null for anyone else. */
   warehouseFill:
@@ -1295,7 +1307,8 @@ export type TargetList = {
 
 // ---------------------------------------------------------------- finance
 
-export type PaymentMethod = "bank" | "cash" | "check" | "ewallet" | "other" | "points";
+/** "withholding": tax the customer withheld (BIR Form 2307), a settlement, not cash. */
+export type PaymentMethod = "bank" | "cash" | "check" | "ewallet" | "other" | "points" | "withholding";
 
 /** How an invoice stands today: "Paid", "Overdue by 12 days", "Due in 5 days". */
 export type InvoiceState = {
@@ -1520,6 +1533,10 @@ export type PaymentInput = {
   paidOn: string;
   note?: string | null;
   proofId?: number | null;
+  /** Tax the customer withheld from it (EWT, with their BIR Form 2307): recorded with it as a
+   *  payment of its own, settling the invoice too. */
+  withheld?: number | null;
+  form2307?: string | null;
 };
 
 export type RefundInput = {

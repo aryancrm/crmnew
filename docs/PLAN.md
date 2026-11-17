@@ -1908,8 +1908,8 @@ on the local copy (database copied first, put back after), with what was seen wr
 21. **Billing company changed after the invoice**: the invoice keeps its row and takes a number in
     the other company's series (the old number stays only on the timeline). Allow that, or refuse
     changing the company once the invoice is made?
-22. **Withholding tax** (EWT 1–2%, Form 2307): Zoho recorded it on customer payments; crmnew's
-    Finance can't yet, so a hospital paying less by its withholding stays "owing" that. For step C.
+22. ~~Withholding tax~~ Built 17 Nov (step C1, as Zoho kept it): Finance types the tax withheld and
+    its Form 2307 number with the money; it settles the invoice, is no cash in, never given back.
 23. **Businesses filed as patients**: 93 customers named like businesses (pharma, trading,
     medical…) are kind "patient" from the Zoho import; with the Rx rule their orders would wait
     for a prescription. List in `.data/lists/patients-that-look-like-businesses.csv` for the heads.
@@ -2452,4 +2452,16 @@ on the local copy (database copied first, put back after), with what was seen wr
   loaded on the local database** (410 offers from today, until ended; 92 patient offers on
   prescription medicines held back as the sheet says; 11 SKUs not in the list left out; a safety
   copy at .data/pg.before-offers-2026-11-17). Not on live yet.
+- 17 Nov (89), plan 19 step C part 1 (Finance), Aryan: Finance used to look in Zoho for what a
+  hospital or patient still owed — now the order shows it, worked out: Finance's check on the order
+  page has a box **"what they owed before this order"** (this CRM's invoices, Zoho's and its opening
+  balance; the order's own invoice left out) with its verdict — green "Nothing owed from before:
+  clear to send on", amber "owes ₱X, nothing late", red "₱X overdue, the oldest N days late (₱Y of it
+  from Zoho): collect it first, or ask Management", and over the credit limit — and a link to the
+  whole history; the same lines are no longer repeated below it. **Tax withheld (EWT, Form 2307)**
+  on a payment, as Zoho kept it: Finance types it and the 2307's number with the money (refused
+  without the number); it is a payment of its own ("Tax withheld (2307)", migration 0088) that
+  settles the invoice, is not counted as money in, and is never given back as cash. Walked on a
+  copy as Sarla: DE OCAMPO's order showed "₱4,800 overdue, the oldest 11 days late, all from Zoho";
+  ₱833 by bank and ₱17 withheld paid the ₱850 invoice; money in today ₱833; data checks clean.
 

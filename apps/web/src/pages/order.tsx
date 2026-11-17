@@ -2157,6 +2157,47 @@ function CompleteDetails({ data }: { data: OrderDetail }) {
   );
 }
 
+/** What the customer owed before this order, worked out from this CRM's invoices and Zoho's
+ *  (Aryan, 17 Nov: Finance no longer goes to Zoho to see it), and what that means for the check. */
+function DuesVerdict({ data }: { data: OrderDetail }) {
+  const { dues, order } = data;
+  const after = dues.owed + order.total;
+  const over = dues.creditLimit !== null && after > dues.creditLimit;
+  const tone =
+    dues.overdue > 0 || over
+      ? "border-bad/20 bg-bad-tint text-bad"
+      : dues.owed > 0
+        ? "border-amber-200 bg-amber-50 text-amber-900"
+        : "border-good/20 bg-good-tint text-good";
+  return (
+    <div className={`flex flex-col gap-1 rounded-xl border px-3 py-2.5 text-[13px] ${tone}`}>
+      <b>
+        {dues.overdue > 0
+          ? `${peso(dues.overdue)} overdue, the oldest ${dues.days} days late`
+          : dues.owed > 0
+            ? `Owes ${peso(dues.owed)} from before, nothing late`
+            : "Nothing owed from before: clear to send on"}
+      </b>
+      {dues.owed > 0 && (
+        <span>
+          Owed before this order: {peso(dues.owed)}
+          {dues.zoho > 0 ? ` (${peso(dues.zoho)} of it from Zoho)` : ""}.{" "}
+          {dues.overdue > 0 ? "Collect it first, or ask Management." : ""}
+        </span>
+      )}
+      {over && (
+        <span>
+          With this order they would owe {peso(after)}, over their credit limit of{" "}
+          {peso(dues.creditLimit ?? 0)}.
+        </span>
+      )}
+      <Link to={`/customers/${order.customerId}`} className="text-xs font-semibold underline">
+        Their whole history, Zoho's too
+      </Link>
+    </div>
+  );
+}
+
 function FinanceStep({
   data,
   n,
@@ -2219,6 +2260,7 @@ function FinanceStep({
           <b>After Management's approval</b>
         </Fact>
       )}
+      {!checked && !skipped && <DuesVerdict data={data} />}
       {!checked && noProofWords(order.noProofReason, order.noProofNote) && (
         <div className="flex gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[13px] text-slate-700">
           <span className="mt-1.5 size-2 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
@@ -2228,9 +2270,13 @@ function FinanceStep({
           </span>
         </div>
       )}
-      {data.findings.length > 0 && !checked && (
+      {/* What it owed and its credit limit are in the box above; the rest is listed here. */}
+      {data.findings.some((finding) => finding.kind !== "owes" && finding.kind !== "credit") &&
+        !checked && (
         <ul className="flex flex-col gap-1.5 rounded-xl bg-slate-50 px-3 py-2.5 text-[13px] text-slate-800">
-          {data.findings.map((finding) => (
+          {data.findings
+            .filter((finding) => finding.kind !== "owes" && finding.kind !== "credit")
+            .map((finding) => (
             <li key={finding.text} className="flex gap-2">
               <TriangleAlert
                 size={15}

@@ -161,6 +161,38 @@ describe("the invoice made at approval", () => {
     expect((await order(id)).findings.map((finding) => finding.kind)).not.toContain("credit");
   });
 
+  it("takes the tax a customer withheld with its 2307: settled, but no cash and never given back", async () => {
+    const id = await approved(credit);
+    const total = (await order(id)).order.total;
+    await ok("fiona", `/api/finance/orders/${id}/invoice`, {});
+    const invoice = (await order(id)).money.invoice;
+    const withheld = Math.round(total * 0.01);
+    const pay = (body: object) =>
+      post("fiona", `/api/invoices/${invoice?.id}/payments`, {
+        amount: total - withheld,
+        method: "bank",
+        reference: "BDO-9",
+        paidOn: todayManila(),
+        withheld,
+        ...body,
+      });
+    // The 2307's number is needed with the tax withheld.
+    expect((await pay({})).status).toBe(400);
+    const before = (await read<FinanceBoard>("fiona", "/api/finance/board")).money.inToday;
+    expect((await pay({ form2307: "2307-0001" })).status).toBe(200);
+    const paid = await order(id);
+    expect(paid.money.invoice).toMatchObject({ status: "paid", paid: total });
+    expect(paid.money.payments.map((one) => [one.method, one.amount])).toEqual([
+      ["bank", total - withheld],
+      ["withholding", withheld],
+    ]);
+    // Money in counts only the cash.
+    expect((await read<FinanceBoard>("fiona", "/api/finance/board")).money.inToday).toBe(
+      before + total - withheld,
+    );
+    expect(await overpaid()).toBe(true);
+  });
+
   it("holds Management's own order for a patient until its prescription is on it", async () => {
     const response = await ok("sarla", "/api/orders", {
       customerId: patient,

@@ -87,6 +87,7 @@ import {
   STATUSES,
   STEP_OF,
 } from "./rules";
+import { duesSql } from "../finance/dues";
 import { activeOffers, withOfferLines } from "./offers";
 import { shortLines, shortWords } from "./stock-wait";
 
@@ -174,7 +175,7 @@ const takeBackSql = sql`(o.approved_by is not null
     and (e.stage in ('finance_verified', 'paid', 'packed', 'shipped', 'delivered', 'completed')
       or (e.stage = 'invoiced' and e.by_person <> o.approved_by)))
   and not exists (select 1 from invoice i where i.order_id = o.id and i.status <> 'cancelled'
-    and i.paid > (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points')))`;
+    and i.paid > (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding'))))`;
 /** A cancelled order (alias `o`) Management can bring back (the hub's Restore): no money given
  *  back on it, no points (they went back to the customer), not an Online or PAP case's (its case
  *  places its next order itself). */
@@ -190,7 +191,7 @@ const beforeDispatch = (order: { status: OrderStatus; heldFrom: OrderStatus | nu
     (!order.heldFrom || ["pending_approval", "finance_check", "ready_for_invoice"].includes(order.heldFrom)));
 /** Money is on the order's invoice (alias `o`): points paid on it as it was made don't count. */
 const paidInSql = sql`exists (select 1 from invoice i where i.order_id = o.id and i.status <> 'cancelled'
-  and i.paid > (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points'))`;
+  and i.paid > (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding')))`;
 /** Sent back to the MedRep (alias `o`): its last reason, who sent it, the MedRep's answer. */
 const sentBackColumns = sql`o.sent_back_count::int as "sentBackCount", o.sent_back_reason as "sentBackReason",
   (select p.name from person p where p.id = o.sent_back_by) as "sentBackBy", o.reply`;
@@ -1470,6 +1471,19 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
       held && waitingSince
         ? { since: waitingSince, by: waitingBy, short: await shortLines(db, id) }
         : null,
+    dues: {
+      ...(
+        await rows<{ owed: number; overdue: number; days: number; zoho: number }>(
+          db,
+          sql`select coalesce(sum(dd.balance) filter (where not dd.cod_waiting), 0)::float8 as owed,
+              coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late > 0), 0)::float8 as overdue,
+              coalesce(max(dd.late) filter (where not dd.on_delivery and dd.late > 0), 0)::int as days,
+              coalesce(sum(dd.balance) filter (where dd.source <> 'crm' and not dd.cod_waiting), 0)::float8 as zoho
+            from ${duesSql(todayManila())} dd where dd.customer_id = ${order.customerId} and dd.order_id is distinct from ${id}`,
+        )
+      )[0] ?? { owed: 0, overdue: 0, days: 0, zoho: 0 },
+      creditLimit,
+    },
     warehouseFill: can.approve ? await warehouseFill(db, id) : null,
     money,
     picks,

@@ -191,7 +191,7 @@ export async function financeCounts(
     db,
     sql`select (select count(*) from sales_order where status = 'finance_check')::int as "toConfirm",
         (select count(*) from sales_order where status = 'ready_for_invoice')::int as "toInvoice",
-        (select count(*) from invoice i join sales_order o on o.id = i.order_id where i.status = 'cancelled' and o.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points') > i.refunded)::int as refunds`,
+        (select count(*) from invoice i join sales_order o on o.id = i.order_id where i.status = 'cancelled' and o.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding')) > i.refunded)::int as refunds`,
   );
   return counted ?? { toConfirm: 0, toInvoice: 0, refunds: 0 };
 }
@@ -364,7 +364,7 @@ async function reissueInvoice(
         cancelled_reason = null, cancelled_at = null, by_person = ${me.id}
       where id = ${voided.id}`,
   );
-  const kept = voided.paid - (await pointsPaid(tx, voided.id));
+  const kept = voided.paid - (await notCashPaid(tx, voided.id));
   await logEvent(
     tx,
     order.id,
@@ -642,7 +642,7 @@ export async function cancelInvoiceOf(
     sql`update invoice set status = 'cancelled', cancelled_reason = ${reason}, cancelled_at = now() where id = ${invoice.id}`,
   );
   // Points paid on it go back to the customer's points, not as money.
-  const owed = invoice.paid - invoice.refunded - (await pointsPaid(tx, invoice.id));
+  const owed = invoice.paid - invoice.refunded - (await notCashPaid(tx, invoice.id));
   await logEvent(
     tx,
     orderId,
@@ -719,13 +719,16 @@ export async function recordPayment(
         "not_now",
         `${invoice.code} is paid in advance: confirm the money on the order's payment check.`,
       );
-    if (input.amount > owed)
+    const withheld = Math.max(0, Math.round(input.withheld ?? 0));
+    if (input.amount + withheld > owed)
       throw new Refusal(
         400,
         "invalid",
         `That is more than the ${peso(owed)} still owed on ${invoice.code}.`,
-        "amount",
+        withheld ? "withheld" : "amount",
       );
+    if (withheld && !clean(input.form2307))
+      throw new Refusal(400, "invalid", "Type the BIR Form 2307's number for the tax withheld.", "form2307");
     if (input.proofId) {
       const [proof] = await rows<{ id: number }>(
         tx,
@@ -734,15 +737,24 @@ export async function recordPayment(
       if (!proof)
         throw new Refusal(400, "invalid", "That proof of payment isn't on this order.", "proofId");
     }
-    const { left } = await addPayment(tx, me, invoice, input);
+    const first = await addPayment(tx, me, invoice, input);
+    // The tax withheld settles the invoice as well (Zoho kept it on the payment).
+    const { left } = withheld
+      ? await addPayment(tx, me, invoice, {
+          amount: withheld,
+          method: "withholding",
+          reference: clean(input.form2307),
+          paidOn: input.paidOn,
+          note: null,
+          proofId: null,
+        })
+      : first;
     await logEvent(
       tx,
       invoice.orderId,
       me,
       "payment",
-      left > 0
-        ? `${how(input)} received for ${invoice.code}. ${peso(left)} still owed.`
-        : `${how(input)} received for ${invoice.code}. Paid in full.`,
+      `${how(input)}${withheld ? `, and ${peso(withheld)} tax withheld (Form 2307 ${clean(input.form2307)})` : ""} received for ${invoice.code}. ${left > 0 ? `${peso(left)} still owed.` : "Paid in full."}`,
       left > 0 ? null : "paid",
     );
     if (left === 0) {
@@ -765,6 +777,15 @@ export async function recordPayment(
 }
 
 /** What was paid on an invoice with points (given back as points, never as money). */
+/** Paid on an invoice without cash (points, tax withheld): never given back as money. */
+async function notCashPaid(tx: Runner, invoiceId: number): Promise<number> {
+  const [found] = await rows<{ amount: number }>(
+    tx,
+    sql`select coalesce(sum(amount), 0)::int as amount from payment where invoice_id = ${invoiceId} and active and method in ('points', 'withholding')`,
+  );
+  return found?.amount ?? 0;
+}
+
 async function pointsPaid(tx: Runner, invoiceId: number): Promise<number> {
   const [found] = await rows<{ amount: number }>(
     tx,
@@ -838,7 +859,7 @@ export async function recordRefund(
     const invoice = await lockInvoice(tx, invoiceId);
     // A cancelled order gives back what came in; a return gives back what was paid beyond the
     // bill it left (never the points).
-    const cash = invoice.paid - invoice.refunded - (await pointsPaid(tx, invoice.id));
+    const cash = invoice.paid - invoice.refunded - (await notCashPaid(tx, invoice.id));
     const owed =
       invoice.status === "cancelled"
         ? cash
@@ -1156,10 +1177,10 @@ export async function refundsOwed(db: Database, me: Me): Promise<RefundList> {
     rows<Omit<RefundOwed, "days" | "owed"> & { cancelledDay: string | null }>(
       db,
       sql`select i.id::int as "invoiceId", i.code as "invoiceCode", i.order_id::int as "orderId", o.code as "orderCode",
-          i.customer_id::int as "customerId", c.name as customer, (i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points'))::int as received, i.refunded::int as refunded,
+          i.customer_id::int as "customerId", c.name as customer, (i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding')))::int as received, i.refunded::int as refunded,
           i.cancelled_reason as reason, ${iso("i.cancelled_at")} as "cancelledAt",
           to_char(i.cancelled_at at time zone 'Asia/Manila', 'YYYY-MM-DD') as "cancelledDay"
-        ${invoiceFrom} where i.status = 'cancelled' and o.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points') > i.refunded order by i.cancelled_at, i.id`,
+        ${invoiceFrom} where i.status = 'cancelled' and o.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding')) > i.refunded order by i.cancelled_at, i.id`,
     ),
     // Paid beyond the bill (a return lowered it, or the order was changed after the money came
     // in): given back as well.
@@ -1168,7 +1189,7 @@ export async function refundsOwed(db: Database, me: Me): Promise<RefundList> {
       sql`select i.id::int as "invoiceId", i.code as "invoiceCode", i.order_id::int as "orderId", o.code as "orderCode",
           i.customer_id::int as "customerId", c.name as customer, i.paid::int as received, i.refunded::int as refunded,
           least(i.paid - i.refunded - i.total,
-            i.paid - i.refunded - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points'))::int as owed,
+            i.paid - i.refunded - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding')))::int as owed,
           case when i.credited > 0
             then 'Goods returned: ' || coalesce((select string_agg(r.code, ', ') from sales_return r where r.order_id = i.order_id and r.status = 'received'), 'credit')
             else 'Paid more than the bill' end as reason,
@@ -1176,7 +1197,7 @@ export async function refundsOwed(db: Database, me: Me): Promise<RefundList> {
           to_char((select max(r.received_at) from sales_return r where r.order_id = i.order_id) at time zone 'Asia/Manila', 'YYYY-MM-DD') as "cancelledDay"
         ${invoiceFrom} where i.status <> 'cancelled'
           and least(i.paid - i.refunded - i.total,
-            i.paid - i.refunded - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points')) > 0
+            i.paid - i.refunded - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding'))) > 0
         order by i.id`,
     ),
     rows<RefundList["done"][number]>(

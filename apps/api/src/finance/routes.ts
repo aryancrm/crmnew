@@ -45,6 +45,9 @@ const paymentInput = z.object({
   paidOn: day,
   note: optional(300),
   proofId: z.number().int().positive().nullish(),
+  // Tax the customer withheld (EWT) with its BIR Form 2307 number.
+  withheld: z.number().int().min(0).nullish(),
+  form2307: optional(60),
 });
 
 export function financeRoutes(

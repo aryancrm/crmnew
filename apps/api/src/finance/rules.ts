@@ -16,10 +16,14 @@ export const METHOD_LABEL: Record<PaymentMethod, string> = {
   ewallet: "GCash / Maya",
   other: "Other",
   points: "Points",
+  withholding: "Tax withheld (2307)",
 };
 export const METHODS = Object.keys(METHOD_LABEL) as PaymentMethod[];
-/** What a person records by hand: points are paid only by the points the order used. */
-export const STAFF_METHODS = METHODS.filter((method) => method !== "points");
+/** What a person records by hand: points are paid only by the points the order used; tax withheld
+ *  comes with the money it was withheld from. */
+export const STAFF_METHODS = METHODS.filter((method) => method !== "points" && method !== "withholding");
+/** Settled without cash: never counted as money in, never given back as money. */
+export const NOT_CASH = ["points", "withholding"] as const;
 
 /** Each company's own invoice series. */
 const SERIES: Record<InvoiceFrom, string> = { "2mg": "2MG-SI-", getmeds: "INV-" };
