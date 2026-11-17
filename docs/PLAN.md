@@ -1884,14 +1884,14 @@ on the local copy (database copied first, put back after), with what was seen wr
 11. A guarantee-letter case (18): when an Online case becomes GL, does it move to the PAP head (who
     gives it to a PAP MedRep) or straight to one PAP person?
 12. ~~Pharmacy~~ Answered 17 Nov: Management checks prescriptions on approving (no separate
-    Pharmacy login). Still open: which channels must attach one (hub: URO, STC, B&B, B2C; HOS a
-    nudge)?
+    Pharmacy login); a prescription is required whenever a patient buys (a patient customer, or
+    an order for one patient), whatever the channel.
 13. ~~Advance-pay proof~~ Answered 17 Nov: the proof is an attachment on the order (or the
     MedRep's reason), and Finance checks it there.
-14. Approvals (19): which manager approves which divisions (the hub ticks divisions per manager)?
-    And may an exception go to the Team Lead / Business Mentor (question 9)?
+14. ~~Approvals~~ Answered 17 Nov: Management approves every order that comes in, of every
+    channel (B2B, B2C, Government, hospitals…); nothing skips it.
 15. ~~The invoice~~ Answered 17 Nov: made when Management approves.
-16. Look (19): keep 2MG's green with the hub's layout, or the hub's blue too?
+16. ~~Look~~ Answered 17 Nov: the hub's look — its text style, sizes, colours and background.
 
 ## 14. Change log
 
@@ -2339,3 +2339,4 @@ on the local copy (database copied first, put back after), with what was seen wr
 - 17 Nov (78), Aryan (plan 18, step 1 "safe line", and his answers: SC/PWD on any order with the ID, 20% off and no VAT; Management approves, an exception goes to the Team Lead, Management's own to the Business Mentor, all by a CRM button): a MedRep can't skip Management or Finance through the API; every version of an order is kept and the MedRep sees Management's change before → after with its reason ("Changed by Mgmt" on his list); the MedRep's note and any price above the list are on Management's card; SC/PWD on any order, from the patient price (VAT out, 20% off), priced by the API, VAT-exempt on the invoice with the ID number printed; VAT and "Prescription" shown on every line of the MedRep's form and Management's order; Management's customer check shows first order or not, orders here and in Zoho, what they owe now (Zoho's too) and a link to the whole history; Finance's checks, Customers owe, the customer list and history count Zoho's unpaid invoices and opening balances (`src/finance/dues.ts`). Tests: `src/orders/safe-line.test.ts`. The ask-up step for exceptions waits for Aryan (question 9).
 - 17 Nov (79), Aryan ("crmnew is too complicated; make it simple like the hub, see every screen in each login"): the hub was run locally and walked role by role, button by button, with its Zoho link read from the code (docs/HUB-WALKTHROUGH.md, docs/HUB-CHECKLIST.md); section 19 is the plan: the hub's line and look, crmnew's prices, dues, versions and line returns kept, the hub's gaps fixed (unflagged prices, silent changes, lost discounts, dead Undo, advance orders without proof, whole-order refunds, silent Team Leads, approval alerts to every manager), Zoho's manual steps inside crmnew; questions 12–16 wait for Aryan.
 - 17 Nov (80), Aryan's answers to 19: start with the order page and Management; prescriptions checked by Management on approving (the hub has no Pharmacy login of its own); the proof of payment is an attachment on the order and Finance checks it there; the invoice is made when Management approves.
+- 17 Nov (81), Aryan: a prescription is required whenever a patient buys; Management approves every order of every channel; the hub's look (text, sizes, colours, background); crmnew itself is reshaped to the plan (no new project), the hub and Zoho brought together, nothing extra.
