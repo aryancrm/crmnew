@@ -218,6 +218,70 @@ function payable(input: { amount: number; paidOn: string }, field = "paidOn") {
     throw new Refusal(400, "invalid", "That day hasn't come yet.", field);
 }
 
+/** What the order's invoice holds: its lines split by VAT (a senior's or PWD's line exempt) and
+ *  the delivery fee. */
+async function invoiceFigures(tx: Runner, orderId: number) {
+  const lines = await rows<{ amount: number; vat: Vat }>(
+    tx,
+    // A senior's or PWD's line is sold VAT-exempt (the law), whatever the medicine's own VAT.
+    sql`select (i.qty * i.unit_price)::int as amount, case when i.relief then 'exempt' else m.vat end as vat
+      from order_item i join medicine m on m.id = i.medicine_id where i.order_id = ${orderId}`,
+  );
+  // Delivery is a service the company sells: VAT-able, on the same invoice.
+  const [fee] = await rows<{ fee: number }>(
+    tx,
+    sql`select delivery_fee::int as fee from sales_order where id = ${orderId}`,
+  );
+  if (fee?.fee) lines.push({ amount: fee.fee, vat: "vat12" });
+  return vatSplit(lines);
+}
+
+/** The next number in a company's own invoice series. */
+async function nextInvoiceCode(tx: Runner, from: LockedOrder["invoiceFrom"]): Promise<string> {
+  const [next] = await rows<{ value: number }>(
+    tx,
+    sql`update counter set value = value + 1 where name = ${`invoice:${from}`} returning value::int as value`,
+  );
+  return invoiceCode(from, next?.value ?? 1);
+}
+
+const whenDue = (terms: string, due: string) =>
+  terms === "days" ? `due on ${dated(due)}` : terms === "cod" ? "collected on delivery" : "paid in advance";
+
+/** The points the customer used are paid on the invoice at once (once: an invoice made good
+ *  again keeps the points payment it had). */
+async function payPoints(
+  tx: Runner,
+  me: Me,
+  order: LockedOrder,
+  invoice: { id: number; code: string },
+  today: string,
+): Promise<void> {
+  const [used] = await rows<{ points: number }>(
+    tx,
+    sql`select points_used::int as points from sales_order where id = ${order.id}`,
+  );
+  if (!used?.points || (await pointsPaid(tx, invoice.id)) > 0) return;
+  await addPayment(
+    tx,
+    me,
+    { id: invoice.id, customerId: order.customerId },
+    {
+      amount: used.points * POINT_CENTAVOS,
+      method: "points",
+      reference: `${used.points.toLocaleString("en-PH")} points`,
+      paidOn: today,
+    },
+  );
+  await logEvent(
+    tx,
+    order.id,
+    me,
+    "payment",
+    `${used.points.toLocaleString("en-PH")} points (${peso(used.points * POINT_CENTAVOS)}) paid on ${invoice.code}.`,
+  );
+}
+
 /** Makes the order's invoice under its company, numbered in that company's own series. */
 async function issueInvoice(
   tx: Runner,
@@ -225,24 +289,8 @@ async function issueInvoice(
   order: LockedOrder,
   today: string,
 ): Promise<{ id: number; code: string }> {
-  const lines = await rows<{ amount: number; vat: Vat }>(
-    tx,
-    // A senior's or PWD's line is sold VAT-exempt (the law), whatever the medicine's own VAT.
-    sql`select (i.qty * i.unit_price)::int as amount, case when i.relief then 'exempt' else m.vat end as vat
-      from order_item i join medicine m on m.id = i.medicine_id where i.order_id = ${order.id}`,
-  );
-  // Delivery is a service the company sells: VAT-able, on the same invoice.
-  const [fee] = await rows<{ fee: number }>(
-    tx,
-    sql`select delivery_fee::int as fee from sales_order where id = ${order.id}`,
-  );
-  if (fee?.fee) lines.push({ amount: fee.fee, vat: "vat12" });
-  const split = vatSplit(lines);
-  const [next] = await rows<{ value: number }>(
-    tx,
-    sql`update counter set value = value + 1 where name = ${`invoice:${order.invoiceFrom}`} returning value::int as value`,
-  );
-  const code = invoiceCode(order.invoiceFrom, next?.value ?? 1);
+  const split = await invoiceFigures(tx, order.id);
+  const code = await nextInvoiceCode(tx, order.invoiceFrom);
   const due = dueOn(order.terms, order.days, today, order.expectedOn);
   const [made] = await rows<{ id: number }>(
     tx,
@@ -251,46 +299,62 @@ async function issueInvoice(
         ${split.vatable}, ${split.vat}, ${split.exempt}, ${split.zeroRated}, ${me.id})
       returning id::int as id`,
   );
-  const when =
-    order.terms === "days"
-      ? `due on ${dated(due)}`
-      : order.terms === "cod"
-        ? "collected on delivery"
-        : "paid in advance";
   await logEvent(
     tx,
     order.id,
     me,
     "invoice",
-    `Invoice ${code} made under ${INVOICE_FROM_LABEL[order.invoiceFrom]}: ${peso(order.total)}, ${when}.`,
+    `Invoice ${code} made under ${INVOICE_FROM_LABEL[order.invoiceFrom]}: ${peso(order.total)}, ${whenDue(order.terms, due)}.`,
     "invoiced",
   );
-  // The points the customer used are paid on it at once.
-  const [used] = await rows<{ points: number }>(
-    tx,
-    sql`select points_used::int as points from sales_order where id = ${order.id}`,
+  const invoice = { id: made?.id as number, code };
+  await payPoints(tx, me, order, invoice, today);
+  return invoice;
+}
+
+/**
+ * An order keeps one invoice. When its invoice was cancelled (the approval taken back, or the
+ * order put back after a cancel) and Management approves it again, that invoice is made good
+ * again as the order stands now: the same number (a new one only when the company changed), its
+ * lines, total and due day afresh. Money received on it before counts on it again; money already
+ * given back can't be undone, so such an order is placed again instead.
+ */
+async function reissueInvoice(
+  tx: Runner,
+  me: Me,
+  order: LockedOrder,
+  voided: { id: number; code: string; invoiceFrom: string; paid: number; refunded: number },
+  today: string,
+): Promise<{ id: number; code: string }> {
+  if (voided.refunded > 0)
+    throw new Refusal(
+      409,
+      "refunded",
+      `Money was given back on ${order.code}'s cancelled invoice ${voided.code}: place a new order instead.`,
+    );
+  const split = await invoiceFigures(tx, order.id);
+  const code =
+    voided.invoiceFrom === order.invoiceFrom ? voided.code : await nextInvoiceCode(tx, order.invoiceFrom);
+  const due = dueOn(order.terms, order.days, today, order.expectedOn);
+  await tx.execute(
+    sql`update invoice set code = ${code}, invoice_from = ${order.invoiceFrom}, terms = ${order.terms}, issued_on = ${today}::date,
+        due_on = ${due}::date, total = ${order.total}, vatable = ${split.vatable}, vat = ${split.vat}, exempt = ${split.exempt},
+        zero_rated = ${split.zeroRated}, status = case when paid >= ${order.total} and ${order.total} > 0 then 'paid' else 'open' end,
+        cancelled_reason = null, cancelled_at = null, by_person = ${me.id}
+      where id = ${voided.id}`,
   );
-  if (used?.points) {
-    await addPayment(
-      tx,
-      me,
-      { id: made?.id as number, customerId: order.customerId },
-      {
-        amount: used.points * POINT_CENTAVOS,
-        method: "points",
-        reference: `${used.points.toLocaleString("en-PH")} points`,
-        paidOn: today,
-      },
-    );
-    await logEvent(
-      tx,
-      order.id,
-      me,
-      "payment",
-      `${used.points.toLocaleString("en-PH")} points (${peso(used.points * POINT_CENTAVOS)}) paid on ${code}.`,
-    );
-  }
-  return { id: made?.id as number, code };
+  const kept = voided.paid - (await pointsPaid(tx, voided.id));
+  await logEvent(
+    tx,
+    order.id,
+    me,
+    "invoice",
+    `Invoice ${code}${code !== voided.code ? ` (was ${voided.code})` : ""} made good again under ${INVOICE_FROM_LABEL[order.invoiceFrom]}: ${peso(order.total)}, ${whenDue(order.terms, due)}.${kept > 0 ? ` ${peso(kept)} received before counts on it again.` : ""}`,
+    "invoiced",
+  );
+  const invoice = { id: voided.id, code };
+  await payPoints(tx, me, order, invoice, today);
+  return invoice;
 }
 
 async function addPayment(
@@ -400,11 +464,7 @@ export async function confirmPayment(
       "finance_verified",
     );
     // A check undone left its invoice: the same one takes the payment again.
-    const [kept] = await rows<{ id: number; code: string }>(
-      tx,
-      sql`select id::int as id, code from invoice where order_id = ${orderId} and status <> 'cancelled'`,
-    );
-    const invoice = kept ?? (await issueInvoice(tx, me, order, today));
+    const invoice = await invoiceOnApproval(tx, me, orderId);
     await addPayment(
       tx,
       me,
@@ -418,7 +478,8 @@ export async function confirmPayment(
 }
 
 /** The order's invoice as Management approves it (Aryan, 17 Nov: the invoice is made when
- *  Management approves): the one it has already, or a new one in its company's series. */
+ *  Management approves), or as Finance or an Online case lets an older order go: the one it has
+ *  already, its cancelled one made good again, or a new one in its company's series. */
 export async function invoiceOnApproval(
   tx: Runner,
   me: Me,
@@ -430,7 +491,14 @@ export async function invoiceOnApproval(
   );
   if (kept) return kept;
   const order = await lockOrder(tx, orderId);
-  return issueInvoice(tx, me, order, todayManila());
+  const [voided] = await rows<{ id: number; code: string; invoiceFrom: string; paid: number; refunded: number }>(
+    tx,
+    sql`select id::int as id, code, invoice_from as "invoiceFrom", paid::int as paid, refunded::int as refunded
+      from invoice where order_id = ${orderId} and status = 'cancelled' for update`,
+  );
+  return voided
+    ? reissueInvoice(tx, me, order, voided, todayManila())
+    : issueInvoice(tx, me, order, todayManila());
 }
 
 /** An unpaid invoice follows the order's details changed before Finance's check: its terms and
@@ -493,11 +561,7 @@ export async function makeInvoice(
       "finance_verified",
     );
     // Made when Management approved; an order approved before that rule gets it now.
-    const [kept] = await rows<{ id: number; code: string }>(
-      tx,
-      sql`select id::int as id, code from invoice where order_id = ${orderId} and status <> 'cancelled'`,
-    );
-    const invoice = kept ?? (await issueInvoice(tx, me, order, today));
+    const invoice = await invoiceOnApproval(tx, me, orderId);
     return { invoiceId: invoice.id };
   });
 }
@@ -526,11 +590,7 @@ export async function clearCaseOrder(
   );
   // Nothing to check: say so on the timeline, in the place Management's approval would be.
   if (cleared) await logEvent(tx, orderId, me, "status", cleared, "approved");
-  const [kept] = await rows<{ id: number; code: string }>(
-    tx,
-    sql`select id::int as id, code from invoice where order_id = ${orderId} and status <> 'cancelled'`,
-  );
-  const invoice = kept ?? (await issueInvoice(tx, me, order, today));
+  const invoice = await invoiceOnApproval(tx, me, orderId);
   return { invoiceId: invoice.id };
 }
 
@@ -1066,7 +1126,7 @@ export async function refundsOwed(db: Database, me: Me): Promise<RefundList> {
           i.customer_id::int as "customerId", c.name as customer, (i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points'))::int as received, i.refunded::int as refunded,
           i.cancelled_reason as reason, ${iso("i.cancelled_at")} as "cancelledAt",
           to_char(i.cancelled_at at time zone 'Asia/Manila', 'YYYY-MM-DD') as "cancelledDay"
-        ${invoiceFrom} where i.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points') > i.refunded order by i.cancelled_at, i.id`,
+        ${invoiceFrom} where i.status = 'cancelled' and o.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points') > i.refunded order by i.cancelled_at, i.id`,
     ),
     // Paid beyond the bill a return left: given back as well.
     rows<Omit<RefundOwed, "days"> & { cancelledDay: string | null }>(

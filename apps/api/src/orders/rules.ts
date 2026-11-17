@@ -134,6 +134,35 @@ export function caseChecksOf(
   return kept;
 }
 
+/** Where an approved order goes: one paid in advance waits for Finance to see the money first;
+ *  credit and cash on delivery go to Finance's look at the customer's dues. */
+export const afterApproval = (terms: string): OrderStatus =>
+  terms === "advance" ? "finance_check" : "ready_for_invoice";
+
+/**
+ * Where Management may let a held order go on from (the hub's "Continue from"): where it
+ * stopped, first; or an earlier desk, to look at it again — Finance's check, or Management's own
+ * approval (to change it and approve it afresh; its invoice is made again then). Never further
+ * than it was, so no desk's check is skipped. Once money is on its invoice, or it was packed or
+ * sent out, it goes on only from where it stopped.
+ */
+export function resumeChoices(order: {
+  heldFrom: OrderStatus | null;
+  terms: string;
+  financeCheck: boolean;
+  leadId: number | null;
+  paidIn: boolean;
+}): OrderStatus[] {
+  const from = order.heldFrom ?? "pending_approval";
+  if (order.paidIn || !["finance_check", "ready_for_invoice", "ready_for_dispatch"].includes(from))
+    return [from];
+  const earlier: OrderStatus[] = [];
+  if (from === "ready_for_dispatch" && order.financeCheck && !order.leadId)
+    earlier.push(afterApproval(order.terms));
+  earlier.push("pending_approval");
+  return [from, ...earlier];
+}
+
 /** Which desk holds a held order: its own record, else (older rows) where it stood. */
 export const holder = (order: {
   heldRole?: HoldRole | null;
@@ -159,6 +188,8 @@ export function orderActions(
     takeBack?: boolean;
     /** Who decides it instead of Management (a PAP order's head); none: Management. */
     approverId?: number | null;
+    /** Cancelled and can come back (the server says: no money given back, no points, not a case's). */
+    restorable?: boolean;
   },
 ): Record<OrderAction, boolean> {
   const managers = ORDER_MANAGE_ROLES.includes(me.role);
@@ -193,6 +224,8 @@ export function orderActions(
     answer: mine && flagged,
     resubmit: mine && order.status === "draft",
     take_back: manage && Boolean(order.takeBack),
+    // The hub's Restore: a cancelled order back to Management's approval.
+    restore: managers && order.status === "cancelled" && Boolean(order.restorable),
     confirm_payment: finance && order.status === "finance_check",
     make_invoice: finance && order.status === "ready_for_invoice",
     pack: dispatch && order.status === "ready_for_dispatch",
@@ -223,6 +256,7 @@ export const DESK_TABS: Record<Desk, Partial<Record<BoardTab, OrderStatus[]>>> =
     finance: ["finance_check", "ready_for_invoice"],
     dispatch: ["ready_for_dispatch", "packing", "shipped"],
     hold: ["on_hold", "exception"],
+    cancelled: ["cancelled"],
     done: ["completed"],
     // Sent back to the MedRep (a draft once sent back): waiting for their fix and answer.
     sent: ["draft"],

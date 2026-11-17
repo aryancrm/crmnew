@@ -53,6 +53,7 @@ const DESK_TABS: Record<Desk, { key: BoardTab; label: string; dot?: string }[]> 
     { key: "finance", label: "With Finance" },
     { key: "dispatch", label: "With Dispatch" },
     { key: "hold", label: "On hold", dot: "bg-amber-500" },
+    { key: "cancelled", label: "Cancelled" },
     { key: "done", label: "Delivered today" },
   ],
   finance: [
@@ -154,7 +155,7 @@ const FinanceLanes = lazy(() =>
 );
 
 /** What a card asks a reason for before doing it. */
-type CardAsk = "hold" | "send_back" | "reject" | "take_back";
+type CardAsk = "hold" | "send_back" | "reject" | "take_back" | "resume";
 
 /** How long after approving Management may take it back (the API's TAKE_BACK_MINUTES). */
 const TAKE_BACK_MINUTES = 30;
@@ -363,7 +364,10 @@ export function OrdersToCheck({
       busy={busy}
       // Approving picks the warehouse, as the hub did: the order opens with its approve window.
       onApprove={() => navigate(`/orders/${card.id}?step=management&check=approve&approve=1`)}
-      onResume={() => order.act(card.id, "resume")}
+      // Management says why it can go on (the hub's Resume); Finance and Dispatch lift their own.
+      onResume={() =>
+        data.desk === "management" ? setAsking({ card, what: "resume" }) : order.act(card.id, "resume")
+      }
       onAsk={(what) => setAsking({ card, what })}
       onTake={dispatch && data.can.dispatch ? (release) => take(card.id, release) : undefined}
       onHandle={
@@ -659,7 +663,9 @@ export function OrdersToCheck({
           code={asking.card.code}
           what={asking.what}
           initial={asking.reason}
-          financeHold={["finance_check", "ready_for_invoice"].includes(asking.card.status)}
+          financeHold={
+            data.desk === "finance" && ["finance_check", "ready_for_invoice"].includes(asking.card.status)
+          }
           onClose={() => setAsking(null)}
         />
       )}

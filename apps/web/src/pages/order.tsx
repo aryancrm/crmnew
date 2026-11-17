@@ -29,6 +29,7 @@ import {
   Play,
   Printer,
   ReceiptText,
+  RotateCcw,
   TriangleAlert,
   Truck,
   Undo2,
@@ -358,7 +359,9 @@ export function Order() {
     danger?: boolean;
     reason: boolean;
   }[] = [
-    { action: "resume", label: "Take off hold", icon: Play, reason: false },
+    // Management says why it can go on and from where (the hub's Resume); Finance and Dispatch
+    // lift their own holds with a press.
+    { action: "resume", label: "Take off hold", icon: Play, reason: data.resumeTo.length > 0 },
     {
       action: "take_back",
       label: order.takeBackUntil
@@ -376,6 +379,7 @@ export function Order() {
       reason: true,
     },
     { action: "cancel", label: "Cancel order", icon: CircleX, danger: true, reason: true },
+    { action: "restore", label: "Restore", icon: RotateCcw, reason: true },
   ];
   const shownOthers = others.filter((item) => can[item.action]);
 
@@ -687,6 +691,24 @@ export function Order() {
               <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
               <span>
                 <b>{order.statusLabel}:</b> {order.flagReason}
+                {data.waitingStock && (
+                  // Waiting for stock: crmnew watches the shelf and tells whoever held it.
+                  <span className="mt-1 block text-xs">
+                    Waiting since {timeLabel(data.waitingStock.since)}
+                    {data.waitingStock.by ? ` · held by ${data.waitingStock.by}` : ""}.{" "}
+                    {data.waitingStock.short.length === 0 ? (
+                      <b className="text-good">Stock is back: everything is on the shelf now. Take it off hold.</b>
+                    ) : (
+                      // Said only when it changed since the hold (the reason says what was short then).
+                      (() => {
+                        const now = data.waitingStock.short
+                          .map((one) => `${one.name} (needs ${one.need.toLocaleString("en-PH")}, ${one.free.toLocaleString("en-PH")} free)`)
+                          .join("; ");
+                        return order.flagReason?.includes(now) ? null : <>Short now: {now}.</>;
+                      })()
+                    )}
+                  </span>
+                )}
                 {order.holdProofs.length > 0 && (
                   // Finance's screenshots with the hold, for the MedRep to see what it saw.
                   <span className="mt-2 flex flex-wrap gap-2">
@@ -839,7 +861,9 @@ export function Order() {
           orderId={order.id}
           code={order.code}
           what={asking}
-          financeHold={["finance_check", "ready_for_invoice"].includes(order.status)}
+          // Finance's hold carries screenshots for the MedRep; Management's is words only.
+          financeHold={desk === "finance" && ["finance_check", "ready_for_invoice"].includes(order.status)}
+          choices={asking === "resume" ? data.resumeTo : []}
           onClose={() => setAsking(null)}
         />
       )}

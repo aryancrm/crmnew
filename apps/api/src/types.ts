@@ -618,6 +618,8 @@ export type BoardTab =
   | "finance"
   | "dispatch"
   | "hold"
+  /** Cancelled orders: Management can bring one back (the hub's Exception Hub lists them). */
+  | "cancelled"
   | "done"
   | "all"
   /** Sent back to the MedRep and not placed again yet. */
@@ -970,6 +972,8 @@ export type OrderAction =
   /** Management: takes back an approval given by mistake, while the next desk hasn't acted on
    *  it (and for 30 minutes at most). */
   | "take_back"
+  /** Management: a cancelled order comes back, to Management's approval (the hub's Restore). */
+  | "restore"
   /** Finance: the money for an advance order is in, so it can go on. */
   | "confirm_payment"
   /** Finance: a credit or cash-on-delivery order gets its invoice and goes on. */
@@ -1106,6 +1110,11 @@ export type OrderDetail = {
     at: string;
   }[];
   warehouses: Warehouse[];
+  /** Held, for Management: where it may go on from, where it stopped first (the hub's "Continue
+   *  from"). Empty for anyone else. */
+  resumeTo: { status: OrderStatus; label: string }[];
+  /** Waiting for stock: since when, who held it, and what is still short (empty: it's in now). */
+  waitingStock: { since: string; by: string | null; short: { name: string; need: number; free: number }[] } | null;
   /** For whoever approves it: each warehouse and what it can't fill of this order (stock
    *  unexpired, less what other approved orders from it hold). Null for anyone else. */
   warehouseFill:

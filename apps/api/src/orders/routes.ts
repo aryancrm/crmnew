@@ -127,6 +127,7 @@ const ACTIONS: readonly OrderAction[] = [
   "cancel",
   "resubmit",
   "take_back",
+  "restore",
   "answer",
 ];
 
@@ -325,6 +326,8 @@ export function orderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
         finance: z.boolean().optional(),
         // Holding until stock comes in.
         stock: z.boolean().optional(),
+        // Taking it off hold: the step it goes on from (Management may pick an earlier one).
+        to: z.enum(["pending_approval", "finance_check", "ready_for_invoice", "ready_for_dispatch", "packing", "shipped"]).optional(),
       }),
     );
     const before = await actOnOrder(db, c.get("me"), idParam(c), action, input);

@@ -242,7 +242,7 @@ describe("one order through every desk", () => {
     expect((await order("sarla", id)).order.status).toBe("pending_approval");
     await ok("sarla", `/api/orders/${id}/hold`, { reason: "Which ward?" });
     await ok("ryan", `/api/orders/${id}/answer`, { reason: "Oncology" });
-    await ok("sarla", `/api/orders/${id}/resume`);
+    await ok("sarla", `/api/orders/${id}/resume`, { reason: "The MedRep answered: Oncology" });
     await ok("sarla", `/api/orders/${id}/approve`);
     expect((await order("fiona", id)).order.status).toBe("ready_for_invoice");
   });

@@ -8,6 +8,7 @@ import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
 import { iso, type Runner } from "../inventory/service";
+import { STATUS_LABEL } from "../orders/rules";
 import type { Me, NotificationList, OrderAction, OrderStatus } from "../types";
 
 export async function notify(
@@ -117,7 +118,23 @@ export async function tellAboutOrder(
       return say([...seller, ...desk], "held", `On hold: ${label}`, `${by}: ${reason ?? ""}`);
     }
     case "resume":
-      return say(seller, "resumed", `Taken off hold: ${label}`, `By ${me.name}. It goes on.`);
+    case "restore": {
+      // As the hub: the MedRep, and the desk it is with now.
+      const desk = await peopleIn(
+        db,
+        order.status === "pending_approval"
+          ? ["management"]
+          : ["finance_check", "ready_for_invoice"].includes(order.status)
+            ? ["finance"]
+            : ["dispatch"],
+      );
+      return say(
+        [...seller, ...desk],
+        "resumed",
+        action === "restore" ? `Restored: ${label}` : `Taken off hold: ${label}`,
+        `By ${me.name}. It goes on from ${STATUS_LABEL[order.status]}.${reason ? ` Why: ${reason}` : ""}`,
+      );
+    }
     case "cancel":
       return say(seller, "cancelled", `Cancelled: ${label}`, `${me.name}: ${reason ?? ""}`);
     case "take_back": {

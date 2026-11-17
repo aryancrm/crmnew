@@ -401,7 +401,9 @@ describe("what Management does with an order", () => {
     // Told once per wait.
     expect((await receive(10, "WAIT-3")).status).toBe(200);
     expect(await told()).toHaveLength(2);
-    expect((await act("sarla", short.body.id, "resume")).status).toBe(200);
+    expect(
+      (await act("sarla", short.body.id, "resume", { reason: "The stock is in" })).status,
+    ).toBe(200);
     const resumed = await order("sarla", short.body.id);
     expect(resumed.order.status).toBe("pending_approval");
     expect(resumed.order.flagReason).toBeNull();
@@ -474,8 +476,13 @@ describe("what Management does with an order", () => {
       approvedBy: null,
       takeBackUntil: null,
     });
+    // Approved again: the invoice cancelled with the take-back is made good again, same number.
+    const first = (await order("sarla", made.body.id)).money.invoice;
+    expect((await act("sarla", made.body.id, "approve")).status).toBe(200);
+    const again = (await order("sarla", made.body.id)).money.invoice;
+    expect(again?.state).not.toBe("cancelled");
+    expect(again?.code).toBe(first?.code);
     // Past the half hour it can't be taken back any more.
-    await act("sarla", made.body.id, "approve");
     await db.execute(
       sql`update sales_order set approved_at = now() - interval '31 minutes' where id = ${made.body.id}`,
     );
@@ -492,7 +499,7 @@ describe("what Management does with an order", () => {
       status: "on_hold",
       flagReason: "Price too low",
     });
-    await act("sarla", made.body.id, "resume");
+    await act("sarla", made.body.id, "resume", { reason: "The price is right after all" });
     expect((await order("sarla", made.body.id)).order.status).toBe("pending_approval");
 
     await act("sarla", made.body.id, "approve");
@@ -502,7 +509,7 @@ describe("what Management does with an order", () => {
       (await act("sarla", made.body.id, "exception", { reason: "Customer disputes the order" }))
         .status,
     ).toBe(409);
-    await act("sarla", made.body.id, "resume");
+    await act("sarla", made.body.id, "resume", { reason: "The stock is in" });
     const resumed = await order("sarla", made.body.id);
     expect(resumed.order.status).toBe("finance_check");
     expect(resumed.events.map((event) => event.kind)).toContain("status");
@@ -513,6 +520,62 @@ describe("what Management does with an order", () => {
       hold: false,
       resume: false,
       cancel: false,
+    });
+  });
+
+  it("takes a held order back to an earlier desk, and brings back a cancelled one (the hub's Resume and Restore)", async () => {
+    const made = await place("ryan", { customerId: hospital, items: [line()] });
+    await act("sarla", made.body.id, "approve");
+    const invoice = (await order("sarla", made.body.id)).money.invoice;
+    expect(invoice?.status).toBe("open");
+    await act("sarla", made.body.id, "hold", { reason: "Check the price again" });
+    const held = await order("sarla", made.body.id);
+    // Where it stopped first, then earlier desks; the MedRep gets no choice.
+    expect(held.resumeTo.map((one) => one.status)).toEqual(["finance_check", "pending_approval"]);
+    expect((await order("ryan", made.body.id)).resumeTo).toEqual([]);
+    // Management says why, and never skips a desk ahead.
+    expect((await act("sarla", made.body.id, "resume")).status).toBe(400);
+    expect(
+      (await act("sarla", made.body.id, "resume", { reason: "Fine", to: "ready_for_dispatch" }))
+        .status,
+    ).toBe(400);
+    expect(
+      (
+        await act("sarla", made.body.id, "resume", {
+          reason: "Change the price first",
+          to: "pending_approval",
+        })
+      ).status,
+    ).toBe(200);
+    const back = await order("sarla", made.body.id);
+    expect(back.order).toMatchObject({ status: "pending_approval", approvedBy: null });
+    expect(back.money.invoice?.status).toBe("cancelled");
+    expect(back.events.at(-1)?.message).toContain("back to Pending Management Approval");
+    // Approved again: the same invoice, made good again.
+    expect((await act("sarla", made.body.id, "approve")).status).toBe(200);
+    expect((await order("sarla", made.body.id)).money.invoice).toMatchObject({
+      code: invoice?.code,
+      status: "open",
+    });
+
+    // Cancelled, then restored to Management's approval, with a reason, by Management only.
+    expect(
+      (await act("sarla", made.body.id, "cancel", { reason: "Customer cancelled" })).status,
+    ).toBe(200);
+    expect((await order("sarla", made.body.id)).can.restore).toBe(true);
+    expect((await order("ryan", made.body.id)).can.restore).toBe(false);
+    expect((await act("sarla", made.body.id, "restore")).status).toBe(400);
+    expect(
+      (await act("sarla", made.body.id, "restore", { reason: "The customer wants it after all" }))
+        .status,
+    ).toBe(200);
+    const restored = await order("sarla", made.body.id);
+    expect(restored.order.status).toBe("pending_approval");
+    expect(restored.events.at(-1)?.message).toContain("Restored by Sarla");
+    expect((await act("sarla", made.body.id, "approve")).status).toBe(200);
+    expect((await order("sarla", made.body.id)).money.invoice).toMatchObject({
+      code: invoice?.code,
+      status: "open",
     });
   });
 });

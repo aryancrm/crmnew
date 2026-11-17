@@ -3,12 +3,19 @@
 // quantities change in place, a line comes off. Saving sends the whole order back through the
 // same change the MedRep's form uses; the MedRep is told what changed.
 
-import type { BuyerType, Catalogue, CatalogueRow, OrderDetail } from "@2mg/api/types";
+import type {
+  BuyerType,
+  Catalogue,
+  CatalogueRow,
+  OrderDetail,
+  OrderVersionLine,
+} from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Gift, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { api } from "../api";
 import { Button, count, Problem, peso, useAction } from "../ui";
+import { changesBetween } from "./versions";
 
 type Line = {
   key: number;
@@ -73,6 +80,8 @@ export function LinesEditor({ data, onDone }: { data: OrderDetail; onDone: () =>
   );
   const [search, setSearch] = useState("");
   const [why, setWhy] = useState("");
+  // The hub's "Confirm changes": what changes, old → new, before it is saved.
+  const [confirming, setConfirming] = useState(false);
   const keyOf = () => Math.max(0, ...lines.map((line) => line.key)) + 1;
   const found = useMemo(() => {
     const words = search.toLowerCase().split(/\s+/).filter(Boolean);
@@ -143,6 +152,31 @@ export function LinesEditor({ data, onDone }: { data: OrderDetail; onDone: () =>
     const price = line.free ? 0 : typed(line.price);
     return sum + (Number(line.qty) || 0) * (Number.isFinite(price) ? price : 0);
   }, 0);
+
+  const before: OrderVersionLine[] = data.items.map((item) => ({
+    medicineId: item.medicineId,
+    name: item.medicine,
+    qty: item.qty,
+    priceKind: item.priceKind,
+    listPrice: item.listPrice,
+    unitPrice: item.unitPrice,
+    reason: item.reason,
+    free: item.free,
+    relief: item.relief,
+  }));
+  const after: OrderVersionLine[] = lines.map((line) => ({
+    medicineId: line.medicineId,
+    name: line.medicine,
+    qty: Math.max(0, Math.floor(Number(line.qty) || 0)),
+    priceKind: line.priceKind,
+    listPrice: line.listPrice,
+    unitPrice: line.free ? 0 : Number.isFinite(typed(line.price)) ? typed(line.price) : 0,
+    reason: line.reason || null,
+    free: line.free,
+    relief: line.relief,
+  }));
+  const changes = confirming ? changesBetween(before, after) : [];
+  const totalBefore = order.total;
 
   async function save() {
     const done = await action.run(async () => {
@@ -399,14 +433,56 @@ export function LinesEditor({ data, onDone }: { data: OrderDetail; onDone: () =>
           <span className="text-xs text-rose-700">{action.at("answer")}</span>
         )}
       </label>
+      {confirming && (
+        <div className="rounded-lg border border-brand/30 bg-brand-tint/40 px-3.5 py-3 text-[13px]">
+          <div className="font-semibold text-ink">Confirm changes</div>
+          {changes.length === 0 ? (
+            <div className="mt-1 text-ink-2">Nothing on the lines changed.</div>
+          ) : (
+            <ul className="mt-1.5 flex flex-col gap-1">
+              {changes.map((one) => (
+                <li key={`${one.name}-${one.what}`}>
+                  <b className="text-ink">{one.name}</b>{" "}
+                  <span
+                    className={
+                      one.tone === "add" ? "text-good" : one.tone === "off" ? "text-bad" : "text-ink"
+                    }
+                  >
+                    {one.what}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="mt-2 tabular-nums text-ink">
+            Total {peso(totalBefore)} → <b>{peso(total + order.deliveryFee)}</b>
+          </div>
+          <div className="mt-1 text-ink-2">
+            {order.medrep} is told what changed and why. Every version stays on the order.
+          </div>
+        </div>
+      )}
       <Problem message={action.problem?.message} />
       <div className="flex justify-end gap-2">
-        <Button onClick={onDone} disabled={action.busy}>
-          Cancel
+        <Button
+          onClick={() => (confirming ? setConfirming(false) : onDone())}
+          disabled={action.busy}
+        >
+          {confirming ? "Back to editing" : "Cancel"}
         </Button>
-        <Button variant="primary" onClick={save} disabled={action.busy || lines.length === 0}>
-          {action.busy ? "Saving…" : "Save changes"}
-        </Button>
+        {confirming ? (
+          <Button variant="primary" onClick={save} disabled={action.busy || lines.length === 0}>
+            {action.busy ? "Saving…" : "Confirm changes"}
+          </Button>
+        ) : (
+          <Button
+            variant="primary"
+            onClick={() => setConfirming(true)}
+            disabled={action.busy || lines.length === 0}
+          >
+            Save changes
+          </Button>
+        )}
       </div>
     </div>
   );

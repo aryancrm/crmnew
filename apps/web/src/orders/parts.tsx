@@ -70,7 +70,14 @@ export function useOrderAction() {
   async function run(
     id: number,
     what: OrderAction,
-    body: { reason?: string; warehouseId?: number | null; finance?: boolean; stock?: boolean } = {},
+    body: {
+      reason?: string;
+      warehouseId?: number | null;
+      finance?: boolean;
+      stock?: boolean;
+      /** Taking it off hold: the step it goes on from. */
+      to?: OrderStatus;
+    } = {},
   ) {
     const done = await action.run(async () => {
       await api(`/api/orders/${id}/${what}`, { body });
@@ -106,7 +113,17 @@ const WHY: Partial<Record<OrderAction, { title: string; button: string; hint: st
   cancel: {
     title: "Cancel this order",
     button: "Cancel order",
-    hint: "A cancelled order can't be brought back.",
+    hint: "It stops for good and is kept. Management can bring it back later (Restore) while no money was given back on it.",
+  },
+  resume: {
+    title: "Take off hold",
+    button: "Take off hold",
+    hint: "It goes on from where it stopped, or from an earlier desk to look at it again. The MedRep and that desk are told.",
+  },
+  restore: {
+    title: "Restore this order",
+    button: "Restore",
+    hint: "The cancelled order comes back to Management's approval as it was; the cancel stays on its timeline. Its invoice is made again when it is approved.",
   },
   take_back: {
     title: "Take back the approval",
@@ -132,11 +149,14 @@ export function ReasonDialog({
   what,
   initial = "",
   financeHold = false,
+  choices = [],
   onClose,
 }: {
   orderId: number;
   code: string;
   what: OrderAction;
+  /** Taking it off hold: where it may go on from, where it stopped first. */
+  choices?: { status: OrderStatus; label: string }[];
   /** A reason already written (holding for money owed). */
   initial?: string;
   /** Finance holds it: screenshots (the bank, the slip) go with the reason, for the MedRep. */
@@ -144,6 +164,7 @@ export function ReasonDialog({
   onClose: () => void;
 }) {
   const [reason, setReason] = useState(initial);
+  const [to, setTo] = useState<OrderStatus | "">(choices[0]?.status ?? "");
   const [shots, setShots] = useState<File[]>([]);
   const [shotProblem, setShotProblem] = useState<string | null>(null);
   const order = useOrderAction();
@@ -153,7 +174,7 @@ export function ReasonDialog({
   const withShots = financeHold && what === "hold";
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!(await order.act(orderId, what, { reason }))) return;
+    if (!(await order.act(orderId, what, { reason, ...(to ? { to } : {}) }))) return;
     if (withShots && shots.length) {
       const failed: string[] = [];
       for (const shot of shots) {
@@ -177,13 +198,33 @@ export function ReasonDialog({
     <Dialog title={`${words.title} · ${code}`} onClose={onClose} busy={order.busy}>
       <form onSubmit={submit} className="flex flex-col gap-4">
         <div className="text-[13px] text-ink-2">{words.hint}</div>
+        {choices.length > 1 && (
+          <Field label="Continue from" error={order.at("to")}>
+            {(field) => (
+              <select
+                {...field}
+                className={INPUT}
+                value={to}
+                onChange={(event) => setTo(event.target.value as OrderStatus)}
+              >
+                {choices.map((choice, index) => (
+                  <option key={choice.status} value={choice.status}>
+                    {index === 0 ? `Where it stopped — ${choice.label}` : `Back to ${choice.label}`}
+                  </option>
+                ))}
+              </select>
+            )}
+          </Field>
+        )}
         <Field
           label={
             what === "resubmit"
               ? "Your answer to Management"
               : what === "answer"
                 ? "Your answer"
-                : "Reason"
+                : what === "resume" || what === "restore"
+                  ? "Why can it go on?"
+                  : "Reason"
           }
           error={order.at("reason")}
         >
@@ -248,7 +289,7 @@ export function ReasonDialog({
           <Button
             type="submit"
             variant={
-              ["send_back", "hold", "resubmit", "take_back", "answer"].includes(what)
+              ["send_back", "hold", "resubmit", "take_back", "answer", "resume", "restore"].includes(what)
                 ? "primary"
                 : "danger"
             }

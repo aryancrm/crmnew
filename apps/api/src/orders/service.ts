@@ -64,6 +64,7 @@ import {
   DESK_HOME,
   DESK_TABS,
   FINANCE_STATUSES,
+  afterApproval,
   holder,
   INVOICE_FROM_LABEL,
   mayAddPaper,
@@ -71,6 +72,7 @@ import {
   NEXT_OF,
   ORDER_ALL_ROLES,
   ORDER_MANAGE_ROLES,
+  resumeChoices,
   orderActions,
   orderCan,
   PAPER_KINDS,
@@ -168,6 +170,13 @@ const takeBackSql = sql`(o.approved_by is not null
     and (e.stage in ('finance_verified', 'paid', 'packed', 'shipped', 'delivered', 'completed')
       or (e.stage = 'invoiced' and e.by_person <> o.approved_by)))
   and not exists (select 1 from invoice i where i.order_id = o.id and i.status <> 'cancelled' and i.paid > 0))`;
+/** A cancelled order (alias `o`) Management can bring back (the hub's Restore): no money given
+ *  back on it, no points (they went back to the customer), not an Online case's (its case moved on). */
+const restorableSql = sql`(o.status = 'cancelled' and o.lead_id is null and coalesce(o.points_used, 0) = 0
+  and not exists (select 1 from invoice i where i.order_id = o.id and i.refunded > 0)
+  and not exists (select 1 from sales_return r where r.order_id = o.id))`;
+/** Money is on the order's invoice (alias `o`). */
+const paidInSql = sql`exists (select 1 from invoice i where i.order_id = o.id and i.status <> 'cancelled' and i.paid > 0)`;
 /** Sent back to the MedRep (alias `o`): its last reason, who sent it, the MedRep's answer. */
 const sentBackColumns = sql`o.sent_back_count::int as "sentBackCount", o.sent_back_reason as "sentBackReason",
   (select p.name from person p where p.id = o.sent_back_by) as "sentBackBy", o.reply`;
@@ -1198,6 +1207,10 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
       gl: boolean;
       undoable: boolean;
       approverId: number | null;
+      restorable: boolean;
+      paidIn: boolean;
+      waitingSince: string | null;
+      waitingBy: string | null;
     }
   >(
     db,
@@ -1227,7 +1240,9 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         o.division, o.sub_division as "subDivision", o.payment_term as "paymentTerm", o.finance_check as "financeCheck",
         ${sentBackColumns}, ${iso("o.sent_back_at")} as "sentBackAt",
         case when ${takeBackSql} then ${iso(`(o.approved_at + make_interval(mins => ${TAKE_BACK_MINUTES}))`)} end as "takeBackUntil",
-        case when o.relief_kind is not null then json_build_object('kind', o.relief_kind, 'idNo', o.relief_id_no, 'name', o.relief_name) end as relief
+        case when o.relief_kind is not null then json_build_object('kind', o.relief_kind, 'idNo', o.relief_id_no, 'name', o.relief_name) end as relief,
+        ${restorableSql} as restorable, ${paidInSql} as "paidIn", ${iso("o.waiting_stock_at")} as "waitingSince",
+        (select wp.name from person wp where wp.id = o.waiting_stock_by) as "waitingBy"
       from sales_order o ${rowJoins}
       join person raiser on raiser.id = o.raised_by
       left join channel ch on ch.id = o.channel_id
@@ -1288,8 +1303,20 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         where v.order_id = ${id} order by v.n`,
     ),
   ]);
-  const { raisedById, medrepId, licenceExpired, creditLimit, gl, undoable, approverId, ...shown } =
-    order;
+  const {
+    raisedById,
+    medrepId,
+    licenceExpired,
+    creditLimit,
+    gl,
+    undoable,
+    approverId,
+    restorable,
+    paidIn,
+    waitingSince,
+    waitingBy,
+    ...shown
+  } = order;
   const onFile = [...new Set(papers.map((paper) => paper.kind))];
   const who = {
     status: order.status,
@@ -1300,7 +1327,10 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
     leadId: order.leadId,
     takeBack: Boolean(order.takeBackUntil),
     approverId,
+    restorable,
   };
+  const can = orderActions(me, who);
+  const held = order.status === "on_hold" || order.status === "exception";
   const found = findingsOf(
     items,
     {
@@ -1358,11 +1388,26 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
     events: events.map(({ role, ...event }) => ({ ...event, byRole: ROLE_LABEL[role] })),
     steps: steps.map((step) => ({ ...step, label: STATUS_LABEL[step.status] })),
     warehouses: places,
-    warehouseFill: orderActions(me, who).approve ? await warehouseFill(db, id) : null,
+    // Management lets a held order go on from where it stopped, or an earlier desk.
+    resumeTo:
+      can.resume && (ORDER_MANAGE_ROLES.includes(me.role) || approverId === me.id)
+        ? resumeChoices({
+            heldFrom: order.heldFrom,
+            terms: order.paymentTerms,
+            financeCheck: order.financeCheck,
+            leadId: order.leadId,
+            paidIn,
+          }).map((status) => ({ status, label: STATUS_LABEL[status] }))
+        : [],
+    waitingStock:
+      held && waitingSince
+        ? { since: waitingSince, by: waitingBy, short: await shortLines(db, id) }
+        : null,
+    warehouseFill: can.approve ? await warehouseFill(db, id) : null,
     money,
     picks,
     can: {
-      ...orderActions(me, who),
+      ...can,
       addPaper: mayAddPaper(me, who, "po"),
       addProof: mayAddPaper(me, who, "payment_proof"),
       addDr: mayAddPaper(me, who, "dr"),
@@ -1370,7 +1415,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
       recordPayment:
         (orderCan(me).finance || (Boolean(order.leadId) && CASE_AGENT_ROLES.includes(me.role))) &&
         money.invoice?.status === "open",
-      waitStock: orderActions(me, who).hold && (await shortLines(db, id)).length > 0,
+      waitStock: can.hold && (await shortLines(db, id)).length > 0,
       undoConfirm: orderCan(me).finance && Boolean(undoable),
     },
   };
@@ -1791,10 +1836,6 @@ export function withCity(address: string | null, city: string | null): string | 
   return `${address}, ${city}`;
 }
 
-/** Where an approved order goes: only a customer who pays in advance needs its money checked
- *  first; credit and cash on delivery go straight to their invoice. */
-const afterApproval = (terms: string): OrderStatus =>
-  terms === "advance" ? "finance_check" : "ready_for_invoice";
 
 export async function actOnOrder(
   db: Database,
@@ -1807,6 +1848,8 @@ export async function actOnOrder(
     finance?: boolean;
     /** Holding: wait until what it needs is on the shelf (the reason is worked out). */
     stock?: boolean;
+    /** Taking it off hold: the step it goes on from (Management may pick an earlier one). */
+    to?: OrderStatus;
   },
 ): Promise<OrderStatus> {
   const reason = clean(input.reason);
@@ -1826,11 +1869,15 @@ export async function actOnOrder(
       takeBack: boolean;
       approvedBy: string | null;
       approverId: number | null;
+      approved: boolean;
+      restorable: boolean;
+      paidIn: boolean;
     }>(
       tx,
       sql`select o.id::int as id, o.status, o.raised_by::int as "raisedBy", o.medrep_id::int as "medrepId", ${approverSql} as "approverId", o.held_from as "heldFrom",
           o.held_role as "heldRole", o.payment_terms as terms, o.code, o.lead_id::int as "leadId", o.finance_check as "financeCheck",
-          ${takeBackSql} as "takeBack", (select p.name from person p where p.id = o.approved_by) as "approvedBy"
+          ${takeBackSql} as "takeBack", (select p.name from person p where p.id = o.approved_by) as "approvedBy",
+          o.approved_at is not null as approved, ${restorableSql} as restorable, ${paidInSql} as "paidIn"
         from sales_order o where o.id = ${id} for update of o`,
     );
     if (!order) throw new Refusal(404, "not_found", "That order doesn't exist.");
@@ -1851,9 +1898,15 @@ export async function actOnOrder(
       "exception",
       "cancel",
       "take_back",
+      "restore",
     ];
     if (needsReason.includes(action) && !reason && !(action === "hold" && input.stock))
       throw new Refusal(400, "invalid", "Say why.", "reason");
+    // Management says why a held order can go on (the hub's Resume); Finance and Dispatch lift
+    // their own holds with a press.
+    const managing = ORDER_MANAGE_ROLES.includes(me.role) || order.approverId === me.id;
+    if (action === "resume" && managing && !reason)
+      throw new Refusal(400, "invalid", "Say why it can go on.", "reason");
     if (action === "resubmit" && !reason)
       throw new Refusal(
         400,
@@ -1908,7 +1961,7 @@ export async function actOnOrder(
             id,
             me,
             "status",
-            `Approved. Ships from ${place.name}. It goes to Dispatch with its invoice${order.leadId ? "; the Online desk takes the payment" : ""}.`,
+            `Approved. Ships from ${place.name.replace(/\.$/, "")}. It goes to Dispatch with its invoice${order.leadId ? "; the Online desk takes the payment" : ""}.`,
             "approved",
           );
           await clearCaseOrder(tx, me, id);
@@ -1923,7 +1976,7 @@ export async function actOnOrder(
           id,
           me,
           "status",
-          `Approved. Ships from ${place.name}. ${next === "ready_for_invoice" ? `${order.terms === "cod" ? "Cash on delivery" : "Credit customer"}: Finance checks what the customer owes and lets it go.` : "It goes to Finance to check the payment."}`,
+          `Approved. Ships from ${place.name.replace(/\.$/, "")}. ${next === "ready_for_invoice" ? `${order.terms === "cod" ? "Cash on delivery" : "Credit customer"}: Finance checks what the customer owes and lets it go.` : "It goes to Finance to check the payment."}`,
           "approved",
         );
         // The invoice is made as Management approves (Aryan, 17 Nov).
@@ -1988,7 +2041,30 @@ export async function actOnOrder(
         );
         return logEvent(tx, id, me, "status", `Marked as an exception. Reason: ${reason}`);
       case "resume": {
-        const back = order.heldFrom ?? "pending_approval";
+        const stopped = order.heldFrom ?? "pending_approval";
+        // Where it stopped, or (Management) an earlier desk to look at it again.
+        const choices = managing ? resumeChoices(order) : [stopped];
+        const back = input.to ?? stopped;
+        if (!choices.includes(back))
+          throw new Refusal(
+            400,
+            "invalid",
+            `${order.code} can go on only from ${choices.map((one) => STATUS_LABEL[one]).join(" or ")}.`,
+            "to",
+          );
+        if (back !== stopped) {
+          // Back before Finance's check: Finance looks again (nothing was paid on it).
+          await set(sql`finance_checked_at = null, finance_checked_by = null`);
+          await tx.execute(
+            sql`update order_event set stage = null where order_id = ${id} and stage in ('finance_verified', 'paid')`,
+          );
+        }
+        if (back === "pending_approval" && order.approved) {
+          // Back to Management's approval: as if not yet approved; its invoice is made again
+          // (the same number) when it is approved.
+          await cancelInvoiceOf(tx, me, id, `Back to Management: ${reason ?? "taken off hold"}`);
+          await set(sql`approved_at = null, approved_by = null`);
+        }
         await set(
           sql`status = ${back}, held_from = null, held_role = null, flag_reason = null,
             waiting_stock_at = null, waiting_stock_by = null`,
@@ -1998,7 +2074,28 @@ export async function actOnOrder(
           id,
           me,
           "status",
-          `Taken off hold: back to ${STATUS_LABEL[back]}.${reason ? ` ${reason}` : ""}`,
+          `Taken off hold by ${me.name}: ${back === stopped ? "goes on from" : "back to"} ${STATUS_LABEL[back]}.${reason ? ` Why: ${reason}` : ""}`,
+        );
+      }
+      case "restore": {
+        // The hub's Restore: the cancelled order comes back to Management's approval, as it was;
+        // the cancel stays on its timeline. Its invoice (if it had one) is made good again when
+        // it is approved, and money received on it counts again then.
+        await set(
+          sql`status = 'pending_approval', approved_at = null, approved_by = null, finance_checked_at = null,
+            finance_checked_by = null, held_from = null, held_role = null, flag_reason = null,
+            waiting_stock_at = null, waiting_stock_by = null, packed_at = null, packed_by = null`,
+        );
+        // Packed before the cancel: its pieces went back on the shelf, so it is packed afresh.
+        await tx.execute(
+          sql`update order_event set stage = null where order_id = ${id} and stage in ('finance_verified', 'paid', 'packed')`,
+        );
+        return logEvent(
+          tx,
+          id,
+          me,
+          "status",
+          `Restored by ${me.name}: back with Management for approval. Why: ${reason}`,
         );
       }
       case "answer":
