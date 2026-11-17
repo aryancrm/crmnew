@@ -128,6 +128,47 @@ export function customerRoutes(
     c.json(await customerPrices(db, c.get("me"), idParam(c))),
   );
 
+  // Customers from a spreadsheet (ERP phase 4): each row added as if typed by hand, with the same
+  // checks (one customer per phone and kind, no twin by name and city). Checked first without
+  // keeping anything; kept only with apply. Management and the Admin.
+  app.post("/api/customers/import", async (c) => {
+    const me = c.get("me");
+    allow(me, CUSTOMER_MANAGE_ROLES, "import customers");
+    const input = await readBody(
+      c,
+      z.object({
+        rows: z.array(z.record(z.string(), z.unknown())).min(1, "The file has no rows.").max(2000, "At most 2,000 rows at a time."),
+        apply: z.boolean().default(false),
+      }),
+    );
+    const results: { row: number; name: string; ok: boolean; message: string | null }[] = [];
+    const DRY = new Error("dry run");
+    try {
+      await db.transaction(async (tx) => {
+        for (const [n, raw] of input.rows.entries()) {
+          const parsed = customerInput.safeParse(importRow(raw));
+          const name = String(raw.name ?? raw.Name ?? "").trim();
+          if (!parsed.success) {
+            const issue = parsed.error.issues[0];
+            results.push({ row: n + 2, name, ok: false, message: `${issue?.path.join(".") || "row"}: ${issue?.message ?? "not readable"}` });
+            continue;
+          }
+          try {
+            await addCustomer(tx as unknown as Database, me, parsed.data as Parameters<typeof addCustomer>[2]);
+            results.push({ row: n + 2, name, ok: true, message: null });
+          } catch (error) {
+            if (!(error instanceof Refusal)) throw error;
+            results.push({ row: n + 2, name, ok: false, message: error.message });
+          }
+        }
+        if (!input.apply) throw DRY;
+      });
+    } catch (error) {
+      if (error !== DRY) throw error;
+    }
+    return c.json({ applied: input.apply, added: input.apply ? results.filter((one) => one.ok).length : 0, results });
+  });
+
   app.post("/api/customers", async (c) => {
     allow(c.get("me"), CUSTOMER_ADD_ROLES, "add a customer");
     const input = await readBody(c, customerInput);
@@ -198,4 +239,32 @@ export function customerRoutes(
       }),
     ),
   );
+}
+
+/** A spreadsheet row read by its headers ("Name", "Mobile", "Type"…) into the add form's fields. */
+function importRow(raw: Record<string, unknown>): Record<string, unknown> {
+  const pick = (...keys: string[]) => {
+    for (const [key, value] of Object.entries(raw)) {
+      const plain = key.toLowerCase().replace(/[^a-z]/g, "");
+      if (keys.includes(plain)) {
+        const text = String(value ?? "").trim();
+        return text === "" ? null : text;
+      }
+    }
+    return null;
+  };
+  const date = (value: string | null) => (value && /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null);
+  return {
+    kind: pick("kind", "type", "customertype")?.toLowerCase() ?? null,
+    name: pick("name", "customername", "customer") ?? "",
+    phone: pick("phone", "mobile", "mobileno", "phoneno", "contactno", "contact"),
+    email: pick("email", "emailaddress"),
+    address: pick("address", "billingaddress"),
+    city: pick("city", "billingcity", "town"),
+    specialty: pick("specialty", "specialization"),
+    licenceNo: pick("licenceno", "licenseno", "lto", "ltono", "ltonumber", "licence", "license"),
+    licenceExpires: date(pick("licenceexpires", "licenseexpires", "ltoexpiry", "expiry")),
+    tin: pick("tin", "tinno"),
+    note: pick("note", "notes", "remarks"),
+  };
 }

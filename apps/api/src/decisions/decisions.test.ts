@@ -3,7 +3,8 @@
 
 import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../app";
-import { type Database, openDatabase } from "../db/index";
+import { sql } from "drizzle-orm";
+import { type Database, openDatabase, rows as dbRows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { seedDemo } from "../seed";
@@ -22,6 +23,7 @@ const post = (who: string, path: string, body: unknown = {}) =>
     headers: { "content-type": "application/json", cookie: cookies[who] as string },
     body: JSON.stringify(body),
   });
+const rows_ = (text: string) => dbRows<{ n: number }>(db, sql.raw(text));
 const line = (list: Decisions["forMe"], key: string) => list.find((one) => one.key === key)?.count ?? 0;
 
 beforeAll(async () => {
@@ -102,5 +104,22 @@ describe("to decide", () => {
     expect((await app.request("/api/books/insights/top-medicines", { headers: { cookie: cookies.ryan as string } })).status).toBe(403);
     expect((await app.request("/api/books/insights/stock-aging", { headers: { cookie: cookies.marco as string } })).status).toBe(403);
     expect((await app.request("/api/books/insights/nothing", { headers: { cookie: cookies.naresh as string } })).status).toBe(404);
+  });
+  it("imports customers from a sheet: checked first without keeping anything, then kept", async () => {
+    const rows = [
+      { Name: "Sheet Hospital One", Type: "Hospital", City: "Makati", Mobile: "09171230001" },
+      { Name: "No Kind Clinic", City: "Pasig" },
+      { Name: "Sheet Hospital Two", Type: "hospital", City: "Taguig", Mobile: "0917 123 0001" },
+    ];
+    const count = async () => (await rows_(`select count(*)::int as n from customer where name like 'Sheet Hospital%'`))[0]?.n;
+    const check = (await (await post("sarla", "/api/customers/import", { rows })).json()) as { applied: boolean; results: { ok: boolean; message: string | null }[] };
+    expect(check.applied).toBe(false);
+    expect(check.results.map((one) => one.ok)).toEqual([true, false, false]);
+    expect(check.results[1]?.message).toMatch(/kind/);
+    expect(await count()).toBe(0);
+    const done = (await (await post("sarla", "/api/customers/import", { rows, apply: true })).json()) as { added: number };
+    expect(done.added).toBe(1);
+    expect(await count()).toBe(1);
+    expect((await post("ryan", "/api/customers/import", { rows })).status).toBe(403);
   });
 });

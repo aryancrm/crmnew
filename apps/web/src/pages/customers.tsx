@@ -96,12 +96,19 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
             : `${count(data.total)} ${(data.total === 1 ? (kindLabel?.label ?? "customer") : (kindLabel?.plural ?? "customers")).toLowerCase()}`
         }
         actions={
-          data.can.add && (
-            <Button variant="primary" onClick={() => setAdding(true)}>
-              <Plus size={16} aria-hidden="true" /> Add{" "}
-              {kindLabel ? kindLabel.label.toLowerCase() : "customer"}
-            </Button>
-          )
+          <div className="flex flex-wrap gap-2">
+            {(me?.role === "management" || me?.role === "admin") && (
+              <Link to="/customers/import" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+                Import from a sheet
+              </Link>
+            )}
+            {data.can.add && (
+              <Button variant="primary" onClick={() => setAdding(true)}>
+                <Plus size={16} aria-hidden="true" /> Add{" "}
+                {kindLabel ? kindLabel.label.toLowerCase() : "customer"}
+              </Button>
+            )}
+          </div>
         }
       />
 
