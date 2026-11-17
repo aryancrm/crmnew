@@ -154,7 +154,7 @@ function Launcher() {
       </footer>
       </div>
 
-      <About onPick={setPicked} />
+      <About />
 
       {/* The same sign-in, whichever tile was pressed. */}
       {picked && (
@@ -248,18 +248,27 @@ function Launcher() {
   );
 }
 
+/** A line that waves between two shapes of itself, slowly, about the same level. */
+function Wave({ a, b, dur, className, stroke, strokeOpacity, strokeWidth }: { a: string; b: string; dur: number; className?: string; stroke: string; strokeOpacity: string; strokeWidth: string }) {
+  return (
+    <path className={className} d={a} stroke={stroke} strokeOpacity={strokeOpacity} strokeWidth={strokeWidth} fill="none">
+      <animate attributeName="d" values={`${a};${b};${a}`} keyTimes="0;0.5;1" calcMode="spline" keySplines=".45 0 .55 1;.45 0 .55 1" dur={`${dur}s`} repeatCount="indefinite" />
+    </path>
+  );
+}
+
 /** The logo's orbit, drawn wide and quiet behind the board: orange and green lines and a star. */
 function Orbits() {
   return (
     <svg aria-hidden="true" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" className="pointer-events-none absolute inset-0 -z-10 h-full w-full">
       <g className="orbit-drift">
-        <path d="M-80 700C220 560 520 820 860 690S1300 420 1540 520" stroke="#f36b21" strokeOpacity=".45" strokeWidth="2.2" fill="none" />
-        <path className="orbit-flow" d="M-80 742C240 610 540 860 880 734S1320 470 1540 566" stroke="#f36b21" strokeOpacity=".32" strokeWidth="1.6" fill="none" />
+        <Wave a="M-80 700C220 560 520 820 860 690S1300 420 1540 520" b="M-80 690C220 610 520 770 860 702S1300 470 1540 508" dur={9} stroke="#f36b21" strokeOpacity=".45" strokeWidth="2.2" />
+        <Wave className="orbit-flow" a="M-80 742C240 610 540 860 880 734S1320 470 1540 566" b="M-80 730C240 655 540 815 880 746S1320 518 1540 554" dur={9} stroke="#f36b21" strokeOpacity=".32" strokeWidth="1.6" />
         <ellipse cx="200" cy="130" rx="300" ry="80" transform="rotate(-8 200 130)" stroke="#f36b21" strokeOpacity=".14" strokeWidth="1.5" fill="none" />
       </g>
       <g className="orbit-drift-back">
-        <path d="M-60 210C260 120 470 300 760 220S1210 40 1520 150" stroke="#1f9d55" strokeOpacity=".42" strokeWidth="2.2" fill="none" />
-        <path className="orbit-flow" d="M-60 250C280 165 490 342 780 262S1230 84 1520 194" stroke="#1f9d55" strokeOpacity=".3" strokeWidth="1.6" fill="none" />
+        <Wave a="M-60 210C260 120 470 300 760 220S1210 40 1520 150" b="M-60 198C260 165 470 255 760 232S1210 90 1520 138" dur={10} stroke="#1f9d55" strokeOpacity=".42" strokeWidth="2.2" />
+        <Wave className="orbit-flow" a="M-60 250C280 165 490 342 780 262S1230 84 1520 194" b="M-60 238C280 210 490 298 780 274S1230 132 1520 182" dur={10} stroke="#1f9d55" strokeOpacity=".3" strokeWidth="1.6" />
         <ellipse cx="1210" cy="760" rx="380" ry="110" transform="rotate(-12 1210 760)" stroke="#1f9d55" strokeOpacity=".16" strokeWidth="1.5" fill="none" />
       </g>
       <path className="orbit-twinkle" d="M1335 118l6 15 15 6-15 6-6 15-6-15-15-6 15-6z" fill="#1f9d55" fillOpacity=".6" />
