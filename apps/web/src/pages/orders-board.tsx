@@ -893,6 +893,14 @@ export function OrderCardItem({
                     {card.statusLabel}
                   </span>
                 )}
+                {card.changed && (
+                  <span
+                    className="inline-flex items-center rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-semibold text-white"
+                    title="Management changed its medicines or prices before approving: open it to see what"
+                  >
+                    Changed by Mgmt
+                  </span>
+                )}
                 {late && (
                   <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-semibold text-white">
                     Late

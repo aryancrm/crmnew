@@ -22,6 +22,9 @@ type Line = {
   free: boolean;
   reason: string;
   stock: number;
+  /** A senior citizen's or PWD's line: its price is the law's (or a lower promo), worked out by
+   *  the API; sent back unchanged it keeps the price it has. */
+  relief: boolean;
 };
 
 /** The buyer's own price list for each kind of customer. */
@@ -63,8 +66,9 @@ export function LinesEditor({ data, onDone }: { data: OrderDetail; onDone: () =>
       price: (item.unitPrice / 100).toFixed(2),
       listPrice: item.listPrice,
       free: item.free,
-      reason: item.reason ?? "",
+      reason: item.relief ? "" : (item.reason ?? ""),
       stock: item.inStock,
+      relief: item.relief,
     })),
   );
   const [search, setSearch] = useState("");
@@ -107,6 +111,7 @@ export function LinesEditor({ data, onDone }: { data: OrderDetail; onDone: () =>
         free: false,
         reason: "",
         stock: row.free,
+        relief: Boolean(order.relief),
       },
     ]);
     setSearch("");
@@ -122,7 +127,15 @@ export function LinesEditor({ data, onDone }: { data: OrderDetail; onDone: () =>
     if (lines.some((other) => other.medicineId === line.medicineId && other.free)) return;
     setLines((all) => [
       ...all,
-      { ...line, key: keyOf(), qty: line.qty, price: "0.00", free: true, reason: "Free item" },
+      {
+        ...line,
+        key: keyOf(),
+        qty: line.qty,
+        price: "0.00",
+        free: true,
+        reason: "Free item",
+        relief: false,
+      },
     ]);
   }
 
@@ -141,9 +154,10 @@ export function LinesEditor({ data, onDone }: { data: OrderDetail; onDone: () =>
             qty: Math.max(0, Math.floor(Number(line.qty) || 0)),
             priceKind: line.priceKind,
             unitPrice: line.free ? 0 : typed(line.price),
+            // Any price other than the list's, below or above, says why (Management's too).
             reason: line.free
               ? line.reason.trim() || "Free item"
-              : typed(line.price) < line.listPrice
+              : !line.relief && typed(line.price) !== line.listPrice
                 ? line.reason.trim() || null
                 : null,
             free: line.free,
@@ -161,7 +175,8 @@ export function LinesEditor({ data, onDone }: { data: OrderDetail; onDone: () =>
           paymentTerm: order.paymentTerm,
           patientOrder: order.patientOrder,
           patientName: order.patientName,
-          answer: why.trim() || "Medicines changed by Management",
+          // Said by Management every time: the MedRep reads it beside what changed.
+          answer: why.trim(),
         },
       });
     });
@@ -245,7 +260,8 @@ export function LinesEditor({ data, onDone }: { data: OrderDetail; onDone: () =>
           <tbody className="divide-y divide-slate-100">
             {lines.map((line) => {
               const price = line.free ? 0 : typed(line.price);
-              const below = !line.free && Number.isFinite(price) && price < line.listPrice;
+              const differs =
+                !line.free && !line.relief && Number.isFinite(price) && price !== line.listPrice;
               return (
                 <tr key={line.key} className="align-top">
                   <td className="px-3 py-2">
@@ -274,14 +290,26 @@ export function LinesEditor({ data, onDone }: { data: OrderDetail; onDone: () =>
                         <span>list {peso(line.listPrice)}</span>
                       )}
                     </div>
-                    {(line.free || below) && (
+                    {(line.free || differs) && (
                       <input
                         aria-label={`Remark for ${line.medicine}`}
                         value={line.reason}
                         onChange={(event) => change(line.key, { reason: event.target.value })}
-                        placeholder={line.free ? "Free item" : "Why below the list price"}
+                        placeholder={
+                          line.free
+                            ? "Free item"
+                            : price < line.listPrice
+                              ? "Why below the list price"
+                              : "Why above the list price"
+                        }
                         className={`${FIELD} mt-1 w-full text-[12px]`}
                       />
+                    )}
+                    {line.relief && !line.free && (
+                      <div className="mt-1 text-[11px] text-sky-800">
+                        {order.relief?.kind === "pwd" ? "PWD" : "Senior citizen"}: 20% off, no
+                        VAT (or a lower promo), set on saving
+                      </div>
                     )}
                   </td>
                   <td className="px-2 py-2 text-right">
@@ -299,7 +327,7 @@ export function LinesEditor({ data, onDone }: { data: OrderDetail; onDone: () =>
                     <input
                       aria-label={`Price of ${line.medicine}`}
                       inputMode="decimal"
-                      disabled={line.free}
+                      disabled={line.free || line.relief}
                       value={line.free ? "0.00" : line.price}
                       onChange={(event) => change(line.key, { price: event.target.value })}
                       className={`${FIELD} w-24 text-right disabled:bg-slate-50`}
@@ -357,13 +385,20 @@ export function LinesEditor({ data, onDone }: { data: OrderDetail; onDone: () =>
         </table>
       </div>
 
-      <input
-        aria-label="A word for the MedRep (optional)"
-        value={why}
-        onChange={(event) => setWhy(event.target.value)}
-        placeholder="A word for the MedRep (optional): promo, Buy 10 Take 1…"
-        className={`${FIELD} w-full`}
-      />
+      <label className="flex flex-col gap-1">
+        <span className="text-[11px] font-semibold text-slate-600">
+          Why you changed it (the MedRep reads it)
+        </span>
+        <input
+          value={why}
+          onChange={(event) => setWhy(event.target.value)}
+          placeholder="e.g. Promo Buy 10 Take 1, price as agreed with the hospital…"
+          className={`${FIELD} w-full`}
+        />
+        {action.at("answer") && (
+          <span className="text-xs text-rose-700">{action.at("answer")}</span>
+        )}
+      </label>
       <Problem message={action.problem?.message} />
       <div className="flex justify-end gap-2">
         <Button onClick={onDone} disabled={action.busy}>

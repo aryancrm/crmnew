@@ -38,6 +38,7 @@ import {
 import { type FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { VAT_WORDS } from "../inventory/vat";
 import { useMe } from "../auth";
 import { shortPeso } from "../ceo";
 import { CustomerDialog } from "../customers/dialog";
@@ -96,7 +97,18 @@ type Line = {
   reason: string;
   /** The same medicine again at no charge (a Buy 1 Take 1, a sample). */
   free?: boolean;
+  /** A changed order's SC/PWD price as it stands (a case's quote): sent back as it is, kept. */
+  kept?: number;
 };
+
+type Relief = { kind: "senior" | "pwd"; idNo: string; name: string };
+
+
+/** A price without its VAT (a 12% medicine), and a senior's or PWD's: no VAT, then 20% off. The
+ *  form's estimate; the API works out the price it keeps (the same rule). */
+const exVat = (price: number, vat: string) => (vat === "vat12" ? Math.round(price / 1.12) : price);
+const reliefOf = (price: number, vat: string) =>
+  Math.round((vat === "vat12" ? price / 1.12 : price) * 0.8);
 
 /** What "Save draft" keeps on this device. Photos are not kept. */
 type Draft = {
@@ -239,6 +251,9 @@ export function OrderNew({
   // patient's ID go with it, and Management checks them as on a patient's own order.
   const [patientOrder, setPatientOrder] = useState(false);
   const [patientName, setPatientName] = useState("");
+  // A senior citizen's or PWD's ID shown (RA 9994, RA 10754), on any order: 20% off and no VAT,
+  // or a promo without VAT when lower, never both. Their OSCA / PWD ID number goes on the invoice.
+  const [relief, setRelief] = useState<Relief | null>(null);
   // An advance order without its slip says why (the hub's rule): Finance reads it.
   const [noProof, setNoProof] = useState<NoProofReason | "">("");
   const [noProofNote, setNoProofNote] = useState("");
@@ -266,7 +281,8 @@ export function OrderNew({
     (pickedDivision
       ? subDivisionOfArea(pickedDivision, forRep ? forRep.area : me?.area?.name)
       : "");
-  const [toFinance, setToFinance] = useState(false);
+  // Finance checks every order unless Management switches it off (Aryan, 17 Nov).
+  const [toFinance, setToFinance] = useState(true);
   const doctors = useQuery({
     queryKey: ["customers", "doctors", findDoctor.trim()],
     queryFn: () =>
@@ -311,12 +327,20 @@ export function OrderNew({
         medicineId: item.medicineId,
         priceKind: item.priceKind,
         qty: item.qty,
-        lower: !item.free && item.unitPrice !== item.listPrice,
+        lower: !item.free && !item.relief && item.unitPrice !== item.listPrice,
         given:
-          !item.free && item.unitPrice !== item.listPrice ? (item.unitPrice / 100).toFixed(2) : "",
-        reason: item.reason ?? "",
+          !item.free && !item.relief && item.unitPrice !== item.listPrice
+            ? (item.unitPrice / 100).toFixed(2)
+            : "",
+        reason: item.relief ? "" : (item.reason ?? ""),
         free: item.free,
+        ...(item.relief ? { kept: item.unitPrice } : {}),
       })),
+    );
+    setRelief(
+      order.relief
+        ? { kind: order.relief.kind, idNo: order.relief.idNo ?? "", name: order.relief.name ?? "" }
+        : null,
     );
     restoredAddress.current = order.deliveryAddress ?? "";
     setReceiver(order.receiver ?? "");
@@ -425,8 +449,27 @@ export function OrderNew({
     const row = byId.get(line.medicineId);
     return row ? (pricesOf(row).find((option) => option.kind === line.priceKind)?.amount ?? 0) : 0;
   };
+  // Any order whose buyer shows a senior citizen's or PWD's ID takes their price (Aryan, 17 Nov).
+  const withRelief = Boolean(relief);
+  // An SC/PWD line: the lowest of the law's price (the patient price less VAT and 20%), a promo
+  // without VAT, or the price it keeps.
+  const reliefBase = (line: Line) => byId.get(line.medicineId)?.prices.patient ?? listOf(line);
+  const reliefEach = (line: Line) => {
+    const row = byId.get(line.medicineId);
+    if (!row) return 0;
+    const options = [reliefOf(reliefBase(line), row.vat)];
+    if (row.promo) options.push(exVat(row.promo.amount, row.vat));
+    if (line.kept !== undefined) options.push(line.kept);
+    return Math.min(...options);
+  };
   const eachOf = (line: Line) =>
-    line.free ? 0 : line.lower && line.given.trim() ? centavos(line.given) : listOf(line);
+    line.free
+      ? 0
+      : withRelief
+        ? reliefEach(line)
+        : line.lower && line.given.trim()
+          ? centavos(line.given)
+          : listOf(line);
   const change = (key: number, changes: Partial<Line>) =>
     setLines((all) => all.map((line) => (line.key === key ? { ...line, ...changes } : line)));
 
@@ -494,9 +537,15 @@ export function OrderNew({
       warnings.push(
         `${name} is short by ${count(line.qty - row.free)}${row.promised ? ` (${count(row.promised)} of the shelf already promised to other orders)` : ""}`,
       );
-    if (line.lower && eachOf(line) < listOf(line))
+    if (!withRelief && line.lower && eachOf(line) < listOf(line))
       warnings.push(`${name} is ${peso(listOf(line) - eachOf(line))} below the price, each`);
+    if (!withRelief && line.lower && eachOf(line) > listOf(line))
+      warnings.push(`${name} is ${peso(eachOf(line) - listOf(line))} above the price, each`);
   }
+  if (withRelief)
+    warnings.push(
+      `${relief?.kind === "pwd" ? "PWD" : "Senior citizen"} discount: 20% off and no VAT (or a promo, never both)`,
+    );
   if (picked?.review === "to_review")
     warnings.push("This customer is new: Management hasn't checked its details yet");
   if (picked?.licenceState === "expired") warnings.push("The customer's licence has expired");
@@ -563,10 +612,14 @@ export function OrderNew({
         medicineId: line.medicineId,
         qty: line.qty,
         priceKind: line.priceKind,
-        unitPrice: eachOf(line),
-        reason: line.free ? line.reason || "Free" : line.lower ? line.reason : null,
+        // An SC/PWD line sends the price it keeps (or none): the API works the rest out.
+        unitPrice: withRelief ? (line.free ? 0 : line.kept) : eachOf(line),
+        reason: line.free ? line.reason || "Free" : !withRelief && line.lower ? line.reason : null,
         free: Boolean(line.free),
       })),
+      relief: withRelief && relief
+        ? { kind: relief.kind, idNo: relief.idNo.trim() || null, name: relief.name.trim() || null }
+        : null,
       deliveryAddress: address,
       receiver,
       receiverPhone,
@@ -1095,6 +1148,99 @@ export function OrderNew({
             }}
           />
         )}
+        {picked && (
+          // A senior citizen's or PWD's ID shown, on any order: 20% off and no VAT (the law), or a
+          // promo without VAT when lower, never both. Management keeps what the MedRep chose.
+          <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-[13px] font-semibold text-slate-900">
+                Senior citizen or PWD?
+              </span>
+              <span className="flex gap-1 rounded-lg bg-slate-100 p-0.5 text-xs font-semibold">
+                {(
+                  [
+                    { kind: null, label: "No" },
+                    { kind: "senior", label: "Senior citizen" },
+                    { kind: "pwd", label: "PWD" },
+                  ] as const
+                ).map((choice) => {
+                  const on = (relief?.kind ?? null) === choice.kind;
+                  return (
+                    <button
+                      key={choice.label}
+                      type="button"
+                      disabled={management}
+                      aria-pressed={on}
+                      onClick={() => {
+                        setRelief(
+                          choice.kind
+                            ? {
+                                kind: choice.kind,
+                                idNo: relief?.idNo ?? "",
+                                name:
+                                  relief?.name ??
+                                  (picked.kind === "patient" ? picked.name : patientName),
+                              }
+                            : null,
+                        );
+                        // The law's price replaces any other price typed on the lines.
+                        if (choice.kind)
+                          setLines((all) =>
+                            all.map((line) =>
+                              line.free ? line : { ...line, lower: false, given: "", reason: "" },
+                            ),
+                          );
+                      }}
+                      className={`rounded-md px-3 py-1.5 disabled:cursor-not-allowed ${on ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"}`}
+                    >
+                      {choice.label}
+                    </button>
+                  );
+                })}
+              </span>
+            </div>
+            {relief && (
+              <div className="flex flex-wrap gap-3">
+                <label className="flex min-w-40 flex-1 flex-col gap-1">
+                  <span className={FIELD_LABEL}>
+                    {relief.kind === "senior" ? "OSCA ID number" : "PWD ID number"}
+                  </span>
+                  <input
+                    value={relief.idNo}
+                    disabled={management}
+                    onChange={(event) => setRelief({ ...relief, idNo: event.target.value })}
+                    className={FIELD}
+                    placeholder="As on their ID"
+                  />
+                </label>
+                <label className="flex min-w-48 flex-1 flex-col gap-1">
+                  <span className={FIELD_LABEL}>Name on the ID</span>
+                  <input
+                    value={relief.name}
+                    disabled={management}
+                    onChange={(event) => setRelief({ ...relief, name: event.target.value })}
+                    className={FIELD}
+                  />
+                </label>
+              </div>
+            )}
+            {(action.at("relief.idNo") ?? action.at("relief")) && (
+              <div className="text-xs text-rose-700">
+                {action.at("relief.idNo") ?? action.at("relief")}
+              </div>
+            )}
+            {relief && (
+              <span className="text-[11px] text-slate-500">
+                {management
+                  ? "As the MedRep placed it. "
+                  : ""}
+                Every paid medicine at its patient price without VAT and 20% off, or its promo
+                without VAT when lower (never both). Attach a photo of their ID under Papers:
+                Management checks it.
+              </span>
+            )}
+          </div>
+        )}
         {action.at("items") && <div className="text-xs text-rose-700">{action.at("items")}</div>}
         {lines.length === 0 && (
           <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-center text-xs text-slate-500">
@@ -1184,6 +1330,19 @@ export function OrderNew({
                     {row.pack ? (
                       <span className="font-normal text-slate-500">, {row.pack.toLowerCase()}</span>
                     ) : null}
+                  </div>
+                  {/* VAT as Inventory keeps it, so nobody looks it up by hand (Aryan, 17 Nov). */}
+                  <div className="flex flex-wrap gap-1.5 text-[10px] font-semibold">
+                    <span
+                      className={`rounded px-1.5 py-0.5 ${row.vat === "vat12" ? "bg-amber-50 text-amber-800" : "bg-slate-100 text-slate-600"}`}
+                    >
+                      {VAT_WORDS[row.vat] ?? row.vat}
+                    </span>
+                    {row.rx && (
+                      <span className="rounded bg-rose-50 px-1.5 py-0.5 text-rose-700">
+                        Prescription
+                      </span>
+                    )}
                   </div>
                   <div
                     className={`text-[11px] font-semibold ${short ? "text-amber-700" : "text-emerald-700"}`}
@@ -1295,11 +1454,11 @@ export function OrderNew({
                 <div className="text-xs text-rose-700">{lineError(index, "qty")}</div>
               )}
 
-              {line.lower ? (
+              {!withRelief && line.lower ? (
                 <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold text-amber-900">
-                      Giving a lower price than{" "}
+                      Giving another price than{" "}
                       {option ? `the ${option.label.toLowerCase()} price` : "these"}
                     </span>
                     <button
@@ -1340,16 +1499,29 @@ export function OrderNew({
                       {((100 * (list - each)) / list).toFixed(1)}%). Management decides.
                     </div>
                   )}
+                  {line.lower && each > list && (
+                    <div className="text-xs text-amber-900">
+                      {peso(each - list)} above the {option?.label.toLowerCase()} price. Management
+                      sees it.
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="flex flex-wrap gap-4">
-                  <button
-                    type="button"
-                    onClick={() => change(line.key, { lower: true, given: String(list / 100) })}
-                    className="self-start text-xs font-medium text-emerald-700 hover:underline"
-                  >
-                    Give a lower price
-                  </button>
+                  {withRelief ? (
+                    <span className="self-start text-xs font-medium text-sky-800">
+                      {relief?.kind === "pwd" ? "PWD" : "Senior citizen"} price {peso(each)}{" "}
+                      (patient price {peso(reliefBase(line))}, no VAT, 20% off)
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => change(line.key, { lower: true, given: String(list / 100) })}
+                      className="self-start text-xs font-medium text-emerald-700 hover:underline"
+                    >
+                      Give another price
+                    </button>
+                  )}
                   {!lines.some((other) => other.free && other.medicineId === line.medicineId) && (
                     <button
                       type="button"
@@ -1552,7 +1724,10 @@ export function OrderNew({
             .filter((paper) =>
               forPatient
                 ? !paper.business || paper.kind === "po"
-                : !paper.patient || paper.kind === "prescription",
+                : !paper.patient ||
+                  paper.kind === "prescription" ||
+                  // The SC/PWD ID, on any order given their price.
+                  (paper.kind === "senior_id" && withRelief),
             )
             .map((paper) => {
               const file = papers[paper.kind];

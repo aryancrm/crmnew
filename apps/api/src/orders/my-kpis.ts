@@ -55,7 +55,8 @@ export async function myKpis(
       sql`select o.id::int as id, o.code, c.name as customer, c.kind as "customerKind", o.total::int as total, o.status,
           ${iso("coalesce(o.submitted_at, o.created_at)")} as at,
           (select string_agg(m.name || coalesce(' ' || m.strength, '') || ' × ' || i.qty, ', ' order by i.id)
-             from order_item i join medicine m on m.id = i.medicine_id where i.order_id = o.id) as lines
+             from order_item i join medicine m on m.id = i.medicine_id where i.order_id = o.id) as lines,
+          exists (select 1 from order_version v where v.order_id = o.id and v.kind = 'changed') as changed
         from sales_order o join customer c on c.id = o.customer_id
         where ${mine} and ${inPeriod}
         order by coalesce(o.submitted_at, o.created_at) desc, o.id desc limit 50`,

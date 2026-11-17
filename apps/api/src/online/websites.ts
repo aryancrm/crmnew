@@ -756,7 +756,8 @@ async function openCase(tx: Runner, site: Site, order: WebOrderRow): Promise<num
       packSize: medicine.packSize,
       listPrice: medicine.price,
       unitPrice,
-      reason: unitPrice < medicine.price ? `The price on ${site.name}` : null,
+      // A price other than the list's says where it came from (Management sees it either way).
+      reason: unitPrice !== medicine.price ? `The price on ${site.name}` : null,
       vat: medicine.vat,
       rx: medicine.rx,
     });

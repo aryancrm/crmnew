@@ -4,6 +4,7 @@
 
 import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
+import { duesSql } from "../finance/dues";
 import { allow, may, onlineDesk, Refusal } from "../http";
 import { addDays, EXPIRING_DAYS, todayManila } from "../inventory/rules";
 import { clean, day, iso, type Runner } from "../inventory/service";
@@ -106,14 +107,12 @@ export function seen(me: Me): SQL {
 }
 
 /** What a customer (alias `c`) owes: every open invoice, cash on delivery once delivered; past
- *  due by its due day (credit counts from delivery). */
-const owedOf = sql`(select coalesce(sum(i.total - i.paid), 0)::int from invoice i join sales_order o on o.id = i.order_id
-  where i.customer_id = c.id and i.status = 'open' and not (i.terms = 'cod' and o.status <> 'completed'))`;
-const overdueOf = (
-  today: string,
-) => sql`(select coalesce(sum(i.total - i.paid), 0)::int from invoice i join sales_order o on o.id = i.order_id
-  where i.customer_id = c.id and i.status = 'open' and i.due_on < ${today}::date
-    and not (i.terms in ('cod', 'days') and o.status <> 'completed'))`;
+ *  due by its due day (credit counts from delivery). Zoho's unpaid invoices and opening balances
+ *  with this CRM's. */
+const owedOf = (today: string) =>
+  sql`(select coalesce(sum(dd.balance), 0)::float8 from ${duesSql(today)} dd where dd.customer_id = c.id and not dd.cod_waiting)`;
+const overdueOf = (today: string) =>
+  sql`(select coalesce(sum(dd.balance), 0)::float8 from ${duesSql(today)} dd where dd.customer_id = c.id and not dd.on_delivery and dd.late > 0)`;
 const lastOrderOf = sql`(select max(o.created_at) from sales_order o where o.customer_id = c.id and o.status not in ('draft', 'cancelled'))`;
 
 /** How a list of customers is ordered: by name, who owes most, the latest order, or the longest
@@ -121,8 +120,8 @@ const lastOrderOf = sql`(select max(o.created_at) from sales_order o where o.cus
 const byName = () => sql`lower(c.name), c.id`;
 const SORTS: Record<string, (today: string) => SQL> = {
   name: byName,
-  owed: () => sql`${owedOf} desc, lower(c.name), c.id`,
-  overdue: (today) => sql`${overdueOf(today)} desc, ${owedOf} desc, lower(c.name), c.id`,
+  owed: (today) => sql`${owedOf(today)} desc, lower(c.name), c.id`,
+  overdue: (today) => sql`${overdueOf(today)} desc, ${owedOf(today)} desc, lower(c.name), c.id`,
   recent: () => sql`${lastOrderOf} desc nulls last, lower(c.name), c.id`,
   quiet: () => sql`${lastOrderOf} asc nulls first, lower(c.name), c.id`,
 };
@@ -166,7 +165,7 @@ export async function listCustomers(
   const conditions: SQL[] = [sql`c.active`, seen(me)];
   if (filter.kind) conditions.push(sql`c.kind = ${filter.kind}`);
   if (filter.review) conditions.push(sql`c.review = 'to_review'`);
-  if (filter.owes === "any") conditions.push(sql`${owedOf} > 0`);
+  if (filter.owes === "any") conditions.push(sql`${owedOf(today)} > 0`);
   if (filter.owes === "overdue") conditions.push(sql`${overdueOf(today)} > 0`);
   // One seat's customers: those of its area (a lead's person page, an empty seat's too).
   if (filter.seat)
@@ -202,7 +201,7 @@ export async function listCustomers(
               where l.customer_id = c.id order by l.first_contact_at desc limit 1) as "deskOwner",
             (select count(*)::int from sales_order o where o.customer_id = c.id and o.status not in ('draft', 'cancelled')) as orders,
             ${iso("(select max(o.created_at) from sales_order o where o.customer_id = c.id and o.status not in ('draft', 'cancelled'))")} as "lastOrderAt",
-            ${owedOf} as owed, ${overdueOf(today)} as overdue, c.credit_limit::int as "creditLimit"
+            ${owedOf(today)} as owed, ${overdueOf(today)} as overdue, c.credit_limit::int as "creditLimit"
           from customer c
           left join area a on a.id = c.area_id
           left join customer h on h.id = c.works_at
@@ -269,7 +268,7 @@ export async function customerDetail(db: Database, me: Me, id: number): Promise<
             (select to_char(max(o.created_at) at time zone 'Asia/Manila', 'YYYY-MM-DD') from sales_order o
               where o.customer_id = c.id and o.status <> 'cancelled') as "lastOrderOn",
             coalesce(c.area_id = ${me.area?.id ?? null}, false) as "inMyArea",
-            ${owedOf} as owed, ${overdueOf(today)} as overdue,
+            ${owedOf(today)} as owed, ${overdueOf(today)} as overdue,
             coalesce((select max(${today}::date - i.due_on)::int from invoice i join sales_order o on o.id = i.order_id
               where i.customer_id = c.id and i.status = 'open' and i.due_on < ${today}::date
                 and not (i.terms in ('cod', 'days') and o.status <> 'completed')), 0) as "overdueDays"

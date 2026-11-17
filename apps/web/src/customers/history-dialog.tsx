@@ -35,9 +35,10 @@ export function CustomerHistoryDialog({
     (first, invoice) => (!first || invoice.dueOn < first ? invoice.dueOn : first),
     null,
   );
-  const lateDays = oldest
-    ? Math.max(0, Math.round((Date.now() - Date.parse(`${oldest}T00:00:00+08:00`)) / 86_400_000))
-    : 0;
+  const lateDays = Math.max(
+    oldest ? Math.max(0, Math.round((Date.now() - Date.parse(`${oldest}T00:00:00+08:00`)) / 86_400_000)) : 0,
+    data?.totals.zohoDays ?? 0,
+  );
 
   return (
     <Dialog
@@ -71,7 +72,11 @@ export function CustomerHistoryDialog({
               {
                 label: "Owes us",
                 value: peso(data.totals.owed),
-                sub: data.totals.owed ? "on open invoices" : "nothing",
+                sub: data.totals.zohoOwed
+                  ? `${peso(data.totals.zohoOwed)} of it in Zoho`
+                  : data.totals.owed
+                    ? "on open invoices"
+                    : "nothing",
               },
               {
                 label: "Overdue",

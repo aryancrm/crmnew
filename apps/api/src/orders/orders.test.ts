@@ -131,8 +131,9 @@ describe("placing an order", () => {
     expect(detail.stages[0]).toMatchObject({ key: "created" });
     expect(detail.stages[0]?.at).not.toBeNull();
     expect(detail.stages[1]?.at).toBeNull();
-    // The customer pays in advance and no proof is attached yet: Management is told.
-    expect(detail.findings.map((finding) => finding.kind)).toEqual(["papers"]);
+    // The customer pays in advance and no proof is attached yet: Management is told; and it
+    // reads the MedRep's note.
+    expect(detail.findings.map((finding) => finding.kind)).toEqual(["note", "papers"]);
     // Ryan may not approve his own order; Management may.
     expect(detail.can.approve).toBe(false);
     expect((await order("sarla", made.body.id)).can).toMatchObject({

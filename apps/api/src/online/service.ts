@@ -53,7 +53,6 @@ import {
   papersFor,
   queuesOf,
   quoteTotals,
-  reliefPrice,
   roadStepOf,
   SOURCE_LABEL,
   stepsOf,
@@ -1534,22 +1533,21 @@ export async function orderFromLead(
   // like any MedRep order (the Online desk's skips Finance: its agent takes the money).
   const pap = row.desk === "pap";
   const customerId = await patientOf(db, me, id);
-  const relief = row.road === "senior" || row.road === "pwd";
-  const law =
-    row.road === "senior"
-      ? "Senior citizen: 20% off and no VAT (RA 9994)"
-      : "PWD: 20% off and no VAT (RA 10754)";
+  // A senior's or PWD's case: the order works the relief out on every line (the law's 20% and no
+  // VAT, or a lower quoted price or promo without VAT, never both); their ID is on the case's papers.
+  const relief = row.road === "senior" || row.road === "pwd" ? { kind: row.road } : null;
   return placeOrder(
     db,
     me,
     {
       customerId,
+      relief,
       items: row.quoteLines.map((line) => ({
         medicineId: line.medicineId,
         qty: line.qty,
         priceKind: "patient",
-        unitPrice: relief ? reliefPrice(line.unitPrice, line.vat) : line.unitPrice,
-        reason: relief ? (line.reason ? `${law} · ${line.reason}` : law) : line.reason,
+        unitPrice: line.unitPrice,
+        reason: line.reason ?? (line.unitPrice !== line.listPrice ? `As quoted on ${row.code}` : null),
       })),
       deliveryAddress: [row.address, row.city].filter(Boolean).join(", ") || null,
       receiver: row.patientName ?? row.name,
@@ -1563,7 +1561,7 @@ export async function orderFromLead(
           ? { terms: "days", days: 60 }
           : { terms: paying === "cod" ? "cod" : "advance", days: null },
       deliveryFee: website?.deliveryFee ?? 0,
-      relief,
+      reliefFromCase: true,
       leadId: pap ? undefined : id,
       toManagement,
       inside: async (tx, orderId) => {

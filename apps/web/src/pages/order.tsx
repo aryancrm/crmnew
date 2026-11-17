@@ -40,7 +40,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { api } from "../api";
 import { useMe } from "../auth";
 import {
-  CustomerBefore,
+  CustomerStory,
   LastGiven,
   LineLookSwitch,
   useLineLook,
@@ -62,6 +62,8 @@ import { LinesEditor } from "../orders/lines-editor";
 import { ReasonDialog, StatusPill, shortSpan, useOrderAction } from "../orders/parts";
 import { OrderReturnsBox } from "../orders/returns";
 import { SendToCustomer } from "../orders/send-update";
+import { OrderVersions } from "../orders/versions";
+import { VAT_WORDS } from "../inventory/vat";
 import { PAPER_ACCEPT, uploadPaper } from "../photo";
 import { manilaToday } from "../team/range";
 import {
@@ -566,6 +568,16 @@ export function Order() {
                 <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-semibold text-slate-700">
                   {pays}
                 </span>
+                {order.relief && (
+                  <span
+                    className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 font-semibold text-sky-800"
+                    title="20% off and no VAT on their own medicines (or a lower promo without VAT, never both)"
+                  >
+                    {order.relief.kind === "pwd" ? "PWD" : "Senior citizen"}
+                    {order.relief.idNo ? ` · ${order.relief.idNo}` : ""}
+                    {order.relief.name ? ` · ${order.relief.name}` : ""}
+                  </span>
+                )}
                 <span className="text-slate-400">
                   Placed {timeLabel(order.submittedAt ?? order.createdAt)} by {order.raisedBy}
                 </span>
@@ -600,8 +612,9 @@ export function Order() {
             </div>
           </div>
         </div>
-        {changedBy && (
-          // What Management changed before approving, for the MedRep to see at once.
+        <OrderVersions versions={data.versions} />
+        {changedBy && !data.versions.some((version) => version.kind === "changed") && (
+          // Changed before versions were kept: Management's words from the order's history.
           <div className="mt-3 flex gap-2.5 rounded-xl bg-slate-50 px-3.5 py-3 text-[13px] text-slate-800">
             <PencilLine className="mt-0.5 size-4 shrink-0 text-sky-600" aria-hidden="true" />
             <div className="min-w-0">
@@ -977,7 +990,7 @@ function checkStates(data: OrderDetail): Record<CheckKey, { ok: boolean; note: s
     return warn ? { ok: false, note: warn.label } : { ok: true, note: fine };
   };
   return {
-    price: state(["price"], of("price")?.label ?? "Price OK"),
+    price: state(["price", "note"], of("price")?.label ?? "Price OK"),
     stock: state(["stock"], "In stock"),
     customer: state(["customer"], "Customer OK"),
     papers: (() => {
@@ -1084,11 +1097,6 @@ function Lines({ data, compare }: { data: OrderDetail; compare?: boolean }) {
   return (
     <div className="-mx-4 overflow-x-auto border-y border-slate-100">
       {medicine !== null && <MedicinePopup id={medicine} onClose={() => setMedicine(null)} />}
-      {compare && prices && (
-        <div className="border-b border-slate-100 px-4 py-2.5">
-          <CustomerBefore prices={prices} name={order.customer} />
-        </div>
-      )}
       {anyBefore && <LineLookSwitch look={look} onPick={pickLook} />}
       <table className="t">
         <thead>
@@ -1121,6 +1129,21 @@ function Lines({ data, compare }: { data: OrderDetail; compare?: boolean }) {
                     <div className="text-xs text-ink-2">
                       {item.free ? "Free" : `${item.priceLabel} price`}
                       {item.reason && item.reason !== "Free" ? ` · ${item.reason}` : ""}
+                    </div>
+                    {/* VAT as Inventory keeps it; an SC/PWD line is sold without it. */}
+                    <div className="mt-0.5 flex flex-wrap gap-1 text-[10px] font-semibold">
+                      <span
+                        className={`rounded px-1.5 py-0.5 ${item.relief ? "bg-sky-50 text-sky-800" : item.vat === "vat12" ? "bg-amber-50 text-amber-800" : "bg-slate-100 text-slate-600"}`}
+                      >
+                        {item.relief
+                          ? "SC/PWD: no VAT, 20% off"
+                          : (VAT_WORDS[item.vat] ?? item.vat)}
+                      </span>
+                      {item.rx && (
+                        <span className="rounded bg-rose-50 px-1.5 py-0.5 text-rose-700">
+                          Prescription
+                        </span>
+                      )}
                     </div>
                   </td>
                   <td className="num">
@@ -1624,7 +1647,7 @@ function ManagementStep({
   const shownFindings = !check
     ? data.findings
     : check === "price"
-      ? findingsOf(["price"])
+      ? findingsOf(["price", "note"])
       : check === "stock"
         ? findingsOf(["stock"])
         : check === "customer"
@@ -1714,6 +1737,7 @@ function ManagementStep({
         )
       )}
       {/* What Management checks besides the price: the buyer's licence and the papers. */}
+      {shows("customer") && <CustomerStory orderId={order.id} name={order.customer} />}
       {shows("customer") && <LicenceFacts order={order} />}
       {check === "papers" ? (
         <Documents data={data} />
@@ -1817,7 +1841,7 @@ function ManagementGlance({
   const waiting = order.status === "pending_approval";
   const completes = can.approve || (can.resume && order.heldRole === "management");
   const kinds: Record<Part, string[]> = {
-    price: ["price"],
+    price: ["price", "note"],
     stock: ["stock"],
     customer: ["customer", "licence", "owes", "credit"],
     papers: ["rx"],
@@ -1875,6 +1899,7 @@ function ManagementGlance({
           ))}
         {key === "customer" && (
           <>
+            <CustomerStory orderId={order.id} name={order.customer} />
             <LicenceFacts order={order} />
             {completes && <DetailsLine data={data} />}
           </>

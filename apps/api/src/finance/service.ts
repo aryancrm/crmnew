@@ -4,6 +4,7 @@
 // Every change is one transaction that also writes the order's timeline.
 
 import { keepFile } from "../files/store";
+import { duesSql } from "./dues";
 import { type SQL, sql } from "drizzle-orm";
 import { customerDetail } from "../customers/service";
 import { type Database, rows } from "../db/index";
@@ -118,11 +119,15 @@ export async function moneyOf(
   const today = todayManila();
   const found = await rows<{ customerId: number; owed: number; overdue: number; days: number }>(
     db,
-    sql`select i.customer_id::int as "customerId", sum(i.total - i.paid)::float8 as owed,
-        coalesce(sum(i.total - i.paid) filter (where ${overdue(today)}), 0)::float8 as overdue,
-        coalesce(max(${today}::date - i.due_on) filter (where ${overdue(today)}), 0)::int as days
-      ${invoiceFrom} where i.status = 'open' and i.customer_id in (${ids([...new Set(customerIds)])})
-      group by i.customer_id`,
+    // Owed: everything but cash on delivery not delivered yet; late: past its due day (credit
+    // counts from delivery). Zoho's invoices and opening balances with this CRM's.
+    sql`select dd.customer_id::int as "customerId",
+        coalesce(sum(dd.balance) filter (where not dd.cod_waiting), 0)::float8 as owed,
+        coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late > 0), 0)::float8 as overdue,
+        coalesce(max(dd.late) filter (where not dd.on_delivery and dd.late > 0), 0)::int as days
+      from ${duesSql(today)} dd where dd.customer_id in (${ids([...new Set(customerIds)])})
+      group by dd.customer_id
+      having coalesce(sum(dd.balance) filter (where not dd.cod_waiting), 0) > 0`,
   );
   return new Map(found.map(({ customerId, ...money }) => [customerId, money]));
 }
@@ -222,7 +227,9 @@ async function issueInvoice(
 ): Promise<{ id: number; code: string }> {
   const lines = await rows<{ amount: number; vat: Vat }>(
     tx,
-    sql`select (i.qty * i.unit_price)::int as amount, m.vat from order_item i join medicine m on m.id = i.medicine_id where i.order_id = ${order.id}`,
+    // A senior's or PWD's line is sold VAT-exempt (the law), whatever the medicine's own VAT.
+    sql`select (i.qty * i.unit_price)::int as amount, case when i.relief then 'exempt' else m.vat end as vat
+      from order_item i join medicine m on m.id = i.medicine_id where i.order_id = ${order.id}`,
   );
   // Delivery is a service the company sells: VAT-able, on the same invoice.
   const [fee] = await rows<{ fee: number }>(
@@ -804,6 +811,7 @@ export async function invoiceDetail(db: Database, me: Me, id: number): Promise<I
         who.name as by, ${iso("i.at")} as at, i.cancelled_reason as "cancelledReason", o.delivery_fee::int as "deliveryFee",
         c.phone as "customerPhone", o.receiver, doc.name as doctor,
         concat_ws(' | ', coalesce(ch.code, '—'), rep.name) as salesperson, o.payment_term as "paymentTerm",
+        case when o.relief_kind is not null then json_build_object('kind', o.relief_kind, 'idNo', o.relief_id_no, 'name', o.relief_name) end as relief,
         case when l.source is null then 'MedRep order' else l.source end as source
       ${invoiceFrom} join person rep on rep.id = o.medrep_id join person who on who.id = i.by_person
         left join channel ch on ch.id = o.channel_id left join customer doc on doc.id = o.doctor_id
@@ -924,10 +932,7 @@ export async function customersOwe(
 ): Promise<OwedList> {
   allow(me, FINANCE_READ_ROLES, "see what customers owe");
   const today = todayManila();
-  const late = sql`(${today}::date - i.due_on)`;
-  const balance = sql`(i.total - i.paid)`;
-  const onDelivery = sql`(i.terms in ('cod', 'days') and o.status <> 'completed')`;
-  const narrowed: SQL[] = [sql`i.status = 'open'`];
+  const narrowed: SQL[] = [sql`true`];
   for (const word of (filter.q ?? "").toLowerCase().split(/\s+/).filter(Boolean).slice(0, 5)) {
     const like = `%${word.replace(/[%_\\]/g, "\\$&")}%`;
     narrowed.push(sql`(lower(c.name) like ${like} or lower(coalesce(c.city, '')) like ${like})`);
@@ -937,26 +942,27 @@ export async function customersOwe(
   >(
     db,
     // Terms and MedRep as the open invoices have them (the order's), not the customer's today: a
-    // customer moved to credit last week still owes on the advance invoices of before.
+    // customer moved to credit last week still owes on the advance invoices of before. Zoho's
+    // unpaid invoices and opening balances count with this CRM's (an opening balance as "older").
     sql`select c.id::int as "customerId", c.name as customer, c.kind, c.city,
-        case when count(distinct i.terms) = 1 then min(i.terms) else 'mixed' end as "paymentTerms",
-        case when count(distinct o.payment_days) = 1 then min(o.payment_days)::int end as "paymentDays",
+        case when count(distinct dd.terms) = 1 then min(dd.terms) else 'mixed' end as "paymentTerms",
+        case when count(distinct dd.days) = 1 then min(dd.days)::int end as "paymentDays",
         c.credit_limit::int as "creditLimit",
-        (select string_agg(distinct p.name, ', ') from invoice i2 join sales_order o2 on o2.id = i2.order_id
-          join person p on p.id = o2.medrep_id where i2.customer_id = c.id and i2.status = 'open') as medrep,
+        (select string_agg(distinct p.name, ', ') from person p where p.id in (select dd2.medrep_id from ${duesSql(today)} dd2 where dd2.customer_id = c.id)) as medrep,
         count(*)::int as invoices,
-        coalesce(sum(${balance}) filter (where not ${onDelivery} and ${late} <= 0), 0)::float8 as current,
-        coalesce(sum(${balance}) filter (where not ${onDelivery} and ${late} between 1 and 30), 0)::float8 as d30,
-        coalesce(sum(${balance}) filter (where not ${onDelivery} and ${late} between 31 and 60), 0)::float8 as d60,
-        coalesce(sum(${balance}) filter (where not ${onDelivery} and ${late} between 61 and 90), 0)::float8 as d90,
-        coalesce(sum(${balance}) filter (where not ${onDelivery} and ${late} > 90), 0)::float8 as older,
-        coalesce(sum(${balance}) filter (where ${onDelivery}), 0)::float8 as "onDelivery",
-        sum(${balance})::float8 as total,
-        coalesce(sum(${balance}) filter (where not ${onDelivery} and ${late} > 0), 0)::float8 as overdue,
-        coalesce(max(${late}) filter (where not ${onDelivery} and ${late} > 0), 0)::int as "oldestDays"
-      ${invoiceFrom} where ${sql.join(narrowed, sql` and `)}
+        coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late <= 0), 0)::float8 as current,
+        coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late between 1 and 30), 0)::float8 as d30,
+        coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late between 31 and 60), 0)::float8 as d60,
+        coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late between 61 and 90), 0)::float8 as d90,
+        coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late > 90), 0)::float8 as older,
+        coalesce(sum(dd.balance) filter (where dd.on_delivery), 0)::float8 as "onDelivery",
+        sum(dd.balance)::float8 as total,
+        coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late > 0), 0)::float8 as overdue,
+        coalesce(max(dd.late) filter (where not dd.on_delivery and dd.late > 0), 0)::int as "oldestDays"
+      from ${duesSql(today)} dd join customer c on c.id = dd.customer_id
+      where ${sql.join(narrowed, sql` and `)}
       group by c.id, c.name, c.kind, c.city, c.credit_limit, c.area_id
-      having sum(${balance}) > 0
+      having sum(dd.balance) > 0
       order by overdue desc, total desc, c.name`,
   );
   const keys = [

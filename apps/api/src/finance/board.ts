@@ -12,6 +12,7 @@ import { day, iso } from "../inventory/service";
 import { POINT_CENTAVOS } from "../points/service";
 import type { FinanceBoard, FinanceCollect, FinanceOrderCard, Me } from "../types";
 import { FINANCE_READ_ROLES, FINANCE_ROLES } from "./rules";
+import { duesSql } from "./dues";
 
 const LANE_SIZE = 100;
 
@@ -22,11 +23,11 @@ export async function financeBoard(db: Database, me: Me): Promise<FinanceBoard> 
   // Cash on delivery isn't owed until the goods arrive.
   const notYetDue = sql`(i.terms in ('cod', 'days') and o.status <> 'completed')`;
   // Owed: every open invoice but cash on delivery not yet delivered; late: only once it is due
-  // (credit counts from delivery).
+  // (credit counts from delivery). Zoho's unpaid invoices and opening balances count too (Aryan,
+  // 17 Nov: Finance checks what the customer already owes, wherever it was billed).
   const owedBy = (late: boolean) =>
-    sql`(select coalesce(sum(i.total - i.paid), 0)::int from invoice i join sales_order o on o.id = i.order_id
-      where i.customer_id = c.id and i.status = 'open'
-      ${late ? sql`and not ${notYetDue} and i.due_on < ${today}::date` : sql`and not (i.terms = 'cod' and o.status <> 'completed')`})`;
+    sql`(select coalesce(sum(dd.balance), 0)::float8 from ${duesSql(today)} dd
+      where dd.customer_id = c.id and ${late ? sql`not dd.on_delivery and dd.late > 0` : sql`not dd.cod_waiting`})`;
   const orderColumns = sql`o.id::int as id, o.code, o.customer_id::int as "customerId", c.name as customer, c.kind as "customerKind",
     rep.name as medrep, o.total::int as total, (o.total - o.points_used * ${POINT_CENTAVOS})::int as due,
     o.payment_terms as terms, o.payment_days::int as "paymentDays", o.payment_term as "paymentTerm",
@@ -66,10 +67,8 @@ export async function financeBoard(db: Database, me: Me): Promise<FinanceBoard> 
             and date_trunc('month', p.paid_on) = date_trunc('month', ${today}::date))::int as "inMonth",
           (select coalesce(sum(i.total), 0) from invoice i where i.status <> 'cancelled'
             and date_trunc('month', i.issued_on) = date_trunc('month', ${today}::date))::int as "invoicedMonth",
-          (select coalesce(sum(i.total - i.paid), 0) from invoice i join sales_order o on o.id = i.order_id
-            where i.status = 'open' and not ${notYetDue})::int as owed,
-          (select coalesce(sum(i.total - i.paid), 0) from invoice i join sales_order o on o.id = i.order_id
-            where i.status = 'open' and not ${notYetDue} and i.due_on < ${today}::date)::int as overdue,
+          (select coalesce(sum(dd.balance), 0) from ${duesSql(today)} dd where not dd.on_delivery)::float8 as owed,
+          (select coalesce(sum(dd.balance), 0) from ${duesSql(today)} dd where not dd.on_delivery and dd.late > 0)::float8 as overdue,
           (select coalesce(sum(i.total - i.paid), 0) from invoice i join sales_order o on o.id = i.order_id
             where i.status = 'open' and ${notYetDue})::int as "onDelivery",
           (select count(*) from invoice i where i.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method = 'points') > i.refunded)::int as refunds,

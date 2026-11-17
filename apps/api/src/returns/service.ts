@@ -282,7 +282,9 @@ export async function receiveReturn(
     }>(
       tx,
       sql`select l.id::int as id, l.order_item_id::int as "orderItemId", l.medicine_id::int as "medicineId",
-          m.name || coalesce(' ' || m.strength, '') as medicine, l.qty::int as qty, l.unit_price::int as "unitPrice", m.vat
+          m.name || coalesce(' ' || m.strength, '') as medicine, l.qty::int as qty, l.unit_price::int as "unitPrice",
+          -- A senior's or PWD's line was sold VAT-exempt: its credit is too.
+          case when (select oi.relief from order_item oi where oi.id = l.order_item_id) then 'exempt' else m.vat end as vat
         from sales_return_line l join medicine m on m.id = l.medicine_id where l.return_id = ${id} order by l.id`,
     );
     const outcomeOf = new Map(input.lines.map((line) => [line.lineId, line.outcome]));

@@ -7,6 +7,7 @@
 import { may } from "../http";
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
+import { duesSql } from "../finance/dues";
 import { invoiceState, METHOD_LABEL } from "../finance/rules";
 import { todayManila } from "../inventory/rules";
 import { day, iso } from "../inventory/service";
@@ -188,11 +189,18 @@ export async function customerPage(db: Database, me: Me, id: number): Promise<Cu
       state,
     };
   });
-  const owed = invoiceRows.reduce((sum, invoice) => sum + invoice.balance, 0);
-  const overdue = invoiceRows.reduce(
-    (sum, invoice) => sum + (invoice.state.overdueDays > 0 ? invoice.balance : 0),
-    0,
+  // What Zoho's invoices and opening balance still have them owing (their days late too).
+  const [zoho] = await rows<{ owed: number; overdue: number; days: number }>(
+    db,
+    sql`select coalesce(sum(dd.balance), 0)::float8 as owed,
+        coalesce(sum(dd.balance) filter (where dd.late > 0), 0)::float8 as overdue,
+        coalesce(max(dd.late) filter (where dd.late > 0), 0)::int as days
+      from ${duesSql(today)} dd where dd.customer_id = ${detail.customer.id} and dd.source <> 'crm'`,
   );
+  const owed = invoiceRows.reduce((sum, invoice) => sum + invoice.balance, 0) + (zoho?.owed ?? 0);
+  const overdue =
+    invoiceRows.reduce((sum, invoice) => sum + (invoice.state.overdueDays > 0 ? invoice.balance : 0), 0) +
+    (zoho?.overdue ?? 0);
   const points = detail.customer.kind === "patient" ? await pointsByPhone(db, phone) : null;
 
   return {
@@ -203,6 +211,9 @@ export async function customerPage(db: Database, me: Me, id: number): Promise<Cu
       bought: counted[0]?.bought ?? 0,
       owed,
       overdue,
+      zohoOwed: zoho?.owed ?? 0,
+      zohoOverdue: zoho?.overdue ?? 0,
+      zohoDays: zoho?.days ?? 0,
       firstOrderAt: counted[0]?.firstAt ?? null,
       lastOrderAt: counted[0]?.lastAt ?? null,
       paid: payments.reduce((sum, payment) => sum + payment.amount, 0),

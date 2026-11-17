@@ -120,6 +120,9 @@ describe("a hospital's order", () => {
       }),
     );
     orderId = ((await placed.json()) as { id: number }).id;
+    // A MedRep's order always waits for Management (Aryan, 17 Nov), whatever the switch says;
+    // Management approves it straight to Dispatch.
+    expect((await post("sarla", `/api/orders/${orderId}/approve`, { finance: false })).status).toBe(200);
     const order = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
     expect(order.order.status).toBe("ready_for_dispatch");
     const [mail] = await mailTo(to, 1);
@@ -235,6 +238,7 @@ describe("a hospital's order", () => {
       }),
     );
     const id = ((await placed.json()) as { id: number }).id;
+    expect((await post("sarla", `/api/orders/${id}/approve`, { finance: false })).status).toBe(200);
     const refused = await post("ryan", `/api/orders/${id}/update/email`);
     expect(refused.status).toBe(409);
     expect(((await refused.json()) as { error: { message: string } }).error.message).toContain(

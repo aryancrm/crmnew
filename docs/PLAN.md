@@ -1757,6 +1757,40 @@ return, as the people who will do it, before the next)**
    Management is told; refunds from returns counted on Finance's badge. Old invoices keep the
    medicine's name and VAT as they were.
 
+**Rules Aryan gave on 17 Nov (answers)**
+- *SC/PWD* goes on any order whose buyer shows a senior citizen's or PWD's ID, not only a
+  patient's. It is worked from the **patient price**: VAT out, then 20% off, by the system (or the
+  promo without VAT when that is lower, never both). The OSCA / PWD ID number and the name on it
+  are typed on the order and printed on the invoice; a photo of the ID goes under Papers and
+  Management checks it.
+- *Prices* Aryan named: patient, hospital, drugstore, and an "Extra" price (some rupees more).
+  Inventory has today patient, hospital, doctor, distributor, drugstore, bidding (question 10).
+- *VAT* is in Inventory on every medicine (12% or exempt) and shows wherever a medicine is picked
+  or checked (MedRep's form, Management's lines), so nobody looks it up by hand.
+- *Management sees the customer's past* on its customer check: first order or not, orders here
+  and in Zoho, what they take, what they owe now (Zoho's too), and a link to the whole history.
+- *Guarantee-letter cases go to PAP* (the PAP person), not the Online desk (question 11: today an
+  Online case turned GL stays with the Online agent).
+- *Approvals.* Management approves every MedRep order. When something is an exception, the
+  approval is taken from the MedRep's Team Lead; when Management itself needs a yes, from its
+  Business Mentor. Approval is a button in the CRM (name and time kept on the order), not a
+  screenshot or a mail. (The ask-up step for the Team Lead and the Business Mentor is not built
+  yet: its shape waits for Aryan's yes, question 9.)
+
+**Step 1 as built (17 Nov, local)**: a MedRep's order always waits for Management and an approved
+one goes to Finance unless Management switches it off on approving (the API refuses otherwise);
+every version of an order's lines is kept (`order_version`: placed, fixed by the MedRep, changed
+by Management, with who, when and why), the order shows Management's last change line by line
+(before → after, total before → after) and every version behind a toggle, and the MedRep's list
+marks "Changed by Mgmt"; Management must say why it changed an order; the MedRep's note is a check
+on Management's card; a price above the list needs a reason and shows "Above … price" (below as
+before); SC/PWD on the order form (No / Senior citizen / PWD, ID number, name), priced by the API
+(a typed price is not taken; a changed order's SC/PWD price is kept, never VAT-stripped twice),
+"No SC/PWD ID" until the ID is attached, the invoice VAT-exempt for those lines with "OSCA ID No." /
+"PWD ID No." printed, the sales order and a return's credit the same; Finance's cards, the
+Customers owe list, the customer list's "owes" and the customer's history count Zoho's unpaid
+invoices and opening balance with this CRM's (`src/finance/dues.ts`).
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -1772,6 +1806,14 @@ return, as the people who will do it, before the next)**
    different), and should Zoho's SKU stay the medicine's SKU so old prices join by themselves?
 8. Zoho's customers come over as they are (50,000+, patients included). Kinds are read from
    names and orders (12.18): look over the hospitals / drugstores / distributors after the import.
+9. Asking up for an exception (18): Management presses "Ask Team Lead" (the MedRep's) or "Ask
+   Business Mentor" on the order with what it is asking; that person sees it on their screen and
+   answers Yes / No with a word; it comes back to Management, which approves. Is that the way, and
+   what counts as an exception (a discount over some %, free goods, a customer who owes)?
+10. Price kinds (18): keep doctor, distributor and bidding beside patient, hospital and drugstore?
+    And "Extra": one more price per medicine set in Inventory (higher), that the MedRep can pick?
+11. A guarantee-letter case (18): when an Online case becomes GL, does it move to the PAP head (who
+    gives it to a PAP MedRep) or straight to one PAP person?
 
 ## 14. Change log
 
@@ -2216,3 +2258,4 @@ return, as the people who will do it, before the next)**
 - 17 Nov (75), Aryan: people are added, moved and taken off on a chart before the company tests the CRM. Admin panel → Teams & people opens on a Chart: every seat a box under the seat it reports to (the CEO on top, branches folded until opened, a search that opens the way to whoever it finds, zoom). Each box: + adds someone under that person (their boss already picked, their work guessed from the boss's other people), ✎ changes the job, the team (moving across), the boss (moving up or down) and the area, ⋯ shows their login, their screens, a cover, or "no longer with us"; an empty seat says Fill. Adding a person takes their employee ID (refused if someone else has it). The Teams list, Areas and Asks for people stay as tabs. Code pushed to GitHub main (Vercel and Render redeploy); Zoho's data stays local until Aryan says.
 - 17 Nov (76), Aryan: the company on the live CRM for testing, no Zoho data. `onboard-company.ts --live --no-zoho --apply`: the fresh CRM's boxes taken over as the chart's (Hospitals → Hospital Division, Doctors → Prescription Business, Telesales → MD Telesales, Government tenders → Government Bidding, Distributors and drugstores → B2B Telesales), every box with its channel, a CEO's seat at the top; 117 people and 2 vacant seats, the early accounts Mary Jane and Saroj taken as Mary Jane Viñas and Saroj Kumar (their seats moved to their chart places, their logins kept), Aryan & Saurav and Veronica left as they were. Checked on live: 120 of 121 sign in with the common password (Aryan & Saurav keep their own), JOIN_PASSWORD is set on Render, and every person's role, channel, business and boss is the local one's. Login IDs are numbered afresh on live: docs/LOGINS-LIVE.md (`scripts/list-logins.ts --live`).
 - 17 Nov (77), Aryan ("check the chart, you often get things wrong"): the CRM's tree read box by box against HR's 2026 chart PDF. Three places differed and are put right on live and locally (`scripts/fix-chart-17nov.ts`): the Patient Assistance Program sits in the Hospital Division (Fhaye Norella now reports to Vanessa Escalderon, not the CEO); MD Telesales Oncology sits inside the Onco-Hema Division, beside its two lines Uro & Onco Care (9 Rx CHCs) and Blood & Bone Care (2), which were missing; Claire Gallana sits beside Jessa Domino under B2B Telesales (reports to Subir Dey). Nobody's work, channel or desk changed, only those bosses and boxes. Everything else (Hospital's six regions, Government Account, MD Telesales Anesthesia, Sales & Marketing, Modern Trade, Executive and Admin, Digital Marketing, IT, In-licensing & Regulatory, HR, Supply Chain, Pharmacy, Finance) matches the PDF name by name. The chart file and onboarding now put a box found elsewhere where the chart has it.
+- 17 Nov (78), Aryan (plan 18, step 1 "safe line", and his answers: SC/PWD on any order with the ID, 20% off and no VAT; Management approves, an exception goes to the Team Lead, Management's own to the Business Mentor, all by a CRM button): a MedRep can't skip Management or Finance through the API; every version of an order is kept and the MedRep sees Management's change before → after with its reason ("Changed by Mgmt" on his list); the MedRep's note and any price above the list are on Management's card; SC/PWD on any order, from the patient price (VAT out, 20% off), priced by the API, VAT-exempt on the invoice with the ID number printed; VAT and "Prescription" shown on every line of the MedRep's form and Management's order; Management's customer check shows first order or not, orders here and in Zoho, what they owe now (Zoho's too) and a link to the whole history; Finance's checks, Customers owe, the customer list and history count Zoho's unpaid invoices and opening balances (`src/finance/dues.ts`). Tests: `src/orders/safe-line.test.ts`. The ask-up step for exceptions waits for Aryan (question 9).

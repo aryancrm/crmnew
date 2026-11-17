@@ -246,6 +246,14 @@ export function Invoice() {
     ["Source", invoice.source ?? ""],
     ["Customer's PO", invoice.customerPo ?? ""],
     ["Payment Terms", invoice.paymentTerm ?? ""],
+    ...(invoice.relief
+      ? ([
+          [
+            invoice.relief.kind === "pwd" ? "PWD ID No." : "OSCA ID No.",
+            [invoice.relief.idNo, invoice.relief.name].filter(Boolean).join(" · "),
+          ],
+        ] as [string, string][])
+      : []),
   ];
 
   return (
@@ -478,6 +486,15 @@ function InvoicePaper({ data }: { data: InvoiceDetail }) {
       </Link>,
     ],
     ...(invoice.doctor ? ([["Doctor Name", invoice.doctor]] as [string, ReactNode][]) : []),
+    // A senior citizen's or PWD's sale: their ID number and name on the invoice (the law).
+    ...(invoice.relief
+      ? ([
+          [
+            invoice.relief.kind === "pwd" ? "PWD ID No." : "OSCA ID No.",
+            [invoice.relief.idNo, invoice.relief.name].filter(Boolean).join(" · ") || "—",
+          ],
+        ] as [string, ReactNode][])
+      : []),
   ];
   const shipTo = [
     ...(invoice.receiver && invoice.receiver !== invoice.customer ? [invoice.receiver] : []),

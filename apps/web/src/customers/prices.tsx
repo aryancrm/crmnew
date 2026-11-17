@@ -425,7 +425,9 @@ export function CustomerBefore({ prices, name }: { prices: OrderPrices; name: st
           {initials(name)}
         </span>
         <div className="text-[13px] text-sky-950">
-          <b>First order.</b> {name} has not bought from us before, so there is no earlier price.
+          <b>First order.</b> {name} has not bought from us before (here or in Zoho), so there is
+          no earlier price.
+          {customer.owed > 0 && <Owes customer={customer} />}
         </div>
       </div>
     );
@@ -451,8 +453,21 @@ export function CustomerBefore({ prices, name }: { prices: OrderPrices; name: st
           </div>
         </div>
         <div className="ml-auto flex flex-wrap gap-x-7 gap-y-2 whitespace-nowrap">
-          <Figure label="Orders">{count(customer.orders)}</Figure>
+          <Figure label="Orders">
+            {count(customer.orders)}
+            {customer.zohoOrders > 0 && (
+              <span className="font-medium text-slate-500">
+                {" "}
+                · {count(customer.zohoOrders)} in Zoho
+              </span>
+            )}
+          </Figure>
           <Figure label="Bought">{peso(customer.bought)}</Figure>
+          <Figure label="Owes now">
+            <span className={customer.overdue > 0 ? "text-rose-700" : undefined}>
+              {customer.owed > 0 ? peso(customer.owed) : "Nothing"}
+            </span>
+          </Figure>
           <Figure label="Last order">
             {customer.lastOn ? dayLabel(customer.lastOn) : "—"}
             {customer.lastCode && (
@@ -484,8 +499,45 @@ export function CustomerBefore({ prices, name }: { prices: OrderPrices; name: st
           ))}
         </div>
       )}
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-3.5 py-2 text-[12px]">
+        {customer.owed > 0 ? <Owes customer={customer} /> : <span className="text-slate-500">Owes nothing now</span>}
+        <Link
+          to={`/customers/${customer.id}`}
+          className="font-semibold text-emerald-700 hover:underline"
+        >
+          Whole history, Zoho's too →
+        </Link>
+      </div>
     </div>
   );
+}
+
+/** What they owe now, how much is past due and how late, and how much of it is in Zoho. */
+function Owes({ customer }: { customer: OrderPrices["customer"] }) {
+  return (
+    <span className="text-slate-700">
+      Owes <b>{peso(customer.owed)}</b>
+      {customer.overdue > 0 ? (
+        <span className="font-semibold text-rose-700">
+          {" "}
+          · {peso(customer.overdue)} past due, oldest {count(customer.overdueDays)} days
+        </span>
+      ) : (
+        " · nothing past due"
+      )}
+      {customer.zohoOwed > 0 && (
+        <span className="text-slate-500"> · {peso(customer.zohoOwed)} of it in Zoho</span>
+      )}
+    </span>
+  );
+}
+
+/** The customer of an order, for Management's customer check: new or bought before (here and in
+ *  Zoho), what they take, what they owe now (Aryan, 17 Nov). */
+export function CustomerStory({ orderId, name }: { orderId: number; name: string }) {
+  const prices = useOrderPrices(orderId).data;
+  if (!prices) return null;
+  return <CustomerBefore prices={prices} name={name} />;
 }
 
 type LookProps = {

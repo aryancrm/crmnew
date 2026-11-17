@@ -7,6 +7,8 @@
 
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
+import { duesSql } from "../finance/dues";
+import { todayManila } from "../inventory/rules";
 import { orderDetail } from "../orders/service";
 import type { CustomerPrices, Me, MedicinePrices, OrderPrices } from "../types";
 import { customerDetail } from "./service";
@@ -181,7 +183,8 @@ export async function customerPrices(db: Database, me: Me, id: number): Promise<
 export async function orderPrices(db: Database, me: Me, id: number): Promise<OrderPrices> {
   const detail = await orderDetail(db, me, id);
   const customerId = detail.order.customerId;
-  const [lines, past, own] = await Promise.all([
+  const today = todayManila();
+  const [lines, past, own, dues] = await Promise.all([
     linesOf(db, customerId, id),
     pastOf(db, customerId),
     rows<{ orders: number; bought: number; lastAt: string | null; firstAt: string | null }>(
@@ -190,6 +193,15 @@ export async function orderPrices(db: Database, me: Me, id: number): Promise<Ord
           to_char(max(coalesce(submitted_at, created_at)) at time zone 'Asia/Manila', 'YYYY-MM-DD') as "lastAt",
           to_char(min(coalesce(submitted_at, created_at)) at time zone 'Asia/Manila', 'YYYY-MM-DD') as "firstAt"
         from sales_order where customer_id = ${customerId} and id < ${id} and status not in ('draft', 'cancelled')`,
+    ),
+    // What they owe now, wherever it was billed (this CRM, Zoho's invoices, Zoho's opening balance).
+    rows<{ owed: number; overdue: number; days: number; zoho: number }>(
+      db,
+      sql`select coalesce(sum(dd.balance) filter (where not dd.cod_waiting), 0)::float8 as owed,
+          coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late > 0), 0)::float8 as overdue,
+          coalesce(max(dd.late) filter (where not dd.on_delivery and dd.late > 0), 0)::int as days,
+          coalesce(sum(dd.balance) filter (where dd.source <> 'crm'), 0)::float8 as zoho
+        from ${duesSql(today)} dd where dd.customer_id = ${customerId}`,
     ),
   ]);
   const medicines = byMedicine(lines);
@@ -205,6 +217,12 @@ export async function orderPrices(db: Database, me: Me, id: number): Promise<Ord
       firstOn: days.length ? days.reduce((a, b) => (a < b ? a : b)) : null,
       lastOn: days.length ? days.reduce((a, b) => (a > b ? a : b)) : null,
       lastCode: lines[0]?.code ?? null,
+      crmOrders: own[0]?.orders ?? 0,
+      zohoOrders: past.orders,
+      owed: dues[0]?.owed ?? 0,
+      overdue: dues[0]?.overdue ?? 0,
+      overdueDays: dues[0]?.days ?? 0,
+      zohoOwed: dues[0]?.zoho ?? 0,
       top: [...medicines]
         .sort((a, b) => b.times - a.times || (a.lastAt < b.lastAt ? 1 : -1))
         .slice(0, 5)

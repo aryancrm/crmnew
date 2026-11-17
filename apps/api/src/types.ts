@@ -596,7 +596,8 @@ export type OrderStage =
 /** What the system found on an order, for Management (and Finance) to weigh before it goes on. */
 export type OrderFinding = {
   /** rx: a patient's order without its prescription or the patient's ID (Management's). */
-  kind: "price" | "stock" | "customer" | "licence" | "papers" | "rx" | "owes" | "credit";
+  /** note: what the MedRep wrote on the order, for Management to read before approving. */
+  kind: "price" | "stock" | "customer" | "licence" | "papers" | "rx" | "owes" | "credit" | "note";
   /** A few words for a pill on the card: "Below hospital price". */
   short: string;
   /** What is to be decided, for the card's "Next action". */
@@ -762,6 +763,10 @@ export type OrderRow = {
   /** Filled on the approval queue: the medicines in one line and what the system found. */
   lines?: string;
   findings?: OrderFinding[];
+  /** What the MedRep wrote on the order. */
+  note?: string | null;
+  /** Management changed its lines before approving (what, on the order's versions). */
+  changed?: boolean;
 };
 
 export type OrderList = {
@@ -858,6 +863,38 @@ export type OrderInput = {
   paymentTerm?: string | null;
   /** Whose order it is, when a team lead (or Management) places it for one of their MedReps. */
   medrepId?: number | null;
+  /** A senior citizen's or PWD's order: 20% off and no VAT (or a lower promo, never both), with
+   *  their OSCA/PWD ID number and name. On any order whose buyer shows the ID (Aryan, 17 Nov). */
+  relief?: OrderRelief | null;
+};
+
+export type OrderRelief = { kind: "senior" | "pwd"; idNo?: string | null; name?: string | null };
+
+/** One line of an order as a version kept it (centavos). */
+export type OrderVersionLine = {
+  medicineId: number;
+  name: string;
+  qty: number;
+  priceKind: string;
+  listPrice: number;
+  unitPrice: number;
+  reason: string | null;
+  free: boolean;
+  relief: boolean;
+};
+
+/** An order's lines as they stood once: placed, fixed by the MedRep, or changed by Management. */
+export type OrderVersion = {
+  n: number;
+  kind: "placed" | "fixed" | "changed";
+  kindLabel: string;
+  by: string | null;
+  byRole: string | null;
+  at: string;
+  /** The MedRep's answer, or Management's reason. */
+  why: string | null;
+  total: number;
+  lines: OrderVersionLine[];
 };
 
 /** Whom a team lead (or Management) may place an order for, and who looks after the customer. */
@@ -1017,6 +1054,8 @@ export type OrderDetail = {
     reply: string | null;
     /** Until when Management can still take its approval back (null when it can't). */
     takeBackUntil: string | null;
+    /** A senior citizen's or PWD's order: who, as the invoice shows them. */
+    relief: OrderRelief | null;
   };
   items: {
     id: number;
@@ -1038,7 +1077,15 @@ export type OrderDetail = {
     lastPrice: number | null;
     /** Given at no charge (a promo's free goods). */
     free: boolean;
+    /** Sold at the senior's or PWD's price (20% off, no VAT). */
+    relief: boolean;
+    /** The medicine's VAT as Inventory keeps it, and whether it needs a prescription. */
+    vat: Vat;
+    rx: boolean;
   }[];
+  /** Every version of its lines, oldest first: as placed, each MedRep fix, each change
+   *  Management made before approving. The last is what the order is now. */
+  versions: OrderVersion[];
   findings: OrderFinding[];
   stages: { key: OrderStage; label: string; at: string | null }[];
   /** Every status it stood at, when it came and when it left (open while it is there). */
@@ -1293,6 +1340,9 @@ export type InvoiceDetail = {
     source?: string;
     /** The Payment Terms as agreed ("PDC 30"). */
     paymentTerm?: string | null;
+    /** A senior citizen's or PWD's sale: their OSCA / PWD ID number and name, as the law has the
+     *  invoice show them. */
+    relief?: OrderRelief | null;
   };
   /** The company's own details, printed at the top as Zoho Books prints them. */
   company: CompanyInfo;
@@ -2349,6 +2399,15 @@ export type OrderPrices = {
     firstOn: string | null;
     lastOn: string | null;
     lastCode: string | null;
+    /** Of the orders: this CRM's, and Zoho's from before it. */
+    crmOrders: number;
+    zohoOrders: number;
+    /** What they owe now (Zoho's invoices and opening balance with this CRM's), how much of it is
+     *  past due and how late the oldest is, and how much of it is in Zoho. */
+    owed: number;
+    overdue: number;
+    overdueDays: number;
+    zohoOwed: number;
     top: {
       key: string;
       name: string;
@@ -2368,8 +2427,14 @@ export type CustomerPage = CustomerDetail & {
   totals: {
     orders: number;
     bought: number;
+    /** With what Zoho's invoices and opening balance still have them owing. */
     owed: number;
     overdue: number;
+    /** Of owed and overdue, what is in Zoho (its unpaid invoices, its opening balance). */
+    zohoOwed: number;
+    zohoOverdue: number;
+    /** How late Zoho's oldest unpaid amount is (an opening balance counts as a year). */
+    zohoDays: number;
     paid: number;
     firstOrderAt: string | null;
     lastOrderAt: string | null;
@@ -2481,6 +2546,8 @@ export type MyKpis = {
     statusLabel: string;
     at: string;
     lines: string | null;
+    /** Management changed its lines before approving. */
+    changed: boolean;
   }[];
   /** This month's scorecard from the scorecard engine (the seat's playbook card). */
   scorecard: {

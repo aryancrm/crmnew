@@ -94,6 +94,13 @@ const orderInput = z.object({
   noProofNote: optional(300),
   patientOrder: z.boolean().optional(),
   patientName: optional(120),
+  relief: z
+    .object({
+      kind: z.enum(["senior", "pwd"], { error: "Pick senior citizen or PWD." }),
+      idNo: optional(40),
+      name: optional(120),
+    })
+    .nullish(),
 });
 
 /** What Management completes on a field order. */

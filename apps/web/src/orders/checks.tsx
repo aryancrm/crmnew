@@ -1,7 +1,7 @@
 // What Management checks on an order, at a glance on top of its card and in the table (Aryan):
 // the price against the buyer's list, the stock, the papers that kind of buyer sends (a
 // hospital's own purchase order, a patient's prescription) and the customer (new, licence,
-// owing). Each is a word with a dot before it, no box (Aryan): green when fine, yellow when it
+// owing), and the MedRep's note when they wrote one. Each is a word with a dot before it, no box (Aryan): green when fine, yellow when it
 // needs a look, grey when it is only for information; the full words are on hover.
 
 import type { CustomerKind, OrderFinding, PaperKind } from "@2mg/api/types";
@@ -49,6 +49,9 @@ export function checksOf(card: {
     price,
     one("stock", ["stock"], "In stock", "Everything on it is free on the shelf"),
   ];
+  // What the MedRep wrote on the order: Management reads it before approving (Aryan, 17 Nov).
+  const note = found(["note"])[0];
+  if (note) out.unshift({ key: "note", tone: "warn", label: note.short, title: note.text });
   // A hospital's (or distributor's) purchase order is their own paper, which the MedRep brings
   // when they gave one: for information, never a problem. A patient's prescription is needed for
   // a prescription medicine.

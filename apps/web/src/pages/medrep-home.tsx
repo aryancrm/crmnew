@@ -380,6 +380,11 @@ export function MedrepHome() {
                             {order.customer}
                           </span>
                           <span className="shrink-0 text-[11px] text-slate-400">{order.code}</span>
+                          {order.changed && (
+                            <span className="shrink-0 rounded-md bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
+                              Changed by Mgmt
+                            </span>
+                          )}
                         </span>
                         <span className="block truncate text-xs text-slate-500">
                           {order.lines ?? "—"}

@@ -1,5 +1,6 @@
-// The switch at the top of the order form: send the order to Management and to Finance before
-// Dispatch, or not. Management sees it anyway when the system finds something wrong on it.
+// Who checks an order: a MedRep's goes to Management, then Finance, whatever is sent; Management's
+// own follows the switch at the top of its form, and Management decides on approving whether
+// Finance checks it.
 
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -95,8 +96,8 @@ beforeAll(async () => {
   medicine = { id: row.id, price: row.prices.hospital as number };
 });
 
-describe("the switch on the order", () => {
-  it("left out, the order goes to Management and then Finance, as before", async () => {
+describe("who checks an order", () => {
+  it("a MedRep's order goes to Management and then Finance", async () => {
     const order = await ryanOrders(undefined);
     expect(order.status).toBe("pending_approval");
     expect((await post("sarla", `/api/orders/${order.id}/approve`)).status).toBe(200);
@@ -105,40 +106,39 @@ describe("the switch on the order", () => {
     );
   });
 
-  it("both off and nothing wrong: straight to Dispatch with its invoice", async () => {
+  it("a MedRep can't switch Management or Finance off, even through the API", async () => {
     const order = await ryanOrders({ management: false, finance: false });
-    expect(order).toMatchObject({ status: "ready_for_dispatch", approvedBy: null });
-    expect(order.events).toContain(
-      "Nothing for Management to check: it goes to Dispatch with its invoice.",
+    expect(order).toMatchObject({ status: "pending_approval", approvedBy: null });
+    expect(await invoiceOf(order.id)).toBeNull();
+    // Approved, it still goes to Finance: the MedRep's switch was not read.
+    expect((await post("sarla", `/api/orders/${order.id}/approve`)).status).toBe(200);
+    expect((await read<OrderDetail>("sarla", `/api/orders/${order.id}`)).order.status).toBe(
+      "ready_for_invoice",
     );
-    expect(await invoiceOf(order.id)).not.toBeNull();
   });
 
-  it("off, but a price below the list: Management checks it anyway", async () => {
-    const order = await ryanOrders({ management: false, finance: false }, medicine.price - 100);
+  it("Management decides on approving whether Finance checks it", async () => {
+    const order = await ryanOrders(undefined, medicine.price - 100);
     expect(order.status).toBe("pending_approval");
-    expect(order.events.at(-1)).toContain("Management checks it first: below hospital price");
-    // Approved, it skips Finance as the switch said.
-    expect((await post("sarla", `/api/orders/${order.id}/approve`)).status).toBe(200);
+    expect(order.events.at(-1)).not.toContain("straight");
+    expect((await post("sarla", `/api/orders/${order.id}/approve`, { finance: false })).status).toBe(200);
     expect((await read<OrderDetail>("sarla", `/api/orders/${order.id}`)).order.status).toBe(
       "ready_for_dispatch",
     );
     expect(await invoiceOf(order.id)).not.toBeNull();
   });
 
-  it("Management off, Finance on: it goes to Finance to make the invoice", async () => {
-    const order = await ryanOrders({ management: false, finance: true });
-    expect(order.status).toBe("ready_for_invoice");
-    expect(order.events).toContain("Nothing for Management to check: it goes to Finance.");
-    expect((await read<OrderDetail>("fiona", `/api/orders/${order.id}`)).can.make_invoice).toBe(
-      true,
-    );
-  });
-
-  it("the MedRep can ask Management to look although nothing is wrong", async () => {
-    const order = await ryanOrders({ management: true, finance: false });
-    expect(order.status).toBe("pending_approval");
-    expect(order.events.at(-1)).toBe("Ryan sent it to Management to check.");
+  it("Management's own order follows its switch", async () => {
+    const placed = await post("sarla", "/api/orders", {
+      customerId: hospital,
+      items: [{ medicineId: medicine.id, qty: 5, priceKind: "hospital" }],
+      checks: { management: false, finance: true },
+    });
+    expect(placed.status, await placed.clone().text()).toBe(200);
+    const id = ((await placed.json()) as { id: number }).id;
+    const detail = await read<OrderDetail>("sarla", `/api/orders/${id}`);
+    expect(detail.order.status).toBe("ready_for_invoice");
+    expect((await read<OrderDetail>("fiona", `/api/orders/${id}`)).can.make_invoice).toBe(true);
   });
 });
 
