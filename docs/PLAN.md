@@ -1827,15 +1827,20 @@ partial return refunds only what came back; the Team Lead is told about the team
    approval, sent back, on hold, waiting for stock, cancelled), tabs **Timeline · Items · Payment ·
    Dispatch · Documents**.
 3. *Management* — Approval Queue rows (Approve / Send back / Reject); the order page; Approve and
-   check stock (every warehouse, tick to approve short); Edit Items with Confirm changes; Hold,
+   check stock (every warehouse, tick to approve short) — **approving makes the invoice** (Aryan,
+   17 Nov: the invoice is made when Management approves, not after Finance); Edit Items with Confirm changes; Hold,
    Exception, Resume ("continue from" + why); drafts: Wait for stock / Stock is back, Cancel draft
    (delete for good, or keep record when paid), Restore; Exception Hub; Refund requests;
    Pending customers.
 4. *Finance* — Orders with stage tiles; Details drawer with the customer's dues and history;
-   Confirm (tick, note, Undo that works); Hold with screenshots; Bring back; Refunds (pending →
-   done) and payments recorded in crmnew.
-5. *Pharmacy* — prescriptions checked beside Finance (Verify / Reject and tell the MedRep / Ask
-   for one / Not needed); Dispatch can't ship until it is cleared (question 12).
+   the **proof of payment is an attachment on the order** (Aryan: the MedRep attaches it, or says
+   why there is none, as in the hub) and Finance checks it there; Confirm (tick, note, Undo that
+   works); Hold with screenshots; Bring back; Refunds (pending → done) and payments recorded in
+   crmnew.
+5. *Prescriptions* — **Management checks the prescription when it approves** (Aryan, 17 Nov: the
+   hub has no Pharmacy login of its own — its Pharmacy page sits in the Operation / Dispatch login
+   — so Management does it): Verify / Reject and tell the MedRep / Ask for one / Not needed on the
+   approval step; an order with a prescription medicine is not approved without it.
 6. *Dispatch* — to pack / to ship / on the road; Cater and Release, Print address, Confirm for
    delivery against the printed slip, courier and tracking (or "not ready yet"), proof photo,
    Hold, Mark delivered; packing and the invoice made in crmnew.
@@ -1850,7 +1855,7 @@ partial return refunds only what came back; the Team Lead is told about the team
 10. *Look* — the hub's calm layout: a title and one line saying what the page is for, white cards
     with room, small windows for actions, a toast when done, folding menu groups.
 
-**Order of work** (Aryan picks the first): A) the order page and Management (steps 2–3), B) the
+**Order of work** (Aryan, 17 Nov: start with A): A) the order page and Management (steps 2–3), B) the
 MedRep form (1), C) Finance, Pharmacy, Dispatch, Returns (4–7), D) Team Lead and Admin (8–9), the
 look (10) going along with each. Each part: built, tested, then walked in every login it touches
 on the local copy (database copied first, put back after), with what was seen written here.
@@ -1878,13 +1883,14 @@ on the local copy (database copied first, put back after), with what was seen wr
     And "Extra": one more price per medicine set in Inventory (higher), that the MedRep can pick?
 11. A guarantee-letter case (18): when an Online case becomes GL, does it move to the PAP head (who
     gives it to a PAP MedRep) or straight to one PAP person?
-12. Pharmacy (19): who checks prescriptions — the Pharmacy team in the chart, beside Finance as in
-    the hub? Which channels need a prescription (hub: URO, STC, B&B, B2C required; HOS a nudge)?
-13. Advance-pay customers (19): may Finance confirm with no proof of payment, or only with
-    Management's word?
+12. ~~Pharmacy~~ Answered 17 Nov: Management checks prescriptions on approving (no separate
+    Pharmacy login). Still open: which channels must attach one (hub: URO, STC, B&B, B2C; HOS a
+    nudge)?
+13. ~~Advance-pay proof~~ Answered 17 Nov: the proof is an attachment on the order (or the
+    MedRep's reason), and Finance checks it there.
 14. Approvals (19): which manager approves which divisions (the hub ticks divisions per manager)?
     And may an exception go to the Team Lead / Business Mentor (question 9)?
-15. The invoice (19): made by Finance after its check (crmnew today), or when Management approves?
+15. ~~The invoice~~ Answered 17 Nov: made when Management approves.
 16. Look (19): keep 2MG's green with the hub's layout, or the hub's blue too?
 
 ## 14. Change log
@@ -2332,3 +2338,4 @@ on the local copy (database copied first, put back after), with what was seen wr
 - 17 Nov (77), Aryan ("check the chart, you often get things wrong"): the CRM's tree read box by box against HR's 2026 chart PDF. Three places differed and are put right on live and locally (`scripts/fix-chart-17nov.ts`): the Patient Assistance Program sits in the Hospital Division (Fhaye Norella now reports to Vanessa Escalderon, not the CEO); MD Telesales Oncology sits inside the Onco-Hema Division, beside its two lines Uro & Onco Care (9 Rx CHCs) and Blood & Bone Care (2), which were missing; Claire Gallana sits beside Jessa Domino under B2B Telesales (reports to Subir Dey). Nobody's work, channel or desk changed, only those bosses and boxes. Everything else (Hospital's six regions, Government Account, MD Telesales Anesthesia, Sales & Marketing, Modern Trade, Executive and Admin, Digital Marketing, IT, In-licensing & Regulatory, HR, Supply Chain, Pharmacy, Finance) matches the PDF name by name. The chart file and onboarding now put a box found elsewhere where the chart has it.
 - 17 Nov (78), Aryan (plan 18, step 1 "safe line", and his answers: SC/PWD on any order with the ID, 20% off and no VAT; Management approves, an exception goes to the Team Lead, Management's own to the Business Mentor, all by a CRM button): a MedRep can't skip Management or Finance through the API; every version of an order is kept and the MedRep sees Management's change before → after with its reason ("Changed by Mgmt" on his list); the MedRep's note and any price above the list are on Management's card; SC/PWD on any order, from the patient price (VAT out, 20% off), priced by the API, VAT-exempt on the invoice with the ID number printed; VAT and "Prescription" shown on every line of the MedRep's form and Management's order; Management's customer check shows first order or not, orders here and in Zoho, what they owe now (Zoho's too) and a link to the whole history; Finance's checks, Customers owe, the customer list and history count Zoho's unpaid invoices and opening balances (`src/finance/dues.ts`). Tests: `src/orders/safe-line.test.ts`. The ask-up step for exceptions waits for Aryan (question 9).
 - 17 Nov (79), Aryan ("crmnew is too complicated; make it simple like the hub, see every screen in each login"): the hub was run locally and walked role by role, button by button, with its Zoho link read from the code (docs/HUB-WALKTHROUGH.md, docs/HUB-CHECKLIST.md); section 19 is the plan: the hub's line and look, crmnew's prices, dues, versions and line returns kept, the hub's gaps fixed (unflagged prices, silent changes, lost discounts, dead Undo, advance orders without proof, whole-order refunds, silent Team Leads, approval alerts to every manager), Zoho's manual steps inside crmnew; questions 12–16 wait for Aryan.
+- 17 Nov (80), Aryan's answers to 19: start with the order page and Management; prescriptions checked by Management on approving (the hub has no Pharmacy login of its own); the proof of payment is an attachment on the order and Finance checks it there; the invoice is made when Management approves.
