@@ -636,8 +636,16 @@ describe("the MedRep's own view", () => {
       /^Management is checking it: below hospital price, .*no payment proof$/,
     );
     expect(mine.sales.orders).toBeGreaterThan(0);
-    // Sold is what Finance invoiced: nothing of his is invoiced yet.
-    expect(mine.sales.value).toBe(0);
+    // Sold is what was invoiced this month: the invoice is made when Management approves, so his
+    // approved orders count and this one (still waiting) does not.
+    const [invoiced] = await rows<{ value: number }>(
+      db,
+      sql`select coalesce(sum(i.total), 0)::float8 as value from invoice i join sales_order o on o.id = i.order_id
+        join person p on p.id = o.medrep_id
+        where p.name = 'Ryan' and i.status <> 'cancelled'
+          and date_trunc('month', i.issued_on) = date_trunc('month', (now() at time zone 'Asia/Manila')::date)`,
+    );
+    expect(mine.sales.value).toBe(invoiced?.value ?? 0);
     expect(mine.sales.month).toMatch(/^[A-Z][a-z]+$/);
 
     await act("sarla", made.body.id, "send_back", { reason: "Attach the PO photo" });

@@ -90,7 +90,7 @@ export function ApproveDialog({
                         )}
                       </span>
                       <span
-                        className={`mt-0.5 inline-flex items-center gap-1 text-[12px] font-medium ${fills ? "text-emerald-700" : "text-rose-700"}`}
+                        className={`mt-0.5 inline-flex items-center gap-1 text-[12px] font-medium ${fills ? "text-good" : "text-rose-700"}`}
                       >
                         {fills ? (
                           <CircleCheck className="size-3.5" />
@@ -137,7 +137,7 @@ export function ApproveDialog({
                     <td className="px-3 py-2 text-right tabular-nums">{count(line.have)}</td>
                     <td className="px-3 py-2 text-right">
                       <span
-                        className={`inline-flex items-center gap-1 text-[12px] font-semibold ${line.have >= line.need ? "text-emerald-700" : "text-rose-700"}`}
+                        className={`inline-flex items-center gap-1 text-[12px] font-semibold ${line.have >= line.need ? "rounded-full bg-good-tint px-2 py-0.5 text-good" : "rounded-full bg-bad-tint px-2 py-0.5 text-bad"}`}
                       >
                         {line.have >= line.need
                           ? "Enough"

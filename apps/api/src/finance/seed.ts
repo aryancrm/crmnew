@@ -10,7 +10,12 @@ import { addDays } from "./rules";
 import { confirmPayment, makeInvoice, recordPayment } from "./service";
 
 export async function seedDemoFinance(db: Database): Promise<boolean> {
-  const [made] = await rows<{ count: number }>(db, sql`select count(*)::int as count from invoice`);
+  // Once: Finance has checked none of them yet (invoices themselves are made on Management's
+  // approval now, so they are no sign Finance's demo ran).
+  const [made] = await rows<{ count: number }>(
+    db,
+    sql`select count(*)::int as count from sales_order where finance_checked_at is not null`,
+  );
   if ((made?.count ?? 0) > 0) return false;
   const [fiona] = await rows<{ id: number; name: string }>(
     db,

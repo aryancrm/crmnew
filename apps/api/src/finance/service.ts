@@ -417,8 +417,56 @@ export async function confirmPayment(
   });
 }
 
-/** A credit or cash-on-delivery order: Finance looks at what the customer owes, makes the
- *  invoice and lets the order go to Dispatch. The money comes later. */
+/** The order's invoice as Management approves it (Aryan, 17 Nov: the invoice is made when
+ *  Management approves): the one it has already, or a new one in its company's series. */
+export async function invoiceOnApproval(
+  tx: Runner,
+  me: Me,
+  orderId: number,
+): Promise<{ id: number; code: string }> {
+  const [kept] = await rows<{ id: number; code: string }>(
+    tx,
+    sql`select id::int as id, code from invoice where order_id = ${orderId} and status <> 'cancelled'`,
+  );
+  if (kept) return kept;
+  const order = await lockOrder(tx, orderId);
+  return issueInvoice(tx, me, order, todayManila());
+}
+
+/** An unpaid invoice follows the order's details changed before Finance's check: its terms and
+ *  due day, and its company (with a number in that company's series) when that changed. */
+export async function refreshInvoice(tx: Runner, me: Me, orderId: number): Promise<void> {
+  const order = await lockOrder(tx, orderId);
+  const [invoice] = await rows<{ id: number; code: string; invoiceFrom: string; issuedOn: string; dueOn: string; terms: string }>(
+    tx,
+    sql`select id::int as id, code, invoice_from as "invoiceFrom", ${day("issued_on")} as "issuedOn", ${day("due_on")} as "dueOn", terms
+      from invoice where order_id = ${orderId} and status <> 'cancelled' for update`,
+  );
+  if (!invoice) return;
+  const due = dueOn(order.terms, order.days, invoice.issuedOn, order.expectedOn);
+  let code = invoice.code;
+  if (invoice.invoiceFrom !== order.invoiceFrom) {
+    const [next] = await rows<{ value: number }>(
+      tx,
+      sql`update counter set value = value + 1 where name = ${`invoice:${order.invoiceFrom}`} returning value::int as value`,
+    );
+    code = invoiceCode(order.invoiceFrom, next?.value ?? 1);
+  }
+  if (code === invoice.code && due === invoice.dueOn && order.terms === invoice.terms) return;
+  await tx.execute(
+    sql`update invoice set code = ${code}, invoice_from = ${order.invoiceFrom}, terms = ${order.terms}, due_on = ${due}::date where id = ${invoice.id}`,
+  );
+  await logEvent(
+    tx,
+    orderId,
+    me,
+    "invoice",
+    `Invoice ${invoice.code}${code !== invoice.code ? ` is now ${code} under ${INVOICE_FROM_LABEL[order.invoiceFrom]}` : ""} follows the new details: ${order.terms === "days" ? `due on ${dated(due)}` : order.terms === "cod" ? "collected on delivery" : "paid in advance"}.`,
+  );
+}
+
+/** A credit or cash-on-delivery order: Finance looks at what the customer owes and lets the
+ *  order go to Dispatch with the invoice Management's approval made. The money comes later. */
 export async function makeInvoice(
   db: Database,
   me: Me,
@@ -444,7 +492,12 @@ export async function makeInvoice(
       `Checked by Finance: the customer ${pays}. It goes to Dispatch.${clean(input.note) ? ` ${clean(input.note)}` : ""}`,
       "finance_verified",
     );
-    const invoice = await issueInvoice(tx, me, order, today);
+    // Made when Management approved; an order approved before that rule gets it now.
+    const [kept] = await rows<{ id: number; code: string }>(
+      tx,
+      sql`select id::int as id, code from invoice where order_id = ${orderId} and status <> 'cancelled'`,
+    );
+    const invoice = kept ?? (await issueInvoice(tx, me, order, today));
     return { invoiceId: invoice.id };
   });
 }
@@ -473,7 +526,11 @@ export async function clearCaseOrder(
   );
   // Nothing to check: say so on the timeline, in the place Management's approval would be.
   if (cleared) await logEvent(tx, orderId, me, "status", cleared, "approved");
-  const invoice = await issueInvoice(tx, me, order, today);
+  const [kept] = await rows<{ id: number; code: string }>(
+    tx,
+    sql`select id::int as id, code from invoice where order_id = ${orderId} and status <> 'cancelled'`,
+  );
+  const invoice = kept ?? (await issueInvoice(tx, me, order, today));
   return { invoiceId: invoice.id };
 }
 

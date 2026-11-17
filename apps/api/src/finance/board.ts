@@ -1,5 +1,5 @@
 // Finance's work board, in the order the money is worked: 1 Check payment (an advance order: the
-// proof, the amount it should be), 2 Make invoice (a credit or cash-on-delivery order: what the
+// proof, the amount it should be), 2 Check dues (a credit or cash-on-delivery order, invoiced on approval: what the
 // customer already owes and how late, against their credit limit), 3 Collect (open invoices, the
 // latest past due first, cash on delivery once delivered). With the money in today and this month,
 // what is owed and overdue. A few queries whatever the number of orders.

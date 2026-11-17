@@ -121,7 +121,7 @@ export function checksOf(card: {
   return out;
 }
 
-const DOT = { ok: "bg-emerald-500", warn: "bg-amber-400", info: "bg-slate-300" };
+const DOT = { ok: "bg-good-fill", warn: "bg-amber-400", info: "bg-slate-300" };
 
 export function Checks({
   card,

@@ -35,7 +35,8 @@ const post = (who: string, path: string, body: unknown = {}) =>
     body: JSON.stringify(body),
   });
 
-/** Ryan places it and Sarla approves it; with `invoice`, Fiona makes its invoice (it is sold). */
+/** Ryan places it and Sarla approves it (its invoice is made then: it is sold); with `invoice`,
+ *  Fiona also checks it and lets it go to Dispatch. */
 async function order(qty: number, invoice: boolean): Promise<{ id: number; total: number }> {
   const placed = (await (
     await post("ryan", "/api/orders", {
@@ -83,11 +84,13 @@ beforeAll(async () => {
   );
   if (!row) throw new Error("the fixture has no medicine with a hospital price and stock");
   medicine = { id: row.id, price: row.prices.hospital as number };
-  // Two orders invoiced (sold), one waiting for Finance, one on hold.
+  // Four orders approved, so invoiced and sold (Aryan, 17 Nov: the invoice is made when
+  // Management approves): two past Finance, one waiting for Finance, one on hold.
   sold += (await order(20, true)).total;
   sold += (await order(10, true)).total;
-  await order(5, false);
+  sold += (await order(5, false)).total;
   const held = await order(3, false);
+  sold += held.total;
   await post("fiona", `/api/orders/${held.id}/hold`, { reason: "Customer's account to check" });
   const ryanId = (await read<TargetList>("vanessa", `/api/targets?month=${month}`)).rows.find(
     (row) => row.name === "Ryan",
@@ -131,7 +134,7 @@ describe("the rules", () => {
 });
 
 describe("a team's month", () => {
-  it("counts what Finance invoiced against the target, for the team lead and the head above him", async () => {
+  it("counts what was invoiced against the target, for the team lead and the head above him", async () => {
     const lead = await read<TeamSales>("daniel", "/api/team/sales");
     const ryan = lead.people.find((row) => row.name === "Ryan");
     expect(ryan).toMatchObject({

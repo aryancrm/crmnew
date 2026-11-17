@@ -256,7 +256,7 @@ describe("a credit order", () => {
     expect((await order("fiona", id)).order.status).toBe("ready_for_invoice");
     const board = await read<OrderBoard>("fiona", "/api/orders/board?status=ready_for_invoice");
     expect(board.cards.find((card) => card.id === id)?.next).toBe(
-      "Make the invoice (pays in 30 days)",
+      "Check what they owe and send it on (pays in 30 days)",
     );
     expect((await post("ryan", `/api/finance/orders/${id}/invoice`)).status).toBe(403);
     expect((await post("fiona", `/api/finance/orders/${id}/invoice`)).status).toBe(200);

@@ -120,7 +120,11 @@ async function placeFromWebsite(ref: string): Promise<number> {
   }
   const placed = await post("jane", `/api/leads/${leadId}/order`);
   expect(placed.status, await placed.clone().text()).toBe(200);
-  return ((await placed.json()) as { id: number }).id;
+  const orderId = ((await placed.json()) as { id: number }).id;
+  // Management approves every order (Aryan, 17 Nov).
+  const approved = await post("sarla", `/api/orders/${orderId}/approve`);
+  expect(approved.status, await approved.clone().text()).toBe(200);
+  return orderId;
 }
 
 /** The case of a website order, placed, approved, invoiced, delivered and paid in cash. */

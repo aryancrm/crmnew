@@ -160,7 +160,7 @@ export function roadStepOf(f: CaseFacts): string {
 const ORDER_WORDS: Partial<Record<OrderStatus, string>> = {
   pending_approval: "With Management for a check",
   finance_check: "Finance checks the payment",
-  ready_for_invoice: "Finance makes the invoice",
+  ready_for_invoice: "Finance checks what they owe",
   ready_for_dispatch: "Dispatch packs it",
   packing: "Packed: Dispatch ships it",
 };

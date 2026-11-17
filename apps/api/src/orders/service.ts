@@ -9,6 +9,8 @@ import { dispatchCounts, putBack } from "../dispatch/service";
 import {
   cancelInvoiceOf,
   clearCaseOrder,
+  invoiceOnApproval,
+  refreshInvoice,
   financeCounts,
   moneyOf,
   orderMoney,
@@ -399,15 +401,15 @@ function findingsOf(
   const wanted = new Map<number, number>();
   for (const item of items) wanted.set(item.medicineId, (wanted.get(item.medicineId) ?? 0) + item.qty);
   const stockSaid = new Set<number>();
-  // A patient's order (their own, or for them through a hospital): Management checks the
-  // prescription for a prescription medicine, and the patient's ID.
+  // A patient's order (their own, or for them through a hospital): a prescription is required
+  // whenever a patient buys (Aryan, 17 Nov), and Management checks it with the patient's ID.
   if (customer.kind === "patient" || customer.patientOrder) {
-    if (items.some((item) => item.rx) && !customer.papers.includes("prescription"))
+    if (!customer.papers.includes("prescription"))
       found.push({
         kind: "rx",
         short: "No prescription",
-        decide: "a prescription medicine, no prescription attached",
-        text: "A prescription medicine is on it and no prescription is attached",
+        decide: "a patient's order, no prescription attached",
+        text: "A patient buys on it and no prescription is attached: it can't be approved without one",
       });
     if (!customer.papers.includes("valid_id") && !customer.papers.includes("senior_id"))
       found.push({
@@ -603,7 +605,9 @@ export async function routeOrder(
   await tx.execute(
     sql`update sales_order set finance_check = ${financeStep} where id = ${orderId}`,
   );
-  if (!manages && !fromCase) return "management";
+  // Management approves every order that comes in, of every channel: a MedRep's, a Team
+  // Lead's, an Online or PAP case's (Aryan, 17 Nov). Only Management's own order goes on by itself.
+  if (!manages) return "management";
   const checks = manages
     ? []
     : fromCase
@@ -787,7 +791,7 @@ function nextLine(viewer: Viewer, row: CardRow, findings: OrderFinding[]): strin
     if (row.status === "ready_for_invoice")
       return findings[0]
         ? `Decide: ${findings[0].decide}`
-        : `Make the invoice (${row.paymentTerms === "days" ? `pays in ${row.paymentDays} days` : "cash on delivery"})`;
+        : `Check what they owe and send it on (${row.paymentTerms === "days" ? `pays in ${row.paymentDays} days` : "cash on delivery"})`;
     return NEXT_OF[row.status];
   }
   if (viewer === "management")
@@ -1862,6 +1866,19 @@ export async function actOnOrder(
 
     switch (action) {
       case "approve": {
+        // Whenever a patient buys, the prescription is on the order before Management approves.
+        const [rx] = await rows<{ patient: boolean; onFile: boolean }>(
+          tx,
+          sql`select (c.kind = 'patient' or o.patient_order) as patient,
+              exists (select 1 from order_file f where f.order_id = o.id and f.active and f.kind = 'prescription') as "onFile"
+            from sales_order o join customer c on c.id = o.customer_id where o.id = ${id}`,
+        );
+        if (rx?.patient && !rx.onFile)
+          throw new Refusal(
+            409,
+            "no_prescription",
+            "A patient's order is approved only with the prescription: attach it first (under Documents), or send it back for it.",
+          );
         const [place] = input.warehouseId
           ? await rows<{ id: number; name: string }>(
               tx,
@@ -1906,9 +1923,11 @@ export async function actOnOrder(
           id,
           me,
           "status",
-          `Approved. Ships from ${place.name}. ${next === "ready_for_invoice" ? `${order.terms === "cod" ? "Cash on delivery" : "Credit customer"}: no payment check needed, Finance makes the invoice.` : "It goes to Finance to check the payment."}`,
+          `Approved. Ships from ${place.name}. ${next === "ready_for_invoice" ? `${order.terms === "cod" ? "Cash on delivery" : "Credit customer"}: Finance checks what the customer owes and lets it go.` : "It goes to Finance to check the payment."}`,
           "approved",
         );
+        // The invoice is made as Management approves (Aryan, 17 Nov).
+        await invoiceOnApproval(tx, me, id);
         return;
       }
       case "send_back":
@@ -2346,11 +2365,19 @@ export async function saveOrderDetails(
         from sales_order where id = ${id} for update`,
     );
     if (!order) throw new Refusal(404, "not_found", "That order doesn't exist.");
-    const [invoiced] = await rows<{ id: number }>(
+    // The invoice is made as Management approves. Until money is on it and while the order is
+    // still with Finance, a change of details updates it, as the hub's edit updated its Sales
+    // Order; after that the details stay as invoiced.
+    const [invoiced] = await rows<{ id: number; code: string; paid: number }>(
       tx,
-      sql`select id::int as id from invoice where order_id = ${id} and status <> 'cancelled'`,
+      sql`select id::int as id, code, paid::int as paid from invoice where order_id = ${id} and status <> 'cancelled'`,
     );
-    if (invoiced || ["packing", "shipped", "completed", "cancelled"].includes(order.status))
+    const replaceable =
+      invoiced && invoiced.paid === 0 && FINANCE_STATUSES.includes(order.status);
+    if (
+      (invoiced && !replaceable) ||
+      ["packing", "shipped", "completed", "cancelled"].includes(order.status)
+    )
       throw new Refusal(
         409,
         "not_now",
@@ -2406,8 +2433,10 @@ export async function saveOrderDetails(
       id,
       me,
       "status",
-      `${step && FINANCE_STATUSES.includes(order.status) && step !== order.status ? (step === "finance_check" ? "Now paid in advance: Finance checks the money first. " : "No advance payment now: Finance makes the invoice. ") : ""}Details completed: ${changed.map((key) => `${LABEL[key]} ${order[key] ?? "—"} → ${next[key] ?? "—"}`).join("; ")}.`,
+      `${step && FINANCE_STATUSES.includes(order.status) && step !== order.status ? (step === "finance_check" ? "Now paid in advance: Finance checks the money first. " : "No advance payment now: Finance checks what the customer owes. ") : ""}Details completed: ${changed.map((key) => `${LABEL[key]} ${order[key] ?? "—"} → ${next[key] ?? "—"}`).join("; ")}.`,
     );
+    // An unpaid invoice made on approval follows the new details (terms, due day, company).
+    if (invoiced && replaceable) await refreshInvoice(tx, me, id);
   });
 }
 

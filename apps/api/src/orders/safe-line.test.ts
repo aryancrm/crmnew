@@ -10,6 +10,7 @@ import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { seedDemo } from "../seed";
+import { attachPaper } from "../testing/receipt";
 import type {
   Catalogue,
   OwedList,
@@ -223,6 +224,9 @@ describe("a senior citizen's or PWD's order", () => {
       [0, false, true],
     ]);
 
+    // A patient buys: Management approves only with the prescription on the order.
+    expect((await post("sarla", `/api/orders/${id}/approve`)).status).toBe(409);
+    expect(await attachPaper(app, cookies.sarla as string, id, "prescription")).toBe(200);
     expect((await post("sarla", `/api/orders/${id}/approve`)).status).toBe(200);
     const made = await post("fiona", `/api/finance/orders/${id}/invoice`);
     expect(made.status, await made.clone().text()).toBe(200);

@@ -222,6 +222,8 @@ describe("a website order", () => {
     const placed = await post("jane", `/api/leads/${id}/order`);
     expect(placed.status).toBe(200);
     const orderId = ((await placed.json()) as { id: number }).id;
+    // Management approves every order (Aryan, 17 Nov).
+    expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(200);
     const detail = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
     expect(detail.order).toMatchObject({
       total: 2 * 140000 + 15000,
@@ -229,7 +231,7 @@ describe("a website order", () => {
       paymentTerms: "cod",
     });
 
-    // Nothing to check: it goes to Dispatch with its invoice at once, and the website hears "confirmed".
+    // Approved, it goes to Dispatch with its invoice, and the website hears "confirmed".
     expect(detail.order.status).toBe("ready_for_dispatch");
     const [invoice] = await rows<{ total: number }>(
       db,

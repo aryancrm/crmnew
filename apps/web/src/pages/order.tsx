@@ -479,184 +479,210 @@ export function Order() {
     </>
   );
 
-  return (
-    <div className="mx-auto max-w-screen-2xl">
-      <nav
-        aria-label="Where you are"
-        className="mb-3 flex items-center gap-1 text-xs text-slate-500"
-      >
-        <button
-          type="button"
-          onClick={() => navigate(-1)}
-          aria-label="Back"
-          title="Back to the page before"
-          className="mr-1 grid size-6 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:border-emerald-300 hover:text-emerald-700"
-        >
-          <ChevronLeft className="size-3.5" />
-        </button>
-        Orders <ChevronRight className="size-3" />
-        <span className="font-semibold text-slate-700">{order.code}</span>
-        {checking && (
-          <span className="ml-auto">
-            <LookSwitch
-              legend="How to see this order"
-              looks={ORDER_LOOKS}
-              value={pageLook}
-              onPick={pickPageLook}
-            />
-          </span>
-        )}
-      </nav>
+  // The hub's order page (Aryan, 17 Nov: simple like the hub): who and what on top, the step
+  // that is this person's to do under it, then the tabs everyone reads.
+  const tabs = [
+    ["timeline", "Timeline"],
+    ["items", "Items"],
+    ["payment", "Payment"],
+    ["dispatch", "Dispatch"],
+    ["documents", "Documents"],
+  ] as const;
+  type Tab = (typeof tabs)[number][0];
+  const tab: Tab = tabs.some(([key]) => key === params.get("tab"))
+    ? (params.get("tab") as Tab)
+    : "items";
+  const pickTab = (key: Tab) =>
+    setParams(
+      (old) => {
+        const next = new URLSearchParams(old);
+        next.set("tab", key);
+        return next;
+      },
+      { replace: true },
+    );
+  const managing =
+    desk === "management" &&
+    (can.approve ||
+      order.status === "pending_approval" ||
+      (can.resume && order.heldRole === "management"));
+  const financeWork =
+    desk === "finance" && (order.status === "finance_check" || order.status === "ready_for_invoice");
+  const dispatchWork =
+    desk === "dispatch" && (order.status === "ready_for_dispatch" || order.status === "packing");
+  const deliveryWork = desk === "dispatch" && order.status === "shipped";
+  const detail = (label: string, value: ReactNode) => (
+    <div className="min-w-0">
+      <div className="text-xs text-ink-2">{label}</div>
+      <div className="mt-0.5 truncate text-sm font-medium text-ink">{value || "—"}</div>
+    </div>
+  );
 
-      {/* Who it is for, what it is worth and where it goes. */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="flex min-w-0 items-start gap-3">
-            <span
-              className={`flex size-11 shrink-0 items-center justify-center rounded-xl text-sm font-bold ${avatarTone(order.customer)}`}
-            >
-              {initials(order.customer)}
-            </span>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="truncate text-xl font-bold tracking-tight text-ink">
-                  <Link to={`/customers/${order.customerId}`} className="hover:text-emerald-800">
-                    {order.customer}
-                  </Link>
-                </h1>
-                <span className="rounded-md border border-slate-200 bg-white px-1.5 py-0.5 text-[11px] font-semibold text-slate-600">
-                  {order.code}
+  return (
+    <div className="mx-auto max-w-screen-xl">
+      <button
+        type="button"
+        onClick={() => navigate(-1)}
+        className="mb-3 inline-flex items-center gap-1 text-sm text-ink-2 hover:text-brand"
+      >
+        <ChevronLeft className="size-4" aria-hidden="true" /> Back
+      </button>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="text-xs text-ink-2">Order ID</div>
+            <h1 className="text-2xl font-bold tracking-tight text-brand">{order.code}</h1>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-ink-2">
+              <Link
+                to={`/customers/${order.customerId}`}
+                className="font-medium text-ink hover:text-brand"
+              >
+                {order.customer}
+              </Link>
+              <span>·</span>
+              <span className="rounded bg-brand-tint px-2 py-0.5 text-xs font-medium text-brand-dark">
+                {order.customerKind[0]?.toUpperCase() + order.customerKind.slice(1)}
+              </span>
+              <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                {pays}
+              </span>
+              {order.relief && (
+                <span
+                  className="rounded bg-brand-tint px-2 py-0.5 text-xs font-medium text-brand-dark"
+                  title="20% off and no VAT on their own medicines (or a lower promo without VAT, never both)"
+                >
+                  {order.relief.kind === "pwd" ? "PWD" : "Senior citizen"}
+                  {order.relief.idNo ? ` · ${order.relief.idNo}` : ""}
                 </span>
-                <StatusPill status={order.status} label={order.statusLabel} />
-                {order.customerReview === "to_review" && order.customerKind !== "patient" && (
-                  <Pill tone="warn">New customer</Pill>
-                )}
-              </div>
-              <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-slate-600">
-                <span className="inline-flex items-center gap-1">
-                  <UserRound className="size-3.5 text-slate-400" />{" "}
-                  {order.receiver ?? order.customer}
-                </span>
-                {order.receiverPhone && (
-                  <a
-                    href={`tel:${order.receiverPhone}`}
-                    className="inline-flex items-center gap-1 hover:text-emerald-700"
-                  >
-                    <Phone className="size-3.5 text-slate-400" /> {order.receiverPhone}
-                  </a>
-                )}
-                {order.deliveryAddress && (
-                  <span className="inline-flex min-w-0 items-center gap-1">
-                    <MapPin className="size-3.5 shrink-0 text-slate-400" />
-                    <span className="truncate">{order.deliveryAddress}</span>
-                  </span>
-                )}
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
-                <span className="font-semibold text-slate-600">
-                  {order.customerKind[0]?.toUpperCase() + order.customerKind.slice(1)}
-                </span>
-                {order.channel && (
-                  <>
-                    <span className="text-slate-300">·</span>
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-semibold text-slate-700">
-                      {order.channel}
-                    </span>
-                  </>
-                )}
-                <span className="text-slate-300">·</span>
-                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 font-semibold text-slate-700">
-                  {pays}
-                </span>
-                {order.relief && (
-                  <span
-                    className="rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 font-semibold text-sky-800"
-                    title="20% off and no VAT on their own medicines (or a lower promo without VAT, never both)"
-                  >
-                    {order.relief.kind === "pwd" ? "PWD" : "Senior citizen"}
-                    {order.relief.idNo ? ` · ${order.relief.idNo}` : ""}
-                    {order.relief.name ? ` · ${order.relief.name}` : ""}
-                  </span>
-                )}
-                <span className="text-slate-400">
-                  Placed {timeLabel(order.submittedAt ?? order.createdAt)} by {order.raisedBy}
-                </span>
-                {order.leadId && (
-                  <Link
-                    to={`/leads/${order.leadId}`}
-                    className="inline-flex items-center gap-1 font-semibold text-emerald-700 hover:underline"
-                  >
-                    From the Online case <ExternalLink className="size-3" />
-                  </Link>
-                )}
-              </div>
+              )}
+              {order.customerReview === "to_review" && order.customerKind !== "patient" && (
+                <Pill tone="warn">New customer</Pill>
+              )}
             </div>
-          </div>
-          <div className="text-right">
-            <div className="text-2xl font-bold tracking-tight tabular-nums">
-              {peso(order.total)}
+            <div className="mt-1 text-xs text-ink-2">
+              MedRep: {order.medrep} · Placed {timeLabel(order.submittedAt ?? order.createdAt)}
+              {order.raisedBy !== order.medrep ? ` by ${order.raisedBy}` : ""}
+              {order.channel ? ` · ${order.channel}` : ""}
+              {order.leadId && (
+                <>
+                  {" · "}
+                  <Link to={`/leads/${order.leadId}`} className="font-medium text-brand hover:underline">
+                    From the Online case
+                  </Link>
+                </>
+              )}
             </div>
-            {data.money.invoice && (
-              <div className="mt-1 flex justify-end">
-                <InvoiceStatus state={data.money.invoice.state} />
-              </div>
-            )}
-            <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <Link
                 to={`/orders/${order.id}/sales-order`}
-                className="inline-flex h-8 items-center gap-1.5 rounded-[10px] border border-line bg-white px-2.5 text-[13px] font-semibold text-slate-700 shadow-sm hover:border-field hover:bg-hover"
+                className="inline-flex items-center gap-1.5 rounded-md border border-brand/40 px-3 py-1.5 text-xs font-semibold text-brand-dark hover:bg-brand-tint"
               >
-                <FileText className="size-4" aria-hidden="true" /> Sales order
+                <FileText className="size-3.5" aria-hidden="true" /> Sales order
               </Link>
               <SendToCustomer orderId={order.id} small />
             </div>
           </div>
+          <div className="flex flex-col items-end gap-2 text-right">
+            <div className="flex items-center gap-3">
+              <StatusPill status={order.status} label={order.statusLabel} />
+              <span className="text-2xl font-bold tabular-nums text-ink">{peso(order.total)}</span>
+            </div>
+            {data.money.invoice && <InvoiceStatus state={data.money.invoice.state} />}
+          </div>
         </div>
+
+        <div className="mt-5 grid gap-5 border-t border-slate-100 pt-4 sm:grid-cols-2">
+          <div className="min-w-0">
+            <div className="text-xs font-semibold tracking-wide text-ink-2 uppercase">Delivery address</div>
+            <div className="mt-1 text-sm text-ink">{order.deliveryAddress ?? "—"}</div>
+            <div className="mt-1 flex flex-wrap gap-x-4 text-xs text-ink-2">
+              <span className="inline-flex items-center gap-1">
+                <UserRound className="size-3.5" aria-hidden="true" /> {order.receiver ?? order.customer}
+              </span>
+              {order.receiverPhone && (
+                <a href={`tel:${order.receiverPhone}`} className="inline-flex items-center gap-1 hover:text-brand">
+                  <Phone className="size-3.5" aria-hidden="true" /> {order.receiverPhone}
+                </a>
+              )}
+            </div>
+          </div>
+          <div className="min-w-0">
+            <div className="text-xs font-semibold tracking-wide text-ink-2 uppercase">Invoice</div>
+            <div className="mt-1 text-sm text-ink">
+              {data.money.invoice ? (
+                <Link to={`/invoices/${data.money.invoice.id}`} className="font-medium text-brand hover:underline">
+                  {data.money.invoice.code}
+                </Link>
+              ) : (
+                <span className="text-ink-2">Made when Management approves</span>
+              )}
+            </div>
+            {order.warehouse && (
+              <div className="mt-1 inline-flex items-center gap-1 text-xs text-ink-2">
+                <MapPin className="size-3.5" aria-hidden="true" /> Ships from {order.warehouse}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="mt-5 border-t border-slate-100 pt-4">
+          <div className="text-xs font-semibold tracking-wide text-ink-2 uppercase">Order details</div>
+          <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+            {detail("Division", order.division)}
+            {detail("Sub-division", order.subDivision)}
+            {detail("Payment terms", order.paymentTerm ?? pays)}
+            {detail("Customer PO", order.customerPo)}
+            {detail("Doctor", order.doctor)}
+            {detail("Invoicing from", order.invoiceFromLabel)}
+            {detail("Expected", order.expectedOn ? dayLabel(order.expectedOn) : null)}
+            {detail("Raised by", order.raisedBy)}
+            {detail("Note", order.note)}
+          </div>
+        </div>
+
         <OrderVersions versions={data.versions} />
         {changedBy && !data.versions.some((version) => version.kind === "changed") && (
           // Changed before versions were kept: Management's words from the order's history.
-          <div className="mt-3 flex gap-2.5 rounded-xl bg-slate-50 px-3.5 py-3 text-[13px] text-slate-800">
-            <PencilLine className="mt-0.5 size-4 shrink-0 text-sky-600" aria-hidden="true" />
+          <div className="mt-3 flex gap-2.5 rounded-lg bg-slate-50 px-3.5 py-3 text-sm text-ink">
+            <PencilLine className="mt-0.5 size-4 shrink-0 text-brand" aria-hidden="true" />
             <div className="min-w-0">
-              <b>Changed by {changedBy.by}</b>{" "}
-              <span className="text-slate-500">· {short(changedBy.at)}</span>
+              <b>Changed by {changedBy.by}</b> <span className="text-ink-2">· {short(changedBy.at)}</span>
               <div className="mt-0.5">{changedBy.what}</div>
             </div>
           </div>
         )}
         {order.status === "draft" && (order.sentBackReason ?? order.flagReason) ? (
-          // Sent back: Management's reason, and the MedRep's two ways to answer it.
-          <div className="mt-3 flex flex-col gap-2.5 rounded-xl bg-slate-50 px-3.5 py-3 text-[13px] text-slate-800 sm:flex-row sm:items-center">
-            <Undo2 className="hidden size-5 shrink-0 text-amber-600 sm:block" aria-hidden="true" />
+          // Sent back: Management's reason in the hub's yellow band, and the MedRep's two answers.
+          <div className="mt-4 flex flex-col gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center">
             <div className="min-w-0 flex-1">
-              <div className="font-semibold">
-                Sent back to {order.medrep}
-                {order.sentBackBy ? ` by ${order.sentBackBy}` : ""}
+              <b>
+                Sent back{order.sentBackBy ? ` by ${order.sentBackBy}` : ""}
                 {order.sentBackAt ? ` · ${timeLabel(order.sentBackAt)}` : ""}
-                {order.sentBackCount > 1 ? ` · ${order.sentBackCount} times` : ""}
-              </div>
-              <div className="mt-0.5">{order.sentBackReason ?? order.flagReason}</div>
+                {order.sentBackCount > 1 ? ` · ${order.sentBackCount} times` : ""} — What to fix:
+              </b>{" "}
+              {order.sentBackReason ?? order.flagReason}
             </div>
             {can.resubmit && (
               <div className="flex shrink-0 flex-wrap gap-2">
                 <Link
                   to={`/orders/${order.id}/fix`}
-                  className="inline-flex h-9 items-center rounded-lg bg-brand px-3.5 text-xs font-semibold text-white shadow-sm hover:bg-brand-dark"
+                  className="inline-flex items-center rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-dark"
                 >
-                  Fix and send again
+                  Fix and resubmit
                 </Link>
                 <button
                   type="button"
                   onClick={() => setAsking("resubmit")}
-                  className="inline-flex h-9 items-center rounded-lg bg-brand px-3 text-xs font-semibold text-white hover:bg-brand-dark"
+                  className="inline-flex items-center rounded-md border border-brand/40 bg-white px-3 py-1.5 text-xs font-semibold text-brand-dark hover:bg-brand-tint"
                 >
-                  It's right as it is
+                  ↩ Resubmit as it is
                 </button>
               </div>
             )}
           </div>
         ) : order.flagReason ? (
-          <div className="mt-3 flex flex-col gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[13px] text-rose-700 sm:flex-row sm:items-center">
+          <div className="mt-4 flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 sm:flex-row sm:items-center">
             <span className="flex flex-1 gap-2">
               <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
               <span>
@@ -671,14 +697,9 @@ export function Order() {
                         target="_blank"
                         rel="noreferrer"
                         title={shot.name}
-                        className="block overflow-hidden rounded-lg border border-slate-200 bg-white hover:border-slate-400"
+                        className="block overflow-hidden rounded-md border border-slate-200 bg-white hover:border-slate-400"
                       >
-                        <img
-                          src={`/api/papers/${shot.id}`}
-                          alt={shot.name}
-                          loading="lazy"
-                          className="h-16 w-20 object-cover"
-                        />
+                        <img src={`/api/papers/${shot.id}`} alt={shot.name} loading="lazy" className="h-16 w-20 object-cover" />
                       </a>
                     ))}
                   </span>
@@ -686,22 +707,19 @@ export function Order() {
               </span>
             </span>
             {can.answer && (
-              // The MedRep's own held order: answer the question, or call the order off.
               <span className="flex shrink-0 gap-2">
-                {can.answer && (
-                  <button
-                    type="button"
-                    onClick={() => setAsking("answer")}
-                    className="inline-flex h-8 items-center rounded-lg bg-brand px-3 text-xs font-semibold text-white hover:bg-brand-dark"
-                  >
-                    Answer
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => setAsking("answer")}
+                  className="inline-flex items-center rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-dark"
+                >
+                  ↩ Re-submit
+                </button>
                 {can.cancel && (
                   <button
                     type="button"
                     onClick={() => setAsking("cancel")}
-                    className="inline-flex h-8 items-center rounded-lg border border-rose-300 bg-white px-3 text-xs font-semibold text-rose-700 hover:bg-rose-100"
+                    className="inline-flex items-center rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
                   >
                     Cancel order
                   </button>
@@ -711,14 +729,12 @@ export function Order() {
           </div>
         ) : null}
         {order.status !== "draft" && order.sentBackCount > 0 && order.sentBackReason && (
-          <div className="mt-3 rounded-xl bg-slate-50 px-3.5 py-2.5 text-[13px] leading-snug text-slate-800">
-            <div>
-              <b>
-                Sent back{order.sentBackCount > 1 ? ` ${order.sentBackCount} times` : ""}
-                {order.sentBackBy ? ` by ${order.sentBackBy}` : ""}:
-              </b>{" "}
-              {order.sentBackReason}
-            </div>
+          <div className="mt-3 rounded-lg bg-slate-50 px-3.5 py-2.5 text-sm text-ink">
+            <b>
+              Sent back{order.sentBackCount > 1 ? ` ${order.sentBackCount} times` : ""}
+              {order.sentBackBy ? ` by ${order.sentBackBy}` : ""}:
+            </b>{" "}
+            {order.sentBackReason}
             {order.reply && (
               <div className="mt-1">
                 <b>{order.medrep}'s answer:</b> {order.reply}
@@ -728,215 +744,95 @@ export function Order() {
         )}
       </section>
 
-      {!glance && journey}
+      {/* This person's step on the order, as the hub's approval band: Management approves,
+          Finance makes and collects, Dispatch packs and ships. */}
+      {managing && (
+        <section className="mt-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-3 text-xs font-semibold tracking-wide text-ink-2 uppercase">
+            Management approval
+          </div>
+          <ManagementGlance
+            data={data}
+            act={act}
+            onAsk={setAsking}
+            states={states}
+            more={otherButtons}
+            autoApprove={params.get("approve") === "1"}
+          />
+        </section>
+      )}
+      {financeWork && (
+        <div className="mt-4">
+          <FinanceStep data={data} money={money} next={() => pickTab("payment")} />
+        </div>
+      )}
+      {dispatchWork && (
+        <div className="mt-4">
+          <DispatchStep data={data} ask={ask} next={() => pickTab("dispatch")} />
+        </div>
+      )}
+      {deliveryWork && (
+        <div className="mt-4">
+          <DeliveredStep data={data} ask={ask} next={() => pickTab("payment")} />
+        </div>
+      )}
+      {!managing && otherButtons && (
+        <div className="mt-4 flex flex-wrap gap-2">{otherButtons}</div>
+      )}
+      <div className="mt-3">
+        <Problem message={problem?.message} />
+      </div>
 
-      {glance && (
-        // One page: what to decide and the buttons on top, each check under it (the ones the
-        // system found fine folded), money and what happened at the side, the road last.
-        <>
-          <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem] 2xl:grid-cols-[minmax(0,1fr)_22rem]">
-            <div className="min-w-0">
-              <ManagementGlance
-                data={data}
-                act={act}
-                onAsk={setAsking}
-                states={states}
-                more={otherButtons}
-                autoApprove={params.get("approve") === "1"}
-              />
-              <div className="mt-3">
-                <Problem message={problem?.message} />
-              </div>
-            </div>
-            <div className="flex min-w-0 flex-col gap-4">
-              <MoneyCard data={data} />
+      <section className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div role="tablist" aria-label="About this order" className="flex gap-1 overflow-x-auto border-b border-slate-200 px-3">
+          {tabs.map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => pickTab(key)}
+              className={`-mb-px border-b-2 px-3 py-3 text-sm font-medium whitespace-nowrap ${tab === key ? "border-brand text-brand" : "border-transparent text-ink-2 hover:text-ink"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="p-4">
+          {tab === "timeline" && (
+            <div className="flex flex-col gap-4">
+              {journey}
               <Activity data={data} />
             </div>
-          </div>
-          {journey}
-        </>
-      )}
-      <div
-        className={`mt-4 grid items-start gap-4 lg:grid-cols-[19rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] 2xl:grid-cols-[22rem_minmax(0,1fr)] ${glance ? "hidden" : ""}`}
-      >
-        {/* Each desk's own steps at the side; anyone else steps through the journey on top. */}
-        {(desk || shownOthers.length > 0) && (
-          <nav
-            aria-label="Steps"
-            className="min-w-0 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm lg:col-start-1 lg:row-start-1"
-          >
-            {desk === "management"
-              ? CHECKS.map((item, index) => {
-                  const on = item.key === check;
-                  const state = states[item.key];
-                  return (
-                    <button
-                      key={item.key}
-                      type="button"
-                      aria-current={on && checking ? "step" : undefined}
-                      onClick={() => openCheck(item.key)}
-                      className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors ${on && checking ? "bg-emerald-50 font-semibold text-emerald-900" : "text-slate-700 hover:bg-slate-50"}`}
-                    >
-                      <span
-                        className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                          item.key === "approve" && order.approvedAt
-                            ? "bg-emerald-600 text-white"
-                            : item.key === "approve"
-                              ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
-                              : state.ok
-                                ? "bg-emerald-600 text-white"
-                                : "bg-amber-400 text-white"
-                        }`}
-                      >
-                        {item.key === "approve" && !order.approvedAt ? (
-                          index + 1
-                        ) : state.ok || item.key === "approve" ? (
-                          <Check className="size-3.5" />
-                        ) : (
-                          "!"
-                        )}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate">{checkLabel(item.key, data)}</span>
-                        <span
-                          className={`block truncate text-[11px] font-normal ${state.ok || item.key === "approve" ? "text-slate-500" : "font-semibold text-amber-700"}`}
-                        >
-                          {item.key === "approve"
-                            ? order.approvedAt
-                              ? `Approved${order.approvedBy ? ` by ${order.approvedBy}` : ""}`
-                              : can.approve
-                                ? "Your step"
-                                : order.status === "pending_approval"
-                                  ? "Waiting"
-                                  : "—"
-                            : state.note}
-                        </span>
-                      </span>
-                    </button>
-                  );
-                })
-              : !desk
-                ? null
-                : railSteps.map((item) => {
-                    const on = item.key === opened;
-                    return (
-                      <button
-                        key={item.key}
-                        type="button"
-                        aria-current={on ? "step" : undefined}
-                        onClick={() => open(item.key)}
-                        className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-2 text-left text-[13px] transition-colors ${on ? "bg-emerald-50 font-semibold text-emerald-900" : "text-slate-700 hover:bg-slate-50"}`}
-                      >
-                        <span
-                          className={`flex size-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-                            item.shape === "done" || item.shape === "skipped"
-                              ? "bg-emerald-600 text-white"
-                              : item.shape === "stopped"
-                                ? "bg-rose-100 text-rose-700"
-                                : on || item.shape === "now"
-                                  ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
-                                  : "bg-slate-100 text-slate-500"
-                          }`}
-                        >
-                          {item.shape === "done" || item.shape === "skipped" ? (
-                            <Check className="size-3.5" />
-                          ) : (
-                            item.number
-                          )}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate">{item.label}</span>
-                          <span
-                            className={`block truncate text-[11px] font-normal ${item.mine && item.shape !== "done" ? "font-semibold text-amber-700" : "text-slate-500"}`}
-                          >
-                            {item.mine && item.shape !== "done" ? "Your step" : item.who}
-                          </span>
-                        </span>
-                      </button>
-                    );
-                  })}
-            {otherButtons && (
-              <div className="mt-1 flex flex-wrap gap-1.5 border-t border-slate-100 px-1 pt-2">
-                {otherButtons}
+          )}
+          {tab === "items" && <Lines data={data} compare={desk === "management"} />}
+          {tab === "payment" && (
+            <div className="grid items-start gap-4 lg:grid-cols-2">
+              <MoneyCard data={data} />
+              <PaidStep data={data} />
+            </div>
+          )}
+          {tab === "dispatch" &&
+            (["ready_for_dispatch", "packing", "shipped", "completed"].includes(order.status) ? (
+              <div className="flex flex-col gap-4">
+                <DispatchStep data={data} ask={ask} next={() => pickTab("dispatch")} />
+                {(order.status === "shipped" || order.status === "completed") && (
+                  <DeliveredStep data={data} ask={ask} next={() => pickTab("payment")} />
+                )}
               </div>
-            )}
-          </nav>
-        )}
-
-        <div className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
-          {opened === "proof" && (
-            <StepPanel
-              number={1}
-              title="Payment proof"
-              footer={<NextButton label="Next: Finance check" onClick={() => open("finance")} />}
-            >
-              <Papers data={data} kinds={["payment_proof", "po", "other"]} />
-            </StepPanel>
-          )}
-          {checking && !glance ? (
-            <ManagementStep
-              data={data}
-              act={act}
-              onAsk={setAsking}
-              next={() => open(nextOf("management") ?? "finance")}
-              check={check}
-              onCheck={openCheck}
-              states={states}
-              autoApprove={params.get("approve") === "1"}
-            />
-          ) : null}
-          {!checking && opened === "placed" && (
-            <PlacedStep data={data} next={() => open("management")} />
-          )}
-          {opened === "management" && !checking && (
-            <ManagementStep
-              data={data}
-              act={act}
-              onAsk={setAsking}
-              next={() => open(nextOf("management") ?? "finance")}
-            />
-          )}
-          {!checking && opened === "finance" && (
-            <FinanceStep
-              data={data}
-              money={money}
-              next={() => open("dispatch")}
-              n={railNumber("finance")}
-            />
-          )}
-          {!checking && opened === "dispatch" && (
-            <DispatchStep
-              data={data}
-              ask={ask}
-              next={() => open("delivered")}
-              n={railNumber("dispatch")}
-            />
-          )}
-          {!checking && opened === "delivered" && (
-            <DeliveredStep
-              data={data}
-              ask={ask}
-              next={() => open("paid")}
-              n={railNumber("delivered")}
-            />
-          )}
-          {!checking && opened === "paid" && <PaidStep data={data} n={railNumber("paid")} />}
-          <div className="mt-3">
-            <Problem message={problem?.message} />
-          </div>
-          {/* Goods back after delivery: asked here, approved and checked on /returns too. */}
-          {order.status === "completed" && (
-            <div className="mt-4">
-              <OrderReturnsBox orderId={order.id} />
+            ) : (
+              <div className="py-6 text-center text-sm text-ink-2">
+                Not with Dispatch yet: it is {order.statusLabel.toLowerCase()}.
+              </div>
+            ))}
+          {tab === "documents" && (
+            <div className="flex flex-col gap-4">
+              <Documents data={data} />
+              {order.status === "completed" && <OrderReturnsBox orderId={order.id} />}
             </div>
           )}
         </div>
-
-        <div className="flex min-w-0 flex-col gap-4 lg:col-start-1 lg:row-start-2">
-          {desk !== "dispatch" && <MoneyCard data={data} />}
-          <Activity data={data} />
-        </div>
-      </div>
+      </section>
 
       {asking && (
         <ReasonDialog
@@ -2273,7 +2169,7 @@ function FinanceStep({
               ? `Credit: pays ${order.paymentDays} days after the invoice`
               : "Cash on delivery"}
           </b>{" "}
-          · make the invoice
+          · check what they owe and send it to Dispatch
         </Fact>
       ) : (
         <Fact shape="later">
@@ -2334,7 +2230,7 @@ function FinanceStep({
               disabled={money.busy}
               onClick={() => money.send(`/api/finance/orders/${order.id}/invoice`, {})}
             >
-              <ReceiptText size={16} aria-hidden="true" /> Make invoice
+              <ReceiptText size={16} aria-hidden="true" /> Check & send to Dispatch
             </Button>
           )}
         </div>

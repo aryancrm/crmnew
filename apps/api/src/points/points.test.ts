@@ -79,6 +79,8 @@ async function delivered(leadId: number): Promise<{ orderId: number; invoiceId: 
   const placed = await post("jane", `/api/leads/${leadId}/order`, { pay: "cod" });
   expect(placed.status).toBe(200);
   const orderId = ((await placed.json()) as { id: number }).id;
+  // Management approves every order (Aryan, 17 Nov).
+  expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(200);
   const [invoice] = await rows<{ id: number }>(
     db,
     sql`select id::int as id from invoice where order_id = ${orderId}`,
@@ -214,7 +216,8 @@ describe("using points", () => {
     const placed = await post("jane", `/api/leads/${id}/order`, { pay: "cod" });
     const orderId = ((await placed.json()) as { id: number }).id;
     expect(await balanceOf("9173334444")).toBe(before - 20);
-    // Nothing to check: its invoice is made at once, the points paid on it.
+    // Management approves it; its invoice is made then, the points paid on it.
+    expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(200);
     const detail = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
     expect(detail.order.pointsUsed).toBe(20);
     const [invoice] = await rows<{ paid: number; total: number }>(

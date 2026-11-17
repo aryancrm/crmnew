@@ -17,3 +17,16 @@ export async function attachReceipt(app: Requester, cookie: string, orderId: num
   });
   return response.status;
 }
+
+/** Attaches a paper of a kind (a prescription, a valid ID…) to the order; answers the status. */
+export async function attachPaper(app: Requester, cookie: string, orderId: number, kind: string) {
+  const form = new FormData();
+  form.set("kind", kind);
+  form.set("file", new File([PNG], `${kind}.png`, { type: "image/png" }));
+  const response = await app.request(`/api/orders/${orderId}/papers`, {
+    method: "POST",
+    headers: { cookie },
+    body: form,
+  });
+  return response.status;
+}

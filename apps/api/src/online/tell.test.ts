@@ -281,6 +281,8 @@ describe("a patient's case", () => {
     );
     const placed = await ok(await post("jane", `/api/leads/${id}/order`, { pay: "cod" }));
     const orderId = ((await placed.json()) as { id: number }).id;
+    // Confirmed once Management approves it (every order waits for Management).
+    expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(200);
     const [mail] = await mailTo("maria@example.test", 1);
     expect(mail?.subject).toMatch(/is confirmed$/);
     expect(mail?.text).toContain("Good day, Maria!");

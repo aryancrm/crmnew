@@ -1,6 +1,6 @@
 // Finance's Board view (the order list's third look, beside Cards and Table): the money as it
 // is worked, three columns in order. 1 Check payment: an advance order's proof beside the amount it
-// should be. 2 Make invoice: a credit or cash-on-delivery order, with what the customer already
+// should be. 2 Check dues: a credit or cash-on-delivery order (invoiced on approval), with what the customer already
 // owes, how late, against their credit limit. 3 Collect: open invoices, the latest past due first.
 // Above them the money in today and this month, owed and overdue. Loaded only when someone picks
 // Board (lazy), with its own read. On a phone the three columns are three tabs.
@@ -25,8 +25,8 @@ const LANES: { key: Lane; number: number; title: string; hint: string }[] = [
   {
     key: "invoice",
     number: 2,
-    title: "Make invoice",
-    hint: "Credit and COD: look at what they owe",
+    title: "Check dues",
+    hint: "Credit and COD: look at what they owe, then send it on"
   },
   { key: "collect", number: 3, title: "Collect", hint: "Open invoices, the latest past due first" },
 ];
@@ -135,7 +135,7 @@ export function FinanceLanes() {
                     disabled={money.busy}
                     onClick={() => money.send(`/api/finance/orders/${card.id}/invoice`, {})}
                   >
-                    Make invoice
+                    Check & send to Dispatch
                   </button>
                   <button type="button" className={QUIET} onClick={() => setHolding(card)}>
                     Hold

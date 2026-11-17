@@ -1,40 +1,56 @@
 @import "tailwindcss";
 
-/* The look is the old CRM's own (frontend/app/globals.css): Inter, the quiet green, slate
-   greys, soft cards. Tables follow its copy of Zoho Inventory's. Screens use these names,
-   never raw colours. */
+/* The look is the old GetMeds hub's (Aryan, 17 Nov: its text style, sizes, colours and
+   background): Poppins, the GetMeds blue for everything you press or follow, the pharmacy green
+   for what is fine, slate text on a pale blue-grey ground, white cards. Screens use these names,
+   never raw colours; the emerald scale is the hub's blue so every older accent follows it. */
 @theme {
-  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-display: "Inter Variable", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-sans: "Poppins", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "Poppins", ui-sans-serif, system-ui, -apple-system, sans-serif;
 
-  --color-ground: #f7f8fa;
+  --color-ground: #f4f8fb;
   --color-line: #e2e8f0;
-  --color-line-soft: #eef1f5;
+  --color-line-soft: #eef2f6;
   --color-field: #cbd5e1;
-  --color-ink: #111827;
+  --color-ink: #1e293b;
   --color-ink-2: #64748b;
-  --color-hover: #f8fafc;
+  --color-hover: #f0f9fd;
   --color-head: #f1f5f9;
 
-  --color-brand: #047857;
-  --color-brand-dark: #065f46;
-  --color-brand-tint: #ecfdf5;
+  /* getmeds-blue */
+  --color-brand: #1d9fda;
+  --color-brand-dark: #1583b5;
+  --color-brand-tint: #e0f3fb;
 
-  --color-good: #15803d;
-  --color-good-tint: #effaf3;
-  --color-good-fill: #16a34a;
+  /* The accents that were emerald are the hub's blue, shade for shade. */
+  --color-emerald-50: #f0f9fd;
+  --color-emerald-100: #e0f3fb;
+  --color-emerald-200: #bae3f7;
+  --color-emerald-300: #86cdee;
+  --color-emerald-400: #4fb6e4;
+  --color-emerald-500: #1d9fda;
+  --color-emerald-600: #1583b5;
+  --color-emerald-700: #116890;
+  --color-emerald-800: #0e5473;
+  --color-emerald-900: #0b415a;
+  --color-emerald-950: #072b3c;
+
+  /* pharmacy-green: what is fine, done, paid */
+  --color-good: #3a6729;
+  --color-good-tint: #e4f4dc;
+  --color-good-fill: #61a644;
   --color-warn: #b45309;
-  --color-warn-tint: #fff8eb;
-  --color-warn-fill: #d97706;
+  --color-warn-tint: #fef3c7;
+  --color-warn-fill: #f59e0b;
   --color-bad: #b91c1c;
-  --color-bad-tint: #fdf2f2;
-  --color-bad-fill: #dc2626;
-  --color-info: #0369a1;
-  --color-info-tint: #eff7fc;
-  --color-info-fill: #0284c7;
+  --color-bad-tint: #fee2e2;
+  --color-bad-fill: #ef4444;
+  --color-info: #116890;
+  --color-info-tint: #e0f3fb;
+  --color-info-fill: #1d9fda;
 
   /* Zoho Inventory's table and link colours, as the old CRM measured them. */
-  --color-zoho-link: #1c5bd9;
+  --color-zoho-link: #1583b5;
   --color-zoho-th: #6c718a;
   --color-zoho-head: #f9f9fb;
   --color-zoho-line: #ebeaf2;
@@ -55,8 +71,7 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans);
   font-size: 14px;
-  line-height: 1.45;
-  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  line-height: 1.5;
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
 }

@@ -154,7 +154,7 @@ const FinanceLanes = lazy(() =>
 );
 
 /** What a card asks a reason for before doing it. */
-type CardAsk = "hold" | "send_back" | "take_back";
+type CardAsk = "hold" | "send_back" | "reject" | "take_back";
 
 /** How long after approving Management may take it back (the API's TAKE_BACK_MINUTES). */
 const TAKE_BACK_MINUTES = 30;
@@ -1199,7 +1199,7 @@ export function OrderCardItem({
                     onClick={card.status === "finance_check" ? onConfirm : onInvoice}
                     className="h-8 rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
                   >
-                    {card.status === "finance_check" ? "Confirm payment" : "Make invoice"}
+                    {card.status === "finance_check" ? "Confirm payment" : "Check & send to Dispatch"}
                   </button>
                   <button
                     type="button"
@@ -1293,14 +1293,7 @@ export function OrderCardItem({
                   >
                     Approve
                   </button>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => onAsk("hold")}
-                    className="h-8 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
-                  >
-                    Hold
-                  </button>
+                  {/* The hub's three: Approve, Send back, Reject (hold and the rest on the order). */}
                   <button
                     type="button"
                     disabled={busy}
@@ -1308,6 +1301,14 @@ export function OrderCardItem({
                     className="h-8 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                   >
                     Send back
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => onAsk("reject")}
+                    className="h-8 rounded-lg text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                  >
+                    Reject
                   </button>
                 </>
               ) : (

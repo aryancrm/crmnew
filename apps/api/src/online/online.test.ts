@@ -185,8 +185,9 @@ describe("a regular enquiry", () => {
     const placed = await post("jane", `/api/leads/${id}/order`, { pay: "advance" });
     expect(placed.status).toBe(200);
     const orderId = ((await placed.json()) as { id: number }).id;
-    // No discount and no credit: nothing for Management to check, so it goes straight to Dispatch
-    // with its invoice (a new patient is no reason to stop it).
+    // Management approves every order (Aryan, 17 Nov); approved, it goes to Dispatch with its
+    // invoice (a case's payment is the agent's to record).
+    expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(200);
     const order = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
     expect(order.order).toMatchObject({
       status: "ready_for_dispatch",
@@ -202,7 +203,7 @@ describe("a regular enquiry", () => {
     expect(now.step.value).toBe("ordered");
     expect(now.next).toBe("Record the advance payment received");
     expect(now.order?.code).toBe(order.order.code);
-    expect(now.order?.trail.check).toMatchObject({ state: "none" });
+    expect(now.order?.trail.check).toMatchObject({ state: "approved", by: "Sarla" });
     expect(now.order?.trail.invoice).toMatchObject({
       total: 30 * medicine.price,
       balance: 30 * medicine.price,
@@ -316,7 +317,8 @@ describe("the other roads", () => {
     const orderId = (
       (await (await post("jane", `/api/leads/${id}/order`)).json()) as { id: number }
     ).id;
-    // The agency's bill isn't credit: no check, straight to Dispatch with the agency's invoice.
+    // Management approves it; the agency's bill then goes to Dispatch with the agency's invoice.
+    expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(200);
     const order = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
     expect(order.order).toMatchObject({
       status: "ready_for_dispatch",
