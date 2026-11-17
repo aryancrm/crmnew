@@ -66,6 +66,7 @@ import {
   Wallet,
   ListChecks,
   ScrollText,
+  ScanSearch,
 } from "lucide-react";
 
 /** A count from the orders dashboard shown beside a link. "finance" is Finance's own work:
@@ -209,6 +210,8 @@ function inventoryApp(me: Me): Space {
           { to: "/inventory", label: "Stock", icon: Boxes },
           { to: "/adjustments", label: "Adjustments", icon: SlidersHorizontal },
           { to: "/transfers", label: "Transfers", icon: ArrowLeftRight },
+          // Where a batch went, for a recall (ERP phase 3).
+          { to: "/inventory/trace", label: "Batch trace", icon: ScanSearch },
         ],
       },
       // Purchases are Zoho Inventory's, moved in whole, in Zoho's own frame (docs/PLAN.md 17).

@@ -5376,3 +5376,10 @@ export type Insight = {
   rows: Record<string, string | number | null>[];
   totals: Record<string, string | number>;
 };
+/** A batch traced for a recall (ERP phase 3): where it is, every move, every customer it reached. */
+export type BatchTrace = {
+  batches: { id: number; batchNo: string; medicineId: number; medicine: string; expires: string | null; unitCost: number | null; onHand: number }[];
+  places: { batchId: number; warehouse: string; qty: number }[];
+  moves: { batchId: number; at: string; kind: string; qty: number; warehouse: string; ref: string | null; note: string | null; by: string; orderId: number | null; customer: string | null }[];
+  customers: { customerId: number; name: string; kind: string; phone: string | null; address: string | null; city: string | null; orders: string; pieces: number; first: string; last: string; returned: number }[];
+};

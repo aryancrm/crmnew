@@ -13,6 +13,7 @@ import { seedDemo } from "../seed";
 import { attachReceipt } from "../testing/receipt";
 import type {
   BalanceSheet,
+  BatchTrace,
   BookAccountDetail,
   BookAccountList,
   CashFlow,
@@ -238,5 +239,17 @@ describe("this CRM's money in the books", () => {
     // A MedRep reads none of it.
     expect((await get("ryan", "/api/books/reports/profit-and-loss")).status).toBe(403);
     expect((await get("ryan", "/api/books/reports/gross-profit")).status).toBe(403);
+  });
+  it("traces a delivered batch to the customer it reached, with what came back", async () => {
+    const [batch] = await rows<{ batchNo: string }>(
+      db,
+      sql`select b.batch_no as "batchNo" from stock_move m join batch b on b.id = m.batch_id where m.kind = 'deliver' order by m.id limit 1`,
+    );
+    const trace = await read<BatchTrace>("sarla", `/api/trace?batch=${encodeURIComponent(batch?.batchNo ?? "")}`);
+    const hospitalRow = trace.customers.find((one) => one.name === "Ledger General Hospital");
+    expect(hospitalRow?.pieces).toBeGreaterThan(0);
+    expect(trace.moves.some((one) => one.kind === "deliver" && one.customer === "Ledger General Hospital")).toBe(true);
+    expect((await get("ryan", `/api/trace?batch=${batch?.batchNo}`)).status).toBe(403);
+    expect((await get("sarla", "/api/trace")).status).toBe(400);
   });
 });

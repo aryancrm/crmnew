@@ -4,11 +4,15 @@ import type { Hono, MiddlewareHandler } from "hono";
 import type { Database } from "../db/index";
 import type { Env } from "../http";
 import { auditTrail } from "../audit/trail";
+import { traceBatch } from "../inventory/trace";
 import { decisions } from "./service";
 
 export function decisionRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandler<Env>): void {
   app.use("/api/decisions", signedIn);
   app.get("/api/decisions", async (c) => c.json(await decisions(db, c.get("me"))));
+  // A batch traced for a recall (ERP phase 3).
+  app.use("/api/trace", signedIn);
+  app.get("/api/trace", async (c) => c.json(await traceBatch(db, c.get("me"), { batch: c.req.query("batch") })));
   // Who did what, when, across the CRM (ERP phase 2).
   app.use("/api/audit", signedIn);
   app.get("/api/audit", async (c) =>
