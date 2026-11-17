@@ -1865,6 +1865,81 @@ MedRep form (1), C) Finance, Pharmacy, Dispatch, Returns (4–7), D) Team Lead a
 look (10) going along with each. Each part: built, tested, then walked in every login it touches
 on the local copy (database copied first, put back after), with what was seen written here.
 
+## 20. Finish every seat's screens and tie them together, before the money (plan, 17 Nov 2026)
+
+Aryan, 17 Nov: before the real-money work (one ledger, section 17 / change log 96), finish the
+seats whose screens are not complete and join them up, the chart's way; look at the live hub as
+Subir Dey (Sales and Marketing Mentor), who runs CLIDP, B2B and Bidding, and follow its hierarchy.
+
+**What the live hub shows Subir** (hub.getmeds.ph, looked at only, 17 Nov):
+- *One switch at the top of every team page*: **All (13) · My team: CLIDP (2) · Jessa Domino's team ·
+  Team Leader (7) · Jimmy Boy Saturinas's team · Leader (3)**. All = everyone under him; "My team" =
+  the people straight under him who have no lead of their own (CLIDP: Maria Anicia Maglatang, Nicka
+  Masusi); then one tab per lead under him with that lead's whole team (Jessa: Fritzie, Floremel,
+  Ma. Lonie, Benjamin Dan Lacebal, Jeremy Regulasyon, Claire Gallana, Jessa; Jimmy: Angelica, Hazel,
+  Jimmy). One press turns the whole page to that team: its KPIs, statuses, orders, activity.
+- *My Team page*: Today / Yesterday / a day / This month; My own KPI and the team's (invoiced
+  without VAT against target, %, orders invoiced, new customers, raised, held, "verified, waiting for
+  invoice — not counted yet"); today's sales; Needs your attention (stuck over 48 h: 402); Current
+  operations (orders today, pending payment, ready for dispatch, in transit, on hold, processing
+  time); Orders by status (press one to filter); the orders table by MedRep and dates, Export CSV;
+  recent activity. Stock news and promos on top.
+- *Team performance*: the same switch and days; the team KPI with "4 flagged"; today's sales;
+  salespeople with sales "2 of 13"; a table per salesperson: today, orders, **month so far, % of the
+  month's target**, Dashboard →; a member's own dashboard, read-only, with ‹ Previous / Next ›
+  through the team, and **"For the coaching talk"**: needs ₱X more in N days, orders on hold, drafts
+  not sent, new customers.
+- *Tracking Shared* (Aryan asked): the hub's status when Zoho's shipment with a tracking number came
+  in — the parcel left and its tracking went to the MedRep. It stays there until someone presses
+  "Mark delivery complete"; nobody does, so Subir's team has **363 orders "Tracking Shared" against
+  156 completed**, and 402 "stuck over 48 h". crmnew has no such pile: Dispatch marks it delivered
+  with the signed receipt (Aryan, 17 Nov), and "On the road" counts only what is on the road.
+- *The CEO's (Admin's) hub pages*, read from its code: **Sales Performance** — the sales team's own
+  sheet as a page: one row per territory, grouped **Head › channel › manager**, Target, Achieved,
+  Balance to target, today's invoicing and %, a total at every level and a grand total, vacant
+  territories in red; **KPI Scorecard** (NZSD and HRR per salesperson); Sales KPIs (targets).
+- Targets: the hub has November's targets (Subir's 13: ₱31.5M; 26.2% reached); crmnew has none yet.
+
+**crmnew today for Subir** (local, as Subir): Home with NBD, CRR (hand-overs), CLIDP, Government
+Bidding, people at risk, money owed (₱69.1M, biggest owers), your people; My team (15 people in 6
+boxes: CLIDP, B2B Telesales — Jessa, CRR, NBD, Government Bidding — Jimmy; drill in by box). Missing
+against the hub: the switch at the top (crmnew drills in page by page instead), the month's targets
+and % on every person, today's sales per person, the member's read-only dashboard with Previous /
+Next and the coaching talk, and the CEO's Head › channel › manager sheet.
+
+**The plan, in this order (each built, tested, walked in the seat's own login, then the next):**
+1. *The team switch, everywhere a lead looks* (the hub's hierarchy, read from crmnew's chart: the
+   seats under the lead): **All · My team (seats straight under me without a lead of their own) ·
+   one tab per lead under me ("Jessa Domino's team · B2B Sales Coach")**, a lead's tab opening that
+   lead's own switch one level down. On My team, the lead's Home figures, Scorecards / Team
+   performance, Collections, Business orders and Targets; the CEO's company view the same from the
+   top (All · each head's division). One press turns the whole page, kept in the address.
+2. *Team performance like the hub's*: per person today, orders, month so far, **% of the month's
+   target**, flagged; a member's own dashboard read-only with ‹ Previous / Next › and "For the
+   coaching talk" (to target in N days, holds, drafts, new customers). crmnew's scorecards stay
+   beside it.
+3. *The sales sheet for the CEO and the heads*: Head › channel › team lead › seat rows, Target,
+   Achieved, Balance, Today, %, totals at each level, vacant seats in red, Export CSV.
+4. *Targets in place*: November's targets typed by the heads on Targets (or brought from the hub's
+   own if Aryan says so), so every % above means something.
+5. *The seats still short*:
+   - Hospital Division's **Government Account** (Reynan Cuenca): the tender desk of 16.6 for the
+     division's government hospitals, and the Hospital CHC's "Tenders open" block (a government
+     posting quoted within 24 hours); the CHC's **weekly report**, the **Monday sync** and **route
+     approval** (16.1's phases).
+   - **Modern Trade**: the chains' deductions and near-expiry returns (they use the returns of step
+     C3 and Finance's short-payment).
+   - **Training Coach** (a vacant seat): its seat's screen once someone sits in it.
+   - The two people in the hub but not on HR's chart: **Jeremy Regulasyon** (in Jessa's team in the
+     hub; not in crmnew) — Aryan / HR to say where he sits (Benjamin Dan Lacebal is in crmnew as
+     "Benjie Dan Lacebal", NBD).
+6. *Tied together*: NBD → CRR hand-over (built) shown on both and on the lead's switch; CLIDP
+   listings and Bidding tenders reaching the orders they make; every lead's "stuck" list the same;
+   every page's people from the one chart.
+
+Then the money (one ledger): every invoice, payment, 2307, refund, credit and return posted to the
+books, with the bank each payment went into.
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
