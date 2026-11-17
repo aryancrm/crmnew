@@ -63,6 +63,7 @@ const medicineInput = z.object({
   rx: z.boolean(),
   coldChain: z.boolean().optional(),
   coldBox: z.boolean().optional(),
+  noSamples: z.boolean().optional(),
   vat: z.enum(["exempt", "vat12", "zero"]),
   reorderLevel: z.number().int("Use a whole number.").min(0, "Use zero or more.").max(1_000_000),
 });

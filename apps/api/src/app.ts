@@ -1,6 +1,7 @@
 // The API. Every route answers JSON; every refusal is { error: { code, message, field? } }.
 
 import { decisionRoutes } from "./decisions/routes";
+import { sampleRoutes } from "./samples/routes";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { Hono } from "hono";
@@ -286,6 +287,7 @@ export function createApp(db: Database, options: AppOptions) {
   regulatoryRoutes(app, db, signedIn);
   bookRoutes(app, db, signedIn);
   decisionRoutes(app, db, signedIn);
+  sampleRoutes(app, db, signedIn);
 
   return app;
 }

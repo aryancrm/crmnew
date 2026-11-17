@@ -199,7 +199,7 @@ export async function catalogue(db: Database, me: Me): Promise<Catalogue> {
     >(
       db,
       sql`select id::int as id, code, sku, name, generic, strength, form, pack, unit, pack_size::int as "packSize",
-            category, manufacturer, brand, rx, vat, cold_chain as "coldChain", cold_box as "coldBox", reorder_level::int as reorder
+            category, manufacturer, brand, rx, vat, cold_chain as "coldChain", cold_box as "coldBox", no_samples as "noSamples", reorder_level::int as reorder
           from medicine where active order by lower(name), lower(coalesce(strength, ''))`,
     ),
     rows<{ medicine: number; buyer: BuyerType; amount: number; pack: number | null }>(
@@ -281,7 +281,7 @@ export async function medicineDetail(db: Database, me: Me, id: number): Promise<
     rows<MedicineDetail["medicine"] & { reorder: number }>(
       db,
       sql`select id::int as id, code, sku, name, generic, strength, form, pack, unit, pack_size::int as "packSize",
-            category, manufacturer, brand, rx, vat, cold_chain as "coldChain", cold_box as "coldBox", reorder_level::int as reorder, active
+            category, manufacturer, brand, rx, vat, cold_chain as "coldChain", cold_box as "coldBox", no_samples as "noSamples", reorder_level::int as reorder, active
           from medicine where id = ${id}`,
     ),
     rows<{
@@ -478,7 +478,8 @@ export async function saveMedicine(
             category = ${clean(input.category)}, manufacturer = ${clean(input.manufacturer)}, brand = ${clean(input.brand)},
             rx = ${input.rx}, vat = ${input.vat}, reorder_level = ${input.reorderLevel},
             cold_chain = coalesce(${input.coldChain ?? null}::boolean, cold_chain),
-            cold_box = coalesce(${input.coldBox ?? null}::boolean, cold_box)
+            cold_box = coalesce(${input.coldBox ?? null}::boolean, cold_box),
+            no_samples = coalesce(${input.noSamples ?? null}::boolean, no_samples)
           where id = ${id} returning id`,
     );
     if (!changed.length) throw new Refusal(404, "not_found", "No such medicine.");

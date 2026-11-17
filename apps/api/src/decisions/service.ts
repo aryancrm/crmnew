@@ -12,6 +12,7 @@ import { leaveList } from "../hr/leave";
 import { Refusal } from "../http";
 import { orderDashboard } from "../orders/service";
 import { listReturns } from "../returns/service";
+import { teamSamples } from "../samples/service";
 import type { Decisions, DecisionLine, Me, Role } from "../types";
 
 /** A desk's list the person may not open counts as nothing waiting there. */
@@ -84,6 +85,13 @@ export async function decisions(db: Database, me: Me): Promise<Decisions> {
     add(forMe, { key: "returns:credit", label: "Returns to credit", count: credit, to: "/returns?status=checked", kind: "orders" });
   }
 
+  // Samples and gifts asked for: the lead approves, the stock desk issues (ERP phase 3).
+  const samples = await ifAllowed(() => teamSamples(db, me, {}));
+  if (samples) {
+    add(forMe, { key: "samples:decide", label: "Samples & gifts to approve", count: samples.requests.filter((one) => one.canDecide).length, to: "/field/samples", kind: "people" });
+    add(forMe, { key: "samples:issue", label: "Samples & gifts to issue", count: samples.requests.filter((one) => one.canIssue).length, to: "/field/samples", kind: "orders" });
+  }
+
   // Management asked this person (a team lead, a Business Mentor) for a yes on an order.
   const asks = await rows<{ orderId: number; code: string; by: string; at: string }>(
     db,
@@ -101,7 +109,7 @@ export async function decisions(db: Database, me: Me): Promise<Decisions> {
   }
 
   // What this person asked others for, still open.
-  const [own] = await rows<{ leave: number; forms: number; asks: number; returns: number; expenses: number; plans: number; seats: number }>(
+  const [own] = await rows<{ leave: number; forms: number; asks: number; returns: number; expenses: number; plans: number; seats: number; samplesAsked: number; samplesComing: number }>(
     db,
     sql`select
         (select count(*) from person_leave where person_id = ${me.id} and status = 'asked')::int as leave,
@@ -110,7 +118,9 @@ export async function decisions(db: Database, me: Me): Promise<Decisions> {
         (select count(*) from sales_return where requested_by = ${me.id} and status in ('requested', 'approved', 'checked'))::int as returns,
         (select count(*) from field_expense where person_id = ${me.id} and status = 'pending')::int as expenses,
         (select count(*) from visit_plan where person_id = ${me.id} and status = 'sent')::int as plans,
-        (select count(*) from seat_request where asked_by = ${me.id} and status = 'open')::int as seats`,
+        (select count(*) from seat_request where asked_by = ${me.id} and status = 'open')::int as seats,
+        (select count(*) from sample_request where person_id = ${me.id} and status in ('submitted', 'approved'))::int as "samplesAsked",
+        (select count(*) from sample_request where person_id = ${me.id} and status = 'issued')::int as "samplesComing"`,
   );
   const mine: DecisionLine[] = [];
   if (own) {
@@ -121,6 +131,9 @@ export async function decisions(db: Database, me: Me): Promise<Decisions> {
     add(mine, { key: "my-expenses", label: "Your field expenses waiting", count: own.expenses, to: "/visits/expenses", kind: "people" });
     add(mine, { key: "my-plan", label: "Your visit plan waiting", count: own.plans, to: "/visits/plan", kind: "people" });
     add(mine, { key: "my-seats", label: "Your asks for people", count: own.seats, to: "/people?tab=requests", kind: "people" });
+    add(mine, { key: "my-samples", label: "Samples & gifts you asked for", count: own.samplesAsked, to: "/me/samples", kind: "people" });
+    // On the way to the rep: theirs to mark received.
+    add(forMe, { key: "samples:receive", label: "Samples & gifts to mark received", count: own.samplesComing, to: "/me/samples", kind: "people" });
   }
   return { forMe, mine, total: forMe.reduce((sum, line) => sum + line.count, 0) };
 }

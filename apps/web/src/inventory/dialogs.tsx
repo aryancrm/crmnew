@@ -400,6 +400,7 @@ export function MedicineDialog({
     medicine?.coldBox ? "box" : medicine?.coldChain ? "cold" : "room",
   );
   const [vat, setVat] = useState<Vat>(medicine?.vat ?? "exempt");
+  const [noSamples, setNoSamples] = useState(medicine?.noSamples ?? false);
   const [reorder, setReorder] = useState(String(medicine?.reorderLevel ?? 0));
 
   return (
@@ -428,6 +429,7 @@ export function MedicineDialog({
               rx,
               coldChain: storage === "cold",
               coldBox: storage === "box",
+              noSamples,
               vat,
               reorderLevel: whole(reorder),
             },
@@ -611,6 +613,10 @@ export function MedicineDialog({
           </select>
         )}
       </Field>
+      <label className="flex items-center gap-2 text-sm text-slate-700">
+        <input type="checkbox" checked={noSamples} onChange={(event) => setNoSamples(event.target.checked)} />
+        Never given as a sample (antimicrobials); gifts may still be given
+      </label>
       <Field
         label="Low-stock level, in pieces (0 = never flag as low)"
         error={action.at("reorderLevel")}

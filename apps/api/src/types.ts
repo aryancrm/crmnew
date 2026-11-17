@@ -180,6 +180,8 @@ export type MedicineInput = {
   coldChain?: boolean;
   /** A cold-chain box (a styro box): kept in stock, priced by Management on each order. */
   coldBox?: boolean;
+  /** Never given as a sample (antimicrobials and the like); gifts may still be any item. */
+  noSamples?: boolean;
 };
 
 export type MedicineDetail = {
@@ -5382,4 +5384,28 @@ export type BatchTrace = {
   places: { batchId: number; warehouse: string; qty: number }[];
   moves: { batchId: number; at: string; kind: string; qty: number; warehouse: string; ref: string | null; note: string | null; by: string; orderId: number | null; customer: string | null }[];
   customers: { customerId: number; name: string; kind: string; phone: string | null; address: string | null; city: string | null; orders: string; pieces: number; first: string; last: string; returned: number }[];
+};
+
+// ---------------------------------------------------------------- samples and gifts (ERP phase 3)
+
+export type SampleKind = "samples" | "gifts";
+export type SampleLineInput = { medicineId: number; qty: number };
+export type SampleRequestStatus = "submitted" | "approved" | "rejected" | "withdrawn" | "issued" | "received";
+export type SamplesOfPerson = {
+  personId: number;
+  person: string;
+  month: string;
+  own: boolean;
+  held: { kind: SampleKind; batchId: number; batchNo: string; medicineId: number; medicine: string; expires: string | null; qty: number; tone: "ok" | "soon" | "expired" }[];
+  requests: { id: number; code: string; kind: SampleKind; status: SampleRequestStatus; note: string | null; rejectReason: string | null; askedAt: string; lines: { medicine: string; qty: number }[] }[];
+  month_: { givenSamples: number; givenGifts: number; doctors: number; receivedSamples: number; receivedGifts: number; countedSamples: boolean; countedGifts: boolean };
+  can: { ask: boolean };
+};
+export type TeamSamples = {
+  month: string;
+  reps: { personId: number; name: string; samples: number; gifts: number; received: number; given: number; doctors: number; counted: boolean; difference: number }[];
+  requests: { id: number; code: string; kind: SampleKind; status: SampleRequestStatus; note: string | null; personId: number; person: string; askedAt: string; lines: { medicine: string; qty: number }[]; canDecide: boolean; canIssue: boolean }[];
+  counts: { person: string; kind: SampleKind; medicine: string; difference: number; reason: string | null; at: string }[];
+  doctors: { customerId: number; doctor: string; person: string; medicines: string; pieces: number; visits: number }[];
+  can: { send: boolean };
 };

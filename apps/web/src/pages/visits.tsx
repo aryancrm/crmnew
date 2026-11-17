@@ -5,9 +5,10 @@
 
 import type { FieldDay, FieldForm, SkipReason, VisitReaction, VisitRow } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarPlus, Check, ChevronLeft, ChevronRight, MapPin, Plus, Trash2 } from "lucide-react";
+import { CalendarPlus, Check, ChevronLeft, ChevronRight, Gift, MapPin, Plus, Trash2 } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { GiveSamplesDialog } from "./samples";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { clock } from "../hr/parts";
@@ -224,7 +225,7 @@ function VisitCard({
 }) {
   const queries = useQueryClient();
   const action = useAction();
-  const [open, setOpen] = useState<"report" | "skip" | "move" | null>(null);
+  const [open, setOpen] = useState<"report" | "skip" | "move" | "samples" | null>(null);
   const planned = visit.status === "planned";
   const checkIn = () =>
     action.run(async () => {
@@ -389,6 +390,15 @@ function VisitCard({
           </Button>
         </div>
       )}
+      {/* Samples and gifts go to a doctor at the visit (ERP phase 3), never sold. */}
+      {mine && c.kind === "doctor" && visit.status !== "skipped" && (
+        <div className="border-t border-slate-100 pt-3">
+          <Button small onClick={() => setOpen("samples")}>
+            <Gift size={14} /> Give samples or gifts
+          </Button>
+        </div>
+      )}
+      {open === "samples" && <GiveSamplesDialog visitId={visit.id} doctor={c.name} onClose={() => setOpen(null)} />}
       {open === "report" && <ReportDialog visit={visit} onClose={() => setOpen(null)} />}
       {open === "skip" && <SkipDialog visit={visit} onClose={() => setOpen(null)} />}
       {open === "move" && <MoveDialog visit={visit} today={today} onClose={() => setOpen(null)} />}

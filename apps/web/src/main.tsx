@@ -84,6 +84,7 @@ import { DecisionsPage } from "./pages/decisions";
 import { AuditPage } from "./pages/audit";
 import { BatchTracePage } from "./pages/batch-trace";
 import { CustomersImportPage } from "./pages/customers-import";
+import { MySamplesPage, TeamSamplesPage } from "./pages/samples";
 import { BillFromOrderPage, NewBillPage, NewPaymentPage, NewReceiptPage, NewPurchaseOrderPage, NewVendorCreditPage, NewVendorPage, ReceivePage } from "./books/forms";
 import { CompanyPapersPage, TenderPage, TendersPage } from "./pages/tenders";
 import { ClidpListingsPage, ClidpTeamPage } from "./pages/clidp";
@@ -196,6 +197,8 @@ createRoot(root).render(
             <Route path="audit" element={<AuditPage />} />
             <Route path="inventory/trace" element={<BatchTracePage />} />
             <Route path="customers/import" element={<CustomersImportPage />} />
+            <Route path="me/samples" element={<MySamplesPage />} />
+            <Route path="field/samples" element={<TeamSamplesPage />} />
             <Route path="inventory/overview" element={<InventoryOverview />} />
             <Route path="inventory/requests" element={<MedicineRequestsPage />} />
             <Route path="targets" element={<Targets />} />
