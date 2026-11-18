@@ -10,6 +10,7 @@ import {
   ArrowLeftRight,
   BookOpen,
   LayoutDashboard,
+  FileBarChart,
   BookOpenCheck,
   Landmark,
   ListTree,
@@ -74,6 +75,7 @@ import {
   ScrollText,
   ScanSearch,
 } from "lucide-react";
+import { ZOHO_REPORT_GROUPS } from "./zoho-reports";
 
 /** A count from the orders dashboard shown beside a link. "finance" is Finance's own work:
  *  payments to confirm and orders to invoice together. */
@@ -1265,6 +1267,11 @@ function ownDesk(me: Me): Space {
                 "Company",
               ),
             ],
+          },
+          // Zoho CRM's reports, by name for now (Aryan, 18 Nov): one link per group.
+          {
+            title: "Zoho CRM reports",
+            items: ZOHO_REPORT_GROUPS.map((group) => ({ to: `/zoho-reports/${group.key}`, label: group.label, icon: FileBarChart })),
           },
           {
             title: "Apps",

@@ -60,6 +60,7 @@ import { PointsAccountPage, PointsPage } from "./pages/points";
 import { Purchase } from "./pages/purchase";
 import { Purchases } from "./pages/purchases";
 import { PurchasesBoard } from "./buying/board";
+import { ZohoReportsPage } from "./pages/zoho-reports";
 import { DocListPage, DocPage, NewBillOrCredit, NewVendorPayment } from "./buying/docs";
 import { NewPurchaseOrder, PurchaseOrderPage, PurchaseOrdersPage } from "./buying/orders";
 import { VendorPage as BuyingVendor, VendorsPage as BuyingVendors } from "./buying/vendors";
@@ -300,6 +301,8 @@ createRoot(root).render(
             {/* One road for buying (Aryan, 18 Nov): Purchases (vendors, purchase orders, receives,
                 bills, payments, vendor credits), which hold Zoho's history too. The first purchase
                 pages' few orders still open by their number. */}
+            <Route path="zoho-reports" element={<ZohoReportsPage />} />
+            <Route path="zoho-reports/:group" element={<ZohoReportsPage />} />
             <Route path="purchases" element={<PurchasesBoard />} />
             <Route path="purchases/new" element={<Navigate to="/purchases/orders/new" replace />} />
             <Route path="purchases/orders" element={<PurchaseOrdersPage />} />
