@@ -247,6 +247,8 @@ export function Order() {
   const me = useMe().data;
   const [asking, setAsking] = useState<OrderAction | null>(null);
   const [dispatching, setDispatching] = useState<DispatchAsk>(null);
+  // Management's and Finance's page keeps the top short: the rest of the details on a press.
+  const [moreOpen, setMoreOpen] = useState(false);
   // Management's two looks of its check: step by step, or everything on one page.
   const [pageLook, pickPageLook] = useLook("crm:order-look", ORDER_LOOKS);
   const data = query.data;
@@ -518,6 +520,61 @@ export function Order() {
   const dispatchWork =
     desk === "dispatch" && (order.status === "ready_for_dispatch" || order.status === "packing");
   const deliveryWork = desk === "dispatch" && order.status === "shipped";
+  // Management's and Finance's own page (Aryan, 18 Nov): the top short, then, as on the Leads
+  // case, its steps at the side (each ticked once fine), the one picked open beside them.
+  const deskView = desk === "management" || desk === "finance";
+  const tabsBox = (
+      <section className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div role="tablist" aria-label="About this order" className="flex gap-1 overflow-x-auto border-b border-slate-200 px-3">
+          {tabs.map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => pickTab(key)}
+              className={`-mb-px border-b-2 px-3 py-3 text-sm font-medium whitespace-nowrap ${tab === key ? "border-brand text-brand" : "border-transparent text-ink-2 hover:text-ink"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="p-4">
+          {tab === "timeline" && (
+            <div className="flex flex-col gap-4">
+              {journey}
+              <Activity data={data} />
+            </div>
+          )}
+          {tab === "items" && <Lines data={data} compare={desk === "management"} />}
+          {tab === "payment" && (
+            <div className="grid items-start gap-4 lg:grid-cols-2">
+              <MoneyCard data={data} />
+              <PaidStep data={data} />
+            </div>
+          )}
+          {tab === "dispatch" &&
+            (["ready_for_dispatch", "packing", "shipped", "completed"].includes(order.status) ? (
+              <div className="flex flex-col gap-4">
+                <DispatchStep data={data} ask={ask} next={() => pickTab("dispatch")} />
+                {(order.status === "shipped" || order.status === "completed") && (
+                  <DeliveredStep data={data} ask={ask} next={() => pickTab("payment")} />
+                )}
+              </div>
+            ) : (
+              <div className="py-6 text-center text-sm text-ink-2">
+                Not with Dispatch yet: it is {order.statusLabel.toLowerCase()}.
+              </div>
+            ))}
+          {tab === "documents" && (
+            <div className="flex flex-col gap-4">
+              <Documents data={data} />
+              <OrderReturnsBox orderId={order.id} />
+            </div>
+          )}
+        </div>
+      </section>
+  );
   const detail = (label: string, value: ReactNode) => (
     <div className="min-w-0">
       <div className="text-xs text-ink-2">{label}</div>
@@ -535,7 +592,7 @@ export function Order() {
         <ChevronLeft className="size-4" aria-hidden="true" /> Back
       </button>
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className={`rounded-xl border border-slate-200 bg-white shadow-sm ${deskView ? "p-4" : "p-5"}`}>
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-xs text-ink-2">Order ID</div>
@@ -600,6 +657,46 @@ export function Order() {
           </div>
         </div>
 
+        {deskView && (
+          // Management's and Finance's page: the facts that matter in one line; the rest on a press.
+          <>
+            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-slate-100 pt-3 text-[13px] text-ink-2">
+              <span className="inline-flex min-w-0 items-center gap-1">
+                <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
+                <span className="truncate">{order.deliveryAddress ?? "No address"}</span>
+              </span>
+              {order.warehouse && <span>Ships from {order.warehouse}</span>}
+              <span>
+                Invoice{" "}
+                {data.money.invoice ? (
+                  <Link to={`/invoices/${data.money.invoice.id}`} className="font-medium text-brand hover:underline">
+                    {data.money.invoice.code}
+                  </Link>
+                ) : (
+                  "made when approved"
+                )}
+              </span>
+              {order.division && <span>Division {order.division}</span>}
+              {order.customerPo && <span>PO {order.customerPo}</span>}
+              {order.doctor && <span>Dr. {order.doctor.replace(/^Dr\.?\s*/i, "")}</span>}
+              <button
+                type="button"
+                onClick={() => setMoreOpen(!moreOpen)}
+                className="ml-auto inline-flex items-center gap-1 font-semibold text-brand hover:underline"
+              >
+                {moreOpen ? "Fewer details" : "More details"}
+                <ChevronDown className={`size-3.5 transition-transform ${moreOpen ? "rotate-180" : ""}`} aria-hidden="true" />
+              </button>
+            </div>
+            {order.note && (
+              <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[13px] text-amber-950">
+                <b>Customer remarks:</b> {order.note}
+              </div>
+            )}
+          </>
+        )}
+        {(!deskView || moreOpen) && (
+          <>
         <div className="mt-5 grid gap-5 border-t border-slate-100 pt-4 sm:grid-cols-2">
           <div className="min-w-0">
             <div className="text-xs font-semibold tracking-wide text-ink-2 uppercase">Delivery address</div>
@@ -650,6 +747,9 @@ export function Order() {
             {order.stockReason && detail("Goes on though short", order.stockReason)}
           </div>
         </div>
+
+          </>
+        )}
 
         <OrderVersions versions={data.versions} />
         {changedBy && !data.versions.some((version) => version.kind === "changed") && (
@@ -772,9 +872,139 @@ export function Order() {
         )}
       </section>
 
+      {deskView && (
+        <div className="mt-4 grid items-start gap-4 lg:grid-cols-[19rem_minmax(0,1fr)] 2xl:grid-cols-[21rem_minmax(0,1fr)]">
+          <div className="flex min-w-0 flex-col gap-4">
+            <nav aria-label="Steps" className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+              <div className="px-2.5 pt-1.5 pb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-400 uppercase">
+                {desk === "management" ? "Management checks" : "Finance steps"}
+              </div>
+              {desk === "management"
+                ? CHECKS.map((item, index) => {
+                    const on = item.key === check && checking;
+                    const state = states[item.key];
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        aria-current={on ? "step" : undefined}
+                        onClick={() => openCheck(item.key)}
+                        className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2.5 text-left text-[13px] transition-colors ${on ? "border-emerald-200 bg-emerald-50/70 font-semibold text-emerald-950" : "border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50"}`}
+                      >
+                        <span
+                          className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                            item.key === "approve" && order.approvedAt
+                              ? "bg-emerald-600 text-white"
+                              : item.key === "approve"
+                                ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
+                                : state.ok
+                                  ? "bg-emerald-600 text-white"
+                                  : "bg-amber-400 text-white"
+                          }`}
+                        >
+                          {item.key === "approve" && !order.approvedAt ? (
+                            index + 1
+                          ) : state.ok || item.key === "approve" ? (
+                            <Check className="size-3.5" />
+                          ) : (
+                            "!"
+                          )}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">{checkLabel(item.key, data)}</span>
+                          <span
+                            className={`block truncate text-[11px] font-normal ${state.ok || item.key === "approve" ? "text-slate-500" : "font-semibold text-amber-700"}`}
+                          >
+                            {item.key === "approve"
+                              ? order.approvedAt
+                                ? `Approved${order.approvedBy ? ` by ${order.approvedBy}` : ""}`
+                                : can.approve
+                                  ? "The last step: approve it"
+                                  : order.status === "pending_approval"
+                                    ? "Waiting"
+                                    : "—"
+                              : state.note}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })
+                : railSteps.map((item) => {
+                    const on = item.key === opened;
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        aria-current={on ? "step" : undefined}
+                        onClick={() => open(item.key)}
+                        className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2.5 text-left text-[13px] transition-colors ${on ? "border-emerald-200 bg-emerald-50/70 font-semibold text-emerald-950" : "border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50"}`}
+                      >
+                        <span
+                          className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                            item.shape === "done" || item.shape === "skipped"
+                              ? "bg-emerald-600 text-white"
+                              : item.shape === "stopped"
+                                ? "bg-rose-100 text-rose-700"
+                                : on || item.shape === "now"
+                                  ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
+                                  : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {item.shape === "done" || item.shape === "skipped" ? <Check className="size-3.5" /> : item.number}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">{item.label}</span>
+                          <span
+                            className={`block truncate text-[11px] font-normal ${item.mine && item.shape !== "done" ? "font-semibold text-amber-700" : "text-slate-500"}`}
+                          >
+                            {item.mine && item.shape !== "done" ? "Your step" : item.who}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+              {otherButtons && (
+                <div className="mt-1 flex flex-wrap gap-1.5 border-t border-slate-100 px-1 pt-2">{otherButtons}</div>
+              )}
+            </nav>
+            <MoneyCard data={data} />
+            <Activity data={data} />
+          </div>
+          <div className="min-w-0">
+            {desk === "management" ? (
+              <ManagementStep
+                data={data}
+                act={act}
+                onAsk={setAsking}
+                next={() => openCheck("approve")}
+                check={check}
+                onCheck={openCheck}
+                states={states}
+                autoApprove={params.get("approve") === "1"}
+              />
+            ) : opened === "proof" ? (
+              <StepPanel
+                number={1}
+                title="Payment proof"
+                footer={<NextButton label="Next: Finance check" onClick={() => open("finance")} />}
+              >
+                <Papers data={data} kinds={["payment_proof", "po", "other"]} />
+              </StepPanel>
+            ) : opened === "paid" ? (
+              <PaidStep data={data} n={railNumber("paid")} />
+            ) : (
+              <FinanceStep data={data} money={money} next={() => open("paid")} n={railNumber("finance")} />
+            )}
+            <div className="mt-3">
+              <Problem message={problem?.message} />
+            </div>
+            {tabsBox}
+          </div>
+        </div>
+      )}
       {/* This person's step on the order, as the hub's approval band: Management approves,
           Finance makes and collects, Dispatch packs and ships. */}
-      {managing && (
+      {!deskView && managing && (
         <section className="mt-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="mb-3 text-xs font-semibold tracking-wide text-ink-2 uppercase">
             Management approval
@@ -790,12 +1020,12 @@ export function Order() {
         </section>
       )}
       {/* Asked up the line: the Team Lead or Business Mentor answers here; others read it. */}
-      {!managing && data.asks.length > 0 && (
+      {!deskView && !managing && data.asks.length > 0 && (
         <div className="mt-4">
           <AskUpBox data={data} />
         </div>
       )}
-      {financeWork && (
+      {!deskView && financeWork && (
         <div className="mt-4">
           <FinanceStep data={data} money={money} next={() => pickTab("payment")} />
         </div>
@@ -810,63 +1040,15 @@ export function Order() {
           <DeliveredStep data={data} ask={ask} next={() => pickTab("payment")} />
         </div>
       )}
-      {!managing && otherButtons && (
+      {!deskView && !managing && otherButtons && (
         <div className="mt-4 flex flex-wrap gap-2">{otherButtons}</div>
       )}
-      <div className="mt-3">
-        <Problem message={problem?.message} />
-      </div>
-
-      <section className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div role="tablist" aria-label="About this order" className="flex gap-1 overflow-x-auto border-b border-slate-200 px-3">
-          {tabs.map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              role="tab"
-              aria-selected={tab === key}
-              onClick={() => pickTab(key)}
-              className={`-mb-px border-b-2 px-3 py-3 text-sm font-medium whitespace-nowrap ${tab === key ? "border-brand text-brand" : "border-transparent text-ink-2 hover:text-ink"}`}
-            >
-              {label}
-            </button>
-          ))}
+      {!deskView && (
+        <div className="mt-3">
+          <Problem message={problem?.message} />
         </div>
-        <div className="p-4">
-          {tab === "timeline" && (
-            <div className="flex flex-col gap-4">
-              {journey}
-              <Activity data={data} />
-            </div>
-          )}
-          {tab === "items" && <Lines data={data} compare={desk === "management"} />}
-          {tab === "payment" && (
-            <div className="grid items-start gap-4 lg:grid-cols-2">
-              <MoneyCard data={data} />
-              <PaidStep data={data} />
-            </div>
-          )}
-          {tab === "dispatch" &&
-            (["ready_for_dispatch", "packing", "shipped", "completed"].includes(order.status) ? (
-              <div className="flex flex-col gap-4">
-                <DispatchStep data={data} ask={ask} next={() => pickTab("dispatch")} />
-                {(order.status === "shipped" || order.status === "completed") && (
-                  <DeliveredStep data={data} ask={ask} next={() => pickTab("payment")} />
-                )}
-              </div>
-            ) : (
-              <div className="py-6 text-center text-sm text-ink-2">
-                Not with Dispatch yet: it is {order.statusLabel.toLowerCase()}.
-              </div>
-            ))}
-          {tab === "documents" && (
-            <div className="flex flex-col gap-4">
-              <Documents data={data} />
-              <OrderReturnsBox orderId={order.id} />
-            </div>
-          )}
-        </div>
-      </section>
+      )}
+      {!deskView && tabsBox}
 
       {asking && (
         <ReasonDialog
