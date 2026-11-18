@@ -837,6 +837,8 @@ export function OrderCardItem({
   const atDispatch =
     card.status === "ready_for_dispatch" || card.status === "packing" || card.status === "shipped";
   const me = useMe().data;
+  // The people who sell (and follow their own orders) see the strip's steps named.
+  const sellerView = ["medrep", "team_lead", "manager", "online"].includes(me?.role ?? "");
   const warehouse = desk === "dispatch";
   // Management's checks and buttons only for whoever decides it: Management, or the order's own
   // approver (a PAP order's head). A MedRep reads where it stands instead.
@@ -946,10 +948,9 @@ export function OrderCardItem({
                 </span>
               </span>
               {onHandle &&
-                (pending ||
-                  (flagged && heldBy === "management") ||
-                  card.status === "finance_check" ||
-                  card.status === "ready_for_invoice") && (
+                (desk === "finance"
+                  ? card.status === "finance_check" || card.status === "ready_for_invoice"
+                  : pending || (flagged && heldBy === "management")) && (
                 // Who in Management has it, so two people don't work the same order.
                 <span className="flex items-center gap-1.5">
                   {card.handledById === me?.id ? (
@@ -1170,14 +1171,45 @@ export function OrderCardItem({
                   {finished ? "Complete" : `${stepIdx + 1} of ${STRIP.length}`}
                 </span>
               </div>
-              <div className="grid grid-cols-6 gap-1" aria-hidden="true">
-                {STRIP.map((label, index) => {
-                  const done = finished || index < stepIdx;
-                  const current = index === stepIdx && !finished;
-                  return (
-                    <div key={label} title={label} className="flex min-w-0 flex-col gap-1">
-                      <span
-                        className={`h-1.5 w-full rounded-full ${
+              {/* Sellers see each step named under the strip (their My orders, 18 Nov); the desks
+                  keep the plain strip. */}
+              {sellerView ? (
+                <div className="grid grid-cols-6 gap-1" aria-hidden="true">
+                  {STRIP.map((label, index) => {
+                    const done = finished || index < stepIdx;
+                    const current = index === stepIdx && !finished;
+                    return (
+                      <div key={label} title={label} className="flex min-w-0 flex-col gap-1">
+                        <span
+                          className={`h-1.5 w-full rounded-full ${
+                            current
+                              ? stopped
+                                ? "bg-rose-600 ring-2 ring-rose-200"
+                                : "bg-blue-600 ring-2 ring-blue-200"
+                              : done
+                                ? "bg-emerald-500"
+                                : "bg-slate-200"
+                          }`}
+                        />
+                        <span
+                          className={`truncate text-[9px] font-semibold ${current ? (stopped ? "text-rose-700" : "text-blue-700") : done ? "text-slate-600" : "text-slate-400"}`}
+                        >
+                          {STRIP_SHORT[index]}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex gap-1" aria-hidden="true">
+                  {STRIP.map((label, index) => {
+                    const done = finished || index < stepIdx;
+                    const current = index === stepIdx && !finished;
+                    return (
+                      <div
+                        key={label}
+                        title={label}
+                        className={`h-1.5 flex-1 rounded-full ${
                           current
                             ? stopped
                               ? "bg-rose-600 ring-2 ring-rose-200"
@@ -1187,15 +1219,10 @@ export function OrderCardItem({
                               : "bg-slate-200"
                         }`}
                       />
-                      <span
-                        className={`truncate text-[9px] font-semibold ${current ? (stopped ? "text-rose-700" : "text-blue-700") : done ? "text-slate-600" : "text-slate-400"}`}
-                      >
-                        {STRIP_SHORT[index]}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </>
           )}
           {(card.warehouse || (warehouse && card.papers.length > 0)) && (
