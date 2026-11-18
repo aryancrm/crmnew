@@ -1,4 +1,5 @@
-// A customer's credit (step C3, 17 Nov): open credit notes (Zoho's, and those made in Books here) still holding money for them
+// A customer's credit (step C3, 17 Nov): open credit notes (Zoho's, and those made in Books here) and
+// payments received in Books not yet put on an invoice (a customer's advance) still holding money for them
 // (₱2.5M over 443 customers when Zoho stopped), and money paid beyond one of our bills that
 // Finance kept for their next one instead of giving it back. Finance uses it on an invoice as a
 // payment of its own: never cash in, never given back as cash, and back with the customer if that
@@ -21,7 +22,7 @@ const sourcesSql = (customers: SQL) => sql`
     round(d.balance * d.fx_rate)::int as amount,
     (round(d.balance * d.fx_rate) - coalesce((select sum(p.amount) from payment p where p.active and p.credit_doc_id = d.id), 0))::int as left
   from book_doc d
-  where d.kind = 'credit_note' and d.balance > 0 and d.status not in ('void', 'draft')
+  where d.kind in ('credit_note', 'customer_payment') and d.balance > 0 and d.status not in ('void', 'draft')
     and d.voided_at is null and d.customer_id in (${customers})
   union all
   select i.customer_id::int, 'kept', r.id::int, i.code, to_char(r.refunded_on, 'YYYY-MM-DD'), r.amount::int,
@@ -90,7 +91,7 @@ export async function useCredit(
       throw new Refusal(400, "invalid", `Only ${peso(source.left)} is left of ${source.number}.`, "amount");
     if (input.amount > invoice.owed)
       throw new Refusal(400, "invalid", `Only ${peso(invoice.owed)} is owed on ${invoice.code}.`, "amount");
-    const word = input.kind === "zoho" ? `credit note ${source.number}` : `credit kept from ${source.number}`;
+    const word = input.kind === "zoho" ? `credit ${source.number} (credit note or advance)` : `credit kept from ${source.number}`;
     await tx.execute(
       sql`insert into payment (invoice_id, customer_id, amount, method, reference, paid_on, note, by_person, payer,
           credit_doc_id, credit_refund_id)
