@@ -1,6 +1,7 @@
 // Sales against target: a team's month, the channels', the CEO Home and the company tree.
 
 import type { Hono, MiddlewareHandler } from "hono";
+import { targetSheet } from "./target-sheet";
 import type { Database } from "../db/index";
 import { z } from "zod";
 import { listCalls, logSalesCall } from "../calls/service";
@@ -11,7 +12,7 @@ import { monthFacts } from "./rules";
 import { ceoHome, channelSales, channelSalesDetail, companyTree, teamSales } from "./service";
 
 export function salesRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandler<Env>): void {
-  for (const path of ["/api/team/*", "/api/ceo/*", "/api/company/*", "/api/channel-sales/*", "/api/calls", "/api/calls/*", "/api/sales-performance", "/api/sales-performance/*"])
+  for (const path of ["/api/team/*", "/api/ceo/*", "/api/company/*", "/api/channel-sales/*", "/api/calls", "/api/calls/*", "/api/sales-performance", "/api/sales-performance/*", "/api/target-sheet"])
     app.use(path, signedIn);
 
   // Sales calls and the daily sales performance (the B2B team's end-of-day report).
@@ -41,6 +42,9 @@ export function salesRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
     ),
   );
   app.get("/api/calls", async (c) => c.json(await listCalls(db, c.get("me"), asked(c))));
+  app.get("/api/target-sheet", async (c) =>
+    c.json(await targetSheet(db, c.get("me"), { month: c.req.query("month"), day: c.req.query("day") })),
+  );
   app.get("/api/sales-performance", async (c) => c.json(await salesPerformance(db, c.get("me"), asked(c))));
   app.get("/api/sales-performance/xlsx", async (c) => {
     const report = await salesPerformance(db, c.get("me"), asked(c));

@@ -5764,3 +5764,27 @@ export type SalesPerformance = {
   channel: string | null;
   scope: "company" | "team" | "self";
 };
+
+/** The month's target sheet (Aryan, 18 Nov 2026): each row as the company's sheet has it, with
+ *  what it achieved to the day (centavos, VAT out) and that day's invoicing. */
+export type TargetSheet = {
+  month: string;
+  months: string[];
+  day: string;
+  rows: {
+    id: number;
+    head: string;
+    channel: string;
+    manager: string;
+    salesperson: string;
+    zoho: string;
+    hq: string | null;
+    /** Who holds the row's seat in this ERP today. */
+    holder: string | null;
+    target: number;
+    ach: number;
+    today: number;
+  }[];
+  /** Sales this month under names on no row of the sheet. */
+  apart: { name: string; ach: number; today: number }[];
+};

@@ -1291,6 +1291,7 @@ function ownDesk(me: Me): Space {
           {
             title: "Key reports",
             items: [
+              { to: "/key-reports/target-sheet", label: "Target sheet", icon: Target },
               { to: "/key-reports/customers", label: "Customers", icon: Users },
               { to: "/key-reports/channels", label: "Channels", icon: Network },
             ],
