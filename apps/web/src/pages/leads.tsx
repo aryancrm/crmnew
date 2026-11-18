@@ -297,7 +297,7 @@ export function LeadsDesk({ desk = "online" }: { desk?: "online" | "pap" }) {
               ])}
               {select("Payment road", road, (value) => set({ road: value }), [
                 { value: "", label: "Every road" },
-                ...ROADS.map((item) => ({ value: item.key, label: item.label })),
+                ...ROADS.map((item) => ({ value: item.key === "senior" ? "senior_pwd" : item.key, label: item.label })),
               ])}
               {select("Assigned to", who, (value) => set({ who: value }), [
                 { value: "", label: "Everyone's" },

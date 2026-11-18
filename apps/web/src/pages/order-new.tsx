@@ -13,6 +13,7 @@ import {
 } from "@2mg/api/divisions";
 import { formatPhone } from "@2mg/api/phone";
 import type {
+  BuyerType,
   Catalogue,
   CatalogueRow,
   CustomerDetail,
@@ -52,6 +53,7 @@ import { type FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { VAT_WORDS } from "../inventory/vat";
+import { MedicineFinder } from "../orders/medicine-finder";
 import { useMe } from "../auth";
 import { shortPeso } from "../ceo";
 import { CustomerDialog } from "../customers/dialog";
@@ -551,25 +553,6 @@ export function OrderNew({
   const change = (key: number, changes: Partial<Line>) =>
     setLines((all) => all.map((line) => (line.key === key ? { ...line, ...changes } : line)));
 
-  const found =
-    findMedicine.trim().length >= 1
-      ? medicines
-          .filter((row) => !lines.some((line) => line.medicineId === row.id))
-          // Every word typed is somewhere in the name, its strength, generic, SKU or code, so
-          // "letrozole 2.5" finds "Letrozole 2.5 mg" (the strength is kept apart from the name).
-          .filter((row) => {
-            const text = [row.name, row.strength, row.generic, row.sku, row.code]
-              .filter(Boolean)
-              .join(" ")
-              .toLowerCase();
-            return findMedicine
-              .trim()
-              .toLowerCase()
-              .split(/\s+/)
-              .every((word) => text.includes(word));
-          })
-          .slice(0, 8)
-      : [];
   /** A free line of the same medicine (a Buy 1 Take 1): the same quantity at ₱0, under the paid one. */
   function addFree(paid: Line) {
     setLines((all) => {
@@ -1382,62 +1365,30 @@ export function OrderNew({
             ))}
           </datalist>
 
-        <div className="relative">
-          <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-slate-400" />
-          <input
-            aria-label="Add a medicine"
-            placeholder="Search a medicine to add"
-            value={findMedicine}
-            onChange={(event) => setFindMedicine(event.target.value)}
-            className={`${FIELD} pl-9`}
-          />
-          {found.length > 0 && (
-            <ul className="absolute inset-x-0 top-full z-10 mt-1 flex flex-col overflow-hidden rounded-xl border border-slate-200 bg-white shadow-pop">
-              {found.map((row) => (
-                <li key={row.id} className="border-b border-slate-100 last:border-b-0">
-                  <button
-                    type="button"
-                    onClick={() => addMedicine(row)}
-                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left hover:bg-slate-50"
-                  >
-                    <span className="min-w-0">
-                      <span className="block truncate text-[13px] font-semibold text-slate-900">
-                        {[row.name, row.strength].filter(Boolean).join(" ")}
-                      </span>
-                      <span className="block truncate text-[11px] text-slate-500">
-                        {[row.generic, row.pack, row.sku].filter(Boolean).join(" · ")}
-                      </span>
-                    </span>
-                    <span
-                      className={`shrink-0 text-[11px] font-semibold ${row.free > 0 ? "text-emerald-700" : "text-rose-700"}`}
-                    >
-                      {row.free > 0
-                        ? `${count(row.free)} free`
-                        : row.total > 0
-                          ? "All promised"
-                          : "Out of stock"}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {findMedicine.trim().length >= 2 && found.length === 0 && catalogue.data && (
+        <MedicineFinder
+          id="order-medicine"
+          buyer={(picked ? USUAL[picked.kind] : "patient") as BuyerType}
+          catalogue={{ ...catalogue.data, rows: medicines }}
+          taken={lines.map((line) => line.medicineId)}
+          takenWhy="Already on the order"
+          onPick={addMedicine}
+          missing={(text) => (
             // Not in our list: ask Inventory for it, so it can be bought in (the order waits).
-            <div className="absolute inset-x-0 top-full z-10 mt-1 flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-3 py-2.5 shadow-pop">
-              <span className="text-[13px] text-slate-600">
-                "{findMedicine.trim()}" isn't in our list.
-              </span>
+            <span className="flex items-center justify-between gap-3">
+              <span>"{text}" isn't in our list.</span>
               <button
                 type="button"
-                onClick={() => setAskingMedicine(true)}
+                onClick={() => {
+                  setFindMedicine(text);
+                  setAskingMedicine(true);
+                }}
                 className="shrink-0 rounded-lg bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-dark"
               >
                 Ask Inventory for it
               </button>
-            </div>
+            </span>
           )}
-        </div>
+        />
         {askingMedicine && catalogue.data && (
           <MedicineRequestDialog
             catalogue={catalogue.data}
@@ -1612,12 +1563,6 @@ export function OrderNew({
               </div>
             );
           const held = stockOf(row.id);
-          const places = (stock.data?.warehouses ?? [])
-            .map((place) => ({
-              name: place.name.replace(/ warehouse$/i, ""),
-              qty: held?.stock[place.id] ?? 0,
-            }))
-            .filter((place) => place.qty > 0);
           const short = line.qty > row.free;
           const list = listOf(line);
           const each = eachOf(line);
@@ -1646,20 +1591,19 @@ export function OrderNew({
                       </span>
                     )}
                   </div>
-                  <div
-                    className={`text-[11px] font-semibold ${short ? "text-amber-700" : "text-emerald-700"}`}
-                  >
-                    {short
-                      ? `Free ${count(row.free)} of ${count(row.total)} on the shelf · short by ${count(line.qty - row.free)}`
-                      : `Free ${count(row.free)}${row.promised ? ` (${count(row.promised)} promised)` : ""}${places.length ? ` · ${places.map((place) => `${place.name} ${count(place.qty)}`).join(", ")}` : ""}`}
-                  </div>
-                  <div className="text-[11px] text-slate-500">
-                    {held?.coming
-                      ? `${count(held.coming.qty)} more arrive ${dayLabel(held.coming.on)}`
-                      : held?.nearestExpiry
-                        ? `Nearest expiry ${monthYear(held.nearestExpiry)}`
-                        : ""}
-                  </div>
+                  {/* Sellers don't need the shelf's numbers (Aryan, 18 Nov): only when it runs out. */}
+                  {short && (
+                    <div className="text-[11px] font-semibold text-rose-700">
+                      {row.free <= 0 ? "Out of stock" : "Not all of it is in stock"}
+                      {held?.coming ? (
+                        <span className="font-normal text-slate-500">
+                          {" "}
+                          · more arrive {dayLabel(held.coming.on)}
+                        </span>
+                      ) : null}
+                      <span className="font-normal text-slate-500"> · Dispatch sees it</span>
+                    </div>
+                  )}
                   {/* What Dispatch announced about this medicine (the hub showed it on the items). */}
                   {(stock.data?.news ?? [])
                     .filter((one) => one.medicineId === row.id)

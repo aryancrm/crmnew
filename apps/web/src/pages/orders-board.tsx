@@ -107,6 +107,8 @@ const PAPER_SHORT: Record<string, string> = {
 
 /** The six steps of the card's strip. */
 const STRIP = ["Placed", "Management", "Finance", "Packed", "Shipped", "Delivered"];
+/** The same steps named under the strip, short enough for a card (18 Nov: "who has it now"). */
+const STRIP_SHORT = ["Placed", "Mgmt", "Finance", "Packed", "On way", "Delivered"];
 
 /** The customer's kind as the Leads card shows its type pill. */
 export const KIND_BADGE: Record<string, { label: string; style: string }> = {
@@ -1150,24 +1152,29 @@ export function OrderCardItem({
                   {finished ? "Complete" : `${stepIdx + 1} of ${STRIP.length}`}
                 </span>
               </div>
-              <div className="flex gap-1" aria-hidden="true">
+              <div className="grid grid-cols-6 gap-1" aria-hidden="true">
                 {STRIP.map((label, index) => {
                   const done = finished || index < stepIdx;
                   const current = index === stepIdx && !finished;
                   return (
-                    <div
-                      key={label}
-                      title={label}
-                      className={`h-1.5 flex-1 rounded-full ${
-                        current
-                          ? stopped
-                            ? "bg-rose-600 ring-2 ring-rose-200"
-                            : "bg-blue-600 ring-2 ring-blue-200"
-                          : done
-                            ? "bg-emerald-500"
-                            : "bg-slate-200"
-                      }`}
-                    />
+                    <div key={label} title={label} className="flex min-w-0 flex-col gap-1">
+                      <span
+                        className={`h-1.5 w-full rounded-full ${
+                          current
+                            ? stopped
+                              ? "bg-rose-600 ring-2 ring-rose-200"
+                              : "bg-blue-600 ring-2 ring-blue-200"
+                            : done
+                              ? "bg-emerald-500"
+                              : "bg-slate-200"
+                        }`}
+                      />
+                      <span
+                        className={`truncate text-[9px] font-semibold ${current ? (stopped ? "text-rose-700" : "text-blue-700") : done ? "text-slate-600" : "text-slate-400"}`}
+                      >
+                        {STRIP_SHORT[index]}
+                      </span>
+                    </div>
                   );
                 })}
               </div>

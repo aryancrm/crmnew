@@ -3552,6 +3552,24 @@ export type Statement = {
 
 /** Every unpaid invoice, one line each: whose (customer, MedRep, team), when it was made and the day
  *  it was due, how late, what is left. Cash on delivery not delivered yet is kept apart. */
+/** Later payments that came in (cash on delivery, credit): Finance's "Collected" list. */
+export type CollectedLater = {
+  rows: {
+    invoiceId: number;
+    invoiceCode: string;
+    orderId: number;
+    orderCode: string;
+    customer: string;
+    medrep: string;
+    terms: string;
+    total: number;
+    /** The day the last of the money came in, and who recorded it. */
+    paidOn: string;
+    by: string;
+    delivered: boolean;
+  }[];
+};
+
 export type OwedInvoices = {
   today: string;
   rows: {

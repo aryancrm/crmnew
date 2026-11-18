@@ -9,7 +9,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiFailure, api } from "../api";
 import { dayLabel, peso } from "../ui";
-import { AGENCIES, ROADS } from "./parts";
+import { AGENCIES, roadOf } from "./parts";
 
 /** What the case's own form holds, to change one or two of them. */
 export function inputOf(lead: LeadCase["lead"]): LeadInput {
@@ -56,7 +56,7 @@ export function roadWords(road: LeadRoad, agency: string | null): string {
     const named = AGENCIES.find((item) => item.key === agency);
     return named ? `GL — ${named.short}` : "GL — choose the agency";
   }
-  return ROADS.find((item) => item.key === road)?.line ?? "";
+  return roadOf(road)?.line ?? "";
 }
 
 /**
@@ -112,7 +112,7 @@ export function RoadPicker({
         >
           Regular
         </button>
-        {/* Senior and PWD are one road; which one is chosen underneath. */}
+        {/* Senior and PWD are one road (18 Nov): same papers, discount and VAT. */}
         <button
           type="button"
           disabled={details.busy || off}
@@ -134,18 +134,7 @@ export function RoadPicker({
       </div>
       <div className="mt-1 flex h-8 items-center gap-1.5 px-1">
         {off && locked && <Lock aria-hidden="true" className="size-3.5 shrink-0 text-slate-500" />}
-        {seniorPwd && !off ? (
-          <select
-            aria-label="Discount eligibility"
-            value={lead.road}
-            disabled={details.busy}
-            onChange={(event) => pick(event.target.value as LeadRoad)}
-            className="h-7 min-h-0 w-full rounded-lg border border-amber-200 bg-amber-50 px-2 py-0.5 text-xs text-amber-900"
-          >
-            <option value="senior">{roadWords("senior", null)}</option>
-            <option value="pwd">{roadWords("pwd", null)}</option>
-          </select>
-        ) : lead.road === "gl" && !off ? (
+        {lead.road === "gl" && !off ? (
           <select
             aria-label="GL agency"
             value={lead.agency ?? ""}

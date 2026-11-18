@@ -33,12 +33,15 @@ export const SOURCES: { key: LeadSource; label: string }[] = [
   { key: "other", label: "Other" },
 ];
 
+/** The three roads (Aryan, 18 Nov): a senior citizen and a PWD walk one road, with one ID, the
+ *  same 20% off and no VAT. Older cases may still say "pwd": it reads as the same road. */
 export const ROADS: { key: LeadRoad; label: string; line: string }[] = [
   { key: "regular", label: "Regular", line: "Regular — no discount" },
-  { key: "senior", label: "Senior", line: "Senior citizen — 20% off, no VAT" },
-  { key: "pwd", label: "PWD", line: "PWD — 20% off, no VAT" },
+  { key: "senior", label: "Senior / PWD", line: "Senior citizen or PWD — 20% off, no VAT" },
   { key: "gl", label: "GL", line: "Guarantee letter — the agency pays" },
 ];
+/** The road's entry, a PWD case's as the Senior / PWD road. */
+export const roadOf = (road: LeadRoad) => ROADS.find((item) => item.key === (road === "pwd" ? "senior" : road));
 
 export const AGENCIES: { key: GlAgency; label: string; short: string }[] = [
   { key: "dswd", label: "DSWD (AICS)", short: "DSWD" },
@@ -99,11 +102,10 @@ export const RELATIONS: { key: string; label: string }[] = [
   { key: "other", label: "Other representative" },
 ];
 
-/** The four ways to pay as the old Case details draws them: a big choice each. */
+/** The three ways to pay: a big choice each. */
 const ROAD_CHOICES: { key: LeadRoad; title: string; note: string }[] = [
-  { key: "regular", title: "Regular", note: "" },
-  { key: "senior", title: "Senior citizen", note: "RA 9994" },
-  { key: "pwd", title: "PWD", note: "RA 10754" },
+  { key: "regular", title: "Regular", note: "full price" },
+  { key: "senior", title: "Senior citizen / PWD", note: "20% off, no VAT" },
   { key: "gl", title: "Guarantee letter", note: "agency pays" },
 ];
 
@@ -388,21 +390,24 @@ export function LeadForm({
         <legend className="text-sm font-semibold text-slate-900">
           {pap ? "Guarantee letter from" : "How will they pay?"}
         </legend>
-        <div className={`grid grid-cols-2 gap-2 sm:grid-cols-4 ${pap ? "hidden" : ""}`}>
-          {ROAD_CHOICES.map((road) => (
+        <div className={`grid grid-cols-3 gap-2 ${pap ? "hidden" : ""}`}>
+          {ROAD_CHOICES.map((road) => {
+            const on = (value.road === "pwd" ? "senior" : value.road) === road.key;
+            return (
             <button
               key={road.key}
               type="button"
-              aria-pressed={value.road === road.key}
+              aria-pressed={on}
               disabled={locked}
               title={lockRoad ?? undefined}
-              onClick={() => set({ road: road.key })}
-              className={choiceClass(value.road === road.key, locked)}
+              onClick={() => !on && set({ road: road.key })}
+              className={choiceClass(on, locked)}
             >
               <span className="text-sm font-bold">{road.title}</span>
               {road.note && <span className="text-[11px] opacity-75">{road.note}</span>}
             </button>
-          ))}
+            );
+          })}
         </div>
         {value.road === "gl" && (
           <fieldset className="grid grid-cols-2 gap-2 pt-1 sm:grid-cols-4">
@@ -428,7 +433,7 @@ export function LeadForm({
         {lockRoad ? (
           <p className="flex items-center gap-2 text-xs text-slate-600">
             <Lock aria-hidden="true" className="size-3.5 shrink-0 text-slate-500" />
-            {ROADS.find((road) => road.key === value.road)?.line}. {lockRoad}
+            {value.road ? roadOf(value.road)?.line : ""}. {lockRoad}
           </p>
         ) : (
           value.road === "regular" && (

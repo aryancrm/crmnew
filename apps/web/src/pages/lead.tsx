@@ -33,7 +33,6 @@ import {
   Pencil,
   Phone,
   Plus,
-  Search,
   Trash2,
   Truck,
   Upload,
@@ -51,6 +50,7 @@ import { ChatPanel } from "../online/chat";
 import { LeadJourney } from "../online/journey";
 import { AGENCIES, LeadForm, RELATIONS, uploadLeadFile } from "../online/parts";
 import { WebsiteOrderCard } from "../online/website";
+import { MedicineFinder, packWord, unitWord } from "../orders/medicine-finder";
 import { SendToCustomer } from "../orders/send-update";
 import { PAPER_ACCEPT } from "../photo";
 import {
@@ -71,9 +71,11 @@ import {
 type StepKey = "docs" | "quote" | "apply" | "letter" | "order" | "pay";
 
 /** The step a case opens on, from where it stands. */
+/** The step a case opens on: the one its next action is in (18 Nov: the steps in the journey's
+ *  order, the enquiry and its quotation first, then the prescription and papers). */
 function openingStep(step: string, gl: boolean): StepKey {
-  if (["new", "rx_wait", "rx_check", "papers"].includes(step)) return "docs";
-  if (step === "rx_ok" || step === "quoted") return "quote";
+  if (["new", "rx_ok", "quoted"].includes(step)) return "quote";
+  if (["rx_wait", "rx_check", "papers"].includes(step)) return "docs";
   if (gl && step === "apply") return "apply";
   if (gl && (step === "waiting" || step === "verify")) return "letter";
   if (step === "ready" || step === "ordered") return "order";
@@ -166,17 +168,29 @@ export function LeadPage() {
     order: orderLive?.status === "completed",
     pay: data.step.value === "done",
   };
-  const rail: { key: StepKey; number: string; label: string; sub?: boolean }[] = [
-    { key: "docs", number: "1", label: "Rx & documents" },
-    { key: "quote", number: "2", label: "Enquiry & quotation" },
+  // The steps in the journey's order, each saying who does it (Aryan, 18 Nov: "what comes where,
+  // and who does what").
+  const rail: { key: StepKey; number: string; label: string; who?: string; sub?: boolean }[] = [
+    { key: "quote", number: "1", label: "Enquiry & quotation", who: "You answer and quote" },
     ...(gl
       ? [
-          { key: "apply" as const, number: "2.1", label: "Agency application", sub: true },
-          { key: "letter" as const, number: "2.2", label: "Guarantee letter", sub: true },
+          { key: "apply" as const, number: "1.1", label: "Agency application", sub: true },
+          { key: "letter" as const, number: "1.2", label: "Guarantee letter", sub: true },
         ]
       : []),
-    { key: "order", number: "3", label: "Order & delivery" },
-    { key: "pay", number: "4", label: gl ? "Claim & payment" : "Payment & follow-up" },
+    { key: "docs", number: "2", label: "Rx & documents", who: "You collect the papers" },
+    {
+      key: "order",
+      number: "3",
+      label: "Order & delivery",
+      who: "You place it · Management approves · Finance checks · Dispatch ships",
+    },
+    {
+      key: "pay",
+      number: "4",
+      label: gl ? "Claim & payment" : "Payment & follow-up",
+      who: gl ? "You send the claim · the agency pays" : "Money in · the refill reminder",
+    },
   ];
   const roadLock = orderLive ? "Locked: the order is placed with this road." : null;
   const files = data.journey.approved.map((kind) => ({
@@ -529,6 +543,11 @@ export function LeadPage() {
                         className={`min-w-0 flex-1 pt-1 text-sm leading-snug font-semibold ${selected ? "text-emerald-950" : "text-slate-800"}`}
                       >
                         {item.label}
+                        {item.who && (
+                          <span className="block text-[11px] leading-snug font-normal text-slate-500">
+                            {item.who}
+                          </span>
+                        )}
                       </span>
                       {selected && (
                         <span className="mt-2 size-1.5 shrink-0 rounded-full bg-emerald-600" />
@@ -601,15 +620,15 @@ export function LeadPage() {
         </aside>
 
         <section className="min-w-0 space-y-4">
-          {step === "docs" && <DocumentsStep data={data} onNext={() => open("quote")} />}
+          {step === "docs" && <DocumentsStep data={data} onNext={() => open("order")} />}
           {step === "quote" && (
-            <QuotationStep data={data} onNext={() => open(gl ? "apply" : "order")} />
+            <QuotationStep data={data} onNext={() => open(gl ? "apply" : "docs")} />
           )}
           {step === "apply" && gl && (
             <GlStep data={data} part="apply" onNext={() => open("letter")} />
           )}
           {step === "letter" && gl && (
-            <GlStep data={data} part="letter" onNext={() => open("order")} />
+            <GlStep data={data} part="letter" onNext={() => open("docs")} />
           )}
           {step === "order" && <OrderStep data={data} onNext={() => open("pay")} />}
           {step === "pay" && <PayStep data={data} onBack={() => open("order")} />}
@@ -647,8 +666,8 @@ export function LeadPage() {
 /** One step of the case in the right-hand column, as the old CRM draws it: an icon tile (or the
  *  GL sub-step's number) and the step's name on a pale band, its work, then its way on. */
 const PANEL_ICONS: Record<string, typeof FileCheck2> = {
-  "1": FileCheck2,
-  "2": Calculator,
+  "1": Calculator,
+  "2": FileCheck2,
   "3": Truck,
   "4": CircleCheck,
 };
@@ -812,6 +831,28 @@ function PaperRow({
                   {file.by} · {timeLabel(file.at)}
                 </div>
               </div>
+              {/* One ID slot for senior citizens and PWDs: which card it is, for the books. */}
+              {kind === "osca_id" && (file.kind === "osca_id" || file.kind === "pwd_id") && (
+                <div role="group" aria-label="Which ID" className="flex shrink-0 rounded-lg border border-slate-200 p-0.5 text-[11px] font-semibold">
+                  {(
+                    [
+                      ["osca_id", "Senior citizen"],
+                      ["pwd_id", "PWD"],
+                    ] as const
+                  ).map(([which, word]) => (
+                    <button
+                      key={which}
+                      type="button"
+                      aria-pressed={file.kind === which}
+                      disabled={write.busy || locked || !data.can.work || file.kind === which}
+                      onClick={() => write.send(`/api/lead-files/${file.id}/kind`, { kind: which })}
+                      className={`rounded-md px-2 py-0.5 ${file.kind === which ? "bg-amber-100 text-amber-900" : "text-slate-500 hover:bg-slate-50"} disabled:cursor-default`}
+                    >
+                      {word}
+                    </button>
+                  ))}
+                </div>
+              )}
               {data.can.work && !locked && (
                 <button
                   type="button"
@@ -843,9 +884,9 @@ function DocumentsStep({ data, onNext }: { data: LeadCase; onNext: () => void })
   );
   return (
     <StepPanel
-      number="1"
+      number="2"
       title="Rx & documents"
-      footer={<NextButton label="Next: Enquiry & quotation" onClick={onNext} />}
+      footer={<NextButton label="Next: Order & delivery" onClick={onNext} />}
     >
       <div className="flex flex-col gap-2.5">
         {intake.length === 0 && (
@@ -1293,8 +1334,9 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
     enabled: editable,
     staleTime: 120_000,
   });
-  const stockOf = useMemo(
-    () => new Map((catalogue.data?.rows ?? []).map((row) => [row.id, row.total])),
+  // Each line's medicine as Inventory has it now: its pack, its unit, whether it is out.
+  const rowOf = useMemo(
+    () => new Map((catalogue.data?.rows ?? []).map((row) => [row.id, row])),
     [catalogue.data],
   );
   const change = (index: number, changes: Partial<Draft>) => {
@@ -1326,7 +1368,7 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
         qty: String(row.packSize || 1),
         reason: "",
         vat: (row.vat ?? "exempt") as Vat,
-        stock: row.total,
+        stock: null,
       },
     ]);
     setDirty(true);
@@ -1345,11 +1387,11 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
     if (done) setDirty(false);
   }
 
-  const nextLabel = lead.road === "gl" ? "Next: 2.1 Agency application" : "Next: Order & delivery";
+  const nextLabel = lead.road === "gl" ? "Next: 1.1 Agency application" : "Next: Rx & documents";
   return (
     <form onSubmit={save}>
       <StepPanel
-        number="2"
+        number="1"
         title="Enquiry & quotation"
         footer={
           <>
@@ -1384,34 +1426,123 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
         )}
 
         {lines.length > 0 ? (
-          <div className="flex flex-col divide-y divide-slate-100 rounded-xl border border-slate-200">
-            {lines.map((line, index) => {
-              const price = typed[index]?.unitPrice ?? 0;
-              const below = price < line.listPrice;
-              const stock = line.stock ?? stockOf.get(line.medicineId) ?? null;
-              const qty = typed[index]?.qty ?? 0;
-              return (
-                <div key={line.medicineId} className="flex flex-col gap-2 p-3">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <div className="truncate text-[13px] font-semibold text-slate-800">
-                        {line.medicine}
-                      </div>
-                      <div className="text-[11px] text-slate-500">
-                        Patient price {peso(line.listPrice)} a piece
-                        {line.packSize > 1 ? ` · ${line.packSize} in a pack` : ""}
-                        {stock !== null && (
-                          <span
-                            className={`ml-2 font-semibold ${stock === 0 ? "text-rose-700" : stock < qty ? "text-amber-700" : "text-emerald-700"}`}
-                          >
-                            {stock === 0
-                              ? "Out of stock"
-                              : stock < qty
-                                ? `Only ${count(stock)} in stock`
-                                : `In stock ${count(stock)}`}
+          <div className="rounded-xl border border-slate-200">
+            <div className="hidden grid-cols-[minmax(0,1fr)_10.5rem_10rem_6.5rem_2rem] gap-3 rounded-t-xl border-b border-slate-200 bg-slate-50 px-3 py-2 text-[11px] font-semibold tracking-wide text-slate-500 uppercase sm:grid">
+              <span>Medicine</span>
+              <span>Quantity</span>
+              <span>Price each</span>
+              <span className="text-right">Amount</span>
+              <span />
+            </div>
+            <ul className="divide-y divide-slate-100">
+              {lines.map((line, index) => {
+                const row = rowOf.get(line.medicineId);
+                const price = typed[index]?.unitPrice ?? 0;
+                const qty = typed[index]?.qty ?? 0;
+                const below = price < line.listPrice;
+                const step = Math.max(1, line.packSize);
+                const pack = row ? packWord(row) : "";
+                const box = pack.split(" ")[0] || "pack";
+                const boxes = (n: number) =>
+                  `${n} ${n === 1 ? box : /(x|s|ch|sh)$/.test(box) ? `${box}es` : `${box}s`}`;
+                const inPacks =
+                  line.packSize > 1 && qty > 0
+                    ? qty % line.packSize === 0
+                      ? boxes(qty / line.packSize)
+                      : qty > line.packSize
+                        ? `${boxes(Math.floor(qty / line.packSize))} + ${qty % line.packSize}`
+                        : `part of a ${box}`
+                    : "";
+                const units = row ? unitWord(row, true) : "pieces";
+                return (
+                  <li
+                    key={line.medicineId}
+                    className="relative grid grid-cols-2 gap-x-3 gap-y-2 px-3 py-3 sm:grid-cols-[minmax(0,1fr)_10.5rem_10rem_6.5rem_2rem] sm:items-start"
+                  >
+                    <div className="col-span-2 min-w-0 pr-8 sm:col-span-1 sm:pr-0">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="text-[13px] font-semibold text-slate-900">{line.medicine}</span>
+                        {row?.rx && (
+                          <span className="rounded bg-sky-100 px-1 text-[10px] font-bold text-sky-800">Rx</span>
+                        )}
+                        {row && row.free <= 0 && (
+                          <span className="rounded bg-rose-100 px-1 text-[10px] font-bold text-rose-700">
+                            Out of stock
                           </span>
                         )}
                       </div>
+                      <div className="text-[11px] leading-snug text-slate-500">
+                        {[row?.generic, pack && `${pack.charAt(0).toUpperCase()}${pack.slice(1)}`]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex h-9 items-stretch overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15">
+                        {editable && (
+                          <button
+                            type="button"
+                            aria-label={line.packSize > 1 ? `One ${box} less` : "One less"}
+                            title={line.packSize > 1 ? `One ${box} less` : "One less"}
+                            onClick={() => change(index, { qty: String(Math.max(0, qty - step)) })}
+                            className="w-8 shrink-0 text-slate-500 hover:bg-slate-50"
+                          >
+                            −
+                          </button>
+                        )}
+                        <input
+                          aria-label={`${line.medicine}: how many ${units}`}
+                          className="w-full min-w-0 border-0 bg-transparent text-center text-[13px] font-semibold tabular-nums focus:outline-none disabled:text-slate-500"
+                          inputMode="numeric"
+                          disabled={!editable}
+                          value={line.qty}
+                          onChange={(event) => change(index, { qty: event.target.value })}
+                        />
+                        {editable && (
+                          <button
+                            type="button"
+                            aria-label={line.packSize > 1 ? `One ${box} more` : "One more"}
+                            title={line.packSize > 1 ? `One ${box} more` : "One more"}
+                            onClick={() => change(index, { qty: String(qty + step) })}
+                            className="w-8 shrink-0 text-slate-500 hover:bg-slate-50"
+                          >
+                            +
+                          </button>
+                        )}
+                      </div>
+                      <div className="mt-0.5 text-[11px] text-slate-500">
+                        {units}
+                        {inPacks ? ` · ${inPacks}` : ""}
+                      </div>
+                      {write.at(`lines.${index}.qty`) && (
+                        <div className="text-[11px] text-rose-700">{write.at(`lines.${index}.qty`)}</div>
+                      )}
+                    </div>
+                    <div>
+                      <div className="flex h-9 items-center overflow-hidden rounded-lg border border-slate-300 bg-white focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/15">
+                        <span className="pl-2.5 text-[13px] text-slate-400">₱</span>
+                        <input
+                          aria-label={`${line.medicine}: price for one ${row ? unitWord(row) : "piece"}`}
+                          className="w-full min-w-0 border-0 bg-transparent px-1 text-right text-[13px] font-semibold tabular-nums focus:outline-none disabled:text-slate-500"
+                          inputMode="decimal"
+                          disabled={!editable}
+                          value={line.price}
+                          onChange={(event) => change(index, { price: event.target.value })}
+                        />
+                        <span className="shrink-0 pr-2.5 text-[11px] text-slate-400">
+                          / {row ? unitWord(row) : "piece"}
+                        </span>
+                      </div>
+                      <div className={`mt-0.5 text-[11px] ${below ? "font-semibold text-amber-700" : "text-slate-500"}`}>
+                        {below ? `Below the patient price ${peso(line.listPrice)}` : "Patient price"}
+                      </div>
+                      {write.at(`lines.${index}.unitPrice`) && (
+                        <div className="text-[11px] text-rose-700">{write.at(`lines.${index}.unitPrice`)}</div>
+                      )}
+                    </div>
+                    <div className="col-span-2 flex items-center justify-between sm:col-span-1 sm:block sm:pt-2 sm:text-right">
+                      <span className="text-[11px] text-slate-500 sm:hidden">Amount</span>
+                      <span className="text-[14px] font-bold text-slate-900 tabular-nums">{peso(qty * price)}</span>
                     </div>
                     {editable && (
                       <button
@@ -1421,76 +1552,55 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
                           setLines((current) => current.filter((_, at) => at !== index));
                           setDirty(true);
                         }}
-                        className="grid size-7 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-700"
+                        className="absolute top-2.5 right-2 grid size-7 place-items-center rounded-lg text-slate-400 hover:bg-rose-50 hover:text-rose-700 sm:static sm:mt-1"
                       >
                         <X className="size-4" />
                       </button>
                     )}
-                  </div>
-                  <div className="grid grid-cols-[6rem_8rem_minmax(0,1fr)] items-end gap-2">
-                    <Field label="Pieces" error={write.at(`lines.${index}.qty`)}>
-                      {(field) => (
-                        <input
-                          {...field}
-                          className={INPUT}
-                          inputMode="numeric"
-                          disabled={!editable}
-                          value={line.qty}
-                          onChange={(event) => change(index, { qty: event.target.value })}
-                        />
-                      )}
-                    </Field>
-                    <Field label="Price a piece (₱)" error={write.at(`lines.${index}.unitPrice`)}>
-                      {(field) => (
-                        <input
-                          {...field}
-                          className={INPUT}
-                          inputMode="decimal"
-                          disabled={!editable}
-                          value={line.price}
-                          onChange={(event) => change(index, { price: event.target.value })}
-                        />
-                      )}
-                    </Field>
-                    <div className="pb-2 text-right text-[13px] font-semibold text-slate-800 tabular-nums">
-                      {peso(qty * price)}
-                    </div>
-                  </div>
-                  {below && (
-                    <Field
-                      label="Why below the patient price"
-                      error={write.at(`lines.${index}.reason`)}
-                    >
-                      {(field) => (
-                        <input
-                          {...field}
-                          className={INPUT}
-                          disabled={!editable}
-                          value={line.reason}
-                          onChange={(event) => change(index, { reason: event.target.value })}
-                        />
-                      )}
-                    </Field>
-                  )}
-                </div>
-              );
-            })}
+                    {below && (
+                      <div className="col-span-2 sm:col-span-5">
+                        <Field
+                          label="Why below the patient price (Management reads it)"
+                          error={write.at(`lines.${index}.reason`)}
+                        >
+                          {(field) => (
+                            <input
+                              {...field}
+                              className={INPUT}
+                              disabled={!editable}
+                              value={line.reason}
+                              placeholder="e.g. a loyal patient, matched a pharmacy's price"
+                              onChange={(event) => change(index, { reason: event.target.value })}
+                            />
+                          )}
+                        </Field>
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
           </div>
         ) : (
           <div className="rounded-xl border border-dashed border-slate-300 px-3 py-5 text-center text-[13px] text-slate-500">
-            No medicine on the quotation yet.
+            No medicine on the quotation yet: select one below.
           </div>
         )}
 
         {editable && (
-          <MedicinePicker
-            catalogue={catalogue.data}
-            failed={catalogue.isError}
-            onRetry={() => catalogue.refetch()}
-            taken={lines.map((line) => line.medicineId)}
-            asked={lead.request}
-            onPick={add}
-          />
+          <div className="mt-3">
+            <MedicineFinder
+              id="quote-medicine"
+              buyer="patient"
+              catalogue={catalogue.data}
+              failed={catalogue.isError}
+              onRetry={() => catalogue.refetch()}
+              taken={lines.map((line) => line.medicineId)}
+              takenWhy="Already on the quotation"
+              asked={lead.request}
+              onPick={add}
+            />
+          </div>
         )}
 
         {lines.length > 0 && (
@@ -1501,13 +1611,15 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
             </div>
             {totals.relief && (
               <>
-                <div className="flex justify-between">
-                  <dt className="text-slate-600">VAT removed</dt>
-                  <dd className="tabular-nums">−{peso(totals.relief.vatRemoved)}</dd>
-                </div>
+                {totals.relief.vatRemoved > 0 && (
+                  <div className="flex justify-between">
+                    <dt className="text-slate-600">VAT removed</dt>
+                    <dd className="tabular-nums">−{peso(totals.relief.vatRemoved)}</dd>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <dt className="text-slate-600">
-                    20% {lead.road === "pwd" ? "PWD" : "senior citizen"} discount
+                    20% senior citizen / PWD discount
                   </dt>
                   <dd className="tabular-nums">−{peso(totals.relief.discount)}</dd>
                 </div>
@@ -1567,174 +1679,6 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
   );
 }
 
-/** Picking a medicine for the quotation: a clear "Select medicine" box whose list opens on a click
- *  (no typing needed), narrows as you type (name, generic, strength, brand or code), moves with the
- *  arrow keys and Enter, and shows each medicine's patient price, stock, form and pack; one that
- *  can't be added says why (Aryan, 18 Nov: "medicine select karne ka proper dikhna chahiye"). */
-function MedicinePicker({
-  catalogue,
-  failed,
-  onRetry,
-  taken,
-  asked,
-  onPick,
-}: {
-  catalogue?: Catalogue;
-  failed: boolean;
-  onRetry: () => void;
-  taken: number[];
-  /** What the patient asked for, as typed on the case: those medicines come first, marked. */
-  asked?: string | null;
-  onPick: (row: CatalogueRow) => void;
-}) {
-  const [text, setText] = useState("");
-  const [open, setOpen] = useState(false);
-  const [at, setAt] = useState(0);
-  const box = useRef<HTMLDivElement>(null);
-  const words = text.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const all = catalogue?.rows ?? [];
-  const matching = all.filter((row) =>
-    words.every((word) => [row.name, row.generic, row.strength, row.code, row.brand].filter(Boolean).join(" ").toLowerCase().includes(word)),
-  );
-  // A medicine the patient asked for: its name (or generic) is in what was asked.
-  const askedText = (asked ?? "").toLowerCase();
-  const wanted = (row: CatalogueRow) =>
-    askedText.length > 0 && [row.name, row.generic].some((name) => name && name.length > 3 && askedText.includes(name.toLowerCase()));
-  // What the patient asked for first, then what can be added (priced and in stock), then the rest; by name.
-  const rank = (row: CatalogueRow) =>
-    row.prices.patient === undefined || taken.includes(row.id) ? 3 : wanted(row) ? 0 : row.total > 0 ? 1 : 2;
-  const found = [...matching].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name)).slice(0, 40);
-  const blocked = (row: CatalogueRow) =>
-    taken.includes(row.id) ? "Already on the quotation" : row.prices.patient === undefined ? "No patient price yet: ask Inventory" : null;
-  useEffect(() => {
-    if (!open) return;
-    const away = (event: MouseEvent) => {
-      if (box.current && !box.current.contains(event.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", away);
-    return () => document.removeEventListener("mousedown", away);
-  }, [open]);
-  useEffect(() => setAt(0), [text]);
-  // The list opens below the box: near the page's foot, bring it into view.
-  const list = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (open && catalogue) list.current?.scrollIntoView({ block: "nearest" });
-  }, [open, catalogue]);
-  // The arrow keys move the highlight; the list (never the page) scrolls to keep it in view.
-  const keyed = useRef(false);
-  useEffect(() => {
-    if (!keyed.current) return;
-    keyed.current = false;
-    const ul = list.current?.querySelector("ul");
-    const li = ul?.querySelector<HTMLElement>(`[data-row="${at}"]`);
-    if (!ul || !li) return;
-    if (li.offsetTop < ul.scrollTop) ul.scrollTop = li.offsetTop;
-    else if (li.offsetTop + li.offsetHeight > ul.scrollTop + ul.clientHeight)
-      ul.scrollTop = li.offsetTop + li.offsetHeight - ul.clientHeight;
-  }, [at]);
-  const pick = (row: CatalogueRow) => {
-    if (blocked(row)) return;
-    onPick(row);
-    setText("");
-    setOpen(false);
-  };
-  return (
-    <div ref={box} className="relative mt-3">
-      <label htmlFor="quote-medicine" className="mb-1 block text-[12px] font-semibold text-slate-700">
-        Select medicine
-        <span className="ml-1 font-normal text-slate-400">· click to see the list, or type a name, generic or strength</span>
-      </label>
-      <div className="relative">
-        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
-        <input
-          id="quote-medicine"
-          type="search"
-          role="combobox"
-          aria-expanded={open}
-          aria-controls="quote-medicine-list"
-          autoComplete="off"
-          value={text}
-          onFocus={() => setOpen(true)}
-          onClick={() => setOpen(true)}
-          onChange={(event) => {
-            setText(event.target.value);
-            setOpen(true);
-          }}
-          onKeyDown={(event) => {
-            if (event.key === "ArrowDown") {
-              event.preventDefault();
-              setOpen(true);
-              keyed.current = true;
-              setAt((n) => Math.min(n + 1, found.length - 1));
-            } else if (event.key === "ArrowUp") {
-              event.preventDefault();
-              keyed.current = true;
-              setAt((n) => Math.max(n - 1, 0));
-            } else if (event.key === "Enter") {
-              event.preventDefault();
-              const row = found[at];
-              if (row) pick(row);
-            } else if (event.key === "Escape") setOpen(false);
-          }}
-          placeholder={failed ? "Couldn't load the medicines" : catalogue ? `Select a medicine (${all.length} in the list)` : "Loading the medicines…"}
-          className="h-11 w-full rounded-[10px] border border-slate-300 bg-white py-2 pr-9 pl-9 text-sm shadow-2xs placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/15 focus:outline-none"
-        />
-        <ChevronDown className={`pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
-      </div>
-      {failed && (
-        <button type="button" onClick={onRetry} className="mt-1 text-xs font-semibold text-emerald-700 hover:underline">
-          Try again
-        </button>
-      )}
-      {open && catalogue && (
-        <div ref={list} className="absolute right-0 left-0 z-30 mt-1 scroll-mb-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-pop">
-          <ul id="quote-medicine-list" role="listbox" className="max-h-80 overflow-y-auto p-1">
-            {found.map((row, index) => {
-              const price = row.prices.patient;
-              const why = blocked(row);
-              return (
-                <li key={row.id} data-row={index} role="option" aria-selected={index === at} aria-disabled={Boolean(why)}>
-                  <button
-                    type="button"
-                    disabled={Boolean(why)}
-                    onMouseEnter={() => setAt(index)}
-                    onClick={() => pick(row)}
-                    className={`flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left disabled:cursor-not-allowed disabled:opacity-55 ${index === at && !why ? "bg-emerald-50" : ""}`}
-                  >
-                    <span className="min-w-0">
-                      <span className="flex items-center gap-1.5">
-                        <span className="truncate text-[13px] font-semibold text-slate-800">{[row.name, row.strength].filter(Boolean).join(" ")}</span>
-                        {wanted(row) && !why && <span className="shrink-0 rounded bg-emerald-100 px-1 text-[10px] font-bold text-emerald-800">Asked for</span>}
-                        {row.rx && <span className="shrink-0 rounded bg-sky-100 px-1 text-[10px] font-bold text-sky-800">Rx</span>}
-                        {row.promo && <span className="shrink-0 rounded bg-amber-100 px-1 text-[10px] font-bold text-amber-800">Promo</span>}
-                      </span>
-                      <span className="block truncate text-[11px] text-slate-500">{why ?? [row.generic, row.form, row.pack].filter(Boolean).join(" · ")}</span>
-                    </span>
-                    <span className="shrink-0 text-right text-[11px]">
-                      <span className="block font-semibold text-slate-800">{price === undefined ? "—" : `${peso(price)} a piece`}</span>
-                      <span className={`inline-block rounded-full px-1.5 font-semibold ${row.total > 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
-                        {row.total > 0 ? `${count(row.total)} in stock` : "Out of stock"}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-          <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-3 py-1.5 text-[11px] text-slate-500">
-            <span>
-              {matching.length === 0
-                ? `No medicine matches "${text.trim()}". Check the spelling, or ask Inventory to add it.`
-                : `${matching.length} ${matching.length === 1 ? "medicine" : "medicines"}${matching.length > found.length ? `, first ${found.length} shown: type more to narrow` : ""}`}
-            </span>
-            <span className="hidden sm:inline">↑ ↓ to move · Enter to add · Esc to close</span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------- guarantee letter
 
 function GlStep({
@@ -1774,11 +1718,11 @@ function GlStep({
   if (part === "apply")
     return (
       <StepPanel
-        number="2.1"
+        number="1.1"
         title={`${agency?.short ?? "Agency"} application`}
         footer={
           <NextButton
-            label="Next: 2.2 Guarantee letter"
+            label="Next: 1.2 Guarantee letter"
             onClick={onNext}
             disabled={!lead.glAppliedOn}
           />
@@ -1827,13 +1771,13 @@ function GlStep({
 
   return (
     <StepPanel
-      number="2.2"
+      number="1.2"
       title="Guarantee letter"
-      footer={<NextButton label="Next: Order & delivery" onClick={onNext} disabled={!verified} />}
+      footer={<NextButton label="Next: Rx & documents" onClick={onNext} disabled={!verified} />}
     >
       {!lead.glAppliedOn && (
         <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
-          Record the application first (2.1).
+          Record the application first (1.1).
         </div>
       )}
       {letter && (

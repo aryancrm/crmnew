@@ -42,7 +42,7 @@ export const SOURCES = Object.keys(SOURCE_LABEL) as LeadSource[];
 
 export const PAPER_LABEL: Record<LeadPaperKind, string> = {
   rx: "Prescription",
-  osca_id: "Senior citizen (OSCA) ID",
+  osca_id: "Senior citizen ID",
   pwd_id: "PWD ID",
   pwd_booklet: "PWD purchase booklet",
   valid_id: "Patient's valid ID",
@@ -56,7 +56,7 @@ export const PAPER_KINDS = Object.keys(PAPER_LABEL) as LeadPaperKind[];
 /** The same papers inside a sentence ("Add the PWD ID"). */
 const PAPER_PHRASE: Record<LeadPaperKind, string> = {
   rx: "prescription",
-  osca_id: "senior citizen (OSCA) ID",
+  osca_id: "senior citizen ID",
   pwd_id: "PWD ID",
   pwd_booklet: "PWD purchase booklet",
   valid_id: "patient's valid ID",
@@ -67,16 +67,25 @@ const PAPER_PHRASE: Record<LeadPaperKind, string> = {
   unsorted: "photo from the chat",
 };
 
-/** The old journey's three roads: senior and PWD walk the same discount road. */
+/** The three roads (Aryan, 18 Nov: "keep three roads"): senior citizens and PWDs walk the same
+ *  one, with the same papers, discount and VAT. */
 export const journeyRoad = (road: LeadRoad): Road =>
   road === "gl" ? "gl" : road === "regular" ? "regular" : "discount";
 
+/** A senior citizen's or PWD's road (one road since 18 Nov; "pwd" stays on older cases). */
+export const discountRoad = (road: LeadRoad): boolean => road === "senior" || road === "pwd";
+
+/** The senior citizen's or PWD's ID: one paper, either card. Which card it is (filed as a senior
+ *  citizen ID or a PWD ID) says which discount the books show. */
+export const hasDiscountId = (files: { has: (kind: LeadPaperKind) => boolean }): boolean =>
+  files.has("osca_id") || files.has("pwd_id");
+
 /** The papers each road asks for before the order (the prescription only when a quoted
- *  medicine needs one). */
+ *  medicine needs one). Senior / PWD: the prescription and one ID ("osca_id" stands for the ID
+ *  slot; a PWD ID fills it too). */
 export function papersFor(road: LeadRoad, rxNeeded: boolean): LeadPaperKind[] {
   const rx: LeadPaperKind[] = rxNeeded ? ["rx"] : [];
-  if (road === "senior") return [...rx, "osca_id"];
-  if (road === "pwd") return [...rx, "pwd_id", "pwd_booklet"];
+  if (discountRoad(road)) return [...rx, "osca_id"];
   if (road === "gl") return [...rx, "valid_id", "med_cert", "gl_letter"];
   return rx;
 }
@@ -152,8 +161,7 @@ export function roadStepOf(f: CaseFacts): string {
     return "ready";
   }
   if (!rxOk) return "rx_wait";
-  if (f.road === "senior" && !f.files.has("osca_id")) return "papers";
-  if (f.road === "pwd" && (!f.files.has("pwd_id") || !f.files.has("pwd_booklet"))) return "papers";
+  if (discountRoad(f.road) && !hasDiscountId(f.files)) return "papers";
   return "ready";
 }
 
@@ -184,7 +192,11 @@ export function nextOf(f: CaseFacts, step: string): string {
     case "rx_wait":
       return "Add the prescription photo";
     case "papers":
-      return `Add the ${missing(papersFor(f.road, f.rxNeeded).filter((kind) => kind !== "gl_letter"))}`;
+      return `Add the ${missing(
+        papersFor(f.road, f.rxNeeded).filter(
+          (kind) => kind !== "gl_letter" && !(kind === "osca_id" && hasDiscountId(f.files)),
+        ),
+      ).replace("senior citizen ID", "senior citizen or PWD ID")}`;
     case "apply":
       return `Send the quotation and record the ${agency} application`;
     case "waiting":

@@ -36,7 +36,9 @@ const phDate = (day: string) =>
 export function stepOf(status: string, paid: boolean): TellEvent | null {
   if (status === "completed") return paid ? "paid" : "delivered";
   if (status === "shipped") return "shipped";
-  if (["ready_for_dispatch", "packing"].includes(status)) return "confirmed";
+  // Confirmed once Management approves it (18 Nov): Finance's check and the packing come after.
+  if (["finance_check", "ready_for_invoice", "ready_for_dispatch", "packing"].includes(status))
+    return "confirmed";
   return null;
 }
 
@@ -159,14 +161,24 @@ export async function customerUpdate(
           ? "We'll contact you when it's ready to collect."
           : "We'll let you know when it is on its way.",
       ];
+      // How they pay, so nobody has to ask: in advance (the order goes out once the money is
+      // checked), on delivery, or on the credit terms.
+      const howToPay =
+        o.terms === "advance" && due > 0
+          ? `To pay in advance: ${peso(due)}. Send us the proof of payment: your order goes out once it is checked.`
+          : o.terms === "cod" && due > 0
+            ? `To pay on ${pickup ? "pick-up" : "delivery"}: ${peso(due)}`
+            : null;
       details = [
         ...(address && !pickup ? [`Address: ${address}`] : []),
         ...(o.expectedOn ? [`Expected: ${phDate(o.expectedOn)}`] : []),
+        ...(howToPay ? [howToPay] : []),
         ...(credit ? [credit] : []),
       ];
       short = [
         `Your order ${o.code} is confirmed.`,
         `Total: ${peso(o.total)}`,
+        ...(howToPay ? [howToPay] : []),
         ...(o.expectedOn ? [`Expected: ${phDate(o.expectedOn)}`] : []),
       ];
       break;

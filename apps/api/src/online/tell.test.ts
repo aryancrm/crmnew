@@ -282,15 +282,16 @@ describe("a patient's case", () => {
     );
     const placed = await ok(await post("jane", `/api/leads/${id}/order`, { pay: "cod" }));
     const orderId = ((await placed.json()) as { id: number }).id;
-    // Confirmed once Management approves it and Finance lets it go (Aryan, 18 Nov: a case's order
-    // goes Management → Finance → Dispatch like every other).
+    // Confirmed as soon as Management approves it (18 Nov), with how they pay; Finance's check
+    // after it sends nothing twice.
     expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(200);
-    await settle();
-    expect(outbox.filter((mail) => mail.to === "maria@example.test")).toHaveLength(0);
-    expect((await post("fiona", `/api/finance/orders/${orderId}/invoice`, {})).status).toBe(200);
     const [mail] = await mailTo("maria@example.test", 1);
     expect(mail?.subject).toMatch(/is confirmed$/);
     expect(mail?.text).toContain("Good day, Maria!");
+    expect(mail?.text).toContain("To pay on delivery:");
+    expect((await post("fiona", `/api/finance/orders/${orderId}/invoice`, {})).status).toBe(200);
+    await settle();
+    expect(outbox.filter((one) => one.to === "maria@example.test")).toHaveLength(1);
     // The email sits in the case's chat, and the case says it went.
     const now = await read<LeadCase>("jane", `/api/leads/${id}`);
     expect(JSON.stringify(now)).toContain("Emailed the customer: Order confirmed");

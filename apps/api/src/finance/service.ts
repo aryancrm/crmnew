@@ -38,6 +38,7 @@ import type {
   MyConfirmations,
   OrderPaper,
   OrderStatus,
+  CollectedLater,
   OwedInvoices,
   OwedList,
   OwedRow,
@@ -53,6 +54,7 @@ import type {
   Vat,
 } from "../types";
 import {
+  addDays,
   AGE_BUCKETS,
   daysBetween,
   dueOn,
@@ -1413,6 +1415,34 @@ export async function customerStatement(
 }
 
 /** Every unpaid invoice with whose it is and its days (Finance, Management, the CEO, the Admin). */
+/** Cash-on-delivery and credit orders paid in full in the last days, newest first: what Finance
+ *  (or the Online desk) marked paid from the money that came in later. */
+export async function collectedLater(db: Database, me: Me, days = 30): Promise<CollectedLater> {
+  allow(me, FINANCE_READ_ROLES, "see the payments collected");
+  const since = addDays(todayManila(), -Math.max(1, Math.min(days, 366)));
+  const found = await rows<CollectedLater["rows"][number] & { termsKey: string; payDays: number | null }>(
+    db,
+    sql`select i.id::int as "invoiceId", i.code as "invoiceCode", o.id::int as "orderId", o.code as "orderCode",
+        c.name as customer, rep.name as medrep, i.terms as "termsKey", o.payment_days::int as "payDays", i.total::int as total,
+        ${day("max(p.paid_on)")} as "paidOn", (array_agg(who.name order by p.at desc))[1] as by,
+        (o.status = 'completed') as delivered
+      from invoice i join sales_order o on o.id = i.order_id join customer c on c.id = i.customer_id
+        join person rep on rep.id = o.medrep_id
+        join payment p on p.invoice_id = i.id and p.active join person who on who.id = p.by_person
+      where i.terms in ('cod', 'days') and i.status <> 'cancelled' and i.paid >= i.total and i.total > 0
+      group by i.id, o.id, c.name, rep.name
+      having max(p.paid_on) >= ${since}::date
+      order by max(p.paid_on) desc, i.id desc
+      limit 500`,
+  );
+  return {
+    rows: found.map(({ termsKey, payDays, ...row }) => ({
+      ...row,
+      terms: termsKey === "cod" ? "COD" : `${payDays ?? ""} days`.trim(),
+    })),
+  };
+}
+
 export async function owedInvoices(db: Database, me: Me): Promise<OwedInvoices> {
   allow(me, FINANCE_READ_ROLES, "see what customers owe");
   const today = todayManila();

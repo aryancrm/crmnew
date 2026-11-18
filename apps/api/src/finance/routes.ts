@@ -22,6 +22,7 @@ import {
   moneyAccounts,
   myConfirmations,
   orderOfInvoice,
+  collectedLater,
   owedInvoices,
   recordPayment,
   recordRefund,
@@ -77,7 +78,12 @@ export function financeRoutes(
       }),
     );
     const done = await confirmPayment(db, c.get("me"), idParam(c), input as ConfirmPaymentInput);
-    void tellCustomer(db, c.get("me"), idParam(c), "confirmed");
+    // The order was confirmed to the customer at Management's approval (sent now if it wasn't);
+    // the money Finance checked is "Payment received".
+    void (async () => {
+      await tellCustomer(db, c.get("me"), idParam(c), "confirmed");
+      if ((input as ConfirmPaymentInput).amount > 0) await tellCustomer(db, c.get("me"), idParam(c), "paid");
+    })();
     return c.json(done);
   });
   app.post("/api/finance/orders/:id/undo-confirm", async (c) => {
@@ -119,6 +125,9 @@ export function financeRoutes(
   );
   app.get("/api/finance/refunds", async (c) => c.json(await refundsOwed(db, c.get("me"))));
   app.get("/api/finance/owed/invoices", async (c) => c.json(await owedInvoices(db, c.get("me"))));
+  app.get("/api/finance/collected", async (c) =>
+    c.json(await collectedLater(db, c.get("me"), Number(c.req.query("days") ?? 30) || 30)),
+  );
   app.get("/api/finance/statement/:id", async (c) =>
     c.json(
       await customerStatement(db, c.get("me"), idParam(c), {

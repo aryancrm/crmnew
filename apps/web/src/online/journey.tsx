@@ -135,9 +135,9 @@ export function LeadJourney({
         ? "discount"
         : "regular";
   const agency = AGENCY_SHORT[String(gl?.agency ?? lead.agency ?? "")] ?? "DSWD / PCSO / OVP / OP";
-  const eligibilityKind = lead.assistance === "pwd" ? "pwd_id" : "osca_id";
+  // One ID for senior citizens and PWDs (18 Nov): either card.
   const docsApproved = files.some(
-    (file) => file.kind === eligibilityKind && file.status === "approved",
+    (file) => (file.kind === "osca_id" || file.kind === "pwd_id") && file.status === "approved",
   );
 
   const pickedUp = order?.state === "delivered";

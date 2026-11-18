@@ -52,6 +52,7 @@ import { OrdersToCheck } from "./pages/orders-board";
 import { OrgPage } from "./pages/org";
 import { OrgChartPage } from "./pages/org-chart";
 import { OwedReport } from "./pages/owed";
+import { CollectPage } from "./pages/collect";
 import { PayRatesPage, PayrollMonthPage, PayrollPage } from "./pages/payroll";
 import { PointsAccountPage, PointsPage } from "./pages/points";
 import { Purchase } from "./pages/purchase";
@@ -211,6 +212,7 @@ createRoot(root).render(
             <Route path="invoices/:id" element={<Invoice />} />
             <Route path="payments" element={<Payments />} />
             <Route path="owed" element={<OwedReport />} />
+            <Route path="collect" element={<CollectPage />} />
             <Route path="refunds" element={<Refunds />} />
             <Route path="finance/mine" element={<MyConfirmations />} />
             <Route path="returns" element={<Returns />} />

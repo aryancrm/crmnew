@@ -142,7 +142,9 @@ describe("the rules", () => {
       }),
     ).toBe("payment");
     expect(roadStepOf({ ...base, lost: true })).toBe("lost");
-    expect(papersFor("pwd", false)).toEqual(["pwd_id", "pwd_booklet"]);
+    // Senior citizens and PWDs: one road, one ID (either card) since 18 Nov.
+    expect(papersFor("pwd", false)).toEqual(["osca_id"]);
+    expect(papersFor("senior", true)).toEqual(["rx", "osca_id"]);
     expect(deskStepOf("verify")).toBe("papers");
   });
 });
@@ -257,7 +259,7 @@ describe("the other roads", () => {
     await file("jane", id, "rx");
     let now = await lead("jane", id);
     expect(now.step.value).toBe("papers");
-    expect(now.next).toBe("Add the senior citizen (OSCA) ID");
+    expect(now.next).toBe("Add the senior citizen or PWD ID");
     expect(now.quote.relief).not.toBeNull();
     await file("jane", id, "osca_id");
     now = await lead("jane", id);
@@ -273,6 +275,23 @@ describe("the other roads", () => {
       reliefPrice(medicine.price, medicine.vat as "vat12" | "exempt"),
     );
     expect(order.findings.map((finding) => finding.kind)).not.toContain("price");
+    expect(order.order.relief?.kind).toBe("senior");
+  });
+
+  it("a PWD walks the same road with their PWD ID, and the order says PWD", async () => {
+    const id = await addLead({ name: "Mang Tonyo", road: "senior", phone: "0918 444 5555" });
+    await post("jane", `/api/leads/${id}/quote`, { lines: [{ medicineId: medicine.id, qty: 2 }] });
+    await file("jane", id, "rx");
+    await file("jane", id, "pwd_id");
+    const now = await lead("jane", id);
+    expect(now.step.value).toBe("ready");
+    const slot = now.papers.find((paper) => paper.kind === "osca_id");
+    expect(slot).toMatchObject({ label: "Senior citizen or PWD ID", needed: true });
+    expect(slot?.files).toHaveLength(1);
+    expect(now.papers.some((paper) => paper.kind === "pwd_id")).toBe(false);
+    const placed = await post("jane", `/api/leads/${id}/order`, { pay: "cod" });
+    const orderId = ((await placed.json()) as { id: number }).id;
+    expect((await read<OrderDetail>("sarla", `/api/orders/${orderId}`)).order.relief?.kind).toBe("pwd");
   });
 
   it("a guarantee letter walks the application and the letter, and the agency is billed", async () => {
@@ -453,6 +472,12 @@ describe("the agent takes the case to Paid", () => {
 
     // The agent records the money; a MedRep can't.
     const invoiceId = now.order?.trail.invoice?.id as number;
+    // Delivered and unpaid: on Finance's Payments to collect, due now.
+    const owed = await read<{ rows: { invoiceId: number; state: string; deliveredOn: string | null }[] }>(
+      "fiona",
+      "/api/finance/owed/invoices",
+    );
+    expect(owed.rows.find((row) => row.invoiceId === invoiceId)).toMatchObject({ state: "due" });
     expect(
       (
         await post("ryan", `/api/invoices/${invoiceId}/payments`, {
@@ -483,6 +508,16 @@ describe("the agent takes the case to Paid", () => {
       }),
     ]);
     expect(now.can.pay).toBe(false);
+    // Paid in full: Collected, with who marked it.
+    const collected = await read<{ rows: { invoiceId: number; by: string; terms: string; delivered: boolean }[] }>(
+      "fiona",
+      "/api/finance/collected",
+    );
+    expect(collected.rows.find((row) => row.invoiceId === invoiceId)).toMatchObject({
+      by: "Jane",
+      terms: "COD",
+      delivered: true,
+    });
   });
 
   it("keeps the agent off a MedRep's order", async () => {

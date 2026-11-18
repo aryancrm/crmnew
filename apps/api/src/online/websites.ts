@@ -1021,7 +1021,9 @@ function wantedFor(order: {
   if (order.status === "cancelled") return "cancelled";
   if (order.status === "completed") return "delivered";
   if (order.status === "shipped") return "shipped";
-  if (order.status === "ready_for_dispatch" || order.status === "packing") return "confirmed";
+  // Confirmed once Management approves it, like the customer's own email (18 Nov).
+  if (["finance_check", "ready_for_invoice", "ready_for_dispatch", "packing"].includes(order.status))
+    return "confirmed";
   return null;
 }
 

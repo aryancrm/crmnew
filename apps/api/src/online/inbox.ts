@@ -206,7 +206,7 @@ export async function fileChatPhoto(
       );
     await tx.execute(sql`update lead_file set kind = ${kind} where id = ${fileId}`);
     await tx.execute(
-      sql`insert into lead_event (lead_id, kind, message, by_person) values (${file.leadId}, 'paper', ${`${PAPER_LABEL[kind as LeadPaperKind]} filed from the chat (${file.name}).`}, ${me.id})`,
+      sql`insert into lead_event (lead_id, kind, message, by_person) values (${file.leadId}, 'paper', ${`Filed as ${PAPER_LABEL[kind as LeadPaperKind]}: ${file.name}.`}, ${me.id})`,
     );
     await tx.execute(sql`update lead set last_activity_at = now() where id = ${file.leadId}`);
   });

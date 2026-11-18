@@ -303,6 +303,7 @@ const financeApp: Space = {
     {
       items: [
         { to: "/finance", label: "Orders to check", icon: ClipboardCheck, badge: "finance" },
+        { to: "/collect", label: "Payments to collect", icon: Wallet },
         ...moneyLinks,
       ],
     },
@@ -1118,6 +1119,8 @@ function ownDesk(me: Me): Space {
           {
             items: [
               { to: "/", label: "Orders to check", icon: ClipboardCheck, badge: "finance" },
+              // The money that comes later (cash on delivery, credit): marked paid here (18 Nov).
+              { to: "/collect", label: "Payments to collect", icon: Wallet },
               { to: "/orders", label: "All orders", icon: ClipboardList },
               { to: "/finance/mine", label: "My confirmations", icon: CheckCheck },
               folder("Money", Banknote, moneyLinks, "Money"),

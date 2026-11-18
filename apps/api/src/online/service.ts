@@ -50,6 +50,7 @@ import {
   nextOf,
   PAPER_KINDS,
   PAPER_LABEL,
+  discountRoad,
   papersFor,
   queuesOf,
   quoteTotals,
@@ -722,16 +723,19 @@ export async function leadCase(db: Database, me: Me, id: number): Promise<LeadCa
   const step = roadStepOf(facts);
   const { steps, index, words } = stepsOf(row.road, step);
   const needed = papersFor(row.road, facts.rxNeeded);
-  const papers = PAPER_KINDS.filter((kind) => kind !== "other" && kind !== "unsorted").map(
-    (kind) => ({
-      kind,
-      label: PAPER_LABEL[kind],
-      needed: needed.includes(kind),
-      files: files
-        .filter((file) => file.kind === kind)
-        .map((file) => ({ ...file, kindLabel: PAPER_LABEL[file.kind] })),
-    }),
-  );
+  // Senior / PWD is one road with one ID (18 Nov): its slot holds either card, each file saying
+  // which it is; the PWD ID's own slot is left out there.
+  const oneId = discountRoad(row.road);
+  const papers = PAPER_KINDS.filter(
+    (kind) => kind !== "other" && kind !== "unsorted" && !(oneId && kind === "pwd_id"),
+  ).map((kind) => ({
+    kind,
+    label: oneId && kind === "osca_id" ? "Senior citizen or PWD ID" : PAPER_LABEL[kind],
+    needed: needed.includes(kind),
+    files: files
+      .filter((file) => file.kind === kind || (oneId && kind === "osca_id" && file.kind === "pwd_id"))
+      .map((file) => ({ ...file, kindLabel: PAPER_LABEL[file.kind] })),
+  }));
   const quoted = quotedFor(row);
   const totals = quoteTotals(row.quoteLines, row.road);
   const liveOrder = row.orderStatus && row.orderStatus !== "cancelled";
@@ -1042,8 +1046,8 @@ export async function saveLead(db: Database, me: Me, id: number, input: LeadInpu
     );
     const roadWords = {
       regular: "Regular",
-      senior: "Senior citizen",
-      pwd: "PWD",
+      senior: "Senior citizen / PWD",
+      pwd: "Senior citizen / PWD",
       gl: "Guarantee letter",
     };
     await note(
@@ -1555,7 +1559,20 @@ export async function orderFromLead(
   const customerId = await patientOf(db, me, id);
   // A senior's or PWD's case: the order works the relief out on every line (the law's 20% and no
   // VAT, or a lower quoted price or promo without VAT, never both); their ID is on the case's papers.
-  const relief = row.road === "senior" || row.road === "pwd" ? { kind: row.road } : null;
+  // Which discount it is comes from the ID on file (one road since 18 Nov): a PWD ID → PWD.
+  const ids = discountRoad(row.road)
+    ? await rows<{ kind: string }>(
+        db,
+        sql`select distinct kind from lead_file where lead_id = ${id} and active and kind in ('osca_id', 'pwd_id')`,
+      )
+    : [];
+  const reliefKind =
+    ids.some((file) => file.kind === "pwd_id") && !ids.some((file) => file.kind === "osca_id")
+      ? "pwd"
+      : ids.length
+        ? "senior"
+        : row.road;
+  const relief = discountRoad(row.road) ? { kind: reliefKind as "senior" | "pwd" } : null;
   return placeOrder(
     db,
     me,

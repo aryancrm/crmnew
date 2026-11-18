@@ -50,7 +50,7 @@ export const ROAD_STEP_DATA: Record<Road, RoadStepData[]> = {
   discount: [
     ...OPENING,
     { value: "quoted", label: "Quoted", hint: "the buyer decides, the discount counted" },
-    { value: "papers", label: "ID + booklet", hint: "OSCA / PWD ID approved" },
+    { value: "papers", label: "Senior / PWD ID", hint: "Senior citizen or PWD ID on file" },
     { value: "ready", label: "Ready", hint: "20% off + no VAT — place the order" },
     { value: "ordered", label: "Ordered", hint: "release and deliver" },
     ...AFTER_DELIVERY,
@@ -322,7 +322,8 @@ export function journeyStops({ lead, rx, gl, order, approved }: JourneyFacts): J
   const glState = gl ? String(gl.state) : "";
   const glDone = LETTER_IN.includes(glState);
   const oState = order ? String(order.state) : null;
-  const docsApproved = kinds.has(lead.assistance === "pwd" ? "pwd_id" : "osca_id");
+  // One ID for senior citizens and PWDs (18 Nov): either card.
+  const docsApproved = kinds.has("osca_id") || kinds.has("pwd_id");
   const delivered = oState === "delivered";
   // Packing is optional: an order shipped or delivered without the step went out packed.
   const packed =
@@ -351,7 +352,7 @@ export function journeyStops({ lead, rx, gl, order, approved }: JourneyFacts): J
     stop("apply", gl ? "Applied" : "Application", road === "gl" && Boolean(gl), road === "gl"),
     stop(
       "docs",
-      `${lead.assistance === "pwd" ? "PWD ID" : "Senior ID"}${rxNotNeeded ? "" : " & Rx"}`,
+      `Senior / PWD ID${rxNotNeeded ? "" : " & Rx"}`,
       road === "discount" && docsApproved && rxDone,
       road === "discount",
     ),
