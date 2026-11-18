@@ -5,10 +5,12 @@
 
 import type { BookAccountDetail, BookAccountList, BookAccountRow, BookKind, Banking } from "@2mg/api/types";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Landmark, Wallet, CreditCard } from "lucide-react";
+import { ChevronLeft, ChevronRight, Landmark, Plus, Wallet, CreditCard } from "lucide-react";
+import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { kindInfo, zDate, zMoney } from "./kinds";
+import { AccountActiveButton, NewAccountBox, useMayLedger } from "./ledger";
 
 /** This CRM's own documents on an account (its invoices, payments… posted by themselves). */
 const CRM_KIND: Record<string, string> = {
@@ -58,10 +60,12 @@ function ChartOfAccounts() {
     placeholderData: keepPreviousData,
   });
   const data = query.data;
+  const mayLedger = useMayLedger();
+  const [adding, setAdding] = useState(false);
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-[60px] shrink-0 items-center gap-3 border-b border-[#ebeaf2] px-5">
-        <label className="flex items-center gap-2">
+        <label className="mr-auto flex items-center gap-2">
           <span className="sr-only">View</span>
           <select
             value={view}
@@ -75,8 +79,14 @@ function ChartOfAccounts() {
             ))}
           </select>
         </label>
+        {mayLedger && (
+          <button type="button" onClick={() => setAdding(true)} className="flex h-[32px] items-center gap-1 rounded-[5px] bg-[#408dfb] px-2.5 text-white hover:bg-[#2f7ef0]">
+            <Plus size={15} aria-hidden="true" /> New
+          </button>
+        )}
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
+        {adding && <NewAccountBox onDone={() => setAdding(false)} />}
         <table className="w-full min-w-[720px] border-collapse">
           <thead className="sticky top-0 z-10 bg-white">
             <tr className="border-b border-[#ebeaf2] text-[11px] text-[#6c718a] uppercase">
@@ -127,6 +137,7 @@ function AccountPage({ id }: { id: number }) {
     placeholderData: keepPreviousData,
   });
   const a = query.data;
+  const mayLedger = useMayLedger();
   if (!a) return <p className="p-6 text-[#6c718a]">{query.isError ? query.error.message : "Loading…"}</p>;
   const last = Math.max(1, Math.ceil(a.total / a.perPage));
   return (
@@ -136,9 +147,12 @@ function AccountPage({ id }: { id: number }) {
           <div className="text-[12px] text-[#6c718a]">{typeLabel(a.type)}</div>
           <h1 className="text-[20px] font-medium text-[#212529]">{a.name}</h1>
         </div>
+        <div className="flex items-center gap-3">
+        {mayLedger && <AccountActiveButton id={a.id} active={a.active} />}
         <Link to={["bank", "cash", "credit_card", "payment_clearing"].includes(a.type) ? "/books/banking" : "/books/accounts"} className="text-[#1c5bd9]">
           ← {["bank", "cash", "credit_card", "payment_clearing"].includes(a.type) ? "Banking" : "Chart of Accounts"}
         </Link>
+        </div>
       </div>
       <div className="space-y-5 p-5">
         <div className="flex flex-wrap gap-8">

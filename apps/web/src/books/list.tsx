@@ -11,6 +11,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { api } from "../api";
 import { DocView } from "./doc";
 import { useMay } from "./forms";
+import { useMayLedger } from "./ledger";
 import { type Column, type KindInfo, kindByPath, statusClass, statusText, viewLabel, zDate, zMoney, zQty } from "./kinds";
 
 /** Why "+ New" is not offered on a list. */
@@ -365,13 +366,15 @@ export function BookListPage() {
     }
     setParams(next);
   };
+  const mayLedger = useMayLedger();
   const columns = COLUMNS[info.kind] ?? [];
   const newTo =
     info.kind === "sales_order"
       ? "/orders/new"
       : (info.kind === "purchase_order" && may.order) ||
     (info.kind === "bill" && may.bill) ||
-    ((info.kind === "vendor_payment" || info.kind === "vendor_credit" || info.kind === "customer_payment") && may.pay)
+    ((info.kind === "vendor_payment" || info.kind === "vendor_credit" || info.kind === "customer_payment") && may.pay) ||
+    (["expense", "journal", "transfer_fund", "deposit", "credit_note"].includes(info.kind) && mayLedger)
         ? `/books/${info.path}/new`
         : null;
   const sort = params.get("sort") ?? "date";

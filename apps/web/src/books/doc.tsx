@@ -10,6 +10,7 @@ import { ChevronDown, ChevronRight, Printer, X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApplyToBills, Plain, useMay, VoidBox } from "./forms";
+import { PublishButton, RefundBox, useMayLedger } from "./ledger";
 import { api } from "../api";
 import { type KindInfo, kindInfo, statusClass, statusText, zDate, zMoney, zQty } from "./kinds";
 
@@ -361,7 +362,7 @@ export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onC
   const query = useQuery({ queryKey: ["books", info.kind, "doc", id], queryFn: () => api<BookDoc>(`/api/books/${info.kind}/${id}`) });
   const may = useMay();
   const navigate = useNavigate();
-  const [box, setBox] = useState<"apply" | "void" | "cancel" | null>(null);
+  const [box, setBox] = useState<"apply" | "void" | "cancel" | "refund" | null>(null);
   const doc = query.data;
   if (!doc) return <p className="p-6 text-[#6c718a]">{query.isError ? query.error.message : "Loading…"}</p>;
   const order = doc.kind === "purchase_order";
@@ -398,6 +399,7 @@ export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onC
       <div className="space-y-5 p-5">
         {box === "apply" && <ApplyToBills doc={doc} onDone={() => setBox(null)} />}
         {box === "void" && <VoidBox doc={doc} onDone={() => setBox(null)} />}
+        {box === "refund" && <RefundBox doc={doc} onDone={() => setBox(null)} />}
         {box === "cancel" && <CancelOrder doc={doc} onDone={() => setBox(null)} />}
         {doc.status === "void" && doc.fields && (
           <div className="mx-auto max-w-[820px] rounded-md bg-[#f7f7fe] px-4 py-2 text-[#6c718a]">This {info.one.toLowerCase()} is void.</div>
@@ -551,7 +553,8 @@ export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onC
 const TOOL = "flex items-center gap-1.5 rounded px-2.5 py-1 hover:bg-white";
 
 /** The toolbar's buttons for what can be done next with this document, by who may do it. */
-function Actions({ doc, may, onBox, go }: { doc: BookDoc; may: ReturnType<typeof useMay>; onBox: (box: "apply" | "void" | "cancel") => void; go: (to: string) => void }) {
+function Actions({ doc, may, onBox, go }: { doc: BookDoc; may: ReturnType<typeof useMay>; onBox: (box: "apply" | "void" | "cancel" | "refund") => void; go: (to: string) => void }) {
+  const mayLedger = useMayLedger();
   const queries = useQueryClient();
   const [busy, setBusy] = useState(false);
   const left = (what: "received" | "billed") => doc.lines.some((line) => (line.qty ?? 0) - (line.qtyDone.cancelled ?? 0) - (line.qtyDone[what] ?? 0) > 0);
@@ -630,10 +633,19 @@ function Actions({ doc, may, onBox, go }: { doc: BookDoc; may: ReturnType<typeof
         Apply to Bills
       </button>,
     );
+  if (doc.kind === "journal" && doc.status === "draft" && mayLedger) buttons.push(<PublishButton key="publish" doc={doc} className={TOOL} />);
+  if ((doc.kind === "credit_note" || doc.kind === "customer_payment") && !doc.crm && doc.balance > 0 && doc.status !== "void" && mayLedger)
+    buttons.push(
+      <button key="refund" type="button" className={TOOL} onClick={() => onBox("refund")}>
+        Refund
+      </button>,
+    );
   const voidable =
     doc.status !== "void" &&
     !doc.crm &&
-    ((doc.kind === "bill" && may.bill && doc.balance === doc.total) || (["vendor_payment", "vendor_credit", "customer_payment", "credit_note"].includes(doc.kind) && may.pay));
+    ((doc.kind === "bill" && may.bill && doc.balance === doc.total) ||
+      (["vendor_payment", "vendor_credit", "customer_payment"].includes(doc.kind) && may.pay) ||
+      (["credit_note", "expense", "journal", "transfer_fund", "deposit", "refund"].includes(doc.kind) && mayLedger));
   if (voidable)
     buttons.push(
       <button key="void" type="button" className={TOOL} onClick={() => onBox("void")}>

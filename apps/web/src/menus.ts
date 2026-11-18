@@ -11,6 +11,7 @@ import {
   BookOpenCheck,
   Landmark,
   ListTree,
+  Lock,
   Link2,
   Banknote,
   BarChart3,
@@ -287,6 +288,7 @@ const booksLinks: MenuItem[] = [
   { to: "/books/expenses", label: "Expenses", icon: Receipt },
   { to: "/books/journals", label: "Manual journals", icon: BookOpenCheck },
   { to: "/books/accounts", label: "Chart of accounts", icon: ListTree },
+  { to: "/books/locking", label: "Transaction locking", icon: Lock },
 ];
 
 const financeApp: Space = {

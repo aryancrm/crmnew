@@ -87,6 +87,7 @@ import { CustomersImportPage } from "./pages/customers-import";
 import { MySamplesPage, TeamSamplesPage } from "./pages/samples";
 import { ComplaintsPage } from "./pages/complaints";
 import { BillFromOrderPage, NewBillPage, NewPaymentPage, NewReceiptPage, NewPurchaseOrderPage, NewVendorCreditPage, NewVendorPage, ReceivePage } from "./books/forms";
+import { LockingPage, NewCreditNotePage, NewDepositPage, NewExpensePage, NewJournalPage, NewTransferPage } from "./books/ledger";
 import { CompanyPapersPage, TenderPage, TendersPage } from "./pages/tenders";
 import { ClidpListingsPage, ClidpTeamPage } from "./pages/clidp";
 import { RxDoctorsPage, RxFieldPage } from "./pages/rx";
@@ -130,6 +131,12 @@ createRoot(root).render(
             <Route path="paymentsmade/new" element={<NewPaymentPage />} />
             <Route path="paymentsreceived/new" element={<NewReceiptPage />} />
             <Route path="vendorcredits/new" element={<NewVendorCreditPage />} />
+            <Route path="expenses/new" element={<NewExpensePage />} />
+            <Route path="journals/new" element={<NewJournalPage />} />
+            <Route path="transfers/new" element={<NewTransferPage />} />
+            <Route path="deposits/new" element={<NewDepositPage />} />
+            <Route path="creditnotes/new" element={<NewCreditNotePage />} />
+            <Route path="locking" element={<LockingPage />} />
             <Route path="items" element={<ItemsPage />} />
             <Route path="items/:id" element={<ItemsPage />} />
             <Route path="pricelists" element={<PriceListsPage />} />

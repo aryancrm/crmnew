@@ -79,6 +79,7 @@ const GROUPS: NavGroup[] = [
       { label: "Manual Journals", to: "/books/journals" },
       { label: "Chart of Accounts", to: "/books/accounts" },
       { label: "Fixed Assets", to: "/books/fixedassets" },
+      { label: "Transaction Locking", to: "/books/locking" },
     ],
   },
   // The statements (docs/ERP-PLAN.md phase 1).
@@ -111,7 +112,7 @@ export function BooksShell() {
   const ledger = LEDGER_ROLES.includes(me.data.role);
   const groups = GROUPS.filter((group) => ledger || !group.ledger).map((group) => ({ ...group, items: group.items.filter((item) => ledger || !item.ledger) }));
   const listName =
-    segment === "vendors" ? "Vendors" : segment === "customers" ? "Customers" : segment === "items" ? "Items" : segment === "accounts" ? "Chart of Accounts" : segment === "banking" ? "Banking" : segment === "reports" ? "Reports" : (kindByPath(segment)?.plural ?? "Purchases");
+    segment === "vendors" ? "Vendors" : segment === "customers" ? "Customers" : segment === "items" ? "Items" : segment === "accounts" ? "Chart of Accounts" : segment === "locking" ? "Transaction Locking" : segment === "banking" ? "Banking" : segment === "reports" ? "Reports" : (kindByPath(segment)?.plural ?? "Purchases");
   return (
     <div className="flex h-dvh overflow-hidden bg-white font-sans text-[13px] leading-[1.6] text-black">
       <nav aria-label="Books menu" className="flex w-[220px] shrink-0 flex-col overflow-y-auto bg-[#21263c] pb-4 text-[#f0f0f0] print:hidden">
