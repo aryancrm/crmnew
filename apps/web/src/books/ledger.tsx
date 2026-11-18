@@ -931,3 +931,79 @@ export function AccountActiveButton({ id, active }: { id: number; active: boolea
     </button>
   );
 }
+
+// ------------------------------------------------------------------ a recurring profile
+
+/** On a recurring expense or bill: run it here from a day (stop it in Zoho the same day), stop or
+ *  start it, and what it made here. */
+export function RecurringPanel({ doc }: { doc: BookDoc }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const mayLedger = useMayLedger();
+  const [from, setFrom] = useState("");
+  const made = useQuery({
+    queryKey: ["books", "recurring", doc.id],
+    queryFn: () => api<{ id: number; number: string; date: string; total: number; status: string }[]>(`/api/books-recurring/${doc.id}/made`),
+    enabled: mayLedger,
+  }).data;
+  if (!mayLedger) return null;
+  const crmFrom = (doc.fields["CRM From"] as string | undefined) ?? null;
+  const active = doc.status.toLowerCase() === "active";
+  const list = doc.kind === "recurring_expense" ? "expenses" : "bills";
+  return (
+    <div className="mx-auto max-w-[820px] rounded-md border border-[#ebeaf2] p-4">
+      <div className="font-medium">Made here</div>
+      <p className="text-[13px] text-[#6c718a]">
+        {crmFrom
+          ? `This profile's ${list} are made here from ${zDate(crmFrom)} (each day once).`
+          : "Zoho still makes this profile's documents. Pick the day this CRM takes over, and stop the profile in Zoho on the same day."}
+      </p>
+      {action.problem && <div className="mt-2 text-[#b91c1c]">{action.problem.message}</div>}
+      <div className="mt-2 flex flex-wrap items-end gap-2">
+        {!crmFrom && active && (
+          <>
+            <label>
+              From
+              <input type="date" className={ZIN} value={from} onChange={(event) => setFrom(event.target.value)} />
+            </label>
+            <Primary
+              disabled={action.busy || !from}
+              onClick={() =>
+                void action.run(async () => {
+                  await api(`/api/books/${doc.kind}/${doc.id}/take-over`, { body: { from } });
+                  await queries.invalidateQueries({ queryKey: ["books"] });
+                })
+              }
+            >
+              Run it here
+            </Primary>
+          </>
+        )}
+        <Plain
+          disabled={action.busy}
+          onClick={() =>
+            void action.run(async () => {
+              await api(`/api/books/${doc.kind}/${doc.id}/recurring`, { body: { active: !active } });
+              await queries.invalidateQueries({ queryKey: ["books"] });
+            })
+          }
+        >
+          {active ? "Stop" : "Resume"}
+        </Plain>
+      </div>
+      {!!made?.length && (
+        <ul className="mt-3 divide-y divide-[#ebeaf2] rounded-md border border-[#ebeaf2]">
+          {made.map((one) => (
+            <li key={one.id} className="flex justify-between px-3 py-1.5 text-[13px]">
+              <a className="text-[#1c5bd9]" href={`/books/${list}/${one.id}`}>
+                {one.number}
+              </a>
+              <span>{zDate(one.date)}</span>
+              <span>{zMoney(one.total)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}

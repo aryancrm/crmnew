@@ -12,6 +12,7 @@ import { addDays } from "../finance/rules";
 import { todayManila } from "../inventory/rules";
 import { seedDemo } from "../seed";
 import type { LedgerChoices } from "../types";
+import { dueDays, makeDueRecurring } from "./recurring";
 
 const PASSWORD = "test-password-1";
 const BANK = "BDO - 2MG 6722";
@@ -200,5 +201,35 @@ describe("writing the books", () => {
     await ok("fiona", `/api/books/accounts/${id}`, { active: false });
     const choices = await read<LedgerChoices>("fiona", "/api/books-ledger-choices");
     expect(choices.accounts.map((one) => one.name)).not.toContain("Seminars and Training");
+  });
+
+  it("a recurring expense makes its days only from when it is taken over, each day once", async () => {
+    expect(dueDays("2026-01-31", 1, "Months", "2026-04-30")).toEqual(["2026-01-31", "2026-02-28", "2026-03-31", "2026-04-30"]);
+    expect(dueDays("2026-01-01", 2, "Weeks", "2026-01-29")).toEqual(["2026-01-01", "2026-01-15", "2026-01-29"]);
+    await db.execute(sql`delete from book_lock`);
+    const start = addDays(today, -65);
+    const [profile] = await rows<{ id: number }>(
+      db,
+      sql`insert into book_doc (kind, number, doc_date, status, party_name, total, fields)
+        values ('recurring_expense', 'UNIT 9 RENT', ${start}::date, 'Active', 'Landlord', 1150000,
+          ${JSON.stringify({ "Recurrence Frequency": "Months", "Repeat Every": "1", "Paid Through": BANK, "Is Inclusive Tax": "false", "Expense Account": "Office Rent", "CF.Cost Centre": "GetMEDS0001", "CF.Type": "Rental" })}::jsonb)
+        returning id::int as id`,
+    );
+    const id = profile?.id as number;
+    await db.execute(sql`insert into book_line (doc_id, n, account, amount) values (${id}, 1, 'Office Rent', 1150000)`);
+    // Not taken over: Zoho still makes them.
+    expect(await makeDueRecurring(db, today)).toBe(0);
+    const taken = await ok<{ made: number }>("fiona", `/api/books/recurring_expense/${id}/take-over`, { from: addDays(today, -40) });
+    const expected = dueDays(start, 1, "Months", today).filter((on) => on >= addDays(today, -40)).length;
+    expect(taken.made).toBe(expected);
+    expect(await makeDueRecurring(db, today)).toBe(0);
+    const made = await rows<{ id: number }>(db, sql`select from_doc::int as id from book_link where to_doc = ${id}`);
+    expect(made.length).toBe(expected);
+    const list = await posted(made[0]?.id as number);
+    balanced(list);
+    expect(net(list, "Office Rent")).toBe(1_150_000);
+    expect(net(list, BANK)).toBe(-1_150_000);
+    await ok("fiona", `/api/books/recurring_expense/${id}/recurring`, { active: false });
+    expect(await makeDueRecurring(db, addDays(today, 70))).toBe(0);
   });
 });

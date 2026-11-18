@@ -21,6 +21,7 @@ import {
 } from "./actions";
 import { accountDetail, accountList, banking } from "./accounts";
 import { insight } from "./insights";
+import { recurringMade, setRecurringStatus, takeOverRecurring } from "./recurring";
 import {
   bookLocks,
   createAccount,
@@ -57,6 +58,7 @@ export function bookRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHan
   app.use("/api/books-ledger-choices", signedIn);
   app.use("/api/books-locks", signedIn);
   app.use("/api/books-locks/*", signedIn);
+  app.use("/api/books-recurring/*", signedIn);
   bookActionRoutes(app, db);
   app.get("/api/books/items", async (c) => c.json(await itemList(db, c.get("me"), listAsked((n) => c.req.query(n)))));
   app.get("/api/books/items/:id", async (c) => c.json(await itemDetail(db, c.get("me"), Number(c.req.param("id")))));
@@ -350,6 +352,14 @@ export function bookActionRoutes(app: Hono<Env>, db: Database): void {
     await updateAccount(db, me(c), Number(c.req.param("id")), await readBody(c, accountBody.partial().extend({ active: z.boolean().optional() })));
     return c.json({ ok: true });
   });
+  app.post("/api/books/:kind/:id/take-over", async (c) =>
+    c.json(await takeOverRecurring(db, me(c), Number(c.req.param("id")), await readBody(c, z.object({ from: DAY })))),
+  );
+  app.post("/api/books/:kind/:id/recurring", async (c) => {
+    await setRecurringStatus(db, me(c), Number(c.req.param("id")), await readBody(c, z.object({ active: z.boolean() })));
+    return c.json({ ok: true });
+  });
+  app.get("/api/books-recurring/:id/made", async (c) => c.json(await recurringMade(db, me(c), Number(c.req.param("id")))));
   app.get("/api/books-locks", async (c) => c.json(await bookLocks(db, me(c))));
   app.post("/api/books-locks/:module", async (c) => {
     await setLock(db, me(c), c.req.param("module"), await readBody(c, z.object({ lockDate: DAY, reason: TEXT(300) })));

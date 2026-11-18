@@ -13,6 +13,7 @@
 // - Each morning from 8: the CEO's summary of yesterday (sold, collected, owed, stuck, to decide).
 
 import { type SQL, sql } from "drizzle-orm";
+import { makeDueRecurring } from "../books/recurring";
 import { type Database, rows } from "../db/index";
 import { todayManila } from "../inventory/rules";
 import { notify, peopleIn } from "../notify/service";
@@ -176,5 +177,7 @@ export async function runAutomations(db: Database, now = new Date()): Promise<Re
     expiring: weekday === 1 ? await expiringStock(db, day, monday) : 0,
     samples: await samplesToCount(db, day),
     morning: await ceoMorning(db, day, hour),
+    // Recurring expenses and bills taken over from Zoho (docs/BOOKS-PLAN.md B8).
+    recurring: await makeDueRecurring(db, day),
   };
 }

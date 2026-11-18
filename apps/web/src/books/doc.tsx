@@ -10,7 +10,7 @@ import { ChevronDown, ChevronRight, Printer, X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApplyToBills, Plain, useMay, VoidBox } from "./forms";
-import { PublishButton, RefundBox, useMayLedger } from "./ledger";
+import { PublishButton, RecurringPanel, RefundBox, useMayLedger } from "./ledger";
 import { api } from "../api";
 import { type KindInfo, kindInfo, statusClass, statusText, zDate, zMoney, zQty } from "./kinds";
 
@@ -400,6 +400,7 @@ export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onC
         {box === "apply" && <ApplyToBills doc={doc} onDone={() => setBox(null)} />}
         {box === "void" && <VoidBox doc={doc} onDone={() => setBox(null)} />}
         {box === "refund" && <RefundBox doc={doc} onDone={() => setBox(null)} />}
+        {(doc.kind === "recurring_expense" || doc.kind === "recurring_bill") && <RecurringPanel doc={doc} />}
         {box === "cancel" && <CancelOrder doc={doc} onDone={() => setBox(null)} />}
         {doc.status === "void" && doc.fields && (
           <div className="mx-auto max-w-[820px] rounded-md bg-[#f7f7fe] px-4 py-2 text-[#6c718a]">This {info.one.toLowerCase()} is void.</div>
