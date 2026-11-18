@@ -201,3 +201,5 @@ select.field {
 .org-row > .org-col:only-child::before { display: none; }
 .org-row > .org-col::after { content: ""; position: absolute; top: -1rem; left: 50%; height: 1rem; border-left: 2px solid var(--org-line, #cbd5e1); }
 .org-stem { width: 0; height: 0.75rem; border-left: 2px solid var(--org-line, #cbd5e1); margin: 0 auto; }
+/* The whole team's tree: each part keeps its own width (the pop-up scrolls sideways). */
+.org-tree .org-row > .org-col { flex: 0 0 auto; padding: 0 0.4rem; }

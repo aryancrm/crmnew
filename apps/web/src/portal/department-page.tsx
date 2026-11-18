@@ -42,7 +42,7 @@ import {
   Warehouse,
   Workflow,
 } from "lucide-react";
-import { type ComponentType, type CSSProperties, type ReactNode, useEffect, useState } from "react";
+import { type ComponentType, type CSSProperties, type ReactNode, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { Workspace } from "../workspaces";
 import { DEPARTMENTS, FLOW_ICONS, SEAT_DOES } from "./departments";
@@ -142,7 +142,7 @@ export function DepartmentPage({
       </button>
 
       {/* Who it is, with its picture. */}
-      <header className="relative px-1 py-2">
+      <header className={`${card} relative overflow-hidden px-6 py-5 sm:px-8`}>
         <div className="relative z-10 flex items-center gap-5 md:pr-72">
           <span className="grid size-[72px] shrink-0 place-items-center rounded-full shadow-[0_16px_30px_-14px_rgba(20,30,50,0.45)]" style={{ background: color }}>
             <span className="grid size-[52px] place-items-center rounded-full bg-white/95">
@@ -202,7 +202,7 @@ export function DepartmentPage({
             </ul>
           </section>
         )}
-        <section className="relative order-1 flex justify-center lg:order-2 lg:-mt-3" aria-label={`Sign in to ${workspace.label}`}>
+        <section className="relative order-1 flex justify-center lg:order-2" aria-label={`Sign in to ${workspace.label}`}>
           {/* A soft glow of the department's colour behind the sign-in: the page's focus. */}
           <span aria-hidden="true" className="pointer-events-none absolute inset-6 rounded-[2rem] opacity-30 blur-3xl" style={{ background: color }} />
           <div className="relative w-full max-w-sm">{signIn}</div>
@@ -278,6 +278,8 @@ function Picture({ color, TileIcon, first }: { color: string; TileIcon?: () => R
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 hidden w-80 md:block">
       <svg viewBox="0 0 320 140" className="absolute inset-0 h-full w-full" preserveAspectRatio="xMaxYMid slice">
+        <circle cx="250" cy="70" r="90" fill={color} fillOpacity=".08" />
+        <circle cx="300" cy="10" r="40" fill={color} fillOpacity=".06" />
         <path d="M0 120C80 100 140 40 320 30" stroke={color} strokeOpacity=".25" strokeWidth="2" fill="none" />
         <circle className="orbit-twinkle" cx="120" cy="36" r="7" fill={color} fillOpacity=".35" />
         <circle className="orbit-twinkle" style={{ animationDelay: "1.2s" }} cx="300" cy="118" r="4" fill={color} fillOpacity=".5" />
@@ -306,15 +308,19 @@ const peopleIn = (node: PortalTeamNode): number =>
 const teamsIn = (node: PortalTeamNode): number => node.children.reduce((sum, one) => sum + 1 + teamsIn(one), 0);
 
 /** The team as a chart, top-down: the head, then the teams (or seats) under it, then their people. */
-function OrgChart({ tree, workspace, color }: { tree: PortalTeamNode; workspace: Workspace; color: string }) {
-  // The department's own top: below the company, except on the CEO's page (the whole company).
+/** The department's own top of the chart: below the company, except on the CEO's page. */
+function deptRoot(tree: PortalTeamNode, workspace: Workspace): PortalTeamNode {
   let root: PortalTeamNode = tree;
-  if (workspace.key !== "ceo") {
-    while (root.children.length === 1 && !root.members.length && (root.unit === "The company" || !root.lead))
-      root = root.children[0] as PortalTeamNode;
-    if (root.unit === "The company")
-      root = { unit: workspace.label, kind: "department", lead: null, members: [], children: root.children };
-  }
+  if (workspace.key === "ceo") return root;
+  while (root.children.length === 1 && !root.members.length && (root.unit === "The company" || !root.lead))
+    root = root.children[0] as PortalTeamNode;
+  if (root.unit === "The company")
+    root = { unit: workspace.label, kind: "department", lead: null, members: [], children: root.children };
+  return root;
+}
+
+function OrgChart({ tree, workspace, color }: { tree: PortalTeamNode; workspace: Workspace; color: string }) {
+  const root = deptRoot(tree, workspace);
   const boxes = [
     ...root.members.map((one) => ({
       key: `m-${one.title}`,
@@ -438,6 +444,12 @@ function WholeTeam({
     document.addEventListener("keydown", close, true);
     return () => document.removeEventListener("keydown", close, true);
   }, [onClose]);
+  // Opens on the head of the tree, in the middle.
+  const scroller = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const box = scroller.current;
+    if (box) box.scrollLeft = (box.scrollWidth - box.clientWidth) / 2;
+  }, []);
   const kinds = new Set<string>();
   const walk = (one: PortalTeamNode) => {
     if (one.lead) kinds.add(one.lead.module);
@@ -452,7 +464,7 @@ function WholeTeam({
         role="dialog"
         aria-modal="true"
         aria-label={`${workspace.label}: the whole team`}
-        className="relative flex max-h-[88dvh] w-full max-w-3xl flex-col rounded-[1.6rem] bg-white shadow-[0_50px_100px_-30px_rgba(20,30,50,0.6)]"
+        className="relative flex h-[90dvh] w-full max-w-6xl flex-col rounded-[1.6rem] bg-white shadow-[0_50px_100px_-30px_rgba(20,30,50,0.6)]"
       >
         <div className="flex items-center justify-between gap-3 border-b border-[#eceef3] px-6 py-4">
           <div>
@@ -465,8 +477,10 @@ function WholeTeam({
             <X className="size-4" />
           </button>
         </div>
-        <div className="overflow-y-auto px-6 py-4">
-          <Branch node={tree} color={color} root />
+        <div ref={scroller} className="flex-1 overflow-auto px-6 py-5">
+          <div className="org-tree mx-auto w-max min-w-full">
+            <TreeNode node={deptRoot(tree, workspace)} color={color} top />
+          </div>
           <dl className="mt-5 grid gap-1.5 border-t border-[#eceef3] pt-4 text-[13px] sm:grid-cols-2">
             {[...kinds].map((module) => SEAT_DOES[module]).filter(Boolean).map((one) => (
               <div key={one?.name} className="flex gap-2">
@@ -481,33 +495,71 @@ function WholeTeam({
   );
 }
 
-function Branch({ node, color, root = false }: { node: PortalTeamNode; color: string; root?: boolean }) {
+/** One person (a seat) on the tree with the people under them hanging below: the head on top,
+ *  the teams under them side by side, and so on down (Aryan, 18 Nov: "a proper tree"). */
+function TreeNode({ node, color, top = false }: { node: PortalTeamNode; color: string; top?: boolean }) {
+  const title = node.lead ? node.lead.title : node.unit;
+  const sub = node.lead ? node.unit : node.children.length ? "Team" : "Seats";
   return (
-    <div className={root ? "" : "relative mt-2.5 border-l-2 pl-4"} style={root ? undefined : { borderColor: `${color}40` }}>
-      {!root && <span aria-hidden="true" className="absolute top-3.5 left-0 h-0.5 w-3" style={{ background: `${color}66` }} />}
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="text-[14px] font-semibold text-[#1f2733]">{node.unit}</span>
-        {node.lead && (
-          <span className="rounded-full px-2 py-0.5 text-[11px] font-semibold text-white" style={{ background: color }}>
-            Head · {node.lead.title}
-            {node.lead.filled ? "" : " (open)"}
+    <div className="flex flex-col items-center">
+      <div
+        className={`w-48 rounded-xl border px-3 py-2 text-left shadow-[0_8px_18px_-14px_rgba(20,30,50,0.4)] ${top ? "border-transparent text-white" : "border-[#e3e6ee] bg-white"}`}
+        style={top ? { background: color } : undefined}
+      >
+        <div className="flex items-center gap-2">
+          <span className={`grid size-7 shrink-0 place-items-center rounded-full ${top ? "bg-white/25" : ""}`} style={top ? undefined : { background: `${color}22` }}>
+            <UserRound className="size-3.5" style={{ color: top ? "#fff" : color }} aria-hidden="true" />
           </span>
+          <span className="min-w-0">
+            <span className="block truncate text-[12px] font-semibold" title={title}>
+              {title}
+              {node.lead && !node.lead.filled ? " (open)" : ""}
+            </span>
+            <span className={`block truncate text-[10px] ${top ? "text-white/85" : "text-[#7a8394]"}`} title={sub}>
+              {sub}
+            </span>
+          </span>
+        </div>
+        {node.members.length > 0 && (
+          <div className={`mt-1.5 border-t pt-1 ${top ? "border-white/30" : "border-[#eef0f4]"}`}>
+            {node.members.slice(0, 3).map((one) => (
+              <div key={one.title} className={`flex items-center gap-1 truncate text-[10px] ${top ? "text-white" : "text-[#3c4452]"}`} title={one.title}>
+                <Users className="size-3 shrink-0" aria-hidden="true" />
+                <span className="truncate">
+                  {one.title}
+                  {one.seats > 1 ? ` × ${one.seats}` : ""}
+                </span>
+              </div>
+            ))}
+            {node.members.length > 3 && <div className="text-[10px] opacity-70">and {node.members.length - 3} more</div>}
+          </div>
         )}
       </div>
-      {node.members.length > 0 && (
-        <div className="mt-1 flex flex-wrap gap-1">
-          {node.members.map((one) => (
-            <span key={one.title} className="rounded-full border border-[#e3e6ee] bg-[#fafbfd] px-2 py-0.5 text-[12px] text-[#3c4452]">
-              {one.title}
-              {one.seats > 1 ? ` × ${one.seats}` : ""}
-              {one.people < one.seats ? <span className="text-[#c2410c]"> · {one.seats - one.people} open</span> : null}
-            </span>
-          ))}
-        </div>
+      {/* Many teams with nobody under them: one column under their head, not a long row. */}
+      {node.children.length > 3 && node.children.every((child) => !child.children.length) ? (
+        <>
+          <div className="org-stem" />
+          <div className="relative flex flex-col gap-2 border-l-2 pl-3" style={{ borderColor: "var(--org-line)" }}>
+            {node.children.map((child) => (
+              <div key={child.unit} className="relative">
+                <span aria-hidden="true" className="absolute top-5 -left-3 h-0.5 w-3" style={{ background: "var(--org-line)" }} />
+                <TreeNode node={child} color={color} />
+              </div>
+            ))}
+          </div>
+        </>
+      ) : node.children.length > 0 && (
+        <>
+          <div className="org-stem" />
+          <div className="org-row">
+            {node.children.map((child) => (
+              <div key={child.unit} className="org-col">
+                <TreeNode node={child} color={color} />
+              </div>
+            ))}
+          </div>
+        </>
       )}
-      {node.children.map((child) => (
-        <Branch key={child.unit} node={child} color={color} />
-      ))}
     </div>
   );
 }
