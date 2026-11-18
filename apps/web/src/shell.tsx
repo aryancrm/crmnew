@@ -23,11 +23,13 @@ import {
   Menu,
   Plus,
   Search,
+  UsersRound,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
 import { initials, onlineDesk, useMe } from "./auth";
+import { DeskPeople } from "./desk/people";
 import { LiveLocationSender } from "./field/live-sender";
 import { UndoConfirmBar } from "./finance/undo";
 import { MyDayButton } from "./hr/parts";
@@ -109,6 +111,23 @@ export function Shell() {
 
   const space = spaceFor(me.data, location.pathname);
   const flat = space.groups.flatMap((group) => group.items);
+  // Management's and Finance's own desk is one common screen for all its people.
+  const commonDesk =
+    space.key === "desk" && (me.data.role === "management" || me.data.role === "finance")
+      ? me.data.role
+      : null;
+  const menuBadges = {
+    ...(badges.data
+      ? {
+          ...badges.data.attention,
+          finance: badges.data.attention.toConfirm + badges.data.attention.toInvoice,
+          dispatch: badges.data.attention.toPack + badges.data.attention.toShip,
+          dispatchHeld: badges.data.attention.heldByDispatch,
+        }
+      : {}),
+    inbox: (chats.data?.needs ?? 0) + (chats.data?.held ?? 0),
+    messages: messages.data?.unread ?? 0,
+  } as Record<Badge, number>;
   const menu = (onPick?: () => void) => (
     <>
       <div className="flex items-center gap-2.5 px-4 pt-4 pb-3">
@@ -136,26 +155,15 @@ export function Shell() {
         </NavLink>
       )}
       <MenuList
-        groups={space.groups}
+        groups={commonDesk ? space.groups.slice(0, 1) : space.groups}
         onPick={onPick}
-        badges={
-          {
-            ...(badges.data
-              ? {
-                  ...badges.data.attention,
-                  finance: badges.data.attention.toConfirm + badges.data.attention.toInvoice,
-                  dispatch: badges.data.attention.toPack + badges.data.attention.toShip,
-                  dispatchHeld: badges.data.attention.heldByDispatch,
-                }
-              : {}),
-            inbox: (chats.data?.needs ?? 0) + (chats.data?.held ?? 0),
-            messages: messages.data?.unread ?? 0,
-          } as Record<Badge, number>
-        }
+        badges={menuBadges}
       />
+      {/* Management's and Finance's common screen: its people, each with Start (Aryan, 18 Nov). */}
+      {commonDesk && <DeskPeople desk={commonDesk} onPick={onPick} />}
+      {commonDesk && <MenuList groups={space.groups.slice(1)} onPick={onPick} badges={menuBadges} />}
     </>
   );
-
   const viewer = me.data?.viewedBy;
   return (
     <div className="flex min-h-dvh flex-col">
@@ -198,7 +206,12 @@ export function Shell() {
         {/* The person's working day: when it started, Start / End my day. */}
         <MyDayButton />
         <LiveLocationSender />
-        <Account name={me.data.name} role={me.data.roleLabel} />
+        {/* The common desk shows the desk, not the one person signed in on it (Aryan, 18 Nov). */}
+        <Account
+          name={commonDesk ? `${space.label} desk` : me.data.name}
+          role={commonDesk ? `Signed in as ${me.data.name}` : me.data.roleLabel}
+          desk={Boolean(commonDesk)}
+        />
       </header>
 
       <div className="flex min-w-0 flex-1">
@@ -739,7 +752,7 @@ function SearchBox() {
   );
 }
 
-function Account({ name, role }: { name: string; role: string }) {
+function Account({ name, role, desk = false }: { name: string; role: string; desk?: boolean }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -780,7 +793,7 @@ function Account({ name, role }: { name: string; role: string }) {
         aria-label={`${name}, ${role}`}
       >
         <span className="flex size-9 items-center justify-center rounded-full bg-sky-700 text-[13px] font-semibold text-white">
-          {initials(name)}
+          {desk ? <UsersRound size={17} aria-hidden="true" /> : initials(name)}
         </span>
         <ChevronDown size={15} className="hidden text-slate-400 sm:block" aria-hidden="true" />
       </button>

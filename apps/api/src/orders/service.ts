@@ -2901,6 +2901,9 @@ export async function handleOrder(
       await tx.execute(
         sql`update sales_order set manage_by = null, manage_by_at = null where id = ${orderId}`,
       );
+      await tx.execute(
+        sql`insert into order_assignment (order_id, desk, person_id, how, by_person) values (${orderId}, 'management', ${me.id}, 'released', ${me.id})`,
+      );
       await logEvent(
         tx,
         orderId,
@@ -2913,6 +2916,9 @@ export async function handleOrder(
     if (order.by === me.id) return;
     await tx.execute(
       sql`update sales_order set manage_by = ${me.id}, manage_by_at = now() where id = ${orderId}`,
+    );
+    await tx.execute(
+      sql`insert into order_assignment (order_id, desk, person_id, how, by_person) values (${orderId}, 'management', ${me.id}, 'took', ${me.id})`,
     );
     await logEvent(
       tx,

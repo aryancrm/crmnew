@@ -57,7 +57,7 @@ import { scoreRoutes } from "./scores/routes";
 import { sellerRoutes } from "./sellers/routes";
 import { targetRoutes } from "./targets/routes";
 import { teamRoutes } from "./team/routes";
-import { DUTY_DESKS, type DutyDesk, deskTeam, shareOut, shareOutAll, takeFinanceOrder } from "./desks/service";
+import { DUTY_DESKS, type DutyDesk, deskReport, deskStandIn, deskTeam, shareOut, shareOutAll, startPerson, takeFinanceOrder } from "./desks/service";
 import { portalDepartment } from "./portal/service";
 import type { ApiError, Me } from "./types";
 
@@ -116,7 +116,11 @@ export function createApp(db: Database, options: AppOptions) {
   );
 
   // Every signed-in request notes who is working (their day starts with the first one).
-  const signedIn = signedInWith(db, (me) => markSeen(db, me));
+  const signedIn = signedInWith(
+    db,
+    (me) => markSeen(db, me),
+    (me, method, path) => deskStandIn(db, me, method, path),
+  );
 
   app.get("/api/health", (c) => c.json({ ok: true }));
   // Management's and Finance's waiting orders, each given to one of the desk's people: after
@@ -136,6 +140,20 @@ export function createApp(db: Database, options: AppOptions) {
       return c.json(await deskTeam(db, c.get("me"), desk));
     }
     return c.json(team);
+  });
+  app.get("/api/desk/:desk/report", signedIn, async (c) =>
+    c.json(
+      await deskReport(db, c.get("me"), deskParam(c.req.param("desk")), {
+        from: c.req.query("from"),
+        to: c.req.query("to"),
+      }),
+    ),
+  );
+  app.post("/api/desk/:desk/people/:id/start", signedIn, async (c) => {
+    const input = await readBody(c, z.object({ on: z.boolean() }));
+    const desk = deskParam(c.req.param("desk"));
+    await startPerson(db, c.get("me"), desk, idParam(c), input.on);
+    return c.json(await deskTeam(db, c.get("me"), desk));
   });
   app.post("/api/finance/orders/:id/take", signedIn, async (c) => {
     const input = await readBody(c, z.object({ release: z.boolean().default(false) }));

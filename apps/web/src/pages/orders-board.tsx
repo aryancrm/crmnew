@@ -37,7 +37,6 @@ import {
 import { lazy, type ReactNode, Suspense, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
-import { DutyBar } from "../desk/duty-bar";
 import { useMe } from "../auth";
 import { DISPATCH_HOLDS, type DispatchAsk, DispatchDialogs } from "../dispatch/parts";
 import { ConfirmPaymentDialog, useMoney } from "../finance/parts";
@@ -289,7 +288,7 @@ export function OrdersToCheck({
       : defaultTab === "sent"
         ? "Sent back to MedReps"
         : embedded
-          ? "Waiting for you"
+          ? "Waiting for approval"
           : desk === "dispatch"
             ? "Warehouse: to pack and ship"
             : "Orders to check";
@@ -317,11 +316,11 @@ export function OrdersToCheck({
         </Suspense>
       </div>
     );
-  // Only one's own orders (the duty bar's "Mine"), at Management and Finance.
-  const mineOnly = params.get("who") === "mine" && !all && (desk === "management" || desk === "finance");
+  // One person's orders (a name pressed beside the common screen), at Management and Finance.
+  const whoId = !all && (desk === "management" || desk === "finance") ? Number(params.get("who")) || 0 : 0;
   const data = query.data
-    ? mineOnly
-      ? { ...query.data, cards: query.data.cards.filter((card) => card.handledById === me?.id) }
+    ? whoId
+      ? { ...query.data, cards: query.data.cards.filter((card) => card.handledById === whoId) }
       : query.data
     : undefined;
   if (!data) return <PageState query={query} what="the orders" />;
@@ -432,9 +431,6 @@ export function OrdersToCheck({
 
   return (
     <div className={embedded ? "" : "mx-auto max-w-screen-2xl"}>
-      {!all && (desk === "management" || desk === "finance") && (
-        <DutyBar desk={desk} mine={mineOnly} onMine={(value) => set({ who: value ? "mine" : "" })} />
-      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <h1
@@ -958,7 +954,7 @@ export function OrderCardItem({
                 <span className="flex items-center gap-1.5">
                   {card.handledById === me?.id ? (
                     <>
-                      <span className="font-semibold text-sky-700">You have it</span>
+                      <span className="max-w-[110px] truncate font-semibold text-sky-700">{card.handledBy}</span>
                       <button
                         type="button"
                         onClick={(event) => {

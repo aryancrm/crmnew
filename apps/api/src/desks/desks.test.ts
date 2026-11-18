@@ -5,7 +5,7 @@ import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { seedDemo } from "../seed";
-import type { DeskDuty } from "../types";
+import type { DeskDuty, DeskReport } from "../types";
 
 const PASSWORD = "test-password-1";
 let db: Database;
@@ -49,7 +49,7 @@ beforeAll(async () => {
 });
 
 describe("on duty at Management and Finance", () => {
-  it("gives each waiting order to one of the desk's people, fewest open first, someone on leave skipped", async () => {
+  it("shares the waiting orders among the people started on the common screen, in their names", async () => {
     const customer = (await (
       await post("sarla", "/api/customers", { kind: "hospital", name: "Duty Hospital", city: "Pasay" })
     ).json()) as { id: number };
@@ -66,35 +66,64 @@ describe("on duty at Management and Finance", () => {
       return ((await response.json()) as { id: number }).id;
     };
 
-    // Each new order is given to one of Management's people, whoever has the fewest open.
+    const idOf = async (name: string) =>
+      (await rows<{ id: number }>(db, sql`select id::int as id from person where name = ${name}`))[0]?.id as number;
+    const start = (who: string, person: string, desk: string, on = true) =>
+      idOf(person).then((id) => post(who, `/api/desk/${desk}/people/${id}/start`, { on }));
+
+    // Nobody started: the order waits for anyone, as before.
     const first = await place();
+    expect((await ownerOf(first))?.manage).toBeNull();
+    expect((await start("ryan", "Sarla", "management")).status).toBe(403);
+
+    // On the common screen Sarla and Kate press Start: the waiting orders are shared between them.
+    expect((await start("sarla", "Sarla", "management")).status).toBe(200);
+    expect((await start("sarla", "Kate", "management")).status).toBe(200);
     const second = await place();
-    const names = [(await ownerOf(first))?.manage, (await ownerOf(second))?.manage].sort();
-    expect(names).toEqual(["Kate", "Sarla"]);
-    let team = (await (await get("sarla", "/api/desk/management/team")).json()) as DeskDuty;
-    expect(team.mine).toBe(true);
-    expect(team.unassigned).toBe(0);
-    expect(team.people.map((one) => [one.name, one.open])).toEqual([["Kate", 1], ["Sarla", 1]]);
+    expect([(await ownerOf(first))?.manage, (await ownerOf(second))?.manage].sort()).toEqual(["Kate", "Sarla"]);
+    const team = (await (await get("sarla", "/api/desk/management/team")).json()) as DeskDuty;
+    expect(team.canStart).toBe(true);
+    expect(team.people.filter((one) => one.startedAt).map((one) => [one.name, one.open])).toEqual([["Kate", 1], ["Sarla", 1]]);
     expect((await get("ryan", "/api/desk/management/team")).status).toBe(403);
 
-    // Kate is on leave today: her order goes to Sarla at the next move.
-    const kateFirst = (await ownerOf(first))?.manage === "Kate" ? first : second;
-    await db.execute(
-      sql`insert into person_leave (person_id, kind, from_day, to_day, half_day, reason, status, made_by)
-        select id, 'vl', (now() at time zone 'Asia/Manila')::date, (now() at time zone 'Asia/Manila')::date, false, 'Test', 'approved', id
-        from person where name = 'Kate'`,
+    // Approved from the common screen (Sarla's account): written in the name of the order's person.
+    const kates = (await ownerOf(first))?.manage === "Kate" ? first : second;
+    const sarlas = kates === first ? second : first;
+    expect((await post("sarla", `/api/orders/${kates}/approve`)).status).toBe(200);
+    const [approved] = await rows<{ by: string }>(
+      db,
+      sql`select p.name as by from sales_order o join person p on p.id = o.approved_by where o.id = ${kates}`,
     );
-    const third = await place();
-    expect((await ownerOf(third))?.manage).toBe("Sarla");
-    expect((await ownerOf(kateFirst))?.manage).toBe("Sarla");
-    team = (await (await get("sarla", "/api/desk/management/team")).json()) as DeskDuty;
-    expect(team.people.find((one) => one.name === "Kate")?.away).toBe(true);
+    expect(approved?.by).toBe("Kate");
 
-    // Approved, it goes to Finance and is Fiona's there; she can let it go and take it back.
-    expect((await post("sarla", `/api/orders/${first}/approve`)).status).toBe(200);
-    expect((await ownerOf(first))?.finance).toBe("Fiona");
-    const timeline = await rows<{ message: string }>(db, sql`select message from order_event where order_id = ${first} order by at, id`);
+    // Kate stops: what she still had goes to Sarla; a new order goes to Sarla too.
+    const third = await place();
+    if ((await ownerOf(third))?.manage === "Kate") {
+      await start("sarla", "Kate", "management", false);
+      expect((await ownerOf(third))?.manage).toBe("Sarla");
+    } else await start("sarla", "Kate", "management", false);
+    expect((await ownerOf((await place()) as number))?.manage).toBe("Sarla");
+
+    // At Finance: Fiona starts, and the approved order is hers there.
+    expect((await start("fiona", "Fiona", "finance")).status).toBe(200);
+    expect((await ownerOf(kates))?.finance).toBe("Fiona");
+    expect((await post("sarla", `/api/orders/${sarlas}/approve`)).status).toBe(200);
+    expect((await ownerOf(sarlas))?.finance).toBe("Fiona");
+    const timeline = await rows<{ message: string }>(db, sql`select message from order_event where order_id = ${kates} order by at, id`);
     expect(timeline.map((one) => one.message)).toEqual(expect.arrayContaining(["Given to Fiona (Finance)."]));
-    expect((await post("ryan", `/api/finance/orders/${first}/take`, {})).status).toBe(403);
+    expect((await post("ryan", `/api/finance/orders/${kates}/take`, {})).status).toBe(403);
+
+    // Each person's figures for today: given, done in their name, open now.
+    const report = (await (await get("sarla", "/api/desk/management/report")).json()) as DeskReport;
+    const kate = report.people.find((one) => one.name === "Kate");
+    const sarla = report.people.find((one) => one.name === "Sarla");
+    expect(kate).toMatchObject({ done: 1, given: expect.any(Number) });
+    expect((kate?.given ?? 0) + (sarla?.given ?? 0)).toBeGreaterThanOrEqual(3);
+    expect(sarla?.done).toBe(1);
+    expect(kate?.open).toBe(0);
+    expect(typeof kate?.hours).toBe("number");
+    expect((await get("ryan", "/api/desk/management/report")).status).toBe(403);
+    const finance = (await (await get("fiona", "/api/desk/finance/report")).json()) as DeskReport;
+    expect(finance.people.find((one) => one.name === "Fiona")?.given).toBeGreaterThanOrEqual(2);
   });
 });

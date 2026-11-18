@@ -11,7 +11,7 @@ import { api } from "../api";
 import { useMe } from "../auth";
 import { count, peso } from "../ui";
 import { Figure, type Period } from "./figures";
-import { greeting, todayWords } from "./home";
+import { todayWords } from "./home";
 import { OrdersToCheck } from "./orders-board";
 
 /** How long the oldest order has waited, in hours or days. */
@@ -53,67 +53,52 @@ export function ManagementHome() {
   const late = data?.oldestWaiting
     ? (Date.now() - Date.parse(data.oldestWaiting)) / 3_600_000 >= 4
     : false;
-  const share = data && data.target > 0 ? Math.round((data.sales / data.target) * 100) : null;
 
+  // One common screen for the whole of Management (Aryan, 18 Nov): the desk's name, not a person's;
+  // Management's own work only; the people beside it, each with their Start.
   return (
-    <div className="mx-auto max-w-screen-2xl space-y-4">
-      {/* Who and when. */}
-      <div>
-        <div className="text-xs text-slate-500">{todayWords()}</div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
-          {greeting()}, {me.name.split(" ")[0]}
-        </h1>
-        <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
-          <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium tracking-wide text-slate-600 uppercase">
-            Management
-          </span>
-          <span>2MG Inc.</span>
-          {data && data.waiting > 0 && (
-            <span className="text-slate-400">
-              · {count(data.waiting)} {data.waiting === 1 ? "order waits" : "orders wait"} for you
-            </span>
-          )}
+    <div className="mx-auto max-w-screen-2xl">
+      <div className="min-w-0 space-y-4">
+        <div>
+          <div className="text-xs text-slate-500">{todayWords()}</div>
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Management desk</h1>
+          <div className="mt-0.5 text-xs text-slate-500">
+            Every order to approve, shared automatically among the people started (left).
+          </div>
         </div>
-      </div>
 
-      {/* The four numbers asked most. */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Figure
-          label="Waiting for you"
-          value={data ? count(data.waiting) : "—"}
-          sub={data ? (oldest ? `oldest ${oldest}` : "nothing waiting") : undefined}
-          tone={late ? "warn" : undefined}
-          to="/#queue"
-        />
-        <Figure
-          label="Orders today"
-          value={data ? count(data.todayOrders) : "—"}
-          sub={data ? peso(data.todayValue) : undefined}
-          to="/orders"
-        />
-        <Figure
-          label="Orders this month"
-          value={data ? count(data.monthOrders) : "—"}
-          sub={data ? peso(data.monthValue) : undefined}
-          to="/orders"
-        />
-        <Figure
-          label="Sales this month"
-          value={data ? peso(data.sales) : "—"}
-          sub={
-            data
-              ? data.target > 0
-                ? `${share}% of ${peso(data.target)} target`
-                : "invoiced · no target set"
-              : undefined
-          }
-          to="/team"
-        />
-      </div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Figure
+            label="Waiting for approval"
+            value={data ? count(data.waiting) : "—"}
+            sub={data ? (oldest ? `oldest ${oldest}` : "nothing waiting") : undefined}
+            tone={late ? "warn" : undefined}
+            to="/#queue"
+          />
+          <Figure
+            label="On hold"
+            value={data ? count(data.onHold) : "—"}
+            sub="held with a reason"
+            to="/on-hold"
+          />
+          <Figure
+            label="Customers to check"
+            value={data ? count(data.toReview) : "—"}
+            sub="before their first order"
+            to="/customers?review=1"
+          />
+          <Figure
+            label="Orders today"
+            value={data ? count(data.todayOrders) : "—"}
+            sub={data ? peso(data.todayValue) : undefined}
+            to="/orders"
+          />
+        </div>
 
-      {/* The queue to approve, the cards across the whole width (Aryan: three or more a row). */}
-      <div id="queue" className="scroll-mt-20">
-        <OrdersToCheck embedded />
+        {/* The queue to approve, each card naming whose it is. */}
+        <div id="queue" className="scroll-mt-20">
+          <OrdersToCheck embedded />
+        </div>
       </div>
     </div>
   );

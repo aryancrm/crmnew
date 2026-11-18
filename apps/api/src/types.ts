@@ -5,15 +5,40 @@ import type { Role } from "./people/roles";
 export type { Role } from "./people/roles";
 
 /** The signed-in person, as every screen needs them. */
-/** Management's or Finance's team on its screen: each person (away on leave or not), what each has
- *  open and has done today, and what is waiting (and not given to anyone). */
+/** Management's or Finance's common screen: each of the desk's people, started today or not, what
+ *  each has open and has done today, and what is waiting (and not given to anyone started). */
 export type DeskDuty = {
   desk: "management" | "finance";
-  people: { id: number; name: string; away: boolean; open: number; doneToday: number }[];
-  /** The one looking works at this desk (the CEO and the Admin only look). */
-  mine: boolean;
+  people: { id: number; name: string; title: string | null; startedAt: string | null; open: number; doneToday: number }[];
+  /** May press Start / Stop here (the desk's accounts and the Admin; the CEO only looks). */
+  canStart: boolean;
   waiting: number;
   unassigned: number;
+};
+
+/** Each of the desk's people over some days: hours started, given and taken, what they did with
+ *  the orders they moved on, how long each took them (working minutes), late, open now. */
+export type DeskReport = {
+  desk: "management" | "finance";
+  from: string;
+  to: string;
+  /** The desk's limit in working minutes (Management 4 hours, Finance a working day). */
+  limitMinutes: number;
+  people: {
+    id: number;
+    name: string;
+    hours: number;
+    given: number;
+    took: number;
+    /** Approved (Management) or let go to Dispatch (Finance). */
+    done: number;
+    sentBack: number;
+    held: number;
+    rejected: number;
+    medianMinutes: number | null;
+    late: number;
+    open: number;
+  }[];
 };
 
 /** One unit of a department's team on the portal: its lead seat and its seats by title (no names). */

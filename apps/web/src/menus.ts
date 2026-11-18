@@ -727,7 +727,8 @@ function ownDesk(me: Me): Space {
       };
     }
     case "management":
-      // As designed on the canvas: its own work first, then what it looks things up in.
+      // One common screen for the whole of Management (Aryan, 18 Nov): the desk's work first (its
+      // people with their Start sit right under it in the menu), then what it looks things up in.
       return {
         key: "desk",
         label: me.roleLabel,
@@ -736,12 +737,11 @@ function ownDesk(me: Me): Space {
         groups: [
           {
             items: [
-              // Home is the queue to approve (the waiting count sits on it); what waits on
-              // others or is stopped has its own link.
-              { ...home, badge: "awaiting" },
-              // Aryan: All orders is the main list, right under Home.
-              { to: "/orders", label: "All orders", icon: ClipboardList, short: "Orders" },
-              // What stopped: one folder (Aryan) for the three lists.
+              // Home is the desk: every order to approve, each with its person's name.
+              { ...home, label: "Orders to approve", icon: ClipboardCheck, badge: "awaiting", short: "Approve" },
+              // Each person's figures: hours started, given, approved, time per order, late.
+              { to: "/desk/team", label: "Team figures", icon: BarChart3, short: "Team" },
+              // What stopped: one folder (Aryan) for the lists.
               folder(
                 "Stopped orders",
                 TriangleAlert,
@@ -767,6 +767,7 @@ function ownDesk(me: Me): Space {
           {
             title: "Look up",
             items: [
+              { to: "/orders", label: "All orders", icon: ClipboardList, short: "Orders" },
               stockLink,
               folder(
                 "Customers",
@@ -1117,12 +1118,13 @@ function ownDesk(me: Me): Space {
         tone: "bg-brand text-white",
         groups: [
           {
+            // One common screen for the whole of Finance, like Management's (Aryan, 18 Nov): the
+            // desk's work first (its people with their Start sit right under it in the menu).
             items: [
               { to: "/", label: "Orders to check", icon: ClipboardCheck, badge: "finance" },
+              { to: "/desk/team", label: "Team figures", icon: BarChart3, short: "Team" },
               // The money that comes later (cash on delivery, credit): marked paid here (18 Nov).
               { to: "/collect", label: "Payments to collect", icon: Wallet },
-              { to: "/orders", label: "All orders", icon: ClipboardList },
-              { to: "/finance/mine", label: "My confirmations", icon: CheckCheck },
               folder("Money", Banknote, moneyLinks, "Money"),
               folder("Books", Landmark, booksLinks, "Books"),
             ],
@@ -1130,6 +1132,8 @@ function ownDesk(me: Me): Space {
           {
             title: "Look up",
             items: [
+              { to: "/orders", label: "All orders", icon: ClipboardList },
+              { to: "/finance/mine", label: "Confirmations by this login", icon: CheckCheck },
               { to: "/medicines", label: "Inventory", icon: Boxes },
               { to: "/customers", label: "Customers", icon: Users },
             ],

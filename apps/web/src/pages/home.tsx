@@ -51,6 +51,7 @@ export function Home() {
   if (me.role === "inventory") return <Navigate to="/inventory/overview" replace />;
   if (me.role === "management") return <ManagementHome />;
   // A desk's Home is its work board itself, nothing stacked above it.
+  // Finance's common screen, like Management's: the orders to check (its people in the left menu).
   if (me.role === "finance") return <OrdersToCheck desk="finance" />;
   if (me.role === "dispatch") return <OrdersToCheck desk="dispatch" />;
   if (me.role === "medrep") return <MedrepHome />;
