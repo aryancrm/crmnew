@@ -44,7 +44,9 @@ function Launcher() {
     return () => document.removeEventListener("keydown", close);
   }, [picked]);
 
-  if (me.data) return <Navigate to={from} replace />;
+  // The Books tile opens Books for those who keep the books.
+  const landing = (role: string) => (picked?.key === "books" && ["finance", "ceo", "admin"].includes(role) ? "/books/home" : from);
+  if (me.data) return <Navigate to={landing(me.data.role)} replace />;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -54,7 +56,7 @@ function Launcher() {
       const { me: signedIn } = await api<{ me: Me }>("/api/auth/login", { body: { email, password } });
       queries.setQueryData(ME, signedIn);
       rememberWorkspace(workspaceOf(signedIn).key);
-      navigate(from, { replace: true });
+      navigate(landing(signedIn.role), { replace: true });
     } catch (error) {
       setProblem(error instanceof ApiFailure ? { message: error.message, field: error.field } : { message: "Couldn't sign in. Try again." });
     } finally {

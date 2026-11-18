@@ -21,6 +21,7 @@ import {
 } from "./actions";
 import { accountDetail, accountList, banking } from "./accounts";
 import { insight } from "./insights";
+import { booksDashboard } from "./dashboard";
 import { bankStatement, categorizeLine, finishReconciliation, importStatement, matchLine, reconcileView, setLineStatus, undoReconciliation } from "./bank";
 import { recurringMade, setRecurringStatus, takeOverRecurring } from "./recurring";
 import {
@@ -62,6 +63,7 @@ export function bookRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHan
   app.use("/api/books-recurring/*", signedIn);
   app.use("/api/books-bank/*", signedIn);
   bookActionRoutes(app, db);
+  app.get("/api/books/dashboard", async (c) => c.json(await booksDashboard(db, c.get("me"), { year: c.req.query("year") })));
   app.get("/api/books/items", async (c) => c.json(await itemList(db, c.get("me"), listAsked((n) => c.req.query(n)))));
   app.get("/api/books/items/:id", async (c) => c.json(await itemDetail(db, c.get("me"), Number(c.req.param("id")))));
   app.get("/api/books/pricelists", async (c) => c.json(await priceLists(db, c.get("me"))));

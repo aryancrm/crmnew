@@ -11,7 +11,7 @@ import { customerCredit } from "../finance/credit";
 import { addDays } from "../finance/rules";
 import { todayManila } from "../inventory/rules";
 import { seedDemo } from "../seed";
-import type { BankReconcileView, BankStatement, Insight, LedgerChoices } from "../types";
+import type { BankReconcileView, BankStatement, BooksDashboard, Insight, LedgerChoices } from "../types";
 import { dueDays, makeDueRecurring } from "./recurring";
 
 const PASSWORD = "test-password-1";
@@ -302,5 +302,16 @@ describe("writing the books", () => {
     const credits = await read<Insight>("fiona", `/api/books/insights/customer-balances?${q}`);
     expect(credits.rows.find((row) => row.customer === "Books Write Hospital")?.credit).toBe(100_000);
     expect((await get("sarla", `/api/books/insights/general-ledger?${q}`)).status).toBe(403);
+  });
+
+  it("Books Home adds up the books: banks, this month's expenses, a year of months; only the money desks open it", async () => {
+    const home = await read<BooksDashboard>("fiona", "/api/books/dashboard");
+    expect(home.incomeExpense.length).toBe(Number(today.slice(5, 7)));
+    expect(home.cashFlow.closing).toBe(home.cashFlow.opening + home.cashFlow.incoming - home.cashFlow.outgoing);
+    const bank = home.banks.find((one) => one.name === BANK);
+    const [inBooks] = await rows<{ balance: number }>(db, sql`select coalesce(sum(debit - credit), 0)::float8 as balance from book_entry where account = ${BANK} and on_date <= ${today}::date`);
+    expect(bank?.balance).toBe(inBooks?.balance);
+    expect(home.topExpenses.accounts.map((one) => one.account)).toContain("Office Rent");
+    expect((await get("sarla", "/api/books/dashboard")).status).toBe(403);
   });
 });

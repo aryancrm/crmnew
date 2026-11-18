@@ -19,6 +19,8 @@ export const WORKSPACES: Workspace[] = [
   { key: "office", group: "office", label: "Office staff", about: "Work log", roles: ["staff"] },
   { key: "ceo", group: "office", label: "CEO", about: "The whole company", roles: ["ceo"] },
   { key: "admin", group: "office", label: "Administration", about: "Setup, logins, audit", roles: ["admin"] },
+  // Its own app (docs/BOOKS-PLAN.md): opens Books Home. Last, so a person's own workspace stays theirs.
+  { key: "books", group: "office", label: "Books", about: "Accounts, banking, reports", roles: ["finance", "ceo", "admin"] },
 ];
 
 /** The workspace a person's own login opens (their role decides, not the tile pressed). */

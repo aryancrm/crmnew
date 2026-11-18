@@ -65,6 +65,10 @@ const DETAILS: Record<string, { who: string; points: string[] }> = {
     who: "The whole company in one view",
     points: ["What waits on you to decide", "Sales by channel, branch and person", "Scorecards, targets and speed", "The books and every report"],
   },
+  books: {
+    who: "Finance, the CEO and the Admin",
+    points: ["Home: receivables, payables, cash flow, income and expense", "Expenses, journals, transfers and deposits", "Bank statements and reconciliation", "Credit notes, refunds and the chart of accounts", "Every report, from the general ledger to AR aging"],
+  },
   admin: {
     who: "Setup, logins and the audit",
     points: ["People, seats and logins", "Company settings", "The audit: who did what, and when", "Data checks"],

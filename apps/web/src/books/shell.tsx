@@ -1,9 +1,12 @@
-// The books' frame, drawn as Zoho Inventory draws its own (docs/PLAN.md 17; measured in Zoho on
-// 17 Nov 2026): the dark 220px menu (#21263c) with Zoho's sections and the open list in blue
-// (#408dfb), the light top bar with "Search in Bills ( / )", the company and the person. A screen
-// not moved into the books yet opens the CRM's own page for it.
+// The books' frame, drawn as Zoho Inventory and Zoho Books draw their own (docs/PLAN.md 17,
+// docs/BOOKS-PLAN.md; measured in Zoho on 17–18 Nov 2026): the dark 220px menu (#21263c) with Zoho's
+// sections and the open list in blue (#408dfb), the light top bar with "Search in Bills ( / )", the
+// company and the person. For Finance, the CEO and the Admin it is the Books app: "Books", its own
+// Home dashboard, Zoho Books' menu, a "+" to make anything, and Finance's own pages (orders to
+// check, customers owe, refunds owed…) opening inside it. Inventory and Management keep the
+// Inventory frame with the purchases. One module: the same screens and the same data either way.
 
-import { BarChart3, BookOpenCheck, ChevronDown, ChevronRight, CircleUserRound, House, Landmark, PackageOpen, Search, ShoppingBag, ShoppingBasket, ShoppingCart } from "lucide-react";
+import { ArrowLeftRight, BarChart3, BookOpen, BookOpenCheck, ChevronDown, ChevronRight, CircleUserRound, HandCoins, House, Landmark, PackageOpen, Plus, Search, ShoppingBag, ShoppingBasket, ShoppingCart } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useMe } from "../auth";
@@ -43,6 +46,20 @@ const GROUPS: NavGroup[] = [
       { label: "Sales Returns", to: "/books/salesreturns" },
       { label: "Credit Notes", to: "/books/creditnotes" },
       { label: "Credit Note Refunds", to: "/books/refunds", ledger: true },
+    ],
+  },
+  // Finance's own desk (the CRM's invoices, payments, refunds), the same pages, inside Books.
+  {
+    label: "Finance",
+    icon: <HandCoins size={16} />,
+    ledger: true,
+    items: [
+      { label: "Orders to Check", to: "/books/finance/checks" },
+      { label: "Customers Owe", to: "/books/finance/owed" },
+      { label: "CRM Invoices", to: "/books/finance/invoices" },
+      { label: "CRM Payments", to: "/books/finance/payments" },
+      { label: "Refunds Owed", to: "/books/finance/refunds" },
+      { label: "Returns", to: "/books/finance/returns" },
     ],
   },
   {
@@ -88,6 +105,8 @@ const GROUPS: NavGroup[] = [
     icon: <BarChart3 size={16} />,
     items: [
       { label: "All Reports", to: "/books/reports" },
+      { label: "General Ledger", to: "/books/reports/general-ledger", ledger: true },
+      { label: "AR Aging Summary", to: "/books/reports/ar-aging", ledger: true },
       { label: "Profit and Loss", to: "/books/reports/profit-and-loss", ledger: true },
       { label: "Balance Sheet", to: "/books/reports/balance-sheet", ledger: true },
       { label: "Cash Flow", to: "/books/reports/cash-flow", ledger: true },
@@ -104,7 +123,9 @@ export function BooksShell() {
   const me = useMe();
   const location = useLocation();
   const segment = location.pathname.split("/")[2];
-  const openGroup = GROUPS.find((group) => group.items.some((item) => item.to === `/books/${segment}`))?.label ?? (segment === "banking" ? "Banking" : segment === "reports" ? "Reports" : "Purchases");
+  const openGroup =
+    GROUPS.find((group) => group.items.some((item) => item.to === `/books/${segment}` || (segment === "finance" && location.pathname.startsWith(item.to))))?.label ??
+    (segment === "banking" || segment === "bankstatement" || segment === "reconcile" ? "Banking" : segment === "reports" ? "Reports" : !segment || segment === "home" ? "" : "Purchases");
   const [open, setOpen] = useState<Record<string, boolean>>({ [openGroup]: true });
   if (me.isPending) return null;
   if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
@@ -112,15 +133,18 @@ export function BooksShell() {
   const ledger = LEDGER_ROLES.includes(me.data.role);
   const groups = GROUPS.filter((group) => ledger || !group.ledger).map((group) => ({ ...group, items: group.items.filter((item) => ledger || !item.ledger) }));
   const listName =
-    segment === "vendors" ? "Vendors" : segment === "customers" ? "Customers" : segment === "items" ? "Items" : segment === "accounts" ? "Chart of Accounts" : segment === "locking" ? "Transaction Locking" : segment === "bankstatement" || segment === "reconcile" ? "Banking" : segment === "banking" ? "Banking" : segment === "reports" ? "Reports" : (kindByPath(segment)?.plural ?? "Purchases");
+    segment === "home" ? "Customers" : segment === "finance" ? "Customers" : segment === "vendors" ? "Vendors" : segment === "customers" ? "Customers" : segment === "items" ? "Items" : segment === "accounts" ? "Chart of Accounts" : segment === "locking" ? "Transaction Locking" : segment === "bankstatement" || segment === "reconcile" ? "Banking" : segment === "banking" ? "Banking" : segment === "reports" ? "Reports" : (kindByPath(segment)?.plural ?? "Purchases");
   return (
     <div className="flex h-dvh overflow-hidden bg-white font-sans text-[13px] leading-[1.6] text-black">
       <nav aria-label="Books menu" className="flex w-[220px] shrink-0 flex-col overflow-y-auto bg-[#21263c] pb-4 text-[#f0f0f0] print:hidden">
-        <Link to="/" className="flex h-[52px] shrink-0 items-center gap-2.5 bg-[#191d2f] px-4 text-[17px] font-medium text-white">
-          <PackageOpen size={20} aria-hidden="true" /> Inventory
+        <Link to={ledger ? "/books/home" : "/"} className="flex h-[52px] shrink-0 items-center gap-2.5 bg-[#191d2f] px-4 text-[17px] font-medium text-white">
+          {ledger ? <BookOpen size={20} aria-hidden="true" /> : <PackageOpen size={20} aria-hidden="true" />} {ledger ? "Books" : "Inventory"}
         </Link>
         <div className="mt-3 space-y-0.5 px-2.5">
-          <NavLink to="/" className="flex h-[30px] items-center gap-2.5 rounded-md px-2 hover:bg-white/5">
+          <NavLink
+            to={ledger ? "/books/home" : "/"}
+            className={({ isActive }) => `flex h-[30px] items-center gap-2.5 rounded-md px-2 ${isActive && ledger ? "bg-[#408dfb] text-white" : "hover:bg-white/5"}`}
+          >
             <House size={16} aria-hidden="true" /> Home
           </NavLink>
           {groups.map((group) => {
@@ -157,12 +181,16 @@ export function BooksShell() {
             <BarChart3 size={16} aria-hidden="true" /> Sales reports
           </NavLink>
         </div>
+        <Link to="/" className="mx-2.5 mt-auto flex h-[34px] items-center gap-2.5 rounded-md border border-white/10 px-3 text-white/80 hover:bg-white/5">
+          <ArrowLeftRight size={15} aria-hidden="true" /> Back to the CRM
+        </Link>
       </nav>
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-[52px] shrink-0 items-center gap-3 border-b border-[#f0f0f0] bg-[#f7f7fe] px-4 print:hidden">
           <TopSearch listName={listName} />
           <div className="ml-auto flex items-center gap-3 text-[13px] text-[#222536]">
             <span className="hidden sm:inline">2MG Inc. / GetMeds</span>
+            {ledger && <QuickCreate />}
             <span className="flex items-center gap-1.5" title={me.data.name}>
               <CircleUserRound size={22} className="text-[#f76831]" aria-hidden="true" />
               <span className="hidden max-w-32 truncate md:inline">{me.data.name}</span>
@@ -224,4 +252,57 @@ function TopSearch({ listName }: { listName: string }) {
       />
     </form>
   );
+}
+
+/** Zoho Books' "+": make any document from anywhere in Books. Invoices come from an order. */
+const QUICK: { group: string; items: [string, string][] }[] = [
+  { group: "Sales", items: [["New Order (invoice)", "/orders/new"], ["Payment Received", "/books/paymentsreceived/new"], ["Credit Note", "/books/creditnotes/new"]] },
+  { group: "Purchases", items: [["Expense", "/books/expenses/new"], ["Bill", "/books/bills/new"], ["Payment Made", "/books/paymentsmade/new"], ["Vendor Credit", "/books/vendorcredits/new"], ["Purchase Order", "/books/purchaseorders/new"], ["Vendor", "/books/vendors/new"]] },
+  { group: "Banking", items: [["Transfer Fund", "/books/transfers/new"], ["Deposit", "/books/deposits/new"]] },
+  { group: "Accountant", items: [["Manual Journal", "/books/journals/new"]] },
+];
+function QuickCreate() {
+  const [open, setOpen] = useState(false);
+  const location = useLocation();
+  useEffect(() => setOpen(false), [location.pathname]);
+  return (
+    <div className="relative">
+      <button type="button" aria-label="Quick create" aria-expanded={open} onClick={() => setOpen(!open)} className="grid size-[30px] place-items-center rounded-md bg-[#408dfb] text-white hover:bg-[#2f7ef0]">
+        <Plus size={17} />
+      </button>
+      {open && (
+        <div className="absolute right-0 z-30 mt-2 grid w-[min(560px,90vw)] gap-4 rounded-lg border border-[#ebeaf2] bg-white p-4 shadow-xl sm:grid-cols-4">
+          {QUICK.map((group) => (
+            <div key={group.group}>
+              <div className="mb-1.5 text-[11px] font-semibold tracking-wide text-[#6c718a] uppercase">{group.group}</div>
+              <ul className="space-y-1">
+                {group.items.map(([label, to]) => (
+                  <li key={to}>
+                    <Link to={to} className="flex items-center gap-1 text-[13px] text-[#212529] hover:text-[#408dfb]">
+                      <Plus size={12} /> {label}
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** /books: Finance, the CEO and the Admin open Books' Home; Inventory and Management their purchases. */
+export function BooksIndex() {
+  const me = useMe();
+  if (!me.data) return null;
+  return <Navigate to={LEDGER_ROLES.includes(me.data.role) ? "/books/home" : "/books/purchaseorders"} replace />;
+}
+
+/** One of Finance's own pages, the very same component, inside the Books frame. */
+export function InBooks({ children }: { children: ReactNode }) {
+  const me = useMe();
+  // Finance's pages open inside Books for those who keep the books; the others keep them in the CRM.
+  if (me.data && !LEDGER_ROLES.includes(me.data.role)) return <Navigate to="/" replace />;
+  return <div className="h-full overflow-y-auto bg-white p-4 sm:p-6">{children}</div>;
 }

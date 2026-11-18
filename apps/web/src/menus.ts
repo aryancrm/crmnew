@@ -8,6 +8,7 @@ import { b2bRole, seatWords } from "./seat-words";
 import type { Me, Role } from "@2mg/api/types";
 import {
   ArrowLeftRight,
+  BookOpen,
   BookOpenCheck,
   Landmark,
   ListTree,
@@ -284,6 +285,7 @@ const moneyLinks: MenuItem[] = [
 /** Zoho Books' own, moved in (docs/PLAN.md 17): the banks, expenses, journals and the chart of
  *  accounts, for Finance, the CEO and the Admin. */
 const booksLinks: MenuItem[] = [
+  { to: "/books/home", label: "Open Books", icon: BookOpen },
   { to: "/books/banking", label: "Banking", icon: Landmark },
   { to: "/books/expenses", label: "Expenses", icon: Receipt },
   { to: "/books/journals", label: "Manual journals", icon: BookOpenCheck },

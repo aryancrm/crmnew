@@ -73,7 +73,7 @@ import { CareGroupsPage } from "./pages/care-groups";
 import { MtListingsPage } from "./pages/mt";
 import { WorkLogPage, WorkLogsPage } from "./pages/work-log";
 import { PipelinePage, RegistrationsPage, RegulatoryReportPage } from "./pages/regulatory";
-import { BooksShell } from "./books/shell";
+import { BooksIndex, BooksShell, InBooks } from "./books/shell";
 import { BookListPage } from "./books/list";
 import { VendorsPage } from "./books/vendors";
 import { CustomersPage } from "./books/customers";
@@ -88,6 +88,7 @@ import { MySamplesPage, TeamSamplesPage } from "./pages/samples";
 import { ComplaintsPage } from "./pages/complaints";
 import { BillFromOrderPage, NewBillPage, NewPaymentPage, NewReceiptPage, NewPurchaseOrderPage, NewVendorCreditPage, NewVendorPage, ReceivePage } from "./books/forms";
 import { BankStatementPage, ReconcilePage } from "./books/bank";
+import { BooksHome } from "./books/home";
 import { LockingPage, NewCreditNotePage, NewDepositPage, NewExpensePage, NewJournalPage, NewTransferPage } from "./books/ledger";
 import { CompanyPapersPage, TenderPage, TendersPage } from "./pages/tenders";
 import { ClidpListingsPage, ClidpTeamPage } from "./pages/clidp";
@@ -123,7 +124,14 @@ createRoot(root).render(
           <Route path="/login" element={<Login />} />
           {/* Zoho Inventory's Sales and Purchases, in Zoho's own frame (docs/PLAN.md 17). */}
           <Route path="/books" element={<BooksShell />}>
-            <Route index element={<Navigate to="/books/purchaseorders" replace />} />
+            <Route index element={<BooksIndex />} />
+            <Route path="home" element={<BooksHome />} />
+            <Route path="finance/checks" element={<InBooks><OrdersToCheck key="books-finance" desk="finance" /></InBooks>} />
+            <Route path="finance/owed" element={<InBooks><OwedReport /></InBooks>} />
+            <Route path="finance/invoices" element={<InBooks><Invoices /></InBooks>} />
+            <Route path="finance/payments" element={<InBooks><Payments /></InBooks>} />
+            <Route path="finance/refunds" element={<InBooks><Refunds /></InBooks>} />
+            <Route path="finance/returns" element={<InBooks><Returns /></InBooks>} />
             <Route path="vendors/new" element={<NewVendorPage />} />
             <Route path="purchaseorders/new" element={<NewPurchaseOrderPage />} />
             <Route path="purchaseorders/:id/receive" element={<ReceivePage />} />

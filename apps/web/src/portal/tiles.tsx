@@ -86,6 +86,13 @@ export const TILE_ICONS: Record<string, () => ReactNode> = {
       <path d="M44 6h13l-4 4.5 4 4.5H44z" fill="#ffb020" />
     </Mark>
   ),
+  books: () => (
+    <Mark label="Books">
+      <path d="M8 12c8-4 16-4 24 2v42c-8-6-16-6-24-2z" fill="#22b378" />
+      <path d="M56 12c-8-4-16-4-24 2v42c8-6 16-6 24-2z" fill="#34d399" />
+      <path d="M14 22c4-1.5 8-1.5 12 0M14 30c4-1.5 8-1.5 12 0M38 22c4-1.5 8-1.5 12 0M38 30c4-1.5 8-1.5 12 0" stroke="#fff" strokeWidth="3" strokeLinecap="round" fill="none" />
+    </Mark>
+  ),
   admin: () => (
     <Mark label="Administration">
       <circle cx="32" cy="32" r="30" fill="#3a3f8f" />
@@ -111,4 +118,5 @@ export const TILE_GLOW: Record<string, string> = {
   office: "#33475b",
   ceo: "#e5322d",
   admin: "#3a3f8f",
+  books: "#22b378",
 };

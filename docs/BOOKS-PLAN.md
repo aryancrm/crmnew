@@ -121,3 +121,21 @@ statement and reconcile, reports); all books, finance and automations tests pass
 On the switch day (Aryan's word): read Zoho once more (backup + uncategorized lines + month-end trial
 balances), run the imports and `tie-to-zoho.ts`, take each recurring profile over from that day, stop
 Zoho. Live needs the same scripts with Aryan's go-ahead (they refuse without a local database today).
+
+## 7. The Books app (18 Nov 2026, Aryan: "a separate Books application, like Zoho Books, its own
+dashboard and navigation; reuse Finance, don't duplicate; don't remove what is built")
+
+- `/books` is one module with two faces. For Finance, the CEO and the Admin it is **Books**: Zoho
+  Books' dark menu (Home, Items, Inventory, Sales, Finance, Purchases, Banking, Accountant, Reports),
+  a "+" to make any document, "Back to the CRM". Inventory and Management keep the Inventory frame with
+  the purchases, as before; every other role is sent back to the CRM (the API refuses them too).
+- **Home** (`/books/home`, API `/api/books/dashboard`): Total Receivables and Payables (current,
+  overdue), Cash Flow for this or the previous year, Income and Expense month by month, this month's
+  Top Expenses, Bank and Credit Cards with the statement lines still to do.
+- **Finance inside Books**: Orders to Check, Customers Owe, CRM Invoices, CRM Payments, Refunds Owed,
+  Returns are the very same pages as on the Finance desk, opened in the Books frame. The Finance desk
+  in the CRM is unchanged; its menu got "Open Books".
+- A **Books** tile on the portal: Finance, the CEO and the Admin signing in from it land on Books Home.
+- Checked on a demo copy of the company (fresh local database, every role): Finance, CEO, Admin open
+  Books; Management and Inventory get the purchases; Dispatch, MedRep, team lead, head, Online, HR are
+  sent back; the API answers 403 to all of them for the books' money.

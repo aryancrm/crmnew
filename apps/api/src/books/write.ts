@@ -272,6 +272,10 @@ export async function createJournal(db: Database, me: Me, input: JournalInput): 
     };
     if (clean(input.pic)) fields["CF.PIC"] = clean(input.pic);
     const lines = input.lines.filter((line) => line.debit || line.credit);
+    const typedDebit = lines.reduce((sum, line) => sum + (line.debit || 0), 0);
+    const typedCredit = lines.reduce((sum, line) => sum + (line.credit || 0), 0);
+    if (typedDebit !== typedCredit)
+      throw new Refusal(400, "invalid", `Debits (${(typedDebit / 100).toFixed(2)}) and credits (${(typedCredit / 100).toFixed(2)}) must be equal.`, "lines");
     if (lines.length < 2) throw new Refusal(400, "invalid", "A journal needs at least two lines.", "lines");
     const made: { account: string; description: string | null; contact: string | null; amount: number; tax: Tax | null; taxAmount: number }[] = [];
     for (const [at, line] of lines.entries()) {

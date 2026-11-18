@@ -5556,3 +5556,15 @@ export type BankReconcileView = {
   entries: (BankEntry & { onStatement: boolean })[];
   history: { id: number; start: string; end: string; opening: number; closing: number; status: "done" | "undone"; by: string | null; at: string }[];
 };
+
+/** Books → Home (Zoho Books' Dashboard). Centavos. */
+export type BooksDashboard = {
+  today: string;
+  year: number;
+  receivables: { current: number; overdue: number };
+  payables: { current: number; overdue: number };
+  cashFlow: { opening: number; incoming: number; outgoing: number; closing: number; months: { month: string; incoming: number; outgoing: number; closing: number }[] };
+  incomeExpense: { month: string; income: number; expense: number }[];
+  topExpenses: { total: number; accounts: { account: string; amount: number }[] };
+  banks: { id: number; name: string; type: string; balance: number; uncategorized: number }[];
+};
