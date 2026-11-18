@@ -50,6 +50,7 @@ import { AskForPersonDialog } from "../org/areas-requests";
 import { lookAs } from "../shell";
 import { Bars, DayBars, Donut, Ring, Spark } from "../team/charts";
 import { DeskWork } from "../team/desk-work";
+import { OfficeWork } from "../team/office-work";
 import { RangePicker, short } from "../team/range";
 import { TeamChart } from "../team/tree";
 import { ZoomBox } from "../team/zoom";
@@ -494,6 +495,7 @@ export function MyTeamPage() {
     data.seats.some((seat) =>
       /medrep|team lead|sales|online/i.test(`${seat.moduleLabel} ${seat.title}`),
     );
+  const deskTeam = data.seats.some((seat) => /management|finance|dispatch|inventory|pharmac/i.test(`${seat.moduleLabel} ${seat.title}`));
   const kinds = (kind: TeamNeed["kind"]) => data.needs.filter((need) => need.kind === kind).length;
   // The boxes right under the one looked at (or the lead's own boxes, when they lead several):
   // each a card that opens it, so the CEO goes company → business → team → person.
@@ -694,8 +696,16 @@ export function MyTeamPage() {
       {asking && <AskForPersonDialog kind={asking} onClose={() => setAsking(null)} />}
       <RangePicker />
 
-      {!selling && (
+      {/* A team that moves orders (Management, Finance, Dispatch, Inventory) by its desk work; an
+          office team (IT, HR, Digital Marketing, Regulatory) by its work logs. */}
+      {!selling && deskTeam && (
         <DeskWork personIds={data.seats.flatMap((seat) => (seat.person ? [seat.person.id] : []))} />
+      )}
+      {!selling && !deskTeam && (
+        <OfficeWork
+          unit={unit}
+          people={data.seats.flatMap((seat) => (seat.person ? [{ id: seat.person.id, name: seat.person.name, title: seat.title }] : []))}
+        />
       )}
       {selling && (
         <section

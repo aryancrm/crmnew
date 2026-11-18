@@ -2,6 +2,7 @@
 // (Digital Marketing, IT…) have it as their desk. Optional: an empty day is fine. One entry a day,
 // changed during the day. The Founder and the Admin read everyone's; a head the people under them.
 
+import { peopleUnder } from "../org/scope";
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
@@ -35,11 +36,14 @@ export async function workLogDay(db: Database, me: Me, asked: { day?: string }):
   const day = asked.day && /^\d{4}-\d{2}-\d{2}$/.test(asked.day) && asked.day <= today ? asked.day : today;
   // The Founder and the Admin read everyone's; anyone else the people under them on the tree (a
   // Mentor or Coach of any department), and nobody's when nobody reports to them.
-  const who = ["ceo", "admin"].includes(me.role)
-    ? sql`true`
-    : sql`w.person_id in (with recursive team as (select id from person where reports_to = ${me.id}
+  // A box picked on the team switch (checked when the request signed in): the people sitting in it.
+  const who = me.unit
+    ? sql`w.person_id in ${peopleUnder(me.unit)}`
+    : ["ceo", "admin"].includes(me.role)
+      ? sql`true`
+      : sql`w.person_id in (with recursive team as (select id from person where reports_to = ${me.id}
         union all select p.id from person p join team t on p.reports_to = t.id) select id from team)`;
-  if (!["ceo", "admin"].includes(me.role)) {
+  if (!me.unit && !["ceo", "admin"].includes(me.role)) {
     const [under] = await rows<{ n: number }>(db, sql`select count(*)::int as n from person where reports_to = ${me.id} and active`);
     if (!under?.n) throw new Refusal(403, "not_allowed", "Work logs are read by the Founder and the heads.");
   }

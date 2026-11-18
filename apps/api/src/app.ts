@@ -6,7 +6,7 @@ import { sampleRoutes } from "./samples/routes";
 import { complaintRoutes } from "./complaints/routes";
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
-import { Hono } from "hono";
+import { type Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { cors } from "hono/cors";
 import { z } from "zod";
@@ -23,7 +23,7 @@ import {
 } from "./auth/sessions";
 import { checkRoutes } from "./checks/routes";
 import { customerRoutes } from "./customers/routes";
-import { countQueries, type Database } from "./db/index";
+import { countQueries, type Database, rows } from "./db/index";
 import { person } from "./db/schema";
 import { dispatchRoutes } from "./dispatch/routes";
 import { fieldRoutes } from "./field/routes";
@@ -185,26 +185,13 @@ export function createApp(db: Database, options: AppOptions) {
     c.json(await portalDepartment(db, c.req.param("key"))),
   );
 
-  app.post("/api/auth/login", async (c) => {
-    const input = await readBody(
-      c,
-      z.object({
-        email: z.string().trim().min(1, "Type your login ID."),
-        password: z.string().min(1, "Type your password."),
-      }),
-    );
-    const wrong = new Refusal(401, "wrong_login", "Wrong login ID or password.");
-    // A seat's login ID (hos1, tl2@2mginc.com) signs in whoever holds the seat today.
-    const seatHolder = await personOfSeatLogin(db, input.email);
-    const [found] = await db
-      .select()
-      .from(person)
-      .where(
-        seatHolder
-          ? eq(person.id, seatHolder)
-          : eq(sql`lower(${person.email})`, input.email.toLowerCase()),
-      )
-      .limit(1);
+  /** Signs a person in with a password: the lock after wrong tries, the session, its cookie. */
+  const signInAs = async (
+    c: Context<Env>,
+    found: typeof person.$inferSelect | undefined,
+    password: string,
+    wrong: Refusal,
+  ) => {
     if (!found || !found.active) throw wrong;
 
     if (found.lockedUntil && found.lockedUntil.getTime() > Date.now()) {
@@ -216,7 +203,7 @@ export function createApp(db: Database, options: AppOptions) {
       );
     }
 
-    if (!(await passwordMatches(input.password, found.passwordHash))) {
+    if (!(await passwordMatches(password, found.passwordHash))) {
       const failed = found.failedLogins + 1;
       const lock = failed >= MAX_WRONG;
       await db
@@ -244,6 +231,53 @@ export function createApp(db: Database, options: AppOptions) {
     });
     const me = await whoIs(db, token);
     return c.json({ me });
+    return c.json({ me });
+  };
+
+  // Management's, Finance's and Dispatch's common screen (Aryan, 19 Nov: "they all have the same
+  // screen and sign in beside it; one password for it, everyone uses it"): the desk opens with the
+  // company's password alone, as the desk's first seat; each person then presses Start beside it,
+  // and what is done on an order is written in the name of the person it was given to.
+  app.post("/api/auth/desk", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        desk: z.enum(["management", "finance", "dispatch"], { error: "Pick the desk." }),
+        password: z.string().min(1, "Type the password."),
+      }),
+    );
+    const [seat] = await rows<{ personId: number }>(
+      db,
+      sql`select h.person_id::int as "personId" from seat s
+        join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and h.starts_on <= current_date and (h.ends_on is null or h.ends_on >= current_date)
+        join person p on p.id = h.person_id and p.active and p.role = ${input.desk}
+        where s.active and s.module = ${input.desk} order by s.lead desc, s.sort, s.id limit 1`,
+    );
+    const [found] = seat ? await db.select().from(person).where(eq(person.id, seat.personId)).limit(1) : [];
+    return signInAs(c, found, input.password, new Refusal(401, "wrong_login", "Wrong password."));
+  });
+
+  app.post("/api/auth/login", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        email: z.string().trim().min(1, "Type your login ID."),
+        password: z.string().min(1, "Type your password."),
+      }),
+    );
+    const wrong = new Refusal(401, "wrong_login", "Wrong login ID or password.");
+    // A seat's login ID (hos1, tl2@2mginc.com) signs in whoever holds the seat today.
+    const seatHolder = await personOfSeatLogin(db, input.email);
+    const [found] = await db
+      .select()
+      .from(person)
+      .where(
+        seatHolder
+          ? eq(person.id, seatHolder)
+          : eq(sql`lower(${person.email})`, input.email.toLowerCase()),
+      )
+      .limit(1);
+    return signInAs(c, found, input.password, wrong);
   });
 
   app.post("/api/auth/logout", async (c) => {

@@ -174,6 +174,11 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<{ message: string; field?: string } | null>(null);
   const picked = workspace;
+  // Management, Finance and Dispatch share one screen (Aryan, 19 Nov): the company's password opens
+  // it, no ID; each person presses Start on it. Their own ID still works ("with my own ID").
+  const isDesk = ["management", "finance", "dispatch"].includes(picked.key);
+  const [ownId, setOwnId] = useState(false);
+  const deskOnly = isDesk && !ownId;
   // Typing the login brings the box forward where it stands and blurs the page behind, as the old
   // pop-up did (Aryan, 18 Nov); a click outside or Esc puts it back.
   const [lifted, setLifted] = useState(false);
@@ -203,7 +208,9 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
     setBusy(true);
     setProblem(null);
     try {
-      const { me: signedIn } = await api<{ me: Me }>("/api/auth/login", { body: { email, password } });
+      const { me: signedIn } = deskOnly
+        ? await api<{ me: Me }>("/api/auth/desk", { body: { desk: picked.key, password } })
+        : await api<{ me: Me }>("/api/auth/login", { body: { email, password } });
       queries.setQueryData(ME, signedIn);
       rememberWorkspace(workspaceOf(signedIn).key);
       navigate(landing(signedIn.role, workspace, from), { replace: true });
@@ -233,8 +240,11 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
       }`}
     >
       <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Sign in to {picked.label}</h2>
-      <p className="mt-0.5 text-sm text-[#7a8394]">Log in with your ID and password</p>
+      <p className="mt-0.5 text-sm text-[#7a8394]">
+        {deskOnly ? "The desk's one screen: the company's password, no ID" : "Log in with your ID and password"}
+      </p>
       <form onSubmit={submit} className="mt-4 grid gap-3 text-left" aria-busy={busy}>
+        {!deskOnly && (
         <label className="relative block">
           <span className="sr-only">Login ID</span>
           <UserRound className="pointer-events-none absolute top-1/2 left-4 z-10 size-4 -translate-y-1/2 text-[#9aa2b0]" aria-hidden="true" />
@@ -255,12 +265,13 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
             className={field}
           />
         </label>
+        )}
         <label className="relative block">
           <span className="sr-only">Password</span>
           <KeyRound className="pointer-events-none absolute top-1/2 left-4 z-10 size-4 -translate-y-1/2 text-[#9aa2b0]" aria-hidden="true" />
           <input
             type={shown ? "text" : "password"}
-            placeholder="Enter your login password"
+            placeholder={deskOnly ? "Enter the company's password" : "Enter your login password"}
             autoComplete="current-password"
             required
             disabled={busy}
@@ -297,6 +308,18 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
           {busy ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <ArrowRight className="size-4" aria-hidden="true" />}
         </button>
       </form>
+      {isDesk && (
+        <button
+          type="button"
+          onClick={() => {
+            setOwnId(!ownId);
+            setProblem(null);
+          }}
+          className="mt-3 text-xs font-semibold text-[#f36b21] hover:underline"
+        >
+          {ownId ? "Open the desk's screen with the password only" : "Sign in with my own ID instead"}
+        </button>
+      )}
       <p className="mt-4 text-xs text-[#9aa2b0]">Need access? Ask your administrator</p>
     </div>
     </>
