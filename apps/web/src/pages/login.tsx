@@ -6,7 +6,7 @@ import "@fontsource-variable/inter";
 import type { Me } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, ChevronRight, Eye, EyeOff, KeyRound, LoaderCircle, Search, UserRound } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiFailure, api } from "../api";
 import { ME, useMe } from "../auth";
@@ -174,6 +174,30 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<{ message: string; field?: string } | null>(null);
   const picked = workspace;
+  // Typing the login lifts the box to the middle and blurs the page behind, as the old pop-up
+  // did (Aryan, 18 Nov); a click outside or Esc puts it back.
+  const [lifted, setLifted] = useState(false);
+  const [height, setHeight] = useState(0);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const lift = () => {
+    if (lifted) return;
+    setHeight(boxRef.current?.offsetHeight ?? 0);
+    setLifted(true);
+  };
+  const drop = () => {
+    setLifted(false);
+    (document.activeElement as HTMLElement | null)?.blur();
+  };
+  useEffect(() => {
+    if (!lifted) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      drop();
+    };
+    document.addEventListener("keydown", close, true);
+    return () => document.removeEventListener("keydown", close, true);
+  }, [lifted]);
   const field =
     "h-12 w-full rounded-2xl border border-white/70 bg-white/70 pl-11 text-[15px] text-[#1f2733] shadow-[inset_0_1px_2px_rgba(20,30,50,0.06)] outline-none backdrop-blur placeholder:text-[#9aa2b0] focus:border-[#f36b21]/60 focus:bg-white focus:ring-4 focus:ring-[#f36b21]/15";
 
@@ -194,8 +218,25 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
   }
 
   return (
-    // Raised above the page around it, so the eye lands here (Aryan, 18 Nov).
-    <div className="relative w-full max-w-sm rounded-[2rem] border border-white bg-white p-7 text-center shadow-[0_50px_100px_-28px_rgba(20,30,50,0.55),0_18px_36px_-18px_rgba(20,30,50,0.35)] ring-1 ring-black/[0.04]">
+    <>
+    {lifted && (
+      <>
+        {/* Keeps the box's place on the page while it is lifted. */}
+        <div aria-hidden="true" style={{ height }} className="w-full max-w-sm" />
+        <button type="button" aria-label="Back to the page" onClick={drop} className="fixed inset-0 z-40 cursor-default bg-[#eef0f5]/55 backdrop-blur-md" />
+      </>
+    )}
+    {/* Raised above the page around it, so the eye lands here (Aryan, 18 Nov). */}
+    <div
+      ref={boxRef}
+      onFocus={lift}
+      role={lifted ? "dialog" : undefined}
+      aria-modal={lifted || undefined}
+      aria-label={lifted ? `Sign in to ${picked.label}` : undefined}
+      className={`w-full max-w-sm rounded-[2rem] border border-white bg-white p-7 text-center shadow-[0_50px_100px_-28px_rgba(20,30,50,0.55),0_18px_36px_-18px_rgba(20,30,50,0.35)] ring-1 ring-black/[0.04] ${
+        lifted ? "fixed top-1/2 left-1/2 z-50 w-[min(24rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 animate-[lift_180ms_ease-out]" : "relative"
+      }`}
+    >
       <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Sign in to {picked.label}</h2>
       <p className="mt-0.5 text-sm text-[#7a8394]">Log in with your ID and password</p>
       <form onSubmit={submit} className="mt-6 grid gap-3 text-left" aria-busy={busy}>
@@ -263,6 +304,7 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
       </form>
       <p className="mt-4 text-xs text-[#9aa2b0]">Need access? Ask your administrator</p>
     </div>
+    </>
   );
 }
 
