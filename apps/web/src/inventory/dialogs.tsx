@@ -120,9 +120,9 @@ export function ReceiveDialog(props: {
     >
       <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[13px] text-amber-900">
         Only for stock that was not bought: opening stock, goods found in a count, a correction.
-        Bought from a vendor? Receive it on its purchase order (Purchases → Purchase orders →
+        Bought from a vendor? Receive it on its purchase order (Purchases → Purchase orders → the order →
         Receive): that keeps the vendor, the bill and the cost, and nothing is entered twice.{" "}
-        <a href="/books/purchaseorders" className="font-semibold underline">
+        <a href="/purchases/orders" className="font-semibold underline">
           Open purchase orders
         </a>
       </div>

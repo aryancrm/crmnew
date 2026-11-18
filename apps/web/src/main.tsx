@@ -59,6 +59,10 @@ import { PayRatesPage, PayrollMonthPage, PayrollPage } from "./pages/payroll";
 import { PointsAccountPage, PointsPage } from "./pages/points";
 import { Purchase } from "./pages/purchase";
 import { Purchases } from "./pages/purchases";
+import { PurchasesBoard } from "./buying/board";
+import { DocListPage, DocPage, NewBillOrCredit, NewVendorPayment } from "./buying/docs";
+import { NewPurchaseOrder, PurchaseOrderPage, PurchaseOrdersPage } from "./buying/orders";
+import { VendorPage as BuyingVendor, VendorsPage as BuyingVendors } from "./buying/vendors";
 import { ChannelsReport, Reports } from "./pages/reports";
 import { Returns } from "./pages/returns";
 import { SalesOrderPage } from "./pages/sales-order";
@@ -296,11 +300,27 @@ createRoot(root).render(
             {/* One road for buying (Aryan, 18 Nov): Purchases (vendors, purchase orders, receives,
                 bills, payments, vendor credits), which hold Zoho's history too. The first purchase
                 pages' few orders still open by their number. */}
-            <Route path="purchases" element={<Navigate to="/books/purchaseorders" replace />} />
-            <Route path="purchases/new" element={<Navigate to="/books/purchaseorders/new" replace />} />
+            <Route path="purchases" element={<PurchasesBoard />} />
+            <Route path="purchases/new" element={<Navigate to="/purchases/orders/new" replace />} />
+            <Route path="purchases/orders" element={<PurchaseOrdersPage />} />
+            <Route path="purchases/orders/new" element={<NewPurchaseOrder />} />
+            <Route path="purchases/orders/:id" element={<PurchaseOrderPage />} />
+            <Route path="purchases/vendors" element={<BuyingVendors />} />
+            <Route path="purchases/vendors/:id" element={<BuyingVendor />} />
+            <Route path="purchases/receives" element={<DocListPage key="purchase_receive" kind="purchase_receive" />} />
+            <Route path="purchases/receives/:id" element={<DocPage key="purchase_receive" kind="purchase_receive" />} />
+            <Route path="purchases/bills" element={<DocListPage key="bill" kind="bill" />} />
+            <Route path="purchases/bills/new" element={<NewBillOrCredit key="bill" kind="bill" />} />
+            <Route path="purchases/bills/:id" element={<DocPage key="bill" kind="bill" />} />
+            <Route path="purchases/payments" element={<DocListPage key="vendor_payment" kind="vendor_payment" />} />
+            <Route path="purchases/payments/new" element={<NewVendorPayment />} />
+            <Route path="purchases/payments/:id" element={<DocPage key="vendor_payment" kind="vendor_payment" />} />
+            <Route path="purchases/credits" element={<DocListPage key="vendor_credit" kind="vendor_credit" />} />
+            <Route path="purchases/credits/new" element={<NewBillOrCredit key="vendor_credit" kind="vendor_credit" />} />
+            <Route path="purchases/credits/:id" element={<DocPage key="vendor_credit" kind="vendor_credit" />} />
             <Route path="purchases/old" element={<Purchases />} />
             <Route path="purchases/:id" element={<Purchase />} />
-            <Route path="suppliers" element={<Navigate to="/books/vendors" replace />} />
+            <Route path="suppliers" element={<Navigate to="/purchases/vendors" replace />} />
             <Route path="suppliers/old" element={<Suppliers />} />
             <Route path="*" element={<NotBuilt />} />
           </Route>

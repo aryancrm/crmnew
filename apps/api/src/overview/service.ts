@@ -80,7 +80,7 @@ export async function overview(db: Database, me: Me): Promise<Overview> {
               select pu.id as id, 'crm' as road, (select sum(l.qty) from purchase_line l where l.purchase_id = pu.id) as pieces, pu.expected_on as due
                 from purchase pu where pu.state = 'ordered'
               union all
-              select d.id, 'books', sum((l.qty - coalesce((l.qty_done->>'cancelled')::numeric, 0) - coalesce((l.qty_done->>'received')::numeric, 0))), coalesce(min(d.due_date), min(d.doc_date))
+              select d.id, 'books', sum((l.qty - coalesce((l.qty_done->>'cancelled')::numeric, 0) - coalesce((l.qty_done->>'received')::numeric, 0))), min(d.due_date)
                 from book_doc d join book_line l on l.doc_id = d.id, today t
                 where d.kind = 'purchase_order' and d.status not in ('draft', 'cancelled', 'closed', 'void')
                   and l.medicine_id is not null and coalesce(d.due_date, d.doc_date) >= t.d - 365

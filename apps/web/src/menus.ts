@@ -9,6 +9,7 @@ import type { Me, Role } from "@2mg/api/types";
 import {
   ArrowLeftRight,
   BookOpen,
+  LayoutDashboard,
   BookOpenCheck,
   Landmark,
   ListTree,
@@ -200,7 +201,7 @@ function inventoryApp(me: Me): Space {
       {
         title: "Items",
         items: [
-          { to: "/medicines", label: "All medicines", icon: Pill },
+          { to: "/medicines", label: "Medicines & prices", icon: Pill },
           {
             to: "/inventory/requests",
             label: "Medicine requests",
@@ -212,7 +213,7 @@ function inventoryApp(me: Me): Space {
       {
         title: "Inventory",
         items: [
-          { to: "/inventory", label: "Stock", icon: Boxes },
+          { to: "/inventory", label: "Stock by warehouse", icon: Boxes },
           { to: "/adjustments", label: "Adjustments", icon: SlidersHorizontal },
           { to: "/transfers", label: "Transfers", icon: ArrowLeftRight },
           // Where a batch went, for a recall (ERP phase 3).
@@ -220,25 +221,30 @@ function inventoryApp(me: Me): Space {
           { to: "/field/samples", label: "Samples to reps", icon: Gift },
         ],
       },
-      // Purchases are Zoho Inventory's, moved in whole, in Zoho's own frame (docs/PLAN.md 17).
+      // Purchases in this CRM's own look (Aryan, 18 Nov): the same records as Zoho's screens,
+      // which stay one press away ("Zoho view") for showing both. In the order the work goes
+      // (Aryan: "vendors first, then the rest in order"): vendor → order → receive → bill → pay →
+      // credit; the board of what is due and what to buy again after them.
       {
         title: "Purchases",
         items: [
           ...(seesCost
             ? [
-                { to: "/books/vendors", label: "Vendors", icon: Factory },
-                { to: "/books/purchaseorders", label: "Purchase orders", icon: ShoppingCart },
+                { to: "/purchases/vendors", label: "Vendors", icon: Factory },
+                { to: "/purchases/orders", label: "Purchase orders", icon: ShoppingCart },
               ]
             : []),
           // The books are for the stock and money desks; the others see what came in on the shelf.
           seesCost
-            ? { to: "/books/purchasereceives", label: "Purchase receives", icon: PackageCheck }
+            ? { to: "/purchases/receives", label: "Receives", icon: PackageCheck }
             : { to: "/receives", label: "Receives", icon: PackageCheck },
           ...(seesCost
             ? [
-                { to: "/books/bills", label: "Bills", icon: ReceiptText },
-                { to: "/books/paymentsmade", label: "Payments made", icon: Banknote },
-                { to: "/books/vendorcredits", label: "Vendor credits", icon: Undo2 },
+                { to: "/purchases/bills", label: "Bills", icon: ReceiptText },
+                { to: "/purchases/payments", label: "Payments made", icon: Banknote },
+                { to: "/purchases/credits", label: "Vendor credits", icon: Undo2 },
+                { to: "/purchases", label: "To do & buy again", icon: LayoutDashboard },
+                { to: "/books/purchaseorders", label: "Zoho view", icon: BookOpen },
               ]
             : []),
         ],
@@ -1131,7 +1137,7 @@ function ownDesk(me: Me): Space {
               { to: "/collect", label: "Due payments", icon: Wallet, short: "Due" },
               // Money going out, every day: refunds owed to customers and suppliers' bills to pay.
               { to: "/refunds", label: "Refunds owed", icon: Undo2, badge: "refunds", short: "Refunds" },
-              { to: "/books/bills", label: "Supplier bills to pay", icon: Receipt, short: "Bills" },
+              { to: "/purchases/bills", label: "Supplier bills to pay", icon: Receipt, short: "Bills" },
               { to: "/desk/team", label: "Team figures", icon: BarChart3, short: "Team" },
               folder("Money", Banknote, moneyLinks.filter((link) => link.to !== "/refunds"), "Money"),
               folder("Books", Landmark, booksLinks, "Books"),

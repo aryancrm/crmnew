@@ -6,6 +6,7 @@ import type { Database } from "../db/index";
 import { allow, type Env, idParam, readBody } from "../http";
 import { COST_ROLES, PURCHASE_ROLES } from "../inventory/rules";
 import { afterStockIn } from "../orders/stock-wait";
+import { lastRates, purchaseBoard, purchaseOrderExtra, vendorItems } from "./board";
 import {
   cancelPurchase,
   listPurchases,
@@ -88,7 +89,19 @@ export function purchaseRoutes(
   signedIn: MiddlewareHandler<Env>,
 ): void {
   // "/path/*" also covers "/path" itself.
-  for (const path of ["/api/purchases/*", "/api/suppliers/*"]) app.use(path, signedIn);
+  for (const path of ["/api/purchases/*", "/api/suppliers/*", "/api/buying/*"]) app.use(path, signedIn);
+
+  // Purchases in this CRM's own look (the same documents as Zoho's screens).
+  app.get("/api/buying/board", async (c) => c.json(await purchaseBoard(db, c.get("me"))));
+  app.get("/api/buying/orders/:id/extra", async (c) =>
+    c.json(await purchaseOrderExtra(db, c.get("me"), Number(c.req.param("id")))),
+  );
+  app.get("/api/buying/vendors/:id/items", async (c) =>
+    c.json(await vendorItems(db, c.get("me"), Number(c.req.param("id")))),
+  );
+  app.get("/api/buying/rates", async (c) =>
+    c.json(await lastRates(db, c.get("me"), Number(c.req.query("supplierId")) || null)),
+  );
 
   app.get("/api/purchases", async (c) => {
     allow(c.get("me"), COST_ROLES, "see purchases");

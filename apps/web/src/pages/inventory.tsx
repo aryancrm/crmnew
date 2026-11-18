@@ -104,12 +104,12 @@ export function Inventory() {
   return (
     <div className="mx-auto flex max-w-[88rem] flex-col gap-4">
       <PageHead
-        title="Stock"
+        title="Stock by warehouse"
         sub="What is on the shelf in each warehouse, what is coming, and what expires first"
         actions={
           <>
             {can.purchase && (
-              <Button variant="primary" onClick={() => navigate("/books/purchaseorders/new")}>
+              <Button variant="primary" onClick={() => navigate("/purchases/orders/new")}>
                 <ShoppingCart size={16} aria-hidden="true" /> New purchase order
               </Button>
             )}

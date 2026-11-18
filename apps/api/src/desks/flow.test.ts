@@ -7,6 +7,7 @@ import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
+import { addDays, todayManila } from "../inventory/rules";
 import { seedDemo } from "../seed";
 import type { DeskPerson, DeskReport, OrderBoard, OwedInvoices } from "../types";
 
@@ -61,7 +62,8 @@ describe("three at Management, three at Finance, terms of any length", () => {
       db,
       sql`select m.id::int as id from medicine m join medicine_price p on p.medicine_id = m.id and p.buyer_type = 'hospital' limit 1`,
     );
-    const later = new Date(Date.now() + 50 * 86_400_000).toISOString().slice(0, 10);
+    // 50 days from Manila's today, as the server counts (not UTC's: they differ for 8 hours a day).
+    const later = addDays(todayManila(), 50);
     // The MedRep says how the customer pays: from the list, any number of days, months, a date, COD.
     const asked = ["NET 30", "75 days", "3 months", `Pays by ${later}`, "COD", "120 Day"];
     const orders: number[] = [];

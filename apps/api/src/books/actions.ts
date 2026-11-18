@@ -59,10 +59,11 @@ export async function bookChoices(db: Database, me: Me): Promise<BookChoices> {
     nextNumber(db, "vendor_credit", "DN-", 5),
     rows<BookChoices["receivedOrders"][number]>(
       db,
-      sql`select o.id::int as id, o.number, coalesce(s.name, o.party_name, '') as party, to_char(o.doc_date, 'YYYY-MM-DD') as date
+      sql`select o.id::int as id, o.number, coalesce(s.name, o.party_name, '') as party, to_char(o.doc_date, 'YYYY-MM-DD') as date,
+          round(o.total * o.fx_rate)::bigint::float8 as worth
         from book_doc o left join supplier s on s.id = o.supplier_id
         where o.kind = 'purchase_order' and o.status not in ('draft', 'cancelled', 'void')
-          and exists (select 1 from book_link k join book_line l on l.doc_id = k.from_doc and l.batch_id is not null where k.to_doc = o.id)
+          and exists (select 1 from book_line l where l.doc_id = o.id and l.medicine_id is not null)
         order by o.doc_date desc, o.id desc limit 300`,
     ),
   ]);
@@ -307,10 +308,23 @@ async function orderOf(tx: Runner, id: number) {
 }
 const left = (line: OrderLine, what: "received" | "billed") => line.qty - (line.done.cancelled ?? 0) - (line.done[what] ?? 0);
 
-export async function setOrderStatus(db: Database, me: Me, id: number, to: "issued" | "cancelled"): Promise<void> {
+export async function setOrderStatus(db: Database, me: Me, id: number, to: "issued" | "cancelled" | "closed" | "reopen"): Promise<void> {
   allow(me, PO_ROLES, "change a purchase order");
   await db.transaction(async (tx) => {
     const { order, lines } = await orderOf(tx, id);
+    // Close: the rest is not coming (a Zoho order never received in full, a vendor short); it
+    // stops counting as stock coming. Reopen undoes it.
+    if (to === "closed") {
+      if (["draft", "cancelled", "closed", "void"].includes(order.status)) throw new Refusal(409, "not_open", `A ${order.status} order is not closed.`);
+      await tx.execute(sql`update book_doc set status = 'closed', fields = fields || ${JSON.stringify({ "Closed by": me.name, "Closed on": todayManila() })}::jsonb where id = ${id}`);
+      return;
+    }
+    if (to === "reopen") {
+      if (order.status !== "closed") throw new Refusal(409, "not_closed", "Only a closed order is reopened.");
+      const billed = lines.some((line) => (line.done.billed ?? 0) > 0);
+      await tx.execute(sql`update book_doc set status = ${billed ? "partially_billed" : "issued"} where id = ${id}`);
+      return;
+    }
     if (to === "issued" && order.status !== "draft") throw new Refusal(409, "not_draft", "Only a draft is marked as issued.");
     if (to === "cancelled") {
       if (["cancelled", "closed"].includes(order.status)) throw new Refusal(409, "done", `This order is already ${order.status}.`);
@@ -423,6 +437,14 @@ export async function receiveOrder(db: Database, me: Me, id: number, input: Rece
     });
     await insertLines(tx, receiveId, made);
     await link(tx, receiveId, id, null, date);
+    // Freight, customs… entered before these goods came: their share for them goes on now.
+    await landWaiting(
+      tx,
+      id,
+      order.number,
+      order.fxRate,
+      made.filter((line) => line.batchId).map((line) => ({ batchId: line.batchId as number, qty: line.qty, rate: line.rate })),
+    );
     return { id: receiveId };
   });
 }
@@ -560,7 +582,7 @@ export async function createBill(db: Database, me: Me, input: BillInput): Promis
       balance: total,
       paymentTerms: input.paymentTerms,
       notes: input.notes,
-      fields: landed ? { "Landed cost on": landed.order, _landed: landed.batches } : undefined,
+      fields: landed ? { "Landed cost on": landed.order, _landed: landed.batches, _extras: landed.extras, _pending: landed.pending } : undefined,
       by: me.id,
     });
     await insertLines(tx, id, lines);
@@ -568,34 +590,22 @@ export async function createBill(db: Database, me: Me, input: BillInput): Promis
   });
 }
 
-/** Shares a landed-cost bill (in pesos' centavos, before tax) over what a purchase order's goods
- *  cost (by value, as the first purchase pages did) and puts each share on its batch: spread over
- *  the pieces of that batch still on the shelf, so all of it reaches Cost of Goods Sold as they
- *  sell. What it added to each batch is kept, so a void takes it back. */
-async function landOn(tx: Runner, orderId: number, extras: number) {
-  const [order] = await rows<{ number: string; fxRate: number; status: string }>(
+/** What an order's medicines are worth at its own rates, in pesos' centavos (all ordered, less
+ *  what was cancelled): the whole a landed cost is shared over. */
+async function orderWorth(tx: Runner, orderId: number, fxRate: number): Promise<number> {
+  const [worth] = await rows<{ value: number }>(
     tx,
-    sql`select number, fx_rate::float8 as "fxRate", status from book_doc where id = ${orderId} and kind = 'purchase_order'`,
+    sql`select coalesce(sum((coalesce(qty, 0) - coalesce((qty_done->>'cancelled')::numeric, 0)) * coalesce(rate, 0)), 0)::float8 as value
+      from book_line where doc_id = ${orderId} and medicine_id is not null`,
   );
-  if (!order || ["draft", "cancelled", "void"].includes(order.status))
-    throw new Refusal(400, "invalid", "Pick a purchase order whose goods came in.", "landedOn");
-  const came = await rows<{ batchId: number; qty: number; rate: number; onShelf: number }>(
-    tx,
-    sql`select l.batch_id::int as "batchId", sum(l.qty)::float8 as qty, max(l.rate)::float8 as rate,
-        coalesce((select sum(s.qty) from stock s where s.batch_id = l.batch_id), 0)::int as "onShelf"
-      from book_link k join book_doc r on r.id = k.from_doc and r.kind = 'purchase_receive' and r.status <> 'void'
-        join book_line l on l.doc_id = r.id and l.batch_id is not null
-      where k.to_doc = ${orderId} group by l.batch_id order by l.batch_id`,
-  );
-  if (!came.length) throw new Refusal(400, "invalid", `Nothing of ${order.number} was received here yet: receive it first.`, "landedOn");
-  if (came.every((one) => one.onShelf <= 0))
-    throw new Refusal(
-      409,
-      "sold",
-      `All the goods of ${order.number} are sold: record this bill on Cost of Goods Sold instead (no landed cost).`,
-      "landedOn",
-    );
-  const shares = landedCosts(came.map((one) => ({ qty: one.qty, unitCost: one.rate })), order.fxRate, extras);
+  return Math.round((worth?.value ?? 0) * fxRate * 100);
+}
+
+type Came = { batchId: number; qty: number; rate: number; onShelf: number };
+/** Puts an amount (pesos' centavos) on batches that came in, shared by their value and spread over
+ *  each batch's pieces still on the shelf, so all of it reaches Cost of Goods Sold as they sell. */
+async function putOnBatches(tx: Runner, came: Came[], fxRate: number, amount: number) {
+  const shares = landedCosts(came.map((one) => ({ qty: one.qty, unitCost: one.rate })), fxRate, amount);
   const batches: { batchId: number; add: number }[] = [];
   for (const [at, one] of came.entries()) {
     const share = shares[at]?.extras ?? 0;
@@ -605,7 +615,82 @@ async function landOn(tx: Runner, orderId: number, extras: number) {
     await tx.execute(sql`update batch set unit_cost = coalesce(unit_cost, 0) + ${add} where id = ${one.batchId}`);
     batches.push({ batchId: one.batchId, add });
   }
-  return { order: order.number, batches };
+  return batches;
+}
+
+/** A landed-cost bill (freight, customs, airfare, travel for these goods, any extra; in pesos'
+ *  centavos before tax) on a purchase order. It is shared over the order's goods by value: the part
+ *  for what already came goes on those batches now; the part for what is still to come waits and
+ *  goes on each delivery as it is received (all of it once the order is received in full or
+ *  closed). What it added to each batch is kept, so a void takes it back. */
+async function landOn(tx: Runner, orderId: number, extras: number) {
+  const [order] = await rows<{ number: string; fxRate: number; status: string }>(
+    tx,
+    sql`select number, fx_rate::float8 as "fxRate", status from book_doc where id = ${orderId} and kind = 'purchase_order'`,
+  );
+  if (!order || ["draft", "cancelled", "void"].includes(order.status))
+    throw new Refusal(400, "invalid", "Pick a purchase order that was sent to the vendor.", "landedOn");
+  const came = await rows<Came>(
+    tx,
+    sql`select l.batch_id::int as "batchId", sum(l.qty)::float8 as qty, max(l.rate)::float8 as rate,
+        coalesce((select sum(s.qty) from stock s where s.batch_id = l.batch_id), 0)::int as "onShelf"
+      from book_link k join book_doc r on r.id = k.from_doc and r.kind = 'purchase_receive' and r.status <> 'void'
+        join book_line l on l.doc_id = r.id and l.batch_id is not null
+      where k.to_doc = ${orderId} group by l.batch_id order by l.batch_id`,
+  );
+  const worth = await orderWorth(tx, orderId, order.fxRate);
+  const cameWorth = came.reduce((sum, one) => sum + Math.round(one.qty * one.rate * order.fxRate * 100), 0);
+  const [left] = await rows<{ n: number }>(
+    tx,
+    sql`select count(*)::int as n from book_line where doc_id = ${orderId} and medicine_id is not null
+      and coalesce(qty, 0) - coalesce((qty_done->>'cancelled')::numeric, 0) - coalesce((qty_done->>'received')::numeric, 0) > 0`,
+  );
+  // All of it now when nothing more is coming; else the part for what came.
+  const done = order.status === "closed" || (came.length > 0 && !left?.n);
+  const now = !came.length ? 0 : done || worth <= 0 ? extras : Math.min(extras, Math.round((extras * cameWorth) / worth));
+  if (now > 0 && came.every((one) => one.onShelf <= 0))
+    throw new Refusal(
+      409,
+      "sold",
+      `All the goods of ${order.number} that came are sold: record this bill on Cost of Goods Sold instead (no landed cost).`,
+      "landedOn",
+    );
+  const batches = now > 0 ? await putOnBatches(tx, came, order.fxRate, now) : [];
+  return { order: order.number, batches, extras, pending: extras - now };
+}
+
+/** Goods of an order just received: the landed costs waiting on that order put their share for
+ *  these goods on them (all that waits, once nothing more is coming). */
+async function landWaiting(tx: Runner, orderId: number, orderNumber: string, fxRate: number, came: { batchId: number; qty: number; rate: number }[]) {
+  const waiting = await rows<{ id: number; extras: number; pending: number; landed: { batchId: number; add: number }[] | null }>(
+    tx,
+    sql`select id::int as id, coalesce((fields->>'_extras')::bigint, 0)::float8 as extras, (fields->>'_pending')::bigint::float8 as pending, fields->'_landed' as landed
+      from book_doc where kind = 'bill' and status <> 'void' and fields->>'Landed cost on' = ${orderNumber}
+        and coalesce((fields->>'_pending')::bigint, 0) > 0 for update`,
+  );
+  if (!waiting.length || !came.length) return;
+  const worth = await orderWorth(tx, orderId, fxRate);
+  const cameWorth = came.reduce((sum, one) => sum + Math.round(one.qty * one.rate * fxRate * 100), 0);
+  const [left] = await rows<{ n: number }>(
+    tx,
+    sql`select count(*)::int as n from book_line where doc_id = ${orderId} and medicine_id is not null
+      and coalesce(qty, 0) - coalesce((qty_done->>'cancelled')::numeric, 0) - coalesce((qty_done->>'received')::numeric, 0) > 0`,
+  );
+  const shelf = await rows<{ batchId: number; onShelf: number }>(
+    tx,
+    sql`select b.id::int as "batchId", coalesce((select sum(s.qty) from stock s where s.batch_id = b.id), 0)::int as "onShelf"
+      from batch b where b.id in (${sql.join(came.map((one) => sql`${one.batchId}`), sql`, `)})`,
+  );
+  const withShelf = came.map((one) => ({ ...one, onShelf: shelf.find((row) => row.batchId === one.batchId)?.onShelf ?? 0 }));
+  for (const bill of waiting) {
+    const share = !left?.n || worth <= 0 ? bill.pending : Math.min(bill.pending, Math.round((bill.extras * cameWorth) / worth));
+    if (share <= 0) continue;
+    const batches = await putOnBatches(tx, withShelf, fxRate, share);
+    await tx.execute(
+      sql`update book_doc set fields = fields || jsonb_build_object('_landed', ${JSON.stringify([...(bill.landed ?? []), ...batches])}::jsonb, '_pending', ${bill.pending - share}::bigint)
+        where id = ${bill.id}`,
+    );
+  }
 }
 
 // ------------------------------------------------------------------ money on bills

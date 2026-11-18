@@ -48,7 +48,7 @@ export function InventoryOverview() {
             <div className="flex flex-wrap gap-3">
               {Boolean(data.toReceive?.late) && (
                 <Attention
-                  to="/books/purchaseorders"
+                  to="/purchases/orders?stage=to_receive"
                   tone="bad"
                   icon={CalendarClock}
                   value={data.toReceive?.late as number}
@@ -109,7 +109,7 @@ export function InventoryOverview() {
             />
             {data.toReceive && (
               <Tile
-                to="/books/purchaseorders"
+                to="/purchases/orders?stage=to_receive"
                 label="To be received"
                 value={count(data.toReceive.purchases)}
                 sub={`${count(data.toReceive.pieces)} pieces on order`}
@@ -339,7 +339,7 @@ function ReorderPanel() {
         ))}
       </ul>
       <div className="border-t border-slate-100 px-4 py-2.5">
-        <Link to="/books/purchaseorders/new" className="text-xs font-semibold text-brand-dark hover:underline">
+        <Link to="/purchases/orders/new" className="text-xs font-semibold text-brand-dark hover:underline">
           New purchase order →
         </Link>
       </div>

@@ -333,8 +333,8 @@ export async function medicineDetail(db: Database, me: Me, id: number): Promise<
             where l.medicine_id = ${id} and p.state = 'ordered'
             union all
             select d.id::int, d.number, (l.qty - coalesce((l.qty_done->>'cancelled')::numeric, 0) - coalesce((l.qty_done->>'received')::numeric, 0))::int, coalesce(w.name, d.fields->>'Warehouse Name', ''),
-              ${day("coalesce(d.due_date, d.doc_date)")}, coalesce(s.name, d.party_name, ''), (coalesce(d.due_date, d.doc_date) < ${today}::date),
-              '/books/purchaseorders/' || d.id
+              ${day("coalesce(d.due_date, d.doc_date)")}, coalesce(s.name, d.party_name, ''), coalesce(d.due_date < ${today}::date, false),
+              '/purchases/orders/' || d.id
             from book_doc d join book_line l on l.doc_id = d.id
           left join warehouse w on w.id = d.warehouse_id left join supplier s on s.id = d.supplier_id
           where d.kind = 'purchase_order' and d.status not in ('draft', 'cancelled', 'closed', 'void')

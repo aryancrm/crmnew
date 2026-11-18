@@ -5331,6 +5331,42 @@ export type VendorDetail = VendorRow & {
 };
 
 /** What the books' forms pick from. */
+/** Purchases' board: what the Inventory and Finance desks act on. Money in centavos of pesos. */
+export type PurchaseBoard = {
+  today: string;
+  toReceive: { orders: number; pieces: number; late: number; value: number };
+  toBill: { orders: number; value: number };
+  bills: { open: number; owed: number; overdue: number; overdueAmount: number; dueThisWeek: number };
+  /** Vendor credits and payments not put on a bill yet. */
+  unusedCredits: number;
+  buyMore: {
+    id: number;
+    name: string;
+    pack: string | null;
+    packSize: number;
+    free: number;
+    reorderLevel: number;
+    sold30: number;
+    coming: number;
+    daysLeft: number | null;
+    vendorId: number | null;
+    vendor: string | null;
+    /** In the vendor's currency, as it was typed. */
+    lastRate: number | null;
+    lastCurrency: string | null;
+    lastOn: string | null;
+  }[];
+  recent: { id: number; kind: BookKind; number: string; party: string | null; date: string; total: number; currency: string; status: string; fromZoho: boolean }[];
+};
+export type PurchaseOrderExtra = {
+  batches: { receiveId: number; receive: string; date: string; lineId: number | null; batchNo: string | null; expiresOn: string | null; qty: number; warehouse: string | null; orderCost: number; costNow: number | null }[];
+  /** `pending`: the part still to be put on goods not received yet. */
+  landed: { id: number; number: string; vendor: string | null; date: string; amount: number; pending: number; status: string }[];
+};
+export type VendorItems = {
+  items: { medicineId: number | null; name: string; orders: number; qty: number; lastRate: number | null; currency: string | null; lastOn: string }[];
+};
+
 export type BookChoices = {
   today: string;
   vendors: { id: number; name: string; currency: string; paymentTerms: string | null }[];
@@ -5340,9 +5376,10 @@ export type BookChoices = {
   modes: string[];
   paidThrough: string[];
   next: { purchaseOrder: string; receive: string; payment: string; vendorCredit: string };
-  /** Purchase orders whose goods came onto the shelf here: a freight or customs bill can be added
-   *  to their cost (landed cost). Newest first. */
-  receivedOrders: { id: number; number: string; party: string; date: string }[];
+  /** Purchase orders sent to a vendor: a freight, customs, airfare or other bill can be added to
+   *  their goods' cost (landed cost), before or after they come. Newest first. */
+  /** `worth`: the order's total in pesos' centavos. */
+  receivedOrders: { id: number; number: string; party: string; date: string; worth: number }[];
 };
 
 export type CustomerKind2 = "hospital" | "doctor" | "patient" | "drugstore" | "distributor" | "government";

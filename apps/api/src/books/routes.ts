@@ -52,6 +52,7 @@ const listAsked = (query: (name: string) => string | undefined) => ({
   sort: query("sort"),
   dir: query("dir"),
   party: Number(query("party")) || undefined,
+  stage: query("stage"),
 });
 
 export function bookRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandler<Env>): void {
@@ -163,7 +164,7 @@ export function bookActionRoutes(app: Hono<Env>, db: Database): void {
     ),
   );
   app.post("/api/books/purchase_order/:id/status", async (c) => {
-    const { to } = await readBody(c, z.object({ to: z.enum(["issued", "cancelled"]) }));
+    const { to } = await readBody(c, z.object({ to: z.enum(["issued", "cancelled", "closed", "reopen"]) }));
     await setOrderStatus(db, c.get("me"), Number(c.req.param("id")), to);
     return c.json({ ok: true });
   });

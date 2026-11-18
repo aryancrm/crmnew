@@ -97,7 +97,7 @@ export async function bookList(
   db: Database,
   me: Me,
   kind: BookKind,
-  asked: { view?: string; page?: number; perPage?: number; q?: string; sort?: string; dir?: string; party?: number },
+  asked: { view?: string; page?: number; perPage?: number; q?: string; sort?: string; dir?: string; party?: number; stage?: string },
 ): Promise<BookList> {
   mayRead(me, kind);
   const today = todayManila();
@@ -125,6 +125,14 @@ export async function bookList(
       view === "all" ? sql`true` : view === "zoho_to_finish" ? sql`r.open` : sql`r.status = ${view}`,
       q ? sql`(r.number ilike ${`%${q}%`} or r.reference ilike ${`%${q}%`} or r.party ilike ${`%${q}%`})` : sql`true`,
       asked.party ? sql`r."partyId" = ${asked.party}` : sql`true`,
+      // The Purchases board's stages (a purchase order still to come in, or come in and not billed).
+      kind === "purchase_order" && asked.stage === "to_receive"
+        ? sql`r.status not in ('draft', 'cancelled', 'closed', 'void') and coalesce(r.due, r.date)::date >= ${today}::date - 365 and exists (select 1 from book_line l where l.doc_id = r.id
+            and coalesce(l.qty, 0) - coalesce((l.qty_done->>'cancelled')::numeric, 0) - coalesce((l.qty_done->>'received')::numeric, 0) > 0)`
+        : kind === "purchase_order" && asked.stage === "to_bill"
+          ? sql`r.status not in ('draft', 'cancelled', 'void') and r.date::date >= ${today}::date - 365 and exists (select 1 from book_line l where l.doc_id = r.id
+              and coalesce((l.qty_done->>'received')::numeric, 0) > coalesce((l.qty_done->>'billed')::numeric, 0))`
+          : sql`true`,
     ],
     sql` and `,
   );
