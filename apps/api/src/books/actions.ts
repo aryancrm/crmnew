@@ -17,6 +17,7 @@ import type { Role } from "../people/roles";
 import type { BookChoices, Me } from "../types";
 import { LEDGER_ROLES } from "./accounts";
 import { assertOpen } from "./write";
+import { freeStatementLine, guardReconciled } from "./bank";
 
 const PO_ROLES: Role[] = ["inventory", "admin"];
 const BILL_ROLES: Role[] = ["inventory", "finance", "admin"];
@@ -659,6 +660,7 @@ export async function voidDoc(db: Database, me: Me, id: number, reason: string):
     allow(me, doc.kind === "bill" ? BILL_ROLES : ledgerKinds.includes(doc.kind) || doc.kind === "credit_note" ? LEDGER_ROLES : PAY_ROLES, "void it");
     if (doc.status === "void") throw new Refusal(409, "void", "It is already void.");
     await assertOpen(tx, doc.kind, doc.date);
+    await guardReconciled(tx, id);
     if (["credit_note", "customer_payment"].includes(doc.kind)) {
       const [used] = await rows<{ n: number }>(tx, sql`select count(*)::int as n from payment where active and credit_doc_id = ${id}`);
       if (used?.n) throw new Refusal(409, "used", "Some of it was used on a CRM invoice: take that payment off first.");
@@ -704,6 +706,7 @@ export async function voidDoc(db: Database, me: Me, id: number, reason: string):
         );
     }
     await tx.execute(sql`update book_doc set status = 'void', balance = 0, voided_by = ${me.id}, voided_at = now(), void_reason = ${why} where id = ${id}`);
+    await freeStatementLine(tx, id);
     // A Zoho document's debits and credits were written down when it came in: they no longer count.
     await tx.execute(sql`delete from book_ledger where doc_id = ${id}`);
   });

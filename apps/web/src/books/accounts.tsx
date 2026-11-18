@@ -281,6 +281,14 @@ export function BankingPage() {
           {a.name}
         </Link>
         {a.code && <div className="text-[11.5px] text-[#6c718a]">{a.code}</div>}
+        <div className="mt-0.5 flex gap-3 text-[11.5px]">
+          <Link to={`/books/bankstatement?account=${encodeURIComponent(a.name)}`} className="text-[#1c5bd9]">
+            Statement
+          </Link>
+          <Link to={`/books/reconcile?account=${encodeURIComponent(a.name)}`} className="text-[#1c5bd9]">
+            Reconcile
+          </Link>
+        </div>
       </td>
       <td className="px-2 py-2.5">{typeLabel(a.type)}</td>
       <td className="px-2 py-2.5 whitespace-nowrap text-[#4b4f63]">{zDate(a.lastOn)}</td>

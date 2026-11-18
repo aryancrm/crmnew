@@ -21,6 +21,7 @@ import {
 } from "./actions";
 import { accountDetail, accountList, banking } from "./accounts";
 import { insight } from "./insights";
+import { bankStatement, categorizeLine, finishReconciliation, importStatement, matchLine, reconcileView, setLineStatus, undoReconciliation } from "./bank";
 import { recurringMade, setRecurringStatus, takeOverRecurring } from "./recurring";
 import {
   bookLocks,
@@ -59,6 +60,7 @@ export function bookRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHan
   app.use("/api/books-locks", signedIn);
   app.use("/api/books-locks/*", signedIn);
   app.use("/api/books-recurring/*", signedIn);
+  app.use("/api/books-bank/*", signedIn);
   bookActionRoutes(app, db);
   app.get("/api/books/items", async (c) => c.json(await itemList(db, c.get("me"), listAsked((n) => c.req.query(n)))));
   app.get("/api/books/items/:id", async (c) => c.json(await itemDetail(db, c.get("me"), Number(c.req.param("id")))));
@@ -360,6 +362,75 @@ export function bookActionRoutes(app: Hono<Env>, db: Database): void {
     return c.json({ ok: true });
   });
   app.get("/api/books-recurring/:id/made", async (c) => c.json(await recurringMade(db, me(c), Number(c.req.param("id")))));
+  // Bank statements and reconciliation (docs/BOOKS-PLAN.md C).
+  const acct = (c: { req: { param: (name: "account") => string } }) => decodeURIComponent(c.req.param("account"));
+  app.get("/api/books-bank/:account/statement", async (c) => c.json(await bankStatement(db, me(c), acct(c), { view: c.req.query("view") })));
+  app.post("/api/books-bank/:account/import", async (c) =>
+    c.json(
+      await importStatement(
+        db,
+        me(c),
+        acct(c),
+        await readBody(
+          c,
+          z.object({
+            fileName: TEXT(200),
+            rows: z.array(z.object({ date: DAY, description: TEXT(500), reference: TEXT(200), amount: z.number().int(), zohoId: TEXT(60) })).min(1).max(5000),
+          }),
+        ),
+      ),
+    ),
+  );
+  app.post("/api/books-bank/line/:id/match", async (c) => {
+    await matchLine(db, me(c), Number(c.req.param("id")), await readBody(c, z.object({ entryKey: z.string().max(80) })));
+    return c.json({ ok: true });
+  });
+  app.post("/api/books-bank/line/:id/categorize", async (c) =>
+    c.json(
+      await categorizeLine(
+        db,
+        me(c),
+        Number(c.req.param("id")),
+        await readBody(
+          c,
+          z.discriminatedUnion("as", [
+            z.object({
+              as: z.literal("expense"),
+              expense: z.object({
+                account: NAME,
+                taxId: z.number().int().positive().nullish(),
+                taxInclusive: z.boolean(),
+                supplierId: z.number().int().positive().nullish(),
+                customerId: z.number().int().positive().nullish(),
+                reference: TEXT(100),
+                notes: TEXT(2000),
+                costCentre: NAME,
+                type: NAME,
+                department: NAME,
+                pic: NAME,
+                voucher: TEXT(100),
+                orNumber: TEXT(100),
+              }),
+            }),
+            z.object({ as: z.literal("deposit"), from: NAME, payer: TEXT(200) }),
+            z.object({ as: z.literal("transfer"), other: NAME }),
+          ]),
+        ),
+      ),
+    ),
+  );
+  app.post("/api/books-bank/line/:id/status", async (c) => {
+    await setLineStatus(db, me(c), Number(c.req.param("id")), await readBody(c, z.object({ to: z.enum(["excluded", "uncategorized"]) })));
+    return c.json({ ok: true });
+  });
+  app.get("/api/books-bank/:account/reconcile", async (c) => c.json(await reconcileView(db, me(c), acct(c), { end: c.req.query("end") })));
+  app.post("/api/books-bank/:account/reconcile", async (c) =>
+    c.json(await finishReconciliation(db, me(c), acct(c), await readBody(c, z.object({ end: DAY, closing: z.number().int(), keys: z.array(z.string().max(80)).max(10000) })))),
+  );
+  app.post("/api/books-bank/reconciliation/:id/undo", async (c) => {
+    await undoReconciliation(db, me(c), Number(c.req.param("id")));
+    return c.json({ ok: true });
+  });
   app.get("/api/books-locks", async (c) => c.json(await bookLocks(db, me(c))));
   app.post("/api/books-locks/:module", async (c) => {
     await setLock(db, me(c), c.req.param("module"), await readBody(c, z.object({ lockDate: DAY, reason: TEXT(300) })));

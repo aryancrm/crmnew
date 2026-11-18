@@ -5528,3 +5528,31 @@ export type CreditNoteInput = { customerId: number; date: string; reference?: st
 export type CreditRefundInput = { date: string; amount: number; from: string; mode?: string | null; reference?: string | null; notes?: string | null };
 
 export type AccountInput = { name: string; code?: string | null; type: string; parentId?: number | null; description?: string | null };
+
+// ------------------------------------------------------------------ bank statements and reconciliation
+
+/** One document's entries on a bank account: 'books:<doc>' or 'crm:<kind>:<id>'; amount into the bank positive. */
+export type BankEntry = { key: string; kind: string; docId: number; date: string; amount: number; number: string | null; party: string | null };
+export type BankLineRow = {
+  id: number;
+  date: string;
+  description: string | null;
+  reference: string | null;
+  amount: number;
+  status: "uncategorized" | "matched" | "categorized" | "excluded";
+  entryKey: string | null;
+  /** The kind of the book document it stands for, to open it. */
+  docKind: BookKind | null;
+  reconciled: boolean;
+  suggestions?: BankEntry[];
+};
+export type BankStatement = { account: string; view: string; counts: Record<string, number>; booksBalance: number; lines: BankLineRow[] };
+export type BankReconcileView = {
+  account: string;
+  end: string;
+  /** The day after the last reconciliation (null for the first). */
+  start: string | null;
+  opening: number;
+  entries: (BankEntry & { onStatement: boolean })[];
+  history: { id: number; start: string; end: string; opening: number; closing: number; status: "done" | "undone"; by: string | null; at: string }[];
+};

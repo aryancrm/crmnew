@@ -11,7 +11,7 @@ import { customerCredit } from "../finance/credit";
 import { addDays } from "../finance/rules";
 import { todayManila } from "../inventory/rules";
 import { seedDemo } from "../seed";
-import type { LedgerChoices } from "../types";
+import type { BankReconcileView, BankStatement, LedgerChoices } from "../types";
 import { dueDays, makeDueRecurring } from "./recurring";
 
 const PASSWORD = "test-password-1";
@@ -231,5 +231,55 @@ describe("writing the books", () => {
     expect(net(list, BANK)).toBe(-1_150_000);
     await ok("fiona", `/api/books/recurring_expense/${id}/recurring`, { active: false });
     expect(await makeDueRecurring(db, addDays(today, 70))).toBe(0);
+  });
+
+  it("a statement imports once, matches what the books hold, categorizes the rest, and reconciles to nil", async () => {
+    await db.execute(sql`delete from book_lock`);
+    const ACCOUNT = "Eastwest - 2MG 4173";
+    const path = `/api/books-bank/${encodeURIComponent(ACCOUNT)}`;
+    const day1 = addDays(today, -3);
+    // The books already hold a transfer into this bank.
+    const transfer = await ok("fiona", "/api/books/transfer_fund/new", { date: day1, from: BANK, to: ACCOUNT, amount: 250_000 });
+    const rowsIn = [
+      { date: day1, description: "TRANSFER IN", reference: "FT1", amount: 250_000 },
+      { date: addDays(today, -2), description: "SERVICE CHARGE", reference: "SC", amount: -5_000 },
+      { date: addDays(today, -1), description: "INTEREST", amount: 1_234 },
+    ];
+    expect(await ok<{ added: number }>("fiona", `${path}/import`, { fileName: "nov.csv", rows: rowsIn })).toEqual({ added: 3, skipped: 0 });
+    expect(await ok<{ added: number }>("fiona", `${path}/import`, { fileName: "nov.csv", rows: rowsIn })).toEqual({ added: 0, skipped: 3 });
+
+    let statement = await read<BankStatement>("fiona", `${path}/statement`);
+    expect(statement.lines).toHaveLength(3);
+    const transferLine = statement.lines.find((line) => line.amount === 250_000);
+    expect(transferLine?.suggestions?.[0]?.key).toBe(`books:${transfer.id}`);
+    await ok("fiona", `/api/books-bank/line/${transferLine?.id}/match`, { entryKey: `books:${transfer.id}` });
+    // Not twice.
+    const charge = statement.lines.find((line) => line.amount === -5_000);
+    await refused("fiona", `/api/books-bank/line/${charge?.id}/match`, { entryKey: `books:${transfer.id}` }, 400);
+    const made = await ok<{ docId: number }>("fiona", `/api/books-bank/line/${charge?.id}/categorize`, {
+      as: "expense",
+      expense: { account: "Courier", taxInclusive: true, costCentre: "2MG0001", type: "Services", department: "Finance", pic: "Fiona" },
+    });
+    expect(net(await posted(made.docId), ACCOUNT)).toBe(-5_000);
+    const interest = statement.lines.find((line) => line.amount === 1_234);
+    await refused("fiona", `/api/books-bank/line/${interest?.id}/categorize`, { as: "expense", expense: { account: "Courier", taxInclusive: true, costCentre: "2MG0001", type: "Services", department: "Finance", pic: "F" } }, 400);
+    await ok("fiona", `/api/books-bank/line/${interest?.id}/categorize`, { as: "deposit", from: "Interest Income" });
+    statement = await read<BankStatement>("fiona", `${path}/statement?view=all`);
+    expect(statement.lines.every((line) => line.status !== "uncategorized")).toBe(true);
+
+    // Reconcile: the ticked entries must bring the opening to the statement's closing.
+    const view = await read<BankReconcileView>("fiona", `${path}/reconcile?end=${addDays(today, -1)}`);
+    expect(view.opening).toBe(0);
+    const keys = view.entries.filter((entry) => entry.onStatement).map((entry) => entry.key);
+    expect(keys).toHaveLength(3);
+    const wrong = await refused("fiona", `${path}/reconcile`, { end: addDays(today, -1), closing: 250_000, keys }, 400);
+    expect(wrong.message).toContain("difference");
+    const done = await ok("fiona", `${path}/reconcile`, { end: addDays(today, -1), closing: 250_000 - 5_000 + 1_234, keys });
+    // A reconciled document can't be voided; undoing the reconciliation frees it.
+    await refused("fiona", `/api/books/transfer_fund/${transfer.id}/void`, { reason: "x" }, 409);
+    await ok("fiona", `/api/books-bank/reconciliation/${done.id}/undo`);
+    await ok("fiona", `/api/books/transfer_fund/${transfer.id}/void`, { reason: "Wrong account" });
+    statement = await read<BankStatement>("fiona", `${path}/statement`);
+    expect(statement.lines.map((line) => line.amount)).toEqual([250_000]);
   });
 });

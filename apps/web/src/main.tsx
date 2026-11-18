@@ -87,6 +87,7 @@ import { CustomersImportPage } from "./pages/customers-import";
 import { MySamplesPage, TeamSamplesPage } from "./pages/samples";
 import { ComplaintsPage } from "./pages/complaints";
 import { BillFromOrderPage, NewBillPage, NewPaymentPage, NewReceiptPage, NewPurchaseOrderPage, NewVendorCreditPage, NewVendorPage, ReceivePage } from "./books/forms";
+import { BankStatementPage, ReconcilePage } from "./books/bank";
 import { LockingPage, NewCreditNotePage, NewDepositPage, NewExpensePage, NewJournalPage, NewTransferPage } from "./books/ledger";
 import { CompanyPapersPage, TenderPage, TendersPage } from "./pages/tenders";
 import { ClidpListingsPage, ClidpTeamPage } from "./pages/clidp";
@@ -137,6 +138,8 @@ createRoot(root).render(
             <Route path="deposits/new" element={<NewDepositPage />} />
             <Route path="creditnotes/new" element={<NewCreditNotePage />} />
             <Route path="locking" element={<LockingPage />} />
+            <Route path="bankstatement" element={<BankStatementPage />} />
+            <Route path="reconcile" element={<ReconcilePage />} />
             <Route path="items" element={<ItemsPage />} />
             <Route path="items/:id" element={<ItemsPage />} />
             <Route path="pricelists" element={<PriceListsPage />} />
