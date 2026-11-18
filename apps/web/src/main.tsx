@@ -301,6 +301,8 @@ createRoot(root).render(
             {/* One road for buying (Aryan, 18 Nov): Purchases (vendors, purchase orders, receives,
                 bills, payments, vendor credits), which hold Zoho's history too. The first purchase
                 pages' few orders still open by their number. */}
+            {/* The CEO's key reports, in the CRM's frame (the books' report page). */}
+            <Route path="key-reports/:report" element={<ReportsPage />} />
             <Route path="zoho-reports" element={<ZohoReportsPage />} />
             <Route path="zoho-reports/:group" element={<ZohoReportsPage />} />
             <Route path="purchases" element={<PurchasesBoard />} />

@@ -22,7 +22,9 @@ const took = (minutes: number | null) => {
 
 export function DeskReportPage() {
   const me = useMe().data;
-  const desk = me?.role === "finance" ? "finance" : "management";
+  const [deskParams] = useSearchParams();
+  // The desk's own people see their desk; the CEO and the Admin pick it (?desk=finance).
+  const desk = me?.role === "finance" || (me?.role !== "management" && deskParams.get("desk") === "finance") ? "finance" : "management";
   const [params, setParams] = useSearchParams();
   const today = manila();
   const monday = (() => {
@@ -69,7 +71,7 @@ export function DeskReportPage() {
                 key={one.key}
                 type="button"
                 aria-pressed={one.key === range.key}
-                onClick={() => setParams({ range: one.key }, { replace: true })}
+                onClick={() => setParams({ range: one.key, ...(deskParams.get("desk") ? { desk: deskParams.get("desk") as string } : {}) }, { replace: true })}
                 className={`rounded-md px-3 py-1 ${one.key === range.key ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}
               >
                 {one.label}
@@ -101,7 +103,7 @@ export function DeskReportPage() {
               {data.people.map((one) => (
                 <tr key={one.id} className="border-t border-slate-100">
                   <td className="px-4 py-2.5 font-semibold">
-                    <Link to={`/desk/person/${one.id}?range=${range.key}`} className="text-slate-900 hover:text-brand hover:underline">
+                    <Link to={`/desk/person/${one.id}?range=${range.key}&desk=${desk}`} className="text-slate-900 hover:text-brand hover:underline">
                       {one.name}
                     </Link>
                   </td>

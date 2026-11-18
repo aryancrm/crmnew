@@ -29,7 +29,9 @@ const OUTCOME: Record<DeskPerson["done"][number]["outcome"], { word: string; ton
 
 export function DeskPersonPage() {
   const me = useMe().data;
-  const desk = me?.role === "finance" ? "finance" : "management";
+  const [deskParams] = useSearchParams();
+  // The desk's own people see their desk; the CEO and the Admin pick it (?desk=finance).
+  const desk = me?.role === "finance" || (me?.role !== "management" && deskParams.get("desk") === "finance") ? "finance" : "management";
   const id = Number(useParams().id);
   const [params, setParams] = useSearchParams();
   const today = manila();
@@ -65,7 +67,7 @@ export function DeskPersonPage() {
                 key={one.key}
                 type="button"
                 aria-pressed={one.key === range.key}
-                onClick={() => setParams({ range: one.key }, { replace: true })}
+                onClick={() => setParams({ range: one.key, ...(deskParams.get("desk") ? { desk: deskParams.get("desk") as string } : {}) }, { replace: true })}
                 className={`rounded-md px-3 py-1 ${one.key === range.key ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50"}`}
               >
                 {one.label}

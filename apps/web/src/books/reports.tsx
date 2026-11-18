@@ -37,6 +37,33 @@ type Report = {
 const SALES = ["ceo", "admin", "management", "finance"];
 const STOCK = [...SALES, "inventory"];
 export const REPORTS: Report[] = [
+  {
+    key: "customers",
+    title: "Customers",
+    about: "Every customer who ever bought, every kind: channel, who looks after them, bought in the days, this year, all time, owes now, last bought.",
+    group: "Customers & channels",
+    days: "range",
+    insight: true,
+    roles: SALES,
+    by: [
+      { key: "all", label: "All kinds" },
+      { key: "hospital", label: "Hospitals" },
+      { key: "doctor", label: "Doctors" },
+      { key: "patient", label: "Patients" },
+      { key: "drugstore", label: "Drugstores" },
+      { key: "distributor", label: "Distributors" },
+      { key: "government", label: "Government" },
+    ],
+  },
+  {
+    key: "channels",
+    title: "Channels",
+    about: "How many channels, and each one's people, customers, sales in the days and this year, and what its customers owe.",
+    group: "Customers & channels",
+    days: "range",
+    insight: true,
+    roles: SALES,
+  },
   { key: "profit-and-loss", title: "Profit and Loss", about: "Income, cost of goods, expenses and the profit, with the days before beside it.", group: "Business Overview", days: "range" },
   { key: "balance-sheet", title: "Balance Sheet", about: "What the business holds, owes and is worth on a day.", group: "Business Overview", days: "asOf" },
   { key: "cash-flow", title: "Cash Flow", about: "Money in and out of every bank, cash and e-wallet account, and what moved it.", group: "Business Overview", days: "range" },

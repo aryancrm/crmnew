@@ -296,8 +296,136 @@ async function seniorPwd(db: Database, asked: { from?: string | null; to?: strin
   };
 }
 
+const KIND_WORD: Record<string, string> = {
+  hospital: "Hospital",
+  doctor: "Doctor",
+  patient: "Patient",
+  drugstore: "Drugstore",
+  distributor: "Distributor",
+  government: "Government",
+};
+
+/** Every customer, of every kind (Aryan, 18 Nov: "the most important report: customers, all of
+ *  them, hospitals and every kind"): its channel and who looks after it, what it bought (Zoho's
+ *  invoices and the CRM's) in the days picked, this year and in all, what it owes now, when it last
+ *  bought. Biggest buyers first. `by`: one kind, or all. */
+async function customersReport(db: Database, asked: { from?: string | null; to?: string | null; by?: string | null }): Promise<Insight> {
+  const { from, to } = period(asked);
+  const kind = asked.by && KIND_WORD[asked.by] ? asked.by : null;
+  const found = await rows<Record<string, string | number | null>>(
+    db,
+    sql`with s as (
+        select customer_id, count(*) filter (where status <> 'cancelled')::int as invoices,
+          coalesce(sum(total) filter (where status <> 'cancelled' and issued_on between ${from}::date and ${to}::date), 0)::float8 as period,
+          coalesce(sum(total) filter (where status <> 'cancelled' and issued_on >= date_trunc('year', ${to}::date)), 0)::float8 as year,
+          coalesce(sum(total) filter (where status <> 'cancelled'), 0)::float8 as alltime,
+          coalesce(sum(greatest(total - paid, 0)) filter (where status not in ('cancelled', 'paid')), 0)::float8 as owed,
+          to_char(max(issued_on) filter (where status <> 'cancelled'), 'YYYY-MM-DD') as last
+        from sale_invoice where customer_id is not null group by 1)
+      select c.name as customer, c.kind, coalesce(ch.name, '—') as channel,
+        coalesce((select p.name from seat st join seat_holder h on h.seat_id = st.id and h.ends_on is null and h.kind = 'holder'
+          join person p on p.id = h.person_id where st.area_id = c.area_id and st.active order by st.id limit 1), '—') as "lookedAfter",
+        coalesce(c.city, '') as city, coalesce(s.invoices, 0) as invoices, coalesce(s.period, 0) as period, coalesce(s.year, 0) as year,
+        coalesce(s.alltime, 0) as alltime, coalesce(s.owed, 0) as owed, coalesce(s.last, '') as last
+      from customer c left join s on s.customer_id = c.id
+        left join area a on a.id = c.area_id left join channel ch on ch.id = a.channel_id
+      where c.active ${kind ? sql`and c.kind = ${kind}` : sql``}
+      order by coalesce(s.alltime, 0) desc, c.name`,
+  );
+  // Those who bought at least once (Zoho's 90,000 contacts are mostly people who only enquired).
+  const bought = found.filter((row) => Number(row.invoices ?? 0) > 0);
+  const never = found.length - bought.length;
+  const rowsOut: Record<string, string | number | null>[] = bought.map((row) => ({ ...row, kind: KIND_WORD[String(row.kind)] ?? row.kind ?? null }));
+  const kindWord = kind ? (KIND_WORD[kind] as string) : "";
+  return {
+    title: kind ? `Customers: ${kindWord}s` : "Customers",
+    note: `Every customer who ever bought${kind ? ` (${kindWord.toLowerCase()}s)` : ", every kind"} (${never.toLocaleString("en-PH")} more on file never bought): bought ${from} to ${to}, this year and in all (Zoho's invoices and the CRM's, with tax), owed now, last bought. Biggest buyers first.`,
+    columns: [
+      col("customer", "Customer"),
+      col("kind", "Kind"),
+      col("channel", "Channel"),
+      col("lookedAfter", "Looked after by"),
+      col("city", "City"),
+      col("invoices", "Invoices", "number"),
+      col("period", "Bought in the days", "money"),
+      col("year", "This year", "money"),
+      col("alltime", "All time", "money"),
+      col("owed", "Owes now", "money"),
+      col("last", "Last bought"),
+    ],
+    rows: rowsOut,
+    totals: {
+      customer: `${rowsOut.length.toLocaleString("en-PH")} customers`,
+      invoices: rowsOut.reduce((sum, row) => sum + Number(row.invoices ?? 0), 0),
+      period: rowsOut.reduce((sum, row) => sum + Number(row.period ?? 0), 0),
+      year: rowsOut.reduce((sum, row) => sum + Number(row.year ?? 0), 0),
+      alltime: rowsOut.reduce((sum, row) => sum + Number(row.alltime ?? 0), 0),
+      owed: rowsOut.reduce((sum, row) => sum + Number(row.owed ?? 0), 0),
+    },
+  };
+}
+
+/** Each channel (Aryan, 18 Nov: "the second important report: every channel; first tell me how
+ *  many channels there are"): its head, people, customers, what it sold in the days picked and this
+ *  year, what its customers owe. Zoho's sales by salespeople not yet tied to a seat show apart. */
+async function channelsReport(db: Database, asked: { from?: string | null; to?: string | null }): Promise<Insight> {
+  const { from, to } = period(asked);
+  const found = await rows<Record<string, string | number | null>>(
+    db,
+    sql`with s as (
+        select channel_id, count(*) filter (where status <> 'cancelled' and issued_on between ${from}::date and ${to}::date)::int as invoices,
+          count(distinct customer_id) filter (where status <> 'cancelled' and issued_on between ${from}::date and ${to}::date)::int as buyers,
+          coalesce(sum(total) filter (where status <> 'cancelled' and issued_on between ${from}::date and ${to}::date), 0)::float8 as period,
+          coalesce(sum(total) filter (where status <> 'cancelled' and issued_on >= date_trunc('year', ${to}::date)), 0)::float8 as year,
+          coalesce(sum(greatest(total - paid, 0)) filter (where status not in ('cancelled', 'paid')), 0)::float8 as owed
+        from sale_invoice group by 1),
+      people as (
+        select a.channel_id, count(distinct h.person_id)::int as n
+        from seat st join area a on a.id = st.area_id
+          join seat_holder h on h.seat_id = st.id and h.ends_on is null and h.kind = 'holder'
+        where st.active group by 1),
+      cust as (select a.channel_id, count(*)::int as n from customer c join area a on a.id = c.area_id where c.active group by 1)
+      select ch.code, ch.name as channel, coalesce(pe.n, 0) as people, coalesce(cu.n, 0) as customers,
+        coalesce(s.buyers, 0) as buyers, coalesce(s.invoices, 0) as invoices, coalesce(s.period, 0) as period,
+        coalesce(s.year, 0) as year, coalesce(s.owed, 0) as owed
+      from channel ch left join s on s.channel_id = ch.id left join people pe on pe.channel_id = ch.id left join cust cu on cu.channel_id = ch.id
+      union all
+      select '', 'No channel yet (Zoho, untied)', 0, 0, buyers, invoices, period, year, owed from s where channel_id is null
+      order by 7 desc`,
+  );
+  const named = found.filter((row) => row.code);
+  return {
+    title: `Channels: ${named.length}`,
+    note: `${named.map((row) => `${row.channel} (${row.code})`).join(", ")}. Sold ${from} to ${to} and this year: Zoho's invoices and the CRM's, with tax, by the channel of the seat that sold. People: those holding a seat in the channel's areas.`,
+    columns: [
+      col("channel", "Channel"),
+      col("code", "Code"),
+      col("people", "People", "number"),
+      col("customers", "Customers", "number"),
+      col("buyers", "Bought in the days", "number"),
+      col("invoices", "Invoices", "number"),
+      col("period", "Sales in the days", "money"),
+      col("year", "Sales this year", "money"),
+      col("owed", "Customers owe", "money"),
+    ],
+    rows: found,
+    totals: {
+      channel: "Total",
+      people: found.reduce((sum, row) => sum + Number(row.people ?? 0), 0),
+      customers: found.reduce((sum, row) => sum + Number(row.customers ?? 0), 0),
+      buyers: found.reduce((sum, row) => sum + Number(row.buyers ?? 0), 0),
+      invoices: found.reduce((sum, row) => sum + Number(row.invoices ?? 0), 0),
+      period: found.reduce((sum, row) => sum + Number(row.period ?? 0), 0),
+      year: found.reduce((sum, row) => sum + Number(row.year ?? 0), 0),
+      owed: found.reduce((sum, row) => sum + Number(row.owed ?? 0), 0),
+    },
+  };
+}
+
 export const INSIGHTS: Record<string, { roles: Role[]; run: (db: Database, asked: { from?: string | null; to?: string | null; by?: string | null }) => Promise<Insight> }> = {
   "sales-trend": { roles: SALES_ROLES, run: (db, asked) => salesTrend(db, asked) },
+  customers: { roles: SALES_ROLES, run: customersReport },
+  channels: { roles: SALES_ROLES, run: channelsReport },
   "sales-by-branch": { roles: SALES_ROLES, run: (db, asked) => salesByBranch(db, asked) },
   "top-medicines": { roles: SALES_ROLES, run: topMedicines },
   "stock-aging": { roles: STOCK_ROLES, run: (db) => stockAging(db) },

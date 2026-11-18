@@ -280,7 +280,19 @@ const ordersApp = (me: Me): Space => ({
   label: "Orders",
   icon: ClipboardList,
   tone: "bg-emerald-600 text-white",
-  groups: [{ items: orderLinks }],
+  // Management's whole desk, as the CEO steps into it (Aryan, 18 Nov: "are their full screens there").
+  groups: [
+    {
+      items: [
+        ...orderLinks,
+        { to: "/orders/sent-back", label: "Sent back", icon: Undo2, badge: "sentBack" },
+        { to: "/orders?stuck=1", label: "Stuck over 2 days", icon: Timer },
+        { to: "/returns?status=requested", label: "Returns to approve", icon: PackageX },
+        { to: "/customers?review=1", label: "Customers to check", icon: UserPlus, badge: "customers" },
+        { to: "/desk/team?desk=management", label: "Management team figures", icon: BarChart3 },
+      ],
+    },
+  ],
   ...(me.role === "admin" ? { cta: newOrder } : {}),
 });
 
@@ -315,6 +327,8 @@ const financeApp: Space = {
         { to: "/finance", label: "Orders to check", icon: ClipboardCheck, badge: "finance" },
         { to: "/finance/prepaid", label: "Prepaid orders", icon: CreditCard },
         { to: "/collect", label: "Due payments", icon: Wallet },
+        { to: "/purchases/bills", label: "Supplier bills to pay", icon: Receipt },
+        { to: "/desk/team?desk=finance", label: "Finance team figures", icon: BarChart3 },
         ...moneyLinks,
       ],
     },
@@ -331,7 +345,9 @@ const dispatchApp: Space = {
     {
       items: [
         { to: "/dispatch", label: "Orders to check", icon: ClipboardCheck, badge: "dispatch" },
-        { to: "/shipments", label: "Shipments", icon: Truck },
+        { to: "/shipments", label: "On the road", icon: Truck },
+        { to: "/dispatch/hold", label: "On hold", icon: TriangleAlert },
+        { to: "/returns?status=approved", label: "Returns to check", icon: PackageX },
       ],
     },
   ],
@@ -346,8 +362,10 @@ const onlineApp: Space = {
   groups: [
     {
       items: [
-        { to: "/inbox", label: "Inbox", icon: MessagesSquare, badge: "inbox" },
         { to: "/leads", label: "Leads & enquiries", icon: Inbox },
+        { to: "/inbox", label: "Inbox", icon: MessagesSquare, badge: "inbox" },
+        { to: "/to-call", label: "Refills due", icon: Pill },
+        { to: "/patients", label: "Patients", icon: Users },
         { to: "/points", label: "Points", icon: Gift },
         { to: "/channels", label: "Channels", icon: Radio },
         { to: "/settings", label: "Company details", icon: Building2 },
@@ -1266,6 +1284,14 @@ function ownDesk(me: Me): Space {
                 ],
                 "Company",
               ),
+            ],
+          },
+          // The two reports that matter most (Aryan, 18 Nov): every customer, every channel.
+          {
+            title: "Key reports",
+            items: [
+              { to: "/key-reports/customers", label: "Customers", icon: Users },
+              { to: "/key-reports/channels", label: "Channels", icon: Network },
             ],
           },
           // Zoho CRM's reports, by name for now (Aryan, 18 Nov): one link per group.
