@@ -109,13 +109,13 @@ export function Inventory() {
         actions={
           <>
             {can.purchase && (
-              <Button variant="primary" onClick={() => navigate("/purchases/new")}>
+              <Button variant="primary" onClick={() => navigate("/books/purchaseorders/new")}>
                 <ShoppingCart size={16} aria-hidden="true" /> New purchase order
               </Button>
             )}
             {can.stock && (
               <Button onClick={() => setDialog("receive")}>
-                <PackagePlus size={16} aria-hidden="true" /> Add stock
+                <PackagePlus size={16} aria-hidden="true" /> Add stock (not bought)
               </Button>
             )}
             {can.catalogue && (

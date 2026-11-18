@@ -52,6 +52,58 @@ const MOVE: Record<string, string> = {
   return: "Back from an order",
 };
 
+type EditKind = "edit" | "prices" | "promo" | "offer";
+
+/** One Edit for a medicine (Aryan, 18 Nov: "Edit shows nothing about the doctor's, hospital's,
+ *  patient's price, or where a promo runs"): its details, what each buyer pays, a promo price for
+ *  everyone, an offer (Buy X Take Y, or a price for one kind of buyer). Each part saves on its own. */
+function EditTabs({
+  now,
+  can,
+  onPick,
+}: {
+  now: EditKind;
+  can: MedicineDetail["can"];
+  onPick: (kind: EditKind) => void;
+}) {
+  const tabs: { kind: EditKind; label: string; allowed: boolean }[] = [
+    { kind: "edit", label: "Details", allowed: can.catalogue },
+    { kind: "prices", label: "Prices", allowed: can.price },
+    { kind: "promo", label: "Promo", allowed: can.price },
+    { kind: "offer", label: "Buy X Take Y", allowed: can.price },
+  ];
+  return (
+    <div className="-mt-1 flex flex-col gap-1.5">
+      <div role="tablist" className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
+        {tabs.map((tab) => (
+          <button
+            key={tab.kind}
+            type="button"
+            role="tab"
+            aria-selected={tab.kind === now}
+            disabled={!tab.allowed}
+            onClick={() => onPick(tab.kind)}
+            className={`flex-1 rounded-lg px-3 py-1.5 text-[13px] font-semibold whitespace-nowrap ${
+              tab.kind === now
+                ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+                : tab.allowed
+                  ? "text-slate-600 hover:bg-white/70"
+                  : "cursor-not-allowed text-slate-400"
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      {!can.price && (
+        <div className="text-[12px] text-slate-500">
+          Prices, promos and offers are set by Management, the CEO or the Admin.
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function Medicine() {
   const id = Number(useParams().id);
   const query = useQuery({
@@ -105,7 +157,7 @@ export function Medicine() {
             {can.stock && (
               <>
                 <Button variant="primary" onClick={() => setOpen({ kind: "receive" })}>
-                  <PackagePlus size={16} aria-hidden="true" /> Add stock
+                  <PackagePlus size={16} aria-hidden="true" /> Add stock (not bought)
                 </Button>
                 <Button
                   onClick={() => setOpen({ kind: "move" })}
@@ -118,9 +170,9 @@ export function Medicine() {
                 </Button>
               </>
             )}
-            {can.catalogue && (
-              <Button onClick={() => setOpen({ kind: "edit" })}>
-                <Pencil size={16} aria-hidden="true" /> Edit
+            {(can.catalogue || can.price) && (
+              <Button onClick={() => setOpen({ kind: can.catalogue ? "edit" : "prices" })}>
+                <Pencil size={16} aria-hidden="true" /> {can.price ? "Edit · prices · promos" : "Edit"}
               </Button>
             )}
           </>
@@ -243,12 +295,12 @@ export function Medicine() {
               <div className="mt-3 flex flex-col gap-1 border-t border-slate-100 pt-3">
                 <div className="text-xs font-semibold text-slate-500">Coming</div>
                 {data.coming.map((row) => (
-                  <div key={row.purchaseId} className="flex flex-wrap justify-between gap-x-4">
+                  <div key={row.to} className="flex flex-wrap justify-between gap-x-4">
                     <span>
                       {count(row.qty)} into {row.warehouse} · {row.supplier} ·{" "}
                       {can.cost ? (
                         <Link
-                          to={`/purchases/${row.purchaseId}`}
+                          to={row.to}
                           className="font-medium text-brand"
                         >
                           {row.code}
@@ -534,10 +586,18 @@ export function Medicine() {
       )}
       {open?.kind === "move" && <MoveDialog detail={data} onClose={close} />}
       {open?.kind === "count" && <CountDialog detail={data} start={open.line} onClose={close} />}
-      {open?.kind === "edit" && <MedicineDialog medicine={medicine} onClose={close} />}
-      {open?.kind === "prices" && <PricesDialog detail={data} onClose={close} />}
-      {open?.kind === "promo" && <PromoDialog detail={data} onClose={close} />}
-      {open?.kind === "offer" && <OfferDialog detail={data} onClose={close} />}
+      {open?.kind === "edit" && (
+        <MedicineDialog medicine={medicine} onClose={close} tabs={<EditTabs now="edit" can={can} onPick={(kind) => setOpen({ kind })} />} />
+      )}
+      {open?.kind === "prices" && (
+        <PricesDialog detail={data} onClose={close} tabs={<EditTabs now="prices" can={can} onPick={(kind) => setOpen({ kind })} />} />
+      )}
+      {open?.kind === "promo" && (
+        <PromoDialog detail={data} onClose={close} tabs={<EditTabs now="promo" can={can} onPick={(kind) => setOpen({ kind })} />} />
+      )}
+      {open?.kind === "offer" && (
+        <OfferDialog detail={data} onClose={close} tabs={<EditTabs now="offer" can={can} onPick={(kind) => setOpen({ kind })} />} />
+      )}
       {open?.kind === "news" && (
         <NewsDialog medicines={choice} medicineId={medicine.id} onClose={close} />
       )}

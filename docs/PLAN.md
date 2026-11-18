@@ -1705,6 +1705,40 @@ Recurring Expenses, Recurring Bills, Sales → Credit Note Refunds. Every docume
 "Journal" (what it put on each account). Making expenses, journals, transfers and deposits here comes
 with the switch; until then they come over with each backup.
 
+## 17.1 Where each thing is entered: one road, nothing twice (18 Nov 2026)
+
+Aryan, 18 Nov: "Zoho Inventory is in here and Inventory has its own sections too: where does the
+Inventory person enter things, so nothing doubles? Same with the books." The answer is one place
+for each piece of work; every other screen only shows it.
+
+| Work | Who | The one place | What it moves by itself |
+|---|---|---|---|
+| A new medicine, its details | Inventory | All medicines → Add medicine / the medicine → Edit → Details | the order form's list |
+| Its prices (patient, hospital, doctor, distributor, drugstore, bidding; piece and pack) | Management, CEO, Admin | the medicine → Edit → Prices | every new order's price |
+| A promo (one price for all, dated) or an offer (Buy X Take Y, a buyer's own price) | Management, CEO, Admin | the medicine → Edit → Promo / Buy X Take Y | the order form offers it; free pieces added by themselves |
+| A vendor | Inventory | Purchases → Vendors → New | — |
+| What we buy | Inventory | Purchases → Purchase orders → New (the Stock page's "New purchase order" opens the same) | "coming" on Stock, the medicine and Overview |
+| Goods arrive | Inventory | the purchase order → Receive (batch, expiry, quantity) | the shelf, the batch's cost (order rate × exchange rate) |
+| The vendor's invoice | Inventory or Finance | the purchase order → Convert to Bill | Accounts Payable / Inventory Asset |
+| Freight, customs, insurance for those goods | Inventory or Finance | Bills → New Bill → Landed cost: the purchase order | shared over its goods by value; each piece on the shelf costs more; the bill sits in Inventory Asset and reaches Cost of Goods Sold as they sell; void takes it back |
+| Paying the vendor | Finance | Payments made (on one or more bills; the rest stays an advance) | the bank, Accounts Payable |
+| Vendor credit | Finance | Vendor credits → New, then Apply to bills | what we owe the vendor goes down |
+| A count, damage, expired stock | Inventory | the medicine → Stock count (Adjustments lists them) | the shelf; the difference to Cost of Goods Sold |
+| Moving stock between warehouses | Inventory | the medicine → Transfer | the shelves |
+| Stock that was not bought (opening stock, found in a count) | Inventory | Stock → Add stock (not bought) | the shelf only; says to use a purchase order for anything bought |
+| Selling | MedRep → Management → Finance → Dispatch | the order line | invoice, payment, stock out, Cost of Goods Sold, all posted to the books |
+
+**A vendor credit** (Zoho's, checked 18 Nov): what the vendor owes us back — goods returned to them,
+a short or damaged delivery already billed, an overcharge, a discount after the bill. It lowers what
+we owe: put on their next bills (Apply to bills) or refunded. A payment made larger than the bills
+(an advance) is not a vendor credit: it stays as the payment's unused amount and is applied the same
+way.
+
+**Zoho's lists** (Items, Inventory Adjustments, Packages, Shipments, Transfer Orders, Sales) are
+Zoho's history beside this CRM's own work, read only: nothing is entered there. The first purchase
+pages (`/purchases`, `/suppliers`, 3 demo orders) now open Purchases; their 3 orders stay readable by
+number. Tested in `books/one-road.test.ts`.
+
 ## 18. One price book, one order line (plan, 17 Nov 2026)
 
 Aryan, 17 Nov: Inventory is where medicines and every price live, and the whole company reads them
@@ -2725,4 +2759,5 @@ Nothing built until he picks a phase.
 - 18 Nov (111), Aryan: "the order page's top is too big; keep only what's useful on top; below, make it like the Leads case (steps at the side with what to check, a tick as each is fine, the picked one opens beside), for Management and Finance": for Management and Finance the order page now has a **short top** (code, customer, status, amount, one line: address, ships from, invoice, division, PO, doctor; customer remarks if any; **More details** opens the rest) and, below, **the desk's steps on the left** as on the Leads case — Management: RX & documents (or Documents), Medicines & price, Stock & warehouse, Customer & licence, Approve, each ticked green when fine or amber with what to look at; Finance: Payment proof, Finance check, Paid — with hold / cancel under them, then Money and Activity; **the picked step opens on the right** (Approve has the findings, the warehouse and Approve / Send back / Reject), the tabs (Items, Timeline, Payment, Dispatch, Documents) under it. Everyone else keeps the page as it was.
 - 18 Nov (112), Aryan: "Finance's main bars: Orders to check; the prepaid orders in a tab of their own; the payments that come later each by their terms (30 days, 45 days, cash on delivery) in a bar of their own": Finance's menu now starts with **Orders to check**, **Prepaid orders** (`/finance/prepaid`: Finance's board of the orders paid in advance only — to check, not yet with Finance, with Dispatch, on hold, delivered; the board takes `terms`) and **Due payments** (`/collect`, renamed from Payments to collect: one tab per terms — Cash on delivery, 30 days, 45 days… — then From Zoho and Collected; each row says late / due / not delivered yet, late first, with Mark paid). Aryan's check of Management's cards: the "Last time" price is that customer's own last order; the green / blue / amber on the checks follows whether each is fine.
 - 18 Nov (113), Aryan: "test it properly with 2–3 people each; terms can be any length (60 days, 3 months, a date); does what the MedRep enters reach every desk; what else belongs in Finance's menu; where does each Management / Finance person see their own orders": **Terms of any length**: the order form keeps the hub's list and adds **Other: number of days…** (any number, "75 days") and **By a date…** ("Pays by 2027-01-15", due on that day: `pay_by`, migration 0108); "3 months" reads as 90 days. The days are counted from delivery (as the due date always was), so the screens now say "after delivery", not "after the invoice". The terms reach the card ("75 days", "by 7 Jan"), the invoice's due day, Finance's next action, Due payments (a tab per terms, "By a date" apart) and the customer's email. **Even sharing**: someone pressing Start later gets a fair share of what is already waiting (the newest of the busiest's, never one taken by hand); "Given" counts what stayed with them. **Each person's page** (`/desk/person/:id`, from a name in the left menu's People or in Team figures): their figures, what they have now, and every order they approved (Finance: let go), sent back, held or rejected, with the time each took and late marked. **Finance's menu**: Orders to check, Prepaid orders, Due payments, Refunds owed, Supplier bills to pay, Team figures, then Money and Books. Tested end to end with three at Management and three at Finance (`desks/flow.test.ts`): six orders on six different terms shared two each, approved and checked from one account each in its person's name, the by-date invoice due on its date, Due payments grouped by terms, each person's figures and page, and Stop.
+- 18 Nov (114), Aryan: "the medicine list is stretched (AbiraGet, then a big gap); Edit has no doctor, hospital, patient, distributor, drugstore price and nowhere to run a promo; the MedRep's form doesn't look premium; Zoho Inventory and Inventory's own sections: where does he enter things, so nothing doubles?": **All medicines**: one long molecule or maker made the table 3,642px wide; each text column now has a set width and wraps (2,347px, the name no longer floats far from its stock). **One Edit** on a medicine with tabs: Details · Prices (one table: each buyer, a piece and the whole pack) · Promo · Buy X Take Y; the Inventory person sees the price tabs greyed with who sets them (Management, the CEO, the Admin: rule unchanged). **One road for buying** (section 17.1): Purchases (Zoho's road, with Zoho's history) is the only place to buy; the Stock page's "New purchase order", Overview's "to be received" and a medicine's "Coming" now open and count Purchases' open orders; **landed cost** came over from the first purchase pages onto Bills (freight, customs… shared over the order's goods by value, kept in Inventory Asset, void takes it back); "Add stock" says "not bought"; Vendor credits in the Inventory menu; the Purchases frame links Medicines & Prices and Stock on the Shelf. **The MedRep's order form**: steps across the top with a tick per part done and what is left, each part a card with what it is for and "N to fill", taller fields, the bottom bar shows "N to fill" (a press goes to it) or "Ready". 418 API tests.
 

@@ -73,10 +73,23 @@ export async function overview(db: Database, me: Me): Promise<Overview> {
     seesPurchases
       ? rows<{ purchases: number; pieces: number; late: number }>(
           db,
-          sql`select count(*)::int as purchases,
-              coalesce(sum((select sum(l.qty) from purchase_line l where l.purchase_id = pu.id)), 0)::int as pieces,
-              count(*) filter (where pu.expected_on < (now() at time zone 'Asia/Manila')::date)::int as late
-            from purchase pu where pu.state = 'ordered'`,
+          // Purchase orders not yet on the shelf: Purchases' (Zoho's and those made here) and the
+          // first purchase pages' few.
+          sql`with today as (select (now() at time zone 'Asia/Manila')::date as d),
+            open as (
+              select pu.id as id, 'crm' as road, (select sum(l.qty) from purchase_line l where l.purchase_id = pu.id) as pieces, pu.expected_on as due
+                from purchase pu where pu.state = 'ordered'
+              union all
+              select d.id, 'books', sum((l.qty - coalesce((l.qty_done->>'cancelled')::numeric, 0) - coalesce((l.qty_done->>'received')::numeric, 0))), coalesce(min(d.due_date), min(d.doc_date))
+                from book_doc d join book_line l on l.doc_id = d.id, today t
+                where d.kind = 'purchase_order' and d.status not in ('draft', 'cancelled', 'closed', 'void')
+                  and l.medicine_id is not null and coalesce(d.due_date, d.doc_date) >= t.d - 365
+                  and (l.qty - coalesce((l.qty_done->>'cancelled')::numeric, 0) - coalesce((l.qty_done->>'received')::numeric, 0)) > 0
+                group by d.id
+            )
+            select count(*)::int as purchases, coalesce(sum(pieces), 0)::int as pieces,
+              count(*) filter (where due < (select d from today))::int as late
+            from open`,
         )
       : Promise.resolve([]),
     reviews

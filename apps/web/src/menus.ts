@@ -238,6 +238,7 @@ function inventoryApp(me: Me): Space {
             ? [
                 { to: "/books/bills", label: "Bills", icon: ReceiptText },
                 { to: "/books/paymentsmade", label: "Payments made", icon: Banknote },
+                { to: "/books/vendorcredits", label: "Vendor credits", icon: Undo2 },
               ]
             : []),
         ],

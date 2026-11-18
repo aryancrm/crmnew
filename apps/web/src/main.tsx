@@ -293,9 +293,15 @@ createRoot(root).render(
             <Route path="adjustments" element={<Moves key="adjust" kind="adjust" />} />
             <Route path="transfers" element={<Moves key="transfer" kind="transfer" />} />
             <Route path="receives" element={<Moves key="receive" kind="receive" />} />
-            <Route path="purchases" element={<Purchases />} />
+            {/* One road for buying (Aryan, 18 Nov): Purchases (vendors, purchase orders, receives,
+                bills, payments, vendor credits), which hold Zoho's history too. The first purchase
+                pages' few orders still open by their number. */}
+            <Route path="purchases" element={<Navigate to="/books/purchaseorders" replace />} />
+            <Route path="purchases/new" element={<Navigate to="/books/purchaseorders/new" replace />} />
+            <Route path="purchases/old" element={<Purchases />} />
             <Route path="purchases/:id" element={<Purchase />} />
-            <Route path="suppliers" element={<Suppliers />} />
+            <Route path="suppliers" element={<Navigate to="/books/vendors" replace />} />
+            <Route path="suppliers/old" element={<Suppliers />} />
             <Route path="*" element={<NotBuilt />} />
           </Route>
         </Routes>

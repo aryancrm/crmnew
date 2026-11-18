@@ -78,8 +78,77 @@ const USUAL: Record<CustomerKind, string> = {
  *  form reads like the case. */
 const BOX = "rounded-2xl border border-slate-200/90 bg-white p-4 shadow-2xs";
 const FIELD =
-  "h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 focus:outline-none";
+  "h-11 w-full rounded-xl border border-slate-300 bg-white px-3.5 text-[14px] text-slate-900 shadow-2xs transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-brand focus:ring-4 focus:ring-brand/15 focus:outline-none";
 const FIELD_LABEL = "text-xs font-semibold text-slate-600";
+/** A value the form fills by itself (the day, the MedRep): shown in a field, not typed. */
+const FIXED =
+  "flex h-11 items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3.5 text-[14px] text-ink";
+
+/** The five parts, what each is for, and which "Missing" items belong to it (for the ticks). */
+const PARTS = [
+  { number: 1, title: "General", sub: "Whose order it is and which Division it counts for." },
+  { number: 2, title: "Customer", sub: "Who buys, where it goes, how and when they pay." },
+  { number: 3, title: "Medicines", sub: "What they want. Each price comes from Inventory by itself." },
+  { number: 4, title: "Documents", sub: "Prescription, their PO, proof of payment: a photo or a PDF." },
+  { number: 5, title: "Review and place", sub: "Check the total and what Management will see, then place it." },
+] as const;
+const partOf = (missing: string): number =>
+  missing === "Division"
+    ? 1
+    : ["Customer", "Delivery address", "Source", "Customer remarks", "Date needed"].includes(missing)
+      ? 2
+      : ["At least one medicine", "Why the price is different", "SC / PWD ID number"].includes(missing)
+        ? 3
+        : missing === "Your answer to Management"
+          ? 5
+          : 4;
+
+/** The parts as steps across the top: a tick on each one filled, a press goes to it. */
+function PartSteps({ missing, show }: { missing: string[]; show: boolean }) {
+  if (!show) return null;
+  const left = (n: number) => missing.filter((item) => partOf(item) === n).length;
+  const ready = PARTS.filter((part) => left(part.number) === 0 && (part.number < 5 || missing.length === 0)).length;
+  return (
+    <nav
+      aria-label="The order's parts"
+      className="sticky top-2 z-20 flex items-center gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-white/95 p-1.5 shadow-[0_8px_24px_-16px_rgba(15,23,42,0.35)] backdrop-blur"
+    >
+      {PARTS.map((part, at) => {
+        const done = left(part.number) === 0 && (part.number < 5 || missing.length === 0);
+        return (
+          <Fragment key={part.number}>
+            {at > 0 && <span className="h-px w-3 shrink-0 bg-slate-200" aria-hidden="true" />}
+            <a
+              href={`#part-${part.number}`}
+              onClick={(event) => {
+                event.preventDefault();
+                document.getElementById(`part-${part.number}`)?.scrollIntoView({ block: "start" });
+              }}
+              className="flex shrink-0 items-center gap-2 rounded-xl px-2.5 py-1.5 text-[13px] font-semibold whitespace-nowrap text-slate-700 hover:bg-slate-50"
+            >
+              <span
+                className={`grid size-6 place-items-center rounded-full text-[11px] font-bold ${
+                  done ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-600 ring-1 ring-slate-200"
+                }`}
+              >
+                {done ? <Check className="size-3.5" aria-hidden="true" /> : part.number}
+              </span>
+              {part.title}
+              {!done && left(part.number) > 0 && (
+                <span className="rounded-full bg-rose-50 px-1.5 text-[11px] font-semibold text-rose-700 ring-1 ring-rose-200">
+                  {left(part.number)}
+                </span>
+              )}
+            </a>
+          </Fragment>
+        );
+      })}
+      <span className="ml-auto hidden shrink-0 pr-2 pl-3 text-[12px] font-medium text-slate-500 sm:block">
+        {ready} of 5 ready
+      </span>
+    </nav>
+  );
+}
 
 /** A part of the form as the hub draws it (Aryan, 17 Nov: simple like the hub): a white card
  *  headed by its icon and "1. General". */
@@ -88,26 +157,51 @@ function Part({
   title,
   icon: Icon,
   aside,
+  missing,
   children,
 }: {
   number: number;
   title: string;
   icon: typeof Pill;
   aside?: React.ReactNode;
+  /** What is still missing on the whole form: this part's own get counted on its header. */
+  missing?: string[];
   children: React.ReactNode;
 }) {
+  const left = missing?.filter((item) => partOf(item) === number) ?? [];
+  const done = missing !== undefined && left.length === 0 && (number < 5 || missing.length === 0);
+  const sub = PARTS.find((part) => part.number === number)?.sub;
   return (
-    <section className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-      <div className="flex items-center gap-2.5 border-b border-slate-100 pb-3">
-        <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-brand-tint text-brand">
-          <Icon className="size-4" aria-hidden="true" />
+    <section
+      id={`part-${number}`}
+      className="scroll-mt-20 overflow-visible rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-18px_rgba(15,23,42,0.18)]"
+    >
+      <div className="flex items-center gap-3 rounded-t-2xl border-b border-slate-100 bg-gradient-to-r from-slate-50/90 to-white px-4 py-3.5 sm:px-5">
+        <span
+          className={`relative grid size-9 shrink-0 place-items-center rounded-xl ${done ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-brand-tint text-brand ring-1 ring-brand/15"}`}
+        >
+          <Icon className="size-[18px]" aria-hidden="true" />
+          <span
+            className={`absolute -top-1.5 -right-1.5 grid size-[18px] place-items-center rounded-full text-[10px] font-bold ring-2 ring-white ${done ? "bg-emerald-600 text-white" : "bg-slate-800 text-white"}`}
+          >
+            {done ? <Check className="size-3" aria-hidden="true" /> : number}
+          </span>
         </span>
-        <h2 className="min-w-0 flex-1 text-[15px] font-semibold text-ink">
-          {number}. {title}
-        </h2>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-[15px] font-semibold tracking-tight text-ink">{title}</h2>
+          {sub && <p className="truncate text-[12px] text-slate-500">{sub}</p>}
+        </div>
+        {left.length > 0 && (
+          <span
+            className="hidden shrink-0 rounded-full bg-rose-50 px-2 py-0.5 text-[11px] font-semibold text-rose-700 ring-1 ring-rose-200 sm:inline"
+            title={left.join(", ")}
+          >
+            {left.length} to fill
+          </span>
+        )}
         {aside}
       </div>
-      {children}
+      <div className="flex flex-col gap-3.5 p-4 sm:p-5">{children}</div>
     </section>
   );
 }
@@ -115,7 +209,7 @@ function Part({
 /** A field's name as the hub writes it: small capitals, a star when it is needed. */
 function Label({ text, needed }: { text: string; needed?: boolean }) {
   return (
-    <span className="text-[11px] font-semibold tracking-wide text-ink uppercase">
+    <span className="text-[11px] font-semibold tracking-wide text-slate-600 uppercase">
       {text}
       {needed && <span className="text-bad"> *</span>}
     </span>
@@ -898,17 +992,19 @@ export function OrderNew({
       )}
 
       {/* 1 · General: whose order, the day, the Division (the hub's first part) */}
-      <Part number={1} title="General" icon={UserRound}>
+      <PartSteps missing={missing} show={!management} />
+
+      <Part number={1} title="General" icon={UserRound} missing={management ? undefined : missing}>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="flex flex-col gap-1">
             <Label text="Order date" />
-            <div className="flex h-10 items-center rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-ink">
+            <div className={FIXED}>
               {dayLabel(manilaToday())}
             </div>
           </div>
           <div className="flex flex-col gap-1">
             <Label text="MedRep" />
-            <div className="flex h-10 items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm text-ink">
+            <div className={FIXED}>
               <MapPin className="size-4 shrink-0 text-ink-2" aria-hidden="true" />
               <span className="truncate">
                 {changing || sentBack
@@ -977,7 +1073,7 @@ export function OrderNew({
       </Part>
 
       {/* 2 · Customer details: who buys, where it goes, how they pay (the hub's second part) */}
-      <Part number={2} title="Customer details" icon={Users}>
+      <Part number={2} title="Customer details" icon={Users} missing={management ? undefined : missing}>
         {picked ? (
           <div className={`${BOX} flex flex-col gap-2.5`}>
             <div className="flex items-start gap-3">
@@ -1408,6 +1504,7 @@ export function OrderNew({
         number={3}
         title="Medicines"
         icon={Pill}
+        missing={management ? undefined : missing}
         aside={
           picked ? (
             <span className="text-[11px] text-ink-2">
@@ -1869,7 +1966,7 @@ export function OrderNew({
       </Part>
 
       {/* 4 · Documents: proof of payment or why not, the prescription, the customer's papers */}
-      <Part number={4} title="Documents" icon={Paperclip}>
+      <Part number={4} title="Documents" icon={Paperclip} missing={management ? undefined : missing}>
         {picked && picked.kind !== "patient" && (
           <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <span className="text-[13px] font-semibold text-slate-900">
@@ -2020,7 +2117,7 @@ export function OrderNew({
       </Part>
 
       {/* 5 · Review and place: what is missing, then the hub's Confirm window */}
-      <Part number={5} title="Review and place" icon={ClipboardCheck}>
+      <Part number={5} title="Review and place" icon={ClipboardCheck} missing={management ? undefined : missing}>
       {lines.length > 0 && (
         <div className="flex flex-col gap-1.5 rounded-lg bg-slate-50 px-4 py-3 text-[13px]">
           <div className="flex justify-between">
@@ -2113,11 +2210,36 @@ export function OrderNew({
       )}
       </Part>
 
-      <div className="sticky bottom-16 z-10 -mx-4 flex items-center gap-4 border-t border-slate-200 bg-white px-4 py-3 md:bottom-0 md:mx-0 md:rounded-2xl md:border md:shadow-sm">
+      <div className="sticky bottom-16 z-10 -mx-4 flex items-center gap-4 border-t border-slate-200 bg-white/95 px-4 py-3 backdrop-blur md:bottom-2 md:mx-0 md:rounded-2xl md:border md:shadow-[0_12px_32px_-16px_rgba(15,23,42,0.35)]">
         <div className="flex flex-col">
-          <span className="text-[11px] text-slate-500">Total</span>
+          <span className="text-[11px] text-slate-500">
+            Total{lines.length > 0 ? ` · ${lines.length} ${lines.length === 1 ? "medicine" : "medicines"}` : ""}
+          </span>
           <span className="text-xl font-bold tracking-tight tabular-nums">{peso(total)}</span>
         </div>
+        {!management && (
+          <button
+            type="button"
+            onClick={() => {
+              const first = missing[0];
+              if (first) document.getElementById(`part-${partOf(first)}`)?.scrollIntoView({ block: "start" });
+            }}
+            className={`hidden shrink-0 items-center gap-1.5 rounded-full px-3 py-1 text-[12px] font-semibold sm:flex ${
+              missing.length ? "bg-rose-50 text-rose-700 ring-1 ring-rose-200 hover:bg-rose-100" : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+            }`}
+            title={missing.length ? `Missing: ${missing.join(", ")}` : undefined}
+          >
+            {missing.length ? (
+              <>
+                <TriangleAlert className="size-3.5" aria-hidden="true" /> {missing.length} to fill
+              </>
+            ) : (
+              <>
+                <Check className="size-3.5" aria-hidden="true" /> Ready
+              </>
+            )}
+          </button>
+        )}
         <button
           type="submit"
           disabled={action.busy || missing.length > 0}

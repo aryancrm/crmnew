@@ -320,6 +320,8 @@ export type MedicineDetail = {
 export type ComingRow = {
   purchaseId: number;
   code: string;
+  /** Where the order opens: the purchase order in Purchases (Zoho's and those made here). */
+  to: string;
   qty: number;
   warehouse: string;
   expectedOn: string;
@@ -5338,6 +5340,9 @@ export type BookChoices = {
   modes: string[];
   paidThrough: string[];
   next: { purchaseOrder: string; receive: string; payment: string; vendorCredit: string };
+  /** Purchase orders whose goods came onto the shelf here: a freight or customs bill can be added
+   *  to their cost (landed cost). Newest first. */
+  receivedOrders: { id: number; number: string; party: string; date: string }[];
 };
 
 export type CustomerKind2 = "hospital" | "doctor" | "patient" | "drugstore" | "distributor" | "government";

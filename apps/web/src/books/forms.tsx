@@ -594,6 +594,7 @@ function StandalonePage({ kind }: { kind: "bill" | "vendor_credit" }) {
   const [vendorId, setVendorId] = useState<number | null>(null);
   const [form, setForm] = useState({ number: "", reference: "", date: "", dueDate: "", paymentTerms: "", fxRate: "", notes: "" });
   const [rows, setRows] = useState<ItemRow[]>([emptyRow()]);
+  const [landedOn, setLandedOn] = useState("");
   const bill = kind === "bill";
   const list = bill ? "bills" : "vendorcredits";
   if (!choices) return <p className="p-6 text-[#6c718a]">Loading…</p>;
@@ -618,9 +619,11 @@ function StandalonePage({ kind }: { kind: "bill" | "vendor_credit" }) {
                     fxRate: form.fxRate ? Number(form.fxRate) : null,
                     notes: form.notes || null,
                     lines: toLines(rows),
+                    ...(bill && landedOn ? { landedOn: Number(landedOn) } : {}),
                   },
                 });
                 await queries.invalidateQueries({ queryKey: ["books"] });
+                await queries.invalidateQueries({ queryKey: ["inventory"] });
                 navigate(`/books/${list}/${made.id}`);
               })
             }
@@ -666,6 +669,24 @@ function StandalonePage({ kind }: { kind: "bill" | "vendor_credit" }) {
         {currency !== "PHP" && (
           <ZRow label={`Exchange Rate (1 ${currency})`} required error={action.at("fxRate")}>
             <input className={ZIN} inputMode="decimal" value={form.fxRate} onChange={(event) => setForm({ ...form, fxRate: event.target.value })} />
+          </ZRow>
+        )}
+        {bill && (
+          <ZRow label="Landed cost" error={action.at("landedOn")}>
+            <select className={ZIN} value={landedOn} onChange={(event) => setLandedOn(event.target.value)}>
+              <option value="">No: a bill of its own (rent, a utility, a service)</option>
+              {choices.receivedOrders.map((order) => (
+                <option key={order.id} value={order.id}>
+                  Part of the goods' cost on {order.number} · {order.party} · {order.date}
+                </option>
+              ))}
+            </select>
+            {landedOn && (
+              <div className="mt-1 text-[12px] text-[#6c718a]">
+                Freight, customs, insurance or packaging for that order: it is shared over its goods by value and each
+                piece still on the shelf costs more. The bill is kept in Inventory Asset and reaches Cost of Goods Sold as they sell.
+              </div>
+            )}
           </ZRow>
         )}
       </div>

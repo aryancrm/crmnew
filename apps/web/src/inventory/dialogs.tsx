@@ -32,6 +32,8 @@ function Form({
   submit,
   onClose,
   onSubmit,
+  tabs,
+  wide,
   children,
 }: {
   title: string;
@@ -40,11 +42,15 @@ function Form({
   submit: string;
   onClose: () => void;
   onSubmit: (event: FormEvent) => void;
+  /** A medicine's Edit: Details · Prices · Promo · Offer, one strip on top of each form. */
+  tabs?: ReactNode;
+  wide?: boolean;
   children: ReactNode;
 }) {
   return (
-    <Dialog title={title} onClose={onClose} busy={action.busy}>
+    <Dialog title={title} onClose={onClose} busy={action.busy} wide={wide}>
       <form onSubmit={onSubmit} className="flex flex-col gap-4">
+        {tabs}
         {children}
         <Problem message={action.general(fields)} />
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
@@ -112,9 +118,13 @@ export function ReceiveDialog(props: {
         }),
       )}
     >
-      <div className="text-[13px] text-ink-2">
-        For opening stock or a correction. Stock bought from a supplier is received on its purchase,
-        which works out its cost.
+      <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5 text-[13px] text-amber-900">
+        Only for stock that was not bought: opening stock, goods found in a count, a correction.
+        Bought from a vendor? Receive it on its purchase order (Purchases → Purchase orders →
+        Receive): that keeps the vendor, the bill and the cost, and nothing is entered twice.{" "}
+        <a href="/books/purchaseorders" className="font-semibold underline">
+          Open purchase orders
+        </a>
       </div>
       <Field label="Medicine" error={action.at("medicineId")}>
         {(field) => (
@@ -378,10 +388,12 @@ export function MedicineDialog({
   medicine,
   onClose,
   onSaved,
+  tabs,
 }: {
   medicine?: MedicineDetail["medicine"];
   onClose: () => void;
   onSaved?: (id: number) => void;
+  tabs?: ReactNode;
 }) {
   const action = useSave(onClose);
   const [name, setName] = useState(medicine?.name ?? "");
@@ -406,6 +418,7 @@ export function MedicineDialog({
   return (
     <Form
       title={medicine ? "Edit medicine" : "Add medicine"}
+      tabs={tabs}
       action={action}
       fields={["name", "strength", "sku", "packSize", "reorderLevel"]}
       submit={medicine ? "Save" : "Add medicine"}
@@ -635,10 +648,19 @@ export function MedicineDialog({
   );
 }
 
-export function PricesDialog({ detail, onClose }: { detail: MedicineDetail; onClose: () => void }) {
+export function PricesDialog({
+  detail,
+  onClose,
+  tabs,
+}: {
+  detail: MedicineDetail;
+  onClose: () => void;
+  tabs?: ReactNode;
+}) {
   const action = useSave(onClose);
   const size = detail.medicine.packSize ?? 1;
   const piece = detail.medicine.unit ?? "piece";
+  const packName = detail.medicine.pack ?? `pack of ${size}`;
   const pesos = (value: number | undefined) => (value === undefined ? "" : String(value / 100));
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(detail.buyerTypes.map(({ key }) => [key, pesos(detail.prices[key])])),
@@ -653,10 +675,13 @@ export function PricesDialog({ detail, onClose }: { detail: MedicineDetail; onCl
       ? String(Math.round(one * size * 100) / 100)
       : "";
   };
+  const cell =
+    "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-right text-[14px] tabular-nums shadow-2xs outline-none placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/20";
 
   return (
     <Form
-      title="Prices"
+      title="Edit medicine"
+      tabs={tabs}
       action={action}
       fields={fields}
       submit="Save prices"
@@ -678,48 +703,67 @@ export function PricesDialog({ detail, onClose }: { detail: MedicineDetail; onCl
       )}
     >
       <div className="text-[13px] text-ink-2">
-        In pesos. The main price is for one {piece}.
+        What each kind of buyer pays, in pesos. Every order takes its price from here.
         {size > 1
-          ? ` Fill the pack price only when ${detail.medicine.pack ?? `a pack of ${size}`} has its own price; left empty, a pack is ${size} x the ${piece} price.`
+          ? ` The pack price is only for when the ${packName} has its own price; left empty, it is ${size} × the ${piece} price.`
           : ""}{" "}
         Leave a buyer empty if they aren't sold to.
       </div>
-      <div className="flex flex-col gap-3">
-        {detail.buyerTypes.map(({ key, label }) => (
-          <div key={key} className="flex flex-wrap items-end gap-3">
-            <Field label={`${label} · one ${piece}`} error={action.at(`prices.${key}`)}>
-              {(field) => (
+      <div className="overflow-hidden rounded-xl border border-slate-200">
+        <div
+          className={`grid items-center gap-3 border-b border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-semibold tracking-wide text-slate-500 uppercase ${size > 1 ? "grid-cols-[1fr_9rem_9rem]" : "grid-cols-[1fr_10rem]"}`}
+        >
+          <span>Buyer</span>
+          <span className="text-right">One {piece} (₱)</span>
+          {size > 1 && <span className="text-right">Whole {packName} (₱)</span>}
+        </div>
+        {detail.buyerTypes.map(({ key, label }) => {
+          const wrong = action.at(`prices.${key}`) ?? action.at(`packPrices.${key}`);
+          return (
+            <div key={key} className="border-b border-slate-100 px-4 py-2 last:border-b-0">
+              <div
+                className={`grid items-center gap-3 ${size > 1 ? "grid-cols-[1fr_9rem_9rem]" : "grid-cols-[1fr_10rem]"}`}
+              >
+                <label htmlFor={`price-${key}`} className="text-[14px] font-medium text-slate-800">
+                  {label}
+                </label>
                 <input
-                  {...field}
-                  className={INPUT}
+                  id={`price-${key}`}
+                  className={cell}
                   inputMode="decimal"
+                  placeholder="Not sold"
                   value={values[key as BuyerType] ?? ""}
                   onChange={(event) => setValues((now) => ({ ...now, [key]: event.target.value }))}
                 />
-              )}
-            </Field>
-            {size > 1 && (
-              <Field label={`${label} · whole pack`} error={action.at(`packPrices.${key}`)}>
-                {(field) => (
+                {size > 1 && (
                   <input
-                    {...field}
-                    className={INPUT}
+                    aria-label={`${label}, whole ${packName}`}
+                    className={cell}
                     inputMode="decimal"
                     placeholder={added(key)}
                     value={packs[key as BuyerType] ?? ""}
                     onChange={(event) => setPacks((now) => ({ ...now, [key]: event.target.value }))}
                   />
                 )}
-              </Field>
-            )}
-          </div>
-        ))}
+              </div>
+              {wrong && <div className="pt-1 text-right text-[12px] text-rose-700">{wrong}</div>}
+            </div>
+          );
+        })}
       </div>
     </Form>
   );
 }
 
-export function PromoDialog({ detail, onClose }: { detail: MedicineDetail; onClose: () => void }) {
+export function PromoDialog({
+  detail,
+  onClose,
+  tabs,
+}: {
+  detail: MedicineDetail;
+  onClose: () => void;
+  tabs?: ReactNode;
+}) {
   const action = useSave(onClose);
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
@@ -728,7 +772,8 @@ export function PromoDialog({ detail, onClose }: { detail: MedicineDetail; onClo
 
   return (
     <Form
-      title="Add a promo price"
+      title={tabs ? "Edit medicine" : "Add a promo price"}
+      tabs={tabs}
       action={action}
       fields={["name", "amount", "startsOn", "endsOn"]}
       submit="Add promo"
@@ -739,6 +784,10 @@ export function PromoDialog({ detail, onClose }: { detail: MedicineDetail; onClo
         }),
       )}
     >
+      <div className="text-[13px] text-ink-2">
+        One price for every buyer between two days (a month's promo). For free pieces (Buy 1 Take 1)
+        or a price for one kind of buyer only, use Buy X Take Y.
+      </div>
       <Row>
         <Field label="Promo name" error={action.at("name")}>
           {(field) => (
@@ -793,7 +842,15 @@ export function PromoDialog({ detail, onClose }: { detail: MedicineDetail; onClo
 
 /** An offer (the hub's Buy 1 Take 1, the Christmas offers): for a kind of buyer or every buyer,
  *  Buy X Take Y and / or a special price per piece bought, between two days. */
-export function OfferDialog({ detail, onClose }: { detail: MedicineDetail; onClose: () => void }) {
+export function OfferDialog({
+  detail,
+  onClose,
+  tabs,
+}: {
+  detail: MedicineDetail;
+  onClose: () => void;
+  tabs?: ReactNode;
+}) {
   const action = useSave(onClose);
   const [buyerKind, setBuyerKind] = useState("");
   const [buy, setBuy] = useState("1");
@@ -806,7 +863,8 @@ export function OfferDialog({ detail, onClose }: { detail: MedicineDetail; onClo
   const free = Math.max(0, Number(take) || 0);
   return (
     <Form
-      title="Add an offer"
+      title={tabs ? "Edit medicine" : "Add an offer"}
+      tabs={tabs}
       action={action}
       fields={["buyerKind", "buy", "take", "price", "name", "startsOn", "endsOn"]}
       submit="Add offer"

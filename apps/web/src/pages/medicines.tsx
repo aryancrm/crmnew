@@ -27,6 +27,17 @@ import { StatusPill } from "./inventory";
 
 const VAT = { exempt: "Exempt", vat12: "12%", zero: "Zero-rated" };
 
+/** A cell of a set width that wraps to two lines: one long molecule or maker must not stretch
+ *  the whole table (Aryan, 18 Nov). The full text is on hover. */
+function Wrap({ width, text }: { width: string; text: string | null | undefined }) {
+  if (!text) return <Blank />;
+  return (
+    <div className={`${width} line-clamp-2 whitespace-normal`} title={text}>
+      {text}
+    </div>
+  );
+}
+
 export function Medicines() {
   const query = useQuery({
     queryKey: ["inventory", "catalogue"],
@@ -239,14 +250,18 @@ export function Medicines() {
                 className="group cursor-pointer border-b border-line-soft last:border-b-0 hover:bg-hover"
               >
                 <td className="sticky left-0 z-10 bg-white px-5 py-3 group-hover:bg-hover">
-                  <Link
-                    to={`/medicines/${row.id}`}
-                    className="font-semibold hover:text-brand"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    {row.name} {row.strength}
-                  </Link>
-                  <div className="text-xs text-ink-2">{row.sku ?? row.code}</div>
+                  {/* A set width: one long name must not stretch every row (Aryan, 18 Nov). */}
+                  <div className="w-56 whitespace-normal">
+                    <Link
+                      to={`/medicines/${row.id}`}
+                      className="line-clamp-2 font-semibold hover:text-brand"
+                      onClick={(event) => event.stopPropagation()}
+                      title={`${row.name} ${row.strength ?? ""}`.trim()}
+                    >
+                      {row.name} {row.strength}
+                    </Link>
+                    <div className="truncate text-xs text-ink-2">{row.sku ?? row.code}</div>
+                  </div>
                 </td>
                 <td className="px-3 py-3 text-right font-semibold tabular-nums">
                   {count(row.total)}
@@ -257,16 +272,24 @@ export function Medicines() {
                 <td className="px-3 py-3">
                   <StatusPill row={{ status: row.status, expiringSoon: false }} />
                 </td>
-                <td className="px-3 py-3">{row.generic ?? <Blank />}</td>
                 <td className="px-3 py-3">
-                  {[row.form, row.pack].filter(Boolean).join(" · ") || <Blank />}
+                  <Wrap width="w-48" text={row.generic} />
                 </td>
-                <td className="px-3 py-3">{row.category ?? <Blank />}</td>
-                <td className="px-3 py-3">{row.manufacturer ?? <Blank />}</td>
                 <td className="px-3 py-3">
-                  {row.rx ? "Rx" : "OTC"} · VAT {VAT[row.vat]}
-                  {row.coldChain && <span className="text-sky-700"> · Cold chain</span>}
-                  {row.coldBox && <span className="text-sky-700"> · Cold-chain box</span>}
+                  <Wrap width="w-40" text={[row.form, row.pack].filter(Boolean).join(" · ")} />
+                </td>
+                <td className="px-3 py-3">
+                  <Wrap width="w-36" text={row.category} />
+                </td>
+                <td className="px-3 py-3">
+                  <Wrap width="w-40" text={row.manufacturer} />
+                </td>
+                <td className="px-3 py-3">
+                  <div className="w-36 whitespace-normal">
+                    {row.rx ? "Rx" : "OTC"} · VAT {VAT[row.vat]}
+                    {row.coldChain && <span className="text-sky-700"> · Cold chain</span>}
+                    {row.coldBox && <span className="text-sky-700"> · Cold-chain box</span>}
+                  </div>
                 </td>
                 {buyerTypes.map((type) => (
                   <td key={type.key} className="px-3 py-3 text-right">

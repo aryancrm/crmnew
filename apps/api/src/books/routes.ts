@@ -197,6 +197,7 @@ export function bookActionRoutes(app: Hono<Env>, db: Database): void {
     orderLines: z.array(z.object({ lineId: z.number().int().positive(), qty: z.number().min(0), rate: z.number().min(0) })).max(200).optional(),
     receiveId: z.number().int().positive().nullish(),
     lines: z.array(line).max(200).optional(),
+    landedOn: z.number().int().positive().nullish(),
   });
   app.post("/api/books/purchase_order/:id/bill", async (c) => c.json(await billOrder(db, c.get("me"), Number(c.req.param("id")), await readBody(c, billBody))));
   app.post("/api/books/bill/new", async (c) => c.json(await createBill(db, c.get("me"), await readBody(c, billBody))));

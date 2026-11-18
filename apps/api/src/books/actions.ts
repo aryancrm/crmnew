@@ -16,6 +16,7 @@ import { todayManila } from "../inventory/rules";
 import type { Role } from "../people/roles";
 import type { BookChoices, Me } from "../types";
 import { LEDGER_ROLES } from "./accounts";
+import { landedCosts } from "../purchases/landed";
 import { assertOpen } from "./write";
 import { freeStatementLine, guardReconciled } from "./bank";
 
@@ -40,7 +41,7 @@ export async function nextNumber(tx: Runner, kind: string, prefix: string, width
 
 export async function bookChoices(db: Database, me: Me): Promise<BookChoices> {
   allow(me, READ_ROLES, "see the purchases");
-  const [vendors, warehouses, medicines, accounts, modes, paidThrough, po, receive, payment, credit] = await Promise.all([
+  const [vendors, warehouses, medicines, accounts, modes, paidThrough, po, receive, payment, credit, receivedOrders] = await Promise.all([
     rows<BookChoices["vendors"][number]>(db, sql`select id::int as id, name, currency, payment_terms as "paymentTerms" from supplier where active order by lower(name)`),
     rows<BookChoices["warehouses"][number]>(db, sql`select id::int as id, name from warehouse where active order by is_default desc, name`),
     rows<BookChoices["medicines"][number]>(
@@ -56,6 +57,14 @@ export async function bookChoices(db: Database, me: Me): Promise<BookChoices> {
     nextNumber(db, "purchase_receive", "PR-", 5),
     nextNumber(db, "vendor_payment", "", 0),
     nextNumber(db, "vendor_credit", "DN-", 5),
+    rows<BookChoices["receivedOrders"][number]>(
+      db,
+      sql`select o.id::int as id, o.number, coalesce(s.name, o.party_name, '') as party, to_char(o.doc_date, 'YYYY-MM-DD') as date
+        from book_doc o left join supplier s on s.id = o.supplier_id
+        where o.kind = 'purchase_order' and o.status not in ('draft', 'cancelled', 'void')
+          and exists (select 1 from book_link k join book_line l on l.doc_id = k.from_doc and l.batch_id is not null where k.to_doc = o.id)
+        order by o.doc_date desc, o.id desc limit 300`,
+    ),
   ]);
   return {
     today: todayManila(),
@@ -66,6 +75,7 @@ export async function bookChoices(db: Database, me: Me): Promise<BookChoices> {
     modes: modes.map((row) => row.a),
     paidThrough: paidThrough.map((row) => row.a),
     next: { purchaseOrder: po, receive, payment, vendorCredit: credit },
+    receivedOrders,
   };
 }
 
@@ -431,6 +441,9 @@ export type BillInput = {
   receiveId?: number | null;
   /** A bill on its own (rent, a utility, freight): its lines. */
   lines?: LineInput[];
+  /** Landed cost: this bill (freight, customs, insurance…) is part of what the goods on this
+   *  purchase order cost. */
+  landedOn?: number | null;
 };
 
 async function billNumberFree(tx: Runner, supplierId: number, number: string) {
@@ -526,13 +539,73 @@ export async function createBill(db: Database, me: Me, input: BillInput): Promis
     if (dueDate < date) throw new Refusal(400, "invalid", "The due date comes after the bill date.", "dueDate");
     const fxRate = vendor.currency === "PHP" ? 1 : (input.fxRate ?? 0);
     if (!(fxRate > 0)) throw new Refusal(400, "invalid", `Type how many pesos one ${vendor.currency} is.`, "fxRate");
-    const lines = await linesOf(tx, input.lines ?? []);
-    const subTotal = lines.reduce((sum, line) => sum + line.amount, 0);
-    const total = subTotal + lines.reduce((sum, line) => sum + line.taxAmount, 0);
-    const id = await insertDoc(tx, { kind: "bill", number, reference: input.reference, date, dueDate, status: "open", vendor, fxRate, subTotal, total, balance: total, paymentTerms: input.paymentTerms, notes: input.notes, by: me.id });
+    const typed = await linesOf(tx, input.lines ?? []);
+    const subTotal = typed.reduce((sum, line) => sum + line.amount, 0);
+    const total = subTotal + typed.reduce((sum, line) => sum + line.taxAmount, 0);
+    // Landed cost: the bill sits in the stock's value (Inventory Asset) and each piece of that
+    // order's goods still on the shelf costs more, so the sale takes it to Cost of Goods Sold.
+    const landed = input.landedOn ? await landOn(tx, input.landedOn, Math.round(subTotal * fxRate)) : null;
+    const lines = landed ? typed.map((line) => ({ ...line, medicineId: null, account: "Inventory Asset" })) : typed;
+    const id = await insertDoc(tx, {
+      kind: "bill",
+      number,
+      reference: input.reference ?? landed?.order,
+      date,
+      dueDate,
+      status: "open",
+      vendor,
+      fxRate,
+      subTotal,
+      total,
+      balance: total,
+      paymentTerms: input.paymentTerms,
+      notes: input.notes,
+      fields: landed ? { "Landed cost on": landed.order, _landed: landed.batches } : undefined,
+      by: me.id,
+    });
     await insertLines(tx, id, lines);
     return { id };
   });
+}
+
+/** Shares a landed-cost bill (in pesos' centavos, before tax) over what a purchase order's goods
+ *  cost (by value, as the first purchase pages did) and puts each share on its batch: spread over
+ *  the pieces of that batch still on the shelf, so all of it reaches Cost of Goods Sold as they
+ *  sell. What it added to each batch is kept, so a void takes it back. */
+async function landOn(tx: Runner, orderId: number, extras: number) {
+  const [order] = await rows<{ number: string; fxRate: number; status: string }>(
+    tx,
+    sql`select number, fx_rate::float8 as "fxRate", status from book_doc where id = ${orderId} and kind = 'purchase_order'`,
+  );
+  if (!order || ["draft", "cancelled", "void"].includes(order.status))
+    throw new Refusal(400, "invalid", "Pick a purchase order whose goods came in.", "landedOn");
+  const came = await rows<{ batchId: number; qty: number; rate: number; onShelf: number }>(
+    tx,
+    sql`select l.batch_id::int as "batchId", sum(l.qty)::float8 as qty, max(l.rate)::float8 as rate,
+        coalesce((select sum(s.qty) from stock s where s.batch_id = l.batch_id), 0)::int as "onShelf"
+      from book_link k join book_doc r on r.id = k.from_doc and r.kind = 'purchase_receive' and r.status <> 'void'
+        join book_line l on l.doc_id = r.id and l.batch_id is not null
+      where k.to_doc = ${orderId} group by l.batch_id order by l.batch_id`,
+  );
+  if (!came.length) throw new Refusal(400, "invalid", `Nothing of ${order.number} was received here yet: receive it first.`, "landedOn");
+  if (came.every((one) => one.onShelf <= 0))
+    throw new Refusal(
+      409,
+      "sold",
+      `All the goods of ${order.number} are sold: record this bill on Cost of Goods Sold instead (no landed cost).`,
+      "landedOn",
+    );
+  const shares = landedCosts(came.map((one) => ({ qty: one.qty, unitCost: one.rate })), order.fxRate, extras);
+  const batches: { batchId: number; add: number }[] = [];
+  for (const [at, one] of came.entries()) {
+    const share = shares[at]?.extras ?? 0;
+    if (share <= 0 || one.onShelf <= 0) continue;
+    const add = Math.round(share / one.onShelf);
+    if (add <= 0) continue;
+    await tx.execute(sql`update batch set unit_cost = coalesce(unit_cost, 0) + ${add} where id = ${one.batchId}`);
+    batches.push({ batchId: one.batchId, add });
+  }
+  return { order: order.number, batches };
 }
 
 // ------------------------------------------------------------------ money on bills
@@ -683,6 +756,10 @@ export async function voidDoc(db: Database, me: Me, id: number, reason: string):
       // Nothing else hangs on an expense, transfer or deposit.
     } else if (doc.kind === "bill") {
       if (doc.balance !== doc.total) throw new Refusal(409, "paid", "Money was put on this bill: void its payments or credits first.");
+      // A landed-cost bill: what it added to each batch's cost comes off again.
+      const [landed] = await rows<{ batches: { batchId: number; add: number }[] | null }>(tx, sql`select fields->'_landed' as batches from book_doc where id = ${id}`);
+      for (const one of landed?.batches ?? [])
+        await tx.execute(sql`update batch set unit_cost = greatest(0, unit_cost - ${one.add}) where id = ${one.batchId}`);
       // Its order's lines are billed less again.
       const lines = await rows<{ fromLine: number; qty: number }>(tx, sql`select from_line::int as "fromLine", qty::float8 as qty from book_line where doc_id = ${id} and from_line is not null`);
       for (const line of lines)

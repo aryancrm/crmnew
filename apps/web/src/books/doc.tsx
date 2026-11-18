@@ -167,7 +167,7 @@ const fieldValue = (value: unknown): string => {
 
 function Fields({ fields }: { fields: Record<string, unknown> }) {
   // Zoho fills many fields with a zero or "false" that says nothing: those are left out.
-  const entries = Object.entries(fields).filter(([key, value]) => !SHOWN_ELSEWHERE.has(key) && !/^(0+(\.0+)?|false)$/i.test(fieldValue(value)) && fieldValue(value) !== "");
+  const entries = Object.entries(fields).filter(([key, value]) => !SHOWN_ELSEWHERE.has(key) && !key.startsWith("_") && !/^(0+(\.0+)?|false)$/i.test(fieldValue(value)) && fieldValue(value) !== "");
   if (!entries.length) return null;
   return (
     <dl className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2">

@@ -106,9 +106,19 @@ export async function listInventory(db: Database, me: Me): Promise<InventoryList
     ),
     rows<{ medicine: number; qty: number; on: string }>(
       db,
-      sql`select l.medicine_id::int as medicine, sum(l.qty)::int as qty, ${day("min(p.expected_on)")} as on
-          from purchase_line l join purchase p on p.id = l.purchase_id
-          where p.state = 'ordered' group by 1`,
+      // What is ordered and not yet on the shelf: the purchase orders in Purchases (Zoho's and those
+      // made here), and the few made on the first purchase pages.
+      sql`select medicine::int as medicine, sum(qty)::int as qty, ${day("min(due)")} as on from (
+            select l.medicine_id as medicine, l.qty as qty, p.expected_on as due
+              from purchase_line l join purchase p on p.id = l.purchase_id where p.state = 'ordered'
+            union all
+            select l.medicine_id, (l.qty - coalesce((l.qty_done->>'cancelled')::numeric, 0) - coalesce((l.qty_done->>'received')::numeric, 0)), coalesce(d.due_date, d.doc_date)
+              from book_doc d join book_line l on l.doc_id = d.id
+          where d.kind = 'purchase_order' and d.status not in ('draft', 'cancelled', 'closed', 'void')
+            and l.medicine_id is not null
+            and coalesce(d.due_date, d.doc_date) >= ${today}::date - 365
+            and l.qty - coalesce((l.qty_done->>'cancelled')::numeric, 0) - coalesce((l.qty_done->>'received')::numeric, 0) > 0
+          ) c group by 1`,
     ),
     rows<{ count: number }>(
       db,
@@ -312,14 +322,27 @@ export async function medicineDetail(db: Database, me: Me, id: number): Promise<
     ),
     rows<ComingRow>(
       db,
-      sql`select p.id::int as "purchaseId", p.code, l.qty::int as qty, w.name as warehouse,
-            ${day("p.expected_on")} as "expectedOn", s.name as supplier, (p.expected_on < ${today}::date) as late
-          from purchase_line l
-          join purchase p on p.id = l.purchase_id
-          join warehouse w on w.id = p.warehouse_id
-          join supplier s on s.id = p.supplier_id
-          where l.medicine_id = ${id} and p.state = 'ordered'
-          order by p.expected_on`,
+      sql`select * from (
+            select p.id::int as "purchaseId", p.code, l.qty::int as qty, w.name as warehouse,
+              ${day("p.expected_on")} as "expectedOn", s.name as supplier, (p.expected_on < ${today}::date) as late,
+              '/purchases/' || p.id as to
+            from purchase_line l
+            join purchase p on p.id = l.purchase_id
+            join warehouse w on w.id = p.warehouse_id
+            join supplier s on s.id = p.supplier_id
+            where l.medicine_id = ${id} and p.state = 'ordered'
+            union all
+            select d.id::int, d.number, (l.qty - coalesce((l.qty_done->>'cancelled')::numeric, 0) - coalesce((l.qty_done->>'received')::numeric, 0))::int, coalesce(w.name, d.fields->>'Warehouse Name', ''),
+              ${day("coalesce(d.due_date, d.doc_date)")}, coalesce(s.name, d.party_name, ''), (coalesce(d.due_date, d.doc_date) < ${today}::date),
+              '/books/purchaseorders/' || d.id
+            from book_doc d join book_line l on l.doc_id = d.id
+          left join warehouse w on w.id = d.warehouse_id left join supplier s on s.id = d.supplier_id
+          where d.kind = 'purchase_order' and d.status not in ('draft', 'cancelled', 'closed', 'void')
+            and l.medicine_id is not null
+            and coalesce(d.due_date, d.doc_date) >= ${today}::date - 365
+            and l.qty - coalesce((l.qty_done->>'cancelled')::numeric, 0) - coalesce((l.qty_done->>'received')::numeric, 0) > 0
+              and l.medicine_id = ${id}
+          ) c order by "expectedOn"`,
     ),
     rows<MedicineDetail["moves"][number]>(
       db,

@@ -20,7 +20,10 @@ const GROUPS: NavGroup[] = [
   {
     label: "Items",
     icon: <ShoppingBasket size={16} />,
+    // Where the work is done first (Aryan, 18 Nov: "where does he enter it, so nothing is
+    // entered twice"): a medicine, its prices and promos on its own page; Zoho's lists after.
     items: [
+      { label: "Medicines & Prices", to: "/medicines" },
       { label: "Items", to: "/books/items" },
       { label: "Price Lists", to: "/books/pricelists" },
     ],
@@ -29,6 +32,7 @@ const GROUPS: NavGroup[] = [
     label: "Inventory",
     icon: <PackageOpen size={16} />,
     items: [
+      { label: "Stock on the Shelf", to: "/inventory" },
       { label: "Inventory Adjustments", to: "/books/inventoryadjustments" },
       { label: "Packages", to: "/books/packages" },
       { label: "Shipments", to: "/books/shipments" },
