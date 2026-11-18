@@ -88,11 +88,11 @@ export function DocListPage({ kind }: { kind: DocKind }) {
           </>
         }
       >
-        {all && all.views.length > 1 && (
+        {all && all.views.filter((one) => one.key !== "all").length > 1 && (
           <Tabs
             value={view}
             onChange={(key) => set({ view: key === "all" ? undefined : key, page: undefined })}
-            tabs={[{ key: "all", label: "All", count: all.total }, ...all.views.map((one) => ({ key: one.key, label: VIEW_WORD[one.key] ?? one.key.replace(/_/g, " "), count: one.count }))]}
+            tabs={[{ key: "all", label: "All", count: all.total }, ...all.views.filter((one) => one.key !== "all").map((one) => ({ key: one.key, label: VIEW_WORD[one.key] ?? one.key.replace(/_/g, " "), count: one.count }))]}
           />
         )}
       </PageHead>
