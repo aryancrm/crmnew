@@ -298,10 +298,12 @@ export function OrdersToCheck({
       ? "On hold"
       : defaultTab === "sent"
         ? "Sent back to MedReps"
-        : embedded
-          ? "Waiting for approval"
-          : desk === "dispatch"
-            ? "Warehouse: to pack and ship"
+        : desk === "dispatch"
+          ? embedded
+            ? "To pack and ship"
+            : "Warehouse: to pack and ship"
+          : embedded
+            ? "Waiting for approval"
             : "Orders to check";
   if (lanes)
     return (
@@ -790,6 +792,58 @@ function CheckSteps({ card }: { card: OrderCard }) {
   );
 }
 
+/** Finance's checks on a card, as Management's (Aryan, 19 Nov: "the same bars in Finance: the papers
+ *  it needs, the payment proof, Finance's check, the oldest the customer owes us, on the strip
+ *  itself, without going in"): green fine, amber to look at; a step opens the order. */
+const FINANCE_CHECKS = [
+  { key: "proof", label: "Payment", fine: "Pays by its terms", warnKinds: ["papers"] },
+  { key: "paper", label: "Papers", fine: "Papers on file", warnKinds: [] },
+  { key: "dues", label: "Dues", fine: "Nothing overdue", warnKinds: ["owes"] },
+  { key: "credit", label: "Credit", fine: "Within the limit", warnKinds: ["credit"] },
+] as const;
+
+function FinanceSteps({ card }: { card: OrderCard }) {
+  const navigate = useNavigate();
+  const all = checksOf(card);
+  const paper = all.find((one) => one.key === "paper");
+  const steps = FINANCE_CHECKS.map((step) => {
+    if (step.key === "paper")
+      return { ...step, warn: paper?.tone === "warn", note: paper?.label ?? step.fine };
+    const hit = card.findings.find((one) => (step.warnKinds as readonly string[]).includes(one.kind));
+    return { ...step, warn: Boolean(hit), note: hit ? hit.short : step.fine, title: hit?.text };
+  });
+  const warns = steps.filter((one) => one.warn);
+  const go = (event: { stopPropagation: () => void }) => {
+    event.stopPropagation();
+    navigate(`/orders/${card.id}`);
+  };
+  return (
+    <>
+      <div className="mb-1 flex items-center justify-between gap-2 text-[10px] font-medium text-slate-400">
+        <span>Next action</span>
+        <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
+      </div>
+      <p className="mb-2 line-clamp-2 text-[11px] leading-snug font-medium text-slate-800" title={warns.map((one) => one.note).join("\n") || undefined}>
+        {warns.length ? `Look at: ${warns.map((one) => one.note).join(", ")}` : card.status === "finance_check" ? "Everything checks out: check it and send it on" : "Everything checks out: make the invoice"}
+      </p>
+      <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-slate-500">
+        <span className="font-semibold text-slate-700">Finance check</span>
+        <span className="text-[9px] text-slate-400">
+          {steps.length - warns.length} of {steps.length} fine
+        </span>
+      </div>
+      <div className="grid grid-cols-4 gap-1">
+        {steps.map((step) => (
+          <button key={step.key} type="button" onClick={go} title={step.note} className="group/step flex flex-col gap-1 rounded py-0.5 text-left">
+            <span className={`h-1.5 w-full rounded-full ${step.warn ? "bg-amber-400 ring-2 ring-amber-100" : "bg-emerald-500"}`} />
+            <span className={`text-[10px] font-semibold group-hover/step:underline ${step.warn ? "text-amber-700" : "text-slate-600"}`}>{step.label}</span>
+          </button>
+        ))}
+      </div>
+    </>
+  );
+}
+
 export function OrderCardItem({
   card,
   desk = "management",
@@ -858,6 +912,8 @@ export function OrderCardItem({
     manage &&
     (card.approverId == null || card.approverId === me?.id || me?.role === "admin");
   const checking = pending && decides;
+  // Finance's own checks on its cards while the order is with Finance.
+  const financeChecking = desk === "finance" && atFinance && Boolean(manage);
   // Waiting on the desk that reads it: the clock (and New, Late) count from reaching this step.
   const waitingHere =
     pending ||
@@ -1147,7 +1203,8 @@ export function OrderCardItem({
           className={`mt-2.5 border-t pt-2.5 ${finished ? "border-emerald-200/80" : "border-slate-100"}`}
         >
           {checking && <CheckSteps card={card} />}
-          {!checking && (
+          {financeChecking && <FinanceSteps card={card} />}
+          {!checking && !financeChecking && (
             <>
               <div className="mb-1 flex items-center justify-between gap-2 text-[10px] font-medium text-slate-400">
                 <span>{finished ? "Completed" : "Next action"}</span>
@@ -1165,8 +1222,8 @@ export function OrderCardItem({
               </p>
             </>
           )}
-          {/* Every order in Management's queue stands at the same step: no strip there. */}
-          {!checking && (
+          {/* Every order in Management's (or Finance's) queue stands at the same step: no strip there. */}
+          {!checking && !financeChecking && (
             <>
               <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-slate-500">
                 <span

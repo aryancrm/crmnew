@@ -21,11 +21,13 @@ export async function startSession(
   db: Database,
   personId: number,
   viewedBy?: number,
+  desk?: "management" | "finance" | "dispatch",
 ): Promise<string> {
   const token = randomBytes(32).toString("base64url");
   await db.insert(session).values({
     tokenHash: hashOf(token),
     personId,
+    desk: desk ?? null,
     // Looking as someone else lasts two hours at most.
     expiresAt: new Date(Date.now() + (viewedBy ? 2 * 60 * 60 * 1000 : SESSION_DAYS * DAY)),
     viewedBy: viewedBy ?? null,
@@ -82,6 +84,7 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
       bossTitle: boss.title,
       viewerId: viewer.id,
       viewerName: viewer.name,
+      deskScreen: session.desk,
       // The business box their seat sits in (by its channel), so a seat's desk follows the chart.
       // Of two seats, the one that decides their screens (org/service.ts projectOrg): a lead seat
       // over one that leads nothing, else the first given.
@@ -120,6 +123,7 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
     role: row.role,
     roleLabel: ROLE_LABEL[row.role],
     business: row.businessCode ?? null,
+    deskScreen: (row.deskScreen as Me["deskScreen"]) ?? null,
     // Someone looking as this person isn't asked to change their password.
     mustChangePassword: row.viewerId ? false : row.mustChangePassword,
     channel:

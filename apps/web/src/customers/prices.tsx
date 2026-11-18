@@ -189,9 +189,9 @@ function StepBoxes({ history, now }: { history: MedicinePrices; now?: number }) 
 const ZohoTag = () => (
   <span
     className="rounded bg-slate-100 px-1 py-px text-[9px] font-bold tracking-wide text-slate-500 uppercase"
-    title="An order from before this CRM (Zoho)"
+    title="An order from before this system"
   >
-    Zoho
+    Earlier
   </span>
 );
 
@@ -425,7 +425,7 @@ export function CustomerBefore({ prices, name }: { prices: OrderPrices; name: st
           {initials(name)}
         </span>
         <div className="text-[13px] text-sky-950">
-          <b>First order.</b> {name} has not bought from us before (here or in Zoho), so there is
+          <b>First order.</b> {name} has not bought from us before (now or before), so there is
           no earlier price.
           {customer.owed > 0 && <Owes customer={customer} />}
         </div>
@@ -458,7 +458,7 @@ export function CustomerBefore({ prices, name }: { prices: OrderPrices; name: st
             {customer.zohoOrders > 0 && (
               <span className="font-medium text-slate-500">
                 {" "}
-                · {count(customer.zohoOrders)} in Zoho
+                · {count(customer.zohoOrders)} earlier
               </span>
             )}
           </Figure>
@@ -505,7 +505,7 @@ export function CustomerBefore({ prices, name }: { prices: OrderPrices; name: st
           to={`/customers/${customer.id}`}
           className="font-semibold text-emerald-700 hover:underline"
         >
-          Whole history, Zoho's too →
+          Whole history →
         </Link>
       </div>
     </div>
@@ -526,7 +526,7 @@ function Owes({ customer }: { customer: OrderPrices["customer"] }) {
         " · nothing past due"
       )}
       {customer.zohoOwed > 0 && (
-        <span className="text-slate-500"> · {peso(customer.zohoOwed)} of it in Zoho</span>
+        <span className="text-slate-500"> · {peso(customer.zohoOwed)} of it from before</span>
       )}
     </span>
   );
@@ -807,7 +807,7 @@ export function PricesGiven({ customerId }: { customerId: number }) {
 
       <SectionPanel
         icon={History}
-        title={`Orders before this CRM (Zoho) · ${count(data.past.orders)}`}
+        title={`Earlier orders · ${count(data.past.orders)}`}
         actions={
           <span className="text-xs text-slate-500">
             <b className="text-slate-800 tabular-nums">{peso(data.past.bought)}</b>
@@ -838,7 +838,7 @@ export function PricesGiven({ customerId }: { customerId: number }) {
             )}
             {data.zoho.owed > 0 && (
               <span className="ml-auto rounded-full bg-amber-100 px-2.5 py-0.5 font-semibold text-amber-900 ring-1 ring-amber-200">
-                Owes {peso(data.zoho.owed)} in Zoho · {count(data.zoho.openInvoices)}{" "}
+                Owes {peso(data.zoho.owed)} from before · {count(data.zoho.openInvoices)}{" "}
                 {data.zoho.openInvoices === 1 ? "invoice" : "invoices"}
                 {data.zoho.oldestDue ? ` · oldest due ${dayLabel(data.zoho.oldestDue)}` : ""}
               </span>

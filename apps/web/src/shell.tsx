@@ -111,9 +111,9 @@ export function Shell() {
 
   const space = spaceFor(me.data, location.pathname);
   const flat = space.groups.flatMap((group) => group.items);
-  // Management's and Finance's own desk is one common screen for all its people.
+  // Management's, Finance's and Dispatch's own desk is one common screen for all its people.
   const commonDesk =
-    space.key === "desk" && (me.data.role === "management" || me.data.role === "finance")
+    space.key === "desk" && (me.data.role === "management" || me.data.role === "finance" || me.data.role === "dispatch")
       ? me.data.role
       : null;
   const menuBadges = {
@@ -154,14 +154,9 @@ export function Shell() {
           <ArrowLeft size={15} aria-hidden="true" /> {space.back.label}
         </NavLink>
       )}
-      <MenuList
-        groups={commonDesk ? space.groups.slice(0, 1) : space.groups}
-        onPick={onPick}
-        badges={menuBadges}
-      />
-      {/* Management's and Finance's common screen: its people, each with Start (Aryan, 18 Nov). */}
+      {/* The desk's common screen: who is on the desk today, at the top (Aryan, 19 Nov). */}
       {commonDesk && <DeskPeople desk={commonDesk} onPick={onPick} />}
-      {commonDesk && <MenuList groups={space.groups.slice(1)} onPick={onPick} badges={menuBadges} />}
+      <MenuList groups={space.groups} onPick={onPick} badges={menuBadges} />
     </>
   );
   const viewer = me.data?.viewedBy;

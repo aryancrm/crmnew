@@ -73,7 +73,7 @@ export function CustomerHistoryDialog({
                 label: "Owes us",
                 value: peso(data.totals.owed),
                 sub: data.totals.zohoOwed
-                  ? `${peso(data.totals.zohoOwed)} of it in Zoho`
+                  ? `${peso(data.totals.zohoOwed)} of it from before`
                   : data.totals.owed
                     ? "on open invoices"
                     : "nothing",

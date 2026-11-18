@@ -6,8 +6,9 @@
 // Management approves, Finance invoices and takes payments, Dispatch packs, ships and delivers with
 // a signed receipt; so every desk, report and dashboard has something, at every step.
 //
-// Every customer and order it makes says so in its note ("Demo · 20 Nov walkthrough"), so all of it
-// can be found and closed (cancelled, archived; nothing deleted) before the real go-live. Its
+// Every customer it makes says so in its note ("Demo · 20 Nov walkthrough"), and its orders are
+// theirs, so all of it can be found and closed (cancelled, archived; nothing deleted) before the
+// real go-live. Its
 // stock comes off the shelf like any order's. Safe to run again: a customer already here is used,
 // an area that already has its demo orders is skipped. Dry run by default; --apply writes.
 //
@@ -130,7 +131,7 @@ for (const { area, orders } of PLAN) {
   }
   const [already] = await rows<{ n: number }>(
     db,
-    sql`select count(*)::int as n from sales_order o join customer c on c.id = o.customer_id where c.area_id = ${seat.areaId} and o.note = ${MARK}`,
+    sql`select count(*)::int as n from sales_order o join customer c on c.id = o.customer_id where c.area_id = ${seat.areaId} and c.note = ${MARK}`,
   );
   if (already?.n) {
     console.log(`${area}: has its demo orders already`);
@@ -160,7 +161,7 @@ for (const { area, orders } of PLAN) {
       continue;
     }
     try {
-      const order = (await call(medrep, "/api/orders", { customerId, items, note: MARK })).id as number;
+      const order = (await call(medrep, "/api/orders", { customerId, items })).id as number;
       if (step === "management") continue;
       if (step === "sent_back") {
         await call(management, `/api/orders/${order}/send_back`, { reason: "Which ward receives it? Put it on the order." });
@@ -198,11 +199,143 @@ for (const { area, orders } of PLAN) {
   }
 }
 
+// ---- Some that need a look (Aryan, 19 Nov: "all show blue; put some wrong"): a price below the
+// list, more than the shelf holds, an expired licence, over the credit limit, advance pay with no
+// proof at Finance, a MedRep's note, and new customers a MedRep added for Management to check. ----
+const [extras] = await rows<{ n: number }>(db, sql`select count(*)::int as n from customer where note = ${MARK} and review = 'to_review'`);
+if (extras?.n) console.log("\nThe ones that need a look: there already");
+else {
+  console.log("\nThe ones that need a look: a price below list, short stock, an expired licence, over the credit limit, no payment proof, a MedRep's note, 3 new customers to check");
+  if (apply) {
+    // Earlier runs put the mark on each order's note, where it read as the customer's remarks.
+    await db.execute(sql`update sales_order set note = null where note = ${MARK}`);
+    const customerOf = async (area: string, at: 0 | 1) => {
+      const one = names.get(area)?.[at];
+      if (!one) return null;
+      const [found] = await rows<{ id: number; kind: string; city: string | null; areaId: number }>(
+        db,
+        sql`select id::int as id, kind, city, area_id::int as "areaId" from customer where lower(name) = lower(${one.name}) order by id limit 1`,
+      );
+      return found ? { ...found, name: one.name } : null;
+    };
+    const holderOf = async (area: string) =>
+      (
+        await rows<{ name: string }>(
+          db,
+          sql`select p.name from area a join seat s on s.area_id = a.id and s.active join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and h.ends_on is null
+            join person p on p.id = h.person_id where a.name = ${area} limit 1`,
+        )
+      )[0]?.name;
+    const tryIt = async (what: string, work: () => Promise<unknown>) => {
+      try {
+        await work();
+        console.log(`  ${what}: made`);
+      } catch (error) {
+        console.log(`  ${what}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    };
+    const priced = async (customerId: number, kind: string) => {
+      const [line] = pick(kind, 1);
+      if (!line) throw new Error(`no medicine in stock for ${kind}`);
+      return line;
+    };
+    // 1 · A price below the buyer's list, with the MedRep's reason.
+    const pasay = await customerOf("HOS | PASAY", 0);
+    if (pasay)
+      await tryIt("price below list (Pasay)", async () => {
+        const line = await priced(pasay.id, "hospital");
+        const [list] = await rows<{ amount: number }>(db, sql`select amount::float8 as amount from medicine_price where medicine_id = ${line.medicineId} and buyer_type = 'hospital'`);
+        await call(await cookieOf((await holderOf("HOS | PASAY")) as string), "/api/orders", {
+          customerId: pasay.id,
+          items: [{ ...line, qty: 10, unitPrice: Math.round(((list?.amount ?? 0) * 0.85) / 100) * 100, reason: "Matched the price of their last order" }],
+        });
+      });
+    // 2 · More than the shelf holds.
+    const laguna = await customerOf("HOS | LAGUNA", 0);
+    if (laguna)
+      await tryIt("short stock (Laguna)", async () => {
+        const [low] = await rows<{ id: number; free: number }>(
+          db,
+          sql`select m.id::int as id, coalesce(sum(st.qty), 0)::int as free from medicine m join medicine_price p on p.medicine_id = m.id and p.buyer_type = 'hospital' and p.amount > 0
+            left join batch b on b.medicine_id = m.id left join stock st on st.batch_id = b.id
+            where m.active group by m.id having coalesce(sum(st.qty), 0) between 1 and 20 order by m.id limit 1`,
+        );
+        if (!low) throw new Error("no medicine nearly out");
+        await call(await cookieOf((await holderOf("HOS | LAGUNA")) as string), "/api/orders", {
+          customerId: laguna.id,
+          items: [{ medicineId: low.id, qty: low.free + 40, priceKind: "hospital" }],
+        });
+      });
+    // 3 · An expired licence (a distributor's LTO).
+    const fritzie = await customerOf("B2B | Fritzie Rosann Mier", 1);
+    if (fritzie)
+      await tryIt("expired licence (B2B)", async () => {
+        await call(management, `/api/customers/${fritzie.id}`, {
+          kind: fritzie.kind,
+          name: fritzie.name,
+          city: fritzie.city ?? undefined,
+          areaId: fritzie.areaId,
+          note: MARK,
+          licenceNo: "LTO-3000001234567",
+          licenceExpires: "2026-09-30",
+        });
+        const line = await priced(fritzie.id, "distributor");
+        await call(await cookieOf((await holderOf("B2B | Fritzie Rosann Mier")) as string), "/api/orders", { customerId: fritzie.id, items: [line] });
+      });
+    // 4 · Over the credit limit: one waiting at Management, one at Finance.
+    const commonwealth = await customerOf("HOS | COMMONWEALTH", 0);
+    if (commonwealth)
+      await tryIt("over the credit limit (Commonwealth)", async () => {
+        await call(management, `/api/customers/${commonwealth.id}/credit`, { paymentTerms: "days", paymentDays: 30, creditLimit: 100000 });
+        const rep = await cookieOf((await holderOf("HOS | COMMONWEALTH")) as string);
+        const line = await priced(commonwealth.id, "hospital");
+        await call(rep, "/api/orders", { customerId: commonwealth.id, items: [{ ...line, qty: 20 }] });
+        const second = (await call(rep, "/api/orders", { customerId: commonwealth.id, items: [line] })).id as number;
+        await call(management, `/api/orders/${second}/approve`, {});
+      });
+    // 5 · Pays in advance, no proof of payment yet: at Finance.
+    const lonie = await customerOf("B2B | LONIE", 1);
+    if (lonie)
+      await tryIt("advance pay, no proof (B2B)", async () => {
+        await call(management, `/api/customers/${lonie.id}/credit`, { paymentTerms: "advance", paymentDays: null, creditLimit: null });
+        const line = await priced(lonie.id, "distributor");
+        const order = (await call(await cookieOf((await holderOf("B2B | LONIE")) as string), "/api/orders", { customerId: lonie.id, items: [line] })).id as number;
+        await call(management, `/api/orders/${order}/approve`, {});
+      });
+    // 6 · A MedRep's note for Management to read.
+    const marwin = await customerOf("RX | Blood & Bone Care | Marwin Dy", 0);
+    if (marwin)
+      await tryIt("MedRep's note (Rx)", async () => {
+        const line = await priced(marwin.id, "doctor");
+        await call(await cookieOf((await holderOf("RX | Blood & Bone Care | Marwin Dy")) as string), "/api/orders", {
+          customerId: marwin.id,
+          items: [line],
+          note: "The doctor's clinic receives deliveries only before Friday noon.",
+        });
+      });
+    // 7 · New customers a MedRep added from the field: Management checks them.
+    for (const area of ["HOS | PASAY", "HOS | BAGUIO", "B2B | LONIE"]) {
+      const [third] = await rows<{ name: string; kind: string; city: string | null }>(
+        source,
+        sql`select c.name, c.kind, c.city from customer c join area a on a.id = c.area_id
+          where a.name = ${area} and c.active and c.kind <> 'patient'
+          order by (select coalesce(sum(s.total), 0) from sale_invoice s where s.customer_id = c.id and s.issued_on >= '2026-01-01') desc, c.id
+          offset 2 limit 1`,
+      );
+      const holder = await holderOf(area);
+      if (!third || !holder) continue;
+      await tryIt(`new customer to check (${area})`, async () =>
+        call(await cookieOf(holder), "/api/customers", { kind: third.kind, name: third.name, city: third.city ?? undefined, note: MARK }),
+      );
+    }
+  }
+}
+
 // The sessions this run opened are closed again.
 if (made.length) await db.execute(sql`delete from session where id in (${sql.join(made.map((id) => sql`${id}`), sql`, `)})`);
 const [counts] = await rows<{ orders: number; customers: number }>(
   db,
-  sql`select (select count(*) from sales_order where note = ${MARK})::int as orders, (select count(*) from customer where note = ${MARK})::int as customers`,
+  sql`select (select count(*) from sales_order o join customer c on c.id = o.customer_id where c.note = ${MARK})::int as orders, (select count(*) from customer where note = ${MARK})::int as customers`,
 );
 console.log(`\n${apply ? "Applied" : "Dry run"}: ${counts?.orders ?? 0} demo orders, ${counts?.customers ?? 0} demo customers in the database.`);
 process.exit(0);

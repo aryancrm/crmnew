@@ -241,8 +241,34 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
     >
       <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Sign in to {picked.label}</h2>
       <p className="mt-0.5 text-sm text-[#7a8394]">
-        {deskOnly ? "The desk's one screen: the company's password, no ID" : "Log in with your ID and password"}
+        {deskOnly ? "The desk's shared screen: the company's password, no ID" : "Log in with your ID and password"}
       </p>
+      {/* Two ways in (Aryan, 19 Nov): the desk's shared screen, or each person's own login for their
+          own things (payslips, leave, their own work). */}
+      {isDesk && (
+        <div role="tablist" aria-label="How to sign in" className="mt-3 grid grid-cols-2 gap-1 rounded-2xl bg-[#f1f3f7] p-1 text-[13px] font-semibold">
+          {(
+            [
+              [false, "Desk screen"],
+              [true, "My own login"],
+            ] as const
+          ).map(([own, label]) => (
+            <button
+              key={label}
+              type="button"
+              role="tab"
+              aria-selected={ownId === own}
+              onClick={() => {
+                setOwnId(own);
+                setProblem(null);
+              }}
+              className={`rounded-xl px-3 py-2 ${ownId === own ? "bg-white text-[#1f2733] shadow-sm" : "text-[#7a8394] hover:text-[#1f2733]"}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       <form onSubmit={submit} className="mt-4 grid gap-3 text-left" aria-busy={busy}>
         {!deskOnly && (
         <label className="relative block">
@@ -308,18 +334,6 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
           {busy ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <ArrowRight className="size-4" aria-hidden="true" />}
         </button>
       </form>
-      {isDesk && (
-        <button
-          type="button"
-          onClick={() => {
-            setOwnId(!ownId);
-            setProblem(null);
-          }}
-          className="mt-3 text-xs font-semibold text-[#f36b21] hover:underline"
-        >
-          {ownId ? "Open the desk's screen with the password only" : "Sign in with my own ID instead"}
-        </button>
-      )}
       <p className="mt-4 text-xs text-[#9aa2b0]">Need access? Ask your administrator</p>
     </div>
     </>

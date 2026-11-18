@@ -299,7 +299,11 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
 
       {data.rows.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-2xs">
-          {q || review || picked || medrep ? "No customer matches." : "No customers yet."}
+          {review && !q && !medrep
+            ? "Nothing to check: every customer a MedRep added has been checked. A new one waits here until Management looks at its details (name, address, licence) and marks it checked."
+            : q || review || picked || medrep
+              ? "No customer matches."
+              : "No customers yet."}
         </div>
       ) : view === "table" ? (
         <div

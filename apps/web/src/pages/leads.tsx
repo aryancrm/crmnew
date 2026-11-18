@@ -358,9 +358,13 @@ export function LeadsDesk({ desk = "online" }: { desk?: "online" | "pap" }) {
         {data.cards.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-white px-5 py-8 text-center text-sm text-slate-500">
             {narrowed
-              ? "No enquiry matches."
+              ? pap
+                ? "No case matches."
+                : "No enquiry matches."
               : data.queue === "active"
-                ? "No open enquiry. Add one with New lead."
+                ? pap
+                  ? "No open PAP case. Add one with New PAP case: the patient, the agency (DSWD, PCSO…), then the guarantee letter's papers."
+                  : "No open enquiry. Add one with New lead."
                 : "Nothing here."}
           </div>
         ) : (

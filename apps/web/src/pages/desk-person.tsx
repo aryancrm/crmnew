@@ -31,7 +31,9 @@ export function DeskPersonPage() {
   const me = useMe().data;
   const [deskParams] = useSearchParams();
   // The desk's own people see their desk; the CEO and the Admin pick it (?desk=finance).
-  const desk = me?.role === "finance" || (me?.role !== "management" && deskParams.get("desk") === "finance") ? "finance" : "management";
+  const own = me?.role === "management" || me?.role === "finance" || me?.role === "dispatch" ? me.role : null;
+  const asked = deskParams.get("desk");
+  const desk: "management" | "finance" | "dispatch" = own ?? (asked === "finance" || asked === "dispatch" ? asked : "management");
   const id = Number(useParams().id);
   const [params, setParams] = useSearchParams();
   const today = manila();
@@ -48,7 +50,7 @@ export function DeskPersonPage() {
     placeholderData: keepPreviousData,
   });
   const data = query.data;
-  const doneWord = desk === "management" ? "Approved" : "Let go to Dispatch";
+  const doneWord = desk === "management" ? "Approved" : desk === "finance" ? "Let go to Dispatch" : "Packed or shipped";
   const f = data?.figures;
 
   return (
@@ -57,7 +59,7 @@ export function DeskPersonPage() {
         title={data ? data.person.name : "…"}
         sub={
           data
-            ? `${data.person.title ?? (desk === "management" ? "Management" : "Finance")} · ${data.person.startedAt ? `started today at ${new Date(data.person.startedAt).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" })}` : "not started today"}`
+            ? `${data.person.title ?? (desk === "management" ? "Management" : desk === "finance" ? "Finance" : "Dispatch")} · ${data.person.startedAt ? `started today at ${new Date(data.person.startedAt).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" })}` : "not started today"}`
             : undefined
         }
         actions={

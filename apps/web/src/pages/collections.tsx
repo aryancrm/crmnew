@@ -111,7 +111,7 @@ export function CollectionsPage() {
                       {row.oldestCode}
                     </Link>
                   )}
-                  {row.oldestHref.startsWith("/books") && <span className="ml-1 rounded bg-slate-100 px-1 text-[10.5px] text-slate-500">Zoho</span>}
+                  {row.oldestHref.startsWith("/books") && <span className="ml-1 rounded bg-slate-100 px-1 text-[10.5px] text-slate-500">Earlier</span>}
                   <div className="text-[11.5px] text-slate-400">
                     {dayLabel(row.oldestOn)}
                     {row.daysLate > 0 ? ` · ${row.daysLate} days past due` : ""}

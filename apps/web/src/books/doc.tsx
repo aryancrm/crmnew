@@ -394,7 +394,7 @@ export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onC
             Open on the order line ↗
           </Link>
         )}
-        {doc.fromZoho && <span className="ml-auto text-[12px] text-[#6c718a]">From Zoho{doc.zohoCreated ? ` · made ${doc.zohoCreated}` : ""}</span>}
+        {doc.fromZoho && <span className="ml-auto text-[12px] text-[#6c718a]">Brought over{doc.zohoCreated ? ` · made ${doc.zohoCreated}` : ""}</span>}
       </div>
       <div className="space-y-5 p-5">
         {box === "apply" && <ApplyToBills doc={doc} onDone={() => setBox(null)} />}

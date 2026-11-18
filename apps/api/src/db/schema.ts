@@ -53,4 +53,6 @@ export const session = pgTable("session", {
   expiresAt: at("expires_at").notNull(),
   /** The CEO or Admin looking as this person (read only), on such a session. */
   viewedBy: ref("viewed_by"),
+  /** A desk's common screen (management, finance, dispatch), opened with the company's password. */
+  desk: text("desk"),
 });

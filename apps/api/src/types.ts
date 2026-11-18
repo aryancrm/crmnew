@@ -8,7 +8,7 @@ export type { Role } from "./people/roles";
 /** Management's or Finance's common screen: each of the desk's people, started today or not, what
  *  each has open and has done today, and what is waiting (and not given to anyone started). */
 export type DeskDuty = {
-  desk: "management" | "finance";
+  desk: "management" | "finance" | "dispatch";
   people: { id: number; name: string; title: string | null; startedAt: string | null; open: number; doneToday: number }[];
   /** May press Start / Stop here (the desk's accounts and the Admin; the CEO only looks). */
   canStart: boolean;
@@ -19,7 +19,7 @@ export type DeskDuty = {
 /** Each of the desk's people over some days: hours started, given and taken, what they did with
  *  the orders they moved on, how long each took them (working minutes), late, open now. */
 export type DeskReport = {
-  desk: "management" | "finance";
+  desk: "management" | "finance" | "dispatch";
   from: string;
   to: string;
   /** The desk's limit in working minutes (Management 4 hours, Finance a working day). */
@@ -43,7 +43,7 @@ export type DeskReport = {
 
 /** One of the desk's people over some days: their figures, what they have now, what they did. */
 export type DeskPerson = {
-  desk: "management" | "finance";
+  desk: "management" | "finance" | "dispatch";
   from: string;
   to: string;
   limitMinutes: number;
@@ -99,6 +99,9 @@ export type Me = {
   business?: string | null;
   /** The CEO or Admin looking as this person (read only), when it is that. */
   viewedBy?: { id: number; name: string } | null;
+  /** Signed in at a desk's tile with the company's password: the desk's common screen, not the
+   *  person's own (no "Me" on it). */
+  deskScreen?: "management" | "finance" | "dispatch" | null;
   /** The box picked on a lead's team switch for this request (?unit=, checked): the page counts the
    *  seats in it and under it (org/scope.ts). */
   unit?: number | null;

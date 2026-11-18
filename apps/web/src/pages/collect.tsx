@@ -22,7 +22,7 @@ type Tab = string;
  *  apart"); Zoho's open invoices from before the switch apart. */
 const termOf = (row: Row): Tab => (row.invoiceId < 0 ? "zoho" : row.terms === "COD" ? "cod" : row.terms);
 const termLabel = (key: Tab) =>
-  key === "cod" ? "Cash on delivery" : key === "zoho" ? "From Zoho" : key === "collected" ? "Collected" : key;
+  key === "cod" ? "Cash on delivery" : key === "zoho" ? "From before" : key === "collected" ? "Collected" : key;
 /** Cash on delivery first, then the credit terms shortest first, then Advance, then Zoho's. */
 const termRank = (key: Tab) =>
   key === "cod" ? 0 : key === "zoho" ? 10_000 : /^\d+/.test(key) ? Number.parseInt(key, 10) : 5_000;

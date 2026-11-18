@@ -348,7 +348,7 @@ function Invoices({ rows }: { rows: Row[] }) {
                     {row.orderCode}
                   </Link>
                 ) : (
-                  <span className="block text-[11px] text-slate-400">{row.orderCode ?? ""} · Zoho</span>
+                  <span className="block text-[11px] text-slate-400">{row.orderCode ?? ""} · earlier</span>
                 )}
               </td>
               <td className="px-3 py-2">

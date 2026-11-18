@@ -491,8 +491,11 @@ function deskFor(me: Me): Space {
   if (!first) return space;
   const listed = allItems(space.groups.flatMap((group) => group.items));
   // Everyone asks for their own leave, except the CEO and the Admin (HR records theirs).
+  // The desk's common screen (signed in at its tile with the company's password) is nobody's own:
+  // no "Me", no one person's messages (Aryan, 19 Nov). Each person's own login keeps them.
+  const shared = Boolean(me.deskScreen);
   const mine: MenuItem[] =
-    me.role === "ceo" || me.role === "admin"
+    me.role === "ceo" || me.role === "admin" || shared
       ? []
       : [
           folder(
@@ -529,7 +532,7 @@ function deskFor(me: Me): Space {
     ...space,
     ...(sorted ? { tabs: first.items } : {}),
     groups: [
-      { ...first, items: [...work, ...mine, messagesLink] },
+      { ...first, items: [...work, ...mine, ...(shared ? [] : [messagesLink])] },
       ...(team.length ? [{ title: "Team", items: team }] : []),
       ...(lookUpItems.length ? [{ title: "Look up", ...(lookUp ?? {}), items: lookUpItems }] : []),
       ...others,
@@ -705,10 +708,12 @@ function ownDesk(me: Me): Space {
       // the orders and hold the sales targets; the CHC builds the doctors.
       if (me.channel?.code === "RX")
         return {
+          // My orders right under "Log a call" (Aryan, 19 Nov); Care groups (the doctor's patients
+          // the CHC enrols for MD Telesales) after the calls.
           ...desk([
             home,
+            ordersLink("My orders"),
             { to: "/rx/doctors", label: "My doctors", icon: Stethoscope, short: "Doctors" },
-            { to: "/care-groups", label: "Care groups", icon: Users, short: "Groups" },
             folder(
               "Calls",
               CalendarCheck,
@@ -721,7 +726,7 @@ function ownDesk(me: Me): Space {
               ],
               "Calls",
             ),
-            ordersLink("My orders"),
+            { to: "/care-groups", label: "Patient care groups", icon: Users, short: "Groups" },
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ]),
           cta: { to: "/visits", label: "Log a call" },
@@ -1187,7 +1192,9 @@ function ownDesk(me: Me): Space {
             // Home is the warehouse's queue (to pack, to ship, came back); the road and the
             // holds have their own links, like Management's.
             items: [
-              { ...home, badge: "dispatch" },
+              { ...home, label: "Orders to pack & ship", icon: Truck, badge: "dispatch", short: "Pack" },
+              // Each person's figures, like Management's: hours started, given, packed, time per order.
+              { to: "/desk/team", label: "Team figures", icon: BarChart3, short: "Team" },
               { to: "/orders", label: "All orders", icon: ClipboardList, short: "Orders" },
               {
                 to: "/shipments",

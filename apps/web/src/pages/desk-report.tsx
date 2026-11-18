@@ -24,7 +24,9 @@ export function DeskReportPage() {
   const me = useMe().data;
   const [deskParams] = useSearchParams();
   // The desk's own people see their desk; the CEO and the Admin pick it (?desk=finance).
-  const desk = me?.role === "finance" || (me?.role !== "management" && deskParams.get("desk") === "finance") ? "finance" : "management";
+  const own = me?.role === "management" || me?.role === "finance" || me?.role === "dispatch" ? me.role : null;
+  const asked = deskParams.get("desk");
+  const desk: "management" | "finance" | "dispatch" = own ?? (asked === "finance" || asked === "dispatch" ? asked : "management");
   const [params, setParams] = useSearchParams();
   const today = manila();
   const monday = (() => {
@@ -43,7 +45,7 @@ export function DeskReportPage() {
     placeholderData: keepPreviousData,
   });
   const data = query.data;
-  const doneWord = desk === "management" ? "Approved" : "Let go to Dispatch";
+  const doneWord = desk === "management" ? "Approved" : desk === "finance" ? "Let go to Dispatch" : "Packed or shipped";
   const totals = data?.people.reduce(
     (sum, one) => ({
       hours: sum.hours + one.hours,
@@ -62,7 +64,7 @@ export function DeskReportPage() {
   return (
     <div>
       <PageHead
-        title={desk === "management" ? "Management team" : "Finance team"}
+        title={desk === "management" ? "Management team" : desk === "finance" ? "Finance team" : "Dispatch team"}
         sub={`Each person: hours started, orders given, what they did, how long each took (from when it was theirs, working time). Late: over ${desk === "management" ? "4 working hours" : "a working day"}.`}
         actions={
           <span className="flex rounded-lg border border-slate-200 bg-white p-0.5 text-[13px] font-semibold">

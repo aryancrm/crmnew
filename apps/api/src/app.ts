@@ -191,6 +191,7 @@ export function createApp(db: Database, options: AppOptions) {
     found: typeof person.$inferSelect | undefined,
     password: string,
     wrong: Refusal,
+    desk?: "management" | "finance" | "dispatch",
   ) => {
     if (!found || !found.active) throw wrong;
 
@@ -221,7 +222,7 @@ export function createApp(db: Database, options: AppOptions) {
       .set({ failedLogins: 0, lockedUntil: null, lastSignInAt: new Date() })
       .where(eq(person.id, found.id));
 
-    const token = await startSession(db, found.id);
+    const token = await startSession(db, found.id, undefined, desk);
     setCookie(c, SESSION_COOKIE, token, {
       httpOnly: true,
       secure,
@@ -254,7 +255,7 @@ export function createApp(db: Database, options: AppOptions) {
         where s.active and s.module = ${input.desk} order by s.lead desc, s.sort, s.id limit 1`,
     );
     const [found] = seat ? await db.select().from(person).where(eq(person.id, seat.personId)).limit(1) : [];
-    return signInAs(c, found, input.password, new Refusal(401, "wrong_login", "Wrong password."));
+    return signInAs(c, found, input.password, new Refusal(401, "wrong_login", "Wrong password."), input.desk);
   });
 
   app.post("/api/auth/login", async (c) => {

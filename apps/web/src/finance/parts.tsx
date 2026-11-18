@@ -838,7 +838,7 @@ export function UseCreditDialog({
                 >
                   {sources.map((one) => (
                     <option key={`${one.kind}:${one.id}`} value={`${one.kind}:${one.id}`}>
-                      {one.kind === "zoho" ? `Zoho credit note ${one.number}` : `Kept from ${one.number}`} ·{" "}
+                      {one.kind === "zoho" ? `Credit note ${one.number}` : `Kept from ${one.number}`} ·{" "}
                       {peso(one.left)} left
                     </option>
                   ))}

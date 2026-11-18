@@ -5,7 +5,7 @@
 
 import type { DeskDuty } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useAction } from "../ui";
@@ -13,7 +13,7 @@ import { useAction } from "../ui";
 const at = (iso: string) =>
   new Date(iso).toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Manila" });
 
-export function DeskPeople({ desk, onPick }: { desk: "management" | "finance"; onPick?: () => void }) {
+export function DeskPeople({ desk, onPick }: { desk: "management" | "finance" | "dispatch"; onPick?: () => void }) {
   const queries = useQueryClient();
   const action = useAction();
   const navigate = useNavigate();
@@ -26,6 +26,8 @@ export function DeskPeople({ desk, onPick }: { desk: "management" | "finance"; o
     refetchInterval: 60_000,
   });
   const team = query.data;
+  // The ones started are listed; the rest open with a press (a long list stays short at the top).
+  const [everyone, setEveryone] = useState(false);
   // When orders were just given out, the cards show their names.
   const given = team?.people.map((one) => `${one.id}:${one.open}`).join(",");
   // biome-ignore lint/correctness/useExhaustiveDependencies: on the counts changing only
@@ -42,13 +44,14 @@ export function DeskPeople({ desk, onPick }: { desk: "management" | "finance"; o
     });
 
   return (
-    <section aria-label="The desk's people" className="px-3 pb-2">
-      <div className="flex items-center justify-between px-2.5 pt-4 pb-1">
-        <span className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">People</span>
-        <span className="text-[10px] text-slate-400">press Start when you begin</span>
+    <section aria-label="On the desk today" className="mx-3 mb-3 rounded-xl border border-slate-200 bg-white/80 p-1.5 shadow-2xs">
+      <div className="flex items-center justify-between px-1.5 pt-0.5 pb-1">
+        <span className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
+          On the desk today · {team.people.filter((one) => one.startedAt).length} of {team.people.length}
+        </span>
       </div>
       <ul className="flex flex-col gap-0.5">
-        {team.people.map((one) => {
+        {team.people.filter((one) => everyone || one.startedAt || !team.people.some((other) => other.startedAt)).map((one) => {
           const on = Boolean(one.startedAt);
           return (
             <li
@@ -89,6 +92,15 @@ export function DeskPeople({ desk, onPick }: { desk: "management" | "finance"; o
           );
         })}
       </ul>
+      {team.people.some((one) => one.startedAt) && team.people.some((one) => !one.startedAt) && (
+        <button
+          type="button"
+          onClick={() => setEveryone(!everyone)}
+          className="mt-0.5 w-full rounded-lg px-2 py-1 text-left text-[11.5px] font-semibold text-brand hover:bg-slate-50"
+        >
+          {everyone ? "Only those started" : `+ ${team.people.filter((one) => !one.startedAt).length} not started: Start someone`}
+        </button>
+      )}
       {action.problem && <p className="px-2 pt-1 text-[11px] text-rose-700">{action.problem.message}</p>}
     </section>
   );

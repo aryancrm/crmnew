@@ -12,21 +12,33 @@ import { notify } from "../notify/service";
 import { logEvent } from "../orders/events";
 import type { DeskDuty, DeskPerson, DeskReport, Me } from "../types";
 
-export type DutyDesk = "management" | "finance";
-export const DUTY_DESKS: DutyDesk[] = ["management", "finance"];
+export type DutyDesk = "management" | "finance" | "dispatch";
+// Dispatch is one of them since 19 Nov (Aryan: "make Dispatch's like Management's"): its people
+// press Start, the orders to pack are shared out, what is done is written in its person's name.
+export const DUTY_DESKS: DutyDesk[] = ["management", "finance", "dispatch"];
 
-const WORDS: Record<DutyDesk, string> = { management: "Management", finance: "Finance" };
+const WORDS: Record<DutyDesk, string> = { management: "Management", finance: "Finance", dispatch: "Dispatch" };
+/** The statuses an order waits in at each desk, and how long it may wait there (minutes of work). */
+const STATUSES: Record<DutyDesk, string[]> = {
+  management: ["pending_approval"],
+  finance: ["finance_check", "ready_for_invoice"],
+  dispatch: ["ready_for_dispatch", "packing"],
+};
+const LIMIT: Record<DutyDesk, number> = { management: 4 * 60, finance: 9 * 60, dispatch: 9 * 60 };
+const VERB: Record<DutyDesk, string> = { management: "check", finance: "check for Finance", dispatch: "pack" };
 
 /** The orders waiting at a desk (alias `o`), and the column naming who has each in hand. */
 const AT_DESK: Record<DutyDesk, SQL> = {
   // A PAP case's order is its PAP head's to approve: never shared out.
   management: sql`(o.status = 'pending_approval' and not exists (select 1 from channel ch where ch.id = o.channel_id and ch.code = 'PAP'))`,
   finance: sql`o.status in ('finance_check', 'ready_for_invoice')`,
+  dispatch: sql`o.status in ('ready_for_dispatch', 'packing')`,
 };
-const OWNER: Record<DutyDesk, SQL> = { management: sql.raw("manage_by"), finance: sql.raw("finance_by") };
+const OWNER: Record<DutyDesk, SQL> = { management: sql.raw("manage_by"), finance: sql.raw("finance_by"), dispatch: sql.raw("dispatch_by") };
 const OWNER_AT: Record<DutyDesk, SQL> = {
   management: sql.raw("manage_by_at"),
   finance: sql.raw("finance_by_at"),
+  dispatch: sql.raw("dispatch_by_at"),
 };
 
 /** A start still open today (Manila): yesterday's left open counts as over. */
@@ -78,7 +90,7 @@ export async function shareOut(db: Database, me: Me, desk: DutyDesk): Promise<nu
       await notify(tx, {
         to: [to.id],
         kind: "order",
-        title: `${order.code} is yours to ${desk === "management" ? "check" : "check for Finance"}`,
+        title: `${order.code} is yours to ${VERB[desk]}`,
         link: `/orders/${order.id}`,
         orderId: order.id,
         key: `desk:${desk}:${order.id}:${to.id}`,
@@ -103,7 +115,9 @@ export async function deskTeam(db: Database, me: Me, desk: DutyDesk): Promise<De
   const doneToday =
     desk === "management"
       ? sql`(select count(*) from sales_order o where o.approved_by = p.id and (o.approved_at at time zone 'Asia/Manila')::date = (now() at time zone 'Asia/Manila')::date)`
-      : sql`(select count(*) from sales_order o where o.finance_checked_by = p.id and (o.finance_checked_at at time zone 'Asia/Manila')::date = (now() at time zone 'Asia/Manila')::date)`;
+      : desk === "finance"
+        ? sql`(select count(*) from sales_order o where o.finance_checked_by = p.id and (o.finance_checked_at at time zone 'Asia/Manila')::date = (now() at time zone 'Asia/Manila')::date)`
+        : sql`(select count(*) from sales_order o where o.packed_by = p.id and (o.packed_at at time zone 'Asia/Manila')::date = (now() at time zone 'Asia/Manila')::date)`;
   const [people, [waiting]] = await Promise.all([
     rows<DeskDuty["people"][number]>(
       db,
@@ -212,7 +226,7 @@ async function evenOut(db: Database, me: Me, desk: DutyDesk): Promise<void> {
       await notify(tx, {
         to: [fewer.id],
         kind: "order",
-        title: `${order.code} is yours to ${desk === "management" ? "check" : "check for Finance"}`,
+        title: `${order.code} is yours to ${VERB[desk]}`,
         link: `/orders/${order.id}`,
         orderId: order.id,
         key: `desk:${desk}:${order.id}:${fewer.id}`,
@@ -228,9 +242,9 @@ async function evenOut(db: Database, me: Me, desk: DutyDesk): Promise<void> {
  * account's own.
  */
 export async function deskStandIn(db: Database, me: Me, method: string, path: string): Promise<Me | null> {
-  if (method !== "POST" || (me.role !== "management" && me.role !== "finance")) return null;
-  const found = path.match(/^\/api\/(?:finance\/)?orders\/(\d+)\/([a-z-]+)$/);
-  if (!found || ["handle", "take"].includes(found[2] as string)) return null;
+  if (method !== "POST" || !DUTY_DESKS.includes(me.role as DutyDesk)) return null;
+  const found = path.match(/^\/api\/(?:finance\/|dispatch\/)?orders\/(\d+)\/([a-z-]+)$/);
+  if (!found || ["handle", "take", "release"].includes(found[2] as string)) return null;
   const desk = me.role as DutyDesk;
   const [owner] = await rows<{ id: number; name: string; title: string | null }>(
     db,
@@ -290,9 +304,9 @@ export async function deskReport(
   const from = isDay(asked.from) ? (asked.from as string) : today;
   const to = isDay(asked.to) ? (asked.to as string) : today;
   if (from > to) throw new Refusal(400, "invalid", "The first day comes after the last one.", "from");
-  const statuses = desk === "management" ? ["pending_approval"] : ["finance_check", "ready_for_invoice"];
+  const statuses = STATUSES[desk];
   const inDesk = sql.join(statuses.map((one) => sql`${one}`), sql`, `);
-  const limit = desk === "management" ? 4 * 60 : 9 * 60;
+  const limit = LIMIT[desk];
   const day = (column: SQL) => sql`(${column} at time zone 'Asia/Manila')::date between ${from}::date and ${to}::date`;
   const people = await rows<DeskReport["people"][number]>(
     db,
@@ -323,7 +337,7 @@ export async function deskReport(
           and not exists (select 1 from order_assignment b where b.order_id = a.order_id and b.desk = a.desk and b.at > a.at
             and b.person_id <> p.id and b.how in ('given', 'took')))::int as given,
         (select count(*) from order_assignment a where a.person_id = p.id and a.desk = ${desk} and a.how = 'took' and ${day(sql`a.at`)})::int as took,
-        (select count(*) from acted x where x.by_person = p.id and x.went in ('finance_check', 'ready_for_invoice', 'ready_for_dispatch', 'packing'))::int as done,
+        (select count(*) from acted x where x.by_person = p.id and x.went in ('finance_check', 'ready_for_invoice', 'ready_for_dispatch', 'packing', 'shipped'))::int as done,
         (select count(*) from acted x where x.by_person = p.id and x.went = 'draft')::int as "sentBack",
         (select count(*) from acted x where x.by_person = p.id and x.went in ('on_hold', 'exception'))::int as held,
         (select count(*) from acted x where x.by_person = p.id and x.went = 'cancelled')::int as rejected,
@@ -350,7 +364,7 @@ export async function deskPerson(
   const report = await deskReport(db, me, desk, asked);
   const figures = report.people.find((one) => one.id === personId);
   if (!figures) throw new Refusal(404, "not_found", `That person isn't in ${WORDS[desk]}.`);
-  const statuses = desk === "management" ? ["pending_approval"] : ["finance_check", "ready_for_invoice"];
+  const statuses = STATUSES[desk];
   const inDesk = sql.join(statuses.map((one) => sql`${one}`), sql`, `);
   const day = (column: SQL) =>
     sql`(${column} at time zone 'Asia/Manila')::date between ${report.from}::date and ${report.to}::date`;
@@ -380,7 +394,7 @@ export async function deskPerson(
           from order_step st where st.status in (${inDesk}) and st.left_at is not null and ${day(sql`st.left_at`)}
         )
         select o.id::int as id, o.code, c.name as customer, o.total::int as total,
-          case when m.went in ('finance_check', 'ready_for_invoice', 'ready_for_dispatch', 'packing') then 'done'
+          case when m.went in ('finance_check', 'ready_for_invoice', 'ready_for_dispatch', 'packing', 'shipped') then 'done'
             when m.went = 'draft' then 'sent_back' when m.went in ('on_hold', 'exception') then 'held'
             when m.went = 'cancelled' then 'rejected' else 'moved' end as outcome,
           to_char(m.left_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as at,

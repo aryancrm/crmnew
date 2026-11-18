@@ -16,6 +16,7 @@ import { AdminChannelsPage } from "./admin-channels";
 import { CeoHomePage } from "./ceo-home";
 import { HrPeoplePage } from "./hr-people";
 import { Attention } from "./inventory-overview";
+import { DispatchHome } from "./dispatch-home";
 import { ManagementHome } from "./management-home";
 import { B2cHome } from "./b2c";
 import { MedrepHome } from "./medrep-home";
@@ -53,7 +54,7 @@ export function Home() {
   // A desk's Home is its work board itself, nothing stacked above it.
   // Finance's common screen, like Management's: the orders to check (its people in the left menu).
   if (me.role === "finance") return <OrdersToCheck desk="finance" />;
-  if (me.role === "dispatch") return <OrdersToCheck desk="dispatch" />;
+  if (me.role === "dispatch") return <DispatchHome />;
   if (me.role === "medrep") return <MedrepHome />;
   // The B2C CHC starts on their morning pulse and the replies waiting (docs/PLAN.md 16.3).
   if (onlineDesk(me)) return <B2cHome />;

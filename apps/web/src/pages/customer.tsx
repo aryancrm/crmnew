@@ -308,7 +308,7 @@ export function Customer() {
               label: "Orders",
               value: count(totals.orders),
               sub: before?.orders
-                ? `+ ${count(before.orders)} in Zoho${before.lastOn ? `, last ${day(before.lastOn)}` : ""}`
+                ? `+ ${count(before.orders)} earlier${before.lastOn ? `, last ${day(before.lastOn)}` : ""}`
                 : totals.lastOrderAt
                   ? `last ${day(totals.lastOrderAt)}`
                   : "none yet",
@@ -316,7 +316,7 @@ export function Customer() {
             {
               label: "Bought",
               value: peso(totals.bought),
-              sub: before?.bought ? `+ ${peso(before.bought)} in Zoho` : "all orders",
+              sub: before?.bought ? `+ ${peso(before.bought)} earlier` : "all orders",
             },
             { label: "Paid", value: peso(totals.paid), tone: "good" },
             {
@@ -971,7 +971,7 @@ function CreditCard({ customerId }: { customerId: number }) {
         {credit.sources.map((one) => (
           <li key={`${one.kind}:${one.id}`} className="flex justify-between gap-2">
             <span>
-              {one.kind === "zoho" ? `Zoho credit note ${one.number}` : `Kept from ${one.number}`}
+              {one.kind === "zoho" ? `Credit note ${one.number}` : `Kept from ${one.number}`}
               <span className="block text-[11px] text-slate-500">{dayLabel(one.day)}</span>
             </span>
             <b className="tabular-nums">{peso(one.left)}</b>
