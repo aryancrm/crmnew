@@ -5,13 +5,14 @@
 import "@fontsource-variable/inter";
 import type { Me } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, ChevronRight, Eye, EyeOff, KeyRound, LoaderCircle, Search, UserRound, X } from "lucide-react";
+import { ArrowRight, ChevronRight, Eye, EyeOff, KeyRound, LoaderCircle, Search, UserRound } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiFailure, api } from "../api";
 import { ME, useMe } from "../auth";
 import { ClassicLogin } from "./login-classic";
 import { About } from "../portal/about";
+import { DepartmentPage } from "../portal/department-page";
 import { TILE_GLOW, TILE_ICONS } from "../portal/tiles";
 import { lastWorkspace, rememberWorkspace, type Workspace, WORKSPACES, workspaceOf } from "../workspaces";
 
@@ -23,53 +24,33 @@ export function Login() {
 
 function Launcher() {
   const me = useMe();
-  const queries = useQueryClient();
   const navigate = useNavigate();
   const location = useLocation();
+  const [params] = useSearchParams();
   const from = (location.state as { from?: string } | null)?.from ?? "/";
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [shown, setShown] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [problem, setProblem] = useState<{ message: string; field?: string } | null>(null);
-  // The tile pressed (only a look: the login decides what opens).
-  const [picked, setPicked] = useState<Workspace | null>(null);
+  // The tile pressed opens its department's page, the sign-in below it (the login decides what
+  // opens inside, as always).
+  const picked = WORKSPACES.find((one) => one.key === params.get("dept")) ?? null;
   const [find, setFind] = useState("");
   const last = lastWorkspace();
+  const open = (key: string | null) =>
+    navigate({ search: key ? `?dept=${key}` : "" }, { state: location.state });
 
   useEffect(() => {
     if (!picked) return;
-    const close = (event: KeyboardEvent) => event.key === "Escape" && setPicked(null);
+    window.scrollTo({ top: 0 });
+    const close = (event: KeyboardEvent) => event.key === "Escape" && open(null);
     document.addEventListener("keydown", close);
     return () => document.removeEventListener("keydown", close);
-  }, [picked]);
+    // biome-ignore lint/correctness/useExhaustiveDependencies: on the department changing only
+  }, [picked?.key]);
 
-  // The Books tile opens Books for those who keep the books.
-  const landing = (role: string) => (picked?.key === "books" && ["finance", "ceo", "admin"].includes(role) ? "/books/home" : from);
-  if (me.data) return <Navigate to={landing(me.data.role)} replace />;
-
-  async function submit(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    setProblem(null);
-    try {
-      const { me: signedIn } = await api<{ me: Me }>("/api/auth/login", { body: { email, password } });
-      queries.setQueryData(ME, signedIn);
-      rememberWorkspace(workspaceOf(signedIn).key);
-      navigate(landing(signedIn.role), { replace: true });
-    } catch (error) {
-      setProblem(error instanceof ApiFailure ? { message: error.message, field: error.field } : { message: "Couldn't sign in. Try again." });
-    } finally {
-      setBusy(false);
-    }
-  }
+  if (me.data) return <Navigate to={landing(me.data.role, picked, from)} replace />;
 
   const words = find.trim().toLowerCase();
   const shownTiles = WORKSPACES.filter(
     (one) => !words || `${one.label} ${one.about}`.toLowerCase().includes(words),
   );
-  const field =
-    "h-12 w-full rounded-2xl border border-white/70 bg-white/70 pl-11 text-[15px] text-[#1f2733] shadow-[inset_0_1px_2px_rgba(20,30,50,0.06)] outline-none backdrop-blur placeholder:text-[#9aa2b0] focus:border-[#f36b21]/60 focus:bg-white focus:ring-4 focus:ring-[#f36b21]/15";
 
   return (
     <main className="relative isolate overflow-x-hidden bg-[#f6f7fb] font-[Inter_Variable,Inter,sans-serif] text-[#1f2733]">
@@ -84,6 +65,16 @@ function Launcher() {
         <div className="absolute bottom-[24rem] -right-48 size-[34rem] rounded-full bg-[#cfe8d8] opacity-50 blur-[130px]" />
         <div className="absolute bottom-0 left-1/3 size-[32rem] rounded-full bg-[#dcd6ff] opacity-45 blur-[130px]" />
       </div>
+      {picked ? (
+        <div className="flex min-h-dvh flex-col">
+          <header className="mx-auto flex w-[min(1240px,calc(100%-32px))] items-center gap-2.5 py-4">
+            <img src="/brand/bishnoi-one-mark.png" alt="" className="size-8" />
+            <span className="text-[18px] font-semibold tracking-[-0.03em]">Bishnoi One</span>
+          </header>
+          <DepartmentPage workspace={picked} onBack={() => open(null)} signIn={<SignIn workspace={picked} from={from} />} />
+        </div>
+      ) : (
+        <>
       {/* The first screen: the launcher, whole in the window. */}
       <div className="relative isolate flex min-h-dvh flex-col overflow-hidden md:h-dvh">
       <Orbits />
@@ -125,7 +116,7 @@ function Launcher() {
             const Icon = TILE_ICONS[one.key];
             return (
               <li key={one.key} className="flex w-[clamp(6.5rem,13vh,8.5rem)] justify-center">
-                <button type="button" onClick={() => setPicked(one)} className="group flex flex-col items-center gap-2.5 focus-visible:outline-none">
+                <button type="button" onClick={() => open(one.key)} className="group flex flex-col items-center gap-2.5 focus-visible:outline-none">
                   <span className="relative grid size-[clamp(4.75rem,12vh,7rem)] place-items-center">
                     {/* The tile's own colour, faded, behind the glass. */}
                     <span
@@ -161,97 +152,117 @@ function Launcher() {
       </footer>
       </div>
 
-      <About />
+          <About />
 
-      {/* The same sign-in, whichever tile was pressed. */}
-      {picked && (
-        <div className="fixed inset-0 z-30 grid place-items-center bg-[#eef0f5]/60 p-4 backdrop-blur-md">
-          <button type="button" aria-label="Close" className="absolute inset-0 cursor-default" onClick={() => setPicked(null)} />
-          <div role="dialog" aria-modal="true" aria-label={`Sign in to ${picked.label}`} className="relative w-full max-w-sm rounded-[2rem] border border-white/90 bg-white/85 p-7 text-center shadow-[0_40px_90px_-30px_rgba(20,30,50,0.45)] backdrop-blur-2xl">
-            <button type="button" onClick={() => setPicked(null)} aria-label="Back to all workspaces" className="absolute top-4 right-4 grid size-9 place-items-center rounded-full text-[#7a8394] hover:bg-black/5">
-              <X className="size-4" />
-            </button>
-            <span className="relative mx-auto grid size-20 place-items-center">
-              <span aria-hidden="true" className="absolute inset-2 rounded-[1.4rem] opacity-30 blur-xl" style={{ background: TILE_GLOW[picked.key] }} />
-              <span className="relative grid size-20 place-items-center rounded-[1.4rem] border border-white bg-white shadow-[0_14px_30px_-14px_rgba(20,30,50,0.3)]">
-                <span className="size-11">{(() => {
-                  const Icon = TILE_ICONS[picked.key];
-                  return Icon ? <Icon /> : null;
-                })()}</span>
-              </span>
-            </span>
-            <h1 className="mt-4 text-[22px] font-semibold tracking-[-0.02em]">{picked.label}</h1>
-            <p className="mt-0.5 text-sm text-[#7a8394]">Sign in as yourself</p>
-            <form onSubmit={submit} className="mt-6 grid gap-3 text-left" aria-busy={busy}>
-              <label className="relative block">
-                <span className="sr-only">Login ID</span>
-                <UserRound className="pointer-events-none absolute top-1/2 left-4 z-10 size-4 -translate-y-1/2 text-[#9aa2b0]" aria-hidden="true" />
-                <input
-                  type="text"
-                  placeholder="Enter your login ID"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  autoComplete="username"
-                  // biome-ignore lint/a11y/noAutofocus: the tile was just pressed to sign in
-                  autoFocus
-                  required
-                  disabled={busy}
-                  value={email}
-                  onChange={(event) => {
-                    setEmail(event.target.value);
-                    setProblem(null);
-                  }}
-                  aria-invalid={problem?.field === "email"}
-                  className={field}
-                />
-              </label>
-              <label className="relative block">
-                <span className="sr-only">Password</span>
-                <KeyRound className="pointer-events-none absolute top-1/2 left-4 z-10 size-4 -translate-y-1/2 text-[#9aa2b0]" aria-hidden="true" />
-                <input
-                  type={shown ? "text" : "password"}
-                  placeholder="Enter your login password"
-                  autoComplete="current-password"
-                  required
-                  disabled={busy}
-                  value={password}
-                  onChange={(event) => {
-                    setPassword(event.target.value);
-                    setProblem(null);
-                  }}
-                  aria-invalid={problem?.field === "password"}
-                  aria-describedby={problem ? "login-error" : undefined}
-                  className={`${field} pr-12`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShown(!shown)}
-                  aria-label={shown ? "Hide password" : "Show password"}
-                  aria-pressed={shown}
-                  className="absolute inset-y-0 right-1 grid w-11 place-items-center text-[#9aa2b0] hover:text-[#1f2733]"
-                >
-                  {shown ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
-                </button>
-              </label>
-              {problem && (
-                <p id="login-error" role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-                  {problem.message}
-                </p>
-              )}
-              <button
-                type="submit"
-                disabled={busy}
-                className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#f36b21] text-sm font-semibold text-white shadow-[0_14px_30px_-12px_rgba(243,107,33,0.7)] transition-colors hover:bg-[#e05a12] disabled:opacity-60"
-              >
-                {busy ? "Signing in…" : `Enter ${picked.label}`}
-                {busy ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <ArrowRight className="size-4" aria-hidden="true" />}
-              </button>
-            </form>
-            <p className="mt-4 text-xs text-[#9aa2b0]">Bishnoi One · your workspace</p>
-          </div>
-        </div>
+        </>
       )}
     </main>
+  );
+}
+
+/** Where a person lands: the Books tile opens Books for those who keep the books. */
+const landing = (role: string, picked: Workspace | null, from: string) =>
+  picked?.key === "books" && ["finance", "ceo", "admin"].includes(role) ? "/books/home" : from;
+
+/** The sign-in, the same for every department: login ID and password, as always. */
+function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
+  const queries = useQueryClient();
+  const navigate = useNavigate();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [shown, setShown] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<{ message: string; field?: string } | null>(null);
+  const picked = workspace;
+  const field =
+    "h-12 w-full rounded-2xl border border-white/70 bg-white/70 pl-11 text-[15px] text-[#1f2733] shadow-[inset_0_1px_2px_rgba(20,30,50,0.06)] outline-none backdrop-blur placeholder:text-[#9aa2b0] focus:border-[#f36b21]/60 focus:bg-white focus:ring-4 focus:ring-[#f36b21]/15";
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setProblem(null);
+    try {
+      const { me: signedIn } = await api<{ me: Me }>("/api/auth/login", { body: { email, password } });
+      queries.setQueryData(ME, signedIn);
+      rememberWorkspace(workspaceOf(signedIn).key);
+      navigate(landing(signedIn.role, workspace, from), { replace: true });
+    } catch (error) {
+      setProblem(error instanceof ApiFailure ? { message: error.message, field: error.field } : { message: "Couldn't sign in. Try again." });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    // Raised above the page around it, so the eye lands here (Aryan, 18 Nov).
+    <div className="relative w-full max-w-sm rounded-[2rem] border border-white bg-white p-7 text-center shadow-[0_50px_100px_-28px_rgba(20,30,50,0.55),0_18px_36px_-18px_rgba(20,30,50,0.35)] ring-1 ring-black/[0.04]">
+      <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Sign in to {picked.label}</h2>
+      <p className="mt-0.5 text-sm text-[#7a8394]">Log in with your ID and password</p>
+      <form onSubmit={submit} className="mt-6 grid gap-3 text-left" aria-busy={busy}>
+        <label className="relative block">
+          <span className="sr-only">Login ID</span>
+          <UserRound className="pointer-events-none absolute top-1/2 left-4 z-10 size-4 -translate-y-1/2 text-[#9aa2b0]" aria-hidden="true" />
+          <input
+            type="text"
+            placeholder="Enter your login ID"
+            autoCapitalize="none"
+            spellCheck={false}
+            autoComplete="username"
+            required
+            disabled={busy}
+            value={email}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              setProblem(null);
+            }}
+            aria-invalid={problem?.field === "email"}
+            className={field}
+          />
+        </label>
+        <label className="relative block">
+          <span className="sr-only">Password</span>
+          <KeyRound className="pointer-events-none absolute top-1/2 left-4 z-10 size-4 -translate-y-1/2 text-[#9aa2b0]" aria-hidden="true" />
+          <input
+            type={shown ? "text" : "password"}
+            placeholder="Enter your login password"
+            autoComplete="current-password"
+            required
+            disabled={busy}
+            value={password}
+            onChange={(event) => {
+              setPassword(event.target.value);
+              setProblem(null);
+            }}
+            aria-invalid={problem?.field === "password"}
+            aria-describedby={problem ? "login-error" : undefined}
+            className={`${field} pr-12`}
+          />
+          <button
+            type="button"
+            onClick={() => setShown(!shown)}
+            aria-label={shown ? "Hide password" : "Show password"}
+            aria-pressed={shown}
+            className="absolute inset-y-0 right-1 grid w-11 place-items-center text-[#9aa2b0] hover:text-[#1f2733]"
+          >
+            {shown ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
+          </button>
+        </label>
+        {problem && (
+          <p id="login-error" role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+            {problem.message}
+          </p>
+        )}
+        <button
+          type="submit"
+          disabled={busy}
+          className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#f36b21] text-sm font-semibold text-white shadow-[0_14px_30px_-12px_rgba(243,107,33,0.7)] transition-colors hover:bg-[#e05a12] disabled:opacity-60"
+        >
+          {busy ? "Signing in…" : `Enter ${picked.label}`}
+          {busy ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <ArrowRight className="size-4" aria-hidden="true" />}
+        </button>
+      </form>
+      <p className="mt-4 text-xs text-[#9aa2b0]">Need access? Ask your administrator</p>
+    </div>
   );
 }
 

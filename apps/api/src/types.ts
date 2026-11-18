@@ -5,6 +5,25 @@ import type { Role } from "./people/roles";
 export type { Role } from "./people/roles";
 
 /** The signed-in person, as every screen needs them. */
+/** One unit of a department's team on the portal: its lead seat and its seats by title (no names). */
+export type PortalTeamNode = {
+  unit: string;
+  kind: string;
+  lead: { title: string; module: string; filled: boolean } | null;
+  members: { title: string; module: string; seats: number; people: number }[];
+  children: PortalTeamNode[];
+};
+
+/** A department's page on the portal, before signing in: counts and times of the last 30 days. */
+export type PortalDepartment = {
+  key: string;
+  stats: { label: string; value: number | null; unit: "count" | "minutes" | "days"; hint: string }[];
+  team: PortalTeamNode | null;
+  /** People in the department's seats today. */
+  people: number;
+  at: string;
+};
+
 export type Me = {
   id: number;
   name: string;

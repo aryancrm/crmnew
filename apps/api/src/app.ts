@@ -57,6 +57,7 @@ import { scoreRoutes } from "./scores/routes";
 import { sellerRoutes } from "./sellers/routes";
 import { targetRoutes } from "./targets/routes";
 import { teamRoutes } from "./team/routes";
+import { portalDepartment } from "./portal/service";
 import type { ApiError, Me } from "./types";
 
 export type AppOptions = {
@@ -112,6 +113,10 @@ export function createApp(db: Database, options: AppOptions) {
   const signedIn = signedInWith(db, (me) => markSeen(db, me));
 
   app.get("/api/health", (c) => c.json({ ok: true }));
+  // A department's page on the portal, before signing in: counts, times and the team's seats only.
+  app.get("/api/portal/departments/:key", async (c) =>
+    c.json(await portalDepartment(db, c.req.param("key"))),
+  );
 
   app.post("/api/auth/login", async (c) => {
     const input = await readBody(

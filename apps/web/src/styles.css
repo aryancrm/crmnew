@@ -182,9 +182,22 @@ select.field {
 .orbit-drift { animation: orbit-rock 6s ease-in-out infinite alternate; }
 .orbit-drift-back { animation: orbit-rock-back 7s ease-in-out infinite alternate; }
 .orbit-flow { stroke-dasharray: 6 14; animation: orbit-flow 18s linear infinite; }
+/* A department's flow on the portal: the dashes run along the stops. */
+@keyframes portal-flow { to { stroke-dashoffset: -64; } }
+.portal-flow { animation: portal-flow 2.4s linear infinite; }
 .orbit-twinkle { transform-box: fill-box; transform-origin: center; animation: orbit-twinkle 3.2s ease-in-out infinite; }
 .star-twinkle { animation: star-twinkle 3.6s ease-in-out infinite; }
 .sun-breathe { transform-box: fill-box; transform-origin: center; animation: sun-breathe 6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .orbit-drift, .orbit-drift-back, .orbit-flow, .orbit-twinkle, .star-twinkle, .sun-breathe { animation: none; }
+  .orbit-drift, .orbit-drift-back, .orbit-flow, .orbit-twinkle, .star-twinkle, .sun-breathe, .portal-flow { animation: none; }
 }
+
+/* A department's team on the portal, drawn as a chart: each row hangs from the card above. */
+.org-row { display: flex; justify-content: center; position: relative; padding-top: 1rem; }
+.org-row > .org-col { position: relative; display: flex; flex-direction: column; align-items: center; flex: 1 1 0; min-width: 0; padding: 0 0.3rem; }
+.org-row > .org-col::before { content: ""; position: absolute; top: -1rem; left: 0; right: 0; border-top: 2px solid var(--org-line, #cbd5e1); }
+.org-row > .org-col:first-child::before { left: 50%; }
+.org-row > .org-col:last-child::before { right: 50%; }
+.org-row > .org-col:only-child::before { display: none; }
+.org-row > .org-col::after { content: ""; position: absolute; top: -1rem; left: 50%; height: 1rem; border-left: 2px solid var(--org-line, #cbd5e1); }
+.org-stem { width: 0; height: 0.75rem; border-left: 2px solid var(--org-line, #cbd5e1); margin: 0 auto; }
