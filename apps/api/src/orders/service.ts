@@ -1003,6 +1003,8 @@ export async function orderBoard(
     medrep?: number;
     q?: string;
     status?: string;
+    /** How it pays: Finance's Prepaid orders are the board of the ones paid in advance. */
+    terms?: string;
     /** Cards already shown: "Load more" asks for the next ones (up to 600 at once). */
     shown?: number;
   },
@@ -1034,6 +1036,8 @@ export async function orderBoard(
   const today = sql`(now() at time zone 'Asia/Manila')::date`;
   const narrowed: SQL[] = [seen(me)];
   if (filter.channel) narrowed.push(sql`ch.code = ${filter.channel}`);
+  if (filter.terms && ["advance", "cod", "days"].includes(filter.terms))
+    narrowed.push(sql`o.payment_terms = ${filter.terms}`);
   for (const word of (filter.q ?? "").toLowerCase().split(/\s+/).filter(Boolean).slice(0, 5)) {
     const like = `%${word.replace(/[%_\\]/g, "\\$&")}%`;
     narrowed.push(sql`(lower(o.code) like ${like} or lower(c.name) like ${like} or lower(rep.name) like ${like}

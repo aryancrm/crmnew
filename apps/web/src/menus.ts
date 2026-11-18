@@ -26,6 +26,7 @@ import {
   CheckCheck,
   ClipboardCheck,
   ClipboardList,
+  CreditCard,
   Factory,
   FlaskConical,
   FileText,
@@ -303,7 +304,8 @@ const financeApp: Space = {
     {
       items: [
         { to: "/finance", label: "Orders to check", icon: ClipboardCheck, badge: "finance" },
-        { to: "/collect", label: "Payments to collect", icon: Wallet },
+        { to: "/finance/prepaid", label: "Prepaid orders", icon: CreditCard },
+        { to: "/collect", label: "Due payments", icon: Wallet },
         ...moneyLinks,
       ],
     },
@@ -1121,10 +1123,12 @@ function ownDesk(me: Me): Space {
             // One common screen for the whole of Finance, like Management's (Aryan, 18 Nov): the
             // desk's work first (its people with their Start sit right under it in the menu).
             items: [
+              // Finance's three main bars (Aryan, 18 Nov): the orders to check, the prepaid ones, and
+              // the money that comes later by its terms (cash on delivery, 30 days, 45 days…).
               { to: "/", label: "Orders to check", icon: ClipboardCheck, badge: "finance" },
+              { to: "/finance/prepaid", label: "Prepaid orders", icon: CreditCard, short: "Prepaid" },
+              { to: "/collect", label: "Due payments", icon: Wallet, short: "Due" },
               { to: "/desk/team", label: "Team figures", icon: BarChart3, short: "Team" },
-              // The money that comes later (cash on delivery, credit): marked paid here (18 Nov).
-              { to: "/collect", label: "Payments to collect", icon: Wallet },
               folder("Money", Banknote, moneyLinks, "Money"),
               folder("Books", Landmark, booksLinks, "Books"),
             ],

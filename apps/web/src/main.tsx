@@ -215,6 +215,7 @@ createRoot(root).render(
             <Route path="owed" element={<OwedReport />} />
             <Route path="collect" element={<CollectPage />} />
             <Route path="desk/team" element={<DeskReportPage />} />
+            <Route path="finance/prepaid" element={<OrdersToCheck key="prepaid" desk="finance" terms="advance" title="Prepaid orders" />} />
             <Route path="refunds" element={<Refunds />} />
             <Route path="finance/mine" element={<MyConfirmations />} />
             <Route path="returns" element={<Returns />} />

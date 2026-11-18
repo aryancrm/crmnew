@@ -170,6 +170,7 @@ export function orderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
         medrep: Number(query.medrep) || undefined,
         q: query.q,
         status: query.status,
+        terms: query.terms || undefined,
         shown: Number(query.shown) || 0,
       }),
     );

@@ -1,8 +1,8 @@
-// Payments to collect (Aryan, 18 Nov: "the orders whose money comes later: who marks it? Finance,
-// on a page of its own"): every cash-on-delivery and credit order still owing, one row each, with
-// a Mark paid button right there. Paid in full, the order is done and counted as collected, and it
-// moves to Collected. Late first, then due now, then not delivered yet (not owed yet). Zoho's open
-// invoices from before the switch are listed apart: their money is recorded in Books.
+// Due payments (Aryan, 18 Nov: "the orders whose money comes later, on a page of their own, each kind
+// of terms apart: 30 days, 45 days, cash on delivery"): every order still owing, one tab per terms,
+// one row each with Mark paid right there; late first, then due now, then not delivered yet (not
+// owed yet). Paid in full, the order is done, counted and moves to Collected. Zoho's open invoices
+// from before the switch are a tab of their own: their money is recorded in Books.
 
 import type { CollectedLater, OwedInvoices } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -15,35 +15,27 @@ import { RecordPaymentDialog } from "../finance/parts";
 import { Button, dayLabel, PageHead, PageState, peso } from "../ui";
 
 type Row = OwedInvoices["rows"][number];
-type Tab = "late" | "due" | "waiting" | "collected" | "zoho";
+/** A tab: one way of paying ("cod", "30 days", "45 days"…), Zoho's open invoices, or Collected. */
+type Tab = string;
 
-const TABS: { key: Tab; label: string; tone: string; note: string }[] = [
-  { key: "late", label: "Late", tone: "text-rose-700", note: "Past the day they were to pay" },
-  { key: "due", label: "Due now", tone: "text-amber-700", note: "Delivered: the money is due" },
-  {
-    key: "waiting",
-    label: "Not delivered yet",
-    tone: "text-slate-700",
-    note: "Owed once it is delivered",
-  },
-  { key: "collected", label: "Collected", tone: "text-emerald-700", note: "Paid in full, last 30 days" },
-  { key: "zoho", label: "From Zoho", tone: "text-slate-500", note: "Before the switch: record in Books" },
-];
-
-const tabOf = (row: Row): Tab =>
-  row.invoiceId < 0
-    ? "zoho"
-    : row.state === "late"
-      ? "late"
-      : row.state === "on_delivery" || !row.deliveredOn
-        ? "waiting"
-        : "due";
+/** Which tab a row sits in: its terms (Aryan, 18 Nov: "30 days, 45 days, cash on delivery, each
+ *  apart"); Zoho's open invoices from before the switch apart. */
+const termOf = (row: Row): Tab => (row.invoiceId < 0 ? "zoho" : row.terms === "COD" ? "cod" : row.terms);
+const termLabel = (key: Tab) =>
+  key === "cod" ? "Cash on delivery" : key === "zoho" ? "From Zoho" : key === "collected" ? "Collected" : key;
+/** Cash on delivery first, then the credit terms shortest first, then Advance, then Zoho's. */
+const termRank = (key: Tab) =>
+  key === "cod" ? 0 : key === "zoho" ? 10_000 : /^\d+/.test(key) ? Number.parseInt(key, 10) : 5_000;
+/** Where a row stands: late, due now (delivered), or not delivered yet (not owed yet). */
+const stateOf = (row: Row): "late" | "due" | "waiting" =>
+  row.state === "late" ? "late" : row.state === "on_delivery" || !row.deliveredOn ? "waiting" : "due";
+const STATE_RANK = { late: 0, due: 1, waiting: 2 } as const;
 
 export function CollectPage() {
   const me = useMe();
   const queries = useQueryClient();
   const [params, setParams] = useSearchParams();
-  const tab = (params.get("tab") as Tab | null) ?? "late";
+  const askedTab = params.get("tab");
   const [q, setQ] = useState("");
   const [paying, setPaying] = useState<Row | null>(null);
   const owed = useQuery({
@@ -58,7 +50,13 @@ export function CollectPage() {
   const words = q.trim().toLowerCase().split(/\s+/).filter(Boolean);
   const hits = (text: string) => words.every((word) => text.toLowerCase().includes(word));
   const all = owed.data?.rows ?? [];
-  const byTab = (key: Tab) => all.filter((row) => tabOf(row) === key);
+  const terms = [...new Set(all.map(termOf))].sort((a, b) => termRank(a) - termRank(b));
+  const tabs: Tab[] = [...terms, "collected"];
+  const tab: Tab = askedTab && tabs.includes(askedTab) ? askedTab : (terms[0] ?? "collected");
+  const byTab = (key: Tab) =>
+    all
+      .filter((row) => termOf(row) === key)
+      .sort((a, b) => STATE_RANK[stateOf(a)] - STATE_RANK[stateOf(b)] || b.daysLate - a.daysLate);
   const sum = (rows: Row[]) => rows.reduce((total, row) => total + row.balance, 0);
   const shown = byTab(tab).filter((row) =>
     hits([row.invoiceCode, row.orderCode, row.customer, row.medrep, row.city].filter(Boolean).join(" ")),
@@ -75,30 +73,38 @@ export function CollectPage() {
   return (
     <div>
       <PageHead
-        title="Payments to collect"
-        sub="Cash on delivery and credit orders: mark each one paid when the money comes in. Paid in full, the order is done and counted."
+        title="Due payments"
+        sub="Every order paid later, by its terms: cash on delivery, 30 days, 45 days… Mark each one paid when the money comes in; paid in full, the order is done and counted."
       />
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
-        {TABS.map((item) => {
-          const rows = item.key === "collected" ? null : byTab(item.key);
-          const on = tab === item.key;
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+        {tabs.map((key) => {
+          const rows = key === "collected" ? null : byTab(key);
+          const late = rows ? rows.filter((row) => stateOf(row) === "late") : [];
+          const on = tab === key;
           return (
             <button
-              key={item.key}
+              key={key}
               type="button"
-              onClick={() => pick(item.key)}
+              onClick={() => pick(key)}
               aria-pressed={on}
               className={`rounded-2xl border px-3.5 py-3 text-left transition ${on ? "border-brand bg-emerald-50/60 ring-2 ring-brand/20" : "border-slate-200 bg-white hover:border-slate-300"}`}
             >
-              <div className="text-[12px] font-semibold text-slate-600">{item.label}</div>
-              <div className={`mt-0.5 text-lg font-bold tabular-nums ${item.tone}`}>
+              <div className="text-[12px] font-semibold text-slate-600">{termLabel(key)}</div>
+              <div className={`mt-0.5 text-lg font-bold tabular-nums ${key === "collected" ? "text-emerald-700" : "text-slate-900"}`}>
                 {rows
                   ? peso(sum(rows))
                   : peso((collected.data?.rows ?? []).reduce((total, row) => total + row.total, 0))}
               </div>
               <div className="text-[11px] text-slate-500">
-                {rows ? `${rows.length} ${rows.length === 1 ? "order" : "orders"}` : `${collected.data?.rows.length ?? 0} paid`}{" "}
-                · {item.note}
+                {rows ? (
+                  <>
+                    {rows.length} {rows.length === 1 ? "order" : "orders"}
+                    {late.length > 0 && <span className="font-semibold text-rose-700"> · {late.length} late</span>}
+                    {key === "zoho" && " · record in Books"}
+                  </>
+                ) : (
+                  `${collected.data?.rows.length ?? 0} paid in the last 30 days`
+                )}
               </div>
             </button>
           );
@@ -127,7 +133,7 @@ export function CollectPage() {
                 <th className="px-4 py-2">Order</th>
                 <th className="px-3 py-2">Customer</th>
                 <th className="px-3 py-2">Seller</th>
-                <th className="px-3 py-2">Terms</th>
+                <th className="px-3 py-2">Where it stands</th>
                 <th className="px-3 py-2">Delivered</th>
                 <th className="px-3 py-2">To pay by</th>
                 <th className="px-3 py-2 text-right">Still to pay</th>
@@ -162,7 +168,15 @@ export function CollectPage() {
                     {row.medrep}
                     {row.team && <span className="block text-[11px] text-slate-500">{row.team}</span>}
                   </td>
-                  <td className="px-3 py-2.5 text-slate-700">{row.terms}</td>
+                  <td className="px-3 py-2.5">
+                    {stateOf(row) === "late" ? (
+                      <span className="rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-semibold text-rose-700">{row.daysLate}d late</span>
+                    ) : stateOf(row) === "due" ? (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">Due</span>
+                    ) : (
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Not delivered yet</span>
+                    )}
+                  </td>
                   <td className="px-3 py-2.5 whitespace-nowrap text-slate-700">
                     {row.deliveredOn ? dayLabel(row.deliveredOn) : <span className="text-slate-400">Not yet</span>}
                   </td>
@@ -188,7 +202,7 @@ export function CollectPage() {
                   </td>
                   <td className="px-4 py-2.5 text-right">
                     {row.invoiceId > 0 && row.orderId && canMark ? (
-                      <Button small variant={tab === "waiting" ? "plain" : "primary"} onClick={() => setPaying(row)}>
+                      <Button small variant={stateOf(row) === "waiting" ? "plain" : "primary"} onClick={() => setPaying(row)}>
                         Mark paid
                       </Button>
                     ) : row.invoiceId < 0 ? (

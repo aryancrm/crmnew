@@ -171,7 +171,13 @@ export function OrdersToCheck({
   defaultTab = all ? "all" : DESK_HOME[desk],
   embedded = false,
   aside,
+  terms,
+  title,
 }: {
+  /** Only the orders paid this way (Finance's Prepaid orders: "advance"). */
+  terms?: "advance" | "cod" | "days";
+  /** The page's own title in place of the desk's. */
+  title?: string;
   desk?: Desk;
   /** The All orders page: every order, with Cards, Table and Board views. */
   all?: boolean;
@@ -231,6 +237,7 @@ export function OrdersToCheck({
 
   const search = new URLSearchParams({
     desk,
+    ...(terms ? { terms } : {}),
     tab,
     status,
     channel,
@@ -281,7 +288,9 @@ export function OrdersToCheck({
       ))}
     </fieldset>
   );
-  const pageTitle = all
+  const pageTitle = title
+    ? title
+    : all
     ? "All orders"
     : defaultTab === "hold"
       ? "On hold"
