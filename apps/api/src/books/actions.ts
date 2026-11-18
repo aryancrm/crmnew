@@ -15,6 +15,8 @@ import { logMove, putIn, type Runner } from "../inventory/service";
 import { todayManila } from "../inventory/rules";
 import type { Role } from "../people/roles";
 import type { BookChoices, Me } from "../types";
+import { LEDGER_ROLES } from "./accounts";
+import { assertOpen } from "./write";
 
 const PO_ROLES: Role[] = ["inventory", "admin"];
 const BILL_ROLES: Role[] = ["inventory", "finance", "admin"];
@@ -25,7 +27,7 @@ const clean = (text?: string | null) => text?.trim() || null;
 const centsOf = (pesos: number) => Math.round(pesos * 100);
 
 /** The next number in a series as Zoho counts it: PO-04368 → PO-04369; payments are plain numbers. */
-async function nextNumber(tx: Runner, kind: string, prefix: string, width: number): Promise<string> {
+export async function nextNumber(tx: Runner, kind: string, prefix: string, width: number): Promise<string> {
   const [last] = await rows<{ n: number | null }>(
     tx,
     prefix
@@ -75,10 +77,10 @@ async function vendorOf(tx: Runner, id: number): Promise<Vendor> {
 
 export type LineInput = { medicineId?: number | null; itemName?: string | null; description?: string | null; account?: string | null; qty: number; rate: number; taxPct?: number | null };
 
-type MadeLine = { medicineId: number | null; itemName: string; sku: string | null; description: string | null; account: string | null; unit: string | null; qty: number; rate: number; taxPct: number | null; taxAmount: number; amount: number };
+export type MadeLine = { medicineId: number | null; itemName: string; sku: string | null; description: string | null; account: string | null; unit: string | null; qty: number; rate: number; taxPct: number | null; taxAmount: number; amount: number };
 
 /** Lines as typed: a medicine (its name and SKU come with it) or an item or account by name. */
-async function linesOf(tx: Runner, input: LineInput[]): Promise<MadeLine[]> {
+export async function linesOf(tx: Runner, input: LineInput[]): Promise<MadeLine[]> {
   if (!input.length) throw new Refusal(400, "invalid", "Add at least one item.", "lines");
   const out: MadeLine[] = [];
   for (const [at, line] of input.entries()) {
@@ -152,7 +154,7 @@ async function insertDoc(
   return made.id;
 }
 
-async function insertLines(tx: Runner, docId: number, lines: (MadeLine & { fromLine?: number | null; batchId?: number | null; batches?: unknown[]; warehouse?: string | null; qtyDone?: Record<string, number> })[]) {
+export async function insertLines(tx: Runner, docId: number, lines: (MadeLine & { fromLine?: number | null; batchId?: number | null; batches?: unknown[]; warehouse?: string | null; qtyDone?: Record<string, number> })[]) {
   for (const [n, line] of lines.entries())
     await tx.execute(
       sql`insert into book_line (doc_id, n, medicine_id, item_name, sku, description, account, warehouse, unit, qty, rate, tax_pct, tax_amount, amount, qty_done, batches, from_line, batch_id)
@@ -162,13 +164,13 @@ async function insertLines(tx: Runner, docId: number, lines: (MadeLine & { fromL
     );
 }
 
-const link = (tx: Runner, from: number, to: number, amount: number | null, on: string | null) =>
+export const link = (tx: Runner, from: number, to: number, amount: number | null, on: string | null) =>
   tx.execute(
     sql`insert into book_link (from_doc, to_doc, amount, on_date) values (${from}, ${to}, ${amount}, ${on}::date)
       on conflict (from_doc, to_doc) do update set amount = coalesce(book_link.amount, 0) + coalesce(excluded.amount, 0)`,
   );
 
-const day = (value: string | null | undefined, field: string, required = true) => {
+export const day = (value: string | null | undefined, field: string, required = true) => {
   if (!value) {
     if (required) throw new Refusal(400, "invalid", "Pick the day.", field);
     return null;
@@ -518,6 +520,7 @@ export async function createBill(db: Database, me: Me, input: BillInput): Promis
     if (!number) throw new Refusal(400, "invalid", "Type the vendor's bill number.", "number");
     await billNumberFree(tx, vendor.id, number);
     const date = day(input.date, "date") as string;
+    await assertOpen(tx, "bill", date);
     const dueDate = day(input.dueDate, "dueDate", false) ?? date;
     if (dueDate < date) throw new Refusal(400, "invalid", "The due date comes after the bill date.", "dueDate");
     const fxRate = vendor.currency === "PHP" ? 1 : (input.fxRate ?? 0);
@@ -561,6 +564,7 @@ export async function payVendor(db: Database, me: Me, input: PaymentInput): Prom
   return db.transaction(async (tx) => {
     const vendor = await vendorOf(tx, input.supplierId);
     const date = day(input.date, "date") as string;
+    await assertOpen(tx, "vendor_payment", date);
     if (!(input.amount > 0)) throw new Refusal(400, "invalid", "Type the amount paid.", "amount");
     const applied = input.bills.filter((entry) => entry.amount > 0);
     const bills = await billsFor(tx, vendor.id, applied);
@@ -596,6 +600,7 @@ export async function createVendorCredit(db: Database, me: Me, input: CreditInpu
   return db.transaction(async (tx) => {
     const vendor = await vendorOf(tx, input.supplierId);
     const date = day(input.date, "date") as string;
+    await assertOpen(tx, "vendor_credit", date);
     const fxRate = vendor.currency === "PHP" ? 1 : (input.fxRate ?? 0);
     if (!(fxRate > 0)) throw new Refusal(400, "invalid", `Type how many pesos one ${vendor.currency} is.`, "fxRate");
     const lines = await linesOf(tx, input.lines);
@@ -619,6 +624,7 @@ export async function applyCredit(db: Database, me: Me, id: number, input: { dat
     );
     if (!credit || credit.status === "void") throw new Refusal(404, "not_found", "That credit is not in the books.");
     const date = day(input.date, "date") as string;
+    await assertOpen(tx, credit.kind, date);
     const applied = input.bills.filter((entry) => entry.amount > 0);
     const sales = credit.kind === "credit_note" || credit.kind === "customer_payment";
     const bills = await billsFor(tx, credit.partyId, applied, sales ? "invoice" : "bill");
@@ -643,14 +649,37 @@ export async function voidDoc(db: Database, me: Me, id: number, reason: string):
   const why = reason.trim();
   if (!why) throw new Refusal(400, "invalid", "Say why it is voided.", "reason");
   await db.transaction(async (tx) => {
-    const [doc] = await rows<{ kind: string; status: string; total: number; balance: number }>(
+    const [doc] = await rows<{ kind: string; status: string; total: number; balance: number; date: string }>(
       tx,
-      sql`select kind, status, total::bigint::float8 as total, balance::bigint::float8 as balance from book_doc where id = ${id} for update`,
+      sql`select kind, status, total::bigint::float8 as total, balance::bigint::float8 as balance, to_char(doc_date, 'YYYY-MM-DD') as date from book_doc where id = ${id} for update`,
     );
-    if (!doc || !["bill", "vendor_payment", "vendor_credit", "customer_payment", "credit_note"].includes(doc.kind)) throw new Refusal(404, "not_found", "That document is not voided here.");
-    allow(me, doc.kind === "bill" ? BILL_ROLES : PAY_ROLES, "void it");
+    const ledgerKinds = ["expense", "journal", "transfer_fund", "deposit", "refund"];
+    if (!doc || ![...["bill", "vendor_payment", "vendor_credit", "customer_payment", "credit_note"], ...ledgerKinds].includes(doc.kind))
+      throw new Refusal(404, "not_found", "That document is not voided here.");
+    allow(me, doc.kind === "bill" ? BILL_ROLES : ledgerKinds.includes(doc.kind) || doc.kind === "credit_note" ? LEDGER_ROLES : PAY_ROLES, "void it");
     if (doc.status === "void") throw new Refusal(409, "void", "It is already void.");
-    if (doc.kind === "bill") {
+    await assertOpen(tx, doc.kind, doc.date);
+    if (["credit_note", "customer_payment"].includes(doc.kind)) {
+      const [used] = await rows<{ n: number }>(tx, sql`select count(*)::int as n from payment where active and credit_doc_id = ${id}`);
+      if (used?.n) throw new Refusal(409, "used", "Some of it was used on a CRM invoice: take that payment off first.");
+      const [refunded] = await rows<{ n: number }>(tx, sql`select count(*)::int as n from book_link k join book_doc r on r.id = k.from_doc and r.kind = 'refund' and r.status <> 'void' where k.to_doc = ${id}`);
+      if (refunded?.n) throw new Refusal(409, "refunded", "Money was refunded from it: void the refund first.");
+    }
+    if (doc.kind === "refund") {
+      // The credit it was refunded from has the money again.
+      for (const back of await rows<{ creditId: number; amount: number; kind: string }>(
+        tx,
+        sql`select k.to_doc::int as "creditId", coalesce(k.amount, 0)::float8 as amount, c.kind from book_link k join book_doc c on c.id = k.to_doc where k.from_doc = ${id}`,
+      ))
+        await tx.execute(
+          sql`update book_doc set balance = least(total, balance + ${back.amount}), status = case when ${back.kind} = 'credit_note' then 'open' else status end where id = ${back.creditId}`,
+        );
+    } else if (doc.kind === "journal") {
+      // Its reversal goes with it.
+      await tx.execute(sql`update book_doc set status = 'void', voided_by = ${me.id}, voided_at = now(), void_reason = ${`With journal it reverses: ${why}`} where reversal_of = ${id} and status <> 'void'`);
+    } else if (ledgerKinds.includes(doc.kind)) {
+      // Nothing else hangs on an expense, transfer or deposit.
+    } else if (doc.kind === "bill") {
       if (doc.balance !== doc.total) throw new Refusal(409, "paid", "Money was put on this bill: void its payments or credits first.");
       // Its order's lines are billed less again.
       const lines = await rows<{ fromLine: number; qty: number }>(tx, sql`select from_line::int as "fromLine", qty::float8 as qty from book_line where doc_id = ${id} and from_line is not null`);
@@ -691,6 +720,7 @@ export async function receivePayment(db: Database, me: Me, input: ReceiptInput):
     const [customer] = await rows<{ id: number; name: string }>(tx, sql`select id::int as id, name from customer where id = ${input.customerId}`);
     if (!customer) throw new Refusal(400, "invalid", "Pick the customer.", "customerId");
     const date = day(input.date, "date") as string;
+    await assertOpen(tx, "customer_payment", date);
     if (!(input.amount > 0)) throw new Refusal(400, "invalid", "Type the amount received.", "amount");
     const applied = input.invoices.filter((entry) => entry.amount > 0);
     const invoices = await billsFor(tx, customer.id, applied, "invoice");

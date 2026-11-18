@@ -21,6 +21,21 @@ import {
 } from "./actions";
 import { accountDetail, accountList, banking } from "./accounts";
 import { insight } from "./insights";
+import {
+  bookLocks,
+  createAccount,
+  createCreditNote,
+  createDeposit,
+  createExpense,
+  createJournal,
+  createTransfer,
+  ledgerChoices,
+  publishJournal,
+  refundCredit,
+  setLock,
+  unlock,
+  updateAccount,
+} from "./write";
 import { balanceSheet, cashFlow, grossProfit, moneySummary, payablesAging, profitAndLoss, trialBalance, vatSummary } from "./statements";
 import { customerDetail, customerList } from "./customers";
 import { itemDetail, itemList, priceLists } from "./items";
@@ -39,6 +54,9 @@ const listAsked = (query: (name: string) => string | undefined) => ({
 export function bookRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandler<Env>): void {
   app.use("/api/books/*", signedIn);
   app.use("/api/books-choices", signedIn);
+  app.use("/api/books-ledger-choices", signedIn);
+  app.use("/api/books-locks", signedIn);
+  app.use("/api/books-locks/*", signedIn);
   bookActionRoutes(app, db);
   app.get("/api/books/items", async (c) => c.json(await itemList(db, c.get("me"), listAsked((n) => c.req.query(n)))));
   app.get("/api/books/items/:id", async (c) => c.json(await itemDetail(db, c.get("me"), Number(c.req.param("id")))));
@@ -216,6 +234,129 @@ export function bookActionRoutes(app: Hono<Env>, db: Database): void {
   app.post("/api/books/:kind/:id/void", async (c) => {
     const { reason } = await readBody(c, z.object({ reason: z.string().max(300) }));
     await voidDoc(db, c.get("me"), Number(c.req.param("id")), reason);
+    return c.json({ ok: true });
+  });
+
+  // Writing the books (docs/BOOKS-PLAN.md A and B).
+  const me = (c: { get: (key: "me") => Env["Variables"]["me"] }) => c.get("me");
+  const NAME = z.string().max(200);
+  const CENTS = z.number().int().min(0).max(100_000_000_000_00);
+  app.get("/api/books-ledger-choices", async (c) => c.json(await ledgerChoices(db, me(c))));
+  app.post("/api/books/expense/new", async (c) =>
+    c.json(
+      await createExpense(
+        db,
+        me(c),
+        await readBody(
+          c,
+          z.object({
+            date: DAY,
+            lines: z.array(z.object({ account: NAME, amount: CENTS, description: TEXT(2000), taxId: z.number().int().positive().nullish() })).min(1).max(50),
+            taxInclusive: z.boolean(),
+            paidThrough: NAME,
+            supplierId: z.number().int().positive().nullish(),
+            customerId: z.number().int().positive().nullish(),
+            reference: TEXT(100),
+            notes: TEXT(2000),
+            costCentre: NAME,
+            type: NAME,
+            department: NAME,
+            pic: NAME,
+            voucher: TEXT(100),
+            orNumber: TEXT(100),
+          }),
+        ),
+      ),
+    ),
+  );
+  app.post("/api/books/journal/new", async (c) =>
+    c.json(
+      await createJournal(
+        db,
+        me(c),
+        await readBody(
+          c,
+          z.object({
+            date: DAY,
+            number: TEXT(60),
+            reference: TEXT(100),
+            notes: z.string().max(2000),
+            department: NAME,
+            company: NAME,
+            pic: TEXT(200),
+            reverseOn: DAY.nullish(),
+            publish: z.boolean(),
+            lines: z
+              .array(z.object({ account: NAME, description: TEXT(2000), contact: TEXT(200), debit: CENTS, credit: CENTS, taxId: z.number().int().positive().nullish() }))
+              .min(2)
+              .max(200),
+          }),
+        ),
+      ),
+    ),
+  );
+  app.post("/api/books/journal/:id/publish", async (c) => {
+    await publishJournal(db, me(c), Number(c.req.param("id")));
+    return c.json({ ok: true });
+  });
+  const move = z.object({ date: DAY, from: NAME, to: NAME, amount: CENTS, reference: TEXT(100), notes: TEXT(2000), payer: TEXT(200) });
+  app.post("/api/books/transfer_fund/new", async (c) => c.json(await createTransfer(db, me(c), await readBody(c, move))));
+  app.post("/api/books/deposit/new", async (c) => c.json(await createDeposit(db, me(c), await readBody(c, move))));
+  app.post("/api/books/credit_note/new", async (c) =>
+    c.json(
+      await createCreditNote(
+        db,
+        me(c),
+        await readBody(
+          c,
+          z.object({
+            customerId: z.number().int().positive(),
+            date: DAY,
+            reference: TEXT(100),
+            reason: z.string().max(500),
+            notes: TEXT(2000),
+            lines: z
+              .array(
+                z.object({
+                  medicineId: z.number().int().positive().nullish(),
+                  itemName: TEXT(300),
+                  account: TEXT(200),
+                  description: TEXT(2000),
+                  qty: z.number().positive().max(100_000_000),
+                  rate: z.number().min(0).max(1_000_000_000),
+                  taxId: z.number().int().positive().nullish(),
+                }),
+              )
+              .min(1)
+              .max(200),
+          }),
+        ),
+      ),
+    ),
+  );
+  app.post("/api/books/:kind/:id/refund", async (c) =>
+    c.json(
+      await refundCredit(
+        db,
+        me(c),
+        Number(c.req.param("id")),
+        await readBody(c, z.object({ date: DAY, amount: CENTS, from: NAME, mode: TEXT(60), reference: TEXT(100), notes: TEXT(2000) })),
+      ),
+    ),
+  );
+  const accountBody = z.object({ name: NAME, code: TEXT(40), type: z.string().max(40), parentId: z.number().int().positive().nullish(), description: TEXT(500) });
+  app.post("/api/books/accounts", async (c) => c.json(await createAccount(db, me(c), await readBody(c, accountBody))));
+  app.post("/api/books/accounts/:id", async (c) => {
+    await updateAccount(db, me(c), Number(c.req.param("id")), await readBody(c, accountBody.partial().extend({ active: z.boolean().optional() })));
+    return c.json({ ok: true });
+  });
+  app.get("/api/books-locks", async (c) => c.json(await bookLocks(db, me(c))));
+  app.post("/api/books-locks/:module", async (c) => {
+    await setLock(db, me(c), c.req.param("module"), await readBody(c, z.object({ lockDate: DAY, reason: TEXT(300) })));
+    return c.json({ ok: true });
+  });
+  app.post("/api/books-locks/:module/unlock", async (c) => {
+    await unlock(db, me(c), c.req.param("module"), await readBody(c, z.object({ reason: z.string().max(300) })));
     return c.json({ ok: true });
   });
 }

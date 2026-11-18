@@ -5465,3 +5465,66 @@ export type ComplaintList = {
   counts: { open: number; late: number; serious: number };
   can: { handle: boolean };
 };
+
+// ------------------------------------------------------------------ writing the books (docs/BOOKS-PLAN.md)
+
+export type LockModule = "all" | "sales" | "purchases" | "banking" | "accountant";
+export type BookLocks = {
+  locks: { module: LockModule; lockDate: string; reason: string | null; by: string | null; at: string }[];
+  log: { module: LockModule; action: "lock" | "unlock"; lockDate: string | null; reason: string | null; by: string | null; at: string }[];
+};
+
+/** What the expense, journal, transfer, deposit and credit note forms pick from. */
+export type LedgerChoices = {
+  today: string;
+  accounts: { id: number; name: string; code: string | null; type: string; parent: string | null }[];
+  moneyAccounts: { name: string; type: string }[];
+  taxes: { id: number; name: string; pct: number; kind: "vat" | "withholding" | "other" }[];
+  options: Record<string, string[]>;
+  people: { id: number; name: string }[];
+  vendors: { id: number; name: string }[];
+  next: { expense: string; journal: string; transfer: string; deposit: string; creditNote: string; refund: string };
+  locks: { module: LockModule; lockDate: string }[];
+};
+
+export type BookExpenseLineInput = { account: string; amount: number; description?: string | null; taxId?: number | null };
+export type BookExpenseInput = {
+  date: string;
+  /** Itemized: one line per account; else one. Amounts in centavos. */
+  lines: BookExpenseLineInput[];
+  taxInclusive: boolean;
+  paidThrough: string;
+  supplierId?: number | null;
+  customerId?: number | null;
+  reference?: string | null;
+  notes?: string | null;
+  costCentre: string;
+  type: string;
+  department: string;
+  pic: string;
+  voucher?: string | null;
+  orNumber?: string | null;
+};
+
+export type JournalLineInput = { account: string; description?: string | null; contact?: string | null; debit: number; credit: number; taxId?: number | null };
+export type JournalInput = {
+  date: string;
+  number?: string | null;
+  reference?: string | null;
+  notes: string;
+  department: string;
+  company: string;
+  pic?: string | null;
+  reverseOn?: string | null;
+  publish: boolean;
+  lines: JournalLineInput[];
+};
+
+export type TransferInput = { date: string; from: string; to: string; amount: number; reference?: string | null; notes?: string | null };
+export type DepositInput = { date: string; to: string; from: string; amount: number; reference?: string | null; notes?: string | null; payer?: string | null };
+
+export type CreditNoteLineInput = { medicineId?: number | null; itemName?: string | null; account?: string | null; description?: string | null; qty: number; rate: number; taxId?: number | null };
+export type CreditNoteInput = { customerId: number; date: string; reference?: string | null; reason: string; notes?: string | null; lines: CreditNoteLineInput[] };
+export type CreditRefundInput = { date: string; amount: number; from: string; mode?: string | null; reference?: string | null; notes?: string | null };
+
+export type AccountInput = { name: string; code?: string | null; type: string; parentId?: number | null; description?: string | null };
