@@ -149,6 +149,89 @@ export function kindOf(
   return "distributor";
 }
 
+/** What an order says its buyer is: Zoho's "Source", else the salesperson's channel. */
+const SOURCE_KIND: Record<string, CustomerKind> = {
+  "Hospital PO": "hospital",
+  "Bidding Order": "government",
+  "Doctor order": "doctor",
+  "Distributor order": "distributor",
+  "Patient order referred by doctor": "patient",
+  "Patient order referred by patient": "patient",
+  "B2C Order": "patient",
+  DSWD: "patient",
+  PCSO: "patient",
+  "Office of the President": "patient",
+};
+const CHANNEL_KIND: Record<string, CustomerKind> = {
+  HOS: "hospital",
+  BID: "government",
+  B2B: "distributor",
+  MT: "distributor",
+  B2C: "patient",
+  TeleSales: "patient",
+};
+export function orderKind(source: string | null | undefined, seller: string | null | undefined): CustomerKind | undefined {
+  const said = seller ?? "";
+  return SOURCE_KIND[source ?? ""] ?? CHANNEL_KIND[said.includes("|") ? (said.split("|")[0] ?? "").trim() : ""];
+}
+
+/** What a contact's orders in Zoho say about them: what kind of buyer each order took them for,
+ *  how they paid last, where it went, and whose customer they were. */
+export type ContactSeen = {
+  kinds: Map<CustomerKind, number>;
+  terms: string;
+  city: string;
+  address: string;
+  seller: string;
+  sellerOn: string;
+  division: string;
+  subDivision: string;
+  headquarter: string;
+};
+
+const said = (value: string | undefined) => (value ?? "").trim();
+const cut = (value: string, max: number) => (value.length > max ? value.slice(0, max) : value) || null;
+const isDay = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+/** A Zoho contact as the customer import takes it: a row of Zoho's Contacts backup (or the copy of
+ *  it a customer here keeps in zoho_fields), with what its orders say. */
+export function zohoCustomerFrom(row: Record<string, string>, seen: ContactSeen | undefined, sharedPhone: boolean): ZohoCustomer {
+  const hint = seen ? [...seen.kinds].sort((a, b) => b[1] - a[1])[0]?.[0] : undefined;
+  const created = said(row["Created Time"]);
+  const expires = said(row["CF.License Expiry Date"]);
+  const issued = said(row["CF.License Issuance Date"]);
+  return {
+    id: said(row["Contact ID"]),
+    name: (said(row["Display Name"]) || said(row["Contact Name"]) || said(row["Company Name"]) || "Unnamed").slice(0, 300),
+    business: said(row["Customer Sub Type"]) === "business",
+    doctor: said(row["CF.Is Doctor"]) === "true",
+    hint: hint ?? null,
+    phone: cut(said(row.Phone), 80),
+    mobile: cut(said(row.MobilePhone) || said(row["CF.Contact Number"]), 80),
+    email: cut(said(row.EmailID), 200),
+    address: cut(
+      [said(row["Billing Address"]), said(row["Billing Street2"])].filter(Boolean).join(", ") || (seen?.address ?? ""),
+      600,
+    ),
+    city: cut(said(row["Billing City"]) || said(row["Shipping City"]) || (seen?.city ?? ""), 120),
+    tin: cut(said(row["CF.TIN"]), 60),
+    terms: seen?.terms || "Paid",
+    createdAt: /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(created) ? `${created.replace(" ", "T")}+08:00` : null,
+    company: Boolean(said(row["Company Name"])),
+    licenceNo: cut(said(row["CF.LTO License Number"]), 80),
+    licenceType: cut(said(row["CF.LTO Type"]), 80),
+    licenceExpires: isDay(expires) ? expires : null,
+    licenceOwner: cut(said(row["CF.License Owner"]), 120),
+    licenceIssued: isDay(issued) ? issued : null,
+    seller: cut(seen?.seller ?? "", 200),
+    sellerOn: seen && isDay(seen.sellerOn) ? seen.sellerOn : null,
+    division: cut(seen?.division ?? "", 120),
+    subDivision: cut(seen?.subDivision ?? "", 120),
+    headquarter: cut(seen?.headquarter ?? "", 120),
+    sharedPhone,
+  };
+}
+
 /** Zoho's payment terms in this CRM's three: in advance, cash on delivery, or so many days. */
 export function termsOf(label: string | null | undefined): {
   terms: "advance" | "cod" | "days";
@@ -205,6 +288,66 @@ export function identityPhone(number: string | null | undefined, shared?: boolea
   if (!key || shared) return null;
   if (/^(\d)\1+$/.test(key) || /0123456789|1234567890|9876543210/.test(key)) return null;
   return key;
+}
+
+export type CustomerRecord = ReturnType<typeof customerRecordOf>;
+
+/** The customer a Zoho contact is here, as the import makes it. */
+export function customerRecordOf(one: ZohoCustomer) {
+  const kind = kindOf(one);
+  const number = clip(one.mobile, 40) ?? clip(one.phone, 40);
+  const { terms, days } = termsOf(one.terms);
+  const made = one.createdAt ? new Date(one.createdAt) : null;
+  return {
+    zohoId: one.id,
+    kind,
+    name: clip(one.name, 160) as string,
+    phone: formatPhone(number)?.slice(0, 40) ?? null,
+    phoneKey: phoneKey(number),
+    email: clip(one.email, 120),
+    address: clip(one.address, 300),
+    city: clip(one.city, 80),
+    tin: clip(one.tin, 40),
+    licenceNo: kind === "patient" ? null : clip(one.licenceNo, 60),
+    licenceExpires: kind === "patient" ? null : (one.licenceExpires ?? null),
+    licenceOwner: kind === "patient" ? null : clip(one.licenceOwner, 120),
+    ltoType: kind === "patient" ? null : clip(one.licenceType, 80),
+    licenceIssued: kind === "patient" ? null : (one.licenceIssued ?? null),
+    terms,
+    days,
+    createdAt: made && !Number.isNaN(made.getTime()) ? made.toISOString() : null,
+  };
+}
+
+/** Writes new customers made from Zoho contacts (each with its CUS- code); a contact already a
+ *  customer here is left as it is. */
+export async function insertZohoCustomers(
+  tx: Pick<Database, "execute">,
+  toMake: CustomerRecord[],
+  admin: number,
+): Promise<{ id: number; zohoId: string }[]> {
+  if (!toMake.length) return [];
+  const made = await rows<{ id: number; zohoId: string }>(
+    tx,
+    sql`insert into customer (kind, name, phone, phone_key, email, address, city, tin,
+        licence_no, licence_expires, licence_owner, lto_type, licence_issued,
+        payment_terms, payment_days, review, added_by, created_at, zoho_id)
+      select x.kind, x.name, x.phone, x."phoneKey", x.email, x.address, x.city, x.tin,
+        x."licenceNo", x."licenceExpires"::date, x."licenceOwner", x."ltoType", x."licenceIssued"::date,
+        x.terms, x.days, 'ok', ${admin}, coalesce(x."createdAt"::timestamptz, now()), x."zohoId"
+      from jsonb_to_recordset(${JSON.stringify(toMake)}::jsonb) as x(kind text, name text, phone text,
+        "phoneKey" text, email text, address text, city text, tin text,
+        "licenceNo" text, "licenceExpires" text, "licenceOwner" text, "ltoType" text,
+        "licenceIssued" text, terms text, days integer, "createdAt" text, "zohoId" text)
+      on conflict do nothing
+      returning id::int as id, zoho_id as "zohoId"`,
+  );
+  if (made.length)
+    await tx.execute(
+      sql`update customer set code = 'CUS-' || lpad(id::text, 5, '0')
+        where code is null and zoho_id in ${texts(made.map((row) => row.zohoId))}`,
+    );
+  return made;
 }
 
 export type ZohoCustomersResult = {
@@ -301,7 +444,7 @@ export async function importZohoCustomers(
     const phone = `${row.kind}|${row.phoneKey}`;
     if (row.phoneKey && !byPhone.has(phone)) byPhone.set(phone, row.id);
   }
-  const toMake: Record<string, unknown>[] = [];
+  const toMake: CustomerRecord[] = [];
   const links: { zohoId: string; target: Target }[] = [];
   const sellerOf = new Map(customers.map((one) => [one.id, one]));
   for (const one of fresh) {
@@ -313,7 +456,6 @@ export async function importZohoCustomers(
     const kind = kindOf(one);
     const city = clip(one.city, 80);
     const number = clip(one.mobile, 40) ?? clip(one.phone, 40);
-    const key = phoneKey(number);
     const identity = identityPhone(number, one.sharedPhone);
     const place = `${kind}|${name.toLowerCase()}|${(city ?? "").toLowerCase()}`;
     const phone = `${kind}|${identity}`;
@@ -328,27 +470,7 @@ export async function importZohoCustomers(
     if (kind !== "patient") byPlace.set(place, one.id);
     if (identity) byPhone.set(phone, one.id);
     links.push({ zohoId: one.id, target: one.id });
-    const { terms, days } = termsOf(one.terms);
-    const made = one.createdAt ? new Date(one.createdAt) : null;
-    toMake.push({
-      zohoId: one.id,
-      kind,
-      name,
-      phone: formatPhone(number)?.slice(0, 40) ?? null,
-      phoneKey: key,
-      email: clip(one.email, 120),
-      address: clip(one.address, 300),
-      city,
-      tin: clip(one.tin, 40),
-      licenceNo: kind === "patient" ? null : clip(one.licenceNo, 60),
-      licenceExpires: kind === "patient" ? null : (one.licenceExpires ?? null),
-      licenceOwner: kind === "patient" ? null : clip(one.licenceOwner, 120),
-      ltoType: kind === "patient" ? null : clip(one.licenceType, 80),
-      licenceIssued: kind === "patient" ? null : (one.licenceIssued ?? null),
-      terms,
-      days,
-      createdAt: made && !Number.isNaN(made.getTime()) ? made.toISOString() : null,
-    });
+    toMake.push(customerRecordOf(one));
   }
   if (!apply) return said;
 
@@ -368,29 +490,8 @@ export async function importZohoCustomers(
             "ltoType" text, "licenceIssued" text)
           where c.zoho_id = x."zohoId"`,
       );
-    const made = toMake.length
-      ? await rows<{ id: number; zohoId: string }>(
-          tx,
-          sql`insert into customer (kind, name, phone, phone_key, email, address, city, tin,
-              licence_no, licence_expires, licence_owner, lto_type, licence_issued,
-              payment_terms, payment_days, review, added_by, created_at, zoho_id)
-            select x.kind, x.name, x.phone, x."phoneKey", x.email, x.address, x.city, x.tin,
-              x."licenceNo", x."licenceExpires"::date, x."licenceOwner", x."ltoType", x."licenceIssued"::date,
-              x.terms, x.days, 'ok', ${admin}, coalesce(x."createdAt"::timestamptz, now()), x."zohoId"
-            from jsonb_to_recordset(${JSON.stringify(toMake)}::jsonb) as x(kind text, name text, phone text,
-              "phoneKey" text, email text, address text, city text, tin text,
-              "licenceNo" text, "licenceExpires" text, "licenceOwner" text, "ltoType" text,
-              "licenceIssued" text, terms text, days integer, "createdAt" text, "zohoId" text)
-            on conflict do nothing
-            returning id::int as id, zoho_id as "zohoId"`,
-        )
-      : [];
+    const made = await insertZohoCustomers(tx, toMake, admin);
     const idOf = new Map(made.map((row) => [row.zohoId, row.id]));
-    if (made.length)
-      await tx.execute(
-        sql`update customer set code = 'CUS-' || lpad(id::text, 5, '0')
-          where code is null and zoho_id in ${texts(made.map((row) => row.zohoId))}`,
-      );
     const pairs = links
       .map((link) => ({
         zohoId: link.zohoId,

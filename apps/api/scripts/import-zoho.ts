@@ -25,6 +25,7 @@ import {
   importZohoOrders,
   importZohoPayments,
   kindOf,
+  orderKind,
   type ZohoCustomer,
   type ZohoCustomersResult,
   type ZohoInvoice,
@@ -34,6 +35,7 @@ import {
   type ZohoPayment,
   type ZohoPaymentsResult,
   zohoCustomer,
+  zohoCustomerFrom,
   zohoInvoice,
   zohoOrder,
   zohoPayment,
@@ -57,28 +59,6 @@ if (!existsSync(join(ZOHO_DIR, "Contacts")) || !existsSync(join(ZOHO_DIR, "Sales
   throw new Error(`No Contacts/ and Sales_Order/ in ${ZOHO_DIR}: unpack Zoho's backup there.`);
 
 // ---------------------------------------------------------------- the orders
-
-/** What an order says its buyer is: Zoho's "Source", else the salesperson's channel. */
-const SOURCE_KIND: Record<string, CustomerKind> = {
-  "Hospital PO": "hospital",
-  "Bidding Order": "government",
-  "Doctor order": "doctor",
-  "Distributor order": "distributor",
-  "Patient order referred by doctor": "patient",
-  "Patient order referred by patient": "patient",
-  "B2C Order": "patient",
-  DSWD: "patient",
-  PCSO: "patient",
-  "Office of the President": "patient",
-};
-const CHANNEL_KIND: Record<string, CustomerKind> = {
-  HOS: "hospital",
-  BID: "government",
-  B2B: "distributor",
-  MT: "distributor",
-  B2C: "patient",
-  TeleSales: "patient",
-};
 
 // What is not a medicine (packing material, giveaways, services): its lines are left out of
 // the history, though the order's total still counts them.
@@ -162,7 +142,7 @@ for (const row of rowsOf("Sales_Order")) {
         seen.headquarter = said(row["CF.Headquarter"]).replace(/^n\/?a$/i, "");
         seen.dividedOn = order.date;
       }
-      const kind = SOURCE_KIND[order.source ?? ""] ?? CHANNEL_KIND[seller.includes("|") ? said(seller.split("|")[0]) : ""];
+      const kind = orderKind(order.source, seller);
       if (kind) seen.kinds.set(kind, (seen.kinds.get(kind) ?? 0) + 1);
       if (order.date >= seen.last) {
         seen.last = order.date;
@@ -222,43 +202,10 @@ for (const row of rowsOf("Contacts")) {
   const id = said(row["Contact ID"]);
   const seen = seenOf.get(id);
   if (!id || (orderedOnly && !seen)) continue;
-  const hint = seen ? [...seen.kinds].sort((a, b) => b[1] - a[1])[0]?.[0] : undefined;
-  const created = said(row["Created Time"]);
-  const expires = said(row["CF.License Expiry Date"]);
-  const issued = said(row["CF.License Issuance Date"]);
   const shared = (namesOn.get(digits(row))?.size ?? 0) >= 3;
   if (digits(row)) withPhone += 1;
   if (shared) sharedLines += 1;
-  customers.push({
-    id,
-    name: (said(row["Display Name"]) || said(row["Contact Name"]) || said(row["Company Name"]) || "Unnamed").slice(0, 300),
-    business: said(row["Customer Sub Type"]) === "business",
-    doctor: said(row["CF.Is Doctor"]) === "true",
-    hint: hint ?? null,
-    phone: cut(said(row.Phone), 80),
-    mobile: cut(said(row.MobilePhone) || said(row["CF.Contact Number"]), 80),
-    email: cut(said(row.EmailID), 200),
-    address: cut(
-      [said(row["Billing Address"]), said(row["Billing Street2"])].filter(Boolean).join(", ") || (seen?.address ?? ""),
-      600,
-    ),
-    city: cut(said(row["Billing City"]) || said(row["Shipping City"]) || (seen?.city ?? ""), 120),
-    tin: cut(said(row["CF.TIN"]), 60),
-    terms: seen?.terms || "Paid",
-    createdAt: /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(created) ? `${created.replace(" ", "T")}+08:00` : null,
-    company: Boolean(said(row["Company Name"])),
-    licenceNo: cut(said(row["CF.LTO License Number"]), 80),
-    licenceType: cut(said(row["CF.LTO Type"]), 80),
-    licenceExpires: isDay(expires) ? expires : null,
-    licenceOwner: cut(said(row["CF.License Owner"]), 120),
-    licenceIssued: isDay(issued) ? issued : null,
-    seller: cut(seen?.seller ?? "", 200),
-    sellerOn: seen && isDay(seen.sellerOn) ? seen.sellerOn : null,
-    division: cut(seen?.division ?? "", 120),
-    subDivision: cut(seen?.subDivision ?? "", 120),
-    headquarter: cut(seen?.headquarter ?? "", 120),
-    sharedPhone: shared,
-  });
+  customers.push(zohoCustomerFrom(row, seen, shared));
 }
 
 // ---------------------------------------------------------------- invoices and payments

@@ -986,7 +986,14 @@ export async function importCustomerPeople(db: Database, all: Row[], apply: bool
 /** Each customer's receivables and unused credits that no Zoho document here explains (opening
  *  balances and advances in Zoho Books), from Zoho's customer list: kept as opening figures. Zoho
  *  contacts merged into one customer here add up. */
-export async function customerOpenings(db: Database, listed: Record<string, unknown>[], apply: boolean): Promise<{ customers: number; receivables: number; credits: number; notHere: number }> {
+export async function customerOpenings(
+  db: Database,
+  listed: Record<string, unknown>[],
+  apply: boolean,
+  /** Only these customers (the rest left as they are). */
+  only?: number[],
+): Promise<{ customers: number; receivables: number; credits: number; notHere: number }> {
+  const within = only ? new Set(only) : null;
   const customerOf = new Map(
     (await rows<{ zohoId: string; id: number }>(db, sql`select zoho_id as "zohoId", id::int as id from customer where zoho_id is not null union all select zoho_id, customer_id::int from zoho_contact`)).map(
       (row) => [row.zohoId, row.id],
@@ -1005,6 +1012,7 @@ export async function customerOpenings(db: Database, listed: Record<string, unkn
       notHere++;
       continue;
     }
+    if (within && !within.has(id)) continue;
     const have = zoho.get(id) ?? { owed: 0, unused: 0 };
     zoho.set(id, { owed: have.owed + owed, unused: have.unused + unused });
   }
@@ -1023,7 +1031,11 @@ export async function customerOpenings(db: Database, listed: Record<string, unkn
   let receivables = 0;
   let credits = 0;
   // Worked out afresh each time: what an earlier run kept and Zoho no longer says goes.
-  if (apply) await db.execute(sql`update customer set opening_receivables = 0, opening_credits = 0 where opening_receivables <> 0 or opening_credits <> 0`);
+  if (apply)
+    await db.execute(
+      sql`update customer set opening_receivables = 0, opening_credits = 0 where (opening_receivables <> 0 or opening_credits <> 0)
+        ${within ? sql`and id in (select jsonb_array_elements_text(${JSON.stringify([...within].map(String))}::jsonb)::bigint)` : sql``}`,
+    );
   for (const [id, total] of zoho) {
     const here = explained.get(id) ?? { owed: 0, unused: 0 };
     const openOwed = Math.max(0, total.owed - here.owed);
