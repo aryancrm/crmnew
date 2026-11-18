@@ -9,6 +9,7 @@ import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { allow } from "../http";
 import { COST_ROLES, todayManila } from "../inventory/rules";
+import { companyInfo } from "../settings/service";
 import type { Me, PurchaseBoard, PurchaseOrderExtra, VendorItems } from "../types";
 
 /** What is left to come in on a line (Zoho's "quantity ordered" less cancelled and received). */
@@ -107,7 +108,7 @@ export async function purchaseBoard(db: Database, me: Me): Promise<PurchaseBoard
  *  its cost now, with any freight or customs added), and the landed-cost bills put on it. */
 export async function purchaseOrderExtra(db: Database, me: Me, id: number): Promise<PurchaseOrderExtra> {
   allow(me, COST_ROLES, "see the purchases");
-  const [batches, landed] = await Promise.all([
+  const [batches, landed, company] = await Promise.all([
     rows<PurchaseOrderExtra["batches"][number]>(
       db,
       sql`select r.id::int as "receiveId", r.number as receive, to_char(r.doc_date, 'YYYY-MM-DD') as date, l.from_line::int as "lineId",
@@ -130,8 +131,9 @@ export async function purchaseOrderExtra(db: Database, me: Me, id: number): Prom
         where d.kind = 'bill' and d.fields->>'Landed cost on' = (select number from book_doc where id = ${id})
         order by d.doc_date, d.id`,
     ),
+    companyInfo(db),
   ]);
-  return { batches, landed };
+  return { batches, landed, company };
 }
 
 /** What a vendor sells us: each item, how often, how much, and the price last time. */

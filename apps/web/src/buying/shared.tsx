@@ -4,12 +4,14 @@
 // and vendor credits, Zoho's history and those made here. These are the pieces every page shares.
 
 import type { BookDoc, BookKind, BookList, BookRow, DoneState } from "@2mg/api/types";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { Check, ChevronLeft, ChevronRight, Search } from "lucide-react";
-import type { ReactNode } from "react";
+import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Check, ChevronLeft, ChevronRight, FileText, Paperclip, Search } from "lucide-react";
+import { type ReactNode, useRef } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
-import { count, dayLabel, Pill, type Tone } from "../ui";
+import { useMay } from "../books/forms";
+import { smaller } from "../photo";
+import { count, dayLabel, Pill, Problem, type Tone, useAction } from "../ui";
 
 /** Each kind's own page and list here. */
 export const PATHS: Partial<Record<BookKind, string>> = {
@@ -195,6 +197,83 @@ export function Fact({ label, children }: { label: string; children: ReactNode }
       <dt className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase">{label}</dt>
       <dd className="mt-0.5 truncate text-[14px] font-medium text-slate-900">{children || "—"}</dd>
     </div>
+  );
+}
+
+/** The papers on a document — the vendor's invoice on its bill, a waybill or customs entry on its
+ *  order, a delivery photo — Zoho's and those added here. A photo is made smaller first. */
+export function FilesBox({ doc }: { doc: BookDoc }) {
+  const may = useMay();
+  const queries = useQueryClient();
+  const action = useAction();
+  const input = useRef<HTMLInputElement>(null);
+  const files = doc.files ?? [];
+  return (
+    <Box
+      title={
+        <>
+          Papers{" "}
+          {files.length > 0 && <span className="ml-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-500">{files.length}</span>}
+        </>
+      }
+      aside={
+        may.bill ? (
+          <>
+            <input
+              ref={input}
+              type="file"
+              accept="image/*,application/pdf"
+              multiple
+              className="hidden"
+              onChange={(event) => {
+                const picked = [...(event.target.files ?? [])];
+                event.target.value = "";
+                if (!picked.length) return;
+                void action.run(async () => {
+                  for (const file of picked) {
+                    const form = new FormData();
+                    form.set("file", await smaller(file));
+                    await api(`/api/books/${doc.kind}/${doc.id}/files`, { body: form });
+                  }
+                  await queries.invalidateQueries({ queryKey: ["books", doc.kind, "doc", doc.id] });
+                });
+              }}
+            />
+            <button
+              type="button"
+              disabled={action.busy}
+              onClick={() => input.current?.click()}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-slate-100 px-3 text-[12.5px] font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-50"
+            >
+              <Paperclip className="size-3.5" aria-hidden="true" /> {action.busy ? "Adding…" : "Attach"}
+            </button>
+          </>
+        ) : undefined
+      }
+    >
+      {files.length === 0 ? (
+        <p className="px-4 py-4 text-[13px] text-slate-500">
+          {doc.kind === "bill" ? "The vendor's invoice goes here: a photo or the PDF." : "Their invoice, a waybill, customs papers, a photo of the delivery."}
+        </p>
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {files.map((file) => (
+            <li key={file.id}>
+              <a href={`/api/books/files/${file.id}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 px-4 py-2.5 text-[13px] hover:bg-slate-50">
+                <FileText className="size-4 shrink-0 text-slate-400" aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate font-medium text-brand-dark">{file.name}</span>
+                <span className="shrink-0 text-[11.5px] text-slate-500">{[file.uploadedBy, file.uploadedOn && /^\d{4}-\d{2}-\d{2}/.test(file.uploadedOn) ? when(file.uploadedOn.slice(0, 10)) : file.uploadedOn].filter(Boolean).join(" · ")}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      )}
+      {action.problem && (
+        <div className="px-4 pb-3">
+          <Problem message={action.problem.message} />
+        </div>
+      )}
+    </Box>
   );
 }
 

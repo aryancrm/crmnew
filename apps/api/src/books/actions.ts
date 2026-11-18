@@ -16,6 +16,7 @@ import { todayManila } from "../inventory/rules";
 import type { Role } from "../people/roles";
 import type { BookChoices, Me } from "../types";
 import { LEDGER_ROLES } from "./accounts";
+import { keepFile } from "../files/store";
 import { landedCosts } from "../purchases/landed";
 import { assertOpen } from "./write";
 import { freeStatementLine, guardReconciled } from "./bank";
@@ -691,6 +692,31 @@ async function landWaiting(tx: Runner, orderId: number, orderNumber: string, fxR
         where id = ${bill.id}`,
     );
   }
+}
+
+// ------------------------------------------------------------------ files on a purchase document
+
+const FILE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"];
+const FILE_MAX = 10 * 1024 * 1024;
+const FILE_KINDS = ["purchase_order", "purchase_receive", "bill", "vendor_payment", "vendor_credit"];
+
+/** A paper put on a purchase document (Aryan, 18 Nov: the vendor's invoice kept with its bill):
+ *  the vendor's invoice, a waybill, a customs entry, a photo of the delivery. Never removed. */
+export async function addBookFile(db: Database, me: Me, docId: number, file: { name: string; mime: string; bytes: Uint8Array }): Promise<{ id: number }> {
+  allow(me, BILL_ROLES, "attach a paper");
+  const [doc] = await rows<{ kind: string }>(db, sql`select kind from book_doc where id = ${docId}`);
+  if (!doc || !FILE_KINDS.includes(doc.kind)) throw new Refusal(404, "not_found", "That document is not in Purchases.");
+  if (!FILE_TYPES.includes(file.mime)) throw new Refusal(400, "invalid", "Attach a photo or a PDF.", "file");
+  if (file.bytes.byteLength === 0) throw new Refusal(400, "invalid", "That file is empty.", "file");
+  if (file.bytes.byteLength > FILE_MAX) throw new Refusal(400, "invalid", "That file is over 10 MB.", "file");
+  const kept = await keepFile("books", { name: file.name.trim().slice(0, 120) || "paper", mime: file.mime, bytes: file.bytes });
+  const [made] = await rows<{ id: number }>(
+    db,
+    sql`insert into book_file (doc_id, name, mime, size, data, key, uploaded_by, uploaded_on)
+      values (${docId}, ${kept.name}, ${kept.mime}, ${kept.size}, ${kept.data}, ${kept.key}, ${me.name}, ${todayManila()})
+      returning id::int as id`,
+  );
+  return { id: made?.id as number };
 }
 
 // ------------------------------------------------------------------ money on bills

@@ -18,6 +18,7 @@ import {
   docState,
   Fact,
   FIELD,
+  FilesBox,
   KIND_WORD,
   LABEL,
   money,
@@ -334,6 +335,7 @@ export function DocPage({ kind }: { kind: DocKind }) {
               </ul>
             )}
           </Box>
+          <FilesBox doc={doc} />
           {doc.notes && (
             <Box title="Notes">
               <p className="px-4 py-3 text-[13.5px] whitespace-pre-line text-slate-700">{doc.notes}</p>

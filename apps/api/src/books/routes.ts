@@ -5,7 +5,7 @@ import { z } from "zod";
 import type { Database } from "../db/index";
 import { type Env, readBody, Refusal } from "../http";
 import { afterStockIn } from "../orders/stock-wait";
-import {
+import { addBookFile,
   applyCredit,
   billOrder,
   bookChoices,
@@ -238,6 +238,16 @@ export function bookActionRoutes(app: Hono<Env>, db: Database): void {
   app.post("/api/books/:kind/:id/apply", async (c) => {
     await applyCredit(db, c.get("me"), Number(c.req.param("id")), await readBody(c, z.object({ date: DAY, bills: applied })));
     return c.json({ ok: true });
+  });
+  app.post("/api/books/:kind/:id/files", async (c) => {
+    if (Number(c.req.header("content-length") ?? 0) > 10 * 1024 * 1024 + 64 * 1024)
+      throw new Refusal(400, "invalid", "That file is over 10 MB.", "file");
+    const body = await c.req.parseBody().catch(() => ({}) as Record<string, unknown>);
+    const file = body.file;
+    if (!(file instanceof File)) throw new Refusal(400, "invalid", "Attach a photo or a PDF.", "file");
+    return c.json(
+      await addBookFile(db, c.get("me"), Number(c.req.param("id")), { name: file.name, mime: file.type, bytes: new Uint8Array(await file.arrayBuffer()) }),
+    );
   });
   app.post("/api/books/:kind/:id/void", async (c) => {
     const { reason } = await readBody(c, z.object({ reason: z.string().max(300) }));

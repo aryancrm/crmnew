@@ -123,6 +123,19 @@ describe("one road for buying", () => {
     );
     expect(kept?.account).toBe("Inventory Asset");
 
+    // The vendor's invoice goes on the bill (a PDF), and opens again.
+    const form = new FormData();
+    form.set("file", new File([new TextEncoder().encode("%PDF-1.4 freight invoice")], "freight-invoice.pdf", { type: "application/pdf" }));
+    const attached = await app.request(`/api/books/bill/${bill.id}/files`, { method: "POST", headers: { cookie: cookies.irene as string }, body: form });
+    expect(attached.status, await attached.clone().text()).toBe(200);
+    const withFile = await read<{ files: { id: number; name: string; uploadedBy: string }[] }>("irene", `/api/books/bill/${bill.id}`);
+    expect(withFile.files).toMatchObject([{ name: "freight-invoice.pdf" }]);
+    const opened = await app.request(`/api/books/files/${withFile.files[0]?.id}`, { headers: { cookie: cookies.irene as string } });
+    expect(await opened.text()).toContain("freight invoice");
+    const wrong = new FormData();
+    wrong.set("file", new File([new TextEncoder().encode("x")], "notes.txt", { type: "text/plain" }));
+    expect((await app.request(`/api/books/bill/${bill.id}/files`, { method: "POST", headers: { cookie: cookies.irene as string }, body: wrong })).status).toBe(400);
+
     // Voided: the cost goes back.
     expect((await post("irene", `/api/books/bill/${bill.id}/void`, { reason: "Wrong vendor" })).status).toBeLessThan(300);
     expect(await costOf("ROAD-1")).toBe(5000);

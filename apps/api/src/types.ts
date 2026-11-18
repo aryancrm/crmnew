@@ -5362,6 +5362,8 @@ export type PurchaseOrderExtra = {
   batches: { receiveId: number; receive: string; date: string; lineId: number | null; batchNo: string | null; expiresOn: string | null; qty: number; warehouse: string | null; orderCost: number; costNow: number | null }[];
   /** `pending`: the part still to be put on goods not received yet. */
   landed: { id: number; number: string; vendor: string | null; date: string; amount: number; pending: number; status: string }[];
+  /** Whose order it is, for the printed purchase order. */
+  company: CompanyInfo;
 };
 export type VendorItems = {
   items: { medicineId: number | null; name: string; orders: number; qty: number; lastRate: number | null; currency: string | null; lastOn: string }[];

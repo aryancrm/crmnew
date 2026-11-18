@@ -5,7 +5,7 @@
 
 import type { BookDoc, InventoryList, PurchaseOrderExtra } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, CircleSlash, ClipboardList, PackageCheck, Plus, ReceiptText, RotateCcw, Trash2, Truck, Wallet } from "lucide-react";
+import { Check, CircleSlash, ClipboardList, PackageCheck, Plus, Printer, ReceiptText, RotateCcw, Trash2, Truck, Wallet } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
@@ -19,6 +19,7 @@ import {
   docState,
   Fact,
   FIELD,
+  FilesBox,
   LABEL,
   money,
   orderStage,
@@ -202,7 +203,9 @@ export function PurchaseOrderPage() {
     });
 
   return (
-    <div className="mx-auto flex max-w-[88rem] flex-col gap-4">
+    <>
+    {extra.data && <PrintedOrder order={order} extra={extra.data} />}
+    <div className="mx-auto flex max-w-[88rem] flex-col gap-4 print:hidden">
       <PageHead
         title={order.number}
         tags={<StatePill state={stage} />}
@@ -221,6 +224,9 @@ export function PurchaseOrderPage() {
         actions={
           <>
             <ZohoLink to={`/books/purchaseorders/${id}`} />
+            <Button onClick={() => window.print()} title="Print it, or save it as a PDF to send the vendor">
+              <Printer size={16} aria-hidden="true" /> Print / PDF
+            </Button>
             {may.bill && order.status !== "draft" && order.status !== "cancelled" && (
               <Button onClick={() => navigate(`/purchases/bills/new?landed=${id}`)}>
                 <Plus size={16} aria-hidden="true" /> Add extra cost
@@ -302,9 +308,114 @@ export function PurchaseOrderPage() {
           {at === "billed" && <BilledPanel order={order} extra={extra.data} canBill={may.bill && toBill > 0 && order.status !== "cancelled"} today={today} onDone={refresh} />}
           {at === "paid" && <PaidPanel order={order} canPay={may.pay} today={today} />}
           <ExtraCosts order={order} extra={extra.data} canAdd={may.bill && order.status !== "draft" && order.status !== "cancelled"} today={today} />
+          <FilesBox doc={order} />
         </div>
       </div>
     </div>
+    </>
+  );
+}
+
+/** The purchase order as the vendor gets it (Print, or Save as PDF): whose order, to whom, where
+ *  to deliver, what, at what price, the terms, and lines to sign. Only on paper. */
+function PrintedOrder({ order, extra }: { order: BookDoc; extra: PurchaseOrderExtra }) {
+  const company = extra.company;
+  const warehouse = String(order.fields["Warehouse Name"] ?? "") || order.lines.find((line) => line.warehouse)?.warehouse || "";
+  const terms = String(order.fields["Terms & Conditions"] ?? order.fields.terms ?? "");
+  const taxed = order.lines.some((line) => line.taxPct);
+  return (
+    <article className="hidden bg-white text-[12.5px] text-slate-900 print:block">
+      <header className="flex items-start justify-between gap-6 border-b-2 border-slate-900 pb-4">
+        <div>
+          <div className="text-[18px] font-bold">{company.name}</div>
+          {company.address && <div className="whitespace-pre-line text-slate-600">{company.address}</div>}
+          <div className="text-slate-600">{[company.phone, company.email].filter(Boolean).join(" · ")}</div>
+          {company.tin && <div className="text-slate-600">TIN {company.tin}</div>}
+        </div>
+        <div className="text-right">
+          <div className="text-[22px] font-bold tracking-wide">PURCHASE ORDER</div>
+          <div className="mt-1 text-[14px] font-semibold">{order.number}</div>
+          <div className="text-slate-600">Date: {when(order.date)}</div>
+          {order.dueDate && <div className="text-slate-600">Deliver by: {when(order.dueDate)}</div>}
+          {order.reference && <div className="text-slate-600">Your reference: {order.reference}</div>}
+        </div>
+      </header>
+      <section className="mt-4 grid grid-cols-2 gap-6">
+        <div>
+          <div className="text-[10.5px] font-bold tracking-wider text-slate-500 uppercase">Vendor</div>
+          <div className="mt-1 font-semibold">{order.vendor?.name ?? order.party}</div>
+          {order.vendor?.address && <div className="whitespace-pre-line text-slate-600">{order.vendor.address}</div>}
+          <div className="text-slate-600">{[order.vendor?.email, order.vendor?.phone].filter(Boolean).join(" · ")}</div>
+        </div>
+        <div>
+          <div className="text-[10.5px] font-bold tracking-wider text-slate-500 uppercase">Deliver to</div>
+          <div className="mt-1 font-semibold">{warehouse || company.name}</div>
+          {company.address && <div className="whitespace-pre-line text-slate-600">{company.address}</div>}
+        </div>
+      </section>
+      <table className="mt-5 w-full border-collapse">
+        <thead>
+          <tr className="border-y border-slate-900 text-left text-[10.5px] font-bold tracking-wider uppercase">
+            <th className="py-2 pr-2">#</th>
+            <th className="py-2 pr-2">Item and description</th>
+            <th className="py-2 pr-2 text-right">Qty</th>
+            <th className="py-2 pr-2 text-right">Rate ({order.currency})</th>
+            {taxed && <th className="py-2 pr-2 text-right">Tax</th>}
+            <th className="py-2 text-right">Amount ({order.currency})</th>
+          </tr>
+        </thead>
+        <tbody>
+          {order.lines.map((line, n) => (
+            <tr key={line.id} className="border-b border-slate-200 align-top">
+              <td className="py-2 pr-2">{n + 1}</td>
+              <td className="py-2 pr-2">
+                <div className="font-semibold">{line.medicine ?? line.itemName ?? line.account}</div>
+                <div className="text-slate-600">{[line.sku && `SKU ${line.sku}`, line.description].filter(Boolean).join(" · ")}</div>
+              </td>
+              <td className="py-2 pr-2 text-right tabular-nums">{qty(line.qty)}</td>
+              <td className="py-2 pr-2 text-right tabular-nums">{money(Math.round((line.rate ?? 0) * 100), order.currency)}</td>
+              {taxed && <td className="py-2 pr-2 text-right">{line.taxPct ? `${line.taxPct}%` : ""}</td>}
+              <td className="py-2 text-right font-semibold tabular-nums">{money(line.amount, order.currency)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="mt-3 flex justify-end">
+        <dl className="w-72 space-y-1">
+          {order.subTotal !== null && order.subTotal !== order.total && (
+            <div className="flex justify-between">
+              <dt>Sub total</dt>
+              <dd className="tabular-nums">{money(order.subTotal, order.currency)}</dd>
+            </div>
+          )}
+          <div className="flex justify-between border-t-2 border-slate-900 pt-1.5 text-[15px] font-bold">
+            <dt>Total</dt>
+            <dd className="tabular-nums">{money(order.total, order.currency)}</dd>
+          </div>
+        </dl>
+      </div>
+      <section className="mt-5 grid grid-cols-2 gap-6">
+        <div>
+          {order.paymentTerms && (
+            <p>
+              <b>Payment terms:</b> {order.paymentTerms}
+            </p>
+          )}
+          {order.notes && <p className="mt-1 whitespace-pre-line">{order.notes}</p>}
+        </div>
+        {terms && (
+          <div>
+            <div className="text-[10.5px] font-bold tracking-wider text-slate-500 uppercase">Terms and conditions</div>
+            <p className="mt-1 whitespace-pre-line">{terms}</p>
+          </div>
+        )}
+      </section>
+      <section className="mt-14 grid grid-cols-2 gap-16">
+        <div className="border-t border-slate-900 pt-1 text-center text-slate-600">Prepared by</div>
+        <div className="border-t border-slate-900 pt-1 text-center text-slate-600">Approved by</div>
+      </section>
+      {company.footer && <footer className="mt-8 text-center text-[11px] text-slate-500">{company.footer}</footer>}
+    </article>
   );
 }
 
