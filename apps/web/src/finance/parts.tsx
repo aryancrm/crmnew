@@ -358,7 +358,7 @@ export function ConfirmPaymentDialog({
                 ) : (
                   <>
                     <b>No slip on the order.</b> Type the bank reference you checked, or hold it
-                    until the MedRep adds the proof.
+                    until {order?.medrep ?? "the seller"} adds the proof.
                   </>
                 )}
               </span>
@@ -432,7 +432,7 @@ export function ConfirmPaymentDialog({
           </Button>
         </div>
         <div className="-mt-1 text-right text-xs text-ink-2">
-          The invoice is made and the order goes to Dispatch.
+          The money goes on {bill?.code ?? "its invoice"} and the order goes to Dispatch.
         </div>
       </form>
     </Dialog>

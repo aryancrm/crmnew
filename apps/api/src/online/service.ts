@@ -574,9 +574,14 @@ async function orderTrail(db: Runner, orderId: number): Promise<CaseOrderTrail> 
     receiverPhone: string | null;
     address: string | null;
     pointsUsed: number;
+    heldFrom: string | null;
+    financeOn: boolean;
+    financeAt: string | null;
+    financeBy: string | null;
   }>(
     db,
-    sql`select o.status, ${iso("o.approved_at")} as "approvedAt", approver.name as "approvedBy", o.flag_reason as "flagReason",
+    sql`select o.status, o.held_from as "heldFrom", o.finance_check as "financeOn", ${iso("o.finance_checked_at")} as "financeAt", checker.name as "financeBy",
+        ${iso("o.approved_at")} as "approvedAt", approver.name as "approvedBy", o.flag_reason as "flagReason",
         o.held_role as "heldRole", ${iso("o.packed_at")} as "packedAt", packer.name as "packedBy", w.name as warehouse,
         ${iso("o.shipped_at")} as "shippedAt", shipper.name as "shippedBy", o.delivery_method as method, o.courier, o.tracking, o.rider,
         ${day("o.delivered_on")} as "deliveredOn", o.received_by as "receivedBy", deliverer.name as "deliveredBy",
@@ -584,6 +589,7 @@ async function orderTrail(db: Runner, orderId: number): Promise<CaseOrderTrail> 
       from sales_order o
         left join person approver on approver.id = o.approved_by left join person packer on packer.id = o.packed_by
         left join person shipper on shipper.id = o.shipped_by left join person deliverer on deliverer.id = o.delivered_by
+        left join person checker on checker.id = o.finance_checked_by
         left join warehouse w on w.id = o.warehouse_id
       where o.id = ${orderId}`,
   );
@@ -615,6 +621,18 @@ async function orderTrail(db: Runner, orderId: number): Promise<CaseOrderTrail> 
           : order.approvedBy
             ? { state: "approved", by: order.approvedBy, at: order.approvedAt, reasons: [] }
             : { state: "none", by: null, at: order.approvedAt, reasons: [] };
+  const financeHeld =
+    (order.status === "on_hold" || order.status === "exception") &&
+    (order.heldRole === "finance" || order.heldFrom === "finance_check" || order.heldFrom === "ready_for_invoice");
+  const finance: CaseOrderTrail["finance"] = order.financeAt
+    ? { state: "done", by: order.financeBy, at: order.financeAt, reason: null }
+    : order.status === "finance_check" || order.status === "ready_for_invoice"
+      ? { state: "waiting", by: null, at: null, reason: null }
+      : financeHeld
+        ? { state: "held", by: null, at: null, reason: order.flagReason }
+        : ["pending_approval", "draft", "on_hold", "exception"].includes(order.status)
+          ? { state: order.financeOn ? "later" : "off", by: null, at: null, reason: null }
+          : { state: "off", by: null, at: null, reason: null };
   const month = (iso: string) =>
     new Date(`${iso}T00:00:00Z`).toLocaleDateString("en-PH", {
       month: "short",
@@ -623,6 +641,7 @@ async function orderTrail(db: Runner, orderId: number): Promise<CaseOrderTrail> 
     });
   return {
     check,
+    finance,
     packed: order.packedAt
       ? {
           by: order.packedBy,
@@ -1530,8 +1549,8 @@ export async function orderFromLead(
       "Say how they pay: cash on delivery or paid in advance.",
       "pay",
     );
-  // A PAP case's order is the MedRep's own: Management checks it, then Finance, then Dispatch,
-  // like any MedRep order (the Online desk's skips Finance: its agent takes the money).
+  // Every case's order goes Management → Finance → Dispatch, like any MedRep order (Aryan, 18 Nov:
+  // the Online desk's work goes to Management and to Finance too; its agent keeps the money's proof).
   const pap = row.desk === "pap";
   const customerId = await patientOf(db, me, id);
   // A senior's or PWD's case: the order works the relief out on every line (the law's 20% and no
@@ -1604,8 +1623,8 @@ export async function orderFromLead(
         const checks = await caseOrderChecks(tx, orderId);
         const where =
           checks.length > 0
-            ? `Management checks it first (${checks.map((check) => check.short.toLowerCase()).join(", ")})`
-            : "it waits for Management's approval";
+            ? `Management checks it first (${checks.map((check) => check.short.toLowerCase()).join(", ")}), then Finance, then Dispatch`
+            : "it waits for Management's approval, then Finance's check, then Dispatch";
         await tx.execute(
           sql`insert into lead_event (lead_id, kind, message, by_person) values (${id}, 'status', ${`Order ${code?.code} placed: ${where}.`}, ${me.id})`,
         );

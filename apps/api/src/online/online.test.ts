@@ -185,10 +185,23 @@ describe("a regular enquiry", () => {
     const placed = await post("jane", `/api/leads/${id}/order`, { pay: "advance" });
     expect(placed.status).toBe(200);
     const orderId = ((await placed.json()) as { id: number }).id;
-    // Management approves every order (Aryan, 17 Nov); approved, it goes to Dispatch with its
-    // invoice (a case's payment is the agent's to record).
+    // Management approves every order (Aryan, 17 Nov); approved, it goes to Finance with its
+    // invoice, then to Dispatch (Aryan, 18 Nov: a case's order too).
     expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(200);
-    const order = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
+    let order = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
+    expect(order.order.status).toBe("finance_check");
+    expect((await lead("jane", id)).next).toBe("With Finance: record the advance payment received");
+    expect((await post("marco", `/api/dispatch/orders/${orderId}/pack`, {})).status).toBe(409);
+    // Finance sees the money and lets it go to Dispatch.
+    const confirmed = await post("fiona", `/api/finance/orders/${orderId}/confirm-payment`, {
+      amount: 30 * medicine.price,
+      method: "ewallet",
+      reference: "GC-5521",
+      paidOn: todayManila(),
+      checked: true,
+    });
+    expect(confirmed.status, await confirmed.clone().text()).toBe(200);
+    order = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
     expect(order.order).toMatchObject({
       status: "ready_for_dispatch",
       medrep: "Jane",
@@ -201,14 +214,11 @@ describe("a regular enquiry", () => {
     expect(order.order.customerReview).toBe("to_review");
     now = await lead("jane", id);
     expect(now.step.value).toBe("ordered");
-    expect(now.next).toBe("Record the advance payment received");
+    expect(now.next).toBe("Dispatch packs it");
     expect(now.order?.code).toBe(order.order.code);
     expect(now.order?.trail.check).toMatchObject({ state: "approved", by: "Sarla" });
-    expect(now.order?.trail.invoice).toMatchObject({
-      total: 30 * medicine.price,
-      balance: 30 * medicine.price,
-    });
-    expect(now.can).toMatchObject({ pay: true, deliver: false });
+    expect(now.order?.trail.invoice).toMatchObject({ total: 30 * medicine.price, balance: 0 });
+    expect(now.can).toMatchObject({ pay: false, deliver: false });
     expect((await post("jane", `/api/leads/${id}/order`)).status).toBe(409);
     // The road is fixed once the order is placed.
     expect(
@@ -221,7 +231,7 @@ describe("a regular enquiry", () => {
       ),
     ).toBe("road");
     expect(now.order).toMatchObject({ terms: "advance", proof: false });
-    // Nothing waits for Management or Finance.
+    // Approved once: nothing more for Management.
     expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(409);
     // A second enquiry on the same number finds the patient already on file.
     const again = await addLead({ name: "Maria Santos", source: "phone" });
@@ -317,8 +327,11 @@ describe("the other roads", () => {
     const orderId = (
       (await (await post("jane", `/api/leads/${id}/order`)).json()) as { id: number }
     ).id;
-    // Management approves it; the agency's bill then goes to Dispatch with the agency's invoice.
+    // Management approves it; Finance looks at the agency's bill (60 days), then it goes to
+    // Dispatch with the agency's invoice.
     expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(200);
+    expect((await read<OrderDetail>("sarla", `/api/orders/${orderId}`)).order.status).toBe("ready_for_invoice");
+    expect((await post("fiona", `/api/finance/orders/${orderId}/invoice`, {})).status).toBe(200);
     const order = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
     expect(order.order).toMatchObject({
       status: "ready_for_dispatch",
@@ -371,6 +384,7 @@ describe("the agent takes the case to Paid", () => {
     ).id;
     let now = await lead("jane", id);
     expect(now.order).toMatchObject({ status: "pending_approval" });
+    expect(now.order?.trail.finance.state).toBe("later");
     expect(now.order?.trail.check.state).toBe("waiting");
     expect(now.order?.trail.check.reasons[0]).toContain("Loyal patient");
     expect(now.order?.trail.invoice).toBeNull();
@@ -378,10 +392,17 @@ describe("the agent takes the case to Paid", () => {
     expect(now.order?.trail.check.reasons).toHaveLength(1);
     expect((await post("marco", `/api/dispatch/orders/${orderId}/pack`, {})).status).toBe(409);
 
-    // Sarla passes it: it goes to Dispatch with its invoice, never to Finance.
+    // Sarla passes it: it goes to Finance with its invoice (cash on delivery: Finance looks at
+    // what the customer owes), then to Dispatch.
     expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(200);
     now = await lead("jane", id);
+    expect(now.order?.status).toBe("ready_for_invoice");
+    expect(now.next).toBe("With Finance for a check");
+    expect(now.order?.trail.finance.state).toBe("waiting");
+    expect((await post("fiona", `/api/finance/orders/${orderId}/invoice`, {})).status).toBe(200);
+    now = await lead("jane", id);
     expect(now.order?.status).toBe("ready_for_dispatch");
+    expect(now.order?.trail.finance).toMatchObject({ state: "done", by: "Fiona" });
     expect(now.order?.trail.check).toMatchObject({ state: "approved", by: "Sarla" });
     expect(now.order?.trail.invoice).toMatchObject({ total: 4 * below, balance: 4 * below });
     // Cash on delivery: no money before the handover.

@@ -19,6 +19,8 @@ import {
   ArrowRight,
   Calculator,
   Check,
+  ChevronDown,
+  ChevronRight,
   CircleCheck,
   ClipboardList,
   ExternalLink,
@@ -38,7 +40,7 @@ import {
   UserRound,
   X,
 } from "lucide-react";
-import { type FormEvent, type ReactNode, useEffect, useMemo, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { type DispatchAsk, DispatchDialogs } from "../dispatch/parts";
@@ -49,7 +51,6 @@ import { ChatPanel } from "../online/chat";
 import { LeadJourney } from "../online/journey";
 import { AGENCIES, LeadForm, RELATIONS, uploadLeadFile } from "../online/parts";
 import { WebsiteOrderCard } from "../online/website";
-import { OrderChecksBox } from "../orders/parts";
 import { SendToCustomer } from "../orders/send-update";
 import { PAPER_ACCEPT } from "../photo";
 import {
@@ -591,8 +592,12 @@ export function LeadPage() {
               </div>
             )}
           </div>
-          <MoneyCard data={data} />
-          <Activity data={data} />
+          {/* Beside the step on a wide screen; under it on a narrow one (below), so the step being
+              worked on comes right after the steps. */}
+          <div className="hidden space-y-3 xl:block">
+            <MoneyCard data={data} />
+            <Activity data={data} />
+          </div>
         </aside>
 
         <section className="min-w-0 space-y-4">
@@ -609,6 +614,10 @@ export function LeadPage() {
           {step === "order" && <OrderStep data={data} onNext={() => open("pay")} />}
           {step === "pay" && <PayStep data={data} onBack={() => open("order")} />}
         </section>
+        <div className="space-y-3 xl:hidden">
+          <MoneyCard data={data} />
+          <Activity data={data} />
+        </div>
       </div>
 
       {editing && (
@@ -658,8 +667,9 @@ function StepPanel({
   const Icon = PANEL_ICONS[number];
   const sub = number.includes(".");
   return (
-    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <header className="flex items-center gap-3 border-b border-slate-200 bg-slate-50/70 px-4 py-3 sm:px-5">
+    // Not overflow-hidden: a list that opens inside a step (the medicine picker) shows in full.
+    <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <header className="flex items-center gap-3 rounded-t-2xl border-b border-slate-200 bg-slate-50/70 px-4 py-3 sm:px-5">
         <span
           className={`grid size-8 shrink-0 place-items-center rounded-lg text-xs font-bold ${
             sub ? "bg-violet-50 text-violet-700" : "bg-emerald-50 text-emerald-700"
@@ -1478,6 +1488,7 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
             failed={catalogue.isError}
             onRetry={() => catalogue.refetch()}
             taken={lines.map((line) => line.medicineId)}
+            asked={lead.request}
             onPick={add}
           />
         )}
@@ -1556,96 +1567,169 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
   );
 }
 
+/** Picking a medicine for the quotation: a clear "Select medicine" box whose list opens on a click
+ *  (no typing needed), narrows as you type (name, generic, strength, brand or code), moves with the
+ *  arrow keys and Enter, and shows each medicine's patient price, stock, form and pack; one that
+ *  can't be added says why (Aryan, 18 Nov: "medicine select karne ka proper dikhna chahiye"). */
 function MedicinePicker({
   catalogue,
   failed,
   onRetry,
   taken,
+  asked,
   onPick,
 }: {
   catalogue?: Catalogue;
   failed: boolean;
   onRetry: () => void;
   taken: number[];
+  /** What the patient asked for, as typed on the case: those medicines come first, marked. */
+  asked?: string | null;
   onPick: (row: CatalogueRow) => void;
 }) {
   const [text, setText] = useState("");
+  const [open, setOpen] = useState(false);
+  const [at, setAt] = useState(0);
+  const box = useRef<HTMLDivElement>(null);
   const words = text.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  const found = words.length
-    ? (catalogue?.rows ?? [])
-        .filter((row) =>
-          words.every((word) =>
-            [row.name, row.generic, row.strength, row.code, row.brand]
-              .filter(Boolean)
-              .join(" ")
-              .toLowerCase()
-              .includes(word),
-          ),
-        )
-        .slice(0, 8)
-    : [];
+  const all = catalogue?.rows ?? [];
+  const matching = all.filter((row) =>
+    words.every((word) => [row.name, row.generic, row.strength, row.code, row.brand].filter(Boolean).join(" ").toLowerCase().includes(word)),
+  );
+  // A medicine the patient asked for: its name (or generic) is in what was asked.
+  const askedText = (asked ?? "").toLowerCase();
+  const wanted = (row: CatalogueRow) =>
+    askedText.length > 0 && [row.name, row.generic].some((name) => name && name.length > 3 && askedText.includes(name.toLowerCase()));
+  // What the patient asked for first, then what can be added (priced and in stock), then the rest; by name.
+  const rank = (row: CatalogueRow) =>
+    row.prices.patient === undefined || taken.includes(row.id) ? 3 : wanted(row) ? 0 : row.total > 0 ? 1 : 2;
+  const found = [...matching].sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name)).slice(0, 40);
+  const blocked = (row: CatalogueRow) =>
+    taken.includes(row.id) ? "Already on the quotation" : row.prices.patient === undefined ? "No patient price yet: ask Inventory" : null;
+  useEffect(() => {
+    if (!open) return;
+    const away = (event: MouseEvent) => {
+      if (box.current && !box.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", away);
+    return () => document.removeEventListener("mousedown", away);
+  }, [open]);
+  useEffect(() => setAt(0), [text]);
+  // The list opens below the box: near the page's foot, bring it into view.
+  const list = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (open && catalogue) list.current?.scrollIntoView({ block: "nearest" });
+  }, [open, catalogue]);
+  // The arrow keys move the highlight; the list (never the page) scrolls to keep it in view.
+  const keyed = useRef(false);
+  useEffect(() => {
+    if (!keyed.current) return;
+    keyed.current = false;
+    const ul = list.current?.querySelector("ul");
+    const li = ul?.querySelector<HTMLElement>(`[data-row="${at}"]`);
+    if (!ul || !li) return;
+    if (li.offsetTop < ul.scrollTop) ul.scrollTop = li.offsetTop;
+    else if (li.offsetTop + li.offsetHeight > ul.scrollTop + ul.clientHeight)
+      ul.scrollTop = li.offsetTop + li.offsetHeight - ul.clientHeight;
+  }, [at]);
+  const pick = (row: CatalogueRow) => {
+    if (blocked(row)) return;
+    onPick(row);
+    setText("");
+    setOpen(false);
+  };
   return (
-    <div className="relative mt-3">
-      <Search className="pointer-events-none absolute top-2.5 left-3 size-4 text-slate-400" />
-      <input
-        type="search"
-        aria-label="Add a medicine"
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        placeholder={failed ? "Couldn't load the medicines" : "Add a medicine: type its name"}
-        className="h-9 w-full rounded-[10px] border border-slate-200 bg-white py-1.5 pr-3 pl-9 text-sm placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/10 focus:outline-none"
-      />
+    <div ref={box} className="relative mt-3">
+      <label htmlFor="quote-medicine" className="mb-1 block text-[12px] font-semibold text-slate-700">
+        Select medicine
+        <span className="ml-1 font-normal text-slate-400">· click to see the list, or type a name, generic or strength</span>
+      </label>
+      <div className="relative">
+        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
+        <input
+          id="quote-medicine"
+          type="search"
+          role="combobox"
+          aria-expanded={open}
+          aria-controls="quote-medicine-list"
+          autoComplete="off"
+          value={text}
+          onFocus={() => setOpen(true)}
+          onClick={() => setOpen(true)}
+          onChange={(event) => {
+            setText(event.target.value);
+            setOpen(true);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              setOpen(true);
+              keyed.current = true;
+              setAt((n) => Math.min(n + 1, found.length - 1));
+            } else if (event.key === "ArrowUp") {
+              event.preventDefault();
+              keyed.current = true;
+              setAt((n) => Math.max(n - 1, 0));
+            } else if (event.key === "Enter") {
+              event.preventDefault();
+              const row = found[at];
+              if (row) pick(row);
+            } else if (event.key === "Escape") setOpen(false);
+          }}
+          placeholder={failed ? "Couldn't load the medicines" : catalogue ? `Select a medicine (${all.length} in the list)` : "Loading the medicines…"}
+          className="h-11 w-full rounded-[10px] border border-slate-300 bg-white py-2 pr-9 pl-9 text-sm shadow-2xs placeholder:text-slate-400 focus:border-brand focus:ring-2 focus:ring-brand/15 focus:outline-none"
+        />
+        <ChevronDown className={`pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2 text-slate-400 transition ${open ? "rotate-180" : ""}`} />
+      </div>
       {failed && (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="mt-1 text-xs font-semibold text-emerald-700 hover:underline"
-        >
+        <button type="button" onClick={onRetry} className="mt-1 text-xs font-semibold text-emerald-700 hover:underline">
           Try again
         </button>
       )}
-      {found.length > 0 && (
-        <ul className="absolute right-0 left-0 z-20 mt-1 max-h-80 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-pop">
-          {found.map((row) => {
-            const price = row.prices.patient;
-            const on = taken.includes(row.id);
-            return (
-              <li key={row.id}>
-                <button
-                  type="button"
-                  disabled={price === undefined || on}
-                  onClick={() => {
-                    onPick(row);
-                    setText("");
-                  }}
-                  className="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-emerald-50 disabled:opacity-50 disabled:hover:bg-transparent"
-                >
-                  <span className="min-w-0">
-                    <span className="block truncate text-[13px] font-semibold text-slate-800">
-                      {[row.name, row.strength].filter(Boolean).join(" ")}
+      {open && catalogue && (
+        <div ref={list} className="absolute right-0 left-0 z-30 mt-1 scroll-mb-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-pop">
+          <ul id="quote-medicine-list" role="listbox" className="max-h-80 overflow-y-auto p-1">
+            {found.map((row, index) => {
+              const price = row.prices.patient;
+              const why = blocked(row);
+              return (
+                <li key={row.id} data-row={index} role="option" aria-selected={index === at} aria-disabled={Boolean(why)}>
+                  <button
+                    type="button"
+                    disabled={Boolean(why)}
+                    onMouseEnter={() => setAt(index)}
+                    onClick={() => pick(row)}
+                    className={`flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-2 text-left disabled:cursor-not-allowed disabled:opacity-55 ${index === at && !why ? "bg-emerald-50" : ""}`}
+                  >
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate text-[13px] font-semibold text-slate-800">{[row.name, row.strength].filter(Boolean).join(" ")}</span>
+                        {wanted(row) && !why && <span className="shrink-0 rounded bg-emerald-100 px-1 text-[10px] font-bold text-emerald-800">Asked for</span>}
+                        {row.rx && <span className="shrink-0 rounded bg-sky-100 px-1 text-[10px] font-bold text-sky-800">Rx</span>}
+                        {row.promo && <span className="shrink-0 rounded bg-amber-100 px-1 text-[10px] font-bold text-amber-800">Promo</span>}
+                      </span>
+                      <span className="block truncate text-[11px] text-slate-500">{why ?? [row.generic, row.form, row.pack].filter(Boolean).join(" · ")}</span>
                     </span>
-                    <span className="block truncate text-[11px] text-slate-500">
-                      {[row.generic, row.form, row.pack].filter(Boolean).join(" · ")}
-                      {row.rx ? " · Rx" : ""}
+                    <span className="shrink-0 text-right text-[11px]">
+                      <span className="block font-semibold text-slate-800">{price === undefined ? "—" : `${peso(price)} a piece`}</span>
+                      <span className={`inline-block rounded-full px-1.5 font-semibold ${row.total > 0 ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                        {row.total > 0 ? `${count(row.total)} in stock` : "Out of stock"}
+                      </span>
                     </span>
-                  </span>
-                  <span className="shrink-0 text-right text-[11px]">
-                    <span className="block font-semibold text-slate-800">
-                      {price === undefined ? "No patient price" : `${peso(price)} a piece`}
-                    </span>
-                    <span className={row.total > 0 ? "text-emerald-700" : "text-rose-700"}>
-                      {on
-                        ? "On the quotation"
-                        : row.total > 0
-                          ? `In stock ${count(row.total)}`
-                          : "Out of stock"}
-                    </span>
-                  </span>
-                </button>
-              </li>
-            );
-          })}
-        </ul>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50 px-3 py-1.5 text-[11px] text-slate-500">
+            <span>
+              {matching.length === 0
+                ? `No medicine matches "${text.trim()}". Check the spelling, or ask Inventory to add it.`
+                : `${matching.length} ${matching.length === 1 ? "medicine" : "medicines"}${matching.length > found.length ? `, first ${found.length} shown: type more to narrow` : ""}`}
+            </span>
+            <span className="hidden sm:inline">↑ ↓ to move · Enter to add · Esc to close</span>
+          </div>
+        </div>
       )}
     </div>
   );
@@ -1904,11 +1988,12 @@ function orderWord(order: NonNullable<LeadCase["order"]>, pap = false): string {
     return pap ? "Waiting for the PAP head" : "Waiting for Management";
   if (order.status === "on_hold" || order.status === "exception") return "On hold";
   if (order.status === "draft") return "Sent back";
+  if (order.status === "finance_check" || order.status === "ready_for_invoice") return "With Finance";
   return "With Dispatch";
 }
 
-/** The order on the case, from its placing to its handover: Management's check (when one was
- *  needed), Dispatch's packing and road, then the agent hands it over. */
+/** The order on the case, from its placing to its handover: Management's check, Finance's check
+ *  (18 Nov: every case's order), Dispatch's packing and road, then the agent hands it over. */
 function PlacedOrder({
   data,
   order,
@@ -2000,6 +2085,54 @@ function PlacedOrder({
             }
           />
         )}
+        {trail.finance.state === "done" ? (
+          <TrailRow
+            state="done"
+            title={
+              <>
+                <b>Finance check</b> · {order.terms === "advance" ? "payment checked" : "let go"} by {trail.finance.by ?? "Finance"}
+              </>
+            }
+            note={trail.finance.at ? shortTime(trail.finance.at) : undefined}
+          />
+        ) : trail.finance.state === "waiting" ? (
+          <TrailRow
+            state="now"
+            title={
+              <>
+                <b>Finance check</b> · waiting
+              </>
+            }
+            note={
+              order.terms === "advance"
+                ? paidAhead
+                  ? "record the advance received"
+                  : "checks the payment"
+                : order.terms === "cod"
+                  ? "cash on delivery: checks what they owe"
+                  : "checks the agency's bill"
+            }
+          />
+        ) : trail.finance.state === "held" ? (
+          <TrailRow
+            state="stopped"
+            title={
+              <>
+                <b>On hold by Finance</b>
+                {trail.finance.reason ? ` · ${trail.finance.reason}` : ""}
+              </>
+            }
+          />
+        ) : trail.finance.state === "later" ? (
+          <TrailRow
+            state="later"
+            title={
+              <>
+                <b>Finance check</b> · after Management
+              </>
+            }
+          />
+        ) : null}
         {trail.packed ? (
           <TrailRow
             state="done"
@@ -2018,7 +2151,11 @@ function PlacedOrder({
           />
         ) : (
           <TrailRow
-            state={check.state === "waiting" || stopped ? "later" : "now"}
+            state={
+              check.state === "waiting" || stopped || ["waiting", "held", "later"].includes(trail.finance.state)
+                ? "later"
+                : "now"
+            }
             title={
               <>
                 <b>Packing</b> · Dispatch packs it
@@ -2116,6 +2253,51 @@ function PlacedOrder({
   );
 }
 
+/** Where the case's order goes once placed, in one line (Aryan, 17 and 18 Nov: Management approves
+ *  every order, then Finance checks it, then Dispatch), and what Management will see on it. */
+function CaseRoute({
+  reasons,
+  pap,
+  gl,
+  pay,
+}: {
+  reasons: string[];
+  pap: boolean;
+  gl: boolean;
+  pay: "cod" | "advance" | null;
+}) {
+  const steps = [
+    pap ? "The PAP head approves" : "Management approves",
+    gl
+      ? "Finance checks the agency's bill"
+      : pay === "advance"
+        ? "Finance checks the payment"
+        : pay === "cod"
+          ? "Finance checks what they owe"
+          : "Finance checks it",
+    "Dispatch packs and ships",
+  ];
+  return (
+    <section aria-label="Where the order goes" className="rounded-2xl border border-slate-200 bg-slate-50/70 px-4 py-3">
+      <div className="text-[12px] font-semibold text-slate-500">Once placed, it goes</div>
+      <ol className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[13px] font-medium text-slate-800">
+        {steps.map((step, index) => (
+          <li key={step} className="flex items-center gap-1.5">
+            <span className="grid size-5 place-items-center rounded-full bg-white text-[11px] font-bold text-slate-500 ring-1 ring-slate-200">
+              {index + 1}
+            </span>
+            {step}
+            {index < steps.length - 1 && <ChevronRight className="size-3.5 text-slate-400" aria-hidden="true" />}
+          </li>
+        ))}
+      </ol>
+      {reasons.length > 0 && (
+        <p className="mt-2 text-[12px] text-amber-800">Management will see: {reasons.join("; ")}.</p>
+      )}
+    </section>
+  );
+}
+
 function OrderStep({ data, onNext }: { data: LeadCase; onNext: () => void }) {
   const write = useCaseWrite(data.lead.id);
   // A website order comes with how the customer chose to pay.
@@ -2125,9 +2307,7 @@ function OrderStep({ data, onNext }: { data: LeadCase; onNext: () => void }) {
   const fee = data.web?.money.deliveryFee ?? 0;
   const order = data.order && data.order.status !== "cancelled" ? data.order : null;
   const gl = data.lead.road === "gl";
-  // The switch at the top: a price below the list sends it to Management whatever the agent
-  // picks; otherwise it goes straight to Dispatch unless the agent asks Management to look.
-  const [toManagement, setToManagement] = useState(false);
+  // What Management will see on it (a price below the list); every case's order is approved anyway.
   const reasons = data.quote.lines
     .filter((line) => line.unitPrice < line.listPrice)
     .map(
@@ -2140,11 +2320,7 @@ function OrderStep({ data, onNext }: { data: LeadCase; onNext: () => void }) {
       {
         <div className="flex flex-col gap-3">
           {data.can.work && data.can.placeOrder && (
-            <OrderChecksBox
-              reasons={reasons}
-              management={toManagement}
-              onManagement={setToManagement}
-            />
+            <CaseRoute reasons={reasons} pap={data.lead.desk === "pap"} gl={gl} pay={pay} />
           )}
           {data.quote.lines.length > 0 && (
             <ul className="flex flex-col gap-1 rounded-xl bg-slate-50 px-3 py-2.5 text-[13px]">
@@ -2232,7 +2408,7 @@ function OrderStep({ data, onNext }: { data: LeadCase; onNext: () => void }) {
                 onClick={() =>
                   write.send(
                     `/api/leads/${data.lead.id}/order`,
-                    gl ? { toManagement } : { pay, toManagement },
+                    gl ? {} : { pay },
                   )
                 }
               >

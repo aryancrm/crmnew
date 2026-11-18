@@ -231,8 +231,15 @@ describe("a website order", () => {
       paymentTerms: "cod",
     });
 
-    // Approved, it goes to Dispatch with its invoice, and the website hears "confirmed".
-    expect(detail.order.status).toBe("ready_for_dispatch");
+    // Approved, it goes to Finance with its invoice (cash on delivery: Finance looks at what the
+    // customer owes); the website hears "confirmed" once Finance lets it go to Dispatch.
+    expect(detail.order.status).toBe("ready_for_invoice");
+    answer = { status: 200, json: { ok: true, status: "confirmed" } };
+    const before = posted.length;
+    await pushWebsites(db);
+    expect(posted.slice(before).some((p) => JSON.parse(p.body ?? "{}").data?.status === "confirmed")).toBe(false);
+    expect((await post("fiona", `/api/finance/orders/${orderId}/invoice`, {})).status).toBe(200);
+    expect((await read<OrderDetail>("sarla", `/api/orders/${orderId}`)).order.status).toBe("ready_for_dispatch");
     const [invoice] = await rows<{ total: number }>(
       db,
       sql`select total::int as total from invoice where order_id = ${orderId}`,

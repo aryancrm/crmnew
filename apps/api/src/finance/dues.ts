@@ -2,9 +2,9 @@ import { type SQL, sql } from "drizzle-orm";
 
 /** An advance-pay invoice (aliases `i`, `o`) made at Management's approval whose money Finance
  *  hasn't checked yet: not owed and not late — Finance's check is where that money comes in (it
- *  is what the order waits for). An Online case's agent and an order Management let skip Finance
- *  are left as they were. */
-export const awaitingPaymentSql = sql`(i.terms = 'advance' and o.finance_check and o.lead_id is null and o.finance_checked_at is null)`;
+ *  is what the order waits for). An Online case's order goes to Finance like any other (18 Nov);
+ *  an order Management let skip Finance is left as it was. */
+export const awaitingPaymentSql = sql`(i.terms = 'advance' and o.finance_check and o.finance_checked_at is null)`;
 
 /** Not due yet (aliases `i`, `o`): credit and cash on delivery until delivered, advance pay until
  *  Finance has checked the money. */

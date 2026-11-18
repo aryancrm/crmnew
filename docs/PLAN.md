@@ -443,18 +443,19 @@ Aryan saw that in the old CRM one Online agent (Mary Jane) worked a case from th
 money, while the new line split it between Management, Finance and Dispatch. He asked me to choose;
 he wants every department's order page laid out like the Leads & enquiries case.
 
-- **An Online case's order** (`sales_order.lead_id` set): placed by the agent, it goes **straight to
-  Dispatch with its invoice** unless something needs Management (`caseChecksOf` in
-  `orders/rules.ts`): a price below the list (the agent's discount, beyond the senior / PWD relief),
-  or for a business buyer (never a patient) an unchecked account, an expired licence, money owed or
-  a sale on credit. A guarantee letter's bill to the agency isn't credit; short stock is Dispatch's.
-  Management's approval of such an order also sends it straight to Dispatch with its invoice
-  (`clearCaseOrder` in `finance/service.ts`). **Finance is not a step** for these orders; Finance
-  still sees every payment and its proof.
+- **An Online case's order** (`sales_order.lead_id` set): placed by the agent, it goes
+  **Management → Finance → Dispatch** like every other order (17 Nov: Management approves every
+  order; 18 Nov: "the Online desk's work goes to Management and to Finance"). Management sees what
+  `caseChecksOf` (`orders/rules.ts`) finds on it: a price below the list (the agent's discount,
+  beyond the senior / PWD relief), or for a business buyer an unchecked account, an expired
+  licence, money owed or a sale on credit. The invoice is made at the approval. Finance then checks
+  the payment (paid in advance) or what is owed (cash on delivery, an agency's bill) and lets it go
+  to Dispatch; Management may still switch Finance off on approving. *(Until 18 Nov a case's order
+  skipped Finance.)*
 - Dispatch packs and ships as before. **The agent marks it delivered** (the Online desk role, on a
   case's order only) and **records the money** (cash on delivery after the handover; paid in advance
-  as soon as the invoice exists). MedReps' orders keep the full line (Management, Finance,
-  Dispatch). The Online desk sees every case's order.
+  as soon as the invoice exists, so Finance finds it on the invoice and confirms). The Online desk
+  sees every case's order.
 - **The case** shows the order's trail in Order & delivery: Management's check (not needed /
   waiting with why / approved by whom), packed (who, warehouse, batch), shipped (courier, tracking),
   delivered, then "Mark as delivered"; Payment & follow-up shows the invoice, the payments and
@@ -2717,3 +2718,4 @@ Nothing built until he picks a phase.
 - 18 Nov (104), Aryan: a separate Books app like Zoho Books, reusing Finance, removing nothing (docs/BOOKS-PLAN.md 7): Books frame and menu for Finance, the CEO and the Admin, Books Home dashboard, Finance's own pages inside Books, a quick-create "+", a Books tile on the portal; checked role by role on a demo copy.
 - 18 Nov (105), the B2B team's end-of-day report (Zoho export + Google Form + Excel pivots), now from the ERP itself (Aryan: "everyone logs their calls on their own screen and it shows up the team; no emails; fixed 7-day weeks; load November's targets under the right people"): **Calls** (`/calls`, migration 0103: a call to a CRM customer or a typed name, in the caller's seat; seen by the person, up their reporting line, by Management, the CEO and the Admin) and **Sales performance** (`/sales-performance`, `src/sales/performance.ts`): revenue before VAT against target, 110% and BTD; TLB (different SKUs) and billing efficiency (different customers), counted once for the team too; calls by day; channels ranked with their share; daily by salesperson and channel; W1 = 1st–7th …; Excel download (`/api/sales-performance/xlsx`, own .xlsx writer). Targets got TLB and billing counts. A team can carry its own report channel (CLIDP inside B2B). Checked on the real local data for 1–14 Nov against the team's sheets: equal to the peso except two invoices Zoho holds that their export missed (2MG-SI000004962 ₱60,000 Lonie, INV-12843903 ₱14,910.71 Fritzie). November targets loaded locally for Fritzie, Faith, Lonie and Floremel (`scripts/load-b2b-targets-nov-2026.ts`); Khayzee and Darsh are not in the ERP yet. Found: some CRM customers join two different Zoho contacts (e.g. Los Medicinas and Lucky 8), so the report counts Zoho's customers by Zoho's own name.
 - 18 Nov (106), Aryan: "in the Admin panel drag a person under any team; their modules follow the channel": Teams & people → Teams: drag a seat (its person, customers and orders go with it) or a whole team onto another team in the tree; a bar asks before moving. Each team can carry a report channel ("Reports as", e.g. CLIDP inside B2B) for Sales performance.
+- 18 Nov (107), Aryan: "the Online desk's work must go to Management and to Finance; the medicine select isn't proper; mind every section's small details": an Online case's order now goes **Management → Finance → Dispatch** like every other (`routeOrder`, the approval, Finance's "awaiting payment" list; migration 0104 puts the case orders not yet approved on that road). The case shows a **Finance check** row in its order trail (later / waiting / done by whom / held), "With Finance" in its heading, and the next step says what the agent does meanwhile ("record the advance payment received"). The old "Goes straight to Dispatch / Send to Management" switch on the case's order step (it did nothing: Management approves every order) is now one line: *Once placed, it goes 1 Management approves › 2 Finance checks the payment (or what they owe, or the agency's bill) › 3 Dispatch packs and ships*, with what Management will see. **Select medicine** on the quotation: a labelled box whose list opens on a click (it was clipped by the step's card before), narrows by name, generic, strength, brand or code, moves with ↑ ↓ and Enter, shows price a piece, stock, Rx and Promo, puts the medicine the patient asked for first ("Asked for"), and says why one can't be added. Below 1280 px the step being worked on now comes right after the steps (Money and Activity under it). Finance's confirm dialog names who adds the proof and the invoice the money goes on. Walked on the demo copy: Jane quotes and places → Sarla approves → Fiona confirms the payment → the case shows both checks done and Packing next.

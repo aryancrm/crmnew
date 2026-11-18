@@ -2137,6 +2137,9 @@ export type CaseOrderTrail = {
     /** What sent it to Management, or why it is held. */
     reasons: string[];
   };
+  /** Finance's look after Management (every case's order since 18 Nov): later: Management first;
+   *  waiting / held: with Finance; done: let go to Dispatch; off: Management left it out. */
+  finance: { state: "later" | "waiting" | "held" | "done" | "off"; by: string | null; at: string | null; reason: string | null };
   packed: { by: string | null; at: string; warehouse: string | null; batches: string[] } | null;
   shipped: { how: string; by: string | null; at: string } | null;
   delivered: { on: string; receivedBy: string | null; by: string | null } | null;

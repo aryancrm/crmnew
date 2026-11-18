@@ -628,7 +628,7 @@ async function findingsOfOrder(db: Runner, orderId: number) {
   return { order, found };
 }
 
-/** What holds an Online case's order for Management (none: it goes straight to Dispatch). */
+/** What Management sees on an Online case's order (it approves every one, then Finance checks it). */
 export async function caseOrderChecks(db: Runner, orderId: number): Promise<OrderFinding[]> {
   const read = await findingsOfOrder(db, orderId);
   return read ? caseChecksOf(read.found, read.order) : [];
@@ -640,9 +640,9 @@ export async function caseOrderChecks(db: Runner, orderId: number): Promise<Orde
  * own order follows the switch at the top of its form: to Management or not, to Finance or not;
  * it is checked anyway when the system finds something wrong on it (a price below the list, over
  * the credit limit, money overdue, a new business customer, an expired licence; a missing proof
- * of payment while Finance is off). An Online case's order never waits for Finance (its agent takes the money) and goes
- * to Management only for what `caseChecksOf` finds or when the agent asks. Management's own
- * order skips Management. Short stock is never Management's: Dispatch sees it.
+ * of payment while Finance is off). An Online case's order goes Management → Finance → Dispatch
+ * like every other (Aryan, 18 Nov). Management's own order skips Management. Short stock is never
+ * Management's: Dispatch sees it.
  */
 export async function routeOrder(
   tx: Runner,
@@ -669,7 +669,9 @@ export async function routeOrder(
     tx,
     sql`select finance_check as finance from sales_order where id = ${orderId}`,
   );
-  const financeStep = !fromCase && (allowed ? allowed.finance : (kept?.finance ?? true));
+  // Every order goes to Finance after Management, an Online case's too (Aryan, 18 Nov: the Online
+  // desk's work goes to Management and to Finance); only Management's own switch can leave it out.
+  const financeStep = allowed && !fromCase ? allowed.finance : (kept?.finance ?? true);
   await tx.execute(
     sql`update sales_order set finance_check = ${financeStep} where id = ${orderId}`,
   );
@@ -1992,7 +1994,7 @@ export async function placeOrder(
       tx,
       me,
       id,
-      options.leadId ? { management: options.toManagement ?? false, finance: false } : input.checks,
+      options.leadId ? { management: options.toManagement ?? false, finance: true } : input.checks,
     );
     return id;
   });
@@ -2124,15 +2126,14 @@ export async function actOnOrder(
         if (!place)
           throw new Refusal(400, "invalid", "Pick the warehouse it ships from.", "warehouseId");
         // Management says on approving whether Finance checks it too.
-        const financeCheck =
-          input.finance === undefined ? order.financeCheck : input.finance && !order.leadId;
+        const financeCheck = input.finance === undefined ? order.financeCheck : input.finance;
         if (financeCheck !== order.financeCheck)
           await tx.execute(
             sql`update sales_order set finance_check = ${financeCheck} where id = ${id}`,
           );
-        // An Online case's order (its agent takes the money), or any order while Finance's check
-        // is switched off: once Management has said yes it goes to Dispatch with its invoice.
-        if (order.leadId || !financeCheck) {
+        // An order whose Finance check Management switched off goes to Dispatch with its invoice once
+        // approved. An Online case's order goes to Finance like every other (Aryan, 18 Nov).
+        if (!financeCheck) {
           await set(
             sql`warehouse_id = ${place.id}, approved_at = now(), approved_by = ${me.id}, flag_reason = null`,
           );
@@ -2141,7 +2142,7 @@ export async function actOnOrder(
             id,
             me,
             "status",
-            `Approved. Ships from ${place.name.replace(/\.$/, "")}. It goes to Dispatch with its invoice${order.leadId ? "; the Online desk takes the payment" : ""}.`,
+            `Approved. Ships from ${place.name.replace(/\.$/, "")}. It goes to Dispatch with its invoice.`,
             "approved",
           );
           await clearCaseOrder(tx, me, id);

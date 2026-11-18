@@ -201,7 +201,11 @@ export function nextOf(f: CaseFacts, step: string): string {
       if (order.status === "draft")
         return `Order sent back: ${order.flagReason ?? "fix it and place it again"}`;
       if (order.status === "pending_approval") return ORDER_WORDS.pending_approval as string;
-      // Paid in advance: the agent records the money as soon as the order is on its way to Dispatch.
+      // With Finance (every case's order goes there after Management, 18 Nov). Paid in advance, the
+      // agent records the money that came in; Finance checks it and lets the order go to Dispatch.
+      if (order.status === "finance_check" || order.status === "ready_for_invoice")
+        return order.advance && !order.paid ? "With Finance: record the advance payment received" : "With Finance for a check";
+      // Paid in advance and gone past Finance without the money: the agent records it.
       if (order.advance && !order.paid) return "Record the advance payment received";
       if (order.status === "shipped")
         return `${order.method === "rider" ? `With our rider ${order.rider}` : `On the way with ${order.courier ?? "the courier"}${order.tracking ? ` · ${order.tracking}` : ""}`}: mark it delivered`;

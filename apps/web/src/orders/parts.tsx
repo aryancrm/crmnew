@@ -536,7 +536,7 @@ export function OrderChecksBox({
   reasons: string[];
   management: boolean;
   onManagement: (on: boolean) => void;
-  /** Left out on an Online case's order: the Online desk takes its money. */
+  /** Left out where Finance always checks it. */
   finance?: boolean;
   onFinance?: (on: boolean) => void;
 }) {
