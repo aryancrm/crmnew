@@ -9,6 +9,7 @@ import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
 import type { Insight, Me, Role } from "../types";
+import { LEDGER_INSIGHTS } from "./ledger-reports";
 
 const SALES_ROLES: Role[] = ["ceo", "admin", "management", "finance"];
 const STOCK_ROLES: Role[] = ["ceo", "admin", "management", "finance", "inventory"];
@@ -305,6 +306,8 @@ export const INSIGHTS: Record<string, { roles: Role[]; run: (db: Database, asked
   purchases: { roles: BUY_ROLES, run: purchases },
   cases: { roles: [...SALES_ROLES, "online"], run: cases },
   "senior-pwd": { roles: SALES_ROLES, run: seniorPwd },
+  // Zoho Books' own reports Finance used (docs/BOOKS-PLAN.md D).
+  ...LEDGER_INSIGHTS,
 };
 
 export async function insight(db: Database, me: Me, key: string, asked: { from?: string | null; to?: string | null; by?: string | null }): Promise<Insight> {

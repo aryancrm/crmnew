@@ -11,7 +11,7 @@ import { customerCredit } from "../finance/credit";
 import { addDays } from "../finance/rules";
 import { todayManila } from "../inventory/rules";
 import { seedDemo } from "../seed";
-import type { BankReconcileView, BankStatement, LedgerChoices } from "../types";
+import type { BankReconcileView, BankStatement, Insight, LedgerChoices } from "../types";
 import { dueDays, makeDueRecurring } from "./recurring";
 
 const PASSWORD = "test-password-1";
@@ -281,5 +281,26 @@ describe("writing the books", () => {
     await ok("fiona", `/api/books/transfer_fund/${transfer.id}/void`, { reason: "Wrong account" });
     statement = await read<BankStatement>("fiona", `${path}/statement`);
     expect(statement.lines.map((line) => line.amount)).toEqual([250_000]);
+  });
+
+  it("Zoho's missing reports read the books: the ledger balances, expenses add up by every grouping", async () => {
+    const q = `from=${addDays(today, -90)}&to=${addDays(today, 60)}`;
+    const ledger = await read<Insight>("fiona", `/api/books/insights/general-ledger?${q}`);
+    expect(ledger.totals.debit).toBe(ledger.totals.credit);
+    expect(ledger.rows.some((row) => row.account === "Office Rent")).toBe(true);
+    const journal = await read<Insight>("fiona", `/api/books/insights/journal-report?${q}`);
+    expect(journal.totals.debit).toBe(journal.totals.credit);
+    const rent = await read<Insight>("fiona", `/api/books/insights/account-transactions?${q}&by=${encodeURIComponent("Office Rent")}`);
+    expect(rent.rows.length).toBeGreaterThan(0);
+    const details = await read<Insight>("fiona", `/api/books/insights/expenses?${q}`);
+    for (const by of ["category", "department", "pic", "cost-centre", "paid-through"]) {
+      const grouped = await read<Insight>("fiona", `/api/books/insights/expenses?${q}&by=${by}`);
+      expect(grouped.totals.total, by).toBe(details.totals.total);
+    }
+    for (const key of ["ar-aging", "ar-aging-details", "customer-balances", "vendor-balances", "payments-received", "payments-made", "credit-notes", "sales-by-customer"])
+      expect((await get("fiona", `/api/books/insights/${key}?${q}`)).status, key).toBe(200);
+    const credits = await read<Insight>("fiona", `/api/books/insights/customer-balances?${q}`);
+    expect(credits.rows.find((row) => row.customer === "Books Write Hospital")?.credit).toBe(100_000);
+    expect((await get("sarla", `/api/books/insights/general-ledger?${q}`)).status).toBe(403);
   });
 });

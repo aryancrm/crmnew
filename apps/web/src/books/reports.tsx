@@ -77,6 +77,33 @@ export const REPORTS: Report[] = [
       { key: "person", label: "By person" },
     ],
   },
+  // Zoho Books' own reports Finance used (docs/BOOKS-PLAN.md D).
+  { key: "general-ledger", title: "General Ledger", about: "Every account's opening, debits, credits and closing for the days picked.", group: "Accountant", days: "range", insight: true },
+  { key: "journal-report", title: "Journal Report", about: "Each document's debits and credits, account by account, in order.", group: "Accountant", days: "range", insight: true },
+  { key: "ar-aging", title: "AR Aging Summary", about: "What each customer owes by how late it is: current, 1-15, 16-30, 31-45, over 45 days.", group: "Receivables", days: "asOf", insight: true },
+  { key: "ar-aging-details", title: "AR Aging Details", about: "Every unpaid invoice with its age, the latest first.", group: "Receivables", days: "asOf", insight: true },
+  { key: "customer-balances", title: "Customer Balance Summary", about: "What each customer owes and the credit they hold.", group: "Receivables", days: "asOf", insight: true },
+  { key: "payments-received", title: "Payments Received", about: "Money received from customers, the CRM's and Zoho's, with where it went.", group: "Receivables", days: "range", insight: true },
+  { key: "credit-notes", title: "Credit Note Details", about: "Credit notes, what each credited and what is left of it.", group: "Receivables", days: "range", insight: true },
+  { key: "sales-by-customer", title: "Sales by Customer", about: "What each customer was invoiced in these days.", group: "Sales", days: "range", insight: true, roles: SALES },
+  { key: "vendor-balances", title: "Vendor Balance Summary", about: "What the company owes each vendor, and the credit it holds with them.", group: "Payables", days: "none", insight: true },
+  { key: "payments-made", title: "Payments Made", about: "Money paid to vendors, with the bills it paid.", group: "Payables", days: "range", insight: true },
+  {
+    key: "expenses",
+    title: "Expenses",
+    about: "Expense details, or by account, department, PIC, cost centre or the account paid from.",
+    group: "Purchases and Expenses",
+    days: "range",
+    insight: true,
+    by: [
+      { key: "details", label: "Details" },
+      { key: "category", label: "By account" },
+      { key: "department", label: "By department" },
+      { key: "pic", label: "By PIC" },
+      { key: "cost-centre", label: "By cost centre" },
+      { key: "paid-through", label: "By paid through" },
+    ],
+  },
 ];
 /** The reports this role opens. */
 export const reportsFor = (role: string) => REPORTS.filter((one) => (one.roles ?? ["finance", "ceo", "admin"]).includes(role));
@@ -160,7 +187,7 @@ function ReportPage({ report }: { report: Report }) {
   const asOf = params.get("asOf") ?? today();
   const by = params.get("by") ?? (report.by?.[0]?.key ?? "medicine");
   const qs = new URLSearchParams({
-    ...(report.days === "range" ? { from, to } : report.days === "asOf" ? { asOf } : {}),
+    ...(report.days === "range" ? { from, to } : report.days === "asOf" ? (report.insight ? { to: asOf } : { asOf }) : {}),
     ...(report.key === "gross-profit" || report.by ? { by } : {}),
   });
   const query = useQuery({
