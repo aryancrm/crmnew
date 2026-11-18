@@ -203,5 +203,3 @@ select.field {
 .org-stem { width: 0; height: 0.75rem; border-left: 2px solid var(--org-line, #cbd5e1); margin: 0 auto; }
 /* The whole team's tree: each part keeps its own width (the pop-up scrolls sideways). */
 .org-tree .org-row > .org-col { flex: 0 0 auto; padding: 0 0.4rem; }
-/* The sign-in rising to the middle (its place is set by translate; only the size and fade move). */
-@keyframes lift { from { opacity: .7; scale: .96; } to { opacity: 1; scale: 1; } }

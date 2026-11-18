@@ -67,8 +67,8 @@ function Launcher() {
       </div>
       {picked ? (
         <div className="flex min-h-dvh flex-col">
-          <header className="mx-auto flex w-[min(1240px,calc(100%-32px))] items-center gap-2.5 py-4">
-            <img src="/brand/bishnoi-one-mark.png" alt="" className="size-8" />
+          <header className="mx-auto flex w-[min(1240px,calc(100%-32px))] items-center gap-2.5 py-2.5">
+            <img src="/brand/bishnoi-one-mark.png" alt="" className="size-7" />
             <span className="text-[18px] font-semibold tracking-[-0.03em]">Bishnoi One</span>
           </header>
           <DepartmentPage workspace={picked} onBack={() => open(null)} signIn={<SignIn workspace={picked} from={from} />} />
@@ -174,15 +174,12 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<{ message: string; field?: string } | null>(null);
   const picked = workspace;
-  // Typing the login lifts the box to the middle and blurs the page behind, as the old pop-up
-  // did (Aryan, 18 Nov); a click outside or Esc puts it back.
+  // Typing the login brings the box forward where it stands and blurs the page behind, as the old
+  // pop-up did (Aryan, 18 Nov); a click outside or Esc puts it back.
   const [lifted, setLifted] = useState(false);
-  const [height, setHeight] = useState(0);
   const boxRef = useRef<HTMLDivElement>(null);
   const lift = () => {
-    if (lifted) return;
-    setHeight(boxRef.current?.offsetHeight ?? 0);
-    setLifted(true);
+    if (!lifted) setLifted(true);
   };
   const drop = () => {
     setLifted(false);
@@ -220,11 +217,7 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
   return (
     <>
     {lifted && (
-      <>
-        {/* Keeps the box's place on the page while it is lifted. */}
-        <div aria-hidden="true" style={{ height }} className="w-full max-w-sm" />
-        <button type="button" aria-label="Back to the page" onClick={drop} className="fixed inset-0 z-40 cursor-default bg-[#eef0f5]/55 backdrop-blur-md" />
-      </>
+      <button type="button" aria-label="Back to the page" onClick={drop} className="fixed inset-0 z-40 cursor-default bg-[#eef0f5]/55 backdrop-blur-md" />
     )}
     {/* Raised above the page around it, so the eye lands here (Aryan, 18 Nov). */}
     <div
@@ -233,13 +226,15 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
       role={lifted ? "dialog" : undefined}
       aria-modal={lifted || undefined}
       aria-label={lifted ? `Sign in to ${picked.label}` : undefined}
-      className={`w-full max-w-sm rounded-[2rem] border border-white bg-white p-7 text-center shadow-[0_50px_100px_-28px_rgba(20,30,50,0.55),0_18px_36px_-18px_rgba(20,30,50,0.35)] ring-1 ring-black/[0.04] ${
-        lifted ? "fixed top-1/2 left-1/2 z-50 w-[min(24rem,calc(100%-2rem))] -translate-x-1/2 -translate-y-1/2 animate-[lift_180ms_ease-out]" : "relative"
+      className={`relative w-full max-w-sm rounded-[2rem] border border-white bg-white p-6 text-center ring-1 ring-black/[0.04] transition-[scale,box-shadow] duration-200 ease-out ${
+        lifted
+          ? "z-50 scale-[1.05] shadow-[0_60px_120px_-30px_rgba(20,30,50,0.6),0_24px_48px_-20px_rgba(20,30,50,0.4)]"
+          : "shadow-[0_50px_100px_-28px_rgba(20,30,50,0.55),0_18px_36px_-18px_rgba(20,30,50,0.35)]"
       }`}
     >
       <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Sign in to {picked.label}</h2>
       <p className="mt-0.5 text-sm text-[#7a8394]">Log in with your ID and password</p>
-      <form onSubmit={submit} className="mt-6 grid gap-3 text-left" aria-busy={busy}>
+      <form onSubmit={submit} className="mt-4 grid gap-3 text-left" aria-busy={busy}>
         <label className="relative block">
           <span className="sr-only">Login ID</span>
           <UserRound className="pointer-events-none absolute top-1/2 left-4 z-10 size-4 -translate-y-1/2 text-[#9aa2b0]" aria-hidden="true" />

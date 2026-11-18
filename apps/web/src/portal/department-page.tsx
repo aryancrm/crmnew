@@ -132,33 +132,33 @@ export function DepartmentPage({
     : [];
 
   return (
-    <div className="mx-auto w-[min(1240px,calc(100%-32px))] pb-10" style={{ "--org-line": `${color}55` } as CSSProperties}>
+    <div className="mx-auto my-auto w-[min(1240px,calc(100%-32px))] pb-4" style={{ "--org-line": `${color}55` } as CSSProperties}>
       <button
         type="button"
         onClick={onBack}
-        className="mb-3 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#5b6472] hover:text-[#c2410c]"
+        className="mb-2 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#5b6472] hover:text-[#c2410c]"
       >
         <ArrowLeft className="size-4" aria-hidden="true" /> Back to departments
       </button>
 
       {/* Who it is, with its picture. */}
-      <header className={`${card} relative overflow-hidden px-6 py-5 sm:px-8`}>
+      <header className={`${card} relative overflow-hidden px-6 py-3 sm:px-7`}>
         <div className="relative z-10 flex items-center gap-5 md:pr-72">
-          <span className="grid size-[72px] shrink-0 place-items-center rounded-full shadow-[0_16px_30px_-14px_rgba(20,30,50,0.45)]" style={{ background: color }}>
-            <span className="grid size-[52px] place-items-center rounded-full bg-white/95">
-              <span className="size-8">{TileIcon && <TileIcon />}</span>
+          <span className="grid size-[58px] shrink-0 place-items-center rounded-full shadow-[0_16px_30px_-14px_rgba(20,30,50,0.45)]" style={{ background: color }}>
+            <span className="grid size-[42px] place-items-center rounded-full bg-white/95">
+              <span className="size-6">{TileIcon && <TileIcon />}</span>
             </span>
           </span>
           <div className="min-w-0">
-            <h1 className="text-[clamp(24px,3.2vw,34px)] leading-tight font-semibold tracking-[-0.035em]">{workspace.label}</h1>
-            {info && <p className="mt-1 text-[15px] text-[#5b6472]">{info.about}</p>}
+            <h1 className="text-[clamp(22px,2.6vw,30px)] leading-tight font-semibold tracking-[-0.035em]">{workspace.label}</h1>
+            {info && <p className="mt-0.5 text-[14px] text-[#5b6472]">{info.about}</p>}
           </div>
         </div>
         <Picture color={color} TileIcon={TileIcon} first={stats[0]} />
       </header>
 
       {/* What went well, counted. */}
-      <section aria-label="Highlights" className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <section aria-label="Highlights" className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
         {(stats.length ? stats : [null, null, null, null]).map((one, index) => {
           const tint = TINTS[index % TINTS.length] as (typeof TINTS)[number];
           const Mark = tint.icon;
@@ -166,15 +166,15 @@ export function DepartmentPage({
             <div
               // biome-ignore lint/suspicious/noArrayIndexKey: the four places are fixed
               key={index}
-              className={`flex items-center gap-3.5 rounded-[1.2rem] border px-4 py-3.5 ${tint.bg} ${tint.ring} ${one ? "" : "h-[82px] animate-pulse"}`}
+              className={`flex items-center gap-3.5 rounded-[1.2rem] border px-4 py-2.5 ${tint.bg} ${tint.ring} ${one ? "" : "h-[70px] animate-pulse"}`}
             >
               {one && (
                 <>
-                  <span className="grid size-11 shrink-0 place-items-center rounded-full bg-white/80">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white/80">
                     <Mark className="size-5" style={{ color: tint.dot }} />
                   </span>
                   <span className="min-w-0">
-                    <span className="block text-[24px] leading-none font-semibold tracking-[-0.03em] text-[#1f2733] tabular-nums">{one.value}</span>
+                    <span className="block text-[22px] leading-none font-semibold tracking-[-0.03em] text-[#1f2733] tabular-nums">{one.value}</span>
                     <span className="mt-1 block text-[13px] font-medium text-[#3c4452]">{one.label}</span>
                     <span className="block truncate text-[11px] text-[#7a8394]">{one.hint}</span>
                   </span>
@@ -186,13 +186,13 @@ export function DepartmentPage({
       </section>
 
       {/* What it handles · the sign-in · its team. */}
-      <div className="mt-4 grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_23rem_minmax(0,1.25fr)]">
+      <div className="mt-3 grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_23rem_minmax(0,1.25fr)]">
         {info && (
-          <section className={`${card} order-2 p-5 lg:order-1`} aria-label="Key functions">
+          <section className={`${card} order-2 p-4 lg:order-1`} aria-label="Key functions">
             <h2 className={heading}>
               <Settings className="size-5" style={{ color }} aria-hidden="true" /> Key functions
             </h2>
-            <ul className="mt-3 grid gap-2.5">
+            <ul className="mt-2.5 grid gap-2">
               {info.handles.map((line) => (
                 <li key={line} className="flex items-start gap-2.5 text-[14px] text-[#3c4452]">
                   <CheckCircle2 className="mt-0.5 size-[18px] shrink-0 text-[#1f9d55]" aria-hidden="true" />
@@ -207,7 +207,7 @@ export function DepartmentPage({
           <span aria-hidden="true" className="pointer-events-none absolute inset-6 rounded-[2rem] opacity-30 blur-3xl" style={{ background: color }} />
           <div className="relative w-full max-w-sm">{signIn}</div>
         </section>
-        <section className={`${card} order-3 p-5`} aria-label="Team structure">
+        <section className={`${card} order-3 p-4`} aria-label="Team structure">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className={heading}>
               <Network className="size-5" style={{ color }} aria-hidden="true" /> Team structure
@@ -240,30 +240,30 @@ export function DepartmentPage({
 
       {/* How work moves through it. */}
       {info && (
-        <section className={`${card} mt-4 p-5`} aria-label="Workflow overview">
+        <section className={`${card} mt-3 px-4 py-3`} aria-label="Workflow overview">
           <h2 className={heading}>
             <Workflow className="size-5" style={{ color }} aria-hidden="true" /> Workflow overview
           </h2>
-          <ol className="mt-4 flex flex-wrap items-start justify-center gap-y-4">
+          <ol className="mt-1 flex flex-wrap items-start justify-center gap-y-3">
             {info.flow.map((one, index) => {
               const Mark = ICONS[FLOW_ICONS[workspace.key]?.[index] ?? "check"] ?? CheckCircle2;
               return (
                 <li key={one.step} className="flex items-start">
                   <span className="flex w-[9.5rem] flex-col items-center text-center">
-                    <span className="grid size-14 place-items-center rounded-full" style={{ background: `${color}1f` }}>
-                      <Mark className="size-6" style={{ color }} />
+                    <span className="grid size-11 place-items-center rounded-full" style={{ background: `${color}1f` }}>
+                      <Mark className="size-5" style={{ color }} />
                     </span>
-                    <span className="mt-2 text-[13px] leading-snug font-semibold text-[#1f2733]">{one.step}</span>
+                    <span className="mt-1.5 text-[13px] leading-snug font-semibold text-[#1f2733]">{one.step}</span>
                     <span className="mt-0.5 text-[11px] leading-snug text-[#7a8394]">{one.who}</span>
                   </span>
                   {index < info.flow.length - 1 && (
-                    <ArrowRight className="mt-5 hidden size-5 shrink-0 text-[#9aa2b0] sm:block" aria-hidden="true" />
+                    <ArrowRight className="mt-3.5 hidden size-5 shrink-0 text-[#9aa2b0] sm:block" aria-hidden="true" />
                   )}
                 </li>
               );
             })}
           </ol>
-          <p className="mt-4 flex items-center justify-center gap-2 text-center text-[13px] text-[#5b6472]">
+          <p className="mt-2 flex items-center justify-center gap-2 text-center text-[12px] text-[#5b6472]">
             <Sparkles className="size-4 shrink-0" style={{ color }} aria-hidden="true" />
             Every step works from the same record: no double entry, nothing lost between desks.
           </p>
@@ -284,16 +284,16 @@ function Picture({ color, TileIcon, first }: { color: string; TileIcon?: () => R
         <circle className="orbit-twinkle" cx="120" cy="36" r="7" fill={color} fillOpacity=".35" />
         <circle className="orbit-twinkle" style={{ animationDelay: "1.2s" }} cx="300" cy="118" r="4" fill={color} fillOpacity=".5" />
       </svg>
-      <div className="absolute top-1/2 right-16 grid size-24 -translate-y-1/2 rotate-[-6deg] place-items-center rounded-[1.6rem] border border-white bg-white shadow-[0_24px_40px_-18px_rgba(20,30,50,0.45)]">
-        <span className="size-14">{TileIcon && <TileIcon />}</span>
+      <div className="absolute top-1/2 right-16 grid size-[72px] -translate-y-1/2 rotate-[-6deg] place-items-center rounded-[1.3rem] border border-white bg-white shadow-[0_24px_40px_-18px_rgba(20,30,50,0.45)]">
+        <span className="size-10">{TileIcon && <TileIcon />}</span>
       </div>
       {first && (
-        <div className="absolute top-5 right-44 rotate-[3deg] rounded-xl border border-white bg-white/95 px-3 py-1.5 shadow-[0_14px_28px_-16px_rgba(20,30,50,0.45)]">
+        <div className="absolute top-2 right-40 rotate-[3deg] rounded-xl border border-white bg-white/95 px-3 py-1.5 shadow-[0_14px_28px_-16px_rgba(20,30,50,0.45)]">
           <div className="text-[15px] leading-none font-semibold text-[#1f2733] tabular-nums">{first.value}</div>
           <div className="mt-0.5 text-[10px] text-[#7a8394]">{first.label}</div>
         </div>
       )}
-      <div className="absolute right-6 bottom-5 grid size-9 place-items-center rounded-full bg-white shadow-[0_10px_20px_-10px_rgba(20,30,50,0.4)]">
+      <div className="absolute right-6 bottom-2 grid size-8 place-items-center rounded-full bg-white shadow-[0_10px_20px_-10px_rgba(20,30,50,0.4)]">
         <CheckCircle2 className="size-5 text-[#1f9d55]" />
       </div>
     </div>
