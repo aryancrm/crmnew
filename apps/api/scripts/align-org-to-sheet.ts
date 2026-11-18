@@ -239,10 +239,19 @@ const [claireArea] = await rows<{ id: number; seat: number | null }>(
   sql`select a.id::int as id, (select s.id::int from seat s where s.area_id = a.id and s.active limit 1) as seat from area a where upper(a.name) = 'B2B | CLAIRE' limit 1`,
 );
 const claireId = await personId("Claire Gallana");
-if (b2bBox && claireId && claireArea && !claireArea.seat) {
+const claireHasB2b = claireId
+  ? (await rows<{ n: number }>(db, sql`select count(*)::int as n from seat_holder h join seat s on s.id = h.seat_id and s.active and s.unit_id = ${b2bBox?.id ?? 0} where h.person_id = ${claireId} and h.ends_on is null`))[0]?.n
+  : 1;
+// Her area from Zoho's names when the database has it; else made with the seat (the live CRM, no Zoho yet).
+if (b2bBox && claireId && !claireHasB2b && !claireArea?.seat) {
   say("B2B Telesales: Claire Gallana's own seat (B2B | CLAIRE), a second seat beside her Mindanao one");
   if (apply) {
-    const { seatId } = await addSeat(db, me, { unitId: b2bBox.id, title: "B2B District Sales Coach – Mindanao", module: "medrep", areaId: claireArea.id });
+    const { seatId } = await addSeat(db, me, {
+      unitId: b2bBox.id,
+      title: "B2B District Sales Coach – Mindanao",
+      module: "medrep",
+      ...(claireArea ? { areaId: claireArea.id } : { newArea: { name: "B2B | CLAIRE", cities: [] } }),
+    });
     await fillSeat(db, me, seatId, { personId: claireId, keepOther: true, reason: `Second seat: ${REASON}` });
   }
 }
@@ -253,7 +262,7 @@ await vacantSeat(b2bBox, "B2B Sales Person", "B2B | MANI MISHRA", "Mani Mishra")
 
 // ---- Mhalou: MT ----
 step("Mhalou · MT");
-const mtBox = await unit("Modern Trade");
+const mtBox = await unit("Modern Trade", "Modern trade");
 await vacantSeat(mtBox, "Modern Trade Sales Person", "MT | ARLENE", "Arlene, Zoho's MT | 1");
 await vacantSeat(mtBox, "Modern Trade Sales Person", "MT | JASPER", "Jasper, Zoho's MT | 2");
 
