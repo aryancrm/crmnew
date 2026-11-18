@@ -548,7 +548,8 @@ function withSalesLinks(me: Me, space: Space): Space {
   const own = CALL_ROLES.includes(me.role) && !LEAD_ROLES.includes(me.role);
   const add: MenuItem[] = [
     ...(listed.includes("/calls") ? [] : [{ to: "/calls", label: own ? "My calls" : "Calls", icon: PhoneCall }]),
-    ...(listed.includes("/sales-performance") ? [] : [{ to: "/sales-performance", label: "Sales performance", icon: TrendingUp }]),
+    // The Admin sets the company up; sales figures are the CEO's and the leads' (Aryan, 18 Nov).
+    ...(listed.includes("/sales-performance") || me.role === "admin" ? [] : [{ to: "/sales-performance", label: "Sales performance", icon: TrendingUp }]),
   ];
   return { ...space, groups: [{ ...first, items: [...first.items, ...add] }, ...rest] };
 }

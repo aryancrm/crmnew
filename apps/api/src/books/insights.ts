@@ -372,34 +372,58 @@ async function channelsReport(db: Database, asked: { from?: string | null; to?: 
   const { from, to } = period(asked);
   const found = await rows<Record<string, string | number | null>>(
     db,
-    sql`with s as (
+    sql`with recursive s as (
         select channel_id, count(*) filter (where status <> 'cancelled' and issued_on between ${from}::date and ${to}::date)::int as invoices,
           count(distinct customer_id) filter (where status <> 'cancelled' and issued_on between ${from}::date and ${to}::date)::int as buyers,
           coalesce(sum(total) filter (where status <> 'cancelled' and issued_on between ${from}::date and ${to}::date), 0)::float8 as period,
           coalesce(sum(total) filter (where status <> 'cancelled' and issued_on >= date_trunc('year', ${to}::date)), 0)::float8 as year,
           coalesce(sum(greatest(total - paid, 0)) filter (where status not in ('cancelled', 'paid')), 0)::float8 as owed
         from sale_invoice group by 1),
+      -- The channel's own box and every team under it (a box of another channel under it is that
+      -- channel's): its head, team leads, teams and MedReps as the Admin panel sets them.
+      tree as (
+        select u.id, u.channel_id as ch, 0 as depth from org_unit u
+        where u.active and u.channel_id is not null
+          and not exists (select 1 from org_unit up where up.id = u.parent_id and up.channel_id = u.channel_id)
+        union all
+        select k.id, t.ch, t.depth + 1 from org_unit k join tree t on k.parent_id = t.id
+        where k.active and (k.channel_id is null or k.channel_id = t.ch)),
+      held as (
+        select t.ch, t.depth, st.lead, st.module, h.person_id from seat st join tree t on t.id = st.unit_id
+          left join seat_holder h on h.seat_id = st.id and h.ends_on is null and h.kind = 'holder'
+        where st.active),
       people as (
-        select a.channel_id, count(distinct h.person_id)::int as n
-        from seat st join area a on a.id = st.area_id
-          join seat_holder h on h.seat_id = st.id and h.ends_on is null and h.kind = 'holder'
-        where st.active group by 1),
+        select ch as channel_id, count(distinct person_id)::int as n,
+          count(distinct person_id) filter (where module in ('team_lead', 'manager') and not (depth = 0 and lead))::int as leads,
+          count(person_id) filter (where module = 'medrep')::int as medreps
+        from held group by ch),
+      teams as (select ch as channel_id, count(*) filter (where depth > 0)::int as n from tree group by ch),
+      heads as (
+        select distinct on (held.ch) held.ch as channel_id, p.name from held join person p on p.id = held.person_id
+        where held.depth = 0 and held.lead order by held.ch, p.name),
       cust as (select a.channel_id, count(*)::int as n from customer c join area a on a.id = c.area_id where c.active group by 1)
-      select ch.code, ch.name as channel, coalesce(pe.n, 0) as people, coalesce(cu.n, 0) as customers,
+      select ch.code, ch.name as channel, coalesce(hd.name, '—') as head, coalesce(pe.leads, 0) as leads, coalesce(tm.n, 0) as teams,
+        coalesce(pe.medreps, 0) as medreps, coalesce(pe.n, 0) as people, coalesce(cu.n, 0) as customers,
         coalesce(s.buyers, 0) as buyers, coalesce(s.invoices, 0) as invoices, coalesce(s.period, 0) as period,
         coalesce(s.year, 0) as year, coalesce(s.owed, 0) as owed
       from channel ch left join s on s.channel_id = ch.id left join people pe on pe.channel_id = ch.id left join cust cu on cu.channel_id = ch.id
+        left join teams tm on tm.channel_id = ch.id left join heads hd on hd.channel_id = ch.id
+      where ch.active
       union all
-      select '', 'No channel yet (Zoho, untied)', 0, 0, buyers, invoices, period, year, owed from s where channel_id is null
-      order by 7 desc`,
+      select '', 'Not tied to a channel yet', '—', 0, 0, 0, 0, 0, buyers, invoices, period, year, owed from s where channel_id is null
+      order by 11 desc`,
   );
   const named = found.filter((row) => row.code);
   return {
     title: `Channels: ${named.length}`,
-    note: `${named.map((row) => `${row.channel} (${row.code})`).join(", ")}. Sold ${from} to ${to} and this year: Zoho's invoices and the CRM's, with tax, by the channel of the seat that sold. People: those holding a seat in the channel's areas.`,
+    note: `Head, team leads, teams and MedReps as set in the Admin panel. Sales: Zoho's invoices and ours, with tax, by the channel of the seat that sold. "Not tied to a channel yet": Zoho sales by salespeople not yet tied to a seat (Admin panel → Old customers to seats).`,
     columns: [
       col("channel", "Channel"),
       col("code", "Code"),
+      col("head", "Head"),
+      col("leads", "Team leads", "number"),
+      col("teams", "Teams", "number"),
+      col("medreps", "MedReps", "number"),
       col("people", "People", "number"),
       col("customers", "Customers", "number"),
       col("buyers", "Bought in the days", "number"),
@@ -411,6 +435,9 @@ async function channelsReport(db: Database, asked: { from?: string | null; to?: 
     rows: found,
     totals: {
       channel: "Total",
+      leads: found.reduce((sum, row) => sum + Number(row.leads ?? 0), 0),
+      teams: found.reduce((sum, row) => sum + Number(row.teams ?? 0), 0),
+      medreps: found.reduce((sum, row) => sum + Number(row.medreps ?? 0), 0),
       people: found.reduce((sum, row) => sum + Number(row.people ?? 0), 0),
       customers: found.reduce((sum, row) => sum + Number(row.customers ?? 0), 0),
       buyers: found.reduce((sum, row) => sum + Number(row.buyers ?? 0), 0),

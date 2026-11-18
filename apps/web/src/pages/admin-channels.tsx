@@ -502,10 +502,26 @@ function ChannelPage({ tree, channel }: { tree: OrgTree; channel: Channel }) {
             {[
               channel.division ? `Division ${channel.division}` : "No Division set",
               `${shape.people} ${shape.people === 1 ? "person" : "people"}`,
-              `${shape.teams.length} ${shape.teams.length === 1 ? "team" : "teams"}`,
               `${shape.areas.length} ${shape.areas.length === 1 ? "area" : "areas"}`,
             ].join(" · ")}
           </p>
+          {/* The channel's shape in one line: who heads it, how many lead teams, teams, MedReps. */}
+          <div className="mt-3 flex flex-wrap items-center gap-2 text-[12.5px]">
+            {[
+              ["Head", who(head) ?? "none yet"],
+              ["Team leads", String(shape.leads.filter((seat) => seat.holder).length)],
+              ["Teams", String(shape.teams.length)],
+              ["MedReps", String(shape.reps.filter((seat) => seat.holder).length)],
+            ].map(([label, value], at) => (
+              <span key={label} className="flex items-center gap-2">
+                {at > 0 && <span className="text-slate-300">→</span>}
+                <span className="rounded-lg bg-slate-50 px-2.5 py-1 ring-1 ring-slate-200">
+                  <span className="text-slate-500">{label} </span>
+                  <b className="text-slate-900">{value}</b>
+                </span>
+              </span>
+            ))}
+          </div>
           {shape.insideOf && (
             <p className="mt-2 inline-flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900 ring-1 ring-amber-200">
               Sits inside {shape.insideOf.name}: it counts there too.
@@ -662,20 +678,14 @@ function ChannelPage({ tree, channel }: { tree: OrgTree; channel: Channel }) {
                 }
               />
             )}
+            {/* A tree (Aryan, 18 Nov: "who heads it, who are team leads, how many teams under whom"):
+                each team with its lead and MedReps, the teams under it inside it, any depth. */}
             <div className="grid items-start gap-3 lg:grid-cols-2">
-              {shape.teams.map(({ unit, path }) => (
-                <TeamCard
-                  key={unit.id}
-                  unit={unit}
-                  path={path}
-                  can={can}
-                  empty={
-                    unit.seats.length === 0 &&
-                    !shape.teams.some((one) => one.unit.parentId === unit.id)
-                  }
-                  open={setPop}
-                />
-              ))}
+              {shape.teams
+                .filter(({ unit }) => unit.parentId === top.id)
+                .map(({ unit }) => (
+                  <TeamCard key={unit.id} unit={unit} teams={shape.teams.map((one) => one.unit)} top={top} can={can} open={setPop} />
+                ))}
               {direct.length > 0 && (
                 <section className={CARD}>
                   <div className="flex min-h-12 items-center justify-between gap-2 border-b border-slate-100 px-4 py-2">
@@ -816,28 +826,37 @@ function Empty({ text, action }: { text: string; action?: ReactNode }) {
 /** One team: its lead, its MedReps (each with their area), and Add buttons. */
 function TeamCard({
   unit,
-  path,
+  teams,
+  top,
   can,
-  empty,
   open,
+  depth = 0,
 }: {
   unit: OrgUnit;
-  path: string[];
+  /** Every team of the channel: the ones under this one are drawn inside it. */
+  teams: OrgUnit[];
+  /** The channel's own box (the head's). */
+  top: OrgUnit;
   can: boolean;
-  /** No seat and no team under it: it can be closed. */
-  empty: boolean;
   open: (pop: Pop) => void;
+  depth?: number;
 }) {
   const queries = useQueryClient();
   const close = useAction();
+  const [moving, setMoving] = useState(false);
   const lead = unit.seats.find((seat) => seat.lead) ?? null;
   const others = unit.seats.filter((seat) => !seat.lead);
+  const under = teams.filter((one) => one.parentId === unit.id);
+  /** No seat and no team under it: it can be closed. */
+  const empty = unit.seats.length === 0 && under.length === 0;
   return (
-    <section className={CARD}>
+    <section className={depth === 0 ? CARD : "rounded-xl border border-slate-200 bg-white"}>
       <div className="flex min-h-12 items-center justify-between gap-2 border-b border-slate-100 px-4 py-2">
         <div className="min-w-0">
-          {path.length > 0 && (
-            <div className="truncate text-[11px] text-slate-400">{path.join(" › ")}</div>
+          {under.length > 0 && (
+            <div className="text-[11px] text-slate-400">
+              {under.length} {under.length === 1 ? "team" : "teams"} under it
+            </div>
           )}
           <h3 className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
             <Users size={14} className="text-slate-400" />
@@ -870,6 +889,7 @@ function TeamCard({
                   label: "Add a team under it",
                   onClick: () => open({ kind: "unit", parent: unit, team: true }),
                 },
+                { label: "Move under…", onClick: () => setMoving(true) },
                 { label: "Rename", onClick: () => open({ kind: "unit", unit, team: true }) },
                 ...(empty
                   ? [
@@ -918,6 +938,68 @@ function TeamCard({
           <li className="px-4 py-2.5 text-xs text-slate-400">No MedRep yet.</li>
         )}
       </ul>
+      {under.length > 0 && (
+        <div className="flex flex-col gap-2.5 rounded-b-2xl border-t border-slate-100 bg-slate-50/70 p-2.5 pl-4">
+          {under.map((one) => (
+            <TeamCard key={one.id} unit={one} teams={teams} top={top} can={can} open={open} depth={depth + 1} />
+          ))}
+        </div>
+      )}
+      {moving && <MoveTeamDialog unit={unit} teams={teams} top={top} onClose={() => setMoving(false)} />}
     </section>
+  );
+}
+
+/** Moves a team (with everything under it) under another team of the channel, or straight under
+ *  the head: the structure is changed here, never by hand. */
+function MoveTeamDialog({ unit, teams, top, onClose }: { unit: OrgUnit; teams: OrgUnit[]; top: OrgUnit; onClose: () => void }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  // Not itself, nor any team under it (that would make a loop).
+  const inside = new Set<number>([unit.id]);
+  let grew = true;
+  while (grew) {
+    grew = false;
+    for (const one of teams)
+      if (one.parentId !== null && inside.has(one.parentId) && !inside.has(one.id)) {
+        inside.add(one.id);
+        grew = true;
+      }
+  }
+  const places = [top, ...teams.filter((one) => !inside.has(one.id))];
+  const [to, setTo] = useState(String(unit.parentId ?? top.id));
+  return (
+    <Dialog title={`Move ${unit.name}`} onClose={onClose} busy={action.busy}>
+      <form
+        className="flex flex-col gap-4"
+        onSubmit={(event: FormEvent) => {
+          event.preventDefault();
+          void action.run(async () => {
+            await api(`/api/org/units/${unit.id}`, { method: "PATCH", body: { parentId: Number(to) } });
+            await queries.invalidateQueries({ queryKey: ["org"] });
+            onClose();
+          });
+        }}
+      >
+        <label className="flex flex-col gap-1">
+          <span className={LABEL}>Under</span>
+          <select className={FIELD} value={to} onChange={(event) => setTo(event.target.value)}>
+            {places.map((one) => (
+              <option key={one.id} value={one.id}>
+                {one.id === top.id ? `Straight under the head (${top.name})` : one.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="text-[12.5px] text-slate-500">Its team lead, MedReps and the teams under it move with it.</p>
+        <Problem message={action.problem?.message} />
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button onClick={onClose}>Cancel</Button>
+          <Button type="submit" variant="primary" disabled={action.busy}>
+            Move
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
