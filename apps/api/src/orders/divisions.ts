@@ -120,8 +120,20 @@ export function subDivisionOfArea(division: string, area: string | null | undefi
 export function termsOfLabel(label: string): {
   terms: "advance" | "cod" | "days";
   days: number | null;
+  /** Paid by a particular date ("Pays by 2027-01-15"): its due day, whatever the invoice's. */
+  payBy?: string | null;
 } {
   const text = label.trim().toLowerCase();
+  // Any particular date (Aryan, 18 Nov: "different dates"): due on that day.
+  const by = text.match(/^pays by (\d{4}-\d{2}-\d{2})$/);
+  if (by) {
+    const today = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+    const days = Math.max(0, Math.round((Date.parse(`${by[1]}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000));
+    return { terms: "days", days, payBy: by[1] };
+  }
+  // Months, as said ("3 months"): thirty days each.
+  const months = text.match(/(\d+)\s*months?\b/);
+  if (months) return { terms: "days", days: Number(months[1]) * 30 };
   const days = text.match(/(\d+)\s*(?:day|days)?\b/);
   if (/^(pdc|net)\b/.test(text) && days) return { terms: "days", days: Number(days[1]) };
   if (/\bday/.test(text) && days) return { terms: "days", days: Number(days[1]) };

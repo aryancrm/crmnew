@@ -320,6 +320,8 @@ export function OrderNew({
   const [division, setDivision] = useState<string | null>(null);
   const [subDivision, setSubDivision] = useState<string | null>(null);
   const [paymentTerm, setPaymentTerm] = useState("");
+  // How the terms are given: from the list, as a number of days, or as a date to pay by.
+  const [termMode, setTermMode] = useState<"list" | "__days" | "__date">("list");
   // A lead ordering in a MedRep's name books it under that MedRep's channel and area.
   const forRep = forWhom.data?.can
     ? forWhom.data.medreps.find((rep) => rep.id === medrepId)
@@ -355,7 +357,12 @@ export function OrderNew({
     setNote(draft.note);
     if (draft.division !== undefined) setDivision(draft.division);
     if (draft.subDivision !== undefined) setSubDivision(draft.subDivision);
-    if (draft.paymentTerm !== undefined) setPaymentTerm(draft.paymentTerm);
+    if (draft.paymentTerm !== undefined) {
+      setPaymentTerm(draft.paymentTerm);
+      if (draft.paymentTerm.startsWith("Pays by ")) setTermMode("__date");
+      else if (/^\d+ days$/.test(draft.paymentTerm) && !PAYMENT_TERMS.includes(draft.paymentTerm as (typeof PAYMENT_TERMS)[number]))
+        setTermMode("__days");
+    }
     if (draft.source !== undefined) setSource(draft.source);
     setInvoiceFrom(draft.invoiceFrom);
     setDoctor(draft.doctor);
@@ -404,6 +411,13 @@ export function OrderNew({
     if (order.division) setDivision(order.division);
     if (order.subDivision) setSubDivision(order.subDivision);
     setPaymentTerm(order.paymentTerm ?? "");
+    setTermMode(
+      order.paymentTerm?.startsWith("Pays by ")
+        ? "__date"
+        : order.paymentTerm && /^\d+ days$/.test(order.paymentTerm) && !PAYMENT_TERMS.includes(order.paymentTerm as (typeof PAYMENT_TERMS)[number])
+          ? "__days"
+          : "list",
+    );
     setSource(order.source ?? "");
     setStockReason(order.stockReason ?? "");
     setPatientOrder(order.patientOrder);
@@ -782,7 +796,7 @@ export function OrderNew({
     : "";
   const terms = picked
     ? picked.paymentTerms === "days"
-      ? `${picked.paymentDays} days after the invoice`
+      ? `${picked.paymentDays} days after delivery`
       : picked.paymentTerms === "cod"
         ? "Cash on delivery"
         : "Pays in advance"
@@ -1199,11 +1213,23 @@ export function OrderNew({
               className={FIELD}
             />
           </label>
-          <label className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1">
             <Label text="Payment terms" needed />
+            {/* Any terms the customer agreed (Aryan, 18 Nov: "30, 45, 60 days, three months, a
+                date"): the usual list, any number of days, or a particular date. */}
             <select
-              value={paymentTerm}
-              onChange={(event) => setPaymentTerm(event.target.value)}
+              aria-label="Payment terms"
+              value={termMode === "list" ? paymentTerm : termMode}
+              onChange={(event) => {
+                const value = event.target.value;
+                if (value === "__days" || value === "__date") {
+                  setTermMode(value);
+                  setPaymentTerm("");
+                } else {
+                  setTermMode("list");
+                  setPaymentTerm(value);
+                }
+              }}
               className={FIELD}
             >
               <option value="">
@@ -1214,12 +1240,44 @@ export function OrderNew({
                   {name}
                 </option>
               ))}
-              {paymentTerm &&
+              {termMode === "list" &&
+                paymentTerm &&
                 !PAYMENT_TERMS.includes(paymentTerm as (typeof PAYMENT_TERMS)[number]) && (
                   <option value={paymentTerm}>{paymentTerm}</option>
                 )}
+              <option value="__days">Other: number of days…</option>
+              <option value="__date">By a date…</option>
             </select>
-          </label>
+            {termMode === "__days" && (
+              <label className="flex items-center gap-2 text-[13px] text-slate-600">
+                <input
+                  aria-label="Days to pay"
+                  inputMode="numeric"
+                  value={paymentTerm.replace(/\D/g, "")}
+                  onChange={(event) => {
+                    const n = event.target.value.replace(/\D/g, "").slice(0, 3);
+                    setPaymentTerm(n ? `${n} days` : "");
+                  }}
+                  placeholder="e.g. 75"
+                  className={`${FIELD} w-24`}
+                />
+                days after delivery
+              </label>
+            )}
+            {termMode === "__date" && (
+              <label className="flex items-center gap-2 text-[13px] text-slate-600">
+                Pays by
+                <input
+                  aria-label="Pays by"
+                  type="date"
+                  min={manilaToday()}
+                  value={paymentTerm.startsWith("Pays by ") ? paymentTerm.slice(8) : ""}
+                  onChange={(event) => setPaymentTerm(event.target.value ? `Pays by ${event.target.value}` : "")}
+                  className={`${FIELD} w-44`}
+                />
+              </label>
+            )}
+          </div>
           <label className="flex flex-col gap-1">
             <Label text="Source" needed />
             <select

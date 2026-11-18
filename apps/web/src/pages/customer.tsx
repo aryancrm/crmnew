@@ -799,7 +799,7 @@ function Details({ data }: { data: CustomerPage }) {
     [
       "Pays",
       customer.paymentTerms === "days"
-        ? `${customer.paymentDays} days after the invoice`
+        ? `${customer.paymentDays} days after delivery`
         : customer.paymentTerms === "cod"
           ? "Cash on delivery"
           : "In advance",

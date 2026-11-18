@@ -352,7 +352,9 @@ export function Order() {
     : null;
   const pays =
     order.paymentTerms === "days"
-      ? `Pays ${order.paymentDays} days after the invoice`
+      ? order.paymentTerm?.startsWith("Pays by ")
+        ? `Pays by ${dayLabel(order.paymentTerm.slice(8))}`
+        : `Pays ${order.paymentDays} days after delivery`
       : order.paymentTerms === "cod"
         ? "Cash on delivery"
         : "Paid in advance";
@@ -2200,7 +2202,7 @@ function termWords(label: string): string {
     ? "Paid before it goes out"
     : terms === "cod"
       ? "Cash on delivery"
-      : `Credit: paid ${days} days after the invoice`;
+      : `Credit: paid ${days} days after delivery`;
 }
 
 /** What the MedRep sent, for Management to complete before approving: the Division and
@@ -2460,7 +2462,7 @@ function FinanceStep({
         <Fact shape="now">
           <b>
             {order.paymentTerms === "days"
-              ? `Credit: pays ${order.paymentDays} days after the invoice`
+              ? `Credit: pays ${order.paymentDays} days after delivery`
               : "Cash on delivery"}
           </b>{" "}
           · check what they owe and send it to Dispatch

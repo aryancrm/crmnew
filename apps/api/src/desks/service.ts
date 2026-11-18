@@ -10,7 +10,7 @@ import type { Runner } from "../inventory/service";
 import { Refusal } from "../http";
 import { notify } from "../notify/service";
 import { logEvent } from "../orders/events";
-import type { DeskDuty, DeskReport, Me } from "../types";
+import type { DeskDuty, DeskPerson, DeskReport, Me } from "../types";
 
 export type DutyDesk = "management" | "finance";
 export const DUTY_DESKS: DutyDesk[] = ["management", "finance"];
@@ -167,6 +167,58 @@ export async function startPerson(db: Database, me: Me, desk: DutyDesk, personId
     }
   });
   await shareOut(db, me, desk);
+  // Someone starting later gets a fair share of what is already waiting (Aryan, 18 Nov).
+  if (on) await evenOut(db, me, desk);
+}
+
+/**
+ * Evens out the waiting orders among the people started: while someone has two or more than
+ * another, their newest order (never one taken by hand) goes to whoever has the fewest and may
+ * take it. Told on the timeline and to the person.
+ */
+async function evenOut(db: Database, me: Me, desk: DutyDesk): Promise<void> {
+  await db.transaction(async (tx) => {
+    const people = await deskPeople(tx, desk);
+    if (people.length < 2) return;
+    const owner = OWNER[desk];
+    const held = await rows<{ id: number; code: string; division: string | null; owner: number; took: boolean }>(
+      tx,
+      sql`select o.id::int as id, o.code, o.division, o.${owner}::int as owner,
+          coalesce((select a.how = 'took' from order_assignment a where a.order_id = o.id and a.desk = ${desk}
+            order by a.at desc, a.id desc limit 1), false) as took
+        from sales_order o where ${AT_DESK[desk]} and o.${owner} in (${sql.join(people.map((one) => sql`${one.id}`), sql`, `)})
+        order by o.status_since desc nulls last, o.id desc for update of o`,
+    );
+    const load = new Map(people.map((one) => [one.id, held.filter((order) => order.owner === one.id).length]));
+    const may = (person: (typeof people)[number], order: (typeof held)[number]) =>
+      desk !== "management" || !person.approves || (order.division !== null && person.approves.includes(order.division));
+    for (let guard = 0; guard < held.length; guard += 1) {
+      const most = people.reduce((a, b) => ((load.get(b.id) ?? 0) > (load.get(a.id) ?? 0) ? b : a));
+      // The newest order the busiest has, not taken by hand, that someone with fewer may take.
+      const order = held.find((one) => one.owner === most.id && !one.took);
+      if (!order) return;
+      const fewer = people
+        .filter((one) => one.id !== most.id && (load.get(one.id) ?? 0) + 1 < (load.get(most.id) ?? 0) && may(one, order))
+        .sort((a, b) => (load.get(a.id) ?? 0) - (load.get(b.id) ?? 0))[0];
+      if (!fewer) return;
+      order.owner = fewer.id;
+      load.set(most.id, (load.get(most.id) ?? 0) - 1);
+      load.set(fewer.id, (load.get(fewer.id) ?? 0) + 1);
+      await tx.execute(sql`update sales_order set ${owner} = ${fewer.id}, ${OWNER_AT[desk]} = now() where id = ${order.id}`);
+      await tx.execute(
+        sql`insert into order_assignment (order_id, desk, person_id, how, by_person) values (${order.id}, ${desk}, ${fewer.id}, 'given', ${me.id})`,
+      );
+      await logEvent(tx, order.id, me, "note", `Given to ${fewer.name} (${WORDS[desk]}), to share the load with ${most.name}.`);
+      await notify(tx, {
+        to: [fewer.id],
+        kind: "order",
+        title: `${order.code} is yours to ${desk === "management" ? "check" : "check for Finance"}`,
+        link: `/orders/${order.id}`,
+        orderId: order.id,
+        key: `desk:${desk}:${order.id}:${fewer.id}`,
+      });
+    }
+  });
 }
 
 /**
@@ -266,7 +318,10 @@ export async function deskReport(
           from desk_shift s where s.person_id = p.id and s.desk = ${desk}
             and s.started_at < (${to}::date + 1)::timestamp at time zone 'Asia/Manila'
             and coalesce(s.ended_at, now()) > ${from}::date::timestamp at time zone 'Asia/Manila'), 0)::float8 as hours,
-        (select count(*) from order_assignment a where a.person_id = p.id and a.desk = ${desk} and a.how = 'given' and ${day(sql`a.at`)})::int as given,
+        -- Given to them and kept (not moved on to someone else afterwards to even the load).
+        (select count(distinct a.order_id) from order_assignment a where a.person_id = p.id and a.desk = ${desk} and a.how = 'given' and ${day(sql`a.at`)}
+          and not exists (select 1 from order_assignment b where b.order_id = a.order_id and b.desk = a.desk and b.at > a.at
+            and b.person_id <> p.id and b.how in ('given', 'took')))::int as given,
         (select count(*) from order_assignment a where a.person_id = p.id and a.desk = ${desk} and a.how = 'took' and ${day(sql`a.at`)})::int as took,
         (select count(*) from acted x where x.by_person = p.id and x.went in ('finance_check', 'ready_for_invoice', 'ready_for_dispatch', 'packing'))::int as done,
         (select count(*) from acted x where x.by_person = p.id and x.went = 'draft')::int as "sentBack",
@@ -278,4 +333,71 @@ export async function deskReport(
       from person p where p.active and p.role = ${desk} order by p.name`,
   );
   return { desk, from, to, limitMinutes: limit, people };
+}
+
+/**
+ * One of the desk's people over some days (Aryan, 18 Nov: "click a name and see everything they
+ * did"): their figures, the orders they have now, and every order they moved on — approved or
+ * checked, sent back, held, rejected — with how long each took them from when it was theirs.
+ */
+export async function deskPerson(
+  db: Database,
+  me: Me,
+  desk: DutyDesk,
+  personId: number,
+  asked: { from?: string | null; to?: string | null },
+): Promise<DeskPerson> {
+  const report = await deskReport(db, me, desk, asked);
+  const figures = report.people.find((one) => one.id === personId);
+  if (!figures) throw new Refusal(404, "not_found", `That person isn't in ${WORDS[desk]}.`);
+  const statuses = desk === "management" ? ["pending_approval"] : ["finance_check", "ready_for_invoice"];
+  const inDesk = sql.join(statuses.map((one) => sql`${one}`), sql`, `);
+  const day = (column: SQL) =>
+    sql`(${column} at time zone 'Asia/Manila')::date between ${report.from}::date and ${report.to}::date`;
+  const [[person], open, done] = await Promise.all([
+    rows<{ title: string | null; startedAt: string | null }>(
+      db,
+      sql`select p.title, (select to_char(s.started_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') from desk_shift s
+          where s.person_id = p.id and s.desk = ${desk} and ${STARTED_TODAY} order by s.started_at limit 1) as "startedAt"
+        from person p where p.id = ${personId}`,
+    ),
+    rows<DeskPerson["open"][number]>(
+      db,
+      sql`select o.id::int as id, o.code, c.name as customer, o.total::int as total, o.status,
+          to_char(coalesce(o.${OWNER_AT[desk]}, o.status_since) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as since
+        from sales_order o join customer c on c.id = o.customer_id
+        where ${AT_DESK[desk]} and o.${OWNER[desk]} = ${personId} order by o.status_since nulls last`,
+    ),
+    rows<DeskPerson["done"][number]>(
+      db,
+      sql`with moved as (
+          select st.order_id, st.left_at, st.entered_at,
+            (select e.by_person from order_event e where e.order_id = st.order_id
+              and e.at between st.left_at - interval '15 seconds' and st.left_at + interval '15 seconds'
+              order by abs(extract(epoch from e.at - st.left_at)), e.id limit 1) as by_person,
+            (select st2.status from order_step st2 where st2.order_id = st.order_id and st2.entered_at >= st.left_at
+              order by st2.entered_at limit 1) as went
+          from order_step st where st.status in (${inDesk}) and st.left_at is not null and ${day(sql`st.left_at`)}
+        )
+        select o.id::int as id, o.code, c.name as customer, o.total::int as total,
+          case when m.went in ('finance_check', 'ready_for_invoice', 'ready_for_dispatch', 'packing') then 'done'
+            when m.went = 'draft' then 'sent_back' when m.went in ('on_hold', 'exception') then 'held'
+            when m.went = 'cancelled' then 'rejected' else 'moved' end as outcome,
+          to_char(m.left_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as at,
+          work_minutes(greatest(m.entered_at, coalesce((select max(a.at) from order_assignment a where a.order_id = m.order_id
+            and a.desk = ${desk} and a.person_id = ${personId} and a.how in ('given', 'took') and a.at <= m.left_at), m.entered_at)), m.left_at)::int as minutes
+        from moved m join sales_order o on o.id = m.order_id join customer c on c.id = o.customer_id
+        where m.by_person = ${personId} order by m.left_at desc limit 300`,
+    ),
+  ]);
+  return {
+    desk,
+    from: report.from,
+    to: report.to,
+    limitMinutes: report.limitMinutes,
+    person: { id: personId, name: figures.name, title: person?.title ?? null, startedAt: person?.startedAt ?? null },
+    figures,
+    open,
+    done,
+  };
 }

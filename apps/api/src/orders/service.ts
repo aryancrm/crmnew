@@ -810,7 +810,7 @@ const cardColumns = sql`${rowColumns}, o.medrep_id::int as "medrepId", ${approve
   (select p.name from person p where p.id = case when o.status in ('finance_check', 'ready_for_invoice') then o.finance_by else o.manage_by end) as "handledBy",
   (case when o.status in ('finance_check', 'ready_for_invoice') then o.finance_by else o.manage_by end)::int as "handledById",
   o.came_back_count::int as "cameBackCount", o.came_back_reason as "cameBackReason", c.kind as "customerKind", c.city as "customerCity", ch.code as channel, a.name as area,
-  o.payment_terms as "paymentTerms", o.payment_days::int as "paymentDays",
+  o.payment_terms as "paymentTerms", o.payment_days::int as "paymentDays", ${day("o.pay_by")} as "payBy",
   ${iso("coalesce(o.submitted_at, o.created_at)")} as "submittedAt", o.held_from as "heldFrom", c.review,
   to_char(coalesce(o.submitted_at, o.created_at) at time zone 'Asia/Manila', 'YYYY-MM-DD') as "placedOn",
   c.phone as "customerPhone", w.name as warehouse, c.credit_limit::int as "creditLimit", o.held_role as "heldRole",
@@ -1952,13 +1952,13 @@ export async function placeOrder(
   return db.transaction(async (tx) => {
     const [made] = await rows<{ id: number }>(
       tx,
-      sql`insert into sales_order (customer_id, medrep_id, raised_by, channel_id, status, payment_terms, payment_days,
+      sql`insert into sales_order (customer_id, medrep_id, raised_by, channel_id, status, payment_terms, payment_days, pay_by,
           delivery_address, receiver, receiver_phone, note, expected_on, customer_po, invoice_from, doctor_id, total, submitted_at,
           approved_at, approved_by, warehouse_id, lead_id, delivery_fee, division, sub_division, payment_term,
           no_proof_reason, no_proof_note, patient_order, patient_name, relief_kind, relief_id_no, relief_name,
           source, stock_reason)
         values (${customer.id}, ${holder?.id ?? me.id}, ${me.id}, ${holder?.channelId ?? own?.channelId ?? null}, ${status},
-          ${terms.terms}, ${terms.days},
+          ${terms.terms}, ${terms.days}, ${("payBy" in terms ? terms.payBy : null) ?? null},
           ${clean(input.deliveryAddress) ?? withCity(customer.address, customer.city)},
           ${clean(input.receiver)}, ${clean(input.receiverPhone)}, ${clean(input.note)}, ${input.expectedOn || null}, ${clean(input.customerPo)}, ${input.invoiceFrom ?? "2mg"}, ${input.doctorId ?? null}, ${total}, now(),
           ${manages ? sql`now()` : null}, ${manages ? me.id : null}, ${shipsFrom?.id ?? null}, ${options.leadId ?? null}, ${deliveryFee},
@@ -2572,7 +2572,8 @@ export async function reviseOrder(
       lines.reduce((sum, line) => sum + line.qty * line.unitPrice, 0) + order.deliveryFee;
     await tx.execute(
       sql`update sales_order set total = ${total}, payment_term = ${next.paymentTerm}, payment_terms = ${terms.terms},
-          payment_days = ${terms.days}, expected_on = ${next.expectedOn}, delivery_address = ${next.deliveryAddress},
+          payment_days = ${terms.days}, pay_by = ${("payBy" in terms ? terms.payBy : null) ?? null},
+          expected_on = ${next.expectedOn}, delivery_address = ${next.deliveryAddress},
           receiver = ${next.receiver}, receiver_phone = ${next.receiverPhone}, customer_po = ${next.customerPo}, note = ${next.note},
           invoice_from = coalesce(${input.invoiceFrom ?? null}, invoice_from), doctor_id = ${input.doctorId ?? null},
           division = ${next.division}, sub_division = ${next.subDivision},
@@ -2712,7 +2713,7 @@ export async function saveOrderDetails(
       sql`update sales_order set division = ${next.division}, sub_division = ${next.subDivision}, payment_term = ${next.paymentTerm},
           receiver = ${next.receiver}, receiver_phone = ${next.receiverPhone}, delivery_address = ${next.deliveryAddress},
           expected_on = ${next.expectedOn}, customer_po = ${next.customerPo}, invoice_from = ${next.invoiceFrom}, note = ${next.note},
-          ${terms ? sql`payment_terms = ${terms.terms}, payment_days = ${terms.days},` : sql``} updated_at = now()
+          ${terms ? sql`payment_terms = ${terms.terms}, payment_days = ${terms.days}, pay_by = ${terms.payBy ?? null},` : sql``} updated_at = now()
         where id = ${id}`,
     );
     // New terms at Finance move the order to the Finance step those terms take: advance has its

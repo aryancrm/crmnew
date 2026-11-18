@@ -4,7 +4,7 @@
 
 import type { DeskReport } from "@2mg/api/types";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { CARD, PageHead, PageState } from "../ui";
@@ -100,7 +100,11 @@ export function DeskReportPage() {
             <tbody className="tabular-nums">
               {data.people.map((one) => (
                 <tr key={one.id} className="border-t border-slate-100">
-                  <td className="px-4 py-2.5 font-semibold text-slate-900">{one.name}</td>
+                  <td className="px-4 py-2.5 font-semibold">
+                    <Link to={`/desk/person/${one.id}?range=${range.key}`} className="text-slate-900 hover:text-brand hover:underline">
+                      {one.name}
+                    </Link>
+                  </td>
                   <td className="px-3 py-2.5 text-right">{one.hours ? one.hours.toFixed(1) : "—"}</td>
                   <td className="px-3 py-2.5 text-right">{one.given}</td>
                   <td className="px-3 py-2.5 text-right">{one.took}</td>

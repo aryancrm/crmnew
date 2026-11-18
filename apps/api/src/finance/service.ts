@@ -219,6 +219,8 @@ type LockedOrder = {
   customerId: number;
   invoiceFrom: InvoiceFrom;
   expectedOn: string | null;
+  /** Agreed to be paid by this day: it is the due day. */
+  payBy: string | null;
 };
 
 async function lockOrder(tx: Runner, id: number): Promise<LockedOrder> {
@@ -226,7 +228,7 @@ async function lockOrder(tx: Runner, id: number): Promise<LockedOrder> {
     tx,
     sql`select id::int as id, code, status, raised_by::int as "raisedBy", medrep_id::int as "medrepId", held_from as "heldFrom",
         payment_terms as terms, payment_days::int as days, total::int as total, customer_id::int as "customerId",
-        invoice_from as "invoiceFrom", ${day("expected_on")} as "expectedOn"
+        invoice_from as "invoiceFrom", ${day("expected_on")} as "expectedOn", ${day("pay_by")} as "payBy"
       from sales_order where id = ${id} for update`,
   );
   if (!order) throw new Refusal(404, "not_found", "That order doesn't exist.");
@@ -326,7 +328,7 @@ async function issueInvoice(
 ): Promise<{ id: number; code: string }> {
   const split = await invoiceFigures(tx, order.id);
   const code = await nextInvoiceCode(tx, order.invoiceFrom);
-  const due = dueOn(order.terms, order.days, today, order.expectedOn);
+  const due = order.payBy ?? dueOn(order.terms, order.days, today, order.expectedOn);
   const [made] = await rows<{ id: number }>(
     tx,
     sql`insert into invoice (code, order_id, customer_id, invoice_from, terms, issued_on, due_on, total, vatable, vat, exempt, zero_rated, by_person)
@@ -370,7 +372,7 @@ async function reissueInvoice(
   const split = await invoiceFigures(tx, order.id);
   const code =
     voided.invoiceFrom === order.invoiceFrom ? voided.code : await nextInvoiceCode(tx, order.invoiceFrom);
-  const due = dueOn(order.terms, order.days, today, order.expectedOn);
+  const due = order.payBy ?? dueOn(order.terms, order.days, today, order.expectedOn);
   await tx.execute(
     sql`update invoice set code = ${code}, invoice_from = ${order.invoiceFrom}, terms = ${order.terms}, issued_on = ${today}::date,
         due_on = ${due}::date, total = ${order.total}, vatable = ${split.vatable}, vat = ${split.vat}, exempt = ${split.exempt},
@@ -611,7 +613,7 @@ export async function refreshInvoice(tx: Runner, me: Me, orderId: number): Promi
       from invoice where order_id = ${orderId} and status <> 'cancelled' for update`,
   );
   if (!invoice) return;
-  const due = dueOn(order.terms, order.days, invoice.issuedOn, order.expectedOn);
+  const due = order.payBy ?? dueOn(order.terms, order.days, invoice.issuedOn, order.expectedOn);
   let code = invoice.code;
   if (invoice.invoiceFrom !== order.invoiceFrom) {
     const [next] = await rows<{ value: number }>(
@@ -651,7 +653,7 @@ export async function makeInvoice(
           held_from = null, held_role = null, flag_reason = null, updated_at = now() where id = ${orderId}`,
     );
     const pays =
-      order.terms === "days" ? `pays ${order.days} days after the invoice` : "pays on delivery";
+      order.terms === "days" ? order.payBy ? `pays by ${order.payBy}` : `pays ${order.days} days after delivery` : "pays on delivery";
     await logEvent(
       tx,
       orderId,
@@ -1455,8 +1457,8 @@ export async function owedInvoices(db: Database, me: Me): Promise<OwedInvoices> 
         coalesce(u.name, (select u2.name from seat_holder h join seat s2 on s2.id = h.seat_id join org_unit u2 on u2.id = s2.unit_id
           where h.person_id = o.medrep_id and h.kind = 'holder' order by h.starts_on desc limit 1)) as team,
         ${day("i.issued_on")} as "issuedOn",
-        case when i.terms = 'days' and o.status <> 'completed' then null else ${day("i.due_on")} end as "dueOn",
-        ${day("o.delivered_on")} as "deliveredOn", i.terms as "termsKey", o.payment_days::int as days,
+        case when i.terms = 'days' and o.status <> 'completed' and o.pay_by is null then null else ${day("i.due_on")} end as "dueOn",
+        ${day("o.delivered_on")} as "deliveredOn", case when o.pay_by is not null then 'by_date' else i.terms end as "termsKey", o.payment_days::int as days,
         i.total::int as total, i.paid::int as paid, (i.total - i.paid)::int as balance,
         case when i.terms = 'cod' and o.status <> 'completed' then 'on_delivery'
              when i.terms = 'days' and o.status <> 'completed' then 'due'
@@ -1496,7 +1498,15 @@ export async function owedInvoices(db: Database, me: Me): Promise<OwedInvoices> 
   const rowsOut = found.map(({ termsKey, days, ...row }) => ({
     ...row,
     terms:
-      termsKey === "zoho" ? "From Zoho" : termsKey === "days" ? `${days ?? ""} days`.trim() : termsKey === "cod" ? "COD" : "Advance",
+      termsKey === "zoho"
+        ? "From Zoho"
+        : termsKey === "by_date"
+          ? "By a date"
+          : termsKey === "days"
+            ? `${days ?? ""} days`.trim()
+            : termsKey === "cod"
+              ? "COD"
+              : "Advance",
   }));
   const counted = rowsOut.filter((row) => row.state !== "on_delivery");
   return {

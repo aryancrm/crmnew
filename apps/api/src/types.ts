@@ -41,6 +41,27 @@ export type DeskReport = {
   }[];
 };
 
+/** One of the desk's people over some days: their figures, what they have now, what they did. */
+export type DeskPerson = {
+  desk: "management" | "finance";
+  from: string;
+  to: string;
+  limitMinutes: number;
+  person: { id: number; name: string; title: string | null; startedAt: string | null };
+  figures: DeskReport["people"][number];
+  open: { id: number; code: string; customer: string; total: number; status: string; since: string }[];
+  /** Each order they moved on: approved / checked (done), sent back, held, rejected. */
+  done: {
+    id: number;
+    code: string;
+    customer: string;
+    total: number;
+    outcome: "done" | "sent_back" | "held" | "rejected" | "moved";
+    at: string;
+    minutes: number;
+  }[];
+};
+
 /** One unit of a department's team on the portal: its lead seat and its seats by title (no names). */
 export type PortalTeamNode = {
   unit: string;
@@ -802,6 +823,8 @@ export type OrderCard = OrderRow & {
   area: string | null;
   paymentTerms: PaymentTerms;
   paymentDays: number | null;
+  /** Agreed to be paid by this day (in place of a number of days). */
+  payBy: string | null;
   /** When it was placed (or placed again). */
   submittedAt: string;
   /** When it reached the step it is at now: its waiting time at this desk counts from here. */

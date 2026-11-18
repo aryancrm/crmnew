@@ -38,7 +38,7 @@ const QUIET =
 
 const termsWord = (card: FinanceOrderCard) =>
   card.terms === "days"
-    ? `${card.paymentDays} days after the invoice${card.paymentTerm ? ` (${card.paymentTerm})` : ""}`
+    ? `${card.paymentDays} days after delivery${card.paymentTerm ? ` (${card.paymentTerm})` : ""}`
     : card.terms === "cod"
       ? "Cash on delivery"
       : "Paid in advance";

@@ -1,7 +1,7 @@
 // The desk's people in the left menu of Management's (or Finance's) common screen (Aryan, 18 Nov):
 // one screen for the whole desk; each person from the chart presses Start when they begin and Stop
 // when they end. The waiting orders are shared out among the people started (fewest open first),
-// and what is done on an order is written in its person's name. A name shows just their orders.
+// and what is done on an order is written in its person's name. A name opens that person's page.
 
 import type { DeskDuty } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,7 +18,8 @@ export function DeskPeople({ desk, onPick }: { desk: "management" | "finance"; o
   const action = useAction();
   const navigate = useNavigate();
   const location = useLocation();
-  const who = location.pathname === "/" ? Number(new URLSearchParams(location.search).get("who")) || 0 : 0;
+  // The person whose page is open is marked in the list.
+  const who = Number(location.pathname.match(/^\/desk\/person\/(\d+)/)?.[1]) || 0;
   const query = useQuery({
     queryKey: ["desk", desk, "team"],
     queryFn: () => api<DeskDuty>(`/api/desk/${desk}/team`),
@@ -57,11 +58,11 @@ export function DeskPeople({ desk, onPick }: { desk: "management" | "finance"; o
               <button
                 type="button"
                 onClick={() => {
-                  navigate(who === one.id ? "/" : `/?who=${one.id}`);
+                  navigate(`/desk/person/${one.id}`);
                   onPick?.();
                 }}
                 className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                title={who === one.id ? "Show everyone's orders" : `Show ${one.name}'s orders`}
+                title={`${one.name}: what they have and what they did`}
               >
                 <span className={`relative grid size-7 shrink-0 place-items-center rounded-full text-[11px] font-bold ${on ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500"}`}>
                   {one.name.slice(0, 1)}

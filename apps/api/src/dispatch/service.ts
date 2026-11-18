@@ -516,7 +516,8 @@ export async function deliverOrder(
       sql`update invoice set due_on = case
           when terms = 'cod' and status = 'open' then ${input.deliveredOn}::date
           when terms = 'days' and status = 'open'
-            then ${input.deliveredOn}::date + coalesce((select o.payment_days from sales_order o where o.id = ${orderId}), 0)
+            then coalesce((select o.pay_by from sales_order o where o.id = ${orderId}),
+              ${input.deliveredOn}::date + coalesce((select o.payment_days from sales_order o where o.id = ${orderId}), 0))
           else due_on end
         where order_id = ${orderId} returning code, status, (total - paid)::int as balance, terms`,
     );

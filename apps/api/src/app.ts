@@ -57,7 +57,7 @@ import { scoreRoutes } from "./scores/routes";
 import { sellerRoutes } from "./sellers/routes";
 import { targetRoutes } from "./targets/routes";
 import { teamRoutes } from "./team/routes";
-import { DUTY_DESKS, type DutyDesk, deskReport, deskStandIn, deskTeam, shareOut, shareOutAll, startPerson, takeFinanceOrder } from "./desks/service";
+import { DUTY_DESKS, type DutyDesk, deskPerson, deskReport, deskStandIn, deskTeam, shareOut, shareOutAll, startPerson, takeFinanceOrder } from "./desks/service";
 import { portalDepartment } from "./portal/service";
 import type { ApiError, Me } from "./types";
 
@@ -144,6 +144,14 @@ export function createApp(db: Database, options: AppOptions) {
   app.get("/api/desk/:desk/report", signedIn, async (c) =>
     c.json(
       await deskReport(db, c.get("me"), deskParam(c.req.param("desk")), {
+        from: c.req.query("from"),
+        to: c.req.query("to"),
+      }),
+    ),
+  );
+  app.get("/api/desk/:desk/people/:id", signedIn, async (c) =>
+    c.json(
+      await deskPerson(db, c.get("me"), deskParam(c.req.param("desk")), idParam(c), {
         from: c.req.query("from"),
         to: c.req.query("to"),
       }),

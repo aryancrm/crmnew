@@ -121,7 +121,9 @@ export const KIND_BADGE: Record<string, { label: string; style: string }> = {
 };
 
 const termsOf = (card: OrderCard) =>
-  card.paymentTerms === "days"
+  card.payBy
+    ? `by ${new Date(`${card.payBy}T00:00:00Z`).toLocaleDateString("en-PH", { day: "numeric", month: "short", timeZone: "UTC" })}`
+    : card.paymentTerms === "days"
     ? `${card.paymentDays} days`
     : card.paymentTerms === "cod"
       ? "COD"
