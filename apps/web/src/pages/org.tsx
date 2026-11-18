@@ -78,9 +78,18 @@ export function OrgPage() {
   return <Org tree={query.data} />;
 }
 
+/** What is being dragged in the tree: a seat (with its person) or a whole team. */
+type Dragged = { kind: "seat"; id: number; label: string } | { kind: "unit"; id: number; label: string };
+const DRAG_TYPE = "application/x-org-move";
+
 function Org({ tree }: { tree: OrgTree }) {
   const [params, setParams] = useSearchParams();
   const [pop, setPop] = useState<Pop | null>(null);
+  // A drop asks first: "Move Fritzie into CLIDP?" (Aryan, 18 Nov: drag a person to any team; their
+  // work follows the team's channel).
+  const [pending, setPending] = useState<{ item: Dragged; to: OrgUnit } | null>(null);
+  const moveAction = useAction();
+  const moveQueries = useQueryClient();
   const root = tree.units.find((unit) => unit.kind === "company") ?? tree.units[0];
   const picked = tree.units.find((unit) => String(unit.id) === params.get("unit")) ?? root;
   const q = params.get("q") ?? "";
@@ -193,6 +202,37 @@ function Org({ tree }: { tree: OrgTree }) {
           </button>
         ))}
       </div>
+      {pending && (
+        <div role="alert" className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm">
+          <span className="min-w-0 flex-1">
+            Move <b>{pending.item.label}</b> {pending.item.kind === "seat" ? "into" : "under"} <b>{pending.to.name}</b>?{" "}
+            <span className="text-slate-600">
+              {pending.item.kind === "seat" ? "The seat keeps its person, customers and orders; its work follows the team's channel." : "The team moves with all its seats and people."}
+            </span>
+            {moveAction.problem && <span className="block text-rose-700">{moveAction.problem.message}</span>}
+          </span>
+          <Button
+            variant="primary"
+            small
+            disabled={moveAction.busy}
+            onClick={() =>
+              void moveAction.run(async () => {
+                const { item, to } = pending;
+                if (item.kind === "seat") await api(`/api/org/seats/${item.id}`, { method: "PATCH", body: { unitId: to.id } });
+                else await api(`/api/org/units/${item.id}`, { method: "PATCH", body: { parentId: to.id } });
+                await moveQueries.invalidateQueries();
+                setPending(null);
+                set({ unit: String(to.id) });
+              })
+            }
+          >
+            Move
+          </Button>
+          <Button small onClick={() => setPending(null)}>
+            Cancel
+          </Button>
+        </div>
+      )}
       {tab === "chart" && <OrgChart tree={tree} open={setPop} />}
       {tab === "areas" && <AreasTab tree={tree} />}
       {tab === "requests" && <RequestsTab tree={tree} />}
@@ -211,8 +251,13 @@ function Org({ tree }: { tree: OrgTree }) {
                 totals={totals}
                 picked={picked?.id ?? null}
                 onPick={(unit) => set({ unit: String(unit.id), q: null })}
+                onDropItem={(item, to) => {
+                  if (item.kind === "unit" && item.id === to.id) return;
+                  setPending({ item, to });
+                }}
               />
             )}
+            <p className="px-2 pt-2 text-[11px] text-slate-400">Drag a person's seat (from the team's list) or a team onto another team to move it.</p>
           </nav>
           <div className="flex min-w-0 flex-col gap-4">
             {/* On a phone the tree is a list to pick from, so the team picked stays in view. */}
@@ -365,6 +410,7 @@ function TreeNode({
   totals,
   picked,
   onPick,
+  onDropItem,
 }: {
   unit: OrgUnit;
   depth: number;
@@ -372,8 +418,10 @@ function TreeNode({
   totals: Map<number, { people: number; vacant: number }>;
   picked: number | null;
   onPick: (unit: OrgUnit) => void;
+  onDropItem?: (item: Dragged, to: OrgUnit) => void;
 }) {
   const kids = childrenOf.get(unit.id) ?? [];
+  const [over, setOver] = useState(false);
   const sum = totals.get(unit.id) ?? { people: 0, vacant: 0 };
   const isPicked = picked === unit.id;
   return (
@@ -381,9 +429,23 @@ function TreeNode({
       <button
         type="button"
         onClick={() => onPick(unit)}
+        draggable={unit.kind !== "company"}
+        onDragStart={(event) => event.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ kind: "unit", id: unit.id, label: unit.name } satisfies Dragged))}
+        onDragOver={(event) => {
+          if (!event.dataTransfer.types.includes(DRAG_TYPE)) return;
+          event.preventDefault();
+          setOver(true);
+        }}
+        onDragLeave={() => setOver(false)}
+        onDrop={(event) => {
+          event.preventDefault();
+          setOver(false);
+          const raw = event.dataTransfer.getData(DRAG_TYPE);
+          if (raw) onDropItem?.(JSON.parse(raw) as Dragged, unit);
+        }}
         aria-current={isPicked ? "true" : undefined}
         style={{ paddingLeft: `${0.5 + depth * 0.9}rem` }}
-        className={`flex w-full items-center gap-1.5 rounded-lg py-1.5 pr-2 text-left text-[13px] ${
+        className={`flex w-full items-center gap-1.5 rounded-lg py-1.5 pr-2 text-left text-[13px] ${over ? "ring-2 ring-emerald-500 ring-offset-1" : ""} ${
           isPicked
             ? "bg-emerald-50 font-semibold text-emerald-900"
             : "text-slate-700 hover:bg-slate-50"
@@ -421,6 +483,7 @@ function TreeNode({
               totals={totals}
               picked={picked}
               onPick={onPick}
+              onDropItem={onDropItem}
             />
           ))}
         </div>
@@ -491,6 +554,7 @@ function UnitPanel({
                   {channel.code} · {channel.name}
                 </span>
               )}
+              {unit.kind !== "company" && <ReportChannel unit={unit} />}
             </h2>
             <p className="mt-1 text-sm text-slate-500">
               {lead ? (
@@ -704,7 +768,12 @@ export function SeatRow({
   ].filter(Boolean);
   return (
     <li
-      className={`flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ${holder ? "" : "bg-amber-50/40"}`}
+      draggable
+      onDragStart={(event) =>
+        event.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ kind: "seat", id: seat.id, label: holder ? `${holder.name} (${seat.title})` : `the empty seat "${seat.title}"` } satisfies Dragged))
+      }
+      title="Drag onto a team in the tree to move"
+      className={`flex cursor-grab flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 active:cursor-grabbing ${holder ? "" : "bg-amber-50/40"}`}
     >
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex flex-wrap items-center gap-2">
@@ -956,5 +1025,35 @@ function Found({ tree, q, onPick }: { tree: OrgTree; q: string; onPick: (unit: O
         )}
       </ul>
     </section>
+  );
+}
+
+/** The line a team's sales are reported under in Sales performance (CLIDP inside B2B), else its
+ *  channel's. The CEO and the Admin set it here. */
+function ReportChannel({ unit }: { unit: OrgUnit }) {
+  const queries = useQueryClient();
+  const act = useAction();
+  return (
+    <label className="flex items-center gap-1 text-[11px] font-semibold text-slate-500" title={act.problem?.message}>
+      Reports as
+      <select
+        className="rounded-md border border-slate-200 bg-white py-0 pr-6 pl-1.5 text-[11px] font-bold text-slate-700"
+        value={unit.reportChannel ?? ""}
+        disabled={act.busy}
+        onChange={(event) =>
+          void act.run(async () => {
+            await api(`/api/org/units/${unit.id}`, { method: "PATCH", body: { reportChannel: event.target.value || null } });
+            await queries.invalidateQueries({ queryKey: ["org"] });
+          })
+        }
+      >
+        <option value="">its channel</option>
+        {["B2B", "RX", "HOSP", "BID", "CLIDP", "TELESALES", "B2C", "MT"].map((line) => (
+          <option key={line} value={line}>
+            {line}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

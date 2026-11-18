@@ -187,6 +187,8 @@ export function orgRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHand
         name: text(80).optional(),
         channelId: id("Pick the channel.").nullable().optional(),
         parentId: id("Pick where it sits.").optional(),
+        // The business line its sales are reported under (CLIDP inside B2B); null: the channel's.
+        reportChannel: z.enum(["B2B", "RX", "HOSP", "BID", "CLIDP", "TELESALES", "B2C", "MT"]).nullable().optional(),
       }),
     );
     await updateUnit(db, c.get("me"), idParam(c), body);

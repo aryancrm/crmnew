@@ -3060,6 +3060,8 @@ export type OrgUnit = {
   kind: OrgUnitKind;
   parentId: number | null;
   channel: { id: number; code: string; name: string } | null;
+  /** The business line its sales are reported under, when it is not its channel's (CLIDP). */
+  reportChannel: string | null;
   sort: number;
   seats: OrgSeat[];
 };

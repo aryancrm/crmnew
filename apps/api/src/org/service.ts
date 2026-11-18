@@ -318,7 +318,7 @@ export async function orgTree(db: Database, me: Me): Promise<OrgTree> {
       }
     >(
       db,
-      sql`select u.id::int as id, u.name, u.kind, u.parent_id::int as "parentId", u.sort::int as sort,
+      sql`select u.id::int as id, u.name, u.kind, u.parent_id::int as "parentId", u.sort::int as sort, u.report_channel as "reportChannel",
           u.channel_id::int as "channelId", ch.code, ch.name as "channelName"
         from org_unit u left join channel ch on ch.id = u.channel_id where u.active order by u.sort, u.id`,
     ),
@@ -1118,7 +1118,7 @@ export async function updateUnit(
   db: Database,
   me: Me,
   unitId: number,
-  input: { name?: string; channelId?: number | null; parentId?: number },
+  input: { name?: string; channelId?: number | null; parentId?: number; reportChannel?: string | null },
 ): Promise<void> {
   allow(me, ORG_CHANGE_ROLES, "change teams");
   await change(db, async (tx) => {
@@ -1145,6 +1145,7 @@ export async function updateUnit(
       sql`update org_unit set name = ${name}
         ${input.channelId === undefined ? sql`` : sql`, channel_id = ${input.channelId}`}
         ${input.parentId === undefined ? sql`` : sql`, parent_id = ${input.parentId}`}
+        ${input.reportChannel === undefined ? sql`` : sql`, report_channel = ${input.reportChannel}`}
         where id = ${unit.id}`,
     );
   });
