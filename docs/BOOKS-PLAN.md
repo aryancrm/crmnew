@@ -100,3 +100,24 @@ by a "Company" field), PHP, fiscal year from January, **accrual** basis, opening
 - Who writes the books: Finance, the CEO and the Admin (as Zoho's admins and accountants did).
 - Not built until used: estimates, recurring invoices, projects, timesheets, budgets, fixed-asset
   depreciation, base-currency adjustments, reporting tags, bank feeds, bank rules.
+
+## 6. Built (18 Nov 2026, local; not pushed)
+
+| Part | What | Where |
+|---|---|---|
+| A | Record Expense (Zoho's Cost Centre, Type, PIC, Department, Voucher, OR Number; tax inclusive/exclusive; itemized), New Journal (debits = credits, draft / publish, reverse on a day), Transfer Fund, Record Deposit, New Credit Note (applied, used on a CRM invoice as credit, refunded), Refund, void for all of them | `src/books/write.ts`, migration 0101, web `books/ledger.tsx` |
+| A5 | A customer's advance (a payment not put on an invoice) counts as their credit, usable on a CRM invoice | `finance/credit.ts` |
+| B6 | Chart of accounts: New account (type, code, parent), rename only while nothing is on it, inactive | `write.ts`, Chart of Accounts page |
+| B7 | Transaction Locking: Sales, Purchases, Banking, Accountant or all, up to a day; every write and void checks it; unlock needs a reason; history kept | `write.ts` (`assertOpen`), Accountant → Transaction Locking |
+| B8 | Recurring expenses and bills run here once taken over from Zoho from a day (each day once; a locked month waits); stop and resume | `src/books/recurring.ts`, the profile's page, the daily automations |
+| C | Bank statement: import a bank's CSV (a line twice is kept once), match each line to what the books hold (suggested by amount within 10 days), categorize into an expense / deposit / transfer, exclude; Reconcile to a nil difference; a reconciled document can't be voided; undo the latest | migration 0102, `src/books/bank.ts`, Banking → Statement / Reconcile |
+| C | Zoho's 193 uncategorized statement lines brought over (read only, Zoho's ids) | `scripts/import-zoho-bank-lines.ts` |
+| D | General Ledger, Journal Report, Account Transactions, AR Aging Summary and Details, Customer and Vendor Balances, Expenses (details, by account, department, PIC, cost centre, paid through), Payments Received and Made, Credit Notes, Sales by Customer | `src/books/ledger-reports.ts`, Books → Reports |
+| E | History tied to Zoho: Zoho's trial balance at every month's end since May 2020 (79 days, read only) against the books here; one "ZOHO-TIE-YYYY-MM" journal a month holds what Zoho posted by itself that its backup lacks (cost of goods sold and stock ₱548M, payables, prepaid, unearned revenue, tax split, rounding). After it every account at every month's end is Zoho's to 3 centavos (Zoho's own rounding of the 2020 opening balances). A rerun with newer balances rewrites only these journals | `scripts/tie-to-zoho.ts`, `.data/zoho-api/trial-balances.json` |
+
+Tests: `src/books/write.test.ts` (10: postings balance, drafts, reversal, refund, lock, chart, recurring,
+statement and reconcile, reports); all books, finance and automations tests pass.
+
+On the switch day (Aryan's word): read Zoho once more (backup + uncategorized lines + month-end trial
+balances), run the imports and `tie-to-zoho.ts`, take each recurring profile over from that day, stop
+Zoho. Live needs the same scripts with Aryan's go-ahead (they refuse without a local database today).
