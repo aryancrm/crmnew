@@ -1,6 +1,7 @@
 // Orders: placing one, what Management does with it, and the lists and figures its screens
 // show. Every change is one transaction that also writes the order's timeline.
 
+import { peopleUnder, seatsUnder } from "../org/scope";
 import { bytesOf, keepFile } from "../files/store";
 import { type SQL, sql } from "drizzle-orm";
 import { customerDetail, missingOf } from "../customers/service";
@@ -123,8 +124,11 @@ export const inApprovalScopeSql = (me: Me): SQL =>
     ? sql`(select p.approves is null or coalesce(o.division = any(p.approves), false) from person p where p.id = ${me.id})`
     : sql`true`;
 
-/** Which orders (alias `o`) this person may see. Needs `team` in front of the query. */
+/** Which orders (alias `o`) this person may see. Needs `team` in front of the query. With a box
+ *  picked on the team switch (checked to be theirs): the orders sold from its seats and under it. */
 function seen(me: Me): SQL {
+  if (me.unit)
+    return sql`(o.seat_id in ${seatsUnder(me.unit)} or (o.seat_id is null and o.medrep_id in ${peopleUnder(me.unit)}))`;
   if (ORDER_ALL_ROLES.includes(me.role)) return sql`true`;
   // A lead also sees what was sold from any seat under them, by someone who has moved on too.
   if (me.role === "team_lead" || me.role === "manager")

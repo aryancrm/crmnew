@@ -5,6 +5,7 @@
 // records leave. The person, their team lead, HR, the CEO and the Admin see it; the CEO's page is
 // the report (who worked how long, who less, late, absent, on leave), with nothing to change.
 
+import { peopleUnder } from "../org/scope";
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
@@ -375,7 +376,10 @@ async function visiblePeople(
     hiredOn: string | null;
   }[]
 > {
-  const scope = ATTENDANCE_ALL_ROLES.includes(me.role)
+  // A box picked on the team switch: the people sitting in it and under it.
+  const scope = me.unit
+    ? sql`p.id in ${peopleUnder(me.unit)}`
+    : ATTENDANCE_ALL_ROLES.includes(me.role)
     ? sql`true`
     : LEAD_ROLES.includes(me.role)
       ? sql`p.id in (with recursive team as (select id from person where id = ${me.id}

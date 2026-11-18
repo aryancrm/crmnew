@@ -2,17 +2,32 @@
 // team page — All · each team under them, by its lead ("B2B Telesales · Jessa Domino") — and one
 // press turns the whole page to that team. A team with teams of its own opens the next row
 // (B2B Telesales › CRR, NBD). Read from the chart (the same boxes as the sidebar), kept in the
-// address (?unit=), so the dates and the rest of the page stay as they were.
+// address (?unit=), so the dates and the rest of the page stay as they were. On every lead page
+// (Aryan, 19 Nov): My team, Scorecards, Targets, Sales performance, Collections, Team orders,
+// Calls, Visits, Who's working; a lead of two teams has both, "All" both together.
 
 import type { OrgMenuUnit } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 
+/** The box picked on the team switch (?unit=), to send with the page's own reads: the server
+ *  counts that box and every box under it (org/scope.ts). */
+export function useTeamUnit(): string | null {
+  const [params] = useSearchParams();
+  return params.get("unit");
+}
+
+/** A read's address with the box picked on the team switch added. */
+export function withUnit(path: string, unit: string | null): string {
+  if (!unit) return path;
+  return `${path}${path.includes("?") ? "&" : "?"}unit=${encodeURIComponent(unit)}`;
+}
+
 export function TeamSwitch({ wholeLabel = "All" }: { wholeLabel?: string }) {
   const query = useQuery({
     queryKey: ["org", "menu"],
-    queryFn: () => api<{ units: OrgMenuUnit[]; openRequests: number }>("/api/org/menu"),
+    queryFn: () => api<{ units: OrgMenuUnit[]; openRequests: number; whole?: boolean }>("/api/org/menu"),
     staleTime: 5 * 60_000,
   });
   const [params] = useSearchParams();
@@ -70,7 +85,8 @@ export function TeamSwitch({ wholeLabel = "All" }: { wholeLabel?: string }) {
           {n === 0
             ? chip(
                 "all",
-                root ? `${wholeLabel} · ${root.name}` : `${wholeLabel} · the company`,
+                // A lead of two teams (Honey: RX Business, MD Telesales): All is both.
+                root ? `${wholeLabel} · ${root.name}` : query.data?.whole ? `${wholeLabel} · the company` : `${wholeLabel} · my ${tops.length} teams`,
                 root?.people ?? tops.reduce((sum, one) => sum + one.people, 0),
                 active(null),
                 () => go(null),

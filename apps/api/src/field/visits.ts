@@ -6,6 +6,7 @@
 // The visit keeps its seat: the work stays with the seat when its person changes. A check-in is
 // compared with the clinic's pin; far away is said, never refused.
 
+import { peopleUnder } from "../org/scope";
 import { type SQL, sql } from "drizzle-orm";
 import { seen, team } from "../customers/service";
 import { type Database, rows } from "../db/index";
@@ -401,7 +402,8 @@ export async function fieldReport(
       "not_allowed",
       "The visits report is for team leads, Management and the CEO.",
     );
-  const scope = ALL_ROLES.includes(me.role) ? sql`true` : sql`p.id in (select id from team)`;
+  // A box picked on the team switch: the people sitting in it and under it.
+  const scope = me.unit ? sql`p.id in ${peopleUnder(me.unit)}` : ALL_ROLES.includes(me.role) ? sql`true` : sql`p.id in (select id from team)`;
   const today = todayManila();
   const to = asked.to && DAY.test(asked.to) ? asked.to : today;
   let from = asked.from && DAY.test(asked.from) ? asked.from : `${today.slice(0, 7)}-01`;

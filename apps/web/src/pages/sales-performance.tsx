@@ -10,6 +10,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Download, TrendingUp } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { TeamSwitch, useTeamUnit } from "../team/switch";
 import { CARD, PageHead, PageState } from "../ui";
 
 const todayIn = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
@@ -106,7 +107,8 @@ export function SalesPerformancePage() {
   const to = params.get("to") ?? today;
   const channel = params.get("channel") ?? "";
   const tab = params.get("tab") ?? "values";
-  const qs = new URLSearchParams({ from, to, ...(channel ? { channel } : {}) });
+  const unit = useTeamUnit();
+  const qs = new URLSearchParams({ from, to, ...(channel ? { channel } : {}), ...(unit ? { unit } : {}) });
   const query = useQuery({
     queryKey: ["sales-performance", qs.toString()],
     queryFn: () => api<SalesPerformance>(`/api/sales-performance?${qs}`),
@@ -168,6 +170,7 @@ export function SalesPerformancePage() {
           )}
         </div>
       </PageHead>
+      <TeamSwitch />
       <PageState query={query} what="the sales performance" />
       {r && (
         <>

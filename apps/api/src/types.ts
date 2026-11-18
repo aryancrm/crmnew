@@ -99,6 +99,9 @@ export type Me = {
   business?: string | null;
   /** The CEO or Admin looking as this person (read only), when it is that. */
   viewedBy?: { id: number; name: string } | null;
+  /** The box picked on a lead's team switch for this request (?unit=, checked): the page counts the
+   *  seats in it and under it (org/scope.ts). */
+  unit?: number | null;
 };
 
 // ---- Inventory. Money is whole centavos; days are "YYYY-MM-DD" (Manila); times are ISO. ----

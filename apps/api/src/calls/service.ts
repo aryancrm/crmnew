@@ -7,6 +7,7 @@
 //
 // (Replaces the Google Form the team used: the caller's name comes from their own login.)
 
+import { peopleUnder } from "../org/scope";
 import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
@@ -38,6 +39,8 @@ export async function seatNow(tx: Runner, personId: number): Promise<number | nu
  *  reports up to them; everyone for Management, the CEO and the Admin. A lead picked by a whole
  *  viewer (or a lead under this lead) narrows it to that lead's team. */
 export function visiblePeople(me: Me, column: SQL, lead?: number | null): SQL {
+  // A box picked on the team switch: the people sitting in it and under it.
+  if (me.unit) return sql`${column} in ${peopleUnder(me.unit)}`;
   const under = (top: number) => sql`${column} in (with recursive team as (
       select ${top}::bigint as id union all select q.id from person q join team t on q.reports_to = t.id
     ) select id from team)`;

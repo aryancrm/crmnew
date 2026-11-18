@@ -6,15 +6,17 @@ import type { TeamScores } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { CARD, PageHead, PageState } from "../ui";
 import { Disputes, MonthPicker, toneOf } from "./my-score";
 
 export function TeamScoresPage() {
   const [params, setParams] = useSearchParams();
   const month = params.get("month") ?? "";
+  const unit = useTeamUnit();
   const query = useQuery({
-    queryKey: ["scores", "team", month],
-    queryFn: () => api<TeamScores>(`/api/scores/team${month ? `?month=${month}` : ""}`),
+    queryKey: ["scores", "team", month, unit],
+    queryFn: () => api<TeamScores>(withUnit(`/api/scores/team${month ? `?month=${month}` : ""}`, unit)),
   });
   const data = query.data;
   if (!data) return <PageState query={query} what="the team's scorecards" />;
@@ -27,8 +29,25 @@ export function TeamScoresPage() {
       <PageHead
         title="Scorecards"
         sub={`${filled.length} of ${data.rows.length} scored seats with a card${average === null ? "" : ` · team average ${average}`}`}
-        actions={<MonthPicker month={data.month} today={data.today} onChange={(next) => setParams({ month: next }, { replace: true })} />}
+        actions={
+          <MonthPicker
+            month={data.month}
+            today={data.today}
+            onChange={(next) =>
+              setParams(
+                (now) => {
+                  now.set("month", next);
+                  return now;
+                },
+                { replace: true },
+              )
+            }
+          />
+        }
       />
+      <div className="mb-4">
+        <TeamSwitch />
+      </div>
       <div className={`${CARD} mb-4 overflow-x-auto`}>
         <table className="w-full text-[13px]">
           <thead>

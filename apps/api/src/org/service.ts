@@ -141,7 +141,8 @@ type PersonRow = {
 
 /**
  * Writes the tree onto the people who sit in it: each person's role, title, channel, area and
- * boss come from their seat (the first one they were given, when they hold two), and each
+ * boss come from their seat (when they hold two: a lead seat over one that leads nothing, else the
+ * first one they were given), and each
  * channel's head is whoever leads its top unit. A seat's boss is the lead of its unit (a lead's:
  * of the unit above), else the seat it names; a vacant boss seat is skipped upwards and an acting
  * cover counts as its occupant. People with no seat are left as they are. Writes only what changed.
@@ -184,7 +185,11 @@ export async function projectOrg(db: Runner, today = todayManila()): Promise<voi
     if (hold.kind === "holder") {
       if (!holderOf.has(hold.seatId)) holderOf.set(hold.seatId, hold.personId);
       const seat = seatById.get(hold.seatId);
-      if (seat && !firstSeatOf.has(hold.personId)) firstSeatOf.set(hold.personId, seat);
+      // The seat that decides their screens: a lead seat over one that leads nothing (Reynan,
+      // Government Account's coachee and TeleSales's lead, works as TeleSales's lead), else the
+      // first they were given.
+      const known = firstSeatOf.get(hold.personId);
+      if (seat && (!known || (seat.lead && !known.lead))) firstSeatOf.set(hold.personId, seat);
     } else actingOf.set(hold.seatId, hold.personId);
   }
   const occupant = (seat: SeatRow) => actingOf.get(seat.id) ?? holderOf.get(seat.id) ?? null;
@@ -1335,10 +1340,10 @@ export async function ledUnits(db: Runner, me: Me): Promise<number[]> {
 export async function menuUnits(
   db: Runner,
   me: Me,
-): Promise<{ units: OrgMenuUnit[]; openRequests: number }> {
+): Promise<{ units: OrgMenuUnit[]; openRequests: number; whole: boolean }> {
   const whole = me.role === "ceo" || me.role === "admin";
   const led = whole ? [] : await ledUnits(db, me);
-  if (!whole && !led.length) return { units: [], openRequests: 0 };
+  if (!whole && !led.length) return { units: [], openRequests: 0, whole };
   // The CEO's and the Admin's: asks waiting for them; a lead's: their own still waiting.
   const [open] = await rows<{ n: number }>(
     db,
@@ -1375,7 +1380,7 @@ export async function menuUnits(
       from shown s
       order by (select t.sort from org_unit t where t.id = s.top_id), (select t.name from org_unit t where t.id = s.top_id), s.level, s.sort, s.name`,
   );
-  return { units, openRequests: open?.n ?? 0 };
+  return { units, openRequests: open?.n ?? 0, whole };
 }
 
 async function seatRequests(db: Runner, where: SQL): Promise<SeatRequest[]> {

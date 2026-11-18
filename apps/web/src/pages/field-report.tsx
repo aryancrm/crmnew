@@ -3,6 +3,7 @@
 // by class, check-ins away from the clinic, and what they spent. A team lead's for the team (with
 // the plans and expenses waiting for them), the CEO's for everyone. A person opens their day.
 
+import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import type { FieldReport } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { CalendarCheck, Search } from "lucide-react";
@@ -31,9 +32,10 @@ export function FieldReportPage() {
   const from = params.get("from") ?? `${today.slice(0, 7)}-01`;
   const to = params.get("to") ?? today;
   const sort = (params.get("sort") as Sort | null) ?? "done";
+  const unit = useTeamUnit();
   const query = useQuery({
-    queryKey: ["field", "report", from, to],
-    queryFn: () => api<FieldReport>(`/api/field/report?from=${from}&to=${to}`),
+    queryKey: ["field", "report", from, to, unit],
+    queryFn: () => api<FieldReport>(withUnit(`/api/field/report?from=${from}&to=${to}`, unit)),
     placeholderData: (previous) => previous,
   });
   const [q, setQ] = useState("");
@@ -73,6 +75,7 @@ export function FieldReportPage() {
       >
         <RangePicker />
       </PageHead>
+      <TeamSwitch />
 
       {visitsOn && plansWaiting.length > 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">

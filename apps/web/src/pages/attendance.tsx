@@ -3,6 +3,7 @@
 // team lead their team; anyone else goes to their own month). A person's month is their DTR, day
 // by day, where HR puts a day right with a note.
 
+import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import type { AttendanceDay, AttendanceMonth, AttendanceToday, LeaveKind } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, CalendarPlus, ChevronLeft, ChevronRight, Pencil, Search } from "lucide-react";
@@ -57,9 +58,10 @@ export function AttendancePage() {
   const [params, setParams] = useSearchParams();
   const today = manilaToday();
   const day = params.get("day") ?? today;
+  const unit = useTeamUnit();
   const query = useQuery({
-    queryKey: ["attendance", "day", day],
-    queryFn: () => api<AttendanceToday>(`/api/hr/attendance?day=${day}`),
+    queryKey: ["attendance", "day", day, unit],
+    queryFn: () => api<AttendanceToday>(withUnit(`/api/hr/attendance?day=${day}`, unit)),
     placeholderData: (previous) => previous,
     refetchInterval: day === today ? 60_000 : false,
   });
@@ -69,7 +71,7 @@ export function AttendancePage() {
   if (!me) return null;
   if (!data) return <PageState query={query} what="attendance" />;
   // Only themselves to see: their own month is the page.
-  if (data.people.length === 1 && data.people[0]?.personId === me.id)
+  if (!unit && data.people.length === 1 && data.people[0]?.personId === me.id)
     return <Navigate to={`/hr/attendance/${me.id}`} replace />;
   const set = (next: string) => {
     const out = new URLSearchParams(params);
@@ -150,6 +152,7 @@ export function AttendancePage() {
           </div>
         }
       />
+      <TeamSwitch />
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
         {tiles.map((tile) => (

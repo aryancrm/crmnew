@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Phone } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { useMe } from "../auth";
 import { shortPeso } from "../ceo";
 import { seatWords } from "../seat-words";
@@ -25,7 +26,8 @@ const FLAG: Record<Collections["rows"][number]["flag"], { bar: string; pill: str
 export function CollectionsPage() {
   const me = useMe().data;
   const words = seatWords(me);
-  const query = useQuery({ queryKey: ["my", "collections"], queryFn: () => api<Collections>("/api/my/collections") });
+  const unit = useTeamUnit();
+  const query = useQuery({ queryKey: ["my", "collections", unit], queryFn: () => api<Collections>(withUnit("/api/my/collections", unit)) });
   const data = query.data;
   if (!data) return <PageState query={query} what="the money to collect" />;
   return (
@@ -39,6 +41,9 @@ export function CollectionsPage() {
         }
         sub={`${shortPeso(data.total)} owed by ${count(data.rows.length)} ${words.customers} · age counted from the oldest unpaid invoice`}
       />
+      <div className="mb-4">
+        <TeamSwitch />
+      </div>
       <section className={`${CARD} mb-4 p-4`}>
         <div className="flex h-3 overflow-hidden rounded-full bg-slate-100">
           {data.buckets

@@ -1,6 +1,7 @@
 // Monthly sales targets. The Admin and the CEO set anyone's; a manager or team lead sets the
 // targets of the people under them. A MedRep sees his own on his Home.
 
+import { peopleUnder, seatsUnder } from "../org/scope";
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
@@ -22,9 +23,12 @@ function monthOf(asked?: string): string {
   return new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }).slice(0, 7);
 }
 
-/** The people this person sets targets for (alias `p`). */
+/** The people this person sets targets for (alias `p`); with a box picked on the team switch,
+ *  those sitting in it (a lead not themselves). */
 const inScope = (me: Me) =>
-  EVERYONE.includes(me.role)
+  me.unit
+    ? sql`p.id in ${peopleUnder(me.unit)} ${EVERYONE.includes(me.role) ? sql`` : sql`and p.id <> ${me.id}`}`
+    : EVERYONE.includes(me.role)
     ? sql`true`
     : sql`p.id in (with recursive team as (
           select id from person where reports_to = ${me.id}
@@ -164,7 +168,9 @@ export async function setTarget(
 /** The selling seats this person sets targets for (alias `s`): every one for the Admin and the
  *  CEO, else those whose line runs up to them. */
 const seatsInScope = (me: Me) =>
-  EVERYONE.includes(me.role)
+  me.unit
+    ? sql`s.id in ${seatsUnder(me.unit)}`
+    : EVERYONE.includes(me.role)
     ? sql`true`
     : sql`s.boss_id in (with recursive team as (
           select ${me.id}::bigint as id

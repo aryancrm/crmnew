@@ -83,9 +83,11 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
       viewerId: viewer.id,
       viewerName: viewer.name,
       // The business box their seat sits in (by its channel), so a seat's desk follows the chart.
-      businessCode: sql<string | null>`(select seat_business_channel(h.seat_id) from seat_holder h
+      // Of two seats, the one that decides their screens (org/service.ts projectOrg): a lead seat
+      // over one that leads nothing, else the first given.
+      businessCode: sql<string | null>`(select seat_business_channel(h.seat_id) from seat_holder h join seat s on s.id = h.seat_id and s.active
         where h.person_id = ${person.id} and h.starts_on <= current_date and (h.ends_on is null or h.ends_on >= current_date)
-        order by (h.kind = 'holder') desc, h.starts_on desc limit 1)`,
+        order by (h.kind = 'holder') desc, s.lead desc, h.starts_on, h.id limit 1)`,
     })
     .from(session)
     .innerJoin(person, eq(person.id, session.personId))

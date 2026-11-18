@@ -10,6 +10,7 @@ import { Check, ChevronLeft, ChevronRight, Copy, MapPin } from "lucide-react";
 import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { exactPeso, shortPeso } from "../ceo";
 import { Bars, Ring } from "../team/charts";
 import { PageState, useAction } from "../ui";
@@ -63,9 +64,10 @@ export function Targets() {
   const copy = useAction();
   const [copied, setCopied] = useState<number | null>(null);
   const asked = params.get("month") ?? "";
+  const unit = useTeamUnit();
   const query = useQuery({
-    queryKey: ["targets", asked],
-    queryFn: () => api<TargetList>(`/api/targets?month=${asked}`),
+    queryKey: ["targets", asked, unit],
+    queryFn: () => api<TargetList>(withUnit(`/api/targets?month=${asked}`, unit)),
     placeholderData: (previous) => previous,
   });
   const data = query.data;
@@ -125,7 +127,12 @@ export function Targets() {
             <button
               type="button"
               aria-label="Month before"
-              onClick={() => setParams({ month: shift(data.month, -1) })}
+              onClick={() =>
+                setParams((now) => {
+                  now.set("month", shift(data.month, -1));
+                  return now;
+                })
+              }
               className="grid size-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100"
             >
               <ChevronLeft className="size-4" />
@@ -134,7 +141,12 @@ export function Targets() {
             <button
               type="button"
               aria-label="Month after"
-              onClick={() => setParams({ month: shift(data.month, 1) })}
+              onClick={() =>
+                setParams((now) => {
+                  now.set("month", shift(data.month, 1));
+                  return now;
+                })
+              }
               className="grid size-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100"
             >
               <ChevronRight className="size-4" />
@@ -142,6 +154,7 @@ export function Targets() {
           </div>
         </div>
       </header>
+      <TeamSwitch />
       {copied !== null && (
         <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-[13px] text-emerald-900">
           {copied

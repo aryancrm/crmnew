@@ -3,6 +3,7 @@
 // and 90 days), and the 7 PM huddle declared to the coach, prefilled from the day's invoices,
 // payments and visits. A coach reads the team's huddle: who declared, who is red, the blockers.
 
+import { areasUnder, peopleUnder, seatsUnder } from "../org/scope";
 import { type SQL, sql } from "drizzle-orm";
 import { reorders } from "../customers/reorders";
 import { type Database, rows } from "../db/index";
@@ -156,8 +157,13 @@ export async function collections(db: Database, me: Me): Promise<Collections> {
   if (![...SELLERS, ...LEADS, "ceo", "admin", "finance"].includes(me.role))
     throw new Refusal(403, "not_allowed", "Collections is the sellers' and their heads' list.");
   const today = todayManila();
-  const everyone = ["ceo", "admin", "finance"].includes(me.role);
-  const whose = everyone ? sql`true` : whoseOrders(me);
+  // A box picked on the team switch: the orders sold from its seats, the customers of its areas.
+  const everyone = !me.unit && ["ceo", "admin", "finance"].includes(me.role);
+  const whose = me.unit
+    ? sql`(o.seat_id in ${seatsUnder(me.unit)} or (o.seat_id is null and o.medrep_id in ${peopleUnder(me.unit)}))`
+    : everyone
+      ? sql`true`
+      : whoseOrders(me);
   // The people whose customers these are: me, or my whole team for a head.
   const team = LEADS.includes(me.role)
     ? sql`(with recursive t as (select id from person where id = ${me.id} union all select p.id from person p join t on p.reports_to = t.id) select id from t)`
@@ -178,7 +184,9 @@ export async function collections(db: Database, me: Me): Promise<Collections> {
         from book_doc d join customer c on c.id = d.customer_id
         where d.kind = 'invoice' and d.zoho_id is not null and d.balance > 0 and d.status not in ('void', 'draft')
           and ${
-            everyone
+            me.unit
+              ? sql`c.area_id in ${areasUnder(me.unit)}`
+              : everyone
               ? sql`true`
               : sql`c.area_id in (select s.area_id from seat s join seat_holder h on h.seat_id = s.id and h.ends_on is null where h.person_id in ${team} and s.area_id is not null)`
           }
@@ -209,7 +217,13 @@ export async function collections(db: Database, me: Me): Promise<Collections> {
       { key: "d90", label: "90 days and over", amount: sum("d90") },
     ],
     rows: withFlags,
-    scope: LEADS.includes(me.role) ? "My team's customers" : ["ceo", "admin", "finance"].includes(me.role) ? "Every customer" : "My customers",
+    scope: me.unit
+      ? `${(await rows<{ name: string }>(db, sql`select name from org_unit where id = ${me.unit}`))[0]?.name ?? "The team"}'s customers`
+      : LEADS.includes(me.role)
+        ? "My team's customers"
+        : ["ceo", "admin", "finance"].includes(me.role)
+          ? "Every customer"
+          : "My customers",
   };
 }
 

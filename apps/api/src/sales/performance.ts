@@ -15,6 +15,7 @@
 // Totals of TLB and billing efficiency count each SKU or customer once for the whole team, as the
 // team's pivots did.
 
+import { seatsUnder } from "../org/scope";
 import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
@@ -92,7 +93,9 @@ export async function salesPerformance(db: Database, me: Me, asked: { from?: str
   const seenUntied = whole && !asked.lead ? sql`true` : ["team_lead", "manager"].includes(me.role) && myLine && !asked.lead ? sql`x.channel = ${myLine}` : sql`false`;
   const key = sql`coalesce('P' || x.person_id, 'Z' || coalesce(x.zoho_name, '(no salesperson)'))`;
   const channel = asked.channel?.trim().toUpperCase() || null;
-  const base = sql`(select * from (${linesSql(from, to)}) x where ((x.person_id is not null and ${seenPerson}) or (x.person_id is null and ${seenUntied}))
+  // A box picked on the team switch: what was sold from its seats and those under it.
+  const seen = me.unit ? sql`x.seat_id in ${seatsUnder(me.unit)}` : sql`((x.person_id is not null and ${seenPerson}) or (x.person_id is null and ${seenUntied}))`;
+  const base = sql`(select * from (${linesSql(from, to)}) x where ${seen}
     ${channel ? sql`and x.channel = ${channel}` : sql``}) x`;
 
   const weekCase = sql`case when extract(day from x.day) <= 7 then 1 when extract(day from x.day) <= 14 then 2 when extract(day from x.day) <= 21 then 3 when extract(day from x.day) <= 28 then 4 else 5 end`;
@@ -123,6 +126,13 @@ export async function salesPerformance(db: Database, me: Me, asked: { from?: str
     ),
   ]);
 
+  const strangers = [...new Set(byDay.flatMap((line) => (line.personId && !people.some((p) => p.id === line.personId) ? [line.personId] : [])))];
+  const named = new Map(
+    (strangers.length
+      ? await rows<{ id: number; name: string }>(db, sql`select id::int as id, name from person where id in (${sql.join(strangers.map((id) => sql`${id}`), sql`, `)})`)
+      : []
+    ).map((one) => [one.id, one.name]),
+  );
   // Rows: everyone in view who sells (even with nothing sold yet), and every key that sold.
   const rowsByKey = new Map<string, Row>();
   for (const person of people) rowsByKey.set(`P${person.id}`, { key: `P${person.id}`, name: person.name, channel: person.channel ?? "Not tagged", personId: person.id });
@@ -130,7 +140,8 @@ export async function salesPerformance(db: Database, me: Me, asked: { from?: str
     if (!rowsByKey.has(line.key))
       rowsByKey.set(line.key, {
         key: line.key,
-        name: line.personId ? (people.find((p) => p.id === line.personId)?.name ?? `#${line.personId}`) : (line.zohoName ?? "(no salesperson)"),
+        // Sold from the box by someone who sits elsewhere now (or left): their name, from the line.
+        name: line.personId ? (people.find((p) => p.id === line.personId)?.name ?? named.get(line.personId) ?? `#${line.personId}`) : (line.zohoName ?? "(no salesperson)"),
         channel: line.channel,
         personId: line.personId,
       });

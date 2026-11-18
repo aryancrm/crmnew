@@ -29,7 +29,8 @@ export function scoreRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
     return c.json(
       await teamScores(db, c.get("me"), {
         month: c.req.query("month"),
-        unitId: Number.isInteger(unitId) && unitId > 0 ? unitId : null,
+        // The box picked on the team switch (?unit=, checked when signing the request in).
+        unitId: c.get("me").unit ?? (Number.isInteger(unitId) && unitId > 0 ? unitId : null),
       }),
     );
   });

@@ -3,6 +3,7 @@
 // remarks; when to call next), and their name and channel come from their own login. A lead or
 // head sees their team's calls, the CEO, Management and the Admin everyone's, by person and day.
 
+import { TeamSwitch, useTeamUnit } from "../team/switch";
 import type { CallList, SalesCallOutcome } from "@2mg/api/types";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { PhoneCall, X } from "lucide-react";
@@ -124,9 +125,10 @@ export function Calls() {
   const from = params.get("from") ?? today;
   const to = params.get("to") ?? today;
   const person = params.get("person");
+  const unit = useTeamUnit();
   const query = useQuery({
-    queryKey: ["calls", from, to, person],
-    queryFn: () => api<CallList>(`/api/calls?${new URLSearchParams({ from, to, ...(person ? { person } : {}) })}`),
+    queryKey: ["calls", from, to, person, unit],
+    queryFn: () => api<CallList>(`/api/calls?${new URLSearchParams({ from, to, ...(person ? { person } : {}), ...(unit ? { unit } : {}) })}`),
     placeholderData: keepPreviousData,
   });
   const data = query.data;
@@ -151,6 +153,9 @@ export function Calls() {
           </div>
         }
       />
+      <div className="mb-4">
+        <TeamSwitch />
+      </div>
       {data?.can.log && <LogCall />}
       <PageState query={query} what="the calls" />
       {data && many && (

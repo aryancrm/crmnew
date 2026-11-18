@@ -1,5 +1,6 @@
 // The API. Every route answers JSON; every refusal is { error: { code, message, field? } }.
 
+import { createMiddleware } from "hono/factory";
 import { decisionRoutes } from "./decisions/routes";
 import { sampleRoutes } from "./samples/routes";
 import { complaintRoutes } from "./complaints/routes";
@@ -37,6 +38,7 @@ import { channelRoutes } from "./online/channel-routes";
 import { onlineRoutes } from "./online/routes";
 import { orderRoutes } from "./orders/routes";
 import { orgRoutes } from "./org/routes";
+import { pickedUnit } from "./org/scope";
 import { personOfSeatLogin } from "./org/service";
 import { overviewRoutes } from "./overview/routes";
 import { pointsRoutes } from "./points/routes";
@@ -116,10 +118,19 @@ export function createApp(db: Database, options: AppOptions) {
   );
 
   // Every signed-in request notes who is working (their day starts with the first one).
-  const signedIn = signedInWith(
+  const signedInOnly = signedInWith(
     db,
     (me) => markSeen(db, me),
     (me, method, path) => deskStandIn(db, me, method, path),
+  );
+  // A lead's page reading one box of the team switch (?unit=): checked once here, then every
+  // service's team is that box and what is under it (org/scope.ts).
+  const signedIn = createMiddleware<Env>((c, next) =>
+    signedInOnly(c, async () => {
+      const asked = c.req.method === "GET" ? c.req.query("unit") : undefined;
+      if (asked) c.set("me", { ...c.get("me"), unit: await pickedUnit(db, c.get("me"), asked) });
+      await next();
+    }),
   );
 
   app.get("/api/health", (c) => c.json({ ok: true }));

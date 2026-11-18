@@ -3,6 +3,7 @@
 // sent back to him), the stock news, and his latest orders as the same cards Management sees.
 // "My orders" is the same cards, every order, with tabs.
 
+import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import type {
   CustomerKind,
   CustomerList,
@@ -42,10 +43,10 @@ const NEWS: Record<StockNews["kind"], { label: string; style: string }> = {
   note: { label: "Note", style: "bg-slate-100 text-slate-700" },
 };
 
-const useMine = (stage: MyOrderStage = "all", page = 1) =>
+const useMine = (stage: MyOrderStage = "all", page = 1, unit: string | null = null) =>
   useQuery({
-    queryKey: ["orders", "mine", stage, page],
-    queryFn: () => api<MyOrders>(`/api/orders/mine?stage=${stage}&page=${page}`),
+    queryKey: ["orders", "mine", stage, page, unit],
+    queryFn: () => api<MyOrders>(withUnit(`/api/orders/mine?stage=${stage}&page=${page}`, unit)),
     placeholderData: (previous) => previous,
     refetchInterval: 60_000,
   });
@@ -591,7 +592,8 @@ export function MyOrdersPage() {
   const [params, setParams] = useSearchParams();
   const stage = (params.get("stage") ?? "all") as MyOrderStage;
   const page = Number(params.get("page")) || 1;
-  const mine = useMine(stage, page);
+  const unit = useTeamUnit();
+  const mine = useMine(stage, page, unit);
   const data = mine.data;
   const team = me?.role === "team_lead" || me?.role === "manager";
   if (!data) return <PageState query={mine} what="your orders" />;
@@ -616,6 +618,11 @@ export function MyOrdersPage() {
         )}
       </div>
 
+      {team && (
+        <div className="mt-4">
+          <TeamSwitch />
+        </div>
+      )}
       <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         <div
           role="tablist"
@@ -631,7 +638,10 @@ export function MyOrdersPage() {
                 role="tab"
                 aria-selected={selected}
                 onClick={() =>
-                  setParams(tab.key === "all" ? {} : { stage: tab.key }, { replace: true })
+                  setParams(
+                    { ...(tab.key === "all" ? {} : { stage: tab.key }), ...(unit ? { unit } : {}) },
+                    { replace: true },
+                  )
                 }
                 className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
                   selected
@@ -705,7 +715,7 @@ export function MyOrdersPage() {
             <button
               type="button"
               disabled={data.page <= 1}
-              onClick={() => setParams({ stage, page: String(data.page - 1) })}
+              onClick={() => setParams({ stage, page: String(data.page - 1), ...(unit ? { unit } : {}) })}
               className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-medium disabled:opacity-40"
             >
               Previous
@@ -713,7 +723,7 @@ export function MyOrdersPage() {
             <button
               type="button"
               disabled={data.page >= pages}
-              onClick={() => setParams({ stage, page: String(data.page + 1) })}
+              onClick={() => setParams({ stage, page: String(data.page + 1), ...(unit ? { unit } : {}) })}
               className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 font-medium disabled:opacity-40"
             >
               Next
