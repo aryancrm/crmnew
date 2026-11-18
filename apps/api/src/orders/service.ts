@@ -806,7 +806,9 @@ const cardColumns = sql`${rowColumns}, o.medrep_id::int as "medrepId", ${approve
   o.delivery_address as "deliveryAddress", o.receiver, o.receiver_phone as "receiverPhone", ${day("o.expected_on")} as "expectedOn",
   (select coalesce(sum(i.qty), 0) from order_item i where i.order_id = o.id)::int as pieces,
   (select p.name from person p where p.id = o.dispatch_by) as "dispatchBy", o.dispatch_by::int as "dispatchById",
-  (select p.name from person p where p.id = o.manage_by) as "handledBy", o.manage_by::int as "handledById",
+  -- Who has it in hand at its desk now: Finance's person while it is with Finance, else Management's.
+  (select p.name from person p where p.id = case when o.status in ('finance_check', 'ready_for_invoice') then o.finance_by else o.manage_by end) as "handledBy",
+  (case when o.status in ('finance_check', 'ready_for_invoice') then o.finance_by else o.manage_by end)::int as "handledById",
   o.came_back_count::int as "cameBackCount", o.came_back_reason as "cameBackReason", c.kind as "customerKind", c.city as "customerCity", ch.code as channel, a.name as area,
   o.payment_terms as "paymentTerms", o.payment_days::int as "paymentDays",
   ${iso("coalesce(o.submitted_at, o.created_at)")} as "submittedAt", o.held_from as "heldFrom", c.review,

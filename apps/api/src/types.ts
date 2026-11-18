@@ -5,6 +5,17 @@ import type { Role } from "./people/roles";
 export type { Role } from "./people/roles";
 
 /** The signed-in person, as every screen needs them. */
+/** Management's or Finance's team on its screen: each person (away on leave or not), what each has
+ *  open and has done today, and what is waiting (and not given to anyone). */
+export type DeskDuty = {
+  desk: "management" | "finance";
+  people: { id: number; name: string; away: boolean; open: number; doneToday: number }[];
+  /** The one looking works at this desk (the CEO and the Admin only look). */
+  mine: boolean;
+  waiting: number;
+  unassigned: number;
+};
+
 /** One unit of a department's team on the portal: its lead seat and its seats by title (no names). */
 export type PortalTeamNode = {
   unit: string;

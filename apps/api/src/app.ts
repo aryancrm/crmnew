@@ -57,6 +57,7 @@ import { scoreRoutes } from "./scores/routes";
 import { sellerRoutes } from "./sellers/routes";
 import { targetRoutes } from "./targets/routes";
 import { teamRoutes } from "./team/routes";
+import { DUTY_DESKS, type DutyDesk, deskTeam, shareOut, shareOutAll, takeFinanceOrder } from "./desks/service";
 import { portalDepartment } from "./portal/service";
 import type { ApiError, Me } from "./types";
 
@@ -66,6 +67,11 @@ export type AppOptions = {
 };
 
 const MAX_WRONG = 5;
+
+const deskParam = (value: string): DutyDesk => {
+  if (!DUTY_DESKS.includes(value as DutyDesk)) throw new Refusal(404, "not_found", "No such desk.");
+  return value as DutyDesk;
+};
 const LOCK_MINUTES = 15;
 
 export function createApp(db: Database, options: AppOptions) {
@@ -113,6 +119,30 @@ export function createApp(db: Database, options: AppOptions) {
   const signedIn = signedInWith(db, (me) => markSeen(db, me));
 
   app.get("/api/health", (c) => c.json({ ok: true }));
+  // Management's and Finance's waiting orders, each given to one of the desk's people: after
+  // anything that may have moved an order, the new ones are shared out; the team on the screen.
+  app.use("/api/*", async (c, next) => {
+    await next();
+    const me = c.get("me");
+    if (me && c.req.method === "POST" && c.res.status < 300)
+      await shareOutAll(db, me).catch((error) => console.error("[desk]", error));
+  });
+  app.get("/api/desk/:desk/team", signedIn, async (c) => {
+    const desk = deskParam(c.req.param("desk"));
+    const team = await deskTeam(db, c.get("me"), desk);
+    // Opening the screen shares out anything still waiting for a name.
+    if (team.unassigned) {
+      await shareOut(db, c.get("me"), desk);
+      return c.json(await deskTeam(db, c.get("me"), desk));
+    }
+    return c.json(team);
+  });
+  app.post("/api/finance/orders/:id/take", signedIn, async (c) => {
+    const input = await readBody(c, z.object({ release: z.boolean().default(false) }));
+    await takeFinanceOrder(db, c.get("me"), idParam(c), input.release);
+    return c.json({ ok: true });
+  });
+
   // A department's page on the portal, before signing in: counts, times and the team's seats only.
   app.get("/api/portal/departments/:key", async (c) =>
     c.json(await portalDepartment(db, c.req.param("key"))),

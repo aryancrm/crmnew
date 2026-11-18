@@ -437,8 +437,9 @@ describe("what Management does with an order", () => {
         (one) => one.id === made.body.id,
       );
     expect((await post("ryan", `/api/orders/${made.body.id}/handle`)).status).toBe(403);
-    expect((await post("sarla", `/api/orders/${made.body.id}/handle`)).status).toBe(200);
+    // Given to Management's one person automatically (18 Nov); saying so again changes nothing.
     expect((await card("admin"))?.handledBy).toBe("Sarla");
+    expect((await post("sarla", `/api/orders/${made.body.id}/handle`)).status).toBe(200);
     // Another takes it over; the one who no longer has it can't let it go for them.
     expect((await post("admin", `/api/orders/${made.body.id}/handle`)).status).toBe(200);
     expect(
@@ -446,12 +447,13 @@ describe("what Management does with an order", () => {
     ).toBe(200);
     expect((await card("sarla"))?.handledBy).toBe("Admin");
     const events = (await order("sarla", made.body.id)).events.map((one) => one.message);
-    expect(events).toContain("Sarla is handling it.");
+    expect(events).toContain("Given to Sarla (Management).");
     expect(events).toContain("Admin took it over from Sarla.");
+    // Let go, it is given again to whoever at Management has the fewest open.
     expect(
       (await post("admin", `/api/orders/${made.body.id}/handle`, { release: true })).status,
     ).toBe(200);
-    expect((await card("sarla"))?.handledBy).toBeNull();
+    expect((await card("sarla"))?.handledBy).toBe("Sarla");
     await act("sarla", made.body.id, "approve");
     expect((await post("sarla", `/api/orders/${made.body.id}/handle`)).status).toBe(409);
   });

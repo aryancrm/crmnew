@@ -37,6 +37,7 @@ import {
 import { lazy, type ReactNode, Suspense, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { DutyBar } from "../desk/duty-bar";
 import { useMe } from "../auth";
 import { DISPATCH_HOLDS, type DispatchAsk, DispatchDialogs } from "../dispatch/parts";
 import { ConfirmPaymentDialog, useMoney } from "../finance/parts";
@@ -183,7 +184,8 @@ export function OrdersToCheck({
 }) {
   const navigate = useNavigate();
   // Management and Admin say why a held order goes on, on any desk's board (the API asks them).
-  const manager = ["management", "admin"].includes(useMe().data?.role ?? "");
+  const me = useMe().data;
+  const manager = ["management", "admin"].includes(me?.role ?? "");
   const TABS = all
     ? [{ key: "all" as const, label: "All orders" }, ...DESK_TABS.management]
     : DESK_TABS[desk];
@@ -315,7 +317,13 @@ export function OrdersToCheck({
         </Suspense>
       </div>
     );
-  const data = query.data;
+  // Only one's own orders (the duty bar's "Mine"), at Management and Finance.
+  const mineOnly = params.get("who") === "mine" && !all && (desk === "management" || desk === "finance");
+  const data = query.data
+    ? mineOnly
+      ? { ...query.data, cards: query.data.cards.filter((card) => card.handledById === me?.id) }
+      : query.data
+    : undefined;
   if (!data) return <PageState query={query} what="the orders" />;
 
   const finance = data.desk === "finance";
@@ -355,6 +363,11 @@ export function OrdersToCheck({
   }
 
   /** Someone in Management says "I'll handle it", takes it over, or lets it go. */
+  async function takeFinance(orderId: number, release: boolean) {
+    await order.run(() => api(`/api/finance/orders/${orderId}/take`, { body: { release } }));
+    await queries.invalidateQueries({ queryKey: ["orders"] });
+
+  }
   async function handle(orderId: number, release: boolean) {
     await order.run(() => api(`/api/orders/${orderId}/handle`, { body: { release } }));
     await queries.invalidateQueries({ queryKey: ["orders"] });
@@ -378,7 +391,9 @@ export function OrdersToCheck({
       onHandle={
         data.desk === "management" && data.can.manage
           ? (release) => handle(card.id, release)
-          : undefined
+          : data.desk === "finance" && ["finance_check", "ready_for_invoice"].includes(card.status)
+            ? (release) => takeFinance(card.id, release)
+            : undefined
       }
       onConfirm={() => setConfirming(card)}
       onInvoice={() => money.send(`/api/finance/orders/${card.id}/invoice`, {})}
@@ -417,6 +432,9 @@ export function OrdersToCheck({
 
   return (
     <div className={embedded ? "" : "mx-auto max-w-screen-2xl"}>
+      {!all && (desk === "management" || desk === "finance") && (
+        <DutyBar desk={desk} mine={mineOnly} onMine={(value) => set({ who: value ? "mine" : "" })} />
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <h1
@@ -931,7 +949,11 @@ export function OrderCardItem({
                   {waited(card.stepSince)}
                 </span>
               </span>
-              {onHandle && (pending || (flagged && heldBy === "management")) && (
+              {onHandle &&
+                (pending ||
+                  (flagged && heldBy === "management") ||
+                  card.status === "finance_check" ||
+                  card.status === "ready_for_invoice") && (
                 // Who in Management has it, so two people don't work the same order.
                 <span className="flex items-center gap-1.5">
                   {card.handledById === me?.id ? (
