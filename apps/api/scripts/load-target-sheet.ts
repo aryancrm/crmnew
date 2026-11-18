@@ -2,7 +2,8 @@
 // "take this sheet as the truth"):
 //  1. its rows, each with the seat of the person it names (or the vacant seat of its area);
 //  2. each Zoho name tied to that seat, so its customers and sales come under it;
-//  3. the month's target on the seat and its holder (a 0 on the sheet never wipes a target set);
+//  3. the month's target on the seat and its holder, as the sheet says (Aryan, 19 Nov: "what is in
+//     the sheet is right");
 //  4. who reports to whom, as the sheet's managers say (a manager not in the ERP, or who left, is
 //     left as it is and said).
 // Dry run by default; --apply writes.
@@ -84,8 +85,12 @@ for (const [at, row] of SHEET_2026_11.entries()) {
     if (known.tied === seatId) continue;
     console.log(`  ${name.padEnd(28)} → seat ${seatId}${known.tied ? ` (was seat ${known.tied})` : ""}`);
     if (apply) {
-      const done = await tieZohoSeller(db, me, name, seatId);
-      console.log(`    ${done.moved} customers moved`);
+      try {
+        const done = await tieZohoSeller(db, me, name, seatId);
+        console.log(`    ${done.moved} customers moved`);
+      } catch (error) {
+        console.log(`    not tied: ${error instanceof Error ? error.message : String(error)}`);
+      }
     }
   }
 }
@@ -96,11 +101,7 @@ for (const [at, row] of SHEET_2026_11.entries()) {
   const seatId = seats[at];
   if (!seatId) continue;
   const [now] = await rows<{ amount: number | null }>(db, sql`select amount::float8 as amount from seat_target where seat_id = ${seatId} and month = ${MONTH}::date`);
-  if (row.target === 0 && now?.amount) {
-    console.log(`  ${row.salesperson.padEnd(28)} sheet 0, kept ₱${(now.amount / 100).toLocaleString("en-US")} already set`);
-    continue;
-  }
-  if (now?.amount === row.target * 100) continue;
+  if ((now?.amount ?? null) === row.target * 100) continue;
   console.log(`  ${row.salesperson.padEnd(28)} ₱${row.target.toLocaleString("en-US")}${now?.amount ? ` (was ₱${(now.amount / 100).toLocaleString("en-US")})` : ""}`);
   if (!apply) continue;
   await db.execute(
@@ -125,8 +126,8 @@ const MANAGERS: Record<string, string | null> = {
   Ken: "Kindred Malauan",
   Subir: "Subir Dey",
   "Jessa Domino": "Jessa Domino",
-  // Claire Gallana was marked as left on 17 Nov: Mindanao stays as it is until Aryan says.
-  Claire: null,
+  // Back in the company (scripts/claire-back-19nov.ts).
+  Claire: "Claire Gallana",
   Mhalou: null,
 };
 console.log("\nReports to:");
@@ -136,6 +137,11 @@ for (const [at, row] of SHEET_2026_11.entries()) {
   const manager = MANAGERS[row.manager];
   if (manager === undefined || manager === null) {
     if (row.manager === "Claire") console.log(`  ${row.salesperson.padEnd(28)} manager Claire on the sheet: left as it is (Claire Gallana left on 17 Nov)`);
+    continue;
+  }
+  // A manager's own sales row (Claire's B2B | CLAIRE) doesn't move whom the manager reports to.
+  if (row.person && Object.values(MANAGERS).includes(row.person)) {
+    console.log(`  ${row.salesperson.padEnd(28)} ${row.person} manages others: their own line is left as it is`);
     continue;
   }
   const [boss] = await seatOfPerson(manager);

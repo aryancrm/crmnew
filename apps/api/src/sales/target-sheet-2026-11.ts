@@ -58,7 +58,7 @@ export const SHEET_2026_11: SheetRow[] = [
   { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | DHON", zoho: ["B2B | DHON"], hq: "ON SITE", target: 500_000 },
   { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | FLOREMEL TAN MEDINA", zoho: ["B2B | FLOREMEL TAN MEDINA"], hq: "ON SITE", target: 1_415_319, person: "Floremel Medina" },
   { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | FRITZIE ROSANN MIER", zoho: ["B2B | FRITZIE ROSANN MIER", "B2B | Fritzie Mier"], hq: "ON SITE", target: 6_016_856, person: "Fritzie Mier" },
-  { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | CLAIRE", zoho: ["B2B | CLAIRE"], hq: "ON SITE", target: 500_000 },
+  { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | CLAIRE", zoho: ["B2B | CLAIRE"], hq: "ON SITE", target: 500_000, person: "Claire Gallana" },
   { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | LONIE", zoho: ["B2B | LONIE"], hq: "BAMBANG", target: 2_454_860, person: "Lonie Ann Neri" },
   { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | PILLOW", zoho: ["B2B | PILLOW"], hq: "ON SITE", target: 2_350_771 },
   { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | CHARLE", zoho: ["B2B | CHARLE"], hq: "ON SITE", target: 500_000 },
