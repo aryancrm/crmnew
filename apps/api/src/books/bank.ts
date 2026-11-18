@@ -90,10 +90,15 @@ export type StatementRow = { date: string; description?: string | null; referenc
  *  reference) is left as it is, so importing the same file twice adds nothing. */
 export async function importStatement(db: Database, me: Me, account: string, input: { fileName?: string | null; rows: StatementRow[] }): Promise<{ added: number; skipped: number }> {
   allow(me, LEDGER_ROLES, "import a bank statement");
-  return db.transaction(async (tx) => {
+  return db.transaction((tx) => addStatementLines(tx, account, input, me.id));
+}
+
+/** The lines themselves (also used by the import of Zoho's uncategorized lines). */
+export async function addStatementLines(tx: Runner, account: string, input: { fileName?: string | null; rows: StatementRow[] }, by: number | null): Promise<{ added: number; skipped: number }> {
+  {
     const name = await bankAccount(tx, account);
     if (!input.rows.length) throw new Refusal(400, "invalid", "The file has no lines.", "rows");
-    const [made] = await rows<{ id: number }>(tx, sql`insert into bank_import (account, file_name, by_person) values (${name}, ${input.fileName ?? null}, ${me.id}) returning id::int as id`);
+    const [made] = await rows<{ id: number }>(tx, sql`insert into bank_import (account, file_name, by_person) values (${name}, ${input.fileName ?? null}, ${by}) returning id::int as id`);
     let added = 0;
     for (const [at, row] of input.rows.entries()) {
       const date = day(row.date, `rows.${at}.date`) as string;
@@ -111,7 +116,7 @@ export async function importStatement(db: Database, me: Me, account: string, inp
     }
     await tx.execute(sql`update bank_import set lines = ${added} where id = ${made?.id ?? 0}`);
     return { added, skipped: input.rows.length - added };
-  });
+  }
 }
 
 async function openLine(tx: Runner, id: number): Promise<{ id: number; account: string; date: string; amount: number; description: string | null; reference: string | null; status: string }> {
