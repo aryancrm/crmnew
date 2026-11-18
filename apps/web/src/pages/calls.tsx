@@ -142,12 +142,12 @@ export function Calls() {
     <div>
       <PageHead
         title={many ? "Calls" : "My calls"}
-        sub={data ? `${data.rows.length} calls ${from === to ? (from === today ? "today" : `on ${from}`) : `from ${from} to ${to}`}` : undefined}
+        sub={data ? `${data.rows.length} ${data.rows.length === 1 ? "call" : "calls"} ${from === to ? (from === today ? "today" : `on ${from}`) : `from ${from} to ${to}`}` : undefined}
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            <input type="date" className="field" value={from} max={to} onChange={(event) => set({ from: event.target.value })} aria-label="From" />
+            <input type="date" className="field !w-40" value={from} max={to} onChange={(event) => set({ from: event.target.value })} aria-label="From" />
             <span className="text-slate-400">to</span>
-            <input type="date" className="field" value={to} min={from} max={today} onChange={(event) => set({ to: event.target.value })} aria-label="To" />
+            <input type="date" className="field !w-40" value={to} min={from} max={today} onChange={(event) => set({ to: event.target.value })} aria-label="To" />
           </div>
         }
       />

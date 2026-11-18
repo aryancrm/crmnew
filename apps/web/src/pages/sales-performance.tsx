@@ -153,11 +153,11 @@ export function SalesPerformancePage() {
               {p.label}
             </button>
           ))}
-          <input type="date" className="field" value={from} max={to} onChange={(event) => set({ from: event.target.value })} aria-label="From" />
+          <input type="date" className="field !w-40" value={from} max={to} onChange={(event) => set({ from: event.target.value })} aria-label="From" />
           <span className="text-slate-400">to</span>
-          <input type="date" className="field" value={to} min={from} max={today} onChange={(event) => set({ to: event.target.value })} aria-label="To" />
+          <input type="date" className="field !w-40" value={to} min={from} max={today} onChange={(event) => set({ to: event.target.value })} aria-label="To" />
           {r?.scope === "company" && (
-            <select className="field" value={channel} onChange={(event) => set({ channel: event.target.value || null })} aria-label="Channel">
+            <select className="field !w-44" value={channel} onChange={(event) => set({ channel: event.target.value || null })} aria-label="Channel">
               <option value="">All channels</option>
               {LINES.map((c) => (
                 <option key={c} value={c}>
