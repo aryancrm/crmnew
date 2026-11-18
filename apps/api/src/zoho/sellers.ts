@@ -10,7 +10,20 @@ import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import { ORG_CHANGE_ROLES } from "../org/service";
-import type { Me, ZohoSellers } from "../types";
+import type { Me, ZohoSellerPlace, ZohoSellers } from "../types";
+import { HUB_SHEET_2026_09 } from "./hub-sheet";
+
+/** A Zoho salesperson name, made comparable (the hub's own rule: case, spacing, "I" for "|"). */
+const norm = (text: string) =>
+  text
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+i\s+/g, " | ")
+    .replace(/\s*\|\s*/g, " | ")
+    .replace(/\s+/g, " ");
+const after = (text: string) => (text.includes("|") ? (text.split("|").slice(1).join("|") ?? "").trim() : text.trim());
 
 /** Each customer's salesperson in Zoho: the one on the latest order across their contacts. */
 const latestSeller = sql`(select distinct on (z.customer_id) z.customer_id, z.seller, z.seller_on
@@ -28,7 +41,7 @@ const words = (text: string) =>
 
 export async function zohoSellers(db: Database, me: Me): Promise<ZohoSellers> {
   allow(me, ORG_CHANGE_ROLES, "tie Zoho's salespeople to seats");
-  const [sellers, seats] = await Promise.all([
+  const [sellers, seats, sales, holders] = await Promise.all([
     rows<Omit<ZohoSellers["sellers"][number], "suggested">>(
       db,
       sql`select s.seller as name, count(*)::int as customers,
@@ -49,7 +62,49 @@ export async function zohoSellers(db: Database, me: Me): Promise<ZohoSellers> {
         where s.active
         order by c.code, u.name, s.sort`,
     ),
+    // Zoho's invoices under each salesperson name this year.
+    rows<{ name: string; amount: number }>(
+      db,
+      sql`select coalesce(d.fields->>'Sales Person', d.fields->>'salesperson_name') as name, sum(round(d.total * d.fx_rate))::bigint::float8 as amount
+        from book_doc d where d.kind = 'invoice' and d.zoho_id is not null and d.status not in ('void', 'draft')
+          and d.doc_date >= date_trunc('year', now())::date
+        group by 1`,
+    ),
+    // Everyone holding a seat today: where they sit and whom they report to.
+    rows<ZohoSellerPlace & { seatId: number }>(
+      db,
+      sql`select s.id::int as "seatId", p.name as person, s.title as seat, u.name as team,
+          coalesce(ca.code, cu.code, cp.code) as channel, b.name as "reportsTo"
+        from seat s join seat_holder h on h.seat_id = s.id and h.ends_on is null and h.kind = 'holder'
+          join person p on p.id = h.person_id join org_unit u on u.id = s.unit_id
+          left join org_unit up on up.id = u.parent_id
+          left join area a on a.id = s.area_id left join channel ca on ca.id = a.channel_id
+          left join channel cu on cu.id = u.channel_id left join channel cp on cp.id = up.channel_id
+          left join person b on b.id = s.boss_id
+        where s.active and p.active`,
+    ),
   ]);
+  const saleOf = new Map(sales.map((one) => [norm(one.name ?? ""), one.amount]));
+  const hubOf = new Map<string, (typeof HUB_SHEET_2026_09)[number]>();
+  for (const row of HUB_SHEET_2026_09) {
+    hubOf.set(norm(row.zoho), row);
+    if (row.alias) hubOf.set(norm(row.alias), row);
+  }
+  const placeOfSeat = new Map(holders.map((one) => [one.seatId, one]));
+  /** The person a hub name ("STC | GIENEL", "B&B | MERRY JOYCE") is, when exactly one holder's
+   *  name starts with it; a vacant name is nobody. Only shown, never applied. */
+  const looksLike = (hubPerson: string): ZohoSellerPlace | null => {
+    const said = norm(after(hubPerson));
+    if (!said || /vacant/.test(said)) return null;
+    const found = holders.filter((one) => {
+      const name = norm(one.person);
+      return name === said || name.startsWith(`${said} `);
+    });
+    const unique = [...new Map(found.map((one) => [one.person, one])).values()];
+    if (unique.length !== 1) return null;
+    const { seatId: _, ...place } = unique[0] as ZohoSellerPlace & { seatId: number };
+    return place;
+  };
   // A suggestion: the seat whose area or title shares the most words with the salesperson's name,
   // in the channel the name starts with when one is known.
   const CHANNEL: Record<string, string> = { HOS: "HOSP", RX: "RX", URO: "RX", STC: "RX", "B&B": "RX", B2B: "B2B", CLIDP: "B2B", BID: "BID", TELESALES: "TS", B2C: "ONLINE", MT: "MT" };
@@ -65,7 +120,16 @@ export async function zohoSellers(db: Database, me: Me): Promise<ZohoSellers> {
         const score = mine.filter((word) => theirs.has(word)).length;
         if (score > 0 && (!best || score > best.score)) best = { id: seat.id, score };
       }
-      return { ...seller, suggested: best?.id ?? null };
+      const hub = hubOf.get(norm(seller.name)) ?? null;
+      const tiedTo = seller.seatId ? placeOfSeat.get(seller.seatId) : undefined;
+      return {
+        ...seller,
+        suggested: best?.id ?? null,
+        year: saleOf.get(norm(seller.name)) ?? 0,
+        hub: hub ? { channel: hub.channel, head: hub.head, manager: hub.manager, person: hub.person, hq: hub.hq, vacant: hub.vacant } : null,
+        ours: tiedTo ? { person: tiedTo.person, seat: tiedTo.seat, team: tiedTo.team, channel: tiedTo.channel, reportsTo: tiedTo.reportsTo } : null,
+        looksLike: hub ? looksLike(hub.person) : looksLike(seller.name),
+      };
     }),
   };
 }

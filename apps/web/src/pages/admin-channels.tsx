@@ -845,7 +845,19 @@ function TeamCard({
   const close = useAction();
   const [moving, setMoving] = useState(false);
   const lead = unit.seats.find((seat) => seat.lead) ?? null;
-  const others = unit.seats.filter((seat) => !seat.lead);
+  // A team may have more than one team lead (Aryan, 18 Nov): the other leads sit in it beside the
+  // main one, each MedRep under the lead they report to.
+  const isLeadSeat = (seat: OrgSeat) => seat.module === "team_lead" || seat.module === "manager";
+  const coLeads = unit.seats.filter((seat) => !seat.lead && isLeadSeat(seat));
+  const others = unit.seats.filter((seat) => !seat.lead && !isLeadSeat(seat));
+  const repsOf = (leadSeat: OrgSeat | null) =>
+    others.filter((seat) =>
+      leadSeat && leadSeat !== lead
+        ? seat.reportsToSeatId === leadSeat.id
+        : !coLeads.some((co) => co.id === seat.reportsToSeatId),
+    );
+  const parentUnit = teams.find((one) => one.id === unit.parentId) ?? top;
+  const aboveLead = parentUnit.seats.find((seat) => seat.lead) ?? null;
   const under = teams.filter((one) => one.parentId === unit.id);
   /** No seat and no team under it: it can be closed. */
   const empty = unit.seats.length === 0 && under.length === 0;
@@ -874,7 +886,13 @@ function TeamCard({
             <Menu
               items={[
                 ...(lead
-                  ? []
+                  ? [
+                      {
+                        label: "Add another team lead",
+                        onClick: () =>
+                          open({ kind: "add", unit, module: "team_lead", ...(aboveLead ? { reportsTo: aboveLead.id } : {}) }),
+                      },
+                    ]
                   : [
                       {
                         label: "Add its team lead",
@@ -931,12 +949,30 @@ function TeamCard({
             )}
           </li>
         )}
-        {others.map((seat) => (
+        {repsOf(lead).map((seat) => (
           <SeatRow key={seat.id} seat={seat} unit={unit} open={open} />
         ))}
-        {others.length === 0 && (
+        {others.length === 0 && coLeads.length === 0 && (
           <li className="px-4 py-2.5 text-xs text-slate-400">No MedRep yet.</li>
         )}
+        {coLeads.map((co) => (
+          <li key={co.id} className="!p-0">
+            <div className="flex items-center justify-between gap-2 border-t border-dashed border-slate-200 bg-slate-50/60 px-4 py-1.5">
+              <span className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase">Another team lead</span>
+              {can && (
+                <Button small variant="quiet" onClick={() => open({ kind: "add", unit, module: "medrep", reportsTo: co.id })}>
+                  <Plus size={13} /> MedRep under them
+                </Button>
+              )}
+            </div>
+            <ul className="divide-y divide-slate-100">
+              <SeatRow seat={co} unit={unit} open={open} />
+              {repsOf(co).map((seat) => (
+                <SeatRow key={seat.id} seat={seat} unit={unit} open={open} />
+              ))}
+            </ul>
+          </li>
+        ))}
       </ul>
       {under.length > 0 && (
         <div className="flex flex-col gap-2.5 rounded-b-2xl border-t border-slate-100 bg-slate-50/70 p-2.5 pl-4">

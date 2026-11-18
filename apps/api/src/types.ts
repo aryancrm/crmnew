@@ -4538,6 +4538,9 @@ export type DataCheck = {
 export type DataChecks = { at: string; ok: boolean; checks: DataCheck[] };
 
 /** Zoho's salespeople, each with the customers they last sold to, and the seats they can be tied to. */
+/** A person's place in this CRM's org: their seat, team, channel and whom they report to. */
+export type ZohoSellerPlace = { person: string; seat: string; team: string; channel: string | null; reportsTo: string | null };
+
 export type ZohoSellers = {
   sellers: {
     /** As Zoho writes it ("HOS | PASAY"). */
@@ -4549,6 +4552,13 @@ export type ZohoSellers = {
     /** The seat it is tied to, and the seat that looks like it. */
     seatId: number | null;
     suggested: number | null;
+    /** Zoho's invoices under this name this year, in centavos. */
+    year: number;
+    /** Who the old hub's Sep 2026 sheet put on this name, and under whom. */
+    hub: { channel: string; head: string | null; manager: string; person: string; hq: string | null; vacant: boolean } | null;
+    /** Where this CRM has it: the tied seat's holder, or the person the hub's name looks like. */
+    ours: ZohoSellerPlace | null;
+    looksLike: ZohoSellerPlace | null;
   }[];
   /** Seats with an area (only those can hold customers). */
   seats: { id: number; title: string; unit: string; channel: string | null; area: string | null; holder: string | null }[];
