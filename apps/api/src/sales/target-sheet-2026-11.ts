@@ -2,8 +2,8 @@
 // software in one click"), row for row as the company's Excel has it: head, channel, manager, the
 // salesperson as the sheet names them, the Zoho name(s) their sales are invoiced under, HQ and the
 // month's target in pesos. `person`: who that is in this ERP's org (full name), when they are in it;
-// `area`: the seat by its area when the sheet's row is a vacant seat. Loaded by
-// scripts/load-target-sheet.ts.
+// `area`: the seat by its area when the sheet's row is a vacant seat, or someone not yet in the ERP
+// (their seat made by scripts/align-org-to-sheet.ts). Loaded by scripts/load-target-sheet.ts.
 
 export type SheetRow = {
   head: string;
@@ -55,14 +55,14 @@ export const SHEET_2026_11: SheetRow[] = [
   { head: "Javed", channel: "MD Telesales", manager: "Honey", salesperson: "B2C | RACHELLE UPAO", zoho: ["B2C | Rachelle Upao"], hq: "ON SITE", target: 500_000, person: "Rachelle Upao" },
   { head: "Javed", channel: "MD Telesales", manager: "Honey", salesperson: "B2C | JANE", zoho: ["B2C | Mary Jane Vinas"], hq: "ON SITE", target: 500_000, person: "Mary Jane Viñas" },
 
-  { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | DHON", zoho: ["B2B | DHON"], hq: "ON SITE", target: 500_000 },
+  { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | DHON", zoho: ["B2B | DHON"], hq: "ON SITE", target: 500_000, area: "B2B | DHON" },
   { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | FLOREMEL TAN MEDINA", zoho: ["B2B | FLOREMEL TAN MEDINA"], hq: "ON SITE", target: 1_415_319, person: "Floremel Medina" },
   { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | FRITZIE ROSANN MIER", zoho: ["B2B | FRITZIE ROSANN MIER", "B2B | Fritzie Mier"], hq: "ON SITE", target: 6_016_856, person: "Fritzie Mier" },
   { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | CLAIRE", zoho: ["B2B | CLAIRE"], hq: "ON SITE", target: 500_000, person: "Claire Gallana" },
   { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | LONIE", zoho: ["B2B | LONIE"], hq: "BAMBANG", target: 2_454_860, person: "Lonie Ann Neri" },
-  { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | PILLOW", zoho: ["B2B | PILLOW"], hq: "ON SITE", target: 2_350_771 },
-  { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | CHARLE", zoho: ["B2B | CHARLE"], hq: "ON SITE", target: 500_000 },
-  { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | MANI MISHRA", zoho: ["B2B | MANI MISHRA"], hq: "ON SITE", target: 0 },
+  { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | PILLOW", zoho: ["B2B | PILLOW"], hq: "ON SITE", target: 2_350_771, area: "B2B | PILLOW" },
+  { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | CHARLE", zoho: ["B2B | CHARLE"], hq: "ON SITE", target: 500_000, area: "B2B | CHARLE" },
+  { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | MANI MISHRA", zoho: ["B2B | MANI MISHRA"], hq: "ON SITE", target: 0, area: "B2B | MANI MISHRA" },
   // The sheet has Faith twice: her own name, and Khayzee's (₱18,013 in November), which she sells now.
   { head: "Subir", channel: "B2B", manager: "Jessa Domino", salesperson: "B2B | FAITH", zoho: ["B2B | FAITH", "B2B | Winbelle Faith Gomez", "B2B | KHAYZEE"], hq: "ON SITE", target: 0, person: "Winbelle Faith Gomez" },
   { head: "Subir", channel: "BID", manager: "Subir", salesperson: "BID | HAZEL", zoho: ["BID | HAZEL"], hq: "ON SITE", target: 1_403_356, person: "Hazel Marie Balano" },
@@ -101,6 +101,6 @@ export const SHEET_2026_11: SheetRow[] = [
   hos("Jimlord", "HOS | DEN JANE", ["HOS | CAMANAVA"], "CAMANAVA", 500_000, "Den Jane Suarez"),
   hos("Jimlord", "HOS | JESSA", ["HOS | ILOILO"], "ILOILO", 500_000, "Jessa Mae Teruel"),
 
-  { head: "Mhalou", channel: "MT", manager: "Mhalou", salesperson: "MT | ARLENE", zoho: ["MT | 1"], hq: "ON SITE", target: 500_000 },
-  { head: "Mhalou", channel: "MT", manager: "Mhalou", salesperson: "MT | JASPER", zoho: ["MT | 2"], hq: "ON SITE", target: 500_000 },
+  { head: "Mhalou", channel: "MT", manager: "Mhalou", salesperson: "MT | ARLENE", zoho: ["MT | 1"], hq: "ON SITE", target: 500_000, area: "MT | ARLENE" },
+  { head: "Mhalou", channel: "MT", manager: "Mhalou", salesperson: "MT | JASPER", zoho: ["MT | 2"], hq: "ON SITE", target: 500_000, area: "MT | JASPER" },
 ];

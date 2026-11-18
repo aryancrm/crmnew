@@ -15,6 +15,7 @@ import { sql } from "drizzle-orm";
 import { openDatabase, rows } from "../src/db/index";
 import { migrate } from "../src/db/migrate";
 import { updateSeat } from "../src/org/service";
+import { sheetName } from "../src/sales/target-sheet";
 import { SHEET_2026_11 } from "../src/sales/target-sheet-2026-11";
 import type { Me } from "../src/types";
 import { tieZohoSeller } from "../src/zoho/sellers";
@@ -70,18 +71,20 @@ if (apply) {
   console.log("Rows written.");
 }
 
-// 2 · Zoho names onto the seats.
+// 2 · Zoho names onto the seats: each name as Zoho spells it ("B2B | Pillow" for the sheet's
+// "B2B | PILLOW"), matched the way the sheet's figures are.
 console.log("\nZoho names tied:");
+const spelled = new Map<string, { name: string; tied: number | null }[]>();
+for (const one of await rows<{ name: string; tied: number | null }>(
+  db,
+  sql`select z.seller as name, (select seat_id::int from zoho_seller where name = z.seller) as tied from (select distinct seller from zoho_contact where seller is not null) z`,
+))
+  spelled.set(sheetName(one.name), [...(spelled.get(sheetName(one.name)) ?? []), one]);
 for (const [at, row] of SHEET_2026_11.entries()) {
   const seatId = seats[at];
   if (!seatId) continue;
-  for (const name of row.zoho) {
-    const [known] = await rows<{ name: string; tied: number | null }>(
-      db,
-      sql`select z.seller as name, (select seat_id::int from zoho_seller where name = z.seller) as tied from zoho_contact z
-        where z.seller = ${name} limit 1`,
-    );
-    if (!known) continue;
+  for (const known of row.zoho.flatMap((name) => spelled.get(sheetName(name)) ?? [])) {
+    const name = known.name;
     if (known.tied === seatId) continue;
     console.log(`  ${name.padEnd(28)} → seat ${seatId}${known.tied ? ` (was seat ${known.tied})` : ""}`);
     if (apply) {
@@ -144,7 +147,12 @@ for (const [at, row] of SHEET_2026_11.entries()) {
     console.log(`  ${row.salesperson.padEnd(28)} ${row.person} manages others: their own line is left as it is`);
     continue;
   }
-  const [boss] = await seatOfPerson(manager);
+  // The manager's lead seat (Claire also sells under B2B | CLAIRE from a seat of her own).
+  const [boss] = await rows<{ seatId: number }>(
+    db,
+    sql`select s.id::int as "seatId" from person p join seat_holder h on h.person_id = p.id and h.kind = 'holder' and h.ends_on is null
+      join seat s on s.id = h.seat_id and s.active where p.active and p.name = ${manager} order by s.lead desc, h.starts_on, h.id limit 1`,
+  );
   if (!boss) {
     console.log(`  ${row.salesperson.padEnd(28)} manager ${manager}: not in the ERP, left as it is`);
     continue;

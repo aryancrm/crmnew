@@ -32,15 +32,31 @@ type Area = OrgTree["areas"][number];
 const LABEL = "text-xs font-semibold text-slate-600";
 
 /** A channel's own box (the one with its channel whose box above isn't the same channel), every
- *  box under it, and its seats by the work they do. */
+ *  box under it, and its seats by the work they do. A channel can have a box in two businesses
+ *  (Telesales: Vanessa's TeleSales, Javed's MD Telesales): the highest one, first in order, is its
+ *  own box (as the server picks its head); the others are teams of it, each said where it sits. */
 function shapeOf(tree: OrgTree, channel: Channel) {
   const byId = new Map(tree.units.map((unit) => [unit.id, unit]));
-  const top =
-    tree.units.find(
+  const depthOf = (unit: OrgUnit) => {
+    let n = 0;
+    for (let at = unit.parentId; at !== null && n < 50; at = byId.get(at)?.parentId ?? null) n++;
+    return n;
+  };
+  const tops = tree.units
+    .filter(
       (unit) =>
         unit.channel?.id === channel.id &&
         (unit.parentId === null || byId.get(unit.parentId)?.channel?.id !== channel.id),
-    ) ?? null;
+    )
+    .sort((a, b) => depthOf(a) - depthOf(b) || a.sort - b.sort || a.id - b.id);
+  const top = tops[0] ?? null;
+  /** The channel's other boxes, with the box each sits in (another business). */
+  const elsewhere = new Map(
+    tops.slice(1).flatMap((unit) => {
+      const parent = unit.parentId ? byId.get(unit.parentId) : undefined;
+      return parent ? [[unit.id, parent] as const] : [];
+    }),
+  );
   const kids = new Map<number, OrgUnit[]>();
   for (const unit of tree.units) {
     if (unit.parentId === null) continue;
@@ -58,6 +74,10 @@ function shapeOf(tree: OrgTree, channel: Channel) {
     }
   };
   if (top) walk(top, []);
+  for (const unit of tops.slice(1)) {
+    teams.push({ unit, path: [] });
+    walk(unit, [unit.name]);
+  }
   const head = top?.seats.find((seat) => seat.lead) ?? null;
   const all = [...(top?.seats ?? []), ...teams.flatMap(({ unit }) => unit.seats)];
   const isLead = (seat: OrgSeat) => seat.module === "team_lead" || seat.module === "manager";
@@ -74,6 +94,7 @@ function shapeOf(tree: OrgTree, channel: Channel) {
     top,
     /** The box of another channel this channel's box sits inside, when it does (it shouldn't). */
     insideOf: parent?.channel && parent.channel.id !== channel.id ? parent : null,
+    elsewhere,
     head,
     teams,
     leads,
@@ -682,9 +703,17 @@ function ChannelPage({ tree, channel }: { tree: OrgTree; channel: Channel }) {
                 each team with its lead and MedReps, the teams under it inside it, any depth. */}
             <div className="grid items-start gap-3 lg:grid-cols-2">
               {shape.teams
-                .filter(({ unit }) => unit.parentId === top.id)
+                .filter(({ unit }) => unit.parentId === top.id || shape.elsewhere.has(unit.id))
                 .map(({ unit }) => (
-                  <TeamCard key={unit.id} unit={unit} teams={shape.teams.map((one) => one.unit)} top={top} can={can} open={setPop} />
+                  <TeamCard
+                    key={unit.id}
+                    unit={unit}
+                    teams={shape.teams.map((one) => one.unit)}
+                    top={top}
+                    sitsIn={shape.elsewhere.get(unit.id)}
+                    can={can}
+                    open={setPop}
+                  />
                 ))}
               {direct.length > 0 && (
                 <section className={CARD}>
@@ -828,6 +857,7 @@ function TeamCard({
   unit,
   teams,
   top,
+  sitsIn,
   can,
   open,
   depth = 0,
@@ -837,6 +867,8 @@ function TeamCard({
   teams: OrgUnit[];
   /** The channel's own box (the head's). */
   top: OrgUnit;
+  /** For the channel's box in another business: the box it sits in there (Prescription Business). */
+  sitsIn?: OrgUnit;
   can: boolean;
   open: (pop: Pop) => void;
   depth?: number;
@@ -856,7 +888,7 @@ function TeamCard({
         ? seat.reportsToSeatId === leadSeat.id
         : !coLeads.some((co) => co.id === seat.reportsToSeatId),
     );
-  const parentUnit = teams.find((one) => one.id === unit.parentId) ?? top;
+  const parentUnit = sitsIn ?? teams.find((one) => one.id === unit.parentId) ?? top;
   const aboveLead = parentUnit.seats.find((seat) => seat.lead) ?? null;
   const under = teams.filter((one) => one.parentId === unit.id);
   /** No seat and no team under it: it can be closed. */
@@ -865,9 +897,14 @@ function TeamCard({
     <section className={depth === 0 ? CARD : "rounded-xl border border-slate-200 bg-white"}>
       <div className="flex min-h-12 items-center justify-between gap-2 border-b border-slate-100 px-4 py-2">
         <div className="min-w-0">
-          {under.length > 0 && (
+          {(sitsIn || under.length > 0) && (
             <div className="text-[11px] text-slate-400">
-              {under.length} {under.length === 1 ? "team" : "teams"} under it
+              {[
+                sitsIn && `In ${sitsIn.name}${who(sitsIn.seats.find((seat) => seat.lead) ?? null) ? ` · ${who(sitsIn.seats.find((seat) => seat.lead) ?? null)}` : ""}`,
+                under.length > 0 && `${under.length} ${under.length === 1 ? "team" : "teams"} under it`,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
             </div>
           )}
           <h3 className="flex items-center gap-1.5 text-sm font-semibold text-slate-900">
