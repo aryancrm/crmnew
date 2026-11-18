@@ -94,6 +94,8 @@ import { CompanyPapersPage, TenderPage, TendersPage } from "./pages/tenders";
 import { ClidpListingsPage, ClidpTeamPage } from "./pages/clidp";
 import { RxDoctorsPage, RxFieldPage } from "./pages/rx";
 import { Targets } from "./pages/targets";
+import { Calls } from "./pages/calls";
+import { SalesPerformancePage } from "./pages/sales-performance";
 import { ToCallPage } from "./pages/to-call";
 import { TeamSalesPage } from "./pages/team";
 import { VisitPlanPage } from "./pages/visit-plan";
@@ -222,6 +224,8 @@ createRoot(root).render(
             <Route path="inventory/overview" element={<InventoryOverview />} />
             <Route path="inventory/requests" element={<MedicineRequestsPage />} />
             <Route path="targets" element={<Targets />} />
+            <Route path="calls" element={<Calls />} />
+            <Route path="sales-performance" element={<SalesPerformancePage />} />
             <Route path="my/score" element={<MyScorePage />} />
             <Route path="to-call" element={<ToCallPage />} />
             <Route path="collections" element={<CollectionsPage />} />

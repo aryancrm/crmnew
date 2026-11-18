@@ -48,6 +48,7 @@ import {
   PackageCheck,
   PackageX,
   PhoneCall,
+  TrendingUp,
   Pill,
   Radio,
   Receipt,
@@ -454,7 +455,8 @@ const messagesLink: MenuItem = folder(
  *  of its work, and Speed with what they look things up in: few links, folders for the rest
  *  (Aryan, 15 Nov: less clutter). */
 function deskFor(me: Me): Space {
-  const space = ownDesk(me);
+  const desk = ownDesk(me);
+  const space = withSalesLinks(me, desk);
   const [first, ...rest] = space.groups;
   if (!first) return space;
   const listed = allItems(space.groups.flatMap((group) => group.items));
@@ -505,9 +507,25 @@ function deskFor(me: Me): Space {
   };
 }
 
+/** Calls and the daily sales performance on every selling desk and those above them (18 Nov,
+ *  the B2B team's Google Form and end-of-day Excel, now here). */
+const CALL_ROLES: Role[] = ["medrep", "team_lead", "manager", "online"];
+const PERFORMANCE_ROLES: Role[] = [...CALL_ROLES, "ceo", "management", "admin"];
+function withSalesLinks(me: Me, space: Space): Space {
+  const [first, ...rest] = space.groups;
+  if (!first || !PERFORMANCE_ROLES.includes(me.role)) return space;
+  const listed = allItems(space.groups.flatMap((group) => group.items)).map((item) => item.to);
+  const own = CALL_ROLES.includes(me.role) && !LEAD_ROLES.includes(me.role);
+  const add: MenuItem[] = [
+    ...(listed.includes("/calls") ? [] : [{ to: "/calls", label: own ? "My calls" : "Calls", icon: PhoneCall }]),
+    ...(listed.includes("/sales-performance") ? [] : [{ to: "/sales-performance", label: "Sales performance", icon: TrendingUp }]),
+  ];
+  return { ...space, groups: [{ ...first, items: [...first.items, ...add] }, ...rest] };
+}
+
 const LEAD_ROLES: Role[] = ["team_lead", "manager"];
 /** Links about the people under a lead: their team, scores, targets, visits and attendance. */
-const TEAM_LINKS = ["/my-team", "/team-scores", "/targets", "/hr/attendance", "/field/report", "/rx/field"];
+const TEAM_LINKS = ["/my-team", "/team-scores", "/targets", "/hr/attendance", "/field/report", "/rx/field", "/calls", "/sales-performance"];
 /** What a lead looks things up in: customers and the stock. */
 const LOOK_UP_LINKS = ["/customers", "/medicines"];
 /** Splits a lead's links into the day's work, the team and the look-ups, keeping their order. A

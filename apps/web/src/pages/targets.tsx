@@ -440,6 +440,7 @@ function TargetCard({
           <div className="mt-1 text-xs text-rose-700">{action.problem.message}</div>
         )}
       </div>
+      <CountTargets row={row} month={month} />
       <div className="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-2 text-[11px] text-slate-500">
         <span className={`rounded-full px-2 py-0.5 font-semibold ring-1 ${TONE[tone].pill}`}>
           {TONE[tone].word}
@@ -453,5 +454,51 @@ function TargetCard({
         ) : null}
       </div>
     </article>
+  );
+}
+
+/** TLB (different SKUs) and billing efficiency (different customers) targets beside the peso one:
+ *  the daily sales performance reads them (18 Nov). They ride on the peso target's month. */
+function CountTargets({ row, month }: { row: Row; month: string }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const [tlb, setTlb] = useState(row.tlbTarget === null ? "" : String(row.tlbTarget));
+  const [billed, setBilled] = useState(row.billedTarget === null ? "" : String(row.billedTarget));
+  const changed = tlb !== (row.tlbTarget === null ? "" : String(row.tlbTarget)) || billed !== (row.billedTarget === null ? "" : String(row.billedTarget));
+  const box = "h-8 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm tabular-nums focus:border-emerald-600 focus:outline-none disabled:bg-slate-50";
+  return (
+    <div>
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-[11px] font-semibold text-slate-600">
+          TLB (SKUs)
+          <input className={box} inputMode="numeric" disabled={row.target === null} value={tlb} onChange={(event) => setTlb(event.target.value.replace(/\D/g, ""))} placeholder="—" />
+        </label>
+        <label className="text-[11px] font-semibold text-slate-600">
+          Billing (customers)
+          <input className={box} inputMode="numeric" disabled={row.target === null} value={billed} onChange={(event) => setBilled(event.target.value.replace(/\D/g, ""))} placeholder="—" />
+        </label>
+      </div>
+      {row.target === null ? (
+        <p className="mt-1 text-[10px] text-slate-400">Set the peso target first.</p>
+      ) : (
+        changed && (
+          <button
+            type="button"
+            disabled={action.busy}
+            className="mt-1.5 h-7 rounded-lg bg-brand px-3 text-xs font-semibold text-white disabled:opacity-50"
+            onClick={() =>
+              void action.run(async () => {
+                await api("/api/targets", { body: { personId: row.personId, month, amount: row.target, tlb: tlb === "" ? null : Number(tlb), billed: billed === "" ? null : Number(billed) } });
+                await queries.invalidateQueries({ queryKey: ["targets"] });
+                await queries.invalidateQueries({ queryKey: ["sales-performance"] });
+              })
+            }
+          >
+            Save counts
+          </button>
+        )
+      )}
+      {action.problem && <div className="mt-1 text-xs text-rose-700">{action.problem.message}</div>}
+    </div>
   );
 }

@@ -25,6 +25,9 @@ export function targetRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
           .min(0, "Use zero or more.")
           .max(100_000_000_000, "That target is too high.")
           .nullable(),
+        // How many different SKUs (TLB) and different customers billed (billing efficiency).
+        tlb: z.number().int().min(0).max(100_000).nullable().optional(),
+        billed: z.number().int().min(0).max(100_000).nullable().optional(),
       }),
     );
     await setTarget(db, c.get("me"), input);

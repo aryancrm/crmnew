@@ -39,7 +39,7 @@ export async function listTargets(db: Database, me: Me, asked?: string): Promise
   const found = await rows<Omit<TargetList["rows"][number], "roleLabel"> & { role: Role }>(
     db,
     sql`select p.id::int as "personId", p.name, p.role, p.title, ch.code as channel, a.name as area,
-        t.amount::float8 as target, setter.name as "setBy", seat.unit_id::int as "unitId", seat.login,
+        t.amount::float8 as target, t.tlb::int as "tlbTarget", t.billed::int as "billedTarget", setter.name as "setBy", seat.unit_id::int as "unitId", seat.login,
         (select l.amount::float8 from sales_target l where l.person_id = p.id
           and l.month = (${first}::date - interval '1 month')::date) as "lastTarget",
         coalesce((select sum(o.total) from sales_order o where ${creditedTo(todayManila())} = p.id and o.status not in ('draft', 'cancelled')
@@ -112,7 +112,7 @@ export async function listTargets(db: Database, me: Me, asked?: string): Promise
 export async function setTarget(
   db: Database,
   me: Me,
-  input: { personId: number; month: string; amount: number | null },
+  input: { personId: number; month: string; amount: number | null; tlb?: number | null; billed?: number | null },
 ): Promise<void> {
   if (!mayListTargets(me))
     throw new Refusal(403, "not_allowed", "Only the Admin, the CEO and team heads set targets.");
@@ -144,13 +144,19 @@ export async function setTarget(
       return;
     }
     await tx.execute(
-      sql`insert into sales_target (person_id, month, amount, set_by) values (${input.personId}, ${first}::date, ${input.amount}, ${me.id})
-        on conflict (person_id, month) do update set amount = excluded.amount, set_by = excluded.set_by, set_at = now()`,
+      sql`insert into sales_target (person_id, month, amount, tlb, billed, set_by)
+        values (${input.personId}, ${first}::date, ${input.amount}, ${input.tlb ?? null}, ${input.billed ?? null}, ${me.id})
+        on conflict (person_id, month) do update set amount = excluded.amount, set_by = excluded.set_by, set_at = now(),
+          tlb = case when ${input.tlb !== undefined} then excluded.tlb else sales_target.tlb end,
+          billed = case when ${input.billed !== undefined} then excluded.billed else sales_target.billed end`,
     );
     if (seat)
       await tx.execute(
-        sql`insert into seat_target (seat_id, month, amount, set_by) values (${seat.id}, ${first}::date, ${input.amount}, ${me.id})
-          on conflict (seat_id, month) do update set amount = excluded.amount, set_by = excluded.set_by, set_at = now()`,
+        sql`insert into seat_target (seat_id, month, amount, tlb, billed, set_by)
+          values (${seat.id}, ${first}::date, ${input.amount}, ${input.tlb ?? null}, ${input.billed ?? null}, ${me.id})
+          on conflict (seat_id, month) do update set amount = excluded.amount, set_by = excluded.set_by, set_at = now(),
+            tlb = case when ${input.tlb !== undefined} then excluded.tlb else seat_target.tlb end,
+            billed = case when ${input.billed !== undefined} then excluded.billed else seat_target.billed end`,
       );
   });
 }

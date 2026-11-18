@@ -4,6 +4,7 @@
 // coach sees the pipeline per NBD, the hand-overs waiting and the accounts slipping per CRR.
 // The seat's title tells NBD from CRR ("NBD", "CRR" as the 2026 chart names them).
 
+import { seatNow } from "../calls/service";
 import { sql } from "drizzle-orm";
 import { addCustomer } from "../customers/service";
 import { type Database, rows } from "../db/index";
@@ -217,8 +218,8 @@ async function mayWork(db: Database, me: Me, customerId: number): Promise<boolea
 export async function logCall(db: Database, me: Me, input: { customerId: number; outcome: string; note?: string | null; nextOn?: string | null }): Promise<void> {
   if (!(await mayWork(db, me, input.customerId))) throw new Refusal(403, "not_allowed", "Not one of your accounts.");
   await db.execute(
-    sql`insert into account_call (customer_id, by_person, outcome, note, next_on)
-      values (${input.customerId}, ${me.id}, ${input.outcome}, ${input.note?.trim() || null}, ${input.nextOn ?? null})`,
+    sql`insert into account_call (customer_id, by_person, seat_id, outcome, note, next_on)
+      values (${input.customerId}, ${me.id}, ${await seatNow(db, me.id)}, ${input.outcome}, ${input.note?.trim() || null}, ${input.nextOn ?? null})`,
   );
   if (input.nextOn !== undefined)
     await db.execute(sql`update b2b_account set next_call_on = ${input.nextOn ?? null} where customer_id = ${input.customerId}`);

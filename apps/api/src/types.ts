@@ -1345,6 +1345,9 @@ export type TargetList = {
     channel: string | null;
     area: string | null;
     target: number | null;
+    /** How many different SKUs (TLB) and different customers billed (billing efficiency) are aimed at. */
+    tlbTarget: number | null;
+    billedTarget: number | null;
     /** Orders placed this month (not drafts, not cancelled), their value. */
     placed: number;
     /** What was sold this month: their orders' invoices (not cancelled), as the target counts. */
@@ -5567,4 +5570,42 @@ export type BooksDashboard = {
   incomeExpense: { month: string; income: number; expense: number }[];
   topExpenses: { total: number; accounts: { account: string; amount: number }[] };
   banks: { id: number; name: string; type: string; balance: number; uncategorized: number }[];
+};
+
+// ------------------------------------------------------------------ sales calls and daily performance
+
+export type SalesCallOutcome = "reached" | "no_answer" | "call_back" | "ordered" | "not_interested" | "won_back";
+export type SalesCallInput = { customerId?: number | null; customerName?: string | null; outcome: SalesCallOutcome; note?: string | null; nextOn?: string | null };
+export type CallList = {
+  from: string;
+  to: string;
+  rows: { id: number; at: string; person: string | null; personId: number; customer: string | null; customerId: number | null; outcome: string; note: string | null; nextOn: string | null }[];
+  perDay: { personId: number; person: string; day: string; n: number }[];
+  can: { log: boolean };
+};
+
+type PerfCountRow = { key: string; name: string; channel: string; target: number | null; weeks: number[]; total: number; pct: number | null };
+/** The B2B team's end-of-day report, from the ERP's own data. Money in centavos, VAT-exclusive. */
+export type SalesPerformance = {
+  from: string;
+  to: string;
+  today: string;
+  weeks: { key: string; label: string; from: string; to: string }[];
+  /** Each day, when the days are 31 or fewer. */
+  days: string[];
+  revenue: {
+    rows: (PerfCountRow & { target110: number | null; btd: number | null })[];
+    total: { target: number | null; target110: number | null; weeks: number[]; total: number; pct: number | null; btd: number | null };
+  };
+  tlb: { rows: PerfCountRow[]; total: { target: number | null; weeks: number[]; total: number; pct: number | null } };
+  billing: { rows: PerfCountRow[]; total: { target: number | null; weeks: number[]; total: number; pct: number | null } };
+  calls: { rows: { key: string; name: string; channel: string; days: number[]; weeks: number[]; total: number }[]; total: { days: number[]; weeks: number[]; total: number } };
+  channels: {
+    rows: { channel: string; rank: number; weeks: number[]; days: number[]; total: number; share: number }[];
+    total: { weeks: number[]; days: number[]; total: number };
+  };
+  daily: { people: { key: string; name: string; channel: string; days: number[]; total: number }[] };
+  /** The one business line shown, when one was picked. */
+  channel: string | null;
+  scope: "company" | "team" | "self";
 };
