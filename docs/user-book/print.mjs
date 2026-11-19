@@ -4,7 +4,8 @@ import { spawn } from "node:child_process";
 import { writeFileSync } from "node:fs";
 
 const dir = new URL(".", import.meta.url).pathname;
-const out = process.argv[2] ?? `${dir}Bishnoi-One-User-Book.pdf`;
+const out = process.argv[2] ?? `${dir}Bishnoi-One-Playbook.pdf`;
+const page = process.argv[3] ?? "book.html";
 const chrome = spawn("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", [
   "--headless=new", "--remote-debugging-port=9334", `--user-data-dir=${dir}.chrome`, "--no-first-run", "about:blank",
 ], { stdio: "ignore" });
@@ -28,9 +29,16 @@ const send = (method, params = {}) => new Promise((resolve, reject) => {
   ws.send(JSON.stringify({ id: n, method, params }));
 });
 await send("Page.enable");
-await send("Page.navigate", { url: `file://${dir}book.html` });
-await sleep(6000);
-const pdf = await send("Page.printToPDF", { printBackground: true, preferCSSPageSize: true, marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0 });
+await send("Runtime.enable");
+await send("Page.navigate", { url: `file://${dir}${page}` });
+// Wait for the pages to be fitted (book.html shrinks words that overflow), then name any that still don't fit.
+for (let i = 0; i < 120; i++) {
+  await sleep(500);
+  const done = await send("Runtime.evaluate", { expression: "document.body && document.body.dataset.fitted === '1' ? (document.body.dataset.over || 'none') : ''", returnByValue: true });
+  if (done.result.value) { console.log("pages that still overflow:", done.result.value); break; }
+}
+// node print.mjs <out.pdf> [book.html] [pages, e.g. "1,37-88"]: one part of the book on its own.
+const pdf = await send("Page.printToPDF", { printBackground: true, preferCSSPageSize: true, marginTop: 0, marginBottom: 0, marginLeft: 0, marginRight: 0, ...(process.argv[4] ? { pageRanges: process.argv[4] } : {}) });
 writeFileSync(out, Buffer.from(pdf.data, "base64"));
 console.log("printed", out);
 ws.close();

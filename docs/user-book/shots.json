@@ -1,0 +1,1613 @@
+[
+ {
+  "name": "p001",
+  "title": "Signing in",
+  "who": null,
+  "path": "/login",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p002",
+  "title": "Starting and ending your working day",
+  "who": "hos1",
+  "path": "/",
+  "scroll": null,
+  "click": null,
+  "phone": true
+ },
+ {
+  "name": "p003",
+  "title": "Finding your way: the menu, the phone bar and search",
+  "who": "tl2",
+  "path": "/",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p004",
+  "title": "Reading what needs you and the news",
+  "who": "hos1",
+  "path": "/messages?box=important",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p005",
+  "title": "Sending a message or an announcement",
+  "who": "hos1",
+  "path": "/messages",
+  "scroll": null,
+  "click": "New",
+  "phone": false
+ },
+ {
+  "name": "p006",
+  "title": "Asking for leave",
+  "who": "hos1",
+  "path": "/me/leave",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p007",
+  "title": "Filing a form: official business, work from home, overtime",
+  "who": "hos1",
+  "path": "/me/leave",
+  "scroll": "Forms: official business, work from home, overtime",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p008",
+  "title": "Reading your payslip",
+  "who": "hos1",
+  "path": "/me/payslips",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p009",
+  "title": "Changing your password (only if you want to)",
+  "who": "hos1",
+  "path": "/password",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p010",
+  "title": "Signing out",
+  "who": "hos1",
+  "path": "/",
+  "scroll": null,
+  "click": "RA",
+  "phone": false
+ },
+ {
+  "name": "p011",
+  "title": "Reporting a complaint or side-effect",
+  "who": "hos1",
+  "path": "/complaints",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p012",
+  "title": "Sign in on your phone",
+  "who": null,
+  "path": "/login",
+  "scroll": null,
+  "click": null,
+  "phone": true
+ },
+ {
+  "name": "p013",
+  "title": "Find your way around on the phone",
+  "who": "hos1",
+  "path": "/",
+  "scroll": null,
+  "click": null,
+  "phone": true
+ },
+ {
+  "name": "p014",
+  "title": "Read your Home",
+  "who": "hos1",
+  "path": "/",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p015",
+  "title": "Create a new order: start, and part 1 (General)",
+  "who": "hos1",
+  "path": "/orders/new",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p016",
+  "title": "Create a new order: part 2 (Customer details)",
+  "who": "hos1",
+  "path": "/orders/new",
+  "scroll": "2 \u00b7 Customer details",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p017",
+  "title": "Add a new customer while placing an order",
+  "who": "b2b4",
+  "path": "/orders/new",
+  "scroll": null,
+  "click": "New customer",
+  "phone": false
+ },
+ {
+  "name": "p018",
+  "title": "Create a new order: part 3 (Medicines)",
+  "who": "hos1",
+  "path": "/orders/new",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p019",
+  "title": "Create a new order: part 4 (Documents)",
+  "who": "ts6",
+  "path": "/orders/new",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p020",
+  "title": "Create a new order: part 5 (Review and place)",
+  "who": "hos1",
+  "path": "/orders/new",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p021",
+  "title": "Save an order as a draft and finish it later",
+  "who": "hos1",
+  "path": "/orders/new",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p022",
+  "title": "Follow an order (\"Where the order is\")",
+  "who": "hos1",
+  "path": "/orders",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p023",
+  "title": "Fix an order Management sent back",
+  "who": "hos1",
+  "path": "/orders/201",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p024",
+  "title": "Answer a hold, or cancel your order",
+  "who": "hos1",
+  "path": "/orders/232",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p025",
+  "title": "Ask for a return of delivered goods",
+  "who": "hos1",
+  "path": "/orders/199",
+  "scroll": null,
+  "click": "Request refund",
+  "phone": false
+ },
+ {
+  "name": "p026",
+  "title": "Report a complaint or a side-effect",
+  "who": "hos1",
+  "path": "/complaints?report=1",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p027",
+  "title": "Work your list of customers to call (refills due)",
+  "who": "hos1",
+  "path": "/to-call",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p028",
+  "title": "Set a customer's next refill day",
+  "who": "online1",
+  "path": "/customers/91939",
+  "scroll": "Next refill",
+  "click": "Set the day",
+  "phone": false
+ },
+ {
+  "name": "p029",
+  "title": "Log a phone call",
+  "who": "b2b3",
+  "path": "/calls",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p030",
+  "title": "Plan your visits for the month (Visit plan / Route plan)",
+  "who": "hos1",
+  "path": "/visits/plan",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p031",
+  "title": "Plan a visit, check in and report the call (Rx CHC: Log a call)",
+  "who": "hos1",
+  "path": "/visits",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p032",
+  "title": "Skip or move a visit",
+  "who": "hos1",
+  "path": "/visits",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p033",
+  "title": "Add a field expense with its receipt",
+  "who": "hos1",
+  "path": "/visits/expenses",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p034",
+  "title": "Ask for samples and gifts, and count them",
+  "who": "rx1",
+  "path": "/me/samples",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p035",
+  "title": "Give samples or gifts to a doctor at a visit",
+  "who": "rx1",
+  "path": "/visits",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p036",
+  "title": "Follow the money owed (Collections)",
+  "who": "hos1",
+  "path": "/collections",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p037",
+  "title": "Declare tonight's huddle (Hospital CHC)",
+  "who": "hos1",
+  "path": "/huddle",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p038",
+  "title": "Read your score and question a figure",
+  "who": "hos1",
+  "path": "/my/score",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p039",
+  "title": "Open a customer's page",
+  "who": "hos1",
+  "path": "/customers/62478",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p040",
+  "title": "Rx CHC: put your doctors in tiers and follow today's route",
+  "who": "rx1",
+  "path": "/rx/doctors",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p041",
+  "title": "Rx CHC and MD Telesales (Oncology): patient care groups",
+  "who": "rx1",
+  "path": "/care-groups",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p042",
+  "title": "NBD: add a prospect, call, and collect their papers",
+  "who": "b2b4",
+  "path": "/",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p043",
+  "title": "NBD: place the first order and hand the account to the CRR",
+  "who": "b2b4",
+  "path": "/",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p044",
+  "title": "CRR: call the accounts due and check delivered orders",
+  "who": "b2b3",
+  "path": "/",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p045",
+  "title": "CLIDP: keep the distributors' listings",
+  "who": "b2b1",
+  "path": "/clidp/listings",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p046",
+  "title": "Government Bidding: record a tender and take it to submission",
+  "who": "bid2",
+  "path": "/tenders",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p047",
+  "title": "Government Bidding: after the award (order, delivery, acceptance, payment)",
+  "who": "bid2",
+  "path": "/tenders?view=awarded",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p048",
+  "title": "PAP: open a PAP case for a patient with a guarantee letter",
+  "who": "pap1",
+  "path": "/pap",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p049",
+  "title": "PAP: place the order, send the claim and follow the payment",
+  "who": "online1",
+  "path": "/leads/4?step=letter",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p050",
+  "title": "Modern Trade: the chains and their listings",
+  "who": "tl10",
+  "path": "/",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p051",
+  "title": "Start the day on Home",
+  "who": "online1",
+  "path": "/",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p052",
+  "title": "Find a case on Leads & enquiries",
+  "who": "online1",
+  "path": "/leads",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p053",
+  "title": "Answer a conversation in the Inbox and open its case",
+  "who": "online1",
+  "path": "/inbox",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p054",
+  "title": "Decide on a new email sender",
+  "who": "online1",
+  "path": "/inbox",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p055",
+  "title": "Add a lead by hand (New lead)",
+  "who": "online1",
+  "path": "/leads?new=1",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p056",
+  "title": "Choose how they pay (the payment road)",
+  "who": "online1",
+  "path": "/leads/133",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p057",
+  "title": "Fill in Case details and take the case",
+  "who": "online1",
+  "path": "/leads/133",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p058",
+  "title": "Say who's buying: a patient or a business",
+  "who": "online1",
+  "path": "/leads/134?step=quote",
+  "scroll": "Who's buying",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p059",
+  "title": "Make and save the quotation",
+  "who": "online1",
+  "path": "/leads/134?step=quote",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p060",
+  "title": "Send the quotation to the customer",
+  "who": "online1",
+  "path": "/leads/134?step=quote",
+  "scroll": "The quotation for the customer",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p061",
+  "title": "Collect the papers (prescription, IDs, GL papers)",
+  "who": "online1",
+  "path": "/leads/133?step=docs",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p062",
+  "title": "Use the customer's points, and look them up",
+  "who": "online1",
+  "path": "/points",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p063",
+  "title": "Place the order",
+  "who": "online1",
+  "path": "/leads/133?step=order",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p064",
+  "title": "Paid in advance: put the payment slip on the order",
+  "who": "online1",
+  "path": "/orders/265?step=finance",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p065",
+  "title": "Follow the order on the case (and fix it if held or sent back)",
+  "who": "online1",
+  "path": "/leads/133?step=order",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p067",
+  "title": "Record the payment received",
+  "who": "online1",
+  "path": "/leads/133?step=pay",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p068",
+  "title": "Set the next refill, and work Refills due",
+  "who": "online1",
+  "path": "/leads/133?step=pay",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p069",
+  "title": "Day-3 check-in",
+  "who": "online1",
+  "path": "/",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p070",
+  "title": "Close a case as lost, and reopen it",
+  "who": "online1",
+  "path": "/leads/4",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p071",
+  "title": "A guarantee-letter case (apply, letter, verify, claim)",
+  "who": "online1",
+  "path": "/leads/4?step=letter",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p072",
+  "title": "The PAP officer's case (PAP desk)",
+  "who": "pap1",
+  "path": "/pap",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p073",
+  "title": "A website order case",
+  "who": "online1",
+  "path": "/leads?type=website_order",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p074",
+  "title": "Reading your Home",
+  "who": "tl2",
+  "path": "/",
+  "scroll": "District now",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p075",
+  "title": "Switching between your teams",
+  "who": "tl3",
+  "path": "/my-team",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p076",
+  "title": "Following your team's orders",
+  "who": "tl2",
+  "path": "/orders",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p077",
+  "title": "Placing an order for one of your people",
+  "who": "tl2",
+  "path": "/orders/new",
+  "scroll": "Whose order is it?",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p078",
+  "title": "Approving expenses",
+  "who": "tl2",
+  "path": "/visits/expenses?waiting=1",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p079",
+  "title": "Approving a visit plan",
+  "who": "tl2",
+  "path": "/field/report",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p080",
+  "title": "The evening huddle",
+  "who": "tl2",
+  "path": "/huddle",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p081",
+  "title": "Reading scorecards and answering a question on the figures",
+  "who": "tl2",
+  "path": "/team-scores",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p082",
+  "title": "Setting targets",
+  "who": "tl2",
+  "path": "/targets",
+  "scroll": "Target for the month (\u20b1)",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p083",
+  "title": "Team attendance: who's working",
+  "who": "tl2",
+  "path": "/hr/attendance",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p084",
+  "title": "Approving leave and forms for your team",
+  "who": "tl2",
+  "path": "/hr/leave",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p085",
+  "title": "Where the team is",
+  "who": "tl2",
+  "path": "/field/live",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p086",
+  "title": "Asking for a new person, region or area",
+  "who": "tl2",
+  "path": "/my-team",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p087",
+  "title": "Sign in to the shared desk screen",
+  "who": null,
+  "path": "/login?dept=management",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p088",
+  "title": "Start and Stop on the desk",
+  "who": "desk:management",
+  "path": "/",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p089",
+  "title": "How orders are shared out (and taking one by hand)",
+  "who": "desk:management",
+  "path": "/",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p090",
+  "title": "Team figures",
+  "who": "desk:management",
+  "path": "/desk/team?range=week",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p091",
+  "title": "Read the board: orders to approve",
+  "who": "desk:management",
+  "path": "/",
+  "scroll": "Waiting for approval",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p092",
+  "title": "Check an order: the four checks, then Approve",
+  "who": "desk:management",
+  "path": "/orders/232?step=management",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p093",
+  "title": "Check 1: Documents (read the papers by hand)",
+  "who": "desk:management",
+  "path": "/orders/265?step=management&check=papers",
+  "scroll": "Papers are right",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p094",
+  "title": "Check 2: Medicines and price (the last price given, a price below list)",
+  "who": "desk:management",
+  "path": "/orders/265?step=management&check=price",
+  "scroll": "Last time",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p095",
+  "title": "Check 3: Stock and warehouse (stock short)",
+  "who": "desk:management",
+  "path": "/orders/232?step=management&check=stock",
+  "scroll": "Ships from",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p096",
+  "title": "Check 4: Customer and licence (new, licence, overdue, credit)",
+  "who": "desk:management",
+  "path": "/orders/217?step=management&check=customer",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p097",
+  "title": "Approve and pick the warehouse",
+  "who": "desk:management",
+  "path": "/orders/232?step=management&check=approve&approve=1",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p098",
+  "title": "Take back an approval",
+  "who": "desk:management",
+  "path": "/",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p099",
+  "title": "Send back with a reason",
+  "who": "desk:management",
+  "path": "/orders/265?step=management&check=approve",
+  "scroll": null,
+  "click": "Send back",
+  "phone": false
+ },
+ {
+  "name": "p100",
+  "title": "Hold with a question (ask the Team Lead or Business Mentor)",
+  "who": "desk:management",
+  "path": "/orders/206?step=management",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p101",
+  "title": "Take an order off hold",
+  "who": "desk:management",
+  "path": "/on-hold",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p102",
+  "title": "Reject an order",
+  "who": "desk:management",
+  "path": "/orders/217?step=management&check=approve",
+  "scroll": null,
+  "click": "Reject",
+  "phone": false
+ },
+ {
+  "name": "p103",
+  "title": "Mark an exception",
+  "who": "desk:management",
+  "path": "/orders/217?step=management",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p104",
+  "title": "Cancel an order",
+  "who": "desk:management",
+  "path": "/orders/217?step=management",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p105",
+  "title": "Bring back a cancelled order (Restore)",
+  "who": "desk:management",
+  "path": "/orders/298?step=management",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p106",
+  "title": "Change the order's medicines",
+  "who": "desk:management",
+  "path": "/orders/265?step=management&check=price",
+  "scroll": null,
+  "click": "Edit medicines \u00b7 add, free, price",
+  "phone": false
+ },
+ {
+  "name": "p107",
+  "title": "Customers to check (a new customer's papers)",
+  "who": "desk:management",
+  "path": "/customers?review=1",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p108",
+  "title": "Returns to approve",
+  "who": "desk:management",
+  "path": "/returns?status=requested",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p109",
+  "title": "Stopped orders: sent back, on hold, stuck",
+  "who": "desk:management",
+  "path": "/orders?stuck=1",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p110",
+  "title": "Read the Finance check strip on a card",
+  "who": "desk:finance",
+  "path": "/",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p111",
+  "title": "Confirm a prepaid order's payment (match the slip with the bank)",
+  "who": "desk:finance",
+  "path": "/finance/prepaid",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p112",
+  "title": "Check a credit or cash-on-delivery order and send it to Dispatch (the invoice)",
+  "who": "desk:finance",
+  "path": "/orders/214?step=finance",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p113",
+  "title": "Hold an order at Finance, and take it off",
+  "who": "desk:finance",
+  "path": "/",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p114",
+  "title": "Due payments by terms, and Mark paid",
+  "who": "desk:finance",
+  "path": "/collect",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p115",
+  "title": "Record a payment on an invoice (tax withheld 2307, deductions)",
+  "who": "desk:finance",
+  "path": "/invoices/171",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p116",
+  "title": "Use the customer's credit on an invoice",
+  "who": "desk:finance",
+  "path": "/orders/214?step=paid",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p117",
+  "title": "Take off a payment recorded by mistake",
+  "who": "desk:finance",
+  "path": "/invoices/171",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p118",
+  "title": "Refunds owed: give money back",
+  "who": "desk:finance",
+  "path": "/refunds",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p119",
+  "title": "Set a customer's terms and credit limit",
+  "who": "desk:finance",
+  "path": "/customers/61614",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p120",
+  "title": "Supplier bills to pay",
+  "who": "desk:finance",
+  "path": "/purchases/bills?view=open",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p121",
+  "title": "Statement of account",
+  "who": "desk:finance",
+  "path": "/customers/87605/statement",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p123",
+  "title": "Sign in to the shared Dispatch desk and press Start",
+  "who": "desk:dispatch",
+  "path": "/",
+  "scroll": "On the desk today",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p124",
+  "title": "See the orders to pack and ship",
+  "who": "desk:dispatch",
+  "path": "/",
+  "scroll": "To pack and ship",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p125",
+  "title": "Pack an order (batches, warehouse, nearest expiry first)",
+  "who": "desk:dispatch",
+  "path": "/orders/208?step=dispatch",
+  "scroll": "Pack & ship",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p126",
+  "title": "When there isn't enough stock to pack",
+  "who": "desk:dispatch",
+  "path": "/orders/208?step=dispatch",
+  "scroll": "Wait for stock",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p127",
+  "title": "Ship by courier (tracking number now or later)",
+  "who": "desk:dispatch",
+  "path": "/orders/220?step=dispatch",
+  "scroll": "Pack & ship",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p128",
+  "title": "Ship with our own rider",
+  "who": "desk:dispatch",
+  "path": "/orders/220?step=dispatch",
+  "scroll": "Pack & ship",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p129",
+  "title": "Hand an order over at the warehouse (customer picks it up)",
+  "who": "desk:dispatch",
+  "path": "/orders/220?step=delivered",
+  "scroll": "Delivered",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p130",
+  "title": "Add or change a tracking number later",
+  "who": "desk:dispatch",
+  "path": "/shipments",
+  "scroll": "On the road",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p131",
+  "title": "A delivery failed (the parcel came back)",
+  "who": "desk:dispatch",
+  "path": "/shipments",
+  "scroll": "Came back",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p132",
+  "title": "Mark an order delivered with the signed receipt (and cash on delivery)",
+  "who": "desk:dispatch",
+  "path": "/shipments",
+  "scroll": "Delivered",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p133",
+  "title": "Put an order on hold, and take it off hold",
+  "who": "desk:dispatch",
+  "path": "/dispatch/hold",
+  "scroll": "On hold",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p134",
+  "title": "Check goods that came back on a return",
+  "who": "desk:dispatch",
+  "path": "/returns?status=approved",
+  "scroll": "Goods to check",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p135",
+  "title": "Add a new medicine",
+  "who": "inv2",
+  "path": "/medicines",
+  "scroll": "Add medicine",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p136",
+  "title": "Set a medicine's price for each kind of buyer",
+  "who": "mgmt",
+  "path": "/medicines/81",
+  "scroll": "Prices & promos",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p137",
+  "title": "Read stock by warehouse and by batch",
+  "who": "inv2",
+  "path": "/inventory",
+  "scroll": "Stock by warehouse",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p138",
+  "title": "Move stock between warehouses (transfer)",
+  "who": "inv2",
+  "path": "/medicines/81",
+  "scroll": "Transfer",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p139",
+  "title": "Correct a count; write off damaged or expired stock (adjustment)",
+  "who": "inv2",
+  "path": "/medicines/81",
+  "scroll": "Stock count",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p140",
+  "title": "Add stock that was not bought (opening stock, goods found)",
+  "who": "inv2",
+  "path": "/inventory",
+  "scroll": "Add stock (not bought)",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p141",
+  "title": "Trace a batch for a complaint or recall",
+  "who": "inv2",
+  "path": "/inventory/trace?batch=BT25633A",
+  "scroll": "Customers it reached",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p142",
+  "title": "Answer a medicine request",
+  "who": "inv2",
+  "path": "/inventory/requests",
+  "scroll": "Medicine requests",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p143",
+  "title": "Send samples and gifts to reps",
+  "who": "inv2",
+  "path": "/field/samples",
+  "scroll": "Requests open",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p144",
+  "title": "See what to buy again",
+  "who": "inv2",
+  "path": "/purchases",
+  "scroll": "Buy again before it runs out",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p145",
+  "title": "Choose the vendor (compare last prices)",
+  "who": "inv2",
+  "path": "/purchases/vendors/56",
+  "scroll": "What we buy from them",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p146",
+  "title": "Add a new vendor",
+  "who": "inv2",
+  "path": "/purchases/vendors",
+  "scroll": "New vendor",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p147",
+  "title": "Make and send a purchase order",
+  "who": "inv2",
+  "path": "/purchases/orders/new",
+  "scroll": "Vendor and delivery",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p148",
+  "title": "Receive a purchase order (batch, expiry, warehouse)",
+  "who": "inv2",
+  "path": "/purchases/orders/4208",
+  "scroll": "Receive what came",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p149",
+  "title": "Record the vendor's bill (and extra costs like freight)",
+  "who": "inv2",
+  "path": "/purchases/orders/4208",
+  "scroll": "Enter the vendor's bill",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p150",
+  "title": "Pay the vendor",
+  "who": "fin",
+  "path": "/purchases/payments/new",
+  "scroll": "Their unpaid bills",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p151",
+  "title": "Record and use a vendor credit",
+  "who": "fin",
+  "path": "/purchases/credits/25211",
+  "scroll": "Use on bills",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p152",
+  "title": "Finding a person's record",
+  "who": "hr1",
+  "path": "/",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p153",
+  "title": "Adding a new joiner",
+  "who": "hr1",
+  "path": "/",
+  "scroll": null,
+  "click": "New joiner",
+  "phone": false
+ },
+ {
+  "name": "p154",
+  "title": "Keeping a record up to date, and someone leaving",
+  "who": "hr1",
+  "path": "/hr/people/529",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p155",
+  "title": "Seeing who's working today",
+  "who": "hr1",
+  "path": "/hr/attendance",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p156",
+  "title": "Putting a day right",
+  "who": "hr1",
+  "path": "/hr/attendance/529",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p157",
+  "title": "Recording leave for someone",
+  "who": "hr1",
+  "path": "/hr/attendance/529",
+  "scroll": null,
+  "click": "Record leave",
+  "phone": false
+ },
+ {
+  "name": "p158",
+  "title": "Approving leave and forms",
+  "who": "hr1",
+  "path": "/hr/leave",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p159",
+  "title": "Reading the attendance report",
+  "who": "hr1",
+  "path": "/hr/report",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p160",
+  "title": "Running the month's payroll",
+  "who": "hr1",
+  "path": "/hr/payroll/2026-11",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p161",
+  "title": "Releasing payslips",
+  "who": "hr1",
+  "path": "/hr/payroll/2026-10",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p162",
+  "title": "Reading the CEO Home",
+  "who": "ceo",
+  "path": "/",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p163",
+  "title": "The target sheet",
+  "who": "ceo",
+  "path": "/key-reports/target-sheet",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p164",
+  "title": "Reports: customers, channels, calls, sales performance",
+  "who": "ceo",
+  "path": "/key-reports/customers",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p165",
+  "title": "Looking at the company and its apps",
+  "who": "ceo",
+  "path": "/my-team",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p166",
+  "title": "Before this CRM",
+  "who": "ceo",
+  "path": "/zoho-reports/orders",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p167",
+  "title": "Seeing someone's screens (read only)",
+  "who": "admin",
+  "path": "/people?tab=teams",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p168",
+  "title": "Adding a channel and setting its Division",
+  "who": "admin",
+  "path": "/",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p169",
+  "title": "Building a channel: head, teams, team leads, MedReps",
+  "who": "admin",
+  "path": "/admin/channels/1",
+  "scroll": "Head of the channel",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p170",
+  "title": "Giving a person a seat and a login",
+  "who": "admin",
+  "path": "/people?tab=teams",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p171",
+  "title": "Moving someone",
+  "who": "admin",
+  "path": "/people?tab=teams",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p172",
+  "title": "A vacant seat: making it, covering it, filling it",
+  "who": "admin",
+  "path": "/people?tab=teams",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p173",
+  "title": "Someone is no longer with the company",
+  "who": "admin",
+  "path": "/people?tab=teams",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p174",
+  "title": "Giving a new password",
+  "who": "admin",
+  "path": "/people",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p175",
+  "title": "Areas",
+  "who": "admin",
+  "path": "/people?tab=areas",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p176",
+  "title": "Asks for people",
+  "who": "admin",
+  "path": "/people?tab=requests",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p177",
+  "title": "Who approves what",
+  "who": "admin",
+  "path": "/people?tab=approvers",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p178",
+  "title": "Targets for the whole company",
+  "who": "admin",
+  "path": "/targets",
+  "scroll": "Empty seats",
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p179",
+  "title": "Data checks",
+  "who": "admin",
+  "path": "/admin/data-checks",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p180",
+  "title": "Audit",
+  "who": "admin",
+  "path": "/audit",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ },
+ {
+  "name": "p181",
+  "title": "Company details and online pages",
+  "who": "admin",
+  "path": "/settings",
+  "scroll": null,
+  "click": null,
+  "phone": false
+ }
+]

@@ -22,7 +22,7 @@ for line in LOGINS.read_text().splitlines():
 
 
 def slide(body: str, cls: str = "") -> str:
-    return f'<section class="slide {cls}">{body}<footer><span>Bishnoi One · User book</span><span class="pg"></span></footer></section>'
+    return f'<section class="slide {cls}">{body}<footer><span>Bishnoi One · Playbook</span><span class="pg"></span></footer></section>'
 
 
 def shot(name: str, caption: str = "", cls: str = "") -> str:
@@ -53,7 +53,7 @@ S.append(
     slide(
         f"""<div class="cover">
   <div class="brand">Bishnoi One</div>
-  <h1>User book</h1>
+  <h1>Playbook</h1>
   <p class="lede">The company's one system for selling, orders, money, stock and people: how each of us uses it, step by step.</p>
   <p class="meta">2MG Inc. · GetMeds Philippines Inc. · November 2026</p>
   <p class="url">{URL}</p>
@@ -521,6 +521,14 @@ S.append(grid("Admin", "Setting the company up", "", [
     ("data-checks", "Data checks", ["The data checked against itself: bills, payments, stock", "All 17 should pass"]),
 ]))
 
+# The playbook: every task, step by step, a page each, with its screen (playbook.py).
+import playbook
+
+overview_pages = len(S) + 1  # the overview with the contents page put in after the cover
+play, play_parts = playbook.render(len(S) + 2)
+S += play
+logins_page = len(S) + 2
+
 # 17 · The logins, by hierarchy
 groups = {}
 for team, name, job, login in rows:
@@ -656,6 +664,22 @@ table { border-collapse: collapse; width: 100%; }
 .vac { color: #94a3b8; font-style: italic; }
 """
 
-doc = f"<!doctype html><html><head><meta charset='utf-8'><title>Bishnoi One · User book</title><style>{CSS}</style></head><body>{''.join(S)}</body></html>"
+# The contents, after the cover: the big picture, then each part of the playbook, then the logins.
+cards = [("The big picture", "What the system is, signing in, the order line of every channel, each desk in short", 3)]
+cards += [(t, w, pg) for t, w, pg in play_parts]
+cards.append(("Logins, by hierarchy", "Every seat's login ID, by department and team", logins_page))
+cards.append(("The rules, from the plan", "The business, who sees what, the order line, the price book: after the logins", logins_page + (len(S) - logins_page + 2)))
+S.insert(
+    1,
+    slide(
+        head("Contents", "Find your part", "Read the big picture once; then your own part: every task is one page, its steps on the left and its screen on the right.")
+        + "<div class='contents'><div class='parts'>"
+        + "".join(f"<div class='pt'><h3><span>{E(t)}</span><b>{pg}</b></h3><p>{E(w)}</p></div>" for t, w, pg in cards)
+        + "</div></div>"
+    ),
+)
+CSS += playbook.CSS + playbook.PLAN_CSS
+
+doc = f"<!doctype html><html><head><meta charset='utf-8'><title>Bishnoi One · Playbook</title><style>{CSS}</style></head><body>{''.join(S)}{playbook.plan_html()}{playbook.FIT}</body></html>"
 (HERE / "book.html").write_text(doc)
 print(f"book.html: {len(S)} pages, {len(rows)} logins")
