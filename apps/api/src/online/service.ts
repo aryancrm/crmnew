@@ -6,6 +6,7 @@
 
 import { bytesOf, keepFile } from "../files/store";
 import { type SQL, sql } from "drizzle-orm";
+import { refillOf, setRefill } from "../customers/reorders";
 import { phoneKey } from "../customers/service";
 import { type Database, rows } from "../db/index";
 import { invoiceState } from "../finance/rules";
@@ -21,6 +22,7 @@ import { pointsByPhone, spendOnOrder } from "../points/service";
 import { useWebsiteReservation } from "../points/website";
 import { pointsProgram } from "../settings/service";
 import type {
+  BuyerBusiness,
   CaseOrderTrail,
   DeskStep,
   GlInput,
@@ -88,6 +90,12 @@ type LeadRow = {
   road: LeadRoad;
   agency: LeadCase["lead"]["agency"];
   request: string | null;
+  /** A business buying through the desk (its kind); null: a patient. */
+  buyerKind: BuyerBusiness | null;
+  /** The business on file the case is for, once picked, and its payment terms. */
+  buyerName: string | null;
+  buyerTerms: string | null;
+  quoteBuyer: string | null;
   quoteLines: QuoteLine[];
   quoteRoad: string | null;
   quoteAgency: string | null;
@@ -143,6 +151,10 @@ type LeadRow = {
 
 const leadColumns = sql`l.id::int as id, l.code, l.source, l.name, l.relation, l.patient_name as "patientName", l.phone, l.email, l.city,
   l.address, l.customer_id::int as "customerId", l.assigned_to::int as "assignedTo", who.name as "assignedName", l.road, l.agency, l.request,
+  l.buyer_kind as "buyerKind", l.quote_buyer as "quoteBuyer",
+  (select bc.name from customer bc where bc.id = l.customer_id and bc.kind <> 'patient') as "buyerName",
+  (select case bc.payment_terms when 'days' then coalesce(bc.payment_days, 30) || ' days' when 'cod' then 'on delivery' else 'in advance' end
+     from customer bc where bc.id = l.customer_id and bc.kind <> 'patient') as "buyerTerms",
   l.quote_lines as "quoteLines", l.quote_road as "quoteRoad", l.quote_agency as "quoteAgency", ${iso("l.quote_saved_at")} as "quoteSavedAt",
   l.quote_sent_via as "quoteSentVia", ${iso("l.quote_sent_at")} as "quoteSentAt", ${day("l.gl_applied_on")} as "glAppliedOn",
   l.gl_letter_no as "glLetterNo", l.gl_amount::int as "glAmount", ${day("l.gl_letter_on")} as "glLetterOn", ${iso("l.gl_verified_at")} as "glVerifiedAt",
@@ -167,7 +179,23 @@ const leadFrom = sql`from lead l left join person maker on maker.id = l.created_
 const quotedFor = (row: LeadRow) =>
   row.quoteLines.length > 0 &&
   row.quoteRoad === row.road &&
+  (row.quoteBuyer ?? "patient") === (row.buyerKind ?? "patient") &&
   (row.road !== "gl" || row.quoteAgency === row.agency);
+
+/** The kinds of business that may buy through the desk, and the price list each buys from (the
+ *  order form's own: a government buyer at the bidding price). */
+export const BUYER_BUSINESSES: { key: BuyerBusiness; label: string; price: string }[] = [
+  { key: "drugstore", label: "Drugstore / pharmacy", price: "drugstore" },
+  { key: "hospital", label: "Hospital", price: "hospital" },
+  { key: "doctor", label: "Doctor / clinic", price: "doctor" },
+  { key: "distributor", label: "Distributor", price: "distributor" },
+  { key: "government", label: "Government", price: "bidding" },
+];
+/** The price list a case's buyer buys from: the patient price, or the business kind's own. */
+const priceListOf = (buyer: BuyerBusiness | null) =>
+  buyer ? (BUYER_BUSINESSES.find((one) => one.key === buyer)?.price ?? "patient") : "patient";
+const buyerWord = (buyer: BuyerBusiness | null) =>
+  buyer ? (BUYER_BUSINESSES.find((one) => one.key === buyer)?.label.toLowerCase() ?? buyer) : "patient";
 
 /** Why a verified letter can't carry the order: it expired, or it grants less than the
  *  quotation comes to. */
@@ -188,8 +216,9 @@ function factsOf(row: LeadRow): CaseFacts {
     lost: row.state === "lost",
     quoted: quotedFor(row),
     // A prescription is asked for whenever a patient buys (Aryan, 17 Nov), over the counter or not:
-    // Management approves the order only with it.
-    rxNeeded: true,
+    // Management approves the order only with it. A business buying (a drugstore through the
+    // desk) is not a patient's purchase: the order line checks its licence instead.
+    rxNeeded: !row.buyerKind,
     files: new Set(row.kinds),
     glApplied: Boolean(row.glAppliedOn),
     glLetter: Boolean(row.glLetterNo) || row.kinds.includes("gl_letter"),
@@ -234,6 +263,7 @@ function cardOf(row: LeadRow): LeadCard {
     sourceLabel: row.siteName ?? SOURCE_LABEL[row.source],
     caseType: row.caseType,
     road: row.road,
+    buyer: row.buyerKind,
     agency: row.agency,
     city: row.city,
     interest: interestOf(row),
@@ -699,7 +729,7 @@ export async function leadCase(db: Database, me: Me, id: number): Promise<LeadCa
   const work = mayOnCase(me, row, "work");
   if (work && row.unopened)
     await db.execute(sql`update lead set opened_at = now() where id = ${id} and opened_at is null`);
-  const [files, events, agents, web, wallet, program, trail, history] = await Promise.all([
+  const [files, events, agents, web, wallet, program, trail, history, refill] = await Promise.all([
     rows<Omit<LeadPaper, "kindLabel">>(
       db,
       sql`select f.id::int as id, f.kind, f.name, f.mime, f.size::int as size, coalesce(p.name, 'From the chat') as by, ${iso("f.at")} as at
@@ -718,6 +748,8 @@ export async function leadCase(db: Database, me: Me, id: number): Promise<LeadCa
     pointsProgram(db),
     row.orderId && row.orderStatus ? orderTrail(db, row.orderId) : Promise.resolve(null),
     caseHistory(db, { id, phoneKey: row.phoneKey, customerId: row.customerId }),
+    // When they need their medicines again: kept on the customer once the order is placed.
+    row.customerId ? refillOf(db, me, row.customerId) : Promise.resolve(null),
   ]);
   const facts = factsOf(row);
   const step = roadStepOf(facts);
@@ -791,6 +823,9 @@ export async function leadCase(db: Database, me: Me, id: number): Promise<LeadCa
       road: row.road,
       agency: row.agency,
       request: row.request,
+      buyerKind: row.buyerKind,
+      buyerName: row.buyerName,
+      buyerTerms: row.buyerTerms,
       quoteSentVia: row.quoteSentVia,
       quoteSentAt: row.quoteSentAt,
       glAppliedOn: row.glAppliedOn,
@@ -855,6 +890,8 @@ export async function leadCase(db: Database, me: Me, id: number): Promise<LeadCa
     events,
     agents,
     history,
+    refill,
+    buyers: BUYER_BUSINESSES,
     can: {
       work: work && row.state === "open",
       placeOrder: placeWhy === null,
@@ -943,6 +980,123 @@ async function lockLead(tx: Runner, id: number) {
   );
   if (!lead) throw new Refusal(404, "not_found", "That enquiry doesn't exist.");
   return { ...lead, ordered: Boolean(lead.orderStatus && lead.orderStatus !== "cancelled") };
+}
+
+/** Who buys on a case: the patient (the patient price), or a business (Aryan, 19 Nov: a
+ *  drugstore or a hospital that orders through the Online desk is the desk's entry), priced from
+ *  its own list. One on file can be picked; else it is added as a customer with the order, for
+ *  Management to check like any new customer. A business pays on the regular road. */
+export async function setBuyer(
+  db: Database,
+  me: Me,
+  id: number,
+  input: { kind: "patient" | BuyerBusiness; customerId?: number | null },
+): Promise<void> {
+  await leadGate(db, me, id, "work", "say who is buying");
+  await db.transaction(async (tx) => {
+    const lead = await lockLead(tx, id);
+    if (lead.state === "lost")
+      throw new Refusal(409, "not_now", `${lead.code} is closed. Reopen it first.`);
+    if (lead.ordered)
+      throw new Refusal(409, "not_now", "Locked: the order is placed for this buyer.");
+    const [now] = await rows<{ desk: string; road: LeadRoad; buyer: BuyerBusiness | null; customerKind: string | null }>(
+      tx,
+      sql`select l.desk, l.road, l.buyer_kind as buyer, c.kind as "customerKind"
+        from lead l left join customer c on c.id = l.customer_id where l.id = ${id}`,
+    );
+    if (now?.desk === "pap") throw new Refusal(400, "invalid", "A PAP case is a patient's.", "kind");
+    if (input.kind === "patient") {
+      await tx.execute(
+        sql`update lead set buyer_kind = null,
+            customer_id = case when ${now?.customerKind ?? null}::text = 'patient' then customer_id end where id = ${id}`,
+      );
+      if (now?.buyer) await note(tx, id, me, "status", "Buyer: the patient, at the patient price.");
+      return;
+    }
+    let kind: BuyerBusiness = input.kind;
+    let picked: { id: number; name: string } | null = null;
+    if (input.customerId) {
+      const [found] = await rows<{ id: number; name: string; kind: BuyerBusiness }>(
+        tx,
+        sql`select id::int as id, name, kind from customer where id = ${input.customerId} and active and kind <> 'patient'`,
+      );
+      if (!found) throw new Refusal(400, "invalid", "Pick a business that is on file.", "customerId");
+      kind = found.kind;
+      picked = found;
+    }
+    await tx.execute(
+      sql`update lead set buyer_kind = ${kind}, road = 'regular', agency = null, points_to_use = 0,
+          customer_id = ${picked?.id ?? null} where id = ${id}`,
+    );
+    const word = buyerWord(kind);
+    await note(
+      tx,
+      id,
+      me,
+      "status",
+      `Buyer: ${picked ? `${picked.name} (${word}, on file)` : `a ${word}, added as a customer with the order`}. Priced from the ${priceListOf(kind)} list${now?.road && now.road !== "regular" ? "; pays by: Regular" : ""}.`,
+    );
+  });
+}
+
+/** The businesses on file a case's buyer can be picked from, by name, code or number. */
+export async function findBuyers(
+  db: Database,
+  me: Me,
+  id: number,
+  q: string,
+): Promise<{ id: number; code: string | null; name: string; kind: BuyerBusiness; city: string | null; terms: string }[]> {
+  await leadGate(db, me, id, "work", "say who is buying");
+  const text = q.trim();
+  if (text.length < 2) return [];
+  const key = phoneKey(text);
+  const found = await rows<{
+    id: number;
+    code: string | null;
+    name: string;
+    kind: BuyerBusiness;
+    city: string | null;
+    terms: string;
+    days: number | null;
+  }>(
+    db,
+    sql`select id::int as id, code, name, kind, city, payment_terms as terms, payment_days::int as days from customer
+      where active and kind <> 'patient'
+        and (name ilike ${`%${text}%`} or code ilike ${`${text}%`} ${key ? sql`or phone_key = ${key}` : sql``})
+      order by (lower(name) like ${`${text.toLowerCase()}%`}) desc, lower(name) limit 12`,
+  );
+  return found.map(({ days, ...row }) => ({
+    ...row,
+    terms: row.terms === "days" ? `${days ?? 30} days` : row.terms === "cod" ? "On delivery" : "In advance",
+  }));
+}
+
+/** The next refill, set from the case (step 4, Payment & follow-up): kept on the case's customer,
+ *  where Refills due reads it, with a line on the case. */
+export async function caseRefill(
+  db: Database,
+  me: Me,
+  id: number,
+  input: { on: string | null; note?: string | null },
+): Promise<void> {
+  await leadGate(db, me, id, "work", "set the next refill");
+  const [lead] = await rows<{ customerId: number | null }>(
+    db,
+    sql`select customer_id::int as "customerId" from lead where id = ${id}`,
+  );
+  if (!lead?.customerId)
+    throw new Refusal(409, "not_now", "Place the order first: the next refill is kept on the customer.");
+  await setRefill(db, me, lead.customerId, input);
+  const said = input.note?.trim();
+  await note(
+    db,
+    id,
+    me,
+    "status",
+    input.on
+      ? `Next refill set for ${new Date(`${input.on}T00:00:00Z`).toLocaleDateString("en-PH", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}${said ? ` (${said.slice(0, 200)})` : ""}.`
+      : "Next refill taken off: their usual gap counts.",
+  );
 }
 
 async function note(tx: Runner, leadId: number, me: Me, kind: string, message: string) {
@@ -1034,6 +1188,14 @@ export async function saveLead(db: Database, me: Me, id: number, input: LeadInpu
     const pap = kept?.desk === "pap";
     if (pap && road !== "gl")
       throw new Refusal(400, "invalid", "A PAP case is paid by a guarantee letter.", "road");
+    const [buyer] = await rows<{ kind: string | null }>(tx, sql`select buyer_kind as kind from lead where id = ${id}`);
+    if (buyer?.kind && road !== "regular")
+      throw new Refusal(
+        400,
+        "invalid",
+        "A business buys at its own price: senior / PWD and guarantee letters are a patient's.",
+        "road",
+      );
     const assigned = pap ? (kept?.assignedTo ?? null) : await agentOrNull(tx, input.assignedTo);
     const self = !clean(input.relation) || clean(input.relation)?.toLowerCase() === "self";
     await tx.execute(
@@ -1080,6 +1242,13 @@ export async function saveQuote(
       "A medicine is on the quotation twice. Put it on one line.",
       "lines",
     );
+  // Priced from the buyer's own list: the patient price, or a business's (a drugstore's).
+  const [buying] = await rows<{ buyer: BuyerBusiness | null }>(
+    db,
+    sql`select buyer_kind as buyer from lead where id = ${id}`,
+  );
+  const buyer = buying?.buyer ?? null;
+  const list = priceListOf(buyer);
   const medicines = await rows<{
     id: number;
     name: string;
@@ -1090,7 +1259,7 @@ export async function saveQuote(
   }>(
     db,
     sql`select m.id::int as id, m.name || coalesce(' ' || m.strength, '') as name, m.vat, m.rx, m.pack_size::int as "packSize",
-        (select amount::int from medicine_price p where p.medicine_id = m.id and p.buyer_type = 'patient') as price
+        (select amount::int from medicine_price p where p.medicine_id = m.id and p.buyer_type = ${list}) as price
       from medicine m where m.active and m.id in (${sql.join(
         ids.map((value) => sql`${value}`),
         sql`, `,
@@ -1109,7 +1278,7 @@ export async function saveQuote(
       throw new Refusal(
         400,
         "invalid",
-        `${medicine.name} has no patient price yet. Ask Inventory to set one.`,
+        `${medicine.name} has no ${list === "bidding" ? "bidding" : buyerWord(buyer).split(" / ")[0]} price yet. Ask Inventory to set one.`,
         `lines.${index}.medicineId`,
       );
     if (!Number.isInteger(line.qty) || line.qty <= 0)
@@ -1120,7 +1289,7 @@ export async function saveQuote(
       throw new Refusal(
         400,
         "invalid",
-        `Say why ${medicine.name} is below the patient price.`,
+        `Say why ${medicine.name} is below the ${buyer ? "list" : "patient"} price.`,
         `lines.${index}.reason`,
       );
     return {
@@ -1155,6 +1324,7 @@ export async function saveQuote(
       );
     await tx.execute(
       sql`update lead set quote_lines = ${JSON.stringify(lines)}::jsonb, quote_road = ${road}, quote_agency = ${now?.agency ?? null}, quote_saved_at = now(),
+          quote_buyer = ${buyer ?? "patient"},
           quote_sent_via = null, quote_sent_at = null where id = ${id}`,
     );
     const totals = quoteTotals(lines, road);
@@ -1469,8 +1639,14 @@ const ORDER_PAPER: Record<LeadPaperKind, string> = {
   unsorted: "other",
 };
 
-/** The patient on file for a case: linked, else found by the number, else added now. */
-async function patientOf(db: Database, me: Me, id: number): Promise<number> {
+/** The customer on file for a case: linked, else (a patient) found by the number, else added now.
+ *  A business buyer not picked from the file is added as that kind, for Management to check. */
+async function patientOf(
+  db: Database,
+  me: Me,
+  id: number,
+  pays: "cod" | "advance" | "terms" | null = null,
+): Promise<number> {
   return db.transaction(async (tx) => {
     const [lead] = await rows<{
       customerId: number | null;
@@ -1481,12 +1657,28 @@ async function patientOf(db: Database, me: Me, id: number): Promise<number> {
       email: string | null;
       city: string | null;
       address: string | null;
+      buyer: BuyerBusiness | null;
     }>(
       tx,
-      sql`select customer_id::int as "customerId", name, patient_name as patient, phone, phone_key as key, email, city, address from lead where id = ${id} for update`,
+      sql`select customer_id::int as "customerId", name, patient_name as patient, phone, phone_key as key, email, city, address,
+          buyer_kind as buyer from lead where id = ${id} for update`,
     );
     if (!lead) throw new Refusal(404, "not_found", "That enquiry doesn't exist.");
     if (lead.customerId) return lead.customerId;
+    if (lead.buyer) {
+      const [made] = await rows<{ id: number }>(
+        tx,
+        sql`insert into customer (kind, name, phone, phone_key, email, address, city, payment_terms, review, added_by)
+          values (${lead.buyer}, ${lead.name}, ${lead.phone}, ${lead.key}, ${lead.email}, ${lead.address}, ${lead.city},
+            ${pays === "advance" ? "advance" : "cod"}, 'to_review', ${me.id})
+          returning id::int as id`,
+      );
+      const business = made?.id as number;
+      await tx.execute(sql`update customer set code = 'CUS-' || lpad(id::text, 5, '0') where id = ${business}`);
+      await tx.execute(sql`update lead set customer_id = ${business} where id = ${id}`);
+      await note(tx, id, me, "status", `${lead.name} added as a ${buyerWord(lead.buyer)} customer: Management checks a new customer.`);
+      return business;
+    }
     const patient = lead.patient ?? lead.name;
     const [found] = lead.key
       ? await rows<{ id: number }>(
@@ -1526,7 +1718,7 @@ export async function orderFromLead(
   db: Database,
   me: Me,
   id: number,
-  pay?: "cod" | "advance" | null,
+  pay?: "cod" | "advance" | "terms" | null,
   toManagement = false,
 ): Promise<number> {
   await leadGate(db, me, id, "work", "place an order");
@@ -1546,7 +1738,10 @@ export async function orderFromLead(
   // A website order comes with how the customer chose to pay, and its delivery fee.
   const website = await websiteTerms(db, id);
   const paying = pay ?? website?.pay ?? null;
-  if (row.road !== "gl" && paying !== "cod" && paying !== "advance")
+  // A business on file may pay on its own terms (30 days); a patient pays on delivery or before.
+  if (paying === "terms" && !(row.buyerKind && row.customerId))
+    throw new Refusal(400, "invalid", "Only a business on file pays on its own terms.", "pay");
+  if (row.road !== "gl" && paying !== "cod" && paying !== "advance" && paying !== "terms")
     throw new Refusal(
       400,
       "invalid",
@@ -1556,7 +1751,7 @@ export async function orderFromLead(
   // Every case's order goes Management → Finance → Dispatch, like any MedRep order (Aryan, 18 Nov:
   // the Online desk's work goes to Management and to Finance too; its agent keeps the money's proof).
   const pap = row.desk === "pap";
-  const customerId = await patientOf(db, me, id);
+  const customerId = await patientOf(db, me, id, paying);
   // A senior's or PWD's case: the order works the relief out on every line (the law's 20% and no
   // VAT, or a lower quoted price or promo without VAT, never both); their ID is on the case's papers.
   // Which discount it is comes from the ID on file (one road since 18 Nov): a PWD ID → PWD.
@@ -1582,21 +1777,23 @@ export async function orderFromLead(
       items: row.quoteLines.map((line) => ({
         medicineId: line.medicineId,
         qty: line.qty,
-        priceKind: "patient",
+        priceKind: priceListOf(row.buyerKind),
         unitPrice: line.unitPrice,
         reason: line.reason ?? (line.unitPrice !== line.listPrice ? `As quoted on ${row.code}` : null),
       })),
       deliveryAddress: [row.address, row.city].filter(Boolean).join(", ") || null,
-      receiver: row.patientName ?? row.name,
+      receiver: row.buyerKind ? row.name : (row.patientName ?? row.name),
       receiverPhone: row.phone,
-      note: `${pap ? "PAP case" : "Online enquiry"} ${row.code} (${SOURCE_LABEL[row.source]})${row.road === "gl" && row.glLetterNo ? ` · GL ${row.glLetterNo}${row.agency ? ` (${row.agency.toUpperCase()})` : ""}` : ""}`,
+      note: `${pap ? "PAP case" : "Online enquiry"} ${row.code} (${SOURCE_LABEL[row.source]})${row.buyerKind ? ` · B2B ${buyerWord(row.buyerKind)}` : ""}${row.road === "gl" && row.glLetterNo ? ` · GL ${row.glLetterNo}${row.agency ? ` (${row.agency.toUpperCase()})` : ""}` : ""}`,
     },
     {
       // A guarantee letter's order is paid by the agency on its claim: billed, not paid first.
       terms:
         row.road === "gl"
           ? { terms: "days", days: 60 }
-          : { terms: paying === "cod" ? "cod" : "advance", days: null },
+          : paying === "terms"
+            ? undefined
+            : { terms: paying === "cod" ? "cod" : "advance", days: null },
       deliveryFee: website?.deliveryFee ?? 0,
       reliefFromCase: true,
       leadId: pap ? undefined : id,

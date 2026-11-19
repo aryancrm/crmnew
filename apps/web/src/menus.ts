@@ -96,7 +96,9 @@ export type Badge =
   | "important"
   | "updates"
   | "leave"
-  | "decisions";
+  | "decisions"
+  | "refills"
+  | "latePayments";
 export type MenuItem = {
   to: string;
   label: string;
@@ -364,7 +366,7 @@ const onlineApp: Space = {
       items: [
         { to: "/leads", label: "Leads & enquiries", icon: Inbox },
         { to: "/inbox", label: "Inbox", icon: MessagesSquare, badge: "inbox" },
-        { to: "/to-call", label: "Refills due", icon: Pill },
+        { to: "/to-call", label: "Refills due", icon: Pill, badge: "refills" },
         { to: "/patients", label: "Patients", icon: Users },
         { to: "/points", label: "Points", icon: Gift },
         { to: "/channels", label: "Channels", icon: Radio },
@@ -387,7 +389,7 @@ const reportsApp: Space = {
         { to: "/reports/channels", label: "By channel", icon: Users },
         { to: "/team", label: "By person", icon: User },
         { to: "/team-scores", label: "Scorecards", icon: Gauge },
-        { to: "/to-call", label: "Customers to call", icon: PhoneCall },
+        { to: "/to-call", label: "Customers to call", icon: PhoneCall, badge: "refills" },
         { to: "/collections", label: "Collections", icon: HandCoins },
         { to: "/huddle", label: "Evening huddles", icon: Megaphone },
         { to: "/care-groups", label: "Care groups", icon: Users },
@@ -593,7 +595,7 @@ function ownDesk(me: Me): Space {
             home,
             { to: "/leads", label: "Leads & enquiries", icon: Inbox },
             { to: "/inbox", label: "Inbox", icon: MessagesSquare, badge: "inbox" },
-            { to: "/to-call", label: "Refills due", icon: Pill, short: "Refills" },
+            { to: "/to-call", label: "Refills due", icon: Pill, badge: "refills", short: "Refills" },
             ordersLink("My orders"),
             { to: "/customers", label: "Patients", icon: Users },
             { to: "/points", label: "Points", icon: Gift },
@@ -609,7 +611,7 @@ function ownDesk(me: Me): Space {
             { to: "/my/area", label: "My hospitals", icon: Building2, short: "Hospitals" },
             ordersLink("My orders"),
             { to: "/collections", label: "Collections", icon: HandCoins },
-            { to: "/to-call", label: "Hospitals to call", icon: PhoneCall, short: "Call" },
+            { to: "/to-call", label: "Hospitals to call", icon: PhoneCall, badge: "refills", short: "Call" },
             folder(
               "Visits",
               CalendarCheck,
@@ -685,7 +687,7 @@ function ownDesk(me: Me): Space {
         return {
           ...desk([
             home,
-            { to: "/to-call", label: "Customers to call", icon: PhoneCall, short: "Call" },
+            { to: "/to-call", label: "Customers to call", icon: PhoneCall, badge: "refills", short: "Call" },
             ordersLink("My orders"),
             { to: "/collections", label: "Collections", icon: HandCoins },
             { to: "/my/area", label: "My customers", icon: Building2 },
@@ -700,7 +702,7 @@ function ownDesk(me: Me): Space {
           ...desk([
             home,
             { to: "/care-groups", label: "Care groups", icon: Users, short: "Groups" },
-            { to: "/to-call", label: "Refills due", icon: Pill, short: "Refills" },
+            { to: "/to-call", label: "Refills due", icon: Pill, badge: "refills", short: "Refills" },
             ordersLink("My orders"),
             { to: "/my/area", label: "My patients", icon: Users },
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
@@ -756,7 +758,7 @@ function ownDesk(me: Me): Space {
             "Visits",
           ),
           { to: "/my/area", label: pap ? "My patients" : "My area", icon: pap ? Users : MapPin },
-          { to: "/to-call", label: pap ? "Patients to call" : "Customers to call", icon: PhoneCall, short: "Call" },
+          { to: "/to-call", label: pap ? "Patients to call" : "Customers to call", icon: PhoneCall, badge: "refills", short: "Call" },
           { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
         ]),
         cta: pap
@@ -930,7 +932,7 @@ function ownDesk(me: Me): Space {
               "Team",
             ),
             { to: "/care-groups", label: "Care groups", icon: Users, short: "Groups" },
-            { to: "/to-call", label: "Refills due", icon: Pill, short: "Refills" },
+            { to: "/to-call", label: "Refills due", icon: Pill, badge: "refills", short: "Refills" },
             ordersLink("Team orders"),
             { to: "/targets", label: "Targets", icon: Target },
             { to: "/collections", label: "Collections", icon: HandCoins },
@@ -999,7 +1001,7 @@ function ownDesk(me: Me): Space {
               "Team",
             ),
             { to: "/huddle", label: "Team huddle", icon: Megaphone, short: "Huddle" },
-            { to: "/to-call", label: "Hospitals to call", icon: PhoneCall },
+            { to: "/to-call", label: "Hospitals to call", icon: PhoneCall, badge: "refills" },
             { to: "/collections", label: "Collections", icon: HandCoins },
             ordersLink("Team orders"),
             folder(
@@ -1047,7 +1049,7 @@ function ownDesk(me: Me): Space {
             { to: "/team-scores", label: "Scorecards", icon: Gauge, short: "Scores" },
             { to: "/targets", label: "Targets", icon: Target },
             { to: "/collections", label: "Collections", icon: HandCoins },
-            { to: "/to-call", label: "Hospitals to call", icon: PhoneCall },
+            { to: "/to-call", label: "Hospitals to call", icon: PhoneCall, badge: "refills" },
             { to: "/tenders", label: "Government tenders", icon: FileText },
             ordersLink("Division orders"),
             folder(
@@ -1095,7 +1097,7 @@ function ownDesk(me: Me): Space {
             [
               { to: "/my-team", label: "Whole team", icon: Users, teams: true },
               { to: "/team-scores", label: "Scorecards", icon: Gauge },
-              { to: "/to-call", label: "Customers to call", icon: PhoneCall },
+              { to: "/to-call", label: "Customers to call", icon: PhoneCall, badge: "refills" },
               { to: "/my/score", label: "My score", icon: Gauge },
             ],
             "Team",
@@ -1137,7 +1139,7 @@ function ownDesk(me: Me): Space {
             home,
             { to: "/leads", label: "Leads & enquiries", icon: Inbox },
             { to: "/inbox", label: "Inbox", icon: MessagesSquare, badge: "inbox" },
-            { to: "/to-call", label: "Refills due", icon: Pill, short: "Refills" },
+            { to: "/to-call", label: "Refills due", icon: Pill, badge: "refills", short: "Refills" },
             { to: "/orders", label: "My orders", icon: ClipboardList },
             { to: "/customers", label: "Patients", icon: Users },
             { to: "/points", label: "Points", icon: Gift },
@@ -1163,7 +1165,8 @@ function ownDesk(me: Me): Space {
               // the money that comes later by its terms (cash on delivery, 30 days, 45 days…).
               { to: "/", label: "Orders to check", icon: ClipboardCheck, badge: "finance" },
               { to: "/finance/prepaid", label: "Prepaid orders", icon: CreditCard, short: "Prepaid" },
-              { to: "/collect", label: "Due payments", icon: Wallet, short: "Due" },
+              // Its count: the payments past their day (cash on delivery once delivered, credit's days).
+              { to: "/collect", label: "Due payments", icon: Wallet, short: "Due", badge: "latePayments" },
               // Money going out, every day: refunds owed to customers and suppliers' bills to pay.
               { to: "/refunds", label: "Refunds owed", icon: Undo2, badge: "refunds", short: "Refunds" },
               { to: "/purchases/bills", label: "Supplier bills to pay", icon: Receipt, short: "Bills" },

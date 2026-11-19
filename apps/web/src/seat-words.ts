@@ -64,9 +64,10 @@ export function seatWords(me: Person | null | undefined): Words {
     return { desk: "Patient Assistance (PAP)", customers: "patients", myCustomers: "My patients", toCall: "Patients to call" };
   if (me.channel?.code === "BID")
     return { desk: me.role === "team_lead" ? "Government Bidding Admin" : "Government Bidding", customers: "agencies", myCustomers: "Agencies", toCall: "Agencies to call" };
-  // The Online desk: the B2C CHC (the desk role, or the Online channel's MedRep).
+  // The Online desk (the desk role, or the Online channel's MedRep): its people work in Online
+  // (Aryan, 19 Nov: Mary Jane's top bar said "B2C CHC", her seat's old name on the chart).
   if (me.role === "online" || (me.role === "medrep" && me.channel?.code === "ONLINE"))
-    return { desk: "B2C CHC", customers: "patients", myCustomers: "My patients", toCall: "Refills due" };
+    return { desk: "Online desk", customers: "patients", myCustomers: "My patients", toCall: "Refills due" };
   // Telesales by their box on the chart: the Hospital Division's sell anesthesia to hospitals and
   // doctors; the Prescription Business's (oncology) work patients' refills and care groups.
   if (me.channel?.code === "TS" && me.role === "medrep" && me.business === "HOSP")

@@ -545,6 +545,14 @@ function LeadCardItem({ card }: { card: LeadCard }) {
         </div>
 
         <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          {card.buyer && (
+            <span
+              className="inline-flex items-center rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold text-white capitalize"
+              title="A business buying through the Online desk: its own price list"
+            >
+              B2B · {card.buyer}
+            </span>
+          )}
           {card.caseType === "website_order" ? (
             <span className="inline-flex items-center rounded-full border border-teal-200 bg-teal-50 px-2 py-0.5 text-[10px] font-semibold text-teal-800">
               Website order

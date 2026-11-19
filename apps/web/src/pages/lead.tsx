@@ -4,7 +4,10 @@
 // Payment & follow-up), the step being worked in the middle, and the money and the activity
 // under the steps. The step open is in the address (?step=).
 
+import { RefillCard } from "../customers/refill";
 import type {
+  BuyerBusiness,
+  BuyerType,
   Catalogue,
   CatalogueRow,
   LeadCase,
@@ -192,7 +195,11 @@ export function LeadPage() {
       who: gl ? "You send the claim · the agency pays" : "Money in · the refill reminder",
     },
   ];
-  const roadLock = orderLive ? "Locked: the order is placed with this road." : null;
+  const roadLock = orderLive
+    ? "Locked: the order is placed with this road."
+    : lead.buyerKind
+      ? "A business buys on the regular road, at its own price."
+      : null;
   const files = data.journey.approved.map((kind) => ({
     id: kind,
     name: kind,
@@ -1322,6 +1329,127 @@ function Canvass({ data, editable }: { data: LeadCase; editable: boolean }) {
   );
 }
 
+/** Who buys on the case: the patient, or a business through the desk (Aryan, 19 Nov: a drugstore
+ *  or a hospital that orders through Online is Online's entry), priced from its own list. One on
+ *  file is picked; else the case's name is added as that kind with the order. */
+function BuyerPicker({ data, editable }: { data: LeadCase; editable: boolean }) {
+  const { lead } = data;
+  const write = useCaseWrite(lead.id);
+  const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<BuyerBusiness>(lead.buyerKind ?? "drugstore");
+  const [q, setQ] = useState("");
+  const found = useQuery({
+    queryKey: ["leads", lead.id, "buyers", q.trim()],
+    queryFn: () =>
+      api<{ id: number; code: string | null; name: string; kind: BuyerBusiness; city: string | null; terms: string }[]>(
+        `/api/leads/${lead.id}/buyers?q=${encodeURIComponent(q.trim())}`,
+      ),
+    enabled: open && q.trim().length >= 2,
+  });
+  if (lead.desk === "pap") return null;
+  const business = data.buyers.find((one) => one.key === lead.buyerKind) ?? null;
+  const pickedKind = data.buyers.find((one) => one.key === kind);
+  async function choose(body: { kind: "patient" | BuyerBusiness; customerId?: number | null }) {
+    if (await write.send(`/api/leads/${lead.id}/buyer`, body)) setOpen(false);
+  }
+  const tab = (active: boolean) =>
+    `rounded-lg px-2.5 py-1 text-[12px] font-semibold ${active ? "bg-emerald-700 text-white" : "text-slate-600 hover:bg-slate-100"}`;
+  return (
+    <div className="mb-3 rounded-xl border border-slate-200 px-3 py-2.5 text-[13px]">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-slate-600">Who's buying</span>
+        <div className="inline-flex rounded-xl border border-slate-200 p-0.5">
+          <button
+            type="button"
+            className={tab(!business && !open)}
+            disabled={!editable || write.busy}
+            onClick={() => (business ? void choose({ kind: "patient" }) : setOpen(false))}
+          >
+            A patient
+          </button>
+          <button
+            type="button"
+            className={tab(Boolean(business) || open)}
+            disabled={!editable || write.busy}
+            onClick={() => setOpen(true)}
+          >
+            A business (B2B)
+          </button>
+        </div>
+        <span className="text-[12px] text-slate-500">
+          {business
+            ? `${lead.buyerName ?? `New ${business.label.toLowerCase()}: ${lead.name}`} · ${business.price === "bidding" ? "bidding" : business.label.split(" / ")[0]?.toLowerCase()} price · counts as Online's`
+            : "Patient price"}
+        </span>
+        {business && editable && !open && (
+          <button type="button" className="text-[12px] font-semibold text-emerald-700 hover:underline" onClick={() => setOpen(true)}>
+            Change
+          </button>
+        )}
+      </div>
+      {open && editable && (
+        <div className="mt-2.5 flex flex-col gap-2 rounded-xl bg-slate-50 p-2.5">
+          <div className="flex flex-wrap gap-2">
+            <select
+              aria-label="What kind of business"
+              className="field h-9 w-auto"
+              value={kind}
+              onChange={(event) => setKind(event.target.value as BuyerBusiness)}
+            >
+              {data.buyers.map((one) => (
+                <option key={one.key} value={one.key}>
+                  {one.label}
+                </option>
+              ))}
+            </select>
+            <input
+              className="field h-9 min-w-[14rem] flex-1"
+              placeholder="Find them on file: name, code or number"
+              value={q}
+              onChange={(event) => setQ(event.target.value)}
+            />
+          </div>
+          {q.trim().length >= 2 && (
+            <ul className="divide-y divide-slate-100 overflow-hidden rounded-lg border border-slate-200 bg-white">
+              {(found.data ?? []).map((one) => (
+                <li key={one.id}>
+                  <button
+                    type="button"
+                    disabled={write.busy}
+                    onClick={() => void choose({ kind: one.kind, customerId: one.id })}
+                    className="flex w-full flex-wrap items-center justify-between gap-2 px-3 py-2 text-left hover:bg-emerald-50"
+                  >
+                    <span className="font-semibold text-slate-900">{one.name}</span>
+                    <span className="text-[12px] text-slate-500">
+                      {[one.code, data.buyers.find((b) => b.key === one.kind)?.label, one.city, one.terms].filter(Boolean).join(" · ")}
+                    </span>
+                  </button>
+                </li>
+              ))}
+              {found.data && found.data.length === 0 && (
+                <li className="px-3 py-2 text-[12px] text-slate-500">No business on file by that name.</li>
+              )}
+            </ul>
+          )}
+          <div className="flex flex-wrap gap-2">
+            <Button small disabled={write.busy} onClick={() => void choose({ kind, customerId: null })}>
+              New {pickedKind?.label.toLowerCase() ?? "business"}: add “{lead.name}” with the order
+            </Button>
+            <Button small disabled={write.busy} onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+          </div>
+          <div className="text-[11.5px] text-slate-500">
+            A business pays on the regular road at its own price; no prescription is asked, and Management checks a new
+            customer's papers.
+          </div>
+        </div>
+      )}
+      <Problem message={write.problem?.message} />
+    </div>
+  );
+}
+
 function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void }) {
   const { lead } = data;
   const editable = data.can.work && !(data.order && data.order.status !== "cancelled");
@@ -1352,9 +1480,27 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
   }));
   const totals = totalsOf(typed, lead.road);
   const quoted = data.quote.lines.length > 0 && !data.quote.stale && !dirty;
+  // Priced from the buyer's own list: the patient price, or a business's (a drugstore's).
+  const buyer = data.buyers.find((one) => one.key === lead.buyerKind) ?? null;
+  const list = (buyer?.price ?? "patient") as BuyerType;
+  const listWord =
+    (buyer ? (list === "bidding" ? "bidding" : buyer.label.split(" / ")[0]?.toLowerCase()) : null) ?? "patient";
+  // A new buyer prices the lines again from its list (a reason given for the old price goes).
+  const pricedFor = useRef(list);
+  useEffect(() => {
+    if (pricedFor.current === list || rowOf.size === 0) return;
+    pricedFor.current = list;
+    setLines((current) =>
+      current.map((line) => {
+        const price = rowOf.get(line.medicineId)?.prices[list];
+        return price === undefined ? line : { ...line, listPrice: price, price: (price / 100).toFixed(2), reason: "" };
+      }),
+    );
+    setDirty(true);
+  }, [list, rowOf]);
 
   function add(row: CatalogueRow) {
-    const price = row.prices.patient;
+    const price = row.prices[list];
     if (price === undefined) return;
     if (lines.some((line) => line.medicineId === row.id)) return;
     setLines((current) => [
@@ -1419,9 +1565,10 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
             <span className="font-semibold">Asked for:</span> {lead.request}
           </div>
         )}
+        <BuyerPicker data={data} editable={editable} />
         {data.quote.stale && !dirty && (
           <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
-            Saved for another road. Check the prices and save it again for this one.
+            Saved for another road or buyer. Check the prices and save it again for this one.
           </div>
         )}
 
@@ -1534,7 +1681,9 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
                         </span>
                       </div>
                       <div className={`mt-0.5 text-[11px] ${below ? "font-semibold text-amber-700" : "text-slate-500"}`}>
-                        {below ? `Below the patient price ${peso(line.listPrice)}` : "Patient price"}
+                        {below
+                          ? `Below the ${listWord} price ${peso(line.listPrice)}`
+                          : `${listWord.charAt(0).toUpperCase()}${listWord.slice(1)} price`}
                       </div>
                       {write.at(`lines.${index}.unitPrice`) && (
                         <div className="text-[11px] text-rose-700">{write.at(`lines.${index}.unitPrice`)}</div>
@@ -1560,7 +1709,7 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
                     {below && (
                       <div className="col-span-2 sm:col-span-5">
                         <Field
-                          label="Why below the patient price (Management reads it)"
+                          label={`Why below the ${listWord} price (Management reads it)`}
                           error={write.at(`lines.${index}.reason`)}
                         >
                           {(field) => (
@@ -1591,7 +1740,7 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
           <div className="mt-3">
             <MedicineFinder
               id="quote-medicine"
-              buyer="patient"
+              buyer={list}
               catalogue={catalogue.data}
               failed={catalogue.isError}
               onRetry={() => catalogue.refetch()}
@@ -2208,7 +2357,7 @@ function CaseRoute({
   reasons: string[];
   pap: boolean;
   gl: boolean;
-  pay: "cod" | "advance" | null;
+  pay: "cod" | "advance" | "terms" | null;
 }) {
   const steps = [
     pap ? "The PAP head approves" : "Management approves",
@@ -2216,7 +2365,7 @@ function CaseRoute({
       ? "Finance checks the agency's bill"
       : pay === "advance"
         ? "Finance checks the payment"
-        : pay === "cod"
+        : pay === "cod" || pay === "terms"
           ? "Finance checks what they owe"
           : "Finance checks it",
     "Dispatch packs and ships",
@@ -2245,9 +2394,17 @@ function CaseRoute({
 function OrderStep({ data, onNext }: { data: LeadCase; onNext: () => void }) {
   const write = useCaseWrite(data.lead.id);
   // A website order comes with how the customer chose to pay.
-  const [pay, setPay] = useState<"cod" | "advance" | null>(
+  const [pay, setPay] = useState<"cod" | "advance" | "terms" | null>(
     data.web?.paymentMethod ? (data.web.paymentMethod === "cod" ? "cod" : "advance") : null,
   );
+  // A business on file may pay on its own terms (30 days), as with its MedRep.
+  const payWays = [
+    ...(data.lead.buyerKind && data.lead.buyerTerms
+      ? [["terms", `On their terms (${data.lead.buyerTerms})`] as const]
+      : []),
+    ["cod", "Cash on delivery"] as const,
+    ["advance", "Paid in advance"] as const,
+  ];
   const fee = data.web?.money.deliveryFee ?? 0;
   const order = data.order && data.order.status !== "cancelled" ? data.order : null;
   const gl = data.lead.road === "gl";
@@ -2316,13 +2473,8 @@ function OrderStep({ data, onNext }: { data: LeadCase; onNext: () => void }) {
           {data.can.work && data.can.placeOrder && !gl && (
             <div>
               <div className="mb-1.5 text-xs font-medium text-slate-600">How they pay</div>
-              <div className="grid max-w-md grid-cols-2 gap-2">
-                {(
-                  [
-                    ["cod", "Cash on delivery"],
-                    ["advance", "Paid in advance"],
-                  ] as const
-                ).map(([key, label]) => (
+              <div className={`grid gap-2 ${payWays.length > 2 ? "max-w-xl grid-cols-3" : "max-w-md grid-cols-2"}`}>
+                {payWays.map(([key, label]) => (
                   <label
                     key={key}
                     className={`flex cursor-pointer items-center justify-center rounded-[10px] border px-3 py-2 text-sm font-semibold ${pay === key ? "border-emerald-600 bg-emerald-50 text-emerald-900" : "border-line text-slate-600 hover:bg-hover"}`}
@@ -2472,16 +2624,28 @@ function PayStep({ data, onBack }: { data: LeadCase; onBack: () => void }) {
   const invoice = order?.trail.invoice ?? null;
   // Cash on delivery and the agency's claim come after the handover; paid in advance, at once.
   const before = !order || !invoice || (order.terms !== "advance" && order.status !== "completed");
+  // The follow-up: when the patient needs their medicines again (kept on the customer, listed in
+  // Refills due). Set by the agent who took the order, once it is placed.
+  const refill =
+    order && data.refill ? (
+      <div className="rounded-xl border border-slate-200 p-3">
+        <div className="mb-2 text-[12px] font-semibold tracking-wide text-slate-500 uppercase">Follow-up · next refill</div>
+        <RefillCard plain refill={data.refill} post={`/api/leads/${data.lead.id}/refill`} onSaved={() => write.refresh()} />
+      </div>
+    ) : null;
   if (before)
     return (
       <StepPanel number="4" title={title}>
-        <div className="flex flex-wrap items-center justify-between gap-3 text-[13px] text-slate-600">
-          <span>
-            {order ? "Payment comes after the delivery." : "Payment comes after the order."}
-          </span>
-          <Button small onClick={onBack}>
-            {order ? "Go to delivery" : "Go to the order"}
-          </Button>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 text-[13px] text-slate-600">
+            <span>
+              {order ? "Payment comes after the delivery." : "Payment comes after the order."}
+            </span>
+            <Button small onClick={onBack}>
+              {order ? "Go to delivery" : "Go to the order"}
+            </Button>
+          </div>
+          {refill}
         </div>
       </StepPanel>
     );
@@ -2539,6 +2703,7 @@ function PayStep({ data, onBack }: { data: LeadCase; onBack: () => void }) {
           )}
           <SendToCustomer orderId={order.id} up />
         </div>
+        {refill}
       </div>
       {paying && (
         <RecordPaymentDialog

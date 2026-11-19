@@ -193,15 +193,19 @@ export async function orderMoney(
 export async function financeCounts(
   db: Runner,
   me: Me,
-): Promise<{ toConfirm: number; toInvoice: number; refunds: number }> {
-  if (!FINANCE_READ_ROLES.includes(me.role)) return { toConfirm: 0, toInvoice: 0, refunds: 0 };
-  const [counted] = await rows<{ toConfirm: number; toInvoice: number; refunds: number }>(
+): Promise<{ toConfirm: number; toInvoice: number; refunds: number; latePayments: number }> {
+  if (!FINANCE_READ_ROLES.includes(me.role)) return { toConfirm: 0, toInvoice: 0, refunds: 0, latePayments: 0 };
+  const today = todayManila();
+  const [counted] = await rows<{ toConfirm: number; toInvoice: number; refunds: number; latePayments: number }>(
     db,
     sql`select (select count(*) from sales_order where status = 'finance_check')::int as "toConfirm",
         (select count(*) from sales_order where status = 'ready_for_invoice')::int as "toInvoice",
+        -- Due payments past their day (this CRM's: delivered, or advance checked), beside Due payments.
+        (select count(*) from invoice i join sales_order o on o.id = i.order_id
+          where i.status = 'open' and i.total > i.paid and not ${notDueSql} and i.due_on < ${today}::date)::int as "latePayments",
         (select count(*) from invoice i join sales_order o on o.id = i.order_id where i.status = 'cancelled' and o.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit', 'deduction')) > i.refunded)::int as refunds`,
   );
-  return counted ?? { toConfirm: 0, toInvoice: 0, refunds: 0 };
+  return counted ?? { toConfirm: 0, toInvoice: 0, refunds: 0, latePayments: 0 };
 }
 
 // ---------------------------------------------------------------- the order's step

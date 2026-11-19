@@ -15,7 +15,7 @@ import { CARD, count, dayLabel, PageHead, PageState, Tabs } from "../ui";
 const STATE_LABEL: Record<ReorderState, string> = { soon: "In 2 days", due: "Due now", late: "Late", at_risk: "At risk", lost: "Lost" };
 const STATE_SUB: Record<ReorderState, string> = {
   soon: "Their refill falls in the next two days: reach them before they run out.",
-  due: "Their usual gap has passed: call before they order elsewhere.",
+  due: "Their refill day has come (the day set by hand, else their usual gap): call before they order elsewhere.",
   late: "Past 1.5 times their usual gap.",
   at_risk: "Past 2.5 times their usual gap, or 90 days and late.",
   lost: "No order in 180 days and far past their gap (last two years only).",
@@ -122,7 +122,19 @@ export function ToCallPage() {
                   {row.usual} days
                   <div className="text-[11.5px] text-slate-400">{row.orders} orders</div>
                 </td>
-                <td className="px-3 py-2.5 whitespace-nowrap text-slate-600">{dayLabel(row.expectedOn)}</td>
+                <td className="px-3 py-2.5 text-slate-600">
+                  <span className="whitespace-nowrap">{dayLabel(row.expectedOn)}</span>
+                  <div className="text-[11.5px] text-slate-400">
+                    {row.setOn ? (
+                      <span className="text-emerald-700" title={row.refillNote ?? undefined}>
+                        Set by {row.setBy ?? "hand"}
+                        {row.refillNote ? ` · ${row.refillNote}` : ""}
+                      </span>
+                    ) : (
+                      "Usual gap"
+                    )}
+                  </div>
+                </td>
                 <td className="px-4 py-2.5 text-right font-semibold text-slate-900 tabular-nums">{shortPeso(row.lastTotal)}</td>
               </tr>
             ))}

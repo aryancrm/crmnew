@@ -42,7 +42,7 @@ export function B2cHome() {
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">
           {greeting()}, {me.name.split(" ")[0]}
         </h1>
-        <div className="mt-0.5 text-xs text-slate-500">B2C CHC · every new enquiry answered within {data?.replyMinutes ?? 15} minutes</div>
+        <div className="mt-0.5 text-xs text-slate-500">Online desk · every new enquiry answered within {data?.replyMinutes ?? 15} minutes</div>
       </div>
       {!data ? (
         <div className="p-8 text-center text-slate-500">Loading your day…</div>
@@ -228,13 +228,13 @@ export function B2cDeskCard() {
   return (
     <section className={`${CARD} min-w-0 overflow-x-auto`}>
       <header className="flex items-baseline justify-between gap-3 px-4 pt-4 pb-2 sm:px-5">
-        <h2 className="text-sm font-semibold text-slate-900">B2C desk now</h2>
+        <h2 className="text-sm font-semibold text-slate-900">Online desk now</h2>
         <span className="text-xs text-slate-500">Replies within 15 minutes · three late in a day comes to you</span>
       </header>
       <table className="w-full text-[13px]">
         <thead>
           <tr className="border-y border-slate-100 bg-slate-50/60 text-left text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
-            <th className="px-4 py-2 sm:px-5">B2C CHC</th>
+            <th className="px-4 py-2 sm:px-5">Online agent</th>
             <th className="px-3 py-2 text-right">Waiting for a reply</th>
             <th className="px-3 py-2 text-right">Late today</th>
             <th className="px-4 py-2">Invoices</th>

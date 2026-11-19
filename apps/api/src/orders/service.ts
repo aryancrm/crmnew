@@ -21,7 +21,7 @@ import { Refusal } from "../http";
 import { buyerLabel, todayManila } from "../inventory/rules";
 import { clean, day, iso, PROMISED_ORDER, type Runner, warehouses } from "../inventory/service";
 import { notify } from "../notify/service";
-import { reliefPrice } from "../online/rules";
+import { reliefPrice, SOURCE_LABEL } from "../online/rules";
 import { inForce } from "../org/service";
 import { ROLE_LABEL, type Role } from "../people/roles";
 import { releaseOrderPoints } from "../points/service";
@@ -168,12 +168,21 @@ export async function findOrders(
   return found.map((row) => ({ ...row, status: STATUS_LABEL[row.status] }));
 }
 
+/** The Online case an order came from (alias `o`): its code and where it came in (Messenger, a
+ *  website, a call…), so every desk sees "Online · Messenger" on the order. */
+const viaSql = sql.raw(`(select jsonb_build_object('code', l.code, 'source', coalesce(site.name, case l.source ${Object.entries(
+  SOURCE_LABEL,
+)
+  .map(([key, label]) => `when '${key}' then '${label.replace(/'/g, "''")}'`)
+  .join(" ")} else l.source end))
+  from lead l left join channel_account site on site.id = l.site_account_id where l.id = o.lead_id)`);
+
 const rowColumns = sql`
   o.id::int as id, o.code, o.customer_id::int as "customerId", c.name as customer, rep.name as medrep,
   o.status, (o.payment_terms = 'days') as credit, o.total::int as total, o.delivery_fee::int as "deliveryFee", o.points_used::int as "pointsUsed",
   ${iso("o.created_at")} as "createdAt", ${iso("o.updated_at")} as "updatedAt", o.flag_reason as "flagReason",
   o.patient_order as "patientOrder", o.patient_name as "patientName", o.note,
-  exists (select 1 from order_version v where v.order_id = o.id and v.kind = 'changed') as changed`;
+  exists (select 1 from order_version v where v.order_id = o.id and v.kind = 'changed') as changed, ${viaSql} as via`;
 
 const rowJoins = sql`
   join customer c on c.id = o.customer_id
@@ -934,8 +943,8 @@ async function toCards(
       : all;
   };
   return found.map((row) => {
-    const { review, licenceExpired, creditLimit, gl, ...shown } = row;
-    const { heldFrom } = row;
+    const { review, licenceExpired, gl, ...shown } = row;
+    const { heldFrom, creditLimit } = row;
     const own = items.filter((item) => item.orderId === row.id);
     const onFile = papers.get(row.id) ?? [];
     // What the system found matters while the order waits for Management (or was stopped

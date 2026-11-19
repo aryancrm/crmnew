@@ -484,7 +484,14 @@ export function OrdersTable({ title }: { title: string }) {
                       {row.code}
                     </Link>
                   </td>
-                  <td className="font-semibold">{row.customer}</td>
+                  <td className="font-semibold">
+                    {row.customer}
+                    {row.via && (
+                      <span className="ml-1.5 rounded-full bg-violet-600 px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-white">
+                        Online · {row.via.source}
+                      </span>
+                    )}
+                  </td>
                   <td className="whitespace-nowrap text-slate-600">{row.medrep}</td>
                   <td>
                     <StatusPill status={row.status} label={row.statusLabel} />

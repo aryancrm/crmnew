@@ -11,7 +11,9 @@ import {
   addLead,
   addLeadFile,
   addLeadNote,
+  caseRefill,
   closeLead,
+  findBuyers,
   LEAD_FILE_MAX_BYTES,
   leadCase,
   leadDesk,
@@ -25,6 +27,7 @@ import {
   saveGl,
   saveLead,
   saveQuote,
+  setBuyer,
   setCasePoints,
 } from "./service";
 import { tellCustomer } from "./tell";
@@ -156,6 +159,33 @@ export function onlineRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
     await saveCanvass(db, c.get("me"), idParam(c), input.lines);
     return c.json({ ok: true });
   });
+  // Who buys: the patient, or a business through the desk (its own price list).
+  app.post("/api/leads/:id/buyer", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        kind: z.enum(["patient", "hospital", "doctor", "drugstore", "distributor", "government"], { error: "Pick who is buying." }),
+        customerId: z.number().int().positive().nullish(),
+      }),
+    );
+    await setBuyer(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+  app.get("/api/leads/:id/buyers", async (c) =>
+    c.json(await findBuyers(db, c.get("me"), idParam(c), c.req.query("q") ?? "")),
+  );
+  // The next refill (step 4): the day the patient's medicines run out, kept on the customer.
+  app.post("/api/leads/:id/refill", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick the day.").nullable(),
+        note: z.string().max(200).nullish(),
+      }),
+    );
+    await caseRefill(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
   app.post("/api/leads/:id/note", async (c) => {
     const input = await readBody(c, z.object({ message: z.string().max(2000) }));
     await addLeadNote(db, c.get("me"), idParam(c), input.message);
@@ -213,7 +243,7 @@ export function onlineRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
   app.post("/api/leads/:id/order", async (c) => {
     const input = await readBody(
       c,
-      z.object({ pay: z.enum(["cod", "advance"]).nullish(), toManagement: z.boolean().optional() }),
+      z.object({ pay: z.enum(["cod", "advance", "terms"]).nullish(), toManagement: z.boolean().optional() }),
     );
     const id = await orderFromLead(
       db,

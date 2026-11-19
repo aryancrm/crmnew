@@ -15,6 +15,7 @@ import { LEAD_READ_ROLES } from "../online/rules";
 import { STATUS_LABEL } from "../orders/rules";
 import { pointsByPhone } from "../points/service";
 import type { CustomerPage, Me, OrderStatus, PaymentMethod, PaymentTerms } from "../types";
+import { refillOf } from "./reorders";
 import { customerDetail } from "./service";
 
 const LIMIT = 100;
@@ -201,7 +202,10 @@ export async function customerPage(db: Database, me: Me, id: number): Promise<Cu
   const overdue =
     invoiceRows.reduce((sum, invoice) => sum + (invoice.state.overdueDays > 0 ? invoice.balance : 0), 0) +
     (zoho?.overdue ?? 0);
-  const points = detail.customer.kind === "patient" ? await pointsByPhone(db, phone) : null;
+  const [points, refill] = await Promise.all([
+    detail.customer.kind === "patient" ? pointsByPhone(db, phone) : null,
+    refillOf(db, me, id),
+  ]);
 
   return {
     ...detail,
@@ -264,5 +268,6 @@ export async function customerPage(db: Database, me: Me, id: number): Promise<Cu
     cases,
     events,
     points: points ? { balance: points.balance } : null,
+    refill,
   };
 }

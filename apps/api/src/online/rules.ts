@@ -87,7 +87,9 @@ export function papersFor(road: LeadRoad, rxNeeded: boolean): LeadPaperKind[] {
   const rx: LeadPaperKind[] = rxNeeded ? ["rx"] : [];
   if (discountRoad(road)) return [...rx, "osca_id"];
   if (road === "gl") return [...rx, "valid_id", "med_cert", "gl_letter"];
-  return rx;
+  // A patient's order carries their prescription and their ID, which Management checks (Aryan,
+  // 16 Nov); a business buying through the desk needs neither.
+  return rxNeeded ? [...rx, "valid_id"] : rx;
 }
 
 /** A senior citizen's or PWD's price: VAT taken out of a 12% medicine, then 20% off (the law). */
@@ -162,6 +164,8 @@ export function roadStepOf(f: CaseFacts): string {
   }
   if (!rxOk) return "rx_wait";
   if (discountRoad(f.road) && !hasDiscountId(f.files)) return "papers";
+  // The patient's own ID is asked for on the regular road (Management checks it with the
+  // prescription) but doesn't stop the order: whether it should is Aryan's to say.
   return "ready";
 }
 

@@ -806,11 +806,34 @@ function FinanceSteps({ card }: { card: OrderCard }) {
   const navigate = useNavigate();
   const all = checksOf(card);
   const paper = all.find((one) => one.key === "paper");
+  // What each one means for Finance's money, in its own words (Aryan, 19 Nov: the strip's data
+  // relevant): how this order pays, what is overdue, and its credit against the limit.
+  const fineNote = (key: string) => {
+    if (key === "proof")
+      return card.payBy
+        ? `Pays by ${dayLabel(card.payBy)}`
+        : card.paymentTerms === "advance"
+          ? card.papers.includes("payment_proof")
+            ? "Proof attached: match it with the bank"
+            : "Pays in advance"
+          : card.paymentTerms === "cod"
+            ? `Cash on delivery: ${peso(card.total)} collected at the door`
+            : `On credit: ${card.paymentDays ?? 30} days from delivery`;
+    if (key === "credit")
+      return card.paymentTerms !== "days" && !card.payBy
+        ? "Not on credit"
+        : card.creditLimit === null
+          ? "On credit, no limit set"
+          : `Within the ${peso(card.creditLimit)} limit`;
+    return null;
+  };
   const steps = FINANCE_CHECKS.map((step) => {
     if (step.key === "paper")
-      return { ...step, warn: paper?.tone === "warn", note: paper?.label ?? step.fine };
+      return { ...step, warn: paper?.tone === "warn", info: false, note: paper?.label ?? step.fine };
     const hit = card.findings.find((one) => (step.warnKinds as readonly string[]).includes(one.kind));
-    return { ...step, warn: Boolean(hit), note: hit ? hit.short : step.fine, title: hit?.text };
+    // A sale on credit with no limit set: grey, for Finance to set one (never a stop by itself).
+    const info = !hit && step.key === "credit" && (card.paymentTerms === "days" || Boolean(card.payBy)) && card.creditLimit === null;
+    return { ...step, warn: Boolean(hit), info, note: hit ? hit.short : (fineNote(step.key) ?? step.fine), title: hit?.text };
   });
   const warns = steps.filter((one) => one.warn);
   const go = (event: { stopPropagation: () => void }) => {
@@ -835,8 +858,9 @@ function FinanceSteps({ card }: { card: OrderCard }) {
       <div className="grid grid-cols-4 gap-1">
         {steps.map((step) => (
           <button key={step.key} type="button" onClick={go} title={step.note} className="group/step flex flex-col gap-1 rounded py-0.5 text-left">
-            <span className={`h-1.5 w-full rounded-full ${step.warn ? "bg-amber-400 ring-2 ring-amber-100" : "bg-emerald-500"}`} />
+            <span className={`h-1.5 w-full rounded-full ${step.warn ? "bg-amber-400 ring-2 ring-amber-100" : step.info ? "bg-slate-300" : "bg-emerald-500"}`} />
             <span className={`text-[10px] font-semibold group-hover/step:underline ${step.warn ? "text-amber-700" : "text-slate-600"}`}>{step.label}</span>
+            <span className="line-clamp-2 text-[9.5px] leading-tight text-slate-500">{step.note}</span>
           </button>
         ))}
       </div>
@@ -1068,6 +1092,14 @@ export function OrderCardItem({
             {card.channel && (
               <span className="max-w-[120px] truncate text-[10px] font-semibold text-slate-600">
                 {card.channel}
+              </span>
+            )}
+            {card.via && (
+              <span
+                className="inline-flex shrink-0 items-center rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold text-white"
+                title={`Came in through the Online desk: case ${card.via.code}`}
+              >
+                Online · {card.via.source}
               </span>
             )}
             <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
@@ -1899,7 +1931,10 @@ function OrdersCardTable({
                 </td>
               )}
               <td className="px-3 py-2 text-slate-700">{card.medrep}</td>
-              <td className="px-3 py-2 text-slate-600">{card.channel ?? "—"}</td>
+              <td className="px-3 py-2 text-slate-600">
+                {card.channel ?? "—"}
+                {card.via && <div className="text-[11px] font-semibold text-violet-700">Online · {card.via.source}</div>}
+              </td>
               <td className="px-3 py-2 text-right font-semibold text-slate-900 tabular-nums">
                 {peso(card.total)}
               </td>
@@ -1994,7 +2029,7 @@ function OrdersLanes({
                         </span>
                       </div>
                       <div className="mt-0.5 truncate text-xs text-stone-500">
-                        {card.code} · {card.channel ?? card.customerKind}
+                        {card.code} · {card.via ? `Online · ${card.via.source}` : (card.channel ?? card.customerKind)}
                       </div>
                     </div>
                   </div>

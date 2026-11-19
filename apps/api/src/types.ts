@@ -878,6 +878,8 @@ export type OrderCard = OrderRow & {
   customerPhone: string | null;
   /** Where it ships from, once Management approved it. */
   warehouse: string | null;
+  /** The customer's credit limit (null: none set). */
+  creditLimit: number | null;
   /** The kinds of papers on file: "po", "payment_proof", "prescription", "gl", "other". */
   papers: PaperKind[];
   /** Where it stood when it was put on hold, and which desk holds it. */
@@ -950,6 +952,8 @@ export type OrderRow = {
   note?: string | null;
   /** Management changed its lines before approving (what, on the order's versions). */
   changed?: boolean;
+  /** It came through the Online desk: the case's code and where it came in ("Messenger"). */
+  via?: { code: string; source: string } | null;
 };
 
 export type OrderList = {
@@ -981,6 +985,8 @@ export type OrderDashboard = {
     toConfirm: number;
     toInvoice: number;
     refunds: number;
+    /** Due payments past their day (Finance's Due payments). */
+    latePayments: number;
     toPack: number;
     toShip: number;
     onTheWay: number;
@@ -2023,6 +2029,8 @@ export type LeadSource =
   | "email"
   | "other";
 export type LeadRoad = "regular" | "senior" | "pwd" | "gl";
+/** A business buying through the Online desk (Aryan, 19 Nov: those orders count as Online's). */
+export type BuyerBusiness = "hospital" | "doctor" | "drugstore" | "distributor" | "government";
 export type GlAgency = "dswd" | "pcso" | "ovp" | "op";
 export type LeadPaperKind =
   | "rx"
@@ -2073,6 +2081,8 @@ export type LeadCard = {
   sourceLabel: string;
   caseType: CaseType;
   road: LeadRoad;
+  /** A business buying through the desk (its kind); null: a patient. */
+  buyer: BuyerBusiness | null;
   agency: GlAgency | null;
   city: string | null;
   /** The medicines asked for, in one line. */
@@ -2153,6 +2163,11 @@ export type LeadCase = {
     road: LeadRoad;
     agency: GlAgency | null;
     request: string | null;
+    /** A business buying (its kind) and the one on file once picked; null: a patient buys. */
+    buyerKind: BuyerBusiness | null;
+    buyerName: string | null;
+    /** The business's own payment terms on file ("30 days"). */
+    buyerTerms: string | null;
     quoteSentVia: string | null;
     quoteSentAt: string | null;
     glAppliedOn: string | null;
@@ -2225,6 +2240,10 @@ export type LeadCase = {
   agents: { id: number; name: string }[];
   /** The customer's other orders and enquiries, on the same number or customer. */
   history: CaseHistory;
+  /** When the customer needs their medicines again; null until the case has a customer. */
+  refill: Refill | null;
+  /** The kinds of business that may buy through the desk, each with the price list it buys from. */
+  buyers: { key: BuyerBusiness; label: string; price: string }[];
   can: {
     work: boolean;
     placeOrder: boolean;
@@ -2810,6 +2829,8 @@ export type CustomerPage = CustomerDetail & {
   }[];
   /** A patient's points, by their number. */
   points: { balance: number } | null;
+  /** When they need their medicines again. */
+  refill: Refill;
 };
 
 export type MyKpisPeriod = "today" | "yesterday" | "day" | "month";
@@ -4690,7 +4711,12 @@ export type Reorders = {
     /** Their usual days between orders. */
     usual: number;
     since: number;
+    /** When they should need more: the day a person set, else the last order plus the usual gap. */
     expectedOn: string;
+    /** The day a person set (it counts until their next order), who set it, and their note. */
+    setOn: string | null;
+    setBy: string | null;
+    refillNote: string | null;
     lastTotal: number;
     /** The medicines of their latest order. */
     lastItems: string | null;
@@ -4699,6 +4725,25 @@ export type Reorders = {
   areas: { areaId: number | null; area: string; seller: string | null; due: number; late: number; atRisk: number; lost: number; ok: number }[];
   /** Whose customers these are: the seat's area, the teams led, the online desk, the company. */
   scope: { label: string; detail: string };
+};
+
+/** A customer's next refill: the day a person set (until their next order), else the suggestion. */
+export type Refill = {
+  /** Their last order, this CRM's or the old system's; null with none. */
+  lastOn: string | null;
+  orders: number;
+  /** Their usual days between orders (28 with one order). */
+  usual: number;
+  /** The last order plus the usual gap. */
+  suggestedOn: string | null;
+  /** The day a person set, who and when, and their note; null when none counts. */
+  setOn: string | null;
+  note: string | null;
+  setBy: string | null;
+  setAt: string | null;
+  /** The day that counts: the one set, else the suggestion. */
+  nextOn: string | null;
+  canSet: boolean;
 };
 
 /** A seller's pulse for today: four numbers, each with its light. */

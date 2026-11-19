@@ -8,7 +8,7 @@ import { allow, type Env, idParam, Refusal, readBody } from "../http";
 import { customerFiles } from "./files";
 import { customerPage } from "./page";
 import { customerPrices } from "./prices";
-import { reorders } from "./reorders";
+import { refillsWaiting, reorders, setRefill } from "./reorders";
 import {
   addCustomer,
   addCustomerPaper,
@@ -85,6 +85,7 @@ export function customerRoutes(
     "/api/my/area",
     "/api/my/collect",
     "/api/my/reorders",
+    "/api/my/refills-waiting",
   ])
     app.use(path, signedIn);
 
@@ -224,6 +225,19 @@ export function customerRoutes(
     });
   });
 
+  // The next refill: the day the customer's medicines run out, set by whoever took the order.
+  app.post("/api/customers/:id/refill", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        on: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick the day.").nullable(),
+        note: z.string().max(200).nullish(),
+      }),
+    );
+    await setRefill(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+
   app.post("/api/customers/:id/review", async (c) => {
     allow(c.get("me"), CUSTOMER_MANAGE_ROLES, "review a new customer");
     await reviewCustomer(db, c.get("me"), idParam(c));
@@ -232,6 +246,8 @@ export function customerRoutes(
 
   app.get("/api/my/area", async (c) => c.json(await myArea(db, c.get("me"))));
   app.get("/api/my/collect", async (c) => c.json(await toCollect(db, c.get("me"))));
+  // The menu's count beside Refills due: due now, or within two days.
+  app.get("/api/my/refills-waiting", async (c) => c.json(await refillsWaiting(db, c.get("me"))));
   app.get("/api/my/reorders", async (c) =>
     c.json(
       await reorders(db, c.get("me"), {

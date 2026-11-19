@@ -5,18 +5,51 @@
 // late; lost past 180 days (the thresholds found in Zoho's orders: the usual reorder gap is 28
 // days, which is taken for a customer with one order). A seller sees their own customers; a lead
 // their team's, with a count per area, so the head sees whose customers are slipping.
+//
+// The next refill a person set (Aryan, 19 Nov): the one who took the order types the day the
+// medicines run out, and that day counts in place of the usual gap until the customer's next order.
 
 import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
-import { onlineDesk, Refusal } from "../http";
+import { allow, onlineDesk, Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
 import { rxTelesales } from "../org/boxes";
 import { inForce, ledUnits } from "../org/service";
-import type { CustomerKind, Me, Reorders, ReorderState } from "../types";
-import { seen, team } from "./service";
+import type { CustomerKind, Me, Refill, Reorders, ReorderState } from "../types";
+import { CUSTOMER_ADD_ROLES, seen, team } from "./service";
 
 export const REORDER_STATES: ReorderState[] = ["soon", "due", "late", "at_risk", "lost"];
 const DEFAULT_GAP = 28;
+
+/** The customers' orders and gaps, for the ids `who` gives: `s` has each one's last order, how many
+ *  and their usual gap; `st` adds the gap that counts (the day a person set, until the customer
+ *  orders again, else the usual gap), the days since and the state. */
+const refillCtes = (who: SQL, today: string) => sql`days as (
+      select o.customer_id as cid, (coalesce(o.submitted_at, o.created_at) at time zone 'Asia/Manila')::date as d, o.total::bigint as total
+        from sales_order o where o.customer_id in ${who} and o.status not in ('draft', 'cancelled')
+      union all
+      select p.customer_id, p.ordered_on, p.total from past_order p where p.customer_id in ${who} and p.status <> 'void'
+    ),
+    dd as (select cid, d, sum(total) as total from days group by cid, d),
+    g as (select cid, d, total, d - lag(d) over (partition by cid order by d) as gap,
+        row_number() over (partition by cid order by d desc) as rn from dd),
+    s as (select cid, max(d) as last, count(*)::int as orders,
+        greatest(7, coalesce(percentile_cont(0.5) within group (order by gap) filter (where gap is not null and rn <= 7), ${DEFAULT_GAP}))::float8 as usual,
+        max(total) filter (where rn = 1) as "lastTotal"
+      from g group by cid),
+    r as (select s.*, case when c.next_refill_on is not null and (c.refill_set_at at time zone 'Asia/Manila')::date >= s.last
+          then c.next_refill_on end as "setOn"
+        from s join customer c on c.id = s.cid),
+    q as (select r.*, greatest(1, coalesce(r."setOn" - r.last, round(r.usual)::int))::float8 as want from r),
+    st as (select q.*, (${today}::date - q.last)::int as since,
+        case
+          when ${today}::date - q.last > 180 and ${today}::date - q.last > 2.5 * q.want then 'lost'
+          when ${today}::date - q.last > 2.5 * q.want or (${today}::date - q.last > 90 and ${today}::date - q.last > 1.5 * q.want) then 'at_risk'
+          when ${today}::date - q.last > 1.5 * q.want then 'late'
+          when ${today}::date - q.last >= q.want then 'due'
+          when ${today}::date - q.last >= q.want - 2 then 'soon'
+          else 'ok' end as state
+      from q where ${today}::date - q.last <= 730)`;
 
 export async function reorders(
   db: Database,
@@ -34,10 +67,11 @@ export async function reorders(
   // Patients are the online desk's; everyone else's list is the buying businesses and doctors.
   // An Rx CHC's list is their doctors; MD Telesales Oncology's their patients and doctors (the
   // Hospital Division's anesthesia telesales sell to hospitals and doctors: the default).
+  // The Online desk's own customers are mostly patients, and the businesses that ordered through it.
   const kindIs: SQL = kind
     ? sql`c.kind = ${kind}`
     : online
-      ? sql`c.kind = 'patient'`
+      ? sql`true`
       : me.channel?.code === "RX" && me.role === "medrep"
         ? sql`c.kind = 'doctor'`
         : rxTelesales(me)
@@ -54,28 +88,7 @@ export async function reorders(
 
   const base = sql`${team(me)},
     mine as (select c.id from customer c where c.active and ${kindIs} and ${areaIs} and ${ownIs} and ${seen(me)}),
-    days as (
-      select o.customer_id as cid, (coalesce(o.submitted_at, o.created_at) at time zone 'Asia/Manila')::date as d, o.total::bigint as total
-        from sales_order o where o.customer_id in (select id from mine) and o.status not in ('draft', 'cancelled')
-      union all
-      select p.customer_id, p.ordered_on, p.total from past_order p where p.customer_id in (select id from mine) and p.status <> 'void'
-    ),
-    dd as (select cid, d, sum(total) as total from days group by cid, d),
-    g as (select cid, d, total, d - lag(d) over (partition by cid order by d) as gap,
-        row_number() over (partition by cid order by d desc) as rn from dd),
-    s as (select cid, max(d) as last, count(*)::int as orders,
-        greatest(7, coalesce(percentile_cont(0.5) within group (order by gap) filter (where gap is not null and rn <= 7), ${DEFAULT_GAP}))::float8 as usual,
-        max(total) filter (where rn = 1) as "lastTotal"
-      from g group by cid),
-    st as (select s.*, (${today}::date - s.last)::int as since,
-        case
-          when ${today}::date - s.last > 180 and ${today}::date - s.last > 2.5 * s.usual then 'lost'
-          when ${today}::date - s.last > 2.5 * s.usual or (${today}::date - s.last > 90 and ${today}::date - s.last > 1.5 * s.usual) then 'at_risk'
-          when ${today}::date - s.last > 1.5 * s.usual then 'late'
-          when ${today}::date - s.last >= s.usual then 'due'
-          when ${today}::date - s.last >= s.usual - 2 then 'soon'
-          else 'ok' end as state
-      from s where ${today}::date - s.last <= 730)`;
+    ${refillCtes(sql`(select id from mine)`, today)}`;
 
   const [counts, list, areas, scope] = await Promise.all([
     rows<{ state: ReorderState | "ok"; n: number; value: number }>(
@@ -89,7 +102,9 @@ export async function reorders(
              join person p on p.id = h.person_id where x.area_id = c.area_id and x.active and not x.lead
            order by h.starts_on desc limit 1) as seller,
           to_char(st.last, 'YYYY-MM-DD') as "lastOn", st.orders, round(st.usual)::int as usual, st.since,
-          to_char(st.last + round(st.usual)::int, 'YYYY-MM-DD') as "expectedOn", coalesce(st."lastTotal", 0)::float8 as "lastTotal",
+          to_char(st.last + st.want::int, 'YYYY-MM-DD') as "expectedOn",
+          to_char(st."setOn", 'YYYY-MM-DD') as "setOn", case when st."setOn" is not null then c.refill_note end as "refillNote",
+          case when st."setOn" is not null then (select p.name from person p where p.id = c.refill_set_by) end as "setBy", coalesce(st."lastTotal", 0)::float8 as "lastTotal",
           -- What they took last time: this CRM's latest order, else the old system's.
           coalesce(
             (select string_agg(m.name || coalesce(' ' || m.strength, '') || ' × ' || i.qty, ', ' order by i.id)
@@ -125,7 +140,7 @@ export async function reorders(
   return {
     today,
     state,
-    kind: kind ?? (online ? "patient" : null) as CustomerKind | null,
+    kind: (kind ?? null) as CustomerKind | null,
     counts: (["ok", ...REORDER_STATES] as const).map((key) => ({ state: key, customers: of(key)?.n ?? 0, lastValue: of(key)?.value ?? 0 })),
     rows: list,
     areas,
@@ -163,4 +178,84 @@ async function scopeOf(db: Database, me: Me, today: string, online: boolean): Pr
     };
   }
   return { label: "Whole company", detail: "Every seller's customers, by area" };
+}
+
+/** May this person set a customer's next refill: the sellers who take the orders, their leads,
+ *  and Management. */
+const REFILL_ROLES = CUSTOMER_ADD_ROLES;
+
+/** A customer's next refill: the day a person set (it counts until their next order), else their
+ *  last order plus their usual gap (28 days with one order). */
+export async function refillOf(db: Database, me: Me, customerId: number): Promise<Refill> {
+  const today = todayManila();
+  const [row] = await rows<{
+    lastOn: string;
+    orders: number;
+    usual: number;
+    suggestedOn: string;
+    setOn: string | null;
+  }>(
+    db,
+    sql`with ${refillCtes(sql`(${customerId})`, today)}
+      select to_char(st.last, 'YYYY-MM-DD') as "lastOn", st.orders, round(st.usual)::int as usual,
+        to_char(st.last + round(st.usual)::int, 'YYYY-MM-DD') as "suggestedOn", to_char(st."setOn", 'YYYY-MM-DD') as "setOn"
+      from st`,
+  );
+  const [set] = await rows<{ on: string | null; note: string | null; by: string | null; at: string | null }>(
+    db,
+    sql`select to_char(c.next_refill_on, 'YYYY-MM-DD') as on, c.refill_note as note, p.name as by,
+        to_char(c.refill_set_at at time zone 'Asia/Manila', 'YYYY-MM-DD') as at
+      from customer c left join person p on p.id = c.refill_set_by where c.id = ${customerId}`,
+  );
+  // A day set before their latest order no longer counts: the usual gap after the new order does.
+  const counts = Boolean(row?.setOn);
+  return {
+    lastOn: row?.lastOn ?? null,
+    orders: row?.orders ?? 0,
+    usual: row?.usual ?? DEFAULT_GAP,
+    suggestedOn: row?.suggestedOn ?? null,
+    setOn: counts ? (set?.on ?? null) : null,
+    note: counts ? (set?.note ?? null) : null,
+    setBy: counts ? (set?.by ?? null) : null,
+    setAt: counts ? (set?.at ?? null) : null,
+    nextOn: counts ? (set?.on ?? null) : (row?.suggestedOn ?? null),
+    canSet: REFILL_ROLES.includes(me.role),
+  };
+}
+
+/** Sets (or clears, with no day) a customer's next refill, for one who may see the customer. */
+export async function setRefill(
+  db: Database,
+  me: Me,
+  customerId: number,
+  input: { on: string | null; note?: string | null },
+): Promise<void> {
+  allow(me, REFILL_ROLES, "set the next refill");
+  const today = todayManila();
+  const [seenIt] = await rows<{ id: number }>(
+    db,
+    sql`${team(me)} select c.id::int as id from customer c where c.id = ${customerId} and c.active and ${seen(me)}`,
+  );
+  if (!seenIt) throw new Refusal(404, "not_found", "No such customer, or it isn't one of yours.");
+  if (input.on !== null) {
+    if (input.on < today) throw new Refusal(400, "invalid", "That day has passed. Pick a day from today on.", "on");
+    const limit = new Date(`${today}T00:00:00Z`);
+    limit.setUTCFullYear(limit.getUTCFullYear() + 1);
+    if (input.on > limit.toISOString().slice(0, 10))
+      throw new Refusal(400, "invalid", "Pick a day within a year.", "on");
+  }
+  const note = input.note?.trim().slice(0, 200) || null;
+  await db.execute(
+    input.on === null
+      ? sql`update customer set next_refill_on = null, refill_note = null, refill_set_by = ${me.id}, refill_set_at = now() where id = ${customerId}`
+      : sql`update customer set next_refill_on = ${input.on}, refill_note = ${note}, refill_set_by = ${me.id}, refill_set_at = now() where id = ${customerId}`,
+  );
+}
+
+/** How many of this person's customers need a call now: due, or due within two days (the menu's count). */
+export async function refillsWaiting(db: Database, me: Me): Promise<{ soon: number; due: number }> {
+  if (!["medrep", "online", "team_lead", "manager"].includes(me.role)) return { soon: 0, due: 0 };
+  const list = await reorders(db, me, { state: "due" });
+  const of = (key: ReorderState) => list.counts.find((one) => one.state === key)?.customers ?? 0;
+  return { soon: of("soon"), due: of("due") };
 }

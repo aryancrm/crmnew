@@ -88,6 +88,14 @@ export function Shell() {
     refetchInterval: () => (document.visibilityState === "visible" ? 30_000 : false),
   });
 
+  // Customers whose refill is due now or within two days, beside Refills due / Customers to call.
+  const refills = useQuery({
+    queryKey: ["refills-waiting"],
+    queryFn: () => api<{ soon: number; due: number }>("/api/my/refills-waiting"),
+    enabled: ["medrep", "online", "team_lead", "manager"].includes(me.data?.role ?? "") && !me.data?.deskScreen,
+    staleTime: 5 * 60_000,
+  });
+
   if (me.isPending) return <Centered>Loading…</Centered>;
   if (me.isError)
     return (
@@ -127,6 +135,7 @@ export function Shell() {
       : {}),
     inbox: (chats.data?.needs ?? 0) + (chats.data?.held ?? 0),
     messages: messages.data?.unread ?? 0,
+    refills: (refills.data?.soon ?? 0) + (refills.data?.due ?? 0),
   } as Record<Badge, number>;
   const menu = (onPick?: () => void) => (
     <>
@@ -424,7 +433,7 @@ function inFolder(item: MenuItem, location: { pathname: string; search: string }
 }
 
 const PILL = (badge: Badge) =>
-  `rounded-full px-1.5 text-[11px] font-semibold ${badge === "flagged" || badge === "refunds" ? "bg-rose-100 text-rose-700" : badge === "inbox" ? "bg-sky-100 text-sky-800" : badge === "messages" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`;
+  `rounded-full px-1.5 text-[11px] font-semibold ${badge === "flagged" || badge === "refunds" || badge === "latePayments" ? "bg-rose-100 text-rose-700" : badge === "inbox" ? "bg-sky-100 text-sky-800" : badge === "messages" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`;
 
 function MenuList({
   groups,

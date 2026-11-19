@@ -242,7 +242,7 @@ export const COMPANY_CHART: ChartBox = {
                       title: "Customer Happiness Coachee (B2C)",
                       people: ["Ms. Mary Jane Viñas", "Ms. Rachelle Upao"],
                       work: ["Answers every enquiry within 15 minutes", "Works the refill-due list before noon; day-3 check-ins", "At least one invoice by 2:30 PM"],
-                      desk: "B2C CHC",
+                      desk: "Online desk",
                       screens: ["Morning pulse", "Waiting for a reply", "Refills due", "Leads & enquiries", "Inbox", "My score (B2C card)"],
                       status: "built",
                     },

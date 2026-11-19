@@ -3,6 +3,7 @@
 // at their buying inside it, then their parts on the left (orders, medicines, money, enquiries,
 // doctors, details, activity) with the open one on the right. Everything comes from one read.
 
+import { RefillCard } from "../customers/refill";
 import type {
   CustomerCredit,
   CustomerFiles,
@@ -384,6 +385,9 @@ export function Customer() {
               </button>
             )}
           </SideCard>
+          {(data.refill.lastOn || data.refill.setOn) && (
+            <RefillCard refill={data.refill} post={`/api/customers/${customer.id}/refill`} />
+          )}
           {me && ["finance", "admin", "ceo", "management"].includes(me.role) && (
             <CreditCard customerId={customer.id} />
           )}
