@@ -7,7 +7,7 @@ import type { SpeedReport } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
-import { took } from "../pages/speed";
+import { took } from "../desk/speed";
 import { Ring } from "./charts";
 
 const CARD = "rounded-2xl border border-slate-200 bg-white shadow-sm";

@@ -16,7 +16,7 @@ import { type ReactNode, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { counted, shortPeso } from "../ceo";
-import { StepCard, took } from "../pages/speed";
+import { StepCard, took } from "../desk/speed";
 import { count } from "../ui";
 import { Bars, Donut } from "./charts";
 

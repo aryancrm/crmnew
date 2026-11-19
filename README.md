@@ -24,12 +24,16 @@ apps/api   The API: Node, Hono, Drizzle, Postgres.
   src/app.ts    Sign-in routes, and where each area's routes are added.
   src/types.ts  What the API sends and takes; the web app imports these types.
 apps/web   The web app: React, Vite, Tailwind. Screens only.
+  src/main.tsx  Every address and the screen it opens.
   src/menus.ts  Each role's menu.
   src/shell.tsx The frame: top bar, menu (a tab bar on a phone).
   src/ui.tsx    The pieces every screen uses, and how money and days are written.
-  src/pages/    The screens.
-  src/inventory/ Inventory's forms (dialogs) and the stock news list.
-  src/customers/ The add / edit customer form.
+  src/<area>/   Each area's screens with the parts only they use, one folder an area:
+                account (sign-in), home, sellers (each channel's own work), field (visits,
+                expenses, where the team is), customers, orders, online, desk (Management's and
+                Finance's shared desk), finance, dispatch, inventory, buying, books, hr, team
+                (team leads), company (the CEO's views), org (teams and people), admin,
+                messages, regulatory, portal.
 ```
 
 ## Run it

@@ -195,7 +195,7 @@ select.field {
   padding-right: 2.25rem;
 }
 
-/* The portal's orbit lines move (pages/login.tsx): each line waves gently about its own level (the
+/* The portal's orbit lines move (account/login.tsx): each line waves gently about its own level (the
    wave itself is in the SVG), the orange and green ones opposite ways; the stars twinkle; the space section's stars too. Still for people who ask for less motion. */
 @keyframes orbit-rock { from { transform: translateY(8px); } to { transform: translateY(-8px); } }
 @keyframes orbit-rock-back { from { transform: translateY(-7px); } to { transform: translateY(7px); } }
