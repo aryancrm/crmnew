@@ -6,7 +6,7 @@ import type { Database } from "../db/index";
 import { type Env, idParam, readBody } from "../http";
 import { saveCompany, savePointsProgram, settingsOf } from "../settings/service";
 import type { CompanyInfo } from "../types";
-import { adjustPoints, openAccountFor, pointsAccount, pointsList } from "./service";
+import { addPointsByPhone, adjustPoints, openAccountFor, pointsAccount, pointsList } from "./service";
 
 const line = (max: number) => z.string().trim().max(max, `Keep it under ${max} characters.`);
 
@@ -17,6 +17,19 @@ export function pointsRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
   app.get("/api/points", async (c) =>
     c.json(await pointsList(db, c.get("me"), { q: c.req.query("q") })),
   );
+  // Add points to a customer by their mobile number, their account opened if new (19 Nov).
+  app.post("/api/points/add", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        phone: line(40).min(1, "Type their mobile number."),
+        name: line(120).nullish(),
+        points: z.number({ error: "Type how many points." }).int("Use whole points.").positive("Type how many points to add."),
+        reason: line(300).nullish(),
+      }),
+    );
+    return c.json(await addPointsByPhone(db, c.get("me"), input));
+  });
   app.get("/api/points/:id", async (c) => c.json(await pointsAccount(db, c.get("me"), idParam(c))));
   app.post("/api/points/:id/adjust", async (c) => {
     const input = await readBody(

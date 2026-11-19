@@ -17,7 +17,7 @@ import { phoneKey } from "../customers/service";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import type { Runner } from "../inventory/service";
-import { releaseWebsiteOrderPoints } from "../points/website";
+import { checkWebsiteHold, releaseWebsiteOrderPoints } from "../points/website";
 import type {
   LeadRoad,
   Me,
@@ -27,7 +27,7 @@ import type {
   WebOrderView,
   WebsiteStatus,
 } from "../types";
-import { journeyStops } from "./journey";
+import { AGENCY_SHORT, journeyStops } from "./journey";
 import { CHANNEL_ROLES } from "./messenger";
 import { LEAD_WORK_ROLES, SOURCE_LABEL } from "./rules";
 import { seal, unseal } from "./secrets";
@@ -91,6 +91,8 @@ export const WEB_STATUS_LABEL: Record<string, string> = {
   shipped: "On the way",
   delivered: "Delivered",
   cancelled: "Cancelled",
+  // Not a status of the order: the customer applies at the agency with our quotation.
+  quotation_sent: "Apply with our quotation",
 };
 const rank = (status: string) => STATUS_ORDER.indexOf(status);
 /** A status may move forward, or to cancelled from anything but delivered. */
@@ -240,6 +242,14 @@ export function useWebHttp(next: WebHttp | null): void {
 
 const sign = (body: string, secret: string) =>
   `sha256=${createHmac("sha256", secret).update(body).digest("hex")}`;
+/** Sends a signed call to a website (the stock link's, online/catalog.ts). */
+export const postToWebsite = (url: string, body: string, secret: string, event: string) =>
+  http.post(url, body, {
+    "content-type": "application/json",
+    "x-crm-event": event,
+    "x-crm-delivery": randomUUID(),
+    "x-crm-signature": sign(body, secret),
+  });
 export function signatureMatches(
   raw: string,
   given: string | null | undefined,
@@ -267,8 +277,8 @@ export async function siteByKey(db: Runner, key: string): Promise<Site | null> {
 export async function connectWebsite(
   db: Database,
   me: Me,
-  input: { name: string; site: string },
-): Promise<{ id: number; secret: string; key: string }> {
+  input: { name: string; site: string; secret?: string | null },
+): Promise<{ id: number; secret: string; key: string; kept: boolean }> {
   allow(me, CHANNEL_ROLES, "connect a website");
   const key = siteOf(input.site);
   if (!key)
@@ -279,7 +289,10 @@ export async function connectWebsite(
       "site",
     );
   const name = input.name.trim() || key;
-  const secret = randomBytes(32).toString("hex");
+  // The secret it has now, when given (a website moving over from the old CRM keeps working
+  // unchanged); else a new one.
+  const kept = Boolean(input.secret?.trim());
+  const secret = input.secret?.trim() || randomBytes(32).toString("hex");
   const [account] = await rows<{ id: number }>(
     db,
     sql`insert into channel_account (kind, key, name, secret, connected_by, config)
@@ -287,7 +300,30 @@ export async function connectWebsite(
       on conflict (kind, key) do update set name = excluded.name, secret = excluded.secret, active = true, connected_by = excluded.connected_by, connected_at = now()
       returning id::int as id`,
   );
-  return { id: account?.id as number, secret, key };
+  return { id: account?.id as number, secret: kept ? "" : secret, key, kept };
+}
+
+/** A website admin's "Open in the CRM" link (<CRM_APP_URL>/website-order?site=&ref=, as the old
+ *  CRM had it): the case and the order the website's order became. Only their numbers: each page
+ *  checks who may see it. */
+export async function websiteOrderCase(
+  db: Database,
+  site: string,
+  ref: string,
+): Promise<{ leadId: number | null; orderId: number | null }> {
+  const key = siteOf(site);
+  const wanted = ref.trim();
+  if (!wanted) throw new Refusal(400, "invalid", "The link has no order number.", "ref");
+  const found = await rows<{ leadId: number | null; orderId: number | null }>(
+    db,
+    sql`select w.lead_id::int as "leadId", l.order_id::int as "orderId"
+      from web_order w join channel_account a on a.id = w.account_id left join lead l on l.id = w.lead_id
+      where a.kind = 'website' and w.ref = ${wanted} and (${key} = '' or a.key = ${key})
+      order by w.id desc limit 2`,
+  );
+  if (!found.length || (!key && found.length > 1))
+    throw new Refusal(404, "not_found", `No website order ${wanted} in the CRM.`);
+  return found[0] as { leadId: number | null; orderId: number | null };
 }
 
 /** A new secret (the old one stops working at once). */
@@ -544,10 +580,29 @@ async function receiveOrder(
       const assistance = Object.keys(obj(data.assistance)).length
         ? `${text(obj(data.assistance).program, 20) ?? ""} · ${text(obj(data.assistance).status, 40) ?? ""}`
         : null;
+      // The points the customer held at checkout, checked as the old CRM checked them.
+      const rewards = obj(data.rewards);
+      const holdId = /^[0-9a-f-]{36}$/i.test(String(rewards.reservation ?? "")) ? String(rewards.reservation) : null;
+      const hold = holdId
+        ? await checkWebsiteHold(tx, {
+            id: holdId,
+            points: Math.max(0, Math.round(Number(rewards.points) || 0)),
+            site: site.key,
+            ref,
+            phone: text(customer.phone, 40),
+            business: data.isB2B === true,
+            benefit:
+              ["senior", "pwd"].includes(norm(text(obj(data.benefit).type, 20))) ||
+              Boolean(text(obj(data.assistance).program, 20)),
+            discount: centavos(data.discount) ?? 0,
+            cancelled: status === "cancelled",
+          })
+        : null;
+      const keptHold = hold && !hold.refused ? holdId : null;
       const [made] = await rows<{ id: number }>(
         tx,
         sql`insert into web_order (account_id, ref, status, placed_at, source_at, customer, items, money, payment_method, benefit, assistance,
-            is_b2b, account_ref, account_phone, admin_url, status_url, files, points_reservation, points_redeemed)
+            is_b2b, account_ref, account_phone, admin_url, status_url, files, points_reservation, points_redeemed, letter)
           values (${site.id}, ${ref}, ${status}, ${isoOrNull(data.createdAt)}, ${changedAt},
             ${JSON.stringify({ name: text(customer.name, 120), phone: text(customer.phone, 40), email: text(customer.email, 120), address: text(customer.address, 300), notes: text(customer.notes, 1000) })}::jsonb,
             ${JSON.stringify(itemsOf(data.items))}::jsonb,
@@ -555,8 +610,9 @@ async function receiveOrder(
             ${text(data.paymentMethod, 40)}, ${benefit}, ${assistance}, ${data.isB2B === true},
             ${text(obj(data.account).ref, 120)}, ${text(obj(data.account).phone, 40)}, ${allowedUrl(data.adminUrl ?? data.orderUrl)}, ${callback},
             ${JSON.stringify(files.map(({ url: _url, ...file }) => file))}::jsonb,
-            ${/^[0-9a-f-]{36}$/i.test(String(obj(data.rewards).reservation ?? "")) ? String(obj(data.rewards).reservation) : null}::uuid,
-            ${Math.max(0, Math.round(Number(obj(data.rewards).points) || 0))})
+            ${keptHold}::uuid,
+            ${keptHold ? (hold?.points ?? 0) : 0},
+            ${norm(obj(data.assistance).letterStatus) === "needed" ? "needed" : null})
           returning id::int as id`,
       );
       const order = (
@@ -570,7 +626,15 @@ async function receiveOrder(
         await releaseWebsiteOrderPoints(tx, order.id);
       } else if (!["pending", "confirmed"].includes(status) || Date.now() - placed > CARD_WITHIN_MS)
         await tx.execute(sql`update web_order set card_note = ${TOO_LATE} where id = ${order.id}`);
-      else await openCase(tx, site, order);
+      else {
+        const leadId = await openCase(tx, site, order);
+        if (hold?.refused)
+          await caseNote(
+            tx,
+            leadId,
+            `The website order's ${hold.points} points were returned to the customer: ${hold.refused} Review the order's total before invoicing.`,
+          );
+      }
       return { orderId: order.id };
     }
 
@@ -608,11 +672,13 @@ async function receiveOrder(
       await caseNote(
         tx,
         found.leadId,
-        `${site.name}: the customer sent their guarantee letter for ${ref}. File it in the case's papers.`,
+        `${site.name}: the customer sent their guarantee letter for ${ref}: it is in the case's papers as the guarantee letter.`,
       );
     return { orderId: found.id };
   });
-  return (await copyDocuments(db, result.orderId, files)) ? "documents_pending" : "kept";
+  return (await copyDocuments(db, result.orderId, files, event === "order.letter_uploaded"))
+    ? "documents_pending"
+    : "kept";
 }
 
 const ORDER_SELECT = sql`select id::int as id, ref, status, to_char(placed_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "placedAt",
@@ -817,6 +883,8 @@ async function copyDocuments(
   db: Database,
   orderId: number,
   incoming: (WebFile & { url: string | null })[],
+  /** A guarantee letter sent after the order (order.letter_uploaded): filed as the letter. */
+  letterLater = false,
 ): Promise<boolean> {
   const [order] = await rows<WebOrderRow>(db, sql`${ORDER_SELECT} where id = ${orderId}`);
   if (!order?.leadId) return false;
@@ -843,7 +911,7 @@ async function copyDocuments(
       });
       await db.execute(
         sql`insert into lead_file (lead_id, kind, name, mime, size, data, store_key, by_person)
-          values (${order.leadId}, 'unsorted', ${kept.name}, ${kept.mime}, ${kept.size}, ${kept.data}, ${kept.key}, null)`,
+          values (${order.leadId}, ${letterLater && file.kind === "gl" ? "gl_letter" : "unsorted"}, ${kept.name}, ${kept.mime}, ${kept.size}, ${kept.data}, ${kept.key}, null)`,
       );
       file.fetched = true;
     } else {
@@ -1037,14 +1105,48 @@ export async function pushWebsites(db: Database): Promise<number> {
     state: string;
     flagReason: string | null;
     lostReason: string | null;
+    tracking: string | null;
+    pushedTracking: string | null;
+    letter: string | null;
+    quoted: boolean;
   }>(
     db,
-    sql`select w.id::int as id, w.status, w.push_status as "pushStatus", o.status as "orderStatus", l.state, o.flag_reason as "flagReason", l.lost_reason as "lostReason"
+    sql`select w.id::int as id, w.status, w.push_status as "pushStatus", o.status as "orderStatus", l.state, o.flag_reason as "flagReason", l.lost_reason as "lostReason",
+        nullif(trim(o.tracking), '') as tracking, w.pushed_tracking as "pushedTracking", w.letter,
+        (l.quote_sent_at is not null or l.gl_applied_on is not null) as quoted
       from web_order w join lead l on l.id = w.lead_id left join sales_order o on o.id = l.order_id
       where w.status not in ('delivered', 'cancelled') or w.push_status is not null`,
   );
   for (const row of watched) {
+    // A tracking number typed after shipping: "shipped" goes again with it (the old CRM's way).
+    if (
+      row.orderStatus === "shipped" &&
+      row.status === "shipped" &&
+      !row.pushStatus &&
+      row.tracking &&
+      row.tracking !== row.pushedTracking
+    ) {
+      await db.execute(
+        sql`update web_order set push_status = 'shipped', push_reason = null, push_error = null, push_attempts = 0, push_next_at = now() where id = ${row.id}`,
+      );
+      continue;
+    }
     const wanted = wantedFor({ status: row.orderStatus, state: row.state });
+    // A guarantee letter's customer: once our quotation went out (or the application is on
+    // record), the website tells them to apply with it; once, and never over a real move.
+    if (
+      (!wanted || websiteHas(row.status, wanted)) &&
+      row.letter === "needed" &&
+      row.quoted &&
+      !row.pushStatus &&
+      !["shipped", "delivered", "cancelled"].includes(row.status) &&
+      !["shipped", "completed", "cancelled"].includes(row.orderStatus ?? "")
+    ) {
+      await db.execute(
+        sql`update web_order set push_status = 'quotation_sent', push_reason = null, push_error = null, push_attempts = 0, push_next_at = now() where id = ${row.id}`,
+      );
+      continue;
+    }
     if (!wanted || websiteHas(row.status, wanted) || row.pushStatus === wanted) continue;
     const reason =
       wanted === "cancelled"
@@ -1116,9 +1218,22 @@ async function pushOne(db: Database, id: number): Promise<boolean> {
   });
   const message = text(answer.json?.message, 500);
   if (answer.status >= 200 && answer.status < 300) {
+    if (order.pushStatus === "quotation_sent") {
+      // No status moved: the website keeps what it shows (forward only), the letter is quoted.
+      const said = text(answer.json?.status, 40);
+      await db.execute(
+        sql`update web_order set letter = 'quoted', push_status = null, push_reason = null, push_error = null, push_attempts = 0, pushed_at = now(),
+            status = case when ${said ?? ""} in ('pending', 'confirmed', 'packed', 'scheduled', 'shipped', 'delivered', 'cancelled') then ${said ?? ""} else status end
+          where id = ${id}`,
+      );
+      if (order.leadId)
+        await caseNote(db, order.leadId, `${order.siteName} now tells the customer to apply at the agency with our quotation.`);
+      return true;
+    }
     const shows = text(answer.json?.status, 40) ?? order.pushStatus;
     await db.execute(
-      sql`update web_order set status = ${shows}, push_status = null, push_reason = null, push_error = null, push_attempts = 0, pushed_at = now(), updated_at = now() where id = ${id}`,
+      sql`update web_order set status = ${shows}, push_status = null, push_reason = null, push_error = null, push_attempts = 0, pushed_at = now(), updated_at = now(),
+          pushed_tracking = ${order.pushStatus === "shipped" ? tracking : null} where id = ${id}`,
     );
     if (order.leadId)
       await caseNote(
@@ -1164,12 +1279,16 @@ export async function retryWebsitePush(db: Database, me: Me, webOrderId: number)
 
 // ---------------------------------------------------------------- the website's admin reads progress
 
+/** A time column as the website reads it (UTC, ISO); the column is the code's own, never input. */
+const isoOf = (column: string) => sql.raw(`to_char(${column} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"')`);
+
 /** A website's admin reads where its order stands (facts only; nothing is written). */
 export async function answerProgress(
   db: Database,
   raw: string,
   signature: string | null | undefined,
 ): Promise<WebAnswer> {
+  if (raw.length > 4000) return { status: 413, body: { message: "Too big." } };
   let envelope: { site?: unknown; ref?: unknown; sentAt?: unknown };
   try {
     envelope = JSON.parse(raw);
@@ -1184,63 +1303,211 @@ export async function answerProgress(
   if (!Number.isFinite(sent) || Math.abs(Date.now() - sent) > 5 * 60_000)
     return { status: 400, body: { message: "sentAt is missing or more than five minutes off." } };
   const ref = text(envelope.ref, 100);
-  const [order] = ref
-    ? await rows<{ leadId: number | null; status: string }>(
-        db,
-        sql`select lead_id::int as "leadId", status from web_order where account_id = ${site.id} and ref = ${ref}`,
-      )
-    : [];
-  if (!order)
-    return { status: 404, body: { message: "The CRM has no such order from this website." } };
-  if (!order.leadId) return { status: 200, body: { ok: true, case: null } };
+  if (!ref || typeof envelope.site !== "string")
+    return { status: 400, body: { message: "Send the order's ref and the site." } };
+  const [order] = await rows<{ leadId: number | null; note: string | null; at: string }>(
+    db,
+    sql`select lead_id::int as "leadId", card_note as note, ${isoOf("coalesce(updated_at, created_at)")} as at
+      from web_order where account_id = ${site.id} and ref = ${ref}`,
+  );
+  if (!order) return { status: 404, body: { found: false, message: "No such order from this website." } };
+  // As the old CRM answered (apps/store/src/progress.ts), the shape the website checks.
+  if (!order.leadId)
+    return {
+      status: 200,
+      body: {
+        found: true,
+        progress: {
+          ref,
+          road: "regular",
+          roadLabel: "Regular",
+          step: { key: "new", label: "No case yet" },
+          nextStep: order.note ?? "The team opens a case for this order.",
+          closed: false,
+          stops: [],
+          delivery: null,
+          payment: null,
+          letter: null,
+          updatedAt: order.at,
+        },
+      },
+    };
   const progress = await caseProgress(db, order.leadId);
-  const [sale] = await rows<{
-    code: string;
-    status: OrderStatus;
-    courier: string | null;
-    tracking: string | null;
-    total: number;
-    paid: number | null;
-    invoiced: number | null;
+  const [lead] = await rows<{
+    state: string;
+    agency: string | null;
+    applied: boolean;
+    letterNo: string | null;
+    letterFile: boolean;
+    verified: boolean;
+    billed: boolean;
+    glAmount: number | null;
+    updatedAt: string;
   }>(
     db,
-    sql`select o.code, o.status, o.courier, o.tracking, o.total::int as total, i.paid::int as paid, i.total::int as invoiced
-      from lead l join sales_order o on o.id = l.order_id left join invoice i on i.order_id = o.id and i.status <> 'cancelled' where l.id = ${order.leadId}`,
+    sql`select l.state, l.agency, l.gl_applied_on is not null as applied, l.gl_letter_no as "letterNo",
+        exists (select 1 from lead_file f where f.lead_id = l.id and f.active and f.kind = 'gl_letter') as "letterFile",
+        l.gl_verified_at is not null as verified, l.claim_sent_on is not null as billed, l.gl_amount::int as "glAmount",
+        ${isoOf("l.last_activity_at")} as "updatedAt"
+      from lead l where l.id = ${order.leadId}`,
   );
+  const [sale] = await rows<{
+    status: OrderStatus;
+    approved: boolean;
+    method: string | null;
+    tracking: string | null;
+    trackingWait: boolean;
+    expectedOn: string | null;
+    deliveredAt: string | null;
+    cameBack: number;
+    terms: string;
+    total: number;
+    invoiceTotal: number | null;
+    received: number | null;
+  }>(
+    db,
+    sql`select o.status, o.approved_at is not null as approved, o.delivery_method as method, nullif(trim(o.tracking), '') as tracking,
+        o.tracking_wait is not null as "trackingWait", to_char(o.expected_on, 'YYYY-MM-DD') as "expectedOn",
+        ${isoOf("o.delivered_at")} as "deliveredAt", o.came_back_count::int as "cameBack", o.payment_terms as terms, o.total::int as total,
+        i.total::int as "invoiceTotal", (i.paid - coalesce(i.refunded, 0))::int as received
+      from lead l join sales_order o on o.id = l.order_id
+      left join invoice i on i.order_id = o.id and i.status <> 'cancelled'
+      where l.id = ${order.leadId}`,
+  );
+  const lost = lead?.state === "lost";
   const stops = journeyStops(progress.journey as never)
     .filter((stop) => stop.onRoad)
     .map((stop) => ({
       key: stop.key,
       label: stop.label,
-      state: stop.state === "todo" ? "pending" : stop.state,
+      // A lost case has no current stop.
+      state: stop.state === "todo" || (lost && stop.state === "current") ? "pending" : stop.state,
     }));
+  const agency = progress.agency ? (AGENCY_SHORT[progress.agency] ?? progress.agency.toUpperCase()) : null;
+  const roadLabel =
+    progress.road === "gl"
+      ? agency
+        ? `GL · ${agency}`
+        : "GL"
+      : progress.road === "regular"
+        ? "Regular"
+        : progress.road === "senior"
+          ? "Senior citizen"
+          : "PWD";
+  // The order's delivery and money, in the old CRM's words.
+  const saleState = !sale
+    ? null
+    : sale.status === "completed"
+      ? "delivered"
+      : sale.status === "shipped"
+        ? "shipped"
+        : sale.status === "cancelled"
+          ? "cancelled"
+          : sale.status === "draft" || sale.status === "pending_approval" || (sale.status === "on_hold" && !sale.approved)
+            ? "draft"
+            : "confirmed";
+  const STATE_LABEL: Record<string, string> = {
+    draft: "Draft",
+    confirmed: "Confirmed",
+    shipped: "Shipped",
+    delivered: "Delivered",
+    cancelled: "Cancelled",
+  };
+  const link = sale?.tracking?.match(/https:\/\/\S+/)?.[0] ?? null;
+  const trackingNumber = sale?.tracking ? sale.tracking.replace(/https?:\/\/\S+/g, "").trim() || null : null;
+  const delivery =
+    sale && saleState
+      ? {
+          status: saleState,
+          statusLabel: STATE_LABEL[saleState] ?? saleState,
+          outcome:
+            saleState === "delivered"
+              ? "Delivered to receiver"
+              : saleState === "cancelled"
+                ? sale.cameBack > 0
+                  ? "Returned to sender"
+                  : "Cancelled"
+                : sale.cameBack > 0
+                  ? "Delivery attempt failed"
+                  : saleState === "shipped"
+                    ? "In transit"
+                    : "Not dispatched",
+          method:
+            sale.method === "pickup"
+              ? "Pick-up"
+              : sale.method === "rider"
+                ? "Our delivery"
+                : sale.method === "courier"
+                  ? "Courier"
+                  : null,
+          trackingNumber,
+          trackingUrl: link,
+          expectedOn: sale.expectedOn,
+          deliveredAt: sale.deliveredAt,
+          issue:
+            saleState === "shipped" && sale.trackingWait && !sale.tracking
+              ? "Waiting for tracking"
+              : sale.cameBack > 0 && saleState !== "delivered" && saleState !== "cancelled"
+                ? "Delivery attempt failed"
+                : null,
+        }
+      : null;
+  const total = sale ? (sale.invoiceTotal ?? sale.total) : 0;
+  const received = sale?.received ?? 0;
+  const payment = sale
+    ? {
+        method:
+          progress.road === "gl"
+            ? "Government agency claim (GL)"
+            : sale.terms === "cod"
+              ? "Cash on delivery (COD)"
+              : sale.terms === "advance"
+                ? "Paid online / prepaid"
+                : "On account (pays by the due date)",
+        invoiced: sale.invoiceTotal !== null,
+        total: total / 100,
+        received: received / 100,
+        balance: Math.max(0, total - received) / 100,
+      }
+    : null;
+  // A guarantee letter's own road, once applied for.
+  const letterState =
+    progress.road !== "gl" || !lead?.applied
+      ? null
+      : progress.step.value === "done"
+        ? "paid"
+        : lead.billed
+          ? "billed"
+          : lead.verified
+            ? "verified"
+            : lead.letterNo || lead.letterFile
+              ? "pending"
+              : "applying";
+  const LETTER_LABEL: Record<string, string> = {
+    applying: "Applied",
+    pending: "GL awarded",
+    verified: "Verified",
+    billed: "Billed to the agency",
+    paid: "Paid by the agency",
+  };
   return {
     status: 200,
     body: {
-      ok: true,
-      case: {
-        road:
-          progress.road === "gl"
-            ? `GL · ${(progress.agency ?? "").toUpperCase()}`
-            : progress.road === "regular"
-              ? "Regular"
-              : progress.road === "senior"
-                ? "Senior citizen"
-                : "PWD",
-        step: progress.step.label,
-        next: progress.next,
+      found: true,
+      progress: {
+        ref,
+        road: progress.road,
+        roadLabel,
+        step: lost ? { key: "lost", label: "Lost" } : { key: progress.step.value, label: progress.step.label },
+        nextStep: String(progress.next ?? ""),
+        closed: lost,
         stops,
-        order: sale
-          ? {
-              number: sale.code,
-              status: sale.status,
-              courier: sale.courier,
-              trackingNumber: sale.tracking,
-              total: sale.total / 100,
-              invoiced: sale.invoiced === null ? null : sale.invoiced / 100,
-              received: sale.paid === null ? null : sale.paid / 100,
-            }
+        delivery,
+        payment,
+        letter: letterState
+          ? { state: letterState, stateLabel: LETTER_LABEL[letterState] ?? letterState, amount: (lead?.glAmount ?? 0) / 100 }
           : null,
+        updatedAt: lead?.updatedAt ?? order.at,
       },
     },
   };
@@ -1334,7 +1601,7 @@ export async function websiteTerms(
 
 /** A website's connection, for Channels. */
 export async function websiteStatus(db: Runner, accountId: number): Promise<WebsiteStatus> {
-  const [last, [counted], noCase, pushFailing, refusals] = await Promise.all([
+  const [last, [counted], noCase, pushFailing, refusals, [config]] = await Promise.all([
     rows<{ at: string; event: string; outcome: string; error: string | null }>(
       db,
       sql`select to_char(at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as at, event, outcome, error from web_call where account_id = ${accountId} order by id desc limit 1`,
@@ -1358,8 +1625,21 @@ export async function websiteStatus(db: Runner, accountId: number): Promise<Webs
       sql`select to_char(at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as at, event, ref, error from web_call
         where account_id = ${accountId} and outcome = 'failed' order by id desc limit 10`,
     ),
+    rows<WebsiteStatus["catalog"]>(
+      db,
+      sql`select nullif(config->>'catalogUrl', '') as url, config->>'catalogSentAt' as "sentAt", (config->>'catalogSent')::int as sent,
+          config->>'catalogCheckedAt' as "checkedAt", config->>'catalogError' as error
+        from channel_account where id = ${accountId}`,
+    ),
   ]);
-  return { lastCall: last[0] ?? null, orders: counted?.n ?? 0, noCase, pushFailing, refusals };
+  return {
+    lastCall: last[0] ?? null,
+    orders: counted?.n ?? 0,
+    noCase,
+    pushFailing,
+    refusals,
+    catalog: config ?? { url: null, sentAt: null, sent: null, checkedAt: null, error: null },
+  };
 }
 
 export { SOURCE_LABEL };

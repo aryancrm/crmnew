@@ -1,5 +1,6 @@
 // The Inbox's and the channels' addresses, and Meta's webhook (public: Meta signs every call).
 
+import { setCatalogUrl } from "./catalog";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import type { Hono, MiddlewareHandler } from "hono";
@@ -47,6 +48,7 @@ import {
   newWebsiteSecret,
   openWebsiteCase,
   retryWebsitePush,
+  websiteOrderCase,
 } from "./websites";
 
 const messengerSink = () =>
@@ -233,10 +235,29 @@ export function channelRoutes(
           .trim()
           .min(1, "Type the website's address.")
           .max(200),
+        // The secret the website has now (its CRM_WEBHOOK_SECRET), to keep it unchanged.
+        secret: z
+          .string()
+          .trim()
+          .max(200)
+          .refine((value) => value === "" || (value.length >= 16 && !/\s/.test(value)), {
+            message: "Paste the whole secret, as in the website's CRM_WEBHOOK_SECRET.",
+          })
+          .nullish(),
       }),
     );
     return c.json(await connectWebsite(db, c.get("me"), input));
   });
+  // A website's stock link: its catalogue address (empty turns it off).
+  app.post("/api/channels/:id/catalog", async (c) => {
+    const input = await readBody(c, z.object({ url: z.string().trim().max(500) }));
+    await setCatalogUrl(db, c.get("me"), idParam(c), input.url);
+    return c.json({ ok: true });
+  });
+  // A website admin's "Open in the CRM" link: the case its order became (old CRM's link).
+  app.get("/api/website-order", async (c) =>
+    c.json(await websiteOrderCase(db, c.req.query("site") ?? "", c.req.query("ref") ?? "")),
+  );
   app.post("/api/channels/:id/secret", async (c) =>
     c.json(await newWebsiteSecret(db, c.get("me"), idParam(c))),
   );

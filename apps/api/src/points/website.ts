@@ -638,6 +638,13 @@ export async function useWebsiteReservation(
     sql`select points_reservation::text as reservation from web_order where lead_id = ${leadId} and points_reservation is not null order by id desc limit 1`,
   );
   if (!web?.reservation) return 0;
+  // Points never ride with Senior / PWD or a guarantee letter (the old CRM's rule): a case moved to
+  // such a road gives the hold back.
+  const [road] = await rows<{ road: string }>(tx, sql`select road from lead where id = ${leadId}`);
+  if (road && road.road !== "regular") {
+    await releaseHold(tx, web.reservation, "Order cancelled; reserved points restored.");
+    return 0;
+  }
   const [held] = await rows<{ points: number; state: string; orderId: number | null }>(
     tx,
     sql`select points, state, order_id::int as "orderId" from points_reservation where id = ${web.reservation}::uuid for update`,
@@ -648,6 +655,74 @@ export async function useWebsiteReservation(
   );
   await tx.execute(sql`update sales_order set points_used = ${held.points} where id = ${orderId}`);
   return held.points;
+}
+
+/** Gives a website hold's points back, spent or not (the old CRM did for a refused hold), once. */
+async function releaseHold(tx: Runner, id: string, note: string): Promise<number> {
+  const [held] = await rows<{ accountId: number; points: number; state: string; reference: string }>(
+    tx,
+    sql`select account_id::int as "accountId", points, state, reference from points_reservation where id = ${id}::uuid for update`,
+  );
+  if (!held || held.state === "released") return 0;
+  await lockAccount(tx, held.accountId);
+  await addEntry(tx, {
+    accountId: held.accountId,
+    kind: "release",
+    points: held.points,
+    reference: held.reference,
+    note,
+    origin: `unreserve:${id}`,
+  });
+  await tx.execute(sql`update points_reservation set state = 'released', order_id = null where id = ${id}::uuid`);
+  return held.points;
+}
+
+/**
+ * A website order's points hold, checked as the old CRM checked it (apps/store/src/index.ts): the
+ * hold must be this order's (its website, its number, its points, the customer's own number),
+ * else the order is refused; and points are a discount of their own, never on a business order
+ * or with Senior / PWD, a guarantee letter or a coupon: then the points go back to the customer
+ * and the order comes in without them. Answers why they went back (null when kept).
+ */
+export async function checkWebsiteHold(
+  tx: Runner,
+  input: {
+    id: string;
+    points: number;
+    site: string;
+    ref: string;
+    phone: string | null;
+    business: boolean;
+    benefit: boolean;
+    discount: number;
+    cancelled: boolean;
+  },
+): Promise<{ refused: string | null; points: number }> {
+  const [held] = await rows<{ points: number; state: string; site: string; reference: string; phoneKey: string }>(
+    tx,
+    sql`select r.points, r.state, r.site, r.reference, a.phone_key as "phoneKey"
+      from points_reservation r join points_account a on a.id = r.account_id where r.id = ${input.id}::uuid`,
+  );
+  if (!held) throw new Refusal(400, "invalid", "No such points reservation.");
+  const refused = input.business
+    ? "points are not used on business orders."
+    : input.benefit
+      ? "points can't be combined with Senior/PWD or GL assistance."
+      : input.discount > 0
+        ? "points can't be combined with a coupon or another discount."
+        : null;
+  if (
+    held.site !== input.site ||
+    held.reference !== input.ref ||
+    held.points !== input.points ||
+    (held.state === "released" && !refused && !input.cancelled)
+  )
+    throw new Refusal(400, "invalid", "The points reservation does not match this order.");
+  const key = phoneKey(input.phone);
+  if (!key || key !== held.phoneKey)
+    throw new Refusal(400, "invalid", "The points account does not match the order's customer number.");
+  if (refused) await releaseHold(tx, input.id, "Order cancelled; reserved points restored.");
+  return { refused, points: held.points };
 }
 
 /** An order cancelled: the website reservation it spent goes back to the customer, once. */

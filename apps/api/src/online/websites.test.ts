@@ -7,6 +7,7 @@ import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { seedDemo } from "../seed";
 import type { ChannelsData, LeadCase, LeadDesk, OrderDetail } from "../types";
+import { pushCatalog } from "./catalog";
 import { pushWebsites, useWebHttp } from "./websites";
 
 const PASSWORD = "test-password-1";
@@ -131,6 +132,24 @@ describe("a website", () => {
       sql`select secret from channel_account where key = '2mginc.com'`,
     );
     expect(stored?.secret).not.toContain(secret);
+  });
+
+  it("keeps the secret a website already has, when the Admin pastes it (moving from the old CRM)", async () => {
+    const old = "old-crm-shared-secret-0123456789abcdef";
+    const made = await post("naresh", "/api/channels/website", {
+      name: "Caps & Pills",
+      site: "capsandpills",
+      secret: old,
+    });
+    expect(made.status).toBe(200);
+    const body = (await made.json()) as { key: string; secret: string; kept: boolean };
+    expect(body).toMatchObject({ key: "capsandpills", kept: true, secret: "" });
+    // Signed with the secret it had: taken (not 401).
+    expect((await call("order.status_updated", { orderNumber: "CP-1", status: "pending" }, { site: "capsandpills", key: old })).status).not.toBe(401);
+    // A short one is refused.
+    expect(
+      (await post("naresh", "/api/channels/website", { name: "X", site: "x.test", secret: "short" })).status,
+    ).toBe(400);
   });
 
   it("refuses a website it doesn't know and a body it didn't sign", async () => {
@@ -260,6 +279,17 @@ describe("a website order", () => {
       status: "shipped",
       trackingNumber: "LBC-777",
     });
+    // The tracking typed or corrected after shipping: "shipped" goes again with it, once (the
+    // old CRM's way).
+    await db.execute(sql`update sales_order set tracking = 'LBC-778' where id = ${orderId}`);
+    await pushWebsites(db);
+    expect(JSON.parse(posted.at(-1)?.body ?? "{}").data).toMatchObject({
+      status: "shipped",
+      trackingNumber: "LBC-778",
+    });
+    const sentOnce = posted.length;
+    await pushWebsites(db);
+    expect(posted.length).toBe(sentOnce);
 
     // The website refuses one: no more tries until someone says try again.
     await db.execute(sql`update sales_order set status = 'completed' where id = ${orderId}`);
@@ -338,6 +368,16 @@ describe("a website order", () => {
     expect(await caseOfRef("2MG-100030")).not.toBeNull();
   });
 
+  it("opens the case from the website admin's \"Open in the CRM\" link", async () => {
+    const found = await read<{ leadId: number; orderId: number }>(
+      "jane",
+      "/api/website-order?site=https%3A%2F%2Fwww.2mginc.com&ref=2MG-100041",
+    );
+    expect(found.leadId).toBe(await caseOfRef("2MG-100041"));
+    expect(found.orderId).toBeGreaterThan(0);
+    expect((await get("jane", "/api/website-order?site=2mginc.com&ref=NOPE-1")).status).toBe(404);
+  });
+
   it("lets the website's admin read where its order stands", async () => {
     const body = JSON.stringify({
       site: "https://www.2mginc.com",
@@ -350,12 +390,38 @@ describe("a website order", () => {
       body,
     });
     expect(response.status).toBe(200);
+    // The shape the website checks (2MG src/server/admin/crm-progress.ts), as the old CRM answered.
     const answered = (await response.json()) as {
-      case: { road: string; step: string; stops: { label: string }[]; order: { number: string } };
+      found: boolean;
+      progress: {
+        ref: string;
+        road: string;
+        roadLabel: string;
+        step: { key: string; label: string };
+        nextStep: string;
+        closed: boolean;
+        stops: { key: string; label: string; state: string }[];
+        delivery: { status: string; statusLabel: string; trackingNumber: string | null } | null;
+        payment: { method: string | null; invoiced: boolean; total: number; received: number; balance: number } | null;
+        letter: null;
+      };
     };
-    expect(answered.case.road).toBe("Regular");
-    expect(answered.case.order.number).toMatch(/^2MG-/);
-    expect(answered.case.stops.length).toBeGreaterThan(3);
+    expect(answered.found).toBe(true);
+    expect(answered.progress).toMatchObject({ ref: "2MG-100041", road: "regular", roadLabel: "Regular", closed: false, letter: null });
+    expect(typeof answered.progress.nextStep).toBe("string");
+    expect(answered.progress.stops.length).toBeGreaterThan(3);
+    expect(answered.progress.stops.every((stop) => ["done", "current", "pending"].includes(stop.state))).toBe(true);
+    expect(answered.progress.delivery).toMatchObject({ status: "delivered", statusLabel: "Delivered", trackingNumber: "LBC-778" });
+    expect(answered.progress.payment).toMatchObject({ method: "Cash on delivery (COD)", invoiced: true, total: 2950 });
+    // An order the CRM doesn't have: found false, a 404.
+    const none = JSON.stringify({ site: "https://www.2mginc.com", ref: "NOPE-9", sentAt: new Date().toISOString() });
+    const missing = await app.request("/webhooks/store/2mg/order-progress", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-crm-signature": sign(none) },
+      body: none,
+    });
+    expect(missing.status).toBe(404);
+    expect(await missing.json()).toMatchObject({ found: false });
   });
 });
 
@@ -397,5 +463,90 @@ describe("a prescription or enquiry from a website", () => {
     );
     expect(made).toMatchObject({ source: "website" });
     expect(made?.request).toContain("Bulk enquiry · ENQ-100006");
+  });
+});
+
+describe("the stock link (the old CRM's catalogue push)", () => {
+  it("sends every medicine once with its prices and stock, signed, then only what changed", async () => {
+    const [site] = await rows<{ id: number }>(
+      db,
+      sql`select id::int as id from channel_account where key = '2mginc.com'`,
+    );
+    const id = site?.id as number;
+    // Off until the Admin sets the website's catalogue address.
+    expect((await pushCatalog(db, id)).off).toBe(true);
+    expect(
+      (await post("naresh", `/api/channels/${id}/catalog`, { url: "https://www.2mginc.com/api/crm/catalog" })).status,
+    ).toBe(200);
+    answer = { status: 200, json: { ok: true, kept: 1, shown: 1 } };
+    const first = await pushCatalog(db, id);
+    expect(first.sent).toBeGreaterThan(0);
+    const sent = posted.at(-1);
+    expect(sent?.url).toBe("https://www.2mginc.com/api/crm/catalog");
+    expect(sent?.headers["x-crm-signature"]).toBe(sign(sent?.body ?? ""));
+    const body = JSON.parse(sent?.body ?? "{}") as { event: string; products: Record<string, unknown>[] };
+    expect(body.event).toBe("catalog.products");
+    expect(body.products.length).toBeLessThanOrEqual(200);
+    expect(body.products[0]).toMatchObject({
+      id: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      name: expect.any(String),
+      vatRate: expect.any(Number),
+      price: expect.any(Number),
+      packPrice: expect.any(Number),
+      onHand: expect.any(Number),
+      packUnits: expect.any(Number),
+      active: expect.any(Boolean),
+    });
+    // Nothing changed: nothing goes.
+    expect((await pushCatalog(db, id)).sent).toBe(0);
+    // A price changed: that one medicine goes again, with the same id.
+    const [medicine] = await rows<{ id: number; webId: string }>(
+      db,
+      sql`select id::int as id, web_id::text as "webId" from medicine where active order by id limit 1`,
+    );
+    await db.execute(sql`update medicine set srp = coalesce(srp, 0) + 100 where id = ${medicine?.id}`);
+    expect((await pushCatalog(db, id)).sent).toBe(1);
+    expect(JSON.parse(posted.at(-1)?.body ?? "{}").products[0].id).toBe(medicine?.webId);
+    // The website refuses: the change stays to go again, the card says so.
+    await db.execute(sql`update medicine set srp = srp + 100 where id = ${medicine?.id}`);
+    answer = { status: 500, json: { error: "Not kept; send it again." } };
+    const refused = await pushCatalog(db, id);
+    expect(refused.failed).toBeTruthy();
+    answer = { status: 200, json: { ok: true } };
+    expect((await pushCatalog(db, id)).sent).toBe(1);
+  });
+});
+
+
+describe("a guarantee letter's customer (the old CRM's quotation_sent)", () => {
+  it("tells the website once that our quotation went out, moving no status", async () => {
+    expect(
+      (
+        await call(
+          "order.created",
+          order("2MG-100090", { assistance: { program: "dswd", status: "pending", letterStatus: "needed" } }),
+        )
+      ).status,
+    ).toBe(200);
+    const id = (await caseOfRef("2MG-100090")) as number;
+    // Nothing to say until the quotation goes out.
+    const before = posted.length;
+    await pushWebsites(db);
+    expect(posted.length).toBe(before);
+    await db.execute(sql`update lead set quote_sent_at = now(), quote_sent_via = 'email' where id = ${id}`);
+    answer = { status: 200, json: { ok: true, status: "pending" } };
+    await pushWebsites(db);
+    expect(JSON.parse(posted.at(-1)?.body ?? "{}").data).toMatchObject({
+      orderNumber: "2MG-100090",
+      status: "quotation_sent",
+    });
+    const [web] = await rows<{ letter: string; status: string; push: string | null }>(
+      db,
+      sql`select letter, status, push_status as push from web_order where ref = '2MG-100090'`,
+    );
+    expect(web).toMatchObject({ letter: "quoted", status: "pending", push: null });
+    const sent = posted.length;
+    await pushWebsites(db);
+    expect(posted.length).toBe(sent);
   });
 });

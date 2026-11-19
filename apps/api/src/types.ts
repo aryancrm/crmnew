@@ -2428,6 +2428,9 @@ export type WebsiteStatus = {
   /** Statuses the website refused or didn't take. */
   pushFailing: { id: number; ref: string; status: string; error: string }[];
   refusals: { at: string; event: string; ref: string | null; error: string }[];
+  /** The stock link (the old CRM's catalogue push): where it goes, when it last sent, what went
+   *  wrong. Off while there is no address. */
+  catalog: { url: string | null; sentAt: string | null; sent: number | null; checkedAt: string | null; error: string | null };
 };
 
 export type ChatSummary = {

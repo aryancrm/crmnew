@@ -8,7 +8,9 @@
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { logEvent } from "../orders/events";
-import { companyInfo } from "../settings/service";
+import { phoneKey } from "../customers/service";
+import { pointsFor } from "../points/service";
+import { companyInfo, pointsProgram } from "../settings/service";
 import type { CustomerUpdate, Me, TellEvent } from "../types";
 
 export type { CustomerUpdate, TellEvent };
@@ -40,6 +42,31 @@ export function stepOf(status: string, paid: boolean): TellEvent | null {
   if (["finance_check", "ready_for_invoice", "ready_for_dispatch", "packing"].includes(status))
     return "confirmed";
   return null;
+}
+
+/** Where the customer sees their points: the website their order came from (else the first one
+ *  with an address), at its sign-in with their number filled in (the old CRM's "See my points"). */
+async function pointsLinkOf(db: Database, leadId: number | null, key: string): Promise<string | null> {
+  const [web] = leadId
+    ? await rows<{ url: string | null }>(
+        db,
+        sql`select status_url as url from web_order where lead_id = ${leadId} and status_url is not null order by id desc limit 1`,
+      )
+    : [];
+  let origin: string | null = null;
+  try {
+    origin = web?.url ? new URL(web.url).origin : null;
+  } catch {
+    origin = null;
+  }
+  if (!origin) {
+    const [site] = await rows<{ key: string }>(
+      db,
+      sql`select key from channel_account where kind = 'website' and active and key like '%.%' order by id limit 1`,
+    );
+    origin = site ? `https://${site.key.startsWith("www.") ? site.key : `www.${site.key}`}` : null;
+  }
+  return origin ? `${origin}/login#phone=%2B63${key}` : null;
 }
 
 /** The update for one step of an order (null when that step hasn't happened). */
@@ -148,6 +175,22 @@ export async function customerUpdate(
     o.terms === "days" && o.days
       ? `Payment terms: ${o.termLabel ?? `${o.days} days`}${invoice ? `, due ${phDate(invoice.dueOn)}` : ""}`
       : null;
+  // The points this order earns, as the old CRM's "Your points" box said it (19 Nov: "points
+  // showed in the customer's login when the order was approved"): about the rate on what is paid
+  // for the medicines, added once it is paid; and the link to see them on the website.
+  const program = await pointsProgram(db);
+  const key = phoneKey(o.phone);
+  const earns =
+    program.enabled && o.kind === "patient" && key
+      ? pointsFor(Math.max(0, o.total - o.deliveryFee - o.pointsUsed * 100), program.rateBps)
+      : 0;
+  const pointsLink = earns > 0 && key ? await pointsLinkOf(db, o.leadId, key) : null;
+  const pointsSaid = earns
+    ? [
+        `This order earns you about ${peso(earns * 100)} off your next order (${earns.toLocaleString("en-PH")} points), added once it is paid.`,
+        ...(pointsLink ? [`See my points: ${pointsLink}`] : []),
+      ]
+    : [];
   let subject = "";
   let say: string[] = [];
   let details: string[] = [];
@@ -174,12 +217,14 @@ export async function customerUpdate(
         ...(o.expectedOn ? [`Expected: ${phDate(o.expectedOn)}`] : []),
         ...(howToPay ? [howToPay] : []),
         ...(credit ? [credit] : []),
+        ...pointsSaid,
       ];
       short = [
         `Your order ${o.code} is confirmed.`,
         `Total: ${peso(o.total)}`,
         ...(howToPay ? [howToPay] : []),
         ...(o.expectedOn ? [`Expected: ${phDate(o.expectedOn)}`] : []),
+        ...pointsSaid,
       ];
       break;
     case "shipped": {

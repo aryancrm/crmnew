@@ -2,6 +2,7 @@
 // first), the conversation itself (theirs, ours and the desk's notes), the reply, and the
 // channels' settings: which pages and mailboxes are connected and how their reading goes.
 
+import { pushCatalog, pushCatalogs } from "./catalog";
 import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { allow, may, Refusal } from "../http";
@@ -267,7 +268,9 @@ export async function pullChannel(db: Database, me: Me, id: number): Promise<{ l
   allow(me, CHANNEL_ROLES, "read a channel now");
   const channel = await channelOrRefuse(db, id);
   if (!channel.active) throw new Refusal(409, "not_now", "Connect it again first.");
-  if (channel.kind === "website") return { landed: await pushWebsites(db) };
+  // A website: its orders' statuses, and the stock link's changes (online/catalog.ts).
+  if (channel.kind === "website")
+    return { landed: (await pushWebsites(db)) + (await pushCatalog(db, id)).sent };
   return {
     landed: channel.kind === "messenger" ? await pullPage(db, id) : await pullMailbox(db, id),
   };
@@ -305,6 +308,7 @@ export async function setIntake(
 /** Every page and mailbox read on a timer (the server starts it; tests don't). */
 export function startChannelJobs(db: Database): void {
   let busy = false;
+  let fullRounds = 0;
   const tick = async (full: boolean) => {
     if (busy) return;
     busy = true;
@@ -312,6 +316,13 @@ export function startChannelJobs(db: Database): void {
       await drainInbox(db);
       await pushWebsites(db);
       if (full) {
+        // The websites' stock link: what changed, every ten minutes (the old CRM sent it after
+        // each save and every six hours).
+        fullRounds += 1;
+        if (fullRounds % 5 === 1)
+          await pushCatalogs(db).catch((error) =>
+            console.warn("channels: the stock link didn't send:", error instanceof Error ? error.message : error),
+          );
         const accounts = await rows<{ id: number; kind: "messenger" | "email" }>(
           db,
           sql`select id::int as id, kind from channel_account where active and kind in ('messenger', 'email')`,

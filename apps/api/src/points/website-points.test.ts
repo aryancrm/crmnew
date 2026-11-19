@@ -476,6 +476,52 @@ describe("the 2MG website's points", () => {
     ).toBe(140);
   });
 
+  it("gives the points back on a senior's order and refuses a hold that isn't this order's (the old CRM's rules)", async () => {
+    const token = (
+      await wallet({ operation: "auth_member", phone: MEMBER.phone, password: "secret-1" })
+    ).body.token as string;
+    const balance = async () =>
+      ((await wallet({ operation: "wallet_read", account: MEMBER })).body.account as { balance: number }).balance;
+    const before = await balance();
+    const held = await wallet({
+      operation: "reserve",
+      account: MEMBER,
+      walletToken: token,
+      requestKey: "order:2MG-100105",
+      reference: "2MG-100105",
+      maximum: 10,
+    });
+    await wallet({
+      operation: "site_reservation_settle",
+      requestKey: "order:2MG-100105",
+      outcome: "commit",
+      reason: "Applied.",
+    });
+    expect(await balance()).toBe(before - 10);
+    // Not this order's points (another number of points): refused, nothing kept.
+    expect((await orderEvent("2MG-100105", { rewards: { reservation: held.body.id, points: 11 } })).status).toBe(400);
+    // A senior's order: taken without the points, which go back to the customer; the case is told.
+    expect(
+      (
+        await orderEvent("2MG-100105", {
+          rewards: { reservation: held.body.id, points: 10 },
+          benefit: { type: "senior", status: "pending" },
+        })
+      ).status,
+    ).toBe(200);
+    expect(await balance()).toBe(before);
+    const [web] = await rows<{ hold: string | null; lead: number }>(
+      db,
+      sql`select points_reservation::text as hold, lead_id::int as lead from web_order where ref = '2MG-100105'`,
+    );
+    expect(web?.hold).toBeNull();
+    const notes = await rows<{ message: string }>(
+      db,
+      sql`select message from lead_event where lead_id = ${web?.lead ?? 0}`,
+    );
+    expect(notes.some((one) => one.message.includes("points were returned to the customer"))).toBe(true);
+  });
+
   it("lets the website's admin look a number up and adjust it once per request", async () => {
     expect((await wallet({ operation: "admin_lookup", phone: MEMBER.phone })).status).toBe(400);
     const looked = await wallet({

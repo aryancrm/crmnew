@@ -522,6 +522,71 @@ function ConnectMailbox() {
   );
 }
 
+/** The website's stock link (the old CRM's catalogue push): its catalogue address, when the
+ *  medicines last went, and what went wrong. */
+function StockLink({
+  channelId,
+  catalog,
+  run,
+  busy,
+}: {
+  channelId: number;
+  catalog: NonNullable<ChannelStatus["website"]>["catalog"];
+  run: (
+    path: string,
+    body?: unknown,
+    done?: (answer: Record<string, unknown>) => string | null,
+  ) => Promise<void>;
+  busy: boolean;
+}) {
+  const [url, setUrl] = useState(catalog.url ?? "");
+  return (
+    <div className="flex flex-col gap-1.5 rounded-xl border border-slate-200 px-3 py-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold text-slate-800">Stock link</span>
+        {!catalog.url ? (
+          <Pill>Off</Pill>
+        ) : catalog.error ? (
+          <Pill tone="bad">Not taken</Pill>
+        ) : (
+          <Pill tone="good">On</Pill>
+        )}
+        {catalog.sentAt && (
+          <span>
+            Medicines last sent {timeLabel(catalog.sentAt)}
+            {catalog.sent ? ` (${catalog.sent})` : ""}
+          </span>
+        )}
+      </div>
+      {catalog.error && <span className="text-rose-700">{catalog.error}</span>}
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          aria-label="The website's catalogue address"
+          value={url}
+          onChange={(event) => setUrl(event.target.value)}
+          placeholder="https://www.2mginc.com/api/crm/catalog"
+          className="h-8 min-w-64 flex-1 rounded-lg border border-slate-300 px-2.5 text-[12px]"
+        />
+        <Button
+          small
+          disabled={busy || url.trim() === (catalog.url ?? "")}
+          onClick={() =>
+            run(`/api/channels/${channelId}/catalog`, { url }, () =>
+              url.trim() ? "Stock link on: what changes goes every ten minutes." : "Stock link off.",
+            )
+          }
+        >
+          Save
+        </Button>
+      </div>
+      <span className="text-[11px] text-slate-500">
+        Each medicine with its prices and the pieces on the shelf goes to the website, as the old
+        CRM sent it; only what changed, every ten minutes, and with Send updates now.
+      </span>
+    </div>
+  );
+}
+
 /** What a website did lately: its last call, orders the CRM left for a person, statuses it refused. */
 function WebsiteDetails({
   channel,
@@ -557,6 +622,7 @@ function WebsiteDetails({
           · {web.orders} order{web.orders === 1 ? "" : "s"}
         </span>
       </div>
+      <StockLink channelId={channel.id} catalog={web.catalog} run={run} busy={busy} />
       {web.noCase.length > 0 && (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
           <div className="mb-1 font-semibold text-amber-900">Orders with no case</div>
@@ -632,19 +698,22 @@ function WebsiteDetails({
 function ConnectWebsite({ path }: { path: string }) {
   const [name, setName] = useState("");
   const [site, setSite] = useState("");
-  const [made, setMade] = useState<{ key: string; secret: string } | null>(null);
+  // The secret the website has now (from the old CRM), to keep it working unchanged.
+  const [secret, setSecret] = useState("");
+  const [made, setMade] = useState<{ key: string; secret: string; kept: boolean } | null>(null);
   const action = useAction();
   const queries = useQueryClient();
   async function submit(event: FormEvent) {
     event.preventDefault();
-    let answer: { key: string; secret: string } = { key: "", secret: "" };
+    let answer: { key: string; secret: string; kept: boolean } = { key: "", secret: "", kept: false };
     const ok = await action.run(async () => {
-      answer = await api(`/api/channels/website`, { body: { name, site } });
+      answer = await api(`/api/channels/website`, { body: { name, site, secret: secret.trim() || null } });
     });
     if (ok) {
       setMade(answer);
       setName("");
       setSite("");
+      setSecret("");
       await queries.invalidateQueries({ queryKey: ["channels"] });
     }
   }
@@ -680,18 +749,37 @@ function ConnectWebsite({ path }: { path: string }) {
           )}
         </Field>
       </div>
-      <Problem message={action.general(["name", "site"])} />
+      <div className="flex flex-col gap-1">
+        <Field label="Its secret now (optional)" error={action.at("secret")}>
+          {(field) => (
+            <input
+              {...field}
+              type="password"
+              autoComplete="off"
+              className={INPUT}
+              value={secret}
+              onChange={(event) => setSecret(event.target.value)}
+            />
+          )}
+        </Field>
+        <p className="text-[11px] text-slate-500">
+          A website moving over from the old CRM: paste its CRM_WEBHOOK_SECRET and it keeps working
+          as it is. Left empty, a new one is made.
+        </p>
+      </div>
+      <Problem message={action.general(["name", "site", "secret"])} />
       {made && (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12px] text-emerald-900">
           <div className="font-semibold">
-            Connected as {made.key}. Put these in the website's settings; the secret isn't shown
-            again.
+            {made.kept
+              ? `Connected as ${made.key}, with the secret it has: only its address changes.`
+              : `Connected as ${made.key}. Put these in the website's settings; the secret isn't shown again.`}
           </div>
           <div className="mt-1 break-all font-mono">
             CRM_WEBHOOK_URL={window.location.origin}
             {path}
           </div>
-          <div className="break-all font-mono">CRM_WEBHOOK_SECRET={made.secret}</div>
+          {!made.kept && <div className="break-all font-mono">CRM_WEBHOOK_SECRET={made.secret}</div>}
         </div>
       )}
       <div>

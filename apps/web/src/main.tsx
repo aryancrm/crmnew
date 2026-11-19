@@ -31,6 +31,7 @@ import { Inventory } from "./inventory/inventory";
 import { InventoryOverview } from "./inventory/overview";
 import { Invoice, Invoices } from "./finance/invoices";
 import { LeadPage } from "./online/lead";
+import { WebsiteOrderPage } from "./online/website-order";
 import { LeadsDesk } from "./online/leads";
 import { LeaveListPage } from "./hr/leave-list";
 import { Login } from "./account/login";
@@ -197,6 +198,7 @@ createRoot(root).render(
             <Route path="leads" element={<OnlyFor allow={readsOnlineDesk}><LeadsDesk /></OnlyFor>} />
             <Route path="pap" element={<LeadsDesk key="pap" desk="pap" />} />
             <Route path="leads/:id" element={<LeadPage key="lead" />} />
+            <Route path="website-order" element={<WebsiteOrderPage />} />
             <Route path="orders" element={<Orders />} />
             <Route path="orders/new" element={<OnlyFor allow={placesOrders}><OrderNew /></OnlyFor>} />
             <Route path="orders/:id/fix" element={<OrderNew key="fix" fix />} />

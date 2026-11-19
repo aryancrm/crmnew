@@ -5,7 +5,7 @@ import type { PointsAccountDetail, PointsList } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Search, X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { avatarTone, initials } from "../look";
 import {
@@ -43,6 +43,7 @@ export function PointsPage() {
     <div className="mx-auto max-w-5xl">
       <PageHead title="Points" />
       <Program data={data} />
+      {data.can.adjust && <AddPoints />}
       <div className="mt-4 rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 p-3">
           <div className="relative w-full max-w-sm">
@@ -257,6 +258,103 @@ export function PointsAccountPage() {
   );
 }
 
+/** Points to a customer by their mobile number (Aryan, 19 Nov): the number of points typed is
+ *  theirs (one point is one peso off); a number with no points yet gets its account. */
+function AddPoints() {
+  const [open, setOpen] = useState(false);
+  const [phone, setPhone] = useState("");
+  const [points, setPoints] = useState("");
+  const [name, setName] = useState("");
+  const [reason, setReason] = useState("");
+  const action = useAction();
+  const queries = useQueryClient();
+  const navigate = useNavigate();
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    let made: { id: number } | null = null;
+    if (
+      await action.run(async () => {
+        made = await api<{ id: number; balance: number }>("/api/points/add", {
+          body: { phone, points: Math.round(Number(points)), name: name.trim() || null, reason: reason.trim() || null },
+        });
+      })
+    ) {
+      await queries.invalidateQueries({ queryKey: ["points"] });
+      const done = made as { id: number } | null;
+      if (done) navigate(`/points/${done.id}`);
+    }
+  }
+  if (!open)
+    return (
+      <div className="mt-4">
+        <Button variant="primary" small onClick={() => setOpen(true)}>
+          Add points
+        </Button>
+      </div>
+    );
+  return (
+    <form
+      onSubmit={submit}
+      className="mt-4 grid gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-[10rem_7rem_minmax(0,1fr)_minmax(0,1fr)_auto]"
+    >
+      <Field label="Mobile number" error={action.at("phone")}>
+        {(field) => (
+          <input
+            {...field}
+            className={INPUT}
+            inputMode="tel"
+            placeholder="0917 123 4567"
+            value={phone}
+            onChange={(event) => setPhone(event.target.value)}
+          />
+        )}
+      </Field>
+      <Field label="Points" error={action.at("points")}>
+        {(field) => (
+          <input
+            {...field}
+            className={INPUT}
+            inputMode="numeric"
+            placeholder="500"
+            value={points}
+            onChange={(event) => setPoints(event.target.value.replace(/[^\d]/g, ""))}
+          />
+        )}
+      </Field>
+      <Field label="Name (a new number)" error={action.at("name")}>
+        {(field) => (
+          <input {...field} className={INPUT} value={name} onChange={(event) => setName(event.target.value)} />
+        )}
+      </Field>
+      <Field label="Why (optional)" error={action.at("reason")}>
+        {(field) => (
+          <input {...field} className={INPUT} value={reason} onChange={(event) => setReason(event.target.value)} />
+        )}
+      </Field>
+      <div className="flex items-end gap-1.5">
+        <Button type="submit" small variant="primary" disabled={action.busy || !phone.trim() || !Number(points)}>
+          Add
+        </Button>
+        <button
+          type="button"
+          aria-label="Close"
+          onClick={() => setOpen(false)}
+          className="grid size-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-200"
+        >
+          <X className="size-4" />
+        </button>
+      </div>
+      <p className="text-[11px] text-slate-500 sm:col-span-5">
+        One point is one peso off their next order. A number with no points yet gets its points
+        account, tied to the patient with that number if there is one.
+      </p>
+      <div className="sm:col-span-5">
+        <Problem message={action.general(["phone", "points", "name", "reason"])} />
+      </div>
+    </form>
+  );
+}
+
 function Adjust({ id }: { id: number }) {
   const [open, setOpen] = useState(false);
   const [points, setPoints] = useState("");
@@ -280,7 +378,7 @@ function Adjust({ id }: { id: number }) {
     return (
       <div className="mt-3">
         <Button small onClick={() => setOpen(true)}>
-          Adjust points
+          Add points
         </Button>
       </div>
     );

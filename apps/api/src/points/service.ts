@@ -8,6 +8,7 @@
 
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
+import { phoneKey as phoneKeyOf } from "../customers/service";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import type { Runner } from "../inventory/service";
@@ -383,6 +384,43 @@ export async function adjustPoints(
       origin: `adjust:${randomUUID()}`,
       by: me.id,
     });
+  });
+}
+
+/** Adds points to a customer by their mobile number (Aryan, 19 Nov: "an Add points option: we
+ *  type the number of points and they are theirs"): their points account is opened if they have
+ *  none (tied to the patient with that number, if there is one). One point is one peso. */
+export async function addPointsByPhone(
+  db: Database,
+  me: Me,
+  input: { phone: string; name?: string | null; points: number; reason?: string | null },
+): Promise<{ id: number; balance: number }> {
+  allow(me, SETTING_ROLES, "add points");
+  const key = phoneKeyOf(input.phone);
+  if (!key) throw new Refusal(400, "invalid", "Type their mobile number.", "phone");
+  if (!Number.isInteger(input.points) || input.points <= 0 || input.points > 1_000_000)
+    throw new Refusal(400, "invalid", "Type how many points to add.", "points");
+  const [patient] = await rows<{ id: number; name: string }>(
+    db,
+    sql`select id::int as id, name from customer where phone_key = ${key} and kind = 'patient' and active order by id limit 1`,
+  );
+  const name = patient?.name ?? (input.name?.trim() || "Customer");
+  return db.transaction(async (tx) => {
+    const accountId = await accountFor(tx, key, { id: patient?.id ?? null, name });
+    await lockAccount(tx, accountId);
+    await addEntry(tx, {
+      accountId,
+      kind: "adjust",
+      points: input.points,
+      note: input.reason?.trim() || `Added by ${me.name}`,
+      origin: `adjust:${randomUUID()}`,
+      by: me.id,
+    });
+    const [account] = await rows<{ balance: number }>(
+      tx,
+      sql`select balance from points_account where id = ${accountId}`,
+    );
+    return { id: accountId, balance: account?.balance ?? input.points };
   });
 }
 
