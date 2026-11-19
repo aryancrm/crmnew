@@ -7,12 +7,13 @@ import type { Me } from "@2mg/api/types";
 
 export type Workspace = { key: string; label: string; about: string; roles: string[]; group?: "selling" | "operations" | "office" };
 
+// In the order line's order (Aryan, 19 Nov): Sales and field, Management, Finance, Dispatch, then the rest.
 export const WORKSPACES: Workspace[] = [
   { key: "sales", group: "selling", label: "Sales and field", about: "MedReps, team leads, heads", roles: ["medrep", "team_lead", "manager"] },
   { key: "management", group: "operations", label: "Management", about: "Order approvals, customers", roles: ["management"] },
   { key: "finance", group: "operations", label: "Finance", about: "Payments, invoices, the books", roles: ["finance"] },
-  { key: "inventory", group: "operations", label: "Inventory", about: "Stock, purchasing", roles: ["inventory"] },
   { key: "dispatch", group: "operations", label: "Dispatch", about: "Packing and delivery", roles: ["dispatch"] },
+  { key: "inventory", group: "operations", label: "Inventory", about: "Stock, purchasing", roles: ["inventory"] },
   { key: "online", group: "selling", label: "Online desk", about: "Messenger, websites, cases", roles: ["online"] },
   { key: "hr", group: "office", label: "HR", about: "People, attendance, payroll", roles: ["hr"] },
   { key: "regulatory", group: "office", label: "Regulatory", about: "Registrations, complaints", roles: ["regulatory"] },
