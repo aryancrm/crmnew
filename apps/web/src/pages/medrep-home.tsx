@@ -97,8 +97,15 @@ export function MedrepHome() {
   const [params, setParams] = useSearchParams();
   const period = (params.get("period") ?? "today") as Period;
   const day = params.get("day") ?? "";
-  // An Rx CHC's customers are doctors; everyone else opens on hospitals.
-  const [kind, setKind] = useState<CustomerKind>(me?.channel?.code === "RX" ? "doctor" : "hospital");
+  // Each seat opens on the buyers it serves (Aryan, 19 Nov: every screen by its own work): an Rx
+  // CHC's doctors; MD Telesales' and the PAP officer's patients; everyone else's hospitals.
+  const [kind, setKind] = useState<CustomerKind>(
+    me?.channel?.code === "RX"
+      ? "doctor"
+      : (me?.channel?.code === "TS" && me.business === "RX") || me?.channel?.code === "PAP"
+        ? "patient"
+        : "hospital",
+  );
   const set = (changes: Record<string, string>) => {
     const next = new URLSearchParams(params);
     for (const [key, value] of Object.entries(changes)) {

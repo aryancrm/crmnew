@@ -1106,6 +1106,9 @@ function checkStates(data: OrderDetail): Record<CheckKey, { ok: boolean; note: s
     customerKind: data.order.customerKind,
     patientOrder: data.order.patientOrder,
     items: data.items,
+    manual: true,
+    papersCheckedAt: data.order.papersCheckedAt,
+    papersCheckedBy: data.order.papersCheckedBy,
   });
   const of = (key: string) => list.find((one) => one.key === key);
   const state = (keys: string[], fine: string) => {
@@ -1123,10 +1126,10 @@ function checkStates(data: OrderDetail): Record<CheckKey, { ok: boolean; note: s
       );
       if (missing.length)
         return { ok: false, note: `No ${missing.map((row) => row.label).join(", ")}` };
-      return state(
-        ["paper"],
-        of("paper")?.tone === "ok" ? (of("paper")?.label ?? "Papers fine") : "Papers fine",
-      );
+      // On file but not read by a person yet: to check, never fine by itself (Aryan, 19 Nov).
+      const paper = of("paper");
+      if (paper?.tone === "warn") return { ok: false, note: paper.label };
+      return { ok: true, note: paper?.label ?? (data.papers.length ? "Papers checked" : "No papers to read") };
     })(),
     approve: { ok: false, note: "Your step" },
   };
@@ -1486,6 +1489,44 @@ function Documents({ data }: { data: OrderDetail }) {
           .map((row) => row.kind)
           .filter((kind) => kind !== "dr" && kind !== "payment_proof")}
       />
+      <PapersCheck data={data} />
+    </div>
+  );
+}
+
+/** Management's own word on the papers, after reading each (Aryan, 19 Nov: a prescription is read
+ *  by a person, right or wrong; the system never ticks it). Kept with who and when. */
+function PapersCheck({ data }: { data: OrderDetail }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const readable = data.papers.filter((paper) => paper.kind !== "payment_proof" && paper.kind !== "dr");
+  if (!readable.length) return null;
+  const checkedAt = data.order.papersCheckedAt;
+  const may = data.can.approve || data.can.hold;
+  const set = (ok: boolean) =>
+    action.run(async () => {
+      await api(`/api/orders/${data.order.id}/papers-check`, { body: { ok } });
+      // The order's page and every card that shows it.
+      await queries.invalidateQueries({ queryKey: ["orders"] });
+    });
+  return (
+    <div className={`flex flex-wrap items-center gap-3 rounded-xl px-3.5 py-2.5 text-[13px] ${checkedAt ? "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200" : "bg-amber-50 text-amber-900 ring-1 ring-amber-200"}`}>
+      <span className="min-w-0 flex-1">
+        {checkedAt
+          ? `Papers checked by hand${data.order.papersCheckedBy ? ` by ${data.order.papersCheckedBy}` : ""}, ${new Date(checkedAt).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" })}.`
+          : `${readable.length} ${readable.length === 1 ? "paper" : "papers"} on file, not checked yet: open each (the prescription: right patient, doctor, medicine, date) and say so.`}
+      </span>
+      {may && (
+        <button
+          type="button"
+          disabled={action.busy}
+          onClick={() => void set(!checkedAt)}
+          className={checkedAt ? "text-[12.5px] font-semibold text-slate-600 underline hover:text-slate-900" : "rounded-lg bg-emerald-600 px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-emerald-700"}
+        >
+          {action.busy ? "Saving…" : checkedAt ? "Take back" : "Papers are right"}
+        </button>
+      )}
+      {action.problem && <span className="basis-full text-[12px] text-rose-700">{action.problem.message}</span>}
     </div>
   );
 }

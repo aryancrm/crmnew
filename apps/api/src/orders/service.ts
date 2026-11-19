@@ -807,6 +807,7 @@ const approverSql = sql`(select ch2.head_id::int from channel ch2 where ch2.id =
 const cardColumns = sql`${rowColumns}, o.medrep_id::int as "medrepId", ${approverSql} as "approverId",
   (select ap.name from person ap where ap.id = ${approverSql}) as "approverName", ${sentBackColumns},
   ${iso("o.approved_at")} as "approvedAt", ${takeBackSql} as "takeBack", ${iso("o.status_since")} as "stepSince",
+  ${iso("o.papers_checked_at")} as "papersCheckedAt", (select pc.name from person pc where pc.id = o.papers_checked_by) as "papersCheckedBy",
   o.delivery_address as "deliveryAddress", o.receiver, o.receiver_phone as "receiverPhone", ${day("o.expected_on")} as "expectedOn",
   (select coalesce(sum(i.qty), 0) from order_item i where i.order_id = o.id)::int as pieces,
   (select p.name from person p where p.id = o.dispatch_by) as "dispatchBy", o.dispatch_by::int as "dispatchById",
@@ -1328,6 +1329,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         ${day("o.expected_on")} as "expectedOn", o.warehouse_id::int as "warehouseId", w.name as warehouse,
         o.held_from as "heldFrom", ${iso("o.submitted_at")} as "submittedAt", ${iso("o.approved_at")} as "approvedAt",
         approver.name as "approvedBy", c.credit_limit::int as "creditLimit", o.held_role as "heldRole",
+        ${iso("o.papers_checked_at")} as "papersCheckedAt", (select pc.name from person pc where pc.id = o.papers_checked_by) as "papersCheckedBy",
         o.delivery_method as "deliveryMethod", o.courier, o.tracking, o.tracking_wait as "trackingWait", o.rider,
         ${iso("o.packed_at")} as "packedAt", packer.name as "packedBy", ${iso("o.shipped_at")} as "shippedAt", shipper.name as "shippedBy",
         ${day("o.delivered_on")} as "deliveredOn", deliverer.name as "deliveredBy", o.received_by as "receivedBy",
@@ -2775,6 +2777,30 @@ async function visibleOrder(db: Runner, me: Me, id: number) {
 }
 
 /** Keeps a paper (a photo or PDF) on an order and writes it to the order's timeline. */
+/** Management says an order's papers are right, having looked at each by hand (Aryan, 19 Nov: a
+ *  prescription is read, never ticked by the system); `ok: false` takes it back. While the order is
+ *  Management's (or the PAP head's) to decide. */
+export async function checkPapers(db: Database, me: Me, orderId: number, ok: boolean): Promise<void> {
+  const order = await visibleOrder(db, me, orderId);
+  const [row] = await rows<{ approverId: number | null; status: string; checked: boolean }>(
+    db,
+    sql`select ${approverSql} as "approverId", o.status, o.papers_checked_at is not null as checked from sales_order o where o.id = ${orderId}`,
+  );
+  const decides = ORDER_MANAGE_ROLES.includes(me.role) || (row?.approverId != null && row.approverId === me.id);
+  if (!decides) throw new Refusal(403, "not_allowed", "Management checks an order's papers.");
+  if (!row || ["cancelled", "completed"].includes(row.status))
+    throw new Refusal(409, "not_now", `${order.code}'s papers can't be checked now.`);
+  if (row.checked === ok) return;
+  await db.transaction(async (tx) => {
+    await tx.execute(
+      ok
+        ? sql`update sales_order set papers_checked_by = ${me.id}, papers_checked_at = now() where id = ${orderId}`
+        : sql`update sales_order set papers_checked_by = null, papers_checked_at = null where id = ${orderId}`,
+    );
+    await logEvent(tx, orderId, me, "paper", ok ? "Papers checked by hand: right." : "Papers check taken back: to look at again.");
+  });
+}
+
 export async function addPaper(
   db: Database,
   me: Me,
@@ -2812,6 +2838,9 @@ export async function addPaper(
       "paper",
       `${PAPER_LABEL[paper.kind as PaperKind]} attached (${name}).`,
     );
+    // A new paper (not Finance's proof, not Dispatch's receipt) is Management's to look at again.
+    if (paper.kind !== "payment_proof" && paper.kind !== "dr")
+      await tx.execute(sql`update sales_order set papers_checked_by = null, papers_checked_at = null where id = ${orderId} and papers_checked_at is not null`);
     // Finance held it for want of the proof: the proof sends it back to Finance by itself.
     if (
       paper.kind === "payment_proof" &&

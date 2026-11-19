@@ -237,6 +237,43 @@ describe("packing", () => {
     expect(await shelf("NEAR")).toBe(30);
   });
 
+  it("picks a promo's free line from what its paid line left (19 Nov: a nearly empty first batch refused the box)", async () => {
+    // Two vials left in the batch that expires first, plenty in the next.
+    const today = todayManila();
+    const [twin] = await rows<{ id: number }>(db, sql`insert into medicine (name, strength) values ('Twinamine', '2 mg') returning id::int as id`);
+    await db.execute(sql`insert into medicine_price (medicine_id, buyer_type, amount) values (${twin?.id}, 'hospital', 1000)`);
+    for (const [code, days, qty] of [["TW-A", 30, 2], ["TW-B", 300, 100]] as const) {
+      const [made] = await rows<{ id: number }>(
+        db,
+        sql`insert into batch (medicine_id, batch_no, expires_on, unit_cost) values (${twin?.id}, ${code}, ${addDays(today, days)}::date, 700) returning id::int as id`,
+      );
+      await db.execute(sql`insert into stock (batch_id, warehouse_id, qty) values (${made?.id}, ${main}, ${qty})`);
+    }
+    const ready = async () => {
+      const placed = (await (await post("ryan", "/api/orders", { customerId: credit, items: [{ medicineId: twin?.id, qty: 6, priceKind: "hospital" }] })).json()) as { id: number };
+      // The promo's free line: the same medicine again.
+      await db.execute(
+        sql`insert into order_item (order_id, medicine_id, qty, price_kind, list_price, unit_price, free) values (${placed.id}, ${twin?.id}, 6, 'hospital', 1000, 0, true)`,
+      );
+      expect((await post("sarla", `/api/orders/${placed.id}/approve`)).status).toBe(200);
+      expect((await post("fiona", `/api/finance/orders/${placed.id}/invoice`)).status).toBe(200);
+      return placed.id;
+    };
+    // The plan Dispatch is shown never asks a batch for more than it holds, over all the lines.
+    const first = await ready();
+    const plan = await read<PackPlan>("marco", `/api/dispatch/orders/${first}/pack`);
+    const asked = new Map<number, number>();
+    for (const line of plan.lines) for (const pick of line.suggested) asked.set(pick.batchId, (asked.get(pick.batchId) ?? 0) + pick.qty);
+    for (const line of plan.lines)
+      for (const one of line.batches) expect(asked.get(one.batchId) ?? 0).toBeLessThanOrEqual(one.onShelf);
+    // Packed as shown (the screen sends the plan's picks), and packed with no picks at all.
+    const shown = plan.lines.flatMap((line) => line.suggested.map((pick) => ({ itemId: line.itemId, ...pick })));
+    expect((await pack("marco", first, shown)).status).toBe(200);
+    const second = await ready();
+    expect((await pack("marco", second)).status).toBe(200);
+    expect((await order("marco", second)).picks.reduce((sum, pick) => sum + pick.qty, 0)).toBe(12);
+  });
+
   it("refuses when the warehouse hasn't enough that hasn't expired, and says so", async () => {
     const id = await readyToPack(credit, 500);
     const plan = await read<PackPlan>("marco", `/api/dispatch/orders/${id}/pack`);

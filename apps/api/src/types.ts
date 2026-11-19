@@ -856,6 +856,9 @@ export type OrderCard = OrderRow & {
   lines: string;
   /** Each medicine with the price it lists at for this buyer and the price offered. */
   items: CardItem[];
+  /** Management looked at its papers by hand and said they are right: when, and who. */
+  papersCheckedAt: string | null;
+  papersCheckedBy: string | null;
   findings: OrderFinding[];
   /** Sent back to the MedRep before (how many times), Management's last reason, who sent it
    *  and the MedRep's answer when they sent it again. */
@@ -1218,6 +1221,9 @@ export type OrderDetail = {
     submittedAt: string | null;
     approvedAt: string | null;
     approvedBy: string | null;
+    /** Management looked at its papers by hand and said they are right: when, and who. */
+    papersCheckedAt: string | null;
+    papersCheckedBy: string | null;
     deliveryMethod: DeliveryMethod | null;
     courier: string | null;
     tracking: string | null;

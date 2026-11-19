@@ -24,6 +24,11 @@ export function checksOf(card: {
   /** An order for one patient through a hospital or a doctor: checked as a patient's. */
   patientOrder?: boolean;
   items?: { qty: number; listPrice: number; unitPrice: number; free: boolean }[];
+  /** Management's own reading (Aryan, 19 Nov): papers on file count as fine only once someone
+   *  looked at them by hand and said so; until then they are "to check". */
+  manual?: boolean;
+  papersCheckedAt?: string | null;
+  papersCheckedBy?: string | null;
 }): Checked[] {
   const found = (kinds: OrderFinding["kind"][]) =>
     card.findings.filter((one) => kinds.includes(one.kind));
@@ -102,6 +107,17 @@ export function checksOf(card: {
               title: "No prescription attached yet",
             },
     );
+  // Management's reading: a paper on file is never fine by itself; a person reads it and says so.
+  const readable = card.papers.filter((kind) => kind !== "payment_proof" && kind !== "dr");
+  if (card.manual && readable.length) {
+    const at = out.findIndex((item) => item.key === "paper");
+    const checked: Checked = card.papersCheckedAt
+      ? { key: "paper", tone: "ok", label: "Papers checked", title: `Checked by hand${card.papersCheckedBy ? ` by ${card.papersCheckedBy}` : ""}` }
+      : { key: "paper", tone: "warn", label: "Papers to check", title: "Papers are on file: open each and say they are right" };
+    // Something missing (a patient's prescription) stays the first thing said.
+    if (at >= 0 && out[at]?.tone !== "warn") out[at] = checked;
+    else if (at < 0) out.push(checked);
+  }
   const proof = found(["papers"]);
   if (proof.length)
     out.push({

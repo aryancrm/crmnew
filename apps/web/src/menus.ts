@@ -550,7 +550,10 @@ function withSalesLinks(me: Me, space: Space): Space {
   const listed = allItems(space.groups.flatMap((group) => group.items)).map((item) => item.to);
   const own = CALL_ROLES.includes(me.role) && !LEAD_ROLES.includes(me.role);
   const add: MenuItem[] = [
-    ...(listed.includes("/calls") ? [] : [{ to: "/calls", label: own ? "My calls" : "Calls", icon: PhoneCall }]),
+    // An Rx CHC's "Calls" are doctor visits: their phone log says so, so the two don't mix.
+    ...(listed.includes("/calls")
+      ? []
+      : [{ to: "/calls", label: own ? (me.channel?.code === "RX" ? "My phone calls" : "My calls") : "Calls", icon: PhoneCall }]),
     // The Admin sets the company up; sales figures are the CEO's and the leads' (Aryan, 18 Nov).
     ...(listed.includes("/sales-performance") || me.role === "admin" ? [] : [{ to: "/sales-performance", label: "Sales performance", icon: TrendingUp }]),
   ];
@@ -752,8 +755,8 @@ function ownDesk(me: Me): Space {
             ],
             "Visits",
           ),
-          { to: "/my/area", label: "My area", icon: MapPin },
-          { to: "/to-call", label: "Customers to call", icon: PhoneCall, short: "Call" },
+          { to: "/my/area", label: pap ? "My patients" : "My area", icon: pap ? Users : MapPin },
+          { to: "/to-call", label: pap ? "Patients to call" : "Customers to call", icon: PhoneCall, short: "Call" },
           { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
         ]),
         cta: pap

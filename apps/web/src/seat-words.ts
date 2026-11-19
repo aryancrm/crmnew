@@ -59,6 +59,9 @@ export function seatWords(me: Person | null | undefined): Words {
   if (me.channel?.code === "MT")
     return { desk: "Modern Trade · COO", customers: "chains", myCustomers: "Chains", toCall: "Chains to call" };
   // Government Bidding (Sales and Marketing): its Admin, coachees and CHC.
+  // The PAP officer: patients' guarantee-letter cases (19 Nov: each seat named by its own work).
+  if (me.channel?.code === "PAP" && me.role === "medrep")
+    return { desk: "Patient Assistance (PAP)", customers: "patients", myCustomers: "My patients", toCall: "Patients to call" };
   if (me.channel?.code === "BID")
     return { desk: me.role === "team_lead" ? "Government Bidding Admin" : "Government Bidding", customers: "agencies", myCustomers: "Agencies", toCall: "Agencies to call" };
   // The Online desk: the B2C CHC (the desk role, or the Online channel's MedRep).

@@ -736,8 +736,8 @@ const CARD_CHECKS = [
 
 function CheckSteps({ card }: { card: OrderCard }) {
   const navigate = useNavigate();
-  // The proof of payment is Finance's to check, not Management's.
-  const all = checksOf(card).filter((one) => one.key !== "proof");
+  // The proof of payment is Finance's to check, not Management's; papers are read by hand.
+  const all = checksOf({ ...card, manual: true }).filter((one) => one.key !== "proof");
   const tone = (key: string) => all.find((one) => one.key === key)?.tone ?? "ok";
   const warns = all.filter((one) => one.tone === "warn");
   const fine = CARD_CHECKS.filter((step) => tone(step.key) !== "warn").length;

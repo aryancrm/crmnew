@@ -19,6 +19,7 @@ import { Attention } from "./inventory-overview";
 import { DispatchHome } from "./dispatch-home";
 import { ManagementHome } from "./management-home";
 import { B2cHome } from "./b2c";
+import { LeadsDesk } from "./leads";
 import { MedrepHome } from "./medrep-home";
 import { OrdersToCheck } from "./orders-board";
 import { TeamSalesPage } from "./team";
@@ -55,6 +56,8 @@ export function Home() {
   // Finance's common screen, like Management's: the orders to check (its people in the left menu).
   if (me.role === "finance") return <OrdersToCheck desk="finance" />;
   if (me.role === "dispatch") return <DispatchHome />;
+  // The PAP officer's day is their patients' cases (the guarantee letter's road): Home is that list.
+  if (me.role === "medrep" && me.channel?.code === "PAP") return <LeadsDesk key="pap" desk="pap" />;
   if (me.role === "medrep") return <MedrepHome />;
   // The B2C CHC starts on their morning pulse and the replies waiting (docs/PLAN.md 16.3).
   if (onlineDesk(me)) return <B2cHome />;

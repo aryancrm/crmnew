@@ -141,6 +141,9 @@ export async function packPlan(db: Database, me: Me, orderId: number): Promise<P
     place.id,
     items.map((item) => item.medicineId),
   );
+  // Each line's suggestion from what the lines before it left on each batch (a promo's free line is
+  // the same medicine as its paid line).
+  const used = new Map<number, number>();
   return {
     orderId,
     code: order.code,
@@ -151,7 +154,12 @@ export async function packPlan(db: Database, me: Me, orderId: number): Promise<P
       const batches = shelf.filter(
         (row) => row.medicineId === item.medicineId && row.expiresOn >= today,
       );
-      const plan = firstExpiryFirst(item.qty, batches, today);
+      const plan = firstExpiryFirst(
+        item.qty,
+        batches.map((row) => ({ ...row, onShelf: row.onShelf - (used.get(row.batchId) ?? 0) })),
+        today,
+      );
+      for (const pick of plan.picks) used.set(pick.batchId, (used.get(pick.batchId) ?? 0) + pick.qty);
       return {
         itemId: item.itemId,
         medicineId: item.medicineId,
@@ -193,19 +201,30 @@ export async function packOrder(
       true,
     );
     const picks: { item: ItemRow; batch: ShelfRow; qty: number }[] = [];
+    // What earlier lines of this order already took from each batch: a promo's free line is the same
+    // medicine as its paid line, and both come off the same shelf (19 Nov: each line picked as if the
+    // other weren't there, and a nearly empty first batch refused the box).
+    const used = new Map<number, number>();
     for (const [index, item] of items.entries()) {
       const batches = shelf.filter((row) => row.medicineId === item.medicineId);
       const chosen = input.picks
         ? input.picks.filter((pick) => pick.itemId === item.itemId)
-        : firstExpiryFirst(item.qty, batches, today).picks.map((pick) => ({
+        : firstExpiryFirst(
+            item.qty,
+            batches
+              .map((row) => ({ ...row, onShelf: row.onShelf - (used.get(row.batchId) ?? 0) }))
+              .filter((row) => row.onShelf > 0),
+            today,
+          ).picks.map((pick) => ({
             ...pick,
             itemId: item.itemId,
           }));
+      if (!input.picks) for (const pick of chosen) used.set(pick.batchId, (used.get(pick.batchId) ?? 0) + pick.qty);
       const picked = chosen.reduce((sum, pick) => sum + pick.qty, 0);
       if (!input.picks && picked < item.qty) {
         const have = batches
           .filter((row) => row.expiresOn >= today)
-          .reduce((sum, row) => sum + row.onShelf, 0);
+          .reduce((sum, row) => sum + Math.max(0, row.onShelf - (used.get(row.batchId) ?? 0)), 0);
         throw new Refusal(
           409,
           "short",

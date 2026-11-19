@@ -18,6 +18,7 @@ import { salesOrderRoutes } from "./sales-order";
 import {
   actOnOrder,
   addPaper,
+  checkPapers,
   approvalQueue,
   handleOrder,
   listOrders,
@@ -340,6 +341,12 @@ export function orderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
     return c.json({ ok: true });
   });
 
+  // Management's own look at the papers, by hand (Aryan, 19 Nov).
+  app.post("/api/orders/:id/papers-check", async (c) => {
+    const input = await readBody(c, z.object({ ok: z.boolean() }));
+    await checkPapers(db, c.get("me"), idParam(c), input.ok);
+    return c.json({ ok: true });
+  });
   app.post("/api/orders/:id/:action", async (c) => {
     const action = c.req.param("action") as OrderAction;
     if (!ACTIONS.includes(action))

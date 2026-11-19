@@ -205,7 +205,15 @@ export function Shell() {
         <Account
           // The shared screen is the desk's, nobody's own (Aryan, 19 Nov): no person's name on it.
           name={commonDesk && me.data.deskScreen ? `${space.label} desk` : me.data.name}
-          role={commonDesk && me.data.deskScreen ? "Shared desk screen" : me.data.roleLabel}
+          // Under a seller's or a lead's name, their own job (PH Country Mentor, District Sales Coach,
+          // Hospital CHC), not the role's word: a head and a team lead share one role.
+          role={
+            commonDesk && me.data.deskScreen
+              ? "Shared desk screen"
+              : ["team_lead", "manager", "medrep"].includes(me.data.role) && me.data.title
+                ? me.data.title
+                : me.data.roleLabel
+          }
           desk={Boolean(commonDesk)}
         />
       </header>
