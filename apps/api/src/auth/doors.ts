@@ -3,6 +3,12 @@
 // password once, then the door's people by name; a press signs that person in with their own login
 // (their seat's ID and that password), so they see exactly what their own sign-in shows. Only the
 // people the password opens are listed: anyone who changed theirs signs in with their own ID.
+//
+// Behind the Heads door: whoever holds a head's lead seat. Behind Team leads: the sales tracker's
+// managers, under their head: every team lead, and a head who leads sellers with no team lead
+// between, under their own name (the tracker's "BID · SUBIR", "CLIDP · SUBIR", "MT · MHALOU";
+// Aryan, 19 Nov: "Under Vanessa, under Javed, under Subir; there was no Under Mhalou"). As the
+// tracker's rows, those sellers are the ones with a target (this month or the two before).
 
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
@@ -14,38 +20,54 @@ import { passwordMatches } from "./password";
 export const DOORS = ["heads", "leads"] as const;
 export type DoorKey = (typeof DOORS)[number];
 
-/** Who stands behind each door: the heads (a lead seat over a business), the team leads. */
-const MODULE: Record<DoorKey, string> = { heads: "manager", leads: "team_lead" };
-
-/** One person behind the door: their seat's login ID (the press signs in with it and the password
- *  typed), name, boxes, and a team lead's head (the first head up their reporting line). */
+/** One person behind the door: their seat's login ID, name, boxes, and a team lead's head. */
 export type DoorPerson = DoorList["people"][number];
+type Behind = DoorPerson & { personId: number; hash: string };
 
-/** The door's people the password opens, in the chart's order (a team lead's head's order first). */
-export async function doorPeople(db: Database, door: DoorKey, password: string): Promise<DoorPerson[]> {
+/** Everyone behind the door, in the chart's order (a team lead's head's place first). */
+async function behind(db: Database, door: DoorKey): Promise<Behind[]> {
   const today = todayManila();
-  const [found, units, people] = await Promise.all([
-    rows<{ personId: number; name: string; hash: string; email: string | null; logins: (string | null)[]; units: number[] }>(
+  const [seats, units, people, targeted] = await Promise.all([
+    rows<{
+      seatId: number;
+      unitId: number;
+      module: string;
+      lead: boolean;
+      login: string | null;
+      sort: number;
+      reportsToSeat: number | null;
+      personId: number | null;
+    }>(
       db,
-      sql`select p.id::int as "personId", p.name, p.password_hash as hash, p.email,
-          array_agg(s.login order by s.lead desc, s.sort, s.id) as logins,
-          array_agg(s.unit_id::int order by s.lead desc, s.sort, s.id) as units
-        from seat s
-        join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)}
-        join person p on p.id = h.person_id and p.active
-        where s.active and s.module = ${MODULE[door]} ${door === "heads" ? sql`and s.lead` : sql``}
-        group by p.id, p.name, p.password_hash, p.email`,
+      sql`select s.id::int as "seatId", s.unit_id::int as "unitId", s.module, s.lead, s.login, s.sort,
+          s.reports_to_seat_id::int as "reportsToSeat",
+          (select h.person_id::int from seat_holder h join person p on p.id = h.person_id and p.active
+            where h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)} order by h.starts_on limit 1) as "personId"
+        from seat s where s.active order by s.lead desc, s.sort, s.id`,
     ),
     rows<{ id: number; parentId: number | null; name: string; sort: number }>(
       db,
       sql`select id::int as id, parent_id::int as "parentId", name, sort from org_unit where active`,
     ),
-    rows<{ id: number; name: string; role: string; reportsTo: number | null }>(
+    rows<{ id: number; name: string; role: string; reportsTo: number | null; email: string | null; hash: string }>(
       db,
-      sql`select id::int as id, name, role, reports_to::int as "reportsTo" from person where active`,
+      sql`select id::int as id, name, role, reports_to::int as "reportsTo", email, password_hash as hash
+        from person where active`,
+    ),
+    // The sellers with a target, the seat's or its holder's, this month or the two before.
+    rows<{ id: number }>(
+      db,
+      sql`select s.id::int as id from seat s where s.active and s.module = 'medrep' and (
+          exists (select 1 from seat_target t where t.seat_id = s.id
+            and t.month >= (date_trunc('month', ${today}::date) - interval '2 months')::date)
+          or exists (select 1 from sales_target t join seat_holder h on h.person_id = t.person_id and h.seat_id = s.id
+            and h.kind = 'holder' and ${inForce("h", today)}
+            where t.month >= (date_trunc('month', ${today}::date) - interval '2 months')::date))`,
     ),
   ]);
+  const withTarget = new Set(targeted.map((one) => one.id));
   // Each box's place in the chart, read top to bottom as the Admin panel shows it.
+  const unitById = new Map(units.map((unit) => [unit.id, unit]));
   const children = new Map<number | null, typeof units>();
   for (const unit of units) children.set(unit.parentId, [...(children.get(unit.parentId) ?? []), unit]);
   const place = new Map<number, number>();
@@ -56,59 +78,93 @@ export async function doorPeople(db: Database, door: DoorKey, password: string):
     }
   };
   walk(null);
-  const unitName = new Map(units.map((unit) => [unit.id, unit.name]));
-  const byId = new Map(people.map((one) => [one.id, one]));
-  const headOf = (id: number): { id: number; name: string } | null => {
+  const placeOf = (unitId: number) => place.get(unitId) ?? Number.MAX_SAFE_INTEGER;
+  const byPerson = new Map(people.map((one) => [one.id, one]));
+  const seatById = new Map(seats.map((seat) => [seat.seatId, seat]));
+  const held = seats.filter((seat) => seat.personId !== null && unitById.has(seat.unitId));
+  // A box's lead, when somebody holds it today.
+  const leadOf = (unitId: number) => held.find((seat) => seat.unitId === unitId && seat.lead) ?? null;
+  // Heads: each head's own box (their lead seat's), for the order.
+  const headSeats = held.filter((seat) => seat.lead && seat.module === "manager");
+  const headBox = new Map<number, number>();
+  for (const seat of headSeats) if (!headBox.has(seat.personId as number)) headBox.set(seat.personId as number, seat.unitId);
+  const headOf = (personId: number): number | null => {
     const seen = new Set<number>();
-    let at = byId.get(id)?.reportsTo ?? null;
+    let at = byPerson.get(personId)?.reportsTo ?? null;
     while (at !== null && !seen.has(at)) {
       seen.add(at);
-      const up = byId.get(at);
-      if (!up) return null;
-      if (up.role === "manager") return { id: up.id, name: up.name };
-      at = up.reportsTo;
+      if (headBox.has(at)) return at;
+      at = byPerson.get(at)?.reportsTo ?? null;
     }
     return null;
   };
-  // The password, against each person's own (in turn, so a wrong one costs what one sign-in does
-  // per person and no more at once).
-  const opened: typeof found = [];
-  for (const one of found) if (await passwordMatches(password, one.hash)) opened.push(one);
-  if (!opened.length) return [];
-  // Heads' order: their own box's; a team lead's: their head's box first, then their own.
-  const headPlace = new Map<number, number>();
-  if (door === "leads") {
-    const heads = await rows<{ personId: number; unitId: number }>(
-      db,
-      sql`select distinct on (h.person_id) h.person_id::int as "personId", s.unit_id::int as "unitId"
-        from seat s join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)}
-        where s.active and s.lead and s.module = 'manager' order by h.person_id, s.sort, s.id`,
-    );
-    for (const one of heads) headPlace.set(one.personId, place.get(one.unitId) ?? Number.MAX_SAFE_INTEGER);
+
+  // Who stands behind the door, with the boxes to show beside their name.
+  const boxes = new Map<number, Set<number>>();
+  const add = (personId: number, unitId: number) => {
+    const known = boxes.get(personId) ?? new Set<number>();
+    known.add(unitId);
+    boxes.set(personId, known);
+  };
+  if (door === "heads") for (const seat of headSeats) add(seat.personId as number, seat.unitId);
+  else {
+    for (const seat of held) if (seat.module === "team_lead") add(seat.personId as number, seat.unitId);
+    // A head over sellers (with a target) with nobody leading between: the box under the head those
+    // sellers sit in.
+    for (const seat of seats) {
+      if (seat.module !== "medrep" || !withTarget.has(seat.seatId) || !unitById.has(seat.unitId)) continue;
+      const named = seat.reportsToSeat !== null ? seatById.get(seat.reportsToSeat) : undefined;
+      let manager = named?.personId ? named : null;
+      let channel = seat.unitId;
+      for (let at: number | null = seat.unitId, steps = 0; !manager && at !== null && steps < 20; steps += 1) {
+        const lead = leadOf(at);
+        if (lead && lead.seatId !== seat.seatId) manager = lead;
+        else {
+          channel = at;
+          at = unitById.get(at)?.parentId ?? null;
+        }
+      }
+      if (manager?.module === "manager" && manager.personId !== null) add(manager.personId, manager.unitId === seat.unitId ? seat.unitId : channel);
+    }
   }
-  return opened
-    .map((one) => {
-      const head = door === "leads" ? headOf(one.personId) : null;
-      return {
-        login: one.logins.find((login): login is string => Boolean(login)) ?? one.email ?? "",
-        name: one.name,
-        // In the chart's order, as the Admin panel and the sales tracker read them.
-        boxes: [
-          ...new Set(
-            [...one.units]
-              .sort((a, b) => (place.get(a) ?? Number.MAX_SAFE_INTEGER) - (place.get(b) ?? Number.MAX_SAFE_INTEGER))
-              .map((unit) => unitName.get(unit))
-              .filter((name): name is string => Boolean(name)),
-          ),
-        ],
-        head: head?.name ?? null,
-        order: [
-          head ? (headPlace.get(head.id) ?? Number.MAX_SAFE_INTEGER) : 0,
-          Math.min(...one.units.map((unit) => place.get(unit) ?? Number.MAX_SAFE_INTEGER)),
-        ] as const,
-      };
-    })
-    .filter((one) => one.login)
-    .sort((a, b) => a.order[0] - b.order[0] || a.order[1] - b.order[1] || a.name.localeCompare(b.name))
+
+  const list: (Behind & { order: [number, number, number] })[] = [];
+  for (const [personId, unitIds] of boxes) {
+    const one = byPerson.get(personId);
+    if (!one) continue;
+    const mine = held.filter((seat) => seat.personId === personId && (door === "heads" ? seat.module === "manager" && seat.lead : true));
+    const login = mine.find((seat) => seat.login)?.login ?? one.email ?? "";
+    if (!login) continue;
+    const isHead = headBox.has(personId);
+    const head = door === "leads" ? (isHead ? personId : headOf(personId)) : null;
+    const inOrder = [...unitIds].sort((a, b) => placeOf(a) - placeOf(b));
+    list.push({
+      personId,
+      hash: one.hash,
+      login,
+      name: one.name,
+      // In the chart's order, as the Admin panel and the sales tracker read them.
+      boxes: [...new Set(inOrder.map((unitId) => unitById.get(unitId)?.name).filter((name): name is string => Boolean(name)))],
+      head: head !== null ? (byPerson.get(head)?.name ?? null) : null,
+      order: [
+        head !== null ? placeOf(headBox.get(head) ?? -1) : 0,
+        // At the Team leads door a head comes first among their own.
+        door === "leads" && isHead ? -1 : 0,
+        Math.min(...inOrder.map(placeOf)),
+      ],
+    });
+  }
+  return list
+    .sort((a, b) => a.order[0] - b.order[0] || a.order[1] - b.order[1] || a.order[2] - b.order[2] || a.name.localeCompare(b.name))
     .map(({ order: _order, ...one }) => one);
+}
+
+const shown = ({ personId: _id, hash: _hash, ...one }: Behind): DoorPerson => one;
+
+/** The door's people the password opens (their own password, each in turn, so a wrong one costs
+ *  what one sign-in does per person and no more at once). */
+export async function doorPeople(db: Database, door: DoorKey, password: string): Promise<DoorPerson[]> {
+  const opened: DoorPerson[] = [];
+  for (const one of await behind(db, door)) if (await passwordMatches(password, one.hash)) opened.push(shown(one));
+  return opened;
 }
