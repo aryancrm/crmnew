@@ -96,14 +96,14 @@ export function MyDayButton() {
         onClick={() => run("/api/hr/day/start")}
         disabled={action.busy}
         title={action.problem?.message ?? "Start your working day"}
-        className="hidden h-9 shrink-0 items-center gap-1.5 rounded-lg bg-brand px-3 text-xs font-semibold text-white hover:bg-brand-dark sm:inline-flex"
+        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-xs font-semibold text-white hover:bg-brand-dark sm:px-3"
       >
-        <LogIn size={14} aria-hidden="true" /> Start my day
+        <LogIn size={14} aria-hidden="true" /> Start<span className="hidden sm:inline"> my day</span>
       </button>
     );
 
   return (
-    <div ref={box} className="relative hidden shrink-0 sm:block">
+    <div ref={box} className="relative shrink-0">
       <button
         type="button"
         onClick={() => setOpen((now) => !now)}
@@ -118,13 +118,20 @@ export function MyDayButton() {
           aria-hidden="true"
           className={`size-2 rounded-full ${day.working ? "bg-white" : "bg-slate-400"}`}
         />
-        {day.working ? `In since ${clock(day.timeIn)}` : `Done · ${hours(day.workedMinutes)}`}
+        {day.working ? (
+          <>
+            <span className="hidden sm:inline">In since </span>
+            {clock(day.timeIn)}
+          </>
+        ) : (
+          `Done · ${hours(day.workedMinutes)}`
+        )}
       </button>
       {open && (
         <div
           role="dialog"
           aria-label="My day"
-          className="absolute right-0 z-40 mt-1 w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-lg"
+          className="absolute right-0 z-40 mt-1 w-72 max-w-[calc(100vw-1.5rem)] rounded-xl border border-slate-200 bg-white p-3 shadow-lg"
         >
           <div className="text-sm font-semibold text-slate-900">Today</div>
           <div className="mt-0.5 text-[11px] text-slate-500">

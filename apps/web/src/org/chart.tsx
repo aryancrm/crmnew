@@ -260,9 +260,13 @@ function Box({ node, hit, unfolded, onFold, open }: { node: Node; hit: boolean; 
               ? [
                   { label: "See their screens (read only)", icon: <Eye size={14} />, onClick: () => lookAs(holder.personId) },
                   {
-                    label: "Show their login",
+                    label: "Give a new password…",
                     icon: <KeyRound size={14} />,
-                    onClick: () => run(`/api/org/people/${holder.personId}/password`, (answer) => open({ kind: "login", name: holder.name, login: answer as OrgLogin })),
+                    onClick: () => {
+                      // The API makes a new password: their old one stops working at once.
+                      if (!window.confirm(`Give ${holder.name} a new password? Their old one stops working and they are signed out.`)) return;
+                      run(`/api/org/people/${holder.personId}/password`, (answer) => open({ kind: "login", name: holder.name, login: answer as OrgLogin }));
+                    },
                   },
                   { label: "Someone covers (leave)", onClick: () => open({ kind: "cover", seat }) },
                   { label: "No longer with us…", icon: <UserMinus size={14} />, danger: true, onClick: () => open({ kind: "leave", holder }) },

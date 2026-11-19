@@ -1080,7 +1080,7 @@ export async function invoiceDetail(db: Database, me: Me, id: number): Promise<I
   const [invoice] = await rows<InvoiceSql & Omit<InvoiceDetail["invoice"], keyof InvoiceRow>>(
     db,
     sql`select ${invoiceColumns}, i.vatable::int as vatable, i.vat::int as vat, i.exempt::int as exempt, i.zero_rated::int as "zeroRated",
-        o.payment_days::int as "paymentDays", rep.name as medrep, nullif(concat_ws(', ', c.address, c.city), '') as "customerAddress",
+        o.payment_days::int as "paymentDays", ${awaitingPaymentSql} as "awaitingCheck", rep.name as medrep, nullif(concat_ws(', ', c.address, c.city), '') as "customerAddress",
         c.tin as "customerTin", o.customer_po as "customerPo", o.delivery_address as "deliveryAddress",
         who.name as by, ${iso("i.at")} as at, i.cancelled_reason as "cancelledReason", o.delivery_fee::int as "deliveryFee",
         c.phone as "customerPhone", o.receiver, doc.name as doctor,
@@ -1132,7 +1132,9 @@ export async function invoiceDetail(db: Database, me: Me, id: number): Promise<I
       pay:
         acts &&
         invoice.status === "open" &&
-        !(invoice.terms === "cod" && !(invoice as { delivered?: boolean }).delivered),
+        !(invoice.terms === "cod" && !(invoice as { delivered?: boolean }).delivered) &&
+        // Paid in advance and not checked yet: Finance confirms it on the order's payment check.
+        !(invoice as { awaitingCheck?: boolean }).awaitingCheck,
       removePayment: acts && invoice.status !== "cancelled",
       refund: acts && invoice.status === "cancelled" && invoice.paid > invoice.refunded,
     },

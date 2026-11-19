@@ -76,6 +76,8 @@ export function RoadPicker({
   const details = useCaseDetails(data);
   const off = Boolean(locked) || !canChange;
   const seniorPwd = lead.road === "senior" || lead.road === "pwd";
+  // GL needs its agency first: the button opens the agency list, picking one saves the road.
+  const [choosingGl, setChoosingGl] = useState(false);
   const button = (active: boolean) =>
     `rounded-lg px-2 py-1 font-semibold whitespace-nowrap transition ${off ? "pointer-events-none" : "disabled:cursor-wait"} ${
       active
@@ -126,15 +128,15 @@ export function RoadPicker({
           type="button"
           disabled={details.busy || off}
           aria-pressed={lead.road === "gl"}
-          onClick={() => pick("gl")}
-          className={button(lead.road === "gl")}
+          onClick={() => (lead.agency ? pick("gl") : setChoosingGl(true))}
+          className={button(lead.road === "gl" || choosingGl)}
         >
           GL
         </button>
       </div>
       <div className="mt-1 flex h-8 items-center gap-1.5 px-1">
         {off && locked && <Lock aria-hidden="true" className="size-3.5 shrink-0 text-slate-500" />}
-        {lead.road === "gl" && !off ? (
+        {(lead.road === "gl" || choosingGl) && !off ? (
           <select
             aria-label="GL agency"
             value={lead.agency ?? ""}

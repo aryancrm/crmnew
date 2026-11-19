@@ -909,7 +909,9 @@ export async function leadCase(db: Database, me: Me, id: number): Promise<LeadCa
         Boolean(
           trail?.invoice && trail.invoice.balance > 0 && trail.invoice.state.word !== "Cancelled",
         ) &&
-        (row.orderTerms !== "cod" || row.orderStatus === "completed"),
+        (row.orderTerms !== "cod" || row.orderStatus === "completed") &&
+        // Paid in advance: Finance confirms that money on the order's payment check first.
+        !(row.orderTerms === "advance" && ["pending_approval", "finance_check", "ready_for_invoice"].includes(row.orderStatus ?? "")),
     },
   };
 }
@@ -1829,7 +1831,7 @@ export async function orderFromLead(
         );
         if (pap) {
           await tx.execute(
-            sql`insert into lead_event (lead_id, kind, message, by_person) values (${id}, 'status', ${`Order ${code?.code} placed: Management checks it, then Finance, then Dispatch.`}, ${me.id})`,
+            sql`insert into lead_event (lead_id, kind, message, by_person) values (${id}, 'status', ${`Order ${code?.code} placed: ${pap ? "the PAP head approves it" : "Management checks it"}, then Finance, then Dispatch.`}, ${me.id})`,
           );
           return;
         }

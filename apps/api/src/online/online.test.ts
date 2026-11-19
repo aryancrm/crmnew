@@ -192,7 +192,7 @@ describe("a regular enquiry", () => {
     expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(200);
     let order = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
     expect(order.order.status).toBe("finance_check");
-    expect((await lead("jane", id)).next).toBe("With Finance: record the advance payment received");
+    expect((await lead("jane", id)).next).toBe("With Finance: they confirm the advance payment (put the slip on the order)");
     expect((await post("marco", `/api/dispatch/orders/${orderId}/pack`, {})).status).toBe(409);
     // Finance sees the money and lets it go to Dispatch.
     const confirmed = await post("fiona", `/api/finance/orders/${orderId}/confirm-payment`, {

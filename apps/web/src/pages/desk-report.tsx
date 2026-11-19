@@ -95,7 +95,7 @@ export function DeskReportPage() {
                 <th className="px-3 py-2.5 text-right font-semibold">{doneWord}</th>
                 {desk === "management" && <th className="px-3 py-2.5 text-right font-semibold">Sent back</th>}
                 <th className="px-3 py-2.5 text-right font-semibold">Held</th>
-                <th className="px-3 py-2.5 text-right font-semibold">Rejected</th>
+                <th className="px-3 py-2.5 text-right font-semibold">Cancelled</th>
                 <th className="px-3 py-2.5 text-right font-semibold">Time per order</th>
                 <th className="px-3 py-2.5 text-right font-semibold">Late</th>
                 <th className="px-4 py-2.5 text-right font-semibold">Open now</th>

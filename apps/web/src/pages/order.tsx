@@ -2899,7 +2899,7 @@ function PaidStep({
     <StepPanel number={n ?? 6} title="Paid">
       {!invoice ? (
         <Fact shape="later">
-          <b>No invoice yet</b> · it is made once the order is checked
+          <b>No invoice yet</b> · it is made when Management approves
         </Fact>
       ) : (
         <>
@@ -3084,7 +3084,7 @@ function MoneyCard({ data }: { data: OrderDetail }) {
             </div>
           </>
         ) : (
-          <p className="mt-1 border-t border-slate-200 pt-1.5 text-[11.5px] text-slate-500">No invoice yet: Finance makes it after the approval.</p>
+          <p className="mt-1 border-t border-slate-200 pt-1.5 text-[11.5px] text-slate-500">No invoice yet: it is made when Management approves.</p>
         )}
       </dl>
     </section>

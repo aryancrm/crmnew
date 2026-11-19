@@ -65,6 +65,7 @@ export function Medicines() {
     return data.rows.filter((row) => {
       if (category && row.category !== category) return false;
       if (stock === "low" && row.status === "ok") return false;
+      if (stock === "out" && row.status !== "out") return false;
       if (stock === "promo" && !row.promo) return false;
       if (letter && !row.name.toUpperCase().startsWith(letter)) return false;
       const text = [
@@ -134,7 +135,7 @@ export function Medicines() {
           value={count(out)}
           sub={out ? "nothing sellable" : "none"}
           tone={out ? "bad" : undefined}
-          to="?stock=low"
+          to="?stock=out"
         />
         <Figure
           label="Promos running"
@@ -180,7 +181,7 @@ export function Medicines() {
             onClick={() => set("stock", "")}
             className="h-10 shrink-0 rounded-lg px-3 text-xs font-semibold text-emerald-700 ring-1 ring-slate-200 hover:bg-slate-50"
           >
-            {stock === "promo" ? "Promos only" : "Low and out only"} · Show all
+            {stock === "promo" ? "Promos only" : stock === "out" ? "Out of stock only" : "Low and out only"} · Show all
           </button>
         )}
       </div>

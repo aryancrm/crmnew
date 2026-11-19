@@ -45,6 +45,7 @@ import {
 import { type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useMe } from "../auth";
 import { type DispatchAsk, DispatchDialogs } from "../dispatch/parts";
 import { RecordPaymentDialog } from "../finance/parts";
 import { avatarTone, initials } from "../look";
@@ -136,6 +137,7 @@ function useCaseWrite(id: number) {
 
 export function LeadPage() {
   const id = Number(useParams().id);
+  const me = useMe().data;
   const [params, setParams] = useSearchParams();
   const query = useQuery({
     queryKey: ["leads", "case", id],
@@ -605,7 +607,8 @@ export function LeadPage() {
                     Close as lost
                   </Button>
                 )}
-                {lost && (
+                {/* Reopened by whoever works cases (the Online desk, the PAP officer, the Admin). */}
+                {lost && (me?.role === "online" || me?.role === "admin" || (data.lead.desk === "pap" && me?.role === "medrep")) && (
                   <Button
                     small
                     variant="primary"
@@ -1213,7 +1216,8 @@ function QuotationOut({ data }: { data: LeadCase }) {
                 Send on Messenger
               </Button>
             )}
-            {(data.lead.chatChannel === "email" || (!data.lead.chatChannel && data.lead.email)) && (
+            {/* E-mail goes out from the Online desk's mailbox only. */}
+            {data.lead.desk !== "pap" && (data.lead.chatChannel === "email" || (!data.lead.chatChannel && data.lead.email)) && (
               <Button small variant="primary" disabled={write.busy} onClick={() => send("email")}>
                 Email the PDF
               </Button>

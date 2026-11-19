@@ -201,7 +201,9 @@ export function CollectPage() {
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-right">
-                    {row.invoiceId > 0 && row.orderId && canMark ? (
+                    {row.invoiceId > 0 && row.orderId && canMark && stateOf(row) === "waiting" && row.terms === "COD" ? (
+                      <span className="text-[11px] text-slate-400">After delivery</span>
+                    ) : row.invoiceId > 0 && row.orderId && canMark ? (
                       <Button small variant={stateOf(row) === "waiting" ? "plain" : "primary"} onClick={() => setPaying(row)}>
                         Mark paid
                       </Button>

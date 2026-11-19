@@ -368,7 +368,7 @@ const financeApp: Space = {
         { to: "/finance", label: "Orders to check", icon: ClipboardCheck, badge: "finance" },
         { to: "/finance/prepaid", label: "Prepaid orders", icon: CreditCard },
         { to: "/collect", label: "Due payments", icon: Wallet },
-        { to: "/purchases/bills", label: "Supplier bills to pay", icon: Receipt },
+        { to: "/purchases/bills?view=open", label: "Supplier bills to pay", icon: Receipt },
         { to: "/desk/team?desk=finance", label: "Finance team figures", icon: BarChart3 },
         ...moneyLinks,
       ],
@@ -1280,7 +1280,7 @@ function ownDesk(me: Me): Space {
               { to: "/collect", label: "Due payments", icon: Wallet, short: "Due", badge: "latePayments" },
               // Money going out, every day: refunds owed to customers and suppliers' bills to pay.
               { to: "/refunds", label: "Refunds owed", icon: Undo2, badge: "refunds", short: "Refunds" },
-              { to: "/purchases/bills", label: "Supplier bills to pay", icon: Receipt, short: "Bills" },
+              { to: "/purchases/bills?view=open", label: "Supplier bills to pay", icon: Receipt, short: "Bills" },
               { to: "/desk/team", label: "Team figures", icon: BarChart3, short: "Team" },
               folder("Money", Banknote, moneyLinks.filter((link) => link.to !== "/refunds"), "Money"),
               folder("Books", Landmark, booksLinks, "Books"),

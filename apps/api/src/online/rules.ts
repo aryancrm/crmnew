@@ -220,7 +220,7 @@ export function nextOf(f: CaseFacts, step: string): string {
       // With Finance (every case's order goes there after Management, 18 Nov). Paid in advance, the
       // agent records the money that came in; Finance checks it and lets the order go to Dispatch.
       if (order.status === "finance_check" || order.status === "ready_for_invoice")
-        return order.advance && !order.paid ? "With Finance: record the advance payment received" : "With Finance for a check";
+        return order.advance && !order.paid ? "With Finance: they confirm the advance payment (put the slip on the order)" : "With Finance for a check";
       // Paid in advance and gone past Finance without the money: the agent records it.
       if (order.advance && !order.paid) return "Record the advance payment received";
       if (order.status === "shipped")
