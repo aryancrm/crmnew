@@ -1,6 +1,6 @@
 // The top of a Hospital CHC's Home, as the Hospital CHC Playbook runs the day: today's pulse
-// (four numbers with their light), "go here first" (money first: the oldest money owed, then the
-// biggest hospitals due to reorder, each with its button), and tonight's 7 PM huddle.
+// (four numbers with their light), "go here first" (the biggest hospitals due to reorder, then a
+// few whose money is long overdue, each with its button), and tonight's 7 PM huddle.
 
 import type { Collections, Huddle, Pulse, Reorders } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
@@ -46,44 +46,46 @@ export function TodaysPulse() {
 
 type Stop = { key: string; kind: "collect" | "reorder"; customerId: number; name: string; amount: number; why: string; phone: string | null; orderId?: number };
 
-/** Money first: owed 60 days and more (oldest first), then the biggest hospitals due or late to
- *  reorder. At most six stops. */
+/** The hospitals due or late to reorder first, the biggest buyers first (Aryan, 19 Nov: "why do
+ *  the ones who owe money come first?"), then up to two whose money is 60 days and more overdue
+ *  (they owe us: collect on the visit). At most six stops. */
 export function GoHereFirst() {
   const owed = useQuery({ queryKey: ["my", "collections"], queryFn: () => api<Collections>("/api/my/collections") });
   const due = useQuery({ queryKey: ["reorders", "due", null, null], queryFn: () => api<Reorders>("/api/my/reorders?state=due") });
   const late = useQuery({ queryKey: ["reorders", "late", null, null], queryFn: () => api<Reorders>("/api/my/reorders?state=late") });
   if (!owed.data || !due.data || !late.data) return null;
-  const stops: Stop[] = [
-    ...owed.data.rows
-      .filter((row) => row.flag !== "ok")
-      .map((row): Stop => ({
-        key: `c${row.customerId}`,
-        kind: "collect",
-        customerId: row.customerId,
-        name: row.customer,
-        amount: row.owed,
-        why: `${shortPeso(row.owed)} owed · oldest invoice ${row.age} days`,
-        phone: row.phone,
-        orderId: row.oldestOrderId ?? undefined,
-      })),
-    ...[...late.data.rows, ...due.data.rows].map((row): Stop => ({
+  const reorders: Stop[] = [...due.data.rows, ...late.data.rows]
+    .sort((a, b) => b.lastTotal - a.lastTotal)
+    .map((row): Stop => ({
       key: `r${row.customerId}`,
       kind: "reorder",
       customerId: row.customerId,
       name: row.name,
       amount: row.lastTotal,
-      why: `Orders every ${row.usual} days · last ${row.since} days ago · last order ${shortPeso(row.lastTotal)}`,
+      why: `Due to reorder: orders every ${row.usual} days · last ${row.since} days ago · last order ${shortPeso(row.lastTotal)}`,
       phone: row.phone,
-    })),
-  ].slice(0, 6);
+    }));
+  const collect: Stop[] = owed.data.rows
+    .filter((row) => row.flag !== "ok" && !reorders.some((one) => one.customerId === row.customerId))
+    .map((row): Stop => ({
+      key: `c${row.customerId}`,
+      kind: "collect",
+      customerId: row.customerId,
+      name: row.customer,
+      amount: row.owed,
+      why: `They owe us ${shortPeso(row.owed)} · oldest invoice ${row.age} days: collect on the visit`,
+      phone: row.phone,
+      orderId: row.oldestOrderId ?? undefined,
+    }));
+  const stops: Stop[] = [...reorders.slice(0, collect.length ? 4 : 6), ...collect.slice(0, 2)].slice(0, 6);
   return (
     <section className="rounded-2xl border border-slate-200/90 bg-white shadow-2xs">
       <header className="flex items-baseline justify-between gap-2 border-b border-slate-100 px-4 py-3">
         <h3 className="text-sm font-bold text-slate-900">Go here first</h3>
-        <span className="text-[11px] text-slate-500">Money first: owed 60 days and more, then hospitals due to reorder</span>
+        <span className="text-[11px] text-slate-500">Hospitals due to reorder first; then money owed to us 60 days and more</span>
       </header>
       {stops.length === 0 ? (
-        <p className="px-4 py-4 text-[13px] text-slate-500">Nothing owed past 60 days and no hospital due to reorder. Plan new hospitals.</p>
+        <p className="px-4 py-4 text-[13px] text-slate-500">No hospital due to reorder and nothing owed past 60 days. Plan new hospitals.</p>
       ) : (
         <ul className="divide-y divide-slate-100">
           {stops.map((stop, n) => (
@@ -92,13 +94,15 @@ export function GoHereFirst() {
               <span className={`grid size-8 shrink-0 place-items-center rounded-lg ${stop.kind === "collect" ? "bg-amber-50 text-amber-700" : "bg-sky-50 text-sky-700"}`}>
                 {stop.kind === "collect" ? <HandCoins className="size-4" /> : <PhoneCall className="size-4" />}
               </span>
-              <span className="min-w-0 flex-1">
+              {/* On a phone the name keeps the row and the buttons go under it (Aryan, 19 Nov: the
+                  MedReps work on their phones). */}
+              <span className="min-w-0 flex-1 basis-[55%] sm:basis-0">
                 <Link to={`/customers/${stop.customerId}`} className="block truncate text-[13px] font-semibold text-slate-900 hover:underline">
                   {stop.name}
                 </Link>
                 <span className="block truncate text-[11.5px] text-slate-500">{stop.why}</span>
               </span>
-              <span className="flex shrink-0 gap-1.5">
+              <span className="ml-auto flex shrink-0 gap-1.5">
                 {stop.phone && stop.phone.replace(/\D/g, "").length >= 7 && (
                   <a
                     href={`tel:${stop.phone.replace(/\s/g, "")}`}

@@ -125,6 +125,8 @@ export function CompanyGlance() {
         ))}
       </div>
 
+      <Attendance data={data.attendance} />
+
       <div className="grid gap-3 lg:grid-cols-3">
         {/* The month's sales, day by day. */}
         <div className={`${CARD} lg:col-span-2`}>
@@ -222,5 +224,141 @@ export function CompanyGlance() {
         </div>
       </div>
     </section>
+  );
+}
+
+const IN = { onTime: "#1f9d55", late: "#f59e0b", notIn: "#e11d48", onLeave: "#0ea5e9" } as const;
+const IN_LABEL = { onTime: "On time", late: "Late", notIn: "Not in", onLeave: "On leave" } as const;
+const KEYS = ["onTime", "late", "notIn", "onLeave"] as const;
+const weekday = (day: string) => new Date(`${day}T00:00:00Z`).toLocaleDateString("en-PH", { weekday: "short", timeZone: "UTC" });
+
+/** Who came in today and when (Aryan, 19 Nov: "who came late, who came early, colourful"): the
+ *  company's four counts, each department as one coloured bar, the first in and the late ones,
+ *  the desks' people started now, and this week day by day. */
+function Attendance({ data }: { data: Data["attendance"] }) {
+  const all = data.onTime + data.late + data.notIn + data.onLeave;
+  return (
+    <div className="grid gap-3 lg:grid-cols-3">
+      <div className={`${CARD} lg:col-span-2`}>
+        <Head title="Who's in today" to="/hr/attendance" sub="Who's working" />
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {KEYS.map((key) => (
+            <div key={key} className="rounded-xl px-3 py-2.5 text-white" style={{ background: IN[key] }}>
+              <div className="text-[11px] font-semibold opacity-90">{IN_LABEL[key]}</div>
+              <div className="text-2xl font-bold tabular-nums">{data[key]}</div>
+              <div className="text-[10.5px] opacity-80">{all ? Math.round((data[key] / all) * 100) : 0}% of {all}</div>
+            </div>
+          ))}
+        </div>
+        <ul className="mt-4 flex flex-col gap-2">
+          {data.departments.map((one) => {
+            const total = KEYS.reduce((sum, key) => sum + one[key], 0) || 1;
+            return (
+              <li key={one.name} className="text-[12px]">
+                <div className="mb-0.5 flex justify-between gap-2">
+                  <span className="truncate text-slate-700">{one.name}</span>
+                  <span className="shrink-0 text-slate-500 tabular-nums">
+                    <b className="text-emerald-700">{one.onTime}</b> on time · <b className="text-amber-600">{one.late}</b> late ·{" "}
+                    <b className="text-rose-600">{one.notIn}</b> not in{one.onLeave ? ` · ${one.onLeave} on leave` : ""}
+                  </span>
+                </div>
+                <div className="flex h-2.5 overflow-hidden rounded-full bg-slate-100">
+                  {KEYS.map((key) =>
+                    one[key] ? <div key={key} title={`${IN_LABEL[key]}: ${one[key]}`} style={{ width: `${(one[key] / total) * 100}%`, background: IN[key] }} /> : null,
+                  )}
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+      <div className="flex min-w-0 flex-col gap-3">
+        <div className={CARD}>
+          <Head title="First in today" />
+          {data.first.length ? (
+            <ul className="flex flex-col gap-1 text-[12.5px]">
+              {data.first.map((one) => (
+                <li key={one.name} className="flex justify-between gap-2">
+                  <span className="truncate text-slate-700">
+                    {one.name}
+                    {one.title ? <span className="text-slate-400"> · {one.title}</span> : null}
+                  </span>
+                  <span className="shrink-0 font-semibold text-emerald-700 tabular-nums">{one.at}</span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-[12.5px] text-slate-400">Nobody in yet.</p>
+          )}
+          <div className="mt-3 border-t border-slate-100 pt-2.5">
+            <div className="mb-1 text-[12px] font-semibold text-slate-900">Came in late</div>
+            {data.lateList.length ? (
+              <ul className="flex flex-col gap-1 text-[12.5px]">
+                {data.lateList.map((one) => (
+                  <li key={one.name} className="flex justify-between gap-2">
+                    <span className="truncate text-slate-700">
+                      {one.name}
+                      {one.title ? <span className="text-slate-400"> · {one.title}</span> : null}
+                    </span>
+                    <span className="shrink-0 font-semibold text-amber-600 tabular-nums">
+                      {one.at} · {one.minutes} min
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-[12.5px] text-slate-400">Nobody late.</p>
+            )}
+          </div>
+        </div>
+        <div className={CARD}>
+          <Head title="At the desks now" />
+          <ul className="flex flex-col gap-2 text-[12.5px]">
+            {data.desks.map((desk) => (
+              <li key={desk.desk}>
+                <div className="flex justify-between">
+                  <span className="font-semibold text-slate-800">{desk.desk}</span>
+                  <span className="text-slate-500 tabular-nums">
+                    {desk.people.length} of {desk.seats} started
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-wrap gap-1">
+                  {desk.people.length ? (
+                    desk.people.map((one) => (
+                      <span
+                        key={one.name}
+                        className={`rounded-full px-2 py-0.5 text-[11px] font-semibold text-white ${one.late ? "bg-amber-500" : "bg-emerald-600"}`}
+                      >
+                        {one.name.split(" ")[0]} · {one.since}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="text-[11.5px] text-rose-600">Nobody started</span>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className={CARD}>
+          <Head title="This week" sub="in on time · late · not in" />
+          <div className="flex h-24 items-end gap-2">
+            {data.week.map((one) => {
+              const total = one.onTime + one.late + one.notIn || 1;
+              return (
+                <div key={one.day} className="flex h-full flex-1 flex-col items-center gap-1" title={`${one.day}: ${one.onTime} on time, ${one.late} late, ${one.notIn} not in`}>
+                  <div className="flex w-full flex-1 flex-col-reverse overflow-hidden rounded-md bg-slate-100">
+                    <div style={{ height: `${(one.onTime / total) * 100}%`, background: IN.onTime }} />
+                    <div style={{ height: `${(one.late / total) * 100}%`, background: IN.late }} />
+                    <div style={{ height: `${(one.notIn / total) * 100}%`, background: IN.notIn }} />
+                  </div>
+                  <span className="text-[10.5px] text-slate-500">{weekday(one.day)}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }

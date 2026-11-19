@@ -325,7 +325,7 @@ export function Shell() {
                       >
                         <Plus size={isActive ? 18 : 28} strokeWidth={2.4} aria-hidden="true" />
                       </span>
-                      <span className="max-w-full truncate px-1">{space.cta?.label}</span>
+                      <span className="max-w-full truncate px-1">{space.cta?.short ?? space.cta?.label}</span>
                     </>
                   )}
                 </NavLink>
@@ -376,6 +376,10 @@ const OWN_BACK = [
   /^\/orders\/\d+/,
   /^\/leads\/\d+/,
   /^\/messages\/\d+/,
+  // Edge-to-edge pages with their own title and tabs (the trail above them was covered: Aryan,
+  // 19 Nov, "Messages is cut off at the top on every screen").
+  /^\/messages$/,
+  /^\/company$/,
 ];
 
 /** "Orders › All orders": where the open page sits in the sidebar (the closest link). */

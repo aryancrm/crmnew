@@ -1926,6 +1926,23 @@ export type CompanyGlance = {
   orders: { status: string; count: number }[];
   stock: { name: string; value: number; pieces: number }[];
   kinds: { kind: string; count: number }[];
+  /** Who came in today and when (Aryan, 19 Nov: "who came late, who came early, in colour"). */
+  attendance: {
+    /** A working day, so far: in on time, in late, not in yet (no leave), on leave. */
+    onTime: number;
+    late: number;
+    notIn: number;
+    onLeave: number;
+    /** The same, department by department (the chart's top boxes). */
+    departments: { name: string; onTime: number; late: number; notIn: number; onLeave: number }[];
+    /** The first in today, and the ones in late (minutes past their start and grace). */
+    first: { name: string; title: string | null; at: string }[];
+    lateList: { name: string; title: string | null; at: string; minutes: number }[];
+    /** Management's, Finance's and Dispatch's people started at their desk now, and since when. */
+    desks: { desk: string; seats: number; people: { name: string; since: string; late: boolean }[] }[];
+    /** This week's working days so far: in on time, late, not in. */
+    week: { day: string; onTime: number; late: number; notIn: number }[];
+  };
 };
 
 export type CeoHome = MonthFacts & {

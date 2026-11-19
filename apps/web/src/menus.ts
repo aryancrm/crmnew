@@ -147,7 +147,7 @@ export type Space = {
   groups: MenuGroup[];
   /** The button on top of the menu, as the hub has "Create New Order": every seller's the same
    *  (Aryan, 19 Nov: one common way to start an order, whatever the seat). */
-  cta?: { to: string; label: string };
+  cta?: { to: string; label: string; short?: string };
   /** The seat's own second action under it (an Rx CHC's Log a call, Bidding's Record a tender). */
   cta2?: { to: string; label: string };
   /** The way back to the person's own desk, when this is an app they stepped into. */
@@ -180,7 +180,7 @@ const stockLink: MenuItem = {
   icon: Pill,
   short: "Stock",
 };
-const newOrder = { to: "/orders/new", label: "Create New Order" };
+const newOrder = { to: "/orders/new", label: "Create New Order", short: "New order" };
 
 /** Management's order screens, in the hub's own order. */
 const orderLinks: MenuItem[] = [
