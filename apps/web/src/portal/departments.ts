@@ -30,6 +30,37 @@ export const DEPARTMENTS: Record<string, DepartmentInfo> = {
       "Score, targets and sales performance",
     ],
   },
+  // The sales line's two doors (19 Nov): the company's password, then each name.
+  heads: {
+    about: "The head of each sales business, as the sales tracker has it: their channels, team leads and people.",
+    flow: [
+      { step: "The month's target, channel by channel", who: "Head" },
+      { step: "Each team lead's team, one switch away", who: "Head" },
+      { step: "Orders, visits and collections", who: "Their people" },
+      { step: "Approved, checked, shipped", who: "Management · Finance · Dispatch" },
+    ],
+    handles: [
+      "Each channel and team against its target",
+      "The whole team: who is working, who is behind",
+      "Their people's orders and collections",
+      "Targets, scorecards, leave and forms",
+    ],
+  },
+  leads: {
+    about: "Each team's lead, under their head: their people's orders, visits and figures.",
+    flow: [
+      { step: "Plan the team's visits", who: "Team lead" },
+      { step: "The team's orders, and asks on them", who: "Team lead" },
+      { step: "Approved, checked, shipped", who: "Management · Finance · Dispatch" },
+      { step: "Collect and follow up", who: "Team" },
+    ],
+    handles: [
+      "The team's orders and visit plans",
+      "Who is working today",
+      "Each person's score and target",
+      "Collections, leave and forms",
+    ],
+  },
   management: {
     about: "Approves every order before it moves on, and checks new customers.",
     flow: [
@@ -193,6 +224,8 @@ export const SEAT_DOES: Record<string, { name: string; does: string }> = {
 /** The picture for each step of a department's flow, in the same order (see the page's ICONS). */
 export const FLOW_ICONS: Record<string, string[]> = {
   sales: ["calendar", "map", "cart", "check", "wallet"],
+  heads: ["chart", "users", "cart", "check"],
+  leads: ["calendar", "cart", "check", "wallet"],
   management: ["inbox", "search", "check", "file"],
   finance: ["inbox", "check", "truck", "wallet", "chart"],
   books: ["file", "card", "bank", "book", "chart"],

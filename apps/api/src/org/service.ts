@@ -14,7 +14,7 @@ import { addDays, todayManila } from "../inventory/rules";
 import { clean, day, iso, type Runner } from "../inventory/service";
 import { sendMessage } from "../messages/service";
 import { notify } from "../notify/service";
-import { DIVISIONS } from "../orders/divisions";
+import { divisionOf } from "../orders/divisions";
 import { isRole, ROLE_LABEL, ROLES, type Role } from "../people/roles";
 import type {
   Me,
@@ -1016,8 +1016,9 @@ export async function addChannel(
       "code",
     );
   if (!name) throw new Refusal(400, "invalid", "Name the channel.", "name");
-  const division = clean(input.division);
-  if (division && !(DIVISIONS as readonly string[]).includes(division))
+  const typedDivision = clean(input.division);
+  const division = divisionOf(typedDivision);
+  if (typedDivision && !division)
     throw new Refusal(400, "invalid", "Pick the Division from the list.", "division");
   return change(db, async (tx) => {
     const [taken] = await rows<{ id: number }>(
@@ -1057,8 +1058,9 @@ export async function updateChannel(
   input: { name?: string; division?: string | null; active?: boolean },
 ): Promise<void> {
   allow(me, ORG_CHANGE_ROLES, "change channels");
-  const division = input.division === undefined ? undefined : clean(input.division);
-  if (division && !(DIVISIONS as readonly string[]).includes(division))
+  const typedDivision = input.division === undefined ? undefined : clean(input.division);
+  const division = typedDivision === undefined ? undefined : divisionOf(typedDivision);
+  if (typedDivision && !division)
     throw new Refusal(400, "invalid", "Pick the Division from the list.", "division");
   await change(db, async (tx) => {
     const [channel] = await rows<{ id: number; name: string }>(

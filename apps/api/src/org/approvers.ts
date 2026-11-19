@@ -5,7 +5,7 @@
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
-import { DIVISIONS } from "../orders/divisions";
+import { DIVISIONS, divisionOf } from "../orders/divisions";
 import type { Approvers, Me } from "../types";
 
 const SETTERS = ["ceo", "admin"] as const;
@@ -26,11 +26,13 @@ export async function setApproves(
   db: Database,
   me: Me,
   personId: number,
-  approves: string[] | null,
+  typed: string[] | null,
 ): Promise<void> {
   allow(me, [...SETTERS], "set who approves what");
-  if (approves && approves.some((one) => !(DIVISIONS as readonly string[]).includes(one)))
+  if (typed && typed.some((one) => !divisionOf(one)))
     throw new Refusal(400, "invalid", "Pick the divisions from the list.", "approves");
+  // Each as the tracker's channel, once (a hub word from a page open from before is its channel).
+  const approves = typed && [...new Set(typed.map((one) => divisionOf(one) as string))];
   const changed = await rows(
     db,
     sql`update person set approves = ${

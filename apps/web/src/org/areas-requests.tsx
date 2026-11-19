@@ -11,6 +11,9 @@ import { api } from "../api";
 import { Button, CARD, Dialog, PageState, Problem, useAction } from "../ui";
 import { FIELD, LoginCard } from "./dialogs";
 
+/** The first word of a new area's name by its channel, as Zoho's salespeople are named. */
+const AREA_PREFIX: Record<string, string> = { HOSP: "HOS", ONLINE: "B2C", TS: "TeleSales", PAP: "MD Telesales" };
+
 const LABEL = "text-xs font-semibold text-slate-600";
 const cityList = (text: string) =>
   text
@@ -29,10 +32,9 @@ export function AreaDialog({
 }) {
   const queries = useQueryClient();
   const action = useAction();
-  // Areas are named like the orders' sub-division: "HOS | Pasay".
-  const [name, setName] = useState(
-    area?.name ?? `${channel.division ?? (channel.code === "HOSP" ? "HOS" : channel.code)} | `,
-  );
+  // Areas are named as Zoho names the salespeople ("HOS | Pasay", "B2C | …"), which ties their
+  // Zoho history to them: the channel's code, or the hub's word for it.
+  const [name, setName] = useState(area?.name ?? `${AREA_PREFIX[channel.code] ?? channel.code} | `);
   const [cities, setCities] = useState(area?.cities.join(", ") ?? "");
   async function submit(event: FormEvent) {
     event.preventDefault();

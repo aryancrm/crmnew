@@ -7,6 +7,7 @@
 import {
   DIVISION_BUYERS,
   DIVISIONS,
+  divisionOf,
   divisionRule,
   isPatientType,
   ORDER_SOURCES,
@@ -461,15 +462,17 @@ export function OrderNew({
   // and the fields follow"); it still counts for its MedRep. Management and the Admin, ordering for
   // nobody in particular, pick one.
   const anyDivision = me ? ["management", "admin", "ceo"].includes(me.role) && !forRep : false;
-  const ownDivisions = forRep
-    ? forRep.divisions
-    : (me?.divisions ?? (me?.channel?.division ? [me.channel.division] : []));
-  const divisionChoices: readonly string[] = DIVISIONS;
-  // Their own first, as chips; every other Division a pick away.
+  // The Divisions are the sales tracker's eight channels (Aryan, 19 Nov); a hub word (an older
+  // draft's) is read as its channel.
+  const ownDivisions = (
+    forRep ? forRep.divisions : (me?.divisions ?? (me?.channel?.division ? [me.channel.division] : []))
+  )
+    .map(divisionOf)
+    .filter((one): one is string => Boolean(one));
+  // Their own marked; every channel one press away.
   const ownChips: readonly string[] = anyDivision ? [] : ownDivisions;
   const ownDivision = ownDivisions[0] ?? "";
-  const pickedDivision =
-    division && divisionChoices.includes(division) ? division : divisionChoices.length === 1 ? (divisionChoices[0] ?? "") : (division ?? ownDivision);
+  const pickedDivision = divisionOf(division) ?? ownDivision;
   const pickedSubDivision =
     subDivision ??
     (pickedDivision
@@ -483,7 +486,7 @@ export function OrderNew({
     rule?.sub ??
     (rule?.subOptions ? (rule.subOptions.includes(pickedSubDivision) ? pickedSubDivision : "") : pickedSubDivision);
   const shownHq = headquarter ?? rule?.hq ?? "";
-  // A prescription Division's order (B2C, STC, URO, B&B) carries the prescription, or says why.
+  // A prescription Division's order (RX Business, MD Telesales) carries the prescription, or says why.
   const rxDivision = RX_DIVISIONS.includes(pickedDivision);
   /** Another Division (or type) picked: its own Sub-division and Headquarter, as the hub does. */
   const divisionPicked = (name: string) => {
@@ -1137,48 +1140,42 @@ export function OrderNew({
             )}
           </div>
         </div>
-        {/* The order's Division: their own first, any other a pick away (19 Nov, evening); the
-            sub-division, the order types, the customer list and the papers follow it. */}
+        {/* The order's Division: the sales tracker's eight channels (Aryan, 19 Nov: "we have 8
+            channels"), their own marked, any other one press away; the sub-division, the order
+            types, the customer list and the papers follow it. */}
         <div className="flex flex-col gap-1.5">
           <Label text="Division" needed />
           <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Division">
-            {[...ownChips, ...(pickedDivision && !ownChips.includes(pickedDivision) ? [pickedDivision] : [])].map(
-              (name) => {
-                const on = pickedDivision === name;
-                return (
-                  <button
-                    key={name}
-                    type="button"
-                    role="radio"
-                    aria-checked={on}
-                    disabled={Boolean(fixId)}
-                    onClick={() => divisionPicked(name)}
-                    className={`inline-flex h-9 items-center rounded-xl border px-3 text-[13px] font-semibold transition ${
-                      on
-                        ? "border-brand bg-brand text-white shadow-2xs"
-                        : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
-                    } disabled:cursor-not-allowed disabled:opacity-70`}
-                  >
-                    {name}
-                  </button>
-                );
-              },
-            )}
-            {!fixId && (
-              <select
-                aria-label={ownChips.length ? "Another Division" : "Division"}
-                value={pickedDivision && !ownChips.includes(pickedDivision) ? pickedDivision : ""}
-                onChange={(event) => divisionPicked(event.target.value || ownDivision)}
-                className="h-9 min-w-44 rounded-xl border border-slate-300 bg-white px-3 text-[13px] text-slate-700 focus:border-brand focus:outline-none"
-              >
-                <option value="">{ownChips.length ? "Another Division…" : "Pick the Division…"}</option>
-                {DIVISIONS.filter((name) => !ownChips.includes(name)).map((name) => (
-                  <option key={name} value={name}>
-                    {name}
-                  </option>
-                ))}
-              </select>
-            )}
+            {DIVISIONS.map((name) => {
+              const on = pickedDivision === name;
+              const own = ownChips.includes(name);
+              return (
+                <button
+                  key={name}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  disabled={Boolean(fixId)}
+                  onClick={() => divisionPicked(name)}
+                  className={`inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-[13px] font-semibold transition ${
+                    on
+                      ? "border-brand bg-brand text-white shadow-2xs"
+                      : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                  } disabled:cursor-not-allowed disabled:opacity-70`}
+                >
+                  {name}
+                  {own && (
+                    <span
+                      className={`rounded-md px-1 text-[10px] font-semibold tracking-wide uppercase ${
+                        on ? "bg-white/20 text-white" : "bg-emerald-50 text-emerald-700"
+                      }`}
+                    >
+                      {forRep ? "Theirs" : "Yours"}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
           {pickedDivision && ownChips.length > 0 && (
             <span className={HELP}>

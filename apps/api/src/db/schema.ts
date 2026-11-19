@@ -12,7 +12,7 @@ export const channel = pgTable("channel", {
   code: text("code").notNull(),
   name: text("name").notNull(),
   sort: integer("sort").notNull().default(0),
-  /** The Division its orders carry ("HOS"), set in the Admin panel. */
+  /** The Division its orders carry (the sales tracker's channel, "HOSP"), set in the Admin panel. */
   division: text("division"),
   /** Out of use once nobody works in it: kept for its history, left out of the lists. */
   active: boolean("active").notNull().default(true),

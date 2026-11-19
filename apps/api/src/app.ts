@@ -10,6 +10,7 @@ import { type Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { cors } from "hono/cors";
 import { z } from "zod";
+import { DOORS, doorPeople } from "./auth/doors";
 import { hashPassword, passwordMatches, passwordProblem } from "./auth/password";
 import {
   BACK_COOKIE,
@@ -256,6 +257,38 @@ export function createApp(db: Database, options: AppOptions) {
     );
     const [found] = seat ? await db.select().from(person).where(eq(person.id, seat.personId)).limit(1) : [];
     return signInAs(c, found, input.password, new Refusal(401, "wrong_login", "Wrong password."), input.desk);
+  });
+
+  // The sales line's doors (Aryan, 19 Nov: "open Heads, one password, all the heads come; press one
+  // and their page opens"): the company's password once, then the heads or the team leads by name;
+  // a press signs that person in with their own login (/api/auth/login, their seat's ID and the
+  // password). Wrong passwords close the door for a while, as a person's own login is locked.
+  const doorTries = new Map<string, { wrong: number; until: number }>();
+  app.post("/api/auth/door", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        door: z.enum(DOORS, { error: "Pick Heads or Team leads." }),
+        password: z.string().min(1, "Type the password."),
+      }),
+    );
+    const key = `${input.door}:${c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? ""}`;
+    const tries = doorTries.get(key);
+    if (tries && tries.until > Date.now()) {
+      const minutes = Math.ceil((tries.until - Date.now()) / 60000);
+      throw new Refusal(429, "locked", `Too many wrong passwords. Try again in ${minutes} minutes.`);
+    }
+    const people = await doorPeople(db, input.door, input.password);
+    if (!people.length) {
+      const wrong = (tries?.wrong ?? 0) + 1;
+      doorTries.set(
+        key,
+        wrong >= MAX_WRONG ? { wrong: 0, until: Date.now() + LOCK_MINUTES * 60000 } : { wrong, until: 0 },
+      );
+      throw new Refusal(401, "wrong_login", "Wrong password.", "password");
+    }
+    doorTries.delete(key);
+    return c.json({ door: input.door, people });
   });
 
   app.post("/api/auth/login", async (c) => {

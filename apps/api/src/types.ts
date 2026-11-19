@@ -81,6 +81,20 @@ export type PortalDepartment = {
   at: string;
 };
 
+/** The sign-in page's Heads or Team leads door, opened with the company's password (Aryan, 19 Nov):
+ *  its people by name, the chart's order; a press signs one in with their own login ID. */
+export type DoorList = {
+  door: "heads" | "leads";
+  people: {
+    login: string;
+    name: string;
+    /** The boxes of the chart they sit in, in the chart's order. */
+    boxes: string[];
+    /** A team lead's head; null at the heads' door. */
+    head: string | null;
+  }[];
+};
+
 export type Me = {
   id: number;
   name: string;

@@ -55,10 +55,10 @@ describe("the Admin panel's channels", () => {
   it("knows each channel's Division", async () => {
     const channels = (await tree()).channels;
     expect(channels.find((one) => one.code === "HOSP")).toMatchObject({
-      division: "HOS",
+      division: "HOSP",
       active: true,
     });
-    expect(channels.find((one) => one.code === "ONLINE")?.division).toBe("B2C");
+    expect(channels.find((one) => one.code === "ONLINE")?.division).toBe("MD Telesales");
   });
 
   it("keeps the Patient Assistance Program a channel of its own, and stands a box alone when moved", async () => {
@@ -101,6 +101,7 @@ describe("the Admin panel's channels", () => {
     expect(badDivision.status).toBe(400);
     expect(await fieldOf(badDivision)).toBe("division");
 
+    // The hub's word for it (URO) is read as the sales tracker's channel it is part of.
     const made = await send("admin", "/api/org/channels", {
       code: "uro",
       name: "Uro & Onco Care",
@@ -116,7 +117,7 @@ describe("the Admin panel's channels", () => {
     let now = await tree();
     expect(now.channels.find((one) => one.id === channelId)).toMatchObject({
       code: "URO",
-      division: "URO",
+      division: "RX Business",
       active: true,
     });
     const box = now.units.find((unit) => unit.id === unitId);
@@ -176,7 +177,7 @@ describe("the Admin panel's channels", () => {
     expect(placed.status, await placed.clone().text()).toBe(200);
     const orderId = ((await placed.json()) as { id: number }).id;
     const detail = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
-    expect(detail.order.division).toBe("URO");
+    expect(detail.order.division).toBe("RX Business");
 
     // The CEO's channels list it with every other.
     const home = await read<CeoHome>("naresh", "/api/ceo/home");
@@ -188,7 +189,7 @@ describe("the Admin panel's channels", () => {
         await send(
           "admin",
           `/api/org/channels/${channelId}`,
-          { name: "Uro and Onco Care", division: "URO" },
+          { name: "Uro and Onco Care", division: "RX Business" },
           "PATCH",
         )
       ).status,
@@ -204,7 +205,7 @@ describe("the Admin panel's channels", () => {
     const made = await send("admin", "/api/org/channels", {
       code: "STC",
       name: "Solid Tumor Care",
-      division: "STC",
+      division: "RX Business",
     });
     expect(made.status).toBe(201);
     const { channelId } = (await made.json()) as { channelId: number };

@@ -10,16 +10,17 @@ import { buildDemoOrg } from "./org/seed";
 import { projectOrg } from "./org/service";
 import type { Role } from "./people/roles";
 
-/** Each channel with the Division its orders carry (none for RX: its doctors' orders say). */
+/** Each channel with the Division its orders carry, the sales tracker's channel (none for RX: its
+ *  people's own box says, RX Business or MD Telesales). */
 export const CHANNELS: [code: string, name: string, division: string | null][] = [
-  ["HOSP", "Hospitals", "HOS"],
+  ["HOSP", "Hospitals", "HOSP"],
   ["RX", "Doctors", null],
   ["B2B", "Distributors and drugstores", "B2B"],
   ["BID", "Government tenders", "BID"],
   ["PAP", "Patient assistance", "MD Telesales"],
   ["TS", "Telesales", "TeleSales"],
   ["MT", "Modern trade", "MT"],
-  ["ONLINE", "Online", "B2C"],
+  ["ONLINE", "Online", "MD Telesales"],
 ];
 
 export async function seedDemo(db: Database, password: string): Promise<boolean> {

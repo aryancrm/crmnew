@@ -2,7 +2,7 @@
 // documents, medicines and price, stock and warehouse, customer and licence, approve), what each
 // found, and Approve, Send back, Reject; the warehouse it ships from; the order's details.
 
-import { DIVISIONS, PAYMENT_TERMS, SUB_DIVISIONS, termsOfLabel } from "@2mg/api/divisions";
+import { DIVISIONS, divisionOf, PAYMENT_TERMS, SUB_DIVISIONS, termsOfLabel } from "@2mg/api/divisions";
 import type { OrderAction, OrderDetail } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { CircleCheck, CircleX, PencilLine, TriangleAlert, Undo2 } from "lucide-react";
@@ -428,7 +428,7 @@ function CompleteDetails({ data }: { data: OrderDetail }) {
   const action = useAction();
   const [saved, setSaved] = useState(false);
   const [value, setValue] = useState({
-    division: order.division ?? "",
+    division: divisionOf(order.division) ?? "",
     subDivision: order.subDivision ?? "",
     paymentTerm: order.paymentTerm ?? "",
     receiver: order.receiver ?? "",
@@ -518,9 +518,9 @@ function CompleteDetails({ data }: { data: OrderDetail }) {
           input("subDivision", "Sub-division", { placeholder: "The area within the Division" })
         )}
         <p className="-mt-1 text-[11px] text-slate-500 sm:col-span-2">
-          Division: the selling team the order counts for (HOS hospitals; B&amp;B, STC, URO the Rx
-          field teams; B2B distributors; BID government tenders; MD Telesales the doctors'
-          patients). Sub-division: the area within it.
+          Division: the sales tracker's channel the order counts for (RX Business and MD Telesales,
+          Javed's; B2B, BID and CLIDP, Subir's; TeleSales and HOSP, Vanessa's; MT, Mhalou's).
+          Sub-division: the area within it.
         </p>
         <label className="flex flex-col gap-1">
           <span className="text-[12px] font-semibold text-slate-600">Payment terms</span>

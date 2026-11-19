@@ -147,7 +147,7 @@ describe("what a field order carries", () => {
     const placed = await post("ryan", "/api/orders", {
       customerId: hospital,
       items: [{ medicineId: medicine.id, qty: 5, priceKind: "hospital" }],
-      division: "HOS",
+      division: "HOSP",
       subDivision: "ILOILO",
       paymentTerm: "PDC 30",
     });
@@ -155,7 +155,7 @@ describe("what a field order carries", () => {
     const id = ((await placed.json()) as { id: number }).id;
     const detail = await read<OrderDetail>("sarla", `/api/orders/${id}`);
     expect(detail.order).toMatchObject({
-      division: "HOS",
+      division: "HOSP",
       subDivision: "ILOILO",
       paymentTerm: "PDC 30",
       paymentTerms: "days",
@@ -175,7 +175,7 @@ describe("what a field order carries", () => {
   it("starts the Division from the MedRep's channel when he leaves it out", async () => {
     const order = await ryanOrders(undefined);
     const detail = await read<OrderDetail>("sarla", `/api/orders/${order.id}`);
-    expect(detail.order.division).toBe("HOS");
+    expect(detail.order.division).toBe("HOSP");
     expect(detail.order.subDivision).toBe("PASAY");
   });
 
@@ -229,7 +229,7 @@ describe("what a field order carries", () => {
       (await post("ryan", `/api/orders/${order.id}/details`, { paymentTerm: "NET 60" })).status,
     ).toBe(403);
     const saved = await post("sarla", `/api/orders/${order.id}/details`, {
-      division: "HOS",
+      division: "HOSP",
       subDivision: "CAVITE",
       paymentTerm: "NET 60",
       receiver: "Ms. Cruz",

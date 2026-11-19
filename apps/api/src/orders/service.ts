@@ -60,7 +60,7 @@ import type {
   Vat,
 } from "../types";
 import { stuckNow } from "./clock";
-import { DIVISIONS, divisionRule, divisionsOf, isPatientType, subDivisionOfArea, termsOfLabel } from "./divisions";
+import { divisionOf, divisionRule, divisionsOf, isPatientType, subDivisionOfArea, termsOfLabel } from "./divisions";
 import { logEvent, peso } from "./events";
 import {
   DESK_HOME,
@@ -1178,7 +1178,7 @@ export async function myOrders(
   // One seat of the team (a lead's person page): everything below reads only its orders.
   const scope = filter.seat ? sql`${seen(me)} and o.seat_id = ${filter.seat}` : seen(me);
   // One Division picked (the split by Division on top): the list and its counts read only it.
-  const division = filter.division && (DIVISIONS as readonly string[]).includes(filter.division) ? filter.division : null;
+  const division = divisionOf(filter.division);
   const scoped = division ? sql`${scope} and o.division = ${division}` : scope;
   const where = stage === "all" ? scoped : sql`${scoped} and ${MY_STAGES[stage]}`;
   const thisMonth = sql`date_trunc('month', o.created_at at time zone 'Asia/Manila') = date_trunc('month', now() at time zone 'Asia/Manila')`;
@@ -1838,6 +1838,16 @@ const forWhom = (me: Me): SQL =>
       ? sql`true`
       : sql`false`;
 
+/** The Division a form sends: one of the sales tracker's channels (a hub word is read as its
+ *  channel, for a page still open from before); anything else is refused. */
+function divisionPicked(typed: string | null | undefined): string | null {
+  const said = clean(typed);
+  if (!said) return null;
+  const division = divisionOf(said);
+  if (!division) throw new Refusal(400, "invalid", "Pick the Division from the list.", "division");
+  return division;
+}
+
 /** A person's seats' Divisions (migration 0114), the main seat's first: `who` is their id. */
 const seatDivisionsSql = (who: SQL, today: string) => sql`(select array_agg(seat_division(dh.seat_id)
     order by (dh.kind = 'holder') desc, ds.lead desc, dh.starts_on, dh.id)
@@ -1949,9 +1959,7 @@ export async function placeOrder(
     undefined,
     customer.kind,
   );
-  const division = clean(input.division);
-  if (division && !(DIVISIONS as readonly string[]).includes(division))
-    throw new Refusal(400, "invalid", "Pick the Division from the list.", "division");
+  const division = divisionPicked(input.division);
   const deliveryFee = Math.max(0, Math.round(options.deliveryFee ?? 0));
   const total = lines.reduce((sum, line) => sum + line.qty * line.unitPrice, 0) + deliveryFee;
 
@@ -2473,9 +2481,7 @@ export async function reviseOrder(
   const today = todayManila();
   if (input.expectedOn && input.expectedOn < today)
     throw new Refusal(400, "invalid", "The delivery date has passed.", "expectedOn");
-  const division = clean(input.division);
-  if (division && !(DIVISIONS as readonly string[]).includes(division))
-    throw new Refusal(400, "invalid", "Pick the Division from the list.", "division");
+  const division = divisionPicked(input.division);
   // SC/PWD stays as the order has it unless the MedRep's fix says otherwise: a change never loses it.
   const [stored] = await rows<{
     kind: "senior" | "pwd" | null;
@@ -2725,9 +2731,7 @@ export async function saveOrderDetails(
 ): Promise<void> {
   if (!ORDER_MANAGE_ROLES.includes(me.role))
     throw new Refusal(403, "not_allowed", "Only Management completes an order's details.");
-  const division = clean(input.division);
-  if (division && !(DIVISIONS as readonly string[]).includes(division))
-    throw new Refusal(400, "invalid", "Pick the Division from the list.", "division");
+  const division = divisionPicked(input.division);
   if (input.expectedOn && input.expectedOn < todayManila())
     throw new Refusal(400, "invalid", "The delivery date has passed.", "expectedOn");
   await db.transaction(async (tx) => {

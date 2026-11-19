@@ -433,9 +433,9 @@ await step("another business's head (Javed) doesn't", async () => {
 });
 // One seat, one Division (Aryan, 19 Nov): Ryan's order carries the Hospital's, another is refused,
 // and it goes to his own lead and head only (not to another Division's coach).
-await step("his order carries his own Division (HOS); one he places under another (CLIDP) is still his", async () => {
+await step("his order carries his own Division (HOSP); one he places under another (CLIDP) is still his", async () => {
   const first = await order(MEDREP, o1);
-  must(first.order.division === "HOS", `carries ${first.order.division}`);
+  must(first.order.division === "HOSP", `carries ${first.order.division}`);
   // Any Division may be picked (Aryan, 19 Nov, evening: the screen universal, as the hub's); the
   // order stays the MedRep's: his own lead and head, his target.
   const other = await call<{ id: number }>(MEDREP, "/api/orders", {
@@ -449,7 +449,7 @@ await step("his order carries his own Division (HOS); one he places under anothe
   must(placed.order.medrep === first.order.medrep, `counts for ${placed.order.medrep}`);
   // Taken off again, so the rest of the walk reads only the first order.
   await call(MGMT[0] as string, `/api/orders/${other.id}/cancel`, { reason: "Placed only to check the Division" });
-  return `${first.order.code}: HOS; ${placed.order.code}: CLIDP, still ${placed.order.medrep}'s (cancelled after)`;
+  return `${first.order.code}: HOSP; ${placed.order.code}: CLIDP, still ${placed.order.medrep}'s (cancelled after)`;
 });
 await step("the B2B coach (Jessa) doesn't see it", async () => {
   try {

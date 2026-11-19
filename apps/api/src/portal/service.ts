@@ -9,6 +9,8 @@ import type { PortalDepartment, PortalTeamNode } from "../types";
 
 export const PORTAL_DEPARTMENTS = [
   "sales",
+  "leads",
+  "heads",
   "management",
   "finance",
   "inventory",
@@ -26,6 +28,9 @@ export type PortalKey = (typeof PORTAL_DEPARTMENTS)[number];
 /** The seats (their module) each department's team is made of. */
 const MODULES: Record<PortalKey, string[]> = {
   sales: ["manager", "team_lead", "medrep"],
+  // The sales line's two doors (19 Nov): its team leads, its heads.
+  leads: ["team_lead"],
+  heads: ["manager"],
   management: ["management"],
   finance: ["finance"],
   books: ["finance"],
@@ -74,6 +79,18 @@ function statsOf(key: PortalKey): [string, SQL, string, Stat["unit"]][] {
         ["Orders taken", orders, "in the last 30 days", "count"],
         ["Customers served", served, "invoiced in 30 days", "count"],
         ["Sellers", sql`(select count(*)::int from person where active and role in ('medrep', 'team_lead', 'manager'))`, "in the field and on the phone", "count"],
+      ];
+    case "heads":
+      return [
+        ["Orders taken", orders, "in the last 30 days", "count"],
+        ["Teams", sql`(select count(*)::int from seat where active and lead and module = 'team_lead')`, "each with its team lead", "count"],
+        ["Sellers", sql`(select count(*)::int from person where active and role in ('medrep', 'team_lead', 'manager'))`, "in the field and on the phone", "count"],
+      ];
+    case "leads":
+      return [
+        ["Orders taken", orders, "in the last 30 days", "count"],
+        ["Customers served", served, "invoiced in 30 days", "count"],
+        ["Sellers", sql`(select count(*)::int from person where active and role = 'medrep')`, "in the teams", "count"],
       ];
     case "management":
       return [
