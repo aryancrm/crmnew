@@ -32,7 +32,7 @@ import {
 import { type ReactNode, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
-import { useMe } from "../auth";
+import { placesOrders, useMe } from "../auth";
 import { CustomerDialog } from "./dialog";
 import { PricesGiven } from "./prices";
 import { PAPER_ACCEPT } from "../photo";
@@ -82,8 +82,6 @@ const LIST_OF: Record<string, [string, string]> = {
 
 const day = (iso: string) => dayLabel(iso.slice(0, 10));
 
-/** Who may place an order (the API's ORDER_PLACE_ROLES). */
-const PLACERS = ["medrep", "team_lead", "manager", "management", "online", "admin"];
 
 export function Customer() {
   const me = useMe().data;
@@ -131,7 +129,7 @@ export function Customer() {
     <div className="mx-auto max-w-screen-2xl space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Crumbs list={listLabel} to={listTo} />
-        {PLACERS.includes(me?.role ?? "") && !me?.viewedBy && (
+        {placesOrders(me) && !me?.viewedBy && (
           <Link
             to={`/orders/new?customer=${customer.id}`}
             className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-3.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-dark"

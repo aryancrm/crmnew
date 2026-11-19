@@ -9,11 +9,13 @@ import { todayManila } from "../inventory/rules";
 import { seedDemo } from "../seed";
 import { attachReceipt } from "../testing/receipt";
 import type {
+  DispatchBoard,
   DispatchKpis,
   NotificationList,
   OrderBoard,
   OrderDashboard,
   OrderDetail,
+  OwedInvoices,
   PackPlan,
   ShipmentList,
 } from "../types";
@@ -512,6 +514,79 @@ describe("shipping and delivery", () => {
     expect(done.events.find((event) => event.stage === "delivered")?.message).toMatch(
       /^Picked up at the warehouse: received by Juan dela Cruz \(driver\) on .+ Cash on delivery: ₱50\.00 to collect/,
     );
+  });
+
+  it("notes who has the cash on delivery, shows it to Dispatch and Finance, and Finance records it (19 Nov)", async () => {
+    const id = await readyToPack(cod, 3);
+    await pack("marco", id);
+    expect((await ship("marco", id, { method: "rider", rider: "Pedro (rider)" })).status).toBe(200);
+    // Not more than it owes, and someone has to have it.
+    const tooMuch = await deliver("marco", id, {
+      receivedBy: "Nurse Santos",
+      deliveredOn: todayManila(),
+      cod: { amount: 3001, by: "Pedro (rider)" },
+    });
+    expect(tooMuch.status).toBe(400);
+    expect(await fieldOf(tooMuch)).toBe("amount");
+    expect((await order("fiona", id)).order.status).toBe("shipped");
+    const delivered = await deliver(
+      "marco",
+      id,
+      { receivedBy: "Nurse Santos", deliveredOn: todayManila(), cod: { amount: 3000, by: "Pedro (rider)" } },
+      false,
+    );
+    expect(delivered.status).toBe(200);
+    const detail = await order("fiona", id);
+    expect(detail.order.status).toBe("completed");
+    expect(detail.events.find((event) => event.stage === "delivered")?.message).toMatch(
+      /Cash on delivery collected: ₱30\.00, with Pedro \(rider\)\. Finance records it when it is in the bank\./,
+    );
+    // Dispatch: under Delivered, cash on delivery, with who has the cash; not paid yet.
+    const board = await read<DispatchBoard>("marco", "/api/dispatch/board");
+    const card = board.done.find((one) => one.id === id);
+    expect(card?.pay).toMatchObject({ terms: "cod", total: 3000, balance: 3000, paid: false });
+    expect(card?.cod).toMatchObject({ amount: 3000, by: "Pedro (rider)", on: todayManila() });
+    expect(board.counts.done).toBeGreaterThanOrEqual(1);
+    // Finance: the same note on its due payments.
+    const owed = await read<OwedInvoices>("fiona", "/api/finance/owed/invoices");
+    const row = owed.rows.find((one) => one.orderId === id);
+    expect(row?.codCash).toMatchObject({ amount: 3000, by: "Pedro (rider)" });
+    // Only Dispatch notes it; Finance records the payment when it is in the bank.
+    expect((await post("fiona", `/api/dispatch/orders/${id}/cod`, { amount: 3000, by: "x" })).status).toBe(403);
+    const invoiceId = detail.money.invoice?.id as number;
+    expect(
+      (
+        await post("fiona", `/api/invoices/${invoiceId}/payments`, {
+          amount: 3000,
+          method: "cash",
+          reference: "Rider's cash, deposited",
+          paidOn: todayManila(),
+        })
+      ).status,
+    ).toBe(200);
+    const after = (await read<DispatchBoard>("marco", "/api/dispatch/board")).done.find((one) => one.id === id);
+    expect(after?.pay).toMatchObject({ paid: true, balance: 0 });
+    // Paid: there is nothing left to note.
+    expect((await post("marco", `/api/dispatch/orders/${id}/cod`, { amount: 100, by: "Pedro" })).status).toBe(409);
+  });
+
+  it("notes the cash later, refuses before delivery and on an order that isn't cash on delivery", async () => {
+    const id = await readyToPack(cod, 2);
+    expect((await post("marco", `/api/dispatch/orders/${id}/cod`, { amount: 2000, by: "LBC" })).status).toBe(409);
+    await pack("marco", id);
+    expect((await ship("marco", id, { method: "courier", courier: "LBC", tracking: "LBC-1" })).status).toBe(200);
+    expect((await deliver("marco", id, { receivedBy: "Pharmacy", deliveredOn: todayManila() })).status).toBe(200);
+    const missing = await post("marco", `/api/dispatch/orders/${id}/cod`, { amount: 2000, by: "" });
+    expect(missing.status).toBe(400);
+    expect(await fieldOf(missing)).toBe("by");
+    expect((await post("marco", `/api/dispatch/orders/${id}/cod`, { amount: 1500, by: "LBC remittance" })).status).toBe(200);
+    expect((await order("fiona", id)).events.at(-1)?.message).toMatch(/₱15\.00 \(₱5\.00 short\), with LBC remittance/);
+    const termsOrder = await readyToPack(credit, 1);
+    await pack("marco", termsOrder);
+    expect((await deliver("marco", termsOrder, { receivedBy: "Olivarez", deliveredOn: todayManila() })).status).toBe(200);
+    expect((await post("marco", `/api/dispatch/orders/${termsOrder}/cod`, { amount: 100, by: "x" })).status).toBe(409);
+    const card = (await read<DispatchBoard>("marco", "/api/dispatch/board")).done.find((one) => one.id === termsOrder);
+    expect(card?.pay).toMatchObject({ terms: "days", days: 30, paid: false });
   });
 });
 

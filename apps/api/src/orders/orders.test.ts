@@ -204,12 +204,14 @@ describe("placing an order", () => {
     ).toBe(400);
   });
 
-  it("Management's own order skips the queue", async () => {
-    const made = await place("sarla", { customerId: hospital, items: [line()] });
+  it("Management places no orders (19 Nov); the Admin's own order skips the queue", async () => {
+    // Management checks and approves orders; it doesn't raise them (Aryan, 19 Nov).
+    expect((await post("sarla", "/api/orders", { customerId: hospital, items: [line()] })).status).toBe(403);
+    const made = await place("admin", { customerId: hospital, items: [line()] });
     const detail = await order("sarla", made.body.id);
     expect(detail.order).toMatchObject({
       status: "finance_check",
-      raisedBy: "Sarla",
+      raisedBy: "Admin",
       medrep: "Ryan",
     });
     expect(detail.stages[1]?.at).not.toBeNull();

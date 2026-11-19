@@ -1470,7 +1470,9 @@ export async function owedInvoices(db: Database, me: Me): Promise<OwedInvoices> 
              when i.terms = 'days' and o.status <> 'completed' then 'due'
              when i.due_on < ${today}::date then 'late' else 'due' end as state,
         case when not ${notDueSql} and i.due_on < ${today}::date
-             then (${today}::date - i.due_on)::int else 0 end as "daysLate"
+             then (${today}::date - i.due_on)::int else 0 end as "daysLate",
+        case when i.terms = 'cod' and o.cod_collected is not null then json_build_object('amount', o.cod_collected,
+          'by', o.cod_collected_by, 'on', to_char(o.cod_noted_at at time zone 'Asia/Manila', 'YYYY-MM-DD')) end as "codCash"
       from invoice i join sales_order o on o.id = i.order_id join customer c on c.id = i.customer_id
         join person rep on rep.id = o.medrep_id
         left join seat s on s.id = o.seat_id left join org_unit u on u.id = s.unit_id
@@ -1491,7 +1493,8 @@ export async function owedInvoices(db: Database, me: Me): Promise<OwedInvoices> 
         ${day("d.doc_date")} as "issuedOn", ${day("d.due_date")} as "dueOn", null as "deliveredOn", 'zoho' as "termsKey", null::int as days,
         round(d.total * d.fx_rate)::int as total, round((d.total - d.balance) * d.fx_rate)::int as paid, round(d.balance * d.fx_rate)::int as balance,
         case when d.due_date < ${today}::date then 'late' else 'due' end as state,
-        case when d.due_date < ${today}::date then (${today}::date - d.due_date)::int else 0 end as "daysLate"
+        case when d.due_date < ${today}::date then (${today}::date - d.due_date)::int else 0 end as "daysLate",
+        null as "codCash"
       from book_doc d join customer c on c.id = d.customer_id
         left join lateral (select h.person_id, s.unit_id from seat s join seat_holder h on h.seat_id = s.id and h.ends_on is null and h.kind = 'holder'
           where s.area_id = c.area_id order by h.starts_on desc limit 1) h on true

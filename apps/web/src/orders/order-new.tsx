@@ -421,7 +421,8 @@ export function OrderNew({
   const [askManagement, setAskManagement] = useState<boolean | null>(null);
   const toManagement = askManagement ?? me?.role === "medrep";
   const setToManagement = (on: boolean) => setAskManagement(on);
-  const fieldRole = me ? ["medrep", "team_lead", "manager"].includes(me.role) : true;
+  // Who chooses whether Management and Finance check their own order (the API reads no one else's).
+  const switches = me?.role === "admin";
   // The hub's Division, Sub-division and the Payment Terms agreed with the customer.
   const [division, setDivision] = useState<string | null>(null);
   const [subDivision, setSubDivision] = useState<string | null>(null);
@@ -870,7 +871,8 @@ export function OrderNew({
       invoiceFrom,
       doctorId: doctor?.id ?? null,
       // The field sends no choice: Management checks it and decides about Finance on approving.
-      ...(fieldRole ? {} : { checks: { management: toManagement, finance: toFinance } }),
+      // Only the Admin's switch is read (the API's ORDER_MANAGE_ROLES; Management places none).
+      ...(switches ? { checks: { management: toManagement, finance: toFinance } } : {}),
       division: pickedDivision || null,
       subDivision: pickedSubDivision || null,
       paymentTerm: paymentTerm.trim() || null,
@@ -1008,9 +1010,9 @@ export function OrderNew({
         </div>
       )}
 
-      {/* Who checks the order is Management's call: the field (a MedRep, a team lead) only
-          places it, so only the office sees the switch. */}
-      {!fieldRole && !changing && (
+      {/* Who checks the order is the office's call: the field and the Online desk only place it,
+          so only the Admin, whose switch the API reads, sees it. */}
+      {switches && !changing && (
         <OrderChecksBox
           reasons={checkReasons}
           management={toManagement}

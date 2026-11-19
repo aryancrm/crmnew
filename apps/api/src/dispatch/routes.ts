@@ -14,6 +14,7 @@ import {
   deliverOrder,
   failedDelivery,
   listShipments,
+  noteCodCash,
   packOrder,
   packPlan,
   setTracking,
@@ -24,6 +25,17 @@ import {
 
 const optional = (max: number) =>
   z.string().trim().max(max, `Keep it under ${max} characters.`).nullish();
+
+/** The cash a cash-on-delivery order's rider or courier collected (centavos) and who has it. */
+const codCash = z.object({
+  amount: z.number({ error: "Type the cash collected." }).int().positive("Type the cash collected."),
+  by: z
+    .string({ error: "Type who has the cash: the rider or the courier." })
+    .trim()
+    .min(1, "Type who has the cash: the rider or the courier.")
+    .max(120),
+  note: optional(300),
+});
 
 export function dispatchRoutes(
   app: Hono<Env>,
@@ -95,10 +107,18 @@ export function dispatchRoutes(
           .string({ error: "Pick the day." })
           .regex(/^\d{4}-\d{2}-\d{2}$/, "Pick the day."),
         note: optional(300),
+        cod: codCash.nullish(),
       }),
     );
     await deliverOrder(db, c.get("me"), idParam(c), input);
     void tellCustomer(db, c.get("me"), idParam(c), "delivered");
+    return c.json({ ok: true });
+  });
+  // Cash on delivery: what the rider or courier collected and who has it; Finance records the
+  // payment once it is in the bank.
+  app.post("/api/dispatch/orders/:id/cod", async (c) => {
+    const input = await readBody(c, codCash);
+    await noteCodCash(db, c.get("me"), idParam(c), input);
     return c.json({ ok: true });
   });
   app.post("/api/dispatch/orders/:id/failed", async (c) => {

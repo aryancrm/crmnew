@@ -409,7 +409,17 @@ export function OrdersToCheck({
       }
       onConfirm={() => setConfirming(card)}
       onInvoice={() => money.send(`/api/finance/orders/${card.id}/invoice`, {})}
-      onDispatch={(what) => setDispatching({ what, orderId: card.id, code: card.code })}
+      onDispatch={(what) =>
+        setDispatching({
+          what,
+          orderId: card.id,
+          code: card.code,
+          // Cash on delivery: Delivered asks what came in and who has it (19 Nov).
+          ...(what === "deliver" && card.paymentTerms === "cod"
+            ? { collect: card.total, carrier: card.rider ?? card.courier }
+            : {}),
+        })
+      }
     />
   );
 

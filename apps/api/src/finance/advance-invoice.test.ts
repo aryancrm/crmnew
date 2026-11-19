@@ -65,7 +65,7 @@ beforeAll(async () => {
   await seedDemo(db, PASSWORD);
   await seedFixture(db);
   app = createApp(db, { webUrl: "http://localhost:5180" });
-  for (const name of ["ryan", "sarla", "fiona"]) {
+  for (const name of ["ryan", "sarla", "fiona", "admin"]) {
     const response = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -207,8 +207,8 @@ describe("the invoice made at approval", () => {
     await db.execute(sql`update medicine set name = ${was?.name}, vat = ${was?.vat} where id = ${medicine.id}`);
   });
 
-  it("holds Management's own order for a patient until its prescription is on it", async () => {
-    const response = await ok("sarla", "/api/orders", {
+  it("holds the Admin's own order for a patient until its prescription is on it", async () => {
+    const response = await ok("admin", "/api/orders", {
       customerId: patient,
       items: [{ medicineId: medicine.id, qty: 2, priceKind: "patient" }],
     });

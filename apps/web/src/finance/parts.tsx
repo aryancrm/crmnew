@@ -36,9 +36,9 @@ export function InvoiceStatus({ state }: { state: InvoiceState }) {
 }
 
 /** Centavos as the pesos typed in a box: 150000 → "1500.00". */
-const asTyped = (centavos: number) => (centavos / 100).toFixed(2);
+export const asTyped = (centavos: number) => (centavos / 100).toFixed(2);
 /** What was typed, in centavos; NaN when it isn't an amount. */
-const centavos = (typed: string) => {
+export const centavos = (typed: string) => {
   const clean = typed.replace(/[₱,\s]/g, "");
   return /^\d+(\.\d{0,2})?$/.test(clean) ? Math.round(Number(clean) * 100) : Number.NaN;
 };
@@ -60,7 +60,7 @@ export function useMoney() {
   return { ...action, send: run };
 }
 
-function AmountField({
+export function AmountField({
   label,
   value,
   onChange,

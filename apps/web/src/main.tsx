@@ -5,6 +5,7 @@ import "@fontsource/poppins/500.css";
 import "@fontsource/poppins/600.css";
 import "@fontsource/poppins/700.css";
 import { ApiFailure } from "./api";
+import { placesOrders, readsOnlineDesk } from "./auth";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -44,7 +45,7 @@ import { MyPayslipsPage } from "./hr/my-payslips";
 import { CompanyMapPage } from "./company/map";
 import { MyTeamPage, TeamSeatPage } from "./team/my-team";
 import { SalesTreePage } from "./company/sales-tree";
-import { NotBuilt } from "./home/not-built";
+import { NotBuilt, OnlyFor } from "./home/not-built";
 import { Order } from "./orders/order";
 import { OrderNew } from "./orders/order-new";
 import { Orders } from "./orders/orders";
@@ -188,16 +189,16 @@ createRoot(root).render(
             <Route path="customers/:id" element={<Customer />} />
             <Route path="customers/:id/statement" element={<StatementPage />} />
             <Route path="my/area" element={<Customers key="mine" mine />} />
-            <Route path="inbox" element={<InboxPage />} />
+            <Route path="inbox" element={<OnlyFor allow={readsOnlineDesk}><InboxPage /></OnlyFor>} />
             <Route path="channels" element={<ChannelsPage />} />
             <Route path="points" element={<PointsPage />} />
             <Route path="points/:id" element={<PointsAccountPage key="points" />} />
             <Route path="settings" element={<SettingsPage />} />
-            <Route path="leads" element={<LeadsDesk />} />
+            <Route path="leads" element={<OnlyFor allow={readsOnlineDesk}><LeadsDesk /></OnlyFor>} />
             <Route path="pap" element={<LeadsDesk key="pap" desk="pap" />} />
             <Route path="leads/:id" element={<LeadPage key="lead" />} />
             <Route path="orders" element={<Orders />} />
-            <Route path="orders/new" element={<OrderNew />} />
+            <Route path="orders/new" element={<OnlyFor allow={placesOrders}><OrderNew /></OnlyFor>} />
             <Route path="orders/:id/fix" element={<OrderNew key="fix" fix />} />
             <Route path="orders/:id/change" element={<OrderNew key="change" change />} />
             <Route path="orders/:id/sales-order" element={<SalesOrderPage />} />

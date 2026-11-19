@@ -59,7 +59,7 @@ export function DispatchLanes() {
   if (!data) return <PageState query={board} what="the warehouse's work" />;
   const work = data.can.work;
   const ask = (what: NonNullable<DispatchAsk>["what"], card: DispatchCard) =>
-    setAsking({ what, orderId: card.id, code: card.code });
+    setAsking({ what, orderId: card.id, code: card.code, collect: card.collect, carrier: card.rider ?? card.courier });
   async function take(card: DispatchCard, release: boolean) {
     await action.run(() => api(`/api/dispatch/orders/${card.id}/take`, { body: { release } }));
     await queries.invalidateQueries({ queryKey: ["dispatch"] });

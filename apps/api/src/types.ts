@@ -1786,7 +1786,17 @@ export type ShipInput = {
   addressChecked?: boolean;
   note?: string | null;
 };
-export type DeliverInput = { receivedBy: string; deliveredOn: string; note?: string | null };
+export type DeliverInput = {
+  receivedBy: string;
+  deliveredOn: string;
+  note?: string | null;
+  /** Cash on delivery: what the rider or courier collected and who has it (Finance records the
+   *  payment once it is in the bank). */
+  cod?: CodCashInput | null;
+};
+
+/** The cash a cash-on-delivery order's rider or courier collected, as Dispatch hands it over. */
+export type CodCashInput = { amount: number; by: string; note?: string | null };
 
 export type ShipmentTab = "road" | "delivered" | "all";
 
@@ -3070,6 +3080,19 @@ export type DispatchCard = {
   deliveredAt: string | null;
   /** Cash the courier or rider collects on delivery (an open cash-on-delivery invoice). */
   collect: number | null;
+  /** How it is paid, from its invoice: cash on delivery, paid in advance, or on terms (days or a
+   *  date); what it comes to, what is still owed, paid or not, and when it falls due. */
+  pay: {
+    terms: "advance" | "cod" | "days";
+    days: number | null;
+    payBy: string | null;
+    total: number;
+    balance: number;
+    paid: boolean;
+    dueOn: string | null;
+  } | null;
+  /** The cash on delivery Dispatch noted: how much, who has it, the day noted. */
+  cod: { amount: number; by: string; on: string } | null;
 };
 
 export type DispatchBoard = {
@@ -3079,6 +3102,8 @@ export type DispatchBoard = {
     toShip: number;
     road: number;
     delivered: number;
+    /** Delivered over the last `doneDays` days. */
+    done: number;
     held: number;
     coming: number;
   };
@@ -3087,6 +3112,9 @@ export type DispatchBoard = {
   road: DispatchCard[];
   /** Delivered today. */
   delivered: DispatchCard[];
+  /** Delivered over the last `doneDays` days, newest first. */
+  done: DispatchCard[];
+  doneDays: number;
   can: { work: boolean };
 };
 
@@ -3747,6 +3775,9 @@ export type OwedInvoices = {
     /** late: past its day; due: not yet; on_delivery: cash on delivery, goods not delivered yet. */
     state: "late" | "due" | "on_delivery";
     daysLate: number;
+    /** Cash on delivery Dispatch noted as collected: how much, who has it, the day noted. Finance
+     *  records the payment once it is in the bank. */
+    codCash: { amount: number; by: string; on: string } | null;
   }[];
   totals: {
     owed: number;

@@ -47,6 +47,7 @@ import {
   type CaseFacts,
   deskStepOf,
   isPapRep,
+  LEAD_DESK_ROLES,
   LEAD_READ_ROLES,
   LEAD_WORK_ROLES,
   nextOf,
@@ -356,11 +357,12 @@ export async function leadDesk(
   },
 ): Promise<LeadDesk> {
   const desk = filter.desk === "pap" ? "pap" : "online";
-  // A PAP MedRep reads only their own PAP cases; Management, the CEO and the admin read them all.
+  // A PAP MedRep reads only their own PAP cases; the CEO and the admin read them all. Management
+  // reads a case from its order, never the desks themselves.
   if (desk === "pap") {
-    if (!isPapRep(me) && !["admin", "ceo", "management"].includes(me.role))
+    if (!isPapRep(me) && !["admin", "ceo"].includes(me.role))
       throw new Refusal(403, "forbidden", "Your role can't see the PAP cases.");
-  } else allow(me, LEAD_READ_ROLES, "see the Online desk");
+  } else allow(me, LEAD_DESK_ROLES, "see the Online desk");
   const queue: LeadQueue = QUEUES.includes(filter.queue as LeadQueue)
     ? (filter.queue as LeadQueue)
     : "active";

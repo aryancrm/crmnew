@@ -69,7 +69,7 @@ beforeAll(async () => {
   await seedDemo(db, PASSWORD);
   await seedFixture(db);
   app = createApp(db, { webUrl: "http://localhost:5180" });
-  for (const name of ["ryan", "sarla", "fiona"]) {
+  for (const name of ["ryan", "sarla", "fiona", "admin"]) {
     const response = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -128,8 +128,8 @@ describe("who checks an order", () => {
     expect(await invoiceOf(order.id)).not.toBeNull();
   });
 
-  it("Management's own order follows its switch", async () => {
-    const placed = await post("sarla", "/api/orders", {
+  it("the Admin's own order follows its switch (Management places none, 19 Nov)", async () => {
+    const placed = await post("admin", "/api/orders", {
       customerId: hospital,
       items: [{ medicineId: medicine.id, qty: 5, priceKind: "hospital" }],
       checks: { management: false, finance: true },

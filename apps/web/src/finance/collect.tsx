@@ -176,6 +176,15 @@ export function CollectPage() {
                     ) : (
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">Not delivered yet</span>
                     )}
+                    {/* Cash on delivery Dispatch noted (19 Nov): who has it; Finance records it once it is in the bank. */}
+                    {row.codCash && (
+                      <span className="mt-1 block text-[11px] leading-snug text-sky-800">
+                        {peso(row.codCash.amount)} cash with {row.codCash.by}, {dayLabel(row.codCash.on)}: Mark paid once it is in the bank
+                      </span>
+                    )}
+                    {!row.codCash && row.terms === "COD" && row.deliveredOn && (
+                      <span className="mt-1 block text-[11px] leading-snug text-slate-500">Dispatch hasn't noted the cash yet</span>
+                    )}
                   </td>
                   <td className="px-3 py-2.5 whitespace-nowrap text-slate-700">
                     {row.deliveredOn ? dayLabel(row.deliveredOn) : <span className="text-slate-400">Not yet</span>}

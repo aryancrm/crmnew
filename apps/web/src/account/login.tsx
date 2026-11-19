@@ -9,7 +9,7 @@ import { ArrowRight, ChevronRight, Eye, EyeOff, KeyRound, LoaderCircle, Search, 
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiFailure, api } from "../api";
-import { ME, useMe } from "../auth";
+import { ME, rememberPerson, returnTo, useMe } from "../auth";
 import { ClassicLogin } from "./login-classic";
 import { About } from "../portal/about";
 import { DepartmentPage } from "../portal/department-page";
@@ -45,7 +45,7 @@ function Launcher() {
     // biome-ignore lint/correctness/useExhaustiveDependencies: on the department changing only
   }, [picked?.key]);
 
-  if (me.data) return <Navigate to={landing(me.data.role, picked, from)} replace />;
+  if (me.data) return <Navigate to={landing(me.data.role, picked, returnTo(me.data.id, from))} replace />;
 
   const words = find.trim().toLowerCase();
   const shownTiles = WORKSPACES.filter(
@@ -211,9 +211,11 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
       const { me: signedIn } = deskOnly
         ? await api<{ me: Me }>("/api/auth/desk", { body: { desk: picked.key, password } })
         : await api<{ me: Me }>("/api/auth/login", { body: { email, password } });
+      const back = returnTo(signedIn.id, from);
       queries.setQueryData(ME, signedIn);
       rememberWorkspace(workspaceOf(signedIn).key);
-      navigate(landing(signedIn.role, workspace, from), { replace: true });
+      navigate(landing(signedIn.role, workspace, back), { replace: true });
+      rememberPerson(signedIn.id);
     } catch (error) {
       setProblem(error instanceof ApiFailure ? { message: error.message, field: error.field } : { message: "Couldn't sign in. Try again." });
     } finally {

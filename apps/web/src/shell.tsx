@@ -239,7 +239,7 @@ export function Shell() {
       <div className="flex min-w-0 flex-1">
         <aside
           aria-label={`${space.label} menu`}
-          className={`sticky top-14 hidden print:!hidden h-[calc(100dvh-3.5rem)] w-60 shrink-0 overflow-y-auto border-r border-slate-200/80 bg-ground ${folded ? "" : "md:block"}`}
+          className={`sticky top-14 hidden print:!hidden h-[calc(100dvh-3.5rem)] w-60 shrink-0 overflow-y-auto overscroll-contain border-r border-slate-200/80 bg-ground ${folded ? "" : "md:block"}`}
         >
           {menu()}
         </aside>
@@ -267,7 +267,7 @@ export function Shell() {
           />
           <aside
             aria-label={`${space.label} menu`}
-            className="absolute inset-y-0 left-0 w-[264px] max-w-[85vw] overflow-y-auto bg-ground shadow-pop"
+            className="absolute inset-y-0 left-0 w-[264px] max-w-[85vw] overflow-y-auto overscroll-contain bg-ground shadow-pop"
           >
             {menu(() => setDrawer(false))}
           </aside>

@@ -7,7 +7,7 @@ import { ArrowRight, Eye, EyeOff, LoaderCircle, LockKeyhole } from "lucide-react
 import { type FormEvent, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { ApiFailure, api } from "../api";
-import { ME, useMe } from "../auth";
+import { ME, rememberPerson, returnTo, useMe } from "../auth";
 
 /** Original line artwork: an orderly pharmacy shelf, drawn in the brand's ink. */
 function PharmacyMark() {
@@ -66,7 +66,7 @@ export function ClassicLogin() {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<{ message: string; field?: string } | null>(null);
 
-  if (me.data) return <Navigate to={from} replace />;
+  if (me.data) return <Navigate to={returnTo(me.data.id, from)} replace />;
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -76,8 +76,10 @@ export function ClassicLogin() {
       const { me: signedIn } = await api<{ me: Me }>("/api/auth/login", {
         body: { email, password },
       });
+      const back = returnTo(signedIn.id, from);
       queries.setQueryData(ME, signedIn);
-      navigate(from, { replace: true });
+      navigate(back, { replace: true });
+      rememberPerson(signedIn.id);
     } catch (error) {
       setProblem(
         error instanceof ApiFailure

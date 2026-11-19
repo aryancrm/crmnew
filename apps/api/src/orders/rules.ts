@@ -60,14 +60,9 @@ export const STAGES: { key: OrderStage; label: string }[] = [
   { key: "completed", label: "Completed" },
 ];
 
-export const ORDER_PLACE_ROLES: readonly Role[] = [
-  "medrep",
-  "team_lead",
-  "manager",
-  "management",
-  "online",
-  "admin",
-];
+/** Who places an order: the field, the Online desk and the Admin. Not Management: it checks and
+ *  approves orders, it doesn't raise them (Aryan, 19 Nov: "why would Management create an order?"). */
+export const ORDER_PLACE_ROLES: readonly Role[] = ["medrep", "team_lead", "manager", "online", "admin"];
 /** Who takes an Online case's order to Paid: marks it delivered and records the money received. */
 export const CASE_AGENT_ROLES: readonly Role[] = ["online", "admin"];
 export const ORDER_MANAGE_ROLES: readonly Role[] = ["management", "admin"];

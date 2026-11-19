@@ -12,6 +12,8 @@ import type { DispatchBoard, DispatchCard, Me, PaperKind } from "../types";
 import { DISPATCH_READ_ROLES, DISPATCH_ROLES } from "./rules";
 
 const LANE_SIZE = 100;
+/** How far back the Delivered list goes. */
+const DONE_DAYS = 30;
 
 export async function dispatchBoard(db: Database, me: Me): Promise<DispatchBoard> {
   allow(me, DISPATCH_READ_ROLES, "see Dispatch's work");
@@ -27,7 +29,14 @@ export async function dispatchBoard(db: Database, me: Me): Promise<DispatchBoard
     ${iso("o.delivered_at")} as "deliveredAt",
     -- Cash the courier or rider collects: an open cash-on-delivery invoice's balance.
     (select (i.total - i.paid)::int from invoice i where i.order_id = o.id and i.status = 'open' and i.terms = 'cod'
-      and i.total > i.paid limit 1) as collect`;
+      and i.total > i.paid limit 1) as collect,
+    -- How it is paid (Aryan, 19 Nov: Dispatch sees which are COD, prepaid or on terms): the invoice as it stands.
+    (select json_build_object('terms', i.terms, 'days', o.payment_days, 'payBy', to_char(o.pay_by, 'YYYY-MM-DD'),
+        'total', i.total, 'balance', i.total - i.paid, 'paid', i.status = 'paid', 'dueOn', to_char(i.due_on, 'YYYY-MM-DD'))
+      from invoice i where i.order_id = o.id and i.status <> 'cancelled' order by i.id desc limit 1) as pay,
+    -- The cash on delivery Dispatch noted: how much and who has it.
+    case when o.cod_collected is not null then json_build_object('amount', o.cod_collected, 'by', o.cod_collected_by,
+      'on', to_char(o.cod_noted_at at time zone 'Asia/Manila', 'YYYY-MM-DD')) end as cod`;
   const from = sql`from sales_order o join customer c on c.id = o.customer_id join person rep on rep.id = o.medrep_id
     left join warehouse w on w.id = o.warehouse_id`;
   const lane = (where: SQL, order: SQL) =>
@@ -35,7 +44,7 @@ export async function dispatchBoard(db: Database, me: Me): Promise<DispatchBoard
       db,
       sql`select ${columns} ${from} where ${where} order by ${order} limit ${LANE_SIZE}`,
     );
-  const [toPack, toShip, road, delivered, counted] = await Promise.all([
+  const [toPack, toShip, road, delivered, done, counted] = await Promise.all([
     // Late and wanted first, then the longest waiting.
     lane(
       sql`o.status = 'ready_for_dispatch'`,
@@ -48,19 +57,25 @@ export async function dispatchBoard(db: Database, me: Me): Promise<DispatchBoard
       sql`o.status = 'completed' and o.delivered_on = ${today}::date`,
       sql`o.delivered_at desc nulls last, o.id desc`,
     ),
+    // Delivered over the last 30 days, the newest first: each with how it is paid.
+    lane(
+      sql`o.status = 'completed' and o.delivered_on >= ${today}::date - ${DONE_DAYS}::int`,
+      sql`o.delivered_on desc, o.delivered_at desc nulls last, o.id desc`,
+    ),
     rows<DispatchBoard["counts"]>(
       db,
       sql`select count(*) filter (where o.status = 'ready_for_dispatch')::int as "toPack",
           count(*) filter (where o.status = 'packing')::int as "toShip",
           count(*) filter (where o.status = 'shipped')::int as road,
           count(*) filter (where o.status = 'completed' and o.delivered_on = ${today}::date)::int as delivered,
+          count(*) filter (where o.status = 'completed' and o.delivered_on >= ${today}::date - ${DONE_DAYS}::int)::int as done,
           count(*) filter (where o.status in ('on_hold', 'exception')
             and (o.held_role = 'dispatch' or o.held_from in ('ready_for_dispatch', 'packing', 'shipped')))::int as held,
           count(*) filter (where o.status in ('finance_check', 'ready_for_invoice'))::int as coming
         from sales_order o where o.status not in ('draft', 'cancelled')`,
     ),
   ]);
-  const all = [...toPack, ...toShip, ...road, ...delivered];
+  const all = [...toPack, ...toShip, ...road, ...delivered, ...done];
   const ids = all.map((card) => card.id);
   const list = ids.length
     ? sql.join(
@@ -95,11 +110,13 @@ export async function dispatchBoard(db: Database, me: Me): Promise<DispatchBoard
   });
   return {
     today,
-    counts: counted[0] ?? { toPack: 0, toShip: 0, road: 0, delivered: 0, held: 0, coming: 0 },
+    counts: counted[0] ?? { toPack: 0, toShip: 0, road: 0, delivered: 0, done: 0, held: 0, coming: 0 },
     toPack: toPack.map(card),
     toShip: toShip.map(card),
     road: road.map(card),
     delivered: delivered.map(card),
+    done: done.map(card),
+    doneDays: DONE_DAYS,
     can: { work: DISPATCH_ROLES.includes(me.role) },
   };
 }

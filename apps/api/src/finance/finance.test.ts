@@ -85,7 +85,7 @@ beforeAll(async () => {
   await seedDemo(db, PASSWORD);
   await seedFixture(db);
   app = createApp(db, { webUrl: "http://localhost:5180" });
-  for (const name of ["ryan", "sarla", "fiona", "naresh", "marco"]) {
+  for (const name of ["ryan", "sarla", "fiona", "naresh", "marco", "admin"]) {
     const response = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -228,9 +228,9 @@ describe("an advance order", () => {
     expect(back.events.at(-1)?.message).toBe("Proof of payment added: back with Finance to check.");
   });
 
-  it("Management's own order skips the queue, ships from the default warehouse and waits for Finance", async () => {
+  it("the Admin's own order skips the queue, ships from the default warehouse and waits for Finance", async () => {
     const placed = (await (
-      await post("sarla", "/api/orders", { customerId: hospital, items: [line()] })
+      await post("admin", "/api/orders", { customerId: hospital, items: [line()] })
     ).json()) as { id: number };
     const own = await order("fiona", placed.id);
     expect(own.order.status).toBe("finance_check");

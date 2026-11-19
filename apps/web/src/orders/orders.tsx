@@ -3,7 +3,7 @@
 
 import { Plus } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
-import { useMe } from "../auth";
+import { placesOrders, useMe } from "../auth";
 import { PRIMARY_SM } from "../look";
 import { OrdersTable } from "./parts";
 import { MyOrdersPage } from "../sellers/medrep-home";
@@ -16,8 +16,7 @@ export function Orders() {
   if (me && ["medrep", "online", "team_lead", "manager"].includes(me.role)) return <MyOrdersPage />;
   const mine = me?.role === "medrep" || me?.role === "online";
   const team = me?.role === "team_lead" || me?.role === "manager";
-  const places =
-    me && ["medrep", "team_lead", "manager", "management", "online", "admin"].includes(me.role);
+  const places = placesOrders(me);
   // Stuck over two days at any desk (the CEO's and Management's link): the list, filtered.
   if (!mine && !team && params.get("stuck") === "1")
     return (

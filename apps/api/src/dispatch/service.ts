@@ -12,6 +12,7 @@ import { logEvent, peso } from "../orders/events";
 import { CASE_AGENT_ROLES, orderActions, STATUS_LABEL } from "../orders/rules";
 import { settleOrderPoints } from "../points/service";
 import type {
+  CodCashInput,
   DeliverInput,
   HoldRole,
   Me,
@@ -540,8 +541,10 @@ export async function deliverOrder(
           else due_on end
         where order_id = ${orderId} returning code, status, (total - paid)::int as balance, terms`,
     );
-    const collect =
-      invoice?.terms === "cod" && invoice.status === "open"
+    const cash = input.cod && !order.leadId ? await noteCash(tx, me, order, await currentInvoice(tx, orderId), input.cod) : "";
+    const collect = cash
+      ? ` ${cash}`
+      : invoice?.terms === "cod" && invoice.status === "open"
         ? ` Cash on delivery: ${peso(invoice.balance)} to collect; ${order.leadId ? "the Online desk" : "Finance"} records it.`
         : "";
     await logEvent(
@@ -556,6 +559,60 @@ export async function deliverOrder(
       await logEvent(tx, orderId, me, "status", "Completed: delivered and paid.", "completed");
     // Paid before it arrived: the points are earned now.
     await settleOrderPoints(tx, orderId);
+  });
+}
+
+/** The order's invoice as it stands (a cancelled one replaced by a new one is passed over). */
+async function currentInvoice(tx: Runner, orderId: number) {
+  const [invoice] = await rows<{ status: string; balance: number; terms: string }>(
+    tx,
+    sql`select status, (total - paid)::int as balance, terms from invoice
+      where order_id = ${orderId} and status <> 'cancelled' order by id desc limit 1`,
+  );
+  return invoice;
+}
+
+/** Notes the cash a delivered cash-on-delivery order's rider or courier collected (Aryan, 19 Nov:
+ *  "who marks the COD payment?"): Dispatch says how much and who has it; Finance records the
+ *  payment once the money is in the bank. Said again, it replaces what was noted. */
+async function noteCash(
+  tx: Runner,
+  me: Me,
+  order: LockedOrder,
+  invoice: { status: string; balance: number; terms: string } | undefined,
+  input: CodCashInput,
+): Promise<string> {
+  const by = clean(input.by);
+  if (!invoice || invoice.terms !== "cod")
+    throw new Refusal(409, "not_cod", `${order.code} isn't cash on delivery.`);
+  if (invoice.status !== "open" || invoice.balance <= 0)
+    throw new Refusal(409, "paid", `Finance has already recorded ${order.code}'s payment.`);
+  if (!Number.isInteger(input.amount) || input.amount <= 0)
+    throw new Refusal(400, "invalid", "Type the cash collected.", "amount");
+  if (input.amount > invoice.balance)
+    throw new Refusal(400, "invalid", `That is more than the ${peso(invoice.balance)} it owes.`, "amount");
+  if (!by) throw new Refusal(400, "invalid", "Type who has the cash: the rider or the courier.", "by");
+  await tx.execute(
+    sql`update sales_order set cod_collected = ${input.amount}, cod_collected_by = ${by}, cod_noted_by = ${me.id},
+        cod_noted_at = now(), updated_at = now() where id = ${order.id}`,
+  );
+  const short = input.amount < invoice.balance ? ` (${peso(invoice.balance - input.amount)} short)` : "";
+  const note = clean(input.note);
+  return `Cash on delivery collected: ${peso(input.amount)}${short}, with ${by}. Finance records it when it is in the bank.${note ? ` ${note}` : ""}`;
+}
+
+/** Dispatch notes the cash collected on a delivered cash-on-delivery order (when it wasn't noted
+ *  on delivering, or to put it right). */
+export async function noteCodCash(db: Database, me: Me, orderId: number, input: CodCashInput): Promise<void> {
+  allow(me, DISPATCH_ROLES, "note the cash collected on delivery");
+  await db.transaction(async (tx) => {
+    const order = await lockOrder(tx, orderId);
+    if (order.status !== "completed")
+      throw new Refusal(409, "not_now", `Note the cash once ${order.code} is delivered.`);
+    if (order.leadId)
+      throw new Refusal(409, "online", `${order.code} is an Online case's order: the Online desk records its payment.`);
+    const said = await noteCash(tx, me, order, await currentInvoice(tx, orderId), input);
+    await logEvent(tx, orderId, me, "payment", said);
   });
 }
 

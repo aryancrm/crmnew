@@ -27,7 +27,7 @@ import {
   replyOnMessenger,
   verifyTokens,
 } from "./messenger";
-import { LEAD_READ_ROLES, LEAD_WORK_ROLES, PAPER_KINDS, PAPER_LABEL } from "./rules";
+import { LEAD_DESK_ROLES, LEAD_READ_ROLES, LEAD_WORK_ROLES, PAPER_KINDS, PAPER_LABEL } from "./rules";
 import { pushWebsites, websiteStatus } from "./websites";
 
 const FILTERS: InboxFilter[] = ["all", "needs", "mine"];
@@ -38,7 +38,7 @@ export async function inboxList(
   me: Me,
   query: { filter?: string; q?: string; account?: string; shown?: number },
 ): Promise<InboxList> {
-  allow(me, LEAD_READ_ROLES, "see the Inbox");
+  allow(me, LEAD_DESK_ROLES, "see the Inbox");
   const filter: InboxFilter = FILTERS.includes(query.filter as InboxFilter)
     ? (query.filter as InboxFilter)
     : "all";
@@ -95,7 +95,7 @@ export async function inboxList(
 
 /** The sidebar's count: conversations waiting for a reply, and new email senders. */
 export async function inboxCount(db: Database, me: Me): Promise<{ needs: number; held: number }> {
-  if (!may(me, LEAD_READ_ROLES)) return { needs: 0, held: 0 };
+  if (!may(me, LEAD_DESK_ROLES)) return { needs: 0, held: 0 };
   const [counted] = await rows<{ needs: number; held: number }>(
     db,
     sql`select (select count(*) from lead l join channel_account a on a.id = l.chat_account_id and a.active where l.awaiting_reply and l.state = 'open')::int as needs,

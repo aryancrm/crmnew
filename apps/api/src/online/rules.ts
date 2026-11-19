@@ -24,6 +24,10 @@ export const isPapRep = (me: { role: Role; channel: { code: string } | null }) =
   me.role === "medrep" && me.channel?.code === PAP_CHANNEL;
 /** Who reads them. */
 export const LEAD_READ_ROLES: readonly Role[] = ["online", "admin", "ceo", "management"];
+/** Who sees the desk itself, every case at once (Leads & enquiries, the Inbox): not Management
+ *  (Aryan, 19 Nov: "why is Leads & enquiries inside Management?"), which reads one case from its
+ *  order. */
+export const LEAD_DESK_ROLES: readonly Role[] = ["online", "admin", "ceo"];
 
 export const SOURCE_LABEL: Record<LeadSource, string> = {
   messenger: "Messenger",

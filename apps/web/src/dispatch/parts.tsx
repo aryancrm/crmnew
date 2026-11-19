@@ -6,9 +6,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, Plus, Snowflake, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { api } from "../api";
-import { todayManila } from "../finance/parts";
+import { AmountField, asTyped, centavos, todayManila } from "../finance/parts";
 import { PAPER_ACCEPT, uploadPaper } from "../photo";
-import { Button, count, Dialog, Field, INPUT, inPacks, Problem, useAction } from "../ui";
+import { Button, count, Dialog, Field, INPUT, inPacks, peso, Problem, useAction } from "../ui";
 
 /** Why a courier's parcel has no tracking number yet (the hub's "Not ready yet"). */
 export const TRACKING_WAITS = [
@@ -585,10 +585,16 @@ export function ShipDialog({
 export function DeliverDialog({
   orderId,
   code,
+  collect,
+  carrier,
   onClose,
 }: {
   orderId: number;
   code: string;
+  /** Cash on delivery still to collect (centavos), if it is that kind of order. */
+  collect?: number | null;
+  /** Who carried it (the rider, the courier): who has the cash, unless said otherwise. */
+  carrier?: string | null;
   onClose: () => void;
 }) {
   const work = useDispatch();
@@ -596,6 +602,12 @@ export function DeliverDialog({
   const [day, setDay] = useState(todayManila());
   const [note, setNote] = useState("");
   const receipt = useReceipt(orderId);
+  // Cash on delivery (Aryan, 19 Nov): how much the rider or courier collected and who has it;
+  // Finance records the payment once it is in the bank. Unticked, it is noted later.
+  const cod = Boolean(collect && collect > 0);
+  const [collected, setCollected] = useState(true);
+  const [cash, setCash] = useState(asTyped(collect ?? 0));
+  const [cashWith, setCashWith] = useState(carrier ?? "");
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -606,6 +618,7 @@ export function DeliverDialog({
         receivedBy,
         deliveredOn: day,
         note,
+        ...(cod && collected ? { cod: { amount: centavos(cash), by: cashWith } } : {}),
       }))
     )
       return;
@@ -641,6 +654,36 @@ export function DeliverDialog({
           </Field>
         </div>
         <ReceiptPicker receipt={receipt} error={receipt.problem ?? work.at("proof")} />
+        {cod && (
+          <fieldset className="rounded-xl border border-amber-200 bg-amber-50/70 px-3.5 py-3">
+            <legend className="px-1 text-[13px] font-semibold text-amber-900">
+              Cash on delivery: {peso(collect ?? 0)} to collect
+            </legend>
+            <label className="flex items-center gap-2 text-[13px] text-slate-800">
+              <input type="checkbox" checked={collected} onChange={(event) => setCollected(event.target.checked)} />
+              The cash was collected
+            </label>
+            {collected ? (
+              <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                <AmountField label="Cash collected" value={cash} onChange={setCash} error={work.at("amount")} />
+                <Field label="Who has the cash" error={work.at("by")}>
+                  {(field) => (
+                    <input
+                      {...field}
+                      className={INPUT}
+                      placeholder="The rider, or the courier (LBC, J&T…)"
+                      value={cashWith}
+                      onChange={(event) => setCashWith(event.target.value)}
+                    />
+                  )}
+                </Field>
+              </div>
+            ) : (
+              <p className="mt-2 text-[12px] text-amber-900">Note it from Delivered when the cash comes in.</p>
+            )}
+            <p className="mt-2 text-[12px] text-slate-600">Finance records the payment once the money is in the bank.</p>
+          </fieldset>
+        )}
         <Field label="Note (optional)" error={work.at("note")}>
           {(field) => (
             <input
@@ -651,7 +694,7 @@ export function DeliverDialog({
             />
           )}
         </Field>
-        <Problem message={work.general(["receivedBy", "deliveredOn", "note", "proof"])} />
+        <Problem message={work.general(["receivedBy", "deliveredOn", "note", "proof", "amount", "by"])} />
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
           <Button onClick={onClose} disabled={work.busy}>
             Close
@@ -719,19 +762,89 @@ export function OneLineDialog({
   );
 }
 
-/** Which of Dispatch's dialogs is open over a screen. */
-export type DispatchAsk = {
-  what: "pack" | "ship" | "deliver" | "failed" | "unpack" | "tracking";
+/** The cash a delivered cash-on-delivery order's rider or courier collected, noted after the
+ *  delivery (Aryan, 19 Nov): how much and who has it. Finance records the payment once it is in
+ *  the bank. */
+export function CodCashDialog({
+  orderId,
+  code,
+  collect,
+  carrier,
+  onClose,
+}: {
   orderId: number;
   code: string;
+  collect: number;
+  carrier?: string | null;
+  onClose: () => void;
+}) {
+  const work = useDispatch();
+  const [cash, setCash] = useState(asTyped(collect));
+  const [cashWith, setCashWith] = useState(carrier ?? "");
+  const [note, setNote] = useState("");
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    if (await work.send(`/api/dispatch/orders/${orderId}/cod`, { amount: centavos(cash), by: cashWith, note })) onClose();
+  }
+  return (
+    <Dialog title={`Cash on delivery · ${code}`} onClose={onClose} busy={work.busy}>
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <p className="text-[13px] text-slate-600">
+          {peso(collect)} to collect. Say how much came in and who has it: Finance records the payment once the
+          money is in the bank.
+        </p>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <AmountField label="Cash collected" value={cash} onChange={setCash} error={work.at("amount")} />
+          <Field label="Who has the cash" error={work.at("by")}>
+            {(field) => (
+              <input
+                {...field}
+                className={INPUT}
+                placeholder="The rider, or the courier (LBC, J&T…)"
+                value={cashWith}
+                onChange={(event) => setCashWith(event.target.value)}
+              />
+            )}
+          </Field>
+        </div>
+        <Field label="Note (optional)" error={work.at("note")}>
+          {(field) => (
+            <input {...field} className={INPUT} value={note} onChange={(event) => setNote(event.target.value)} />
+          )}
+        </Field>
+        <Problem message={work.general(["amount", "by", "note"])} />
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button onClick={onClose} disabled={work.busy}>
+            Close
+          </Button>
+          <Button type="submit" variant="primary" disabled={work.busy}>
+            {work.busy ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+/** Which of Dispatch's dialogs is open over a screen. */
+export type DispatchAsk = {
+  what: "pack" | "ship" | "deliver" | "failed" | "unpack" | "tracking" | "cod";
+  orderId: number;
+  code: string;
+  /** Cash on delivery still to collect, and who carried it (for Delivered and the cash note). */
+  collect?: number | null;
+  carrier?: string | null;
 } | null;
 
 export function DispatchDialogs({ ask, onClose }: { ask: DispatchAsk; onClose: () => void }) {
   if (!ask) return null;
-  const { what, orderId, code } = ask;
+  const { what, orderId, code, collect, carrier } = ask;
   if (what === "pack") return <PackDialog orderId={orderId} code={code} onClose={onClose} />;
   if (what === "ship") return <ShipDialog orderId={orderId} code={code} onClose={onClose} />;
-  if (what === "deliver") return <DeliverDialog orderId={orderId} code={code} onClose={onClose} />;
+  if (what === "deliver")
+    return <DeliverDialog orderId={orderId} code={code} collect={collect} carrier={carrier} onClose={onClose} />;
+  if (what === "cod")
+    return <CodCashDialog orderId={orderId} code={code} collect={collect ?? 0} carrier={carrier} onClose={onClose} />;
   if (what === "failed")
     return (
       <OneLineDialog

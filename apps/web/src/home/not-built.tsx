@@ -1,6 +1,9 @@
 // An address that is none of this person's screens.
 
+import type { Me } from "@2mg/api/types";
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { useMe } from "../auth";
 
 export function NotBuilt() {
   return (
@@ -12,4 +15,12 @@ export function NotBuilt() {
       </Link>
     </div>
   );
+}
+
+/** A page only some people work: the others get "not one of your screens", whatever address they
+ *  open (a link left from someone else's screen included). The API refuses them as well. */
+export function OnlyFor({ allow, children }: { allow: (me: Me) => boolean; children: ReactNode }) {
+  const me = useMe();
+  if (me.data && !allow(me.data)) return <NotBuilt />;
+  return <>{children}</>;
 }

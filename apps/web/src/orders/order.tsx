@@ -337,8 +337,16 @@ export function Order() {
     );
   const nextOf = (key: StepKey) =>
     steps[steps.findIndex((item) => item.key === key) + 1]?.key ?? null;
+  // Cash on delivery still open: Delivered asks how much came in and who has it (19 Nov).
+  const codLeft =
+    data.money.invoice?.terms === "cod" && data.money.invoice.status === "open" ? data.money.invoice.balance : null;
   const ask = (what: NonNullable<DispatchAsk>["what"]) =>
-    setDispatching({ what, orderId: order.id, code: order.code });
+    setDispatching({
+      what,
+      orderId: order.id,
+      code: order.code,
+      ...(what === "deliver" ? { collect: codLeft, carrier: order.rider ?? order.courier } : {}),
+    });
   // Management's last change before approving: what it added, gave free or repriced.
   const changed = data.events.findLast((event) =>
     event.message.includes("changed the order before approving it"),

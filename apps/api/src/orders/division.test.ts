@@ -1,7 +1,7 @@
 // One seat, one Division (Aryan, 19 Nov: "a MedRep comes under one Division; if a Hospital MedRep
 // brings another Division's order, under which head does it go?"): an order carries the Division of
 // the person whose order it is (their seat's: CLIDP, Uro & Onco Care is URO, Blood & Bone Care is
-// B&B, else the channel's), another is refused, and Management may set any.
+// B&B, else the channel's), another is refused, and the Admin may set any (Management places none).
 
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -34,7 +34,7 @@ beforeAll(async () => {
   await seedDemo(db, PASSWORD);
   await seedFixture(db);
   app = createApp(db, { webUrl: "http://localhost:5180" });
-  for (const name of ["ryan", "sarla"]) {
+  for (const name of ["ryan", "sarla", "admin"]) {
     const response = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -56,7 +56,7 @@ beforeAll(async () => {
 });
 
 describe("an order's Division", () => {
-  it("is the MedRep's own; another is refused; Management may set any", async () => {
+  it("is the MedRep's own; another is refused; the Admin may set any", async () => {
     const me = (await read<{ me: Me }>("ryan", "/api/me")).me;
     expect(me.divisions?.[0]).toBe("HOS");
 
@@ -75,13 +75,22 @@ describe("an order's Division", () => {
     expect(other.status).toBe(400);
     expect(await other.text()).toContain("HOS");
 
-    // Management, ordering for nobody in particular, may set any.
-    const management = await post("sarla", "/api/orders", {
+    // The Admin, ordering for nobody in particular, may set any; Management places no orders (19 Nov).
+    const admin = await post("admin", "/api/orders", {
       customerId: customer,
       division: "B2B",
       items: [{ medicineId: medicine, qty: 1, priceKind: "hospital" }],
     });
-    expect(management.status, await management.clone().text()).toBe(200);
+    expect(admin.status, await admin.clone().text()).toBe(200);
+    expect(
+      (
+        await post("sarla", "/api/orders", {
+          customerId: customer,
+          division: "B2B",
+          items: [{ medicineId: medicine, qty: 1, priceKind: "hospital" }],
+        })
+      ).status,
+    ).toBe(403);
   });
 
   it("follows the seat's box on the chart where it names a Division", async () => {

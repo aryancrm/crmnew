@@ -1306,20 +1306,13 @@ function ownDesk(me: Me): Space {
         tone: "bg-brand text-white",
         groups: [
           {
-            // Home is the warehouse's queue (to pack, to ship, came back); the road and the
-            // holds have their own links, like Management's.
+            // The warehouse's own work in the order it is done (Aryan, 19 Nov): what came for
+            // dispatch, what is on the road, what was delivered (cash on delivery noted there);
+            // then the holds and the returns. Home holds the three, one tab each.
             items: [
-              { ...home, label: "Orders to pack & ship", icon: Truck, badge: "dispatch", short: "Pack" },
-              // Each person's figures, like Management's: hours started, given, packed, time per order.
-              { to: "/desk/team", label: "Team figures", icon: BarChart3, short: "Team" },
-              { to: "/orders", label: "All orders", icon: ClipboardList, short: "Orders" },
-              {
-                to: "/shipments",
-                label: "On the road",
-                icon: Truck,
-                badge: "onTheWay",
-                short: "Road",
-              },
+              { ...home, label: "To pack & ship", icon: PackageCheck, badge: "dispatch", short: "Pack" },
+              { to: "/?tab=road", label: "On the road", icon: Truck, badge: "onTheWay", short: "Road" },
+              { to: "/?tab=done", label: "Delivered", icon: CheckCheck, short: "Done" },
               {
                 to: "/dispatch/hold",
                 label: "On hold",
@@ -1330,8 +1323,16 @@ function ownDesk(me: Me): Space {
             ],
           },
           {
+            // Every order is a look-up of its own, apart from the day's work.
             title: "Look up",
-            items: [stockLink, { to: "/customers", label: "Customers", icon: Users }],
+            items: [
+              { to: "/orders", label: "All orders", icon: ClipboardList },
+              { to: "/shipments", label: "Shipments", icon: Truck },
+              // Each person's figures, like Management's: hours started, given, packed, time per order.
+              { to: "/desk/team", label: "Team figures", icon: BarChart3 },
+              stockLink,
+              { to: "/customers", label: "Customers", icon: Users },
+            ],
           },
         ],
       };

@@ -38,10 +38,7 @@ import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { TeamSwitch } from "./switch";
-import { useMe } from "../auth";
-
-/** Who may place an order (the API's ORDER_PLACE_ROLES); the CEO watches, he doesn't order. */
-const PLACERS = ["medrep", "team_lead", "manager", "management", "online", "admin"];
+import { placesOrders, useMe } from "../auth";
 
 import { counted, exactPeso, shortPeso } from "../ceo";
 import { dayHeading, PRIMARY_SM } from "../look";
@@ -520,7 +517,7 @@ export function MyTeamPage() {
   const people = everyone || !deep ? data.seats : own;
   const showAll = chartAll ?? !(deep || data.seats.length > 24);
   const whole = me?.role === "ceo" || me?.role === "admin";
-  const places = PLACERS.includes(me?.role ?? "");
+  const places = placesOrders(me);
   const rootLead = data.seats.find((seat) => data.rootIds.includes(seat.unitId) && seat.lead);
   // One step up from a team: the box above it, else my own team (or the company).
   const above = data.path.length > 1 ? data.path[data.path.length - 2] : null;
@@ -996,7 +993,7 @@ const STAGES: { key: MyOrderStage; label: string }[] = [
 export function TeamSeatPage() {
   const { id } = useParams();
   const me = useMe().data;
-  const places = PLACERS.includes(me?.role ?? "");
+  const places = placesOrders(me);
   const [params, setParams] = useSearchParams();
   const unit = params.get("unit");
   const tab = params.get("tab") === "customers" ? "customers" : "orders";
