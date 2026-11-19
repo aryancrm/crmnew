@@ -134,6 +134,23 @@ const CHECKS: Check[] = [
       from person p where p.active and p.role = 'medrep' and p.reports_to is null`,
   },
   {
+    // The chart decides who each person reports to, and every lead's and head's screens read that
+    // (Aryan, 19 Nov: "is everyone's data going up to the right lead and head?"). Someone in one
+    // seat whose boss isn't the one the chart gives them would be missed by their own lead.
+    key: "chart_boss",
+    label: "Everyone reports to the lead the chart gives them",
+    query: sql`with one_seat as (
+        select h.person_id, min(h.seat_id) as seat_id from seat_holder h join seat s on s.id = h.seat_id
+        where h.kind = 'holder' and s.active and h.starts_on <= (now() at time zone 'Asia/Manila')::date
+          and (h.ends_on is null or h.ends_on >= (now() at time zone 'Asia/Manila')::date)
+        group by h.person_id having count(*) = 1
+      )
+      select p.name || ' reports to ' || coalesce(b.name, 'no one') || '; the chart says ' || coalesce(sb.name, 'no one') as problem
+      from one_seat o join seat s on s.id = o.seat_id join person p on p.id = o.person_id
+      left join person b on b.id = p.reports_to left join person sb on sb.id = s.boss_id
+      where p.active and coalesce(p.reports_to, 0) <> coalesce(s.boss_id, 0) and coalesce(s.boss_id, 0) <> p.id`,
+  },
+  {
     key: "inactive_boss",
     label: "No one reports to someone who has left",
     query: sql`select p.name || ' reports to ' || b.name || ', who has left' as problem

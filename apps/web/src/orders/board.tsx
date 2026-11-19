@@ -1080,6 +1080,12 @@ export function OrderCardItem({
                 >
                   <span className="font-semibold text-slate-700">{peso(card.total)}</span> ·{" "}
                   {card.code}
+                  {/* Its Division, which says the papers it carries (19 Nov). */}
+                  {card.division && (
+                    <span className="ml-1.5 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">
+                      {card.division}
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

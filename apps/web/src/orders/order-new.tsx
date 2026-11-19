@@ -446,6 +446,9 @@ export function OrderNew({
   const [headquarter, setHeadquarter] = useState<string | null>(null);
   const [noRxReason, setNoRxReason] = useState("");
   const [program, setProgram] = useState("");
+  // The letter's number and approved amount, when it is already in (else written on the order later).
+  const [glNumber, setGlNumber] = useState("");
+  const [glAmount, setGlAmount] = useState("");
   const [paymentTerm, setPaymentTerm] = useState("");
   // How the terms are given: from the list, as a number of days, or as a date to pay by.
   const [termMode, setTermMode] = useState<"list" | "__days" | "__date">("list");
@@ -950,6 +953,12 @@ export function OrderNew({
       division: pickedDivision || null,
       subDivision: sentSub || null,
       headquarter: shownHq.trim() || null,
+      ...(orderType === "gl"
+        ? {
+            glNumber: glNumber.trim() || null,
+            glAmount: glAmount.trim() && Number.isFinite(centavos(glAmount)) ? centavos(glAmount) : null,
+          }
+        : {}),
       noRxReason:
         rxDivision && !forPatient && !papers.prescription && !onFile.has("prescription")
           ? noRxReason.trim() || null
@@ -1270,6 +1279,24 @@ export function OrderNew({
             <span className={HELP}>
               Sub-division and Headquarter are Telesales; attach the guarantee letter under Documents.
             </span>
+            {/* The agency writes on the letter what it pays for our quotation (Aryan, 19 Nov): typed
+                here when the letter is already in, else on the order when it comes. */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-1">
+                <Label text="Letter number (when it is in)" />
+                <input value={glNumber} onChange={(event) => setGlNumber(event.target.value)} className={FIELD} />
+              </label>
+              <label className="flex flex-col gap-1">
+                <Label text="Amount on the letter, ₱ (when it is in)" />
+                <input
+                  inputMode="decimal"
+                  value={glAmount}
+                  onChange={(event) => setGlAmount(event.target.value)}
+                  className={FIELD}
+                  placeholder="What the agency approves"
+                />
+              </label>
+            </div>
           </div>
         )}
         <div className="grid gap-3 sm:grid-cols-2">

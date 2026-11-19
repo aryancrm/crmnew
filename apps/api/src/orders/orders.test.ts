@@ -266,6 +266,30 @@ describe("an order's type, picked first (Aryan, 19 Nov)", () => {
   });
 });
 
+describe("a guarantee letter's amount (Aryan, 19 Nov)", () => {
+  it("is written when the letter is in, by the order's MedRep, Management or Finance", async () => {
+    const made = await place("ryan", {
+      customerId: hospital,
+      items: [line()],
+      type: "gl",
+      patientName: "Lito Ramos",
+      source: "DSWD",
+    });
+    expect(made.status, JSON.stringify(made.body)).toBe(200);
+    const id = made.body.id;
+    expect((await order("ryan", id)).order.glAmount).toBeNull();
+    expect((await post("jane", `/api/orders/${id}/gl`, { amount: 100 })).status).not.toBe(200);
+    const wrote = await post("ryan", `/api/orders/${id}/gl`, { number: "DSWD-2026-0042", amount: 2_500_00 });
+    expect(wrote.status, await wrote.clone().text()).toBe(200);
+    const detail = await order("fiona", id);
+    expect(detail.order).toMatchObject({ glNumber: "DSWD-2026-0042", glAmount: 2_500_00, glSetBy: "Ryan" });
+    expect(detail.events.some((event) => event.message.includes("DSWD-2026-0042"))).toBe(true);
+    // Not on another kind of order.
+    const other = await place("ryan", { customerId: hospital, items: [line()], type: "no_po" });
+    expect((await post("ryan", `/api/orders/${other.body.id}/gl`, { amount: 100 })).status).toBe(409);
+  });
+});
+
 describe("who sees an order", () => {
   it("the MedRep, his team lead and Management, not another desk", async () => {
     const made = await place("ryan", { customerId: hospital, items: [line()] });

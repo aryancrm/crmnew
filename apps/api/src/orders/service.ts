@@ -180,7 +180,7 @@ const rowColumns = sql`
   o.id::int as id, o.code, o.customer_id::int as "customerId", c.name as customer, rep.name as medrep,
   o.status, (o.payment_terms = 'days') as credit, o.total::int as total, o.delivery_fee::int as "deliveryFee", o.points_used::int as "pointsUsed",
   ${iso("o.created_at")} as "createdAt", ${iso("o.updated_at")} as "updatedAt", o.flag_reason as "flagReason",
-  o.patient_order as "patientOrder", o.patient_name as "patientName", o.note, o.order_type as "orderType",
+  o.patient_order as "patientOrder", o.patient_name as "patientName", o.note, o.order_type as "orderType", o.division,
   exists (select 1 from order_version v where v.order_id = o.id and v.kind = 'changed') as changed, ${viaSql} as via`;
 
 const rowJoins = sql`
@@ -1363,6 +1363,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         case when ${takeBackSql} then ${iso(`(o.approved_at + make_interval(mins => ${TAKE_BACK_MINUTES}))`)} end as "takeBackUntil",
         case when o.relief_kind is not null then json_build_object('kind', o.relief_kind, 'idNo', o.relief_id_no, 'name', o.relief_name) end as relief,
         o.order_type as type, o.headquarter, o.no_rx_reason as "noRxReason",
+        o.gl_number as "glNumber", o.gl_amount::int as "glAmount", (select gp.name from person gp where gp.id = o.gl_set_by) as "glSetBy",
         ${restorableSql} as restorable, ${paidInSql} as "paidIn", ${iso("o.waiting_stock_at")} as "waitingSince",
         (select wp.name from person wp where wp.id = o.waiting_stock_by) as "waitingBy"
       from sales_order o ${rowJoins}
@@ -2035,7 +2036,7 @@ export async function placeOrder(
           delivery_address, receiver, receiver_phone, note, expected_on, customer_po, invoice_from, doctor_id, total, submitted_at,
           approved_at, approved_by, warehouse_id, lead_id, delivery_fee, division, sub_division, payment_term,
           no_proof_reason, no_proof_note, patient_order, patient_name, relief_kind, relief_id_no, relief_name,
-          source, stock_reason, order_type, headquarter, no_rx_reason)
+          source, stock_reason, order_type, headquarter, no_rx_reason, gl_number, gl_amount, gl_set_by, gl_set_at)
         values (${customer.id}, ${holder?.id ?? me.id}, ${me.id}, ${holder?.channelId ?? own?.channelId ?? null}, ${status},
           ${terms.terms}, ${terms.days}, ${("payBy" in terms ? terms.payBy : null) ?? null},
           ${clean(input.deliveryAddress) ?? withCity(customer.address, customer.city)},
@@ -2045,7 +2046,9 @@ export async function placeOrder(
           ${input.noProofReason ?? null}, ${clean(input.noProofNote)}, ${patientOrder},
           ${patientOrder ? clean(input.patientName) : null},
           ${relief?.kind ?? null}, ${relief?.idNo ?? null}, ${relief?.name ?? null},
-          ${input.source ?? null}, ${clean(input.stockReason)}, ${type}, ${headquarter}, ${clean(input.noRxReason)})
+          ${input.source ?? null}, ${clean(input.stockReason)}, ${type}, ${headquarter}, ${clean(input.noRxReason)},
+          ${clean(input.glNumber)}, ${input.glAmount ?? null},
+          ${clean(input.glNumber) || input.glAmount != null ? me.id : null}, ${clean(input.glNumber) || input.glAmount != null ? sql`now()` : null})
         returning id::int as id`,
     );
     const id = made?.id as number;
@@ -2916,6 +2919,45 @@ export async function approveCheck(db: Database, me: Me, orderId: number, key: s
         sql`update sales_order set papers_checked_by = ${me.id}, papers_checked_at = now() where id = ${orderId} and papers_checked_at is null`,
       );
     await logEvent(tx, orderId, me, "check", `${CHECK_LABEL[check]}: approved by ${me.name}.`);
+  });
+}
+
+/** A guarantee letter's number and the amount the agency approves for our quotation (Aryan, 19 Nov:
+ *  "we don't know it before; at the end we write what we got"). Written by the order's MedRep,
+ *  Management or Finance once the letter is in, on a guarantee letter's order not cancelled. */
+export async function setOrderGl(
+  db: Database,
+  me: Me,
+  orderId: number,
+  input: { number?: string | null; amount?: number | null },
+): Promise<void> {
+  const order = await visibleOrder(db, me, orderId);
+  const [row] = await rows<{ type: string | null; status: string; medrepId: number; raisedBy: number }>(
+    db,
+    sql`select order_type as type, status, medrep_id::int as "medrepId", raised_by::int as "raisedBy" from sales_order where id = ${orderId}`,
+  );
+  const writes =
+    ORDER_MANAGE_ROLES.includes(me.role) ||
+    FINANCE_ROLES.includes(me.role) ||
+    row?.medrepId === me.id ||
+    row?.raisedBy === me.id;
+  if (!writes) throw new Refusal(403, "not_allowed", "The order's MedRep, Management or Finance writes the letter's amount.");
+  if (row?.type !== "gl") throw new Refusal(409, "not_now", `${order.code} isn't a guarantee letter's order.`);
+  if (row.status === "cancelled") throw new Refusal(409, "not_now", `${order.code} is cancelled.`);
+  const number = clean(input.number);
+  const amount = input.amount ?? null;
+  if (!number && amount === null) throw new Refusal(400, "invalid", "Type the letter's number or its amount.", "amount");
+  await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`update sales_order set gl_number = ${number}, gl_amount = ${amount}, gl_set_by = ${me.id}, gl_set_at = now() where id = ${orderId}`,
+    );
+    await logEvent(
+      tx,
+      orderId,
+      me,
+      "note",
+      `Guarantee letter${number ? ` ${number}` : ""}: ${amount === null ? "amount not in yet" : `${peso(amount)} approved`} (written by ${me.name}).`,
+    );
   });
 }
 

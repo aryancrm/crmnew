@@ -190,6 +190,19 @@ export function FinanceStep({
               <b>After Management's approval</b>
             </Fact>
           )}
+          {/* A guarantee letter's order: the agency pays what its letter approves (19 Nov). */}
+          {order.type === "gl" && (
+            <div className="rounded-xl bg-sky-50 px-3 py-2 text-[13px] text-sky-950">
+              <b>Paid by the agency's guarantee letter{order.source ? ` (${order.source})` : ""}:</b>{" "}
+              {order.glAmount != null
+                ? `${peso(order.glAmount)} approved${order.glNumber ? `, letter ${order.glNumber}` : ""}${
+                    order.total !== order.glAmount
+                      ? ` · ${peso(Math.abs(order.total - order.glAmount))} ${order.total > order.glAmount ? "less than" : "more than"} the order`
+                      : ""
+                  }`
+                : "the letter's amount isn't written yet (the order's MedRep or Management writes it when it is in)."}
+            </div>
+          )}
           {!checked && noProofWords(order.noProofReason, order.noProofNote) && (
             <div className="flex gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[13px] text-slate-700">
               <span className="mt-1.5 size-2 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />

@@ -934,6 +934,8 @@ export type OrderRow = {
   code: string;
   /** Its type, picked first (19 Nov); null on an order placed before types. */
   orderType: OrderType | null;
+  /** The Division it was placed under (the MedRep may pick another than their own, 19 Nov). */
+  division: string | null;
   customerId: number;
   customer: string;
   medrep: string;
@@ -1072,6 +1074,9 @@ export type OrderInput = {
   headquarter?: string | null;
   /** A prescription Division's order with no prescription yet: why. */
   noRxReason?: string | null;
+  /** A guarantee letter's number and approved amount (centavos), when already in. */
+  glNumber?: string | null;
+  glAmount?: number | null;
 };
 
 export type OrderRelief = { kind: "senior" | "pwd"; idNo?: string | null; name?: string | null };
@@ -1286,6 +1291,10 @@ export type OrderDetail = {
     headquarter: string | null;
     /** No prescription with it yet, and why (a prescription Division's order). */
     noRxReason: string | null;
+    /** A guarantee letter's number and the amount the agency approves (centavos), once written. */
+    glNumber: string | null;
+    glAmount: number | null;
+    glSetBy: string | null;
   };
   items: {
     id: number;

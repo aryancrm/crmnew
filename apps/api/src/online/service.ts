@@ -1769,6 +1769,8 @@ export async function orderFromLead(
       relief,
       // The case's road is the order's type (19 Nov); a business buying through the desk has none.
       type: row.buyerKind ? null : row.road === "gl" ? "gl" : relief ? "senior_pwd" : "patient",
+      // A guarantee letter's number and amount, as the case has them.
+      ...(row.road === "gl" ? { glNumber: row.glLetterNo ?? null, glAmount: row.glAmount ?? null } : {}),
       items: row.quoteLines.map((line) => ({
         medicineId: line.medicineId,
         qty: line.qty,

@@ -20,7 +20,7 @@ import { AskUpBox } from "./asks";
 import { OrderReturnsBox, RefundButton } from "./returns";
 import { SendToCustomer } from "./send-update";
 import { OrderVersions } from "./versions";
-import { Button, dayLabel, PageState, Pill, Problem, peso, timeLabel, useLook } from "../ui";
+import { Button, dayLabel, PageState, Pill, Problem, peso, timeLabel, useAction, useLook } from "../ui";
 import { DeliveredStep } from "./steps/delivered";
 import { DispatchStep } from "./steps/dispatch";
 import { FINANCE_PARTS, type FinancePart, FinanceStep, financeChecked, financeChecks } from "./steps/finance";
@@ -801,6 +801,15 @@ export function Order() {
               <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
                 {pays}
               </span>
+              {/* Its Division (the MedRep may pick another than their own), which says its papers. */}
+              {order.division && (
+                <span
+                  className="rounded bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-700"
+                  title={[order.subDivision, order.headquarter && order.headquarter !== "N/A" ? `HQ ${order.headquarter}` : null].filter(Boolean).join(" · ") || undefined}
+                >
+                  {order.division}
+                </span>
+              )}
               {/* The order's type, picked first (19 Nov); Senior / PWD shows as its ID below. */}
               {order.type && order.type !== "senior_pwd" && (
                 <span
@@ -867,6 +876,9 @@ export function Order() {
               <SendToCustomer orderId={order.id} small />
               <RefundButton orderId={order.id} />
             </div>
+            {/* A guarantee letter's order: what the agency approves for our quotation, written when
+                the letter is in (Aryan, 19 Nov). */}
+            {order.type === "gl" && <GlLetter data={data} />}
             {/* An order with their PO and no signed PO yet: print it, have it signed, add its photo
                 (Aryan, 19 Nov). */}
             {order.type === "po" &&
@@ -1453,3 +1465,78 @@ const ORDER_LOOKS = [
   ["steps", "Steps"],
   ["glance", "One page"],
 ] as const;
+
+/** A guarantee letter's number and the amount the agency approves, and writing them when the
+ *  letter is in (the order's MedRep, Management, Finance). */
+function GlLetter({ data }: { data: OrderDetail }) {
+  const { order } = data;
+  const [editing, setEditing] = useState(false);
+  const [number, setNumber] = useState(order.glNumber ?? "");
+  const [amount, setAmount] = useState(order.glAmount != null ? String(order.glAmount / 100) : "");
+  const queries = useQueryClient();
+  const action = useAction();
+  const gap = order.glAmount != null ? order.total - order.glAmount : null;
+  async function save() {
+    const typed = amount.trim() ? Math.round(Number(amount.replace(/[,₱\s]/g, "")) * 100) : null;
+    if (
+      await action.run(async () => {
+        await api(`/api/orders/${order.id}/gl`, { body: { number: number.trim() || null, amount: typed } });
+      })
+    ) {
+      setEditing(false);
+      await queries.invalidateQueries({ queryKey: ["orders"] });
+    }
+  }
+  return (
+    <div className="mt-3 rounded-xl border border-sky-200 bg-sky-50/60 px-3 py-2.5 text-[13px] text-sky-950">
+      {!editing ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-semibold">
+            Guarantee letter{order.source ? ` · ${order.source}` : ""}
+            {order.glNumber ? ` · No. ${order.glNumber}` : ""}:
+          </span>
+          {order.glAmount != null ? (
+            <span>
+              <b>{peso(order.glAmount)}</b> approved
+              {gap ? ` · ${peso(Math.abs(gap))} ${gap > 0 ? "less than" : "more than"} our quotation (${peso(order.total)})` : " · the whole quotation"}
+              {order.glSetBy ? ` · written by ${order.glSetBy}` : ""}
+            </span>
+          ) : (
+            <span>the amount isn't in yet: the agency writes it on the letter.</span>
+          )}
+          <button type="button" onClick={() => setEditing(true)} className="font-semibold text-sky-800 underline">
+            {order.glAmount != null ? "Change" : "Write the letter's amount"}
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-semibold text-sky-900">Letter number</span>
+            <input value={number} onChange={(event) => setNumber(event.target.value)} className="h-9 w-40 rounded-lg border border-sky-200 bg-white px-2.5" />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-[11px] font-semibold text-sky-900">Amount on the letter (₱)</span>
+            <input
+              inputMode="decimal"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+              className="h-9 w-40 rounded-lg border border-sky-200 bg-white px-2.5"
+            />
+          </label>
+          <button
+            type="button"
+            disabled={action.busy}
+            onClick={save}
+            className="h-9 rounded-lg bg-brand px-3 font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
+          >
+            Save
+          </button>
+          <button type="button" onClick={() => setEditing(false)} className="h-9 rounded-lg px-2 text-sky-800 hover:underline">
+            Cancel
+          </button>
+          {action.problem && <span className="w-full text-[12px] text-rose-700">{action.problem.message}</span>}
+        </div>
+      )}
+    </div>
+  );
+}

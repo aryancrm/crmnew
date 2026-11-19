@@ -79,6 +79,7 @@ export function checkStates(data: OrderDetail): Record<CheckKey, { ok: boolean; 
     papers: data.papers.map((paper) => paper.kind),
     customerKind: data.order.customerKind,
     patientOrder: data.order.patientOrder,
+    orderType: data.order.type,
     items: data.items,
     manual: true,
     papersCheckedAt: data.order.papersCheckedAt,

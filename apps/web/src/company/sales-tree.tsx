@@ -1,56 +1,90 @@
-// The sales organisation (the old CRM's company tree, brought back live): the company, its heads,
-// their channels and teams, each team's lead and people, every box with how much of its target it
-// sold at the CRM's one pace. Nothing is typed for it: the boxes and seats come from the chart,
-// the people from who sits in each seat, the targets from Targets, the sales from the invoices;
-// a new channel or team, a person joining, leaving or moving shows by itself and its figures roll
-// up to every box above. Search, open all or heads only, zoom; a box opens its details at the side.
+// The sales organisation, full screen (Aryan, 19 Nov: "make it as the photo I sent: its colours,
+// its size, it zoomed well, hovering opened its data; open it full screen"): the old CRM's sales
+// tree (docs/prototypes/sales-tree.html, 10 Nov) and its company org chart, on the CRM's own live
+// data. Two looks: the Tree (left to right: the CEO, each head, their channels and teams, each
+// team's coach, their people) and the Org chart (top down, the same boxes as rings). Every box shows
+// what it sold against its month's target at the CRM's one pace; hover shows its figures, a press
+// opens them at the side; drag to move, the wheel or − / + to zoom, Fit to see it all.
+// Nothing is typed for it: the boxes and seats come from the chart, the people from who sits in each
+// seat, the targets from Targets, the sales from the invoices, so a new channel, a person joining,
+// leaving or moving shows by itself, and every figure rolls up to the boxes above.
 
 import type { TeamBoard, TeamSeatCard } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
-import { Minus, Plus, Search, X } from "lucide-react";
-import { useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Maximize, Minus, Plus, Search, X } from "lucide-react";
+import {
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+  type ReactNode,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { exactPeso, shortPeso } from "../ceo";
-import { TONE, type Tone, toneOf } from "../team/pace";
-import { RangePicker, reportRange, short } from "../team/range";
-import { TeamSwitch } from "../team/switch";
-import { ZoomBox } from "../team/zoom";
+import { type Tone, toneOf } from "../team/pace";
+import { reportRange } from "../team/range";
 import { PageState } from "../ui";
 
 type Unit = TeamBoard["units"][number];
-type Figures = {
-  sold: number;
-  target: number;
-  today: number;
-  people: number;
-  vacant: number;
-  territories: number;
-};
+type Figures = { sold: number; target: number; today: number; people: number; vacant: number; territories: number };
+type Level = "root" | "head" | "channel" | "manager" | "person";
 type Node = {
   key: string;
+  level: Level;
   unit: Unit | null;
   seat: TeamSeatCard | null;
   name: string;
   sub: string;
+  /** The circle's letters in the Org chart (a channel's code, a person's initial). */
+  code: string;
+  /** The colour of the head's part of the company (the Org chart's circles). */
+  hue: string;
   figures: Figures;
   children: Node[];
   path: string[];
 };
 
-const RING: Record<Tone, string> = {
-  on: "#10b981",
-  behind: "#f59e0b",
-  far: "#f43f5e",
+// The colours of the old CRM's tree: green on pace, amber a little behind, red behind, grey none.
+const COLOR: Record<Tone, string> = {
+  on: "#16a34a",
+  behind: "#d97706",
+  far: "#dc2626",
   none: "#94a3b8",
-  vacant: "#cbd5e1",
+  vacant: "#dc2626",
 };
-const pct = (figures: Figures) =>
+// Each head's part of the company in the Org chart (teal, indigo, purple, amber, rose, sky…).
+const HUES = ["#0f766e", "#4f46e5", "#9333ea", "#b45309", "#be123c", "#0369a1", "#4d7c0f"];
+
+const pctOf = (figures: Figures) =>
   figures.target ? Math.round((figures.sold / figures.target) * 1000) / 10 : null;
+const toneOfNode = (node: Node, pace: number): Tone =>
+  node.seat && !node.seat.person ? "vacant" : toneOf(node.figures.sold, node.figures.target || null, pace);
+const people = (count: number) => `${count} ${count === 1 ? "person" : "people"}`;
+
+/** A channel's letters: its capitals' word (RX, CLIDP, B2B, NCR), else the words' first letters. */
+function codeOf(name: string): string {
+  const caps = name.split(/[\s&·,-]+/).find((word) => /^[A-Z0-9]{2,6}$/.test(word));
+  if (caps) return caps;
+  const camel = name.replace(/[^A-Z]/g, "");
+  if (camel.length >= 2 && camel.length <= 4) return camel;
+  const words = name.split(/\s+/).filter((word) => /^[A-Za-z]/.test(word));
+  return words.length > 1
+    ? words
+        .slice(0, 3)
+        .map((word) => word[0]?.toUpperCase())
+        .join("")
+    : name.slice(0, 3).toUpperCase();
+}
+const initialOf = (name: string) => (name.trim()[0] ?? "?").toUpperCase();
 
 export function SalesTreePage() {
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
   const unit = params.get("unit");
+  const look = params.get("look") === "chart" ? "chart" : "tree";
   const { from, to } = reportRange(params);
   const qs = new URLSearchParams();
   if (unit) qs.set("unit", unit);
@@ -58,7 +92,7 @@ export function SalesTreePage() {
   qs.set("to", to);
   const board = useQuery({
     queryKey: ["team", "board", unit ?? "", from, to],
-    queryFn: () => api<TeamBoard>(`/api/team/board${qs.size ? `?${qs}` : ""}`),
+    queryFn: () => api<TeamBoard>(`/api/team/board?${qs}`),
     placeholderData: (previous) => previous,
   });
   const [open, setOpen] = useState<Set<string> | "all" | null>(null);
@@ -66,9 +100,26 @@ export function SalesTreePage() {
   const [everyone, setEveryone] = useState(false);
   const [find, setFind] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
+  const [hover, setHover] = useState<{ key: string; x: number; y: number } | null>(null);
+  const tree = useMemo(() => (board.data ? build(board.data, everyone) : null), [board.data, everyone]);
 
-  const tree = useMemo(() => (board.data ? build(board.data, everyone) : []), [board.data, everyone]);
-  if (!board.data) return <PageState query={board} what="the sales organisation" />;
+  // Esc closes the side panel, then the page.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (picked) setPicked(null);
+      else navigate(-1);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [picked, navigate]);
+
+  if (!board.data || !tree)
+    return (
+      <div className="fixed inset-0 z-50 grid place-items-center bg-[#f6f7f9]">
+        <PageState query={board} what="the sales organisation" />
+      </div>
+    );
   const data = board.data;
   const pace = data.pace;
   const all: Node[] = [];
@@ -76,232 +127,621 @@ export function SalesTreePage() {
     all.push(node);
     for (const child of node.children) walk(child);
   };
-  for (const root of tree) walk(root);
-  const total = tree.reduce(
-    (sum, node) => ({
-      sold: sum.sold + node.figures.sold,
-      target: sum.target + node.figures.target,
-      people: sum.people + node.figures.people,
-      vacant: sum.vacant + node.figures.vacant,
-    }),
-    { sold: 0, target: 0, people: 0, vacant: 0 },
-  );
+  walk(tree);
   const dayOf = Math.max(
     1,
-    Math.round((Date.parse(`${data.today}T00:00:00Z`) - Date.parse(`${data.from}T00:00:00Z`)) / 86_400_000) + 1,
+    Math.min(data.days, Math.round((Date.parse(`${data.today}T00:00:00Z`) - Date.parse(`${data.from}T00:00:00Z`)) / 86_400_000) + 1),
   );
-  const dayCount = data.days;
+  const month = new Date(`${data.from}T00:00:00Z`).toLocaleDateString("en-PH", { month: "long", year: "numeric", timeZone: "UTC" });
   const words = find.trim().toLowerCase();
   const hits = words
     ? all.filter((node) =>
-        `${node.name} ${node.sub} ${node.seat?.area?.name ?? ""} ${node.seat?.title ?? ""}`
-          .toLowerCase()
-          .includes(words),
+        `${node.name} ${node.sub} ${node.seat?.area?.name ?? ""} ${node.seat?.title ?? ""}`.toLowerCase().includes(words),
       )
     : [];
+  const hitKeys = new Set(hits.map((node) => node.key));
   const hitPaths = new Set(hits.flatMap((node) => node.path));
-  // Open at first: the top two levels.
-  const isOpen = (node: Node, depth: number) =>
-    open === "all" ||
-    hitPaths.has(node.key) ||
-    (open === null ? depth < 2 : open.has(node.key));
-  const toggle = (node: Node, depth: number) => {
+  // Open at first: down to the channels (the photo's first look); a found box opens its way down.
+  const isOpen = (node: Node) =>
+    open === "all" || hitPaths.has(node.key) || (open === null ? node.level === "root" || node.level === "head" : open.has(node.key));
+  const toggle = (node: Node) => {
     const next = new Set(
-      open === "all" ? all.map((one) => one.key) : open === null ? all.filter((one) => one.path.length - 1 < 2).map((one) => one.key) : open,
+      open === "all"
+        ? all.map((one) => one.key)
+        : open === null
+          ? all.filter((one) => one.level === "root" || one.level === "head").map((one) => one.key)
+          : open,
     );
-    if (isOpen(node, depth)) next.delete(node.key);
+    if (isOpen(node)) next.delete(node.key);
     else next.add(node.key);
     setOpen(next);
   };
+  const kidsOf = (node: Node) =>
+    headsOnly ? node.children.filter((child) => child.level !== "person") : node.children;
   const selected = all.find((node) => node.key === picked) ?? null;
-
-  const box = (node: Node, depth: number) => {
-    const share = pct(node.figures);
-    const tone: Tone = node.seat && !node.seat.person ? "vacant" : toneOf(node.figures.sold, node.figures.target || null, pace);
-    const hit = words && hits.includes(node);
-    const kids = headsOnly ? node.children.filter((child) => child.unit) : node.children;
-    return (
-      <div className="flex items-center" key={node.key}>
-        <button
-          type="button"
-          onClick={() => setPicked(node.key)}
-          className={`relative w-60 shrink-0 rounded-xl border px-3 py-2 text-left shadow-sm transition-colors hover:border-brand ${picked === node.key ? "border-brand ring-2 ring-brand/30" : hit ? "border-amber-400 ring-2 ring-amber-200" : "border-slate-200"} ${node.unit && depth === 0 ? "bg-emerald-900" : "bg-white"}`}
-        >
-          <div className="flex items-baseline justify-between gap-2">
-            <span className={`truncate text-[13px] font-semibold ${node.unit && depth === 0 ? "text-white" : "text-slate-900"}`}>
-              {node.name}
-            </span>
-            <span className="shrink-0 text-[12px] font-bold tabular-nums" style={{ color: RING[tone] }}>
-              {node.seat && !node.seat.person ? "VACANT" : share === null ? shortPeso(node.figures.sold) : `${share}%`}
-            </span>
-          </div>
-          <div className={`truncate text-[11px] ${node.unit && depth === 0 ? "text-emerald-100" : "text-slate-500"}`}>{node.sub}</div>
-          <div className="relative mt-1.5 h-1.5 rounded-full bg-slate-200">
-            <div
-              className="h-1.5 rounded-full"
-              style={{ width: `${Math.min(100, share ?? 0)}%`, background: RING[tone] }}
-            />
-            {/* The pace mark: where the bar should be by today. */}
-            <div className="absolute -top-0.5 h-2.5 w-px bg-slate-500" style={{ left: `${Math.min(100, pace * 100)}%` }} />
-          </div>
-        </button>
-        {kids.length > 0 && (
-          <button
-            type="button"
-            onClick={() => toggle(node, depth)}
-            aria-label={isOpen(node, depth) ? `Close ${node.name}` : `Open ${node.name}`}
-            className="-ml-2 z-10 grid size-5 shrink-0 place-items-center rounded-full border border-slate-300 bg-white text-slate-500 hover:text-slate-900"
-          >
-            {isOpen(node, depth) ? <Minus className="size-3" /> : <Plus className="size-3" />}
-          </button>
-        )}
-        {kids.length > 0 && isOpen(node, depth) && (
-          <div className="ml-4 flex flex-col gap-2 border-l border-slate-300 py-1 pl-5">
-            {kids.map((child) => (
-              <div key={child.key} className="relative before:absolute before:top-1/2 before:-left-5 before:w-5 before:border-t before:border-slate-300">
-                {box(child, depth + 1)}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    );
+  const hovered = hover ? all.find((node) => node.key === hover.key) : null;
+  const farLine = Math.round((pace / 2) * 100);
+  const paceLine = Math.round(pace * 100);
+  const props: ViewProps = {
+    pace,
+    isOpen,
+    toggle,
+    kidsOf,
+    picked,
+    hitKeys,
+    onPick: (node) => setPicked(node.key),
+    onHover: (node, event) => setHover(node && event ? { key: node.key, x: event.clientX, y: event.clientY } : null),
+  };
+  const setLook = (next: "tree" | "chart") => {
+    const nextParams = new URLSearchParams(params);
+    if (next === "chart") nextParams.set("look", "chart");
+    else nextParams.delete("look");
+    setParams(nextParams, { replace: true });
   };
 
   return (
-    <div className="mx-auto w-full max-w-screen-2xl space-y-4">
-      <header className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Sales organisation</h1>
-          <p className="mt-1 text-[13px] text-slate-500">
-            <b className="text-slate-800">{shortPeso(total.sold)}</b> achieved of{" "}
-            {total.target ? shortPeso(total.target) : "no target yet"}
-            {total.target ? ` · ${Math.round((total.sold / total.target) * 1000) / 10}%` : ""} ·{" "}
-            {total.people} people{total.vacant ? ` · ${total.vacant} vacant` : ""} ·{" "}
-            {pace < 1 ? `day ${Math.min(dayOf, dayCount)} of ${dayCount}` : `${short(data.from)} – ${short(data.to)}`} ·
-            live from the chart, Targets and the invoices
+    <div className="fixed inset-0 z-50 flex flex-col bg-[#f6f7f9]">
+      {/* The bar on top: what it is, find, open all, heads only, the zoom (in the canvas), the look. */}
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-3">
+        <div className="min-w-0">
+          <h1 className="text-[20px] font-semibold tracking-tight text-slate-900">Sales organisation</h1>
+          <p className="text-[13px] text-slate-500">
+            GetMeds sales team · {month} · {pace < 1 ? `day ${dayOf} of ${data.days}` : "the whole month"} ·{" "}
+            <b className="text-slate-800">{shortPeso(tree.figures.sold)}</b> of{" "}
+            {tree.figures.target ? shortPeso(tree.figures.target) : "no target yet"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <label className="relative">
-            <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-slate-400" />
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
             <input
               value={find}
               onChange={(event) => setFind(event.target.value)}
-              placeholder="Find a person, team or area"
-              className="h-9 w-64 rounded-lg border border-slate-200 bg-white pr-3 pl-8 text-sm"
+              placeholder="Find a person, territory, team"
+              className="h-10 w-72 rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm focus:border-emerald-500 focus:outline-none"
             />
           </label>
-          <button type="button" onClick={() => setOpen("all")} className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+          <Toggle on={false} onClick={() => setOpen("all")}>
             Open all
-          </button>
-          <button
-            type="button"
-            onClick={() => setHeadsOnly(!headsOnly)}
-            aria-pressed={headsOnly}
-            className={`h-9 rounded-lg border px-3 text-sm font-semibold ${headsOnly ? "border-brand bg-brand text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
-          >
+          </Toggle>
+          <Toggle on={headsOnly} onClick={() => setHeadsOnly(!headsOnly)}>
             Heads only
+          </Toggle>
+          <Toggle on={everyone} onClick={() => setEveryone(!everyone)} title="The teams that don't sell too (HR, IT, Finance…)">
+            Every team
+          </Toggle>
+          <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-0.5" role="tablist" aria-label="Look">
+            {(
+              [
+                ["tree", "Tree"],
+                ["chart", "Org chart"],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={look === key}
+                onClick={() => setLook(key)}
+                className={`h-9 rounded-lg px-3 text-sm font-semibold ${look === key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            title="The whole screen"
+            aria-label="The whole screen"
+            onClick={() => {
+              if (document.fullscreenElement) void document.exitFullscreen();
+              else void document.documentElement.requestFullscreen?.();
+            }}
+            className="grid size-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+          >
+            <Maximize className="size-4" />
           </button>
           <button
             type="button"
-            onClick={() => setEveryone(!everyone)}
-            aria-pressed={everyone}
-            className={`h-9 rounded-lg border px-3 text-sm font-semibold ${everyone ? "border-brand bg-brand text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
-            title="Show the teams that don't sell too (HR, IT, Finance…)"
+            aria-label="Close"
+            title="Close (Esc)"
+            onClick={() => navigate(-1)}
+            className="grid size-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
           >
-            Every team
+            <X className="size-4" />
           </button>
         </div>
       </header>
-      <TeamSwitch />
-      <RangePicker />
-      <div className="flex flex-wrap items-center gap-3 text-[11px] text-slate-600">
-        <span className="inline-flex items-center gap-1"><span className="size-2.5 rounded-full" style={{ background: RING.on }} /> On pace ({Math.round(pace * 100)}% or more by day {Math.min(dayOf, dayCount)})</span>
-        <span className="inline-flex items-center gap-1"><span className="size-2.5 rounded-full" style={{ background: RING.behind }} /> Behind</span>
-        <span className="inline-flex items-center gap-1"><span className="size-2.5 rounded-full" style={{ background: RING.far }} /> Far behind (under half the pace)</span>
-        <span className="inline-flex items-center gap-1"><span className="size-2.5 rounded-full" style={{ background: RING.none }} /> No target</span>
-        <span className="rounded bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-900">VACANT</span> nobody in the seat
-        {words && <span className="ml-auto font-semibold text-amber-800">{hits.length} found</span>}
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-white px-5 py-2 text-[13px] text-slate-600">
+        <Legend color={COLOR.on}>On pace ({paceLine}% or more by day {dayOf})</Legend>
+        <Legend color={COLOR.behind}>A little behind ({farLine}–{paceLine}%)</Legend>
+        <Legend color={COLOR.far}>Behind (under {farLine}%)</Legend>
+        <Legend color={COLOR.none}>No target</Legend>
+        <span className="inline-flex items-center gap-1.5">
+          <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-bold text-rose-600">VACANT</span> nobody in the seat
+        </span>
+        {words && <span className="ml-auto font-semibold text-amber-700">{hits.length} found</span>}
       </div>
-      {!total.target && (
-        <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[13px] text-amber-900">
-          No target is set for these days yet, so the boxes show only what was sold. Each head or lead
-          types their people's month on{" "}
-          <Link to="/targets" className="font-semibold underline">
-            Targets
-          </Link>{" "}
-          and every box here shows its % of target at once, rolled up to the top.
-        </p>
-      )}
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_22rem]">
-        <ZoomBox height={680}>
-          <div className="flex flex-col gap-4 p-6">{tree.map((root) => box(root, 0))}</div>
-        </ZoomBox>
-        <aside className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          {selected ? (
-            <Details node={selected} pace={pace} day={Math.min(dayOf, dayCount)} days={dayCount} onClose={() => setPicked(null)} unit={unit} />
-          ) : (
-            <p className="text-sm text-slate-500">
-              Press a box to see its target, what it sold, what is left to do, today, its people and
-              who under it is doing best.
-            </p>
-          )}
-        </aside>
+      <div className="relative min-h-0 flex-1">
+        <Canvas key={`${look}:${everyone}`}>
+          {look === "tree" ? <TreeBox node={tree} {...props} /> : <ChartTop node={tree} {...props} />}
+        </Canvas>
+        {selected && (
+          <Details
+            node={selected}
+            all={all}
+            pace={pace}
+            day={dayOf}
+            days={data.days}
+            month={month.split(" ")[0] ?? ""}
+            unit={unit}
+            onPick={(node) => setPicked(node.key)}
+            onClose={() => setPicked(null)}
+          />
+        )}
+        {hovered && hover && !picked && <Hover node={hovered} pace={pace} x={hover.x} y={hover.y} />}
       </div>
     </div>
   );
 }
 
+function Toggle({ on, onClick, title, children }: { on: boolean; onClick: () => void; title?: string; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={on}
+      title={title}
+      onClick={onClick}
+      className={`h-10 rounded-xl border px-4 text-sm font-semibold ${on ? "border-emerald-600 bg-emerald-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Legend({ color, children }: { color: string; children: ReactNode }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="size-3 rounded-[4px]" style={{ background: color }} />
+      {children}
+    </span>
+  );
+}
+
+/** The space the tree sits on: drag to move it, the wheel or − / + to zoom, Fit to see it all. */
+function Canvas({ children }: { children: ReactNode }) {
+  const outer = useRef<HTMLDivElement>(null);
+  const inner = useRef<HTMLDivElement>(null);
+  const [view, setView] = useState({ x: 40, y: 40, scale: 0.85 });
+  const drag = useRef<{ x: number; y: number; from: { x: number; y: number } } | null>(null);
+  const fit = () => {
+    const box = outer.current?.getBoundingClientRect();
+    const content = inner.current;
+    if (!box || !content) return;
+    const width = content.scrollWidth;
+    const height = content.scrollHeight;
+    const scale = Math.max(0.2, Math.min(1.2, Math.min((box.width - 80) / width, (box.height - 80) / height)));
+    setView({ scale, x: (box.width - width * scale) / 2, y: Math.max(24, (box.height - height * scale) / 2) });
+  };
+  // Fitted when it opens, once its boxes are drawn.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only once, on opening
+  useEffect(() => {
+    const timer = setTimeout(fit, 60);
+    return () => clearTimeout(timer);
+  }, []);
+  const zoomAt = (factor: number, cx?: number, cy?: number) =>
+    setView((now) => {
+      const box = outer.current?.getBoundingClientRect();
+      const px = cx ?? (box ? box.width / 2 : 0);
+      const py = cy ?? (box ? box.height / 2 : 0);
+      const scale = Math.max(0.15, Math.min(2.5, now.scale * factor));
+      const k = scale / now.scale;
+      return { scale, x: px - (px - now.x) * k, y: py - (py - now.y) * k };
+    });
+  useEffect(() => {
+    const element = outer.current;
+    if (!element) return;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const box = element.getBoundingClientRect();
+      zoomAt(event.deltaY < 0 ? 1.1 : 1 / 1.1, event.clientX - box.left, event.clientY - box.top);
+    };
+    element.addEventListener("wheel", onWheel, { passive: false });
+    return () => element.removeEventListener("wheel", onWheel);
+  });
+  const down = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if ((event.target as HTMLElement).closest("button,a,input")) return;
+    drag.current = { x: event.clientX, y: event.clientY, from: { x: view.x, y: view.y } };
+    (event.currentTarget as HTMLDivElement).setPointerCapture(event.pointerId);
+  };
+  const move = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = drag.current;
+    if (!start) return;
+    setView((now) => ({ ...now, x: start.from.x + event.clientX - start.x, y: start.from.y + event.clientY - start.y }));
+  };
+  return (
+    <div
+      ref={outer}
+      onPointerDown={down}
+      onPointerMove={move}
+      onPointerUp={() => {
+        drag.current = null;
+      }}
+      className="absolute inset-0 cursor-grab touch-none overflow-hidden select-none bg-[radial-gradient(circle,#dfe3e8_1px,transparent_1px)] [background-size:22px_22px] active:cursor-grabbing"
+    >
+      <div
+        ref={inner}
+        className="absolute top-0 left-0 origin-top-left"
+        style={{ transform: `translate(${view.x}px, ${view.y}px) scale(${view.scale})` }}
+      >
+        {children}
+      </div>
+      <div className="absolute top-4 left-4 flex items-center gap-2">
+        <div className="flex items-center rounded-xl border border-slate-200 bg-white shadow-sm">
+          <button type="button" aria-label="Zoom out" onClick={() => zoomAt(1 / 1.2)} className="grid size-10 place-items-center text-slate-700 hover:bg-slate-50">
+            <Minus className="size-4" />
+          </button>
+          <span className="w-14 text-center text-sm font-semibold text-slate-700 tabular-nums">{Math.round(view.scale * 100)}%</span>
+          <button type="button" aria-label="Zoom in" onClick={() => zoomAt(1.2)} className="grid size-10 place-items-center text-slate-700 hover:bg-slate-50">
+            <Plus className="size-4" />
+          </button>
+        </div>
+        <button type="button" onClick={fit} className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50">
+          Fit
+        </button>
+      </div>
+    </div>
+  );
+}
+
+type ViewProps = {
+  pace: number;
+  isOpen: (node: Node) => boolean;
+  toggle: (node: Node) => void;
+  kidsOf: (node: Node) => Node[];
+  picked: string | null;
+  hitKeys: Set<string>;
+  onPick: (node: Node) => void;
+  onHover: (node: Node | null, event?: ReactMouseEvent) => void;
+};
+
+/** A box's own look in the Tree: the CEO dark green, channels mint, everyone else white. */
+function Card({ node, pace, picked, hitKeys, onPick, onHover }: { node: Node } & ViewProps) {
+  const share = pctOf(node.figures);
+  const tone = toneOfNode(node, pace);
+  const root = node.level === "root";
+  const vacant = Boolean(node.seat && !node.seat.person);
+  return (
+    <button
+      type="button"
+      onClick={() => onPick(node)}
+      onMouseMove={(event) => onHover(node, event)}
+      onMouseLeave={() => onHover(null)}
+      className={`relative w-[250px] shrink-0 rounded-[14px] border px-4 py-3 text-left shadow-[0_1px_2px_rgba(15,23,42,0.06)] transition hover:-translate-y-px hover:shadow-md ${
+        root
+          ? "border-emerald-900 bg-[#0f5c46] text-white"
+          : node.level === "channel"
+            ? "border-emerald-100 bg-[#eaf6f0]"
+            : "border-slate-200 bg-white"
+      } ${picked === node.key ? "ring-2 ring-emerald-500" : hitKeys.has(node.key) ? "ring-2 ring-amber-400" : ""}`}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className={`truncate text-[15px] font-semibold ${root ? "text-white" : "text-slate-900"}`}>{node.name}</span>
+        <span className="shrink-0 text-[13px] font-bold tabular-nums" style={{ color: root ? "#ffffff" : COLOR[tone] }}>
+          {vacant ? "VACANT" : share === null ? shortPeso(node.figures.sold) : `${share}%`}
+        </span>
+      </div>
+      <div className={`mt-0.5 truncate text-[12px] ${root ? "text-emerald-100" : "text-slate-500"}`}>{node.sub}</div>
+      <div className={`relative mt-2.5 h-[5px] rounded-full ${root ? "bg-white/25" : "bg-slate-200"}`}>
+        <div className="h-[5px] rounded-full" style={{ width: `${Math.min(100, share ?? 0)}%`, background: root ? "#ffffff" : COLOR[tone] }} />
+        {/* The pace mark: where the bar should be by today. */}
+        <div className={`absolute -top-[3px] h-[11px] w-[2px] rounded ${root ? "bg-white/70" : "bg-slate-400"}`} style={{ left: `${Math.min(100, pace * 100)}%` }} />
+      </div>
+    </button>
+  );
+}
+
+/** The Tree, left to right: a box, its open button, its children in a column joined by a line. */
+function TreeBox({ node, ...props }: { node: Node } & ViewProps) {
+  const kids = props.kidsOf(node);
+  const open = kids.length > 0 && props.isOpen(node);
+  return (
+    <div className="flex items-center">
+      <Card node={node} {...props} />
+      {kids.length > 0 && (
+        <button
+          type="button"
+          onClick={() => props.toggle(node)}
+          aria-label={open ? `Close ${node.name}` : `Open ${node.name}`}
+          className="z-10 -ml-2.5 grid size-6 shrink-0 place-items-center rounded-full border border-slate-300 bg-white text-slate-500 shadow-sm hover:text-slate-900"
+        >
+          {open ? <Minus className="size-3.5" /> : <Plus className="size-3.5" />}
+        </button>
+      )}
+      {open && (
+        <div className="relative ml-8 flex flex-col gap-4 py-1">
+          {kids.map((child, index) => (
+            <div key={child.key} className="relative pl-8">
+              {/* The elbow: from the column's line to this box. */}
+              <span className="absolute top-1/2 left-0 h-px w-8 bg-slate-300" />
+              <span
+                className={`absolute left-0 w-px bg-slate-300 ${kids.length === 1 ? "top-1/2 h-0" : index === 0 ? "top-1/2 bottom-[-8px]" : index === kids.length - 1 ? "top-[-8px] bottom-1/2" : "top-[-8px] bottom-[-8px]"}`}
+              />
+              <TreeBox node={child} {...props} />
+            </div>
+          ))}
+          {/* From the parent's open button to the column. */}
+          <span className="absolute top-1/2 -left-8 h-px w-8 bg-slate-300" />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** A ring round a circle: how far the target is along, in its colour. */
+function Ring({ node, pace, size, children, fill }: { node: Node; pace: number; size: number; children: ReactNode; fill: string }) {
+  const share = pctOf(node.figures);
+  const tone = toneOfNode(node, pace);
+  const radius = size / 2 - 3;
+  const length = 2 * Math.PI * radius;
+  const shown = Math.min(1, (share ?? 0) / 100);
+  return (
+    <div className="relative grid place-items-center" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="absolute inset-0 -rotate-90" aria-hidden="true">
+        <circle cx={size / 2} cy={size / 2} r={radius} fill={fill} stroke="#e2e8f0" strokeWidth={3} />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={node.seat && !node.seat.person ? COLOR.vacant : COLOR[tone]}
+          strokeWidth={3}
+          strokeDasharray={node.seat && !node.seat.person ? "3 3" : `${length * shown} ${length}`}
+          strokeLinecap="round"
+        />
+      </svg>
+      <span className="relative">{children}</span>
+    </div>
+  );
+}
+
+/** The Org chart, top down: each head with their channels below, each channel's coach, their people. */
+function ChartTop({ node, ...props }: { node: Node } & ViewProps) {
+  // The CEO on top, the heads in a row under.
+  const heads = props.kidsOf(node);
+  return (
+    <div className="flex flex-col items-center gap-10 p-6">
+      <div className="flex flex-col items-center">
+        <ChartLabel node={node} {...props} big />
+        <span className="h-6 w-px bg-slate-300" />
+      </div>
+      <div className="-mt-10 flex items-start">
+        {heads.map((head, index) => (
+          <div key={head.key} className="relative flex flex-col items-center px-7">
+            {heads.length > 1 && (
+              <span
+                className="absolute top-0 h-px bg-slate-300"
+                style={{ left: index === 0 ? "50%" : 0, right: index === heads.length - 1 ? "50%" : 0 }}
+              />
+            )}
+            <span className="h-6 w-px bg-slate-300" />
+            <ChartNode node={head} {...props} />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ChartLabel({ node, pace, onPick, onHover, picked, hitKeys, big }: { node: Node; big?: boolean } & ViewProps) {
+  const share = pctOf(node.figures);
+  const tone = toneOfNode(node, pace);
+  return (
+    <button
+      type="button"
+      onClick={() => onPick(node)}
+      onMouseMove={(event) => onHover(node, event)}
+      onMouseLeave={() => onHover(null)}
+      className={`rounded-xl px-3 py-1 text-center ${picked === node.key ? "ring-2 ring-emerald-500" : hitKeys.has(node.key) ? "ring-2 ring-amber-400" : ""}`}
+    >
+      <div className={`${big ? "text-[18px]" : "text-[15px]"} font-semibold text-slate-900`}>{node.name}</div>
+      <div className="text-[12px] text-slate-500">{node.sub}</div>
+      <div className="text-[13px] font-bold tabular-nums" style={{ color: COLOR[tone] }}>
+        {share === null ? shortPeso(node.figures.sold) : `${share}%`}
+      </div>
+    </button>
+  );
+}
+
+function ChartNode({ node, ...props }: { node: Node } & ViewProps) {
+  const { pace, onPick, onHover, picked, hitKeys } = props;
+  const kids = props.kidsOf(node);
+  const share = pctOf(node.figures);
+  const tone = toneOfNode(node, pace);
+  const vacant = Boolean(node.seat && !node.seat.person);
+  // The people under a coach: a list, as the old chart drew them.
+  if (node.level === "person")
+    return (
+      <button
+        type="button"
+        onClick={() => onPick(node)}
+        onMouseMove={(event) => onHover(node, event)}
+        onMouseLeave={() => onHover(null)}
+        className={`flex w-[170px] items-center gap-2.5 rounded-lg px-1.5 py-1 text-left hover:bg-white ${picked === node.key ? "ring-2 ring-emerald-500" : hitKeys.has(node.key) ? "ring-2 ring-amber-400" : ""}`}
+      >
+        <Ring node={node} pace={pace} size={34} fill="#ffffff">
+          <span className="text-[11px] font-bold" style={{ color: node.hue }}>
+            {vacant ? "–" : node.code}
+          </span>
+        </Ring>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-[13px] font-semibold text-slate-900">{node.name}</span>
+          <span className="block truncate text-[11px] text-slate-500">{node.sub}</span>
+        </span>
+        <span className="text-[12px] font-bold tabular-nums" style={{ color: COLOR[tone] }}>
+          {vacant ? "" : share === null ? "" : `${share}%`}
+        </span>
+      </button>
+    );
+  const people = kids.filter((one) => one.level === "person");
+  const groups = kids.filter((one) => one.level !== "person");
+  const circle = node.level === "head" ? null : node.level === "channel" ? 58 : 50;
+  return (
+    <div className="flex flex-col items-center">
+      {circle ? (
+        <button
+          type="button"
+          onClick={() => onPick(node)}
+          onMouseMove={(event) => onHover(node, event)}
+          onMouseLeave={() => onHover(null)}
+          className={`flex flex-col items-center rounded-xl px-2 py-1 ${picked === node.key ? "ring-2 ring-emerald-500" : hitKeys.has(node.key) ? "ring-2 ring-amber-400" : ""}`}
+        >
+          <Ring node={node} pace={pace} size={circle} fill={node.level === "channel" ? node.hue : "#f8fafc"}>
+            <span className={`font-bold ${node.level === "channel" ? "text-[13px] text-white" : "text-[17px]"}`} style={node.level === "channel" ? undefined : { color: node.hue }}>
+              {node.code}
+            </span>
+          </Ring>
+          <span className="mt-1.5 max-w-[160px] truncate text-[14px] font-semibold text-slate-900">{node.name}</span>
+          <span className="max-w-[170px] truncate text-[11px] text-slate-500">{node.sub}</span>
+          <span className="text-[12px] font-bold tabular-nums" style={{ color: COLOR[tone] }}>
+            {share === null ? shortPeso(node.figures.sold) : `${share}%`}
+          </span>
+        </button>
+      ) : (
+        <ChartLabel node={node} {...props} />
+      )}
+      {kids.length > 0 && (
+        <>
+          <span className="h-6 w-px" style={{ background: `${node.hue}66` }} />
+          {groups.length > 0 && (
+            <div className="flex items-start">
+              {groups.map((group, index) => (
+                <div key={group.key} className="relative flex flex-col items-center px-4">
+                  {/* Its part of the bar joining the children, then down to it. */}
+                  {groups.length > 1 && (
+                    <span
+                      className="absolute top-0 h-px"
+                      style={{
+                        background: `${node.hue}66`,
+                        left: index === 0 ? "50%" : 0,
+                        right: index === groups.length - 1 ? "50%" : 0,
+                      }}
+                    />
+                  )}
+                  {groups.length > 1 && <span className="h-5 w-px" style={{ background: `${node.hue}66` }} />}
+                  <ChartNode node={group} {...props} />
+                </div>
+              ))}
+            </div>
+          )}
+          {people.length > 0 && (
+            <div className={`flex flex-col gap-1 border-l-2 pl-2 ${groups.length ? "mt-6" : ""}`} style={{ borderColor: `${node.hue}40` }}>
+              {people.map((person) => (
+                <ChartNode key={person.key} node={person} {...props} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** What a box holds, on hover. */
+function Hover({ node, pace, x, y }: { node: Node; pace: number; x: number; y: number }) {
+  const share = pctOf(node.figures);
+  const tone = toneOfNode(node, pace);
+  const left = Math.min(x + 16, window.innerWidth - 280);
+  const top = Math.min(y + 16, window.innerHeight - 190);
+  return (
+    <div className="pointer-events-none fixed z-[60] w-[260px] rounded-xl border border-slate-200 bg-white p-3 text-[12px] shadow-lg" style={{ left, top }}>
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="truncate text-[14px] font-semibold text-slate-900">{node.name}</span>
+        <span className="font-bold tabular-nums" style={{ color: COLOR[tone] }}>
+          {node.seat && !node.seat.person ? "VACANT" : share === null ? "—" : `${share}%`}
+        </span>
+      </div>
+      <div className="truncate text-slate-500">{node.sub}</div>
+      <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+        <dt className="text-slate-500">Target</dt>
+        <dd className="text-right font-semibold tabular-nums">{node.figures.target ? shortPeso(node.figures.target) : "—"}</dd>
+        <dt className="text-slate-500">Achieved</dt>
+        <dd className="text-right font-semibold tabular-nums">{shortPeso(node.figures.sold)}</dd>
+        <dt className="text-slate-500">Today</dt>
+        <dd className="text-right font-semibold tabular-nums">{shortPeso(node.figures.today)}</dd>
+        <dt className="text-slate-500">People</dt>
+        <dd className="text-right font-semibold tabular-nums">
+          {node.figures.people}
+          {node.figures.vacant ? ` · ${node.figures.vacant} vacant` : ""}
+        </dd>
+      </dl>
+      <div className="mt-1.5 text-[11px] text-slate-400">Press it for everything.</div>
+    </div>
+  );
+}
+
+/** A box's figures at the side, as the old tree's panel. */
 function Details({
   node,
+  all,
   pace,
   day,
   days,
-  onClose,
+  month,
   unit,
+  onPick,
+  onClose,
 }: {
   node: Node;
+  all: Node[];
   pace: number;
   day: number;
   days: number;
-  onClose: () => void;
+  month: string;
   unit: string | null;
+  onPick: (node: Node) => void;
+  onClose: () => void;
 }) {
-  const share = pct(node.figures);
-  const tone: Tone = node.seat && !node.seat.person ? "vacant" : toneOf(node.figures.sold, node.figures.target || null, pace);
+  const share = pctOf(node.figures);
+  const tone = toneOfNode(node, pace);
+  const vacant = Boolean(node.seat && !node.seat.person);
   const under = [...node.children].sort(
-    (a, b) => (pct(b.figures) ?? -1) - (pct(a.figures) ?? -1) || b.figures.sold - a.figures.sold,
+    (a, b) => (pctOf(b.figures) ?? -1) - (pctOf(a.figures) ?? -1) || b.figures.sold - a.figures.sold,
   );
+  const trail = node.path
+    .slice(0, -1)
+    .map((key) => all.find((one) => one.key === key)?.name)
+    .filter(Boolean)
+    .join(" › ");
   return (
-    <div className="space-y-3">
-      <div className="flex items-start justify-between gap-2">
+    <aside className="absolute top-4 right-4 bottom-4 z-20 flex w-[400px] max-w-[calc(100%-2rem)] flex-col overflow-y-auto rounded-2xl border border-slate-200 bg-white p-6 shadow-xl">
+      <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="truncate text-[11px] text-slate-500">{node.path.slice(0, -1).map((key) => key.split(":").slice(2).join(":")).join(" › ")}</div>
-          <h2 className="text-lg font-bold text-slate-900">{node.name}</h2>
-          <div className="text-[12px] text-slate-500">{node.sub}</div>
+          {trail && <div className="truncate text-[13px] text-slate-500">{trail}</div>}
+          <h2 className="mt-1 text-[22px] font-bold text-slate-900">{node.name}</h2>
+          <div className="text-[14px] text-slate-500">{node.sub}</div>
         </div>
         <button type="button" onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-slate-800">
-          <X className="size-4" />
+          <X className="size-5" />
         </button>
       </div>
-      <div>
-        <div className="flex items-baseline gap-2">
-          <span className="text-3xl font-bold tabular-nums" style={{ color: RING[tone] }}>
-            {node.seat && !node.seat.person ? "VACANT" : share === null ? "—" : `${share}%`}
+      <div className="mt-5">
+        <div className="flex items-baseline gap-3">
+          <span className="text-[40px] leading-none font-bold tabular-nums" style={{ color: COLOR[tone] }}>
+            {vacant ? "VACANT" : share === null ? "—" : `${share}%`}
           </span>
-          <span className="text-[13px] text-slate-600">{node.figures.target ? "of the target" : "no target set"}</span>
+          <span className="text-[15px] text-slate-600">{node.figures.target ? `of the ${month} target` : "no target set"}</span>
         </div>
-        <div className="relative mt-2 h-2 rounded-full bg-slate-200">
-          <div className="h-2 rounded-full" style={{ width: `${Math.min(100, share ?? 0)}%`, background: RING[tone] }} />
-          <div className="absolute -top-0.5 h-3 w-px bg-slate-600" style={{ left: `${Math.min(100, pace * 100)}%` }} />
+        <div className="relative mt-3 h-2.5 rounded-full bg-slate-200">
+          <div className="h-2.5 rounded-full" style={{ width: `${Math.min(100, share ?? 0)}%`, background: COLOR[tone] }} />
+          <div className="absolute -top-1 h-[18px] w-[2px] rounded bg-slate-500" style={{ left: `${Math.min(100, pace * 100)}%` }} />
         </div>
-        <p className="mt-1.5 text-[11px] text-slate-500">
-          The mark on the bar is the pace: by day {day} of {days}, {Math.round(pace * 100)}% of the target.
+        <p className="mt-2 text-[13px] text-slate-500">
+          The mark on the bar is the month's pace: by day {day} of {days}, {Math.round(pace * 100)}% of the target.
         </p>
       </div>
-      <dl className="grid grid-cols-2 gap-2 text-[12px]">
+      <dl className="mt-4 grid grid-cols-2 gap-3">
         {(
           [
             ["Target", node.figures.target ? exactPeso(node.figures.target) : "—"],
@@ -312,56 +752,65 @@ function Details({
             ["Territories", String(node.figures.territories)],
           ] as [string, string][]
         ).map(([label, value]) => (
-          <div key={label} className="rounded-lg bg-slate-50 px-2.5 py-2">
-            <dt className="text-[10px] font-semibold tracking-wide text-slate-500 uppercase">{label}</dt>
-            <dd className="font-bold text-slate-900 tabular-nums">{value}</dd>
+          <div key={label} className="rounded-xl bg-slate-50 px-3.5 py-3">
+            <dt className="text-[11px] font-semibold tracking-wide text-slate-500 uppercase">{label}</dt>
+            <dd className="mt-0.5 text-[17px] font-bold text-slate-900 tabular-nums">{value}</dd>
           </div>
         ))}
       </dl>
       {node.seat && (
         <Link
           to={`/my-team/seat/${node.seat.seatId}${unit ? `?unit=${unit}` : ""}`}
-          className="inline-block text-[12px] font-semibold text-brand hover:underline"
+          className="mt-3 inline-block text-[13px] font-semibold text-emerald-700 hover:underline"
         >
           Open their page →
         </Link>
       )}
       {under.length > 0 && (
-        <div>
-          <h3 className="mb-1.5 text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
+        <div className="mt-5">
+          <h3 className="mb-2 text-[12px] font-semibold tracking-wide text-slate-500 uppercase">
             Under {node.name} · best first
           </h3>
-          <ul className="space-y-1.5">
+          <ul className="space-y-2.5">
             {under.map((child) => {
-              const childShare = pct(child.figures);
-              const childTone: Tone = child.seat && !child.seat.person ? "vacant" : toneOf(child.figures.sold, child.figures.target || null, pace);
+              const childShare = pctOf(child.figures);
+              const childTone = toneOfNode(child, pace);
+              const childVacant = Boolean(child.seat && !child.seat.person);
               return (
-                <li key={child.key} className="text-[12px]">
-                  <div className="flex justify-between gap-2">
-                    <span className="truncate font-semibold text-slate-800">{child.name}</span>
-                    <span className="font-bold tabular-nums" style={{ color: RING[childTone] }}>
-                      {child.seat && !child.seat.person ? "VACANT" : childShare === null ? shortPeso(child.figures.sold) : `${childShare}%`}
-                    </span>
-                  </div>
-                  <div className="relative mt-0.5 h-1 rounded-full bg-slate-200">
-                    <div className="h-1 rounded-full" style={{ width: `${Math.min(100, childShare ?? 0)}%`, background: RING[childTone] }} />
-                  </div>
+                <li key={child.key}>
+                  <button type="button" onClick={() => onPick(child)} className="w-full text-left">
+                    <div className="flex justify-between gap-2 text-[14px]">
+                      <span className="truncate font-semibold text-slate-800">{child.name}</span>
+                      <span className="font-bold tabular-nums" style={{ color: COLOR[childTone] }}>
+                        {childVacant ? "VACANT" : childShare === null ? shortPeso(child.figures.sold) : `${childShare}%`}
+                      </span>
+                    </div>
+                    <div className="relative mt-1 h-1.5 rounded-full bg-slate-200">
+                      <div className="h-1.5 rounded-full" style={{ width: `${Math.min(100, childShare ?? 0)}%`, background: COLOR[childTone] }} />
+                      <div className="absolute -top-0.5 h-2.5 w-px bg-slate-500" style={{ left: `${Math.min(100, pace * 100)}%` }} />
+                    </div>
+                  </button>
                 </li>
               );
             })}
           </ul>
         </div>
       )}
-      <p className="text-[11px] text-slate-400">
+      <p className="mt-auto pt-5 text-[12px] text-slate-400">
         Live: the chart's seats and who sits in them, the targets typed on Targets, and what Finance
         invoiced (Zoho's history counted for the seat it was sold from).
       </p>
-    </div>
+    </aside>
   );
 }
 
-/** The tree from the board: boxes from the chart, each lead's box named by its lead, people under. */
-function build(board: TeamBoard, everyone: boolean): Node[] {
+/**
+ * The tree from the board, in the old tree's levels: the CEO; each head (a business's lead); their
+ * channels and teams (the chart's boxes under them, mint); each box's coach when it has one; the
+ * people in their seats. A box with nobody selling under it stays out (HR, IT…) unless every team
+ * is asked for. Every box's figures are the sum of what is under it.
+ */
+function build(board: TeamBoard, everyone: boolean): Node {
   const units = board.units;
   const ids = new Set(units.map((one) => one.id));
   const seatsOf = new Map<number, TeamSeatCard[]>();
@@ -370,84 +819,156 @@ function build(board: TeamBoard, everyone: boolean): Node[] {
   // target, or it sold something in the days picked. So a new channel's seats show by themselves.
   const sellingSeat = (seat: TeamSeatCard) =>
     (seat.target ?? 0) > 0 || seat.sold > 0 || /^(medrep|team lead|online desk)$/i.test(seat.moduleLabel);
-  const nodeOf = (unit: Unit, path: string[]): Node | null => {
-    const key = `u:${unit.id}:${unit.name}`;
+  const zero: Figures = { sold: 0, target: 0, today: 0, people: 0, vacant: 0, territories: 0 };
+  const add = (a: Figures, b: Figures): Figures => ({
+    sold: a.sold + b.sold,
+    target: a.target + b.target,
+    today: a.today + b.today,
+    people: a.people + b.people,
+    vacant: a.vacant + b.vacant,
+    territories: a.territories + b.territories,
+  });
+  const seatFigures = (seat: TeamSeatCard): Figures => ({
+    sold: seat.sold,
+    target: seat.target ?? 0,
+    today: seat.today,
+    people: seat.person ? 1 : 0,
+    vacant: seat.person ? 0 : 1,
+    territories: seat.area ? 1 : 0,
+  });
+  const personNode = (seat: TeamSeatCard, path: string[], hue: string): Node => {
+    const key = `s:${seat.seatId}`;
+    return {
+      key,
+      level: "person",
+      unit: null,
+      seat,
+      name: seat.person?.name ?? "VACANT",
+      sub: seat.area?.name?.split("|").pop()?.trim() || "On site",
+      code: initialOf(seat.person?.name ?? "?"),
+      hue,
+      figures: seatFigures(seat),
+      children: [],
+      path: [...path, key],
+    };
+  };
+  const unitNode = (unit: Unit, path: string[], depth: number, hue: string): Node | null => {
+    if (!everyone && depth === 1 && unit.kind === "department") return null;
+    const key = `u:${unit.id}`;
     const here = [...path, key];
     const seats = seatsOf.get(unit.id) ?? [];
     const lead = seats.find((seat) => seat.seatId === unit.leadSeatId) ?? null;
     const childUnits = units
       .filter((one) => one.parentId === unit.id)
-      .map((one) => nodeOf(one, here))
+      .map((one, index) => unitNode(one, depth === 0 ? here : here, depth + 1, depth === 0 ? (HUES[index % HUES.length] as string) : hue))
       .filter((one): one is Node => one !== null);
-    const people = seats
+    const sellers = seats
       .filter((seat) => seat.seatId !== unit.leadSeatId)
       .filter((seat) => everyone || sellingSeat(seat))
-      .sort((a, b) => b.sold - a.sold)
-      .map((seat): Node => {
-        const seatKey = `s:${seat.seatId}:${seat.person?.name ?? seat.title}`;
-        return {
-          key: seatKey,
-          unit: null,
-          seat,
-          name: seat.person?.name ?? "VACANT",
-          sub: [seat.title, seat.area?.name].filter(Boolean).join(" · "),
-          figures: {
-            sold: seat.sold,
-            target: seat.target ?? 0,
-            today: seat.today,
-            people: seat.person ? 1 : 0,
-            vacant: seat.person ? 0 : 1,
-            territories: seat.area ? 1 : 0,
-          },
-          children: [],
-          path: [...here, seatKey],
-        };
-      });
-    const children = [...childUnits, ...people];
-    const leadFigures: Figures = lead
-      ? {
-          sold: lead.sold,
-          target: lead.target ?? 0,
-          today: lead.today,
-          people: lead.person ? 1 : 0,
-          vacant: lead.person ? 0 : 1,
-          territories: lead.area ? 1 : 0,
-        }
-      : { sold: 0, target: 0, today: 0, people: 0, vacant: 0, territories: 0 };
-    const figures = children.reduce(
-      (sum, child) => ({
-        sold: sum.sold + child.figures.sold,
-        target: sum.target + child.figures.target,
-        today: sum.today + child.figures.today,
-        people: sum.people + child.figures.people,
-        vacant: sum.vacant + child.figures.vacant,
-        territories: sum.territories + child.figures.territories,
-      }),
-      leadFigures,
-    );
-    const sells = everyone || figures.people + figures.vacant > 0 && (figures.target > 0 || figures.sold > 0 || children.length > 0);
-    if (!sells && !everyone) return null;
-    if (!everyone && children.length === 0 && !(lead && sellingSeat(lead))) return null;
-    const leadName = lead?.person?.name ?? (lead ? (lead.acting ? `${lead.acting.name} (covering)` : "No lead yet") : null);
+      .sort((a, b) => b.sold - a.sold);
+    const leadSells = Boolean(lead && (everyone || sellingSeat(lead)));
+    if (!everyone && depth > 0 && childUnits.length === 0 && sellers.length === 0 && !leadSells) return null;
+    const leadName = lead?.person?.name ?? (lead?.acting ? `${lead.acting.name} (covering)` : null);
+    // A head's box is the person (the old tree's "Javed · Head"); a channel or team is its box, with
+    // its coach under it when it has one (the old tree's "RX Business" then "Honey · Manager").
+    if (depth === 1) {
+      const kids = [...childUnits, ...sellers.map((seat) => personNode(seat, here, hue))];
+      const figures = kids.reduce((sum, kid) => add(sum, kid.figures), lead ? seatFigures(lead) : zero);
+      return {
+        key,
+        level: "head",
+        unit,
+        seat: null,
+        name: leadName ?? unit.name,
+        sub: [leadName ? unit.name : "No head named", people(figures.people), figures.vacant ? `${figures.vacant} vacant` : null]
+          .filter(Boolean)
+          .join(" · "),
+        code: codeOf(unit.name),
+        hue,
+        figures,
+        children: kids,
+        path: here,
+      };
+    }
+    if (depth === 0) {
+      const kids = childUnits;
+      const figures = kids.reduce((sum, kid) => add(sum, kid.figures), zero);
+      const ceo = board.lead && /ceo|chief executive/i.test(board.lead.title ?? "") ? board.lead.name : null;
+      return {
+        key,
+        level: "root",
+        unit,
+        seat: null,
+        name: ceo ?? unit.name,
+        sub: [ceo ? "CEO" : null, people(figures.people), figures.vacant ? `${figures.vacant} vacant` : null].filter(Boolean).join(" · "),
+        code: codeOf(unit.name),
+        hue: "#0f5c46",
+        figures,
+        children: kids,
+        path: here,
+      };
+    }
+    // A channel or team, and its coach.
+    const coachKey = `c:${unit.id}`;
+    const people_ = sellers.map((seat) => personNode(seat, lead && leadName ? [...here, coachKey] : here, hue));
+    const below = [...childUnits, ...people_];
+    const coachFigures = below.reduce((sum, kid) => add(sum, kid.figures), lead ? seatFigures(lead) : zero);
+    const coach: Node | null =
+      lead && leadName
+        ? {
+            key: coachKey,
+            level: "manager",
+            unit: null,
+            seat: lead,
+            name: leadName,
+            sub: [lead.title?.replace(/\s*–.*$/, "") || "Coach", people(coachFigures.people), coachFigures.vacant ? `${coachFigures.vacant} vacant` : null]
+              .filter(Boolean)
+              .join(" · "),
+            code: initialOf(leadName),
+            hue,
+            figures: coachFigures,
+            children: below,
+            path: [...here, coachKey],
+          }
+        : null;
+    const figures = coach ? coach.figures : coachFigures;
     return {
       key,
+      level: "channel",
       unit,
       seat: null,
-      name: leadName && leadName !== "No lead yet" ? `${unit.name} · ${leadName}` : unit.name,
-      sub: [
-        lead?.title,
-        `${figures.people} ${figures.people === 1 ? "person" : "people"}`,
-        figures.vacant ? `${figures.vacant} vacant` : null,
-      ]
-        .filter(Boolean)
-        .join(" · "),
+      name: unit.name,
+      sub: [people(figures.people), figures.vacant ? `${figures.vacant} vacant` : null].filter(Boolean).join(" · "),
+      code: codeOf(unit.name),
+      hue,
       figures,
-      children,
+      children: coach ? [coach] : below,
       path: here,
     };
   };
-  return units
-    .filter((one) => one.parentId === null || !ids.has(one.parentId))
-    .map((one) => nodeOf(one, []))
-    .filter((one): one is Node => one !== null);
+  const roots = units.filter((one) => one.parentId === null || !ids.has(one.parentId));
+  const withPaths = (node: Node, above: string[]): Node => {
+    const path = [...above, node.key];
+    return { ...node, path, children: node.children.map((child) => withPaths(child, path)) };
+  };
+  const built = roots
+    .map((one) => unitNode(one, [], 0, "#0f5c46"))
+    .filter((one): one is Node => one !== null)
+    .map((one) => withPaths(one, []));
+  if (built.length === 1) return built[0] as Node;
+  // Several tops (a lead looking at two teams): one box over them.
+  const figures = built.reduce((sum, kid) => add(sum, kid.figures), zero);
+  return {
+    key: "top",
+    level: "root",
+    unit: null,
+    seat: null,
+    name: board.lead?.name ?? "Your teams",
+    sub: people(figures.people),
+    code: "",
+    hue: "#0f5c46",
+    figures,
+    children: built.map((one) => withPaths({ ...one, level: one.level === "root" ? "head" : one.level }, ["top"])),
+    path: ["top"],
+  };
 }

@@ -35,6 +35,7 @@ import {
   removePaper,
   reviseOrder,
   saveOrderDetails,
+  setOrderGl,
 } from "./service";
 import { tellStockBack } from "./stock-wait";
 
@@ -106,6 +107,8 @@ const orderInput = z.object({
   type: z.enum(ORDER_TYPES, { error: "Pick the order's type." }).nullish(),
   headquarter: optional(60),
   noRxReason: optional(300),
+  glNumber: optional(60),
+  glAmount: z.number().int().min(0).max(100_000_000_00).nullish(),
   relief: z
     .object({
       kind: z.enum(["senior", "pwd"], { error: "Pick senior citizen or PWD." }),
@@ -354,6 +357,18 @@ export function orderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
     return c.json({ ok: true });
   });
   // Management's own look at the papers, by hand (Aryan, 19 Nov).
+  // A guarantee letter's number and the amount the agency approves, written when the letter is in.
+  app.post("/api/orders/:id/gl", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        number: optional(60),
+        amount: z.number({ error: "Type the amount on the letter." }).int().min(0).max(100_000_000_00).nullish(),
+      }),
+    );
+    await setOrderGl(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
   app.post("/api/orders/:id/papers-check", async (c) => {
     const input = await readBody(c, z.object({ ok: z.boolean() }));
     await checkPapers(db, c.get("me"), idParam(c), input.ok);
