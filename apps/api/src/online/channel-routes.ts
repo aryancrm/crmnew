@@ -120,6 +120,8 @@ export function channelRoutes(
     "/api/email-held",
     "/api/email-held/*",
     "/api/web-orders/*",
+    // "Open in the CRM": only for someone signed in (each page then checks who may see it).
+    "/api/website-order",
     "/api/dev/*",
   ])
     app.use(path, signedIn);

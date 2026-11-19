@@ -376,6 +376,8 @@ describe("a website order", () => {
     expect(found.leadId).toBe(await caseOfRef("2MG-100041"));
     expect(found.orderId).toBeGreaterThan(0);
     expect((await get("jane", "/api/website-order?site=2mginc.com&ref=NOPE-1")).status).toBe(404);
+    // Never without signing in.
+    expect((await app.request("/api/website-order?site=2mginc.com&ref=2MG-100041")).status).toBe(401);
   });
 
   it("lets the website's admin read where its order stands", async () => {
