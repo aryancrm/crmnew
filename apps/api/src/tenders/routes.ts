@@ -4,7 +4,30 @@ import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
 import { type Env, readBody } from "../http";
-import { addCompanyPaper, companyPapers, createTender, listTenders, moveTender, saveTender, setLines, STEPS, tenderDesk, tenderDetail } from "./service";
+import {
+  addCompanyPaper,
+  bidReport,
+  companyPapers,
+  createTender,
+  listTenders,
+  moveTender,
+  removeBidder,
+  saveBidder,
+  saveTender,
+  setLines,
+  STEPS,
+  tenderDesk,
+  tenderDetail,
+} from "./service";
+
+const REASONS = ["lowest", "lower_price", "above_abc", "documents", "post_disqualified", "failed_bidding", "other"] as const;
+const BIDDER = z.object({
+  name: z.string().trim().min(2, "Name the bidder.").max(160),
+  price: z.number().int().min(0).max(1_000_000_000_000).nullish(),
+  lines: z.array(z.object({ medicineId: z.number().int().positive(), unitPrice: z.number().int().min(0) })).max(200).optional(),
+  disqualified: z.boolean().optional(),
+  note: z.string().max(500).nullish(),
+});
 
 const DAY = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick the day.");
 const MONEY = z.number().int().min(0).max(1_000_000_000_000);
@@ -14,6 +37,23 @@ export function tenderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
   for (const path of ["/api/tenders", "/api/tenders/*", "/api/company-papers"]) app.use(path, signedIn);
   app.get("/api/tenders", async (c) => c.json(await listTenders(db, c.get("me"))));
   app.get("/api/tenders/desk", async (c) => c.json(await tenderDesk(db, c.get("me"))));
+  // The bid report: every price read, won or lost and why, by agency, securities, what is coming.
+  app.get("/api/tenders/report", async (c) =>
+    c.json(await bidReport(db, c.get("me"), { from: c.req.query("from"), to: c.req.query("to") })),
+  );
+  // The other bids read at the opening (the abstract of bids), written on the tender.
+  app.post("/api/tenders/:id/bidders", async (c) => {
+    const input = await readBody(c, BIDDER);
+    return c.json(await saveBidder(db, c.get("me"), Number(c.req.param("id")), input));
+  });
+  app.post("/api/tenders/:id/bidders/:bidder", async (c) => {
+    const input = await readBody(c, BIDDER);
+    return c.json(await saveBidder(db, c.get("me"), Number(c.req.param("id")), input, Number(c.req.param("bidder"))));
+  });
+  app.post("/api/tenders/bidders/:bidder/remove", async (c) => {
+    await removeBidder(db, c.get("me"), Number(c.req.param("bidder")));
+    return c.json({ ok: true });
+  });
   app.get("/api/tenders/:id", async (c) => c.json(await tenderDetail(db, c.get("me"), Number(c.req.param("id")))));
   app.post("/api/tenders", async (c) => {
     const input = await readBody(
@@ -44,6 +84,11 @@ export function tenderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
         bidSecurityForm: z.string().max(60).nullish(),
         bidSecurityAmount: MONEY.nullish(),
         bidSecurityBackOn: DAY.nullish(),
+        performanceSecurityForm: z.string().max(60).nullish(),
+        performanceSecurityAmount: MONEY.nullish(),
+        performanceSecurityBackOn: DAY.nullish(),
+        retentionAmount: MONEY.nullish(),
+        retentionBackOn: DAY.nullish(),
         deliverBy: DAY.nullish(),
         papers: z.array(z.object({ paper: z.string(), done: z.boolean() })).nullish(),
       }),
@@ -65,7 +110,13 @@ export function tenderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
   app.post("/api/tenders/:id/step", async (c) => {
     const input = await readBody(
       c,
-      z.object({ step: z.enum(STEPS as [string, ...string[]]), note: z.string().max(500).nullish(), on: DAY.nullish(), winningBid: MONEY.nullish() }),
+      z.object({
+        step: z.enum(STEPS as [string, ...string[]]),
+        note: z.string().max(500).nullish(),
+        on: DAY.nullish(),
+        winningBid: MONEY.nullish(),
+        reason: z.enum(REASONS).nullish(),
+      }),
     );
     await moveTender(db, c.get("me"), Number(c.req.param("id")), input as Parameters<typeof moveTender>[3]);
     return c.json({ ok: true });

@@ -4,15 +4,28 @@
 // details, envelope papers, our price per medicine, its next step, its history) and the company's
 // eligibility papers.
 
-import type { Catalogue, CompanyPaper, CustomerList, RegulatoryDesk, Tender, TenderDesk, TenderStep } from "@2mg/api/types";
+import type {
+  Catalogue,
+  CompanyPaper,
+  CustomerList,
+  RegulatoryDesk,
+  Tender,
+  TenderBidder,
+  TenderDesk,
+  TenderReason,
+  TenderStanding,
+  TenderStep,
+} from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { shortPeso } from "../ceo";
-import { Button, CARD, dayLabel, Dialog, PageHead, PageState, Problem, Tabs, useAction } from "../ui";
+import { Button, CARD, dayLabel, Dialog, PageHead, PageState, Problem, peso, Tabs, useAction } from "../ui";
 import { withUnit } from "../team/switch";
+import { BidReportCard } from "./bid-report";
+import { REASON } from "./tender-words";
 
 const STEP: Record<TenderStep, string> = {
   found: "Found",
@@ -40,6 +53,7 @@ const MODE: Record<string, string> = {
   other: "Other",
 };
 const toCentavos = (pesos: string) => Math.round(Number(pesos.replace(/[^\d.]/g, "")) * 100) || 0;
+
 const deadline = (t: Tender) => (t.deadlineAt ? new Date(t.deadlineAt).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" }) : "no deadline yet");
 
 function TenderRow({ t, extra }: { t: Tender; extra?: string }) {
@@ -146,6 +160,8 @@ export function BiddingHome() {
           )}
         </section>
       </div>
+      {/* Their bids so far this year: every price read, won or lost and why, what is coming. */}
+      <BidReportCard />
     </>
   );
 }
@@ -277,7 +293,16 @@ export function TendersPage() {
   );
 }
 
-type Detail = { tender: Tender; lines: { id: number; medicineId: number; medicine: string; qty: number; unitPrice: number }[]; events: { step: string; note: string | null; by: string; at: string }[]; next: TenderStep[]; canApprove: boolean };
+type Detail = {
+  tender: Tender;
+  lines: { id: number; medicineId: number; medicine: string; qty: number; unitPrice: number }[];
+  events: { step: string; note: string | null; by: string; at: string }[];
+  next: TenderStep[];
+  canApprove: boolean;
+  bidders: TenderBidder[];
+  standing: TenderStanding;
+  canBidders: boolean;
+};
 
 function StepDialog({ tender, step, onClose }: { tender: Tender; step: TenderStep; onClose: () => void }) {
   const queries = useQueryClient();
@@ -285,8 +310,24 @@ function StepDialog({ tender, step, onClose }: { tender: Tender; step: TenderSte
   const [note, setNote] = useState("");
   const [on, setOn] = useState("");
   const [winning, setWinning] = useState("");
+  const [reason, setReason] = useState<TenderReason | "">("");
   return (
     <Dialog title={`${tender.code}: ${STEP[step]}`} sub={tender.title} onClose={onClose} busy={action.busy}>
+      {step === "lost" && (
+        <label className="mb-3 block text-[12.5px] font-semibold text-slate-600">
+          Why we lost
+          <select className="field h-10 w-full" value={reason} onChange={(event) => setReason(event.target.value as TenderReason)}>
+            <option value="">Pick the reason…</option>
+            {(Object.keys(REASON) as TenderReason[])
+              .filter((key) => key !== "lowest")
+              .map((key) => (
+                <option key={key} value={key}>
+                  {REASON[key]}
+                </option>
+              ))}
+          </select>
+        </label>
+      )}
       {["won", "contract", "delivered", "accepted", "billed", "paid"].includes(step) && (
         <label className="block text-[12.5px] font-semibold text-slate-600">
           On which day (today if empty)
@@ -312,7 +353,13 @@ function StepDialog({ tender, step, onClose }: { tender: Tender; step: TenderSte
             void action.run(async () => {
               await api(`/api/tenders/${tender.id}/step`, {
                 method: "POST",
-                body: { step, note: note || null, on: on || null, winningBid: winning ? toCentavos(winning) : null },
+                body: {
+                  step,
+                  note: note || null,
+                  on: on || null,
+                  winningBid: winning ? toCentavos(winning) : null,
+                  reason: step === "lost" && reason ? reason : null,
+                },
               });
               await queries.invalidateQueries({ queryKey: ["tenders"] });
               onClose();
@@ -440,9 +487,9 @@ export function TenderPage() {
             <b>Winning bid</b> {shortPeso(t.winningBid)}
           </div>
         )}
-        {t.resultNote && (
+        {(t.resultReason || t.resultNote) && (
           <div className="sm:col-span-2">
-            <b>Result</b> {t.resultNote}
+            <b>Result</b> {[t.resultReason ? REASON[t.resultReason] : null, t.resultNote].filter(Boolean).join(" · ")}
           </div>
         )}
         {t.noaOn && (
@@ -483,6 +530,8 @@ export function TenderPage() {
         <Problem message={action.problem?.message} />
       </section>
       <LinesEditor key={data.lines.map((l) => l.id).join("-")} detail={data} />
+      <BidsRead detail={data} />
+      {["won", "contract", "delivered", "accepted", "billed", "paid"].includes(t.step) && <Securities tender={t} />}
       <section className={`${CARD} p-4`}>
         <h3 className="text-sm font-bold text-slate-900">History</h3>
         <ul className="mt-2 space-y-1 text-[12.5px] text-slate-600">
@@ -613,6 +662,268 @@ export function BiddingCard({ title = "Government Bidding", unit = null }: { tit
             <div className="text-[11px] text-slate-500">{label}</div>
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+/** The bids read at the opening (the abstract of bids): ours among them, the lowest first, each
+ *  bidder's price (a total, or a price for each of our medicines), out or not; a bidder is added
+ *  as read, and one written by mistake is taken off (kept, marked replaced). */
+function BidsRead({ detail }: { detail: Detail }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState("");
+  const [price, setPrice] = useState("");
+  const [unit, setUnit] = useState<Record<number, string>>({});
+  const [out, setOut] = useState(false);
+  const [note, setNote] = useState("");
+  const { standing, bidders, tender } = detail;
+  const reset = () => {
+    setName("");
+    setPrice("");
+    setUnit({});
+    setOut(false);
+    setNote("");
+  };
+  const ours = new Map(detail.lines.map((line) => [line.medicineId, line]));
+  const unitTotal = Object.entries(unit).reduce((sum, [medicineId, value]) => {
+    const line = ours.get(Number(medicineId));
+    return sum + (line && value ? toCentavos(value) * line.qty : 0);
+  }, 0);
+  if (!detail.canBidders && bidders.length === 0)
+    return (
+      <section className={`${CARD} p-4`}>
+        <h3 className="text-sm font-bold text-slate-900">The bids read at the opening</h3>
+        <p className="mt-1 text-[13px] text-slate-500">Written once the bids are opened (after Submitted): every bidder's price and who was out.</p>
+      </section>
+    );
+  return (
+    <section className={`${CARD} min-w-0`}>
+      <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 px-4 py-3">
+        <h3 className="text-sm font-bold text-slate-900">The bids read at the opening</h3>
+        {standing.lowest && (
+          <span className="text-[12.5px] text-slate-600">
+            Lowest {shortPeso(standing.lowest.price)} ({standing.lowest.name})
+            {standing.rank ? ` · ours is #${standing.rank}` : ""}
+            {standing.gap !== null && standing.gap > 0 ? ` · ${shortPeso(standing.gap)} (${standing.gapPct}%) above it` : ""}
+          </span>
+        )}
+      </header>
+      {standing.bids.length > 0 && (
+        <table className="w-full text-[13px]">
+          <thead>
+            <tr className="text-left text-[10.5px] font-semibold tracking-wide text-slate-400 uppercase">
+              <th className="px-4 py-2">#</th>
+              <th className="px-3 py-2">Bidder</th>
+              <th className="px-3 py-2 text-right">Bid</th>
+              <th className="px-3 py-2 text-right">Against the ABC</th>
+              <th className="px-3 py-2">Note</th>
+              <th className="px-3 py-2" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {standing.bids.map((bid, index) => {
+              const row = bidders.find((one) => one.name === bid.name && one.price === bid.price);
+              const place = bid.disqualified ? null : standing.bids.filter((one) => !one.disqualified).indexOf(bid) + 1;
+              return (
+                <tr key={`${bid.name}-${index}`} className={bid.us ? "bg-emerald-50/60" : ""}>
+                  <td className="px-4 py-2 text-slate-500 tabular-nums">{place ?? "—"}</td>
+                  <td className={`px-3 py-2 ${bid.us ? "font-semibold text-emerald-800" : "text-slate-900"}`}>
+                    {bid.name}
+                    {bid.disqualified && <span className="ml-1.5 rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-semibold text-rose-700">Out</span>}
+                  </td>
+                  <td className="px-3 py-2 text-right tabular-nums">{shortPeso(bid.price)}</td>
+                  <td className="px-3 py-2 text-right text-slate-500 tabular-nums">
+                    {tender.abc ? `${Math.round((bid.price / tender.abc) * 1000) / 10}%` : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-[12px] text-slate-500">
+                    {row?.note ?? ""}
+                    {row && row.lines.length > 0 && (
+                      <span className="block">
+                        {row.lines
+                          .map((line) => `${ours.get(line.medicineId)?.medicine ?? "a medicine"} ${peso(line.unitPrice)} each`)
+                          .join(" · ")}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {row && detail.canBidders && (
+                      <button
+                        type="button"
+                        disabled={action.busy}
+                        onClick={() =>
+                          void action.run(async () => {
+                            await api(`/api/tenders/bidders/${row.id}/remove`, { method: "POST", body: {} });
+                            await queries.invalidateQueries({ queryKey: ["tenders"] });
+                          })
+                        }
+                        className="text-[12px] font-semibold text-slate-500 hover:text-rose-700"
+                      >
+                        Take off
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      {detail.canBidders &&
+        (adding ? (
+          <div className="grid gap-2 border-t border-slate-100 p-4 sm:grid-cols-2">
+            <label className="block text-[12.5px] font-semibold text-slate-600">
+              Bidder (as read at the opening)
+              <input className="field h-10 w-full" value={name} onChange={(event) => setName(event.target.value)} />
+            </label>
+            <label className="block text-[12.5px] font-semibold text-slate-600">
+              Their bid for the whole tender (₱)
+              <input
+                className="field h-10 w-full"
+                inputMode="decimal"
+                placeholder={unitTotal ? `${(unitTotal / 100).toLocaleString("en-PH")} from the prices below` : ""}
+                value={price}
+                onChange={(event) => setPrice(event.target.value)}
+              />
+            </label>
+            {detail.lines.length > 0 && (
+              <fieldset className="sm:col-span-2">
+                <legend className="text-[12.5px] font-semibold text-slate-600">Their price for one piece, medicine by medicine (when read item by item)</legend>
+                <div className="mt-1 grid gap-2 sm:grid-cols-2">
+                  {detail.lines.map((line) => (
+                    <label key={line.id} className="block text-[12px] text-slate-600">
+                      {line.medicine} × {line.qty} (ours {shortPeso(line.unitPrice)})
+                      <input
+                        className="field h-9 w-full"
+                        inputMode="decimal"
+                        value={unit[line.medicineId] ?? ""}
+                        onChange={(event) => setUnit({ ...unit, [line.medicineId]: event.target.value })}
+                      />
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
+            )}
+            <label className="flex items-center gap-2 text-[13px] text-slate-700">
+              <input type="checkbox" className="accent-rose-600" checked={out} onChange={(event) => setOut(event.target.checked)} />
+              Out (disqualified at the opening or the post-qualification)
+            </label>
+            <label className="block text-[12.5px] font-semibold text-slate-600 sm:col-span-2">
+              Note (why out, a remark)
+              <input className="field h-10 w-full" value={note} onChange={(event) => setNote(event.target.value)} />
+            </label>
+            <Problem message={action.problem?.message} />
+            <div className="flex gap-2 sm:col-span-2">
+              <Button
+                variant="primary"
+                disabled={action.busy || !name.trim()}
+                onClick={() =>
+                  void action.run(async () => {
+                    const lines = Object.entries(unit)
+                      .filter(([, value]) => value.trim())
+                      .map(([medicineId, value]) => ({ medicineId: Number(medicineId), unitPrice: toCentavos(value) }));
+                    await api(`/api/tenders/${tender.id}/bidders`, {
+                      method: "POST",
+                      body: {
+                        name: name.trim(),
+                        price: price.trim() ? toCentavos(price) : unitTotal || null,
+                        lines,
+                        disqualified: out,
+                        note: note.trim() || null,
+                      },
+                    });
+                    await queries.invalidateQueries({ queryKey: ["tenders"] });
+                    reset();
+                  })
+                }
+              >
+                Add the bid
+              </Button>
+              <Button
+                onClick={() => {
+                  reset();
+                  setAdding(false);
+                }}
+              >
+                Done
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="border-t border-slate-100 px-4 py-3">
+            <Button small onClick={() => setAdding(true)}>
+              Add a bidder's price
+            </Button>
+          </div>
+        ))}
+    </section>
+  );
+}
+
+/** What the award ties up: the performance security and the retention, and when each comes back. */
+function Securities({ tender }: { tender: Tender }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const [form, setForm] = useState(tender.performanceSecurityForm ?? "");
+  const [amount, setAmount] = useState(tender.performanceSecurityAmount ? String(tender.performanceSecurityAmount / 100) : "");
+  const [back, setBack] = useState(tender.performanceSecurityBackOn ?? "");
+  const [retention, setRetention] = useState(tender.retentionAmount ? String(tender.retentionAmount / 100) : "");
+  const [retentionBack, setRetentionBack] = useState(tender.retentionBackOn ?? "");
+  return (
+    <section className={`${CARD} p-4`}>
+      <h3 className="text-sm font-bold text-slate-900">Securities</h3>
+      <p className="text-[12px] text-slate-500">
+        The performance security (5% in cash or a bank guarantee, 30% by surety bond) and the retention (1% on medicines,
+        three months after acceptance).
+      </p>
+      <div className="mt-2 grid gap-2 sm:grid-cols-3">
+        <label className="block text-[12.5px] font-semibold text-slate-600">
+          Performance security: form
+          <input className="field h-10 w-full" placeholder="Bank guarantee, surety bond, cash" value={form} onChange={(event) => setForm(event.target.value)} />
+        </label>
+        <label className="block text-[12.5px] font-semibold text-slate-600">
+          Amount (₱)
+          <input className="field h-10 w-full" inputMode="decimal" value={amount} onChange={(event) => setAmount(event.target.value)} />
+        </label>
+        <label className="block text-[12.5px] font-semibold text-slate-600">
+          Came back on
+          <input type="date" className="field h-10 w-full" value={back} onChange={(event) => setBack(event.target.value)} />
+        </label>
+        <label className="block text-[12.5px] font-semibold text-slate-600">
+          Retention kept (₱)
+          <input className="field h-10 w-full" inputMode="decimal" value={retention} onChange={(event) => setRetention(event.target.value)} />
+        </label>
+        <label className="block text-[12.5px] font-semibold text-slate-600">
+          Retention released on
+          <input type="date" className="field h-10 w-full" value={retentionBack} onChange={(event) => setRetentionBack(event.target.value)} />
+        </label>
+      </div>
+      <Problem message={action.problem?.message} />
+      <div className="mt-3">
+        <Button
+          small
+          variant="primary"
+          disabled={action.busy}
+          onClick={() =>
+            void action.run(async () => {
+              await api(`/api/tenders/${tender.id}`, {
+                method: "POST",
+                body: {
+                  performanceSecurityForm: form.trim() || null,
+                  performanceSecurityAmount: amount.trim() ? toCentavos(amount) : null,
+                  performanceSecurityBackOn: back || null,
+                  retentionAmount: retention.trim() ? toCentavos(retention) : null,
+                  retentionBackOn: retentionBack || null,
+                },
+              });
+              await queries.invalidateQueries({ queryKey: ["tenders"] });
+            })
+          }
+        >
+          Save
+        </Button>
       </div>
     </section>
   );

@@ -35,6 +35,7 @@ import { BiddingHome } from "./tenders";
 import { b2bRole } from "../seat-words";
 import { greeting, todayWords } from "../home/home";
 import { OrderCardItem } from "../orders/board";
+import { HospitalsCard } from "./hospitals";
 
 const NEWS: Record<StockNews["kind"], { label: string; style: string }> = {
   out: { label: "Out of stock", style: "bg-rose-50 text-rose-700" },
@@ -177,6 +178,8 @@ export function MedrepHome() {
       {/* A Hospital CHC's day starts with the pulse and where to go first (docs/PLAN.md 16.1). */}
       {(hospital || anesthesia) && <TodaysPulse />}
       {(hospital || anesthesia) && <GoHereFirst />}
+      {/* Their hospitals: whom to call, accreditation ending, formulary waiting, money (19 Nov). */}
+      {hospital && <HospitalsCard first="due" />}
       {/* An Rx CHC's day: the doctors, today's route, PAP (docs/PLAN.md 16.2). No sales target here. */}
       {rx && <RxHome />}
       {/* MD Telesales: the pulse, the groups waiting (15 minutes), the refills due. */}

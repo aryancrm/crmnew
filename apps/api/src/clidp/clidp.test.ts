@@ -6,7 +6,9 @@ import { migrate } from "../db/migrate";
 import { seedDemoInventory } from "../inventory/seed";
 import { seedDemoTeam } from "../orders/seed-team";
 import { seedDemo } from "../seed";
-import type { ClidpDay, ClidpTeam } from "../types";
+import { sql } from "drizzle-orm";
+import { rows } from "../db/index";
+import type { ClidpDay, ClidpRoad, ClidpTeam } from "../types";
 import { seedClidp } from "./seed";
 
 const PASSWORD = "test-password-1";
@@ -53,5 +55,42 @@ describe("CLIDP", () => {
     const team = (await (await get("sam", "/api/clidp/team")).json()) as ClidpTeam;
     expect(team.rows.find((row) => row.name === "Annie")?.accounts).toBe(3);
     expect((await get("annie", "/api/clidp/team")).status).toBe(403);
+  });
+
+  it("CLIDP's road: who we went to, who agreed, the rate, and the accounts already buying", async () => {
+    // The three accounts already buying stand at "ordering", each with the price it paid last.
+    const road = (await (await get("annie", "/api/clidp/road")).json()) as ClidpRoad;
+    expect(road.counts.ordering).toBe(3);
+    expect(road.rows.every((row) => row.stage === "ordering" && row.coach === "Annie")).toBe(true);
+    // A pharmacy approached, interested, agreed with a rate and an agreement, then declined by another.
+    const [pharmacy] = await rows<{ id: number }>(
+      db,
+      sql`insert into customer (kind, name, city, added_by) values ('drugstore', 'Road Test Pharmacy', 'Davao City', (select id from person order by id limit 1)) returning id::int as id`,
+    );
+    expect((await post("annie", "/api/clidp/road", { customerId: pharmacy?.id, note: "Owner keen", nextStep: "Send the rate" })).status).toBe(200);
+    expect((await post("annie", "/api/clidp/road", { customerId: pharmacy?.id })).status).toBe(409);
+    expect((await post("annie", `/api/clidp/road/${pharmacy?.id}`, { stage: "interested" })).status).toBe(200);
+    expect((await post("annie", "/api/clidp/rates", { customerId: pharmacy?.id, medicineId: 1, unitPrice: 185000, moq: 50 })).status).toBe(200);
+    expect((await post("annie", "/api/clidp/rates", { customerId: pharmacy?.id, medicineId: 1, unitPrice: 180000, moq: 50 })).status).toBe(200);
+    expect((await post("annie", `/api/clidp/road/${pharmacy?.id}`, { stage: "agreed", agreementUntil: "2027-12-31" })).status).toBe(200);
+    const [other] = await rows<{ id: number }>(
+      db,
+      sql`insert into customer (kind, name, added_by) values ('distributor', 'Road Test Distributor', (select id from person order by id limit 1)) returning id::int as id`,
+    );
+    await post("annie", "/api/clidp/road", { customerId: other?.id });
+    expect((await post("annie", `/api/clidp/road/${other?.id}`, { stage: "declined" })).status).toBe(400);
+    expect((await post("annie", `/api/clidp/road/${other?.id}`, { stage: "declined", declinedReason: "Lists a rival brand" })).status).toBe(200);
+    const after = (await (await get("annie", "/api/clidp/road")).json()) as ClidpRoad;
+    const agreed = after.rows.find((row) => row.customerId === pharmacy?.id);
+    // The latest rate stands (the first kept, replaced).
+    expect(agreed).toMatchObject({ stage: "agreed", agreementUntil: "2027-12-31", nextStep: "Send the rate" });
+    expect(agreed?.rates).toEqual([expect.objectContaining({ unitPrice: 180000, moq: 50 })]);
+    expect(after.rows.find((row) => row.customerId === other?.id)).toMatchObject({ stage: "declined", declinedReason: "Lists a rival brand" });
+    expect(after.counts).toMatchObject({ agreed: 1, declined: 1, ordering: 3 });
+    expect(after.month).toMatchObject({ approached: 2, agreed: 1, declined: 1 });
+    // The Mentor sees the same road, coach by coach; a B2B seller doesn't.
+    const head = (await (await get("sam", "/api/clidp/road")).json()) as ClidpRoad;
+    expect(head.coaches.find((one) => one.name === "Annie")).toMatchObject({ ordering: 3 });
+    expect((await get("flor", "/api/clidp/road")).status).toBe(403);
   });
 });

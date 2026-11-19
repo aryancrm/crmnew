@@ -39,8 +39,8 @@ import { channelRoutes } from "./online/channel-routes";
 import { onlineRoutes } from "./online/routes";
 import { orderRoutes } from "./orders/routes";
 import { orgRoutes } from "./org/routes";
-import { pickedUnit } from "./org/scope";
-import { personOfSeatLogin } from "./org/service";
+import { pickedUnit, teamIds } from "./org/scope";
+import { ledUnits, personOfSeatLogin } from "./org/service";
 import { overviewRoutes } from "./overview/routes";
 import { pointsRoutes } from "./points/routes";
 import { purchaseRoutes } from "./purchases/routes";
@@ -54,6 +54,7 @@ import { mtRoutes } from "./mt/routes";
 import { workLogRoutes } from "./worklog/routes";
 import { regulatoryRoutes } from "./regulatory/routes";
 import { bookRoutes } from "./books/routes";
+import { hospitalRoutes } from "./hospitals/routes";
 import { tenderRoutes } from "./tenders/routes";
 import { rxRoutes } from "./rx/routes";
 import { scoreRoutes } from "./scores/routes";
@@ -347,12 +348,25 @@ export function createApp(db: Database, options: AppOptions) {
   });
   app.post("/api/auth/view/:id", signedIn, async (c) => {
     const me = c.get("me");
-    allow(me, ["ceo", "admin"], "look as someone else");
+    // The CEO and the Admin look as anyone; a team lead or a head as the people under them (Aryan,
+    // 19 Nov: "press a person and what they do opens, what they see"), read only as always.
+    allow(me, ["ceo", "admin", "team_lead", "manager"], "look as someone else");
     if (me.viewedBy) throw new Refusal(400, "invalid", "Go back first.");
     const target = idParam(c);
     if (target === me.id) throw new Refusal(400, "invalid", "That's you.");
     const [found] = await db.select().from(person).where(eq(person.id, target)).limit(1);
     if (!found?.active) throw new Refusal(404, "not_found", "That person isn't working here.");
+    if (me.role === "team_lead" || me.role === "manager") {
+      const led = await ledUnits(db, me);
+      const [under] = await rows<{ ok: boolean }>(
+        db,
+        sql`select (${target} in ${teamIds(me)} or exists (
+            select 1 from seat_holder h join seat s on s.id = h.seat_id and s.active
+            where h.person_id = ${target} and s.unit_id in (${led.length ? sql.join(led.map((id) => sql`${id}`), sql`, `) : sql`0`})
+              and h.starts_on <= current_date and (h.ends_on is null or h.ends_on >= current_date))) as ok`,
+      );
+      if (!under?.ok) throw new Refusal(403, "not_allowed", "That person isn't in your team.");
+    }
     const token = await startSession(db, found.id, me.id);
     setCookie(c, BACK_COOKIE, c.get("token"), {
       httpOnly: true,
@@ -423,6 +437,7 @@ export function createApp(db: Database, options: AppOptions) {
   b2bRoutes(app, db, signedIn);
   clidpRoutes(app, db, signedIn);
   tenderRoutes(app, db, signedIn);
+  hospitalRoutes(app, db, signedIn);
   mtRoutes(app, db, signedIn);
   workLogRoutes(app, db, signedIn);
   regulatoryRoutes(app, db, signedIn);

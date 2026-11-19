@@ -105,8 +105,12 @@ import { BillFromOrderPage, NewBillPage, NewPaymentPage, NewReceiptPage, NewPurc
 import { BankStatementPage, ReconcilePage } from "./books/bank";
 import { BooksHome } from "./books/home";
 import { LockingPage, NewCreditNotePage, NewDepositPage, NewExpensePage, NewJournalPage, NewTransferPage } from "./books/ledger";
+import { BidReportPage } from "./sellers/bid-report";
 import { CompanyPapersPage, TenderPage, TendersPage } from "./sellers/tenders";
 import { ClidpListingsPage, ClidpTeamPage } from "./sellers/clidp";
+import { ClidpRoadPage } from "./sellers/clidp-road";
+import { HospitalsPage } from "./sellers/hospitals";
+import { RxBusinessPage } from "./sellers/rx-business";
 import { RxDoctorsPage, RxFieldPage } from "./sellers/rx";
 import { Targets } from "./team/targets";
 import { Calls } from "./sellers/calls";
@@ -258,7 +262,11 @@ createRoot(root).render(
             <Route path="b2b/accounts" element={<AccountsPage />} />
             <Route path="b2b/team" element={<B2bTeamPage />} />
             <Route path="clidp/listings" element={<ClidpListingsPage />} />
+            <Route path="clidp/road" element={<ClidpRoadPage />} />
+            <Route path="hospital-board" element={<HospitalsPage />} />
+            <Route path="rx/business" element={<RxBusinessPage />} />
             <Route path="tenders" element={<TendersPage />} />
+            <Route path="tenders/report" element={<BidReportPage />} />
             <Route path="tenders/:id" element={<TenderPage />} />
             <Route path="company-papers" element={<CompanyPapersPage />} />
             <Route path="mt/listings" element={<MtListingsPage />} />

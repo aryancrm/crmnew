@@ -12,6 +12,7 @@ import { api } from "../api";
 import { shortPeso } from "../ceo";
 import { Button, CARD, dayLabel, Dialog, PageHead, PageState, Problem, useAction } from "../ui";
 import { withUnit } from "../team/switch";
+import { ClidpRoadCard } from "./clidp-road";
 
 const useClidp = () => useQuery({ queryKey: ["clidp", "day"], queryFn: () => api<ClidpDay>("/api/clidp/day") });
 
@@ -140,6 +141,8 @@ export function ClidpHome() {
           </div>
         ))}
       </section>
+      {/* The road: who they went to, who agreed, the rate, the listings (Aryan, 19 Nov). */}
+      <ClidpRoadCard />
       <section className={`${CARD} min-w-0`}>
         <h3 className="border-b border-slate-100 px-4 py-3 text-sm font-bold text-slate-900">Accounts to call (bulk reorders)</h3>
         {toCall.length === 0 ? (

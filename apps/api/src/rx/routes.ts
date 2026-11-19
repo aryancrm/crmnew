@@ -1,5 +1,6 @@
 // The Rx CHC's doctor list and day.
 
+import { rxBusiness } from "./business";
 import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
@@ -13,6 +14,8 @@ export function rxRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   app.use("/api/care-groups/*", signedIn);
 
   app.get("/api/care-groups", async (c) => c.json(await careGroups(db, c.get("me"))));
+  // The prescription business: each person's day and month, the doctors prescribing, the letters.
+  app.get("/api/rx/business", async (c) => c.json(await rxBusiness(db, c.get("me"))));
   app.post("/api/care-groups", async (c) => {
     const input = await readBody(
       c,

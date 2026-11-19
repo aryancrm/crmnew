@@ -12,6 +12,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { CARD, count, dayLabel, PageHead, PageState, Problem, useAction } from "../ui";
 import { EnrolDialog } from "./care-groups";
+import { RxBusinessCard } from "./rx-business";
 
 type Doctor = RxDay["doctors"][number];
 
@@ -49,6 +50,8 @@ export function RxHome() {
   const route = routeOf(data.doctors);
   return (
     <>
+      {/* Their prescriptions this month, the doctors writing, the letters (19 Nov). */}
+      <RxBusinessCard />
       <section aria-label="My doctors at a glance" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         {data.tiers.map((tier) => (
           <Link key={tier.tier} to="/rx/doctors" className={`${CARD} block px-4 py-3 hover:bg-slate-50`}>

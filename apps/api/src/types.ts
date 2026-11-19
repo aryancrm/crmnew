@@ -5100,6 +5100,60 @@ export type RxField = {
   }[];
 };
 
+/** The prescription business at a glance (19 Nov): each person's day and month, the doctors
+ *  prescribing most, the guarantee letters by agency from received to paid. */
+export type RxBusiness = {
+  today: string;
+  summary: {
+    prescriptions: number;
+    prescribers: number;
+    newPrescribers: number;
+    value: number;
+    visitsToday: number;
+    visitsDoneToday: number;
+    glOpen: number;
+    glOpenAmount: number;
+    glPaid: number;
+  };
+  people: {
+    personId: number;
+    name: string;
+    title: string;
+    area: string | null;
+    visitsToday: number;
+    doneToday: number;
+    /** Where they checked in last, and when. */
+    lastCheckIn: string | null;
+    lastCheckInAt: string | null;
+    /** This month: orders written with a prescribing doctor, the doctors, the first-time ones, ₱. */
+    prescriptions: number;
+    prescribers: number;
+    newPrescribers: number;
+    value: number;
+    letters: number;
+  }[];
+  doctors: {
+    customerId: number;
+    name: string;
+    specialty: string | null;
+    city: string | null;
+    seller: string | null;
+    orders: number;
+    value: number;
+    lastOn: string;
+    firstOn: string;
+  }[];
+  letters: {
+    programme: string;
+    received: { count: number; amount: number };
+    serving: { count: number; amount: number };
+    billed: { count: number; amount: number };
+    paid: { count: number; amount: number };
+    /** Zoho's history (served before this CRM): count and ₱. */
+    zoho: { count: number; amount: number };
+  }[];
+};
+
 /** A B2C CHC's day: the morning pulse, the enquiries waiting for a reply, refills, orders. */
 export type B2cDay = {
   today: string;
@@ -5245,6 +5299,126 @@ export type ClidpDay = {
   }[];
 };
 
+/** The hospitals board (19 Nov): each hospital with 2MG's accreditation there, our medicines on its
+ *  formulary, its buying against its own gap, open orders, money owed, visits and calls. */
+export type HospitalBoard = {
+  today: string;
+  canEdit: boolean;
+  summary: {
+    hospitals: number;
+    accredited: number;
+    /** Accredited, ending within 60 days. */
+    expiring: number;
+    notAccredited: number;
+    formularyApproved: number;
+    formularyPending: number;
+    due: number;
+    late: number;
+    stopped: number;
+    owed: number;
+    overdue: number;
+    openOrders: number;
+    openValue: number;
+    /** This month's visits of the sellers: done, and all planned. */
+    visitsDone: number;
+    visitsPlanned: number;
+  };
+  rows: {
+    customerId: number;
+    name: string;
+    kind: string;
+    city: string | null;
+    seller: string | null;
+    lastOrderOn: string | null;
+    since: number | null;
+    usual: number | null;
+    soldMonth: number;
+    soldYear: number;
+    owed: number;
+    overdue: number;
+    openOrders: number;
+    openValue: number;
+    lastVisitOn: string | null;
+    nextVisitOn: string | null;
+    lastCallOn: string | null;
+    reorder: "never" | "ok" | "due" | "late" | "stopped" | "lost";
+    accreditation: {
+      status: "applied" | "accredited" | "refused" | null;
+      onDay: string | null;
+      validUntil: string | null;
+      daysLeft: number | null;
+      state: "none" | "applied" | "accredited" | "expiring" | "expired" | "refused";
+    };
+    formulary: {
+      approved: number;
+      requested: number;
+      items: { medicine: string; status: "requested" | "approved" | "not_approved" | "removed"; onDay: string; doctor: string | null }[];
+    };
+  }[];
+};
+
+/** A step on CLIDP's road with a distributor or pharmacy (migration 0127). */
+export type ClidpStage = "approached" | "interested" | "agreed" | "filed" | "listed" | "ordering" | "declined";
+
+/** CLIDP's road (Aryan, 19 Nov: "how many pharmacies we went to, did they approve us, at what
+ *  rate"): each account's stage and day, the rate agreed and the price really paid last, its
+ *  listings, the agreement's end, the next step, its reorder state and what it owes. */
+export type ClidpRoad = {
+  today: string;
+  canEdit: boolean;
+  coaches: {
+    personId: number;
+    name: string;
+    approached: number;
+    agreed: number;
+    listed: number;
+    ordering: number;
+    late: number;
+    listingsEnding: number;
+    owed: number;
+    overdue: number;
+  }[];
+  counts: Record<ClidpStage, number>;
+  /** This month's moves on the road. */
+  month: { approached: number; agreed: number; listed: number; declined: number; firstOrders: number };
+  rows: {
+    customerId: number;
+    name: string;
+    kind: string;
+    city: string | null;
+    coach: string | null;
+    stage: ClidpStage;
+    /** The day it reached its stage (an account buying: its first order). */
+    stageOn: string | null;
+    approachedOn: string | null;
+    agreedOn: string | null;
+    listedOn: string | null;
+    declinedReason: string | null;
+    agreementUntil: string | null;
+    nextStep: string | null;
+    nextOn: string | null;
+    note: string | null;
+    rates: { medicine: string; unitPrice: number; moq: number | null; agreedOn: string }[];
+    lastPrices: { medicine: string; unitPrice: number; qty: number; on: string }[];
+    listings: {
+      brand: string;
+      medicine: string;
+      certificateNo: string | null;
+      validUntil: string | null;
+      daysLeft: number | null;
+      state: "valid" | "expiring" | "expired" | "no date";
+    }[];
+    lastOrderOn: string | null;
+    /** Against its own reorder gap (an account buying). */
+    reorder: "due" | "late" | "stopped" | "lost" | "ok" | null;
+    usual: number | null;
+    soldYear: number;
+    firstOrderOn: string | null;
+    owed: number;
+    overdue: number;
+  }[];
+};
+
 /** The heads' CLIDP coaches. */
 export type ClidpTeam = {
   today: string;
@@ -5289,6 +5463,75 @@ export type Tender = {
   priceApprovedBy: string | null;
   papers: { paper: string; done: boolean }[];
   droppedReason: string | null;
+  /** The agency's city: where the bid was. */
+  agencyCity: string | null;
+  /** Why it was won or lost, in fixed words (migration 0126). */
+  resultReason: TenderReason | null;
+  /** The day the result came (the Notice of Award for a win). */
+  resultOn: string | null;
+  performanceSecurityForm: string | null;
+  performanceSecurityAmount: number | null;
+  performanceSecurityBackOn: string | null;
+  /** The 1% kept on medicines for three months after acceptance. */
+  retentionAmount: number | null;
+  retentionBackOn: string | null;
+};
+
+/** Why a tender was won or lost (the bid report's words). */
+export type TenderReason = "lowest" | "lower_price" | "above_abc" | "documents" | "post_disqualified" | "failed_bidding" | "other";
+
+/** A bidder read at the opening (the abstract of bids). Money in centavos. */
+export type TenderBidder = {
+  id: number;
+  name: string;
+  price: number | null;
+  /** Their price for one piece of our medicines, item by item. */
+  lines: { medicineId: number; unitPrice: number }[];
+  disqualified: boolean;
+  note: string | null;
+  by: string;
+  at: string;
+};
+
+/** Where our bid stood among the bids read (ours and every bidder's, the lowest first). */
+export type TenderStanding = {
+  bids: { name: string; price: number; us: boolean; disqualified: boolean }[];
+  lowest: { name: string; price: number; us: boolean } | null;
+  /** Our place among the bids not disqualified (1 = the lowest). */
+  rank: number | null;
+  /** How far ours was above the lowest (centavos, and % of the lowest). */
+  gap: number | null;
+  gapPct: number | null;
+};
+
+/** The bid report (Aryan, 19 Nov): where we bid, every price read, won or lost and why, how low it
+ *  went; then by agency, the reasons, the securities still out, late deliveries, what is coming. */
+export type BidReport = {
+  today: string;
+  from: string;
+  to: string;
+  summary: {
+    joined: number;
+    won: number;
+    wonValue: number;
+    lost: number;
+    lostValue: number;
+    pending: number;
+    failed: number;
+    winRate: number | null;
+    /** On the bids lost: how far above the winner we were, on average (%). */
+    avgGapPct: number | null;
+  };
+  rows: (Pick<
+    Tender,
+    "id" | "code" | "title" | "agency" | "agencyCity" | "owner" | "abc" | "ourBid" | "step" | "openingOn" | "resultOn" | "resultReason" | "resultNote" | "mode"
+  > &
+    TenderStanding & { result: "won" | "lost" | "pending" | "failed" })[];
+  byAgency: { agency: string; city: string | null; joined: number; won: number; lost: number; wonValue: number }[];
+  byReason: { reason: TenderReason; count: number }[];
+  securities: { code: string; id: number; agency: string; kind: "bid" | "performance" | "retention"; amount: number; dueBack: string | null }[];
+  late: { code: string; id: number; agency: string; deliverBy: string; daysLate: number; penalty: number }[];
+  comingUp: Pick<Tender, "id" | "code" | "title" | "agency" | "agencyCity" | "owner" | "abc" | "step" | "deadlineAt" | "prebidOn" | "openingOn">[];
 };
 
 export type TenderInput = {

@@ -250,7 +250,10 @@ describe("a team lead asks for a new region or a new area", () => {
 describe("looking as someone", () => {
   it("lets the CEO see a person's screens, read only, then go back", async () => {
     const daniel = (await read<{ me: Me }>("daniel", "/api/me")).me;
-    expect((await send("vanessa", `/api/auth/view/${daniel.id}`)).status).toBe(403);
+    const vanessa = (await read<{ me: Me }>("vanessa", "/api/me")).me;
+    // Since 19 Nov a lead looks as the people under them (Vanessa as her team lead Daniel), never
+    // the other way (auth/look.test.ts); the CEO as anyone.
+    expect((await send("daniel", `/api/auth/view/${vanessa.id}`)).status).toBe(403);
     const view = await send("naresh", `/api/auth/view/${daniel.id}`);
     expect(view.status).toBe(200);
     const cookieLines = view.headers.getSetCookie();

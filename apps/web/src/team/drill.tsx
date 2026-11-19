@@ -13,11 +13,16 @@ import { ChevronRight, ListTree, Rows3 } from "lucide-react";
 import { type MouseEvent as ReactMouseEvent, type ReactNode, useState } from "react";
 import { Link } from "react-router-dom";
 import { exactPeso, shortPeso } from "../ceo";
+import { lookAs } from "../shell";
 import { PACE_TEXT, PaceBar } from "../company/ceo-home";
 import { type Node, pctOf, toneOfNode } from "../company/sales-tree";
 import { B2bTeamCard } from "../sellers/b2b";
 import { ClidpTeamCard } from "../sellers/clidp";
+import { ClidpRoadCard } from "../sellers/clidp-road";
+import { HospitalsCard } from "../sellers/hospitals";
+import { RxBusinessCard } from "../sellers/rx-business";
 import { MtHome } from "../sellers/mt";
+import { BidReportCard } from "../sellers/bid-report";
 import { BiddingCard, BiddingHome } from "../sellers/tenders";
 import { TeamAccountsCard } from "./accounts-card";
 import { DistrictNow } from "./district";
@@ -347,7 +352,7 @@ function Opened({
             {[...people]
               .sort((a, b) => b.figures.sold - a.figures.sold)
               .map((one) => (
-                <PersonRow key={one.key} node={one} pace={pace} running={running} onHover={onHover} />
+                <PersonRow key={one.key} node={one} pace={pace} running={running} onHover={onHover} canLook={!me.viewedBy} />
               ))}
           </ul>
         )}
@@ -410,12 +415,16 @@ function PersonRow({
   pace,
   running,
   onHover,
+  canLook,
 }: {
   node: Node;
   pace: number;
   running: boolean;
   onHover: (node: Node | null, event?: ReactMouseEvent) => void;
+  /** A press opens the person's own screens (read only); not while already looking as someone. */
+  canLook: boolean;
 }) {
+  const [opening, setOpening] = useState(false);
   const seat = node.seat;
   const vacant = !seat?.person;
   const pct = pctOf(node.figures);
@@ -429,7 +438,9 @@ function PersonRow({
             {vacant ? "Vacant seat" : node.name}
           </span>
           <span className="block truncate text-[11.5px] text-slate-500">
-            {[seat?.title, seat?.area?.name?.split("|").slice(1, 2).join("").trim() || null].filter(Boolean).join(" · ")}
+            {opening
+              ? "Opening their screen…"
+              : [seat?.title, seat?.area?.name?.split("|").slice(1, 2).join("").trim() || null].filter(Boolean).join(" · ")}
           </span>
         </span>
       </span>
@@ -458,14 +469,41 @@ function PersonRow({
   );
   const grid =
     "grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1.5 px-4 py-2.5 sm:grid-cols-[minmax(0,16rem)_minmax(0,1fr)_8.5rem_3.5rem] sm:px-5";
+  const person = seat?.person ?? null;
   return (
-    <li onMouseMove={(event) => onHover(node, event)} onMouseLeave={() => onHover(null)}>
-      {seat ? (
+    <li onMouseMove={(event) => onHover(node, event)} onMouseLeave={() => onHover(null)} className="group relative">
+      {person && canLook ? (
+        // What this person does, as they see it (Aryan, 19 Nov: "press a person and what they see
+        // opens"): their own Home, menu and desks, read only, with the way back on top.
+        <button
+          type="button"
+          disabled={opening}
+          onClick={async () => {
+            setOpening(true);
+            try {
+              await lookAs(person.id);
+            } catch {
+              setOpening(false);
+            }
+          }}
+          className={`${grid} w-full text-left hover:bg-slate-50 disabled:opacity-70`}
+        >
+          {body}
+        </button>
+      ) : seat ? (
         <Link to={`/my-team/seat/${seat.seatId}`} className={`${grid} hover:bg-slate-50`}>
           {body}
         </Link>
       ) : (
         <div className={grid}>{body}</div>
+      )}
+      {person && canLook && seat && (
+        <Link
+          to={`/my-team/seat/${seat.seatId}`}
+          className="absolute top-1.5 right-4 hidden rounded-md bg-white px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-slate-200 group-hover:block hover:underline sm:right-5"
+        >
+          Their record
+        </Link>
       )}
     </li>
   );
@@ -542,18 +580,43 @@ export function ChannelWork({
 }) {
   switch (division) {
     case "RX Business":
-      return <RxFieldBlock unit={unit} />;
+      // The field (doctors, coverage, visits), then the prescriptions and the letters.
+      return (
+        <>
+          <RxFieldBlock unit={unit} />
+          <RxBusinessCard unit={unit} />
+        </>
+      );
     case "MD Telesales":
       return <TelesalesCoachHome unit={unit} />;
     case "B2B":
       return <B2bTeamCard unit={unit} />;
     case "CLIDP":
-      return <ClidpTeamCard unit={unit} />;
+      // Each coach's volume and money, then the road: who we went to, who agreed, the rate.
+      return (
+        <>
+          <ClidpTeamCard unit={unit} />
+          <ClidpRoadCard unit={unit} />
+        </>
+      );
     case "BID":
-      return me.role === "team_lead" ? <BiddingHome /> : <BiddingCard unit={unit} />;
+      // The desk's counts (the Bidding Admin's whole desk), then the bid report: every price read,
+      // won or lost and why, what is coming up.
+      return (
+        <>
+          {me.role === "team_lead" ? <BiddingHome /> : <BiddingCard unit={unit} />}
+          <BidReportCard unit={unit} />
+        </>
+      );
     case "HOSP":
       // The head: the teams side by side; one team (a coach picked, or the coach's own): its day.
-      return me.role === "manager" && !narrow ? <HospitalTeams unit={unit} /> : <DistrictNow unit={unit} />;
+      // Then the hospitals: accreditation, formulary, buying, orders, money, visits.
+      return (
+        <>
+          {me.role === "manager" && !narrow ? <HospitalTeams unit={unit} /> : <DistrictNow unit={unit} />}
+          <HospitalsCard unit={unit} />
+        </>
+      );
     case "MT":
       return <MtHome />;
     default:

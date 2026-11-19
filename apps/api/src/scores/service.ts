@@ -26,7 +26,7 @@ const shiftMonth = (month: string, by: number) => {
   const d = new Date(Date.UTC(y, m - 1 + by, 1));
   return d.toISOString().slice(0, 7);
 };
-const daysBetween = (from: string, to: string) => {
+export const daysBetween = (from: string, to: string) => {
   const out: string[] = [];
   for (let t = Date.parse(`${from}T00:00:00Z`); t <= Date.parse(`${to}T00:00:00Z`); t += 86_400_000)
     out.push(new Date(t).toISOString().slice(0, 10));
@@ -74,7 +74,7 @@ async function seatOn(db: Database, personId: number, day: string): Promise<Seat
   return own;
 }
 
-async function holidaysIn(db: Database, from: string, to: string): Promise<Set<string>> {
+export async function holidaysIn(db: Database, from: string, to: string): Promise<Set<string>> {
   const found = await rows<{ day: string }>(
     db,
     sql`select to_char(day, 'YYYY-MM-DD') as day from holiday where active and day between ${from}::date and ${to}::date`,

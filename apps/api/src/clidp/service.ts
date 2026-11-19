@@ -10,13 +10,50 @@ import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
 import { addDays, todayManila } from "../inventory/rules";
 import { inForce } from "../org/service";
-import { HOSPITAL } from "../scores/recipes";
-import { measure } from "../scores/service";
+import { DEFAULT_SCHEDULE, isWorkDay } from "../hr/work-time";
+import { daysBetween, holidaysIn } from "../scores/service";
 import { collections } from "../sellers/service";
 import { teamSeats } from "../team/service";
 import type { ClidpDay, ClidpTeam, Me } from "../types";
 
 const SOON_DAYS = 60;
+
+/** A coach's volume this month against their target on the working-day pace: what their seats
+ *  invoiced (this CRM's invoices and Zoho's, as the team board counts them), the target set for
+ *  them (or their seat's), and where that sold amount lands by the month's end at today's pace. */
+export async function volumeOf(
+  db: Database,
+  personId: number,
+  today: string,
+): Promise<{ sold: number; target: number | null; pace: number | null; note: string }> {
+  const first = `${today.slice(0, 7)}-01`;
+  const [y, m] = today.split("-").map(Number) as [number, number];
+  const last = `${today.slice(0, 7)}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0")}`;
+  const [row] = await rows<{ sold: number; target: number | null }>(
+    db,
+    sql`with mine as (select h.seat_id from seat_holder h where h.person_id = ${personId} and h.kind = 'holder' and ${inForce("h", today)})
+      select coalesce((select sum(i.total) from sale_invoice i where i.seat_id in (select seat_id from mine)
+          and i.status <> 'cancelled' and i.issued_on between ${first}::date and ${today}::date), 0)::float8 as sold,
+        coalesce((select t.amount from sales_target t where t.person_id = ${personId} and t.month = ${first}::date),
+          (select sum(t.amount) from seat_target t where t.month = ${first}::date and t.seat_id in (select seat_id from mine)))::float8 as target`,
+  );
+  const holidays = await holidaysIn(db, first, last);
+  const workDay = (day: string) => isWorkDay(day, DEFAULT_SCHEDULE, holidays);
+  const worked = daysBetween(first, today).filter(workDay).length;
+  const inMonth = daysBetween(first, last).filter(workDay).length;
+  const sold = row?.sold ?? 0;
+  const target = row?.target ?? null;
+  const onPace = worked > 0 ? (sold * inMonth) / worked : sold;
+  const peso = (centavos: number) => `₱${Math.round(centavos / 100).toLocaleString("en-PH")}`;
+  return {
+    sold,
+    target,
+    pace: target && target > 0 ? Math.round((onPace / target) * 100) : null,
+    note: target
+      ? `${peso(sold)} of ${peso(target)}, ${peso(onPace)} on the pace of ${worked} of ${inMonth} working days`
+      : "No target for this month",
+  };
+}
 
 async function listingsOf(db: Database, customerIds: number[], today: string): Promise<ClidpDay["listings"]> {
   if (!customerIds.length) return [];
@@ -40,15 +77,15 @@ async function listingsOf(db: Database, customerIds: number[], today: string): P
 export async function clidpDay(db: Database, me: Me): Promise<ClidpDay> {
   if (b2bRole(me) !== "clidp") throw new Refusal(403, "not_allowed", "This is the CLIDP Sales Coach's desk.");
   const today = todayManila();
-  const [accounts, { values, notes }, owed] = await Promise.all([
+  const [accounts, volume, owed] = await Promise.all([
     seatAreas(db, me.id, today).then((areas) => accountsOf(db, [me.id], areas, today)),
-    measure(db, me.id, HOSPITAL, today.slice(0, 7), today, true),
+    volumeOf(db, me.id, today),
     collections(db, me),
   ]);
   const listings = await listingsOf(db, accounts.map((one) => one.customerId), today);
   return {
     today,
-    volume: { pace: values.ist === null || values.ist === undefined ? null : Math.round(values.ist), note: notes.ist ?? "" },
+    volume: { pace: volume.pace, note: volume.note },
     accounts,
     owed: { total: owed.total, rows: [...owed.rows].sort((a, b) => b.owed - a.owed).slice(0, 8) },
     listings,
@@ -86,20 +123,27 @@ export async function clidpTeam(db: Database, me: Me): Promise<ClidpTeam> {
     : [];
   const rowsOut = await Promise.all(
     people.map(async (one) => {
-      const [accounts, { values }, [owed]] = await Promise.all([
-        accountsOf(db, [one.personId], one.areaId ? [one.areaId] : [], today),
-        measure(db, one.personId, HOSPITAL, today.slice(0, 7), today, true),
+      const accounts = await accountsOf(db, [one.personId], one.areaId ? [one.areaId] : [], today);
+      const customerIds = accounts.map((a) => a.customerId);
+      const [volume, [owed]] = await Promise.all([
+        volumeOf(db, one.personId, today),
+        // What their accounts owe: this CRM's open invoices and Zoho's still open.
         rows<{ total: number }>(
           db,
-          sql`select coalesce(sum(i.total - i.paid), 0)::float8 as total from invoice i join sales_order o on o.id = i.order_id
-            where i.status = 'open' and (o.medrep_id = ${one.personId} or o.raised_by = ${one.personId})`,
+          sql`select coalesce(sum(amount), 0)::float8 as total from (
+              select (i.total - i.paid) as amount from invoice i
+                where i.status = 'open' and i.total > i.paid and i.customer_id in (${customerIds.length ? sql.join(customerIds.map((id) => sql`${id}`), sql`, `) : sql`0`})
+              union all
+              select round(d.balance * d.fx_rate) from book_doc d
+                where d.kind = 'invoice' and d.zoho_id is not null and d.balance > 0 and d.status not in ('void', 'draft')
+                  and d.customer_id in (${customerIds.length ? sql.join(customerIds.map((id) => sql`${id}`), sql`, `) : sql`0`})) x`,
         ),
       ]);
       const listings = await listingsOf(db, accounts.map((a) => a.customerId), today);
       return {
         personId: one.personId,
         name: one.name,
-        pace: values.ist === null || values.ist === undefined ? null : Math.round(values.ist),
+        pace: volume.pace,
         owed: owed?.total ?? 0,
         accounts: accounts.filter((a) => a.state !== "lost").length,
         late: accounts.filter((a) => a.state === "late" || a.state === "stopped").length,
