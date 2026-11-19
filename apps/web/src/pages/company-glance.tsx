@@ -90,7 +90,10 @@ function Stack({ rows }: { rows: { label: string; value: number }[] }) {
   );
 }
 
-export function CompanyGlance() {
+/** The business part (sales, money, orders, medicines, customers) or the people part (headcount,
+ *  who's in today, people by department): the CEO's Home shows the business first and the people
+ *  at its foot (Aryan, 19 Nov). */
+export function CompanyGlance({ part = "business" }: { part?: "business" | "people" }) {
   const query = useQuery({ queryKey: ["ceo", "company"], queryFn: () => api<Data>("/api/ceo/company"), staleTime: 60_000 });
   const data = query.data;
   if (!data) return null;
@@ -100,6 +103,32 @@ export function CompanyGlance() {
   const dayTop = Math.max(1, ...data.days.map((one) => one.amount));
   const monthSold = data.days.reduce((sum, one) => sum + one.amount, 0);
   const stockValue = data.stock.reduce((sum, one) => sum + one.value, 0);
+  if (part === "people")
+    return (
+      <section aria-labelledby="company-people" className="space-y-3">
+        <h2 id="company-people" className="text-base font-semibold tracking-tight text-slate-900">
+          The company's people
+        </h2>
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            ["People", people.toLocaleString("en-PH"), `${data.departments.length} departments`, "#1f9d55", "/company"],
+            ["Working today", `${data.working.in} of ${data.working.all}`, "signed in for the day", "#2563eb", "/hr/attendance"],
+          ].map(([label, value, sub, colour, to]) => (
+            <Link key={label} to={to as string} className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-slate-300">
+              <span className="absolute inset-x-0 top-0 h-1" style={{ background: colour }} />
+              <div className="text-[11.5px] font-medium text-slate-500">{label}</div>
+              <div className="mt-1 text-xl font-bold tracking-tight text-slate-900 tabular-nums">{value}</div>
+              <div className="text-[11px] text-slate-400">{sub}</div>
+            </Link>
+          ))}
+        </div>
+        <Attendance data={data.attendance} />
+        <div className={CARD}>
+          <Head title="People by department" to="/company" sub="Chart" />
+          <Bars rows={data.departments.map((one) => ({ label: one.name, value: one.people }))} />
+        </div>
+      </section>
+    );
   return (
     <section aria-labelledby="company-glance" className="space-y-3">
       <h2 id="company-glance" className="text-base font-semibold tracking-tight text-slate-900">
@@ -107,10 +136,8 @@ export function CompanyGlance() {
       </h2>
 
       {/* Big numbers, each its colour. */}
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         {[
-          ["People", people.toLocaleString("en-PH"), `${data.departments.length} departments`, "#1f9d55", "/company"],
-          ["Working today", `${data.working.in} of ${data.working.all}`, "signed in for the day", "#2563eb", "/hr/attendance"],
           ["Sold this month", shortPeso(monthSold), `${data.days.length} days with sales`, "#f59e0b", "/sales-performance"],
           ["Enquiries this month", data.enquiries.month.toLocaleString("en-PH"), `${data.enquiries.waiting} waiting for a reply`, "#e11d48", "/leads"],
           ["Stock value", shortPeso(stockValue), `${data.stock.length} warehouses`, "#7c3aed", "/inventory/overview"],
@@ -124,8 +151,6 @@ export function CompanyGlance() {
           </Link>
         ))}
       </div>
-
-      <Attendance data={data.attendance} />
 
       <div className="grid gap-3 lg:grid-cols-3">
         {/* The month's sales, day by day. */}
@@ -156,8 +181,8 @@ export function CompanyGlance() {
           </div>
         </div>
         <div className={CARD}>
-          <Head title="People by department" to="/company" sub="Chart" />
-          <Bars rows={data.departments.map((one) => ({ label: one.name, value: one.people }))} />
+          <Head title="Top medicines this month" to="/medicines" />
+          <Bars rows={data.medicines.map((one) => ({ label: one.name, value: one.amount }))} money />
         </div>
       </div>
 
@@ -202,10 +227,6 @@ export function CompanyGlance() {
         <div className={CARD}>
           <Head title="Top customers this month" to="/key-reports/customers" />
           <Bars rows={data.customers.map((one) => ({ label: one.name, value: one.amount }))} money />
-        </div>
-        <div className={CARD}>
-          <Head title="Top medicines this month" to="/medicines" />
-          <Bars rows={data.medicines.map((one) => ({ label: one.name, value: one.amount }))} money />
         </div>
         <div className={CARD}>
           <Head title="Online enquiries this month" to="/leads" sub={`${data.enquiries.all.toLocaleString("en-PH")} in all`} />

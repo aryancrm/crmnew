@@ -392,10 +392,9 @@ export function CeoHomePage() {
         </div>
       </header>
 
-      {/* The company at a glance: colourful, everything the CRM knows about it (Aryan, 19 Nov). */}
-      <CompanyGlance />
-
-      {/* 2. The four boxes, open: each holds what clicking it used to lead to */}
+      {/* 2. The four boxes, open: each holds what clicking it used to lead to. The business comes
+          first (Aryan, 19 Nov: sales, collected, customers owe, orders now, profit, medicines,
+          customers on top; the people below). */}
       <section aria-label="The month" className="grid gap-3 lg:grid-cols-2">
         <ChannelSalesCard
           channels={sales.channels}
@@ -470,6 +469,10 @@ export function CeoHomePage() {
       {/* The month's profit and how fast customers pay (ERP phase 1: from the books). */}
       <ProfitStrip />
 
+      {/* The company at a glance: the month's sales by day and channel, the top sellers, customers
+          and medicines, enquiries, orders by step, stock, customers (Aryan, 19 Nov). */}
+      <CompanyGlance part="business" />
+
       {/* 4. The day's work and who sells, open: the cards of My team and Speed */}
       <AtAGlance money={money} stock={stock} />
 
@@ -518,6 +521,9 @@ export function CeoHomePage() {
           )}
         </section>
       </div>
+
+      {/* The company's people at the foot: headcount, who's in today, people by department. */}
+      <CompanyGlance part="people" />
     </div>
   );
 }
