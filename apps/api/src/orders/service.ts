@@ -60,7 +60,7 @@ import type {
   Vat,
 } from "../types";
 import { stuckNow } from "./clock";
-import { DIVISIONS, subDivisionOfArea, termsOfLabel } from "./divisions";
+import { DIVISIONS, divisionsOf, subDivisionOfArea, termsOfLabel } from "./divisions";
 import { logEvent, peso } from "./events";
 import {
   CASE_AGENT_ROLES,
@@ -1812,6 +1812,12 @@ const forWhom = (me: Me): SQL =>
       ? sql`true`
       : sql`false`;
 
+/** A person's seats' Divisions (migration 0114), the main seat's first: `who` is their id. */
+const seatDivisionsSql = (who: SQL, today: string) => sql`(select array_agg(seat_division(dh.seat_id)
+    order by (dh.kind = 'holder') desc, ds.lead desc, dh.starts_on, dh.id)
+  from seat_holder dh join seat ds on ds.id = dh.seat_id and ds.active
+  where dh.person_id = ${who} and ${inForce("dh", today)})`;
+
 async function pickedMedrep(db: Database, me: Me, medrepId: number) {
   const [found] = await rows<{ id: number; channelId: number | null }>(
     db,
@@ -1831,15 +1837,22 @@ export async function orderForList(
   if (me.role === "medrep" || me.role === "online")
     return { can: false, medreps: [], suggested: null };
   const today = todayManila();
-  const medreps = await rows<OrderForList["medreps"][number]>(
+  const found = await rows<Omit<OrderForList["medreps"][number], "divisions"> & { seatDivisions: string[] | null }>(
     db,
-    sql`select p.id::int as id, p.name, a.name as area, ch.code as channel, ch.division, seat.login, seat.team from person p
+    sql`select p.id::int as id, p.name, a.name as area, ch.code as channel, ch.division, seat.login, seat.team,
+        ${seatDivisionsSql(sql`p.id`, today)} as "seatDivisions" from person p
       left join area a on a.id = p.area_id left join channel ch on ch.id = p.channel_id
       left join lateral (select s.login, u.name as team from seat_holder h join seat s on s.id = h.seat_id and s.active
         join org_unit u on u.id = s.unit_id where h.person_id = p.id and h.kind = 'holder' and ${inForce("h", today)}
         order by h.starts_on limit 1) seat on true
       where p.active and p.role = 'medrep' and ${forWhom(me)} order by seat.team nulls last, p.name`,
   );
+  // Each MedRep's own Divisions: the order picked for them carries one of theirs.
+  const medreps = found.map(({ seatDivisions, ...rep }) => ({
+    ...rep,
+    divisions: divisionsOf(seatDivisions, rep.division),
+    division: divisionsOf(seatDivisions, rep.division)[0] ?? null,
+  }));
   const [suggested] = customerId
     ? await rows<{ id: number }>(
         db,
@@ -1951,17 +1964,28 @@ export async function placeOrder(
     (paymentTerm
       ? termsOfLabel(paymentTerm)
       : { terms: customer.paymentTerms, days: customer.paymentDays });
-  const [placer] = await rows<{ division: string | null; area: string | null }>(
+  const [placer] = await rows<{ division: string | null; area: string | null; title: string | null; seatDivisions: string[] | null }>(
     db,
     // The division and area are the MedRep's whose order it is (a team lead ordering for Ryan
     // books it under Ryan's channel and area), else the placer's own.
-    sql`select ch.division, a.name as area from person p left join channel ch on ch.id = p.channel_id left join area a on a.id = p.area_id where p.id = ${holder?.id ?? me.id}`,
+    sql`select ch.division, a.name as area, p.title, ${seatDivisionsSql(sql`p.id`, today)} as "seatDivisions"
+      from person p left join channel ch on ch.id = p.channel_id left join area a on a.id = p.area_id where p.id = ${holder?.id ?? me.id}`,
   );
-  // The channel's own Division, as the Admin panel sets it (none when it has none).
-  const orderDivision = division ?? placer?.division ?? null;
+  // One seat, one Division (Aryan, 19 Nov: "a MedRep comes under one Division"): the order carries
+  // its person's own (one with two seats picks between the two); Management and the Admin may set
+  // any. A Hospital MedRep's order stays the Hospital's: their own lead and head, their target.
+  const ownDivisions = divisionsOf(placer?.seatDivisions ?? null, placer?.division ?? null);
+  if (division && ownDivisions.length > 0 && !ownDivisions.includes(division) && !ORDER_ALL_ROLES.includes(me.role))
+    throw new Refusal(
+      400,
+      "invalid",
+      `${holder ? "Their" : "Your"} orders carry ${ownDivisions.length > 1 ? `one of ${ownDivisions.join(", ")}` : ownDivisions[0]}: ${holder ? "their" : "your"} own Division.`,
+      "division",
+    );
+  const orderDivision = division ?? ownDivisions[0] ?? null;
   const subDivision =
     clean(input.subDivision) ??
-    (orderDivision && placer?.area ? subDivisionOfArea(orderDivision, placer.area) : null);
+    (orderDivision && (placer?.area || placer?.title) ? subDivisionOfArea(orderDivision, placer?.area, placer?.title) : null);
   const status: OrderStatus = manages ? afterApproval(terms.terms) : "pending_approval";
 
   return db.transaction(async (tx) => {

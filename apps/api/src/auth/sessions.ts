@@ -1,6 +1,7 @@
 // A signed-in browser holds a random token in a cookie its scripts can't read. The database
 // keeps only the token's hash, so a copy of the database signs nobody in.
 
+import { divisionsOf } from "../orders/divisions";
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt, ne, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -91,6 +92,10 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
       businessCode: sql<string | null>`(select seat_business_channel(h.seat_id) from seat_holder h join seat s on s.id = h.seat_id and s.active
         where h.person_id = ${person.id} and h.starts_on <= current_date and (h.ends_on is null or h.ends_on >= current_date)
         order by (h.kind = 'holder') desc, s.lead desc, h.starts_on, h.id limit 1)`,
+      // The Divisions their orders carry: their seats' own (migration 0114), the main seat's first.
+      seatDivisions: sql<string[] | null>`(select array_agg(seat_division(h.seat_id) order by (h.kind = 'holder') desc, s.lead desc, h.starts_on, h.id)
+        from seat_holder h join seat s on s.id = h.seat_id and s.active
+        where h.person_id = ${person.id} and h.starts_on <= current_date and (h.ends_on is null or h.ends_on >= current_date))`,
     })
     .from(session)
     .innerJoin(person, eq(person.id, session.personId))
@@ -123,6 +128,7 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
     role: row.role,
     roleLabel: ROLE_LABEL[row.role],
     business: row.businessCode ?? null,
+    divisions: divisionsOf(row.seatDivisions, row.channelDivision ?? null),
     deskScreen: (row.deskScreen as Me["deskScreen"]) ?? null,
     // Someone looking as this person isn't asked to change their password.
     mustChangePassword: row.viewerId ? false : row.mustChangePassword,

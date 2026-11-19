@@ -20,8 +20,34 @@ export const DIVISIONS = [
   "MT",
 ] as const;
 
-/** The named Sub-divisions of the four Divisions that have them: suggestions, never enforced. */
+/** The Divisions a person's orders carry (Aryan, 19 Nov: a MedRep comes under one Division): their
+ *  seats' own (the database's seat_division, migration 0114), the main seat's first, each once;
+ *  with no seat, their channel's. */
+export function divisionsOf(seats: (string | null)[] | null, channelDivision: string | null): string[] {
+  const own = [...new Set((seats ?? []).filter((one): one is string => Boolean(one)))];
+  return own.length ? own : channelDivision ? [channelDivision] : [];
+}
+
+/** Whom each Division's orders are usually for: the order form's customer list opens on these
+ *  (every customer is one click away). Divisions not listed open on every customer. */
+export const DIVISION_BUYERS: Record<string, string[]> = {
+  HOS: ["hospital", "doctor"],
+  "TeleSales Anesthesia": ["hospital", "doctor"],
+  B2B: ["drugstore", "distributor"],
+  CLIDP: ["distributor", "drugstore"],
+  MT: ["drugstore", "distributor"],
+  BID: ["government", "hospital"],
+  B2C: ["patient", "doctor"],
+  "B&B": ["patient", "doctor"],
+  URO: ["patient", "doctor"],
+  STC: ["patient", "doctor"],
+  "MD Telesales": ["patient", "doctor"],
+};
+
+/** The named Sub-divisions of the Divisions that have them: suggestions, never enforced. B2B's
+ *  two are its teams, as the hub has them (CRR keeps accounts buying, NBD finds new ones). */
 export const SUB_DIVISIONS: Record<string, string[]> = {
+  B2B: ["CRR", "NBD"],
   "B&B": ["CEBU", "DAVAO", "E. RODRIGUEZ", "EAST AVE", "NCL", "SOUTH LUZON", "TAFT"],
   HOS: [
     "GENSAN",
@@ -105,7 +131,16 @@ export function divisionOfChannel(code: string | null | undefined): string {
 }
 
 /** The Sub-division an area's name points at ("HOS | Pasay" -> "PASAY"), when it is a known one. */
-export function subDivisionOfArea(division: string, area: string | null | undefined): string {
+export function subDivisionOfArea(
+  division: string,
+  area: string | null | undefined,
+  title?: string | null,
+): string {
+  // B2B's are its two teams, never a place: the seat's own (an NBD's, a CRR's), else blank.
+  if (division === "B2B") {
+    const said = `${area ?? ""} ${title ?? ""}`;
+    return /\bNBD\b/i.test(said) ? "NBD" : /\bCRR\b/i.test(said) ? "CRR" : "";
+  }
   const place = (area ?? "").split("|").pop()?.trim().toUpperCase() ?? "";
   return (SUB_DIVISIONS[division] ?? []).find((name) => name === place) ?? place;
 }

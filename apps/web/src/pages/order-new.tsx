@@ -5,6 +5,7 @@
 // it goes out.
 
 import {
+  DIVISION_BUYERS,
   DIVISIONS,
   ORDER_SOURCES,
   PAYMENT_TERMS,
@@ -216,6 +217,15 @@ function Label({ text, needed }: { text: string; needed?: boolean }) {
   );
 }
 const HELP = "text-[11px] text-ink-2";
+/** A kind of customer in the plural, for "HOS orders are usually for hospitals and doctors". */
+const BUYER_WORDS: Record<string, string> = {
+  hospital: "hospitals",
+  doctor: "doctors",
+  patient: "patients",
+  drugstore: "drugstores",
+  distributor: "distributors",
+  government: "government buyers",
+};
 /** Dispatch's word about a medicine, as its stock news says it. */
 const NEWS_WORDS: Record<string, string> = {
   out: "Dispatch: out of stock",
@@ -356,6 +366,8 @@ export function OrderNew({
   }, [forWhom.data, medrepTouched]);
   const [askedCustomer, setAskedCustomer] = useState("");
   const [adding, setAdding] = useState(false);
+  // The customer list opens on the Division's usual buyers; every customer is one click away.
+  const [everyKind, setEveryKind] = useState(false);
   useEffect(() => {
     const timer = setTimeout(() => setAskedCustomer(findCustomer.trim()), 250);
     return () => clearTimeout(timer);
@@ -420,13 +432,30 @@ export function OrderNew({
   const forRep = forWhom.data?.can
     ? forWhom.data.medreps.find((rep) => rep.id === medrepId)
     : undefined;
-  // The channel's own Division (the Admin panel sets it), the MedRep's whose order it is.
-  const pickedDivision = division ?? (forRep ? forRep.division : me?.channel?.division) ?? "";
+  // One seat, one Division (Aryan, 19 Nov: "a MedRep comes under one Division"): the order carries
+  // the Division of the person whose order it is; one with two seats picks between the two.
+  // Management and the Admin, ordering for nobody in particular, may set any.
+  const anyDivision = me ? ["management", "admin", "ceo"].includes(me.role) && !forRep : false;
+  const ownDivisions = forRep
+    ? forRep.divisions
+    : (me?.divisions ?? (me?.channel?.division ? [me.channel.division] : []));
+  const divisionChoices: readonly string[] = anyDivision || ownDivisions.length === 0 ? DIVISIONS : ownDivisions;
+  const ownDivision = ownDivisions[0] ?? "";
+  const pickedDivision =
+    division && divisionChoices.includes(division) ? division : divisionChoices.length === 1 ? (divisionChoices[0] ?? "") : (division ?? ownDivision);
   const pickedSubDivision =
     subDivision ??
     (pickedDivision
-      ? subDivisionOfArea(pickedDivision, forRep ? forRep.area : me?.area?.name)
+      ? subDivisionOfArea(pickedDivision, forRep ? forRep.area : me?.area?.name, forRep ? null : me?.title)
       : "");
+  // The customers shown: the Division's usual buyers, unless every customer is asked for.
+  const divisionKinds = DIVISION_BUYERS[pickedDivision] ?? null;
+  const allCustomerRows = customers.data?.rows ?? [];
+  const kindRows =
+    divisionKinds && !everyKind
+      ? allCustomerRows.filter((row) => divisionKinds.includes(row.kind))
+      : allCustomerRows;
+  const otherKinds = allCustomerRows.length - kindRows.length;
   // Finance checks every order unless Management switches it off (Aryan, 17 Nov).
   const [toFinance, setToFinance] = useState(true);
   const doctors = useQuery({
@@ -1017,25 +1046,67 @@ export function OrderNew({
             )}
           </div>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-            <label className="flex flex-col gap-1">
-              <Label text="Division" needed />
-              <select
-                value={pickedDivision}
-                onChange={(event) => {
-                  setDivision(event.target.value);
-                  setSubDivision("");
-                }}
-                className={FIELD}
-              >
-                <option value="">-- Not set --</option>
-                {DIVISIONS.map((name) => (
-                  <option key={name} value={name}>
+        {/* The order's Division: the person's own, shown (one seat, one Division); one with two
+            seats picks between the two. The sub-division and the customer list follow it. */}
+        <div className="flex flex-col gap-1.5">
+          <Label text="Division" needed />
+          {divisionChoices.length === 1 ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="inline-flex h-9 items-center rounded-xl bg-brand px-3.5 text-[13px] font-semibold text-white shadow-2xs">
+                {pickedDivision}
+              </span>
+              <span className={HELP}>
+                {forRep ? `${forRep.name}'s Division` : "Your Division"}: the order goes to{" "}
+                {forRep ? "their" : "your"} own team lead and head, and counts for {forRep ? "them" : "you"}.
+              </span>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Division">
+              {divisionChoices.map((name) => {
+                const on = pickedDivision === name;
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    disabled={Boolean(fixId)}
+                    onClick={() => {
+                      setDivision(name);
+                      // Their own main Division fills its sub-division again; another starts blank.
+                      setSubDivision(name === ownDivision ? null : "");
+                    }}
+                    className={`inline-flex h-9 items-center rounded-xl border px-3 text-[13px] font-semibold transition ${
+                      on
+                        ? "border-brand bg-brand text-white shadow-2xs"
+                        : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                    } disabled:cursor-not-allowed disabled:opacity-70`}
+                  >
                     {name}
-                  </option>
-                ))}
-              </select>
-            </label>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {divisionChoices.length > 1 && ownDivisions.length > 1 && !anyDivision && (
+            <span className={HELP}>
+              {forRep ? "They sit" : "You sit"} in {ownDivisions.length} Divisions: pick the one this order is for.
+            </span>
+          )}
+          {!pickedDivision && (
+            <span className="text-[12px] text-amber-700">Pick the Division this order counts for.</span>
+          )}
+          {pickedDivision && DIVISION_BUYERS[pickedDivision] && (
+            <span className={HELP}>
+              {pickedDivision} orders are usually for{" "}
+              {(DIVISION_BUYERS[pickedDivision] ?? [])
+                .map((kind) => BUYER_WORDS[kind] ?? kind)
+                .join(" and ")}
+              : the customer list below opens on them.
+            </span>
+          )}
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1">
               <Label text="Sub-division" />
               {(SUB_DIVISIONS[pickedDivision] ?? []).length > 0 ? (
@@ -1067,9 +1138,6 @@ export function OrderNew({
               )}
             </label>
           </div>
-        <span className={HELP}>
-          Filled from your account; change it for this order if needed.
-        </span>
       </Part>
 
       {/* 2 · Customer details: who buys, where it goes, how they pay (the hub's second part) */}
@@ -1226,10 +1294,35 @@ export function OrderNew({
             {action.at("customerId") && (
               <div className="text-xs text-rose-700">{action.at("customerId")}</div>
             )}
+            {divisionKinds && (
+              <div className="flex flex-wrap items-center gap-1.5 px-1" role="radiogroup" aria-label="Which customers">
+                {(
+                  [
+                    [false, `${pickedDivision}: ${divisionKinds.map((kind) => BUYER_WORDS[kind] ?? kind).join(" & ")}`],
+                    [true, "Every customer"],
+                  ] as const
+                ).map(([every, label]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    role="radio"
+                    aria-checked={everyKind === every}
+                    onClick={() => setEveryKind(every)}
+                    className={`rounded-full px-2.5 py-1 text-[12px] font-semibold ring-1 ${
+                      everyKind === every
+                        ? "bg-slate-900 text-white ring-slate-900"
+                        : "bg-white text-slate-600 ring-slate-200 hover:bg-slate-50"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
             <ul className="flex max-h-72 flex-col overflow-y-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
               {(findCustomer.trim()
-                ? (customers.data?.rows ?? []).slice(0, 12)
-                : [...(customers.data?.rows ?? [])]
+                ? kindRows.slice(0, 12)
+                : [...kindRows]
                     .filter((row) => row.lastOrderAt)
                     .sort((a, b) => (b.lastOrderAt ?? "").localeCompare(a.lastOrderAt ?? ""))
                     .slice(0, 5)
@@ -1262,14 +1355,21 @@ export function OrderNew({
                   </button>
                 </li>
               ))}
-              {customers.data && findCustomer.trim() && customers.data.rows.length === 0 && (
+              {customers.data && findCustomer.trim() && kindRows.length === 0 && otherKinds === 0 && (
                 <li className="px-3.5 py-3 text-xs text-slate-500">
                   No customer matches: add them as a New customer above.
                 </li>
               )}
+              {customers.data && otherKinds > 0 && !everyKind && (findCustomer.trim() || kindRows.length === 0) && (
+                <li className="px-3.5 py-2.5">
+                  <button type="button" onClick={() => setEveryKind(true)} className="text-xs font-semibold text-brand hover:underline">
+                    {otherKinds} more of other kinds: show every customer
+                  </button>
+                </li>
+              )}
               {customers.data &&
                 !findCustomer.trim() &&
-                !customers.data.rows.some((row) => row.lastOrderAt) && (
+                !kindRows.some((row) => row.lastOrderAt) && (
                   <li className="px-3.5 py-3 text-xs text-slate-500">
                     Type a name, phone number or city to find one.
                   </li>
@@ -2371,6 +2471,8 @@ export function OrderNew({
         <CustomerDialog
           can={customers.data.can}
           kinds={customers.data.kinds}
+          // A new customer starts as the Division's usual buyer (a hospital for HOS, a drugstore for B2B).
+          kind={(divisionKinds?.[0] as CustomerKind | undefined) ?? undefined}
           onClose={() => setAdding(false)}
           onSaved={(id) => setCustomerId(id)}
           onPick={(id) => setCustomerId(id)}

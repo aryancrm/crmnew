@@ -618,9 +618,11 @@ export function MyOrdersPage() {
             {count(data.counts.all)}
           </span>
         </div>
-        {team && (
+        {/* Every seller's own way in, as the hub's "+ New Order" on My Orders (the Online desk's
+            orders start as cases). */}
+        {me?.role !== "online" && (
           <Link to="/orders/new" className={PRIMARY_SM}>
-            <Plus className="size-4" /> New order
+            <Plus className="size-4" /> Create New Order
           </Link>
         )}
       </div>

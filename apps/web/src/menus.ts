@@ -140,8 +140,11 @@ export type Space = {
   /** The tile's colours. */
   tone: string;
   groups: MenuGroup[];
-  /** The button on top of the menu, as the hub has "Create New Order". */
+  /** The button on top of the menu, as the hub has "Create New Order": every seller's the same
+   *  (Aryan, 19 Nov: one common way to start an order, whatever the seat). */
   cta?: { to: string; label: string };
+  /** The seat's own second action under it (an Rx CHC's Log a call, Bidding's Record a tender). */
+  cta2?: { to: string; label: string };
   /** The way back to the person's own desk, when this is an app they stepped into. */
   back?: { to: string; label: string };
   /** The phone's tab bar, when it isn't the menu's first links. */
@@ -633,7 +636,7 @@ function ownDesk(me: Me): Space {
               : [{ to: "/huddle", label: "Tonight's huddle", icon: Megaphone, short: "Huddle" }]),
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ]),
-          cta: { ...newOrder, label: "New order" },
+          cta: newOrder,
         };
       // B2B Telesales (docs/PLAN.md 16.4): the NBD hunts new accounts, the CRR keeps them buying.
       if (b2bRole(me) === "nbd")
@@ -645,7 +648,7 @@ function ownDesk(me: Me): Space {
             { to: "/b2b/prospects?view=handed", label: "Handed over", icon: UserCheck },
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ]),
-          cta: { ...newOrder, label: "New order" },
+          cta: newOrder,
         };
       if (b2bRole(me) === "crr")
         return {
@@ -656,7 +659,7 @@ function ownDesk(me: Me): Space {
             { to: "/collections", label: "Collections", icon: HandCoins },
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ]),
-          cta: { ...newOrder, label: "New order" },
+          cta: newOrder,
         };
       // Government Bidding's coachees and CHC (docs/PLAN.md 16.6): tenders from posting to payment.
       if (me.channel?.code === "BID")
@@ -668,7 +671,8 @@ function ownDesk(me: Me): Space {
             ordersLink("My orders"),
             { to: "/collections", label: "Collections", icon: HandCoins },
           ]),
-          cta: { to: "/tenders", label: "Record a tender" },
+          cta: newOrder,
+          cta2: { to: "/tenders", label: "Record a tender" },
         };
       // CLIDP (Sales and Marketing, docs/PLAN.md 16.5): bulk to distributors under their listings.
       if (b2bRole(me) === "clidp")
@@ -680,7 +684,7 @@ function ownDesk(me: Me): Space {
             ordersLink("My orders"),
             { to: "/collections", label: "Collections", icon: HandCoins },
           ]),
-          cta: { ...newOrder, label: "New order" },
+          cta: newOrder,
         };
       // MD Telesales Anesthesia (inside the Hospital Division): hospitals and doctors by phone.
       if (me.channel?.code === "TS" && me.business === "HOSP")
@@ -693,7 +697,7 @@ function ownDesk(me: Me): Space {
             { to: "/my/area", label: "My customers", icon: Building2 },
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ]),
-          cta: { ...newOrder, label: "New order" },
+          cta: newOrder,
         };
       // MD Telesales Oncology (the Prescription Business): care groups, refills, orders, the number
       // (docs/PLAN.md 16.2).
@@ -707,7 +711,7 @@ function ownDesk(me: Me): Space {
             { to: "/my/area", label: "My patients", icon: Users },
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ]),
-          cta: { ...newOrder, label: "New order" },
+          cta: newOrder,
         };
       // An Rx CHC: the doctors' day of the Rx CHC Play Book (docs/PLAN.md 16.2). Telesales take
       // the orders and hold the sales targets; the CHC builds the doctors.
@@ -734,7 +738,8 @@ function ownDesk(me: Me): Space {
             { to: "/care-groups", label: "Patient care groups", icon: Users, short: "Groups" },
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ]),
-          cta: { to: "/visits", label: "Log a call" },
+          cta: newOrder,
+          cta2: { to: "/visits", label: "Log a call" },
         };
       // A PAP MedRep's patients come as cases (the guarantee letter's road), not plain orders.
       const pap = me.channel?.code === "PAP";
@@ -761,9 +766,8 @@ function ownDesk(me: Me): Space {
           { to: "/to-call", label: pap ? "Patients to call" : "Customers to call", icon: PhoneCall, badge: "refills", short: "Call" },
           { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
         ]),
-        cta: pap
-          ? { to: "/pap?new=1", label: "New PAP case" }
-          : { ...newOrder, label: "New order" },
+        cta: newOrder,
+        ...(pap ? { cta2: { to: "/pap?new=1", label: "New PAP case" } } : {}),
       };
     }
     case "management":
@@ -837,11 +841,12 @@ function ownDesk(me: Me): Space {
             { to: "/targets", label: "Targets", icon: Target },
           ]),
           icon: Users,
-          cta: { ...newOrder, label: "New order" },
+          cta: newOrder,
         };
       // The Government Bidding Admin: approves bid prices, keeps the company's papers, the team's tenders.
       if (me.role === "team_lead" && me.channel?.code === "BID")
         return {
+          cta: newOrder,
           ...desk([
             home,
             { to: "/tenders", label: "Tenders", icon: FileText, short: "Tenders" },
@@ -865,6 +870,7 @@ function ownDesk(me: Me): Space {
       // The B2B Sales Coach (and the district coach): the NBD pipeline, the CRR accounts, hand-overs.
       if (me.role === "team_lead" && me.channel?.code === "B2B")
         return {
+          cta: newOrder,
           ...desk([
             home,
             folder(
@@ -896,6 +902,7 @@ function ownDesk(me: Me): Space {
       // The Sales & Marketing Mentor: B2B (and Bidding and CLIDP as they are built).
       if (me.role === "manager" && me.channel?.code === "B2B")
         return {
+          cta: newOrder,
           ...desk([
             home,
             { to: "/my-team", label: "Whole business", icon: Users, teams: true },
@@ -920,6 +927,7 @@ function ownDesk(me: Me): Space {
       // The Sales Coach of MD Telesales: the team's number, the groups answered in time, refills.
       if (me.role === "team_lead" && me.channel?.code === "TS" && me.business === "RX")
         return {
+          cta: newOrder,
           ...desk([
             home,
             folder(
@@ -953,6 +961,7 @@ function ownDesk(me: Me): Space {
       // The Country Mentor, head of the Prescription business: field and telesales together.
       if (me.role === "manager" && me.channel?.code === "RX")
         return {
+          cta: newOrder,
           ...desk([
             home,
             { to: "/rx/field", label: "Field team", icon: Stethoscope },
@@ -1030,11 +1039,12 @@ function ownDesk(me: Me): Space {
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ]),
           icon: Users,
-          cta: { ...newOrder, label: "New order" },
+          cta: newOrder,
         };
       // The Business Mentor, head of the Hospital Division: the division's month (docs/PLAN.md 16.1).
       if (me.role === "manager" && me.channel?.code === "HOSP")
         return {
+          cta: newOrder,
           ...desk([
             home,
             folder(

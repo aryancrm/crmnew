@@ -97,6 +97,9 @@ export type Me = {
    *  Division, RX for the Prescription Business, B2B for Sales and Marketing…). Telesales inside the
    *  Hospital Division (anesthesia) and inside the Prescription Business (oncology) work differently. */
   business?: string | null;
+  /** The Divisions their orders carry: one per seat (its box where it names one: CLIDP, URO, B&B;
+   *  else its channel's), the main seat's first. One seat, one Division (Aryan, 19 Nov). */
+  divisions?: string[];
   /** The CEO or Admin looking as this person (read only), when it is that. */
   viewedBy?: { id: number; name: string } | null;
   /** Signed in at a desk's tile with the company's password: the desk's common screen, not the
@@ -1099,8 +1102,10 @@ export type OrderForList = {
     area: string | null;
     /** Their channel's code. */
     channel: string | null;
-    /** The Division their orders carry: their channel's. */
+    /** The Division their orders carry: their main seat's. */
     division: string | null;
+    /** Every Division their seats carry (one with two seats has two). */
+    divisions: string[];
     login: string | null;
     team: string | null;
   }[];

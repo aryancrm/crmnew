@@ -154,6 +154,15 @@ export function Shell() {
           <CirclePlus size={17} aria-hidden="true" /> {space.cta.label}
         </NavLink>
       )}
+      {space.cta2 && (
+        <NavLink
+          to={space.cta2.to}
+          onClick={onPick}
+          className="mx-3 -mt-1 mb-3 flex h-9 items-center gap-2 rounded-[10px] border border-slate-200 bg-white px-3.5 text-[13px] font-semibold text-slate-700 hover:bg-slate-50"
+        >
+          <CirclePlus size={15} aria-hidden="true" className="text-slate-400" /> {space.cta2.label}
+        </NavLink>
+      )}
       {space.back && (
         <NavLink
           to={space.back.to}

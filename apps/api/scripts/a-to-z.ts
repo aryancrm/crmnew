@@ -418,6 +418,31 @@ await step("another business's head (Javed) doesn't", async () => {
     if (!/→ 40[34]/.test(error instanceof Error ? error.message : "")) throw error;
   }
 });
+// One seat, one Division (Aryan, 19 Nov): Ryan's order carries the Hospital's, another is refused,
+// and it goes to his own lead and head only (not to another Division's coach).
+await step("his order carries his own Division (HOS); another (CLIDP) is refused", async () => {
+  const first = await order(MEDREP, o1);
+  must(first.order.division === "HOS", `carries ${first.order.division}`);
+  try {
+    await call(MEDREP, "/api/orders", {
+      customerId: customer.id,
+      division: "CLIDP",
+      items: [{ medicineId: rocu.id, qty: 2, priceKind: "hospital" }],
+    });
+    must(false, "an order under another Division was taken");
+  } catch (error) {
+    if (!/→ 400/.test(error instanceof Error ? error.message : "")) throw error;
+  }
+  return `${first.order.code}: HOS`;
+});
+await step("the B2B coach (Jessa) doesn't see it", async () => {
+  try {
+    const coach = await call<{ cards: { id: number }[] }>("Jessa Domino", "/api/orders/mine?stage=all&page=1");
+    must(!coach.cards.some((one) => one.id === o1), "the B2B coach sees a Hospital MedRep's order");
+  } catch (error) {
+    if (!/→ 40[34]/.test(error instanceof Error ? error.message : "")) throw error;
+  }
+});
 await step("the CEO's Home counts it (sold this month, the company at a glance)", async () => {
   const glance = await call<{ sellers: { name: string }[]; days: { day: string; amount: number }[] }>("Naresh Bishnoi", "/api/ceo/company");
   must(glance.days.some((one) => one.day === today && one.amount > 0), "nothing sold today on the CEO's Home");
