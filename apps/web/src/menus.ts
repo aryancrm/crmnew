@@ -1480,12 +1480,14 @@ function ownDesk(me: Me): Space {
               { to: "/key-reports/target-sheet", label: "Target sheet", icon: Target },
               // Each channel as its own app: a press opens all of its data (Aryan, 19 Nov).
               { to: "/divisions", label: "Divisions", icon: LayoutGrid },
+              // The one place that says who is under whom, and where it is changed (Aryan, 20 Nov);
+              // every other screen reads it.
+              { to: "/company/sales", label: "Company tree", icon: Network },
               folder(
                 "Company",
                 Network,
                 [
                   { to: "/my-team", label: "Company view", icon: BarChart3, teams: true },
-                  { to: "/company/sales", label: "Sales organisation", icon: Network },
                   // The Admin panel's channels, each with its head, managers and sales people
                   // (Aryan, 19 Nov: "put the Admin panel's Channels in the CEO's too").
                   { to: "/admin/channels", label: "Channels", icon: Network },
@@ -1503,7 +1505,7 @@ function ownDesk(me: Me): Space {
             title: "Reports",
             items: [
               { to: "/key-reports/customers", label: "Customers", icon: Users },
-              { to: "/key-reports/channels", label: "Channels", icon: Network },
+              { to: "/key-reports/channels", label: "Sales by channel", icon: Network },
               { to: "/calls", label: "Calls", icon: PhoneCall },
               { to: "/sales-performance", label: "Sales performance", icon: TrendingUp },
             ],
@@ -1548,6 +1550,8 @@ function adminPanel(me: Me): Space {
       {
         items: [
           { to: "/", label: "Channels", icon: Network },
+          // The same tree the CEO has: who is under whom, changed from a box's panel.
+          { to: "/company/sales", label: "Company tree", icon: Network },
           { to: "/people", label: "Teams & people", icon: Users },
           { to: "/people?tab=areas", label: "Areas", icon: MapPin },
           {

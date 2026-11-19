@@ -9,8 +9,8 @@
 // seat, the targets from Targets, the sales from the invoices, so a new channel, a person joining,
 // leaving or moving shows by itself, and every figure rolls up to the boxes above.
 
-import type { TeamBoard, TeamSeatCard } from "@2mg/api/types";
-import { useQuery } from "@tanstack/react-query";
+import type { OrgSeat, OrgTree, OrgUnit, TeamBoard, TeamSeatCard } from "@2mg/api/types";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Maximize, Minus, Plus, Search, X } from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
@@ -23,7 +23,10 @@ import {
 } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useMe } from "../auth";
 import { exactPeso, shortPeso } from "../ceo";
+import { OrgPops, type Pop } from "../org/teams";
+import { lookAs } from "../shell";
 import { type Tone, toneOf } from "../team/pace";
 import { reportRange } from "../team/range";
 import { PageState } from "../ui";
@@ -102,17 +105,32 @@ export function SalesTreePage() {
   const [picked, setPicked] = useState<string | null>(null);
   const [hover, setHover] = useState<{ key: string; x: number; y: number } | null>(null);
   const tree = useMemo(() => (board.data ? build(board.data, everyone) : null), [board.data, everyone]);
+  // The one place the company's tree is changed (Aryan, 20 Nov: "one place where I finalise who is
+  // under whom, and the whole software uses it"): the CEO and the Admin change it from a box's
+  // panel, with the same windows as the Admin's Teams & people; every other screen reads it.
+  const me = useMe().data;
+  const canChange = me?.role === "ceo" || me?.role === "admin";
+  const org = useQuery({ queryKey: ["org"], queryFn: () => api<OrgTree>("/api/org"), enabled: canChange });
+  const [pop, setPop] = useState<Pop | null>(null);
+  const queries = useQueryClient();
+  const orgStamp = useRef(0);
+  // A change saved: the tree is read again.
+  useEffect(() => {
+    if (!org.dataUpdatedAt) return;
+    if (orgStamp.current && orgStamp.current !== org.dataUpdatedAt) void queries.invalidateQueries({ queryKey: ["team"] });
+    orgStamp.current = org.dataUpdatedAt;
+  }, [org.dataUpdatedAt, queries]);
 
-  // Esc closes the side panel, then the page.
+  // Esc closes the side panel, then the page (a window open on top closes itself).
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape" || pop) return;
       if (picked) setPicked(null);
       else navigate(-1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [picked, navigate]);
+  }, [picked, navigate, pop]);
 
   if (!board.data || !tree)
     return (
@@ -184,9 +202,10 @@ export function SalesTreePage() {
       {/* The bar on top: what it is, find, open all, heads only, the zoom (in the canvas), the look. */}
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-3">
         <div className="min-w-0">
-          <h1 className="text-[20px] font-semibold tracking-tight text-slate-900">Sales organisation</h1>
+          <h1 className="text-[20px] font-semibold tracking-tight text-slate-900">Company tree</h1>
           <p className="text-[13px] text-slate-500">
-            GetMeds sales team · {month} · {pace < 1 ? `day ${dayOf} of ${data.days}` : "the whole month"} ·{" "}
+            Who is under whom{canChange ? ": press a box to change it, every screen follows" : ""} · {month} ·{" "}
+            {pace < 1 ? `day ${dayOf} of ${data.days}` : "the whole month"} ·{" "}
             <b className="text-slate-800">{shortPeso(tree.figures.sold)}</b> of{" "}
             {tree.figures.target ? shortPeso(tree.figures.target) : "no target yet"}
           </p>
@@ -278,8 +297,10 @@ export function SalesTreePage() {
             unit={unit}
             onPick={(node) => setPicked(node.key)}
             onClose={() => setPicked(null)}
+            change={canChange && org.data ? { tree: org.data, open: setPop } : null}
           />
         )}
+        {org.data && <OrgPops tree={org.data} pop={pop} setPop={setPop} />}
         {hovered && hover && !picked && <Hover node={hovered} pace={pace} x={hover.x} y={hover.y} />}
       </div>
     </div>
@@ -682,6 +703,122 @@ function Hover({ node, pace, x, y }: { node: Node; pace: number; x: number; y: n
 }
 
 /** A box's figures at the side, as the old tree's panel. */
+const PLACE_BUTTON = "rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-[12.5px] font-semibold text-slate-700 hover:bg-slate-50";
+
+/** Where a box sits in the company (who is above it, what it leads, the work its login does) and,
+ *  for the CEO and the Admin, the changes: move or change the job, add under, fill, leave, close;
+ *  a team's name and place, a team under it. Saved, every screen of the software follows. */
+function Place({ node, all, change }: { node: Node; all: Node[]; change: { tree: OrgTree; open: (pop: Pop) => void } | null }) {
+  const queries = useQueryClient();
+  const [problem, setProblem] = useState<string | null>(null);
+  const seat = node.seat;
+  // Who is above: the nearest person up the line who is not them.
+  const above = node.path
+    .slice(0, -1)
+    .map((key) => all.find((one) => one.key === key))
+    .filter((one): one is Node => Boolean(one))
+    .reverse();
+  const boss = above.find((one) => (one.seat?.person || one.level === "root") && one.name !== node.name);
+  const box = above.find((one) => one.level === "channel" || one.level === "head");
+  const found = change && seat ? change.tree.units.flatMap((one) => one.seats.map((orgSeat) => ({ orgSeat, orgUnit: one }))).find((one) => one.orgSeat.id === seat.seatId) : undefined;
+  const orgSeat: OrgSeat | undefined = found?.orgSeat;
+  const seatUnit: OrgUnit | undefined = found?.orgUnit;
+  const orgUnit: OrgUnit | undefined = change && node.unit ? change.tree.units.find((one) => one.id === node.unit?.id) : undefined;
+  const leadsNothing = Boolean(seat && !seat.lead && (seat.moduleLabel === "Team lead" || seat.moduleLabel === "Head"));
+  const lines: [string, string][] = [
+    ...(seat ? ([["Seat", [seat.title, seat.login].filter(Boolean).join(" · ")]] as [string, string][]) : []),
+    ...(boss && node.level !== "root" ? ([[seat ? "Reports to" : "Under", boss.name]] as [string, string][]) : []),
+    ...(seat?.lead && node.unit ? ([["Leads", node.unit.name]] as [string, string][]) : []),
+    ...(seat && !seat.lead && box ? ([["Team", box.unit?.name ?? box.name]] as [string, string][]) : []),
+    ...(seat ? ([["Their screens", seat.moduleLabel]] as [string, string][]) : []),
+  ];
+  if (!lines.length && !change) return null;
+  return (
+    <div className="mt-4 rounded-xl border border-slate-200 p-3.5">
+      <dl className="space-y-1 text-[13px]">
+        {lines.map(([label, value]) => (
+          <div key={label} className="flex gap-2">
+            <dt className="w-24 shrink-0 text-slate-500">{label}</dt>
+            <dd className="min-w-0 font-semibold text-slate-900">{value}</dd>
+          </div>
+        ))}
+      </dl>
+      {leadsNothing && (
+        <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[12.5px] text-amber-900">
+          Has a {seat?.moduleLabel === "Head" ? "head's" : "team lead's"} screens but leads no team on the tree. Change the job
+          {change ? " below" : ""} if that is not meant.
+        </p>
+      )}
+      {change && (
+        <div className="mt-3 flex flex-wrap gap-1.5 border-t border-slate-100 pt-3">
+          {orgSeat && seatUnit && orgSeat.holder && (
+            <>
+              <button type="button" className={PLACE_BUTTON} onClick={() => change.open({ kind: "seat", unit: seatUnit, seat: orgSeat })}>
+                Move or change the job
+              </button>
+              <button type="button" className={PLACE_BUTTON} onClick={() => change.open({ kind: "add", unit: seatUnit, reportsTo: orgSeat.id })}>
+                Add someone under
+              </button>
+              <button type="button" className={PLACE_BUTTON} onClick={() => orgSeat.holder && void lookAs(orgSeat.holder.personId)}>
+                See their screens
+              </button>
+              <button
+                type="button"
+                className={`${PLACE_BUTTON} text-rose-700`}
+                onClick={() => orgSeat.holder && change.open({ kind: "leave", holder: orgSeat.holder })}
+              >
+                No longer with us
+              </button>
+            </>
+          )}
+          {orgSeat && seatUnit && !orgSeat.holder && (
+            <>
+              <button type="button" className={PLACE_BUTTON} onClick={() => change.open({ kind: "add", unit: seatUnit, seat: orgSeat })}>
+                Fill this seat
+              </button>
+              <button type="button" className={PLACE_BUTTON} onClick={() => change.open({ kind: "seat", unit: seatUnit, seat: orgSeat })}>
+                Move or change the seat
+              </button>
+              <button
+                type="button"
+                className={`${PLACE_BUTTON} text-rose-700`}
+                onClick={async () => {
+                  if (!window.confirm("Close this empty seat? Its customers stay on record.")) return;
+                  try {
+                    setProblem(null);
+                    await api(`/api/org/seats/${orgSeat.id}/close`, { body: {} });
+                    await queries.invalidateQueries({ queryKey: ["org"] });
+                  } catch (error) {
+                    setProblem(error instanceof Error ? error.message : "That didn't save.");
+                  }
+                }}
+              >
+                Close this seat
+              </button>
+            </>
+          )}
+          {orgUnit && (
+            <>
+              {!seat && (
+                <button type="button" className={PLACE_BUTTON} onClick={() => change.open({ kind: "add", unit: orgUnit })}>
+                  Add someone here
+                </button>
+              )}
+              <button type="button" className={PLACE_BUTTON} onClick={() => change.open({ kind: "unit", unit: orgUnit })}>
+                Change this team
+              </button>
+              <button type="button" className={PLACE_BUTTON} onClick={() => change.open({ kind: "unit", parent: orgUnit, team: true })}>
+                Add a team under it
+              </button>
+            </>
+          )}
+        </div>
+      )}
+      {problem && <p className="mt-2 text-[12.5px] text-rose-700">{problem}</p>}
+    </div>
+  );
+}
+
 function Details({
   node,
   all,
@@ -692,6 +829,7 @@ function Details({
   unit,
   onPick,
   onClose,
+  change,
 }: {
   node: Node;
   all: Node[];
@@ -702,6 +840,8 @@ function Details({
   unit: string | null;
   onPick: (node: Node) => void;
   onClose: () => void;
+  /** The CEO and the Admin change the tree from here; null for anyone else. */
+  change: { tree: OrgTree; open: (pop: Pop) => void } | null;
 }) {
   const share = pctOf(node.figures);
   const tone = toneOfNode(node, pace);
@@ -741,6 +881,7 @@ function Details({
           The mark on the bar is the month's pace: by day {day} of {days}, {Math.round(pace * 100)}% of the target.
         </p>
       </div>
+      <Place node={node} all={all} change={change} />
       <dl className="mt-4 grid grid-cols-2 gap-3">
         {(
           [
@@ -811,9 +952,10 @@ function Details({
  * "CLIDP · SUBIR"); the Sales persons. A box inside a channel with its own lead is a manager
  * (HOSP's Julius, Daniel…); one without folds its people into the manager above (RX Business's
  * Uro & Onco and Blood & Bone are Honey's people). People sitting straight under a head are their
- * own channel (Modern Trade's MT, under Mhalou). Only those who sell show: a target set for the
- * month or a sale in it (the tracker's rows), unless every team is asked for. Every box's figures
- * are the sum of what is under it.
+ * own channel (Modern Trade's MT, under Mhalou). Every selling seat shows (a MedRep's, the Online
+ * desk's, a lead's, a head's, and any other with a target or a sale), an empty one as VACANT; the
+ * teams that don't sell when every team is asked for. Every box's figures are the sum of what is
+ * under it.
  */
 export function build(board: TeamBoard, everyone: boolean): Node {
   const units = board.units;
@@ -821,7 +963,10 @@ export function build(board: TeamBoard, everyone: boolean): Node {
   const seatsOf = new Map<number, TeamSeatCard[]>();
   for (const seat of board.seats) seatsOf.set(seat.unitId, [...(seatsOf.get(seat.unitId) ?? []), seat]);
   const childrenOf = (unitId: number) => units.filter((one) => one.parentId === unitId);
-  const sells = (seat: TeamSeatCard) => everyone || seat.target !== null || seat.sold > 0;
+  // Every selling seat shows, with or without a target or a sale yet (Aryan, 20 Nov: the tree is
+  // who is under whom, nobody left out); the teams that don't sell come with "Every team".
+  const SELLING = ["MedRep", "Online desk", "Team lead", "Head"];
+  const sells = (seat: TeamSeatCard) => everyone || seat.target !== null || seat.sold > 0 || SELLING.includes(seat.moduleLabel);
   const zero: Figures = { sold: 0, target: 0, today: 0, people: 0, vacant: 0, territories: 0 };
   const add = (a: Figures, b: Figures): Figures => ({
     sold: a.sold + b.sold,
@@ -947,6 +1092,14 @@ export function build(board: TeamBoard, everyone: boolean): Node {
       path: [],
     };
   };
+  // The same tree with every seat, built once when a business has to be read from it.
+  let full: Node | null = null;
+  const fromFull = (key: string): Node | null => {
+    full ??= build(board, true);
+    const find = (node: Node): Node | null => (node.key === key ? node : node.children.reduce<Node | null>((found, child) => found ?? find(child), null));
+    const found = find(full);
+    return found?.children.length ? found : null;
+  };
   const headNode = (unit: Unit, hue: string): Node | null => {
     if (!everyone && unit.kind === "department") return null;
     const head = leadOf(unit);
@@ -988,7 +1141,10 @@ export function build(board: TeamBoard, everyone: boolean): Node {
         path: [],
       });
     }
-    if (!channels.length && !everyone) return null;
+    // A business with nobody selling yet (no target set, no sale: Modern Trade's two empty seats)
+    // still shows, with every seat in it (Aryan, 20 Nov: "where is Mhalou's department?"): the
+    // tree is who is under whom first, the figures second.
+    if (!channels.length && !everyone) return unit.kind === "business" ? fromFull(`u:${unit.id}`) : null;
     const figures = sum(channels, head && (head.target !== null || head.sold > 0) ? seatFigures(head) : zero);
     const headName = nameOf(head);
     return {
