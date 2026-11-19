@@ -315,8 +315,73 @@ export async function b2bTeam(db: Database, me: Me): Promise<B2bTeam> {
       };
     }),
   );
+  // Each B2B seat's real accounts, from the invoices (this CRM's and Zoho's), vacant seats too: the
+  // NBD pipeline above is only what is logged here.
+  const b2bSeats = seatIds.length
+    ? await rows<{ seatId: number; title: string | null; personId: number | null; name: string | null; zoho: string | null }>(
+        db,
+        sql`select s.id::int as "seatId", s.title,
+            (select h.person_id::int from seat_holder h where h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)}
+              order by h.starts_on desc limit 1) as "personId",
+            (select p.name from seat_holder h join person p on p.id = h.person_id where h.seat_id = s.id and h.kind = 'holder'
+              and ${inForce("h", today)} order by h.starts_on desc limit 1) as name,
+            (select string_agg(zs.name, ', ' order by zs.name) from zoho_seller zs where zs.seat_id = s.id) as zoho
+          from seat s join org_unit u on u.id = s.unit_id left join channel ch on ch.id = u.channel_id
+          where s.id in (${sql.join(seatIds.map((id) => sql`${id}`), sql`, `)}) and s.active and s.module = 'medrep' and not s.lead and ch.code = 'B2B'
+          order by s.title, 4 nulls last`,
+      )
+    : [];
+  const seatList = b2bSeats.length ? sql.join(b2bSeats.map((one) => sql`${one.seatId}`), sql`, `) : sql`0`;
+  const [figures, owed] = await Promise.all([
+    rows<{ seatId: number; active: number; opened: number; activated: number; oneOrder: number; noLicence: number; sold: number; owed: number }>(
+      db,
+      sql`with si as (select customer_id, seat_id, issued_on, total, paid, status from sale_invoice where status <> 'cancelled'),
+          firsts as (select customer_id, min(issued_on) as f, (array_agg(distinct issued_on order by issued_on))[2] as s2,
+              count(distinct issued_on)::int as n
+            from si where customer_id in (select customer_id from si where seat_id in (${seatList})) group by 1)
+        select si.seat_id::int as "seatId",
+          count(distinct si.customer_id) filter (where si.issued_on > ${today}::date - 90)::int as active,
+          count(distinct si.customer_id) filter (where si.issued_on between ${first}::date and ${today}::date and f.f >= ${first}::date)::int as opened,
+          count(distinct si.customer_id) filter (where si.issued_on between ${first}::date and ${today}::date and f.s2 >= ${first}::date)::int as activated,
+          count(distinct si.customer_id) filter (where f.n = 1 and f.f <= ${today}::date - 45 and f.f > ${today}::date - 180)::int as "oneOrder",
+          count(distinct si.customer_id) filter (where si.issued_on > ${today}::date - 90
+            and (c.licence_no is null or trim(c.licence_no) = '' or c.licence_expires < ${today}::date))::int as "noLicence",
+          coalesce(sum(si.total) filter (where si.issued_on between ${first}::date and ${today}::date), 0)::float8 as sold,
+          coalesce(sum(si.total - si.paid) filter (where si.status = 'open' and si.total > si.paid), 0)::float8 as owed
+        from si join firsts f using (customer_id) join customer c on c.id = si.customer_id
+        where si.seat_id in (${seatList}) group by 1`,
+    ),
+    rows<{ age: B2bTeam["owedByAge"][number]["age"]; invoices: number; amount: number }>(
+      db,
+      sql`select case when si.due_on is null or si.due_on >= ${today}::date then 'not due'
+            when ${today}::date - si.due_on <= 30 then '1–30' when ${today}::date - si.due_on <= 60 then '31–60'
+            when ${today}::date - si.due_on <= 90 then '61–90' else 'over 90' end as age,
+          count(*)::int as invoices, sum(si.total - si.paid)::float8 as amount
+        from sale_invoice si where si.seat_id in (${seatList}) and si.status = 'open' and si.total > si.paid group by 1`,
+    ),
+  ]);
+  const AGES: B2bTeam["owedByAge"][number]["age"][] = ["not due", "1–30", "31–60", "61–90", "over 90"];
   return {
     today,
+    seats: b2bSeats.map((one) => {
+      const f = figures.find((row) => row.seatId === one.seatId);
+      const side = b2bRole({ role: "medrep", title: one.title, channel: { code: "B2B", name: "", division: null } });
+      return {
+        seatId: one.seatId,
+        personId: one.personId,
+        name: one.name,
+        zoho: one.zoho,
+        side: side === "nbd" || side === "crr" ? side : null,
+        active: f?.active ?? 0,
+        opened: f?.opened ?? 0,
+        activated: f?.activated ?? 0,
+        oneOrder: f?.oneOrder ?? 0,
+        noLicence: f?.noLicence ?? 0,
+        sold: f?.sold ?? 0,
+        owed: f?.owed ?? 0,
+      };
+    }),
+    owedByAge: AGES.map((age) => owed.find((row) => row.age === age) ?? { age, invoices: 0, amount: 0 }),
     nbd: nbds.map((one) => {
       const mine = prospects.filter((p) => p.nbdId === one.personId);
       const c = calls.find((row) => row.personId === one.personId);

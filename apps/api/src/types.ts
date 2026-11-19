@@ -5316,6 +5316,30 @@ export type B2bTeam = {
   /** Accounts ready to hand over or flagged (no 2nd order by day 45). */
   handOvers: NbdDay["prospects"];
   crrPeople: { personId: number; name: string }[];
+  /** Each B2B seat's real accounts, from the invoices (this CRM's and Zoho's); vacant seats too. */
+  seats: {
+    seatId: number;
+    personId: number | null;
+    /** The holder, or null for a vacant seat (then `zoho` names whose customers it holds). */
+    name: string | null;
+    zoho: string | null;
+    side: "nbd" | "crr" | null;
+    /** Accounts that bought in the last 90 days. */
+    active: number;
+    /** First order with the company this month. */
+    opened: number;
+    /** Second order with the company this month (the account is activated). */
+    activated: number;
+    /** One order only, 45 to 180 days ago, no second yet. */
+    oneOrder: number;
+    /** Active accounts with no FDA licence (LTO) on file, or one expired. */
+    noLicence: number;
+    sold: number;
+    /** What the seat's customers owe now. */
+    owed: number;
+  }[];
+  /** What the B2B accounts owe, by how late. */
+  owedByAge: { age: "not due" | "1–30" | "31–60" | "61–90" | "over 90"; invoices: number; amount: number }[];
 };
 
 /** A CLIDP Sales Coach's day. */

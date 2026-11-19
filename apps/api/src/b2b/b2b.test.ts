@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
+import { addDays, todayManila } from "../inventory/rules";
 import { seedDemoTeam } from "../orders/seed-team";
 import { seedDemo } from "../seed";
 import type { B2bTeam, CrrDay, NbdDay } from "../types";
@@ -80,5 +81,59 @@ describe("B2B Telesales", () => {
       expect(team.crr.find((row) => row.name === "Fritz")?.stopped).toBeGreaterThanOrEqual(1);
     }
     expect((await get("flor", "/api/b2b/team")).status).toBe(403);
+  });
+
+  it("each seat's real accounts from the invoices: buying, opened, activated, one order only, no licence, owed by age", async () => {
+    const [flor] = await rows<{ id: number; seat: number }>(
+      db,
+      sql`select p.id::int as id, h.seat_id::int as seat from person p join seat_holder h on h.person_id = p.id and h.kind = 'holder'
+        where p.email = 'flor@2mg.test' limit 1`,
+    );
+    const today = todayManila();
+    const first = `${today.slice(0, 7)}-01`;
+    const before = (await (await get("jess", "/api/b2b/team")).json()) as B2bTeam;
+    const was = before.seats.find((one) => one.seatId === flor?.seat);
+    expect(was).toMatchObject({ personId: flor?.id, side: "nbd" });
+    // Zoho's invoices under Flor's Zoho salesperson: a drugstore's first order this month (no
+    // licence on file), another's second order this month (its first 20 days before the month),
+    // a third's one order 60 days ago, still owed and 50 days past due.
+    await db.execute(sql`insert into zoho_seller (name, seat_id) values ('B2B | TEST FLOR', ${flor?.seat})`);
+    const customer = async (name: string, licence: string | null) =>
+      (
+        await rows<{ id: number }>(
+          db,
+          sql`insert into customer (name, kind, added_by, licence_no, licence_expires)
+            values (${name}, 'drugstore', ${flor?.id}, ${licence}, ${licence ? "2030-01-01" : null}::date) returning id::int as id`,
+        )
+      )[0]?.id;
+    const brandNew = await customer("Zoho New Drugstore", null);
+    const second = await customer("Zoho Second Drugstore", "LTO-1");
+    const once = await customer("Zoho Once Drugstore", "LTO-2");
+    for (const [code, customerId, day, total, balance, due] of [
+      ["INV-T1", brandNew, first, 100000, 0, addDays(first, 30)],
+      ["INV-T2", second, addDays(first, -20), 50000, 0, addDays(first, 10)],
+      ["INV-T3", second, first, 70000, 3000, addDays(today, 30)],
+      ["INV-T4", once, addDays(today, -60), 90000, 5000, addDays(today, -50)],
+    ] as const)
+      await db.execute(
+        sql`insert into book_doc (kind, zoho_id, number, doc_date, due_date, status, customer_id, total, balance, fields)
+          values ('invoice', ${code}, ${code}, ${day}::date, ${due}::date, 'sent', ${customerId}, ${total}, ${balance},
+            ${JSON.stringify({ "Sales Person": "B2B | TEST FLOR" })}::jsonb)`,
+      );
+    const after = (await (await get("jess", "/api/b2b/team")).json()) as B2bTeam;
+    const now = after.seats.find((one) => one.seatId === flor?.seat);
+    expect(now).toMatchObject({
+      active: (was?.active ?? 0) + 3,
+      opened: (was?.opened ?? 0) + 1,
+      activated: (was?.activated ?? 0) + 1,
+      oneOrder: (was?.oneOrder ?? 0) + 1,
+      noLicence: (was?.noLicence ?? 0) + 1,
+      sold: (was?.sold ?? 0) + 170000,
+      owed: (was?.owed ?? 0) + 8000,
+    });
+    const age = (list: B2bTeam["owedByAge"], key: B2bTeam["owedByAge"][number]["age"]) => list.find((one) => one.age === key);
+    expect(age(after.owedByAge, "31–60")?.amount).toBe((age(before.owedByAge, "31–60")?.amount ?? 0) + 5000);
+    expect(age(after.owedByAge, "not due")?.amount).toBe((age(before.owedByAge, "not due")?.amount ?? 0) + 3000);
+    expect(after.owedByAge.map((one) => one.age)).toEqual(["not due", "1–30", "31–60", "61–90", "over 90"]);
   });
 });

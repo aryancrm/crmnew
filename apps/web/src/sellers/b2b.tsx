@@ -525,7 +525,11 @@ export function AccountsPage() {
   );
 }
 
-/** The coach's and the Mentor's B2B team: the pipeline per NBD, the accounts per CRR, hand-overs. */
+/** The coach's and the Mentor's B2B team (Aryan, 19 Nov: "B2B: Domino, her people, from where, how
+ * much"; docs/CHANNEL-WORK.md B2B): CRR against NBD, the accounts each seat's customers bought from
+ * (this CRM's invoices and Zoho's), opened and activated this month, one order only, no FDA licence
+ * on file; the NBD pipeline when it is used here; the CRR's accounts slipping; what the accounts owe
+ * by age; the hand-overs waiting. Sold and target per person are in the panel above it. */
 export function B2bTeamCard({ unit = null }: { unit?: number | null } = {}) {
   // One box of the lead's (a press on the Home's tree): only its people.
   const query = useQuery({
@@ -534,93 +538,213 @@ export function B2bTeamCard({ unit = null }: { unit?: number | null } = {}) {
   });
   const [handing, setHanding] = useState<Prospect | null>(null);
   const data = query.data;
-  if (!data || (data.nbd.length === 0 && data.crr.length === 0)) return null;
+  if (!data || (data.seats.length === 0 && data.nbd.length === 0 && data.crr.length === 0)) return null;
+  const side = (key: "crr" | "nbd") => data.seats.filter((one) => one.side === key);
+  const total = (list: B2bTeam["seats"], key: "active" | "opened" | "activated" | "oneOrder" | "noLicence" | "sold") =>
+    list.reduce((sum, one) => sum + one[key], 0);
+  const crrSeats = side("crr");
+  const nbdSeats = side("nbd");
+  const all = data.seats;
+  // A vacant seat shows when its customers still buy (or bought once); the empty ones are counted.
+  const nbdShown = nbdSeats.filter((one) => one.name || one.active > 0 || one.oneOrder > 0);
+  const nbdEmpty = nbdSeats.length - nbdShown.length;
+  // The prospect pipeline's columns show once anyone uses it here.
+  const pipeline = data.nbd.some((one) => one.open + one.callsDue + one.papersMissing + one.callsThisMonth > 0);
+  const pipelineOf = (personId: number | null) => data.nbd.find((one) => one.personId === personId);
+  const seatOf = (personId: number) => data.seats.find((one) => one.personId === personId);
+  const owedTotal = data.owedByAge.reduce((sum, one) => sum + one.amount, 0);
+  const vacantOwed = data.seats.filter((one) => !one.name).reduce((sum, one) => sum + one.owed, 0);
+  // A box with one side (only NBD, only CRR) shows that side alone.
+  const tiles: [string, string, string][] = [
+    ...(crrSeats.length
+      ? ([["CRR sold", shortPeso(total(crrSeats, "sold")), `this month · ${total(crrSeats, "active")} accounts buying`]] as [string, string, string][])
+      : []),
+    ...(nbdSeats.length
+      ? ([["NBD sold", shortPeso(total(nbdSeats, "sold")), `this month · ${total(nbdSeats, "active")} accounts buying`]] as [string, string, string][])
+      : []),
+    ["Opened", String(total(all, "opened")), "first order with us this month"],
+    ["Activated", String(total(all, "activated")), "second order this month"],
+    ["One order only", String(total(all, "oneOrder")), "no second order after 45 days"],
+    ["No FDA licence on file", String(total(all, "noLicence")), `of ${total(all, "active")} accounts buying (90 days)`],
+  ];
   return (
     <>
+      <section className={`grid grid-cols-2 gap-3 sm:grid-cols-3 ${tiles.length > 5 ? "lg:grid-cols-6" : "lg:grid-cols-5"}`}>
+        {tiles.map(([label, value, hint]) => (
+          <div key={label} className={`${CARD} p-3`}>
+            <p className="text-[12px] text-slate-500">{label}</p>
+            <p className="mt-1 text-xl font-semibold text-slate-900 tabular-nums">{value}</p>
+            <p className="truncate text-[11.5px] text-slate-500" title={hint}>
+              {hint}
+            </p>
+          </div>
+        ))}
+      </section>
+
+      {nbdSeats.length > 0 && (
       <section className={`${CARD} min-w-0 overflow-x-auto`}>
-        <header className="flex items-baseline justify-between gap-3 px-4 pt-4 pb-2 sm:px-5">
+        <header className="flex flex-wrap items-baseline justify-between gap-3 px-4 pt-4 pb-2 sm:px-5">
           <h2 className="text-sm font-semibold text-slate-900">New business (NBD)</h2>
-          <span className="text-xs text-slate-500">Prospects to first order to CRR</span>
+          <span className="text-xs text-slate-500">Accounts from each seat's invoices, here and in Zoho</span>
         </header>
         <table className="w-full text-[13px]">
           <thead>
             <tr className="border-y border-slate-100 bg-slate-50/60 text-left text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
               <th className="px-4 py-2 sm:px-5">NBD</th>
-              <th className="px-3 py-2 text-right">Prospects</th>
-              <th className="px-3 py-2 text-right">Calls due</th>
-              <th className="px-3 py-2 text-right">Papers missing</th>
-              <th className="px-3 py-2 text-right">Calls this month</th>
-              <th className="px-4 py-2 text-right">First orders</th>
+              <th className="px-3 py-2 text-right" title="Bought in the last 90 days">
+                Buying
+              </th>
+              <th className="px-3 py-2 text-right" title="First order with us this month">
+                Opened
+              </th>
+              <th className="px-3 py-2 text-right" title="Second order this month">
+                Activated
+              </th>
+              <th className="px-3 py-2 text-right" title="One order only, no second after 45 days">
+                One order only
+              </th>
+              <th className="px-3 py-2 text-right" title="Buying accounts with no FDA licence (LTO) on file, or one expired">
+                No licence
+              </th>
+              {pipeline && (
+                <>
+                  <th className="px-3 py-2 text-right">Prospects</th>
+                  <th className="px-3 py-2 text-right">Calls due</th>
+                  <th className="px-3 py-2 text-right">Papers missing</th>
+                  <th className="px-4 py-2 text-right">Calls this month</th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {data.nbd.map((row) => (
-              <tr key={row.personId}>
-                <td className="px-4 py-2.5 font-semibold text-slate-900 sm:px-5">{row.name}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums">{row.open}</td>
-                <td className={`px-3 py-2.5 text-right tabular-nums ${row.callsDue ? "text-amber-700" : ""}`}>{row.callsDue}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums">{row.papersMissing}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums">{row.callsThisMonth}</td>
-                <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{row.firstOrdersThisMonth}</td>
-              </tr>
-            ))}
+            {nbdShown.map((row) => {
+              const p = pipelineOf(row.personId);
+              return (
+                <tr key={row.seatId}>
+                  <td className="px-4 py-2.5 sm:px-5">
+                    {row.name ? (
+                      <span className="font-semibold text-slate-900">{row.name}</span>
+                    ) : (
+                      <span className="font-semibold text-amber-700">Vacant seat</span>
+                    )}
+                    {!row.name && row.zoho && <span className="block text-[11px] text-slate-500">customers of Zoho's {row.zoho}</span>}
+                  </td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{row.active || "—"}</td>
+                  <td className="px-3 py-2.5 text-right font-semibold tabular-nums">{row.opened || "—"}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{row.activated || "—"}</td>
+                  <td className={`px-3 py-2.5 text-right tabular-nums ${row.oneOrder ? "text-amber-700" : ""}`}>{row.oneOrder || "—"}</td>
+                  <td className={`px-3 py-2.5 text-right tabular-nums ${row.noLicence ? "text-rose-700" : ""}`}>{row.noLicence || "—"}</td>
+                  {pipeline && (
+                    <>
+                      <td className="px-3 py-2.5 text-right tabular-nums">{p?.open ?? "—"}</td>
+                      <td className={`px-3 py-2.5 text-right tabular-nums ${p?.callsDue ? "text-amber-700" : ""}`}>{p?.callsDue ?? "—"}</td>
+                      <td className="px-3 py-2.5 text-right tabular-nums">{p?.papersMissing ?? "—"}</td>
+                      <td className="px-4 py-2.5 text-right tabular-nums">{p?.callsThisMonth ?? "—"}</td>
+                    </>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
-      </section>
-      <section className={`${CARD} min-w-0 overflow-x-auto`}>
-        <header className="flex items-baseline justify-between gap-3 px-4 pt-4 pb-2 sm:px-5">
-          <h2 className="text-sm font-semibold text-slate-900">Keeping accounts (CRR)</h2>
-          <span className="text-xs text-slate-500">Each account against its own usual gap</span>
-        </header>
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="border-y border-slate-100 bg-slate-50/60 text-left text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
-              <th className="px-4 py-2 sm:px-5">CRR</th>
-              <th className="px-3 py-2 text-right">Accounts</th>
-              <th className="px-3 py-2 text-right">Late</th>
-              <th className="px-3 py-2 text-right">Buying less</th>
-              <th className="px-3 py-2 text-right">Stopped</th>
-              <th className="px-4 py-2 text-right">Retention</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {data.crr.map((row) => (
-              <tr key={row.personId}>
-                <td className="px-4 py-2.5 font-semibold text-slate-900 sm:px-5">{row.name}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums">{row.accounts}</td>
-                <td className={`px-3 py-2.5 text-right tabular-nums ${row.late ? "text-amber-700" : ""}`}>{row.late}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums">{row.down}</td>
-                <td className={`px-3 py-2.5 text-right tabular-nums ${row.stopped ? "text-rose-700" : ""}`}>{row.stopped}</td>
-                <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{row.retention === null ? "—" : `${row.retention}%`}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-      <section className={`${CARD} min-w-0`}>
-        <h2 className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900">Hand-overs waiting</h2>
-        {data.handOvers.length === 0 ? (
-          <p className="px-4 py-3 text-[13px] text-slate-500">No account ready for CRR (3rd order or day 90) and none flagged.</p>
-        ) : (
-          <ul className="divide-y divide-slate-100">
-            {data.handOvers.map((p) => (
-              <li key={p.customerId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 text-[13px]">
-                <span>
-                  <b className="text-slate-900">{p.name}</b> <span className="text-slate-500">· {p.nbd}</span>{" "}
-                  <span className={p.flagged ? "text-rose-700" : "text-emerald-700"}>
-                    {p.flagged ? `· no 2nd order by day 45` : `· ${p.orders} orders, day ${p.sinceFirst}`}
-                  </span>
-                </span>
-                {data.crrPeople.length > 0 && (
-                  <button type="button" onClick={() => setHanding(p)} className="rounded-lg bg-brand px-2 py-1 text-[12px] font-semibold text-white">
-                    Hand to CRR
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
+        {nbdEmpty > 0 && (
+          <p className="border-t border-slate-100 px-4 py-2 text-[12px] text-slate-500 sm:px-5">
+            {nbdEmpty === 1 ? "One more NBD seat is vacant" : `${nbdEmpty} more NBD seats are vacant`}, with no accounts yet.
+          </p>
         )}
       </section>
+      )}
+
+      {data.crr.length > 0 && (
+        <section className={`${CARD} min-w-0 overflow-x-auto`}>
+          <header className="flex flex-wrap items-baseline justify-between gap-3 px-4 pt-4 pb-2 sm:px-5">
+            <h2 className="text-sm font-semibold text-slate-900">Keeping accounts (CRR)</h2>
+            <span className="text-xs text-slate-500">Each account against its own usual gap</span>
+          </header>
+          <table className="w-full text-[13px]">
+            <thead>
+              <tr className="border-y border-slate-100 bg-slate-50/60 text-left text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
+                <th className="px-4 py-2 sm:px-5">CRR</th>
+                <th className="px-3 py-2 text-right">Accounts</th>
+                <th className="px-3 py-2 text-right">Late</th>
+                <th className="px-3 py-2 text-right">Buying less</th>
+                <th className="px-3 py-2 text-right">Stopped</th>
+                <th className="px-3 py-2 text-right" title="Buying accounts with no FDA licence (LTO) on file, or one expired">
+                  No licence
+                </th>
+                <th className="px-4 py-2 text-right" title="Of the accounts that bought last month, those that bought this month too">
+                  Retention
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {data.crr.map((row) => (
+                <tr key={row.personId}>
+                  <td className="px-4 py-2.5 font-semibold text-slate-900 sm:px-5">{row.name}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{row.accounts}</td>
+                  <td className={`px-3 py-2.5 text-right tabular-nums ${row.late ? "text-amber-700" : ""}`}>{row.late}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums">{row.down}</td>
+                  <td className={`px-3 py-2.5 text-right tabular-nums ${row.stopped ? "text-rose-700" : ""}`}>{row.stopped}</td>
+                  <td className={`px-3 py-2.5 text-right tabular-nums ${seatOf(row.personId)?.noLicence ? "text-rose-700" : ""}`}>
+                    {seatOf(row.personId)?.noLicence || "—"}
+                  </td>
+                  <td className="px-4 py-2.5 text-right font-semibold tabular-nums">{row.retention === null ? "—" : `${row.retention}%`}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      )}
+
+      {owedTotal > 0 && (
+        <section className={`${CARD} min-w-0`}>
+          <header className="flex flex-wrap items-baseline justify-between gap-3 px-4 pt-4 pb-2 sm:px-5">
+            <h2 className="text-sm font-semibold text-slate-900">What the accounts owe</h2>
+            <span className="text-xs text-slate-500">
+              {shortPeso(owedTotal)} open, by days past due
+              {vacantOwed > 0 && ` · ${shortPeso(vacantOwed)} of it from vacant seats' customers`}
+            </span>
+          </header>
+          <div className="grid grid-cols-2 gap-px border-t border-slate-100 bg-slate-100 sm:grid-cols-5">
+            {data.owedByAge.map((one) => (
+              <div key={one.age} className="bg-white px-4 py-3">
+                <p className="text-[12px] text-slate-500">{one.age === "not due" ? "Not due yet" : `${one.age} days late`}</p>
+                <p className={`mt-0.5 text-base font-semibold tabular-nums ${one.age === "over 90" && one.amount ? "text-rose-700" : "text-slate-900"}`}>
+                  {one.amount ? shortPeso(one.amount) : "—"}
+                </p>
+                <p className="text-[11.5px] text-slate-500">{one.invoices ? `${one.invoices} invoices` : "none"}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {(pipeline || data.handOvers.length > 0) && (
+        <section className={`${CARD} min-w-0`}>
+          <h2 className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900">Hand-overs waiting</h2>
+          {data.handOvers.length === 0 ? (
+            <p className="px-4 py-3 text-[13px] text-slate-500">No account ready for CRR (3rd order or day 90) and none flagged.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {data.handOvers.map((p) => (
+                <li key={p.customerId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2 text-[13px]">
+                  <span>
+                    <b className="text-slate-900">{p.name}</b> <span className="text-slate-500">· {p.nbd}</span>{" "}
+                    <span className={p.flagged ? "text-rose-700" : "text-emerald-700"}>
+                      {p.flagged ? `· no 2nd order by day 45` : `· ${p.orders} orders, day ${p.sinceFirst}`}
+                    </span>
+                  </span>
+                  {data.crrPeople.length > 0 && (
+                    <button type="button" onClick={() => setHanding(p)} className="rounded-lg bg-brand px-2 py-1 text-[12px] font-semibold text-white">
+                      Hand to CRR
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
       {handing && <HandOverDialog prospect={handing} crrPeople={data.crrPeople} onClose={() => setHanding(null)} />}
     </>
   );
