@@ -23,6 +23,8 @@ export function checksOf(card: {
   customerKind: CustomerKind;
   /** An order for one patient through a hospital or a doctor: checked as a patient's. */
   patientOrder?: boolean;
+  /** Its type (19 Nov): "With their PO" asks for the PO; "No PO" doesn't mention one. */
+  orderType?: string | null;
   items?: { qty: number; listPrice: number; unitPrice: number; free: boolean }[];
   /** Management's own reading (Aryan, 19 Nov): papers on file count as fine only once someone
    *  looked at them by hand and said so; until then they are "to check". */
@@ -63,7 +65,7 @@ export function checksOf(card: {
   // A patient's order: the prescription and the ID, which Management checks.
   const patient = card.customerKind === "patient" || card.patientOrder;
   const rx = found(["rx"]);
-  const paper = patient ? undefined : PAPER_FOR[card.customerKind];
+  const paper = patient || card.orderType === "no_po" ? undefined : PAPER_FOR[card.customerKind];
   if (patient)
     out.push(
       rx.length
@@ -80,7 +82,15 @@ export function checksOf(card: {
             title: "Prescription and ID on file",
           },
     );
-  if (paper)
+  // An order with their PO: the PO is asked for, as the order's page asks (19 Nov).
+  if (paper?.kind === "po" && card.orderType === "po" && !card.papers.includes("po"))
+    out.push({
+      key: "paper",
+      tone: "warn",
+      label: "No PO attached",
+      title: "An order with their PO: attach the customer's purchase order.",
+    });
+  else if (paper)
     out.push(
       card.papers.includes(paper.kind)
         ? {

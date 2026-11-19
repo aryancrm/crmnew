@@ -1,6 +1,7 @@
 // Orders' addresses. Everyone signed in may ask; the service decides which orders each person
 // sees and what they may do to one.
 
+import { ORDER_TYPES } from "./divisions";
 import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
@@ -102,6 +103,7 @@ const orderInput = z.object({
   noProofNote: optional(300),
   patientOrder: z.boolean().optional(),
   patientName: optional(120),
+  type: z.enum(ORDER_TYPES, { error: "Pick the order's type." }).nullish(),
   relief: z
     .object({
       kind: z.enum(["senior", "pwd"], { error: "Pick senior citizen or PWD." }),

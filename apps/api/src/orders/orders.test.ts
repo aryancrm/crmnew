@@ -219,6 +219,53 @@ describe("placing an order", () => {
   });
 });
 
+describe("an order's type, picked first (Aryan, 19 Nov)", () => {
+  it("says which papers it carries; a patient's own order is a patient's type", async () => {
+    // A business with their PO: the PO is needed, and its number kept.
+    const withPo = await place("ryan", { customerId: hospital, items: [line()], type: "po", customerPo: "PO-1187" });
+    expect(withPo.status, JSON.stringify(withPo.body)).toBe(200);
+    let detail = await order("ryan", withPo.body.id);
+    expect(detail.order.type).toBe("po");
+    expect(detail.paperList.find((row) => row.kind === "po")?.needed).toBe(true);
+    // Without a PO: it may come, it is never needed.
+    const noPo = await place("ryan", { customerId: hospital, items: [line()], type: "no_po" });
+    detail = await order("ryan", noPo.body.id);
+    expect(detail.paperList.find((row) => row.kind === "po")?.needed).toBe(false);
+    // A patient's type for a hospital: an order for one patient, their prescription and ID asked.
+    const forPatient = await place("ryan", {
+      customerId: hospital,
+      items: [line()],
+      type: "patient",
+      patientName: "Lito Ramos",
+    });
+    detail = await order("ryan", forPatient.body.id);
+    expect(detail.order.patientOrder).toBe(true);
+    expect(detail.paperList.find((row) => row.kind === "valid_id")?.needed).toBe(true);
+    // A patient never orders as a business; Senior / PWD carries their ID.
+    const patient = ((await (await post("sarla", "/api/customers", {
+      kind: "patient",
+      name: "Rosa Lim",
+      phone: "0917 555 0142",
+      city: "Pasay",
+      paymentTerms: "cod",
+    })).json()) as { id: number }).id;
+    const wrong = await place("ryan", { customerId: patient, items: [line({ priceKind: "patient" })], type: "po" });
+    expect(wrong.status).toBe(400);
+    const noId = await place("ryan", { customerId: patient, items: [line({ priceKind: "patient" })], type: "senior_pwd" });
+    expect(noId.status).toBe(400);
+    const senior = await place("ryan", {
+      customerId: patient,
+      items: [line({ priceKind: "patient" })],
+      type: "senior_pwd",
+      relief: { kind: "senior", idNo: "OSCA-5512", name: "Rosa Lim" },
+    });
+    expect(senior.status, JSON.stringify(senior.body)).toBe(200);
+    detail = await order("ryan", senior.body.id);
+    expect(detail.paperList.find((row) => row.kind === "senior_id")?.needed).toBe(true);
+    expect(detail.paperList.some((row) => row.kind === "po")).toBe(false);
+  });
+});
+
 describe("who sees an order", () => {
   it("the MedRep, his team lead and Management, not another desk", async () => {
     const made = await place("ryan", { customerId: hospital, items: [line()] });
@@ -257,6 +304,21 @@ describe("what Management does with an order", () => {
     detail = await order("sarla", id);
     expect(detail.order.status).toBe("pending_approval");
     expect(detail.checksApproved).toEqual([]);
+  });
+
+  it("Finance approves its own checks while the order is with it, and only those (19 Nov)", async () => {
+    const made = await place("ryan", { customerId: hospital, items: [line()] });
+    const id = made.body.id;
+    // Not yet Finance's.
+    expect((await post("fiona", `/api/orders/${id}/checks/finance_dues`, {})).status).toBe(409);
+    expect((await act("sarla", id, "approve")).status).toBe(200);
+    expect((await post("sarla", `/api/orders/${id}/checks/finance_dues`, {})).status).toBe(403);
+    expect((await post("fiona", `/api/orders/${id}/checks/price`, {})).status).toBe(403);
+    const answer = await post("fiona", `/api/orders/${id}/checks/finance_dues`, {});
+    expect(answer.status, await answer.clone().text()).toBe(200);
+    const detail = await order("fiona", id);
+    expect(detail.checksApproved.map((one) => one.key)).toEqual(["finance_dues"]);
+    expect(detail.events.some((event) => event.message === "Owed from before: approved by Fiona.")).toBe(true);
   });
 
   it("approves: an advance customer's goes to Finance, a credit customer's to invoicing", async () => {

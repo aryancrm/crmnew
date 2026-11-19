@@ -4,9 +4,10 @@
 // and the step being worked on the right. Management, Finance and Dispatch each open on their
 // own step; the step open is in the address (?step=).
 
+import { ORDER_TYPE_HINT, ORDER_TYPE_LABEL } from "@2mg/api/divisions";
 import type { OrderAction, OrderDetail } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Banknote, Check, ChevronDown, ChevronLeft, CircleCheck, CirclePause, CircleX, FileText, Hourglass, MapPin, PencilLine, Phone, Play, ReceiptText, RotateCcw, TriangleAlert, Undo2, UserRound } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, CircleCheck, CirclePause, CircleX, FileText, Hourglass, MapPin, PencilLine, Phone, Play, RotateCcw, TriangleAlert, Undo2, UserRound } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
@@ -22,7 +23,7 @@ import { OrderVersions } from "./versions";
 import { Button, dayLabel, PageState, Pill, Problem, peso, timeLabel, useLook } from "../ui";
 import { DeliveredStep } from "./steps/delivered";
 import { DispatchStep } from "./steps/dispatch";
-import { FinanceStep, financeChecks } from "./steps/finance";
+import { FINANCE_PARTS, type FinancePart, FinanceStep, financeChecked, financeChecks } from "./steps/finance";
 import { NextButton, type Shape, short, StepPanel } from "./steps/frame";
 import { Lines } from "./steps/lines";
 import {
@@ -231,8 +232,10 @@ export function Order() {
   const approvedChecks = new Map(data.checksApproved.map((one) => [one.key as string, one]));
   // A check is fine when the system found nothing on it, or Management approved what it found
   // (Aryan, 19 Nov: "what the system finds fine is ticked by itself").
-  const CHECK_KEYS = CHECKS.filter((item) => item.key !== "approve").map((item) => item.key);
-  const fine = (key: CheckKey) => states[key].ok || approvedChecks.has(key);
+  const CHECK_KEYS = CHECKS.map((item) => item.key);
+  // Documents is never fine by itself: Management reads the papers (Aryan, 19 Nov), so every order
+  // has at least one press of Management's.
+  const fine = (key: CheckKey) => approvedChecks.has(key) || (key !== "papers" && states[key].ok);
   async function approveOrder() {
     const choice = { warehouseId: shipsFrom ? Number(shipsFrom) : null, finance: order.leadId ? undefined : order.financeCheck };
     if (await act.act(order.id, "approve", choice)) approvedNow();
@@ -284,8 +287,7 @@ export function Order() {
   const askedCheck = params.get("check") as CheckKey | null;
   const check: CheckKey = CHECKS.some((item) => item.key === askedCheck)
     ? (askedCheck as CheckKey)
-    : (CHECKS.find((item) => item.key !== "approve" && !states[item.key].ok)?.key ??
-      (order.status === "pending_approval" ? "approve" : "papers"));
+    : (CHECKS.find((item) => !states[item.key].ok)?.key ?? "papers");
   const ownStep = (key: StepKey) =>
     !desk ||
     (desk === "management"
@@ -294,33 +296,15 @@ export function Order() {
         ? key === "finance" || key === "paid"
         : key === "dispatch" || key === "delivered");
   // Finance's and Dispatch's own steps, from the order's road.
-  const deskKeys: StepKey[] =
-    desk === "finance"
-      ? ["proof", "finance", "paid"]
-      : desk === "dispatch"
-        ? ["dispatch", "delivered"]
-        : [];
+  // Finance's column is its own list of checks (below), as Management's.
+  const deskKeys: StepKey[] = desk === "dispatch" ? ["dispatch", "delivered"] : [];
   const railNumber = (key: StepKey) =>
     deskKeys.length && deskKeys.includes(key) ? deskKeys.indexOf(key) + 1 : undefined;
-  const proofOk =
-    !data.paperList.find((row) => row.kind === "payment_proof")?.needed ||
-    data.papers.some((paper) => paper.kind === "payment_proof");
   const railSteps = deskKeys.length
-    ? deskKeys.map((key, index) =>
-        key === "proof"
-          ? {
-              key,
-              number: index + 1,
-              label: "Payment proof",
-              shape: (proofOk ? "done" : "now") as Shape,
-              who: proofOk ? "On file or not needed" : "Pays in advance: check the slip",
-              mine: !proofOk,
-            }
-          : {
-              ...(steps.find((item) => item.key === key) ?? (steps[0] as (typeof steps)[number])),
-              number: index + 1,
-            },
-      )
+    ? deskKeys.map((key, index) => ({
+        ...(steps.find((item) => item.key === key) ?? (steps[0] as (typeof steps)[number])),
+        number: index + 1,
+      }))
     : steps;
   const openCheck = (key: CheckKey) =>
     setParams(
@@ -332,6 +316,42 @@ export function Order() {
       },
       { replace: true },
     );
+  // Finance's checks, one list as Management's (Aryan, 19 Nov: "no approve here, like
+  // Management's? Where do I click Payment?"): what the system found on each, ticked by itself when
+  // fine; Approve or Hold on what it found; Payment is Finance's own press (Confirm payment, or
+  // Approve to make the invoice and send it to Dispatch) once the rest is fine; then Paid.
+  const financeRows = desk === "finance" ? financeChecks(data) : [];
+  const paymentChecked = financeChecked(data);
+  const financeApproval = (key: FinancePart) => approvedChecks.get(`finance_${key}`);
+  const financeFine = (row: (typeof financeRows)[number]) =>
+    row.key === "payment" ? Boolean(paymentChecked) : row.tone !== "warn" || Boolean(financeApproval(row.key));
+  const financeReady = financeRows.every((row) => row.key === "payment" || financeFine(row));
+  const financeActs = can.confirm_payment || can.make_invoice;
+  const askedPart = params.get("check") ?? "";
+  const finPart: FinancePart | "paid" =
+    picked === "paid"
+      ? "paid"
+      : picked === "finance" && (FINANCE_PARTS as readonly string[]).includes(askedPart)
+        ? (askedPart as FinancePart)
+        : !picked && opened === "paid"
+          ? "paid"
+          : (financeRows.find((row) => row.key !== "payment" && !financeFine(row))?.key ?? "payment");
+  const openFin = (key: FinancePart) =>
+    setParams(
+      (old) => {
+        const next = new URLSearchParams(old);
+        next.set("step", "finance");
+        next.set("check", key);
+        return next;
+      },
+      { replace: true },
+    );
+  async function approveFinance(key: FinancePart) {
+    await act.run(async () => {
+      await api(`/api/orders/${order.id}/checks/finance_${key}`, { body: {} });
+    });
+    await queries.invalidateQueries({ queryKey: ["orders"] });
+  }
   const nextOf = (key: StepKey) =>
     steps[steps.findIndex((item) => item.key === key) + 1]?.key ?? null;
   // Cash on delivery still open: Delivered asks how much came in and who has it (19 Nov).
@@ -471,6 +491,169 @@ export function Order() {
           ))}
         </ol>
       </section>
+  );
+  const paidStep = steps.find((item) => item.key === "paid");
+  const rowLook = (on: boolean) =>
+    `flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2.5 text-left text-[13px] transition-colors ${on ? "border-emerald-200 bg-emerald-50/70 font-semibold text-emerald-950" : "border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50"}`;
+  const financeList = desk === "finance" && (
+    <>
+      {financeRows.map((item, index) => {
+        const ok = financeFine(item);
+        const approval = item.key === "payment" ? undefined : financeApproval(item.key);
+        const note =
+          item.key === "payment" && paymentChecked
+            ? `Checked by ${paymentChecked.by} · ${item.note}`
+            : approval
+              ? `Approved by ${approval.by}: ${item.note}`
+              : item.note;
+        const row = (
+          <button
+            key={item.key}
+            type="button"
+            aria-current={finPart === item.key ? "step" : undefined}
+            onClick={() => openFin(item.key)}
+            className={rowLook(finPart === item.key)}
+          >
+            <span
+              className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                ok
+                  ? "bg-emerald-600 text-white"
+                  : item.tone === "warn"
+                    ? "bg-amber-400 text-white"
+                    : "bg-white text-emerald-800 ring-2 ring-emerald-500"
+              }`}
+            >
+              {ok ? <Check className="size-3.5" /> : item.tone === "warn" ? "!" : index + 1}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate">{item.label}</span>
+              <span
+                className={`block truncate text-[11px] font-normal ${ok || item.tone !== "warn" ? "text-slate-500" : "font-semibold text-amber-700"}`}
+                title={note}
+              >
+                {note}
+              </span>
+            </span>
+          </button>
+        );
+        const buttons =
+          item.key === "payment"
+            ? !paymentChecked && financeActs
+              ? [
+                  <button
+                    key="go"
+                    type="button"
+                    disabled={money.busy || !financeReady}
+                    title={
+                      financeReady
+                        ? can.confirm_payment
+                          ? "The money is in the bank: record it and send the order to Dispatch"
+                          : "Makes the invoice and sends the order to Dispatch"
+                        : "Approve or hold what is marked first"
+                    }
+                    onClick={() =>
+                      can.confirm_payment
+                        ? setConfirmingPayment(true)
+                        : money.send(`/api/finance/orders/${order.id}/invoice`, {})
+                    }
+                    className="rounded-lg bg-brand px-2 py-1 text-[11px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
+                  >
+                    {can.confirm_payment ? "Confirm payment" : "Approve"}
+                  </button>,
+                ]
+              : paymentChecked && can.undoConfirm
+                ? [
+                    <button
+                      key="undo"
+                      type="button"
+                      disabled={money.busy}
+                      onClick={() => money.send(`/api/finance/orders/${order.id}/undo-confirm`, {})}
+                      className="rounded-lg border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                    >
+                      Undo
+                    </button>,
+                  ]
+                : []
+            : !ok && financeActs
+              ? [
+                  <button
+                    key="approve"
+                    type="button"
+                    disabled={act.busy}
+                    onClick={() => approveFinance(item.key)}
+                    className="rounded-lg bg-brand px-2 py-1 text-[11px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
+                  >
+                    Approve
+                  </button>,
+                  can.hold && (
+                    <button
+                      key="hold"
+                      type="button"
+                      onClick={() =>
+                        askWith("hold", { initial: `${item.label}: `, presets: [`${item.label}: ${item.note}`] })
+                      }
+                      className="rounded-lg border border-rose-200 bg-white px-2 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
+                    >
+                      Hold
+                    </button>
+                  ),
+                ]
+              : [];
+        return buttons.length ? (
+          <div key={item.key} className="flex items-center gap-1">
+            <div className="min-w-0 flex-1">{row}</div>
+            <span className="flex shrink-0 flex-col gap-1">{buttons}</span>
+          </div>
+        ) : (
+          row
+        );
+      })}
+      {/* Finance's work after delivery: the money in (Aryan, 19 Nov: one list, not a second). */}
+      {paidStep && (
+        <button
+          type="button"
+          aria-current={finPart === "paid" ? "step" : undefined}
+          onClick={() => open("paid")}
+          className={rowLook(finPart === "paid")}
+        >
+          <span
+            className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+              paidStep.shape === "done" || paidStep.shape === "skipped"
+                ? "bg-emerald-600 text-white"
+                : paidStep.shape === "stopped"
+                  ? "bg-rose-100 text-rose-700"
+                  : finPart === "paid" || paidStep.shape === "now"
+                    ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
+                    : "bg-slate-100 text-slate-500"
+            }`}
+          >
+            {paidStep.shape === "done" || paidStep.shape === "skipped" ? (
+              <Check className="size-3.5" />
+            ) : (
+              FINANCE_PARTS.length + 1
+            )}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate">{paidStep.label}</span>
+            <span
+              className={`block truncate text-[11px] font-normal ${paidStep.shape === "now" ? "font-semibold text-amber-700" : "text-slate-500"}`}
+            >
+              {paidStep.shape === "now" ? "Your step: the money in" : paidStep.shape === "later" ? "After delivery" : paidStep.who}
+            </span>
+          </span>
+        </button>
+      )}
+      {financeActs && !paymentChecked && !financeReady && (
+        <p className="px-1 pt-1 text-[11px] text-slate-500">
+          Approve or hold what is marked, then {can.confirm_payment ? "Confirm payment" : "Approve"} on Payment.
+        </p>
+      )}
+      {(money.problem || (act.problem && !asking)) && (
+        <p className="px-1 pt-1 text-[11px] font-medium text-rose-700">
+          {money.problem?.message ?? act.problem?.message}
+        </p>
+      )}
+    </>
   );
   const otherButtons = shownOthers.length > 0 && (
     <>
@@ -618,6 +801,18 @@ export function Order() {
               <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
                 {pays}
               </span>
+              {/* The order's type, picked first (19 Nov); Senior / PWD shows as its ID below. */}
+              {order.type && order.type !== "senior_pwd" && (
+                <span
+                  className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
+                  title={ORDER_TYPE_HINT[order.type]}
+                >
+                  {order.type === "patient" && order.customerKind !== "patient"
+                    ? "For one patient"
+                    : ORDER_TYPE_LABEL[order.type]}
+                  {order.type === "po" && order.customerPo ? ` · ${order.customerPo}` : ""}
+                </span>
+              )}
               {order.via && (
                 <Link
                   to={`/leads/${order.leadId}`}
@@ -894,218 +1089,124 @@ export function Order() {
           <div className="flex min-w-0 flex-col gap-4">
             <nav aria-label="Steps" className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
               <div className="px-2.5 pt-1.5 pb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-400 uppercase">
-                {desk === "management" ? "Management checks" : "Finance steps"}
+                {desk === "management" ? "Management checks" : "Finance checks"}
               </div>
-              {/* Finance's checks with a few words each, and its step's button, in its column
-                  (Aryan, 19 Nov: "like Management's: what was found and that it is fine"). */}
-              {desk === "finance" && (can.confirm_payment || can.make_invoice) && (
-                <div className="mb-2 rounded-xl border border-slate-100 bg-slate-50/70 p-2">
-                  <ul className="flex flex-col">
-                    {financeChecks(data).map((item) => (
-                      <li key={item.key} className="flex items-start gap-2 rounded-lg px-1.5 py-1.5">
-                        <span
-                          className={`mt-1.5 size-2 shrink-0 rounded-full ${item.tone === "warn" ? "bg-amber-400" : item.tone === "info" ? "bg-slate-300" : "bg-emerald-500"}`}
-                          aria-hidden="true"
-                        />
-                        <span className="min-w-0 flex-1 text-[13px]">
-                          <span className="block font-semibold text-slate-800">{item.label}</span>
-                          <span
-                            className={`block text-[11px] leading-snug ${item.tone === "warn" ? "font-semibold text-amber-700" : "text-slate-500"}`}
-                          >
-                            {item.note}
-                          </span>
-                        </span>
-                        {item.tone === "warn" && can.hold && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              askWith("hold", { initial: `${item.label}: `, presets: [`${item.label}: ${item.note}`] })
-                            }
-                            className="mt-0.5 shrink-0 rounded-lg border border-rose-200 bg-white px-2 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
-                          >
-                            Hold
-                          </button>
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                  {can.confirm_payment && (
-                    <button
-                      type="button"
-                      disabled={money.busy}
-                      onClick={() => setConfirmingPayment(true)}
-                      className="mt-1.5 flex h-10 w-full items-center justify-center gap-2 rounded-[10px] bg-brand text-sm font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
-                    >
-                      <Banknote className="size-4" aria-hidden="true" /> Confirm payment
-                    </button>
-                  )}
-                  {can.make_invoice && (
-                    <button
-                      type="button"
-                      disabled={money.busy}
-                      onClick={() => money.send(`/api/finance/orders/${order.id}/invoice`, {})}
-                      className="mt-1.5 flex h-10 w-full items-center justify-center gap-2 rounded-[10px] bg-brand text-sm font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
-                    >
-                      <ReceiptText className="size-4" aria-hidden="true" /> Check & send to Dispatch
-                    </button>
-                  )}
-                  {money.problem && <p className="mt-1 text-[11px] font-medium text-rose-700">{money.problem.message}</p>}
-                </div>
-              )}
               {desk === "management"
-                ? CHECKS.map((item, index) => {
-                    const on = item.key === check && checking;
-                    const state = states[item.key];
-                    // The last row: the Undo for a minute after approving; the order's one Approve
-                    // when every check is fine (nothing found, or approved above), else the row as
-                    // it was (Aryan, 19 Nov).
-                    if (item.key === "approve" && (undoLeft > 0 || (can.approve && CHECK_KEYS.every(fine))))
-                      return (
-                        <div key="approve" className="mt-1 rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5">
-                          {undoLeft > 0 ? (
-                            <div className="flex items-center justify-between gap-2 text-[13px]">
-                              <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-900">
-                                <CircleCheck className="size-4" aria-hidden="true" /> Order approved
-                              </span>
-                              <button
-                                type="button"
-                                disabled={act.busy}
-                                onClick={undoApproval}
-                                className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[12px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                              >
-                                Undo · {undoLeft}s
-                              </button>
-                            </div>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                disabled={act.busy}
-                                onClick={approveOrder}
-                                className="flex h-10 w-full items-center justify-center gap-2 rounded-[10px] bg-brand text-sm font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
-                              >
-                                <CircleCheck className="size-4" aria-hidden="true" /> {act.busy ? "Approving…" : "Approve order"}
-                              </button>
-                              {act.problem && !approveWindow && !asking && (
-                                <p className="mt-1 text-[11px] font-medium text-rose-700">{act.problem.message}</p>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      );
-                    const row = (
-                      <button
-                        key={item.key}
-                        type="button"
-                        aria-current={on ? "step" : undefined}
-                        onClick={() => openCheck(item.key)}
-                        className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2.5 text-left text-[13px] transition-colors ${on ? "border-emerald-200 bg-emerald-50/70 font-semibold text-emerald-950" : "border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50"}`}
+                ? [
+                    // After approving: an Undo for a minute (Aryan, 19 Nov), above the checks.
+                    undoLeft > 0 && (
+                      <div
+                        key="undo"
+                        className="mb-1 flex items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 px-2.5 py-2 text-[13px]"
                       >
-                        <span
-                          className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
-                            item.key === "approve" && order.approvedAt
-                              ? "bg-emerald-600 text-white"
-                              : item.key === "approve"
-                                ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
-                                : fine(item.key)
-                                  ? "bg-emerald-600 text-white"
-                                  : "bg-amber-400 text-white"
-                          }`}
+                        <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-900">
+                          <CircleCheck className="size-4" aria-hidden="true" /> Order approved
+                        </span>
+                        <button
+                          type="button"
+                          disabled={act.busy}
+                          onClick={undoApproval}
+                          className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[12px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                         >
-                          {item.key === "approve" && !order.approvedAt ? (
-                            index + 1
-                          ) : item.key === "approve" || fine(item.key) ? (
-                            <Check className="size-3.5" />
-                          ) : (
-                            "!"
-                          )}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate">{checkLabel(item.key, data)}</span>
+                          Undo · {undoLeft}s
+                        </button>
+                      </div>
+                    ),
+                    ...CHECKS.map((item, index) => {
+                      const on = item.key === check && checking;
+                      const state = states[item.key];
+                      const ok = fine(item.key);
+                      const by = approvedChecks.get(item.key)?.by;
+                      const note = by
+                        ? state.ok
+                          ? `${state.note} · approved by ${by}`
+                          : `Approved by ${by}: ${state.note}`
+                        : state.note;
+                      const row = (
+                        <button
+                          key={item.key}
+                          type="button"
+                          aria-current={on ? "step" : undefined}
+                          onClick={() => openCheck(item.key)}
+                          className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2.5 text-left text-[13px] transition-colors ${on ? "border-emerald-200 bg-emerald-50/70 font-semibold text-emerald-950" : "border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50"}`}
+                        >
                           <span
-                            className={`block truncate text-[11px] font-normal ${item.key === "approve" || fine(item.key) ? "text-slate-500" : "font-semibold text-amber-700"}`}
+                            className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                              ok
+                                ? "bg-emerald-600 text-white"
+                                : state.ok
+                                  ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
+                                  : "bg-amber-400 text-white"
+                            }`}
                           >
-                            {item.key === "approve"
-                              ? order.approvedAt
-                                ? `Approved${order.approvedBy ? ` by ${order.approvedBy}` : ""}`
-                                : can.approve
-                                  ? "Approve or send back what is marked above"
-                                  : order.status === "pending_approval"
-                                    ? "Waiting"
-                                    : "—"
-                              : !state.ok && approvedChecks.get(item.key)
-                                ? `Approved by ${approvedChecks.get(item.key)?.by}: ${state.note}`
-                                : state.note}
+                            {ok ? <Check className="size-3.5" /> : state.ok ? index + 1 : "!"}
                           </span>
-                        </span>
-                      </button>
-                    );
-                    if (item.key === "approve") return row;
-                    // A check the system found something on: its own Approve and Send back, right
-                    // in its row (Aryan, 19 Nov: "inside Documents an approve, inside Medicines &
-                    // price an approve"; "a price problem goes back to the MedRep as a price
-                    // problem"). What the system finds fine is ticked by itself: no button.
-                    return can.approve && !fine(item.key) ? (
-                      <div key={item.key} className="flex items-center gap-1">
-                        <div className="min-w-0 flex-1">{row}</div>
-                        <span className="flex shrink-0 flex-col gap-1">
-                          <button
-                            type="button"
-                            disabled={act.busy}
-                            onClick={() => approveOne(item.key)}
-                            className="rounded-lg bg-brand px-2 py-1 text-[11px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
-                          >
-                            Approve
-                          </button>
-                          {can.send_back && (
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate">{checkLabel(item.key, data)}</span>
+                            <span
+                              className={`block truncate text-[11px] font-normal ${ok || state.ok ? "text-slate-500" : "font-semibold text-amber-700"}`}
+                              title={note}
+                            >
+                              {note}
+                            </span>
+                          </span>
+                        </button>
+                      );
+                      // Each check its own Approve, right in its row; Send back for what the system
+                      // found (Aryan, 19 Nov). What it finds fine is ticked by itself; Documents
+                      // waits for Management's own look (papers are read by hand), so Management
+                      // presses at least once, and the last press approves the order.
+                      return can.approve && !ok ? (
+                        <div key={item.key} className="flex items-center gap-1">
+                          <div className="min-w-0 flex-1">{row}</div>
+                          <span className="flex shrink-0 flex-col gap-1">
                             <button
                               type="button"
-                              onClick={() => askWith("send_back", sendBackFrom(data, item.key))}
-                              className="rounded-lg border border-rose-200 bg-white px-2 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
+                              disabled={act.busy}
+                              onClick={() => approveOne(item.key)}
+                              className="rounded-lg bg-brand px-2 py-1 text-[11px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
                             >
-                              Send back
+                              Approve
                             </button>
-                          )}
-                        </span>
-                      </div>
-                    ) : (
-                      row
-                    );
-                  })
-                : railSteps.map((item) => {
-                    const on = item.key === opened;
-                    return (
-                      <button
-                        key={item.key}
-                        type="button"
-                        aria-current={on ? "step" : undefined}
-                        onClick={() => open(item.key)}
-                        className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2.5 text-left text-[13px] transition-colors ${on ? "border-emerald-200 bg-emerald-50/70 font-semibold text-emerald-950" : "border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50"}`}
-                      >
-                        <span
-                          className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
-                            item.shape === "done" || item.shape === "skipped"
-                              ? "bg-emerald-600 text-white"
-                              : item.shape === "stopped"
-                                ? "bg-rose-100 text-rose-700"
-                                : on || item.shape === "now"
-                                  ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
-                                  : "bg-slate-100 text-slate-500"
-                          }`}
-                        >
-                          {item.shape === "done" || item.shape === "skipped" ? <Check className="size-3.5" /> : item.number}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate">{item.label}</span>
-                          <span
-                            className={`block truncate text-[11px] font-normal ${item.mine && item.shape !== "done" ? "font-semibold text-amber-700" : "text-slate-500"}`}
-                          >
-                            {item.mine && item.shape !== "done" ? "Your step" : item.who}
+                            {can.send_back && !state.ok && (
+                              <button
+                                type="button"
+                                onClick={() => askWith("send_back", sendBackFrom(data, item.key))}
+                                className="rounded-lg border border-rose-200 bg-white px-2 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
+                              >
+                                Send back
+                              </button>
+                            )}
                           </span>
-                        </span>
-                      </button>
-                    );
-                  })}
+                        </div>
+                      ) : (
+                        row
+                      );
+                    }),
+                    // Every check fine and still waiting (its approval was refused): the reason
+                    // and the press to try again.
+                    can.approve && undoLeft <= 0 && CHECK_KEYS.every(fine) && (
+                      <div key="retry" className="mt-1 flex flex-col gap-1 px-1">
+                        {act.problem && !asking && (
+                          <p className="text-[11px] font-medium text-rose-700">{act.problem.message}</p>
+                        )}
+                        <button
+                          type="button"
+                          disabled={act.busy}
+                          onClick={approveOrder}
+                          className="rounded-lg bg-brand px-2.5 py-1.5 text-[12px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
+                        >
+                          Approve the order
+                        </button>
+                      </div>
+                    ),
+                    can.approve && act.problem && !asking && !CHECK_KEYS.every(fine) && (
+                      <p key="problem" className="mt-1 px-1 text-[11px] font-medium text-rose-700">
+                        {act.problem.message}
+                      </p>
+                    ),
+                  ]
+                : financeList}
               {otherButtons && (
                 <div className="mt-1 flex flex-wrap gap-1.5 border-t border-slate-100 px-1 pt-2">{otherButtons}</div>
               )}
@@ -1120,25 +1221,27 @@ export function Order() {
                 data={data}
                 act={act}
                 onAsk={askWith}
-                next={() => openCheck("approve")}
+                next={() => open("finance")}
                 check={check}
                 onCheck={openCheck}
                 states={states}
                 warehouse={stockPick}
                 onWarehouse={setPickedWarehouse}
               />
-            ) : opened === "proof" ? (
-              <StepPanel
-                number={1}
-                title="Payment proof"
-                footer={<NextButton label="Next: Finance check" onClick={() => open("finance")} />}
-              >
-                <Papers data={data} kinds={["payment_proof", "po", "other"]} />
-              </StepPanel>
-            ) : opened === "paid" ? (
-              <PaidStep data={data} n={railNumber("paid")} />
+            ) : finPart === "paid" ? (
+              <PaidStep data={data} n={FINANCE_PARTS.length + 1} />
             ) : (
-              <FinanceStep data={data} money={money} next={() => open("paid")} n={railNumber("finance")} />
+              <FinanceStep
+                data={data}
+                money={money}
+                part={finPart}
+                n={FINANCE_PARTS.indexOf(finPart) + 1}
+                next={() => {
+                  const after = FINANCE_PARTS[FINANCE_PARTS.indexOf(finPart) + 1];
+                  if (after) openFin(after);
+                  else open("paid");
+                }}
+              />
             )}
             <div className="mt-3">
               <Problem message={problem?.message} />
@@ -1223,7 +1326,7 @@ export function Order() {
               <StepPanel number={2} title="Management check">
                 <div className="flex flex-col gap-3 text-[13px]">
                   <ul className="flex flex-col gap-2">
-                    {CHECKS.filter((item) => item.key !== "approve").map((item) => {
+                    {CHECKS.map((item) => {
                       const state = states[item.key];
                       return (
                         <li key={item.key} className="flex items-start gap-2.5">

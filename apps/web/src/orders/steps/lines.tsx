@@ -11,7 +11,16 @@ import { VAT_WORDS } from "../../inventory/vat";
 import { count, inPacks, peso } from "../../ui";
 
 /** The order's lines, with the price list beside what was given. */
-export function Lines({ data, compare }: { data: OrderDetail; compare?: boolean }) {
+export function Lines({
+  data,
+  compare,
+  stock = true,
+}: {
+  data: OrderDetail;
+  compare?: boolean;
+  /** The free stock column: the stock check's, not the price check's (Aryan, 19 Nov). */
+  stock?: boolean;
+}) {
   const { order } = data;
   // A medicine opens over the page, so the order stays where it is.
   const [medicine, setMedicine] = useState<number | null>(null);
@@ -33,9 +42,11 @@ export function Lines({ data, compare }: { data: OrderDetail; compare?: boolean 
             <th className="num">Pieces</th>
             {compare && <th className="num">List price</th>}
             <th className="num">Given</th>
-            <th className="num" title="On the shelf, less what orders placed before this one hold">
-              Free stock
-            </th>
+            {stock && (
+              <th className="num" title="On the shelf, less what orders placed before this one hold">
+                Free stock
+              </th>
+            )}
             <th className="num">Amount</th>
           </tr>
         </thead>
@@ -112,16 +123,18 @@ export function Lines({ data, compare }: { data: OrderDetail; compare?: boolean 
                       </div>
                     )}
                   </td>
-                  <td
-                    className={`num ${item.inStock < item.qty ? "font-semibold text-bad" : "text-emerald-700"}`}
-                  >
-                    {count(item.inStock)}
-                  </td>
+                  {stock && (
+                    <td
+                      className={`num ${item.inStock < item.qty ? "font-semibold text-bad" : "text-emerald-700"}`}
+                    >
+                      {count(item.inStock)}
+                    </td>
+                  )}
                   <td className="num font-semibold whitespace-nowrap">{peso(item.amount)}</td>
                 </tr>
                 {before && (
                   <tr>
-                    <td colSpan={compare ? 6 : 5} className="pt-0">
+                    <td colSpan={4 + (compare ? 1 : 0) + (stock ? 1 : 0)} className="pt-0">
                       <LastGiven
                         key={look}
                         history={before}

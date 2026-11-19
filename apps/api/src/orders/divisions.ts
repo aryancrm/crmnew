@@ -196,3 +196,50 @@ export const ORDER_SOURCES = [
   "Office of the President",
   "Digital Marketing",
 ] as const;
+
+/** An order's type, picked first on the order form (Aryan, 19 Nov: "pick it first, as the Online
+ *  case's GL, PWD and Regular, and the whole order follows it"): whose order it is, and so which
+ *  papers it carries. */
+export const ORDER_TYPES = ["patient", "senior_pwd", "gl", "po", "no_po"] as const;
+export type OrderTypeKey = (typeof ORDER_TYPES)[number];
+export const ORDER_TYPE_LABEL: Record<OrderTypeKey, string> = {
+  patient: "Patient",
+  senior_pwd: "Senior / PWD",
+  gl: "Guarantee letter",
+  po: "With their PO",
+  no_po: "No PO",
+};
+/** What each type asks for, in a few words. */
+export const ORDER_TYPE_HINT: Record<OrderTypeKey, string> = {
+  patient: "Prescription and the patient's ID",
+  senior_pwd: "Prescription, ID and their senior or PWD ID: 20% off, no VAT",
+  gl: "Prescription, ID and the guarantee letter: the agency pays",
+  po: "Their purchase order: its number and the paper",
+  no_po: "A business buying without a PO",
+};
+/** A patient's medicines (their own order, or one for a patient through a hospital or doctor). */
+export const isPatientType = (type: string | null | undefined): boolean =>
+  type === "patient" || type === "senior_pwd" || type === "gl";
+/** The types in the order a Division's orders usually are: a patients' Division's first. */
+export function orderTypesFor(division: string | null | undefined): OrderTypeKey[] {
+  const buyers = (division && DIVISION_BUYERS[division]) || [];
+  return buyers[0] === "patient"
+    ? ["patient", "senior_pwd", "gl", "no_po", "po"]
+    : ["po", "no_po", "patient", "senior_pwd", "gl"];
+}
+
+/** Whether the customer's purchase order (their PO to us, not ours to a supplier) comes with the
+ *  order. Its type says so (19 Nov): "With their PO" needs it, a patient's own order never has
+ *  one, any other business may give one. An order placed before types: needed when it came as a
+ *  Hospital PO or a bidding order, never from a patient, else when they give one. A needed one
+ *  missing shows on Management's Documents check, which decides; it never stops the order. */
+export function poExpected(order: {
+  type?: string | null;
+  kind: string | null | undefined;
+  source?: string | null;
+}): "never" | "optional" | "expected" {
+  if (order.type === "po") return "expected";
+  if (!order.kind || order.kind === "patient") return "never";
+  if (order.type) return "optional";
+  return order.source === "Bidding Order" || order.source === "Hospital PO" ? "expected" : "optional";
+}

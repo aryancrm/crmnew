@@ -1767,6 +1767,8 @@ export async function orderFromLead(
     {
       customerId,
       relief,
+      // The case's road is the order's type (19 Nov); a business buying through the desk has none.
+      type: row.buyerKind ? null : row.road === "gl" ? "gl" : relief ? "senior_pwd" : "patient",
       items: row.quoteLines.map((line) => ({
         medicineId: line.medicineId,
         qty: line.qty,

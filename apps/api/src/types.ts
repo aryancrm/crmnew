@@ -932,6 +932,8 @@ export type BoardRep = {
 export type OrderRow = {
   id: number;
   code: string;
+  /** Its type, picked first (19 Nov); null on an order placed before types. */
+  orderType: OrderType | null;
   customerId: number;
   customer: string;
   medrep: string;
@@ -1064,9 +1066,15 @@ export type OrderInput = {
   /** A senior citizen's or PWD's order: 20% off and no VAT (or a lower promo, never both), with
    *  their OSCA/PWD ID number and name. On any order whose buyer shows the ID (Aryan, 17 Nov). */
   relief?: OrderRelief | null;
+  /** The order's type, picked first (19 Nov): it says which papers the order carries. */
+  type?: OrderType | null;
 };
 
 export type OrderRelief = { kind: "senior" | "pwd"; idNo?: string | null; name?: string | null };
+
+/** An order's type, picked first on the form (19 Nov): a patient's, a senior's or PWD's, one paid
+ *  by a guarantee letter, a business's with their PO or without (orders/divisions.ts). */
+export type OrderType = "patient" | "senior_pwd" | "gl" | "po" | "no_po";
 
 /** One line of an order as a version kept it (centavos). */
 export type OrderVersionLine = {
@@ -1269,6 +1277,8 @@ export type OrderDetail = {
     takeBackUntil: string | null;
     /** A senior citizen's or PWD's order: who, as the invoice shows them. */
     relief: OrderRelief | null;
+    /** Its type, picked first (null on an order placed before types, 19 Nov). */
+    type: OrderType | null;
   };
   items: {
     id: number;
@@ -1334,7 +1344,12 @@ export type OrderDetail = {
   resumeTo: { status: OrderStatus; label: string }[];
   /** The checks Management has approved one by one (Documents, Medicines & price, Stock &
    *  warehouse, Customer & licence), with who and when; all four approve the order. */
-  checksApproved: { key: "papers" | "price" | "stock" | "customer"; by: string; at: string }[];
+  /** Management's checks approved one by one, and Finance's (finance_…), with who and when. */
+  checksApproved: {
+    key: "papers" | "price" | "stock" | "customer" | "finance_papers" | "finance_dues" | "finance_credit";
+    by: string;
+    at: string;
+  }[];
   /** Waiting for stock: since when, who held it, and what is still short (empty: it's in now). */
   waitingStock: { since: string; by: string | null; short: { name: string; need: number; free: number }[] } | null;
   /** What the customer owed before this order (this CRM's invoices, Zoho's and its opening

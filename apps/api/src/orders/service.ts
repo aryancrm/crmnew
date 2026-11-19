@@ -60,7 +60,7 @@ import type {
   Vat,
 } from "../types";
 import { stuckNow } from "./clock";
-import { DIVISIONS, divisionsOf, subDivisionOfArea, termsOfLabel } from "./divisions";
+import { DIVISIONS, divisionsOf, isPatientType, subDivisionOfArea, termsOfLabel } from "./divisions";
 import { logEvent, peso } from "./events";
 import {
   DESK_HOME,
@@ -87,6 +87,7 @@ import {
   STEP_OF,
 } from "./rules";
 import { customerCredit } from "../finance/credit";
+import { FINANCE_ROLES } from "../finance/rules";
 import { asksOf, leadsUp } from "./asks";
 import { duesSql } from "../finance/dues";
 import { activeOffers, withOfferLines } from "./offers";
@@ -179,7 +180,7 @@ const rowColumns = sql`
   o.id::int as id, o.code, o.customer_id::int as "customerId", c.name as customer, rep.name as medrep,
   o.status, (o.payment_terms = 'days') as credit, o.total::int as total, o.delivery_fee::int as "deliveryFee", o.points_used::int as "pointsUsed",
   ${iso("o.created_at")} as "createdAt", ${iso("o.updated_at")} as "updatedAt", o.flag_reason as "flagReason",
-  o.patient_order as "patientOrder", o.patient_name as "patientName", o.note,
+  o.patient_order as "patientOrder", o.patient_name as "patientName", o.note, o.order_type as "orderType",
   exists (select 1 from order_version v where v.order_id = o.id and v.kind = 'changed') as changed, ${viaSql} as via`;
 
 const rowJoins = sql`
@@ -1351,6 +1352,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         ${sentBackColumns}, ${iso("o.sent_back_at")} as "sentBackAt",
         case when ${takeBackSql} then ${iso(`(o.approved_at + make_interval(mins => ${TAKE_BACK_MINUTES}))`)} end as "takeBackUntil",
         case when o.relief_kind is not null then json_build_object('kind', o.relief_kind, 'idNo', o.relief_id_no, 'name', o.relief_name) end as relief,
+        o.order_type as type,
         ${restorableSql} as restorable, ${paidInSql} as "paidIn", ${iso("o.waiting_stock_at")} as "waitingSince",
         (select wp.name from person wp where wp.id = o.waiting_stock_by) as "waitingBy"
       from sales_order o ${rowJoins}
@@ -1505,6 +1507,8 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         days: order.paymentDays,
         patient: order.customerKind === "patient" || order.patientOrder,
         rx: items.some((item) => item.rx),
+        source: order.source,
+        type: order.type,
       },
       onFile,
     ),
@@ -1940,7 +1944,21 @@ export async function placeOrder(
 
   // Management's own order is approved as it is placed, but a patient's waits for its
   // prescription (Aryan, 17 Nov: Rx whenever a patient buys): Management approves it once on file.
-  const patientBuys = customer.kind === "patient" || Boolean(input.patientOrder);
+  // The order's type, picked first (Aryan, 19 Nov): a business's type is never a patient's own
+  // order; Senior / PWD carries their ID; a patient's type for a hospital or a doctor is an order
+  // for one patient.
+  const type = input.type ?? null;
+  if (type && !isPatientType(type) && customer.kind === "patient")
+    throw new Refusal(400, "invalid", "A patient's order is Patient, Senior / PWD or Guarantee letter.", "type");
+  if (type === "po" && !clean(input.customerPo))
+    throw new Refusal(400, "invalid", "Type their PO number: it goes on the invoice.", "customerPo");
+  if (type === "senior_pwd" && !relief)
+    throw new Refusal(400, "invalid", "Say senior citizen or PWD, with their ID number.", "relief");
+  if (type && type !== "senior_pwd" && relief && !options.reliefFromCase)
+    throw new Refusal(400, "invalid", "The 20% off is for a Senior / PWD order: pick that type.", "type");
+  const patientOrder =
+    customer.kind !== "patient" && (type ? isPatientType(type) : Boolean(input.patientOrder));
+  const patientBuys = customer.kind === "patient" || patientOrder;
   const manages = orderCan(me).manage && !patientBuys;
   // Whose order it is: the MedRep who placed it; for one a team lead or Management places, the
   // MedRep they pick (one of the lead's own people), else the MedRep of the customer's area.
@@ -2004,17 +2022,17 @@ export async function placeOrder(
           delivery_address, receiver, receiver_phone, note, expected_on, customer_po, invoice_from, doctor_id, total, submitted_at,
           approved_at, approved_by, warehouse_id, lead_id, delivery_fee, division, sub_division, payment_term,
           no_proof_reason, no_proof_note, patient_order, patient_name, relief_kind, relief_id_no, relief_name,
-          source, stock_reason)
+          source, stock_reason, order_type)
         values (${customer.id}, ${holder?.id ?? me.id}, ${me.id}, ${holder?.channelId ?? own?.channelId ?? null}, ${status},
           ${terms.terms}, ${terms.days}, ${("payBy" in terms ? terms.payBy : null) ?? null},
           ${clean(input.deliveryAddress) ?? withCity(customer.address, customer.city)},
           ${clean(input.receiver)}, ${clean(input.receiverPhone)}, ${clean(input.note)}, ${input.expectedOn || null}, ${clean(input.customerPo)}, ${input.invoiceFrom ?? "2mg"}, ${input.doctorId ?? null}, ${total}, now(),
           ${manages ? sql`now()` : null}, ${manages ? me.id : null}, ${shipsFrom?.id ?? null}, ${options.leadId ?? null}, ${deliveryFee},
           ${orderDivision}, ${subDivision || null}, ${paymentTerm},
-          ${input.noProofReason ?? null}, ${clean(input.noProofNote)}, ${Boolean(input.patientOrder) && customer.kind !== "patient"},
-          ${input.patientOrder && customer.kind !== "patient" ? clean(input.patientName) : null},
+          ${input.noProofReason ?? null}, ${clean(input.noProofNote)}, ${patientOrder},
+          ${patientOrder ? clean(input.patientName) : null},
           ${relief?.kind ?? null}, ${relief?.idNo ?? null}, ${relief?.name ?? null},
-          ${input.source ?? null}, ${clean(input.stockReason)})
+          ${input.source ?? null}, ${clean(input.stockReason)}, ${type})
         returning id::int as id`,
     );
     const id = made?.id as number;
@@ -2636,7 +2654,8 @@ export async function reviseOrder(
               : sql`status = 'pending_approval', flag_reason = null, submitted_at = now(), reply = ${answer},
             no_proof_reason = ${input.noProofReason ?? null}, no_proof_note = ${clean(input.noProofNote)},
             source = coalesce(${input.source ?? null}, source), stock_reason = ${clean(input.stockReason)},
-            patient_order = ${Boolean(input.patientOrder)}, patient_name = ${input.patientOrder ? clean(input.patientName) : null},`
+            patient_order = ${Boolean(input.patientOrder)}, patient_name = ${input.patientOrder ? clean(input.patientName) : null},
+            order_type = coalesce(${input.type ?? null}, order_type),`
           }
           updated_at = now()
         where id = ${id}`,
@@ -2825,12 +2844,18 @@ async function visibleOrder(db: Runner, me: Me, id: number) {
 
 /** The four checks Management approves one by one (Aryan, 19 Nov). */
 export const CHECK_KEYS = ["papers", "price", "stock", "customer"] as const;
-export type OrderCheckKey = (typeof CHECK_KEYS)[number];
+/** Finance's own, approved the same way when the system found something (19 Nov); its payment
+ *  check is Confirm payment or sending the order on, as before. */
+export const FINANCE_CHECK_KEYS = ["finance_papers", "finance_dues", "finance_credit"] as const;
+export type OrderCheckKey = (typeof CHECK_KEYS)[number] | (typeof FINANCE_CHECK_KEYS)[number];
 const CHECK_LABEL: Record<OrderCheckKey, string> = {
   papers: "Documents",
   price: "Medicines & price",
   stock: "Stock & warehouse",
   customer: "Customer & licence",
+  finance_papers: "Papers (Finance)",
+  finance_dues: "Owed from before",
+  finance_credit: "Credit limit",
 };
 
 /** Clears an order's check approvals (all, or one): it is looked at afresh. */
@@ -2847,17 +2872,26 @@ export async function clearChecks(tx: Runner, orderId: number, key?: OrderCheckK
  *  marks its papers read by hand. The order itself is approved with the Approve action, once
  *  every check is fine or approved. */
 export async function approveCheck(db: Database, me: Me, orderId: number, key: string): Promise<void> {
-  if (!(CHECK_KEYS as readonly string[]).includes(key)) throw new Refusal(404, "not_found", "No such check.");
+  const finance = (FINANCE_CHECK_KEYS as readonly string[]).includes(key);
+  if (!finance && !(CHECK_KEYS as readonly string[]).includes(key))
+    throw new Refusal(404, "not_found", "No such check.");
   const check = key as OrderCheckKey;
   const order = await visibleOrder(db, me, orderId);
   const [row] = await rows<{ approverId: number | null; status: string }>(
     db,
     sql`select ${approverSql} as "approverId", o.status from sales_order o where o.id = ${orderId}`,
   );
-  const decides = ORDER_MANAGE_ROLES.includes(me.role) || (row?.approverId != null && row.approverId === me.id);
-  if (!decides) throw new Refusal(403, "not_allowed", "Management approves an order's checks.");
-  if (row?.status !== "pending_approval")
-    throw new Refusal(409, "not_now", `${order.code} isn't waiting for approval now. Reload it.`);
+  if (finance) {
+    // Finance's own checks, while the order is Finance's to check.
+    if (!FINANCE_ROLES.includes(me.role)) throw new Refusal(403, "not_allowed", "Finance approves its own checks.");
+    if (row?.status !== "finance_check" && row?.status !== "ready_for_invoice")
+      throw new Refusal(409, "not_now", `${order.code} isn't with Finance now. Reload it.`);
+  } else {
+    const decides = ORDER_MANAGE_ROLES.includes(me.role) || (row?.approverId != null && row.approverId === me.id);
+    if (!decides) throw new Refusal(403, "not_allowed", "Management approves an order's checks.");
+    if (row?.status !== "pending_approval")
+      throw new Refusal(409, "not_now", `${order.code} isn't waiting for approval now. Reload it.`);
+  }
   await db.transaction(async (tx) => {
     await tx.execute(
       sql`insert into order_check (order_id, check_key, by_person) values (${orderId}, ${check}, ${me.id})

@@ -7,7 +7,12 @@
 import {
   DIVISION_BUYERS,
   DIVISIONS,
+  isPatientType,
   ORDER_SOURCES,
+  ORDER_TYPE_HINT,
+  ORDER_TYPE_LABEL,
+  type OrderTypeKey,
+  orderTypesFor,
   PAYMENT_TERMS,
   SUB_DIVISIONS,
   subDivisionOfArea,
@@ -274,6 +279,7 @@ type Draft = {
   subDivision?: string;
   paymentTerm?: string;
   source?: string;
+  orderType?: OrderTypeKey | null;
 };
 const draftKey = (personId: number) => `crm:draft:order:${personId}`;
 const readDraft = (personId: number): Draft | null => {
@@ -403,9 +409,13 @@ export function OrderNew({
   const [doctor, setDoctor] = useState<{ id: number; name: string } | null>(null);
   const [findDoctor, setFindDoctor] = useState("");
   const [papers, setPapers] = useState<Partial<Record<PaperKind, File>>>({});
-  // An order through a hospital or a doctor for one patient (Aryan): its prescription and the
-  // patient's ID go with it, and Management checks them as on a patient's own order.
-  const [patientOrder, setPatientOrder] = useState(false);
+  // The order's type, picked first (Aryan, 19 Nov: "the MedRep knows whose order it is; pick it
+  // first, as the Online case's GL, PWD and Regular, and the whole order follows it"): its papers,
+  // the SC/PWD price and the PO follow it. A patient's type with a hospital or a doctor as the
+  // customer is an order for one patient: its prescription and the patient's ID go with it, and
+  // Management checks them as on a patient's own order.
+  const [orderType, setOrderType] = useState<OrderTypeKey | null>(null);
+  const patientOrder = Boolean(picked && picked.kind !== "patient" && isPatientType(orderType));
   const [patientName, setPatientName] = useState("");
   // A senior citizen's or PWD's ID shown (RA 9994, RA 10754), on any order: 20% off and no VAT,
   // or a promo without VAT when lower, never both. Their OSCA / PWD ID number goes on the invoice.
@@ -451,7 +461,10 @@ export function OrderNew({
       : "");
   // The customers shown: the Division's usual buyers, unless every customer is asked for.
   const divisionKinds = DIVISION_BUYERS[pickedDivision] ?? null;
-  const allCustomerRows = customers.data?.rows ?? [];
+  // A business's order type never lists patients (19 Nov).
+  const allCustomerRows = (customers.data?.rows ?? []).filter(
+    (row) => !orderType || isPatientType(orderType) || row.kind !== "patient",
+  );
   const kindRows =
     divisionKinds && !everyKind
       ? allCustomerRows.filter((row) => divisionKinds.includes(row.kind))
@@ -488,6 +501,7 @@ export function OrderNew({
         setTermMode("__days");
     }
     if (draft.source !== undefined) setSource(draft.source);
+    if (draft.orderType !== undefined) setOrderType(draft.orderType);
     setInvoiceFrom(draft.invoiceFrom);
     setDoctor(draft.doctor);
     restoredAddress.current = draft.address;
@@ -544,7 +558,17 @@ export function OrderNew({
     );
     setSource(order.source ?? "");
     setStockReason(order.stockReason ?? "");
-    setPatientOrder(order.patientOrder);
+    // An order placed before types: worked out from what it carries.
+    setOrderType(
+      order.type ??
+        (order.relief
+          ? "senior_pwd"
+          : order.customerKind === "patient" || order.patientOrder
+            ? "patient"
+            : order.customerPo
+              ? "po"
+              : "no_po"),
+    );
     setPatientName(order.patientName ?? "");
     setNoProof(order.noProofReason ?? "");
     setNoProofNote(order.noProofNote ?? "");
@@ -568,6 +592,7 @@ export function OrderNew({
       subDivision: pickedSubDivision,
       paymentTerm,
       source,
+      orderType,
     };
     try {
       localStorage.setItem(draftKey(me.id), JSON.stringify(draft));
@@ -790,7 +815,7 @@ export function OrderNew({
   // doesn't). A customer on credit or cash on delivery starts as "on payment terms".
   const asksProof = !management && !(me && ["management", "admin"].includes(me.role));
   const proofMissing = asksProof && !papers.payment_proof;
-  const forPatient = picked?.kind === "patient" || patientOrder;
+  const forPatient = isPatientType(orderType) || picked?.kind === "patient" || patientOrder;
   // What a sent-back order already has on file counts (its prescription stays on the order).
   const onFile = new Set((fixing.data?.papers ?? []).map((paper) => paper.kind));
   const shortLines = lines.filter((line) => {
@@ -804,6 +829,13 @@ export function OrderNew({
     : [
         ...(customerId ? [] : ["Customer"]),
         ...(pickedDivision ? [] : ["Division"]),
+        ...(orderType ? [] : ["Order type"]),
+        // A patient's own order is one of the patient types (19 Nov).
+        ...(orderType && !isPatientType(orderType) && picked?.kind === "patient"
+          ? ["A patient's order type (Patient, Senior / PWD or Guarantee letter)"]
+          : []),
+        ...(orderType === "senior_pwd" && !relief ? ["Senior citizen or PWD"] : []),
+        ...(orderType === "po" && !customerPo.trim() ? ["Their PO number"] : []),
         ...(address.trim() ? [] : ["Delivery address"]),
         ...(source ? [] : ["Source"]),
         ...(note.trim() ? [] : ["Customer remarks"]),
@@ -876,8 +908,9 @@ export function OrderNew({
       division: pickedDivision || null,
       subDivision: pickedSubDivision || null,
       paymentTerm: paymentTerm.trim() || null,
-      patientOrder: picked?.kind !== "patient" && patientOrder,
-      patientName: picked?.kind !== "patient" && patientOrder ? patientName.trim() || null : null,
+      type: orderType,
+      patientOrder,
+      patientName: patientOrder ? patientName.trim() || null : null,
       noProofReason: proofMissing && noProof ? noProof : null,
       noProofNote: proofMissing && noProof ? noProofNote.trim() || null : null,
       source: source || null,
@@ -1105,6 +1138,48 @@ export function OrderNew({
                 .map((kind) => BUYER_WORDS[kind] ?? kind)
                 .join(" and ")}
               : the customer list below opens on them.
+            </span>
+          )}
+        </div>
+        {/* The order's type, first (Aryan, 19 Nov): whose order it is; its papers follow. */}
+        <div className="flex flex-col gap-1.5">
+          <Label text="Order type" needed />
+          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Order type">
+            {orderTypesFor(pickedDivision).map((key) => {
+              const on = orderType === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  disabled={management}
+                  onClick={() => {
+                    setOrderType(key);
+                    // Only a Senior / PWD order has their price.
+                    if (key !== "senior_pwd") setRelief(null);
+                  }}
+                  className={`inline-flex h-9 items-center rounded-xl border px-3 text-[13px] font-semibold transition ${
+                    on
+                      ? "border-brand bg-brand text-white shadow-2xs"
+                      : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                  } disabled:cursor-not-allowed disabled:opacity-70`}
+                >
+                  {ORDER_TYPE_LABEL[key]}
+                </button>
+              );
+            })}
+          </div>
+          {orderType ? (
+            <span className={HELP}>
+              {ORDER_TYPE_HINT[orderType]}
+              {isPatientType(orderType)
+                ? ". For a hospital or a doctor, it is an order for one patient."
+                : "."}
+            </span>
+          ) : (
+            <span className="text-[12px] text-amber-700">
+              Pick whose order it is: the papers it needs follow.
             </span>
           )}
         </div>
@@ -1504,14 +1579,23 @@ export function OrderNew({
             </select>
             <span className={HELP}>The company the invoice is made under.</span>
           </label>
-          <label className="flex flex-col gap-1">
-            <Label text={picked?.kind === "hospital" ? "Hospital PO number" : "Customer's PO number"} />
-            <input
-              value={customerPo}
-              onChange={(event) => setCustomerPo(event.target.value)}
-              className={FIELD}
-            />
-          </label>
+          {/* Their PO number: asked on an order with their PO, never on a patient's own (19 Nov). */}
+          {(orderType === "po" || patientOrder || customerPo || (!orderType && picked?.kind !== "patient")) && (
+            <label className="flex flex-col gap-1">
+              <Label
+                text={picked?.kind === "hospital" ? "Hospital PO number" : "Customer's PO number"}
+                needed={orderType === "po"}
+              />
+              <input
+                value={customerPo}
+                onChange={(event) => setCustomerPo(event.target.value)}
+                className={FIELD}
+              />
+              {orderType === "po" && (
+                <span className={HELP}>As on their PO: it goes on the invoice. Attach the PO under Documents.</span>
+              )}
+            </label>
+          )}
           <label className="flex flex-col gap-1">
             <Label text="Date needed" needed />
             <input
@@ -1656,9 +1740,10 @@ export function OrderNew({
             }}
           />
         )}
-        {picked && (
-          // A senior citizen's or PWD's ID shown, on any order: 20% off and no VAT (the law), or a
-          // promo without VAT when lower, never both. Management keeps what the MedRep chose.
+        {picked && (orderType === "senior_pwd" || relief) && (
+          // A senior citizen's or PWD's ID shown: 20% off and no VAT (the law), or a promo
+          // without VAT when lower, never both. Management keeps what the MedRep chose. A Senior /
+          // PWD order picks which (19 Nov); no other type has it.
           <div className="flex flex-col gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
             <div className="flex flex-wrap items-center gap-3">
               <span className="text-[13px] font-semibold text-slate-900">
@@ -1671,7 +1756,9 @@ export function OrderNew({
                     { kind: "senior", label: "Senior citizen" },
                     { kind: "pwd", label: "PWD" },
                   ] as const
-                ).map((choice) => {
+                )
+                  .filter((choice) => !(orderType === "senior_pwd" && choice.kind === null))
+                  .map((choice) => {
                   const on = (relief?.kind ?? null) === choice.kind;
                   return (
                     <button
@@ -2069,41 +2156,21 @@ export function OrderNew({
 
       {/* 4 · Documents: proof of payment or why not, the prescription, the customer's papers */}
       <Part number={4} title="Documents" icon={Paperclip} missing={management ? undefined : missing}>
-        {picked && picked.kind !== "patient" && (
+        {/* For one patient through a hospital or a doctor: a patient's type for that customer
+            (19 Nov), so only the patient's name is asked. */}
+        {patientOrder && (
           <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <span className="text-[13px] font-semibold text-slate-900">
-              Is this order for one patient?
+            <span className="text-[13px] font-semibold text-slate-900">For one patient</span>
+            <input
+              aria-label="The patient's name"
+              value={patientName}
+              onChange={(event) => setPatientName(event.target.value)}
+              placeholder="The patient's name"
+              className={`${FIELD} min-w-48 flex-1`}
+            />
+            <span className="w-full text-[11px] text-slate-500">
+              Add the prescription and the patient's ID below: Management checks them.
             </span>
-            <span className="flex gap-1 rounded-lg bg-slate-100 p-0.5 text-xs font-semibold">
-              {[
-                { on: false, label: "No" },
-                { on: true, label: "Yes, a patient" },
-              ].map((choice) => (
-                <button
-                  key={choice.label}
-                  type="button"
-                  aria-pressed={patientOrder === choice.on}
-                  onClick={() => setPatientOrder(choice.on)}
-                  className={`rounded-md px-3 py-1.5 ${patientOrder === choice.on ? "bg-white text-slate-900 shadow-sm" : "text-slate-600"}`}
-                >
-                  {choice.label}
-                </button>
-              ))}
-            </span>
-            {patientOrder && (
-              <input
-                aria-label="The patient's name"
-                value={patientName}
-                onChange={(event) => setPatientName(event.target.value)}
-                placeholder="The patient's name"
-                className={`${FIELD} min-w-48 flex-1`}
-              />
-            )}
-            {patientOrder && (
-              <span className="w-full text-[11px] text-slate-500">
-                Add the prescription and the patient's ID below: Management checks them.
-              </span>
-            )}
           </div>
         )}
         <div className="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -2111,7 +2178,11 @@ export function OrderNew({
             .sort((a, b) => paperRank(a.kind, forPatient) - paperRank(b.kind, forPatient))
             .filter((paper) =>
               forPatient
-                ? !paper.business || paper.kind === "po"
+                ? // A hospital's or doctor's PO may come with one patient's order; the SC/PWD ID
+                  // and the guarantee letter with their own types (19 Nov).
+                  (!paper.business || (paper.kind === "po" && patientOrder)) &&
+                  (paper.kind !== "senior_id" || orderType === "senior_pwd" || withRelief) &&
+                  (paper.kind !== "gl" || orderType === "gl" || !orderType)
                 : !paper.patient ||
                   paper.kind === "prescription" ||
                   // The SC/PWD ID, on any order given their price.
@@ -2121,7 +2192,13 @@ export function OrderNew({
               const file = papers[paper.kind];
               const already = onFile.has(paper.kind);
               // Whenever a patient buys, the prescription is needed (Aryan, 17 Nov).
-              const needed = paper.kind === "prescription" && forPatient;
+              // The type's own papers are asked for too (19 Nov): Management's Documents check
+              // reads them; only the prescription keeps the order from going.
+              const needed =
+                (paper.kind === "prescription" && forPatient) ||
+                (paper.kind === "senior_id" && orderType === "senior_pwd") ||
+                (paper.kind === "gl" && orderType === "gl") ||
+                (paper.kind === "po" && orderType === "po");
               return (
                 <div
                   key={paper.kind}

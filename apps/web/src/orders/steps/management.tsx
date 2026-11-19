@@ -10,12 +10,12 @@ import { type FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../../api";
 import { CustomerStory } from "../../customers/prices";
-import { ApproveDialog } from "../approve-dialog";
+import { ApproveDialog, shipsFromOf } from "../approve-dialog";
 import { checksOf } from "../checks";
 import { LinesEditor } from "../lines-editor";
 import { useOrderAction } from "../parts";
 import { manilaToday } from "../../team/range";
-import { Button, count, dayLabel, INPUT, Problem, useAction } from "../../ui";
+import { Button, count, dayLabel, INPUT, Problem, peso, useAction } from "../../ui";
 import { Fact, NextButton, short, StepPanel } from "./frame";
 import { Lines } from "./lines";
 import { Documents, PaperChips } from "./papers";
@@ -23,13 +23,13 @@ import { Documents, PaperChips } from "./papers";
 // ---------------------------------------------------------------- Management's checks
 
 /** What Management goes through on an order, one step each (Aryan): each opens the part to look
- *  at, and the last approves it. */
+ *  at; each is approved in its own row, and the last approval approves the order (19 Nov: no
+ *  Approve of its own at the end). */
 export const CHECKS = [
   { key: "papers", label: "RX & documents" },
   { key: "price", label: "Medicines & price" },
   { key: "stock", label: "Stock & warehouse" },
   { key: "customer", label: "Customer & licence" },
-  { key: "approve", label: "Approve" },
 ] as const;
 /** A hospital's (or any business's) order: its documents, no prescription to check. */
 export const checkLabel = (key: CheckKey, data: OrderDetail) =>
@@ -49,13 +49,13 @@ export function firstPick(fill: NonNullable<OrderDetail["warehouseFill"]>): stri
 /** What the reason window starts from when it opens from a check. */
 export type AskFrom = { initial?: string; presets?: string[] };
 /** What each check sends back for, said for the MedRep. */
-const SEND_BACK: Record<Exclude<CheckKey, "approve">, string> = {
+const SEND_BACK: Record<CheckKey, string> = {
   papers: "attach what is missing (the prescription, the PO) or a copy that can be read",
   price: "a price below the list or changed from last time: give the reason or correct it",
   stock: "not enough in stock to send: change the quantity or the day it is needed",
   customer: "the licence or what the customer owes: send the papers, or collect first",
 };
-const CHECK_FINDINGS: Record<Exclude<CheckKey, "approve">, string[]> = {
+const CHECK_FINDINGS: Record<CheckKey, string[]> = {
   papers: ["rx"],
   price: ["price", "note"],
   stock: ["stock"],
@@ -64,7 +64,6 @@ const CHECK_FINDINGS: Record<Exclude<CheckKey, "approve">, string[]> = {
 /** Sending back from a check (Aryan, 19 Nov: "a price problem goes back as a price problem"): its
  *  name first, so the MedRep reads what to fix; what the system found on it, to pick with a press. */
 export function sendBackFrom(data: OrderDetail, key: CheckKey): AskFrom {
-  if (key === "approve") return {};
   const label = checkLabel(key, data);
   const found = data.findings.filter((finding) => CHECK_FINDINGS[key].includes(finding.kind));
   return {
@@ -90,10 +89,26 @@ export function checkStates(data: OrderDetail): Record<CheckKey, { ok: boolean; 
     const warn = keys.map(of).find((one) => one?.tone === "warn");
     return warn ? { ok: false, note: warn.label } : { ok: true, note: fine };
   };
+  // What each check says when it is fine: the main facts, as Finance's do (Aryan, 19 Nov).
+  const { order, dues } = data;
+  const paid = data.items.filter((item) => !item.free);
+  const atList = paid.every((item) => item.unitPrice >= item.listPrice);
+  const fill = data.warehouseFill ?? [];
+  const from = fill.find((one) => String(one.id) === shipsFromOf(fill, firstPick(fill)))?.name ?? order.warehouse;
+  const owes = dues.owed > 0 ? `owes ${peso(dues.owed)}, nothing overdue` : "owes nothing";
+  const licence =
+    order.customerKind === "patient" || order.patientOrder
+      ? "Patient"
+      : order.licenceExpires
+        ? `Licence till ${dayLabel(order.licenceExpires)}`
+        : "Licence on file";
   return {
-    price: state(["price", "note"], of("price")?.label ?? "Price OK"),
-    stock: state(["stock"], "In stock"),
-    customer: state(["customer"], "Customer OK"),
+    price: state(
+      ["price", "note"],
+      `${count(paid.length)} ${paid.length === 1 ? "medicine" : "medicines"}${atList ? " at list price" : ""} · ${peso(order.total)}`,
+    ),
+    stock: state(["stock"], `In stock${from ? ` · ships from ${from}` : ""}`),
+    customer: state(["customer"], `${licence} · ${owes}`),
     papers: (() => {
       // The papers this buyer is expected to send, read from what is on file.
       const missing = data.paperList.filter(
@@ -106,7 +121,6 @@ export function checkStates(data: OrderDetail): Record<CheckKey, { ok: boolean; 
       if (paper?.tone === "warn") return { ok: false, note: paper.label };
       return { ok: true, note: paper?.label ?? (data.papers.length ? "Papers checked" : "No papers to read") };
     })(),
-    approve: { ok: false, note: "Your step" },
   };
 }
 
@@ -310,7 +324,7 @@ export function ManagementStep({
         ) : undefined
       }
     >
-      {check && check !== "approve" && states ? (
+      {check && states ? (
         <Fact shape={states[check].ok ? "done" : "now"}>
           <b>{states[check].note}</b>
         </Fact>
@@ -364,7 +378,7 @@ export function ManagementStep({
                 </Link>
               </div>
             )}
-            <Lines data={data} compare />
+            <Lines data={data} compare={shows("price")} stock={shows("stock")} />
             {can.approve && check === "price" && (
               <div>
                 <Button small onClick={() => setEditing(true)}>
@@ -383,33 +397,13 @@ export function ManagementStep({
       ) : (
         !check && <PaperChips data={data} kinds={["po", "prescription", "gl", "payment_proof"]} />
       )}
-      {(shows("customer") || check === "approve") && completes && <DetailsLine data={data} />}
-      {(shows("stock") || check === "approve") &&
+      {shows("customer") && completes && <DetailsLine data={data} />}
+      {shows("stock") &&
         can.approve &&
         data.warehouseFill &&
         data.warehouseFill.length > 0 && (
           <ShipsFrom fill={data.warehouseFill} value={warehouse} onChange={onWarehouse} />
         )}
-      {check === "approve" && states && (
-        <ul className="flex flex-col gap-1 text-[13px]">
-          {CHECKS.filter((item) => item.key !== "approve").map((item) => (
-            <li key={item.key}>
-              <button
-                type="button"
-                onClick={() => onCheck?.(item.key)}
-                className="flex items-center gap-2 text-left hover:underline"
-              >
-                <span
-                  className={`size-2 shrink-0 rounded-full ${states[item.key].ok ? "bg-emerald-500" : "bg-amber-400"}`}
-                  aria-hidden="true"
-                />
-                <span className="font-semibold text-slate-800">{item.label}</span>
-                <span className="text-slate-500">· {states[item.key].note}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
     </StepPanel>
   );
 }

@@ -2,6 +2,7 @@
 // which the dashboard's tiles count, and who may do what. After the hub's own state machine.
 
 import { DISPATCH_ROLES } from "../dispatch/rules";
+import { poExpected } from "./divisions";
 import { FINANCE_ROLES } from "../finance/rules";
 import type { Role } from "../people/roles";
 import type {
@@ -318,6 +319,10 @@ export function paperList(
     patient?: boolean;
     /** A medicine on it needs a prescription. */
     rx?: boolean;
+    /** Where the order came from: an old order's PO (one placed before types). */
+    source?: string | null;
+    /** The order's type (19 Nov): which papers it carries. */
+    type?: string | null;
   },
   onFile: PaperKind[],
 ): { kind: PaperKind; label: string; needed: boolean; why: string | null; onFile: boolean }[] {
@@ -350,8 +355,21 @@ export function paperList(
     false,
     "The delivery receipt the customer signed: Dispatch adds it when it is delivered",
   );
+  // The customer's PO, as their kind and the order's source expect it (poExpected, 19 Nov).
+  const po = poExpected({ type: customer.type, kind: customer.kind, source: customer.source });
+  const poRow =
+    po === "never"
+      ? []
+      : [
+          row(
+            "po",
+            po === "expected",
+            po === "expected" ? "Their PO: attach it and type its number" : "When they give one",
+          ),
+        ];
   // A patient: the prescription and their ID first (Management checks them), then what a
-  // discount or a guarantee letter asks for.
+  // discount or a guarantee letter asks for; a hospital's or doctor's order for a patient may
+  // carry their PO.
   if (patient)
     return withTheRest([
       row(
@@ -362,15 +380,28 @@ export function paperList(
           : "The doctor's prescription for these medicines",
       ),
       row("valid_id", true, "The patient's valid ID"),
-      row("senior_id", false, "For a senior citizen's or PWD's 20% off"),
-      row("gl", false, "When a government guarantee letter pays (PCSO, DSWD…)"),
+      row(
+        "senior_id",
+        customer.type === "senior_pwd",
+        customer.type === "senior_pwd"
+          ? "Their senior citizen's or PWD's ID: the 20% off needs it"
+          : "For a senior citizen's or PWD's 20% off",
+      ),
+      row(
+        "gl",
+        customer.type === "gl",
+        customer.type === "gl"
+          ? "The agency's guarantee letter (PCSO, DSWD…): it pays"
+          : "When a government guarantee letter pays (PCSO, DSWD…)",
+      ),
       row("med_cert", false, "When the agency asks for it with the letter"),
+      ...poRow,
       proof,
       dr,
       row("other", false, null),
     ]);
   return withTheRest([
-    row("po", false, "Their purchase order, when they gave one"),
+    ...poRow,
     row("hospital_doc", false, "Their licence (LTO), accreditation or any paper they send"),
     proof,
     row("prescription", false, "For a prescription medicine, when there is one"),

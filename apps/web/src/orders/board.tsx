@@ -92,8 +92,8 @@ const LOOKS: Partial<Record<Desk, { key: string; label: string }[]>> = {
   finance: [
     { key: "proof", label: "Payment" },
     { key: "paper", label: "Papers" },
-    { key: "dues", label: "Dues" },
-    { key: "credit", label: "Credit" },
+    { key: "dues", label: "Owed before" },
+    { key: "credit", label: "Credit limit" },
   ],
 };
 const DESK_HOME: Record<Desk, BoardTab> = {
@@ -882,8 +882,8 @@ function financeWarns(card: OrderCard): string[] {
 const FINANCE_CHECKS = [
   { key: "proof", label: "Payment", fine: "Pays by its terms", warnKinds: ["papers"] },
   { key: "paper", label: "Papers", fine: "Papers on file", warnKinds: [] },
-  { key: "dues", label: "Dues", fine: "Nothing overdue", warnKinds: ["owes"] },
-  { key: "credit", label: "Credit", fine: "Within the limit", warnKinds: ["credit"] },
+  { key: "dues", label: "Owed before", fine: "Nothing overdue", warnKinds: ["owes"] },
+  { key: "credit", label: "Credit limit", fine: "Within the limit", warnKinds: ["credit"] },
 ] as const;
 
 function FinanceSteps({ card }: { card: OrderCard }) {
