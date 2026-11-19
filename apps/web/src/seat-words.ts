@@ -70,6 +70,9 @@ export function seatWords(me: Person | null | undefined): Words {
     return { desk: "Online desk", customers: "patients", myCustomers: "My patients", toCall: "Refills due" };
   // Telesales by their box on the chart: the Hospital Division's sell anesthesia to hospitals and
   // doctors; the Prescription Business's (oncology) work patients' refills and care groups.
+  // Their coach (Hospital Division › TeleSales): the team's desk, named as the chart names it.
+  if (me.channel?.code === "TS" && me.role === "team_lead" && me.business === "HOSP")
+    return { desk: "Sales Coach – TeleSales", customers: "hospitals and doctors", myCustomers: "Customers", toCall: "Customers to call" };
   if (me.channel?.code === "TS" && me.role === "medrep" && me.business === "HOSP")
     return { desk: "MD Telesales – Anesthesia", customers: "hospitals and doctors", myCustomers: "My customers", toCall: "Customers to call" };
   if (me.channel?.code === "TS" && me.business === "RX" && TS[me.role])

@@ -4722,6 +4722,10 @@ export type Reorders = {
     setOn: string | null;
     setBy: string | null;
     refillNote: string | null;
+    /** The field's last visit done there (and by whom), and the next one planned. */
+    lastVisitOn: string | null;
+    lastVisitBy: string | null;
+    nextVisitOn: string | null;
     lastTotal: number;
     /** The medicines of their latest order. */
     lastItems: string | null;

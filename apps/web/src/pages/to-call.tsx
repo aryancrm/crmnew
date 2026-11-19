@@ -80,13 +80,14 @@ export function ToCallPage() {
               <th className="px-3 py-2.5">Last order</th>
               <th className="px-3 py-2.5 text-right">Usually every</th>
               <th className="px-3 py-2.5">Expected</th>
+              <th className="px-3 py-2.5">Visits</th>
               <th className="px-4 py-2.5 text-right">Last order value</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {data.rows.length === 0 && (
               <tr>
-                <td colSpan={own ? 5 : 6} className="px-4 py-6 text-center text-slate-500">
+                <td colSpan={own ? 6 : 7} className="px-4 py-6 text-center text-slate-500">
                   No one here.
                 </td>
               </tr>
@@ -133,6 +134,18 @@ export function ToCallPage() {
                     ) : (
                       "Usual gap"
                     )}
+                  </div>
+                </td>
+                <td className="px-3 py-2.5 text-slate-600">
+                  {row.lastVisitOn ? (
+                    <span className="whitespace-nowrap">Visited {dayLabel(row.lastVisitOn, data.today)}</span>
+                  ) : (
+                    <span className="text-slate-400">Not visited</span>
+                  )}
+                  <div className="text-[11.5px] text-slate-400">
+                    {[row.lastVisitBy && row.lastVisitOn ? `by ${row.lastVisitBy}` : null, row.nextVisitOn ? `next ${dayLabel(row.nextVisitOn, data.today)}` : null]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </div>
                 </td>
                 <td className="px-4 py-2.5 text-right font-semibold text-slate-900 tabular-nums">{shortPeso(row.lastTotal)}</td>

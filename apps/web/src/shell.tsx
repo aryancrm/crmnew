@@ -661,6 +661,7 @@ function MenuList({
               {group.title}
             </div>
           )}
+          {group.divider && <div className="mx-2.5 mt-3 mb-1.5 h-px bg-slate-200" aria-hidden="true" />}
           {group.items.map((item) => (item.children ? folder(item) : link(item)))}
         </div>
       ))}

@@ -130,7 +130,12 @@ const folder = (
 /** Every link of a menu, the pages inside folders too. */
 export const allItems = (items: MenuItem[]): MenuItem[] =>
   items.flatMap((item) => (item.children ? [item, ...allItems(item.children)] : [item]));
-export type MenuGroup = { title?: string; items: MenuItem[] };
+export type MenuGroup = {
+  title?: string;
+  items: MenuItem[];
+  /** A thin line above it in place of a heading (the person's own links at the foot). */
+  divider?: boolean;
+};
 
 /** A desk or an app: its name, its tile and its menu. */
 export type Space = {
@@ -195,6 +200,37 @@ const ordersLink = (label: string): MenuItem => ({
   short: "Orders",
 });
 
+/** A seller's field work in one folder: the day's visits (or calls), the plan, the calendar, their
+ *  phone log, expenses and samples. */
+const fieldFolder = (label: string, today: string, plan: string, phone = "My calls"): MenuItem =>
+  folder(
+    label,
+    CalendarCheck,
+    [
+      { to: "/visits", label: today, icon: CalendarCheck },
+      { to: "/visits/plan", label: plan, icon: CalendarRange },
+      { to: "/visits/calendar", label: "Calendar", icon: CalendarDays },
+      { to: "/calls", label: phone, icon: PhoneCall },
+      { to: "/visits/expenses", label: "My expenses", icon: Receipt },
+      { to: "/me/samples", label: "My samples & gifts", icon: Gift },
+    ],
+    label,
+  );
+
+/** A seller's own numbers in one folder: their score and the day's sales performance (and the
+ *  Hospital CHC's evening huddle). */
+const numbersFolder = (first: MenuItem[] = []): MenuItem =>
+  folder(
+    "My numbers",
+    Gauge,
+    [
+      ...first,
+      { to: "/my/score", label: "My score", icon: Gauge },
+      { to: "/sales-performance", label: "Sales performance", icon: TrendingUp },
+    ],
+    "Numbers",
+  );
+
 /** Inventory, laid out the way Zoho Inventory lays out its own. */
 function inventoryApp(me: Me): Space {
   const seesCost = COST_ROLES.includes(me.role);
@@ -251,7 +287,7 @@ function inventoryApp(me: Me): Space {
                 { to: "/purchases/payments", label: "Payments made", icon: Banknote },
                 { to: "/purchases/credits", label: "Vendor credits", icon: Undo2 },
                 { to: "/purchases", label: "To do & buy again", icon: LayoutDashboard },
-                { to: "/books/purchaseorders", label: "Zoho view", icon: BookOpen },
+                { to: "/books/purchaseorders", label: "Books view", icon: BookOpen },
               ]
             : []),
         ],
@@ -529,21 +565,32 @@ function deskFor(me: Me): Space {
   // team, what they look things up in) so it doesn't read as one long list. Nothing is taken off
   // (Aryan, 17 Nov), and the phone's tab bar keeps the links it had.
   const sorted = LEAD_ROLES.includes(me.role) ? sortLead(first.items) : null;
-  const work = sorted ? sorted.work : first.items;
+  // A seller's look-ups (the stock) sit under Look up too, below their own work (19 Nov).
+  const sellerLookUp = !sorted && me.role === "medrep" ? first.items.filter((item) => SELLER_LOOK_UP.includes(item.to)) : [];
+  const work = sorted ? sorted.work : first.items.filter((item) => !sellerLookUp.includes(item));
   const found = sorted ? sorted.lookUp : [];
   const team = sorted?.team ?? [];
-  const lookUpItems = [...(lookUp?.items ?? []), ...found, ...speed];
+  const lookUpItems = [...(lookUp?.items ?? []), ...found, ...sellerLookUp, ...speed];
+  // Their own leave, payslips and messages at the foot of every menu, under the work (19 Nov: "each
+  // one's own things on top").
+  // The CEO's and the Admin's messages (decisions to take) stay at the top with their work.
+  const personal = [...mine, ...(shared ? [] : [messagesLink])];
+  const onTop = me.role === "ceo" || me.role === "admin";
   return {
     ...space,
     ...(sorted ? { tabs: first.items } : {}),
     groups: [
-      { ...first, items: [...work, ...mine, ...(shared ? [] : [messagesLink])] },
+      { ...first, items: onTop ? [...work, ...personal] : work },
       ...(team.length ? [{ title: "Team", items: team }] : []),
       ...(lookUpItems.length ? [{ title: "Look up", ...(lookUp ?? {}), items: lookUpItems }] : []),
       ...others,
+      ...(personal.length && !onTop ? [{ divider: true, items: personal }] : []),
     ],
   };
 }
+
+/** What a seller only looks things up in. */
+const SELLER_LOOK_UP = ["/medicines"];
 
 /** Calls and the daily sales performance on every selling desk and those above them (18 Nov,
  *  the B2B team's Google Form and end-of-day Excel, now here). */
@@ -606,58 +653,86 @@ function ownDesk(me: Me): Space {
           ]),
           cta: { to: "/leads?new=1", label: "New lead" },
         };
+      // Every seller's menu (Aryan, 19 Nov: "their own things on top, bundled, no clutter"): their
+      // day's work first (the list to call, their orders, their customers), what belongs together
+      // in one folder, their numbers in one, and what they only look up at the foot.
       // A Hospital CHC: the day of the Hospital CHC Playbook, in its order (docs/PLAN.md 16.1).
-      if (me.channel?.code === "HOSP")
+      if (me.channel?.code === "HOSP") {
+        const bidding = /bidding/i.test(me.title ?? "");
         return {
           ...desk([
             home,
-            { to: "/my/area", label: "My hospitals", icon: Building2, short: "Hospitals" },
             ordersLink("My orders"),
-            { to: "/collections", label: "Collections", icon: HandCoins },
-            { to: "/to-call", label: "Hospitals to call", icon: PhoneCall, badge: "refills", short: "Call" },
             folder(
-              "Visits",
-              CalendarCheck,
+              "Hospitals",
+              Building2,
               [
-                { to: "/visits", label: "Today's visits", icon: CalendarCheck },
-                { to: "/visits/calendar", label: "Calendar", icon: CalendarDays },
-                { to: "/visits/plan", label: "Visit plan", icon: CalendarRange },
-                { to: "/visits/expenses", label: "My expenses", icon: Receipt },
-                { to: "/me/samples", label: "My samples & gifts", icon: Gift },
+                { to: "/my/area", label: "My hospitals", icon: Building2 },
+                { to: "/to-call", label: "Hospitals to call", icon: PhoneCall, badge: "refills" },
+                { to: "/collections", label: "Collections", icon: HandCoins },
               ],
-              "Visits",
+              "Hospitals",
             ),
+            fieldFolder("Visits", "Today's visits", "Visit plan"),
             // The Government Account's bidding coachee works tenders; the CHCs declare the 7 PM huddle.
-            ...(/bidding/i.test(me.title ?? "")
+            ...(bidding
               ? [
-                  { to: "/tenders", label: "Tenders", icon: FileText, short: "Tenders" },
-                  { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
+                  folder(
+                    "Tenders",
+                    FileText,
+                    [
+                      { to: "/tenders", label: "Tenders", icon: FileText },
+                      { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
+                    ],
+                    "Tenders",
+                  ),
                 ]
-              : [{ to: "/huddle", label: "Tonight's huddle", icon: Megaphone, short: "Huddle" }]),
-            { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+              : []),
+            numbersFolder(bidding ? [] : [{ to: "/huddle", label: "Tonight's huddle", icon: Megaphone }]),
           ]),
           cta: newOrder,
         };
+      }
       // B2B Telesales (docs/PLAN.md 16.4): the NBD hunts new accounts, the CRR keeps them buying.
       if (b2bRole(me) === "nbd")
         return {
           ...desk([
             home,
-            { to: "/b2b/prospects", label: "Prospects", icon: Building2, short: "Prospects" },
+            folder(
+              "Prospects",
+              Building2,
+              [
+                { to: "/b2b/prospects", label: "My prospects", icon: Building2 },
+                { to: "/b2b/prospects?view=handed", label: "Handed over", icon: UserCheck },
+              ],
+              "Prospects",
+            ),
             ordersLink("My orders"),
-            { to: "/b2b/prospects?view=handed", label: "Handed over", icon: UserCheck },
-            { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+            { to: "/calls", label: "My calls", icon: PhoneCall, short: "Calls" },
+            numbersFolder(),
           ]),
           cta: newOrder,
         };
+      // The CRR (Aryan, 19 Nov): their accounts' delivered orders, whether each ordered again, and a
+      // call to the ones who didn't. The accounts due to reorder come first.
       if (b2bRole(me) === "crr")
         return {
           ...desk([
             home,
-            { to: "/b2b/accounts", label: "Accounts", icon: Building2, short: "Accounts" },
-            ordersLink("My orders"),
+            { to: "/to-call", label: "Accounts to call", icon: PhoneCall, badge: "refills", short: "Call" },
+            { to: "/b2b/accounts", label: "My accounts", icon: Building2, short: "Accounts" },
+            folder(
+              "My orders",
+              ClipboardList,
+              [
+                { to: "/orders", label: "All my orders", icon: ClipboardList, badge: "sentBack" },
+                { to: "/orders?stage=delivered", label: "Delivered", icon: PackageCheck },
+              ],
+              "Orders",
+            ),
+            { to: "/calls", label: "My calls", icon: PhoneCall },
             { to: "/collections", label: "Collections", icon: HandCoins },
-            { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+            numbersFolder(),
           ]),
           cta: newOrder,
         };
@@ -666,10 +741,19 @@ function ownDesk(me: Me): Space {
         return {
           ...desk([
             home,
-            { to: "/tenders", label: "Tenders", icon: FileText, short: "Tenders" },
-            { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
+            folder(
+              "Tenders",
+              FileText,
+              [
+                { to: "/tenders", label: "Tenders", icon: FileText },
+                { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
+              ],
+              "Tenders",
+            ),
             ordersLink("My orders"),
             { to: "/collections", label: "Collections", icon: HandCoins },
+            { to: "/calls", label: "My calls", icon: PhoneCall },
+            { to: "/sales-performance", label: "Sales performance", icon: TrendingUp },
           ]),
           cta: newOrder,
           cta2: { to: "/tenders", label: "Record a tender" },
@@ -679,10 +763,20 @@ function ownDesk(me: Me): Space {
         return {
           ...desk([
             home,
-            { to: "/my/area", label: "Accounts", icon: Building2, short: "Accounts" },
-            { to: "/clidp/listings", label: "Listings", icon: FileText },
+            folder(
+              "Accounts",
+              Building2,
+              [
+                { to: "/my/area", label: "My accounts", icon: Building2 },
+                { to: "/to-call", label: "Accounts to call", icon: PhoneCall, badge: "refills" },
+                { to: "/clidp/listings", label: "Listings", icon: FileText },
+              ],
+              "Accounts",
+            ),
             ordersLink("My orders"),
             { to: "/collections", label: "Collections", icon: HandCoins },
+            { to: "/calls", label: "My calls", icon: PhoneCall },
+            { to: "/sales-performance", label: "Sales performance", icon: TrendingUp },
           ]),
           cta: newOrder,
         };
@@ -693,9 +787,17 @@ function ownDesk(me: Me): Space {
             home,
             { to: "/to-call", label: "Customers to call", icon: PhoneCall, badge: "refills", short: "Call" },
             ordersLink("My orders"),
-            { to: "/collections", label: "Collections", icon: HandCoins },
-            { to: "/my/area", label: "My customers", icon: Building2 },
-            { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+            folder(
+              "Customers",
+              Building2,
+              [
+                { to: "/my/area", label: "My customers", icon: Building2 },
+                { to: "/collections", label: "Collections", icon: HandCoins },
+              ],
+              "Customers",
+            ),
+            { to: "/calls", label: "My calls", icon: PhoneCall },
+            numbersFolder(),
           ]),
           cta: newOrder,
         };
@@ -705,11 +807,19 @@ function ownDesk(me: Me): Space {
         return {
           ...desk([
             home,
-            { to: "/care-groups", label: "Care groups", icon: Users, short: "Groups" },
             { to: "/to-call", label: "Refills due", icon: Pill, badge: "refills", short: "Refills" },
             ordersLink("My orders"),
-            { to: "/my/area", label: "My patients", icon: Users },
-            { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+            folder(
+              "Patients",
+              Users,
+              [
+                { to: "/my/area", label: "My patients", icon: Users },
+                { to: "/care-groups", label: "Care groups", icon: Users },
+              ],
+              "Patients",
+            ),
+            { to: "/calls", label: "My calls", icon: PhoneCall },
+            numbersFolder(),
           ]),
           cta: newOrder,
         };
@@ -718,25 +828,21 @@ function ownDesk(me: Me): Space {
       if (me.channel?.code === "RX")
         return {
           // My orders right under "Log a call" (Aryan, 19 Nov); Care groups (the doctor's patients
-          // the CHC enrols for MD Telesales) after the calls.
+          // the CHC enrols for MD Telesales) with the doctors.
           ...desk([
             home,
             ordersLink("My orders"),
-            { to: "/rx/doctors", label: "My doctors", icon: Stethoscope, short: "Doctors" },
             folder(
-              "Calls",
-              CalendarCheck,
+              "Doctors",
+              Stethoscope,
               [
-                { to: "/visits", label: "Today's calls", icon: CalendarCheck },
-                { to: "/visits/plan", label: "Route plan", icon: CalendarRange },
-                { to: "/visits/calendar", label: "Calendar", icon: CalendarDays },
-                { to: "/visits/expenses", label: "My expenses", icon: Receipt },
-                { to: "/me/samples", label: "My samples & gifts", icon: Gift },
+                { to: "/rx/doctors", label: "My doctors", icon: Stethoscope },
+                { to: "/care-groups", label: "Patient care groups", icon: Users },
               ],
-              "Calls",
+              "Doctors",
             ),
-            { to: "/care-groups", label: "Patient care groups", icon: Users, short: "Groups" },
-            { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+            fieldFolder("Calls", "Today's calls", "Route plan", "My phone calls"),
+            numbersFolder(),
           ]),
           cta: newOrder,
           cta2: { to: "/visits", label: "Log a call" },
@@ -746,25 +852,19 @@ function ownDesk(me: Me): Space {
       return {
         ...desk([
           home,
-          ...(pap
-            ? [{ to: "/pap", label: "PAP cases", icon: HeartHandshake, short: "Cases" }]
-            : []),
+          ...(pap ? [{ to: "/pap", label: "PAP cases", icon: HeartHandshake, short: "Cases" }] : []),
           ordersLink("My orders"),
           folder(
-            "Visits",
-            CalendarCheck,
+            pap ? "Patients" : "Customers",
+            pap ? Users : MapPin,
             [
-              { to: "/visits", label: "Today's visits", icon: CalendarCheck },
-              { to: "/visits/calendar", label: "Calendar", icon: CalendarDays },
-              { to: "/visits/plan", label: "Visit plan", icon: CalendarRange },
-              { to: "/visits/expenses", label: "My expenses", icon: Receipt },
-                { to: "/me/samples", label: "My samples & gifts", icon: Gift },
+              { to: "/my/area", label: pap ? "My patients" : "My area", icon: pap ? Users : MapPin },
+              { to: "/to-call", label: pap ? "Patients to call" : "Customers to call", icon: PhoneCall, badge: "refills" },
             ],
-            "Visits",
+            pap ? "Patients" : "Customers",
           ),
-          { to: "/my/area", label: pap ? "My patients" : "My area", icon: pap ? Users : MapPin },
-          { to: "/to-call", label: pap ? "Patients to call" : "Customers to call", icon: PhoneCall, badge: "refills", short: "Call" },
-          { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+          fieldFolder("Visits", "Today's visits", "Visit plan"),
+          numbersFolder(),
         ]),
         cta: newOrder,
         ...(pap ? { cta2: { to: "/pap?new=1", label: "New PAP case" } } : {}),
@@ -1101,18 +1201,19 @@ function ownDesk(me: Me): Space {
                 },
               ]
             : []),
+          // The team's call list and orders first (19 Nov: the day's work on top).
+          { to: "/to-call", label: seatWords(me).toCall, icon: PhoneCall, badge: "refills", short: "Call" },
+          ordersLink("Team orders"),
           folder(
             "My team",
             Users,
             [
               { to: "/my-team", label: "Whole team", icon: Users, teams: true },
               { to: "/team-scores", label: "Scorecards", icon: Gauge },
-              { to: "/to-call", label: "Customers to call", icon: PhoneCall, badge: "refills" },
               { to: "/my/score", label: "My score", icon: Gauge },
             ],
             "Team",
           ),
-          ordersLink("Team orders"),
           folder(
             "Team visits",
             CalendarCheck,
@@ -1296,6 +1397,8 @@ function ownDesk(me: Me): Space {
           {
             items: [
               home,
+              // The month against the target, the CEO's first look (Aryan, 18 Nov).
+              { to: "/key-reports/target-sheet", label: "Target sheet", icon: Target },
               folder(
                 "Company",
                 Network,
@@ -1310,19 +1413,27 @@ function ownDesk(me: Me): Space {
               ),
             ],
           },
-          // The two reports that matter most (Aryan, 18 Nov): every customer, every channel.
+          // The reports that matter most (Aryan, 18 Nov: every customer, every channel), with the
+          // company's calls and the day's sales performance.
           {
-            title: "Key reports",
+            title: "Reports",
             items: [
-              { to: "/key-reports/target-sheet", label: "Target sheet", icon: Target },
               { to: "/key-reports/customers", label: "Customers", icon: Users },
               { to: "/key-reports/channels", label: "Channels", icon: Network },
+              { to: "/calls", label: "Calls", icon: PhoneCall },
+              { to: "/sales-performance", label: "Sales performance", icon: TrendingUp },
             ],
           },
-          // Zoho CRM's reports, by name for now (Aryan, 18 Nov): one link per group.
+          // The old system's reports (Aryan: "don't write Zoho: their whole history"), in one folder.
           {
-            title: "Zoho CRM reports",
-            items: ZOHO_REPORT_GROUPS.map((group) => ({ to: `/zoho-reports/${group.key}`, label: group.label, icon: FileBarChart })),
+            title: "History",
+            items: [
+              folder(
+                "Before this CRM",
+                FileBarChart,
+                ZOHO_REPORT_GROUPS.map((group) => ({ to: `/zoho-reports/${group.key}`, label: group.label, icon: FileBarChart })),
+              ),
+            ],
           },
           {
             title: "Apps",
@@ -1377,6 +1488,7 @@ function adminPanel(me: Me): Space {
           // The data checked against itself: every bill, payment, return and shelf adds up.
           { to: "/admin/data-checks", label: "Data checks", icon: ShieldCheck },
           { to: "/audit", label: "Audit", icon: ScrollText },
+          { to: "/calls", label: "Calls", icon: PhoneCall },
         ],
       },
     ],

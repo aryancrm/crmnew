@@ -104,6 +104,11 @@ export async function reorders(
           to_char(st.last, 'YYYY-MM-DD') as "lastOn", st.orders, round(st.usual)::int as usual, st.since,
           to_char(st.last + st.want::int, 'YYYY-MM-DD') as "expectedOn",
           to_char(st."setOn", 'YYYY-MM-DD') as "setOn", case when st."setOn" is not null then c.refill_note end as "refillNote",
+          -- The field's visits (Aryan, 19 Nov: "which hospitals has he visited?"): the last one done, by
+          -- whom, and the next one planned.
+          (select to_char(v.day, 'YYYY-MM-DD') from visit v where v.customer_id = c.id and v.status = 'done' order by v.day desc, v.id desc limit 1) as "lastVisitOn",
+          (select p.name from visit v join person p on p.id = v.person_id where v.customer_id = c.id and v.status = 'done' order by v.day desc, v.id desc limit 1) as "lastVisitBy",
+          (select to_char(v.day, 'YYYY-MM-DD') from visit v where v.customer_id = c.id and v.status = 'planned' and v.day >= ${today}::date order by v.day limit 1) as "nextVisitOn",
           case when st."setOn" is not null then (select p.name from person p where p.id = c.refill_set_by) end as "setBy", coalesce(st."lastTotal", 0)::float8 as "lastTotal",
           -- What they took last time: this CRM's latest order, else the old system's.
           coalesce(

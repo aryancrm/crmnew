@@ -135,9 +135,9 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
             to={hrefWith({ review: "", medrep: "", q: "" })}
           />
           <Figure
-            label="Not checked yet"
+            label="New, Management to check"
             value={count(data.summary.toCheck)}
-            sub={data.summary.toCheck ? "added by a MedRep" : "all checked"}
+            sub={data.summary.toCheck ? "their papers, checked once" : "none waiting"}
             tone={data.summary.toCheck ? "warn" : undefined}
             to={data.can.manage ? hrefWith({ review: "1" }) : undefined}
           />
@@ -397,14 +397,17 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
                     {row.lastOrderAt ? dayLabel(row.lastOrderAt.slice(0, 10)) : "—"}
                   </td>
                   <td className="px-3 py-2">
+                    {/* Management checks a new customer's papers once (Aryan, 19 Nov: "Checked: who
+                        checks, why?"): said only while it waits, in those words. */}
                     {row.review === "to_review" ? (
-                      <span className="rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-900 ring-1 ring-amber-300">
-                        Not checked yet
+                      <span
+                        className="rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap text-amber-900 ring-1 ring-amber-300"
+                        title="A new customer: Management checks their papers (licence, BIR 2303) once"
+                      >
+                        New: Management checks it
                       </span>
                     ) : (
-                      <span className="rounded-md bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-800 ring-1 ring-emerald-200">
-                        Checked
-                      </span>
+                      <span className="text-[11px] text-slate-400">Active</span>
                     )}
                   </td>
                 </tr>
@@ -498,13 +501,12 @@ function CustomerCard({
               {row.specialty ? ` · ${row.specialty}` : ""}
             </div>
           </div>
-          {toCheck ? (
-            <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900 ring-1 ring-amber-300">
-              Not checked yet
-            </span>
-          ) : (
-            <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-800 ring-1 ring-emerald-200">
-              Checked
+          {toCheck && (
+            <span
+              className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900 ring-1 ring-amber-300"
+              title="A new customer: Management checks their papers (licence, BIR 2303) once"
+            >
+              New: Management checks it
             </span>
           )}
         </div>
