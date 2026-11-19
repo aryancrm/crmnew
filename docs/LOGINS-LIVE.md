@@ -4,7 +4,7 @@ Open https://crmnew-psi.vercel.app, type the **Login ID** below and the company'
 
 | Team | Name | Job | Login ID |
 |---|---|---|---|
-| 2MG Inc. | Veronica | Management | mgmt1 |
+| Management | Veronica | Management | mgmt1 |
 | 2MG Inc. | Naresh Bishnoi | CEO | ceo |
 | 2MG Inc. | Admin | System admin | admin |
 | Digital Marketing Coaching Department | Kriscel Calbayar | Digital Marketing Coach | staff3 |
