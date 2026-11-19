@@ -594,6 +594,17 @@ export type CustomerDetail = {
   };
   /** A hospital's doctors. */
   doctors: { id: number; name: string; specialty: string | null }[];
+  /** What the customer's channel keeps on it (Aryan, 19 Nov: "as the MedRep picks, the relevant
+   *  things come"): a hospital's accreditation with 2MG and our medicines on its formulary; an
+   *  agency's or hospital's tenders won and not yet delivered by an order (an order may say which
+   *  award it delivers); a pharmacy's agreed CLIDP prices; a chain's listings. Empty for a patient. */
+  standing: {
+    accreditation: { status: "applied" | "accredited" | "refused"; onDay: string; validUntil: string | null } | null;
+    formulary: { approved: number; requested: number };
+    awards: { id: number; code: string; title: string; step: string; deliverBy: string | null }[];
+    clidpRates: { medicineId: number; medicine: string; unitPrice: number; moq: number | null; agreedOn: string }[];
+    listed: number;
+  };
 };
 
 /** A customer already on file that matches what is being typed: enough to recognise it, no more. */
@@ -1065,6 +1076,8 @@ export type OrderInput = {
   expectedOn?: string | null;
   /** The customer's own PO number. */
   customerPo?: string | null;
+  /** A bidding order: the tender whose award it delivers (an award with no order yet). */
+  tenderId?: number | null;
   /** Which company bills it. */
   invoiceFrom?: InvoiceFrom;
   /** The doctor behind the order, if any (a doctor customer). */

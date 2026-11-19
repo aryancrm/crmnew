@@ -338,6 +338,7 @@ export async function customerDetail(db: Database, me: Me, id: number): Promise<
   ]);
   const customer = found[0];
   if (!customer) throw new Refusal(404, "not_found", "No such customer, or it isn't one of yours.");
+  const standing = await standingOf(db, id, customer.kind);
   const expires = customer.licenceExpires;
   const licenceState = !customer.licenceNo
     ? "none"
@@ -353,11 +354,56 @@ export async function customerDetail(db: Database, me: Me, id: number): Promise<
     areas,
     customer: { ...customer, licenceState },
     doctors,
+    standing,
     papers: papers.map((paper) => ({ ...paper, kindLabel: CUSTOMER_PAPER_LABEL[paper.kind] })),
     missing: missingOf(
       customer,
       papers.map((paper) => paper.kind),
     ),
+  };
+}
+
+/** What a business customer's channel keeps on it: a hospital's accreditation and formulary, the
+ *  tenders it awarded us not yet delivered by an order, a pharmacy's agreed CLIDP prices, a chain's
+ *  listings (each the latest line kept). A patient's or a doctor's is empty. */
+async function standingOf(db: Database, id: number, kind: string): Promise<CustomerDetail["standing"]> {
+  const none: CustomerDetail["standing"] = { accreditation: null, formulary: { approved: 0, requested: 0 }, awards: [], clidpRates: [], listed: 0 };
+  if (!["hospital", "government", "drugstore", "distributor"].includes(kind)) return none;
+  const [accreditation, formulary, awards, clidpRates, listed] = await Promise.all([
+    rows<NonNullable<CustomerDetail["standing"]["accreditation"]>>(
+      db,
+      sql`select status, ${day("on_day")} as "onDay", ${day("valid_until")} as "validUntil"
+        from hospital_accreditation where customer_id = ${id} order by id desc limit 1`,
+    ),
+    rows<{ approved: number; requested: number }>(
+      db,
+      sql`select count(*) filter (where status = 'approved')::int as approved, count(*) filter (where status = 'requested')::int as requested
+        from (select distinct on (medicine_id) status from hospital_formulary where customer_id = ${id} order by medicine_id, id desc) f`,
+    ),
+    rows<CustomerDetail["standing"]["awards"][number]>(
+      db,
+      sql`select id::int as id, code, title, step, ${day("deliver_by")} as "deliverBy" from tender
+        where agency_id = ${id} and order_id is null and step in ('won', 'contract') order by noa_on desc nulls last, id desc`,
+    ),
+    rows<CustomerDetail["standing"]["clidpRates"][number]>(
+      db,
+      sql`select r.medicine_id::int as "medicineId", m.name || coalesce(' ' || m.strength, '') as medicine, r.unit_price::int as "unitPrice",
+          r.moq, ${day("r.agreed_on")} as "agreedOn"
+        from clidp_rate r join medicine m on m.id = r.medicine_id
+        where r.customer_id = ${id} and r.replaced_at is null order by m.name`,
+    ),
+    rows<{ count: number }>(
+      db,
+      sql`select count(*)::int as count from (select distinct on (medicine_id) listed from mt_listing where customer_id = ${id}
+          order by medicine_id, id desc) l where l.listed`,
+    ),
+  ]);
+  return {
+    accreditation: accreditation[0] ?? null,
+    formulary: formulary[0] ?? none.formulary,
+    awards,
+    clidpRates,
+    listed: listed[0]?.count ?? 0,
   };
 }
 

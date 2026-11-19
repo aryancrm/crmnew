@@ -90,6 +90,7 @@ const orderInput = z.object({
   customerPo: optional(60),
   invoiceFrom: z.enum(["2mg", "getmeds"], { error: "Pick the company that bills it." }).optional(),
   doctorId: z.number().int().positive().nullish(),
+  tenderId: z.number().int().positive().nullish(),
   checks: z.object({ management: z.boolean(), finance: z.boolean() }).optional(),
   division: optional(40),
   subDivision: optional(60),

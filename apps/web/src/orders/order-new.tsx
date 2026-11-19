@@ -395,6 +395,7 @@ export function OrderNew({
     enabled: Boolean(customerId),
   });
   const picked = customer.data?.customer;
+  const standing = customer.data?.standing;
 
   const [lines, setLines] = useState<Line[]>([]);
   const [findMedicine, setFindMedicine] = useState("");
@@ -404,6 +405,8 @@ export function OrderNew({
   const [receiverPhone, setReceiverPhone] = useState("");
   const [expectedOn, setExpectedOn] = useState("");
   const [customerPo, setCustomerPo] = useState("");
+  // A bidding order: the tender whose award it delivers (one of the customer's awards with no order).
+  const [tenderId, setTenderId] = useState<number | null>(null);
   // The hub's "Customer remarks": what Management reads with the order (needed, as in the hub).
   const [note, setNote] = useState("");
   // Where the order came from: the hub's Source list (needed).
@@ -950,6 +953,7 @@ export function OrderNew({
       note,
       invoiceFrom,
       doctorId: doctor?.id ?? null,
+      tenderId: (customer.data?.standing.awards ?? []).some((award) => award.id === tenderId) ? tenderId : null,
       // The field sends no choice: Management checks it and decides about Finance on approving.
       // Only the Admin's switch is read (the API's ORDER_MANAGE_ROLES; Management places none).
       ...(switches ? { checks: { management: toManagement, finance: toFinance } } : {}),
@@ -1426,7 +1430,80 @@ export function OrderNew({
                   New customer, not checked yet
                 </span>
               )}
+              {/* What the customer's channel keeps on it (19 Nov: "as the MedRep picks, the relevant
+                  things come"): the licence missing, a hospital's accreditation and formulary, a
+                  chain's listings. */}
+              {picked.licenceState === "none" && ["hospital", "drugstore", "distributor"].includes(picked.kind) && (
+                <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+                  No FDA licence on file
+                </span>
+              )}
+              {standing?.accreditation ? (
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                    standing.accreditation.status === "accredited"
+                      ? "border border-emerald-200 bg-emerald-50 text-emerald-800"
+                      : standing.accreditation.status === "refused"
+                        ? "bg-rose-50 text-rose-700"
+                        : "bg-amber-50 text-amber-800"
+                  }`}
+                >
+                  {standing.accreditation.status === "accredited"
+                    ? `2MG accredited${standing.accreditation.validUntil ? ` to ${monthYear(standing.accreditation.validUntil)}` : ""}`
+                    : standing.accreditation.status === "refused"
+                      ? "Accreditation refused"
+                      : "Accreditation applied for"}
+                </span>
+              ) : (
+                picked.kind === "hospital" &&
+                pickedDivision === "HOSP" && (
+                  <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-600">
+                    Accreditation not recorded
+                  </span>
+                )
+              )}
+              {standing && standing.formulary.approved + standing.formulary.requested > 0 && (
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                  {standing.formulary.approved} of ours on its formulary
+                  {standing.formulary.requested ? ` · ${standing.formulary.requested} asked for` : ""}
+                </span>
+              )}
+              {standing && standing.listed > 0 && (
+                <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                  {standing.listed} of ours listed
+                </span>
+              )}
             </div>
+            {standing && standing.awards.length > 0 && (
+              <label className="mt-2 flex flex-col gap-1">
+                <span className="text-xs font-semibold text-slate-700">Which award does this order deliver?</span>
+                <select
+                  value={tenderId ?? ""}
+                  onChange={(event) => setTenderId(event.target.value ? Number(event.target.value) : null)}
+                  className={FIELD}
+                >
+                  <option value="">None: not for a tender</option>
+                  {standing.awards.map((award) => (
+                    <option key={award.id} value={award.id}>
+                      {award.code} · {award.title}
+                      {award.deliverBy ? ` · deliver by ${dayLabel(award.deliverBy)}` : ""}
+                    </option>
+                  ))}
+                </select>
+                <span className={HELP}>Its tender won, with no order yet: the tender keeps this order as its delivery.</span>
+              </label>
+            )}
+            {standing && standing.clidpRates.length > 0 && (
+              <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-[12px] text-slate-700">
+                <b className="text-slate-900">Agreed CLIDP prices</b>
+                {standing.clidpRates.map((rate) => (
+                  <span key={rate.medicineId} className="block">
+                    {rate.medicine}: {peso(rate.unitPrice)} each{rate.moq ? ` · at least ${rate.moq}` : ""}
+                    <span className="text-slate-500"> · since {dayLabel(rate.agreedOn)}</span>
+                  </span>
+                ))}
+              </div>
+            )}
             {(picked.overdue > 0 ||
               (picked.creditLimit != null && picked.owed + total > picked.creditLimit)) && (
               // Said before placing, so the MedRep can collect or talk to Management first.

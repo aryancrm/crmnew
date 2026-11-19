@@ -11,7 +11,7 @@ import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { seedDemo } from "../seed";
-import type { Me, OrderDetail } from "../types";
+import type { CustomerDetail, Me, OrderDetail } from "../types";
 
 const PASSWORD = "test-password-1";
 let db: Database;
@@ -156,5 +156,62 @@ describe("an order's Division", () => {
     const [telesales] = await rows<{ d: string | null }>(db, sql`select seat_division(${seat.id}) as d`);
     expect(telesales?.d).toBe("MD Telesales");
     await db.execute(sql`update org_unit set name = ${before?.name ?? ""} where id = ${unit}`);
+  });
+
+  it("brings the customer's standing for its channel; a bidding order says which award it delivers", async () => {
+    const [ryan] = await rows<{ id: number }>(db, sql`select id::int as id from person where email = 'ryan@2mg.test'`);
+    const [other] = await rows<{ id: number }>(
+      db,
+      sql`insert into customer (name, kind, added_by) values ('Another Agency', 'government', ${ryan?.id}) returning id::int as id`,
+    );
+    // The hospital awarded us a tender (won, no order yet); another agency awarded one too.
+    const award = async (code: string, agencyId: number) =>
+      (
+        await rows<{ id: number }>(
+          db,
+          sql`insert into tender (code, agency_id, title, owner_id, step, created_by)
+            values (${code}, ${agencyId}, 'Ceftriaxone 1 g vials', ${ryan?.id}, 'won', ${ryan?.id}) returning id::int as id`,
+        )
+      )[0]?.id as number;
+    const ours = await award("TND-T-1", customer);
+    const theirs = await award("TND-T-2", other?.id as number);
+    // Its accreditation with 2MG and a medicine on its formulary.
+    await db.execute(
+      sql`insert into hospital_accreditation (customer_id, status, on_day, valid_until, by_person)
+        values (${customer}, 'accredited', '2026-01-10', '2027-01-09', ${ryan?.id})`,
+    );
+    await db.execute(
+      sql`insert into hospital_formulary (customer_id, medicine_id, status, on_day, by_person) values (${customer}, ${medicine}, 'approved', '2026-02-01', ${ryan?.id})`,
+    );
+    const before = await read<CustomerDetail>("ryan", `/api/customers/${customer}`);
+    expect(before.standing).toMatchObject({
+      accreditation: { status: "accredited", validUntil: "2027-01-09" },
+      formulary: { approved: 1, requested: 0 },
+      awards: [{ id: ours, code: "TND-T-1", step: "won" }],
+    });
+    // Another agency's award: refused, nothing placed.
+    const count = async () => (await rows<{ n: number }>(db, sql`select count(*)::int as n from sales_order`))[0]?.n;
+    const was = await count();
+    const wrong = await post("ryan", "/api/orders", {
+      customerId: customer,
+      tenderId: theirs,
+      items: [{ medicineId: medicine, qty: 1, priceKind: "hospital" }],
+    });
+    expect(wrong.status).toBe(400);
+    expect(await count()).toBe(was);
+    const placed = await post("ryan", "/api/orders", {
+      customerId: customer,
+      tenderId: ours,
+      items: [{ medicineId: medicine, qty: 1, priceKind: "hospital" }],
+    });
+    expect(placed.status).toBe(200);
+    const { id } = (await placed.json()) as { id: number };
+    const [linked] = await rows<{ orderId: number | null; events: number }>(
+      db,
+      sql`select order_id::int as "orderId", (select count(*)::int from tender_event e where e.tender_id = t.id) as events from tender t where t.id = ${ours}`,
+    );
+    expect(linked).toEqual({ orderId: id, events: 1 });
+    // Delivered by an order now: no longer offered.
+    expect((await read<CustomerDetail>("ryan", `/api/customers/${customer}`)).standing.awards).toEqual([]);
   });
 });

@@ -2084,6 +2084,22 @@ export async function placeOrder(
       "created",
     );
     if (manages) await logEvent(tx, id, me, "status", "Approved when placed.", "approved");
+    // A bidding order may say which award it delivers (19 Nov): the tender keeps it as its order.
+    if (input.tenderId) {
+      const [linked] = await rows<{ step: string; code: string }>(
+        tx,
+        sql`update tender set order_id = ${id}, updated_at = now()
+          where id = ${input.tenderId} and agency_id = ${customer.id} and order_id is null and step in ('won', 'contract')
+          returning step, code`,
+      );
+      if (!linked) throw new Refusal(400, "invalid", "That award isn't this customer's, or it already has its order.", "tenderId");
+      const [placedCode] = await rows<{ code: string }>(tx, sql`select code from sales_order where id = ${id}`);
+      await tx.execute(
+        sql`insert into tender_event (tender_id, step, note, by_person)
+          values (${input.tenderId}, ${linked.step}, ${`Order ${placedCode?.code ?? ""} placed for this award`}, ${me.id})`,
+      );
+      await logEvent(tx, id, me, "note", `Delivers the award of tender ${linked.code}.`);
+    }
     if (options.inside) await options.inside(tx, id);
     // On along the line, by the switch at the top of the order form.
     await routeOrder(
