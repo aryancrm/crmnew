@@ -943,7 +943,7 @@ function ownDesk(me: Me): Space {
         return {
           ...desk([
             home,
-            { to: "/my/area", label: "Chains", icon: Building2, short: "Chains" },
+            { to: "/mt/chains", label: "Chains", icon: Building2, short: "Chains" },
             { to: "/mt/listings", label: "Listings", icon: FileText },
             ordersLink("Orders"),
             { to: "/collections", label: "Collections", icon: HandCoins },
@@ -1054,6 +1054,23 @@ function ownDesk(me: Me): Space {
             { to: "/care-groups", label: "Care groups", icon: Users, short: "Groups" },
             { to: "/rx/business", label: "Prescriptions and letters", icon: Stethoscope },
             { to: "/to-call", label: "Refills due", icon: Pill, badge: "refills", short: "Refills" },
+            // A coach who leads RX Business's field CHCs too (Honey, 19 Nov's sheet): their visits.
+            ...(me.divisions?.includes("RX Business")
+              ? [
+                  { to: "/rx/field", label: "Field team", icon: Stethoscope },
+                  folder(
+                    "Team visits",
+                    CalendarCheck,
+                    [
+                      { to: "/field/report", label: "Visits report", icon: BarChart3 },
+                      { to: "/field/live", label: "Where the team is", icon: MapPin },
+                      { to: "/visits/expenses?waiting=1", label: "Expenses to approve", icon: Receipt },
+                      { to: "/field/samples", label: "Team samples & gifts", icon: Gift },
+                    ],
+                    "Visits",
+                  ),
+                ]
+              : []),
             ordersLink("Team orders"),
             { to: "/targets", label: "Targets", icon: Target },
             { to: "/collections", label: "Collections", icon: HandCoins },
@@ -1068,6 +1085,50 @@ function ownDesk(me: Me): Space {
             ),
             { to: "/customers", label: "Patients & doctors", icon: Users },
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+          ]),
+          icon: Users,
+        };
+      // The TeleSales Sales Coach (anesthesia, inside the Hospital Division; Reynan, 19 Nov's sheet):
+      // a team that sells by phone (no visits), and the Government Account's tenders he runs.
+      if (me.role === "team_lead" && me.channel?.code === "TS" && me.business === "HOSP")
+        return {
+          cta: newOrder,
+          ...desk([
+            home,
+            { to: "/to-call", label: "Customers to call", icon: PhoneCall, badge: "refills", short: "Call" },
+            ordersLink("Team orders"),
+            folder(
+              "My team",
+              Users,
+              [
+                { to: "/my-team", label: "Whole team", icon: Users, teams: true },
+                { to: "/team-scores", label: "Scorecards", icon: Gauge },
+                { to: "/my/score", label: "My score", icon: Gauge },
+              ],
+              "Team",
+            ),
+            folder(
+              "Tenders",
+              FileText,
+              [
+                { to: "/tenders", label: "Tenders", icon: FileText },
+                { to: "/tenders/report", label: "Bid report", icon: FileText },
+                { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
+              ],
+              "Tenders",
+            ),
+            { to: "/targets", label: "Targets", icon: Target },
+            { to: "/collections", label: "Collections", icon: HandCoins },
+            folder(
+              "Team attendance",
+              CalendarClock,
+              [
+                { to: "/hr/attendance", label: "Who's working", icon: CalendarClock },
+                { to: "/hr/leave", label: "Leave & forms", icon: CalendarDays, badge: "leave" },
+              ],
+              "Attendance",
+            ),
+            { to: "/customers", label: "Hospitals & doctors", icon: Building2 },
           ]),
           icon: Users,
         };

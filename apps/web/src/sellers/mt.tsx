@@ -286,6 +286,21 @@ export function MtHome() {
   );
 }
 
+/** The chains, one page (the COO's "Chains"): each with its money, deductions, returns, listings. */
+export function MtChainsPage() {
+  const query = useMt();
+  if (!query.data) return <PageState query={query} what="the chains" />;
+  return (
+    <div className="mx-auto w-full max-w-6xl space-y-3">
+      <PageHead
+        title="Chains"
+        sub="Each pharmacy chain against its own reorder gap, what it bought from Modern Trade, owes, deducted and sent back"
+      />
+      <MtHome />
+    </div>
+  );
+}
+
 export function MtListingsPage() {
   const query = useMt();
   const [changing, setChanging] = useState(false);

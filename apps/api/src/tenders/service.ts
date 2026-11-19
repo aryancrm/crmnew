@@ -183,7 +183,19 @@ export async function removeBidder(db: Database, me: Me, bidderId: number): Prom
 }
 
 export async function createTender(db: Database, me: Me, input: TenderInput): Promise<{ id: number }> {
-  if (!seesAll(me) && !(me.role === "medrep" && /bidding/i.test(me.title ?? "")))
+  // A government bidding coachee records their own: by their seat's title, or by another seat they
+  // hold on the chart (Reynan leads TeleSales beside his Government Bidding Coachee seat).
+  const coachee =
+    (me.role === "medrep" && /bidding/i.test(me.title ?? "")) ||
+    (
+      await rows<{ ok: boolean }>(
+        db,
+        sql`select exists (select 1 from seat_holder h join seat s on s.id = h.seat_id and s.active
+          where h.person_id = ${me.id} and s.title ~* 'bidding' and h.starts_on <= current_date
+            and (h.ends_on is null or h.ends_on >= current_date)) as ok`,
+      )
+    )[0]?.ok === true;
+  if (!seesAll(me) && !coachee)
     throw new Refusal(403, "not_allowed", "The bidding team (or a government bidding coachee) records tenders.");
   const [agency] = await rows<{ kind: string }>(db, sql`select kind from customer where id = ${input.agencyId} and active`);
   if (!agency || !["government", "hospital"].includes(agency.kind))

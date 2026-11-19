@@ -85,7 +85,7 @@ import { CollectionsPage } from "./sellers/collections";
 import { HuddlePage } from "./sellers/huddle";
 import { AccountsPage, B2bTeamPage, ProspectsPage } from "./sellers/b2b";
 import { CareGroupsPage } from "./sellers/care-groups";
-import { MtListingsPage } from "./sellers/mt";
+import { MtChainsPage, MtListingsPage } from "./sellers/mt";
 import { WorkLogPage, WorkLogsPage } from "./hr/work-log";
 import { PipelinePage, RegistrationsPage, RegulatoryReportPage } from "./regulatory/regulatory";
 import { BooksIndex, BooksShell, InBooks } from "./books/shell";
@@ -269,6 +269,7 @@ createRoot(root).render(
             <Route path="tenders/report" element={<BidReportPage />} />
             <Route path="tenders/:id" element={<TenderPage />} />
             <Route path="company-papers" element={<CompanyPapersPage />} />
+            <Route path="mt/chains" element={<MtChainsPage />} />
             <Route path="mt/listings" element={<MtListingsPage />} />
             <Route path="work-log" element={<WorkLogPage />} />
             <Route path="work-logs" element={<WorkLogsPage />} />

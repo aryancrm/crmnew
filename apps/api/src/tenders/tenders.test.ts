@@ -157,4 +157,18 @@ describe("government tenders", () => {
     expect(division.map((t) => t.title)).toEqual(["Cisplatin vials for the hospital"]);
     expect(((await (await get("ryan", "/api/tenders")).json()) as Tender[]).length).toBe(0);
   });
+
+  it("one holding a bidding seat beside another records tenders too (Reynan: TeleSales lead and Government Account coachee)", async () => {
+    const [agency] = await rows<{ id: number }>(db, sql`select id::int as id from customer where name = 'East Avenue Medical Center'`);
+    const body = { agencyId: agency?.id, title: "Ketamine vials", mode: "small_value" };
+    expect((await post("ryan", "/api/tenders", body)).status).toBe(403);
+    // Ryan also holds a Government Bidding Coachee seat (acting in it).
+    await db.execute(
+      sql`insert into seat_holder (seat_id, person_id, kind, starts_on)
+        select s.id, (select id from person where email = 'ryan@2mg.test'), 'acting', current_date - 1
+        from seat s where s.active and s.title ~* 'bidding' and not s.lead order by s.id limit 1`,
+    );
+    expect((await post("ryan", "/api/tenders", body)).status).toBe(200);
+    expect(((await (await get("ryan", "/api/tenders")).json()) as Tender[]).map((t) => t.title)).toEqual(["Ketamine vials"]);
+  });
 });
