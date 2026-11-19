@@ -8,6 +8,7 @@ import { allow, type Env, idParam, may, readBody } from "../http";
 import { afterStockIn } from "../orders/stock-wait";
 import { answerRequest, askForMedicine, medicineRequests, REQUEST_ANSWER_ROLES } from "./requests";
 import { BUYER_TYPES, CATALOGUE_ROLES, COST_ROLES, PRICE_ROLES, STOCK_ROLES } from "./rules";
+import { askedOf, stockReport, stockReportWorkbook } from "./stock-report";
 import {
   addPromo,
   catalogue,
@@ -80,6 +81,19 @@ export function inventoryRoutes(
   app.get("/api/inventory", async (c) => c.json(await listInventory(db, c.get("me"))));
 
   app.get("/api/inventory/medicines", async (c) => c.json(await catalogue(db, c.get("me"))));
+
+  // The stock report, batch by batch, on the screen and as an Excel file with the same rows.
+  // Everyone signed in reads the stock; what it cost goes only to COST_ROLES (stockReport checks).
+  app.get("/api/inventory/stock-report", async (c) =>
+    c.json(await stockReport(db, c.get("me"), askedOf((name) => c.req.query(name)))),
+  );
+  app.get("/api/inventory/stock-report.xlsx", async (c) => {
+    const report = await stockReport(db, c.get("me"), askedOf((name) => c.req.query(name)));
+    return c.body(new Uint8Array(stockReportWorkbook(report)), 200, {
+      "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "content-disposition": `attachment; filename="stock-report-${report.today}.xlsx"`,
+    });
+  });
 
   // "Medicine not available": anyone asks; Inventory answers.
   app.get("/api/inventory/requests", async (c) =>

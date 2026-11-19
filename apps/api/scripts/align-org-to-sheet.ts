@@ -26,7 +26,7 @@
 import { sql } from "drizzle-orm";
 import { openDatabase, rows } from "../src/db/index";
 import { migrate } from "../src/db/migrate";
-import { addSeat, closeUnit, fillSeat, updateSeat, updateUnit } from "../src/org/service";
+import { addSeat, addUnit, closeUnit, fillSeat, updateSeat, updateUnit } from "../src/org/service";
 import type { Me, Role } from "../src/types";
 
 const apply = process.argv.includes("--apply");
@@ -219,6 +219,34 @@ if (mindanao && claireCoach && !claireCoach.lead) {
   if (apply) await updateSeat(db, me, claireCoach.id, { lead: true, reportsToSeatId: null });
 }
 if (claireCoach) await underTheBox([mindanao], [claireCoach.id]);
+
+// The sales tracker's HOSP (Aryan, 19 Nov: "the tracker is God: the company is exactly as it has it"):
+// one channel box under Vanessa over the five hospital teams, beside TeleSales. Nobody moves seat;
+// the teams' coaches still report to Vanessa (the box has no lead of its own).
+step("Vanessa · one HOSP channel over Julius', Daniel's, Claire's, Ken's and Jim Lord's teams");
+const hospital = await unit("Hospital Division");
+let hospBox = await unit("HOSP");
+if (hospital && !hospBox) {
+  say("Hospital Division: a HOSP box (the tracker's channel) over its five hospital teams");
+  if (apply) {
+    const [channel] = await rows<{ id: number }>(db, sql`select id::int as id from channel where code = 'HOSP'`);
+    const { unitId } = await addUnit(db, me, { name: "HOSP", kind: "line", parentId: hospital.id, channelId: channel?.id ?? null });
+    hospBox = { id: unitId, name: "HOSP", parentId: hospital.id, sort: 0 };
+  }
+}
+const HOSP_TEAMS = ["North & Central Luzon", "NCR 1", "Mindanao", "South Luzon", "NCR 2"];
+for (const [index, name] of HOSP_TEAMS.entries()) {
+  const team = await unit(name);
+  if (team && (!hospBox || team.parentId !== hospBox.id)) {
+    say(`${name} moves into HOSP`);
+    if (apply && hospBox) await updateUnit(db, me, team.id, { parentId: hospBox.id });
+  }
+  // In the tracker's order: Julius, Daniel, Claire, Ken, Jim Lord.
+  if (team && team.sort !== index + 1) {
+    say(`${name} is the ${index + 1}${["st", "nd", "rd"][index] ?? "th"} team in HOSP`);
+    if (apply) await db.execute(sql`update org_unit set sort = ${index + 1} where id = ${team.id}`);
+  }
+}
 
 // ---- Subir: BID led by Subir, B2B under Jessa ----
 step("Subir · BID (manager Subir), B2B (manager Jessa Domino), CLIDP (Subir)");

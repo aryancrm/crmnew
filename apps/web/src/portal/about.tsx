@@ -25,8 +25,16 @@ const JOURNEY = [
 
 /** What each workspace holds, from its own menu (src/menus.ts). */
 const DETAILS: Record<string, { who: string; points: string[] }> = {
+  leads: {
+    who: "Team leads: the managers in the sales tracker (Honey, Jessa, Reynan, Julius, Daniel…)",
+    points: ["Your team's orders, held or sent back", "Each of your people against their target", "Your team's customers and collections", "Calls and visits of your people", "Ask your head or Management for an exception"],
+  },
+  heads: {
+    who: "Heads of the business (Vanessa, Javed, Subir, Mhalou)",
+    points: ["Each of your channels and its managers against the month's target", "Every order of your people", "The sales organisation and the map of your part", "Customers, collections and what is owed", "Targets for your managers and people"],
+  },
   sales: {
-    who: "MedReps, team leads and the head of each channel",
+    who: "MedReps: the sales people",
     points: ["Today's visits, the visit plan and the calendar", "New orders and leads, taken on the spot", "Your hospitals, doctors and patients", "Collections and customers to call", "Samples, gifts and your expenses", "Your score, and your team's for leads"],
   },
   management: {

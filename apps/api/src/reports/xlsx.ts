@@ -6,7 +6,7 @@
 import { crc32, deflateRawSync } from "node:zlib";
 
 export type Cell = { v: string | number | null; s?: Style } | string | number | null;
-export type Style = "title" | "head" | "name" | "int" | "money" | "pct" | "totalName" | "totalInt" | "totalMoney" | "totalPct" | "text";
+export type Style = "title" | "head" | "name" | "int" | "money" | "pct" | "totalName" | "totalInt" | "totalMoney" | "totalPct" | "text" | "centavos";
 export type Sheet = { name: string; rows: Cell[][]; widths?: number[]; merges?: string[] };
 
 const STYLE_ID: Record<Style | "pctGreen" | "pctYellow" | "pctOrange" | "pctPink", number> = {
@@ -25,11 +25,13 @@ const STYLE_ID: Record<Style | "pctGreen" | "pctYellow" | "pctOrange" | "pctPink
   totalInt: 12,
   totalMoney: 13,
   totalPct: 14,
+  // Pesos with their centavos (a piece's cost: 1,917.74); added last, so the others keep their ids.
+  centavos: 15,
 };
 
 const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<numFmts count="2"><numFmt numFmtId="164" formatCode="#,##0"/><numFmt numFmtId="165" formatCode="0.00%"/></numFmts>
+<numFmts count="3"><numFmt numFmtId="164" formatCode="#,##0"/><numFmt numFmtId="165" formatCode="0.00%"/><numFmt numFmtId="166" formatCode="#,##0.00"/></numFmts>
 <fonts count="4"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="12"/><name val="Calibri"/></font><font><b/><sz val="11"/><color rgb="FFC00000"/><name val="Calibri"/></font></fonts>
 <fills count="8"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill>
 <fill><patternFill patternType="solid"><fgColor rgb="FFDCE6F1"/></patternFill></fill>
@@ -40,7 +42,7 @@ const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <fill><patternFill patternType="solid"><fgColor rgb="FFEBF1DE"/></patternFill></fill></fills>
 <borders count="2"><border/><border><left style="thin"><color rgb="FFBFBFBF"/></left><right style="thin"><color rgb="FFBFBFBF"/></right><top style="thin"><color rgb="FFBFBFBF"/></top><bottom style="thin"><color rgb="FFBFBFBF"/></bottom></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="15">
+<cellXfs count="16">
 <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>
 <xf numFmtId="0" fontId="2" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center"/></xf>
 <xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center" wrapText="1"/></xf>
@@ -56,6 +58,7 @@ const STYLES = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <xf numFmtId="164" fontId="3" fillId="7" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center"/></xf>
 <xf numFmtId="164" fontId="3" fillId="7" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1"/>
 <xf numFmtId="165" fontId="3" fillId="7" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center"/></xf>
+<xf numFmtId="166" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>
 </cellXfs>
 </styleSheet>`;
 

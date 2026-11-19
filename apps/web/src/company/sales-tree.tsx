@@ -29,9 +29,9 @@ import { reportRange } from "../team/range";
 import { PageState } from "../ui";
 
 type Unit = TeamBoard["units"][number];
-type Figures = { sold: number; target: number; today: number; people: number; vacant: number; territories: number };
+export type Figures = { sold: number; target: number; today: number; people: number; vacant: number; territories: number };
 type Level = "root" | "head" | "channel" | "manager" | "person";
-type Node = {
+export type Node = {
   key: string;
   level: Level;
   unit: Unit | null;
@@ -48,7 +48,7 @@ type Node = {
 };
 
 // The colours of the old CRM's tree: green on pace, amber a little behind, red behind, grey none.
-const COLOR: Record<Tone, string> = {
+export const COLOR: Record<Tone, string> = {
   on: "#16a34a",
   behind: "#d97706",
   far: "#dc2626",
@@ -58,11 +58,11 @@ const COLOR: Record<Tone, string> = {
 // Each head's part of the company in the Org chart (teal, indigo, purple, amber, rose, sky…).
 const HUES = ["#0f766e", "#4f46e5", "#9333ea", "#b45309", "#be123c", "#0369a1", "#4d7c0f"];
 
-const pctOf = (figures: Figures) =>
+export const pctOf = (figures: Figures) =>
   figures.target ? Math.round((figures.sold / figures.target) * 1000) / 10 : null;
-const toneOfNode = (node: Node, pace: number): Tone =>
+export const toneOfNode = (node: Node, pace: number): Tone =>
   node.seat && !node.seat.person ? "vacant" : toneOf(node.figures.sold, node.figures.target || null, pace);
-const people = (count: number) => `${count} ${count === 1 ? "person" : "people"}`;
+const people_ = (count: number) => `${count} ${count === 1 ? "person" : "people"}`;
 
 /** A channel's letters: its capitals' word (RX, CLIDP, B2B, NCR), else the words' first letters. */
 function codeOf(name: string): string {
@@ -805,20 +805,23 @@ function Details({
 }
 
 /**
- * The tree from the board, in the old tree's levels: the CEO; each head (a business's lead); their
- * channels and teams (the chart's boxes under them, mint); each box's coach when it has one; the
- * people in their seats. A box with nobody selling under it stays out (HR, IT…) unless every team
- * is asked for. Every box's figures are the sum of what is under it.
+ * The tree from the board, in the sales tracker's levels (Aryan, 19 Nov: "the tracker is God"):
+ * the CEO; each Head (a business's lead); their Channels (the boxes right under them, mint); each
+ * channel's Manager (its lead; a channel with no lead of its own shows its head, as the tracker's
+ * "CLIDP · SUBIR"); the Sales persons. A box inside a channel with its own lead is a manager
+ * (HOSP's Julius, Daniel…); one without folds its people into the manager above (RX Business's
+ * Uro & Onco and Blood & Bone are Honey's people). People sitting straight under a head are their
+ * own channel (Modern Trade's MT, under Mhalou). Only those who sell show: a target set for the
+ * month or a sale in it (the tracker's rows), unless every team is asked for. Every box's figures
+ * are the sum of what is under it.
  */
-function build(board: TeamBoard, everyone: boolean): Node {
+export function build(board: TeamBoard, everyone: boolean): Node {
   const units = board.units;
   const ids = new Set(units.map((one) => one.id));
   const seatsOf = new Map<number, TeamSeatCard[]>();
   for (const seat of board.seats) seatsOf.set(seat.unitId, [...(seatsOf.get(seat.unitId) ?? []), seat]);
-  // A seat that sells: its work is selling (MedRep, a team's lead, the online desk), or it has a
-  // target, or it sold something in the days picked. So a new channel's seats show by themselves.
-  const sellingSeat = (seat: TeamSeatCard) =>
-    (seat.target ?? 0) > 0 || seat.sold > 0 || /^(medrep|team lead|online desk)$/i.test(seat.moduleLabel);
+  const childrenOf = (unitId: number) => units.filter((one) => one.parentId === unitId);
+  const sells = (seat: TeamSeatCard) => everyone || seat.target !== null || seat.sold > 0;
   const zero: Figures = { sold: 0, target: 0, today: 0, people: 0, vacant: 0, territories: 0 };
   const add = (a: Figures, b: Figures): Figures => ({
     sold: a.sold + b.sold,
@@ -828,6 +831,7 @@ function build(board: TeamBoard, everyone: boolean): Node {
     vacant: a.vacant + b.vacant,
     territories: a.territories + b.territories,
   });
+  const sum = (nodes: Node[], start: Figures = zero) => nodes.reduce((all, node) => add(all, node.figures), start);
   const seatFigures = (seat: TeamSeatCard): Figures => ({
     sold: seat.sold,
     target: seat.target ?? 0,
@@ -836,139 +840,218 @@ function build(board: TeamBoard, everyone: boolean): Node {
     vacant: seat.person ? 0 : 1,
     territories: seat.area ? 1 : 0,
   });
-  const personNode = (seat: TeamSeatCard, path: string[], hue: string): Node => {
-    const key = `s:${seat.seatId}`;
+  const leadOf = (unit: Unit) => (seatsOf.get(unit.id) ?? []).find((seat) => seat.seatId === unit.leadSeatId) ?? null;
+  const nameOf = (seat: TeamSeatCard | null) => seat?.person?.name ?? (seat?.acting ? `${seat.acting.name} (covering)` : null);
+  const personNode = (seat: TeamSeatCard, hue: string): Node => ({
+    key: `s:${seat.seatId}`,
+    level: "person",
+    unit: null,
+    seat,
+    name: seat.person?.name ?? "VACANT",
+    sub: seat.area?.name?.split("|").pop()?.trim() || "On site",
+    code: initialOf(seat.person?.name ?? "?"),
+    hue,
+    figures: seatFigures(seat),
+    children: [],
+    path: [],
+  });
+  /** A box's own sellers, and those of the boxes inside it with no lead of their own (folded in);
+   *  the boxes inside it that have a lead come back as managers. */
+  const gather = (unit: Unit, hue: string): { people: Node[]; managers: Node[] } => {
+    const people = (seatsOf.get(unit.id) ?? [])
+      .filter((seat) => seat.seatId !== unit.leadSeatId && sells(seat))
+      .map((seat) => personNode(seat, hue));
+    const managers: Node[] = [];
+    for (const child of childrenOf(unit.id)) {
+      const lead = leadOf(child);
+      if (lead && nameOf(lead)) {
+        const manager = managerNode(child, lead, hue);
+        if (manager) managers.push(manager);
+      } else {
+        const inner = gather(child, hue);
+        people.push(...inner.people);
+        managers.push(...inner.managers);
+      }
+    }
+    people.sort((a, b) => b.figures.sold - a.figures.sold);
+    return { people, managers };
+  };
+  /** A manager: the person leading a box, their people (and any managers) under them. */
+  const managerNode = (unit: Unit, lead: TeamSeatCard, hue: string, key = `m:${unit.id}`): Node | null => {
+    const { people, managers } = gather(unit, hue);
+    const kids = [...managers, ...people];
+    if (!kids.length && !sells(lead)) return null;
+    const figures = sum(kids, lead.target !== null || lead.sold > 0 ? seatFigures(lead) : { ...zero, people: lead.person ? 1 : 0 });
+    const name = nameOf(lead) ?? "No manager";
     return {
       key,
-      level: "person",
-      unit: null,
-      seat,
-      name: seat.person?.name ?? "VACANT",
-      sub: seat.area?.name?.split("|").pop()?.trim() || "On site",
-      code: initialOf(seat.person?.name ?? "?"),
+      level: "manager",
+      unit,
+      seat: lead,
+      name,
+      sub: [lead.title?.replace(/\s*–.*$/, "") || "Manager", people_(figures.people), figures.vacant ? `${figures.vacant} vacant` : null]
+        .filter(Boolean)
+        .join(" · "),
+      code: initialOf(name),
       hue,
-      figures: seatFigures(seat),
-      children: [],
-      path: [...path, key],
+      figures,
+      children: kids,
+      path: [],
     };
   };
-  const unitNode = (unit: Unit, path: string[], depth: number, hue: string): Node | null => {
-    if (!everyone && depth === 1 && unit.kind === "department") return null;
-    const key = `u:${unit.id}`;
-    const here = [...path, key];
-    const seats = seatsOf.get(unit.id) ?? [];
-    const lead = seats.find((seat) => seat.seatId === unit.leadSeatId) ?? null;
-    const childUnits = units
-      .filter((one) => one.parentId === unit.id)
-      .map((one, index) => unitNode(one, depth === 0 ? here : here, depth + 1, depth === 0 ? (HUES[index % HUES.length] as string) : hue))
-      .filter((one): one is Node => one !== null);
-    const sellers = seats
-      .filter((seat) => seat.seatId !== unit.leadSeatId)
-      .filter((seat) => everyone || sellingSeat(seat))
-      .sort((a, b) => b.sold - a.sold);
-    const leadSells = Boolean(lead && (everyone || sellingSeat(lead)));
-    if (!everyone && depth > 0 && childUnits.length === 0 && sellers.length === 0 && !leadSells) return null;
-    const leadName = lead?.person?.name ?? (lead?.acting ? `${lead.acting.name} (covering)` : null);
-    // A head's box is the person (the old tree's "Javed · Head"); a channel or team is its box, with
-    // its coach under it when it has one (the old tree's "RX Business" then "Honey · Manager").
-    if (depth === 1) {
-      const kids = [...childUnits, ...sellers.map((seat) => personNode(seat, here, hue))];
-      const figures = kids.reduce((sum, kid) => add(sum, kid.figures), lead ? seatFigures(lead) : zero);
-      return {
-        key,
-        level: "head",
-        unit,
-        seat: null,
-        name: leadName ?? unit.name,
-        sub: [leadName ? unit.name : "No head named", people(figures.people), figures.vacant ? `${figures.vacant} vacant` : null]
-          .filter(Boolean)
-          .join(" · "),
-        code: codeOf(unit.name),
-        hue,
-        figures,
-        children: kids,
-        path: here,
-      };
-    }
-    if (depth === 0) {
-      const kids = childUnits;
-      const figures = kids.reduce((sum, kid) => add(sum, kid.figures), zero);
-      const ceo = board.lead && /ceo|chief executive/i.test(board.lead.title ?? "") ? board.lead.name : null;
-      return {
-        key,
-        level: "root",
-        unit,
-        seat: null,
-        name: ceo ?? unit.name,
-        sub: [ceo ? "CEO" : null, people(figures.people), figures.vacant ? `${figures.vacant} vacant` : null].filter(Boolean).join(" · "),
-        code: codeOf(unit.name),
-        hue: "#0f5c46",
-        figures,
-        children: kids,
-        path: here,
-      };
-    }
-    // A channel or team, and its coach.
-    const coachKey = `c:${unit.id}`;
-    const people_ = sellers.map((seat) => personNode(seat, lead && leadName ? [...here, coachKey] : here, hue));
-    const below = [...childUnits, ...people_];
-    const coachFigures = below.reduce((sum, kid) => add(sum, kid.figures), lead ? seatFigures(lead) : zero);
-    const coach: Node | null =
-      lead && leadName
-        ? {
-            key: coachKey,
+  /** A channel: the box right under a head, its manager (its own lead, else the head when nobody
+   *  inside leads), and the people. */
+  const channelNode = (unit: Unit, head: TeamSeatCard | null, hue: string): Node | null => {
+    const lead = leadOf(unit);
+    let kids: Node[];
+    if (lead && nameOf(lead)) {
+      const manager = managerNode(unit, lead, hue);
+      kids = manager ? [manager] : [];
+    } else {
+      const { people, managers } = gather(unit, hue);
+      if (!people.length && !managers.length) return null;
+      if (managers.length) kids = [...managers, ...people];
+      else if (head && nameOf(head)) {
+        // No lead of its own and nobody inside leading: the head manages it (the tracker's CLIDP · SUBIR).
+        const figures = sum(people);
+        kids = [
+          {
+            key: `h:${unit.id}`,
             level: "manager",
-            unit: null,
-            seat: lead,
-            name: leadName,
-            sub: [lead.title?.replace(/\s*–.*$/, "") || "Coach", people(coachFigures.people), coachFigures.vacant ? `${coachFigures.vacant} vacant` : null]
-              .filter(Boolean)
-              .join(" · "),
-            code: initialOf(leadName),
+            unit,
+            seat: head,
+            name: nameOf(head) ?? "",
+            sub: ["Manager", people_(figures.people), figures.vacant ? `${figures.vacant} vacant` : null].filter(Boolean).join(" · "),
+            code: initialOf(nameOf(head) ?? "?"),
             hue,
-            figures: coachFigures,
-            children: below,
-            path: [...here, coachKey],
-          }
-        : null;
-    const figures = coach ? coach.figures : coachFigures;
+            figures,
+            children: people,
+            path: [],
+          },
+        ];
+      } else kids = people;
+    }
+    if (!kids.length) return null;
+    const figures = sum(kids);
     return {
-      key,
+      key: `u:${unit.id}`,
       level: "channel",
       unit,
       seat: null,
       name: unit.name,
-      sub: [people(figures.people), figures.vacant ? `${figures.vacant} vacant` : null].filter(Boolean).join(" · "),
+      sub: [people_(figures.people), figures.vacant ? `${figures.vacant} vacant` : null].filter(Boolean).join(" · "),
       code: codeOf(unit.name),
       hue,
       figures,
-      children: coach ? [coach] : below,
-      path: here,
+      children: kids,
+      path: [],
     };
   };
-  const roots = units.filter((one) => one.parentId === null || !ids.has(one.parentId));
+  const headNode = (unit: Unit, hue: string): Node | null => {
+    if (!everyone && unit.kind === "department") return null;
+    const head = leadOf(unit);
+    const channels = childrenOf(unit.id)
+      .map((child) => channelNode(child, head, hue))
+      .filter((one): one is Node => one !== null);
+    // People sitting straight under the head: their own channel, named for the business (Modern
+    // Trade's MT), managed by the head.
+    const direct = (seatsOf.get(unit.id) ?? [])
+      .filter((seat) => seat.seatId !== unit.leadSeatId && sells(seat))
+      .map((seat) => personNode(seat, hue))
+      .sort((a, b) => b.figures.sold - a.figures.sold);
+    if (direct.length) {
+      const figures = sum(direct);
+      const manager: Node = {
+        key: `h:${unit.id}:own`,
+        level: "manager",
+        unit,
+        seat: head,
+        name: nameOf(head) ?? unit.name,
+        sub: ["Manager", people_(figures.people), figures.vacant ? `${figures.vacant} vacant` : null].filter(Boolean).join(" · "),
+        code: initialOf(nameOf(head) ?? unit.name),
+        hue,
+        figures,
+        children: direct,
+        path: [],
+      };
+      channels.push({
+        key: `u:${unit.id}:own`,
+        level: "channel",
+        unit,
+        seat: null,
+        name: codeOf(unit.name),
+        sub: [unit.name, people_(figures.people)].join(" · "),
+        code: codeOf(unit.name),
+        hue,
+        figures,
+        children: [manager],
+        path: [],
+      });
+    }
+    if (!channels.length && !everyone) return null;
+    const figures = sum(channels, head && (head.target !== null || head.sold > 0) ? seatFigures(head) : zero);
+    const headName = nameOf(head);
+    return {
+      key: `u:${unit.id}`,
+      level: "head",
+      unit,
+      seat: head,
+      name: headName ?? unit.name,
+      sub: [headName ? unit.name : "No head named", people_(figures.people), figures.vacant ? `${figures.vacant} vacant` : null]
+        .filter(Boolean)
+        .join(" · "),
+      code: codeOf(unit.name),
+      hue,
+      figures,
+      children: channels,
+      path: [],
+    };
+  };
+  const rootNode = (unit: Unit): Node => {
+    const heads = childrenOf(unit.id)
+      .map((child, index) => headNode(child, HUES[index % HUES.length] as string))
+      .filter((one): one is Node => one !== null);
+    const figures = sum(heads);
+    const ceo = board.lead && /ceo|chief executive/i.test(board.lead.title ?? "") ? board.lead.name : null;
+    return {
+      key: `u:${unit.id}`,
+      level: "root",
+      unit,
+      seat: null,
+      name: ceo ?? unit.name,
+      sub: [ceo ? "CEO" : null, people_(figures.people), figures.vacant ? `${figures.vacant} vacant` : null].filter(Boolean).join(" · "),
+      code: codeOf(unit.name),
+      hue: "#0f5c46",
+      figures,
+      children: heads,
+      path: [],
+    };
+  };
   const withPaths = (node: Node, above: string[]): Node => {
     const path = [...above, node.key];
     return { ...node, path, children: node.children.map((child) => withPaths(child, path)) };
   };
-  const built = roots
-    .map((one) => unitNode(one, [], 0, "#0f5c46"))
-    .filter((one): one is Node => one !== null)
-    .map((one) => withPaths(one, []));
-  if (built.length === 1) return built[0] as Node;
-  // Several tops (a lead looking at two teams): one box over them.
-  const figures = built.reduce((sum, kid) => add(sum, kid.figures), zero);
-  return {
-    key: "top",
-    level: "root",
-    unit: null,
-    seat: null,
-    name: board.lead?.name ?? "Your teams",
-    sub: people(figures.people),
-    code: "",
-    hue: "#0f5c46",
-    figures,
-    children: built.map((one) => withPaths({ ...one, level: one.level === "root" ? "head" : one.level }, ["top"])),
-    path: ["top"],
-  };
+  const roots = units.filter((one) => one.parentId === null || !ids.has(one.parentId));
+  // The company on top; a lead looking at their own part of it: their box (and boxes) as the top.
+  const built = roots.map((one) =>
+    one.kind === "company" ? rootNode(one) : (headNode(one, HUES[0] as string) ?? rootNode(one)),
+  );
+  if (built.length === 1) return withPaths(built[0] as Node, []);
+  const figures = sum(built);
+  return withPaths(
+    {
+      key: "top",
+      level: "root",
+      unit: null,
+      seat: null,
+      name: board.lead?.name ?? "Your teams",
+      sub: people_(figures.people),
+      code: "",
+      hue: "#0f5c46",
+      figures,
+      children: built.map((one) => ({ ...one, level: one.level === "root" ? "head" : one.level })),
+      path: [],
+    },
+    [],
+  );
 }

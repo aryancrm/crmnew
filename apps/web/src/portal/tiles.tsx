@@ -18,6 +18,27 @@ export const TILE_ICONS: Record<string, () => ReactNode> = {
       <path d="M20 50h24" stroke="#fff" strokeWidth="4" strokeLinecap="round" />
     </Mark>
   ),
+  // A team lead: their people around them.
+  leads: () => (
+    <Mark label="Team leads">
+      <circle cx="32" cy="32" r="30" fill="#0ea5a4" />
+      <circle cx="32" cy="24" r="7" fill="#fff" />
+      <path d="M20 44c1.5-7 6.5-11 12-11s10.5 4 12 11" fill="#fff" />
+      <circle cx="16" cy="30" r="4.5" fill="#fff" opacity="0.8" />
+      <circle cx="48" cy="30" r="4.5" fill="#fff" opacity="0.8" />
+    </Mark>
+  ),
+  // A head: the channels branching under them.
+  heads: () => (
+    <Mark label="Heads">
+      <circle cx="32" cy="32" r="30" fill="#0f766e" />
+      <circle cx="32" cy="17" r="6" fill="#fff" />
+      <path d="M32 23v9M18 32h28M18 32v9M32 32v9M46 32v9" stroke="#fff" strokeWidth="3.5" strokeLinecap="round" />
+      <circle cx="18" cy="46" r="4.5" fill="#fff" />
+      <circle cx="32" cy="46" r="4.5" fill="#fff" />
+      <circle cx="46" cy="46" r="4.5" fill="#fff" />
+    </Mark>
+  ),
   management: () => (
     <Mark label="Management">
       <path d="M5 34l14-14 14 14-14 14z" fill="#2f6fe4" />
@@ -108,6 +129,8 @@ export const TILE_ICONS: Record<string, () => ReactNode> = {
 /** The colour of each workspace's soft glow behind its tile. */
 export const TILE_GLOW: Record<string, string> = {
   sales: "#34b261",
+  leads: "#0ea5a4",
+  heads: "#0f766e",
   management: "#2f6fe4",
   finance: "#a259ff",
   inventory: "#f59e0b",

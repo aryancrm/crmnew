@@ -9,7 +9,11 @@ export type Workspace = { key: string; label: string; about: string; roles: stri
 
 // In the order line's order (Aryan, 19 Nov): Sales and field, Management, Finance, Dispatch, then the rest.
 export const WORKSPACES: Workspace[] = [
-  { key: "sales", group: "selling", label: "Sales and field", about: "MedReps, team leads, heads", roles: ["medrep", "team_lead", "manager"] },
+  // The sales line's three doors (Aryan, 19 Nov: "where do team leads sign in, where do heads?"),
+  // as the sales tracker has it: the sales people, their managers, the heads of the channels.
+  { key: "sales", group: "selling", label: "MedReps", about: "Visits, orders, your customers", roles: ["medrep"] },
+  { key: "leads", group: "selling", label: "Team leads", about: "Managers: your team's orders and figures", roles: ["team_lead"] },
+  { key: "heads", group: "selling", label: "Heads", about: "Your channels, managers and people", roles: ["manager"] },
   { key: "management", group: "operations", label: "Management", about: "Order approvals, customers", roles: ["management"] },
   { key: "finance", group: "operations", label: "Finance", about: "Payments, invoices, the books", roles: ["finance"] },
   { key: "dispatch", group: "operations", label: "Dispatch", about: "Packing and delivery", roles: ["dispatch"] },

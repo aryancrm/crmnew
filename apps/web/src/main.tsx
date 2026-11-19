@@ -46,6 +46,8 @@ import { MyPayslipsPage } from "./hr/my-payslips";
 import { CompanyMapPage } from "./company/map";
 import { MyTeamPage, TeamSeatPage } from "./team/my-team";
 import { SalesTreePage } from "./company/sales-tree";
+import { DivisionsPage } from "./company/divisions";
+import { StockReportPage } from "./inventory/stock-report";
 import { NotBuilt, OnlyFor } from "./home/not-built";
 import { Order } from "./orders/order";
 import { OrderNew } from "./orders/order-new";
@@ -271,6 +273,8 @@ createRoot(root).render(
             <Route path="company" element={<OrgChartPage />} />
             <Route path="company/map" element={<CompanyMapPage />} />
             <Route path="company/sales" element={<SalesTreePage />} />
+            <Route path="divisions" element={<DivisionsPage />} />
+            <Route path="inventory/stock-report" element={<StockReportPage />} />
             <Route path="people" element={<OrgPage />} />
             <Route path="hr/people" element={<HrPeoplePage />} />
             <Route path="hr/people/:id" element={<HrPersonPage key="person" />} />

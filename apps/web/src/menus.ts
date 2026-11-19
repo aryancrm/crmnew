@@ -257,6 +257,8 @@ function inventoryApp(me: Me): Space {
         title: "Inventory",
         items: [
           { to: "/inventory", label: "Stock by warehouse", icon: Boxes },
+          // Every batch, as Zoho's batch report and more, downloadable as Excel (Aryan, 19 Nov).
+          { to: "/inventory/stock-report", label: "Stock report", icon: FileBarChart },
           { to: "/adjustments", label: "Adjustments", icon: SlidersHorizontal },
           { to: "/transfers", label: "Transfers", icon: ArrowLeftRight },
           // Where a batch went, for a recall (ERP phase 3).
@@ -1400,12 +1402,17 @@ function ownDesk(me: Me): Space {
               home,
               // The month against the target, the CEO's first look (Aryan, 18 Nov).
               { to: "/key-reports/target-sheet", label: "Target sheet", icon: Target },
+              // Each channel as its own app: a press opens all of its data (Aryan, 19 Nov).
+              { to: "/divisions", label: "Divisions", icon: LayoutGrid },
               folder(
                 "Company",
                 Network,
                 [
                   { to: "/my-team", label: "Company view", icon: BarChart3, teams: true },
                   { to: "/company/sales", label: "Sales organisation", icon: Network },
+                  // The Admin panel's channels, each with its head, managers and sales people
+                  // (Aryan, 19 Nov: "put the Admin panel's Channels in the CEO's too").
+                  { to: "/admin/channels", label: "Channels", icon: Network },
                   { to: "/company/map", label: "Map", icon: MapPin },
                   { to: "/company", label: "Company chart", icon: Network },
                   { to: "/audit", label: "Audit", icon: ScrollText },
