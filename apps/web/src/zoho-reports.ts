@@ -11,7 +11,7 @@ export const ZOHO_REPORT_GROUPS: ZohoReportGroup[] = [
     key: "leads",
     label: "Leads",
     reports: [
-      { name: "Raw Leads With number", about: "Every lead: name, company, order, mobile, created (128,635 in Zoho)", used: true },
+      { name: "Raw Leads With number", about: "Every lead: name, company, order, mobile, created (128,635 in the old CRM)", used: true },
       { name: "Today's Leads", used: true },
       { name: "Lead_Report", used: true },
       { name: "Leads to Deals", used: true },
@@ -33,7 +33,7 @@ export const ZOHO_REPORT_GROUPS: ZohoReportGroup[] = [
     key: "customers",
     label: "Customers",
     reports: [
-      { name: "Customer with Products", about: "Customer, company, mobile, medicine, city, barangay, order (210,924 rows in Zoho)", used: true },
+      { name: "Customer with Products", about: "Customer, company, mobile, medicine, city, barangay, order (210,924 rows in the old CRM)", used: true },
       { name: "Customer Report", used: true },
       { name: "Ordercontacts", used: true },
       { name: "City/municipility Report", used: true },

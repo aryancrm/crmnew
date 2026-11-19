@@ -166,11 +166,11 @@ export const TABLE = "w-full border-collapse text-[13.5px]";
 export const TH = "border-b border-slate-200 bg-slate-50/80 px-3 py-2.5 text-left text-[11px] font-semibold tracking-wide text-slate-500 uppercase first:pl-4 last:pr-4";
 export const TD = "border-b border-slate-100 px-3 py-3 align-middle first:pl-4 last:pr-4";
 
-/** "Zoho view" — the same list in Zoho's look, kept to show both. */
+/** "Books view": the same records in the books' own look, kept to show both. */
 export function ZohoLink({ to }: { to: string }) {
   return (
-    <Link to={to} className="inline-flex h-10 items-center rounded-[10px] px-3 text-[13px] font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800" title="The same records in Zoho's look">
-      Zoho view
+    <Link to={to} className="inline-flex h-10 items-center rounded-[10px] px-3 text-[13px] font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800" title="The same records in the books' own look">
+      Books view
     </Link>
   );
 }

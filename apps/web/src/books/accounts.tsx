@@ -120,7 +120,7 @@ function ChartOfAccounts() {
         {query.isError && <p className="px-6 py-10 text-center text-[#f76831]">{query.error.message}</p>}
         {query.isPending && <p className="px-6 py-10 text-center text-[#6c718a]">Adding up every account…</p>}
         <p className="px-5 py-4 text-[12px] text-[#6c718a]">
-          Balances are what the documents put on each account up to today: payments, expenses, journals, transfers, deposits, refunds, bills and invoices. Zoho's cost of goods sold and stock postings are not in Zoho's backup, so the stock and cost accounts don't show them.
+          Balances are what the documents put on each account up to today: payments, expenses, journals, transfers, deposits, refunds, bills and invoices. The old system's cost of goods sold and stock postings are not in its backup, so the stock and cost accounts don't show them.
         </p>
       </div>
     </div>

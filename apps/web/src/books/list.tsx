@@ -25,14 +25,14 @@ const NEW_HINT: Partial<Record<string, string>> = {
   purchase_receive: "A receive is made from its purchase order: open the order and press Receive.",
   sales_return: "Sales returns are made from the order (Sales comes next).",
   credit_note: "Credit notes come with Sales (next).",
-  expense: "Expenses are still entered in Zoho until the switch; they come over with each backup.",
-  journal: "Manual journals are still made in Zoho until the switch.",
-  transfer_fund: "Transfers between accounts are still made in Zoho until the switch.",
-  deposit: "Deposits are still made in Zoho until the switch.",
+  expense: "Expenses are still entered in the old system until the switch; they come over with each backup.",
+  journal: "Manual journals are still made in the old system until the switch.",
+  transfer_fund: "Transfers between accounts are still made in the old system until the switch.",
+  deposit: "Deposits are still made in the old system until the switch.",
   refund: "A refund is made from its credit note.",
-  recurring_bill: "Recurring bills are still kept in Zoho until the switch.",
-  recurring_expense: "Recurring expenses are still kept in Zoho until the switch.",
-  fixed_asset: "Fixed assets are still kept in Zoho until the switch.",
+  recurring_bill: "Recurring bills are still kept in the old system until the switch.",
+  recurring_expense: "Recurring expenses are still kept in the old system until the switch.",
+  fixed_asset: "Fixed assets are still kept in the old system until the switch.",
 };
 
 /** Columns that stay on one line, as in Zoho. */

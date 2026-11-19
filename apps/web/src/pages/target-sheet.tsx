@@ -61,7 +61,7 @@ export function TargetSheetPage() {
     if (!data) return;
     const quote = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
     const lines = [
-      ["Head", "Channel", "Manager", "Sales Person", "Zoho name", "HQ", `${monthName} Target`, `${monthName} Ach`, `BTD ${monthName}`, "Today's invoicing", "%"].map(quote).join(","),
+      ["Head", "Channel", "Manager", "Sales Person", "Sales code", "HQ", `${monthName} Target`, `${monthName} Ach`, `BTD ${monthName}`, "Today's invoicing", "%"].map(quote).join(","),
       ...data.rows.map((row) =>
         [row.head, row.channel, row.manager, row.salesperson, row.zoho, row.hq ?? "", whole(row.target), whole(row.ach), whole(row.target - row.ach), whole(row.today), pctOf(row.ach, row.target)?.toFixed(2) ?? ""]
           .map(quote)
@@ -121,7 +121,7 @@ export function TargetSheetPage() {
                 <th className={TH}>Channel</th>
                 <th className={TH}>Manager</th>
                 <th className={TH}>Sales Person</th>
-                <th className={TH}>Zoho name</th>
+                <th className={TH}>Sales code</th>
                 <th className={TH}>HQ</th>
                 <th className={TH}>{monthName} Target</th>
                 <th className={TH}>{monthName} Ach</th>

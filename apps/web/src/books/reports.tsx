@@ -71,7 +71,7 @@ export const REPORTS: Report[] = [
   { key: "payables-aging", title: "Payables Aging", about: "Unpaid bills by supplier and by how late they are.", group: "Payables", days: "none" },
   { key: "vat", title: "VAT Summary", about: "Output VAT on sales, input VAT on bills and expenses, tax withheld (2307), month by month.", group: "Taxes", days: "range" },
   { key: "trial-balance", title: "Trial Balance", about: "Every account's balance on a day; debits equal credits.", group: "Accountant", days: "asOf" },
-  { key: "sales-trend", title: "Sales by Channel, Month by Month", about: "Six months of billing (Zoho's and the CRM's) by channel, to the day picked.", group: "Sales", days: "range", insight: true, roles: SALES },
+  { key: "sales-trend", title: "Sales by Channel, Month by Month", about: "Six months of billing (the old system's and the CRM's) by channel, to the day picked.", group: "Sales", days: "range", insight: true, roles: SALES },
   { key: "sales-by-branch", title: "Sales by Branch, Month by Month", about: "Six months of billing by warehouse (Main, Cebu, Davao…).", group: "Sales", days: "range", insight: true, roles: SALES },
   { key: "top-medicines", title: "Top Medicines", about: "What sold most in these days, against the same number of days before.", group: "Sales", days: "range", insight: true, roles: SALES },
   { key: "abc", title: "ABC Classes", about: "The last 12 months' sales by medicine: A the first 80%, B the next 15%, C the rest.", group: "Sales", days: "none", insight: true, roles: SALES },
@@ -110,7 +110,7 @@ export const REPORTS: Report[] = [
   { key: "ar-aging", title: "AR Aging Summary", about: "What each customer owes by how late it is: current, 1-15, 16-30, 31-45, over 45 days.", group: "Receivables", days: "asOf", insight: true },
   { key: "ar-aging-details", title: "AR Aging Details", about: "Every unpaid invoice with its age, the latest first.", group: "Receivables", days: "asOf", insight: true },
   { key: "customer-balances", title: "Customer Balance Summary", about: "What each customer owes and the credit they hold.", group: "Receivables", days: "asOf", insight: true },
-  { key: "payments-received", title: "Payments Received", about: "Money received from customers, the CRM's and Zoho's, with where it went.", group: "Receivables", days: "range", insight: true },
+  { key: "payments-received", title: "Payments Received", about: "Money received from customers, the CRM's and the old system's, with where it went.", group: "Receivables", days: "range", insight: true },
   { key: "credit-notes", title: "Credit Note Details", about: "Credit notes, what each credited and what is left of it.", group: "Receivables", days: "range", insight: true },
   { key: "sales-by-customer", title: "Sales by Customer", about: "What each customer was invoiced in these days.", group: "Sales", days: "range", insight: true, roles: SALES },
   { key: "vendor-balances", title: "Vendor Balance Summary", about: "What the company owes each vendor, and the credit it holds with them.", group: "Payables", days: "none", insight: true },
@@ -183,7 +183,7 @@ function ReportsIndex() {
     <div className="h-full overflow-y-auto">
       <div className="border-b border-[#ebeaf2] px-6 py-4">
         <h1 className="text-[20px] font-normal">Reports</h1>
-        <p className="text-[#6c718a]">Read live from the books: Zoho's history and every invoice, payment, refund, return and delivery made in the CRM.</p>
+        <p className="text-[#6c718a]">Read live from the books: the old system's history and every invoice, payment, refund, return and delivery made in the CRM.</p>
       </div>
       <div className="grid gap-6 px-6 py-5 md:grid-cols-2 xl:grid-cols-3">
         {groups.map((group) => (

@@ -236,7 +236,7 @@ function Item({ id, onClose }: { id: number; onClose: () => void }) {
             </div>
             {Object.keys(item.zohoStock).length > 0 && (
               <div className="rounded-md border border-[#ebeaf2] p-4">
-                <div className="mb-2 font-semibold">Zoho's figures (when read)</div>
+                <div className="mb-2 font-semibold">The old system's figures (when read)</div>
                 <dl className="grid grid-cols-[1fr_auto] gap-y-1">
                   {ZOHO_STOCK.filter(([key]) => item.zohoStock[key] !== undefined).map(([key, word]) => (
                     <div key={key} className="contents">
@@ -268,7 +268,7 @@ function Item({ id, onClose }: { id: number; onClose: () => void }) {
             {!item.warehouses.length && (
               <tr>
                 <td colSpan={2} className="px-3 py-4 text-[#6c718a]">
-                  {item.medicineId ? "None on the shelf." : "Not one of this CRM's medicines: Zoho's own figures are on Overview."}
+                  {item.medicineId ? "None on the shelf." : "Not one of this CRM's medicines: the old system's figures are on Overview."}
                 </td>
               </tr>
             )}

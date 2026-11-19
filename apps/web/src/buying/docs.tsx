@@ -201,7 +201,7 @@ export function DocPage({ kind }: { kind: DocKind }) {
             ) : (
               doc.party
             )}
-            {doc.fromZoho ? " · from Zoho" : ""}
+            {doc.fromZoho ? " · from the old system" : ""}
           </>
         }
         actions={

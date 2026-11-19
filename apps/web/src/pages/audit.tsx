@@ -45,7 +45,7 @@ export function AuditPage() {
     <div className={`mx-auto w-full max-w-screen-xl space-y-4 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
       <header>
         <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Audit</h1>
-        <p className="mt-1 text-[13px] text-slate-500">Who did what, when: every order step, case, tender, registration, stock move, payment, refund and seat change, and Zoho's own log.</p>
+        <p className="mt-1 text-[13px] text-slate-500">Who did what, when: every order step, case, tender, registration, stock move, payment, refund and seat change, and the old system's own log.</p>
       </header>
       <div className="flex flex-wrap items-center gap-2">
         <select className={INPUT} value={params.get("kind") ?? ""} onChange={(event) => set("kind", event.target.value)} aria-label="Kind">

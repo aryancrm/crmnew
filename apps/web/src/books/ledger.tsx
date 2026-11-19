@@ -956,7 +956,7 @@ export function RecurringPanel({ doc }: { doc: BookDoc }) {
       <p className="text-[13px] text-[#6c718a]">
         {crmFrom
           ? `This profile's ${list} are made here from ${zDate(crmFrom)} (each day once).`
-          : "Zoho still makes this profile's documents. Pick the day this CRM takes over, and stop the profile in Zoho on the same day."}
+          : "The old system still makes this profile's documents. Pick the day this CRM takes over, and stop the profile there on the same day."}
       </p>
       {action.problem && <div className="mt-2 text-[#b91c1c]">{action.problem.message}</div>}
       <div className="mt-2 flex flex-wrap items-end gap-2">

@@ -14,7 +14,7 @@ export function ZohoReportsPage() {
     <div className="mx-auto flex max-w-5xl flex-col gap-4">
       <PageHead
         title={group.label}
-        sub="Zoho CRM's reports"
+        sub="The old CRM's reports, before this one"
       />
       <div className="flex flex-wrap gap-1.5">
         {ZOHO_REPORT_GROUPS.map((one) => (

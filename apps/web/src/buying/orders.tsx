@@ -64,7 +64,7 @@ export function PurchaseOrdersPage() {
     <div className="mx-auto flex max-w-[88rem] flex-col gap-4">
       <PageHead
         title="Purchase orders"
-        sub="Every order to a vendor, Zoho's and those made here, by where it stands"
+        sub="Every order to a vendor, the old system's and those made here, by where it stands"
         actions={
           <>
             <ZohoLink to="/books/purchaseorders" />
@@ -218,7 +218,7 @@ export function PurchaseOrderPage() {
             ) : (
               order.party
             )}
-            {order.fromZoho ? " · from Zoho" : ""}
+            {order.fromZoho ? " · from the old system" : ""}
           </>
         }
         actions={
@@ -643,7 +643,7 @@ function ReceivedPanel({
       )}
       <Box title="What came in" aside={<span className="text-[12px] text-slate-500">Cost of one piece: at the order's price, and now (with freight, customs…)</span>}>
         {batches.length === 0 ? (
-          <p className="px-4 py-6 text-center text-[13px] text-slate-500">{order.fromZoho ? "Received in Zoho before the switch: the receives are in Zoho's view." : "Nothing came yet."}</p>
+          <p className="px-4 py-6 text-center text-[13px] text-slate-500">{order.fromZoho ? "Received in the old system before the switch: its receives are in the Books view." : "Nothing came yet."}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className={TABLE}>

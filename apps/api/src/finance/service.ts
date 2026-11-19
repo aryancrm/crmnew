@@ -1503,7 +1503,7 @@ export async function owedInvoices(db: Database, me: Me): Promise<OwedInvoices> 
     ...row,
     terms:
       termsKey === "zoho"
-        ? "From Zoho"
+        ? "From before"
         : termsKey === "by_date"
           ? "By a date"
           : termsKey === "days"

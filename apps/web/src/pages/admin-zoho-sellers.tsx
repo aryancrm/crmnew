@@ -27,7 +27,7 @@ export function AdminZohoSellers() {
     for (const seat of data?.seats ?? []) groups.set(seat.channel ?? "—", [...(groups.get(seat.channel ?? "—") ?? []), seat]);
     return [...groups];
   }, [data]);
-  if (!data) return <PageState query={query} what="Zoho's salespeople" />;
+  if (!data) return <PageState query={query} what="the old system's salespeople" />;
 
   const tie = async (name: string, seatId: number | null) => {
     setBusy(name);
@@ -233,7 +233,7 @@ function Compare({ data }: { data: ZohoSellers }) {
               <table className="w-full text-[13px]">
                 <thead>
                   <tr className="border-b border-slate-100 text-left text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
-                    <th className="px-4 py-2">Zoho name</th>
+                    <th className="px-4 py-2">Old system name</th>
                     <th className="px-3 py-2 text-right">This year</th>
                     <th className="px-3 py-2">In the hub: person · under</th>
                     <th className="px-3 py-2">In our org chart today</th>

@@ -512,19 +512,13 @@ export function Order() {
       },
       { replace: true },
     );
-  const managing =
-    desk === "management" &&
-    (can.approve ||
-      order.status === "pending_approval" ||
-      (can.resume && order.heldRole === "management"));
-  const financeWork =
-    desk === "finance" && (order.status === "finance_check" || order.status === "ready_for_invoice");
-  const dispatchWork =
-    desk === "dispatch" && (order.status === "ready_for_dispatch" || order.status === "packing");
-  const deliveryWork = desk === "dispatch" && order.status === "shipped";
   // Management's and Finance's own page (Aryan, 18 Nov): the top short, then, as on the Leads
   // case, its steps at the side (each ticked once fine), the one picked open beside them.
   const deskView = desk === "management" || desk === "finance";
+  // Everyone else (the MedRep, a lead, the CEO, Dispatch) reads the same page (Aryan, 19 Nov: "the
+  // hub's copy, where is ours?"): the order's road at the side, the step picked open beside it.
+  const roadView = !deskView;
+  const shortTop = true;
   const atMyDesk =
     (desk === "management" && (order.status === "pending_approval" || order.heldRole === "management")) ||
     (desk === "finance" && (["finance_check", "ready_for_invoice"].includes(order.status) || order.heldRole === "finance"));
@@ -597,7 +591,7 @@ export function Order() {
         <ChevronLeft className="size-4" aria-hidden="true" /> Back
       </button>
 
-      <section className={`rounded-xl border border-slate-200 bg-white shadow-sm ${deskView ? "p-4" : "p-5"}`}>
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <div className="text-xs text-ink-2">Order ID</div>
@@ -671,8 +665,9 @@ export function Order() {
           </div>
         </div>
 
-        {deskView && (
-          // Management's and Finance's page: the facts that matter in one line; the rest on a press.
+        {shortTop && (
+          // Every order page (Aryan, 19 Nov: "ours, not the hub's"): the facts that matter in one
+          // line; the rest on a press.
           <>
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-slate-100 pt-3 text-[13px] text-ink-2">
               <span className="inline-flex min-w-0 items-center gap-1">
@@ -709,7 +704,7 @@ export function Order() {
             )}
           </>
         )}
-        {(!deskView || moreOpen) && (
+        {(!shortTop || moreOpen) && (
           <>
         <div className="mt-5 grid gap-5 border-t border-slate-100 pt-4 sm:grid-cols-2">
           <div className="min-w-0">
@@ -1019,53 +1014,117 @@ export function Order() {
           </div>
         </div>
       )}
-      {/* This person's step on the order, as the hub's approval band: Management approves,
-          Finance makes and collects, Dispatch packs and ships. */}
-      {!deskView && managing && (
-        <section className="mt-4 rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-3 text-xs font-semibold tracking-wide text-ink-2 uppercase">
-            Management approval
+      {roadView && (
+        <div className="mt-4 grid items-start gap-4 lg:grid-cols-[19rem_minmax(0,1fr)] 2xl:grid-cols-[21rem_minmax(0,1fr)]">
+          <div className="flex min-w-0 flex-col gap-4">
+            <nav aria-label="Steps" className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+              <div className="px-2.5 pt-1.5 pb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-400 uppercase">
+                {desk === "dispatch" ? "Dispatch steps" : "Where the order is"}
+              </div>
+              {railSteps.map((item) => {
+                const on = item.key === opened;
+                return (
+                  <button
+                    key={item.key}
+                    type="button"
+                    aria-current={on ? "step" : undefined}
+                    onClick={() => open(item.key)}
+                    className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2.5 text-left text-[13px] transition-colors ${on ? "border-emerald-200 bg-emerald-50/70 font-semibold text-emerald-950" : "border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50"}`}
+                  >
+                    <span
+                      className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                        item.shape === "done" || item.shape === "skipped"
+                          ? "bg-emerald-600 text-white"
+                          : item.shape === "stopped"
+                            ? "bg-rose-100 text-rose-700"
+                            : on || item.shape === "now"
+                              ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
+                              : "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      {item.shape === "done" || item.shape === "skipped" ? <Check className="size-3.5" /> : item.number}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">{item.label}</span>
+                      <span
+                        className={`block truncate text-[11px] font-normal ${item.mine && item.shape !== "done" ? "font-semibold text-amber-700" : item.shape === "now" ? "font-semibold text-emerald-700" : "text-slate-500"}`}
+                      >
+                        {item.mine && item.shape !== "done" ? "Your step" : item.shape === "now" ? `Now · ${item.who}` : item.who}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+              {otherButtons && (
+                <div className="mt-1 flex flex-wrap gap-1.5 border-t border-slate-100 px-1 pt-2">{otherButtons}</div>
+              )}
+            </nav>
+            <Activity data={data} />
+            <MoneyCard data={data} />
           </div>
-          <ManagementGlance
-            data={data}
-            act={act}
-            onAsk={setAsking}
-            states={states}
-            more={otherButtons}
-            autoApprove={params.get("approve") === "1"}
-          />
-        </section>
-      )}
-      {/* Asked up the line: the Team Lead or Business Mentor answers here; others read it. */}
-      {!deskView && !managing && data.asks.length > 0 && (
-        <div className="mt-4">
-          <AskUpBox data={data} />
+          <div className="flex min-w-0 flex-col gap-4">
+            {/* Asked up the line: the Team Lead or Business Mentor answers here; others read it. */}
+            {data.asks.length > 0 && <AskUpBox data={data} />}
+            {opened === "dispatch" ? (
+              <DispatchStep data={data} n={railNumber("dispatch")} ask={ask} next={() => open("delivered")} />
+            ) : opened === "delivered" ? (
+              <DeliveredStep data={data} n={railNumber("delivered")} ask={ask} next={() => open("paid")} />
+            ) : opened === "paid" ? (
+              <PaidStep data={data} n={railNumber("paid")} />
+            ) : opened === "finance" ? (
+              <StepPanel number={3} title="Finance check">
+                <div className="flex flex-col gap-3 text-[13px]">
+                  <p className="text-slate-600">
+                    {["finance_check", "ready_for_invoice"].includes(order.status)
+                      ? "With Finance now: they check the payment (or what the customer owes) and make the invoice."
+                      : order.status === "pending_approval" || order.status === "draft"
+                        ? "Comes to Finance once Management approves."
+                        : "Finance checked it."}
+                  </p>
+                  <Papers data={data} kinds={["payment_proof", "po", "other"]} />
+                </div>
+              </StepPanel>
+            ) : opened === "management" ? (
+              <StepPanel number={2} title="Management check">
+                <div className="flex flex-col gap-3 text-[13px]">
+                  <ul className="flex flex-col gap-2">
+                    {CHECKS.filter((item) => item.key !== "approve").map((item) => {
+                      const state = states[item.key];
+                      return (
+                        <li key={item.key} className="flex items-start gap-2.5">
+                          <span className={`mt-1 size-2.5 shrink-0 rounded-full ${state.ok ? "bg-emerald-500" : "bg-amber-400"}`} aria-hidden="true" />
+                          <span className="min-w-0">
+                            <b className="text-slate-900">{checkLabel(item.key, data)}</b>
+                            <span className={`block text-[12px] ${state.ok ? "text-slate-500" : "font-semibold text-amber-700"}`}>{state.note}</span>
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <p className="rounded-lg bg-slate-50 px-3 py-2 text-slate-700">
+                    {order.approvedAt
+                      ? `Approved${order.approvedBy ? ` by ${order.approvedBy}` : ""} · ${timeLabel(order.approvedAt)}`
+                      : order.status === "pending_approval"
+                        ? "Waiting for Management to read it and approve."
+                        : order.status === "draft"
+                          ? `Sent back: ${order.flagReason ?? "fix it and place it again"}`
+                          : "Not approved."}
+                  </p>
+                </div>
+              </StepPanel>
+            ) : (
+              <StepPanel number={1} title="The order as placed">
+                <div className="flex flex-col gap-4">
+                  <Lines data={data} />
+                  <Documents data={data} />
+                  <OrderReturnsBox orderId={order.id} />
+                </div>
+              </StepPanel>
+            )}
+            <Problem message={problem?.message} />
+          </div>
         </div>
       )}
-      {!deskView && financeWork && (
-        <div className="mt-4">
-          <FinanceStep data={data} money={money} next={() => pickTab("payment")} />
-        </div>
-      )}
-      {dispatchWork && (
-        <div className="mt-4">
-          <DispatchStep data={data} ask={ask} next={() => pickTab("dispatch")} />
-        </div>
-      )}
-      {deliveryWork && (
-        <div className="mt-4">
-          <DeliveredStep data={data} ask={ask} next={() => pickTab("payment")} />
-        </div>
-      )}
-      {!deskView && !managing && otherButtons && (
-        <div className="mt-4 flex flex-wrap gap-2">{otherButtons}</div>
-      )}
-      {!deskView && (
-        <div className="mt-3">
-          <Problem message={problem?.message} />
-        </div>
-      )}
-      {!deskView && tabsBox}
 
       {asking && (
         <ReasonDialog
