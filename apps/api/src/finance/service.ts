@@ -762,15 +762,9 @@ export async function recordPayment(
   invoiceId: number,
   input: PaymentInput,
 ): Promise<void> {
-  // An Online case's agent records the money for the case's own order; Finance for any.
-  if (!FINANCE_ROLES.includes(me.role)) {
-    const [own] = await rows<{ leadId: number | null }>(
-      db,
-      sql`select o.lead_id::int as "leadId" from invoice i join sales_order o on o.id = i.order_id where i.id = ${invoiceId}`,
-    );
-    if (!own?.leadId || !CASE_AGENT_ROLES.includes(me.role))
-      allow(me, FINANCE_ROLES, "record a payment");
-  }
+  // Finance records the money received, an Online case's order's too (Aryan, 19 Nov: Online
+  // orders go the way every channel's do).
+  allow(me, FINANCE_ROLES, "record a payment");
   payable(input);
   await db.transaction(async (tx) => {
     const invoice = await lockInvoice(tx, invoiceId);

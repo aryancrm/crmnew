@@ -1,7 +1,6 @@
 // The order line's words and rules, with no database: the statuses, what each is called,
 // which the dashboard's tiles count, and who may do what. After the hub's own state machine.
 
-import { may } from "../http";
 import { DISPATCH_ROLES } from "../dispatch/rules";
 import { FINANCE_ROLES } from "../finance/rules";
 import type { Role } from "../people/roles";
@@ -63,7 +62,8 @@ export const STAGES: { key: OrderStage; label: string }[] = [
 /** Who places an order: the field, the Online desk and the Admin. Not Management: it checks and
  *  approves orders, it doesn't raise them (Aryan, 19 Nov: "why would Management create an order?"). */
 export const ORDER_PLACE_ROLES: readonly Role[] = ["medrep", "team_lead", "manager", "online", "admin"];
-/** Who takes an Online case's order to Paid: marks it delivered and records the money received. */
+/** The Online desk (and the Admin): it reads the money accounts, to tell a customer where to pay.
+ *  Its orders are delivered by Dispatch and paid in by Finance, as every channel's (19 Nov). */
 export const CASE_AGENT_ROLES: readonly Role[] = ["online", "admin"];
 export const ORDER_MANAGE_ROLES: readonly Role[] = ["management", "admin"];
 /** Who sees every order. Others see their own, or their team's. */
@@ -97,41 +97,6 @@ const OPEN: OrderStatus[] = [
   "packing",
 ];
 
-/**
- * Of what the system found on an Online case's order, what holds it for Management: a price below
- * its list (the agent's discount), a patient's missing prescription, and for a business buyer (never a patient) an unchecked
- * account, an expired licence, money owed or a sale on credit. Short stock is Dispatch's to sort
- * and the payment is the agent's, so neither stops it. A guarantee letter's bill to the agency
- * isn't credit.
- */
-export function caseChecksOf(
-  found: OrderFinding[],
-  customer: { kind: string; terms: string; gl: boolean },
-): OrderFinding[] {
-  const business = customer.kind !== "patient";
-  // A patient's missing prescription too: Management can't approve the order without it
-  // (Aryan, 17 Nov: Rx whenever a patient buys). The case asks for its own IDs by its road.
-  const kept = found.filter(
-    (finding) =>
-      finding.kind === "price" ||
-      (finding.kind === "rx" && finding.short === "No prescription") ||
-      (business && ["customer", "licence", "owes", "credit"].includes(finding.kind)),
-  );
-  if (
-    business &&
-    customer.terms === "days" &&
-    !customer.gl &&
-    !kept.some((finding) => finding.kind === "credit")
-  )
-    kept.push({
-      kind: "credit",
-      short: "On credit",
-      decide: "sold on credit",
-      text: "Sold on credit: the buyer pays after delivery",
-    });
-  return kept;
-}
-
 /** Where an approved order goes: one paid in advance waits for Finance to see the money first;
  *  credit and cash on delivery go to Finance's look at the customer's dues. */
 export const afterApproval = (terms: string): OrderStatus =>
@@ -155,7 +120,7 @@ export function resumeChoices(order: {
   if (order.paidIn || !["finance_check", "ready_for_invoice", "ready_for_dispatch"].includes(from))
     return [from];
   const earlier: OrderStatus[] = [];
-  if (from === "ready_for_dispatch" && order.financeCheck && !order.leadId)
+  if (from === "ready_for_dispatch" && order.financeCheck)
     earlier.push(afterApproval(order.terms));
   earlier.push("pending_approval");
   return [from, ...earlier];
@@ -199,8 +164,6 @@ export function orderActions(
     order.approverId != null ? order.approverId === me.id || me.role === "admin" : managers;
   const finance = FINANCE_ROLES.includes(me.role);
   const dispatch = DISPATCH_ROLES.includes(me.role);
-  // An Online case's order: its agent hands it over (Dispatch still packs and ships it).
-  const agent = Boolean(order.leadId) && may(me, CASE_AGENT_ROLES);
   const mine = order.raisedBy === me.id || order.medrepId === me.id || Boolean(order.team);
   const pending = order.status === "pending_approval";
   const flagged = order.status === "on_hold" || order.status === "exception";
@@ -232,7 +195,9 @@ export function orderActions(
     pack: dispatch && order.status === "ready_for_dispatch",
     unpack: dispatch && order.status === "packing",
     ship: dispatch && order.status === "packing",
-    deliver: (dispatch || agent) && (order.status === "shipped" || order.status === "packing"),
+    // Dispatch marks every order delivered, an Online case's too (Aryan, 19 Nov: Online orders
+    // go the same way as every channel's).
+    deliver: dispatch && (order.status === "shipped" || order.status === "packing"),
     failed: dispatch && order.status === "shipped",
   };
 }
@@ -429,13 +394,6 @@ export function mayAddPaper(
   if (FINANCE_ROLES.includes(me.role) && (kind === undefined || kind === "payment_proof"))
     return true;
   if (DISPATCH_ROLES.includes(me.role) && (kind === undefined || kind === "dr")) return true;
-  // The case's agent keeps the money's proof and the signed receipt on it, delivered or not.
-  if (
-    order.leadId &&
-    may(me, CASE_AGENT_ROLES) &&
-    (kind === undefined || kind === "payment_proof" || kind === "dr")
-  )
-    return true;
   if (order.status === "completed") return false;
   return (
     ORDER_MANAGE_ROLES.includes(me.role) ||

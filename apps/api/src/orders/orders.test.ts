@@ -231,6 +231,34 @@ describe("who sees an order", () => {
 });
 
 describe("what Management does with an order", () => {
+  it("approves a check at a time, then the order; taking it back clears them (19 Nov)", async () => {
+    const made = await place("ryan", { customerId: hospital, items: [line()] });
+    const id = made.body.id;
+    expect((await post("ryan", `/api/orders/${id}/checks/price`, {})).status).toBe(403);
+    expect((await post("sarla", `/api/orders/${id}/checks/nope`, {})).status).toBe(404);
+    for (const key of ["papers", "price", "stock", "customer"]) {
+      const answer = await post("sarla", `/api/orders/${id}/checks/${key}`, {});
+      expect(answer.status, await answer.clone().text()).toBe(200);
+    }
+    let detail = await order("sarla", id);
+    expect(detail.order.status).toBe("pending_approval");
+    expect(detail.checksApproved.map((one) => one.key).sort()).toEqual(["customer", "papers", "price", "stock"]);
+    expect(detail.order.papersCheckedBy).toBe("Sarla");
+    // The order itself: the Approve action, as always.
+    expect((await act("sarla", id, "approve")).status).toBe(200);
+    detail = await order("sarla", id);
+    expect(detail.order.status).toBe("finance_check");
+    expect(detail.order.approvedBy).toBe("Sarla");
+    expect(detail.events.some((event) => event.message === "Customer & licence: approved by Sarla.")).toBe(true);
+    // Gone on: nothing left to approve here.
+    expect((await post("sarla", `/api/orders/${id}/checks/price`, {})).status).toBe(409);
+    // Undone: back with Management, its checks looked at afresh.
+    expect((await act("sarla", id, "take_back", { reason: "Undone straight after approving" })).status).toBe(200);
+    detail = await order("sarla", id);
+    expect(detail.order.status).toBe("pending_approval");
+    expect(detail.checksApproved).toEqual([]);
+  });
+
   it("approves: an advance customer's goes to Finance, a credit customer's to invoicing", async () => {
     const advance = await place("ryan", { customerId: hospital, items: [line()] });
     expect((await act("ryan", advance.body.id, "approve")).status).toBe(409);

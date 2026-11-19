@@ -384,7 +384,7 @@ describe("the other roads", () => {
 });
 
 describe("the agent takes the case to Paid", () => {
-  it("sends a discount to Management, then Dispatch packs and ships, and the agent hands it over and takes the money", async () => {
+  it("sends a discount to Management, then Dispatch packs, ships and hands it over, and Finance takes the money (as every channel's, 19 Nov)", async () => {
     const id = await addLead({ name: "Lito Reyes", phone: "0917 222 3333", source: "phone" });
     // Quoted below the patient price: that is the agent's discount, so Management checks it.
     const below = medicine.price - 1000;
@@ -405,10 +405,18 @@ describe("the agent takes the case to Paid", () => {
     expect(now.order).toMatchObject({ status: "pending_approval" });
     expect(now.order?.trail.finance.state).toBe("later");
     expect(now.order?.trail.check.state).toBe("waiting");
-    expect(now.order?.trail.check.reasons[0]).toContain("Loyal patient");
+    // Checked as every channel's order (19 Nov): the discount, the patient's ID not on it yet, and
+    // a new customer for Management to check.
+    expect(now.order?.trail.check.reasons).toEqual(
+      expect.arrayContaining([
+        expect.stringContaining("Loyal patient"),
+        expect.stringContaining("patient's ID"),
+        expect.stringContaining("New customer"),
+      ]),
+    );
     expect(now.order?.trail.invoice).toBeNull();
     expect(now.next).toBe("With Management for a check");
-    expect(now.order?.trail.check.reasons).toHaveLength(1);
+    expect(now.order?.trail.check.reasons).toHaveLength(3);
     expect((await post("marco", `/api/dispatch/orders/${orderId}/pack`, {})).status).toBe(409);
 
     // Sarla passes it: it goes to Finance with its invoice (cash on delivery: Finance looks at
@@ -439,26 +447,27 @@ describe("the agent takes the case to Paid", () => {
       ).status,
     ).toBe(200);
     now = await lead("jane", id);
-    expect(now.next).toBe("On the way with LBC · 7781 2290: mark it delivered");
+    expect(now.next).toBe("On the way with LBC · 7781 2290: Dispatch marks it delivered");
     expect(now.order?.trail.packed).toMatchObject({ by: "Marco" });
     expect(now.order?.trail.packed?.batches[0]).toContain("batch");
     expect(now.order?.trail.shipped).toMatchObject({ how: "LBC · 7781 2290", by: "Marco" });
-    expect(now.can).toMatchObject({ deliver: true, pay: false });
+    expect(now.can).toMatchObject({ deliver: false, pay: false });
 
-    // A MedRep can't hand over an Online order; the agent does.
+    // Neither a MedRep nor the agent hands it over: Dispatch does, as for every channel.
+    for (const who of ["ryan", "jane"])
+      expect(
+        (
+          await post(who, `/api/dispatch/orders/${orderId}/deliver`, {
+            receivedBy: "Lito",
+            deliveredOn: todayManila(),
+          })
+        ).status,
+      ).toBe(403);
+    // Dispatch keeps the signed receipt on the order, then hands it over.
+    expect(await attachReceipt(app, cookies.marco as string, orderId)).toBe(200);
     expect(
       (
-        await post("ryan", `/api/dispatch/orders/${orderId}/deliver`, {
-          receivedBy: "Lito",
-          deliveredOn: todayManila(),
-        })
-      ).status,
-    ).toBe(403);
-    // The agent keeps the signed receipt on the case's order, then hands it over.
-    expect(await attachReceipt(app, cookies.jane as string, orderId)).toBe(200);
-    expect(
-      (
-        await post("jane", `/api/dispatch/orders/${orderId}/deliver`, {
+        await post("marco", `/api/dispatch/orders/${orderId}/deliver`, {
           receivedBy: "Lito Reyes",
           deliveredOn: todayManila(),
         })
@@ -466,11 +475,11 @@ describe("the agent takes the case to Paid", () => {
     ).toBe(200);
     now = await lead("jane", id);
     expect(now.step.value).toBe("payment");
-    expect(now.next).toBe("Delivered: record the payment received");
-    expect(now.order?.trail.delivered).toMatchObject({ receivedBy: "Lito Reyes", by: "Jane" });
-    expect(now.can).toMatchObject({ pay: true, deliver: false });
+    expect(now.next).toBe("Delivered: Finance records the payment when it comes in");
+    expect(now.order?.trail.delivered).toMatchObject({ receivedBy: "Lito Reyes", by: "Marco" });
+    expect(now.can).toMatchObject({ pay: false, deliver: false });
 
-    // The agent records the money; a MedRep can't.
+    // Finance records the money; neither a MedRep nor the agent.
     const invoiceId = now.order?.trail.invoice?.id as number;
     // Delivered and unpaid: on Finance's Payments to collect, due now.
     const owed = await read<{ rows: { invoiceId: number; state: string; deliveredOn: string | null }[] }>(
@@ -478,18 +487,19 @@ describe("the agent takes the case to Paid", () => {
       "/api/finance/owed/invoices",
     );
     expect(owed.rows.find((row) => row.invoiceId === invoiceId)).toMatchObject({ state: "due" });
+    for (const who of ["ryan", "jane"])
+      expect(
+        (
+          await post(who, `/api/invoices/${invoiceId}/payments`, {
+            amount: 4 * below,
+            method: "cash",
+            paidOn: todayManila(),
+          })
+        ).status,
+      ).toBe(403);
     expect(
       (
-        await post("ryan", `/api/invoices/${invoiceId}/payments`, {
-          amount: 4 * below,
-          method: "cash",
-          paidOn: todayManila(),
-        })
-      ).status,
-    ).toBe(403);
-    expect(
-      (
-        await post("jane", `/api/invoices/${invoiceId}/payments`, {
+        await post("fiona", `/api/invoices/${invoiceId}/payments`, {
           amount: 4 * below,
           method: "cash",
           reference: "LBC remit 22",
@@ -504,7 +514,7 @@ describe("the agent takes the case to Paid", () => {
         amount: 4 * below,
         methodLabel: "Cash",
         reference: "LBC remit 22",
-        by: "Jane",
+        by: "Fiona",
       }),
     ]);
     expect(now.can.pay).toBe(false);
@@ -514,7 +524,7 @@ describe("the agent takes the case to Paid", () => {
       "/api/finance/collected",
     );
     expect(collected.rows.find((row) => row.invoiceId === invoiceId)).toMatchObject({
-      by: "Jane",
+      by: "Fiona",
       terms: "COD",
       delivered: true,
     });

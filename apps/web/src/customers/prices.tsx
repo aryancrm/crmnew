@@ -477,28 +477,8 @@ export function CustomerBefore({ prices, name }: { prices: OrderPrices; name: st
           <Figure label="Buying since">{customer.firstOn ? dayLabel(customer.firstOn) : "—"}</Figure>
         </div>
       </div>
-      {customer.top.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 px-3.5 py-2">
-          <span className="mr-1 text-[10px] font-semibold tracking-wide text-slate-500 uppercase">
-            Takes most
-          </span>
-          {customer.top.map((one) => (
-            <span
-              key={one.key}
-              className="inline-flex items-center gap-1.5 rounded-full bg-slate-50 py-0.5 pr-1 pl-2.5 text-[11.5px] text-slate-700 ring-1 ring-slate-200"
-              title={`${count(one.times)} ${one.times === 1 ? "order" : "orders"}, ${count(one.qty)} ${unitOf(one.unit)} in all`}
-            >
-              <b className="font-semibold text-slate-900">{one.name}</b>
-              <span className="text-slate-500 tabular-nums">{count(one.times)}×</span>
-              {one.lastPrice !== null && (
-                <span className="rounded-full bg-white px-1.5 py-px font-semibold text-slate-900 tabular-nums ring-1 ring-slate-200">
-                  {peso(one.lastPrice)}
-                </span>
-              )}
-            </span>
-          ))}
-        </div>
-      )}
+      {/* What they take most stays on their page (Whole history): not on the check (Aryan, 19 Nov:
+          "useless clutter here"). */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-3.5 py-2 text-[12px]">
         {customer.owed > 0 ? <Owes customer={customer} /> : <span className="text-slate-500">Owes nothing now</span>}
         <Link

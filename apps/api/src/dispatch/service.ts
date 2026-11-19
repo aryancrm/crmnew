@@ -9,7 +9,7 @@ import { allow, Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
 import { clean, day, iso, logMove, putIn, type Runner, takeOut } from "../inventory/service";
 import { logEvent, peso } from "../orders/events";
-import { CASE_AGENT_ROLES, orderActions, STATUS_LABEL } from "../orders/rules";
+import { orderActions, STATUS_LABEL } from "../orders/rules";
 import { settleOrderPoints } from "../points/service";
 import type {
   CodCashInput,
@@ -502,8 +502,8 @@ export async function deliverOrder(
   orderId: number,
   input: DeliverInput,
 ): Promise<void> {
-  // Dispatch, or for an Online case's order its agent (checked on the order below).
-  allow(me, [...DISPATCH_ROLES, ...CASE_AGENT_ROLES], "mark an order delivered");
+  // Dispatch marks every order delivered, an Online case's too (Aryan, 19 Nov).
+  allow(me, DISPATCH_ROLES, "mark an order delivered");
   const receivedBy = clean(input.receivedBy);
   if (!receivedBy) throw new Refusal(400, "invalid", "Type who received it.", "receivedBy");
   if (input.deliveredOn > todayManila())
@@ -541,11 +541,11 @@ export async function deliverOrder(
           else due_on end
         where order_id = ${orderId} returning code, status, (total - paid)::int as balance, terms`,
     );
-    const cash = input.cod && !order.leadId ? await noteCash(tx, me, order, await currentInvoice(tx, orderId), input.cod) : "";
+    const cash = input.cod ? await noteCash(tx, me, order, await currentInvoice(tx, orderId), input.cod) : "";
     const collect = cash
       ? ` ${cash}`
       : invoice?.terms === "cod" && invoice.status === "open"
-        ? ` Cash on delivery: ${peso(invoice.balance)} to collect; ${order.leadId ? "the Online desk" : "Finance"} records it.`
+        ? ` Cash on delivery: ${peso(invoice.balance)} to collect; Finance records it.`
         : "";
     await logEvent(
       tx,
@@ -609,8 +609,6 @@ export async function noteCodCash(db: Database, me: Me, orderId: number, input: 
     const order = await lockOrder(tx, orderId);
     if (order.status !== "completed")
       throw new Refusal(409, "not_now", `Note the cash once ${order.code} is delivered.`);
-    if (order.leadId)
-      throw new Refusal(409, "online", `${order.code} is an Online case's order: the Online desk records its payment.`);
     const said = await noteCash(tx, me, order, await currentInvoice(tx, orderId), input);
     await logEvent(tx, orderId, me, "payment", said);
   });

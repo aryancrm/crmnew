@@ -225,14 +225,14 @@ export function nextOf(f: CaseFacts, step: string): string {
       // agent records the money that came in; Finance checks it and lets the order go to Dispatch.
       if (order.status === "finance_check" || order.status === "ready_for_invoice")
         return order.advance && !order.paid ? "With Finance: they confirm the advance payment (put the slip on the order)" : "With Finance for a check";
-      // Paid in advance and gone past Finance without the money: the agent records it.
-      if (order.advance && !order.paid) return "Record the advance payment received";
+      // Paid in advance and gone past Finance without the money: Finance records it (19 Nov).
+      if (order.advance && !order.paid) return "With Finance: the advance payment to record (put the slip on the order)";
       if (order.status === "shipped")
-        return `${order.method === "rider" ? `With our rider ${order.rider}` : `On the way with ${order.courier ?? "the courier"}${order.tracking ? ` · ${order.tracking}` : ""}`}: mark it delivered`;
+        return `${order.method === "rider" ? `With our rider ${order.rider}` : `On the way with ${order.courier ?? "the courier"}${order.tracking ? ` · ${order.tracking}` : ""}`}: Dispatch marks it delivered`;
       return ORDER_WORDS[order.status] ?? "Ordered";
     }
     case "payment":
-      return "Delivered: record the payment received";
+      return "Delivered: Finance records the payment when it comes in";
     case "claim":
       return f.files.has("pickup_photo")
         ? `Delivered: send the claim to ${agency}`

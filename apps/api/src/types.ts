@@ -1330,6 +1330,9 @@ export type OrderDetail = {
   /** Held, for Management: where it may go on from, where it stopped first (the hub's "Continue
    *  from"). Empty for anyone else. */
   resumeTo: { status: OrderStatus; label: string }[];
+  /** The checks Management has approved one by one (Documents, Medicines & price, Stock &
+   *  warehouse, Customer & licence), with who and when; all four approve the order. */
+  checksApproved: { key: "papers" | "price" | "stock" | "customer"; by: string; at: string }[];
   /** Waiting for stock: since when, who held it, and what is still short (empty: it's in now). */
   waitingStock: { since: string; by: string | null; short: { name: string; need: number; free: number }[] } | null;
   /** What the customer owed before this order (this CRM's invoices, Zoho's and its opening

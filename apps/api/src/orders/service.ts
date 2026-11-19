@@ -63,8 +63,6 @@ import { stuckNow } from "./clock";
 import { DIVISIONS, divisionsOf, subDivisionOfArea, termsOfLabel } from "./divisions";
 import { logEvent, peso } from "./events";
 import {
-  CASE_AGENT_ROLES,
-  caseChecksOf,
   DESK_HOME,
   DESK_TABS,
   FINANCE_STATUSES,
@@ -634,7 +632,8 @@ async function findingsOfOrder(db: Runner, orderId: number) {
       terms: order.terms,
       papers: papers.get(orderId) ?? [],
       patientOrder: order.patientOrder,
-      note: order.note,
+      // An Online case's order carries the case's label as its note, not anyone's words.
+      note: order.leadId ? null : order.note,
     },
     { owes: money.get(order.customerId), creditLimit: order.creditLimit, total: order.total },
   );
@@ -644,7 +643,7 @@ async function findingsOfOrder(db: Runner, orderId: number) {
 /** What Management sees on an Online case's order (it approves every one, then Finance checks it). */
 export async function caseOrderChecks(db: Runner, orderId: number): Promise<OrderFinding[]> {
   const read = await findingsOfOrder(db, orderId);
-  return read ? caseChecksOf(read.found, read.order) : [];
+  return read ? read.found : [];
 }
 
 /**
@@ -693,10 +692,9 @@ export async function routeOrder(
   if (!manages) return "management";
   const checks = manages
     ? []
-    : fromCase
-      ? caseChecksOf(found, order)
-      : // A proof of payment is Finance's to check while Finance is on.
-        found.filter(
+    : // A proof of payment is Finance's to check while Finance is on; an Online case's order the
+      // same (Aryan, 19 Nov: Online orders go the way every channel's do).
+      found.filter(
           (finding) => finding.kind !== "stock" && (financeStep ? finding.kind !== "papers" : true),
         );
   if (checks.length > 0) {
@@ -780,7 +778,8 @@ export async function approvalQueue(db: Database, me: Me): Promise<OrderRow[]> {
         terms,
         papers: papers.get(row.id) ?? [],
         patientOrder: row.patientOrder,
-        note: row.note,
+        // An Online case's order carries the case's label as its note, not anyone's words.
+        note: leadId ? null : row.note,
       },
       { owes: money.get(row.customerId), creditLimit, total: row.total },
     );
@@ -792,7 +791,7 @@ export async function approvalQueue(db: Database, me: Me): Promise<OrderRow[]> {
             `${item.medicine} × ${item.qty.toLocaleString("en-PH")}${item.free ? " (free)" : ""}`,
         )
         .join(", "),
-      findings: leadId ? caseChecksOf(found, { kind, terms, gl }) : found,
+      findings: found,
     };
   });
 }
@@ -965,15 +964,14 @@ async function toCards(
             terms: row.paymentTerms,
             papers: onFile,
             patientOrder: row.patientOrder,
-            note: row.note,
+            // An Online case's order carries the case's label as its note, not anyone's words.
+            note: row.leadId ? null : row.note,
           },
           { owes: owedBefore(row), creditLimit, total: row.total },
         )
       : [];
-    // An Online case's order waits only on what sent it to Management.
-    const all = row.leadId
-      ? caseChecksOf(found, { kind: row.customerKind, terms: row.paymentTerms, gl })
-      : found;
+    // An Online case's order is checked as every channel's (Aryan, 19 Nov).
+    const all = found;
     const moneyOnly = atFinance || (row.status === "on_hold" && holder(row) === "finance");
     const findings = moneyOnly
       ? all.filter((finding) => MONEY_FINDINGS.includes(finding.kind))
@@ -1451,7 +1449,8 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
       terms: order.paymentTerms,
       papers: onFile,
       patientOrder: order.patientOrder,
-      note: order.note,
+      // An Online case's order carries the case's label as its note, not anyone's words.
+      note: order.leadId ? null : order.note,
     },
     // What the customer owes counts until the order is past Finance (its own invoice, made when
     // Management approved it, left out).
@@ -1502,10 +1501,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
       },
       onFile,
     ),
-    // An Online case's order is held only for what sends it to Management.
-    findings: order.leadId
-      ? caseChecksOf(found, { kind: order.customerKind, terms: order.paymentTerms, gl })
-      : found,
+    findings: found,
     // "Paid" counts only while the invoice is paid: a payment taken off un-pays it.
     // "Paid" and "Completed" count only while the invoice is paid: a payment taken off un-pays it.
     stages: STAGES.map((stage) => ({
@@ -1518,6 +1514,12 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
     events: events.map(({ role, ...event }) => ({ ...event, byRole: ROLE_LABEL[role] })),
     steps: steps.map((step) => ({ ...step, label: STATUS_LABEL[step.status] })),
     warehouses: places,
+    // The checks Management has approved one by one (19 Nov), with who and when.
+    checksApproved: await rows<{ key: OrderCheckKey; by: string; at: string }>(
+      db,
+      sql`select k.check_key as key, p.name as by, ${iso("k.at")} as at
+        from order_check k join person p on p.id = k.by_person where k.order_id = ${id} order by k.at`,
+    ),
     // Management lets a held order go on from where it stopped, or an earlier desk.
     resumeTo:
       can.resume && (ORDER_MANAGE_ROLES.includes(me.role) || approverId === me.id)
@@ -1555,10 +1557,10 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
       addPaper: mayAddPaper(me, who, "po"),
       addProof: mayAddPaper(me, who, "payment_proof"),
       addDr: mayAddPaper(me, who, "dr"),
-      // Finance, or for an Online case's order the Online desk, records the money received.
-      // Not while an advance order waits for Finance's payment check: the money comes in there.
+      // Finance records the money received, an Online case's order's too (19 Nov). Not while an
+      // advance order waits for Finance's payment check: the money comes in there.
       recordPayment:
-        (orderCan(me).finance || (Boolean(order.leadId) && CASE_AGENT_ROLES.includes(me.role))) &&
+        orderCan(me).finance &&
         money.invoice?.status === "open" &&
         order.status !== "finance_check" &&
         !(held && order.heldFrom === "finance_check"),
@@ -2210,6 +2212,7 @@ export async function actOnOrder(
         return;
       }
       case "send_back":
+        await clearChecks(tx, id);
         await set(
           sql`status = 'draft', flag_reason = ${reason}, sent_back_count = sent_back_count + 1, sent_back_reason = ${reason},
             sent_back_at = now(), sent_back_by = ${me.id}, reply = null`,
@@ -2373,6 +2376,8 @@ export async function actOnOrder(
         return;
       case "take_back": {
         // Back to Management's queue, as if never approved; an invoice made with the approval goes.
+        // Its checks are looked at afresh.
+        await clearChecks(tx, id);
         await cancelInvoiceOf(tx, me, id, `Approval taken back: ${reason}`);
         await set(
           sql`status = 'pending_approval', approved_at = null, approved_by = null, held_from = null, held_role = null`,
@@ -2467,6 +2472,8 @@ export async function reviseOrder(
     stored?.buyer ?? null,
   );
   await db.transaction(async (tx) => {
+    // Changed: its checks are looked at afresh (19 Nov).
+    await clearChecks(tx, id);
     const [order] = await rows<{
       status: OrderStatus;
       raisedBy: number;
@@ -2809,6 +2816,54 @@ async function visibleOrder(db: Runner, me: Me, id: number) {
   return order;
 }
 
+/** The four checks Management approves one by one (Aryan, 19 Nov). */
+export const CHECK_KEYS = ["papers", "price", "stock", "customer"] as const;
+export type OrderCheckKey = (typeof CHECK_KEYS)[number];
+const CHECK_LABEL: Record<OrderCheckKey, string> = {
+  papers: "Documents",
+  price: "Medicines & price",
+  stock: "Stock & warehouse",
+  customer: "Customer & licence",
+};
+
+/** Clears an order's check approvals (all, or one): it is looked at afresh. */
+export async function clearChecks(tx: Runner, orderId: number, key?: OrderCheckKey): Promise<void> {
+  await tx.execute(
+    key
+      ? sql`delete from order_check where order_id = ${orderId} and check_key = ${key}`
+      : sql`delete from order_check where order_id = ${orderId}`,
+  );
+}
+
+/** Management approves one check of an order that the system found something on (Aryan, 19 Nov:
+ *  "each with its own approve; what the system finds fine is ticked by itself"); Documents also
+ *  marks its papers read by hand. The order itself is approved with the Approve action, once
+ *  every check is fine or approved. */
+export async function approveCheck(db: Database, me: Me, orderId: number, key: string): Promise<void> {
+  if (!(CHECK_KEYS as readonly string[]).includes(key)) throw new Refusal(404, "not_found", "No such check.");
+  const check = key as OrderCheckKey;
+  const order = await visibleOrder(db, me, orderId);
+  const [row] = await rows<{ approverId: number | null; status: string }>(
+    db,
+    sql`select ${approverSql} as "approverId", o.status from sales_order o where o.id = ${orderId}`,
+  );
+  const decides = ORDER_MANAGE_ROLES.includes(me.role) || (row?.approverId != null && row.approverId === me.id);
+  if (!decides) throw new Refusal(403, "not_allowed", "Management approves an order's checks.");
+  if (row?.status !== "pending_approval")
+    throw new Refusal(409, "not_now", `${order.code} isn't waiting for approval now. Reload it.`);
+  await db.transaction(async (tx) => {
+    await tx.execute(
+      sql`insert into order_check (order_id, check_key, by_person) values (${orderId}, ${check}, ${me.id})
+        on conflict (order_id, check_key) do update set by_person = excluded.by_person, at = now()`,
+    );
+    if (check === "papers")
+      await tx.execute(
+        sql`update sales_order set papers_checked_by = ${me.id}, papers_checked_at = now() where id = ${orderId} and papers_checked_at is null`,
+      );
+    await logEvent(tx, orderId, me, "check", `${CHECK_LABEL[check]}: approved by ${me.name}.`);
+  });
+}
+
 /** Keeps a paper (a photo or PDF) on an order and writes it to the order's timeline. */
 /** Management says an order's papers are right, having looked at each by hand (Aryan, 19 Nov: a
  *  prescription is read, never ticked by the system); `ok: false` takes it back. While the order is
@@ -2830,6 +2885,7 @@ export async function checkPapers(db: Database, me: Me, orderId: number, ok: boo
         ? sql`update sales_order set papers_checked_by = ${me.id}, papers_checked_at = now() where id = ${orderId}`
         : sql`update sales_order set papers_checked_by = null, papers_checked_at = null where id = ${orderId}`,
     );
+    if (!ok) await clearChecks(tx, orderId, "papers");
     await logEvent(tx, orderId, me, "paper", ok ? "Papers checked by hand: right." : "Papers check taken back: to look at again.");
   });
 }
@@ -2872,8 +2928,10 @@ export async function addPaper(
       `${PAPER_LABEL[paper.kind as PaperKind]} attached (${name}).`,
     );
     // A new paper (not Finance's proof, not Dispatch's receipt) is Management's to look at again.
-    if (paper.kind !== "payment_proof" && paper.kind !== "dr")
+    if (paper.kind !== "payment_proof" && paper.kind !== "dr") {
       await tx.execute(sql`update sales_order set papers_checked_by = null, papers_checked_at = null where id = ${orderId} and papers_checked_at is not null`);
+      await clearChecks(tx, orderId, "papers");
+    }
     // Finance held it for want of the proof: the proof sends it back to Finance by itself.
     if (
       paper.kind === "payment_proof" &&

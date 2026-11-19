@@ -18,6 +18,7 @@ import { salesOrderRoutes } from "./sales-order";
 import {
   actOnOrder,
   addPaper,
+  approveCheck,
   checkPapers,
   approvalQueue,
   handleOrder,
@@ -341,6 +342,12 @@ export function orderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
     return c.json({ ok: true });
   });
 
+  // Management approves a check the system found something on (Aryan, 19 Nov); the order itself
+  // is approved with the Approve action once every check is fine.
+  app.post("/api/orders/:id/checks/:key", async (c) => {
+    await approveCheck(db, c.get("me"), idParam(c), c.req.param("key"));
+    return c.json({ ok: true });
+  });
   // Management's own look at the papers, by hand (Aryan, 19 Nov).
   app.post("/api/orders/:id/papers-check", async (c) => {
     const input = await readBody(c, z.object({ ok: z.boolean() }));

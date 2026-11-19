@@ -898,22 +898,11 @@ export async function leadCase(db: Database, me: Me, id: number): Promise<LeadCa
       work: work && row.state === "open",
       placeOrder: placeWhy === null,
       placeWhy,
-      // The agent hands the parcel over once Dispatch has packed it, and records the money once
-      // there is an invoice (in advance, or after a cash-on-delivery handover).
-      // A PAP case's order goes the MedRep's way: Dispatch hands it over, Finance records the money.
-      deliver:
-        work &&
-        row.desk !== "pap" &&
-        (row.orderStatus === "shipped" || row.orderStatus === "packing"),
-      pay:
-        work &&
-        row.desk !== "pap" &&
-        Boolean(
-          trail?.invoice && trail.invoice.balance > 0 && trail.invoice.state.word !== "Cancelled",
-        ) &&
-        (row.orderTerms !== "cod" || row.orderStatus === "completed") &&
-        // Paid in advance: Finance confirms that money on the order's payment check first.
-        !(row.orderTerms === "advance" && ["pending_approval", "finance_check", "ready_for_invoice"].includes(row.orderStatus ?? "")),
+      // Every case's order goes the way every channel's does (Aryan, 19 Nov: "why are Online
+      // orders a system of their own?"): Dispatch hands it over, Finance records the money; the
+      // case shows where it stands.
+      deliver: false,
+      pay: false,
     },
   };
 }

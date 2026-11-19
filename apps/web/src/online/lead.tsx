@@ -2286,7 +2286,7 @@ function PlacedOrder({
             state={data.can.deliver ? "now" : "later"}
             title={
               <>
-                <b>Delivery</b> · {data.can.deliver ? "your step" : "after Dispatch ships it"}
+                <b>Delivery</b> · {data.can.deliver ? "your step" : "Dispatch marks it delivered"}
               </>
             }
             note={trail.shipped?.how}

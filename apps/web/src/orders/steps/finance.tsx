@@ -76,20 +76,16 @@ export function FinanceStep({
   const invoice = data.money.invoice;
   const checked = data.stages.find((stage) => stage.key === "finance_verified")?.at ?? null;
   const by = data.events.findLast((event) => event.stage === "finance_verified")?.by;
-  const skipped = Boolean(order.leadId) && !checked && Boolean(invoice);
   return (
     <StepPanel
       number={n ?? 3}
       title="Finance check"
       footer={
-        checked || skipped ? <NextButton label="Next: Pack & ship" onClick={next} /> : undefined
+        checked ? <NextButton label="Next: Pack & ship" onClick={next} /> : undefined
       }
     >
-      {skipped ? (
-        <Fact shape="skipped" note="Finance sees every payment">
-          <b>Not needed</b> · the Online desk takes this order's money
-        </Fact>
-      ) : checked ? (
+      {/* An Online case's order is checked by Finance as every channel's (Aryan, 19 Nov). */}
+      {checked ? (
         <Fact shape="done" note={short(checked)}>
           <b>Checked</b> by {by ?? "Finance"}
           {can.undoConfirm && (
@@ -121,7 +117,7 @@ export function FinanceStep({
           <b>After Management's approval</b>
         </Fact>
       )}
-      {!checked && !skipped && <DuesVerdict data={data} />}
+      {!checked && <DuesVerdict data={data} />}
       {!checked && noProofWords(order.noProofReason, order.noProofNote) && (
         <div className="flex gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[13px] text-slate-700">
           <span className="mt-1.5 size-2 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
@@ -197,4 +193,45 @@ export function FinanceStep({
       )}
     </StepPanel>
   );
+}
+
+/** Finance's four checks on an order, as its board cards show them (Aryan, 19 Nov: "like
+ *  Management's: what was found and that it is fine"): how it pays, its papers, what the customer
+ *  owes and its credit against the limit; fine (green), to look at (amber) or only to know (grey). */
+export function financeChecks(
+  data: OrderDetail,
+): { key: string; label: string; tone: "ok" | "warn" | "info"; note: string }[] {
+  const { order, dues } = data;
+  const finding = (kind: string) => data.findings.find((one) => one.kind === kind);
+  const slip = data.papers.some((paper) => paper.kind === "payment_proof");
+  const why = noProofWords(order.noProofReason, order.noProofNote);
+  const missing = data.paperList.filter(
+    (row) => row.needed && !row.onFile && row.kind !== "payment_proof" && row.kind !== "dr",
+  );
+  const owes = finding("owes");
+  const credit = finding("credit");
+  return [
+    order.paymentTerms === "advance"
+      ? slip
+        ? { key: "payment", label: "Payment", tone: "ok", note: "Slip on file: match it with the money in the bank" }
+        : { key: "payment", label: "Payment", tone: "warn", note: why ? `No slip: ${why}` : "No slip yet" }
+      : order.paymentTerms === "cod"
+        ? { key: "payment", label: "Payment", tone: "ok", note: `Cash on delivery: ${peso(order.total)} at the door` }
+        : { key: "payment", label: "Payment", tone: "ok", note: `On credit: ${order.paymentDays ?? 30} days from delivery` },
+    missing.length
+      ? { key: "papers", label: "Papers", tone: "warn", note: `No ${missing.map((row) => row.label).join(", ")}` }
+      : { key: "papers", label: "Papers", tone: "ok", note: data.papers.length ? "On file" : "None needed" },
+    owes
+      ? { key: "dues", label: "Dues", tone: "warn", note: owes.short }
+      : dues.owed > 0
+        ? { key: "dues", label: "Dues", tone: "ok", note: `Owes ${peso(dues.owed)}, nothing overdue` }
+        : { key: "dues", label: "Dues", tone: "ok", note: "Nothing owed" },
+    credit
+      ? { key: "credit", label: "Credit", tone: "warn", note: credit.short }
+      : order.paymentTerms !== "days"
+        ? { key: "credit", label: "Credit", tone: "ok", note: "Not on credit" }
+        : dues.creditLimit === null
+          ? { key: "credit", label: "Credit", tone: "info", note: "On credit, no limit set" }
+          : { key: "credit", label: "Credit", tone: "ok", note: `Within the ${peso(dues.creditLimit)} limit` },
+  ];
 }

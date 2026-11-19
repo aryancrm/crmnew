@@ -5,14 +5,15 @@
 // own step; the step open is in the address (?step=).
 
 import type { OrderAction, OrderDetail } from "@2mg/api/types";
-import { useQuery } from "@tanstack/react-query";
-import { Check, ChevronDown, ChevronLeft, CirclePause, CircleX, FileText, Hourglass, MapPin, PencilLine, Phone, Play, RotateCcw, TriangleAlert, Undo2, UserRound } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Banknote, Check, ChevronDown, ChevronLeft, CircleCheck, CirclePause, CircleX, FileText, Hourglass, MapPin, PencilLine, Phone, Play, ReceiptText, RotateCcw, TriangleAlert, Undo2, UserRound } from "lucide-react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { DISPATCH_HOLDS, type DispatchAsk, DispatchDialogs } from "../dispatch/parts";
-import { InvoiceStatus, useMoney } from "../finance/parts";
+import { ConfirmPaymentDialog, InvoiceStatus, useMoney } from "../finance/parts";
+import { ApproveDialog, shipsFromOf } from "./approve-dialog";
 import { ReasonDialog, StatusPill, shortSpan, useOrderAction } from "./parts";
 import { AskUpBox } from "./asks";
 import { OrderReturnsBox, RefundButton } from "./returns";
@@ -21,10 +22,19 @@ import { OrderVersions } from "./versions";
 import { Button, dayLabel, PageState, Pill, Problem, peso, timeLabel, useLook } from "../ui";
 import { DeliveredStep } from "./steps/delivered";
 import { DispatchStep } from "./steps/dispatch";
-import { FinanceStep } from "./steps/finance";
+import { FinanceStep, financeChecks } from "./steps/finance";
 import { NextButton, type Shape, short, StepPanel } from "./steps/frame";
 import { Lines } from "./steps/lines";
-import { type CheckKey, checkLabel, CHECKS, checkStates, ManagementStep } from "./steps/management";
+import {
+  type AskFrom,
+  type CheckKey,
+  checkLabel,
+  CHECKS,
+  checkStates,
+  firstPick,
+  ManagementStep,
+  sendBackFrom,
+} from "./steps/management";
 import { PaidStep } from "./steps/paid";
 import { Documents, Papers } from "./steps/papers";
 import { Activity, MoneyCard } from "./steps/side";
@@ -179,6 +189,27 @@ export function Order() {
   const money = useMoney();
   const me = useMe().data;
   const [asking, setAsking] = useState<OrderAction | null>(null);
+  // A reason window opened from a check starts from that check's reason (19 Nov).
+  const [askFrom, setAskFrom] = useState<AskFrom>({});
+  const askWith = (what: OrderAction, from: AskFrom = {}) => {
+    setAskFrom(from);
+    setAsking(what);
+  };
+  // Management's Approve sits in its column (Aryan, 19 Nov: "in that column itself, not a button
+  // on another page"): one press, shipping from the warehouse picked on the stock check (else the
+  // Approve window's pick), an Undo for a minute after; the window is a press away to change them.
+  const [pickedWarehouse, setPickedWarehouse] = useState<string | null>(null);
+  const [approveWindow, setApproveWindow] = useState(() => params.get("approve") === "1");
+  const [undoUntil, setUndoUntil] = useState(0);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (undoUntil <= Date.now()) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [undoUntil]);
+  // Finance's Confirm payment, from its column.
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
+  const queries = useQueryClient();
   const [dispatching, setDispatching] = useState<DispatchAsk>(null);
   // Management's and Finance's page keeps the top short: the rest of the details on a press.
   const [moreOpen, setMoreOpen] = useState(false);
@@ -188,6 +219,39 @@ export function Order() {
   if (!data) return <PageState query={query} what="this order" />;
   const { order, can } = data;
   const { steps, current } = stepsOf(data);
+  const fill = data.warehouseFill ?? [];
+  const stockPick = pickedWarehouse ?? firstPick(fill);
+  const shipsFrom = shipsFromOf(fill, stockPick);
+  const shipsFromName = fill.find((one) => String(one.id) === shipsFrom)?.name ?? null;
+  const undoLeft = can.take_back ? Math.ceil((undoUntil - now) / 1000) : 0;
+  const approvedNow = () => {
+    setNow(Date.now());
+    setUndoUntil(Date.now() + UNDO_SECONDS * 1000);
+  };
+  const approvedChecks = new Map(data.checksApproved.map((one) => [one.key as string, one]));
+  // A check is fine when the system found nothing on it, or Management approved what it found
+  // (Aryan, 19 Nov: "what the system finds fine is ticked by itself").
+  const CHECK_KEYS = CHECKS.filter((item) => item.key !== "approve").map((item) => item.key);
+  const fine = (key: CheckKey) => states[key].ok || approvedChecks.has(key);
+  async function approveOrder() {
+    const choice = { warehouseId: shipsFrom ? Number(shipsFrom) : null, finance: order.leadId ? undefined : order.financeCheck };
+    if (await act.act(order.id, "approve", choice)) approvedNow();
+  }
+  /** Approves a check the system found something on; the last one approves the order (19 Nov). */
+  async function approveOne(key: CheckKey) {
+    const last = CHECK_KEYS.every((other) => other === key || fine(other));
+    const done = await act.run(async () => {
+      await api(`/api/orders/${order.id}/checks/${key}`, { body: {} });
+    });
+    if (done && last) await approveOrder();
+    else {
+      await queries.invalidateQueries({ queryKey: ["orders"] });
+      await queries.invalidateQueries({ queryKey: ["dispatch"] });
+    }
+  }
+  async function undoApproval() {
+    if (await act.act(order.id, "take_back", { reason: "Undone straight after approving" })) setUndoUntil(0);
+  }
   const picked = params.get("step") as StepKey | null;
   // Each desk opens on its own step when it has one, else where the order stands.
   const opened: StepKey =
@@ -307,6 +371,9 @@ export function Order() {
     danger?: boolean;
     reason: boolean;
   }[] = [
+    // Management's whole-order answers, under its checks (each check sends back for itself too).
+    { action: "send_back", label: "Send back", icon: Undo2, reason: true },
+    { action: "reject", label: "Reject", icon: CircleX, danger: true, reason: true },
     // Management says why it can go on and from where (the hub's Resume); Finance and Dispatch
     // lift their own holds with a press.
     { action: "resume", label: "Take off hold", icon: Play, reason: data.resumeTo.length > 0 },
@@ -829,11 +896,104 @@ export function Order() {
               <div className="px-2.5 pt-1.5 pb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-400 uppercase">
                 {desk === "management" ? "Management checks" : "Finance steps"}
               </div>
+              {/* Finance's checks with a few words each, and its step's button, in its column
+                  (Aryan, 19 Nov: "like Management's: what was found and that it is fine"). */}
+              {desk === "finance" && (can.confirm_payment || can.make_invoice) && (
+                <div className="mb-2 rounded-xl border border-slate-100 bg-slate-50/70 p-2">
+                  <ul className="flex flex-col">
+                    {financeChecks(data).map((item) => (
+                      <li key={item.key} className="flex items-start gap-2 rounded-lg px-1.5 py-1.5">
+                        <span
+                          className={`mt-1.5 size-2 shrink-0 rounded-full ${item.tone === "warn" ? "bg-amber-400" : item.tone === "info" ? "bg-slate-300" : "bg-emerald-500"}`}
+                          aria-hidden="true"
+                        />
+                        <span className="min-w-0 flex-1 text-[13px]">
+                          <span className="block font-semibold text-slate-800">{item.label}</span>
+                          <span
+                            className={`block text-[11px] leading-snug ${item.tone === "warn" ? "font-semibold text-amber-700" : "text-slate-500"}`}
+                          >
+                            {item.note}
+                          </span>
+                        </span>
+                        {item.tone === "warn" && can.hold && (
+                          <button
+                            type="button"
+                            onClick={() =>
+                              askWith("hold", { initial: `${item.label}: `, presets: [`${item.label}: ${item.note}`] })
+                            }
+                            className="mt-0.5 shrink-0 rounded-lg border border-rose-200 bg-white px-2 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
+                          >
+                            Hold
+                          </button>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                  {can.confirm_payment && (
+                    <button
+                      type="button"
+                      disabled={money.busy}
+                      onClick={() => setConfirmingPayment(true)}
+                      className="mt-1.5 flex h-10 w-full items-center justify-center gap-2 rounded-[10px] bg-brand text-sm font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
+                    >
+                      <Banknote className="size-4" aria-hidden="true" /> Confirm payment
+                    </button>
+                  )}
+                  {can.make_invoice && (
+                    <button
+                      type="button"
+                      disabled={money.busy}
+                      onClick={() => money.send(`/api/finance/orders/${order.id}/invoice`, {})}
+                      className="mt-1.5 flex h-10 w-full items-center justify-center gap-2 rounded-[10px] bg-brand text-sm font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
+                    >
+                      <ReceiptText className="size-4" aria-hidden="true" /> Check & send to Dispatch
+                    </button>
+                  )}
+                  {money.problem && <p className="mt-1 text-[11px] font-medium text-rose-700">{money.problem.message}</p>}
+                </div>
+              )}
               {desk === "management"
                 ? CHECKS.map((item, index) => {
                     const on = item.key === check && checking;
                     const state = states[item.key];
-                    return (
+                    // The last row: the Undo for a minute after approving; the order's one Approve
+                    // when every check is fine (nothing found, or approved above), else the row as
+                    // it was (Aryan, 19 Nov).
+                    if (item.key === "approve" && (undoLeft > 0 || (can.approve && CHECK_KEYS.every(fine))))
+                      return (
+                        <div key="approve" className="mt-1 rounded-xl border border-emerald-200 bg-emerald-50/60 p-2.5">
+                          {undoLeft > 0 ? (
+                            <div className="flex items-center justify-between gap-2 text-[13px]">
+                              <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-900">
+                                <CircleCheck className="size-4" aria-hidden="true" /> Order approved
+                              </span>
+                              <button
+                                type="button"
+                                disabled={act.busy}
+                                onClick={undoApproval}
+                                className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[12px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                              >
+                                Undo · {undoLeft}s
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                disabled={act.busy}
+                                onClick={approveOrder}
+                                className="flex h-10 w-full items-center justify-center gap-2 rounded-[10px] bg-brand text-sm font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
+                              >
+                                <CircleCheck className="size-4" aria-hidden="true" /> {act.busy ? "Approving…" : "Approve order"}
+                              </button>
+                              {act.problem && !approveWindow && !asking && (
+                                <p className="mt-1 text-[11px] font-medium text-rose-700">{act.problem.message}</p>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      );
+                    const row = (
                       <button
                         key={item.key}
                         type="button"
@@ -847,14 +1007,14 @@ export function Order() {
                               ? "bg-emerald-600 text-white"
                               : item.key === "approve"
                                 ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
-                                : state.ok
+                                : fine(item.key)
                                   ? "bg-emerald-600 text-white"
                                   : "bg-amber-400 text-white"
                           }`}
                         >
                           {item.key === "approve" && !order.approvedAt ? (
                             index + 1
-                          ) : state.ok || item.key === "approve" ? (
+                          ) : item.key === "approve" || fine(item.key) ? (
                             <Check className="size-3.5" />
                           ) : (
                             "!"
@@ -863,20 +1023,53 @@ export function Order() {
                         <span className="min-w-0 flex-1">
                           <span className="block truncate">{checkLabel(item.key, data)}</span>
                           <span
-                            className={`block truncate text-[11px] font-normal ${state.ok || item.key === "approve" ? "text-slate-500" : "font-semibold text-amber-700"}`}
+                            className={`block truncate text-[11px] font-normal ${item.key === "approve" || fine(item.key) ? "text-slate-500" : "font-semibold text-amber-700"}`}
                           >
                             {item.key === "approve"
                               ? order.approvedAt
                                 ? `Approved${order.approvedBy ? ` by ${order.approvedBy}` : ""}`
                                 : can.approve
-                                  ? "The last step: approve it"
+                                  ? "Approve or send back what is marked above"
                                   : order.status === "pending_approval"
                                     ? "Waiting"
                                     : "—"
-                              : state.note}
+                              : !state.ok && approvedChecks.get(item.key)
+                                ? `Approved by ${approvedChecks.get(item.key)?.by}: ${state.note}`
+                                : state.note}
                           </span>
                         </span>
                       </button>
+                    );
+                    if (item.key === "approve") return row;
+                    // A check the system found something on: its own Approve and Send back, right
+                    // in its row (Aryan, 19 Nov: "inside Documents an approve, inside Medicines &
+                    // price an approve"; "a price problem goes back to the MedRep as a price
+                    // problem"). What the system finds fine is ticked by itself: no button.
+                    return can.approve && !fine(item.key) ? (
+                      <div key={item.key} className="flex items-center gap-1">
+                        <div className="min-w-0 flex-1">{row}</div>
+                        <span className="flex shrink-0 flex-col gap-1">
+                          <button
+                            type="button"
+                            disabled={act.busy}
+                            onClick={() => approveOne(item.key)}
+                            className="rounded-lg bg-brand px-2 py-1 text-[11px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
+                          >
+                            Approve
+                          </button>
+                          {can.send_back && (
+                            <button
+                              type="button"
+                              onClick={() => askWith("send_back", sendBackFrom(data, item.key))}
+                              className="rounded-lg border border-rose-200 bg-white px-2 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
+                            >
+                              Send back
+                            </button>
+                          )}
+                        </span>
+                      </div>
+                    ) : (
+                      row
                     );
                   })
                 : railSteps.map((item) => {
@@ -926,12 +1119,13 @@ export function Order() {
               <ManagementStep
                 data={data}
                 act={act}
-                onAsk={setAsking}
+                onAsk={askWith}
                 next={() => openCheck("approve")}
                 check={check}
                 onCheck={openCheck}
                 states={states}
-                autoApprove={params.get("approve") === "1"}
+                warehouse={stockPick}
+                onWarehouse={setPickedWarehouse}
               />
             ) : opened === "proof" ? (
               <StepPanel
@@ -1075,14 +1269,44 @@ export function Order() {
           // Finance's hold carries screenshots for the MedRep; Management's is words only.
           financeHold={desk === "finance" && ["finance_check", "ready_for_invoice"].includes(order.status)}
           choices={asking === "resume" ? data.resumeTo : []}
-          presets={asking === "hold" && desk === "dispatch" ? DISPATCH_HOLDS : []}
-          onClose={() => setAsking(null)}
+          initial={askFrom.initial}
+          presets={asking === "hold" && desk === "dispatch" ? DISPATCH_HOLDS : (askFrom.presets ?? [])}
+          onClose={() => {
+            setAsking(null);
+            setAskFrom({});
+          }}
         />
       )}
       <DispatchDialogs ask={dispatching} onClose={() => setDispatching(null)} />
+      {approveWindow && can.approve && (
+        <ApproveDialog
+          data={data}
+          initial={stockPick}
+          busy={act.busy}
+          problem={act.problem?.message ?? null}
+          onClose={() => setApproveWindow(false)}
+          onApprove={async (choice) => {
+            if (await act.act(order.id, "approve", choice)) {
+              setApproveWindow(false);
+              approvedNow();
+            }
+          }}
+        />
+      )}
+      {confirmingPayment && (
+        <ConfirmPaymentDialog
+          orderId={order.id}
+          code={order.code}
+          customer={order.customer}
+          total={order.total}
+          onClose={() => setConfirmingPayment(false)}
+        />
+      )}
     </div>
   );
 }
+/** How long an approval can be undone with one press (Aryan, 19 Nov: "about 60 seconds"). */
+const UNDO_SECONDS = 60;
 /** Management's two looks of its check. */
 const ORDER_LOOKS = [
   ["steps", "Steps"],

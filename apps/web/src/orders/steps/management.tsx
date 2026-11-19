@@ -38,6 +38,41 @@ export const checkLabel = (key: CheckKey, data: OrderDetail) =>
     : (CHECKS.find((item) => item.key === key)?.label ?? key);
 export type CheckKey = (typeof CHECKS)[number]["key"];
 
+/** Where an order ships from when nobody has picked: the default warehouse, unless only another
+ *  can fill every line (blank: the default). */
+export function firstPick(fill: NonNullable<OrderDetail["warehouseFill"]>): string {
+  const main = fill.find((place) => place.isDefault);
+  const fills = fill.find((place) => place.short.length === 0);
+  return main && main.short.length > 0 && fills ? String(fills.id) : "";
+}
+
+/** What the reason window starts from when it opens from a check. */
+export type AskFrom = { initial?: string; presets?: string[] };
+/** What each check sends back for, said for the MedRep. */
+const SEND_BACK: Record<Exclude<CheckKey, "approve">, string> = {
+  papers: "attach what is missing (the prescription, the PO) or a copy that can be read",
+  price: "a price below the list or changed from last time: give the reason or correct it",
+  stock: "not enough in stock to send: change the quantity or the day it is needed",
+  customer: "the licence or what the customer owes: send the papers, or collect first",
+};
+const CHECK_FINDINGS: Record<Exclude<CheckKey, "approve">, string[]> = {
+  papers: ["rx"],
+  price: ["price", "note"],
+  stock: ["stock"],
+  customer: ["customer", "licence", "owes", "credit"],
+};
+/** Sending back from a check (Aryan, 19 Nov: "a price problem goes back as a price problem"): its
+ *  name first, so the MedRep reads what to fix; what the system found on it, to pick with a press. */
+export function sendBackFrom(data: OrderDetail, key: CheckKey): AskFrom {
+  if (key === "approve") return {};
+  const label = checkLabel(key, data);
+  const found = data.findings.filter((finding) => CHECK_FINDINGS[key].includes(finding.kind));
+  return {
+    initial: `${label}: `,
+    presets: [...found.map((finding) => `${label}: ${finding.text}`), `${label}: ${SEND_BACK[key]}`],
+  };
+}
+
 /** How each check stands on this order: fine, or what needs a look. */
 export function checkStates(data: OrderDetail): Record<CheckKey, { ok: boolean; note: string }> {
   const list = checksOf({
@@ -226,7 +261,8 @@ export function ManagementStep({
   check,
   onCheck,
   states,
-  autoApprove = false,
+  warehouse,
+  onWarehouse,
 }: {
   data: OrderDetail;
   act: ReturnType<typeof useOrderAction>;
@@ -236,8 +272,10 @@ export function ManagementStep({
   check?: CheckKey;
   onCheck?: (key: CheckKey) => void;
   states?: Record<CheckKey, { ok: boolean; note: string }>;
-  /** Opened from a card's Approve: the approve window opens at once. */
-  autoApprove?: boolean;
+  /** The warehouse it ships from, as picked on the stock check (the page keeps it, 19 Nov: the
+   *  Approve in the column ships from it). */
+  warehouse: string;
+  onWarehouse: (value: string) => void;
 }) {
   const { order, can } = data;
   const shows = (key: CheckKey) => !check || check === key;
@@ -256,15 +294,6 @@ export function ManagementStep({
           : check === "papers"
             ? findingsOf(["rx"])
             : data.findings;
-  // Where it ships from: the default warehouse, unless only another can fill every line.
-  const [warehouse, setWarehouse] = useState(() => {
-    const fill = data.warehouseFill ?? [];
-    const main = fill.find((place) => place.isDefault);
-    const fills = fill.find((place) => place.short.length === 0);
-    return main && main.short.length > 0 && fills ? String(fills.id) : "";
-  });
-  // Management decides here whether Finance checks the order too.
-  const [approving, setApproving] = useState(autoApprove && data.can.approve);
   const [editing, setEditing] = useState(false);
   const waiting = order.status === "pending_approval";
   // Management completes what the MedRep sent before approving it.
@@ -359,7 +388,7 @@ export function ManagementStep({
         can.approve &&
         data.warehouseFill &&
         data.warehouseFill.length > 0 && (
-          <ShipsFrom fill={data.warehouseFill} value={warehouse} onChange={setWarehouse} />
+          <ShipsFrom fill={data.warehouseFill} value={warehouse} onChange={onWarehouse} />
         )}
       {check === "approve" && states && (
         <ul className="flex flex-col gap-1 text-[13px]">
@@ -380,35 +409,6 @@ export function ManagementStep({
             </li>
           ))}
         </ul>
-      )}
-      {can.approve && shows("approve") && (
-        <div className="flex flex-wrap items-end gap-2">
-          <Button variant="primary" disabled={act.busy} onClick={() => setApproving(true)}>
-            <CircleCheck size={16} aria-hidden="true" /> Approve
-          </Button>
-          {can.send_back && (
-            <Button disabled={act.busy} onClick={() => onAsk("send_back")}>
-              <Undo2 size={16} aria-hidden="true" /> Send back
-            </Button>
-          )}
-          {can.reject && (
-            <Button variant="danger" disabled={act.busy} onClick={() => onAsk("reject")}>
-              <CircleX size={16} aria-hidden="true" /> Reject
-            </Button>
-          )}
-        </div>
-      )}
-      {approving && (
-        <ApproveDialog
-          data={data}
-          initial={warehouse}
-          busy={act.busy}
-          problem={act.problem?.message ?? null}
-          onClose={() => setApproving(false)}
-          onApprove={async (choice) => {
-            if (await act.act(order.id, "approve", choice)) setApproving(false);
-          }}
-        />
       )}
     </StepPanel>
   );

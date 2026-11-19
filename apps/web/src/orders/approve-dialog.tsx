@@ -9,6 +9,23 @@ import { Button, count, Dialog, Problem } from "../ui";
 
 type Fill = NonNullable<OrderDetail["warehouseFill"]>[number];
 
+/** The warehouse an approval ships from unless someone picks another: the one already picked on
+ *  the stock step, else the main one if it can fill every line, else one that can, else the main
+ *  one. The Approve window and the Approve beside each check (19 Nov) start from the same. */
+export function shipsFromOf(fill: Fill[], initial: string): string {
+  return (
+    initial ||
+    String(
+      (
+        fill.find((place) => place.isDefault && place.short.length === 0) ??
+        fill.find((place) => place.short.length === 0) ??
+        fill.find((place) => place.isDefault) ??
+        fill[0]
+      )?.id ?? "",
+    )
+  );
+}
+
 export function ApproveDialog({
   data,
   initial,
@@ -27,17 +44,7 @@ export function ApproveDialog({
 }) {
   const { order } = data;
   const fill: Fill[] = data.warehouseFill ?? [];
-  // The main warehouse unless only another can fill every line.
-  const first =
-    initial ||
-    String(
-      (
-        fill.find((place) => place.isDefault && place.short.length === 0) ??
-        fill.find((place) => place.short.length === 0) ??
-        fill.find((place) => place.isDefault) ??
-        fill[0]
-      )?.id ?? "",
-    );
+  const first = shipsFromOf(fill, initial);
   const [picked, setPicked] = useState(first);
   const [finance, setFinance] = useState(order.financeCheck);
   const place = fill.find((one) => String(one.id) === picked);
