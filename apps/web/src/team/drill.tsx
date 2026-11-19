@@ -21,6 +21,7 @@ import { ClidpTeamCard } from "../sellers/clidp";
 import { ClidpRoadCard } from "../sellers/clidp-road";
 import { HospitalsCard } from "../sellers/hospitals";
 import { RxBusinessCard } from "../sellers/rx-business";
+import { TelesalesTeamCard } from "../sellers/telesales-team";
 import { MtHome } from "../sellers/mt";
 import { BidReportCard } from "../sellers/bid-report";
 import { BiddingCard, BiddingHome } from "../sellers/tenders";
@@ -588,7 +589,16 @@ export function ChannelWork({
         </>
       );
     case "MD Telesales":
-      return <TelesalesCoachHome unit={unit} />;
+      // Each telesales person's calls, orders, customers and money; then the online desk and the
+      // patient care groups.
+      return (
+        <>
+          <TelesalesTeamCard unit={unit} />
+          <TelesalesCoachHome unit={unit} />
+        </>
+      );
+    case "TeleSales":
+      return <TelesalesTeamCard unit={unit} />;
     case "B2B":
       return <B2bTeamCard unit={unit} />;
     case "CLIDP":

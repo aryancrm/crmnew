@@ -5154,6 +5154,45 @@ export type RxBusiness = {
   }[];
 };
 
+/** A telesales team at a glance (19 Nov): calls and what came of them, callbacks due, orders and
+ *  conversion, new against repeat customers, sold, owed, orders stopped; person by person. */
+export type TelesalesTeam = {
+  today: string;
+  summary: {
+    callsToday: number;
+    callsMonth: number;
+    reached: number;
+    ordered: number;
+    callbacksDue: number;
+    orders: number;
+    /** Calls this month that ended in an order, %. */
+    conversion: number | null;
+    newCustomers: number;
+    repeatCustomers: number;
+    sold: number;
+    owed: number;
+    stopped: number;
+  };
+  rows: {
+    personId: number;
+    seatId: number;
+    name: string;
+    title: string;
+    area: string | null;
+    callsToday: number;
+    callsMonth: number;
+    reached: number;
+    ordered: number;
+    callbacksDue: number;
+    orders: number;
+    customers: number;
+    newCustomers: number;
+    sold: number;
+    owed: number;
+    stopped: number;
+  }[];
+};
+
 /** A B2C CHC's day: the morning pulse, the enquiries waiting for a reply, refills, orders. */
 export type B2cDay = {
   today: string;

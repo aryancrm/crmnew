@@ -343,4 +343,4 @@ function monthSpan(asked: string): { from: string; to: string } {
 
 /** Whether a channel has a desk of its own to show under the tree. */
 const hasWork = (division: string) =>
-  ["RX Business", "MD Telesales", "B2B", "CLIDP", "BID", "HOSP", "MT"].includes(division);
+  ["RX Business", "MD Telesales", "B2B", "CLIDP", "BID", "HOSP", "MT", "TeleSales"].includes(division);
