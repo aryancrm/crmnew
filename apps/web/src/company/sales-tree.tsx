@@ -112,6 +112,9 @@ export function SalesTreePage() {
   const canChange = me?.role === "ceo" || me?.role === "admin";
   const org = useQuery({ queryKey: ["org"], queryFn: () => api<OrgTree>("/api/org"), enabled: canChange });
   const [pop, setPop] = useState<Pop | null>(null);
+  // Changing is one button on top (Aryan, 20 Nov: "an Edit button; otherwise the normal data, no
+  // clutter"): off, a box's panel is its figures as before; on, it has the changes.
+  const [editing, setEditing] = useState(false);
   const queries = useQueryClient();
   const orgStamp = useRef(0);
   // A change saved: the tree is read again.
@@ -204,7 +207,7 @@ export function SalesTreePage() {
         <div className="min-w-0">
           <h1 className="text-[20px] font-semibold tracking-tight text-slate-900">Company tree</h1>
           <p className="text-[13px] text-slate-500">
-            Who is under whom{canChange ? ": press a box to change it, every screen follows" : ""} · {month} ·{" "}
+            Who is under whom{editing ? ": press a box to change it, every screen follows" : ""} · {month} ·{" "}
             {pace < 1 ? `day ${dayOf} of ${data.days}` : "the whole month"} ·{" "}
             <b className="text-slate-800">{shortPeso(tree.figures.sold)}</b> of{" "}
             {tree.figures.target ? shortPeso(tree.figures.target) : "no target yet"}
@@ -220,6 +223,11 @@ export function SalesTreePage() {
               className="h-10 w-72 rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm focus:border-emerald-500 focus:outline-none"
             />
           </label>
+          {canChange && (
+            <Toggle on={editing} onClick={() => setEditing(!editing)} title="Move people, change a job, add or close a seat or a team">
+              {editing ? "Done editing" : "Edit positions"}
+            </Toggle>
+          )}
           <Toggle on={false} onClick={() => setOpen("all")}>
             Open all
           </Toggle>
@@ -297,7 +305,7 @@ export function SalesTreePage() {
             unit={unit}
             onPick={(node) => setPicked(node.key)}
             onClose={() => setPicked(null)}
-            change={canChange && org.data ? { tree: org.data, open: setPop } : null}
+            change={canChange && editing && org.data ? { tree: org.data, open: setPop } : null}
           />
         )}
         {org.data && <OrgPops tree={org.data} pop={pop} setPop={setPop} />}
@@ -732,7 +740,14 @@ function Place({ node, all, change }: { node: Node; all: Node[]; change: { tree:
     ...(seat && !seat.lead && box ? ([["Team", box.unit?.name ?? box.name]] as [string, string][]) : []),
     ...(seat ? ([["Their screens", seat.moduleLabel]] as [string, string][]) : []),
   ];
-  if (!lines.length && !change) return null;
+  // Not editing: the panel is its figures, as before; only a seat whose screens don't match its
+  // place says so.
+  if (!change)
+    return leadsNothing ? (
+      <p className="mt-4 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[12.5px] text-amber-900">
+        Has a {seat?.moduleLabel === "Head" ? "head's" : "team lead's"} screens but leads no team on the tree.
+      </p>
+    ) : null;
   return (
     <div className="mt-4 rounded-xl border border-slate-200 p-3.5">
       <dl className="space-y-1 text-[13px]">
@@ -746,7 +761,7 @@ function Place({ node, all, change }: { node: Node; all: Node[]; change: { tree:
       {leadsNothing && (
         <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-[12.5px] text-amber-900">
           Has a {seat?.moduleLabel === "Head" ? "head's" : "team lead's"} screens but leads no team on the tree. Change the job
-          {change ? " below" : ""} if that is not meant.
+          below if that is not meant.
         </p>
       )}
       {change && (

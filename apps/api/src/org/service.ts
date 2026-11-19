@@ -594,12 +594,28 @@ async function checkReportsTo(tx: Runner, seatId: number | null | undefined, sel
   return seat.id;
 }
 
+/** The screens follow the place on the tree (Aryan, 20 Nov: "one place decides who gets which
+ *  module"): a team lead's or a head's work goes only with the seat that leads its team, and the
+ *  seat that leads a team is never a MedRep's. */
+function checkLeadWork(module: Role, lead: boolean): void {
+  if ((module === "team_lead" || module === "manager") && !lead)
+    throw new Refusal(
+      400,
+      "invalid",
+      "A team lead's or head's screens go with leading a team: tick that this seat leads its team, or pick the work it does (MedRep…).",
+      "module",
+    );
+  if (lead && module === "medrep")
+    throw new Refusal(400, "invalid", "The seat that leads a team works as its team lead (or its head).", "module");
+}
+
 async function makeSeat(tx: Runner, input: OrgSeatInput): Promise<number> {
   const unit = await unitRow(tx, input.unitId);
   const title = input.title.trim();
   if (!title) throw new Refusal(400, "invalid", "Name the job (its title).", "title");
   if (!isRole(input.module))
     throw new Refusal(400, "invalid", "Pick the work this seat does.", "module");
+  checkLeadWork(input.module, Boolean(input.lead));
   if (input.lead) {
     const [lead] = await rows<{ title: string }>(
       tx,
@@ -761,6 +777,8 @@ export async function updateSeat(
     if (!isRole(module))
       throw new Refusal(400, "invalid", "Pick the work this seat does.", "module");
     const lead = input.lead ?? seat.lead;
+    // Checked when the work or the lead is what changes (a move alone leaves an older seat as it is).
+    if (input.module !== undefined || input.lead !== undefined) checkLeadWork(module, lead);
     if (lead && (!seat.lead || unitId !== seat.unitId)) {
       const [other] = await rows<{ title: string }>(
         tx,

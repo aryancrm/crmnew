@@ -146,6 +146,13 @@ describe("the company's tree", () => {
       lead: true,
     });
     expect(lead.status).toBe(409);
+    // The screens follow the place on the tree (20 Nov): a team lead's work only with the seat that
+    // leads its team, and a lead seat is never a MedRep's.
+    const leadsNobody = await send("naresh", "/api/org/seats", { unitId: ncr1?.id, title: "Coach beside the lead", module: "team_lead" });
+    expect(leadsNobody.status).toBe(400);
+    expect(await fieldOf(leadsNobody)).toBe("module");
+    const sellerLeads = await send("naresh", "/api/org/seats", { unitId: ncr1?.id, title: "A MedRep leading", module: "medrep", lead: true });
+    expect(sellerLeads.status).toBe(400);
   });
 
   it("adds someone under a person from the chart, with their employee ID, and moves them to another team", async () => {

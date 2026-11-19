@@ -313,6 +313,23 @@ async function side(area: string, box: Unit | null, title: string) {
 await side("B2B | CLAIRE", crrBox, "CRR – Mindanao");
 for (const who of ["DHON", "PILLOW", "CHARLE", "MANI MISHRA"]) await side(`B2B | ${who}`, nbdBox, "NBD");
 
+// The sheet's BID rows are Hazel, Angel and Jimmy, their manager Subir (Aryan, 20 Nov: "the sheet
+// is the master: who is under whom and what work they do"). Jimmy's seat worked as a team lead
+// though it leads nobody: a sales person's now (the bid price is approved by BID's lead, Subir).
+step("Subir · BID: Jimmy a sales person, as the sheet's row");
+{
+  const [seat] = await rows<{ id: number; module: string; lead: boolean }>(
+    db,
+    sql`select s.id::int as id, s.module, s.lead from seat s join area a on a.id = s.area_id
+      where s.active and upper(a.name) = 'BID | JIMMY' limit 1`,
+  );
+  if (!seat) missing.push("seat BID | JIMMY");
+  else if (seat.module !== "medrep" && !seat.lead) {
+    say("BID | JIMMY: works as a MedRep of Government Bidding (was a team lead's work, leading nobody)");
+    if (apply) await updateSeat(db, me, seat.id, { module: "medrep" });
+  }
+}
+
 // ---- Mhalou: MT ----
 step("Mhalou · MT");
 const mtBox = await unit("Modern Trade", "Modern trade");

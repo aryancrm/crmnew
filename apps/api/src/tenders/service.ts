@@ -41,7 +41,20 @@ export const ENVELOPE = [
   "Statement of ongoing and completed contracts (SLCC)",
 ];
 
-const isAdmin = (me: Me) => (me.role === "team_lead" && me.channel?.code === "BID") || me.role === "admin";
+/** Who approves a bid price: whoever leads a Government Bidding box on the Company tree (the target
+ *  sheet's BID manager: Subir; Aryan, 20 Nov: "the sheet is the master, the tree decides"), and the
+ *  Admin. It was the seat's work and channel (a team lead in BID), which a seat leading nobody could
+ *  carry. */
+async function approvesBids(db: Database, me: Me): Promise<boolean> {
+  if (me.role === "admin") return true;
+  const [found] = await rows<{ ok: boolean }>(
+    db,
+    sql`select exists (select 1 from seat_holder h join seat s on s.id = h.seat_id and s.active and s.lead
+      where h.person_id = ${me.id} and h.starts_on <= current_date and (h.ends_on is null or h.ends_on >= current_date)
+        and unit_division(s.unit_id) = 'BID') as ok`,
+  );
+  return found?.ok === true;
+}
 const seesAll = (me: Me) =>
   ["ceo", "admin"].includes(me.role) || me.channel?.code === "BID" || (me.role === "manager" && me.business === "B2B");
 // Anyone else sees the tenders they run; a head (the Hospital Division's Business Mentor, say)
@@ -99,7 +112,7 @@ export async function tenderDetail(db: Database, me: Me, id: number) {
     lines,
     events,
     next: NEXT[tender.step],
-    canApprove: isAdmin(me),
+    canApprove: await approvesBids(db, me),
     bidders,
     standing: standingOf(tender, bidders),
     canBidders: OPENED.includes(tender.step),
@@ -272,7 +285,7 @@ export async function moveTender(
   const day = input.on ?? todayManila();
   const set: SQL[] = [sql`step = ${input.step}`, sql`updated_at = now()`];
   if (input.step === "price_approved") {
-    if (!isAdmin(me)) throw new Refusal(403, "not_allowed", "The Government Bidding Admin approves the bid price.");
+    if (!(await approvesBids(db, me))) throw new Refusal(403, "not_allowed", "Government Bidding's lead approves the bid price.");
     if (!tender.ourBid) throw new Refusal(400, "invalid", "Put the bid price (the medicines and their prices) first.");
     if (tender.abc && tender.ourBid > tender.abc) throw new Refusal(400, "invalid", "Our bid is above the ABC: it would be rejected.");
     set.push(sql`price_approved_by = ${me.id}`);
@@ -334,7 +347,7 @@ export async function tenderDesk(db: Database, me: Me): Promise<TenderDesk> {
     },
     resultsCount: results.length,
     papersEnding: papers.filter((p) => p.state !== "valid"),
-    canApprove: isAdmin(me),
+    canApprove: await approvesBids(db, me),
   };
 }
 
@@ -352,7 +365,9 @@ export async function companyPapers(db: Database): Promise<CompanyPaper[]> {
 }
 
 export async function addCompanyPaper(db: Database, me: Me, input: { name: string; number?: string | null; expiresOn?: string | null; note?: string | null }): Promise<void> {
-  if (!isAdmin(me) && !["ceo", "admin"].includes(me.role)) throw new Refusal(403, "not_allowed", "The Government Bidding Admin keeps the company's papers.");
+  // The bidding team keeps the company's papers (its lead, its people), with the CEO and the Admin.
+  if (!(await approvesBids(db, me)) && me.channel?.code !== "BID" && !["ceo", "admin"].includes(me.role))
+    throw new Refusal(403, "not_allowed", "The bidding team keeps the company's papers.");
   await db.execute(
     sql`insert into company_paper (name, number, expires_on, note, added_by)
       values (${input.name.trim()}, ${input.number?.trim() || null}, ${input.expiresOn || null}::date, ${input.note?.trim() || null}, ${me.id})`,
