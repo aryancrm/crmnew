@@ -149,6 +149,12 @@ def screen_spec(text: str):
     }
 
 
+def usable(name: str) -> bool:
+    """A picture that shows the page: one caught while it was still loading is a small, nearly blank file."""
+    f = HERE / "img" / f"{name}.jpg"
+    return f.exists() and f.stat().st_size > 30000
+
+
 def tasks():
     """Every task of the book, in its part, with the screen it shows."""
     files = {}
@@ -166,10 +172,12 @@ def tasks():
             task["n"] = n
             spec = OVERRIDES.get(task["title"], screen_spec(task["screen"]))
             task["shot"] = f"p{n:03d}" if spec else None
-            if task["shot"] and not (HERE / "img" / f"{task['shot']}.jpg").exists():
+            if task["shot"] and not usable(task["shot"]):
                 # Not photographed for the playbook: the screenshot taken earlier of the same page, if any.
                 path = spec["path"].split("?")[0]
                 task["shot"] = EARLIER_BY_LOGIN.get((spec["who"], path)) or (EARLIER.get(path) if path not in ("/", "/orders") else None)
+                if task["shot"] and not usable(task["shot"]):
+                    task["shot"] = None
                 if task["shot"]:
                     spec = {**spec, "phone": task["shot"].startswith("phone")}
                     task["spec"] = spec
@@ -316,6 +324,38 @@ def task_page(part, task, count) -> str:
     )
 
 
+def text_half(part, task, count) -> str:
+    f = task["fields"]
+    meta = " · ".join(f"<b>{k.title()}</b> {inline(cap(f[k]))}" for k in ("who", "when") if f.get(k))
+    steps = "".join(
+        f"<li>{inline(text)}" + (f"<ul>{''.join(f'<li>{inline(x)}</li>' for x in subs)}</ul>" if subs else "") + "</li>"
+        for text, subs in task["steps"]
+    )
+    nxt = "<div class='next'><h4>What happens next</h4>" + "".join(f"<p>{inline(cap(t))}</p>" for t in task["next"]) + "</div>" if task["next"] else ""
+    notes = "<div class='good'><h4>Good to know</h4><ul>" + "".join(f"<li>{inline(cap(t))}</li>" for t in task["notes"]) + "</ul></div>" if task["notes"] else ""
+    return (
+        f"<div class='half fit'><p class='kick'>{E(part['title'])} · {task['in_part']} of {count}</p><h3>{inline(task['title'])}</h3>"
+        f"<p class='meta'>{meta}</p><ol class='steps'>{steps}</ol>{nxt}{notes}</div>"
+    )
+
+
+def pair_page(part, a, b, count) -> str:
+    return f"<section class='slide pair'>{text_half(part, a, count)}{text_half(part, b, count)}{foot('Playbook')}</section>"
+
+
+def pages_of(part):
+    """The part's pages: a task with its picture alone; two tasks in a row without one, side by side."""
+    out, i, ts = [], 0, part["tasks"]
+    while i < len(ts):
+        if not ts[i]["shot"] and not ts[i]["full"] and i + 1 < len(ts) and not ts[i + 1]["shot"] and not ts[i + 1]["full"]:
+            out.append((ts[i], ts[i + 1]))
+            i += 2
+        else:
+            out.append((ts[i],))
+            i += 1
+    return out
+
+
 def part_page(part, number, pages) -> str:
     items = "".join(
         f"<li><span>{inline(t['title'])}</span><b>{pages[t['n']]}</b></li>" for t in part["tasks"]
@@ -349,14 +389,20 @@ def render(first_page: int):
         page += 1
         for i, t in enumerate(part["tasks"], 1):
             t["in_part"] = i
-            pages[t["n"]] = page
-            page += 2 if t["full"] else 1
+        for group in pages_of(part):
+            for t in group:
+                pages[t["n"]] = page
+            page += 2 if group[0]["full"] else 1
     out = []
     for number, part in enumerate(book, 1):
         out.append(part_page(part, number, pages))
-        for t in part["tasks"]:
-            out.append(task_page(part, t, len(part["tasks"])))
-            if t["full"]:
+        for group in pages_of(part):
+            count = len(part["tasks"])
+            if len(group) == 2:
+                out.append(pair_page(part, group[0], group[1], count))
+                continue
+            out.append(task_page(part, group[0], count))
+            if group[0]["full"]:
                 out.append(tracker_page())
     return out, starts
 
@@ -410,6 +456,14 @@ CSS = """
 .halves { position: absolute; top: 1.3in; bottom: 0.45in; left: 0.5in; right: 0.5in; display: grid; grid-template-columns: 1fr 1fr; gap: 0.2in; }
 .halves .shot { display: flex; justify-content: center; align-items: flex-start; }
 .halves .shot img { width: auto; max-width: 100%; max-height: 100%; height: auto; object-fit: contain; }
+.pair { padding: 0.45in 0.55in 0.5in; }
+.pair .half { position: absolute; top: 0.45in; bottom: 0.5in; width: 5.9in; }
+.pair .half:nth-child(1) { left: 0.55in; }
+.pair .half:nth-child(2) { right: 0.55in; padding-left: 0.3in; border-left: 1px solid #e2e8f0; }
+.pair .half .kick { margin: 0; font-size: 0.85em; }
+.pair .half h3 { margin: 2px 0 4px; font-size: 1.6em; line-height: 1.15; font-weight: 800; }
+.pair .half .meta { margin: 0 0 0.6em; font-size: 0.92em; color: #334155; }
+.pair .half .meta b { color: #1f9d55; }
 .contents .parts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.18in; }
 .contents .pt { background: #fff; border: 1px solid #e2e8f0; border-top: 5px solid #1f9d55; border-radius: 14px; padding: 12px 14px; }
 .contents .pt h3 { margin: 0; font-size: 13pt; display: flex; justify-content: space-between; gap: 8px; }
