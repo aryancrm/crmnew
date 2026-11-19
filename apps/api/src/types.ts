@@ -5638,10 +5638,32 @@ export type TenderDesk = {
 /** Modern Trade's day: the chains, their money, their listings. */
 export type MtDay = {
   today: string;
-  pace: number | null;
-  paceNote: string;
+  /** The chains: Modern Trade's areas' customers and those its seats invoiced, each against its gap. */
   chains: CrrDay["accounts"];
-  owed: { total: number; rows: Collections["rows"] };
+  /** Each chain's money with Modern Trade (its seats' invoices, this CRM's and Zoho's), what it
+   *  deducted and sent back in 12 months. */
+  money: {
+    customerId: number;
+    name: string;
+    /** The seat that invoiced it last: its holder, or null when vacant (then `zoho`). */
+    seller: string | null;
+    zoho: string | null;
+    soldMonth: number;
+    sold12: number;
+    owed: number;
+    overdue: number;
+    /** Days since the oldest unpaid invoice was issued. */
+    oldestDays: number | null;
+    deducted: number;
+    returns: number;
+    returnsCredit: number;
+  }[];
+  /** Modern Trade's seats: the COO's own and her sellers', vacant ones too. */
+  seats: { seatId: number; title: string; lead: boolean; name: string | null; zoho: string | null; chains: number; soldMonth: number; owed: number }[];
+  /** What the chains deducted from their payments in 12 months, by why (Finance records each). */
+  deductions: { kind: DeductionKind; count: number; amount: number }[];
+  /** The chains' returns in 12 months, by why. */
+  returns: { reason: string; count: number; credit: number }[];
   listings: { id: number; customerId: number; chain: string; medicine: string; branches: number; listed: boolean; since: string }[];
 };
 

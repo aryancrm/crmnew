@@ -104,8 +104,8 @@ export async function nbdDay(db: Database, me: Me): Promise<NbdDay> {
 type Account = CrrDay["accounts"][number];
 
 /** The accounts a CRR looks after (handed to them, or of their seat's area) and each one's health. */
-export async function accountsOf(db: Database, crrIds: number[], areaIds: number[], today: string): Promise<Account[]> {
-  if (!crrIds.length && !areaIds.length) return [];
+export async function accountsOf(db: Database, crrIds: number[], areaIds: number[], today: string, alsoIds: number[] = []): Promise<Account[]> {
+  if (!crrIds.length && !areaIds.length && !alsoIds.length) return [];
   const first = `${today.slice(0, 7)}-01`;
   const prevFirst = new Date(Date.UTC(Number(today.slice(0, 4)), Number(today.slice(5, 7)) - 2, 1)).toISOString().slice(0, 10);
   const ids = (list: number[]) => (list.length ? sql.join(list.map((id) => sql`${id}`), sql`, `) : sql`0`);
@@ -114,7 +114,8 @@ export async function accountsOf(db: Database, crrIds: number[], areaIds: number
     sql`with mine as (
         select c.id from customer c where c.active and c.kind in ('drugstore', 'distributor', 'hospital')
           and (c.id in (select customer_id from b2b_account where crr_id in (${ids(crrIds)}) and dropped_at is null)
-            or (c.area_id in (${ids(areaIds)}) and not exists (select 1 from b2b_account b where b.customer_id = c.id and b.handed_over_at is null)))
+            or (c.area_id in (${ids(areaIds)}) and not exists (select 1 from b2b_account b where b.customer_id = c.id and b.handed_over_at is null))
+            or c.id in (${ids(alsoIds)}))
       ),
       days as (
         select i.customer_id as cid, i.issued_on as d, i.total::float8 as total from invoice i where i.customer_id in (select id from mine) and i.status <> 'cancelled'

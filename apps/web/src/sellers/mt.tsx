@@ -1,7 +1,7 @@
-// Modern Trade (docs/PLAN.md 16.7): the Chief Operating Officer's Home (sales on pace, each pharmacy
-// chain against its own reorder gap with Order, money owed by chain and its age, the listings) and
-// the Listings page (which of our medicines each chain carries, in how many branches; a change is
-// kept as a new line).
+// Modern Trade (docs/PLAN.md 16.7; docs/CHANNEL-WORK.md MT): the Chief Operating Officer's MT panel
+// (each pharmacy chain against its own reorder gap with Order, what it bought from Modern Trade, owes
+// and how old, deducted and sent back; the listings) and the Listings page (which of our medicines
+// each chain carries, in how many branches; a change is kept as a new line).
 
 import type { Catalogue, MtDay } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -106,6 +106,24 @@ function Listings({ data, onChange }: { data: MtDay; onChange: () => void }) {
   );
 }
 
+const REASON: Record<string, string> = {
+  expired: "Expired or near expiry",
+  damaged: "Damaged",
+  wrong_item: "Wrong item",
+  not_needed: "Not needed",
+  other: "Other",
+};
+const KIND: Record<MtDay["deductions"][number]["kind"], string> = {
+  near_expiry: "Near-expiry goods kept",
+  listing_fee: "Listing fees",
+  promo: "Promos and rebates",
+  penalty: "Penalties",
+  other: "Other",
+};
+
+/** Modern Trade on the COO's Home (a press on MT): the chains' money with Modern Trade, what they
+ *  deducted and sent back, which are due to reorder, the listings. Sold and target per seat are in
+ *  the panel above it. */
 export function MtHome() {
   const query = useMt();
   const [changing, setChanging] = useState(false);
@@ -113,14 +131,34 @@ export function MtHome() {
   if (!data) return null;
   const live = data.chains.filter((c) => c.state !== "lost");
   const toCall = live.filter((c) => c.state !== "ok");
+  const moneyOf = (id: number) => data.money.find((m) => m.customerId === id);
+  // The table: every chain still buying, any other with money in it (a lost chain still owing),
+  // and a customer invoiced with no order on record to measure its gap by; so it adds up to the tiles.
+  const shown: { customerId: number; name: string; chain: MtDay["chains"][number] | null }[] = [
+    ...data.chains
+      .filter((c) => c.state !== "lost" || (moneyOf(c.customerId)?.owed ?? 0) > 0 || (moneyOf(c.customerId)?.sold12 ?? 0) > 0)
+      .map((c) => ({ customerId: c.customerId, name: c.name, chain: c })),
+    ...data.money
+      .filter((m) => !data.chains.some((c) => c.customerId === m.customerId))
+      .map((m) => ({ customerId: m.customerId, name: m.name, chain: null })),
+  ];
+  const sum = (key: "soldMonth" | "sold12" | "owed" | "overdue") => data.money.reduce((total, one) => total + one[key], 0);
+  const owing = data.money.filter((m) => m.owed > 0).length;
+  const deducted = data.deductions.reduce((total, one) => total + one.amount, 0);
+  const returned = data.returns.reduce((total, one) => total + one.count, 0);
+  const credited = data.returns.reduce((total, one) => total + one.credit, 0);
+  const listed = data.listings.filter((l) => l.listed);
   return (
     <>
-      <section className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         {(
           [
-            ["Owed by the chains", shortPeso(data.owed.total), `${data.owed.rows.length} chains`],
+            ["Sold to the chains", shortPeso(sum("soldMonth")), `this month · ${shortPeso(sum("sold12"))} in 12 months`],
+            ["Owed by the chains", shortPeso(sum("owed")), owing ? `${owing} chains · ${shortPeso(sum("overdue"))} past due` : "nothing owed"],
             ["Chains to call", String(toCall.length), "due, late or stopped"],
-            ["Medicines listed", String(data.listings.filter((l) => l.listed).length), `in ${new Set(data.listings.map((l) => l.chain)).size} chains`],
+            ["Deducted", shortPeso(deducted), "from their payments, 12 months"],
+            ["Returns", String(returned), returned ? `${shortPeso(credited)} credited, 12 months` : "none in 12 months"],
+            ["Medicines listed", String(listed.length), `in ${new Set(listed.map((l) => l.chain)).size} chains`],
           ] as const
         ).map(([label, value, sub]) => (
           <div key={label} className={`${CARD} px-4 py-3`}>
@@ -132,43 +170,110 @@ export function MtHome() {
           </div>
         ))}
       </section>
-      <section className={`${CARD} min-w-0`}>
-        <h3 className="border-b border-slate-100 px-4 py-3 text-sm font-bold text-slate-900">The chains</h3>
-        {live.length === 0 ? (
+      <section className={`${CARD} min-w-0 overflow-x-auto`}>
+        <h3 className="border-b border-slate-100 px-4 py-3 text-sm font-bold text-slate-900">
+          The chains <span className="font-normal text-slate-400">· with Modern Trade, here and in Zoho</span>
+        </h3>
+        {shown.length === 0 ? (
           <p className="px-4 py-3 text-[13px] text-slate-500">No chain with orders yet.</p>
         ) : (
-          <ul className="divide-y divide-slate-100">
-            {live.map((c) => (
-              <li key={c.customerId} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
-                <span className="min-w-0 flex-1">
-                  <Link to={`/customers/${c.customerId}`} className="block truncate text-[13px] font-semibold text-slate-900 hover:underline">
-                    {c.name}
-                  </Link>
-                  <span className={`text-[11.5px] ${c.state === "ok" ? "text-slate-500" : "text-amber-700"}`}>
-                    {STATE[c.state]} · orders every {c.usual} days · last {dayLabel(c.lastOrderOn)}
-                  </span>
-                </span>
-                <Link to={`/orders/new?customer=${c.customerId}`} className="inline-flex items-center gap-1 rounded-lg bg-brand px-2 py-1 text-[12px] font-semibold text-white">
-                  <ShoppingCart className="size-3" /> Order
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <table className="w-full text-[12.5px]">
+            <thead>
+              <tr className="text-left text-[10.5px] font-semibold tracking-wide text-slate-400 uppercase">
+                <th className="px-4 py-2">Chain</th>
+                <th className="px-3 py-2">Seller</th>
+                <th className="px-3 py-2 text-right">This month</th>
+                <th className="px-3 py-2 text-right">12 months</th>
+                <th className="px-3 py-2 text-right">Owed</th>
+                <th className="px-3 py-2 text-right">Deducted</th>
+                <th className="px-3 py-2 text-right">Returns</th>
+                <th className="px-4 py-2" />
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {shown.map(({ customerId, name, chain: c }) => {
+                const m = moneyOf(customerId);
+                return (
+                  <tr key={customerId}>
+                    <td className="px-4 py-2">
+                      <Link to={`/customers/${customerId}`} className="block font-semibold text-slate-900 hover:underline">
+                        {name}
+                      </Link>
+                      {c ? (
+                        <span className={`text-[11.5px] ${c.state === "ok" ? "text-slate-500" : "text-amber-700"}`}>
+                          {STATE[c.state]} · orders every {c.usual} days · last {dayLabel(c.lastOrderOn)}
+                        </span>
+                      ) : (
+                        <span className="text-[11.5px] text-slate-500">Invoiced, no order on record to time its reorders by</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-slate-600">
+                      {m?.seller ?? (m?.zoho ? <span className="text-amber-700">Vacant · {m.zoho}</span> : "—")}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">{m?.soldMonth ? shortPeso(m.soldMonth) : "—"}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{m?.sold12 ? shortPeso(m.sold12) : "—"}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {m?.owed ? (
+                        <>
+                          <span className={m.overdue ? "font-semibold text-rose-700" : ""}>{shortPeso(m.owed)}</span>
+                          {m.oldestDays !== null && <span className="block text-[11px] text-slate-500">oldest {m.oldestDays} days</span>}
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right tabular-nums">{m?.deducted ? shortPeso(m.deducted) : "—"}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">
+                      {m?.returns ? (
+                        <>
+                          {m.returns}
+                          {m.returnsCredit > 0 && <span className="block text-[11px] text-slate-500">{shortPeso(m.returnsCredit)} credited</span>}
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <Link
+                        to={`/orders/new?customer=${customerId}`}
+                        className="inline-flex items-center gap-1 rounded-lg bg-brand px-2 py-1 text-[12px] font-semibold text-white"
+                      >
+                        <ShoppingCart className="size-3" /> Order
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </section>
       <div className="grid gap-4 lg:grid-cols-2">
         <section className={`${CARD} min-w-0`}>
-          <h3 className="border-b border-slate-100 px-4 py-3 text-sm font-bold text-slate-900">Money owed by chain</h3>
-          {data.owed.rows.length === 0 ? (
-            <p className="px-4 py-3 text-[13px] text-slate-500">Nothing owed.</p>
+          <h3 className="border-b border-slate-100 px-4 py-3 text-sm font-bold text-slate-900">
+            Deductions and returns <span className="font-normal text-slate-400">· the last 12 months</span>
+          </h3>
+          {data.deductions.length === 0 && data.returns.length === 0 ? (
+            <p className="px-4 py-3 text-[13px] text-slate-500">
+              None in 12 months. Finance records a chain's deduction with its payment (near-expiry goods kept, listing fee, promo,
+              penalty), and each return is asked for on its order.
+            </p>
           ) : (
             <ul className="divide-y divide-slate-100">
-              {data.owed.rows.map((row) => (
-                <li key={row.customerId} className="flex items-center justify-between gap-2 px-4 py-2 text-[13px]">
-                  <span className="min-w-0 truncate font-medium text-slate-900">{row.customer}</span>
-                  <span className="shrink-0 font-semibold tabular-nums">
-                    {shortPeso(row.owed)} <span className="text-[11px] font-normal text-slate-400">{row.age}d</span>
+              {data.deductions.map((d) => (
+                <li key={d.kind} className="flex items-center justify-between gap-2 px-4 py-2 text-[13px]">
+                  <span className="min-w-0 truncate text-slate-900">
+                    Deducted: {KIND[d.kind]} <span className="text-slate-500">· {d.count}</span>
                   </span>
+                  <span className="shrink-0 font-semibold tabular-nums">{shortPeso(d.amount)}</span>
+                </li>
+              ))}
+              {data.returns.map((r) => (
+                <li key={r.reason} className="flex items-center justify-between gap-2 px-4 py-2 text-[13px]">
+                  <span className="min-w-0 truncate text-slate-900">
+                    Returned: {REASON[r.reason] ?? r.reason} <span className="text-slate-500">· {r.count}</span>
+                  </span>
+                  <span className="shrink-0 font-semibold tabular-nums">{r.credit ? `${shortPeso(r.credit)} credited` : "not credited yet"}</span>
                 </li>
               ))}
             </ul>
@@ -176,9 +281,6 @@ export function MtHome() {
         </section>
         <Listings data={data} onChange={() => setChanging(true)} />
       </div>
-      <p className="text-[12px] text-slate-500">
-        Chains' deductions and near-expiry returns are not in the CRM yet: they need Finance's record of a short payment.
-      </p>
       {changing && <ListingDialog chains={live} onClose={() => setChanging(false)} />}
     </>
   );

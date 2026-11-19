@@ -19,6 +19,7 @@ import { PACE_TEXT, PaceBar } from "../company/ceo-home";
 import { seatWords } from "../seat-words";
 import { TeamDrill } from "./drill";
 import { channelsIn, useTeamTree } from "./hierarchy";
+import { toneOf } from "./pace";
 import { HeadRisks } from "./mentor";
 import { greeting, todayWords } from "../home/home";
 
@@ -86,7 +87,22 @@ export function TeamSalesPage() {
   const current = data.today.slice(0, 7);
   const href = (month: string) =>
     month >= current ? location.pathname : `${location.pathname}?month=${month}`;
-  const { total } = data;
+  // A lead's or head's four figures are their boxes' (Aryan, 19 Nov: the target sheet is right):
+  // every seat in them, vacant ones and their own included, as the sales tracker counts, so they
+  // add up to the channels below. The company's view and a team without a tree keep the people's.
+  const boxes = !whole && top && board.data ? board.data.totals : null;
+  const total = boxes
+    ? {
+        target: boxes.target,
+        sold: boxes.sold,
+        today: boxes.today,
+        placed: boxes.placed,
+        placedValue: boxes.placedValue,
+        pct: boxes.target ? (boxes.sold / boxes.target) * 100 : null,
+        tone: toneOf(boxes.sold, boxes.target, data.pace),
+      }
+    : data.total;
+  const stoppedNow = boxes ? boxes.stopped : data.stopped.length;
   const pacePct = Math.round(data.pace * 100);
   const arrow = "grid size-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100";
 
@@ -167,9 +183,9 @@ export function TeamSalesPage() {
             {shortPeso(total.placedValue)} · sold when Finance invoices
           </span>
         </Figure>
-        <Figure label="Stopped now" value={data.stopped.length.toLocaleString("en-PH")}>
-          <span className={data.stopped.length ? "text-rose-600" : "text-slate-500"}>
-            {data.stopped.length ? "On hold or sent back" : "Nothing stopped"}
+        <Figure label="Stopped now" value={stoppedNow.toLocaleString("en-PH")}>
+          <span className={stoppedNow ? "text-rose-600" : "text-slate-500"}>
+            {stoppedNow ? "On hold or sent back" : "Nothing stopped"}
           </span>
         </Figure>
       </section>
