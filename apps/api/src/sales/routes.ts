@@ -1,5 +1,6 @@
 // Sales against target: a team's month, the channels', the CEO Home and the company tree.
 
+import { companyGlance } from "../overview/company";
 import type { Hono, MiddlewareHandler } from "hono";
 import { targetSheet } from "./target-sheet";
 import type { Database } from "../db/index";
@@ -58,6 +59,7 @@ export function salesRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
   app.get("/api/team/sales", async (c) =>
     c.json(await teamSales(db, c.get("me"), c.req.query("month"))),
   );
+  app.get("/api/ceo/company", async (c) => c.json(await companyGlance(db, c.get("me"))));
   app.get("/api/ceo/home", async (c) =>
     c.json(
       await ceoHome(db, c.get("me"), c.req.query("month"), {

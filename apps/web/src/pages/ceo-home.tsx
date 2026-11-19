@@ -38,6 +38,7 @@ import {
 } from "../team/glance";
 import { RangePicker } from "../team/range";
 import { PageState } from "../ui";
+import { CompanyGlance } from "./company-glance";
 import { greeting, todayWords } from "./home";
 
 type Icon = React.ComponentType<{ className?: string }>;
@@ -390,6 +391,9 @@ export function CeoHomePage() {
           <RangePicker />
         </div>
       </header>
+
+      {/* The company at a glance: colourful, everything the CRM knows about it (Aryan, 19 Nov). */}
+      <CompanyGlance />
 
       {/* 2. The four boxes, open: each holds what clicking it used to lead to */}
       <section aria-label="The month" className="grid gap-3 lg:grid-cols-2">

@@ -28,7 +28,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
-import { initials, onlineDesk, useMe } from "./auth";
+import { initials, ME, onlineDesk, useMe } from "./auth";
 import { DeskPeople } from "./desk/people";
 import { LiveLocationSender } from "./field/live-sender";
 import { UndoConfirmBar } from "./finance/undo";
@@ -203,8 +203,9 @@ export function Shell() {
         <LiveLocationSender />
         {/* The common desk shows the desk, not the one person signed in on it (Aryan, 18 Nov). */}
         <Account
-          name={commonDesk ? `${space.label} desk` : me.data.name}
-          role={commonDesk ? `Signed in as ${me.data.name}` : me.data.roleLabel}
+          // The shared screen is the desk's, nobody's own (Aryan, 19 Nov): no person's name on it.
+          name={commonDesk && me.data.deskScreen ? `${space.label} desk` : me.data.name}
+          role={commonDesk && me.data.deskScreen ? "Shared desk screen" : me.data.roleLabel}
           desk={Boolean(commonDesk)}
         />
       </header>
@@ -772,9 +773,7 @@ function Account({ name, role, desk = false }: { name: string; role: string; des
   }, [open]);
 
   async function signOut() {
-    await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
-    queries.clear();
-    navigate("/login", { replace: true });
+    await leaveNow(queries, navigate);
   }
 
   return (
@@ -876,14 +875,24 @@ export async function lookAs(personId: number): Promise<void> {
   window.location.href = "/";
 }
 
+/** Signing out at once (Aryan, 19 Nov: "Sign out takes time"): the screen goes to the sign-in
+ *  first and nobody on it reads again; the session ends on the server meanwhile. Clearing every
+ *  read while the old screen was still open made each of its boxes read once more first. */
+async function leaveNow(queries: ReturnType<typeof useQueryClient>, navigate: ReturnType<typeof useNavigate>) {
+  const ending = api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+  await queries.cancelQueries();
+  queries.setQueryData(ME, null);
+  navigate("/login", { replace: true });
+  await ending;
+  queries.removeQueries({ predicate: (query) => query.queryKey[0] !== ME[0] });
+}
+
 /** The workspace this login opens, and the way back to the portal's board (signing out). */
 function SwitchWorkspace({ label }: { label: string }) {
   const navigate = useNavigate();
   const queries = useQueryClient();
   async function leave() {
-    await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
-    queries.clear();
-    navigate("/login", { replace: true });
+    await leaveNow(queries, navigate);
   }
   return (
     <button

@@ -1895,6 +1895,22 @@ export type CeoAlert = {
   tone: "bad" | "warn";
 };
 
+/** The company at a glance, on the CEO's Home (overview/company.ts). Money in centavos. */
+export type CompanyGlance = {
+  today: string;
+  departments: { name: string; people: number }[];
+  working: { in: number; all: number };
+  channels: { code: string; name: string; target: number; sold: number }[];
+  days: { day: string; amount: number }[];
+  sellers: { name: string; amount: number }[];
+  customers: { name: string; amount: number }[];
+  medicines: { name: string; amount: number }[];
+  enquiries: { bySource: { source: string; count: number }[]; all: number; waiting: number; ordered: number; month: number };
+  orders: { status: string; count: number }[];
+  stock: { name: string; value: number; pieces: number }[];
+  kinds: { kind: string; count: number }[];
+};
+
 export type CeoHome = MonthFacts & {
   sales: {
     target: number | null;

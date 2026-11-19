@@ -331,6 +331,92 @@ else {
   }
 }
 
+// ---- History (Aryan, 19 Nov: "no customer owes much that is long overdue"): the delivered orders
+// spread over the month's days instead of all today, and four more delivered and unpaid, billed
+// 45, 70, 95 and 125 days ago, so Customers owe and Collections show real ageing. Every date on
+// such an order (and its invoice, steps, events, papers, payments) moves back by the same days. ----
+const SHIFT: [table: string, key: string, columns: string[]][] = [
+  ["sales_order", "id", ["created_at", "submitted_at", "approved_at", "updated_at", "finance_checked_at", "packed_at", "shipped_at", "delivered_on", "delivered_at", "status_since", "dispatch_by_at", "manage_by_at", "address_checked_at", "finance_by_at", "expected_on", "pay_by"]],
+  ["invoice", "order_id", ["issued_on", "due_on", "at"]],
+  ["order_event", "order_id", ["at"]],
+  ["order_step", "order_id", ["entered_at", "left_at"]],
+  ["order_file", "order_id", ["at"]],
+  ["order_pick", "order_id", ["at"]],
+  ["order_assignment", "order_id", ["at"]],
+  ["order_version", "order_id", ["at"]],
+];
+async function age(orderId: number, days: number) {
+  for (const [table, key, columns] of SHIFT)
+    for (const column of columns)
+      await db.execute(
+        sql`update ${sql.raw(table)} set ${sql.raw(column)} = ${sql.raw(column)} - make_interval(days => ${days})
+          where ${sql.raw(key)} = ${orderId} and ${sql.raw(column)} is not null`,
+      );
+  await db.execute(
+    sql`update payment set paid_on = paid_on - make_interval(days => ${days}), at = at - make_interval(days => ${days})
+      where invoice_id in (select id from invoice where order_id = ${orderId})`,
+  );
+}
+// Each part looks first, so a run cut short is finished by the next one.
+const [spread] = await rows<{ n: number }>(
+  db,
+  sql`select count(*)::int as n from invoice i join sales_order o on o.id = i.order_id join customer c on c.id = o.customer_id
+    where c.note = ${MARK} and i.issued_on < ${today}::date and i.issued_on >= date_trunc('month', ${today}::date)`,
+);
+console.log("\nHistory: the delivered orders spread over the month; four delivered and unpaid, billed 45, 70, 95 and 125 days ago");
+if (apply) {
+  {
+    const done = spread?.n
+      ? []
+      : await rows<{ id: number }>(
+          db,
+          sql`select o.id::int as id from sales_order o join customer c on c.id = o.customer_id where c.note = ${MARK} and o.status = 'completed' order by o.id`,
+        );
+    const back = Math.max(1, Number(today.slice(8, 10)) - 2);
+    for (const [at, order] of done.entries()) await age(order.id, 1 + ((at * 5) % back));
+    const late: [area: string, which: 0 | 1, days: number][] = [
+      ["HOS | PASAY", 0, 45],
+      ["HOS | BAGUIO", 0, 70],
+      ["HOS | DAVAO NORTH", 1, 95],
+      ["BID | HAZEL", 1, 125],
+    ];
+    for (const [area, which, days] of late) {
+      try {
+        const one = names.get(area)?.[which];
+        const [customer] = one
+          ? await rows<{ id: number; kind: string }>(db, sql`select id::int as id, kind from customer where lower(name) = lower(${one.name}) and note = ${MARK} limit 1`)
+          : [];
+        const [holder] = await rows<{ name: string }>(
+          db,
+          sql`select p.name from area a join seat s on s.area_id = a.id and s.active join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and h.ends_on is null
+            join person p on p.id = h.person_id where a.name = ${area} limit 1`,
+        );
+        if (!customer || !holder) throw new Error("no such customer or seat here");
+        const [late] = await rows<{ n: number }>(
+          db,
+          sql`select count(*)::int as n from invoice i join sales_order o on o.id = i.order_id where o.customer_id = ${customer.id} and i.issued_on < ${today}::date - 30`,
+        );
+        if (late?.n) continue;
+        const items = pick(PRICE_KIND[customer.kind] ?? "hospital", 2).map((line) => ({ ...line, qty: line.qty + 10 }));
+        const order = (await call(await cookieOf(holder.name), "/api/orders", { customerId: customer.id, items })).id as number;
+        await call(management, `/api/orders/${order}/approve`, {});
+        await call(finance, `/api/finance/orders/${order}/invoice`, {});
+        await call(dispatch, `/api/dispatch/orders/${order}/pack`, {});
+        await call(dispatch, `/api/dispatch/orders/${order}/ship`, { method: "rider", rider: "Company rider", addressChecked: true });
+        const form = new FormData();
+        form.set("kind", "dr");
+        form.set("file", new File([PNG], "signed-dr.png", { type: "image/png" }));
+        await call(dispatch, `/api/orders/${order}/papers`, form);
+        await call(dispatch, `/api/dispatch/orders/${order}/deliver`, { receivedBy: "Pharmacy receiving", deliveredOn: today });
+        await age(order, days);
+        console.log(`  ${one?.name}: delivered, unpaid, billed ${days} days ago`);
+      } catch (error) {
+        console.log(`  ${area}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
+}
+
 // The sessions this run opened are closed again.
 if (made.length) await db.execute(sql`delete from session where id in (${sql.join(made.map((id) => sql`${id}`), sql`, `)})`);
 const [counts] = await rows<{ orders: number; customers: number }>(
