@@ -691,7 +691,8 @@ describe("the dashboard and the lists", () => {
       ),
     ).toBe(true);
     expect((await read<OrderBoard>("sarla", "/api/orders/board?channel=RX")).cards).toHaveLength(0);
-    expect(board.channels).toEqual(["HOSP"]);
+    // Every channel, not only those with orders (19 Nov).
+    expect(board.channels).toEqual(expect.arrayContaining(["HOSP", "RX", "B2B"]));
     // The step line's counts and one status picked from it.
     expect(board.byStatus.pending_approval).toBe(board.counts.needs);
     const picked = await read<OrderBoard>("sarla", "/api/orders/board?status=finance_check");

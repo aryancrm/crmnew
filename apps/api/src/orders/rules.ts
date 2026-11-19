@@ -226,6 +226,8 @@ export const DESK_TABS: Record<Desk, Partial<Record<BoardTab, OrderStatus[]>>> =
     done: ["completed"],
     // Sent back to the MedRep (a draft once sent back): waiting for their fix and answer.
     sent: ["draft"],
+    // Approved today, wherever they are now (read by the approval's day).
+    passed: [],
   },
   finance: {
     needs: ["finance_check", "ready_for_invoice"],
@@ -233,6 +235,8 @@ export const DESK_TABS: Record<Desk, Partial<Record<BoardTab, OrderStatus[]>>> =
     dispatch: ["ready_for_dispatch", "packing", "shipped"],
     hold: ["on_hold", "exception"],
     done: ["completed"],
+    // Checked and sent on today (read by Finance's step's day).
+    passed: [],
   },
   dispatch: {
     needs: ["ready_for_dispatch", "packing", "shipped"],

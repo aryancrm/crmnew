@@ -46,23 +46,29 @@ import { ReasonDialog, useOrderAction, waited } from "./parts";
 import { count, Dialog, dayLabel, PageState, peso } from "../ui";
 import { useWorkClock } from "../work-clock";
 
-/** The work tabs, as the Leads desk's queues: each desk's own work first. */
+/** All orders' tabs: every stage of the line, for whoever looks an order up. */
+const ALL_TABS: { key: BoardTab; label: string; dot?: string }[] = [
+  { key: "needs", label: "Needs you" },
+  { key: "sent", label: "Sent back", dot: "bg-amber-400" },
+  { key: "finance", label: "With Finance" },
+  { key: "dispatch", label: "With Dispatch" },
+  { key: "hold", label: "On hold", dot: "bg-amber-500" },
+  { key: "cancelled", label: "Cancelled" },
+  { key: "done", label: "Delivered today" },
+];
+/** Each desk's own tabs only (Aryan, 19 Nov: "on top only what is this desk's; where every order
+ *  stands is All orders' in Look up"). */
 const DESK_TABS: Record<Desk, { key: BoardTab; label: string; dot?: string }[]> = {
   management: [
     { key: "needs", label: "Needs you" },
     { key: "sent", label: "Sent back", dot: "bg-amber-400" },
-    { key: "finance", label: "With Finance" },
-    { key: "dispatch", label: "With Dispatch" },
     { key: "hold", label: "On hold", dot: "bg-amber-500" },
-    { key: "cancelled", label: "Cancelled" },
-    { key: "done", label: "Delivered today" },
+    { key: "passed", label: "Approved today" },
   ],
   finance: [
     { key: "needs", label: "Needs you" },
-    { key: "upstream", label: "Not yet with Finance" },
-    { key: "dispatch", label: "With Dispatch" },
     { key: "hold", label: "On hold", dot: "bg-amber-500" },
-    { key: "done", label: "Delivered today" },
+    { key: "passed", label: "Sent on today" },
   ],
   dispatch: [
     { key: "needs", label: "Needs you" },
@@ -70,9 +76,24 @@ const DESK_TABS: Record<Desk, { key: BoardTab; label: string; dot?: string }[]> 
     { key: "to_ship", label: "To ship" },
     { key: "came_back", label: "Came back", dot: "bg-rose-500" },
     { key: "road", label: "On the road" },
-    { key: "upstream", label: "Not yet with Dispatch" },
     { key: "hold", label: "On hold", dot: "bg-amber-500" },
     { key: "done", label: "Delivered today" },
+  ],
+};
+/** Under Needs you, a filter per check with something on it (Aryan, 19 Nov: "papers not complete,
+ *  payment not right: their filters on top"): Management's four checks, Finance's four. */
+const LOOKS: Partial<Record<Desk, { key: string; label: string }[]>> = {
+  management: [
+    { key: "paper", label: "Documents" },
+    { key: "price", label: "Medicines & price" },
+    { key: "stock", label: "Stock" },
+    { key: "customer", label: "Customer & licence" },
+  ],
+  finance: [
+    { key: "proof", label: "Payment" },
+    { key: "paper", label: "Papers" },
+    { key: "dues", label: "Dues" },
+    { key: "credit", label: "Credit" },
   ],
 };
 const DESK_HOME: Record<Desk, BoardTab> = {
@@ -193,9 +214,7 @@ export function OrdersToCheck({
   // Management and Admin say why a held order goes on, on any desk's board (the API asks them).
   const me = useMe().data;
   const manager = ["management", "admin"].includes(me?.role ?? "");
-  const TABS = all
-    ? [{ key: "all" as const, label: "All orders" }, ...DESK_TABS.management]
-    : DESK_TABS[desk];
+  const TABS = all ? [{ key: "all" as const, label: "All orders" }, ...ALL_TABS] : DESK_TABS[desk];
   const [params, setParams] = useSearchParams();
   // Cards (the usual look), Table or Board, as the Leads desk offers them: picked by whoever
   // uses it and remembered on this device, per desk.
@@ -219,6 +238,8 @@ export function OrdersToCheck({
   const status = params.get("status") ?? "";
   const channel = params.get("channel") ?? "";
   const medrep = params.get("medrep") ?? "";
+  // A check's filter under Needs you (Management's, Finance's): only the orders with something on it.
+  const look = params.get("look") ?? "";
   const q = params.get("q") ?? "";
   const [typed, setTyped] = useState(q);
   const set = (changes: Record<string, string>) => {
@@ -331,12 +352,19 @@ export function OrdersToCheck({
     );
   // One person's orders (a name pressed beside the common screen), at Management and Finance.
   const whoId = !all && (desk === "management" || desk === "finance") ? Number(params.get("who")) || 0 : 0;
-  const data = query.data
+  const base = query.data
     ? whoId
       ? { ...query.data, cards: query.data.cards.filter((card) => card.handledById === whoId) }
       : query.data
     : undefined;
-  if (!data) return <PageState query={query} what="the orders" />;
+  if (!base) return <PageState query={query} what="the orders" />;
+  // The desk's own check filters sit in its tab row, beside Needs you (Aryan, 19 Nov: the same
+  // look as before, only the top changed); their counts are read off Needs you's orders.
+  const looks = !all ? LOOKS[base.desk] : undefined;
+  const onNeeds = base.tab === "needs" && !base.status;
+  const warnsOf = base.desk === "finance" ? financeWarns : managementWarns;
+  const data =
+    looks && look && onNeeds ? { ...base, cards: base.cards.filter((card) => warnsOf(card).includes(look)) } : base;
 
   const finance = data.desk === "finance";
   const dispatch = data.desk === "dispatch";
@@ -506,8 +534,36 @@ export function OrdersToCheck({
               aria-label="Orders"
               className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none]"
             >
-              {TABS.map((item) => {
-                const selected = !data.status && data.tab === item.key;
+              {TABS.flatMap((item) => [item, ...(item.key === "needs" && looks ? looks.map((one) => ({ ...one, look: true })) : [])]).map((item) => {
+                const isLook = "look" in item;
+                const selected = isLook
+                  ? onNeeds && look === item.key
+                  : !data.status && data.tab === item.key && !(item.key === "needs" && look);
+                if (isLook)
+                  return (
+                    <button
+                      key={`look-${item.key}`}
+                      type="button"
+                      role="tab"
+                      aria-selected={selected}
+                      onClick={() => set({ tab: "", status: "", shown: "", look: selected ? "" : item.key })}
+                      className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none ${
+                        selected
+                          ? "bg-brand text-white shadow-sm"
+                          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                      }`}
+                    >
+                      <span aria-hidden="true" className="size-1.5 rounded-full bg-amber-400" />
+                      <span>{item.label}</span>
+                      {onNeeds && (
+                        <span
+                          className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${selected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}
+                        >
+                          {count(base.cards.filter((card) => warnsOf(card).includes(item.key)).length)}
+                        </span>
+                      )}
+                    </button>
+                  );
                 return (
                   <button
                     key={item.key}
@@ -515,7 +571,7 @@ export function OrdersToCheck({
                     role="tab"
                     aria-selected={selected}
                     onClick={() =>
-                      set({ tab: item.key === defaultTab ? "" : item.key, status: "", shown: "" })
+                      set({ tab: item.key === defaultTab ? "" : item.key, status: "", shown: "", look: "" })
                     }
                     className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none ${
                       selected
@@ -526,7 +582,7 @@ export function OrdersToCheck({
                     {item.dot && (
                       <span aria-hidden="true" className={`size-1.5 rounded-full ${item.dot}`} />
                     )}
-                    {item.key === "done" && (
+                    {(item.key === "done" || item.key === "passed") && (
                       <CheckCheck
                         aria-hidden="true"
                         className={`size-3.5 ${selected ? "text-emerald-300" : "text-emerald-600"}`}
@@ -800,6 +856,24 @@ function CheckSteps({ card }: { card: OrderCard }) {
       </div>
     </>
   );
+}
+
+/** Which of Management's checks have something on a card: its filters under Needs you (19 Nov). */
+function managementWarns(card: OrderCard): string[] {
+  const found = checksOf({ ...card, manual: true });
+  return CARD_CHECKS.filter((one) => found.find((check) => check.key === one.key)?.tone === "warn").map(
+    (one) => one.key,
+  );
+}
+
+/** Which of Finance's checks have something on a card, read as its strip reads them (19 Nov). */
+function financeWarns(card: OrderCard): string[] {
+  const paper = checksOf(card).find((one) => one.key === "paper");
+  return FINANCE_CHECKS.filter((step) =>
+    step.key === "paper"
+      ? paper?.tone === "warn"
+      : card.findings.some((finding) => (step.warnKinds as readonly string[]).includes(finding.kind)),
+  ).map((step) => step.key);
 }
 
 /** Finance's checks on a card, as Management's (Aryan, 19 Nov: "the same bars in Finance: the papers

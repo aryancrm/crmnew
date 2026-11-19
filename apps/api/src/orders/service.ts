@@ -1077,7 +1077,12 @@ export async function orderBoard(
       : // Finance's holds are its own too: held by Finance, or stopped at one of its steps.
         desk === "finance" && key === "hold"
         ? sql`o.status in ('on_hold', 'exception') and (o.held_role = 'finance' or o.held_from in ('finance_check', 'ready_for_invoice'))`
-        : key === "done"
+        : key === "passed"
+          ? desk === "finance"
+            ? sql`exists (select 1 from order_event e where e.order_id = o.id and e.stage = 'finance_verified'
+                and (e.at at time zone 'Asia/Manila')::date = ${today})`
+            : sql`o.approved_at is not null and (o.approved_at at time zone 'Asia/Manila')::date = ${today}`
+          : key === "done"
           ? sql`o.status = 'completed' and o.delivered_on = ${today}::date`
           : key === "sent"
             ? sql`o.status = 'draft' and o.sent_back_at is not null`
@@ -1137,9 +1142,11 @@ export async function orderBoard(
     counts: counts[0] ?? {},
     byStatus: Object.fromEntries(statusCounts.map((row) => [row.status, row.n])),
     cards: await toCards(db, me, found, desk === "management" ? viewerOf(me) : desk),
-    channels: [
-      ...new Set(choices.map((row) => row.channel).filter((code): code is string => Boolean(code))),
-    ].sort(),
+    // Every channel, in the company's order (Aryan, 19 Nov: the list showed only the channels with
+    // orders, and looked short).
+    channels: (await rows<{ code: string }>(db, sql`select code from channel order by sort, code`)).map(
+      (row) => row.code,
+    ),
     medreps: [
       ...new Map(choices.map((row) => [row.id, { id: row.id, name: row.name }])).values(),
     ].sort((x, y) => x.name.localeCompare(y.name)),

@@ -805,7 +805,9 @@ export type BoardTab =
   | "to_pack"
   | "to_ship"
   | "road"
-  | "came_back";
+  | "came_back"
+  /** What the desk passed on today: Management's approvals, Finance's checks (19 Nov). */
+  | "passed";
 
 /** A medicine on a card: what it lists at for this buyer and what it was offered at. */
 export type CardItem = {
