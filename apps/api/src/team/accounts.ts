@@ -87,9 +87,11 @@ export async function teamAccounts(db: Database, me: Me): Promise<TeamAccounts> 
   };
   const withState = found.map((one) => ({ ...one, state: stateOf(one) }));
   const count = (state: TeamAccounts["rows"][number]["state"]) => withState.filter((one) => one.state === state).length;
+  // One city however it was typed ("MANILA", "Manila"), shown in title case.
   const byCity = new Map<string, { accounts: number; soldYear: number }>();
   for (const one of withState) {
-    const city = one.city?.trim() || "No city";
+    const typed = one.city?.trim().replace(/\s+/g, " ").toLowerCase();
+    const city = typed ? typed.replace(/(^|[\s(-])(\p{L})/gu, (_, before: string, letter: string) => before + letter.toUpperCase()) : "No city";
     const known = byCity.get(city) ?? { accounts: 0, soldYear: 0 };
     known.accounts += 1;
     known.soldYear += one.soldYear;
