@@ -71,6 +71,7 @@ import { VendorPage as BuyingVendor, VendorsPage as BuyingVendors } from "./buyi
 import { ChannelsReport, Reports } from "./company/reports";
 import { Returns } from "./orders/all-returns";
 import { SalesOrderPage } from "./orders/sales-order";
+import { CustomerPoPage } from "./orders/purchase-order";
 import { SettingsPage } from "./admin/settings";
 import { AddressSlip, DeliveryReceipt, Shipments } from "./dispatch/shipments";
 import { SpeedPage } from "./desk/speed";
@@ -204,6 +205,7 @@ createRoot(root).render(
             <Route path="orders/:id/fix" element={<OrderNew key="fix" fix />} />
             <Route path="orders/:id/change" element={<OrderNew key="change" change />} />
             <Route path="orders/:id/sales-order" element={<SalesOrderPage />} />
+            <Route path="orders/:id/purchase-order" element={<CustomerPoPage />} />
             <Route path="orders/:id" element={<Order />} />
             <Route path="orders/check" element={<OrdersToCheck key="needs" />} />
             <Route path="on-hold" element={<OrdersToCheck key="hold" defaultTab="hold" />} />

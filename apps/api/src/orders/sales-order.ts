@@ -68,6 +68,7 @@ export async function salesOrderDoc(db: Database, me: Me, id: number): Promise<S
     note: string | null;
     division: string | null;
     subDivision: string | null;
+    headquarter: string | null;
     invoiceFrom: InvoiceFrom;
     doctor: string | null;
     leadCode: string | null;
@@ -84,7 +85,7 @@ export async function salesOrderDoc(db: Database, me: Me, id: number): Promise<S
         ${day("(coalesce(o.submitted_at, o.created_at) at time zone 'Asia/Manila')")} as "orderDate", o.payment_terms as terms,
         o.payment_days::int as days, o.payment_term as agreed, ${day("o.expected_on")} as "expectedOn",
         o.customer_po as "customerPo", o.delivery_method as method, o.courier, rep.name as medrep, ch.code as channel,
-        o.note, o.division, o.sub_division as "subDivision", o.invoice_from as "invoiceFrom", doc.name as doctor,
+        o.note, o.division, o.sub_division as "subDivision", o.headquarter, o.invoice_from as "invoiceFrom", doc.name as doctor,
         l.code as "leadCode", l.source as "leadSource", o.delivery_fee::int as "deliveryFee", o.total::int as total,
         i.id::int as "invoiceId", i.code as "invoiceCode", i.status as "invoiceStatus"
       from sales_order o join customer c on c.id = o.customer_id join person rep on rep.id = o.medrep_id
@@ -141,6 +142,7 @@ export async function salesOrderDoc(db: Database, me: Me, id: number): Promise<S
   const custom: [string, string][] = [
     ["Division", o.division ?? ""],
     ["Sub-division", o.subDivision ?? ""],
+    ["Headquarter", o.headquarter ?? ""],
     ["Payment Terms", o.agreed ?? ""],
     ["Doctor Name", o.doctor ?? ""],
     ["Invoicing From", INVOICE_FROM_LABEL[o.invoiceFrom]],

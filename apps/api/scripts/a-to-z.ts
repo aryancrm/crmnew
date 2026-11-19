@@ -123,10 +123,13 @@ await step("his hospital is in his customer list", async () => {
   must(list.rows.some((one) => one.id === customer.id), "St. Clare's not found in his list");
   return customer.name;
 });
-await step("places it from the form: SugamaGet 200 × 5 at the list price, RocuGet × 10", async () => {
+await step("places it from the form, With their PO (PO-STC-118): SugamaGet 200 × 5 at the list price, RocuGet × 10", async () => {
   o1 = (
     await call<{ id: number }>(MEDREP, "/api/orders", {
       customerId: customer.id,
+      // The order's type picked first (19 Nov): the hospital orders with its PO.
+      type: "po",
+      customerPo: "PO-STC-118",
       items: [
         { medicineId: sugama.id, qty: 5, priceKind: "hospital" },
         { medicineId: rocu.id, qty: 10, priceKind: "hospital" },
@@ -147,8 +150,13 @@ await step("the medicine stays on the shelf but is promised", async () => {
   must((promised?.n ?? 0) >= 5, `${promised?.n ?? 0} promised`);
   return `${startShelf} on the shelf, ${promised?.n} promised to this order (5 paid${(promised?.n ?? 0) > 5 ? `, ${(promised?.n ?? 0) - 5} free by a promo` : ""})`;
 });
-await step("attaches the hospital's PO", async () => {
+await step("its PO is asked for, then the signed PO's photo is attached", async () => {
+  const before = (await order(MEDREP, o1)).paperList.find((row) => row.kind === "po");
+  must(before?.needed && !before.onFile, "the PO wasn't asked for");
   await call(MEDREP, `/api/orders/${o1}/papers`, paper("po"));
+  const after = (await order(MEDREP, o1)).paperList.find((row) => row.kind === "po");
+  must(after?.onFile, "the PO isn't on file");
+  return "asked as their PO, on file once attached";
 });
 await step("a MedRep can't approve his own order", async () => {
   must(await refused(MEDREP, `/api/orders/${o1}/approve`), "the MedRep could approve");
@@ -213,6 +221,7 @@ await step("the MedRep fixes it (6 vials) and sends it again with his answer", a
       { medicineId: sugama.id, qty: 6, priceKind: "hospital" },
       { medicineId: rocu.id, qty: 10, priceKind: "hospital" },
     ],
+    customerPo: "PO-STC-118",
     answer: "Yes, 6: confirmed with their pharmacy",
   });
   const back = await order(other, o1);
@@ -259,9 +268,13 @@ await step("checks it and makes the invoice: on to Dispatch", async () => {
   await call(fin, `/api/finance/orders/${o1}/invoice`, {});
   const now = await order(fin, o1);
   must(now.order.status === "ready_for_dispatch", `status ${now.order.status}`);
-  const [invoice] = await rows<{ code: string; due: string; total: number }>(db, sql`select code, to_char(due_on, 'YYYY-MM-DD') as due, total::int as total from invoice where order_id = ${o1} and status <> 'cancelled'`);
+  const [invoice] = await rows<{ id: number; code: string; due: string; total: number }>(db, sql`select id::int as id, code, to_char(due_on, 'YYYY-MM-DD') as due, total::int as total from invoice where order_id = ${o1} and status <> 'cancelled'`);
   must(invoice, "no invoice");
-  return `${invoice.code}, ₱${(invoice.total / 100).toLocaleString("en-PH")}, due ${invoice.due}`;
+  // Their PO's number goes on the invoice.
+  const printed = await call<{ invoice?: { customerPo?: string | null }; customerPo?: string | null }>(fin, `/api/invoices/${invoice.id}`);
+  const po = printed.invoice?.customerPo ?? printed.customerPo ?? null;
+  must(po === "PO-STC-118", `the invoice's PO is ${po}`);
+  return `${invoice.code}, ₱${(invoice.total / 100).toLocaleString("en-PH")}, due ${invoice.due}, their PO ${po} on it`;
 });
 
 // ================================================================== Dispatch
@@ -420,20 +433,23 @@ await step("another business's head (Javed) doesn't", async () => {
 });
 // One seat, one Division (Aryan, 19 Nov): Ryan's order carries the Hospital's, another is refused,
 // and it goes to his own lead and head only (not to another Division's coach).
-await step("his order carries his own Division (HOS); another (CLIDP) is refused", async () => {
+await step("his order carries his own Division (HOS); one he places under another (CLIDP) is still his", async () => {
   const first = await order(MEDREP, o1);
   must(first.order.division === "HOS", `carries ${first.order.division}`);
-  try {
-    await call(MEDREP, "/api/orders", {
-      customerId: customer.id,
-      division: "CLIDP",
-      items: [{ medicineId: rocu.id, qty: 2, priceKind: "hospital" }],
-    });
-    must(false, "an order under another Division was taken");
-  } catch (error) {
-    if (!/→ 400/.test(error instanceof Error ? error.message : "")) throw error;
-  }
-  return `${first.order.code}: HOS`;
+  // Any Division may be picked (Aryan, 19 Nov, evening: the screen universal, as the hub's); the
+  // order stays the MedRep's: his own lead and head, his target.
+  const other = await call<{ id: number }>(MEDREP, "/api/orders", {
+    customerId: customer.id,
+    division: "CLIDP",
+    type: "no_po",
+    items: [{ medicineId: rocu.id, qty: 2, priceKind: "hospital" }],
+  });
+  const placed = await order(MEDREP, other.id);
+  must(placed.order.division === "CLIDP", `carries ${placed.order.division}`);
+  must(placed.order.medrep === first.order.medrep, `counts for ${placed.order.medrep}`);
+  // Taken off again, so the rest of the walk reads only the first order.
+  await call(MGMT[0] as string, `/api/orders/${other.id}/cancel`, { reason: "Placed only to check the Division" });
+  return `${first.order.code}: HOS; ${placed.order.code}: CLIDP, still ${placed.order.medrep}'s (cancelled after)`;
 });
 await step("the B2B coach (Jessa) doesn't see it", async () => {
   try {

@@ -131,6 +131,31 @@ export function divisionOfChannel(code: string | null | undefined): string {
 }
 
 /** The Sub-division an area's name points at ("HOS | Pasay" -> "PASAY"), when it is a known one. */
+/** The hub's rule for what an order's Division brings with it (getmeds-frontend OrderForm.jsx
+ *  divisionRule, 2 Oct 2026; Aryan, 19 Nov: "as soon as the MedRep puts the Division, the fields
+ *  follow"): the Sub-division (fixed, or CRR / NBD) and the Headquarter (filled, editable; B&B, URO
+ *  and STC pick their location). A patient-assistance order (a guarantee letter) in B&B, URO, STC,
+ *  HOS or B2C is Telesales / Telesales. Null: the Sub-division and Headquarter are typed. */
+export const PAP_DIVISIONS = ["B&B", "URO", "STC", "HOS", "B2C"];
+/** The programmes a guarantee letter comes from (the hub's PAP list); one is the order's Source. */
+export const PAP_PROGRAMS = ["DSWD", "PCSO", "Office of the President", "Other"] as const;
+/** The prescription Divisions: their orders carry a prescription, or say why there is none. */
+export const RX_DIVISIONS = ["B2C", "STC", "URO", "B&B"];
+export function divisionRule(
+  division: string | null | undefined,
+  pap: boolean,
+): { sub?: string; subOptions?: string[]; hq: string; hqOptions?: string[] } | null {
+  if (!division) return null;
+  if (pap && PAP_DIVISIONS.includes(division)) return { sub: "Telesales", hq: "Telesales" };
+  if (["B&B", "URO", "STC"].includes(division))
+    return { sub: "MD Telesales", hq: "", hqOptions: SUB_DIVISIONS[division] ?? [] };
+  if (division === "B2C") return { sub: "MD Telesales", hq: "B2C" };
+  if (division === "HOS") return { sub: "Hospital", hq: "N/A" };
+  if (division === "CLIDP") return { sub: "CLIDP", hq: "ON SITE" };
+  if (division === "B2B") return { subOptions: ["CRR", "NBD"], hq: "ON SITE" };
+  return null;
+}
+
 export function subDivisionOfArea(
   division: string,
   area: string | null | undefined,

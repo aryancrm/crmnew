@@ -855,9 +855,41 @@ export function Order() {
               >
                 <FileText className="size-3.5" aria-hidden="true" /> Sales order
               </Link>
+              {/* A business's order: its purchase order, printed for them to sign (19 Nov). */}
+              {order.customerKind !== "patient" && !order.patientOrder && (
+                <Link
+                  to={`/orders/${order.id}/purchase-order`}
+                  className="inline-flex items-center gap-1.5 rounded-md border border-brand/40 px-3 py-1.5 text-xs font-semibold text-brand-dark hover:bg-brand-tint"
+                >
+                  <FileText className="size-3.5" aria-hidden="true" /> Purchase order
+                </Link>
+              )}
               <SendToCustomer orderId={order.id} small />
               <RefundButton orderId={order.id} />
             </div>
+            {/* An order with their PO and no signed PO yet: print it, have it signed, add its photo
+                (Aryan, 19 Nov). */}
+            {order.type === "po" &&
+              !data.papers.some((paper) => paper.kind === "po") &&
+              !["cancelled", "completed"].includes(order.status) && (
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2.5 text-[13px] text-amber-950">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold">Their signed PO isn't on the order yet.</span>
+                    <Link
+                      to={`/orders/${order.id}/purchase-order`}
+                      className="font-semibold text-brand-dark underline"
+                    >
+                      Print the purchase order
+                    </Link>
+                    <span>for them to sign and stamp, then add its photo:</span>
+                  </div>
+                  {can.addPaper && (
+                    <div className="mt-2">
+                      <Papers data={data} kinds={["po"]} />
+                    </div>
+                  )}
+                </div>
+              )}
           </div>
           <div className="flex flex-col items-end gap-2 text-right">
             <div className="flex items-center gap-3">
@@ -888,7 +920,13 @@ export function Order() {
                   "made when approved"
                 )}
               </span>
-              {order.division && <span>Division {order.division}</span>}
+              {order.division && (
+                <span>
+                  Division {order.division}
+                  {order.subDivision ? ` · ${order.subDivision}` : ""}
+                  {order.headquarter && order.headquarter !== "N/A" ? ` · HQ ${order.headquarter}` : ""}
+                </span>
+              )}
               {order.customerPo && <span>PO {order.customerPo}</span>}
               {order.doctor && <span>Dr. {order.doctor.replace(/^Dr\.?\s*/i, "")}</span>}
               <button

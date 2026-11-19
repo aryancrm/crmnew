@@ -104,6 +104,8 @@ const orderInput = z.object({
   patientOrder: z.boolean().optional(),
   patientName: optional(120),
   type: z.enum(ORDER_TYPES, { error: "Pick the order's type." }).nullish(),
+  headquarter: optional(60),
+  noRxReason: optional(300),
   relief: z
     .object({
       kind: z.enum(["senior", "pwd"], { error: "Pick senior citizen or PWD." }),
@@ -198,6 +200,7 @@ export function orderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
         stage: c.req.query("stage"),
         page: Number(c.req.query("page")) || 1,
         seat: Number(c.req.query("seat")) || undefined,
+        division: c.req.query("division") || undefined,
       }),
     ),
   );

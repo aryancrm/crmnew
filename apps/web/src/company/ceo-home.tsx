@@ -397,6 +397,7 @@ export function CeoHomePage() {
           customers on top; the people below). */}
       <section aria-label="The month" className="grid gap-3 lg:grid-cols-2">
         <ChannelSalesCard
+          all
           channels={sales.channels}
           label={inMonth}
           title={
@@ -437,6 +438,7 @@ export function CeoHomePage() {
           }
         />
         <CollectedCard
+          all
           head={
             <>
               <div

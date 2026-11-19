@@ -7,13 +7,17 @@
 import {
   DIVISION_BUYERS,
   DIVISIONS,
+  divisionRule,
   isPatientType,
   ORDER_SOURCES,
   ORDER_TYPE_HINT,
   ORDER_TYPE_LABEL,
   type OrderTypeKey,
   orderTypesFor,
+  PAP_DIVISIONS,
+  PAP_PROGRAMS,
   PAYMENT_TERMS,
+  RX_DIVISIONS,
   SUB_DIVISIONS,
   subDivisionOfArea,
 } from "@2mg/api/divisions";
@@ -277,6 +281,7 @@ type Draft = {
   doctor: { id: number; name: string } | null;
   division?: string;
   subDivision?: string;
+  headquarter?: string | null;
   paymentTerm?: string;
   source?: string;
   orderType?: OrderTypeKey | null;
@@ -436,6 +441,11 @@ export function OrderNew({
   // The hub's Division, Sub-division and the Payment Terms agreed with the customer.
   const [division, setDivision] = useState<string | null>(null);
   const [subDivision, setSubDivision] = useState<string | null>(null);
+  // The hub's Headquarter (null: the Division's own), a prescription Division's order's reason for
+  // having no prescription, and a guarantee letter's programme, which is its Source (19 Nov, evening).
+  const [headquarter, setHeadquarter] = useState<string | null>(null);
+  const [noRxReason, setNoRxReason] = useState("");
+  const [program, setProgram] = useState("");
   const [paymentTerm, setPaymentTerm] = useState("");
   // How the terms are given: from the list, as a number of days, or as a date to pay by.
   const [termMode, setTermMode] = useState<"list" | "__days" | "__date">("list");
@@ -443,14 +453,17 @@ export function OrderNew({
   const forRep = forWhom.data?.can
     ? forWhom.data.medreps.find((rep) => rep.id === medrepId)
     : undefined;
-  // One seat, one Division (Aryan, 19 Nov: "a MedRep comes under one Division"): the order carries
-  // the Division of the person whose order it is; one with two seats picks between the two.
-  // Management and the Admin, ordering for nobody in particular, may set any.
+  // The order's Division starts as its person's own and may be any other (Aryan, 19 Nov, evening:
+  // "universal, as the hub's: a hospital MedRep who gets a prescription order picks that Division
+  // and the fields follow"); it still counts for its MedRep. Management and the Admin, ordering for
+  // nobody in particular, pick one.
   const anyDivision = me ? ["management", "admin", "ceo"].includes(me.role) && !forRep : false;
   const ownDivisions = forRep
     ? forRep.divisions
     : (me?.divisions ?? (me?.channel?.division ? [me.channel.division] : []));
-  const divisionChoices: readonly string[] = anyDivision || ownDivisions.length === 0 ? DIVISIONS : ownDivisions;
+  const divisionChoices: readonly string[] = DIVISIONS;
+  // Their own first, as chips; every other Division a pick away.
+  const ownChips: readonly string[] = anyDivision ? [] : ownDivisions;
   const ownDivision = ownDivisions[0] ?? "";
   const pickedDivision =
     division && divisionChoices.includes(division) ? division : divisionChoices.length === 1 ? (divisionChoices[0] ?? "") : (division ?? ownDivision);
@@ -459,6 +472,23 @@ export function OrderNew({
     (pickedDivision
       ? subDivisionOfArea(pickedDivision, forRep ? forRep.area : me?.area?.name, forRep ? null : me?.title)
       : "");
+  // The hub's rule for the Division (and a guarantee letter's order in its five Divisions): a fixed
+  // Sub-division shows as it is, B2B's is CRR or NBD; the Headquarter starts as the Division's.
+  const pap = orderType === "gl" && PAP_DIVISIONS.includes(pickedDivision);
+  const rule = divisionRule(pickedDivision, pap);
+  const sentSub =
+    rule?.sub ??
+    (rule?.subOptions ? (rule.subOptions.includes(pickedSubDivision) ? pickedSubDivision : "") : pickedSubDivision);
+  const shownHq = headquarter ?? rule?.hq ?? "";
+  // A prescription Division's order (B2C, STC, URO, B&B) carries the prescription, or says why.
+  const rxDivision = RX_DIVISIONS.includes(pickedDivision);
+  /** Another Division (or type) picked: its own Sub-division and Headquarter, as the hub does. */
+  const divisionPicked = (name: string) => {
+    setDivision(name);
+    setSubDivision(name === ownDivision ? null : "");
+    setHeadquarter(null);
+    if (orderType === "gl" && !PAP_DIVISIONS.includes(name)) setOrderType(null);
+  };
   // The customers shown: the Division's usual buyers, unless every customer is asked for.
   const divisionKinds = DIVISION_BUYERS[pickedDivision] ?? null;
   // A business's order type never lists patients (19 Nov).
@@ -494,6 +524,7 @@ export function OrderNew({
     setNote(draft.note);
     if (draft.division !== undefined) setDivision(draft.division);
     if (draft.subDivision !== undefined) setSubDivision(draft.subDivision);
+    if (draft.headquarter !== undefined) setHeadquarter(draft.headquarter);
     if (draft.paymentTerm !== undefined) {
       setPaymentTerm(draft.paymentTerm);
       if (draft.paymentTerm.startsWith("Pays by ")) setTermMode("__date");
@@ -557,6 +588,9 @@ export function OrderNew({
           : "list",
     );
     setSource(order.source ?? "");
+    setHeadquarter(order.headquarter ?? null);
+    setNoRxReason(order.noRxReason ?? "");
+    if ((PAP_PROGRAMS as readonly string[]).includes(order.source ?? "")) setProgram(order.source ?? "");
     setStockReason(order.stockReason ?? "");
     // An order placed before types: worked out from what it carries.
     setOrderType(
@@ -590,6 +624,7 @@ export function OrderNew({
       doctor,
       division: pickedDivision,
       subDivision: pickedSubDivision,
+      headquarter,
       paymentTerm,
       source,
       orderType,
@@ -836,6 +871,9 @@ export function OrderNew({
           : []),
         ...(orderType === "senior_pwd" && !relief ? ["Senior citizen or PWD"] : []),
         ...(orderType === "po" && !customerPo.trim() ? ["Their PO number"] : []),
+        // A guarantee letter's order: its programme and the letter itself (the hub's PAP rule).
+        ...(pap && !program ? ["Programme (DSWD, PCSO…)"] : []),
+        ...(orderType === "gl" && !papers.gl && !onFile.has("gl") ? ["Guarantee letter"] : []),
         ...(address.trim() ? [] : ["Delivery address"]),
         ...(source ? [] : ["Source"]),
         ...(note.trim() ? [] : ["Customer remarks"]),
@@ -851,6 +889,10 @@ export function OrderNew({
         // Whenever a patient buys, the prescription goes with the order (Aryan, 17 Nov).
         ...(forPatient && !papers.prescription && !onFile.has("prescription")
           ? ["Prescription"]
+          : []),
+        // A prescription Division's order (the hub's rule): the prescription, or why there is none.
+        ...(rxDivision && !forPatient && !papers.prescription && !onFile.has("prescription") && !noRxReason.trim()
+          ? ["Prescription (or why there is none)"]
           : []),
         ...(proofMissing &&
         !onFile.has("payment_proof") &&
@@ -906,7 +948,12 @@ export function OrderNew({
       // Only the Admin's switch is read (the API's ORDER_MANAGE_ROLES; Management places none).
       ...(switches ? { checks: { management: toManagement, finance: toFinance } } : {}),
       division: pickedDivision || null,
-      subDivision: pickedSubDivision || null,
+      subDivision: sentSub || null,
+      headquarter: shownHq.trim() || null,
+      noRxReason:
+        rxDivision && !forPatient && !papers.prescription && !onFile.has("prescription")
+          ? noRxReason.trim() || null
+          : null,
       paymentTerm: paymentTerm.trim() || null,
       type: orderType,
       patientOrder,
@@ -1081,23 +1128,13 @@ export function OrderNew({
             )}
           </div>
         </div>
-        {/* The order's Division: the person's own, shown (one seat, one Division); one with two
-            seats picks between the two. The sub-division and the customer list follow it. */}
+        {/* The order's Division: their own first, any other a pick away (19 Nov, evening); the
+            sub-division, the order types, the customer list and the papers follow it. */}
         <div className="flex flex-col gap-1.5">
           <Label text="Division" needed />
-          {divisionChoices.length === 1 ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="inline-flex h-9 items-center rounded-xl bg-brand px-3.5 text-[13px] font-semibold text-white shadow-2xs">
-                {pickedDivision}
-              </span>
-              <span className={HELP}>
-                {forRep ? `${forRep.name}'s Division` : "Your Division"}: the order goes to{" "}
-                {forRep ? "their" : "your"} own team lead and head, and counts for {forRep ? "them" : "you"}.
-              </span>
-            </div>
-          ) : (
-            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Division">
-              {divisionChoices.map((name) => {
+          <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Division">
+            {[...ownChips, ...(pickedDivision && !ownChips.includes(pickedDivision) ? [pickedDivision] : [])].map(
+              (name) => {
                 const on = pickedDivision === name;
                 return (
                   <button
@@ -1106,11 +1143,7 @@ export function OrderNew({
                     role="radio"
                     aria-checked={on}
                     disabled={Boolean(fixId)}
-                    onClick={() => {
-                      setDivision(name);
-                      // Their own main Division fills its sub-division again; another starts blank.
-                      setSubDivision(name === ownDivision ? null : "");
-                    }}
+                    onClick={() => divisionPicked(name)}
                     className={`inline-flex h-9 items-center rounded-xl border px-3 text-[13px] font-semibold transition ${
                       on
                         ? "border-brand bg-brand text-white shadow-2xs"
@@ -1120,12 +1153,29 @@ export function OrderNew({
                     {name}
                   </button>
                 );
-              })}
-            </div>
-          )}
-          {divisionChoices.length > 1 && ownDivisions.length > 1 && !anyDivision && (
+              },
+            )}
+            {!fixId && (
+              <select
+                aria-label={ownChips.length ? "Another Division" : "Division"}
+                value={pickedDivision && !ownChips.includes(pickedDivision) ? pickedDivision : ""}
+                onChange={(event) => divisionPicked(event.target.value || ownDivision)}
+                className="h-9 min-w-44 rounded-xl border border-slate-300 bg-white px-3 text-[13px] text-slate-700 focus:border-brand focus:outline-none"
+              >
+                <option value="">{ownChips.length ? "Another Division…" : "Pick the Division…"}</option>
+                {DIVISIONS.filter((name) => !ownChips.includes(name)).map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+          {pickedDivision && ownChips.length > 0 && (
             <span className={HELP}>
-              {forRep ? "They sit" : "You sit"} in {ownDivisions.length} Divisions: pick the one this order is for.
+              {ownChips.includes(pickedDivision)
+                ? `${forRep ? `${forRep.name}'s` : "Your"} Division: the order goes to ${forRep ? "their" : "your"} own team lead and head, and counts for ${forRep ? "them" : "you"}.`
+                : `Another Division's order: its fields and papers are ${pickedDivision}'s; it still counts for ${forRep ? "them" : "you"} and goes to ${forRep ? "their" : "your"} own team lead and head.`}
             </span>
           )}
           {!pickedDivision && (
@@ -1145,7 +1195,9 @@ export function OrderNew({
         <div className="flex flex-col gap-1.5">
           <Label text="Order type" needed />
           <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Order type">
-            {orderTypesFor(pickedDivision).map((key) => {
+            {orderTypesFor(pickedDivision)
+              .filter((key) => key !== "gl" || PAP_DIVISIONS.includes(pickedDivision))
+              .map((key) => {
               const on = orderType === key;
               return (
                 <button
@@ -1158,6 +1210,8 @@ export function OrderNew({
                     setOrderType(key);
                     // Only a Senior / PWD order has their price.
                     if (key !== "senior_pwd") setRelief(null);
+                    if ((key === "gl") !== (orderType === "gl")) setHeadquarter(null);
+                    if (key !== "gl") setProgram("");
                   }}
                   className={`inline-flex h-9 items-center rounded-xl border px-3 text-[13px] font-semibold transition ${
                     on
@@ -1183,10 +1237,57 @@ export function OrderNew({
             </span>
           )}
         </div>
+        {/* A guarantee letter's order: its programme, as the hub's Patient Assistance Program; it
+            is the order's Source, and the Sub-division and Headquarter become Telesales. */}
+        {pap && (
+          <div className="flex flex-col gap-1.5">
+            <Label text="Programme" needed />
+            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Programme">
+              {PAP_PROGRAMS.map((name) => {
+                const on = program === name;
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    disabled={management}
+                    onClick={() => {
+                      setProgram(name);
+                      if ((ORDER_SOURCES as readonly string[]).includes(name)) setSource(name);
+                    }}
+                    className={`inline-flex h-9 items-center rounded-xl border px-3 text-[13px] font-semibold transition ${
+                      on
+                        ? "border-brand bg-brand text-white shadow-2xs"
+                        : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                    } disabled:cursor-not-allowed disabled:opacity-70`}
+                  >
+                    {name}
+                  </button>
+                );
+              })}
+            </div>
+            <span className={HELP}>
+              Sub-division and Headquarter are Telesales; attach the guarantee letter under Documents.
+            </span>
+          </div>
+        )}
         <div className="grid gap-3 sm:grid-cols-2">
             <label className="flex flex-col gap-1">
               <Label text="Sub-division" />
-              {(SUB_DIVISIONS[pickedDivision] ?? []).length > 0 ? (
+              {rule?.sub ? (
+                // Fixed by the Division (the hub's rule).
+                <div className={FIXED}>{rule.sub}</div>
+              ) : rule?.subOptions ? (
+                <select value={sentSub} onChange={(event) => setSubDivision(event.target.value)} className={FIELD}>
+                  <option value="">-- Not set --</option>
+                  {rule.subOptions.map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              ) : (SUB_DIVISIONS[pickedDivision] ?? []).length > 0 ? (
                 <select
                   value={pickedSubDivision}
                   onChange={(event) => setSubDivision(event.target.value)}
@@ -1211,6 +1312,26 @@ export function OrderNew({
                   onChange={(event) => setSubDivision(event.target.value.toUpperCase())}
                   className={FIELD}
                   placeholder="The area within the Division"
+                />
+              )}
+            </label>
+            <label className="flex flex-col gap-1">
+              <Label text="Headquarter" />
+              {rule?.hqOptions ? (
+                <select value={shownHq} onChange={(event) => setHeadquarter(event.target.value)} className={FIELD}>
+                  <option value="">-- Pick the location --</option>
+                  {[...(shownHq && !rule.hqOptions.includes(shownHq) ? [shownHq] : []), ...rule.hqOptions].map((name) => (
+                    <option key={name} value={name}>
+                      {name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  value={shownHq}
+                  onChange={(event) => setHeadquarter(event.target.value.toUpperCase())}
+                  className={FIELD}
+                  placeholder="Optional"
                 />
               )}
             </label>
@@ -2063,7 +2184,7 @@ export function OrderNew({
                 <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold text-amber-900">
-                      Giving another price than{" "}
+                      {orderType === "po" ? "Their PO's price against " : "Giving another price than "}
                       {option ? `the ${option.label.toLowerCase()} price` : "these"}
                     </span>
                     <button
@@ -2075,7 +2196,9 @@ export function OrderNew({
                     </button>
                   </div>
                   <label className="flex flex-col gap-1">
-                    <span className="text-[11px] text-amber-900">You gave it at (₱ each)</span>
+                    <span className="text-[11px] text-amber-900">
+                      {orderType === "po" ? "Their PO price (₱ each)" : "You gave it at (₱ each)"}
+                    </span>
                     <input
                       inputMode="decimal"
                       value={line.given}
@@ -2121,10 +2244,17 @@ export function OrderNew({
                   ) : (
                     <button
                       type="button"
-                      onClick={() => change(line.key, { lower: true, given: String(list / 100) })}
+                      onClick={() =>
+                        change(line.key, {
+                          lower: true,
+                          given: String(list / 100),
+                          // A PO's price is mapped against ours (Aryan, 19 Nov); Management decides.
+                          ...(orderType === "po" ? { reason: "As on their PO" } : {}),
+                        })
+                      }
                       className="self-start text-xs font-medium text-emerald-700 hover:underline"
                     >
-                      Give another price
+                      {orderType === "po" ? "Their PO has another price" : "Give another price"}
                     </button>
                   )}
                   {!offerTakes(line.medicineId) &&
@@ -2173,6 +2303,20 @@ export function OrderNew({
             </span>
           </div>
         )}
+        {/* No prescription yet on a prescription Division's order: why (the hub's "No prescription?
+            Say why"); Management reads it with the papers. */}
+        {rxDivision && !forPatient && !papers.prescription && !onFile.has("prescription") && (
+          <label className="flex flex-col gap-1 rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-3">
+            <span className="text-[13px] font-semibold text-amber-900">No prescription? Say why</span>
+            <textarea
+              value={noRxReason}
+              onChange={(event) => setNoRxReason(event.target.value)}
+              rows={2}
+              className={FIELD}
+              placeholder="e.g. The doctor sends it before delivery / The clinic keeps stock for its patients"
+            />
+          </label>
+        )}
         <div className="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm">
           {[...PAPERS]
             .sort((a, b) => paperRank(a.kind, forPatient) - paperRank(b.kind, forPatient))
@@ -2195,7 +2339,7 @@ export function OrderNew({
               // The type's own papers are asked for too (19 Nov): Management's Documents check
               // reads them; only the prescription keeps the order from going.
               const needed =
-                (paper.kind === "prescription" && forPatient) ||
+                (paper.kind === "prescription" && (forPatient || rxDivision)) ||
                 (paper.kind === "senior_id" && orderType === "senior_pwd") ||
                 (paper.kind === "gl" && orderType === "gl") ||
                 (paper.kind === "po" && orderType === "po");

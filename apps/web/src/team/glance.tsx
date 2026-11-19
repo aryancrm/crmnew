@@ -17,6 +17,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { counted, shortPeso } from "../ceo";
 import { StepCard, took } from "../desk/speed";
+import { span } from "../orders/parts";
 import { count } from "../ui";
 import { Bars, Donut } from "./charts";
 
@@ -121,6 +122,13 @@ export function GlanceCard({
   );
 }
 
+const DESK_NAME = {
+  management: "Management",
+  finance: "Finance",
+  dispatch: "Dispatch (packing)",
+  road: "On the road",
+} as const;
+
 export function OrdersNowCard({
   board,
   to = "/orders",
@@ -152,6 +160,26 @@ export function OrdersNowCard({
           { label: "Sent back", value: now.sentBack, color: "#fbbf24" },
         ]}
       />
+      {/* The CEO's box: how long each desk takes, under where orders stand (Aryan, 19 Nov: no
+          empty space under it; one story with the boxes beside it). */}
+      {head && board.stepTimes.length > 0 && (
+        <div className="mt-5 border-t border-slate-100 pt-4">
+          <div className="mb-2 text-xs font-semibold text-slate-600">Time at each desk · average, orders that moved on</div>
+          <Bars
+            rows={(["management", "finance", "dispatch", "road"] as const)
+              .map((step) => board.stepTimes.find((one) => one.step === step))
+              .filter((one): one is NonNullable<typeof one> => Boolean(one))
+              .map((one) => ({
+                key: one.step,
+                label: DESK_NAME[one.step],
+                sub: counted(one.orders, "order"),
+                value: Math.round(one.minutes),
+              }))}
+            format={(minutes) => (minutes < 1 ? "<1m" : span(minutes))}
+            color="bg-amber-500"
+          />
+        </div>
+      )}
     </GlanceCard>
   );
 }
@@ -441,11 +469,14 @@ export function ChannelSalesCard({
   label,
   title = "Sales by channel",
   head,
+  all = false,
 }: {
   channels: ChannelFigures[];
   label: string;
   title?: string;
   head?: ReactNode;
+  /** Every channel, none folded (the CEO's Home, Aryan 19 Nov: "don't write 3 more, show all"). */
+  all?: boolean;
 }) {
   const report = useQuery({
     queryKey: ["reports", "channels"],
@@ -453,7 +484,7 @@ export function ChannelSalesCard({
   });
   const extra = new Map((report.data?.channels ?? []).map((row) => [row.code, row]));
   const sorted = [...channels].sort((a, b) => b.sold - a.sold);
-  const { shown, seeAll } = useSeeAll(sorted, 5);
+  const { shown, seeAll } = useSeeAll(sorted, all ? sorted.length : 5);
   const sold = channels.reduce((sum, row) => sum + row.sold, 0);
   return (
     <GlanceCard
@@ -661,13 +692,14 @@ export function OwedCard() {
 }
 
 /** The month's money in: how it came (bank, cash, check…) and day by day. */
-export function CollectedCard({ head }: { head?: ReactNode }) {
+export function CollectedCard({ head, all = false }: { head?: ReactNode; all?: boolean }) {
   const query = useQuery({
     queryKey: ["payments", "glance"],
     queryFn: () => api<PaymentList>("/api/payments"),
   });
   const data = query.data;
-  const { shown, seeAll } = useSeeAll(data?.rows ?? [], 5);
+  // The CEO's Home shows it open, beside every channel's sales (Aryan, 19 Nov).
+  const { shown, seeAll } = useSeeAll(data?.rows ?? [], all ? (data?.rows.length ?? 0) : 5);
   if (!data) return null;
   const top = Math.max(1, ...data.byDay.map((one) => one.amount));
   return (

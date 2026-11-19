@@ -43,10 +43,16 @@ const NEWS: Record<StockNews["kind"], { label: string; style: string }> = {
   note: { label: "Note", style: "bg-slate-100 text-slate-700" },
 };
 
-const useMine = (stage: MyOrderStage = "all", page = 1, unit: string | null = null) =>
+const useMine = (stage: MyOrderStage = "all", page = 1, unit: string | null = null, division: string | null = null) =>
   useQuery({
-    queryKey: ["orders", "mine", stage, page, unit],
-    queryFn: () => api<MyOrders>(withUnit(`/api/orders/mine?stage=${stage}&page=${page}`, unit)),
+    queryKey: ["orders", "mine", stage, page, unit, division],
+    queryFn: () =>
+      api<MyOrders>(
+        withUnit(
+          `/api/orders/mine?stage=${stage}&page=${page}${division ? `&division=${encodeURIComponent(division)}` : ""}`,
+          unit,
+        ),
+      ),
     placeholderData: (previous) => previous,
     refetchInterval: 60_000,
   });
@@ -254,6 +260,28 @@ export function MedrepHome() {
           { label: "New customers", value: data?.newCustomers, sub: "added by you" },
         ]}
       />
+
+      {/* What came from which Division this month (Aryan, 19 Nov: every MedRep's screen says what
+          they brought from which channel); each opens those orders. */}
+      {(mine.data?.byDivision.length ?? 0) > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-xs font-semibold text-slate-500">
+            {mine.data?.sales.month} by Division
+          </span>
+          {mine.data?.byDivision.map((one) => (
+            <Link
+              key={one.division}
+              to={`/orders?division=${encodeURIComponent(one.division)}`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+            >
+              {one.division}
+              <span className="text-slate-500 tabular-nums">
+                {count(one.orders)} · {shortPeso(one.value)}
+              </span>
+            </Link>
+          ))}
+        </div>
+      )}
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="flex min-w-0 flex-col gap-4">
@@ -600,7 +628,8 @@ export function MyOrdersPage() {
   const stage = (params.get("stage") ?? "all") as MyOrderStage;
   const page = Number(params.get("page")) || 1;
   const unit = useTeamUnit();
-  const mine = useMine(stage, page, unit);
+  const division = params.get("division");
+  const mine = useMine(stage, page, unit, division);
   const data = mine.data;
   const team = me?.role === "team_lead" || me?.role === "manager";
   if (!data) return <PageState query={mine} what="your orders" />;
@@ -632,6 +661,40 @@ export function MyOrdersPage() {
           <TeamSwitch />
         </div>
       )}
+      {/* What came from which Division this month (Aryan, 19 Nov: a MedRep may bring another
+          Division's order; their screen says what came from which); a press shows only those. */}
+      {data.byDivision.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center gap-1.5">
+          <span className="mr-1 text-xs font-semibold text-slate-500">{data.sales.month} by Division</span>
+          {data.byDivision.map((one) => {
+            const on = data.division === one.division;
+            return (
+              <button
+                key={one.division}
+                type="button"
+                aria-pressed={on}
+                onClick={() => {
+                  const next = new URLSearchParams(params);
+                  if (on) next.delete("division");
+                  else next.set("division", one.division);
+                  next.delete("page");
+                  setParams(next, { replace: true });
+                }}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                  on
+                    ? "border-brand bg-brand text-white"
+                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                }`}
+              >
+                {one.division}
+                <span className={`tabular-nums ${on ? "text-white/80" : "text-slate-500"}`}>
+                  {count(one.orders)} · {shortPeso(one.value)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
       <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         <div
           role="tablist"
@@ -648,7 +711,11 @@ export function MyOrdersPage() {
                 aria-selected={selected}
                 onClick={() =>
                   setParams(
-                    { ...(tab.key === "all" ? {} : { stage: tab.key }), ...(unit ? { unit } : {}) },
+                    {
+                      ...(tab.key === "all" ? {} : { stage: tab.key }),
+                      ...(unit ? { unit } : {}),
+                      ...(division ? { division } : {}),
+                    },
                     { replace: true },
                   )
                 }

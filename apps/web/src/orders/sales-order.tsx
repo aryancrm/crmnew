@@ -37,6 +37,7 @@ const RIBBON_TONE: Record<string, string> = {
 export function ZohoPaper({ ribbon, children }: { ribbon: string; children: ReactNode }) {
   return (
     <div className="relative mx-auto w-full max-w-[800px] overflow-hidden bg-white text-[12px] leading-[1.6] text-[#333] shadow-[0_0_6px_rgba(0,0,0,0.16)] print:max-w-none print:shadow-none">
+      {ribbon && (
       <div className="pointer-events-none absolute top-0 left-0 size-32 overflow-hidden">
         <div
           className={`absolute top-[30px] -left-[46px] w-[180px] -rotate-45 py-[2px] text-center text-[11px] text-white shadow-sm ${RIBBON_TONE[ribbon] ?? "bg-[#408dfb]"}`}
@@ -44,6 +45,7 @@ export function ZohoPaper({ ribbon, children }: { ribbon: string; children: Reac
           {ribbon}
         </div>
       </div>
+      )}
       <div className="px-8 pt-[72px] pb-12 sm:px-[54px]">{children}</div>
     </div>
   );

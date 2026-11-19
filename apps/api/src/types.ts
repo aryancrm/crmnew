@@ -1068,6 +1068,10 @@ export type OrderInput = {
   relief?: OrderRelief | null;
   /** The order's type, picked first (19 Nov): it says which papers the order carries. */
   type?: OrderType | null;
+  /** The hub's Headquarter, with the Division (19 Nov, evening). */
+  headquarter?: string | null;
+  /** A prescription Division's order with no prescription yet: why. */
+  noRxReason?: string | null;
 };
 
 export type OrderRelief = { kind: "senior" | "pwd"; idNo?: string | null; name?: string | null };
@@ -1279,6 +1283,9 @@ export type OrderDetail = {
     relief: OrderRelief | null;
     /** Its type, picked first (null on an order placed before types, 19 Nov). */
     type: OrderType | null;
+    headquarter: string | null;
+    /** No prescription with it yet, and why (a prescription Division's order). */
+    noRxReason: string | null;
   };
   items: {
     id: number;
@@ -1437,6 +1444,10 @@ export type MyOrders = {
     day: number;
     daysInMonth: number;
   };
+  /** This month's orders by the Division they carry (19 Nov: a MedRep may bring another
+   *  Division's order; their screen says what came from which), and the one picked, if any. */
+  byDivision: { division: string; orders: number; value: number }[];
+  division: string | null;
   cards: OrderCard[];
   total: number;
   page: number;

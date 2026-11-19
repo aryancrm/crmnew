@@ -56,7 +56,7 @@ beforeAll(async () => {
 });
 
 describe("an order's Division", () => {
-  it("is the MedRep's own; another is refused; the Admin may set any", async () => {
+  it("starts as the MedRep's own; another may be picked and still counts for him; the Admin may set any", async () => {
     const me = (await read<{ me: Me }>("ryan", "/api/me")).me;
     expect(me.divisions?.[0]).toBe("HOS");
 
@@ -66,14 +66,18 @@ describe("an order's Division", () => {
     const id = ((await placed.json()) as { id: number }).id;
     expect((await read<OrderDetail>("ryan", `/api/orders/${id}`)).order.division).toBe("HOS");
 
-    // Another Division: refused, saying his own.
+    // Another Division (19 Nov, evening: the screen universal, as the hub's): taken, carried on
+    // the order, and still his (his channel, his lead and head).
     const other = await post("ryan", "/api/orders", {
       customerId: customer,
       division: "CLIDP",
       items: [{ medicineId: medicine, qty: 1, priceKind: "hospital" }],
     });
-    expect(other.status).toBe(400);
-    expect(await other.text()).toContain("HOS");
+    expect(other.status, await other.clone().text()).toBe(200);
+    const otherId = ((await other.json()) as { id: number }).id;
+    const otherDetail = await read<OrderDetail>("ryan", `/api/orders/${otherId}`);
+    expect(otherDetail.order.division).toBe("CLIDP");
+    expect(otherDetail.order.medrep).toBe(me.name);
 
     // The Admin, ordering for nobody in particular, may set any; Management places no orders (19 Nov).
     const admin = await post("admin", "/api/orders", {
@@ -91,6 +95,22 @@ describe("an order's Division", () => {
         })
       ).status,
     ).toBe(403);
+  });
+
+  it("brings the hub's Sub-division and Headquarter with another Division, and a prescription Division asks why there is none", async () => {
+    const placed = await post("ryan", "/api/orders", {
+      customerId: customer,
+      division: "B2C",
+      type: "no_po",
+      noRxReason: "The doctor sends it before delivery",
+      items: [{ medicineId: medicine, qty: 1, priceKind: "hospital" }],
+    });
+    expect(placed.status, await placed.clone().text()).toBe(200);
+    const detail = await read<OrderDetail>("ryan", `/api/orders/${((await placed.json()) as { id: number }).id}`);
+    expect(detail.order).toMatchObject({ division: "B2C", subDivision: "MD Telesales", headquarter: "B2C" });
+    const rx = detail.paperList.find((row) => row.kind === "prescription");
+    expect(rx?.needed).toBe(true);
+    expect(rx?.why).toContain("The doctor sends it before delivery");
   });
 
   it("follows the seat's box on the chart where it names a Division", async () => {

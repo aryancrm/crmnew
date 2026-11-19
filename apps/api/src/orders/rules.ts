@@ -2,7 +2,7 @@
 // which the dashboard's tiles count, and who may do what. After the hub's own state machine.
 
 import { DISPATCH_ROLES } from "../dispatch/rules";
-import { poExpected } from "./divisions";
+import { poExpected, RX_DIVISIONS } from "./divisions";
 import { FINANCE_ROLES } from "../finance/rules";
 import type { Role } from "../people/roles";
 import type {
@@ -323,6 +323,10 @@ export function paperList(
     source?: string | null;
     /** The order's type (19 Nov): which papers it carries. */
     type?: string | null;
+    /** Its Division: a prescription Division's order carries a prescription (the hub's rule),
+     *  or says why there is none. */
+    division?: string | null;
+    noRxReason?: string | null;
   },
   onFile: PaperKind[],
 ): { kind: PaperKind; label: string; needed: boolean; why: string | null; onFile: boolean }[] {
@@ -404,7 +408,15 @@ export function paperList(
     ...poRow,
     row("hospital_doc", false, "Their licence (LTO), accreditation or any paper they send"),
     proof,
-    row("prescription", false, "For a prescription medicine, when there is one"),
+    RX_DIVISIONS.includes(customer.division ?? "")
+      ? row(
+          "prescription",
+          true,
+          customer.noRxReason
+            ? `None yet: ${customer.noRxReason}`
+            : `A ${customer.division} order carries the prescription`,
+        )
+      : row("prescription", false, "For a prescription medicine, when there is one"),
     dr,
     row("other", false, null),
   ]);

@@ -60,7 +60,7 @@ import type {
   Vat,
 } from "../types";
 import { stuckNow } from "./clock";
-import { DIVISIONS, divisionsOf, isPatientType, subDivisionOfArea, termsOfLabel } from "./divisions";
+import { DIVISIONS, divisionRule, divisionsOf, isPatientType, subDivisionOfArea, termsOfLabel } from "./divisions";
 import { logEvent, peso } from "./events";
 import {
   DESK_HOME,
@@ -1169,7 +1169,7 @@ const MY_STAGES: Record<Exclude<MyOrderStage, "all">, SQL> = {
 export async function myOrders(
   db: Database,
   me: Me,
-  filter: { stage?: string; page?: number; seat?: number },
+  filter: { stage?: string; page?: number; seat?: number; division?: string },
 ): Promise<MyOrders> {
   const stage: MyOrderStage =
     filter.stage && filter.stage in MY_STAGES ? (filter.stage as MyOrderStage) : "all";
@@ -1177,10 +1177,13 @@ export async function myOrders(
   const pageSize = 20;
   // One seat of the team (a lead's person page): everything below reads only its orders.
   const scope = filter.seat ? sql`${seen(me)} and o.seat_id = ${filter.seat}` : seen(me);
-  const where = stage === "all" ? scope : sql`${scope} and ${MY_STAGES[stage]}`;
+  // One Division picked (the split by Division on top): the list and its counts read only it.
+  const division = filter.division && (DIVISIONS as readonly string[]).includes(filter.division) ? filter.division : null;
+  const scoped = division ? sql`${scope} and o.division = ${division}` : scope;
+  const where = stage === "all" ? scoped : sql`${scoped} and ${MY_STAGES[stage]}`;
   const thisMonth = sql`date_trunc('month', o.created_at at time zone 'Asia/Manila') = date_trunc('month', now() at time zone 'Asia/Manila')`;
   const placed = sql`o.status not in ('draft', 'cancelled')`;
-  const [counts, held, sales, found] = await Promise.all([
+  const [counts, held, sales, found, byDivision] = await Promise.all([
     rows<Record<MyOrderStage, number>>(
       db,
       sql`${team(me)} select count(*)::int as "all",
@@ -1190,7 +1193,7 @@ export async function myOrders(
           count(*) filter (where ${MY_STAGES.dispatch})::int as dispatch,
           count(*) filter (where ${MY_STAGES.held})::int as held,
           count(*) filter (where ${MY_STAGES.delivered})::int as delivered
-        from sales_order o where ${scope}`,
+        from sales_order o where ${scoped}`,
     ),
     rows<MyOrders["held"][number]>(
       db,
@@ -1221,6 +1224,11 @@ export async function myOrders(
       sql`${team(me)} select ${cardColumns} ${cardFrom} where ${where}
         order by coalesce(o.submitted_at, o.created_at) desc, o.id desc limit ${pageSize} offset ${(page - 1) * pageSize}`,
     ),
+    rows<MyOrders["byDivision"][number]>(
+      db,
+      sql`${team(me)} select coalesce(o.division, 'No Division') as division, count(*)::int as orders, coalesce(sum(o.total), 0)::float8 as value
+        from sales_order o where ${scope} and ${placed} and ${thisMonth} group by 1 order by 3 desc, 1`,
+    ),
   ]);
   const counted = counts[0] ?? {
     all: 0,
@@ -1245,6 +1253,8 @@ export async function myOrders(
       day: 1,
       daysInMonth: 30,
     },
+    byDivision,
+    division,
     cards: await toCards(db, me, found),
     total: counted[stage],
     page,
@@ -1352,7 +1362,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         ${sentBackColumns}, ${iso("o.sent_back_at")} as "sentBackAt",
         case when ${takeBackSql} then ${iso(`(o.approved_at + make_interval(mins => ${TAKE_BACK_MINUTES}))`)} end as "takeBackUntil",
         case when o.relief_kind is not null then json_build_object('kind', o.relief_kind, 'idNo', o.relief_id_no, 'name', o.relief_name) end as relief,
-        o.order_type as type,
+        o.order_type as type, o.headquarter, o.no_rx_reason as "noRxReason",
         ${restorableSql} as restorable, ${paidInSql} as "paidIn", ${iso("o.waiting_stock_at")} as "waitingSince",
         (select wp.name from person wp where wp.id = o.waiting_stock_by) as "waitingBy"
       from sales_order o ${rowJoins}
@@ -1509,6 +1519,8 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         rx: items.some((item) => item.rx),
         source: order.source,
         type: order.type,
+        division: order.division,
+        noRxReason: order.noRxReason,
       },
       onFile,
     ),
@@ -1998,21 +2010,22 @@ export async function placeOrder(
     sql`select ch.division, a.name as area, p.title, ${seatDivisionsSql(sql`p.id`, today)} as "seatDivisions"
       from person p left join channel ch on ch.id = p.channel_id left join area a on a.id = p.area_id where p.id = ${holder?.id ?? me.id}`,
   );
-  // One seat, one Division (Aryan, 19 Nov: "a MedRep comes under one Division"): the order carries
-  // its person's own (one with two seats picks between the two); Management and the Admin may set
-  // any. A Hospital MedRep's order stays the Hospital's: their own lead and head, their target.
+  // The order's Division starts as its person's own and may be any (Aryan, 19 Nov, evening: "the
+  // MedRep's screen universal, as the hub's: a hospital MedRep who gets a prescription order
+  // picks that Division and its fields follow"). Whatever its Division, the order counts for its
+  // MedRep: their own lead and head, their channel, their target.
   const ownDivisions = divisionsOf(placer?.seatDivisions ?? null, placer?.division ?? null);
-  if (division && ownDivisions.length > 0 && !ownDivisions.includes(division) && !ORDER_ALL_ROLES.includes(me.role))
-    throw new Refusal(
-      400,
-      "invalid",
-      `${holder ? "Their" : "Your"} orders carry ${ownDivisions.length > 1 ? `one of ${ownDivisions.join(", ")}` : ownDivisions[0]}: ${holder ? "their" : "your"} own Division.`,
-      "division",
-    );
   const orderDivision = division ?? ownDivisions[0] ?? null;
+  // The Sub-division and Headquarter as the form sent them (the hub's rule, 19 Nov), else: their
+  // own Division's from where they sit, as before; another Division's by the hub's rule (never the
+  // person's own place on another Division's order, the hub's slip).
+  const rule = divisionRule(orderDivision, type === "gl");
   const subDivision =
     clean(input.subDivision) ??
-    (orderDivision && (placer?.area || placer?.title) ? subDivisionOfArea(orderDivision, placer?.area, placer?.title) : null);
+    (orderDivision && orderDivision === ownDivisions[0] && (placer?.area || placer?.title)
+      ? subDivisionOfArea(orderDivision, placer?.area, placer?.title)
+      : (rule?.sub ?? null));
+  const headquarter = clean(input.headquarter) ?? (rule?.hq || null);
   const status: OrderStatus = manages ? afterApproval(terms.terms) : "pending_approval";
 
   return db.transaction(async (tx) => {
@@ -2022,7 +2035,7 @@ export async function placeOrder(
           delivery_address, receiver, receiver_phone, note, expected_on, customer_po, invoice_from, doctor_id, total, submitted_at,
           approved_at, approved_by, warehouse_id, lead_id, delivery_fee, division, sub_division, payment_term,
           no_proof_reason, no_proof_note, patient_order, patient_name, relief_kind, relief_id_no, relief_name,
-          source, stock_reason, order_type)
+          source, stock_reason, order_type, headquarter, no_rx_reason)
         values (${customer.id}, ${holder?.id ?? me.id}, ${me.id}, ${holder?.channelId ?? own?.channelId ?? null}, ${status},
           ${terms.terms}, ${terms.days}, ${("payBy" in terms ? terms.payBy : null) ?? null},
           ${clean(input.deliveryAddress) ?? withCity(customer.address, customer.city)},
@@ -2032,7 +2045,7 @@ export async function placeOrder(
           ${input.noProofReason ?? null}, ${clean(input.noProofNote)}, ${patientOrder},
           ${patientOrder ? clean(input.patientName) : null},
           ${relief?.kind ?? null}, ${relief?.idNo ?? null}, ${relief?.name ?? null},
-          ${input.source ?? null}, ${clean(input.stockReason)}, ${type})
+          ${input.source ?? null}, ${clean(input.stockReason)}, ${type}, ${headquarter}, ${clean(input.noRxReason)})
         returning id::int as id`,
     );
     const id = made?.id as number;
@@ -2655,7 +2668,8 @@ export async function reviseOrder(
             no_proof_reason = ${input.noProofReason ?? null}, no_proof_note = ${clean(input.noProofNote)},
             source = coalesce(${input.source ?? null}, source), stock_reason = ${clean(input.stockReason)},
             patient_order = ${Boolean(input.patientOrder)}, patient_name = ${input.patientOrder ? clean(input.patientName) : null},
-            order_type = coalesce(${input.type ?? null}, order_type),`
+            order_type = coalesce(${input.type ?? null}, order_type),
+            headquarter = coalesce(${clean(input.headquarter)}, headquarter), no_rx_reason = ${clean(input.noRxReason)},`
           }
           updated_at = now()
         where id = ${id}`,
