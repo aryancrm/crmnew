@@ -320,8 +320,11 @@ step("Subir · BID: Jimmy a sales person, as the sheet's row");
 {
   const [seat] = await rows<{ id: number; module: string; lead: boolean }>(
     db,
-    sql`select s.id::int as id, s.module, s.lead from seat s join area a on a.id = s.area_id
-      where s.active and upper(a.name) = 'BID | JIMMY' limit 1`,
+    // By its area (the sheet's Zoho name), else by its title in the bidding team (a database with
+    // no Zoho customers has no such area).
+    sql`select s.id::int as id, s.module, s.lead from seat s left join area a on a.id = s.area_id
+      where s.active and (upper(a.name) = 'BID | JIMMY' or (s.title = 'Government Bidding Admin' and unit_division(s.unit_id) = 'BID'))
+      order by (upper(a.name) = 'BID | JIMMY') desc nulls last limit 1`,
   );
   if (!seat) missing.push("seat BID | JIMMY");
   else if (seat.module !== "medrep" && !seat.lead) {
