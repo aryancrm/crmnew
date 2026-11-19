@@ -7,3 +7,7 @@ dist/
 *.tsbuildinfo
 .claude/launch.json
 .claude/settings.local.json
+docs/user-book/img
+docs/user-book/*.pdf
+docs/user-book/book.html
+docs/user-book/.chrome*

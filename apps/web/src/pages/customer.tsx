@@ -154,11 +154,9 @@ export function Customer() {
                 {[customer.channel, customer.area].filter(Boolean).join(" · ")}
               </PlacePill>
             )}
-            {customer.review === "to_review" ? (
-              <StatePill tone="warn">Not checked yet</StatePill>
-            ) : (
-              !patient && <StatePill tone="good">Checked</StatePill>
-            )}
+            {/* Management checks a new customer's papers once: said only while it waits (Aryan,
+                19 Nov: "Checked: who checks, why?"). */}
+            {customer.review === "to_review" && <StatePill tone="warn">New: Management checks it</StatePill>}
             {customer.licenceState === "expired" && (
               <StatePill tone="bad">Licence expired</StatePill>
             )}
