@@ -323,10 +323,12 @@ export async function teamBoard(
       kind: OrgUnitKind;
       parentId: number | null;
       leadSeatId: number | null;
+      division: string | null;
     }>(
       db,
       sql`select u.id::int as id, u.name, u.kind, u.parent_id::int as "parentId",
-            (select s.id::int from seat s where s.unit_id = u.id and s.active and s.lead order by s.sort, s.id limit 1) as "leadSeatId"
+            (select s.id::int from seat s where s.unit_id = u.id and s.active and s.lead order by s.sort, s.id limit 1) as "leadSeatId",
+            unit_division(u.id) as division
           from org_unit u where u.active order by u.sort, u.id`,
     ),
     rows<TeamBoard["topMedicines"][number]>(

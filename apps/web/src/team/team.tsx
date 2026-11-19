@@ -4,7 +4,7 @@
 // are stopped now. The team lead's and manager's Home; for the CEO and the Admin, every seller
 // in the company ("Sales by person").
 
-import type { TeamSales } from "@2mg/api/types";
+import type { TeamBoard, TeamSales } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, CirclePause, Undo2 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -17,12 +17,9 @@ import { LeadGlance } from "./glance";
 import { PageState } from "../ui";
 import { PACE_TEXT, PaceBar } from "../company/ceo-home";
 import { seatWords } from "../seat-words";
-import { B2bTeamCard } from "../sellers/b2b";
-import { ClidpTeamCard } from "../sellers/clidp";
-import { MtHome } from "../sellers/mt";
-import { BiddingCard, BiddingHome } from "../sellers/tenders";
-import { DistrictNow } from "./district";
-import { HeadRisks, MentorHome, RxMentorHome, TelesalesCoachHome } from "./mentor";
+import { TeamDrill } from "./drill";
+import { channelsIn, useTeamTree } from "./hierarchy";
+import { HeadRisks } from "./mentor";
 import { greeting, todayWords } from "../home/home";
 
 const CARD = "rounded-xl border border-slate-200 bg-white";
@@ -63,9 +60,21 @@ export function TeamSalesPage() {
     placeholderData: (previous) => previous,
     refetchInterval: 60_000,
   });
+  // The team as the sales tracker draws it, for the month shown (Aryan, 19 Nov: "a tree on the Home").
+  const span = monthSpan(asked);
+  const board = useQuery({
+    queryKey: ["team", "board", "", span.from, span.to],
+    queryFn: () => api<TeamBoard>(`/api/team/board?from=${span.from}&to=${span.to}`),
+    enabled: Boolean(me && (me.role === "team_lead" || me.role === "manager")),
+    placeholderData: (previous) => previous,
+    refetchInterval: 120_000,
+  });
+  const top = useTeamTree(board.data);
   const data = query.data;
   if (!data || !me) return <PageState query={query} what="the team's sales" />;
   const whole = data.lead === null;
+  // The channels with a desk of their own (a team without one gets the team at a glance).
+  const worked = top ? channelsIn(top).filter((division) => hasWork(division)) : [];
   const coach = me.role === "team_lead" && me.channel?.code === "HOSP";
   const mentor = me.role === "manager" && me.channel?.code === "HOSP";
   const tsCoach = me.role === "team_lead" && me.channel?.code === "TS" && me.business === "RX";
@@ -120,8 +129,6 @@ export function TeamSalesPage() {
         </nav>
       </header>
 
-      {!coach && !mentor && !tsCoach && !rxMentor && !b2bHead && !bidAdmin && !mtHead && <LeadGlance />}
-
       <section aria-label="The team's month" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Figure
           label={data.running ? "Sold this month" : `Sold in ${monthShort(data.month)}`}
@@ -167,19 +174,16 @@ export function TeamSalesPage() {
         </Figure>
       </section>
 
-      {/* A Hospital coach's day: who needs them, the district now, the huddle, the rescue. */}
-      {coach && <DistrictNow />}
-      {mentor && <MentorHome />}
-      {tsCoach && <TelesalesCoachHome />}
-      {rxMentor && <RxMentorHome />}
-      {b2bHead && <B2bTeamCard />}
-      {b2bHead && me.role === "manager" && <ClidpTeamCard />}
-      {b2bHead && me.role === "manager" && <BiddingCard />}
-      {bidAdmin && <BiddingHome />}
-      {mtHead && <MtHome />}
-      {b2bHead && me.role === "manager" && <HeadRisks />}
+      {/* The team as the tracker draws it (Aryan, 19 Nov): each channel big, hover for its details,
+          a press opens its manager, each person and the channel's own work. */}
+      {!whole && top && <TeamDrill top={top} pace={data.pace} running={data.running} me={me} />}
 
-      {!coach && !mentor && !mtHead && (
+      {!whole && me.role === "manager" && <HeadRisks />}
+
+      {/* A team with no channel desk of its own yet: the team at a glance. */}
+      {!whole && top && worked.length === 0 && <LeadGlance />}
+
+      {(whole || (!top && !board.isPending)) && (
       <section aria-labelledby="people" className={`${CARD} min-w-0`}>
         <header className="flex items-baseline justify-between gap-3 px-4 pt-4 pb-2 sm:px-5">
           <h2 id="people" className="text-sm font-semibold text-slate-900">
@@ -326,3 +330,17 @@ export function TeamSalesPage() {
     </div>
   );
 }
+
+/** The days of the month shown: the 1st to its last day (the board shares targets over them). */
+function monthSpan(asked: string): { from: string; to: string } {
+  const month = /^\d{4}-\d{2}$/.test(asked)
+    ? asked
+    : new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }).slice(0, 7);
+  const [y, m] = month.split("-").map(Number) as [number, number];
+  const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, "0")}` };
+}
+
+/** Whether a channel has a desk of its own to show under the tree. */
+const hasWork = (division: string) =>
+  ["RX Business", "MD Telesales", "B2B", "CLIDP", "BID", "HOSP", "MT"].includes(division);

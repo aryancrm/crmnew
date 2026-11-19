@@ -15,6 +15,7 @@ import { B2cDeskCard } from "../online/b2c-home";
 import { GroupsGlance, WaitingGroups } from "../sellers/care-groups";
 import { RxFieldTable } from "../sellers/rx";
 import { BiddingCard } from "../sellers/tenders";
+import { withUnit } from "./switch";
 
 type Row = District["rows"][number];
 
@@ -34,6 +35,17 @@ export function MentorHome() {
       <BiddingCard title="Government Account (tenders)" />
     </>
   );
+}
+
+/** The Hospital Division's teams, one line each (the Mentor's district table): a head's Home shows
+ *  it under the channel HOSP. */
+export function HospitalTeams({ unit = null }: { unit?: number | null } = {}) {
+  const district = useQuery({
+    queryKey: ["team", "district", unit ?? ""],
+    queryFn: () => api<District>(withUnit("/api/team/district", unit ? String(unit) : null)),
+    refetchInterval: 120_000,
+  });
+  return district.data ? <Teams rows={district.data.rows} /> : null;
 }
 
 /** One line per team (each DSC's district), worst pace first. */
@@ -227,11 +239,11 @@ function Questions({ data }: { data: TeamScores }) {
 
 /** The Sales Coach of MD Telesales: the groups waiting and the 15 minutes kept (the team's
  *  people against their targets follow on the Home). */
-export function TelesalesCoachHome() {
+export function TelesalesCoachHome({ unit = null }: { unit?: number | null } = {}) {
   const groups = useQuery({ queryKey: ["care-groups"], queryFn: () => api<CareGroups>("/api/care-groups"), refetchInterval: 30_000 });
   return (
     <>
-      <B2cDeskCard />
+      <B2cDeskCard unit={unit} />
       {groups.data && <GroupsGlance data={groups.data} />}
       {groups.data && <WaitingGroups data={groups.data} />}
     </>
@@ -257,6 +269,15 @@ export function RxMentorHome() {
       {scores.data && <Questions data={scores.data} />}
     </>
   );
+}
+
+/** The Rx field team (each Rx CHC's doctors, coverage and visits), for the channel RX Business. */
+export function RxFieldBlock({ unit = null }: { unit?: number | null } = {}) {
+  const field = useQuery({
+    queryKey: ["rx", "field", unit ?? ""],
+    queryFn: () => api<RxField>(withUnit("/api/rx/field", unit ? String(unit) : null)),
+  });
+  return field.data ? <RxFieldTable data={field.data} /> : null;
 }
 
 /** A head's people at risk, money owed and score questions, for any division's Mentor. */

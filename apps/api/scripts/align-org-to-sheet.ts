@@ -288,6 +288,31 @@ await vacantSeat(b2bBox, "B2B Sales Person", "B2B | PILLOW", "Pillow");
 await vacantSeat(b2bBox, "B2B Sales Person", "B2B | CHARLE", "Charle");
 await vacantSeat(b2bBox, "B2B Sales Person", "B2B | MANI MISHRA", "Mani Mishra");
 
+// Every B2B seller on a side, CRR or NBD (Aryan, 19 Nov: "B2B is CRR and NBD: NBD brings new
+// customers, CRR watches that they buy every month and tells NBD when one stops; I don't know yet
+// who is which: put one or two in CRR, the rest in NBD, we decide later"). Fritzie is CRR and four
+// are NBD on the chart; Claire's B2B seat joins CRR (her Mindanao accounts), the four new seats NBD.
+step("Subir · B2B: each seller in CRR or NBD");
+const crrBox = await unit("Client Retention & Reorder");
+const nbdBox = await unit("New Business Development");
+async function side(area: string, box: Unit | null, title: string) {
+  if (!box) return;
+  const [seat] = await rows<{ id: number; unitId: number; title: string }>(
+    db,
+    sql`select s.id::int as id, s.unit_id::int as "unitId", s.title from seat s join area a on a.id = s.area_id
+      where s.active and upper(a.name) = upper(${area}) limit 1`,
+  );
+  if (!seat) {
+    missing.push(`seat ${area}`);
+    return;
+  }
+  if (seat.unitId === box.id && seat.title === title) return;
+  say(`${area}: into ${box.name}, "${title}"`);
+  if (apply) await updateSeat(db, me, seat.id, { unitId: box.id, title });
+}
+await side("B2B | CLAIRE", crrBox, "CRR – Mindanao");
+for (const who of ["DHON", "PILLOW", "CHARLE", "MANI MISHRA"]) await side(`B2B | ${who}`, nbdBox, "NBD");
+
 // ---- Mhalou: MT ----
 step("Mhalou · MT");
 const mtBox = await unit("Modern Trade", "Modern trade");

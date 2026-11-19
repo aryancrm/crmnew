@@ -190,7 +190,7 @@ export async function b2cTeam(db: Database, me: Me): Promise<B2cTeam> {
   if (!["team_lead", "manager", "ceo", "admin"].includes(me.role)) throw new Refusal(403, "not_allowed", "The B2C desk is the coaches' view.");
   const today = todayManila();
   const lastDay = await lastWorkDay(db, today);
-  const { seatIds } = await teamSeats(db, me, null);
+  const { seatIds } = await teamSeats(db, me, me.unit ?? null);
   const people = seatIds.length
     ? await rows<{ personId: number; name: string; seat: string }>(
         db,

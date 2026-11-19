@@ -22,7 +22,7 @@ export async function district(db: Database, me: Me): Promise<District> {
     throw new Refusal(403, "not_allowed", "District now is the coaches' and heads' view.");
   const today = todayManila();
   const month = today.slice(0, 7);
-  const { seatIds } = await teamSeats(db, me, null);
+  const { seatIds } = await teamSeats(db, me, me.unit ?? null);
   const people = seatIds.length
     ? await rows<{ personId: number; name: string; seatId: number; seat: string; areaId: number | null; area: string | null; unit: string; coach: string | null }>(
         db,

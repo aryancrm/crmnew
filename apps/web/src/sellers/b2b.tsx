@@ -13,6 +13,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { shortPeso } from "../ceo";
 import { Button, CARD, dayLabel, Dialog, PageHead, PageState, Problem, Tabs, useAction } from "../ui";
+import { withUnit } from "../team/switch";
 
 type Prospect = NbdDay["prospects"][number];
 type Account = CrrDay["accounts"][number];
@@ -525,8 +526,12 @@ export function AccountsPage() {
 }
 
 /** The coach's and the Mentor's B2B team: the pipeline per NBD, the accounts per CRR, hand-overs. */
-export function B2bTeamCard() {
-  const query = useQuery({ queryKey: ["b2b", "team"], queryFn: () => api<B2bTeam>("/api/b2b/team") });
+export function B2bTeamCard({ unit = null }: { unit?: number | null } = {}) {
+  // One box of the lead's (a press on the Home's tree): only its people.
+  const query = useQuery({
+    queryKey: ["b2b", "team", unit ?? ""],
+    queryFn: () => api<B2bTeam>(withUnit("/api/b2b/team", unit ? String(unit) : null)),
+  });
   const [handing, setHanding] = useState<Prospect | null>(null);
   const data = query.data;
   if (!data || (data.nbd.length === 0 && data.crr.length === 0)) return null;

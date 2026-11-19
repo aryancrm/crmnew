@@ -11,6 +11,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { shortPeso } from "../ceo";
 import { Button, CARD, dayLabel, Dialog, PageHead, PageState, Problem, useAction } from "../ui";
+import { withUnit } from "../team/switch";
 
 const useClidp = () => useQuery({ queryKey: ["clidp", "day"], queryFn: () => api<ClidpDay>("/api/clidp/day") });
 
@@ -219,8 +220,11 @@ export function ClidpListingsPage() {
 }
 
 /** The Mentor's card: each CLIDP coach. */
-export function ClidpTeamCard() {
-  const query = useQuery({ queryKey: ["clidp", "team"], queryFn: () => api<ClidpTeam>("/api/clidp/team") });
+export function ClidpTeamCard({ unit = null }: { unit?: number | null } = {}) {
+  const query = useQuery({
+    queryKey: ["clidp", "team", unit ?? ""],
+    queryFn: () => api<ClidpTeam>(withUnit("/api/clidp/team", unit ? String(unit) : null)),
+  });
   const data = query.data;
   if (!data || data.rows.length === 0) return null;
   return (

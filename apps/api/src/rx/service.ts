@@ -126,7 +126,7 @@ export async function rxField(db: Database, me: Me): Promise<RxField> {
   if (!["manager", "team_lead", "ceo", "admin"].includes(me.role)) throw new Refusal(403, "not_allowed", "The field team is the heads' view.");
   const today = todayManila();
   const first = `${today.slice(0, 7)}-01`;
-  const { seatIds } = await teamSeats(db, me, null);
+  const { seatIds } = await teamSeats(db, me, me.unit ?? null);
   const people = seatIds.length
     ? await rows<{ personId: number; name: string; seatId: number; seat: string; area: string | null }>(
         db,

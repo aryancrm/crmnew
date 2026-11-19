@@ -23,9 +23,9 @@ export type Role = (typeof ROLES)[number];
 export const ROLE_LABEL: Record<Role, string> = {
   medrep: "MedRep",
   team_lead: "Team lead",
-  // A head (the chart's Mentor) and a team lead (Coach) do the same work; only how much of the
-  // tree is theirs differs. The old "manager" role stays for the people who have it.
-  manager: "Team lead",
+  // A head of the sales tracker (the chart's Mentor: Javed, Subir, Vanessa, Mhalou), named as the
+  // tracker and the sign-in page's Heads door name them (19 Nov).
+  manager: "Head",
   management: "Management",
   finance: "Finance",
   dispatch: "Dispatch",

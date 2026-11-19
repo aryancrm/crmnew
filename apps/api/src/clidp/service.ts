@@ -74,7 +74,7 @@ export async function addListing(
 export async function clidpTeam(db: Database, me: Me): Promise<ClidpTeam> {
   if (!["team_lead", "manager", "ceo", "admin"].includes(me.role)) throw new Refusal(403, "not_allowed", "The CLIDP view is the heads'.");
   const today = todayManila();
-  const { seatIds } = await teamSeats(db, me, null);
+  const { seatIds } = await teamSeats(db, me, me.unit ?? null);
   const people = seatIds.length
     ? await rows<{ personId: number; name: string; title: string | null; areaId: number | null }>(
         db,

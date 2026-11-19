@@ -12,6 +12,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { shortPeso } from "../ceo";
 import { Button, CARD, dayLabel, Dialog, PageHead, PageState, Problem, Tabs, useAction } from "../ui";
+import { withUnit } from "../team/switch";
 
 const STEP: Record<TenderStep, string> = {
   found: "Found",
@@ -581,8 +582,11 @@ function ProductCprs() {
 }
 
 /** The Mentor's card: the bidding pipeline. */
-export function BiddingCard({ title = "Government Bidding" }: { title?: string }) {
-  const query = useQuery({ queryKey: ["tenders", "desk"], queryFn: () => api<TenderDesk>("/api/tenders/desk") });
+export function BiddingCard({ title = "Government Bidding", unit = null }: { title?: string; unit?: number | null }) {
+  const query = useQuery({
+    queryKey: ["tenders", "desk", unit ?? ""],
+    queryFn: () => api<TenderDesk>(withUnit("/api/tenders/desk", unit ? String(unit) : null)),
+  });
   const data = query.data;
   if (!data) return null;
   const awardedValue = [...data.toDeliver, ...data.toAccept, ...data.toBill, ...data.toCollect].reduce((sum, t) => sum + (t.ourBid ?? 0), 0);

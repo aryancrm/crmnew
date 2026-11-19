@@ -6,6 +6,7 @@
 // the tenders they run. The company's eligibility papers are kept with their expiry.
 
 import { type SQL, sql } from "drizzle-orm";
+import { peopleUnder, seatsUnder } from "../org/scope";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
 import { addDays, todayManila } from "../inventory/rules";
@@ -45,12 +46,17 @@ const seesAll = (me: Me) =>
   ["ceo", "admin"].includes(me.role) || me.channel?.code === "BID" || (me.role === "manager" && me.business === "B2B");
 // Anyone else sees the tenders they run; a head (the Hospital Division's Business Mentor, say)
 // also those run from their own business (the Government Account's).
-const scope = (me: Me): SQL =>
-  seesAll(me)
+const scope = (me: Me): SQL => {
+  const own = seesAll(me)
     ? sql`true`
     : me.role === "manager" && me.business
       ? sql`(t.owner_id = ${me.id} or seat_business_channel(t.seat_id) = ${me.business})`
       : sql`t.owner_id = ${me.id}`;
+  // One box picked on a lead's page (?unit=): the tenders run from it.
+  return me.unit
+    ? sql`(${own}) and (t.seat_id in ${seatsUnder(me.unit)} or t.owner_id in ${peopleUnder(me.unit)})`
+    : own;
+};
 
 const tenderSelect = sql`select t.id::int as id, t.code, t.title, t.agency_id::int as "agencyId", c.name as agency, t.philgeps_ref as "philgepsRef",
     t.mode, t.abc::float8 as abc, t.owner_id::int as "ownerId", o.name as owner, t.step,

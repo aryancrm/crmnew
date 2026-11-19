@@ -13,6 +13,7 @@ import { useMe } from "../auth";
 import { shortPeso } from "../ceo";
 import { Button, CARD, dayLabel, Dialog, Problem, useAction } from "../ui";
 import { greeting, todayWords } from "../home/home";
+import { withUnit } from "../team/switch";
 
 const SOURCE: Record<string, string> = {
   messenger: "Messenger",
@@ -221,8 +222,12 @@ function Day3Dialog({ order, onClose }: { order: B2cDay["day3"][number]; onClose
 }
 
 /** The coach's card: each B2C CHC's desk now (three late replies today: red, the playbook's alarm). */
-export function B2cDeskCard() {
-  const query = useQuery({ queryKey: ["b2c", "team"], queryFn: () => api<B2cTeam>("/api/b2c/team"), refetchInterval: 60_000 });
+export function B2cDeskCard({ unit = null }: { unit?: number | null } = {}) {
+  const query = useQuery({
+    queryKey: ["b2c", "team", unit ?? ""],
+    queryFn: () => api<B2cTeam>(withUnit("/api/b2c/team", unit ? String(unit) : null)),
+    refetchInterval: 60_000,
+  });
   const data = query.data;
   if (!data || data.rows.length === 0) return null;
   return (

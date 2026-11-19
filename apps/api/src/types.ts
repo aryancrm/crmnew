@@ -3467,6 +3467,48 @@ export type TeamSeatCard = {
   lastOrderAt: string | null;
 };
 
+/** The customers of a lead's team or of one box of it (19 Nov): each with its buying, the usual
+ *  gap between its orders, what it owes and the last call; counted by state and by city. */
+export type TeamAccounts = {
+  today: string;
+  counts: {
+    accounts: number;
+    /** Bought this month. */
+    buying: number;
+    /** First order ever this month. */
+    new: number;
+    due: number;
+    late: number;
+    stopped: number;
+    lost: number;
+    /** Called at least once (a call logged on the account). */
+    called: number;
+  };
+  /** Where they buy: the cities with the most sold in the last 12 months. */
+  cities: { city: string; accounts: number; soldYear: number }[];
+  rows: {
+    customerId: number;
+    name: string;
+    kind: string;
+    city: string | null;
+    /** Who holds the seat of the customer's area in the team. */
+    seller: string | null;
+    firstOn: string | null;
+    lastOrderOn: string | null;
+    since: number | null;
+    usual: number | null;
+    soldMonth: number;
+    soldYear: number;
+    owed: number;
+    overdue: number;
+    lastCallOn: string | null;
+    lastOutcome: string | null;
+    /** never ordered · new this month · due within a week · late (past 1.5× its gap) · stopped (90+
+     *  days) · lost (180+) · ok. */
+    state: "never" | "new" | "due" | "late" | "stopped" | "lost" | "ok";
+  }[];
+};
+
 /** Something under the lead that needs them, the most urgent first. */
 export type TeamNeed = {
   kind: "sent_back" | "held" | "late" | "overdue" | "vacant" | "score";
@@ -3505,6 +3547,8 @@ export type TeamBoard = {
     kind: OrgUnitKind;
     parentId: number | null;
     leadSeatId: number | null;
+    /** The sales tracker's channel the box is part of (RX Business … MT), null outside sales. */
+    division: string | null;
   }[];
   seats: TeamSeatCard[];
   needs: TeamNeed[];

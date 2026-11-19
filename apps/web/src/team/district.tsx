@@ -9,12 +9,17 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { shortPeso } from "../ceo";
 import { CARD } from "../ui";
+import { withUnit } from "./switch";
 
 const tone = (good: boolean | null, warn: boolean) =>
   good === null ? "text-slate-400" : good ? "text-emerald-700" : warn ? "text-amber-700" : "text-rose-700";
 
-export function DistrictNow() {
-  const query = useQuery({ queryKey: ["team", "district"], queryFn: () => api<District>("/api/team/district"), refetchInterval: 120_000 });
+export function DistrictNow({ unit = null }: { unit?: number | null } = {}) {
+  const query = useQuery({
+    queryKey: ["team", "district", unit ?? ""],
+    queryFn: () => api<District>(withUnit("/api/team/district", unit ? String(unit) : null)),
+    refetchInterval: 120_000,
+  });
   const data = query.data;
   if (!data) return null;
   const needs = data.rows.filter((row) => row.needs.length);

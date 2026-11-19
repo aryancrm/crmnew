@@ -273,7 +273,7 @@ export async function b2bTeam(db: Database, me: Me): Promise<B2bTeam> {
   if (!["team_lead", "manager", "ceo", "admin"].includes(me.role)) throw new Refusal(403, "not_allowed", "The B2B team is the coaches' view.");
   const today = todayManila();
   const first = `${today.slice(0, 7)}-01`;
-  const { seatIds } = await teamSeats(db, me, null);
+  const { seatIds } = await teamSeats(db, me, me.unit ?? null);
   const people = seatIds.length
     ? await rows<{ personId: number; name: string; title: string | null; role: Me["role"]; areaId: number | null }>(
         db,
