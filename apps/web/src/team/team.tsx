@@ -8,6 +8,7 @@ import type { TeamBoard, TeamSales } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, CirclePause, Undo2 } from "lucide-react";
 import type { ReactNode } from "react";
+import { MyKpis } from "../kpis/my-kpis";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
@@ -144,6 +145,9 @@ export function TeamSalesPage() {
           )}
         </nav>
       </header>
+
+      {/* The hub's My KPIs: their own and their team's (Aryan, 20 Nov; PLAN 23). */}
+      {!whole && <MyKpis />}
 
       <section aria-label="The team's month" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Figure

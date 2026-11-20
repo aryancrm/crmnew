@@ -60,6 +60,7 @@ import { telesalesRoutes } from "./telesales/routes";
 import { tenderRoutes } from "./tenders/routes";
 import { rxRoutes } from "./rx/routes";
 import { scoreRoutes } from "./scores/routes";
+import { kpiRoutes } from "./kpis/routes";
 import { sellerRoutes } from "./sellers/routes";
 import { targetRoutes } from "./targets/routes";
 import { teamRoutes } from "./team/routes";
@@ -434,6 +435,7 @@ export function createApp(db: Database, options: AppOptions) {
   pointsRoutes(app, db, signedIn);
   targetRoutes(app, db, signedIn);
   scoreRoutes(app, db, signedIn);
+  kpiRoutes(app, db, signedIn);
   sellerRoutes(app, db, signedIn);
   rxRoutes(app, db, signedIn);
   b2cRoutes(app, db, signedIn);

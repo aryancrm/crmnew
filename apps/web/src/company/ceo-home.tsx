@@ -40,6 +40,7 @@ import { RangePicker } from "../team/range";
 import { PageState } from "../ui";
 import { CompanyGlance } from "./glance";
 import { KpiCard } from "./kpi-card";
+import { MyKpis } from "../kpis/my-kpis";
 import { greeting, todayWords } from "../home/home";
 
 type Icon = React.ComponentType<{ className?: string }>;
@@ -468,6 +469,9 @@ export function CeoHomePage() {
           stuck={Boolean(orders.stuck)}
         />
       </section>
+
+      {/* The hub's KPI for the company: sales without VAT against the target, the counts, a day. */}
+      <MyKpis company />
 
       {/* The month's profit and how fast customers pay (ERP phase 1: from the books). */}
       <ProfitStrip />

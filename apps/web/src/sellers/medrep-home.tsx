@@ -36,6 +36,7 @@ import { b2bRole } from "../seat-words";
 import { greeting, todayWords } from "../home/home";
 import { OrderCardItem } from "../orders/board";
 import { HospitalsCard } from "./hospitals";
+import { MyKpis as KpiPanel } from "../kpis/my-kpis";
 
 const NEWS: Record<StockNews["kind"], { label: string; style: string }> = {
   out: { label: "Out of stock", style: "bg-rose-50 text-rose-700" },
@@ -174,6 +175,9 @@ export function MedrepHome() {
           </div>
         </div>
       </div>
+
+      {/* The hub's My KPIs: sales without VAT against target, the counts, a day's sales (PLAN 23). */}
+      <KpiPanel />
 
       {/* A Hospital CHC's day starts with the pulse and where to go first (docs/PLAN.md 16.1). */}
       {(hospital || anesthesia) && <TodaysPulse />}

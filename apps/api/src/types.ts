@@ -4845,6 +4845,42 @@ export type MyScore = ScoreYear & {
   mine: boolean;
 };
 
+/** My KPIs, the hub's way (PLAN 23): a month's sales without VAT against target, and the counts. */
+export type KpiFigures = {
+  people: number;
+  peopleWithTarget: number;
+  /** Centavos; a team's includes the empty seats' targets under the lead. */
+  target: number | null;
+  vacantTarget: number;
+  /** Sales without VAT, line by line (centavos). */
+  sales: number;
+  withVat: number;
+  vat: number;
+  /** Sales without VAT ÷ target × 100, one decimal; null with no target. */
+  percent: number | null;
+  ordersInvoiced: number;
+  newCustomers: number;
+  ordersRaised: number;
+  ordersHeld: number;
+  /** Placed, not invoiced yet (waiting for Management or held): shown, never counted. */
+  waitingOrders: number;
+  waitingSales: number;
+};
+export type KpiDay = { sales: number; orders: number };
+export type KpiPanel = {
+  month: string;
+  today: string;
+  running: boolean;
+  /** The day picked (Today, Yesterday, a date), or null for the month only. */
+  day: string | null;
+  own: (KpiFigures & { enteredForOthers: number; enteredForMe: number }) | null;
+  team: (KpiFigures & { label: string }) | null;
+  ownDay: KpiDay | null;
+  teamDay: KpiDay | null;
+  /** The day's invoices behind the sales (a seller's own; a lead's or the CEO's, the team's). */
+  dayOrders: { orderId: number | null; code: string; invoice: string; customer: string; sales: number; person: string | null }[];
+};
+
 /** The CEO's Home: the month's KPI picture of the whole company (PLAN 23). */
 export type CompanyScores = {
   month: string;

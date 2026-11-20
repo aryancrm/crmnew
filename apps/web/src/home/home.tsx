@@ -21,6 +21,7 @@ import { ManagementHome } from "../desk/management-home";
 import { B2cHome } from "../online/b2c-home";
 import { LeadsDesk } from "../online/leads";
 import { MedrepHome } from "../sellers/medrep-home";
+import { MyKpis } from "../kpis/my-kpis";
 import { OrdersToCheck } from "../orders/board";
 import { TeamSalesPage } from "../team/team";
 
@@ -57,10 +58,26 @@ export function Home() {
   if (me.role === "finance") return <OrdersToCheck desk="finance" />;
   if (me.role === "dispatch") return <DispatchHome />;
   // The PAP officer's day is their patients' cases (the guarantee letter's road): Home is that list.
-  if (me.role === "medrep" && me.channel?.code === "PAP") return <LeadsDesk key="pap" desk="pap" />;
+  if (me.role === "medrep" && me.channel?.code === "PAP")
+    return (
+      <div className="space-y-4">
+        <div className="mx-auto max-w-screen-xl">
+          <MyKpis />
+        </div>
+        <LeadsDesk key="pap" desk="pap" />
+      </div>
+    );
   if (me.role === "medrep") return <MedrepHome />;
   // The B2C CHC starts on their morning pulse and the replies waiting (docs/PLAN.md 16.3).
-  if (onlineDesk(me)) return <B2cHome />;
+  if (onlineDesk(me))
+    return (
+      <div className="space-y-4">
+        <div className="mx-auto max-w-screen-xl">
+          <MyKpis />
+        </div>
+        <B2cHome />
+      </div>
+    );
   // HR's Home is People: everyone's record.
   if (me.role === "hr") return <HrPeoplePage />;
   // The office staff's Home is their work log.
