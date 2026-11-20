@@ -698,8 +698,9 @@ export function CollectedCard({ head, all = false }: { head?: ReactNode; all?: b
     queryFn: () => api<PaymentList>("/api/payments"),
   });
   const data = query.data;
-  // The CEO's Home shows it open, beside every channel's sales (Aryan, 19 Nov).
-  const { shown, seeAll } = useSeeAll(data?.rows ?? [], all ? (data?.rows.length ?? 0) : 5);
+  // Five payments, then See more: on the CEO's Home it stays as tall as Sales this month beside it
+  // (Aryan, 20 Nov: "it runs far down the page"); the whole list opens in place or on Payments.
+  const { shown, seeAll } = useSeeAll(data?.rows ?? [], 5);
   if (!data) return null;
   const top = Math.max(1, ...data.byDay.map((one) => one.amount));
   return (

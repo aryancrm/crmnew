@@ -239,8 +239,12 @@ export function MyKpis({ company = false }: { company?: boolean }) {
   );
 }
 
-/** The invoices of the day: order, invoice, customer, amount without VAT. */
-function DayOrders({ rows, names }: { rows: KpiPanel["dayOrders"]; names: boolean }) {
+/** The invoices of the day: order, invoice, customer, amount without VAT; the first five, then
+ *  See more (Aryan, 20 Nov: a busy day's list ran far down the CEO's Home). */
+const DAY_ROWS = 5;
+function DayOrders({ rows: all, names }: { rows: KpiPanel["dayOrders"]; names: boolean }) {
+  const [open, setOpen] = useState(false);
+  const rows = open ? all : all.slice(0, DAY_ROWS);
   return (
     <div className={`${CARD} overflow-x-auto`}>
       <table className="w-full min-w-[560px] text-sm">
@@ -275,6 +279,15 @@ function DayOrders({ rows, names }: { rows: KpiPanel["dayOrders"]; names: boolea
           )}
         </tbody>
       </table>
+      {all.length > DAY_ROWS && (
+        <button
+          type="button"
+          onClick={() => setOpen((now) => !now)}
+          className="w-full border-t border-slate-100 px-3 py-2 text-center text-xs font-semibold text-brand hover:bg-slate-50"
+        >
+          {open ? "Show fewer" : `See more (${all.length - DAY_ROWS} more)`}
+        </button>
+      )}
     </div>
   );
 }
