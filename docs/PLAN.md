@@ -954,14 +954,15 @@ backend/, frontend/  The old CRM. Reference, and still running live.
 | Database | A new Postgres in Singapore (a new Supabase project, or Neon), paid plan with daily backups | Same region as the API |
 | Domain | Web on `app.<domain>`, API on `api.<domain>` | One parent domain keeps the sign-in cookie first-party without a proxy hop |
 
-**Own server (Docker, 20 Nov):** for the company's own server (bishnoi-one) each app has its own
-image, built from the repository root: `apps/api/Dockerfile` (Node 24 slim, runs the TypeScript
-with tsx, `/api/health` as its health check, the embedded database in the `/data` volume when
-`DATABASE_URL` is empty) and `apps/web/Dockerfile` (Vite build served by nginx, which passes
-`/api` and `/webhooks` to `API_UPSTREAM`, so the cookie stays first-party as with Vercel's rewrites;
-no buffering for live updates, 50 MB uploads). `docker-compose.yml` runs both with the API's
-settings from `.env`; only the web app is published (`WEB_PORT`, default 8080), behind the
-server's HTTPS proxy. Vercel Analytics records nothing off Vercel.
+**Own server (Docker on Coolify, 20 Nov):** for the company's own server (bishnoi-one) each
+app has its own image, built from the repository root: `apps/api/Dockerfile` (Node 24 slim, runs
+the TypeScript with tsx, port 4100, `/api/health`; production needs a Postgres in `DATABASE_URL`)
+and `apps/web/Dockerfile` (Vite build served by nginx on port 80, which passes `/api` and
+`/webhooks` to `API_UPSTREAM`, so the cookie stays first-party as with Vercel's rewrites).
+Settings: `apps/api/.env.production.example`, `apps/web/.env.production.example`. On Coolify,
+three resources: a PostgreSQL, the API with no domain and the container name `crmnew-api`,
+the web app on `https://crm.<domain>`. The steps are in docs/DEPLOY-COOLIFY.md.
+`docker-compose.yml` does the same without Coolify. Vercel Analytics records nothing off Vercel.
 
 ### 10.5 Speed and size
 
@@ -2909,3 +2910,4 @@ Nothing built until he picks a phase.
 - 20 Nov (151), Aryan: "slow load is no problem; nothing you change may go wrong in reports or data, many things are interconnected." So no page-by-page loading. Checked instead: every report screen (179 with the 8 biggest customers' pages and statements) for 24 people, old code (d36b2a76) against new (f717157e) on two copies of the same real data: 739,323 numbers, every one the same; the only line that moved is the CEO's attendance glance counting Malou (two lead seats given the same day) under Modern Trade instead of Finance: the pick had no tie-breaker and could come out either way. Every "which seat" lookup now breaks a tie by the seat given first (the seat that decides their screens). 473 tests.
 - 20 Nov (152), Aryan: Vercel Analytics, and "put dummy data on live too, in all of them; the real data when we properly go live". **Vercel Web Analytics** on the web app (`@vercel/analytics`, the SPA rewrite leaves `/_vercel/` alone); live. **Demo data on live for every channel**: `scripts/demo-live.ts` now also gives TeleSales (Aila, Sheena), B2B (Floremel, Faith), BID (Angel), CLIDP (Nicka), RX (Antonette, Kevin), MD Telesales (Ailyn, Mitzi: demo doctor names) and Modern Trade (Arlene's empty seat, placed by Malou) their orders through every desk; `scripts/demo-channels.ts` (new) adds each channel's own records: calls with callbacks due, four BID tenders with the other bids read (lost, won, opened, coming up), CLIDP's road with rates (approached, interested, agreed, declined, ordering), hospital accreditation and formulary, MT listings and a listing fee deducted from a payment, prescriptions. Tried first on a local copy made to look like live; on live: 70 demo orders, 53 demo customers, data checks 18/18. All of it is marked ("Demo · 20 Nov walkthrough" on the customers, "Demo · " on the tenders, "Demo" on calls) and must be closed (cancelled, dropped, archived; nothing deleted) before the real go-live; the closing script is still to write. RX NCR 1 has no area on live (skipped).
 - 20 Nov (153), Aryan: "setup its Dockerfile to live into our bishnoi-one-server; api and web their own Dockerfile". `apps/api/Dockerfile`, `apps/web/Dockerfile` (+ `apps/web/docker/nginx.conf.template`), `docker-compose.yml`, `.dockerignore` (section 10.4). Not built here yet (no Docker on this computer); Render and Vercel unchanged.
+- 20 Nov (154), Aryan: "production-ready .env of both, their ports, and the setup for the Coolify server". `apps/api/.env.production.example` (every setting the API reads, what it is, which are required), `apps/web/.env.production.example` (`API_UPSTREAM`), docs/DEPLOY-COOLIFY.md: Postgres, the API (port 4100, no domain, container name `crmnew-api`), the web app (port 80, the domain). nginx now finds the API through Docker's DNS each 30 s (starts while the API is down) and sends the upstream's own Host. Production refuses the embedded database, so the compose file gets its own Postgres. `SECRETS_KEY` must stay Render's if the live data moves. One API container only (channel reading isn't shared).

@@ -1,8 +1,14 @@
-# Filled by the nginx image on start: ${API_UPSTREAM} is the API's address.
+# Filled by the nginx image on start: ${API_UPSTREAM} is the API's address, e.g.
+# http://crmnew-api:4100 (Coolify, the API's container name) or http://api:4100 (docker compose).
 server {
     listen 80;
     server_name _;
     root /usr/share/nginx/html;
+
+    # Docker's own DNS, asked again every 30 s: the web app starts even while the API is down,
+    # and finds the API's new container after a redeploy.
+    resolver 127.0.0.11 valid=30s ipv6=off;
+    set $api ${API_UPSTREAM};
 
     # Photos and papers are uploaded through the API.
     client_max_body_size 50m;
@@ -11,12 +17,14 @@ server {
     gzip_types text/css application/javascript application/json image/svg+xml;
 
     location /api/ {
-        proxy_pass ${API_UPSTREAM};
+        proxy_pass $api;
         proxy_http_version 1.1;
-        proxy_set_header Host $host;
+        proxy_set_header Host $proxy_host;
+        proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_set_header Connection "";
+        proxy_ssl_server_name on;
         # Live updates are server-sent events: no buffering, long reads.
         proxy_buffering off;
         proxy_cache off;
@@ -25,11 +33,13 @@ server {
 
     # Meta and the websites call the address the web app is on.
     location /webhooks/ {
-        proxy_pass ${API_UPSTREAM};
+        proxy_pass $api;
         proxy_http_version 1.1;
-        proxy_set_header Host $host;
+        proxy_set_header Host $proxy_host;
+        proxy_set_header X-Forwarded-Host $host;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_ssl_server_name on;
     }
 
     # Vite's hashed files never change.
