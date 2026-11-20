@@ -22,7 +22,6 @@ import { ChannelsPage } from "./online/channels";
 import { Customer } from "./customers/customer";
 import { Customers } from "./customers/customers";
 import { FieldCalendarPage } from "./field/calendar";
-import { FieldExpensesPage } from "./field/expenses";
 import { FieldLivePage } from "./field/live";
 import { FieldReportPage } from "./field/report";
 import { Home } from "./home/home";
@@ -119,17 +118,16 @@ import { SalesPerformancePage } from "./company/sales-performance";
 import { ToCallPage } from "./customers/to-call";
 import { TeamSalesPage } from "./team/team";
 import { VisitPlanPage } from "./field/visit-plan";
-import { VisitsPage } from "./field/visits";
 import { MrClientPage, MrClientsPage } from "./mr/clients";
 import { MrDayReportPage } from "./mr/day-report";
 import { MrExpensesPage } from "./mr/expenses";
-import { MrDay, MrHomePage } from "./mr/home";
-import { MrAddOrderPage, MrOrdersPage } from "./mr/orders";
-import { MrMapPage, MrPeoplePage } from "./mr/people";
+import { MrHomePage } from "./mr/home";
+import { MrMapPage } from "./mr/map";
 import { MrPlanPage } from "./mr/plan";
 import { MrFollowUpsPage, MrHolidaysPage, MrReportsPage } from "./mr/reports";
 import { MrVisitPage } from "./mr/visit";
 import { MrVisitsPage } from "./mr/visits";
+import { TeamHome as FieldTeamPage } from "./mr/team";
 import { Shell } from "./shell";
 import "./styles.css";
 
@@ -309,28 +307,24 @@ createRoot(root).render(
             <Route path="hr/payroll" element={<PayrollPage />} />
             <Route path="hr/payroll/rates" element={<PayRatesPage />} />
             <Route path="hr/payroll/:month" element={<PayrollMonthPage key="month" />} />
-            <Route path="visits" element={<VisitsPage />} />
+            {/* The field (SEFMED's work in the MedRep's pages, docs/PLAN.md 22). */}
+            <Route path="visits" element={<MrVisitsPage />} />
+            <Route path="visits/:id" element={<MrVisitPage key="visit" />} />
             <Route path="visits/plan" element={<VisitPlanPage />} />
             <Route path="visits/calendar" element={<FieldCalendarPage />} />
+            <Route path="visits/expenses" element={<MrExpensesPage />} />
+            <Route path="field" element={<MrHomePage />} />
+            <Route path="field/team" element={<FieldTeamPage />} />
+            <Route path="field/plan" element={<MrPlanPage />} />
+            <Route path="field/clients" element={<MrClientsPage />} />
+            <Route path="field/clients/:id" element={<MrClientPage key="client" />} />
+            <Route path="field/day-report" element={<MrDayReportPage />} />
+            <Route path="field/reports" element={<MrReportsPage />} />
+            <Route path="field/follow-ups" element={<MrFollowUpsPage />} />
+            <Route path="field/holidays" element={<MrHolidaysPage />} />
+            <Route path="field/map" element={<MrMapPage />} />
             <Route path="field/live" element={<FieldLivePage />} />
-            <Route path="visits/expenses" element={<FieldExpensesPage />} />
             <Route path="field/report" element={<FieldReportPage />} />
-            <Route path="mr" element={<MrHomePage />} />
-            <Route path="mr/my-day" element={<MrDay />} />
-            <Route path="mr/visits" element={<MrVisitsPage />} />
-            <Route path="mr/visits/:id" element={<MrVisitPage key="visit" />} />
-            <Route path="mr/clients" element={<MrClientsPage />} />
-            <Route path="mr/clients/:id" element={<MrClientPage key="client" />} />
-            <Route path="mr/orders" element={<MrOrdersPage />} />
-            <Route path="mr/orders/new" element={<MrAddOrderPage />} />
-            <Route path="mr/plan" element={<MrPlanPage />} />
-            <Route path="mr/expenses" element={<MrExpensesPage />} />
-            <Route path="mr/day-report" element={<MrDayReportPage />} />
-            <Route path="mr/reports" element={<MrReportsPage />} />
-            <Route path="mr/follow-ups" element={<MrFollowUpsPage />} />
-            <Route path="mr/holidays" element={<MrHolidaysPage />} />
-            <Route path="mr/people" element={<MrPeoplePage />} />
-            <Route path="mr/map" element={<MrMapPage />} />
             <Route path="hr/attendance/:id" element={<AttendanceMonthPage key="month" />} />
             <Route path="admin/channels" element={<AdminChannelsPage />} />
             <Route path="admin/data-checks" element={<AdminDataChecks />} />

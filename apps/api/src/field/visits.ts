@@ -202,7 +202,7 @@ async function planOn(
   const [open] = await rows<{ id: number }>(
     tx,
     sql`select id::int as id from visit where person_id = ${me.id} and customer_id = ${customer.id}
-      and day = ${input.day}::date and status <> 'skipped'`,
+      and day = ${input.day}::date and status in ('planned', 'done')`,
   );
   if (open) {
     if (fromVisit) return null;
@@ -373,7 +373,7 @@ export async function moveVisit(db: Database, me: Me, visitId: number, day: stri
     const [clash] = await rows<{ id: number }>(
       tx,
       sql`select id::int as id from visit where person_id = ${me.id} and customer_id = ${visit.customerId}
-        and day = ${day}::date and status <> 'skipped' and id <> ${visit.id}`,
+        and day = ${day}::date and status in ('planned', 'done') and id <> ${visit.id}`,
     );
     if (clash)
       throw new Refusal(409, "taken", "That customer is already on your visits that day.", "day");
@@ -418,7 +418,8 @@ export async function fieldReport(
           where h.person_id = p.id and h.kind = 'holder' and ${inForce("h", today)} order by h.starts_on, h.id limit 1) as team,
         count(v.id) filter (where v.status = 'planned')::int as planned,
         count(v.id) filter (where v.status = 'done')::int as done,
-        count(v.id) filter (where v.status = 'skipped')::int as skipped,
+        -- Missed: a visit the day report closed with its reason; to this report, not done (skipped).
+        count(v.id) filter (where v.status in ('skipped', 'missed'))::int as skipped,
         count(distinct v.customer_id) filter (where v.status = 'done')::int as covered,
         count(distinct v.day) filter (where v.status = 'done')::int as "fieldDays",
         count(v.id) filter (where v.status = 'done' and v.distance_m > ${NEAR_METRES})::int as away,
@@ -431,8 +432,8 @@ export async function fieldReport(
             and d.day between ${monthStart}::date and ${monthEnd}::date)
             >= case c.visit_class when 'A' then 4 when 'B' then 2 else 1 end) as "seenEnough",
         (select vp.status from visit_plan vp where vp.person_id = p.id and vp.month = ${monthStart}::date) as plan,
-        (select coalesce(sum(x.amount), 0)::int from field_expense x where x.person_id = p.id and x.status = 'approved'
-          and x.day between ${from}::date and ${to}::date) as spent,
+        (select coalesce(sum(coalesce(x.approved_amount, x.amount)), 0)::int from field_expense x where x.person_id = p.id
+          and x.status = 'approved' and x.day between ${from}::date and ${to}::date) as spent,
         (select coalesce(sum(x.amount), 0)::int from field_expense x where x.person_id = p.id and x.status = 'pending'
           and x.day between ${from}::date and ${to}::date) as "spentPending"
       from person p

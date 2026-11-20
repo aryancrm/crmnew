@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { Database } from "../db/index";
 import { allow, type Env, idParam, Refusal, readBody } from "../http";
 import { answerAsk, askUp } from "./asks";
+import { linkOrderToVisit } from "../mr/visits";
 import { tellAboutOrder } from "../notify/service";
 import { orderPrices } from "../customers/prices";
 import { customerUpdate, noteSent, tellCustomer } from "../online/tell";
@@ -224,9 +225,19 @@ export function orderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
 
   app.post("/api/orders", async (c) => {
     allow(c.get("me"), ORDER_PLACE_ROLES, "place an order");
-    const input = await readBody(c, orderInput);
-    const id = await placeOrder(db, c.get("me"), input as OrderInput);
-    void tellCustomer(db, c.get("me"), id, "confirmed");
+    const { visitId, ...input } = await readBody(
+      c,
+      orderInput.extend({ visitId: z.number().int().positive().nullish() }),
+    );
+    const me = c.get("me");
+    // An order placed at a field visit (the call's Add order) joins the visit, in the same step.
+    const id = await placeOrder(
+      db,
+      me,
+      input as OrderInput,
+      visitId ? { inside: (tx, orderId) => linkOrderToVisit(tx, me, visitId, orderId) } : {},
+    );
+    void tellCustomer(db, me, id, "confirmed");
     return c.json({ id });
   });
 

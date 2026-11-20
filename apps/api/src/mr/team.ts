@@ -1,9 +1,10 @@
-// The team lead's side of the MR App (docs/PLAN.md 22): each MR today (started where, visits done
-// of planned, where they are now, orders booked, the day report), what waits for the lead (day
-// reports, calls to judge, plans, plan changes, expenses), the call report (SEFMED's Call reports:
-// a span of days, an MR or all, each visit's details), the attendance month (present = started
-// working; leave and holidays from HR), and the app's members (the Admin adds MRs and names the
-// one team lead; the lead adds and removes MRs).
+// The team lead's side of the field (docs/PLAN.md 22), from the company's own hierarchy (the
+// team switch narrows it to a box; the head sees every box under them, the CEO everything): each
+// field person today (started where, visits closed of the day's, where they are now, orders
+// placed at visits, the day report), what waits for the lead (day reports, calls to judge, plans,
+// plan changes, expenses, off-list requests), the call report (SEFMED's Call reports), the
+// attendance month (present = started working; leave and holidays from HR), the holidays, and the
+// day's places on the map.
 
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
@@ -13,28 +14,26 @@ import { Refusal } from "../http";
 import { addDays, todayManila } from "../inventory/rules";
 import { iso } from "../inventory/service";
 import type { Me } from "../types";
-import { accessOf, isLeadNow, mustSee, mustUse } from "./access";
+import { accessOf, fieldPerson, inTeam, leadOf, mustSee, mustUse, teamSql } from "./access";
 import { cardColumns, cardFrom, type CardSql, toCard } from "./cards";
-import type { LeadQueue, MemberPage, MrMe, TeamToday, VisitCard } from "./words";
+import { seen } from "../customers/service";
+import { FIELD_READ_ROLES } from "../field/visits";
+import type { LeadQueue, MrMe, TeamToday, VisitCard } from "./words";
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const MONTH = /^\d{4}-\d{2}$/;
 
-/** How the app stands for this person (for the menu). */
+/** How the field stands for this person, and whom they report to. */
 export async function mrMe(db: Database, me: Me): Promise<MrMe> {
-  const [access, lead] = await Promise.all([
-    accessOf(db, me),
-    rows<{ id: number; name: string }>(
-      db,
-      sql`select p.id::int as id, p.name from mr_member m join person p on p.id = m.person_id where m.role = 'lead' and m.active`,
-    ),
-  ]);
+  const access = await accessOf(db, me);
+  const leadId = await leadOf(db, me.id);
+  const lead = leadId ? await rows<{ id: number; name: string }>(db, sql`select id::int as id, name from person where id = ${leadId}`) : [];
   return { access, lead: lead[0] ?? null };
 }
 
 async function mustLook(db: Database, me: Me) {
   const access = await mustUse(db, me);
-  if (access === "mr") throw new Refusal(403, "not_allowed", "The team's pages are the team lead's.");
+  if (access === "mr") throw new Refusal(403, "not_allowed", "The team's pages are for team leads, heads and the CEO.");
   return access;
 }
 
@@ -45,9 +44,9 @@ export async function teamToday(db: Database, me: Me, asked: { day?: string | nu
   const day = asked.day && DAY.test(asked.day) && asked.day <= today ? asked.day : today;
   const people = await rows<TeamToday["people"][number]>(
     db,
-    sql`select p.id::int as id, p.name, ${iso("d.started_at")} as started, d.work_type as "workType",
+    sql`${teamSql(me)} select p.id::int as id, p.name, ${iso("d.started_at")} as started, d.work_type as "workType",
         coalesce(to_json(d.cities), '[]'::json) as cities, ${iso("d.ended_at")} as ended,
-        coalesce((select e.kind = 'break' from mr_day_event e where e.day_id = d.id and e.kind in ('break', 'resume')
+        coalesce((select e.kind = 'break' from field_day_event e where e.day_id = d.id and e.kind in ('break', 'resume')
           order by e.at desc, e.id desc limit 1), false) and d.ended_at is null as "onBreak",
         count(v.id) filter (where not v.unplanned)::int as planned,
         count(v.id)::int as visits,
@@ -56,57 +55,64 @@ export async function teamToday(db: Database, me: Me, asked: { day?: string | nu
         count(v.id) filter (where v.status = 'missed')::int as missed,
         count(v.id) filter (where v.status = 'planned')::int as open,
         count(v.id) filter (where v.status = 'done' and v.productive = 'yes')::int as productive,
-        (select count(*) from mr_order o where o.person_id = p.id and o.status = 'booked'
-          and (o.made_at at time zone 'Asia/Manila')::date = ${day}::date)::int as booked,
-        (select coalesce(sum(o.amount), 0) from mr_order o where o.person_id = p.id and o.status = 'booked'
-          and (o.made_at at time zone 'Asia/Manila')::date = ${day}::date)::float8 as "bookedAmount",
-        (select c.name from mr_visit a join mr_client c on c.id = a.client_id where a.person_id = p.id and a.day = ${day}::date
+        (select count(*) from visit_order vo join sales_order o on o.id = vo.order_id join visit w on w.id = vo.visit_id
+          where w.person_id = p.id and w.day = ${day}::date and o.status <> 'cancelled')::int as booked,
+        (select coalesce(sum(o.total), 0) from visit_order vo join sales_order o on o.id = vo.order_id join visit w on w.id = vo.visit_id
+          where w.person_id = p.id and w.day = ${day}::date and o.status <> 'cancelled')::float8 as "bookedAmount",
+        (select c.name from visit a join customer c on c.id = a.customer_id where a.person_id = p.id and a.day = ${day}::date
           and a.status = 'planned' and a.checked_in_at is not null order by a.checked_in_at desc limit 1) as at,
         d.report_status as report
-      from mr_member m join person p on p.id = m.person_id
-      left join mr_day d on d.person_id = p.id and d.day = ${day}::date
-      left join mr_visit v on v.person_id = p.id and v.day = ${day}::date
-      where m.active and p.id <> ${me.id}
-      group by p.id, p.name, d.id
+      from person p
+      left join field_day d on d.person_id = p.id and d.day = ${day}::date
+      left join visit v on v.person_id = p.id and v.day = ${day}::date
+      where ${fieldPerson} and ${inTeam(me, "p.id")} and p.id <> ${me.id}
+      group by p.id, p.name, p.role, d.id
+      -- A lead with nothing in the field that day isn't listed; every MedRep is (none is the point).
+      having p.role = 'medrep' or d.id is not null or count(v.id) > 0
       order by d.started_at is null, p.name`,
   );
   const [waiting] = await rows<TeamToday["waiting"]>(
     db,
-    sql`select
-        (select count(*) from mr_day where report_status = 'sent' and person_id <> ${me.id})::int as reports,
-        (select count(*) from mr_visit where status = 'done' and productive = 'pending' and person_id <> ${me.id})::int as judge,
-        (select count(*) from mr_plan where status = 'sent' and person_id <> ${me.id})::int as plans,
-        (select count(*) from mr_deviation where status = 'waiting' and person_id <> ${me.id})::int as deviations,
-        (select count(*) from mr_expense where status = 'claimed' and person_id <> ${me.id})::int as expenses`,
+    sql`${teamSql(me)} select
+        (select count(*) from field_day where report_status = 'sent' and person_id <> ${me.id} and ${inTeam(me, "person_id")})::int as reports,
+        (select count(*) from visit where status = 'done' and productive = 'pending' and person_id <> ${me.id} and ${inTeam(me, "person_id")})::int as judge,
+        (select count(*) from visit_plan where status = 'sent' and person_id <> ${me.id} and ${inTeam(me, "person_id")})::int as plans,
+        (select count(*) from plan_deviation where status = 'waiting' and person_id <> ${me.id} and ${inTeam(me, "person_id")})::int as deviations,
+        (select count(*) from field_expense where status = 'pending' and person_id <> ${me.id} and ${inTeam(me, "person_id")})::int as expenses`,
   );
   const weekStart = addDays(day, -((new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7));
   const [clients, closed, champions, feed] = await Promise.all([
     rows<TeamToday["clients"]>(
       db,
-      sql`select count(*) filter (where kind = 'doctor')::int as doctors, count(*) filter (where kind = 'hospital')::int as hospitals,
-          count(*) filter (where kind = 'firm')::int as firms from mr_client where active`,
+      sql`${teamSql(me)} select count(*) filter (where c.kind = 'doctor')::int as doctors,
+          count(*) filter (where c.kind = 'hospital')::int as hospitals,
+          count(*) filter (where c.kind in ('drugstore', 'distributor'))::int as firms
+        from customer c where c.active and c.kind in ('doctor', 'hospital', 'drugstore', 'distributor')
+          and ${FIELD_READ_ROLES.includes(me.role) && !me.unit ? sql`true` : seen(me)}`,
     ),
     rows<TeamToday["closed"]>(
       db,
-      sql`select count(*) filter (where day = ${day}::date)::int as today, count(*) filter (where day >= ${weekStart}::date)::int as week,
+      sql`${teamSql(me)} select count(*) filter (where day = ${day}::date)::int as today, count(*) filter (where day >= ${weekStart}::date)::int as week,
           count(*)::int as month
-        from mr_visit where status = 'done' and day between ${`${day.slice(0, 7)}-01`}::date and ${day}::date`,
+        from visit where status = 'done' and day between ${`${day.slice(0, 7)}-01`}::date and ${day}::date
+          and ${inTeam(me, "person_id")}`,
     ),
     rows<TeamToday["champions"][number]>(
       db,
-      sql`select p.id::int as id, p.name, count(*)::int as closed from mr_visit v join person p on p.id = v.person_id
-        where v.status = 'done' and v.day = ${day}::date group by p.id, p.name order by closed desc, p.name limit 5`,
+      sql`${teamSql(me)} select p.id::int as id, p.name, count(*)::int as closed from visit v join person p on p.id = v.person_id
+        where v.status = 'done' and v.day = ${day}::date and ${inTeam(me, "v.person_id")}
+        group by p.id, p.name order by closed desc, p.name limit 5`,
     ),
     rows<TeamToday["feed"][number]>(
       db,
-      sql`select * from (
+      sql`${teamSql(me)} select * from (
           select ${iso("v.checked_in_at")} as at, p.name, 'checked_in' as what, c.name as client, v.id::int as "visitId"
-            from mr_visit v join person p on p.id = v.person_id join mr_client c on c.id = v.client_id
-            where v.day = ${day}::date and v.checked_in_at is not null
+            from visit v join person p on p.id = v.person_id join customer c on c.id = v.customer_id
+            where v.day = ${day}::date and v.checked_in_at is not null and ${inTeam(me, "v.person_id")}
           union all
           select ${iso("v.done_at")} as at, p.name, 'closed' as what, c.name as client, v.id::int as "visitId"
-            from mr_visit v join person p on p.id = v.person_id join mr_client c on c.id = v.client_id
-            where v.day = ${day}::date and v.done_at is not null) f
+            from visit v join person p on p.id = v.person_id join customer c on c.id = v.customer_id
+            where v.day = ${day}::date and v.done_at is not null and ${inTeam(me, "v.person_id")}) f
         order by at desc limit 40`,
     ),
   ]);
@@ -137,15 +143,17 @@ export async function leadQueue(db: Database, me: Me): Promise<LeadQueue> {
   const [reports, judge] = await Promise.all([
     rows<LeadQueue["reports"][number]>(
       db,
-      sql`select d.person_id::int as "personId", p.name, to_char(d.day, 'YYYY-MM-DD') as day, ${iso("d.sent_at")} as "sentAt",
-          (select count(*) from mr_visit v where v.person_id = d.person_id and v.day = d.day and v.status = 'done')::int as done,
-          (select count(*) from mr_visit v where v.person_id = d.person_id and v.day = d.day and v.status = 'missed')::int as missed
-        from mr_day d join person p on p.id = d.person_id where d.report_status = 'sent' and d.person_id <> ${me.id}
+      sql`${teamSql(me)} select d.person_id::int as "personId", p.name, to_char(d.day, 'YYYY-MM-DD') as day, ${iso("d.sent_at")} as "sentAt",
+          (select count(*) from visit v where v.person_id = d.person_id and v.day = d.day and v.status = 'done')::int as done,
+          (select count(*) from visit v where v.person_id = d.person_id and v.day = d.day and v.status = 'missed')::int as missed
+        from field_day d join person p on p.id = d.person_id where d.report_status = 'sent' and d.person_id <> ${me.id}
+          and ${inTeam(me, "d.person_id")}
         order by d.sent_at desc limit 100`,
     ),
     rows<CardSql & { feedback: string | null }>(
       db,
-      sql`select ${cardColumns}, v.feedback ${cardFrom} where v.status = 'done' and v.productive = 'pending' and v.person_id <> ${me.id}
+      sql`${teamSql(me)} select ${cardColumns}, v.feedback ${cardFrom} where v.status = 'done' and v.productive = 'pending'
+          and v.person_id <> ${me.id} and ${inTeam(me, "v.person_id")}
         order by v.done_at desc limit 100`,
     ),
   ]);
@@ -184,21 +192,19 @@ export async function callReport(
   const [found, people] = await Promise.all([
     rows<CallReport["rows"][number]>(
       db,
-      sql`select ${cardColumns}, v.objective_note as "objectiveNote", v.feedback,
+      sql`${teamSql(me)} select ${cardColumns}, v.objective_note as "objectiveNote", v.feedback,
           coalesce((select json_agg(w.name order by w.name) from person w where w.id = any (v.working_with)), '[]'::json) as "workingWith",
-          (select to_char(max(b.day), 'YYYY-MM-DD') from mr_visit b where b.client_id = v.client_id and b.status = 'done' and b.day < v.day) as "lastVisit",
-          (select to_char(min(f.due_on), 'YYYY-MM-DD') from mr_follow_up f where f.visit_id = v.id) as "followUpOn"
+          (select to_char(max(b.day), 'YYYY-MM-DD') from visit b where b.customer_id = v.customer_id and b.status = 'done' and b.day < v.day) as "lastVisit",
+          (select to_char(min(fu.due_on), 'YYYY-MM-DD') from field_follow_up fu where fu.visit_id = v.id) as "followUpOn"
         ${cardFrom} where v.day between ${from}::date and ${to}::date
-          and ${personId ? sql`v.person_id = ${personId}` : sql`v.person_id in (select person_id from mr_member)`}
-          ${status ? sql`and v.status = ${status}` : sql``} ${kind ? sql`and c.kind = ${kind}` : sql``}
+          and ${personId ? sql`v.person_id = ${personId}` : inTeam(me, "v.person_id")}
+          ${status ? sql`and v.status = ${status}` : sql``}
+          ${kind ? (kind === "firm" ? sql`and c.kind in ('drugstore', 'distributor')` : sql`and c.kind = ${kind}`) : sql``}
         order by v.day desc, v.done_at desc nulls last, v.id desc limit 1000`,
     ),
     access === "mr"
       ? Promise.resolve([] as { id: number; name: string }[])
-      : rows<{ id: number; name: string }>(
-          db,
-          sql`select p.id::int as id, p.name from mr_member m join person p on p.id = m.person_id where m.active order by p.name`,
-        ),
+      : teamPeople(db, me),
   ]);
   return { from, to, rows: found, people };
 }
@@ -230,7 +236,7 @@ export async function attendanceMonth(
     rows<{ day: string; startedAt: string; workType: string }>(
       db,
       sql`select to_char(day, 'YYYY-MM-DD') as day, ${iso("started_at")} as "startedAt", work_type as "workType"
-        from mr_day where person_id = ${personId} and day between ${first}::date and ${last}::date`,
+        from field_day where person_id = ${personId} and day between ${first}::date and ${last}::date`,
     ),
     rows<{ from: string; to: string }>(
       db,
@@ -238,12 +244,7 @@ export async function attendanceMonth(
         where person_id = ${personId} and status = 'approved' and from_day <= ${last}::date and to_day >= ${first}::date`,
     ),
     rows<{ id: number; name: string }>(db, sql`select id::int as id, name from person where id = ${personId}`),
-    access === "mr"
-      ? Promise.resolve([] as { id: number; name: string }[])
-      : rows<{ id: number; name: string }>(
-          db,
-          sql`select p.id::int as id, p.name from mr_member m join person p on p.id = m.person_id where m.active order by p.name`,
-        ),
+    access === "mr" ? Promise.resolve([] as { id: number; name: string }[]) : teamPeople(db, me),
   ]);
   const days: AttendanceMonth["days"] = [];
   for (let at = first; at <= last; at = addDays(at, 1)) {
@@ -274,64 +275,13 @@ export async function attendanceMonth(
   };
 }
 
-/** The app's people. */
-export async function memberPage(db: Database, me: Me): Promise<MemberPage> {
-  const access = await mustUse(db, me);
-  const lead = await isLeadNow(db, me);
-  const [members, candidates] = await Promise.all([
-    rows<MemberPage["members"][number]>(
-      db,
-      sql`select p.id::int as "personId", p.name, p.title, p.email, m.role, m.active, ${iso("m.added_at")} as "addedAt",
-          (select count(*) from mr_client c where c.assigned_to = p.id and c.active)::int as clients
-        from mr_member m join person p on p.id = m.person_id
-        order by m.active desc, m.role = 'lead' desc, p.name`,
-    ),
-    lead || me.role === "ceo"
-      ? rows<MemberPage["candidates"][number]>(
-          db,
-          sql`select p.id::int as id, p.name, p.title from person p
-            where p.active and p.role not in ('admin') and not exists (select 1 from mr_member m where m.person_id = p.id and m.active)
-            order by p.name limit 600`,
-        )
-      : Promise.resolve([]),
-  ]);
-  void access;
-  return {
-    members,
-    candidates,
-    can: { manage: lead, setLead: me.role === "admin" || me.role === "ceo" },
-  };
-}
-
-/** Adds a person to the app as an MR (the lead or the Admin), or makes them the team lead (the
- *  Admin or the CEO: the one lead before steps back to MR). */
-export async function addMember(db: Database, me: Me, input: { personId: number; role: "mr" | "lead" }): Promise<void> {
-  if (me.viewedBy) throw new Refusal(403, "not_allowed", "Looking at someone's screens changes nothing.");
-  const setter = me.role === "admin" || me.role === "ceo";
-  if (input.role === "lead" ? !setter : !(setter || (await isLeadNow(db, me))))
-    throw new Refusal(403, "not_allowed", input.role === "lead" ? "The Admin names the team lead." : "The team lead adds MRs.");
-  const [person] = await rows<{ id: number }>(db, sql`select id::int as id from person where id = ${input.personId} and active`);
-  if (!person) throw new Refusal(400, "invalid", "Pick an active person.", "personId");
-  await db.transaction(async (tx) => {
-    if (input.role === "lead")
-      await tx.execute(sql`update mr_member set role = 'mr' where role = 'lead' and active and person_id <> ${person.id}`);
-    await tx.execute(
-      sql`insert into mr_member (person_id, role, added_by) values (${person.id}, ${input.role}, ${me.id})
-        on conflict (person_id) do update set role = excluded.role, active = true, left_at = null, added_by = excluded.added_by,
-          added_at = case when mr_member.active then mr_member.added_at else now() end`,
-    );
-  });
-}
-
-/** Takes someone out of the app (kept, with their work). */
-export async function removeMember(db: Database, me: Me, personId: number): Promise<void> {
-  if (me.viewedBy) throw new Refusal(403, "not_allowed", "Looking at someone's screens changes nothing.");
-  const setter = me.role === "admin" || me.role === "ceo";
-  const [member] = await rows<{ role: string }>(db, sql`select role from mr_member where person_id = ${personId} and active`);
-  if (!member) throw new Refusal(404, "not_found", "Not in the app.");
-  if (member.role === "lead" ? !setter : !(setter || (await isLeadNow(db, me))))
-    throw new Refusal(403, "not_allowed", "The team lead takes MRs out; the Admin the team lead.");
-  await db.execute(sql`update mr_member set active = false, left_at = now() where person_id = ${personId}`);
+/** The field people of a lead's team (the team switch's box; everyone's for the CEO). */
+export async function teamPeople(db: Database, me: Me): Promise<{ id: number; name: string }[]> {
+  return rows<{ id: number; name: string }>(
+    db,
+    sql`${teamSql(me)} select p.id::int as id, p.name from person p where ${fieldPerson} and ${inTeam(me, "p.id")} and p.id <> ${me.id}
+      order by p.name limit 400`,
+  );
 }
 
 /** The year's holidays (HR's), for the app's Holidays tile. */
@@ -357,24 +307,22 @@ export async function mapToday(db: Database, me: Me, person: number | null): Pro
   const today = todayManila();
   const personId = access === "mr" ? me.id : person;
   if (personId) await mustSee(db, me, personId);
-  const people = await rows<{ id: number; name: string }>(
-    db,
-    sql`select p.id::int as id, p.name from mr_member m join person p on p.id = m.person_id
-      where m.active ${personId ? sql`and p.id = ${personId}` : sql``} order by p.name`,
-  );
+  const people = personId
+    ? await rows<{ id: number; name: string }>(db, sql`select id::int as id, name from person where id = ${personId}`)
+    : await teamPeople(db, me);
   const points = await rows<{ personId: number; at: string; what: string; place: string; client: string | null }>(
     db,
     sql`select * from (
         select d.person_id::int as "personId", ${iso("e.at")} as at,
           case e.kind when 'start' then 'Started working' when 'place' then 'Changed place' when 'break' then 'Break'
             when 'resume' then 'Back to work' else 'Stopped working' end as what, e.place, null::text as client
-        from mr_day_event e join mr_day d on d.id = e.day_id where d.day = ${today}::date and e.place is not null
+        from field_day_event e join field_day d on d.id = e.day_id where d.day = ${today}::date and e.place is not null
         union all
         select v.person_id::int, ${iso("v.checked_in_at")}, 'I''m here', v.check_in_place, c.name
-        from mr_visit v join mr_client c on c.id = v.client_id where v.day = ${today}::date and v.check_in_place is not null
+        from visit v join customer c on c.id = v.customer_id where v.day = ${today}::date and v.check_in_place is not null
         union all
         select v.person_id::int, ${iso("v.done_at")}, 'Closed the call', v.closed_place, c.name
-        from mr_visit v join mr_client c on c.id = v.client_id where v.day = ${today}::date and v.closed_place is not null) p
+        from visit v join customer c on c.id = v.customer_id where v.day = ${today}::date and v.closed_place is not null) p
       order by at`,
   );
   return {

@@ -1,6 +1,6 @@
 // The day report (Stop working, docs/PLAN.md 22): the day's hours (start, end, breaks, work place),
 // visits (planned, closed, skipped, missed, met, productive, promotional, business), business
-// (orders booked, chances, follow-ups, samples), expenses; each planned visit not done needs its
+// (the CRM orders placed at visits, chances, follow-ups, samples), expenses; each planned visit not done needs its
 // reason, then the remark and "Send the day report and stop working". The team lead marks it seen.
 
 import type { DayReport, MissReason } from "@2mg/api/mr";
@@ -40,11 +40,13 @@ export function MrDayReportPage() {
         },
       });
       await queries.invalidateQueries({ queryKey: ["mr"] });
+      // Stopping work ends the CRM's attendance day too.
+      await queries.invalidateQueries({ queryKey: ["my-day"] });
     });
   const allGiven = data.open.every((one) => reasons[one.id]?.reason && (reasons[one.id]?.reason !== "other" || reasons[one.id]?.note.trim()));
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4 pb-10">
-      <MrHead title="Day report" back="/mr" sub={`${data.person.name} · ${dayWords(data.day)}`} />
+      <MrHead title="Day report" back="/field" sub={`${data.person.name} · ${dayWords(data.day)}`} />
       {!s ? (
         <div className={`${CARD} px-4 py-8 text-center text-sm text-slate-500`}>The day hasn't started (no Start working).</div>
       ) : (
@@ -72,7 +74,7 @@ export function MrDayReportPage() {
       </Box>
       <Box title="Business">
         <Grid>
-          <Item label="Orders booked">{data.business.booked} · {peso(data.business.bookedAmount)}</Item>
+          <Item label="Orders placed at visits">{data.business.booked} · {peso(data.business.bookedAmount)}</Item>
           <Item label="Business opportunities">{data.business.chances}{data.business.chanceAmount ? ` · ${peso(data.business.chanceAmount)}` : ""}</Item>
           <Item label="Follow-ups made · due">{data.business.followUpsMade} · {data.business.followUpsDue}</Item>
           <Item label="Samples given">{data.business.samples}</Item>
@@ -83,14 +85,14 @@ export function MrDayReportPage() {
           <Item label="Allowances worked out">{peso(data.expenses.generated)}</Item>
           <Item label="Claimed">{peso(data.expenses.claimed)}</Item>
         </Grid>
-        <Link to="/mr/expenses" className="mt-2 inline-block text-xs font-semibold text-sky-700">Open expenses</Link>
+        <Link to="/visits/expenses" className="mt-2 inline-block text-xs font-semibold text-sky-700">Open expenses</Link>
       </Box>
       {data.closed.length + data.notDone.length > 0 && (
         <Box title="The day's calls">
           <ul className="flex flex-col gap-1.5">
             {[...data.closed, ...data.notDone].map((one) => (
               <li key={one.id}>
-                <Link to={`/mr/visits/${one.id}`} className="flex items-center justify-between gap-2 text-sm hover:text-sky-800">
+                <Link to={`/visits/${one.id}`} className="flex items-center justify-between gap-2 text-sm hover:text-sky-800">
                   <span className="truncate">{one.client.name} <span className="text-xs text-slate-500">{one.skipReason ?? ""}</span></span>
                   <StatePill visit={one} />
                 </Link>

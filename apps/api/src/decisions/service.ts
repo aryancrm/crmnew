@@ -7,6 +7,10 @@
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { fieldExpenses } from "../field/expenses";
+import { LEAD_ROLES } from "../field/visits";
+import { offRequests } from "../mr/clients";
+import { deviationList } from "../mr/plan";
+import { leadQueue } from "../mr/team";
 import { formList } from "../hr/forms";
 import { leaveList } from "../hr/leave";
 import { Refusal } from "../http";
@@ -73,7 +77,21 @@ export async function decisions(db: Database, me: Me): Promise<Decisions> {
         order by v.month, p.name`,
     );
     for (const plan of plans)
-      forMe.push({ key: `plan:${plan.personId}:${plan.month}`, label: `${plan.name}'s visit plan for ${plan.month}`, count: 1, to: `/visits/plan?person=${plan.personId}&month=${plan.month}`, kind: "people" });
+      forMe.push({ key: `plan:${plan.personId}:${plan.month}`, label: `${plan.name}'s tour plan for ${plan.month}`, count: 1, to: `/field/plan?person=${plan.personId}&month=${plan.month}`, kind: "people" });
+  }
+
+  // The field's day (docs/PLAN.md 22), from the lead's own pages: day reports to see, calls left
+  // "not sure yet" to judge, changes to an approved tour plan, customers asked off the list.
+  if (LEAD_ROLES.includes(me.role)) {
+    const queue = await ifAllowed(() => leadQueue(db, me));
+    if (queue) {
+      add(forMe, { key: "field:reports", label: "Day reports to see", count: queue.reports.length, to: "/field/reports?view=day-reports", kind: "people" });
+      add(forMe, { key: "field:judge", label: "Calls to judge (productive or not)", count: queue.judge.length, to: "/field/reports?view=judge", kind: "people" });
+    }
+    const changes = await ifAllowed(() => deviationList(db, me, {}));
+    if (changes) add(forMe, { key: "field:deviations", label: "Tour plan changes to approve", count: changes.length, to: "/field/plan?view=deviations", kind: "people" });
+    const off = await ifAllowed(() => offRequests(db, me));
+    if (off) add(forMe, { key: "field:off", label: "Customers to take off the field's list", count: off.length, to: "/field/clients?view=off", kind: "people" });
   }
 
   const returns = await ifAllowed(() => listReturns(db, me, {}));
@@ -139,7 +157,7 @@ export async function decisions(db: Database, me: Me): Promise<Decisions> {
     add(mine, { key: "my-asks", label: "Orders you asked a lead about", count: own.asks, to: "/orders/check", kind: "orders" });
     add(mine, { key: "my-returns", label: "Returns you asked for, not done", count: own.returns, to: "/returns", kind: "orders" });
     add(mine, { key: "my-expenses", label: "Your field expenses waiting", count: own.expenses, to: "/visits/expenses", kind: "people" });
-    add(mine, { key: "my-plan", label: "Your visit plan waiting", count: own.plans, to: "/visits/plan", kind: "people" });
+    add(mine, { key: "my-plan", label: "Your tour plan waiting", count: own.plans, to: "/field/plan", kind: "people" });
     add(mine, { key: "my-seats", label: "Your asks for people", count: own.seats, to: "/people?tab=requests", kind: "people" });
     add(mine, { key: "my-samples", label: "Samples & gifts you asked for", count: own.samplesAsked, to: "/me/samples", kind: "people" });
     // On the way to the rep: theirs to mark received.

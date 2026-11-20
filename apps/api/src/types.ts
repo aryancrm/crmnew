@@ -4218,7 +4218,8 @@ export type HrLoginInput = { email?: string | null; password?: string | null };
 
 // ---- Field: visits to doctors, hospitals and drugstores (SEFMED's daily work). ----
 
-export type VisitStatus = "planned" | "done" | "skipped";
+/** missed: a planned visit the day report closed with its reason (the field's day, PLAN 22). */
+export type VisitStatus = "planned" | "done" | "skipped" | "missed";
 export type PlanStatus = "draft" | "sent" | "approved" | "sent_back";
 /** How often a customer is visited a month: A 4, B 2, C 1, D 1 (no class yet: once). */
 export type VisitClass = "A" | "B" | "C" | "D";

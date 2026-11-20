@@ -2092,87 +2092,78 @@ Aryan asked for crmnew to become a complete ERP (SAP / Odoo / Salesforce class) 
 what works. The plan, what exists today, the phases and his questions: [ERP-PLAN.md](ERP-PLAN.md).
 Nothing built until he picks a phase.
 
-## 22. The MR App: SEFMED's work as its own app (20 Nov 2026)
+## 22. SEFMED's work in the MedRep's pages (20 Nov 2026)
 
 Aryan, 20 Nov: SEFMED's app is very good, every step shows (where I will go, where I am, what
 happened at the doctor); build all of it into the CRM. He showed its phone screens (Home with the
 *Since 10:20 AM · HQ-Manila · Stop Working* circle and tiles; the tour plan calendar with a day's
 actions and its cities; Visits in tabs KOLs · Hospitals · KBLs; Add Order; the KOL list and its
 actions; Expenses; Leave; Call reports; Attendance; the manager's team list) and opened its web
-portal in the browser pane (read only). Then, twice: "won't it get complicated? Make our own
-SEFMED as a **separate app** for now, every screen working the same way, **two sides** (what the
-MR fills, what the team lead sees); the MRs registered in it have **one team lead** who sees
-everything; keep it simple; we tie it to the CRM later."
+portal in the browser pane (read only). First as a separate app so every screen got built properly
+(commit d848ee39, never pushed); then, the same day: **"now integrate it into our MR pages, as
+options of their own.** MRs made orders in the hub and kept records on SEFMED: we join both. Same
+hierarchy: the team lead / manager approves, above them the head, above that the CEO."
 
 **As built (20 Nov, local, not pushed).** Every SEFMED screen and rule, and its state:
-[FIELD-CHECKLIST.md](FIELD-CHECKLIST.md).
+[FIELD-CHECKLIST.md](FIELD-CHECKLIST.md). Code in `apps/api/src/mr` (addresses `/api/mr/*`) and
+`apps/web/src/mr`; migration 0129 (`field_work`). The separate app's own people, clients and order
+booking are gone.
 
-- **Its own app**: the *MR App* tile in the CEO's and the Admin's apps; an *MR App* link at the top
-  of a member's own desk; on its pages its own menu with *Back to <desk>*. Code in
-  `apps/api/src/mr`, `apps/web/src/mr`; tables `mr_*` (migration 0129). Nothing else in the CRM
-  changed: orders, targets, the company tree, every report, and the older Visits pages of 12.11–12.14
-  stay as they were.
-- **Its own people** (`mr_member`): the Admin (or the CEO) names the one team lead; the lead adds
-  and takes out MRs; taking out keeps the work. An MR sees their own work; the lead everyone's in
-  the app; the CEO and the Admin look (the Admin stands in for the lead). No reading of the tree.
-- **Its own clients**: doctors (KOLs), hospitals, firms (KBLs: super stockist, distributor,
-  sub-distributor, stockist, retailer), each once (a twin by name and city is refused), with a code
-  (D0001, H0001, F0001), category A–E, specialty, hospital, firm, best days and time, visits a month,
-  assigned to an MR. *For me* / *Team* lists; an MR adds and edits their own, the lead any. Delete is
-  a request the lead answers (the client is kept, off the list). SEFMED's export can be loaded later.
-- **It reads** only logins, medicines and their prices (the order's rate), HR's leave and holidays
-  (calendar marks, attendance), and starts / ends the CRM's attendance day with Start working /
-  the day report.
+- **One record of everything.** A visit is the CRM's own `visit` (12.11), with SEFMED's call on it
+  (objectives, I'm here, the call, the business, close; *missed* added for a planned visit the day
+  report closes with its reason). Customers are the CRM's own: doctors are the KOLs, hospitals the
+  hospitals, drugstores and distributors the KBLs; the field's profile (best days and time, zone,
+  contact person, qualification, firm type, the pharmacy that serves a doctor) sits beside the
+  customer; the category is the customer's visit class A–D, set by the team lead. New customers come
+  through the CRM's own Add customer (one per city, a hospital's papers, as everywhere). Asking to
+  take one off the list goes to the team lead; nothing is erased.
+- **Add order = the CRM's own order.** On a call, *Add order* keeps the call as typed, opens *Create
+  New Order* for that customer and comes back to the call; the order joins the visit (`visit_order`)
+  and goes to Management, Finance and Dispatch like every order. The call shows its orders and their
+  step; *Business generated* needs one. Samples and gifts go through the samples module (a doctor's
+  signed acknowledgement); the tour plan is the CRM's month plan (`visit_plan`) with days, cities,
+  revisions and deviations; expenses are the CRM's field expense lines with SEFMED's heads and the
+  day's per diem and TA; *Start working* starts the CRM's attendance day and the day report ends it.
+- **The company tree is the hierarchy.** A MedRep works their own day; their team lead (whom they
+  report to) sees the team, gets the tour plans, changes, expenses, day reports and *not sure yet*
+  calls, and decides them; the head above sees everything under them and may stand in; the CEO reads
+  everything and decides nothing; Management and the Admin stand in. Every lead page has the team
+  switch. The person's lead is told (plans, changes, expenses, off-list asks); the lead's waiting
+  items are on *To decide* too.
 
-**The MR's side** (phone first): Home (the circle: *Start working* → work place Head quarter,
-Ex-station, Out-station, In transit, Other, the day's cities, working with; then *Since … · place ·
-Stop working*; a break; the day's numbers; the next visit; tiles Visits, KOLs, KBLs, Hospitals, Tour
-plan, Order details, Expenses, Leaves, Holidays, Follow-ups, Day report, Reports) · Tour plan
-calendar (marks: tour plan, pending / refused / approved leave, holiday, back-dated; a day's *Select
-action*: view / reschedule visits, work place and cities, add visits to KOLs / firms / hospitals by
-city, working with; *Create tour plan* sends the month; list view; working days with no plan) ·
-Visits (tabs, a day or a month, New / At the place / Closed / Skipped / Missed) · a visit step by
-step (1 call objective(s) with remark, working with, priority; 2 *I'm here*: time, place, distance
-from the pin; 3 the call: met or not, drugs promoted with sample quantity and how they were taken,
-the doctor's prescribing list with top five, a hospital's or a firm's own answers, competitors,
-feedback; 4 business: *Add order* over the visit, promotional / business / both, the outcome, a
-chance in pesos, **productive / not / not sure yet, never worked out**; 5 close: follow-up, next
-visit, remarks, photos, the place again; time at the call shown) · Add order (every product with
-MRP, rate incl. tax, tax, quantity in packs, amount, the PO's photo; booked business, not sales) ·
-Expenses (per diem and TA worked out for each day worked, claimed vs approved, + Add expense with
-date, head, amount, remark, bill photo) · Day report (hours, visits, business, expenses; a reason
-for each planned visit not done → *missed*; remarks; *Send the day report and stop working*) ·
-Follow-ups · Reports (call reports, missed calls, attendance month, order booking) · Holidays ·
-Leaves (the CRM's own leave page: one leave record, payroll reads it).
+**Where it is.** The MedRep's *Visits* folder: My day (the circle, today's numbers, the next visit,
+the tiles), Today's visits (tabs, a day or a month, New / At the place / Closed / Skipped / Missed),
+Tour plan, KOLs / hospitals / KBLs, the Visit plan by class, Calendar, My calls, My expenses, My
+samples & gifts; from My day's tiles: Follow-ups, Day report, Reports, Holidays, Leaves. A lead's
+*Team visits* folder: Team today, Team visits, Approve tour plans, Expenses to approve, Team's
+customers, Call reports, Visits report, (Team calendar,) Where the team is, Today's places, Team
+samples & gifts, My own day. The CEO's and the Admin's *Field* app: the same, read from the top.
+The older Visit plan page sends and decides the month through the tour plan's own path.
 
-**The team lead's side**: My team (each MR: Present / Absent, where and since when, closed of the
-day's visits, missed, booked, at which client now, the day report; dashboard figures: clients,
-closed visits today / week / month, attendance %, Call Champion, field activity) with each MR's
-actions (visits, expenses, location on the map, tour plan, attendance, day report, orders) ·
-waiting for him (day reports to see, calls to judge, tour plans to approve, deviations, expenses,
-delete requests) · Approve tour plan (each MR's month, whole month planned or the days missing,
-approve or send back with a word; each decision kept as a revision) · Deviation approval (a visit
-moved, added or dropped, or a day's place changed after approval, with the MR's reason) · Team
-visits and expenses (approve each line, the amount may be less, or reject with why; the allowance
-rates) · All on map (the places taken at start, I'm here, close and stop; no trail in between) ·
-Call reports · the app's people.
+**The MR's call, step by step**: 1 call objective(s) with remark, working with, priority; 2 *I'm
+here*: time, place, distance from the pin; 3 the call: met or not, drugs promoted and how they were
+taken, samples and gifts, the doctor's prescribing list with top five, a hospital's or a firm's own
+answers, competitors, feedback; 4 business: *Add order*, promotional / business / both, the
+outcome, a chance in pesos, **productive / not / not sure yet, never worked out**; 5 close:
+follow-up, next visit, remarks, photos, the place again; time at the call shown.
 
 **Rules kept** (Aryan's list): a planned visit and the call are two records (the plan as approved is
 kept per revision); a call is never productive by itself; a meeting without an order isn't a failed
 call; a planned visit not done needs a reason (missed); a closed call keeps its check-in and close;
-only the lead reopens it, with why, kept; an order booked is not sales; worked-out allowances,
-claims and approvals stay apart, nothing approved because it was worked out; a change after
-approval is a deviation with why; the plan never stops the day's work; nothing is deleted.
+only the lead reopens it, with why, kept; an order placed at a visit is an order like any other,
+not sales until Finance invoices it; worked-out allowances, claims and approvals stay apart, nothing
+approved because it was worked out; a change after approval is a deviation with why; the plan never
+stops the day's work; nothing is deleted. The older visits report counts *missed* with skipped and
+spends the approved amount.
 
 **Interim defaults (to change on Aryan's word):** objectives = GetMeds' two from SEFMED + Aryan's
 list; skip reasons = SEFMED's + two of the CRM's; the expense heads = GetMeds' SEFMED list; a bill
 photo needed for every head but the day's allowances and the communication / car-plan allowances;
-expenses up to 31 days back; per diem and TA rates 0 until the lead or the Admin types them; *Put
-employee on hold* (a lock) and tour-plan blocking not built.
+expenses up to 31 days back; per diem and TA rates 0 until Management or the Admin types them (they
+are the company's, the same for everyone); *Put employee on hold* and tour-plan blocking not built.
 
-**Later (the tie to the CRM):** a client ↔ CRM customer link, a booked order → a CRM order with its
-lines filled (Management approves as every order), SEFMED's data loaded, samples from the samples
-module, e-detailing, stock tally and secondary sales, payment from a firm, working offline.
+**Later:** SEFMED's data loaded (its clients matched to CRM customers, its visits), e-detailing,
+stock tally and secondary sales, payment from a firm, working offline.
 
 ## 13. Questions waiting for Aryan
 
@@ -2258,14 +2249,15 @@ module, e-detailing, stock tally and secondary sales, payment from a firm, worki
     (CN-00893…) for every return; crmnew takes the credit off the invoice and keeps the return's
     RET- number, with no printable credit memo. Does the BIR need one (a "credit memo" with its own
     series per company, like the invoices: GetMeds going on from Zoho's CN-00893, 2MG its own)?
-29. **MR App expenses** (22): the per diem and TA a day for Head quarter / Ex-station /
+29. **Field expenses** (22): the per diem and TA a day for Head quarter / Ex-station /
     Out-station (or the fare chart by km), and the fixed allowances (communication, car plan): who
     gives the numbers? Who approves after the team lead, above what amount, and does Finance pay
-    them with payroll or apart? Until then: rates 0, the team lead approves each line.
-30. **The phone's place in the MR App** (22): keep a trail every few minutes while the day runs
+    them with payroll or apart? Until then: rates 0 (Management or the Admin type them), the team
+    lead approves each line.
+30. **The phone's place in the field** (22): keep a trail every few minutes while the day runs
     (SEFMED's track report), or only at start, I'm here, close and stop, as built?
-31. **The app's name and its people**: "MR App" (SEFMED is the vendor's name), and which MRs and
-    which team lead to put in it on live.
+31. ~~The app's name and its people~~ Answered 20 Nov: no separate app; it lives in the MedRep's
+    pages, with the company tree's people.
 
 ## 14. Change log
 
@@ -3002,3 +2994,4 @@ module, e-detailing, stock tally and secondary sales, payment from a firm, worki
 - 20 Nov (153), Aryan: "setup its Dockerfile to live into our bishnoi-one-server; api and web their own Dockerfile". `apps/api/Dockerfile`, `apps/web/Dockerfile` (+ `apps/web/docker/nginx.conf.template`), `docker-compose.yml`, `.dockerignore` (section 10.4). Not built here yet (no Docker on this computer); Render and Vercel unchanged.
 - 20 Nov (154), Aryan: "production-ready .env of both, their ports, and the setup for the Coolify server". `apps/api/.env.production.example` (every setting the API reads, what it is, which are required), `apps/web/.env.production.example` (`API_UPSTREAM`), docs/DEPLOY-COOLIFY.md: Postgres, the API (port 4100, no domain, container name `crmnew-api`), the web app (port 80, the domain). nginx now finds the API through Docker's DNS each 30 s (starts while the API is down) and sends the upstream's own Host. Production refuses the embedded database, so the compose file gets its own Postgres. `SECRETS_KEY` must stay Render's if the live data moves. One API container only (channel reading isn't shared).
 - 20 Nov (155), Aryan: "SEFMED's app is very good; make our own as a separate app for now, every screen working the same way, two sides (the MR's, the team lead's), one team lead who sees everything; keep it simple, tie it to the CRM later." **The MR App** (section 22, docs/FIELD-CHECKLIST.md): its own people, clients, days, visits with the five steps, orders booked, follow-ups, tour plan with revisions and deviations, expenses with SEFMED's heads, day report, the lead's team, approvals, call reports, attendance, map; migration 0129, `apps/api/src/mr`, `apps/web/src/mr`. Nothing else in the CRM changed. Checked: 12 new API tests (485 in all pass), the web build, and the whole day in the browser on a demo copy (start working, add visits, I'm here, Add order, close the call, day report with a missed reason, the lead's team and Mark seen). Questions 29–31.
+- 20 Nov (156), Aryan, the same day: "build MR properly first, then integrate it into our existing MR pages as options of their own. MRs made orders in the hub and kept records on SEFMED: we join both. Same hierarchy: their team lead / manager approves, above that the head, above that the CEO." **SEFMED's work in the MedRep's pages** (section 22, docs/FIELD-CHECKLIST.md): the separate app's own people, clients and order booking are gone (migration 0129_mr_app replaced by 0129_field_work, never applied outside demo copies). Visits are the CRM's `visit` (+ *missed*), customers the CRM's (doctors = KOLs, hospitals, drugstores and distributors = KBLs) with a field profile beside them, *Add order* opens the CRM's Create New Order and the order joins the visit (`visit_order`, in the same step as the order), samples through the samples module, the tour plan is the CRM's `visit_plan`, expenses the CRM's field expense lines with SEFMED's heads. The company tree is the hierarchy: the person's team lead decides, the head may stand in, the CEO reads only; the lead's waiting items are on *To decide* too. Pages in the MedRep's *Visits* folder, the leads' *Team visits* folder and the CEO's and the Admin's *Field* app. The older visits report counts *missed* with skipped and spends the approved amount. Checked: 487 API tests, the web build, the A-to-Z walk on a fresh copy of the real data, and every field page in the browser as the MedRep, team lead, head, CEO and Admin on a demo copy (no errors; the CEO sees no decide buttons). Local, not pushed. Questions 29–30; 31 answered.

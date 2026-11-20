@@ -2,16 +2,19 @@
 // cancelled / rejected leave, approved leave, holiday, back-dated visit), a list view; a tap on a
 // day opens "Select action" (your work city for the day; view / reschedule visits; add visits to
 // KOLs, firms, hospitals by city; the day's work place; working with); Create tour plan sends the
-// month to the team lead, who approves or sends it back; revisions and deviations are kept.
+// month to the team lead, who approves or sends it back; revisions and deviations are kept. On the
+// CRM's own visits and customers; the lead's pages follow the company tree (the team switch).
 
-import type { ClientKind, ClientList, DeviationRow, PlanMonth, VisitList, WorkType } from "@2mg/api/mr";
+import type { ClientKind, ClientList, DeviationRow, MrHome, PlanMonth, PlanStatus, VisitList, WorkType } from "@2mg/api/mr";
 import { DEVIATION_WORDS, KIND_TABS, PLAN_WORDS, WORK_TYPES, WORK_WORDS } from "@2mg/api/mr";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, List, Send } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useMe } from "../auth";
 import { manilaToday } from "../team/range";
+import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { Button, CARD, Dialog, PageState, Problem, useAction } from "../ui";
 import { ActionSheet, Choices, dayWords, FIELD, Label, MrHead, monthWords, shiftMonth, StatePill, useMrMe } from "./parts";
 
@@ -54,7 +57,7 @@ function PlanCalendar({ person, month, onMonth }: { person: string | null; month
     <div className={`mx-auto flex max-w-3xl flex-col gap-3 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
       <MrHead
         title="Tour plan calendar"
-        back="/mr"
+        back="/field"
         sub={`${mine ? "" : `${data.person.name} · `}${status ? `${PLAN_WORDS[status]}${data.plan.revision ? ` · revision ${data.plan.revision}` : ""}` : "Not made yet"}`}
         actions={<Button small variant="quiet" onClick={() => setList(!list)}><List size={15} /> {list ? "Calendar view" : "List view"}</Button>}
       />
@@ -162,7 +165,7 @@ function PlanCalendar({ person, month, onMonth }: { person: string | null; month
             { label: "Add new visit to firm", hidden: !data.can.edit || picked.day < data.today, onPick: () => setOpen({ what: "add", day: picked.day, kind: "firm" }) },
             { label: "Add new visit to hospital", hidden: !data.can.edit || picked.day < data.today, onPick: () => setOpen({ what: "add", day: picked.day, kind: "hospital" }) },
             { label: "Add / update working with", hidden: !data.can.edit || picked.day < data.today, onPick: () => setOpen({ what: "place", day: picked.day }) },
-            { label: "Open the day's visits", onPick: () => navigate(`/mr/visits?day=${picked.day}${person ? `&person=${person}` : ""}`) },
+            { label: "Open the day's visits", onPick: () => navigate(`/visits?day=${picked.day}${person ? `&person=${person}` : ""}`) },
           ]}
         />
       )}
@@ -195,9 +198,10 @@ function DayPlaceDialog({ data, day, onClose }: { data: PlanMonth; day: string; 
   const [cities, setCities] = useState<string[]>(known?.cities ?? []);
   const [typed, setTyped] = useState("");
   const [why, setWhy] = useState("");
-  const partners = useQuery({ queryKey: ["mr", "members"], queryFn: () => api<{ members: { personId: number; name: string; active: boolean }[] }>("/api/mr/members") });
+  // Whom one may work with: their team lead, team-mates and those under them (the company tree).
+  const home = useQuery({ queryKey: ["mr", "home"], queryFn: () => api<MrHome>("/api/mr/home") });
   const [withWhom, setWithWhom] = useState<number[]>(known?.workingWith.map((one) => one.id) ?? []);
-  const others = (partners.data?.members ?? []).filter((one) => one.active && one.personId !== data.person.id);
+  const others = home.data?.partners ?? [];
   return (
     <Dialog title={`Plan ${dayWords(day)}`} sub="Please select the city to add visits" onClose={onClose} busy={action.busy}>
       <div className="flex flex-col gap-3">
@@ -211,13 +215,13 @@ function DayPlaceDialog({ data, day, onClose }: { data: PlanMonth; day: string; 
                 <input type="checkbox" checked={cities.includes(one)} onChange={(event) => setCities((all) => (event.target.checked ? [...all, one] : all.filter((c) => c !== one)))} /> {one}
               </label>
             ))}
-            {data.cities.length === 0 && <p className="text-xs text-slate-500">No clients with a city yet: type one below.</p>}
+            {data.cities.length === 0 && <p className="text-xs text-slate-500">No customers with a city yet: type one below.</p>}
           </div>
           <input className={`${FIELD} mt-1.5`} value={typed} onChange={(event) => setTyped(event.target.value)} placeholder="Another city" />
         </Label>
         {others.length > 0 && (
           <Label text="Working with">
-            <Choices options={others.map((one) => ({ key: String(one.personId), label: one.name }))} value={withWhom.map(String)} onChange={(next) => setWithWhom(next.map(Number))} many />
+            <Choices options={others.map((one) => ({ key: String(one.id), label: one.name }))} value={withWhom.map(String)} onChange={(next) => setWithWhom(next.map(Number))} many />
           </Label>
         )}
         {data.plan.status === "approved" && (
@@ -277,7 +281,7 @@ export function AddVisitsDialog({
     queryFn: () => api<ClientList["rows"]>(`/api/mr/clients/pick?${new URLSearchParams({ kind, cities: cities.join("|"), ...(q ? { q } : {}) })}`),
     placeholderData: (previous) => previous,
   });
-  const allCities = useQuery({ queryKey: ["mr", "plan", null, null], queryFn: () => api<PlanMonth>("/api/mr/plan") });
+  const allCities = useQuery({ queryKey: ["mr", "cities"], queryFn: () => api<{ cities: string[] }>("/api/mr/cities"), staleTime: 5 * 60_000 });
   const presetOnly = Boolean(preset?.length);
   return (
     <Dialog title={presetOnly ? "Add visit" : `Add new visits to ${KIND_TABS[kind]}`} sub={cities.length ? `Cities: ${cities.join(", ")}` : undefined} onClose={onClose} busy={action.busy}>
@@ -325,7 +329,7 @@ export function AddVisitsDialog({
           disabled={action.busy || picked.length === 0}
           onClick={() =>
             action.run(async () => {
-              await api("/api/mr/visits", { body: { day, clientIds: picked, why: why || null } });
+              await api("/api/mr/visits", { body: { day, customerIds: picked, why: why || null } });
               await queries.invalidateQueries({ queryKey: ["mr"] });
               onClose();
             })
@@ -352,7 +356,7 @@ function DayVisits({ day, person, onClose }: { day: string; person: string | nul
       <ul className="flex flex-col gap-2">
         {rows.map((one) => (
           <li key={one.id}>
-            <Link to={`/mr/visits/${one.id}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm hover:border-sky-300">
+            <Link to={`/visits/${one.id}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm hover:border-sky-300">
               <span className="min-w-0">
                 <span className="block truncate font-semibold">{one.client.name}</span>
                 <span className="block text-xs text-slate-500">{[one.client.detail ?? one.client.specialty, one.client.city].filter(Boolean).join(", ")}</span>
@@ -438,58 +442,70 @@ function DeviationList({ rows, decide }: { rows: DeviationRow[]; decide?: boolea
 }
 
 function Deviations() {
-  const query = useQuery({ queryKey: ["mr", "deviations"], queryFn: () => api<{ rows: DeviationRow[] }>("/api/mr/deviations?status=all") });
+  const unit = useTeamUnit();
+  const query = useQuery({
+    queryKey: ["mr", "deviations", unit],
+    queryFn: () => api<{ rows: DeviationRow[] }>(withUnit("/api/mr/deviations?status=all", unit)),
+  });
   const mr = useMrMe();
+  // The person's team lead decides; Management and the Admin stand in; the CEO reads.
+  const role = useMe().data?.role;
   if (!query.data) return <PageState query={query} what="the deviations" />;
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-3">
-      <MrHead title="Deviation approval" back="/mr" sub={`${query.data.rows.filter((one) => one.status === "waiting").length} waiting`} />
-      <DeviationList rows={query.data.rows} decide={mr.data?.access === "lead"} />
+      <MrHead title="Tour plan changes (deviations)" sub={`${query.data.rows.filter((one) => one.status === "waiting").length} waiting`} />
+      {mr.data?.access !== "mr" && <TeamSwitch />}
+      <DeviationList rows={query.data.rows} decide={mr.data?.access === "lead" || role === "admin" || role === "management"} />
       {query.data.rows.length === 0 && <div className={`${CARD} px-4 py-8 text-center text-sm text-slate-500`}>No deviations.</div>}
     </div>
   );
 }
 
-/** The lead's Approve Tour Plan: each MR's month (status, whole month planned, missing days). */
+type TeamPlans = {
+  month: string;
+  people: { id: number; name: string; status: PlanStatus | null; revision: number; decidedBy: string | null; missing: string[] }[];
+};
+
+/** The lead's Approve Tour Plan: each MedRep's month under them (status, whole month planned,
+ *  the working days still missing); the team switch narrows it to a box. */
 function TeamPlans() {
-  const members = useQuery({ queryKey: ["mr", "members"], queryFn: () => api<{ members: { personId: number; name: string; active: boolean; role: string }[] }>("/api/mr/members") });
+  const unit = useTeamUnit();
   const [month, setMonth] = useState(manilaToday().slice(0, 7));
-  if (!members.data) return <PageState query={members} what="the team" />;
+  const query = useQuery({
+    queryKey: ["mr", "plan", "team", month, unit],
+    queryFn: () => api<TeamPlans>(withUnit(`/api/mr/plan/team?month=${month}`, unit)),
+    placeholderData: (previous) => previous,
+  });
+  if (!query.data) return <PageState query={query} what="the team" />;
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-3">
-      <MrHead title="Approve tour plan" back="/mr" sub={monthWords(month)} actions={
+    <div className={`mx-auto flex max-w-4xl flex-col gap-3 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
+      <MrHead title="Approve tour plan" sub={monthWords(month)} actions={
         <>
           <Button small variant="quiet" aria-label="Month before" onClick={() => setMonth(shiftMonth(month, -1))}><ChevronLeft size={16} /></Button>
           <Button small variant="quiet" aria-label="Month after" onClick={() => setMonth(shiftMonth(month, 1))}><ChevronRight size={16} /></Button>
         </>
       } />
+      <TeamSwitch />
       <ul className="flex flex-col gap-2">
-        {members.data.members.filter((one) => one.active && one.role === "mr").map((one) => (
-          <TeamPlanRow key={one.personId} personId={one.personId} name={one.name} month={month} />
+        {query.data.people.map((one) => (
+          <li key={one.id}>
+            <Link to={`/field/plan?person=${one.id}&month=${month}`} className={`${CARD} flex flex-wrap items-center justify-between gap-2 p-4 hover:border-sky-300`}>
+              <span className="min-w-0">
+                <b>{one.name}</b>
+                <span className="block text-xs text-slate-500">
+                  Whole month tour plan: {one.missing.length ? "No" : "Yes"}
+                  {one.missing.length ? ` · missing ${one.missing.map((day) => Number(day.slice(8))).join(", ")}` : ""}
+                  {one.decidedBy ? ` · by ${one.decidedBy}` : ""}
+                </span>
+              </span>
+              <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold text-white ${one.status === "approved" ? "bg-emerald-600" : one.status === "sent" ? "bg-amber-500" : one.status === "sent_back" ? "bg-rose-600" : "bg-slate-400"}`}>
+                {one.status ? `${PLAN_WORDS[one.status]}${one.revision > 1 ? ` · rev ${one.revision}` : ""}` : "Not submitted"}
+              </span>
+            </Link>
+          </li>
         ))}
+        {query.data.people.length === 0 && <li className={`${CARD} px-4 py-8 text-center text-sm text-slate-500`}>No MedReps under you.</li>}
       </ul>
     </div>
-  );
-}
-
-function TeamPlanRow({ personId, name, month }: { personId: number; name: string; month: string }) {
-  const query = useQuery({ queryKey: ["mr", "plan", String(personId), month], queryFn: () => api<PlanMonth>(`/api/mr/plan?person=${personId}&month=${month}`) });
-  const data = query.data;
-  const missing = data ? data.days.filter((one) => one.work && !one.leave && !one.plan && one.planned === 0) : [];
-  return (
-    <li>
-      <Link to={`/mr/plan?person=${personId}&month=${month}`} className={`${CARD} flex flex-wrap items-center justify-between gap-2 p-4 hover:border-sky-300`}>
-        <span className="min-w-0">
-          <b>{name}</b>
-          <span className="block text-xs text-slate-500">
-            Whole month tour plan: {data ? (missing.length ? "No" : "Yes") : "…"}
-            {missing.length ? ` · missing ${missing.map((one) => Number(one.day.slice(8))).join(", ")}` : ""}
-          </span>
-        </span>
-        <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold text-white ${data?.plan.status === "approved" ? "bg-emerald-600" : data?.plan.status === "sent" ? "bg-amber-500" : data?.plan.status === "sent_back" ? "bg-rose-600" : "bg-slate-400"}`}>
-          {data?.plan.status ? PLAN_WORDS[data.plan.status] : "Not submitted"}
-        </span>
-      </Link>
-    </li>
   );
 }

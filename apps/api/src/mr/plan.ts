@@ -14,8 +14,10 @@ import { Refusal } from "../http";
 import { addDays, todayManila } from "../inventory/rules";
 import { clean, iso, type Runner } from "../inventory/service";
 import { notify } from "../notify/service";
+import { FIELD_READ_ROLES, LEAD_ROLES } from "../field/visits";
 import type { Me } from "../types";
-import { idArray, isLeadNow, membersFrom, mustLead, mustSee, mustWork, textArray } from "./access";
+import { fieldPerson, idArray, inTeam, leadOf, mayDecideFor, mustDecideFor, mustSee, mustWork, peopleFrom, teamSql, textArray } from "./access";
+import { fieldCities } from "./clients";
 import { addDeviation, planApproved } from "./visits";
 import { type DeviationRow, type PlanMonth, type PlanStatus, WORK_TYPES, type WorkType } from "./words";
 
@@ -27,10 +29,10 @@ async function deviationRows(db: Runner, where: ReturnType<typeof sql>): Promise
   return rows<DeviationRow>(
     db,
     sql`select d.id::int as id, json_build_object('id', p.id::int, 'name', p.name) as person, to_char(d.day, 'YYYY-MM-DD') as day,
-        d.kind, d.visit_id::int as "visitId", (select c.name from mr_visit v join mr_client c on c.id = v.client_id where v.id = d.visit_id) as client,
+        d.kind, d.visit_id::int as "visitId", (select c.name from visit v join customer c on c.id = v.customer_id where v.id = d.visit_id) as client,
         to_char(d.from_day, 'YYYY-MM-DD') as "fromDay", to_char(d.to_day, 'YYYY-MM-DD') as "toDay", d.note, d.status,
         (select name from person where id = d.decided_by) as "decidedBy", d.decision_note as "decisionNote", ${iso("d.made_at")} as "madeAt"
-      from mr_deviation d join person p on p.id = d.person_id where ${where} order by d.made_at desc, d.id desc limit 300`,
+      from plan_deviation d join person p on p.id = d.person_id where ${where} order by d.made_at desc, d.id desc limit 300`,
   );
 }
 
@@ -59,33 +61,30 @@ export async function planMonth(db: Database, me: Me, asked: { month?: string | 
         sql`select to_char(d.day, 'YYYY-MM-DD') as day, d.work_type as "workType", to_json(d.cities) as cities,
             coalesce((select json_agg(json_build_object('id', p.id::int, 'name', p.name)) from person p where p.id = any (d.working_with)), '[]'::json) as "workingWith",
             d.note
-          from mr_plan_day d where d.person_id = ${personId} and d.day between ${first}::date and ${last}::date`,
+          from plan_day d where d.person_id = ${personId} and d.day between ${first}::date and ${last}::date`,
       ),
       rows<{ day: string; planned: number; done: number }>(
         db,
         sql`select to_char(day, 'YYYY-MM-DD') as day, count(*) filter (where status in ('planned', 'done', 'missed'))::int as planned,
             count(*) filter (where status = 'done')::int as done
-          from mr_visit where person_id = ${personId} and day between ${first}::date and ${last}::date group by day`,
+          from visit where person_id = ${personId} and day between ${first}::date and ${last}::date group by day`,
       ),
       rows<PlanMonth["plan"] & { id: number }>(
         db,
         sql`select pl.id::int as id, pl.status, pl.revision, ${iso("pl.sent_at")} as "sentAt", d.name as "decidedBy",
             ${iso("pl.decided_at")} as "decidedAt", pl.note
-          from mr_plan pl left join person d on d.id = pl.decided_by where pl.person_id = ${personId} and pl.month = ${first}::date`,
+          from visit_plan pl left join person d on d.id = pl.decided_by where pl.person_id = ${personId} and pl.month = ${first}::date`,
       ),
-      rows<{ city: string }>(
-        db,
-        sql`select distinct city from mr_client where active and city is not null and city <> '' order by city limit 500`,
-      ),
+      fieldCities(db, me),
       rows<PlanMonth["revisions"][number]>(
         db,
         sql`select r.revision, r.status, p.name as by, ${iso("r.decided_at")} as at, r.note, jsonb_array_length(r.visits)::int as visits
-          from mr_plan_revision r join mr_plan pl on pl.id = r.plan_id join person p on p.id = r.decided_by
+          from plan_revision r join visit_plan pl on pl.id = r.plan_id join person p on p.id = r.decided_by
           where pl.person_id = ${personId} and pl.month = ${first}::date order by r.revision desc`,
       ),
       deviationRows(db, sql`d.person_id = ${personId} and d.day between ${first}::date and ${last}::date`),
       rows<{ id: number; name: string }>(db, sql`select id::int as id, name from person where id = ${personId}`),
-      isLeadNow(db, me),
+      mayDecideFor(db, me, personId),
     ]);
   const own = personId === me.id && (access === "mr" || access === "lead") && !me.viewedBy;
   const status = plan[0]?.status ?? null;
@@ -112,7 +111,7 @@ export async function planMonth(db: Database, me: Me, asked: { month?: string | 
     person: person[0] as PlanMonth["person"],
     plan: shown,
     days,
-    cities: cities.map((one) => one.city),
+    cities,
     revisions,
     deviations,
     can: {
@@ -138,23 +137,23 @@ export async function setPlanDay(
   const cities = [...new Set((input.cities ?? []).map((one) => one.trim()).filter(Boolean))];
   if (input.workType !== "transit" && !cities.length) throw new Refusal(400, "invalid", "Pick the day's city.", "cities");
   if (cities.length > 12) throw new Refusal(400, "invalid", "Twelve cities at most.", "cities");
-  const partners = await membersFrom(db, me, input.workingWith, "workingWith");
+  const partners = await peopleFrom(db, me, input.workingWith, "workingWith");
   const why = clean(input.why) ?? null;
   await db.transaction(async (tx) => {
     const [plan] = await rows<{ status: PlanStatus }>(
       tx,
-      sql`select status from mr_plan where person_id = ${me.id} and month = ${`${input.day.slice(0, 7)}-01`}::date for update`,
+      sql`select status from visit_plan where person_id = ${me.id} and month = ${`${input.day.slice(0, 7)}-01`}::date for update`,
     );
     if (plan?.status === "sent") throw new Refusal(409, "invalid", "The month is with your team lead: wait for the answer.");
     const [before] = await rows<{ workType: string; cities: string[] }>(
       tx,
-      sql`select work_type as "workType", to_json(cities) as cities from mr_plan_day where person_id = ${me.id} and day = ${input.day}::date`,
+      sql`select work_type as "workType", to_json(cities) as cities from plan_day where person_id = ${me.id} and day = ${input.day}::date`,
     );
     const changed = !before || before.workType !== input.workType || before.cities.join("|") !== cities.join("|");
     if (plan?.status === "approved" && changed && !why)
       throw new Refusal(400, "invalid", "Say why the day changes (the plan is approved).", "why");
     await tx.execute(
-      sql`insert into mr_plan_day (person_id, day, work_type, cities, working_with, note)
+      sql`insert into plan_day (person_id, day, work_type, cities, working_with, note)
         values (${me.id}, ${input.day}::date, ${input.workType}, ${textArray(cities)}, ${idArray(partners)}, ${clean(input.note) ?? null})
         on conflict (person_id, day) do update set work_type = excluded.work_type, cities = excluded.cities,
           working_with = excluded.working_with, note = excluded.note`,
@@ -173,30 +172,30 @@ export async function sendPlan(db: Database, me: Me, month: string): Promise<voi
   await db.transaction(async (tx) => {
     const [planned] = await rows<{ n: number }>(
       tx,
-      sql`select (select count(*) from mr_plan_day where person_id = ${me.id} and day between ${first}::date and ${lastOf(month)}::date)
-          + (select count(*) from mr_visit where person_id = ${me.id} and day between ${first}::date and ${lastOf(month)}::date) as n`,
+      sql`select (select count(*) from plan_day where person_id = ${me.id} and day between ${first}::date and ${lastOf(month)}::date)
+          + (select count(*) from visit where person_id = ${me.id} and day between ${first}::date and ${lastOf(month)}::date) as n`,
     );
     if (!Number(planned?.n)) throw new Refusal(400, "invalid", "Plan some days first: tap a day, pick its city, add visits.");
     const [plan] = await rows<{ status: PlanStatus }>(
       tx,
-      sql`select status from mr_plan where person_id = ${me.id} and month = ${first}::date for update`,
+      sql`select status from visit_plan where person_id = ${me.id} and month = ${first}::date for update`,
     );
     if (plan && (plan.status === "sent" || plan.status === "approved"))
       throw new Refusal(409, "invalid", plan.status === "sent" ? "It is with your team lead already." : "This month is approved already.");
     await tx.execute(
-      sql`insert into mr_plan (person_id, month, status, revision, sent_at) values (${me.id}, ${first}::date, 'sent', 1, now())
-        on conflict (person_id, month) do update set status = 'sent', revision = mr_plan.revision + 1, sent_at = now(),
+      sql`insert into visit_plan (person_id, month, status, revision, sent_at) values (${me.id}, ${first}::date, 'sent', 1, now())
+        on conflict (person_id, month) do update set status = 'sent', revision = visit_plan.revision + 1, sent_at = now(),
           decided_by = null, decided_at = null, note = null`,
     );
-    const [lead] = await rows<{ id: number }>(tx, sql`select person_id::int as id from mr_member where role = 'lead' and active`);
-    if (lead && lead.id !== me.id)
+    const lead = await leadOf(tx, me.id);
+    if (lead)
       await notify(tx, {
-        to: [lead.id],
-        kind: "mr_plan",
+        to: [lead],
+        kind: "field_plan",
         title: "A tour plan to approve",
         body: `${me.name} · ${month}`,
-        link: `/mr/plan?person=${me.id}&month=${month}`,
-        key: `mr_plan:${me.id}:${month}:${Date.now()}`,
+        link: `/field/plan?person=${me.id}&month=${month}`,
+        key: `field_plan:${me.id}:${month}:${Date.now()}`,
       });
   });
 }
@@ -207,9 +206,8 @@ export async function decidePlan(
   me: Me,
   input: { person: number; month: string; approve: boolean; note?: string | null },
 ): Promise<void> {
-  await mustLead(db, me);
+  await mustDecideFor(db, me, input.person);
   if (!MONTH.test(input.month)) throw new Refusal(400, "invalid", "Pick the month.", "month");
-  if (input.person === me.id) throw new Refusal(403, "not_allowed", "Your own plan is approved by someone else.");
   const note = clean(input.note) ?? null;
   if (!input.approve && !note) throw new Refusal(400, "invalid", "Say what to change in the plan.", "note");
   const first = `${input.month}-01`;
@@ -217,49 +215,99 @@ export async function decidePlan(
   await db.transaction(async (tx) => {
     const [plan] = await rows<{ id: number; revision: number }>(
       tx,
-      sql`update mr_plan set status = ${input.approve ? "approved" : "sent_back"}, decided_by = ${me.id}, decided_at = now(), note = ${note}
+      sql`update visit_plan set status = ${input.approve ? "approved" : "sent_back"}, decided_by = ${me.id}, decided_at = now(), note = ${note}
         where person_id = ${input.person} and month = ${first}::date and status = 'sent' returning id::int as id, revision`,
     );
     if (!plan) throw new Refusal(409, "invalid", "That plan isn't waiting for approval.");
     await tx.execute(
-      sql`insert into mr_plan_revision (plan_id, revision, status, decided_by, note, days, visits)
+      sql`insert into plan_revision (plan_id, revision, status, decided_by, note, days, visits)
         values (${plan.id}, ${plan.revision}, ${input.approve ? "approved" : "sent_back"}, ${me.id}, ${note},
           coalesce((select jsonb_agg(jsonb_build_object('day', to_char(d.day, 'YYYY-MM-DD'), 'workType', d.work_type, 'cities', to_jsonb(d.cities)) order by d.day)
-            from mr_plan_day d where d.person_id = ${input.person} and d.day between ${first}::date and ${last}::date), '[]'::jsonb),
-          coalesce((select jsonb_agg(jsonb_build_object('visitId', v.id, 'day', to_char(v.day, 'YYYY-MM-DD'), 'clientId', v.client_id) order by v.day, v.id)
-            from mr_visit v where v.person_id = ${input.person} and v.day between ${first}::date and ${last}::date and v.status in ('planned', 'done')), '[]'::jsonb))`,
+            from plan_day d where d.person_id = ${input.person} and d.day between ${first}::date and ${last}::date), '[]'::jsonb),
+          coalesce((select jsonb_agg(jsonb_build_object('visitId', v.id, 'day', to_char(v.day, 'YYYY-MM-DD'), 'customerId', v.customer_id) order by v.day, v.id)
+            from visit v where v.person_id = ${input.person} and v.day between ${first}::date and ${last}::date and v.status in ('planned', 'done')), '[]'::jsonb))`,
     );
     await notify(tx, {
       to: [input.person],
-      kind: "mr_plan_decided",
+      kind: "field_plan_decided",
       title: input.approve ? "Your tour plan is approved" : "Your tour plan was sent back",
       body: note,
-      link: `/mr/plan?month=${input.month}`,
-      key: `mr_plan_decided:${input.person}:${input.month}:${plan.revision}`,
+      link: `/field/plan?month=${input.month}`,
+      key: `field_plan_decided:${input.person}:${input.month}:${plan.revision}`,
     });
   });
 }
 
-/** Deviations: the lead's waiting ones (or everyone's), an MR's own. */
+/** Deviations: a lead's team's waiting ones (the team switch narrows it; everyone's for the CEO,
+ *  Management and the Admin), an MR's own. */
 export async function deviationList(db: Database, me: Me, asked: { status?: string | null }): Promise<DeviationRow[]> {
-  const lead = await isLeadNow(db, me);
   const status = asked.status === "all" ? sql`true` : sql`d.status = 'waiting'`;
-  if (lead || me.role === "ceo") return deviationRows(db, sql`${status} and d.person_id <> ${me.id}`);
+  if (LEAD_ROLES.includes(me.role) || FIELD_READ_ROLES.includes(me.role)) {
+    const found = await rows<{ id: number }>(
+      db,
+      sql`${teamSql(me)} select d.id::int as id from plan_deviation d where ${status} and d.person_id <> ${me.id} and ${inTeam(me, "d.person_id")}`,
+    );
+    if (!found.length) return [];
+    return deviationRows(db, sql`d.id in (${sql.join(found.map((one) => sql`${one.id}`), sql`, `)})`);
+  }
   await mustSee(db, me, me.id);
   return deviationRows(db, sql`${status} and d.person_id = ${me.id}`);
 }
 
-/** The lead approves a deviation or not, with a word (a word needed to refuse). */
+/** The person's team lead approves a deviation or not, with a word (a word needed to refuse). */
 export async function decideDeviation(db: Database, me: Me, id: number, input: { approve: boolean; note?: string | null }): Promise<void> {
-  await mustLead(db, me);
   const note = clean(input.note) ?? null;
   if (!input.approve && !note) throw new Refusal(400, "invalid", "Say why it isn't approved.", "note");
+  const [found] = await rows<{ personId: number }>(db, sql`select person_id::int as "personId" from plan_deviation where id = ${id}`);
+  if (!found) throw new Refusal(404, "not_found", "No such change.");
+  await mustDecideFor(db, me, found.personId);
   const changed = await rows<{ personId: number }>(
     db,
-    sql`update mr_deviation set status = ${input.approve ? "approved" : "rejected"}, decided_by = ${me.id}, decided_at = now(),
-        decision_note = ${note} where id = ${id} and status = 'waiting' and person_id <> ${me.id} returning person_id::int as "personId"`,
+    sql`update plan_deviation set status = ${input.approve ? "approved" : "rejected"}, decided_by = ${me.id}, decided_at = now(),
+        decision_note = ${note} where id = ${id} and status = 'waiting' returning person_id::int as "personId"`,
   );
-  if (!changed.length) throw new Refusal(409, "invalid", "That change isn't waiting for you.");
+  if (!changed.length) throw new Refusal(409, "invalid", "That change isn't waiting.");
+}
+
+/** The lead's Approve Tour Plan: each of the team's field people for a month (status, revision,
+ *  the working days with no plan yet). */
+export async function teamPlans(db: Database, me: Me, month: string | null | undefined) {
+  if (!LEAD_ROLES.includes(me.role) && !FIELD_READ_ROLES.includes(me.role))
+    throw new Refusal(403, "not_allowed", "Tour plans are approved by team leads.");
+  const today = todayManila();
+  const asked = month && MONTH.test(month) ? month : today.slice(0, 7);
+  const first = `${asked}-01`;
+  const last = lastOf(asked);
+  const { schedule, holidays } = await workCalendar(db);
+  const people = await rows<{ id: number; name: string; status: PlanStatus | null; revision: number; decidedBy: string | null; days: string[] }>(
+    db,
+    sql`${teamSql(me)} select p.id::int as id, p.name, pl.status, coalesce(pl.revision, 0)::int as revision, d.name as "decidedBy",
+        coalesce((select json_agg(distinct to_char(x.day, 'YYYY-MM-DD')) from (
+          select day from plan_day where person_id = p.id and day between ${first}::date and ${last}::date
+          union select day from visit where person_id = p.id and day between ${first}::date and ${last}::date) x), '[]'::json) as days
+      from person p left join visit_plan pl on pl.person_id = p.id and pl.month = ${first}::date
+      left join person d on d.id = pl.decided_by
+      where ${fieldPerson} and p.role = 'medrep' and ${inTeam(me, "p.id")} and p.id <> ${me.id}
+      order by pl.status = 'sent' desc nulls last, p.name`,
+  );
+  const leave = await rows<{ personId: number; from: string; to: string }>(
+    db,
+    sql`select person_id::int as "personId", to_char(from_day, 'YYYY-MM-DD') as "from", to_char(to_day, 'YYYY-MM-DD') as "to"
+      from person_leave where status = 'approved' and from_day <= ${last}::date and to_day >= ${first}::date`,
+  );
+  return {
+    month: asked,
+    people: people.map((one) => {
+      const missing: string[] = [];
+      for (let at = first; at <= last; at = addDays(at, 1)) {
+        if (!isWorkDay(at, schedule, holidays) || one.days.includes(at)) continue;
+        if (leave.some((l) => l.personId === one.id && l.from <= at && l.to >= at)) continue;
+        missing.push(at);
+      }
+      const { days: _days, ...rest } = one;
+      return { ...rest, missing };
+    }),
+  };
 }
 
 /** Whether a person's month is approved (re-exported for the pages). */

@@ -1,7 +1,9 @@
-// SEFMED's Expenses (docs/PLAN.md 22): the month's lines, Head · Date · Claimed · Amount (approved),
-// a ⋮ on each (claim / change; the team lead approves or rejects), the totals Claimed and Approved,
-// + Add expense (date, head, amount, remark, attach or camera). Per diem and TA come by themselves
-// for each day worked, at the company's rates (0 until set; the lead sets them here).
+// The field's expenses (SEFMED's Expenses, docs/PLAN.md 22), on the CRM's own expense lines: the
+// month's lines, Head · Date · Claimed · Amount (approved), a ⋮ on each (claim / change; the team
+// lead approves, maybe less, or rejects with why), the totals Claimed and Approved, + Add expense
+// (date, head, amount, remark, attach or camera). Per diem and TA come by themselves for each day
+// worked, at the company's rates (0 until Management sets them). ?waiting=1 is what waits for the
+// lead (the team switch narrows it); older lines (petrol, fares…) show by their kind.
 
 import type { ExpenseMonth, ExpenseRow, WorkType } from "@2mg/api/mr";
 import { EXPENSE_STATUS_WORDS, WORK_WORDS } from "@2mg/api/mr";
@@ -11,6 +13,7 @@ import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { manilaToday } from "../team/range";
+import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { Button, CARD, Dialog, PageState, Problem, peso, useAction } from "../ui";
 import { dayWords, FIELD, Label, MrHead, monthWords, shiftMonth } from "./parts";
 
@@ -18,13 +21,22 @@ const pesosOf = (centavos: number) => String(centavos / 100);
 
 export function MrExpensesPage() {
   const [params, setParams] = useSearchParams();
-  const month = params.get("month");
+  // The visits report links a span of days (from=…): its month.
+  const month = params.get("month") ?? params.get("from")?.slice(0, 7) ?? null;
   const person = params.get("person");
+  const waiting = params.get("waiting") === "1";
+  const unit = useTeamUnit();
   const [head, setHead] = useState("");
   const [open, setOpen] = useState<{ what: "add" | "line" | "rates"; row?: ExpenseRow } | null>(null);
   const query = useQuery({
-    queryKey: ["mr", "expenses", month, person],
-    queryFn: () => api<ExpenseMonth>(`/api/mr/expenses?${new URLSearchParams({ ...(month ? { month } : {}), ...(person ? { person } : {}) })}`),
+    queryKey: ["mr", "expenses", month, person, waiting, unit],
+    queryFn: () =>
+      api<ExpenseMonth>(
+        withUnit(
+          `/api/mr/expenses?${new URLSearchParams({ ...(month ? { month } : {}), ...(person ? { person } : {}), ...(waiting ? { waiting: "1" } : {}) })}`,
+          unit,
+        ),
+      ),
     placeholderData: (previous) => previous,
   });
   const set = (next: Record<string, string | null>) => {
@@ -38,15 +50,25 @@ export function MrExpensesPage() {
   return (
     <div className={`mx-auto flex max-w-4xl flex-col gap-3 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
       <MrHead
-        title="Expenses"
-        back="/mr"
-        sub={data.person ? data.person.name : "Everyone"}
-        actions={data.can.setRates && <Button small onClick={() => setOpen({ what: "rates" })}>Allowance rates</Button>}
+        title={waiting ? "Expenses to approve" : "Expenses"}
+        sub={waiting ? `${data.rows.length} waiting${data.person ? ` · ${data.person.name}` : ""}` : data.person ? data.person.name : "Everyone"}
+        actions={
+          <>
+            {data.can.decide && !waiting && <Button small onClick={() => set({ waiting: "1", month: null })}>To approve</Button>}
+            {waiting && <Button small variant="quiet" onClick={() => set({ waiting: null })}>The month</Button>}
+            {data.can.setRates && <Button small onClick={() => setOpen({ what: "rates" })}>Allowance rates</Button>}
+          </>
+        }
       />
+      {(waiting || person === "all") && <TeamSwitch />}
       <div className="flex flex-wrap items-center gap-2">
-        <Button small variant="quiet" aria-label="Month before" onClick={() => set({ month: shiftMonth(data.month, -1) })}><ChevronLeft size={16} /></Button>
-        <span className="text-sm font-semibold">{monthWords(data.month)}</span>
-        <Button small variant="quiet" aria-label="Month after" onClick={() => set({ month: shiftMonth(data.month, 1) })}><ChevronRight size={16} /></Button>
+        {!waiting && (
+          <>
+            <Button small variant="quiet" aria-label="Month before" onClick={() => set({ month: shiftMonth(data.month, -1), from: null, to: null })}><ChevronLeft size={16} /></Button>
+            <span className="text-sm font-semibold">{monthWords(data.month)}</span>
+            <Button small variant="quiet" aria-label="Month after" onClick={() => set({ month: shiftMonth(data.month, 1), from: null, to: null })}><ChevronRight size={16} /></Button>
+          </>
+        )}
         <select aria-label="Head" className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm" value={head} onChange={(event) => setHead(event.target.value)}>
           <option value="">All</option>
           {data.heads.filter((one) => one.active).map((one) => (
@@ -91,7 +113,7 @@ export function MrExpensesPage() {
             <li key={one.id} className="grid grid-cols-[1fr_3.25rem_3.75rem_3.75rem_1.75rem] items-center gap-1 px-3 py-2 text-[13px]">
               <span className="min-w-0">
                 <span className="block truncate">{one.headName}</span>
-                <span className={`block truncate text-[11px] font-semibold ${one.status === "approved" ? "text-emerald-700" : one.status === "rejected" ? "text-rose-700" : one.status === "claimed" ? "text-amber-700" : "text-slate-400"}`}>
+                <span className={`block truncate text-[11px] font-semibold ${one.status === "approved" ? "text-emerald-700" : one.status === "sent_back" ? "text-rose-700" : one.status === "pending" ? "text-amber-700" : "text-slate-400"}`}>
                   {EXPENSE_STATUS_WORDS[one.status]}
                   {one.auto ? ` · worked out ${peso(one.generated)}` : ""}
                   {!data.person ? ` · ${one.person.name}` : ""}
@@ -107,7 +129,9 @@ export function MrExpensesPage() {
             </li>
           ))}
           {rows.length === 0 && (
-            <li className="px-3 py-8 text-center text-sm text-slate-500">No expenses this month. Per diem and TA appear for each day you start working.</li>
+            <li className="px-3 py-8 text-center text-sm text-slate-500">
+              {waiting ? "Nothing waits for approval." : "No expenses this month. Per diem and TA appear for each day you start working."}
+            </li>
           )}
         </ul>
       </div>
@@ -231,7 +255,7 @@ function LineDialog({ data, row, onClose }: { data: ExpenseMonth; row: ExpenseRo
             </Button>
           </>
         )}
-        {data.can.decide && row.status === "claimed" && !own && (
+        {data.can.decide && row.status === "pending" && !own && (
           <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3">
             <Label text="Approve (₱)" error={action.at("amount")}><input className={FIELD} inputMode="decimal" value={approved} onChange={(event) => setApproved(event.target.value)} /></Label>
             <Button variant="primary" disabled={action.busy} onClick={() => action.run(async () => { await api(`/api/mr/expenses/${row.id}/decide`, { body: { approve: true, amount: Number(approved) } }); await refresh(); onClose(); })}>Approve</Button>

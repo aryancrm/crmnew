@@ -1,7 +1,7 @@
-// SEFMED's Reports (docs/PLAN.md 22): Call reports (a span of days, an MR or all, a status; each
+// SEFMED's Reports (docs/PLAN.md 22): Call reports (a span of days, a MedRep or all, a status; each
 // visit's details), Missed calls, Attendance report (the month with Present / Absent / Leave / Weekly
-// off / Holiday and the totals), Day reports and Calls to judge for the team lead, Follow-ups, and
-// the year's Holidays.
+// off / Holiday and the totals, from the field day and HR's leave), Day reports and Calls to judge
+// for the team lead (the team switch narrows them), Follow-ups, and the year's Holidays (HR's).
 
 import type { FollowUpRow, LeadQueue } from "@2mg/api/mr";
 import { FOLLOW_UP_WORDS, OBJECTIVE_WORDS } from "@2mg/api/mr";
@@ -11,6 +11,7 @@ import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { manilaToday } from "../team/range";
+import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { Button, CARD, Dialog, PageState, Problem, useAction } from "../ui";
 import { clockOf, dayWords, Initial, MrHead, monthWords, shiftMonth, StatePill, useMrMe } from "./parts";
 
@@ -40,15 +41,15 @@ export function MrReportsPage() {
   const lead = mr.data?.access === "lead" || mr.data?.access === "viewer";
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-3">
-      <MrHead title="Reports" back="/mr" />
+      <MrHead title="Reports" back="/field" />
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Tile to="/mr/reports?view=calls" icon={BarChart3} label="Call reports" tone="bg-sky-50 text-sky-700" />
-        <Tile to="/mr/reports?view=missed" icon={PhoneOff} label="Missed call report" tone="bg-rose-50 text-rose-700" />
-        <Tile to="/mr/reports?view=attendance" icon={CalendarCheck} label="Attendance report" tone="bg-emerald-50 text-emerald-700" />
-        <Tile to="/mr/orders" icon={ShoppingCart} label="Order booking report" tone="bg-orange-50 text-orange-700" />
-        <Tile to="/mr/follow-ups" icon={ListChecks} label="Follow-ups" tone="bg-amber-50 text-amber-700" />
-        {lead && <Tile to="/mr/reports?view=day-reports" icon={ClipboardList} label="Day reports" tone="bg-indigo-50 text-indigo-700" />}
-        {lead && <Tile to="/mr/reports?view=judge" icon={Scale} label="Calls to judge" tone="bg-violet-50 text-violet-700" />}
+        <Tile to="/field/reports?view=calls" icon={BarChart3} label="Call reports" tone="bg-sky-50 text-sky-700" />
+        <Tile to="/field/reports?view=missed" icon={PhoneOff} label="Missed call report" tone="bg-rose-50 text-rose-700" />
+        <Tile to="/field/reports?view=attendance" icon={CalendarCheck} label="Attendance report" tone="bg-emerald-50 text-emerald-700" />
+        <Tile to="/orders" icon={ShoppingCart} label={lead ? "Team orders" : "My orders"} tone="bg-orange-50 text-orange-700" />
+        <Tile to="/field/follow-ups" icon={ListChecks} label="Follow-ups" tone="bg-amber-50 text-amber-700" />
+        {lead && <Tile to="/field/reports?view=day-reports" icon={ClipboardList} label="Day reports" tone="bg-indigo-50 text-indigo-700" />}
+        {lead && <Tile to="/field/reports?view=judge" icon={Scale} label="Calls to judge" tone="bg-violet-50 text-violet-700" />}
       </div>
     </div>
   );
@@ -70,16 +71,21 @@ function CallReports({ missed }: { missed: boolean }) {
   const [person, setPerson] = useState("");
   const [status, setStatus] = useState(missed ? "missed" : "");
   const [open, setOpen] = useState<CallRow | null>(null);
+  const unit = useTeamUnit();
   const query = useQuery({
-    queryKey: ["mr", "report", "calls", from, to, person, status],
-    queryFn: () => api<{ from: string; to: string; rows: CallRow[]; people: { id: number; name: string }[] }>(`/api/mr/reports/calls?${new URLSearchParams({ from, to, ...(person ? { person } : {}), ...(status ? { status } : {}) })}`),
+    queryKey: ["mr", "report", "calls", from, to, person, status, unit],
+    queryFn: () =>
+      api<{ from: string; to: string; rows: CallRow[]; people: { id: number; name: string }[] }>(
+        withUnit(`/api/mr/reports/calls?${new URLSearchParams({ from, to, ...(person ? { person } : {}), ...(status ? { status } : {}) })}`, unit),
+      ),
     placeholderData: (previous) => previous,
   });
   const data = query.data;
   if (!data) return <PageState query={query} what="the call report" />;
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-3">
-      <MrHead title={missed ? "Missed call report" : "Call reports"} back="/mr/reports" />
+      <MrHead title={missed ? "Missed call report" : "Call reports"} />
+      {data.people.length > 0 && <TeamSwitch />}
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         <input type="date" aria-label="From" className="h-9 rounded-lg border border-slate-300 px-2 text-sm" value={from} onChange={(event) => setFrom(event.target.value)} />
         <input type="date" aria-label="To" className="h-9 rounded-lg border border-slate-300 px-2 text-sm" value={to} onChange={(event) => setTo(event.target.value)} />
@@ -128,7 +134,7 @@ function CallReports({ missed }: { missed: boolean }) {
             <Line label="Client's feedback" value={open.feedback ?? ""} />
             <Line label="Follow up date" value={open.followUpOn ? dayWords(open.followUpOn) : "NA"} />
           </dl>
-          <Link to={`/mr/visits/${open.id}`} className="mt-3 inline-block text-sm font-semibold text-sky-700">Open the visit</Link>
+          <Link to={`/visits/${open.id}`} className="mt-3 inline-block text-sm font-semibold text-sky-700">Open the visit</Link>
         </Dialog>
       )}
     </div>
@@ -173,7 +179,7 @@ function Attendance() {
   const blank = new Date(`${data.month}-01T00:00:00Z`).getUTCDay();
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-3">
-      <MrHead title="Attendance report" back="/mr/reports" sub={data.person.name} />
+      <MrHead title="Attendance report" back="/field/reports" sub={data.person.name} />
       <div className="flex flex-wrap items-center gap-2">
         <Button small variant="quiet" onClick={() => setMonth(shiftMonth(month, -1))}>‹</Button>
         <span className="text-sm font-semibold">{monthWords(data.month)}</span>
@@ -210,16 +216,18 @@ function Attendance() {
 }
 
 function LeadLists({ judge }: { judge: boolean }) {
-  const query = useQuery({ queryKey: ["mr", "queue"], queryFn: () => api<LeadQueue>("/api/mr/team/queue") });
+  const unit = useTeamUnit();
+  const query = useQuery({ queryKey: ["mr", "queue", unit], queryFn: () => api<LeadQueue>(withUnit("/api/mr/team/queue", unit)) });
   if (!query.data) return <PageState query={query} what="the list" />;
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-3">
-      <MrHead title={judge ? "Calls to judge" : "Day reports to see"} back="/mr" />
+      <MrHead title={judge ? "Calls to judge" : "Day reports to see"} />
+      <TeamSwitch />
       <ul className="flex flex-col gap-2">
         {judge
           ? query.data.judge.map((one) => (
               <li key={one.id}>
-                <Link to={`/mr/visits/${one.id}`} className={`${CARD} block p-3 text-sm hover:border-sky-300`}>
+                <Link to={`/visits/${one.id}`} className={`${CARD} block p-3 text-sm hover:border-sky-300`}>
                   <b>{one.client.name}</b> · {one.person.name} · {dayWords(one.day)}
                   {one.feedback && <div className="text-slate-500">“{one.feedback}”</div>}
                 </Link>
@@ -227,7 +235,7 @@ function LeadLists({ judge }: { judge: boolean }) {
             ))
           : query.data.reports.map((one) => (
               <li key={`${one.personId}-${one.day}`}>
-                <Link to={`/mr/day-report?person=${one.personId}&day=${one.day}`} className={`${CARD} block p-3 text-sm hover:border-sky-300`}>
+                <Link to={`/field/day-report?person=${one.personId}&day=${one.day}`} className={`${CARD} block p-3 text-sm hover:border-sky-300`}>
                   <b>{one.name}</b> · {dayWords(one.day)} · {one.done} closed{one.missed ? ` · ${one.missed} missed` : ""}
                 </Link>
               </li>
@@ -247,14 +255,14 @@ export function MrFollowUpsPage() {
   if (!query.data) return <PageState query={query} what="the follow-ups" />;
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-3">
-      <MrHead title="Follow-ups" back="/mr" actions={<Button small variant="quiet" onClick={() => setDone(!done)}>{done ? "Open ones" : "Done ones"}</Button>} />
+      <MrHead title="Follow-ups" back="/field" actions={<Button small variant="quiet" onClick={() => setDone(!done)}>{done ? "Open ones" : "Done ones"}</Button>} />
       <ul className="flex flex-col gap-2">
         {query.data.rows.map((one) => (
           <li key={one.id} className={`${CARD} flex flex-wrap items-center justify-between gap-2 p-3 text-sm`}>
             <span className="min-w-0">
               <b className={one.status === "open" && one.dueOn < today ? "text-rose-700" : ""}>{dayWords(one.dueOn)}</b> · {FOLLOW_UP_WORDS[one.kind]}: {one.what}
               <span className="block text-xs text-slate-500">
-                <Link to={`/mr/clients/${one.client.id}`} className="hover:underline">{one.client.name}</Link> · {one.person.name}
+                <Link to={`/field/clients/${one.client.id}`} className="hover:underline">{one.client.name}</Link> · {one.person.name}
                 {one.doneNote ? ` · ${one.doneNote}` : ""}
               </span>
             </span>
@@ -276,7 +284,7 @@ export function MrHolidaysPage() {
   if (!query.data) return <PageState query={query} what="the holidays" />;
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-3">
-      <MrHead title="Holidays" back="/mr" sub={year} />
+      <MrHead title="Holidays" back="/field" sub={year} />
       <ul className={`${CARD} divide-y divide-slate-100`}>
         {query.data.rows.map((one) => (
           <li key={one.day} className="flex justify-between gap-2 px-4 py-2.5 text-sm">

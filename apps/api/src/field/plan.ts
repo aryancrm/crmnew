@@ -4,6 +4,7 @@
 // or sends it back with a word; the plan never stops the day's work. The team lead sets each
 // customer's class; the MedRep pins a clinic from a check-in there.
 
+import { decidePlan as decideTourPlan, sendPlan as sendTourPlan } from "../mr/plan";
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { workCalendar } from "../hr/attendance";
@@ -96,7 +97,7 @@ export async function fieldPlan(
       sql`select c.id::int as id, c.name, c.kind, c.specialty, c.city, c.visit_class as "visitClass",
           count(v.id) filter (where v.status = 'planned')::int as planned,
           count(v.id) filter (where v.status = 'done')::int as done,
-          count(v.id) filter (where v.status = 'skipped')::int as skipped,
+          count(v.id) filter (where v.status in ('skipped', 'missed'))::int as skipped,
           (select to_char(max(d.day), 'YYYY-MM-DD') from visit d where d.customer_id = c.id and d.status = 'done') as "lastVisit"
         from customer c
         left join visit v on v.customer_id = c.id and v.person_id = ${personId}
@@ -178,7 +179,7 @@ export async function makePlan(db: Database, me: Me, month: string): Promise<{ a
         await rows<{ key: string }>(
           tx,
           sql`select customer_id || ':' || to_char(day, 'YYYY-MM-DD') as key from visit
-            where person_id = ${me.id} and status <> 'skipped' and day between ${days[0]}::date and ${days[days.length - 1]}::date`,
+            where person_id = ${me.id} and status in ('planned', 'done') and day between ${days[0]}::date and ${days[days.length - 1]}::date`,
         )
       ).map((one) => one.key),
     );
@@ -226,23 +227,8 @@ export async function sendPlan(db: Database, me: Me, month: string): Promise<voi
   if (!FIELD_ROLES.includes(me.role) || me.viewedBy)
     throw new Refusal(403, "not_allowed", "Plans are sent by the person who visits.");
   if (!MONTH.test(month)) throw new Refusal(400, "invalid", "Pick the month.", "month");
-  await db.transaction(async (tx) => {
-    const [planned] = await rows<{ n: number }>(
-      tx,
-      sql`select count(*)::int as n from visit where person_id = ${me.id} and status = 'planned'
-        and day between ${`${month}-01`}::date and ${lastDayOf(month)}::date`,
-    );
-    if (!planned?.n)
-      throw new Refusal(400, "invalid", "Plan some visits first (Make my plan fills the month).");
-    const plan = await planOf(tx, me.id, month);
-    if (plan && (plan.status === "sent" || plan.status === "approved"))
-      throw new Refusal(409, "invalid", "This plan is with your team lead already.");
-    await tx.execute(
-      sql`insert into visit_plan (person_id, month, status, sent_at) values (${me.id}, ${`${month}-01`}::date, 'sent', now())
-        on conflict (person_id, month) do update set status = 'sent', sent_at = now(), decided_by = null,
-          decided_at = null, note = null`,
-    );
-  });
+  // One way to send a month, the tour plan's (docs/PLAN.md 22): a new revision, the lead told.
+  await sendTourPlan(db, me, month);
 }
 
 /** The team lead approves the plan or sends it back with a word. */
@@ -255,18 +241,8 @@ export async function decidePlan(
   const isLead = await leads(db, me, personId);
   if (me.viewedBy || (!isLead && !["admin", "management"].includes(me.role)) || me.id === personId)
     throw new Refusal(403, "not_allowed", "A plan is approved by the person's team lead.");
-  if (!MONTH.test(input.month)) throw new Refusal(400, "invalid", "Pick the month.", "month");
-  const note = input.note?.trim() || null;
-  if (!input.approve && !note)
-    throw new Refusal(400, "invalid", "Say what to change in the plan.", "note");
-  const changed = await rows<{ id: number }>(
-    db,
-    sql`update visit_plan set status = ${input.approve ? "approved" : "sent_back"}, decided_by = ${me.id},
-        decided_at = now(), note = ${note}
-      where person_id = ${personId} and month = ${`${input.month}-01`}::date and status = 'sent'
-      returning id::int as id`,
-  );
-  if (!changed.length) throw new Refusal(409, "invalid", "That plan isn't waiting for approval.");
+  // One way to decide a month, the tour plan's: the plan as it was is kept, the person told.
+  await decideTourPlan(db, me, { person: personId, ...input });
 }
 
 /** The team lead (or Management, the Admin) sets a customer's visit class; none clears it. */

@@ -1,9 +1,10 @@
-// One visit, step by step (SEFMED's call, docs/PLAN.md 22): before you go (the client, the last
+// One visit, step by step (SEFMED's call, docs/PLAN.md 22): before you go (the customer, the last
 // five visits, orders, follow-ups, the doctor's prescribing list), 1 the call objective, 2 I'm here,
-// 3 the call (met or not, products promoted with samples, prescribing, a hospital's or a firm's own
-// answers), 4 the business (Add order, promotional or business, the outcome, productive or not),
-// 5 Close the call (follow-up, next visit, feedback, remarks, photos). A closed call is shown as it
-// was; the team lead judges a "not sure yet" or reopens it with why.
+// 3 the call (met or not, products promoted, samples and gifts through the samples module, the
+// prescribing list, a hospital's or a firm's own answers), 4 the business (Add order opens the CRM's
+// own order form, the call kept as typed, and the order joins the visit; promotional or business,
+// the outcome, productive or not), 5 Close the call (follow-up, next visit, feedback, remarks,
+// photos). A closed call is shown as it was; the team lead judges a "not sure yet" or reopens it.
 
 import type {
   CallDetails,
@@ -40,11 +41,11 @@ import {
   REACTIONS,
 } from "@2mg/api/mr";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Camera, Check, MapPin, Navigation, Plus, ShoppingCart, Trash2 } from "lucide-react";
+import { Camera, Check, Gift, MapPin, Navigation, Plus, ShoppingCart, Trash2 } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
-import { OrderBooking } from "./orders";
+import { GiveSamplesDialog } from "../inventory/samples";
 import { Button, CARD, Dialog, PageState, Problem, peso, useAction } from "../ui";
 import {
   Choices,
@@ -76,7 +77,7 @@ export function MrVisitPage() {
     <div className="mx-auto flex max-w-3xl flex-col gap-4 pb-10">
       <MrHead
         title={c.name}
-        back="/mr/visits"
+        back="/visits"
         sub={`${KIND_ONE[c.kind]} · ${[c.code, c.specialty ?? c.detail, c.city].filter(Boolean).join(" · ")}`}
         actions={<StatePill visit={v} />}
       />
@@ -91,7 +92,7 @@ export function MrVisitPage() {
           <a href={directions(c)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm font-semibold text-sky-700 hover:underline">
             <Navigation size={14} /> Get directions
           </a>
-          <Link to={`/mr/clients/${c.id}`} className="text-sm font-semibold text-sky-700 hover:underline">Client page</Link>
+          <Link to={`/field/clients/${c.id}`} className="text-sm font-semibold text-sky-700 hover:underline">Customer page</Link>
         </div>
       </section>
 
@@ -212,7 +213,7 @@ function WorkTheCall({ data }: { data: VisitPage }) {
         <Problem message={action.problem?.message} />
       </Step>
 
-      {v.checkedInAt && <CallForm data={data} objectives={objectives} objectiveNote={objectiveNote} />}
+      {v.checkedInAt && <CallForm key={data.draft ? "kept" : "new"} data={data} objectives={objectives} objectiveNote={objectiveNote} />}
       {open === "skip" && <SkipDialog visitId={v.id} onClose={() => setOpen(null)} />}
       {open === "move" && <MoveDialog visitId={v.id} day={v.day} onClose={() => setOpen(null)} />}
     </>
@@ -241,31 +242,66 @@ function PinButton({ visitId }: { visitId: number }) {
 }
 
 type Line = CallProduct & { name: string };
+type Prescribing = { medicineId: number; name: string; prescribing: boolean; top5: boolean };
+
+/** The call's form as typed, kept on the visit while the MR places the order. */
+type Draft = {
+  meeting: Meeting | null;
+  lines: Line[];
+  prescribing: Prescribing[];
+  call: CallDetails;
+  met: string;
+  nature: Nature | null;
+  outcome: Outcome | null;
+  productive: Productive | null;
+  chance: string;
+  chanceOn: string;
+  followOn: string;
+  followKind: FollowUpKind;
+  followWhat: string;
+  nextDay: string;
+  feedback: string;
+  notes: string;
+};
 
 /** Steps 3–5: the call, the business, Close the call. */
 function CallForm({ data, objectives, objectiveNote }: { data: VisitPage; objectives: string[]; objectiveNote: string }) {
   const v = data.visit;
   const kind = data.client.kind;
   const queries = useQueryClient();
+  const navigate = useNavigate();
   const action = useAction();
-  const [meeting, setMeeting] = useState<Meeting | null>(null);
-  const [lines, setLines] = useState<Line[]>([]);
+  const kept = (data.draft ?? {}) as Partial<Draft>;
+  const [meeting, setMeeting] = useState<Meeting | null>(kept.meeting ?? null);
+  const [lines, setLines] = useState<Line[]>(kept.lines ?? []);
   const [find, setFind] = useState("");
-  const [prescribing, setPrescribing] = useState(data.prescribing.map(({ medicineId, name, prescribing: on, top5 }) => ({ medicineId, name, prescribing: on, top5 })));
-  const [call, setCall] = useState<CallDetails>({});
-  const [met, setMet] = useState("");
-  const [nature, setNature] = useState<Nature | null>(null);
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
-  const [productive, setProductive] = useState<Productive | null>(null);
-  const [chance, setChance] = useState("");
-  const [chanceOn, setChanceOn] = useState("");
-  const [followOn, setFollowOn] = useState("");
-  const [followKind, setFollowKind] = useState<FollowUpKind>("visit");
-  const [followWhat, setFollowWhat] = useState("");
-  const [nextDay, setNextDay] = useState("");
-  const [feedback, setFeedback] = useState("");
-  const [notes, setNotes] = useState("");
-  const [booking, setBooking] = useState(false);
+  const [prescribing, setPrescribing] = useState<Prescribing[]>(
+    kept.prescribing ?? data.prescribing.map(({ medicineId, name, prescribing: on, top5 }) => ({ medicineId, name, prescribing: on, top5 })),
+  );
+  const [call, setCall] = useState<CallDetails>(kept.call ?? {});
+  const [met, setMet] = useState(kept.met ?? "");
+  const [nature, setNature] = useState<Nature | null>(kept.nature ?? null);
+  const [outcome, setOutcome] = useState<Outcome | null>(kept.outcome ?? null);
+  const [productive, setProductive] = useState<Productive | null>(kept.productive ?? null);
+  const [chance, setChance] = useState(kept.chance ?? "");
+  const [chanceOn, setChanceOn] = useState(kept.chanceOn ?? "");
+  const [followOn, setFollowOn] = useState(kept.followOn ?? "");
+  const [followKind, setFollowKind] = useState<FollowUpKind>(kept.followKind ?? "visit");
+  const [followWhat, setFollowWhat] = useState(kept.followWhat ?? "");
+  const [nextDay, setNextDay] = useState(kept.nextDay ?? "");
+  const [feedback, setFeedback] = useState(kept.feedback ?? "");
+  const [notes, setNotes] = useState(kept.notes ?? "");
+  const [giving, setGiving] = useState(false);
+  // Add order: keep the call as typed on the visit, place the order on the CRM's own form (it
+  // joins this visit there), and come back here to close the call.
+  const addOrder = () =>
+    action.run(async () => {
+      const draft: Draft = { meeting, lines, prescribing, call, met, nature, outcome, productive, chance, chanceOn, followOn, followKind, followWhat, nextDay, feedback, notes };
+      await api(`/api/mr/visits/${v.id}/draft`, { body: { draft } });
+      // Coming back (placed, or Back) opens the call as it was typed.
+      queries.setQueryData<VisitPage>(["mr", "visit", v.id], (old) => (old ? { ...old, draft } : old));
+      navigate(`/orders/new?customer=${data.client.id}&visit=${v.id}`);
+    });
   const found = find.trim()
     ? data.medicines.filter((one) => one.name.toLowerCase().includes(find.trim().toLowerCase()) && !lines.some((line) => line.medicineId === one.id)).slice(0, 8)
     : [];
@@ -340,12 +376,6 @@ function CallForm({ data, objectives, objectiveNote }: { data: VisitPage; object
                             <input type="checkbox" checked={line.promoted} onChange={(event) => change(line.medicineId, { promoted: event.target.checked })} /> Promoted
                           </label>
                         )}
-                        {kind === "doctor" && (
-                          <label className="flex items-center gap-2 text-sm">
-                            Sample qty
-                            <input type="number" min={0} className={`${FIELD} h-8 w-24`} value={line.samples ?? ""} onChange={(event) => change(line.medicineId, { samples: event.target.value === "" ? null : Number(event.target.value) })} />
-                          </label>
-                        )}
                         {kind !== "firm" && (
                           <select className={`${FIELD} h-8`} value={line.reaction ?? ""} onChange={(event) => change(line.medicineId, { reaction: (event.target.value || null) as Reaction | null })}>
                             <option value="">How was it taken?</option>
@@ -386,6 +416,23 @@ function CallForm({ data, objectives, objectiveNote }: { data: VisitPage; object
                 </ul>
               </div>
               {kind === "doctor" && (
+                <div className="rounded-xl border border-slate-200 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-slate-600">
+                      Samples and gifts{data.samplesGiven.length ? "" : ` · you hold ${data.samplesHeld}`}
+                    </span>
+                    <Button small onClick={() => setGiving(true)}><Gift size={14} /> Give samples or gifts</Button>
+                  </div>
+                  {data.samplesGiven.length > 0 && (
+                    <ul className="mt-1 text-[13px] text-slate-700">
+                      {data.samplesGiven.map((one) => (
+                        <li key={`${one.medicineId}-${one.kind}`}>{one.name} · {one.qty} {one.kind === "gifts" ? "gifts" : "samples"}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+              {kind === "doctor" && (
                 <div>
                   <div className="mb-1 text-xs font-semibold text-slate-600">Prescribing drugs (this doctor's list: switch and top 5)</div>
                   <ul className="flex flex-col gap-1">
@@ -425,24 +472,19 @@ function CallForm({ data, objectives, objectiveNote }: { data: VisitPage; object
               </Label>
             </>
           )}
-          <Label text="Client's feedback">
+          <Label text="Customer's feedback">
             <textarea className={`${FIELD} h-20 py-2`} value={feedback} onChange={(event) => setFeedback(event.target.value)} />
           </Label>
         </div>
       </Step>
 
-      <Step n={4} title="Business" done={Boolean(data.order && data.order.status === "booked")}>
+      <Step n={4} title="Business" done={data.placed.some((one) => one.status !== "cancelled")}>
         <div className="flex flex-col gap-4">
-          {data.order && data.order.status === "booked" ? (
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-              <b>{data.order.code}</b> booked · {peso(data.order.amount)} · {data.order.lines.length} medicines
-            </div>
-          ) : (
-            data.can.book && (
-              <button type="button" onClick={() => setBooking(true)} className="inline-flex w-fit items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600">
-                <ShoppingCart size={16} /> Add order
-              </button>
-            )
+          <PlacedOrders orders={data.placed} />
+          {data.can.book && (
+            <button type="button" disabled={action.busy} onClick={addOrder} className="inline-flex w-fit items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-60">
+              <ShoppingCart size={16} /> {data.placed.length ? "Add another order" : "Add order"}
+            </button>
           )}
           {isMet && (
             <Label text="Visit nature *" error={action.at("nature")}>
@@ -496,12 +538,37 @@ function CallForm({ data, objectives, objectiveNote }: { data: VisitPage; object
           <p className="text-center text-[11px] text-slate-500">Your phone's place and the time are kept when you close.</p>
         </div>
       </Step>
-      {booking && (
-        <Dialog title="Add order" onClose={() => setBooking(false)} wide>
-          <OrderBooking client={data.client.id} visit={v.id} onDone={() => setBooking(false)} />
-        </Dialog>
+      {giving && (
+        <GiveSamplesDialog
+          visitId={v.id}
+          doctor={data.client.name}
+          onClose={() => {
+            setGiving(false);
+            void queries.invalidateQueries({ queryKey: ["mr", "visit", v.id] });
+          }}
+        />
       )}
     </>
+  );
+}
+
+/** The CRM orders placed at this visit: each goes through Management, Finance and Dispatch. */
+function PlacedOrders({ orders }: { orders: VisitPage["placed"] }) {
+  if (!orders.length) return null;
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {orders.map((one) => (
+        <li key={one.id}>
+          <Link
+            to={`/orders/${one.id}`}
+            className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border p-3 text-sm hover:underline ${one.status === "cancelled" ? "border-slate-200 text-slate-400" : "border-emerald-200 bg-emerald-50 text-emerald-900"}`}
+          >
+            <span><b>{one.code ?? `Order #${one.id}`}</b> · {one.statusWord}</span>
+            <span className="font-semibold">{peso(one.total)}</span>
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -587,7 +654,7 @@ function ClosedCall({ data }: { data: VisitPage }) {
             {v.productive ? PRODUCTIVE_WORDS[v.productive] : "—"}
             {v.judged && <span className="text-slate-500"> · judged by {v.judged.by}{v.judged.note ? `: ${v.judged.note}` : ""}</span>}
           </Fact>
-          <Fact label="Client's feedback">{v.feedback || "—"}</Fact>
+          <Fact label="Customer's feedback">{v.feedback || "—"}</Fact>
           <Fact label="Remarks">{v.notes || "—"}</Fact>
           {v.nextDay && <Fact label="Next visit">{dayWords(v.nextDay)}</Fact>}
         </>
@@ -601,7 +668,6 @@ function ClosedCall({ data }: { data: VisitPage }) {
               <li key={one.medicineId} className="rounded-lg bg-sky-50 px-2 py-1 text-xs text-sky-900">
                 <b>{one.name}</b>
                 {one.promoted ? " · promoted" : ""}
-                {one.samples ? ` · ${one.samples} samples` : ""}
                 {one.reaction ? ` · ${REACTION_WORDS[one.reaction]}` : ""}
                 {one.stock !== null && one.stock !== undefined ? ` · stock ${one.stock}` : ""}
                 {one.sold ? ` · sold ${one.sold}` : ""}
@@ -624,12 +690,15 @@ function ClosedCall({ data }: { data: VisitPage }) {
           {v.call.competitors && <Fact label="Competitors">{v.call.competitors}</Fact>}
         </div>
       )}
-      {data.order && (
-        <Fact label="Order booked">
-          <Link to={`/mr/orders?focus=${data.order.id}`} className="text-sky-700 hover:underline">
-            {data.order.code} · {peso(data.order.amount)}
-          </Link>
-          {data.order.status === "cancelled" ? " (cancelled)" : ""}
+      {data.placed.length > 0 && (
+        <div className="sm:col-span-2">
+          <div className="mb-1 text-[11px] font-semibold text-slate-500 uppercase">Orders placed at this visit</div>
+          <PlacedOrders orders={data.placed} />
+        </div>
+      )}
+      {data.samplesGiven.length > 0 && (
+        <Fact label="Samples and gifts given">
+          {data.samplesGiven.map((one) => `${one.name} · ${one.qty} ${one.kind === "gifts" ? "gifts" : "samples"}`).join(", ")}
         </Fact>
       )}
       {v.files.length > 0 && (
@@ -701,7 +770,7 @@ function History({ data }: { data: VisitPage }) {
               </div>
               <div>Call objective: {objectiveWords(one.objectives) || "—"}{one.objectiveNote ? ` · ${one.objectiveNote}` : ""}</div>
               {one.meeting && <div>{MEETING_WORDS[one.meeting]}{one.outcome ? ` · ${OUTCOME_WORDS[one.outcome]}` : ""}</div>}
-              <div className="text-slate-600">Client's feedback: {one.feedback || "—"}</div>
+              <div className="text-slate-600">Customer's feedback: {one.feedback || "—"}</div>
               {one.status !== "done" && <div className="text-rose-700">{one.status === "missed" ? "Missed" : "Skipped"}</div>}
             </li>
           ))}

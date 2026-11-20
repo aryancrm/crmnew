@@ -6,12 +6,10 @@ import type {
   Decisions,
   FormList,
   LeaveList,
-  Me,
   OrderDashboard,
   OrgMenuUnit,
   SearchResult,
 } from "@2mg/api/types";
-import type { MrMe } from "@2mg/api/mr";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -35,7 +33,7 @@ import { DeskPeople } from "./desk/people";
 import { LiveLocationSender } from "./field/live-sender";
 import { UndoConfirmBar } from "./finance/undo";
 import { MyDayButton } from "./hr/parts";
-import { allItems, type Badge, type MenuGroup, type MenuItem, mrSpace, type Space, spaceFor } from "./menus";
+import { allItems, type Badge, type MenuGroup, type MenuItem, spaceFor } from "./menus";
 import { Toasts } from "./toast";
 import { unreadIn, useUpdates } from "./updates";
 
@@ -98,14 +96,6 @@ export function Shell() {
     staleTime: 5 * 60_000,
   });
 
-  // The MR App (docs/PLAN.md 22) keeps its own people: whether this person is in it, and how.
-  const mrAccess = useQuery({
-    queryKey: ["mr", "me"],
-    queryFn: () => api<MrMe>("/api/mr/me"),
-    enabled: Boolean(me.data) && !me.data?.deskScreen,
-    staleTime: 60_000,
-  });
-
   if (me.isPending) return <Centered>Loading…</Centered>;
   if (me.isError)
     return (
@@ -127,7 +117,7 @@ export function Shell() {
   if (me.data.mustChangePassword && location.pathname !== "/password")
     return <Navigate to="/password" replace />;
 
-  const space = mrSpaceFor(me.data, location.pathname, mrAccess.isLoading ? undefined : (mrAccess.data?.access ?? null)) ?? spaceFor(me.data, location.pathname);
+  const space = spaceFor(me.data, location.pathname);
   const flat = space.groups.flatMap((group) => group.items);
   // Management's, Finance's and Dispatch's own desk is one common screen for all its people.
   const commonDesk =
@@ -948,20 +938,4 @@ function SwitchWorkspace({ label }: { label: string }) {
       {label}
     </button>
   );
-}
-
-/** The MR App's sidebar for its members on its pages (with the way back to their own desk), and
- *  its link at the top of a member's own desk elsewhere. The CEO and the Admin open it from their
- *  apps, so their own sidebar stays. */
-function mrSpaceFor(me: Me, pathname: string, access: MrMe["access"] | undefined): Space | null {
-  const inApp = pathname === "/mr" || pathname.startsWith("/mr/");
-  if (me.role === "ceo" || me.role === "admin") return null;
-  // Still asking whether this person is in the app: the app's frame, not another desk's menu.
-  if (access === undefined && inApp) return { ...mrSpace("mr"), groups: [] };
-  if (!access || access === "viewer") return null;
-  if (inApp) return { ...mrSpace(access), back: { to: "/", label: `Back to ${me.roleLabel}` } };
-  const desk = spaceFor(me, pathname);
-  if (desk.key !== "desk") return null;
-  const app = mrSpace(access);
-  return { ...desk, groups: [{ items: [{ to: "/mr", label: "MR App", icon: app.icon }] }, ...desk.groups] };
 }

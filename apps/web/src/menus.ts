@@ -74,12 +74,8 @@ import {
   ListChecks,
   ScrollText,
   ScanSearch,
-  Store,
-  PartyPopper,
   Map as MapIcon,
-  UserCog,
   Smartphone,
-  GitBranch,
 } from "lucide-react";
 import { ZOHO_REPORT_GROUPS } from "./zoho-reports";
 
@@ -206,14 +202,19 @@ const ordersLink = (label: string): MenuItem => ({
   short: "Orders",
 });
 
-/** A seller's field work in one folder: the day's visits (or calls), the plan, the calendar, their
- *  phone log, expenses and samples. */
+/** A seller's field work in one folder (SEFMED's work in the MedRep's pages, docs/PLAN.md 22): My
+ *  day (Start working, the day report, the tiles), the day's visits (or calls), the tour plan, the
+ *  customers as KOLs, hospitals and KBLs, the visit plan by class, the calendar, their phone log,
+ *  expenses and samples. */
 const fieldFolder = (label: string, today: string, plan: string, phone = "My calls"): MenuItem =>
   folder(
     label,
     CalendarCheck,
     [
+      { to: "/field", label: "My day", icon: Smartphone },
       { to: "/visits", label: today, icon: CalendarCheck },
+      { to: "/field/plan", label: "Tour plan", icon: CalendarRange },
+      { to: "/field/clients", label: "KOLs, hospitals, KBLs", icon: Stethoscope },
       { to: "/visits/plan", label: plan, icon: CalendarRange },
       { to: "/visits/calendar", label: "Calendar", icon: CalendarDays },
       { to: "/calls", label: phone, icon: PhoneCall },
@@ -222,6 +223,24 @@ const fieldFolder = (label: string, today: string, plan: string, phone = "My cal
     ],
     label,
   );
+
+/** A lead's field work (docs/PLAN.md 22): the team today and what waits for them (day reports,
+ *  calls to judge, tour plans, changes, expenses), the team's visits and customers, the reports,
+ *  where the team is; their own day too. Every page follows the company tree (the team switch). */
+const teamFieldItems = (calendar = false): MenuItem[] => [
+  { to: "/field/team", label: "Team today", icon: Users },
+  { to: "/visits?person=all", label: "Team visits", icon: CalendarCheck },
+  { to: "/field/plan?view=team", label: "Approve tour plans", icon: CalendarRange },
+  { to: "/visits/expenses?waiting=1", label: "Expenses to approve", icon: Receipt },
+  { to: "/field/clients?scope=team", label: "Team's customers", icon: Stethoscope },
+  { to: "/field/reports", label: "Call reports", icon: BarChart3 },
+  { to: "/field/report", label: "Visits report", icon: BarChart3 },
+  ...(calendar ? [{ to: "/visits/calendar", label: "Team calendar", icon: CalendarDays }] : []),
+  { to: "/field/live", label: "Where the team is", icon: MapPin },
+  { to: "/field/map", label: "Today's places", icon: MapIcon },
+  { to: "/field/samples", label: "Team samples & gifts", icon: Gift },
+  { to: "/field", label: "My own day", icon: Smartphone },
+];
 
 /** A seller's own numbers in one folder: their score and the day's sales performance (and the
  *  Hospital CHC's evening huddle). */
@@ -478,7 +497,8 @@ const hrApp: Space = {
   ],
 };
 
-/** Field as the CEO and the Admin open it: the visits report (the MedReps' calls). */
+/** Field as the CEO and the Admin open it (docs/PLAN.md 22): everyone's day, visits, tour plans,
+ *  expenses, customers and reports, read from the top of the tree (the team switch narrows it). */
 const fieldApp: Space = {
   key: "field",
   label: "Field",
@@ -487,66 +507,21 @@ const fieldApp: Space = {
   groups: [
     {
       items: [
+        { to: "/field/team", label: "Team today", icon: Users },
+        { to: "/visits", label: "Visits", icon: CalendarCheck },
+        { to: "/field/plan?view=team", label: "Tour plans", icon: CalendarRange },
+        { to: "/visits/expenses?waiting=1", label: "Expenses waiting", icon: Receipt },
+        { to: "/field/clients", label: "KOLs, hospitals, KBLs", icon: Stethoscope },
+        { to: "/field/reports", label: "Call reports", icon: BarChart3 },
         { to: "/field/report", label: "Visits report", icon: CalendarCheck },
         { to: "/visits/calendar", label: "Calendar", icon: CalendarDays },
         { to: "/field/live", label: "Where the team is", icon: MapPin },
+        { to: "/field/map", label: "Today's places", icon: MapIcon },
         { to: "/field/samples", label: "Samples & gifts", icon: Gift },
       ],
     },
   ],
 };
-
-/** The MR App (docs/PLAN.md 22): SEFMED's work as its own app, with its own people. An MR's side
- *  (their day, visits, tour plan, clients, orders, expenses, reports) and the team lead's (the
- *  team, approvals, everyone's visits and expenses, the map, the app's people); the CEO and the
- *  Admin look at the team lead's side. */
-export function mrSpace(access: "mr" | "lead" | "viewer"): Space {
-  const mine: MenuItem[] = [
-    { to: access === "lead" ? "/mr/my-day" : "/mr", label: access === "lead" ? "My day" : "Home", icon: Smartphone },
-    { to: "/mr/visits", label: "Visits", icon: MapPin },
-    { to: "/mr/plan", label: "Tour plan", icon: CalendarRange },
-    { to: "/mr/clients?kind=doctor", label: "KOLs", icon: Stethoscope },
-    { to: "/mr/clients?kind=hospital", label: "Hospitals", icon: Building2 },
-    { to: "/mr/clients?kind=firm", label: "KBLs", icon: Store },
-    { to: "/mr/orders", label: "Order details", icon: ShoppingCart },
-    { to: "/mr/expenses", label: "Expenses", icon: Receipt },
-    { to: "/mr/follow-ups", label: "Follow-ups", icon: ListChecks },
-    { to: "/mr/day-report", label: "Day report", icon: ClipboardList },
-    { to: "/mr/reports", label: "Reports", icon: BarChart3 },
-    { to: "/me/leave", label: "Leaves", icon: CalendarDays },
-    { to: "/mr/holidays", label: "Holidays", icon: PartyPopper },
-  ];
-  const team: MenuItem[] = [
-    { to: "/mr", label: access === "lead" ? "My team" : "Dashboard", icon: Users },
-    { to: "/mr/visits?person=all", label: "Team visits", icon: MapPin },
-    { to: "/mr/plan?view=team", label: "Approve tour plan", icon: CalendarRange },
-    { to: "/mr/plan?view=deviations", label: "Deviation approval", icon: GitBranch },
-    { to: "/mr/expenses?person=all", label: "Team expenses", icon: Receipt },
-    { to: "/mr/orders", label: "Order details", icon: ShoppingCart },
-    { to: "/mr/reports", label: "Reports", icon: BarChart3 },
-    { to: "/mr/map", label: "All on map", icon: MapIcon },
-    { to: "/mr/clients?kind=doctor&scope=team", label: "KOLs", icon: Stethoscope },
-    { to: "/mr/clients?kind=hospital&scope=team", label: "Hospitals", icon: Building2 },
-    { to: "/mr/clients?kind=firm&scope=team", label: "KBLs", icon: Store },
-    { to: "/mr/clients?view=deletes", label: "Delete requests", icon: Undo2 },
-    { to: "/mr/people", label: "The app's people", icon: UserCog },
-  ];
-  return {
-    key: "mr",
-    label: "MR App",
-    icon: Smartphone,
-    tone: "bg-sky-600 text-white",
-    groups:
-      access === "mr"
-        ? [{ items: mine }]
-        : access === "lead"
-          ? [
-              { title: "Team", items: team },
-              { title: "My own work", items: mine },
-            ]
-          : [{ items: team }],
-  };
-}
 
 /** The apps on the Admin's and the CEO's page of apps, in order. */
 export const appsFor = (me: Me): Space[] =>
@@ -559,7 +534,6 @@ export const appsFor = (me: Me): Space[] =>
         inventoryApp(me),
         customersApp(me),
         fieldApp,
-        mrSpace("viewer"),
         hrApp,
         reportsApp,
       ]
@@ -1117,17 +1091,7 @@ function ownDesk(me: Me): Space {
             ...(me.divisions?.includes("RX Business")
               ? [
                   { to: "/rx/field", label: "Field team", icon: Stethoscope },
-                  folder(
-                    "Team visits",
-                    CalendarCheck,
-                    [
-                      { to: "/field/report", label: "Visits report", icon: BarChart3 },
-                      { to: "/field/live", label: "Where the team is", icon: MapPin },
-                      { to: "/visits/expenses?waiting=1", label: "Expenses to approve", icon: Receipt },
-                      { to: "/field/samples", label: "Team samples & gifts", icon: Gift },
-                    ],
-                    "Visits",
-                  ),
+                  folder("Team visits", CalendarCheck, teamFieldItems(), "Visits"),
                 ]
               : []),
             ordersLink("Team orders"),
@@ -1205,17 +1169,7 @@ function ownDesk(me: Me): Space {
             { to: "/targets", label: "Targets", icon: Target },
             { to: "/collections", label: "Collections", icon: HandCoins },
             ordersLink("Business orders"),
-            folder(
-              "Field visits",
-              CalendarCheck,
-              [
-                { to: "/field/report", label: "Visits report", icon: BarChart3 },
-                { to: "/field/live", label: "Where the team is", icon: MapPin },
-                { to: "/visits/expenses?waiting=1", label: "Expenses to approve", icon: Receipt },
-                { to: "/field/samples", label: "Team samples & gifts", icon: Gift },
-              ],
-              "Visits",
-            ),
+            folder("Field visits", CalendarCheck, teamFieldItems(), "Visits"),
             folder(
               "Attendance",
               CalendarClock,
@@ -1248,18 +1202,7 @@ function ownDesk(me: Me): Space {
             { to: "/to-call", label: "Hospitals to call", icon: PhoneCall, badge: "refills" },
             { to: "/collections", label: "Collections", icon: HandCoins },
             ordersLink("Team orders"),
-            folder(
-              "Team visits",
-              CalendarCheck,
-              [
-                { to: "/field/report", label: "Visits report", icon: BarChart3 },
-                { to: "/visits/calendar", label: "Team calendar", icon: CalendarDays },
-                { to: "/field/live", label: "Where the team is", icon: MapPin },
-                { to: "/visits/expenses?waiting=1", label: "Expenses to approve", icon: Receipt },
-                { to: "/field/samples", label: "Team samples & gifts", icon: Gift },
-              ],
-              "Visits",
-            ),
+            folder("Team visits", CalendarCheck, teamFieldItems(true), "Visits"),
             { to: "/targets", label: "Targets", icon: Target },
             folder(
               "Team attendance",
@@ -1299,17 +1242,7 @@ function ownDesk(me: Me): Space {
             { to: "/tenders", label: "Government tenders", icon: FileText },
             { to: "/tenders/report", label: "Bid report", icon: FileText },
             ordersLink("Division orders"),
-            folder(
-              "Visits",
-              CalendarCheck,
-              [
-                { to: "/field/report", label: "Visits report", icon: BarChart3 },
-                { to: "/field/live", label: "Where the team is", icon: MapPin },
-                { to: "/visits/expenses?waiting=1", label: "Expenses to approve", icon: Receipt },
-                { to: "/field/samples", label: "Team samples & gifts", icon: Gift },
-              ],
-              "Visits",
-            ),
+            folder("Visits", CalendarCheck, teamFieldItems(), "Visits"),
             folder(
               "Attendance",
               CalendarClock,
@@ -1351,18 +1284,7 @@ function ownDesk(me: Me): Space {
             ],
             "Team",
           ),
-          folder(
-            "Team visits",
-            CalendarCheck,
-            [
-              { to: "/field/report", label: "Visits report", icon: BarChart3 },
-              { to: "/visits/calendar", label: "Team calendar", icon: CalendarDays },
-              { to: "/field/live", label: "Where the team is", icon: MapPin },
-              { to: "/visits/expenses?waiting=1", label: "Expenses to approve", icon: Receipt },
-                { to: "/field/samples", label: "Team samples & gifts", icon: Gift },
-            ],
-            "Visits",
-          ),
+          folder("Team visits", CalendarCheck, teamFieldItems(true), "Visits"),
           { to: "/targets", label: "Targets", icon: Target },
           folder(
             "Team attendance",

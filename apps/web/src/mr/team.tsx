@@ -1,8 +1,9 @@
-// The team lead's side of the MR App (SEFMED's manager app and web dashboard, docs/PLAN.md 22): the
-// team today (Present / Absent, where and since when, visits closed of planned, at which client
-// now, orders booked, the day report), what waits for the lead, SEFMED's dashboard figures
-// (clients, closed visits today / week / month, Call Champion, the field's activity), and each
-// MR's actions (visits, expenses, location on the map, tour plan, attendance, day report).
+// The team today (SEFMED's manager app and web dashboard, docs/PLAN.md 22), for a team lead, the
+// head above them and the CEO, from the company tree (the team switch narrows it to a box): each
+// MedRep today (Present / Absent, where and since when, visits closed of planned, at which customer
+// now, CRM orders placed at visits, the day report), what waits for the lead, SEFMED's dashboard
+// figures (customers, closed visits today / week / month, Call Champion, the field's activity), and
+// each MedRep's actions (visits, expenses, location on the map, tour plan, attendance, day report).
 
 import type { LeadQueue, TeamToday } from "@2mg/api/mr";
 import { WORK_WORDS } from "@2mg/api/mr";
@@ -11,17 +12,24 @@ import { Trophy } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
+import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { CARD, PageState, Panel, peso } from "../ui";
 import { ActionSheet, clockOf, dayWords, MrHead, useMrMe } from "./parts";
 
 export function TeamHome() {
   const navigate = useNavigate();
   const mr = useMrMe();
-  const query = useQuery({ queryKey: ["mr", "team"], queryFn: () => api<TeamToday>("/api/mr/team"), refetchInterval: 60_000 });
-  const queue = useQuery({ queryKey: ["mr", "queue"], queryFn: () => api<LeadQueue>("/api/mr/team/queue") });
-  const deletes = useQuery({
-    queryKey: ["mr", "delete-requests"],
-    queryFn: () => api<{ rows: unknown[] }>("/api/mr/delete-requests"),
+  const unit = useTeamUnit();
+  const query = useQuery({
+    queryKey: ["mr", "team", unit],
+    queryFn: () => api<TeamToday>(withUnit("/api/mr/team", unit)),
+    refetchInterval: 60_000,
+    placeholderData: (previous) => previous,
+  });
+  const queue = useQuery({ queryKey: ["mr", "queue", unit], queryFn: () => api<LeadQueue>(withUnit("/api/mr/team/queue", unit)) });
+  const offList = useQuery({
+    queryKey: ["mr", "off-requests"],
+    queryFn: () => api<{ rows: unknown[] }>("/api/mr/clients/off-requests"),
     enabled: mr.data?.access === "lead" || mr.data?.access === "viewer",
   });
   const [picked, setPicked] = useState<TeamToday["people"][number] | null>(null);
@@ -33,33 +41,34 @@ export function TeamHome() {
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-4">
       <MrHead
-        title={lead ? "My team" : "MR App"}
+        title="Team today"
         sub={`${dayWords(data.day)} · ${present} of ${t.people} at work`}
-        actions={lead ? <Link to="/mr/my-day" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">My own day</Link> : undefined}
+        actions={lead ? <Link to="/field" className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">My own day</Link> : undefined}
       />
+      <TeamSwitch />
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Figure label="Field employees" value={t.people} />
-        <Figure label="Doctors" value={data.clients.doctors} to="/mr/clients?kind=doctor&scope=team" />
-        <Figure label="Firms" value={data.clients.firms} to="/mr/clients?kind=firm&scope=team" />
-        <Figure label="Hospitals" value={data.clients.hospitals} to="/mr/clients?kind=hospital&scope=team" />
+        <Figure label="Doctors" value={data.clients.doctors} to="/field/clients?kind=doctor&scope=team" />
+        <Figure label="Firms" value={data.clients.firms} to="/field/clients?kind=firm&scope=team" />
+        <Figure label="Hospitals" value={data.clients.hospitals} to="/field/clients?kind=hospital&scope=team" />
       </div>
 
-      {(data.waiting.reports + data.waiting.judge + data.waiting.plans + data.waiting.deviations + data.waiting.expenses + (deletes.data?.rows.length ?? 0)) > 0 && (
+      {(data.waiting.reports + data.waiting.judge + data.waiting.plans + data.waiting.deviations + data.waiting.expenses + (offList.data?.rows.length ?? 0)) > 0 && (
         <Panel title="Waiting for you">
           <ul className="grid gap-2 p-3 sm:grid-cols-3">
-            <Wait n={data.waiting.reports} label="Day reports to see" to="/mr/reports?view=day-reports" />
-            <Wait n={data.waiting.judge} label="Calls to judge" to="/mr/reports?view=judge" />
-            <Wait n={data.waiting.plans} label="Tour plans to approve" to="/mr/plan?view=team" />
-            <Wait n={data.waiting.deviations} label="Plan changes (deviations)" to="/mr/plan?view=deviations" />
-            <Wait n={data.waiting.expenses} label="Expenses to approve" to="/mr/expenses?person=all" />
-            <Wait n={deletes.data?.rows.length ?? 0} label="Client delete requests" to="/mr/clients?view=deletes" />
+            <Wait n={data.waiting.reports} label="Day reports to see" to={withUnit("/field/reports?view=day-reports", unit)} />
+            <Wait n={data.waiting.judge} label="Calls to judge" to={withUnit("/field/reports?view=judge", unit)} />
+            <Wait n={data.waiting.plans} label="Tour plans to approve" to={withUnit("/field/plan?view=team", unit)} />
+            <Wait n={data.waiting.deviations} label="Plan changes (deviations)" to={withUnit("/field/plan?view=deviations", unit)} />
+            <Wait n={data.waiting.expenses} label="Expenses to approve" to={withUnit("/visits/expenses?waiting=1", unit)} />
+            <Wait n={offList.data?.rows.length ?? 0} label="Customers to take off the list" to="/field/clients?view=off" />
           </ul>
         </Panel>
       )}
 
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
-        <Panel title="Today" count={data.people.length} actions={<Link to="/mr/map" className="text-xs font-semibold text-sky-700 hover:underline">View all on map</Link>}>
+        <Panel title="Today" count={data.people.length} actions={<Link to={withUnit("/field/map", unit)} className="text-xs font-semibold text-sky-700 hover:underline">View all on map</Link>}>
           <ul className="divide-y divide-slate-100">
             {data.people.map((one) => (
               <li key={one.id}>
@@ -69,7 +78,7 @@ export function TeamHome() {
                     <span className="block text-xs text-slate-500">
                       {one.done} closed of {one.visits} visits{one.visits > one.planned ? ` (${one.visits - one.planned} added on the day)` : ""}
                       {one.missed ? ` · ${one.missed} missed` : ""}
-                      {one.bookedAmount ? ` · ${peso(one.bookedAmount)} booked` : ""}
+                      {one.bookedAmount ? ` · ${peso(one.bookedAmount)} ordered` : ""}
                       {one.at ? ` · at ${one.at}` : ""}
                     </span>
                   </span>
@@ -90,7 +99,7 @@ export function TeamHome() {
             ))}
             {data.people.length === 0 && (
               <li className="px-4 py-8 text-center text-sm text-slate-500">
-                No MRs in the app yet. <Link to="/mr/people" className="font-semibold text-sky-700">Add them</Link>.
+                No MedReps under you here.
               </li>
             )}
           </ul>
@@ -125,7 +134,7 @@ export function TeamHome() {
             <ul className="max-h-72 divide-y divide-slate-100 overflow-y-auto">
               {data.feed.map((one) => (
                 <li key={`${one.visitId}-${one.what}`} className="px-4 py-2 text-[13px] text-slate-700">
-                  <Link to={`/mr/visits/${one.visitId}`} className="hover:underline">
+                  <Link to={`/visits/${one.visitId}`} className="hover:underline">
                     <b>{one.name}</b> has {one.what === "closed" ? "closed" : "checked in"} the visit of {one.client}
                   </Link>
                   <span className="ml-1 text-xs text-slate-400">{clockOf(one.at)}</span>
@@ -142,7 +151,7 @@ export function TeamHome() {
           <ul className="divide-y divide-slate-100">
             {queue.data.judge.slice(0, 5).map((one) => (
               <li key={one.id}>
-                <Link to={`/mr/visits/${one.id}`} className="block px-4 py-2.5 text-sm hover:bg-slate-50">
+                <Link to={`/visits/${one.id}`} className="block px-4 py-2.5 text-sm hover:bg-slate-50">
                   <b>{one.client.name}</b> · {one.person.name} · {dayWords(one.day)}
                   {one.feedback ? <span className="text-slate-500"> · “{one.feedback}”</span> : null}
                 </Link>
@@ -158,13 +167,13 @@ export function TeamHome() {
           sub={picked.started ? `${picked.workType ? WORK_WORDS[picked.workType] : ""} since ${clockOf(picked.started)}` : "Absent today"}
           onClose={() => setPicked(null)}
           actions={[
-            { label: "View visits", onPick: () => navigate(`/mr/visits?person=${picked.id}`) },
-            { label: "View expenses", onPick: () => navigate(`/mr/expenses?person=${picked.id}`) },
-            { label: "View location on map", onPick: () => navigate(`/mr/map?person=${picked.id}`) },
-            { label: "Manage tour plan", onPick: () => navigate(`/mr/plan?person=${picked.id}`) },
-            { label: "View attendance", onPick: () => navigate(`/mr/reports?view=attendance&person=${picked.id}`) },
-            { label: "Day report", onPick: () => navigate(`/mr/day-report?person=${picked.id}`) },
-            { label: "Orders booked", onPick: () => navigate(`/mr/orders?person=${picked.id}`) },
+            { label: "View visits", onPick: () => navigate(`/visits?person=${picked.id}`) },
+            { label: "View expenses", onPick: () => navigate(`/visits/expenses?person=${picked.id}`) },
+            { label: "View location on map", onPick: () => navigate(`/field/map?person=${picked.id}`) },
+            { label: "Manage tour plan", onPick: () => navigate(`/field/plan?person=${picked.id}`) },
+            { label: "View attendance", onPick: () => navigate(`/field/reports?view=attendance&person=${picked.id}`) },
+            { label: "Day report", onPick: () => navigate(`/field/day-report?person=${picked.id}`) },
+            { label: "Team orders", onPick: () => navigate("/orders") },
           ]}
         />
       )}

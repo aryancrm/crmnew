@@ -362,6 +362,8 @@ export function OrderNew({
   const [customerId, setCustomerId] = useState<number | null>(
     Number(params.get("customer")) || null,
   );
+  // Add order on a field visit (docs/PLAN.md 22): the order joins the call, then back to it.
+  const visitId = fixId ? null : Number(params.get("visit")) || null;
   const [findCustomer, setFindCustomer] = useState("");
   // A team lead (or Management) places the order in one of their MedReps' names: the MedRep of
   // the customer's area unless they pick another; nobody picked = their own (an empty seat's).
@@ -985,7 +987,8 @@ export function OrderNew({
           body: { ...body, answer },
         });
         id = fixId;
-      } else id = (await api<{ id: number }>("/api/orders", { body })).id;
+      } else
+        id = (await api<{ id: number }>("/api/orders", { body: visitId ? { ...body, visitId } : body })).id;
     });
     if (!done) {
       setConfirming(false);
@@ -1002,6 +1005,11 @@ export function OrderNew({
     }
     if (me && !fixId) localStorage.removeItem(draftKey(me.id));
     await queries.invalidateQueries({ queryKey: ["orders"] });
+    if (visitId && !failed.length) {
+      await queries.invalidateQueries({ queryKey: ["mr"] });
+      navigate(`/visits/${visitId}`, { replace: true });
+      return;
+    }
     navigate(`/orders/${id}`, {
       replace: true,
       state: failed.length
@@ -1057,7 +1065,9 @@ export function OrderNew({
           <p className="text-sm text-ink-2">
             {changing
               ? "Change the medicines or details before you approve it."
-              : "Fill the five parts. Management approves it, then Finance and Dispatch take it on."}
+              : visitId
+                ? "Placed at your visit: it joins the call. Management approves it, then Finance and Dispatch take it on."
+                : "Fill the five parts. Management approves it, then Finance and Dispatch take it on."}
           </p>
         </div>
         <button

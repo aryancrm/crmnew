@@ -106,7 +106,7 @@ export async function fieldCalendar(
       holiday: holidayOf.get(day) ?? null,
       planned: count("planned"),
       done: count("done"),
-      skipped: count("skipped"),
+      skipped: count("skipped") + count("missed"),
       leave: picked !== null ? (out[0]?.kind ?? null) : null,
       away: out.length,
       // A team's month carries counts; its visits come one day at a time (fieldCalendarDay).

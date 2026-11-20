@@ -1,9 +1,10 @@
-// The MR App's words and shapes (docs/PLAN.md 22, docs/FIELD-CHECKLIST.md): every list an MR picks
-// from, in the words GetMeds used in SEFMED, and what the app's pages carry. Shared by the API (to
-// check) and the screens (to show); nothing here touches the database.
+// The field's words and shapes (docs/PLAN.md 22, docs/FIELD-CHECKLIST.md): SEFMED's work inside the
+// MedRep's own pages, every list an MR picks from in the words GetMeds used in SEFMED, and what the
+// pages carry. Shared by the API (to check) and the screens (to show); nothing here touches the
+// database.
 
-export type MrRole = "mr" | "lead";
-/** How a person stands in the app: an MR, the team lead, or someone who only looks (CEO, Admin). */
+/** How a person stands in the field: works their own day (an MR), leads a team (and works their
+ *  own calls), or reads everyone's (the CEO, Management, the Admin). */
 export type MrAccess = "mr" | "lead" | "viewer";
 
 /** Where the day's work is (SEFMED's work place). "Return to HQ" is a change of place to `hq`. */
@@ -17,8 +18,11 @@ export const WORK_WORDS: Record<WorkType, string> = {
   other: "Other",
 };
 
-/** SEFMED's three kinds of client: KOLs (doctors), hospitals and KBLs (firms). */
+/** SEFMED's three kinds of client, as the CRM's customers: KOLs (doctors), hospitals and KBLs
+ *  (firms: drugstores and distributors). */
 export type ClientKind = "doctor" | "hospital" | "firm";
+export const clientKindOf = (customerKind: string): ClientKind | null =>
+  customerKind === "doctor" ? "doctor" : customerKind === "hospital" ? "hospital" : customerKind === "drugstore" || customerKind === "distributor" ? "firm" : null;
 export const CLIENT_KINDS: ClientKind[] = ["doctor", "hospital", "firm"];
 export const KIND_TABS: Record<ClientKind, string> = { doctor: "KOLs", hospital: "Hospitals", firm: "KBLs" };
 export const KIND_ONE: Record<ClientKind, string> = { doctor: "Doctor", hospital: "Hospital", firm: "Firm" };
@@ -171,7 +175,9 @@ export const stateOf = (visit: { status: VisitStatus; checkedInAt: string | null
 export type ClientCard = {
   id: number;
   kind: ClientKind;
-  code: string;
+  /** The CRM customer's own kind (drugstore, distributor…). */
+  customerKind: string;
+  code: string | null;
   name: string;
   specialty: string | null;
   category: string | null;
@@ -239,10 +245,9 @@ export type DayState = {
   };
 };
 
-/** Who the app is for this person, and the members a lead runs. */
+/** How the field stands for this person, and whom they report to. */
 export type MrMe = {
   access: MrAccess | null;
-  /** The team lead's name, for an MR's page. */
   lead: { id: number; name: string } | null;
 };
 
@@ -277,8 +282,6 @@ export type CallProduct = {
   medicineId: number;
   name?: string;
   promoted: boolean;
-  /** Samples given in the call (pieces), as SEFMED's Promoted drugs asks. */
-  samples?: number | null;
   reaction: Reaction | null;
   prescribing?: boolean | null;
   competitor?: string | null;
@@ -318,41 +321,8 @@ export type CloseCallInput = {
   place?: string | null;
 };
 
-export type OrderLine = { medicineId: number; name: string; packs: number; qty: number; price: number; amount: number };
-
-export type OrderRow = {
-  id: number;
-  code: string;
-  visitId: number | null;
-  client: { id: number; name: string; kind: ClientKind };
-  person: { id: number; name: string };
-  lines: OrderLine[];
-  amount: number;
-  note: string | null;
-  hasFile: boolean;
-  status: "booked" | "cancelled";
-  madeAt: string;
-  cancelNote: string | null;
-};
-
-/** Add Order: every active medicine with its MRP (the patient's price) and this client's rate. */
-export type OrderForm = {
-  client: { id: number; name: string; kind: ClientKind };
-  rateKind: string;
-  medicines: {
-    id: number;
-    name: string;
-    strength: string | null;
-    unit: string | null;
-    packSize: number;
-    /** A piece (centavos). */
-    mrp: number | null;
-    rate: number | null;
-    /** A whole pack's own price, when it has one. */
-    packRate: number | null;
-    vat: string;
-  }[];
-};
+/** A CRM order on a field page: placed at a visit, or the customer's latest. */
+export type FieldOrder = { id: number; code: string | null; on: string; total: number; status: string; statusWord: string; by: string };
 
 export type VisitPage = {
   visit: VisitCard & {
@@ -395,11 +365,19 @@ export type VisitPage = {
     feedback: string | null;
     notes: string | null;
   }[];
-  orders: OrderRow[];
+  /** The customer's latest CRM orders, and what it owes (from Finance's dues). */
+  orders: FieldOrder[];
+  owed: { total: number; overdue: number };
   followUps: { id: number; dueOn: string; kind: FollowUpKind; what: string; by: string }[];
   prescribing: { medicineId: number; name: string; prescribing: boolean; top5: boolean }[];
   medicines: { id: number; name: string; strength: string | null }[];
-  order: OrderRow | null;
+  /** The CRM orders placed at this visit (the call's business). */
+  placed: FieldOrder[];
+  /** Samples and gifts given at this visit (the samples module), and what the MR holds. */
+  samplesGiven: { medicineId: number; name: string; kind: "samples" | "gifts"; qty: number }[];
+  samplesHeld: number;
+  /** The call's form as typed before stepping out to place the order. */
+  draft: Record<string, unknown> | null;
   partners: { id: number; name: string }[];
   can: {
     work: boolean;
@@ -470,51 +448,45 @@ export type ClientList = {
   counts: { mine: number; team: number };
   rows: (ClientCard & { lastVisit: string | null; nextVisit: string | null; visitsThisMonth: number })[];
   more: boolean;
-  members: { id: number; name: string }[];
-  can: { add: boolean; assign: boolean };
+  can: { add: boolean; team: boolean };
 };
 
-export type ClientInput = {
-  kind: ClientKind;
-  name: string;
-  specialty?: string | null;
-  category?: string | null;
-  dispensing?: boolean | null;
-  qualification?: string | null;
-  registrationNo?: string | null;
-  gender?: "male" | "female" | "other" | null;
-  hospitalType?: "government" | "private" | null;
-  hospitalClass?: "general" | "specialty" | null;
-  firmType?: FirmType | null;
-  contactPerson?: string | null;
-  phone?: string | null;
-  email?: string | null;
-  address?: string | null;
-  city?: string | null;
-  zone?: string | null;
-  prefDays?: string[] | null;
-  prefTime?: string | null;
-  worksAt?: number | null;
-  firmId?: number | null;
-  assignedTo?: number | null;
-  visitsAMonth?: number | null;
-  note?: string | null;
+/** The field's own fields of a customer (SEFMED's KOL / hospital / firm fields). */
+export type FieldProfile = {
+  category: string | null;
+  dispensing: boolean | null;
+  qualification: string | null;
+  gender: "male" | "female" | "other" | null;
+  hospitalType: "government" | "private" | null;
+  hospitalClass: "general" | "specialty" | null;
+  firmType: FirmType | null;
+  contactPerson: string | null;
+  zone: string | null;
+  prefDays: string[];
+  prefTime: string | null;
+  firmId: number | null;
+  visitsAMonth: number | null;
 };
 
 export type ClientPage = {
   client: ClientCard &
-    Required<Omit<ClientInput, "kind" | "name" | "specialty" | "category" | "city" | "zone" | "prefDays" | "prefTime" | "assignedTo">> & {
+    FieldProfile & {
+      address: string | null;
+      phone: string | null;
+      email: string | null;
+      licenceNo: string | null;
       pin: string | null;
       active: boolean;
-      addedBy: string;
-      addedAt: string;
       worksAtName: string | null;
       firmName: string | null;
+      offList: boolean;
+      offAsked: { by: string; at: string; why: string } | null;
     };
   history: VisitPage["history"];
-  orders: OrderRow[];
+  orders: FieldOrder[];
+  owed: { total: number; overdue: number };
   calls: number;
-  can: { edit: boolean; assign: boolean; deactivate: boolean; visit: boolean; order: boolean };
+  can: { profile: boolean; category: boolean; visit: boolean; order: boolean; askOff: boolean; answerOff: boolean };
 };
 
 export type FollowUpRow = {
@@ -568,24 +540,6 @@ export type TeamToday = {
 export type LeadQueue = {
   reports: { personId: number; name: string; day: string; sentAt: string; done: number; missed: number }[];
   judge: (VisitCard & { feedback: string | null })[];
-};
-
-export type Member = {
-  personId: number;
-  name: string;
-  title: string | null;
-  email: string | null;
-  role: MrRole;
-  active: boolean;
-  addedAt: string;
-  clients: number;
-};
-
-export type MemberPage = {
-  members: Member[];
-  /** People who may be added (active CRM logins not in the app). */
-  candidates: { id: number; name: string; title: string | null }[];
-  can: { manage: boolean; setLead: boolean };
 };
 
 // ---- Tour plan ----
@@ -644,12 +598,14 @@ export const DEVIATION_WORDS = {
 // ---- Expenses ----
 
 export type ExpenseHead = { code: string; name: string; allowance: "per_diem" | "ta" | null; needsBill: boolean; active: boolean };
-export type ExpenseStatus = "open" | "claimed" | "approved" | "rejected";
+/** open: a day's allowance not claimed yet; pending: claimed, with the lead; sent_back: rejected
+ *  with why (put right, it waits again). */
+export type ExpenseStatus = "open" | "pending" | "approved" | "sent_back";
 export const EXPENSE_STATUS_WORDS: Record<ExpenseStatus, string> = {
   open: "Not claimed",
-  claimed: "Claimed",
+  pending: "Claimed",
   approved: "Approved",
-  rejected: "Rejected",
+  sent_back: "Rejected",
 };
 export type ExpenseRow = {
   id: number;

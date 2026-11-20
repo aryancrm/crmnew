@@ -1,327 +1,292 @@
-// The MR App's doctors (KOLs), hospitals and firms (KBLs), each once (SEFMED's masters): a list
-// in each tab, For me (assigned to me) or Team (everyone's), searched by name, city, hospital or
-// code; a client's page (details, the last five visits, call history, orders booked); add and
-// edit (an MR their own; the team lead any, and assigns them); Delete in SEFMED is "inactive"
-// here, by the team lead: nothing with history is deleted.
+// SEFMED's KOLs, Hospitals and KBLs as the CRM's own customers (docs/PLAN.md 22): a list in each tab,
+// For me (the customers the person looks after) or Team (a lead's team's; everyone's for the CEO),
+// searched by name, city, hospital or code; a customer's field page (details, the last five
+// visits, call history, the CRM orders and what it owes); its field profile (SEFMED's KOL fields:
+// category, dispensing, best days and time, the serving firm…), kept apart from the customer
+// record. A customer is added through the CRM's own customer form (its rules stay); SEFMED's Delete
+// is "off the field's lists", asked by an MR with why and answered by their team lead.
 
 import { type SQL, sql } from "drizzle-orm";
+import { seen, team } from "../customers/service";
 import { type Database, rows } from "../db/index";
+import { FIELD_READ_ROLES, LEAD_ROLES, lookedAfterBy } from "../field/visits";
+import { moneyOf } from "../finance/service";
 import { Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
 import { clean, iso, type Runner } from "../inventory/service";
 import type { Me } from "../types";
-import { accessOf, isLeadNow, mustUse, mustWork, textArray, words } from "./access";
-import { clientJson } from "./cards";
-import { orderRows } from "./orders";
-import { lastVisits } from "./visits";
-import {
-  CATEGORIES,
-  CLIENT_KINDS,
-  type ClientInput,
-  type ClientKind,
-  type ClientList,
-  type ClientPage,
-  DAYS,
-  FIRM_TYPES,
-} from "./words";
+import { leadOf, mayDecideFor, mustUse, mustWork, textArray, words } from "./access";
+import { clientFrom, clientJson } from "./cards";
+import { customerOrders, lastVisits } from "./visits";
+import { notify } from "../notify/service";
+import { CATEGORIES, CLIENT_KINDS, type ClientKind, type ClientList, type ClientPage, DAYS, type FieldProfile, FIRM_TYPES } from "./words";
 
-const CODE_PREFIX: Record<ClientKind, string> = { doctor: "D", hospital: "H", firm: "F" };
+const kindsOf = (kind: ClientKind): SQL =>
+  kind === "firm" ? sql`('drugstore', 'distributor')` : kind === "doctor" ? sql`('doctor')` : sql`('hospital')`;
+const offList = sql`coalesce(f.off_list, false)`;
 
-/** The clients in a tab: mine (assigned to me) or the team's (every active client). */
+/** The customers in a tab: mine (those I look after) or my team's (a lead's; everyone's for the
+ *  CEO, Management and the Admin). */
 export async function clientList(
   db: Database,
   me: Me,
-  asked: { kind?: string | null; scope?: string | null; q?: string | null; person?: string | null },
+  asked: { kind?: string | null; scope?: string | null; q?: string | null },
 ): Promise<ClientList> {
   const access = await mustUse(db, me);
   const today = todayManila();
   const kind = (CLIENT_KINDS as string[]).includes(asked.kind ?? "") ? (asked.kind as ClientKind) : "doctor";
-  const mineOf = access === "viewer" ? null : me.id;
-  const scope = asked.scope === "mine" && mineOf ? "mine" : asked.scope === "team" || !mineOf ? "team" : "mine";
-  const picked = Number(asked.person) || null;
+  const everyone = FIELD_READ_ROLES.includes(me.role);
+  const teamOk = LEAD_ROLES.includes(me.role) || everyone;
+  const scope = (asked.scope === "team" && teamOk) || access === "viewer" ? "team" : "mine";
   const find = clean(asked.q)?.toLowerCase();
   const match = find
     ? sql`and (lower(c.name) like ${`%${find}%`} or lower(coalesce(c.city, '')) like ${`%${find}%`}
-        or lower(c.code) like ${`%${find}%`} or lower(coalesce(c.specialty, '')) like ${`%${find}%`}
-        or exists (select 1 from mr_client h where h.id = c.works_at and lower(h.name) like ${`%${find}%`}))`
+        or lower(coalesce(c.code, '')) like ${`%${find}%`} or lower(coalesce(c.specialty, '')) like ${`%${find}%`}
+        or exists (select 1 from customer h where h.id = c.works_at and lower(h.name) like ${`%${find}%`}))`
     : sql``;
-  const whose: SQL =
-    scope === "mine" ? sql`c.assigned_to = ${mineOf}` : picked ? sql`c.assigned_to = ${picked}` : sql`true`;
+  const mine = sql`${lookedAfterBy(sql`${me.id}`, today)}`;
+  const theirs = everyone ? sql`true` : seen(me);
   const monthStart = `${today.slice(0, 7)}-01`;
-  const [found, counts, members, lead] = await Promise.all([
-    rows<ClientList["rows"][number]>(
+  const [found, counts] = await Promise.all([
+    rows<{ row: ClientList["rows"][number] }>(
       db,
-      sql`select (${clientJson})::jsonb || jsonb_build_object(
-          'lastVisit', (select to_char(max(v.day), 'YYYY-MM-DD') from mr_visit v where v.client_id = c.id and v.status = 'done'),
-          'nextVisit', (select to_char(min(v.day), 'YYYY-MM-DD') from mr_visit v where v.client_id = c.id and v.status = 'planned' and v.day >= ${today}::date),
-          'visitsThisMonth', (select count(*) from mr_visit v where v.client_id = c.id and v.status = 'done' and v.day >= ${monthStart}::date)) as row
-        from mr_client c where c.active and c.kind = ${kind} and ${whose} ${match}
+      sql`${team(me)} select (${clientJson})::jsonb || jsonb_build_object(
+          'lastVisit', (select to_char(max(v.day), 'YYYY-MM-DD') from visit v where v.customer_id = c.id and v.status = 'done'),
+          'nextVisit', (select to_char(min(v.day), 'YYYY-MM-DD') from visit v where v.customer_id = c.id and v.status = 'planned' and v.day >= ${today}::date),
+          'visitsThisMonth', (select count(*) from visit v where v.customer_id = c.id and v.status = 'done' and v.day >= ${monthStart}::date)) as row
+        ${clientFrom} where c.active and c.kind in ${kindsOf(kind)} and not ${offList}
+          and ${scope === "mine" ? mine : theirs} ${match}
         order by c.name limit 401`,
-    ).then((list) => list.map((one) => (one as unknown as { row: ClientList["rows"][number] }).row)),
+    ),
     rows<{ mine: number; team: number }>(
       db,
-      sql`select count(*) filter (where c.assigned_to = ${mineOf ?? 0})::int as mine, count(*)::int as team
-        from mr_client c where c.active and c.kind = ${kind}`,
+      sql`${team(me)} select count(*) filter (where ${mine})::int as mine, count(*) filter (where ${teamOk ? theirs : sql`false`})::int as team
+        ${clientFrom} where c.active and c.kind in ${kindsOf(kind)} and not ${offList}`,
     ),
-    rows<{ id: number; name: string }>(
-      db,
-      sql`select p.id::int as id, p.name from mr_member m join person p on p.id = m.person_id where m.active order by p.name`,
-    ),
-    isLeadNow(db, me),
   ]);
   return {
     kind,
     scope,
     counts: counts[0] ?? { mine: 0, team: 0 },
-    rows: found.slice(0, 400),
+    rows: found.slice(0, 400).map((one) => one.row),
     more: found.length > 400,
-    members,
-    can: { add: access === "mr" || access === "lead" || lead, assign: lead },
+    can: { add: access !== "viewer" && !me.viewedBy, team: teamOk },
   };
 }
 
-function checkInput(input: ClientInput): Record<string, unknown> {
-  if (!CLIENT_KINDS.includes(input.kind)) throw new Refusal(400, "invalid", "Pick doctor, hospital or firm.", "kind");
-  const name = words(input.name, 160);
-  if (!name) throw new Refusal(400, "invalid", "Type the name.", "name");
-  const category = input.category ? String(input.category).toUpperCase() : null;
-  if (category && !(CATEGORIES as readonly string[]).includes(category))
-    throw new Refusal(400, "invalid", "Pick the category A to E.", "category");
-  if (input.firmType && !FIRM_TYPES.includes(input.firmType)) throw new Refusal(400, "invalid", "Pick the firm's type.", "firmType");
-  if (input.kind === "firm" && !input.firmType) throw new Refusal(400, "invalid", "Pick the firm's type.", "firmType");
-  if (input.hospitalType && !["government", "private"].includes(input.hospitalType))
-    throw new Refusal(400, "invalid", "Government or private?", "hospitalType");
-  if (input.hospitalClass && !["general", "specialty"].includes(input.hospitalClass))
-    throw new Refusal(400, "invalid", "General or specialty?", "hospitalClass");
-  if (input.gender && !["male", "female", "other"].includes(input.gender)) throw new Refusal(400, "invalid", "Pick the gender.", "gender");
-  const days = [...new Set((input.prefDays ?? []).map((one) => String(one).toLowerCase()))];
-  if (days.some((one) => !(DAYS as readonly string[]).includes(one))) throw new Refusal(400, "invalid", "Pick the best days.", "prefDays");
-  const visits = input.visitsAMonth ?? null;
-  if (visits !== null && (!Number.isInteger(visits) || visits < 0 || visits > 31))
-    throw new Refusal(400, "invalid", "Visits a month: 0 to 31.", "visitsAMonth");
-  const city = words(input.city, 80);
-  if (!city) throw new Refusal(400, "invalid", "Type the city.", "city");
-  return {
-    name,
-    specialty: input.kind === "doctor" ? words(input.specialty, 120) : null,
-    category: input.kind === "doctor" ? category : null,
-    dispensing: input.kind === "doctor" ? (input.dispensing ?? null) : null,
-    qualification: input.kind === "doctor" ? words(input.qualification, 120) : null,
-    registrationNo: input.kind === "doctor" ? words(input.registrationNo, 60) : null,
-    gender: input.kind === "doctor" ? (input.gender ?? null) : null,
-    hospitalType: input.kind === "hospital" ? (input.hospitalType ?? null) : null,
-    hospitalClass: input.kind === "hospital" ? (input.hospitalClass ?? null) : null,
-    firmType: input.kind === "firm" ? (input.firmType ?? null) : null,
-    contactPerson: words(input.contactPerson, 120),
-    phone: words(input.phone, 40),
-    email: words(input.email, 120),
-    address: words(input.address, 300),
-    city,
-    zone: words(input.zone, 80),
-    prefDays: days,
-    prefTime: words(input.prefTime, 60),
-    visitsAMonth: visits,
-    note: words(input.note, 500),
-  };
-}
-
-async function linkOk(db: Runner, id: number | null | undefined, kind: ClientKind, field: string): Promise<number | null> {
-  if (!id) return null;
-  const [found] = await rows<{ id: number }>(db, sql`select id::int as id from mr_client where id = ${id} and kind = ${kind} and active`);
-  if (!found) throw new Refusal(400, "invalid", `Pick the ${kind} from the list.`, field);
-  return found.id;
-}
-
-async function assigneeOk(db: Runner, id: number | null | undefined): Promise<number | null> {
-  if (!id) return null;
-  const [found] = await rows<{ id: number }>(db, sql`select person_id::int as id from mr_member where person_id = ${id} and active`);
-  if (!found) throw new Refusal(400, "invalid", "Assign it to someone in the app.", "assignedTo");
-  return found.id;
-}
-
-/** Adds a client: an MR's goes to themselves; the team lead assigns it to anyone in the app. */
-export async function addClient(db: Database, me: Me, input: ClientInput): Promise<{ id: number; code: string }> {
-  const lead = await isLeadNow(db, me);
-  if (!lead) await mustWork(db, me);
-  const values = checkInput(input);
-  const worksAt = input.kind === "doctor" ? await linkOk(db, input.worksAt, "hospital", "worksAt") : null;
-  const firmId = input.kind === "doctor" ? await linkOk(db, input.firmId, "firm", "firmId") : null;
-  const assignedTo = lead ? await assigneeOk(db, input.assignedTo ?? me.id).catch(() => null) : me.id;
-  return db.transaction(async (tx) => {
-    const [same] = await rows<{ code: string }>(
-      tx,
-      sql`select code from mr_client where active and kind = ${input.kind} and lower(name) = lower(${values.name as string})
-        and lower(coalesce(city, '')) = lower(${values.city as string})`,
-    );
-    if (same) throw new Refusal(409, "taken", `Already in the list as ${same.code}.`, "name");
-    const [counter] = await rows<{ value: number }>(
-      tx,
-      sql`update counter set value = value + 1 where name = ${`mr_${input.kind}`} returning value::int as value`,
-    );
-    const code = `${CODE_PREFIX[input.kind]}${String(counter?.value ?? 1).padStart(4, "0")}`;
-    const v = values as Record<string, string | number | boolean | string[] | null>;
-    const [made] = await rows<{ id: number }>(
-      tx,
-      sql`insert into mr_client (kind, code, name, specialty, category, dispensing, qualification, registration_no, gender,
-          hospital_type, hospital_class, firm_type, contact_person, phone, email, address, city, zone, pref_days, pref_time,
-          works_at, firm_id, assigned_to, visits_a_month, note, added_by)
-        values (${input.kind}, ${code}, ${v.name}, ${v.specialty}, ${v.category}, ${v.dispensing}, ${v.qualification},
-          ${v.registrationNo}, ${v.gender}, ${v.hospitalType}, ${v.hospitalClass}, ${v.firmType}, ${v.contactPerson}, ${v.phone},
-          ${v.email}, ${v.address}, ${v.city}, ${v.zone}, ${textArray(v.prefDays as string[])}, ${v.prefTime}, ${worksAt},
-          ${firmId}, ${assignedTo}, ${v.visitsAMonth}, ${v.note}, ${me.id})
-        returning id::int as id`,
-    );
-    return { id: made?.id as number, code };
-  });
-}
-
-/** Changes a client: an MR their own (assigned to them or added by them); the lead any, and
- *  reassigns it. */
-export async function editClient(db: Database, me: Me, id: number, input: ClientInput): Promise<void> {
-  const lead = await isLeadNow(db, me);
-  if (!lead) await mustWork(db, me);
-  const [client] = await rows<{ kind: ClientKind; assignedTo: number | null; addedBy: number }>(
-    db,
-    sql`select kind, assigned_to::int as "assignedTo", added_by::int as "addedBy" from mr_client where id = ${id} and active`,
-  );
-  if (!client) throw new Refusal(404, "not_found", "No such client.");
-  if (!lead && client.assignedTo !== me.id && client.addedBy !== me.id)
-    throw new Refusal(403, "not_allowed", "Only your own clients are changed by you; ask your team lead.");
-  const values = checkInput({ ...input, kind: client.kind }) as Record<string, string | number | boolean | string[] | null>;
-  const worksAt = client.kind === "doctor" ? await linkOk(db, input.worksAt, "hospital", "worksAt") : null;
-  const firmId = client.kind === "doctor" ? await linkOk(db, input.firmId, "firm", "firmId") : null;
-  const assignedTo = lead ? await assigneeOk(db, input.assignedTo) : client.assignedTo;
-  if (worksAt === id || firmId === id) throw new Refusal(400, "invalid", "A client can't be its own hospital or firm.", "worksAt");
-  await db.execute(
-    sql`update mr_client set name = ${values.name}, specialty = ${values.specialty}, category = ${values.category},
-        dispensing = ${values.dispensing}, qualification = ${values.qualification}, registration_no = ${values.registrationNo},
-        gender = ${values.gender}, hospital_type = ${values.hospitalType}, hospital_class = ${values.hospitalClass},
-        firm_type = ${values.firmType}, contact_person = ${values.contactPerson}, phone = ${values.phone}, email = ${values.email},
-        address = ${values.address}, city = ${values.city}, zone = ${values.zone}, pref_days = ${textArray(values.prefDays as string[])},
-        pref_time = ${values.prefTime}, works_at = ${worksAt}, firm_id = ${firmId}, assigned_to = ${assignedTo},
-        visits_a_month = ${values.visitsAMonth}, note = ${values.note}
-      where id = ${id}`,
-  );
-}
-
-/** The team lead takes a client off the lists (SEFMED's Delete): kept, with its history. */
-export async function deactivateClient(db: Database, me: Me, id: number): Promise<void> {
-  if (!(await isLeadNow(db, me))) throw new Refusal(403, "not_allowed", "Only the team lead takes a client off the list.");
-  const changed = await rows<{ id: number }>(
-    db,
-    sql`update mr_client set active = false where id = ${id} and active returning id::int as id`,
-  );
-  if (!changed.length) throw new Refusal(404, "not_found", "No such client.");
-}
-
-/** An MR asks the team lead to take a client off the list (SEFMED's Delete request), with why. */
-export async function askDelete(db: Database, me: Me, id: number, why: string): Promise<void> {
-  await mustWork(db, me);
-  const reason = words(why, 300);
-  if (!reason) throw new Refusal(400, "invalid", "Say why it should come off the list.", "why");
-  const changed = await rows<{ id: number }>(
-    db,
-    sql`update mr_client set delete_asked_by = ${me.id}, delete_asked_at = now(), delete_why = ${reason}
-      where id = ${id} and active and delete_asked_at is null returning id::int as id`,
-  );
-  if (!changed.length) throw new Refusal(409, "invalid", "Asked already, or not on the list.");
-}
-
-/** The team lead answers a delete request: off the list, or kept (the request is cleared). */
-export async function answerDelete(db: Database, me: Me, id: number, remove: boolean): Promise<void> {
-  if (!(await isLeadNow(db, me))) throw new Refusal(403, "not_allowed", "Only the team lead answers a delete request.");
-  const changed = await rows<{ id: number }>(
-    db,
-    sql`update mr_client set active = ${!remove}, delete_asked_by = null, delete_asked_at = null, delete_why = null
-      where id = ${id} and active and delete_asked_at is not null returning id::int as id`,
-  );
-  if (!changed.length) throw new Refusal(409, "invalid", "That request isn't waiting.");
-}
-
-/** Delete requests waiting for the team lead. */
-export async function deleteRequests(db: Database, me: Me) {
-  if (!(await isLeadNow(db, me)) && me.role !== "ceo") throw new Refusal(403, "not_allowed", "Delete requests are the team lead's.");
-  return rows<{ id: number; code: string; name: string; kind: string; city: string | null; why: string; by: string; at: string }>(
-    db,
-    sql`select c.id::int as id, c.code, c.name, c.kind, c.city, c.delete_why as why, p.name as by, ${iso("c.delete_asked_at")} as at
-      from mr_client c join person p on p.id = c.delete_asked_by where c.active and c.delete_asked_at is not null
-      order by c.delete_asked_at`,
-  );
-}
-
-/** A client's page: details, the last five visits, how many calls, the orders booked. */
-export async function clientPage(db: Database, me: Me, id: number): Promise<ClientPage> {
-  const access = await mustUse(db, me);
-  const [found] = await rows<{ row: ClientPage["client"] }>(
-    db,
-    sql`select (${clientJson})::jsonb || jsonb_build_object('dispensing', c.dispensing, 'qualification', c.qualification,
-        'registrationNo', c.registration_no, 'gender', c.gender, 'hospitalType', c.hospital_type, 'hospitalClass', c.hospital_class,
-        'firmType', c.firm_type, 'contactPerson', c.contact_person, 'phone', c.phone, 'email', c.email, 'address', c.address,
-        'worksAt', c.works_at, 'firmId', c.firm_id, 'visitsAMonth', c.visits_a_month, 'note', c.note, 'pin', c.pin, 'active', c.active,
-        'addedBy', (select name from person where id = c.added_by), 'addedAt', ${iso("c.added_at")},
-        'worksAtName', (select name from mr_client where id = c.works_at), 'firmName', (select name from mr_client where id = c.firm_id)) as row
-      from mr_client c where c.id = ${id}`,
-  );
-  if (!found) throw new Refusal(404, "not_found", "No such client.");
-  const client = found.row;
-  const [history, orders, calls, lead] = await Promise.all([
-    lastVisits(db, id),
-    orderRows(db, sql`o.client_id = ${id}`, 10),
-    rows<{ n: number }>(db, sql`select count(*)::int as n from mr_visit where client_id = ${id} and status = 'done'`),
-    isLeadNow(db, me),
-  ]);
-  const member = access === "mr" || access === "lead";
-  const own = client.assignedTo?.id === me.id;
-  return {
-    client,
-    history,
-    orders,
-    calls: calls[0]?.n ?? 0,
-    can: {
-      edit: client.active && (lead || (member && own)),
-      assign: lead && client.active,
-      deactivate: lead && client.active,
-      visit: member && client.active && !me.viewedBy,
-      order: member && client.active && !me.viewedBy,
-    },
-  };
-}
-
-/** The whole visit history of a client (SEFMED's Call history), newest first. */
-export async function callHistory(db: Database, me: Me, id: number): Promise<ClientPage["history"]> {
-  await mustUse(db, me);
-  return rows<ClientPage["history"][number]>(
-    db,
-    sql`select v.id::int as id, to_char(v.day, 'YYYY-MM-DD') as day, p.name as person, v.status,
-        ${iso("v.checked_in_at")} as "checkedInAt", ${iso("v.done_at")} as "doneAt", to_json(v.objectives) as objectives,
-        v.objective_note as "objectiveNote", v.meeting, v.outcome, v.feedback, v.notes
-      from mr_visit v join person p on p.id = v.person_id where v.client_id = ${id}
-      order by v.day desc, v.id desc limit 200`,
-  );
-}
-
-/** Clients to pick for a day's visits: those in the picked cities (all when none), by kind. */
+/** Customers to pick for a day's visits: those the person looks after in the picked cities. */
 export async function clientsIn(
   db: Database,
   me: Me,
   asked: { kind?: string | null; cities?: string | null; q?: string | null },
 ): Promise<ClientList["rows"]> {
   await mustUse(db, me);
-  void accessOf;
   const kind = (CLIENT_KINDS as string[]).includes(asked.kind ?? "") ? (asked.kind as ClientKind) : "doctor";
   const cities = (asked.cities ?? "").split("|").map((one) => one.trim().toLowerCase()).filter(Boolean);
   const find = clean(asked.q)?.toLowerCase();
   const today = todayManila();
   const found = await rows<{ row: ClientList["rows"][number] }>(
     db,
-    sql`select (${clientJson})::jsonb || jsonb_build_object(
-        'lastVisit', (select to_char(max(v.day), 'YYYY-MM-DD') from mr_visit v where v.client_id = c.id and v.status = 'done'),
-        'nextVisit', (select to_char(min(v.day), 'YYYY-MM-DD') from mr_visit v where v.client_id = c.id and v.status = 'planned' and v.day >= ${today}::date),
+    sql`${team(me)} select (${clientJson})::jsonb || jsonb_build_object(
+        'lastVisit', (select to_char(max(v.day), 'YYYY-MM-DD') from visit v where v.customer_id = c.id and v.status = 'done'),
+        'nextVisit', (select to_char(min(v.day), 'YYYY-MM-DD') from visit v where v.customer_id = c.id and v.status = 'planned' and v.day >= ${today}::date),
         'visitsThisMonth', 0) as row
-      from mr_client c where c.active and c.kind = ${kind}
+      ${clientFrom} where c.active and c.kind in ${kindsOf(kind)} and not ${offList} and ${seen(me)}
         ${cities.length ? sql`and lower(coalesce(c.city, '')) in (${sql.join(cities.map((one) => sql`${one}`), sql`, `)})` : sql``}
-        ${find ? sql`and (lower(c.name) like ${`%${find}%`} or lower(c.code) like ${`%${find}%`})` : sql``}
-      order by c.assigned_to = ${me.id} desc, c.name limit 300`,
+        ${find ? sql`and (lower(c.name) like ${`%${find}%`} or lower(coalesce(c.code, '')) like ${`%${find}%`})` : sql``}
+      order by ${lookedAfterBy(sql`${me.id}`, today)} desc, c.name limit 300`,
   );
   return found.map((one) => one.row);
+}
+
+/** The cities of the customers a person may visit (to pick the day's). */
+export async function fieldCities(db: Runner, me: Me): Promise<string[]> {
+  const found = await rows<{ city: string }>(
+    db,
+    sql`${team(me)} select distinct c.city from customer c
+      where c.active and c.kind in ('doctor', 'hospital', 'drugstore', 'distributor') and ${seen(me)} and c.city is not null and c.city <> ''
+      order by c.city limit 500`,
+  );
+  return found.map((one) => one.city);
+}
+
+async function seenCustomer(db: Runner, me: Me, id: number) {
+  const [found] = await rows<{ id: number; kind: string; mine: boolean }>(
+    db,
+    sql`${team(me)} select c.id::int as id, c.kind, ${lookedAfterBy(sql`${me.id}`, todayManila())} as mine from customer c
+      where c.id = ${id} and c.kind in ('doctor', 'hospital', 'drugstore', 'distributor') and ${FIELD_READ_ROLES.includes(me.role) ? sql`true` : seen(me)}`,
+  );
+  if (!found) throw new Refusal(404, "not_found", "No such doctor, hospital or firm of yours.");
+  return found;
+}
+
+/** A customer's field page. */
+export async function clientPage(db: Database, me: Me, id: number): Promise<ClientPage> {
+  const access = await mustUse(db, me);
+  const known = await seenCustomer(db, me, id);
+  const [found] = await rows<{ row: ClientPage["client"] }>(
+    db,
+    sql`select (${clientJson})::jsonb || jsonb_build_object('dispensing', f.dispensing, 'qualification', f.qualification,
+        'gender', f.gender, 'hospitalType', f.hospital_type, 'hospitalClass', f.hospital_class, 'firmType', f.firm_type,
+        'contactPerson', f.contact_person, 'firmId', f.firm_id, 'visitsAMonth', f.visits_a_month,
+        'address', c.address, 'phone', c.phone, 'email', c.email, 'licenceNo', c.licence_no, 'pin', c.pin, 'active', c.active,
+        'worksAtName', (select name from customer where id = c.works_at), 'firmName', (select name from customer where id = f.firm_id),
+        'offList', coalesce(f.off_list, false),
+        'offAsked', case when f.off_asked_at is null then null else json_build_object('by', (select name from person where id = f.off_asked_by),
+          'at', ${iso("f.off_asked_at")}, 'why', f.off_why) end) as row
+      ${clientFrom} where c.id = ${id}`,
+  );
+  if (!found) throw new Refusal(404, "not_found", "No such customer.");
+  const [history, orders, owed, calls] = await Promise.all([
+    lastVisits(db, id),
+    customerOrders(db, id, 10),
+    moneyOf(db, [id]),
+    rows<{ n: number }>(db, sql`select count(*)::int as n from visit where customer_id = ${id} and status = 'done'`),
+  ]);
+  const member = (access === "mr" || access === "lead") && !me.viewedBy;
+  const lead = LEAD_ROLES.includes(me.role) || me.role === "admin" || me.role === "management";
+  const money = owed.get(id);
+  const client = found.row;
+  return {
+    client,
+    history,
+    orders,
+    owed: { total: money?.owed ?? 0, overdue: money?.overdue ?? 0 },
+    calls: calls[0]?.n ?? 0,
+    can: {
+      profile: member || (lead && !me.viewedBy),
+      category: lead && !me.viewedBy,
+      visit: member && client.active && !client.offList,
+      order: member && client.active,
+      askOff: member && known.mine && !client.offList && !client.offAsked,
+      answerOff: lead && !me.viewedBy && Boolean(client.offAsked),
+    },
+  };
+}
+
+/** Saves a customer's field profile; the category (the visit class A–D) by a team lead (or
+ *  Management, the Admin), as the field has always set it. */
+export async function saveProfile(db: Database, me: Me, id: number, input: Partial<FieldProfile>): Promise<void> {
+  if (me.viewedBy) throw new Refusal(403, "not_allowed", "Looking at someone's screens changes nothing.");
+  await mustUse(db, me);
+  if (me.role === "ceo") throw new Refusal(403, "not_allowed", "The CEO reads the field; the team edits it.");
+  const known = await seenCustomer(db, me, id);
+  const days = [...new Set((input.prefDays ?? []).map((one) => String(one).toLowerCase()))];
+  if (days.some((one) => !(DAYS as readonly string[]).includes(one))) throw new Refusal(400, "invalid", "Pick the best days.", "prefDays");
+  if (input.firmType && !FIRM_TYPES.includes(input.firmType)) throw new Refusal(400, "invalid", "Pick the firm's type.", "firmType");
+  if (input.hospitalType && !["government", "private"].includes(input.hospitalType))
+    throw new Refusal(400, "invalid", "Government or private?", "hospitalType");
+  if (input.hospitalClass && !["general", "specialty"].includes(input.hospitalClass))
+    throw new Refusal(400, "invalid", "General or specialty?", "hospitalClass");
+  if (input.gender && !["male", "female", "other"].includes(input.gender)) throw new Refusal(400, "invalid", "Pick the gender.", "gender");
+  const visits = input.visitsAMonth ?? null;
+  if (visits !== null && (!Number.isInteger(visits) || visits < 0 || visits > 31))
+    throw new Refusal(400, "invalid", "Visits a month: 0 to 31.", "visitsAMonth");
+  let firmId: number | null = null;
+  if (known.kind === "doctor" && input.firmId) {
+    const [firm] = await rows<{ id: number }>(
+      db,
+      sql`select id::int as id from customer where id = ${input.firmId} and kind in ('drugstore', 'distributor') and active`,
+    );
+    if (!firm) throw new Refusal(400, "invalid", "Pick the firm from the list.", "firmId");
+    firmId = firm.id;
+  }
+  const lead = LEAD_ROLES.includes(me.role) || me.role === "admin" || me.role === "management";
+  if (input.category !== undefined && input.category !== null) {
+    const category = String(input.category).toUpperCase();
+    if (!(CATEGORIES as readonly string[]).includes(category) || category === "E")
+      throw new Refusal(400, "invalid", "Pick the category A to D.", "category");
+    if (!lead) throw new Refusal(403, "not_allowed", "A customer's category is set by the team lead.", "category");
+    await db.execute(sql`update customer set visit_class = ${category} where id = ${id}`);
+  }
+  const doctor = known.kind === "doctor";
+  const hospital = known.kind === "hospital";
+  const firm = known.kind === "drugstore" || known.kind === "distributor";
+  await db.execute(
+    sql`insert into customer_field (customer_id, dispensing, qualification, gender, hospital_type, hospital_class, firm_type,
+        contact_person, zone, pref_days, pref_time, firm_id, visits_a_month, changed_by, changed_at)
+      values (${id}, ${doctor ? (input.dispensing ?? null) : null}, ${doctor ? words(input.qualification, 120) : null},
+        ${doctor ? (input.gender ?? null) : null}, ${hospital ? (input.hospitalType ?? null) : null},
+        ${hospital ? (input.hospitalClass ?? null) : null}, ${firm ? (input.firmType ?? null) : null},
+        ${words(input.contactPerson, 120)}, ${words(input.zone, 80)}, ${textArray(days)}, ${words(input.prefTime, 60)},
+        ${firmId}, ${visits}, ${me.id}, now())
+      on conflict (customer_id) do update set dispensing = excluded.dispensing, qualification = excluded.qualification,
+        gender = excluded.gender, hospital_type = excluded.hospital_type, hospital_class = excluded.hospital_class,
+        firm_type = excluded.firm_type, contact_person = excluded.contact_person, zone = excluded.zone,
+        pref_days = excluded.pref_days, pref_time = excluded.pref_time, firm_id = excluded.firm_id,
+        visits_a_month = excluded.visits_a_month, changed_by = excluded.changed_by, changed_at = now()`,
+  );
+}
+
+/** An MR asks their team lead to take a customer off the field's lists, with why. */
+export async function askOffList(db: Database, me: Me, id: number, why: string): Promise<void> {
+  await mustWork(db, me);
+  const reason = words(why, 300);
+  if (!reason) throw new Refusal(400, "invalid", "Say why it should come off the list.", "why");
+  const known = await seenCustomer(db, me, id);
+  if (!known.mine) throw new Refusal(403, "not_allowed", "Only a customer you look after.");
+  await db.transaction(async (tx) => {
+    const changed = await rows<{ id: number }>(
+      tx,
+      sql`insert into customer_field (customer_id, off_asked_by, off_asked_at, off_why, changed_by)
+        values (${id}, ${me.id}, now(), ${reason}, ${me.id})
+        on conflict (customer_id) do update set off_asked_by = excluded.off_asked_by, off_asked_at = now(), off_why = excluded.off_why
+          where customer_field.off_asked_at is null and not customer_field.off_list
+        returning customer_id::int as id`,
+    );
+    if (!changed.length) throw new Refusal(409, "invalid", "Asked already, or off the list.");
+    const lead = await leadOf(tx, me.id);
+    if (lead)
+      await notify(tx, {
+        to: [lead],
+        kind: "field_off_list",
+        title: "A customer to take off the field's list",
+        body: reason,
+        link: `/field/clients/${id}`,
+        key: `field_off_list:${id}:${Date.now()}`,
+      });
+  });
+}
+
+/** The asking MR's team lead answers: off the list (kept, with its visits), or kept on it. */
+export async function answerOffList(db: Database, me: Me, id: number, remove: boolean): Promise<void> {
+  const [asked] = await rows<{ by: number }>(
+    db,
+    sql`select off_asked_by::int as by from customer_field where customer_id = ${id} and off_asked_at is not null`,
+  );
+  if (!asked) throw new Refusal(409, "invalid", "That request isn't waiting.");
+  if (!(await mayDecideFor(db, me, asked.by))) throw new Refusal(403, "not_allowed", "The MR's team lead answers it.");
+  await db.execute(
+    sql`update customer_field set off_list = ${remove}, off_asked_by = null, off_asked_at = null, off_why = null,
+        changed_by = ${me.id}, changed_at = now() where customer_id = ${id}`,
+  );
+}
+
+/** Off-list requests waiting for this lead (their team's). */
+export async function offRequests(db: Database, me: Me) {
+  await mustUse(db, me);
+  return rows<{ id: number; code: string | null; name: string; kind: string; city: string | null; why: string; by: string; byId: number; at: string }>(
+    db,
+    sql`${team(me)} select c.id::int as id, c.code, c.name, c.kind, c.city, f.off_why as why, p.name as by, p.id::int as "byId",
+        ${iso("f.off_asked_at")} as at
+      from customer_field f join customer c on c.id = f.customer_id join person p on p.id = f.off_asked_by
+      where f.off_asked_at is not null and not f.off_list and p.id <> ${me.id}
+        and ${FIELD_READ_ROLES.includes(me.role) ? sql`true` : sql`p.id in (select id from team)`}
+      order by f.off_asked_at`,
+  );
+}
+
+/** The whole visit history of a customer (SEFMED's Call history), newest first. */
+export async function callHistory(db: Database, me: Me, id: number): Promise<ClientPage["history"]> {
+  await mustUse(db, me);
+  await seenCustomer(db, me, id);
+  return rows<ClientPage["history"][number]>(
+    db,
+    sql`select v.id::int as id, to_char(v.day, 'YYYY-MM-DD') as day, p.name as person, v.status,
+        ${iso("v.checked_in_at")} as "checkedInAt", ${iso("v.done_at")} as "doneAt",
+        case when cardinality(v.objectives) > 0 then to_json(v.objectives) when v.objective is not null then json_build_array(v.objective) else '[]'::json end as objectives,
+        v.objective_note as "objectiveNote", v.meeting, v.outcome, v.feedback, v.notes
+      from visit v join person p on p.id = v.person_id where v.customer_id = ${id}
+      order by v.day desc, v.id desc limit 200`,
+  );
 }

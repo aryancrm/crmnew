@@ -1,6 +1,7 @@
-// The MR App's Home (SEFMED's dashboard, docs/PLAN.md 22): for an MR the big circle (Start working
-// → "Since 8:10 AM · Head quarter · Angeles City · Stop working"), today's numbers, the next visit
-// and the tiles; for the team lead (and the CEO and the Admin, who look) the team's dashboard.
+// My day in the field (SEFMED's Home, docs/PLAN.md 22): the big circle (Start working → "Since 8:10
+// AM · Head quarter · Angeles City · Stop working"; starting also starts the CRM's attendance day),
+// today's numbers, the next visit and the tiles. For a MedRep, and a team lead or head on their own
+// calls; the CEO, Management and the Admin, who only look, go to the team's page.
 
 import type { MrHome, WorkType } from "@2mg/api/mr";
 import { WORK_TYPES, WORK_WORDS } from "@2mg/api/mr";
@@ -22,32 +23,29 @@ import {
   Users,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { Button, CARD, Dialog, PageState, Problem, peso, useAction } from "../ui";
 import { Choices, clockOf, FIELD, Label, StatePill, useMrMe, whereAmI } from "./parts";
-import { TeamHome } from "./team";
 
 export function MrHomePage() {
   const mr = useMrMe();
-  if (!mr.data) return <PageState query={mr} what="the MR App" />;
-  if (!mr.data.access) return <NotInApp />;
-  if (mr.data.access === "mr") return <MrDay />;
-  return <TeamHome />;
+  if (!mr.data) return <PageState query={mr} what="your day" />;
+  if (!mr.data.access) return <NotInField />;
+  if (mr.data.access === "viewer") return <Navigate to="/field/team" replace />;
+  return <MrDay />;
 }
 
-export function NotInApp() {
+function NotInField() {
   return (
     <div className={`${CARD} mx-auto mt-10 max-w-md px-6 py-10 text-center`}>
-      <h1 className="text-lg font-bold text-slate-900">The MR App</h1>
-      <p className="mt-2 text-sm text-slate-600">
-        This app is for the MRs in it and their team lead. Ask the Admin to add you.
-      </p>
+      <h1 className="text-lg font-bold text-slate-900">The field</h1>
+      <p className="mt-2 text-sm text-slate-600">The field's day is the MedReps' and their team leads'.</p>
     </div>
   );
 }
 
-/** The MR's own day (the lead's too: /mr/my-day). */
+/** One's own field day (a MedRep's; a team lead's or head's own calls too). */
 export function MrDay() {
   const query = useQuery({ queryKey: ["mr", "home"], queryFn: () => api<MrHome>("/api/mr/home") });
   const mr = useMrMe();
@@ -62,7 +60,7 @@ export function MrDay() {
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-sky-200 to-sky-50 px-4 pt-5 pb-8 text-center">
         <div className="flex items-center justify-between text-left">
           <div>
-            <div className="text-lg font-bold text-sky-900">MR App</div>
+            <div className="text-lg font-bold text-sky-900">My day</div>
             <div className="text-xs text-sky-800/80">
               {data.person.name}
               {mr.data?.lead && mr.data.lead.id !== data.person.id ? ` · Team lead ${mr.data.lead.name}` : ""}
@@ -80,12 +78,12 @@ export function MrDay() {
           <Figure label="Planned" value={c.planned} />
           <Figure label="Closed" value={c.done} tone="text-emerald-700" />
           <Figure label="Left" value={left} tone={left ? "text-amber-700" : undefined} />
-          <Figure label="Booked" value={c.bookedAmount ? peso(c.bookedAmount) : "—"} />
+          <Figure label="Ordered" value={c.bookedAmount ? peso(c.bookedAmount) : "—"} />
         </div>
       )}
 
       {data.next && (
-        <Link to={`/mr/visits/${data.next.id}`} className={`${CARD} flex items-center justify-between gap-3 p-4 hover:border-sky-300`}>
+        <Link to={`/visits/${data.next.id}`} className={`${CARD} flex items-center justify-between gap-3 p-4 hover:border-sky-300`}>
           <div className="min-w-0">
             <div className="text-xs font-semibold text-slate-500 uppercase">Next visit</div>
             <div className="truncate font-semibold text-slate-900">{data.next.client.name}</div>
@@ -98,18 +96,18 @@ export function MrDay() {
       )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Tile to="/mr/visits" icon={MapPin} label="Visits" tone="bg-indigo-50 text-indigo-700" sub={`${c.planned} today`} />
-        <Tile to="/mr/clients?kind=doctor" icon={Stethoscope} label="KOLs" tone="bg-pink-50 text-pink-700" sub={`${data.tiles.doctors} doctors`} />
-        <Tile to="/mr/clients?kind=firm" icon={Store} label="KBLs" tone="bg-emerald-50 text-emerald-700" sub={`${data.tiles.firms} firms`} />
-        <Tile to="/mr/clients?kind=hospital" icon={Building2} label="Hospitals" tone="bg-slate-100 text-slate-700" sub={`${data.tiles.hospitals}`} />
-        <Tile to="/mr/plan" icon={CalendarRange} label="Tour plan" tone="bg-cyan-50 text-cyan-700" />
-        <Tile to="/mr/orders" icon={ShoppingCart} label="Order details" tone="bg-orange-50 text-orange-700" />
-        <Tile to="/mr/expenses" icon={Receipt} label="Expenses" tone="bg-violet-50 text-violet-700" sub={data.tiles.claimed ? `${peso(data.tiles.claimed)} this month` : undefined} />
+        <Tile to="/visits" icon={MapPin} label="Visits" tone="bg-indigo-50 text-indigo-700" sub={`${c.planned} today`} />
+        <Tile to="/field/clients?kind=doctor" icon={Stethoscope} label="KOLs" tone="bg-pink-50 text-pink-700" sub={`${data.tiles.doctors} doctor${data.tiles.doctors === 1 ? "" : "s"}`} />
+        <Tile to="/field/clients?kind=firm" icon={Store} label="KBLs" tone="bg-emerald-50 text-emerald-700" sub={`${data.tiles.firms} firm${data.tiles.firms === 1 ? "" : "s"}`} />
+        <Tile to="/field/clients?kind=hospital" icon={Building2} label="Hospitals" tone="bg-slate-100 text-slate-700" sub={`${data.tiles.hospitals}`} />
+        <Tile to="/field/plan" icon={CalendarRange} label="Tour plan" tone="bg-cyan-50 text-cyan-700" />
+        <Tile to="/orders" icon={ShoppingCart} label="My orders" tone="bg-orange-50 text-orange-700" />
+        <Tile to="/visits/expenses" icon={Receipt} label="Expenses" tone="bg-violet-50 text-violet-700" sub={data.tiles.claimed ? `${peso(data.tiles.claimed)} this month` : undefined} />
         <Tile to="/me/leave" icon={CalendarDays} label="Leaves" tone="bg-fuchsia-50 text-fuchsia-700" />
-        <Tile to="/mr/holidays" icon={PartyPopper} label="Holidays" tone="bg-teal-50 text-teal-700" />
-        <Tile to="/mr/follow-ups" icon={ListChecks} label="Follow-ups" tone="bg-amber-50 text-amber-700" sub={data.tiles.followUpsDue ? `${data.tiles.followUpsDue} due` : undefined} />
-        <Tile to="/mr/day-report" icon={ClipboardList} label="Day report" tone="bg-sky-50 text-sky-700" />
-        <Tile to="/mr/reports" icon={BarChart3} label="Reports" tone="bg-lime-50 text-lime-700" />
+        <Tile to="/field/holidays" icon={PartyPopper} label="Holidays" tone="bg-teal-50 text-teal-700" />
+        <Tile to="/field/follow-ups" icon={ListChecks} label="Follow-ups" tone="bg-amber-50 text-amber-700" sub={data.tiles.followUpsDue ? `${data.tiles.followUpsDue} due` : undefined} />
+        <Tile to="/field/day-report" icon={ClipboardList} label="Day report" tone="bg-sky-50 text-sky-700" />
+        <Tile to="/field/reports" icon={BarChart3} label="Reports" tone="bg-lime-50 text-lime-700" />
       </div>
 
       {placing && (
@@ -156,7 +154,7 @@ function Circle({ data, onStart, onEdit }: { data: MrHome; onStart: () => void; 
     );
   if (day.endedAt)
     return (
-      <Link to="/mr/day-report" className={`${ring} text-slate-700`}>
+      <Link to="/field/day-report" className={`${ring} text-slate-700`}>
         <span className="flex flex-col items-center gap-1 px-4">
           <span className="text-sm font-semibold">Day closed {clockOf(day.endedAt)}</span>
           <span className="text-xs text-slate-500">
@@ -226,6 +224,8 @@ function PlaceDialog({ home, mode, onClose }: { home: MrHome; mode: "start" | "e
         },
       });
       await queries.invalidateQueries({ queryKey: ["mr"] });
+      // Starting the field day starts the CRM's attendance day too (the Start button up top).
+      await queries.invalidateQueries({ queryKey: ["my-day"] });
       onClose();
     });
   return (
@@ -277,7 +277,7 @@ function PlaceDialog({ home, mode, onClose }: { home: MrHome; mode: "start" | "e
             today's work.
             <div className="mt-3 flex justify-end gap-2">
               <Button small onClick={() => setStopping(false)}>Cancel</Button>
-              <Button small variant="primary" onClick={() => { onClose(); navigate("/mr/day-report"); }}>OK</Button>
+              <Button small variant="primary" onClick={() => { onClose(); navigate("/field/day-report"); }}>OK</Button>
             </div>
           </div>
         ) : (

@@ -1,19 +1,19 @@
-// The MR App's addresses (/api/mr/*, docs/PLAN.md 22): the MR's day, visits and calls, clients,
-// orders booked, follow-ups, the tour plan, expenses; the team lead's team, queue, reports and
-// members. Every one checks who is asking (access.ts); a hidden button is never the only guard.
+// The field's addresses (/api/mr/*, docs/PLAN.md 22: SEFMED's work in the MedRep's pages): the MR's
+// day, visits and calls, customers' field pages and profiles, follow-ups, the tour plan, expenses;
+// the lead's team, queue, approvals and reports. Every one checks who is asking (access.ts) from
+// the company's own hierarchy; a hidden button is never the only guard.
 
 import type { Context, Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
 import type { IncomingFile } from "../files/store";
 import { type Env, idParam, Refusal, readBody } from "../http";
-import { addClient, answerDelete, askDelete, callHistory, clientList, clientPage, clientsIn, deactivateClient, deleteRequests, editClient } from "./clients";
+import { answerOffList, askOffList, callHistory, clientList, clientPage, clientsIn, fieldCities, offRequests, saveProfile } from "./clients";
 import { changePlace, dayReport, mrHome, seeDayReport, sendDayReport, startWorking, takeBreak } from "./day";
 import { addExpense, claimExpense, decideExpense, EXPENSE_FILE_MAX, expenseFile, expenseMonth, setRates } from "./expenses";
 import { addFollowUp, closeFollowUp, followUpList } from "./follow-ups";
-import { bookOrder, cancelOrder, orderFile, orderForm, orderList } from "./orders";
-import { decideDeviation, decidePlan, deviationList, planMonth, sendPlan, setPlanDay } from "./plan";
-import { addMember, attendanceMonth, callReport, holidayList, leadQueue, mapToday, memberPage, mrMe, removeMember, teamToday } from "./team";
+import { decideDeviation, decidePlan, deviationList, planMonth, sendPlan, setPlanDay, teamPlans } from "./plan";
+import { attendanceMonth, callReport, holidayList, leadQueue, mapToday, mrMe, teamPeople, teamToday } from "./team";
 import {
   addVisitFile,
   addVisits,
@@ -24,21 +24,13 @@ import {
   pinFromVisit,
   readVisitFile,
   reopenCall,
+  saveDraft,
   setVisitPlan,
   skipVisit,
   visitList,
   visitPage,
 } from "./visits";
-import {
-  CLIENT_KINDS,
-  FOLLOW_UP_KINDS,
-  MEETINGS,
-  MISS_REASONS,
-  NATURES,
-  OUTCOMES,
-  PRODUCTIVES,
-  WORK_TYPES,
-} from "./words";
+import { FOLLOW_UP_KINDS, MEETINGS, MISS_REASONS, NATURES, OUTCOMES, PRODUCTIVES, WORK_TYPES } from "./words";
 
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick the day.");
 const month = z.string().regex(/^\d{4}-\d{2}$/, "Pick the month.");
@@ -71,37 +63,25 @@ const fileReply = (c: Context<Env>, file: { name: string; mime: string; bytes: U
     "cache-control": "private, no-cache",
   });
 
-const clientInput = z.object({
-  kind: z.enum(CLIENT_KINDS as [string, ...string[]], { message: "Pick doctor, hospital or firm." }),
-  name: z.string().max(160),
-  specialty: text(120),
+const profileInput = z.object({
   category: text(1),
   dispensing: z.boolean().nullish(),
   qualification: text(120),
-  registrationNo: text(60),
   gender: z.enum(["male", "female", "other"]).nullish(),
   hospitalType: z.enum(["government", "private"]).nullish(),
   hospitalClass: z.enum(["general", "specialty"]).nullish(),
   firmType: z.enum(["super_stockist", "distributor", "sub_distributor", "stockist", "retailer"]).nullish(),
   contactPerson: text(120),
-  phone: text(40),
-  email: text(120),
-  address: text(300),
-  city: text(80),
   zone: text(80),
   prefDays: z.array(z.string().max(3)).max(7).nullish(),
   prefTime: text(60),
-  worksAt: z.number().int().positive().nullish(),
   firmId: z.number().int().positive().nullish(),
-  assignedTo: z.number().int().positive().nullish(),
   visitsAMonth: z.number().int().min(0).max(31).nullish(),
-  note: text(500),
 });
 
 const product = z.object({
   medicineId: z.number().int().positive(),
   promoted: z.boolean(),
-  samples: z.number().int().min(0).max(10_000).nullish(),
   reaction: z.enum(["will_prescribe", "prescribes", "needs_info", "not_interested"]).nullish(),
   prescribing: z.boolean().nullish(),
   competitor: text(120),
@@ -114,7 +94,7 @@ const product = z.object({
 export function mrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandler<Env>) {
   app.use("/api/mr/*", signedIn);
 
-  // Who the app is for, the MR's Home, the day.
+  // How the field stands for this person, the MR's day.
   app.get("/api/mr/me", async (c) => c.json(await mrMe(db, c.get("me"))));
   app.get("/api/mr/home", async (c) => c.json(await mrHome(db, c.get("me"))));
   const placeInput = z.object({
@@ -183,7 +163,12 @@ export function mrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   app.post("/api/mr/visits", async (c) => {
     const input = await readBody(
       c,
-      z.object({ day, clientIds: z.array(z.number().int().positive()).min(1, "Pick whom to visit.").max(40), objectives: z.array(z.string().max(40)).max(6).nullish(), why: text(300) }),
+      z.object({
+        day,
+        customerIds: z.array(z.number().int().positive()).min(1, "Pick whom to visit.").max(40),
+        objectives: z.array(z.string().max(40)).max(6).nullish(),
+        why: text(300),
+      }),
     );
     return c.json(await addVisits(db, c.get("me"), input));
   });
@@ -191,9 +176,19 @@ export function mrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   app.post("/api/mr/visits/:id/plan", async (c) => {
     const input = await readBody(
       c,
-      z.object({ objectives: z.array(z.string().max(40)).max(6), objectiveNote: text(300), priority: z.number().int().min(1).max(3).nullish(), workingWith: ids }),
+      z.object({
+        objectives: z.array(z.string().max(40)).max(6),
+        objectiveNote: text(300),
+        priority: z.number().int().min(1).max(3).nullish(),
+        workingWith: ids,
+      }),
     );
     await setVisitPlan(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+  app.post("/api/mr/visits/:id/draft", async (c) => {
+    const input = await readBody(c, z.object({ draft: z.record(z.string(), z.unknown()) }));
+    await saveDraft(db, c.get("me"), idParam(c), input.draft);
     return c.json({ ok: true });
   });
   app.post("/api/mr/visits/:id/check-in", async (c) => {
@@ -272,80 +267,32 @@ export function mrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
     fileReply(c, await readVisitFile(db, c.get("me"), idParam(c), Number(c.req.param("file")) || 0)),
   );
 
-  // Clients (KOLs, hospitals, KBLs).
+  // Customers' field pages (KOLs, hospitals, KBLs).
   app.get("/api/mr/clients", async (c) =>
-    c.json(
-      await clientList(db, c.get("me"), {
-        kind: c.req.query("kind"),
-        scope: c.req.query("scope"),
-        q: c.req.query("q"),
-        person: c.req.query("person"),
-      }),
-    ),
+    c.json(await clientList(db, c.get("me"), { kind: c.req.query("kind"), scope: c.req.query("scope"), q: c.req.query("q") })),
   );
   app.get("/api/mr/clients/pick", async (c) =>
     c.json(await clientsIn(db, c.get("me"), { kind: c.req.query("kind"), cities: c.req.query("cities"), q: c.req.query("q") })),
   );
-  app.post("/api/mr/clients", async (c) => {
-    const input = await readBody(c, clientInput);
-    return c.json(await addClient(db, c.get("me"), input as Parameters<typeof addClient>[2]));
-  });
+  app.get("/api/mr/cities", async (c) => c.json({ cities: await fieldCities(db, c.get("me")) }));
+  app.get("/api/mr/clients/off-requests", async (c) => c.json({ rows: await offRequests(db, c.get("me")) }));
   app.get("/api/mr/clients/:id", async (c) => c.json(await clientPage(db, c.get("me"), idParam(c))));
   app.get("/api/mr/clients/:id/calls", async (c) => c.json({ rows: await callHistory(db, c.get("me"), idParam(c)) }));
-  app.post("/api/mr/clients/:id", async (c) => {
-    const input = await readBody(c, clientInput);
-    await editClient(db, c.get("me"), idParam(c), input as Parameters<typeof editClient>[3]);
+  app.post("/api/mr/clients/:id/profile", async (c) => {
+    const input = await readBody(c, profileInput);
+    await saveProfile(db, c.get("me"), idParam(c), input as Parameters<typeof saveProfile>[3]);
     return c.json({ ok: true });
   });
-  app.post("/api/mr/clients/:id/off", async (c) => {
-    await deactivateClient(db, c.get("me"), idParam(c));
-    return c.json({ ok: true });
-  });
-  app.post("/api/mr/clients/:id/ask-delete", async (c) => {
+  app.post("/api/mr/clients/:id/ask-off", async (c) => {
     const input = await readBody(c, z.object({ why: z.string().max(300) }));
-    await askDelete(db, c.get("me"), idParam(c), input.why);
+    await askOffList(db, c.get("me"), idParam(c), input.why);
     return c.json({ ok: true });
   });
-  app.post("/api/mr/clients/:id/answer-delete", async (c) => {
+  app.post("/api/mr/clients/:id/answer-off", async (c) => {
     const input = await readBody(c, z.object({ remove: z.boolean() }));
-    await answerDelete(db, c.get("me"), idParam(c), input.remove);
+    await answerOffList(db, c.get("me"), idParam(c), input.remove);
     return c.json({ ok: true });
   });
-  app.get("/api/mr/delete-requests", async (c) => c.json({ rows: await deleteRequests(db, c.get("me")) }));
-
-  // Orders booked.
-  app.get("/api/mr/orders", async (c) =>
-    c.json(await orderList(db, c.get("me"), { month: c.req.query("month"), person: c.req.query("person") })),
-  );
-  app.get("/api/mr/orders/form", async (c) => c.json(await orderForm(db, c.get("me"), Number(c.req.query("client")) || 0)));
-  app.post("/api/mr/orders", async (c) => {
-    const { fields, file } = await formWithFile(c, 10 * 1024 * 1024);
-    let lines: { medicineId: number; packs: number }[] = [];
-    try {
-      lines = JSON.parse(fields.lines ?? "[]");
-    } catch {
-      throw new Refusal(400, "invalid", "Type the quantities again.", "lines");
-    }
-    return c.json(
-      await bookOrder(
-        db,
-        c.get("me"),
-        {
-          clientId: Number(fields.clientId) || 0,
-          visitId: Number(fields.visitId) || null,
-          lines: Array.isArray(lines) ? lines.map((one) => ({ medicineId: Number(one.medicineId), packs: Number(one.packs) })) : [],
-          note: fields.note || null,
-        },
-        file,
-      ),
-    );
-  });
-  app.post("/api/mr/orders/:id/cancel", async (c) => {
-    const input = await readBody(c, z.object({ note: z.string().max(300) }));
-    await cancelOrder(db, c.get("me"), idParam(c), input.note);
-    return c.json({ ok: true });
-  });
-  app.get("/api/mr/orders/:id/file", async (c) => fileReply(c, await orderFile(db, c.get("me"), idParam(c))));
 
   // Follow-ups.
   app.get("/api/mr/follow-ups", async (c) =>
@@ -354,7 +301,12 @@ export function mrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   app.post("/api/mr/follow-ups", async (c) => {
     const input = await readBody(
       c,
-      z.object({ clientId: z.number().int().positive(), dueOn: day, kind: z.enum(FOLLOW_UP_KINDS as [string, ...string[]]), what: z.string().max(300) }),
+      z.object({
+        customerId: z.number().int().positive(),
+        dueOn: day,
+        kind: z.enum(FOLLOW_UP_KINDS as [string, ...string[]]),
+        what: z.string().max(300),
+      }),
     );
     return c.json(await addFollowUp(db, c.get("me"), input as Parameters<typeof addFollowUp>[2]));
   });
@@ -368,6 +320,7 @@ export function mrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   app.get("/api/mr/plan", async (c) =>
     c.json(await planMonth(db, c.get("me"), { month: c.req.query("month"), person: Number(c.req.query("person")) || null })),
   );
+  app.get("/api/mr/plan/team", async (c) => c.json(await teamPlans(db, c.get("me"), c.req.query("month"))));
   app.post("/api/mr/plan/day", async (c) => {
     const input = await readBody(
       c,
@@ -395,7 +348,13 @@ export function mrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
 
   // Expenses.
   app.get("/api/mr/expenses", async (c) =>
-    c.json(await expenseMonth(db, c.get("me"), { month: c.req.query("month"), person: c.req.query("person") })),
+    c.json(
+      await expenseMonth(db, c.get("me"), {
+        month: c.req.query("month"),
+        person: c.req.query("person"),
+        waiting: c.req.query("waiting") === "1",
+      }),
+    ),
   );
   app.post("/api/mr/expenses", async (c) => {
     const { fields, file } = await formWithFile(c, EXPENSE_FILE_MAX);
@@ -425,7 +384,11 @@ export function mrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
     await setRates(
       db,
       c.get("me"),
-      input.rates.map((one) => ({ workType: one.workType as Parameters<typeof setRates>[2][number]["workType"], perDiem: Math.round(one.perDiem * 100), ta: Math.round(one.ta * 100) })),
+      input.rates.map((one) => ({
+        workType: one.workType as Parameters<typeof setRates>[2][number]["workType"],
+        perDiem: Math.round(one.perDiem * 100),
+        ta: Math.round(one.ta * 100),
+      })),
     );
     return c.json({ ok: true });
   });
@@ -434,6 +397,7 @@ export function mrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   // The team lead's side.
   app.get("/api/mr/team", async (c) => c.json(await teamToday(db, c.get("me"), { day: c.req.query("day") })));
   app.get("/api/mr/team/queue", async (c) => c.json(await leadQueue(db, c.get("me"))));
+  app.get("/api/mr/team/people", async (c) => c.json({ people: await teamPeople(db, c.get("me")) }));
   app.get("/api/mr/reports/calls", async (c) =>
     c.json(
       await callReport(db, c.get("me"), {
@@ -448,16 +412,6 @@ export function mrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   app.get("/api/mr/reports/attendance", async (c) =>
     c.json(await attendanceMonth(db, c.get("me"), { month: c.req.query("month"), person: c.req.query("person") })),
   );
-  app.get("/api/mr/members", async (c) => c.json(await memberPage(db, c.get("me"))));
   app.get("/api/mr/holidays", async (c) => c.json({ rows: await holidayList(db, c.get("me"), c.req.query("year")) }));
   app.get("/api/mr/map", async (c) => c.json(await mapToday(db, c.get("me"), Number(c.req.query("person")) || null)));
-  app.post("/api/mr/members", async (c) => {
-    const input = await readBody(c, z.object({ personId: z.number().int().positive(), role: z.enum(["mr", "lead"]) }));
-    await addMember(db, c.get("me"), input);
-    return c.json({ ok: true });
-  });
-  app.post("/api/mr/members/:id/remove", async (c) => {
-    await removeMember(db, c.get("me"), idParam(c));
-    return c.json({ ok: true });
-  });
 }

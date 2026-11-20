@@ -2,7 +2,7 @@
 // quarter, Ex-station, Out-station, In transit, Other), the day's cities and who works with them,
 // with the time and the phone's place; a change of place (back to HQ too) and breaks; the day
 // report on Stop working (each planned visit not done gets its reason, the day's numbers, a
-// remark), which ends the day; the team lead marks it seen. Starting also makes the day's
+// remark), which ends the day; the person's team lead marks it seen. Starting also makes the day's
 // allowance lines (per diem, TA) and starts the CRM's attendance day (one record, HR's).
 
 import { sql } from "drizzle-orm";
@@ -14,17 +14,24 @@ import { clean, iso, type Runner } from "../inventory/service";
 import type { Me } from "../types";
 import {
   accessOf,
-  isLeadNow,
-  membersFrom,
-  mustLead,
+  idArray,
+  mayDecideFor,
+  mustDecideFor,
   mustSee,
   mustWork,
   partnersOf,
+  peopleFrom,
   placeOf,
+  seatNow,
   textArray,
-  idArray,
 } from "./access";
+import { lookedAfterBy } from "../field/visits";
 import { cardColumns, cardFrom, type CardSql, toCard } from "./cards";
+
+/** The customers (alias c) of the field's kinds a person looks after, on the field's lists. */
+export const myCustomers = (personId: number, today: string) =>
+  sql`c.active and c.kind in ('doctor', 'hospital', 'drugstore', 'distributor') and ${lookedAfterBy(sql`${personId}`, today)}
+    and not exists (select 1 from customer_field f0 where f0.customer_id = c.id and f0.off_list)`;
 import {
   type DayEvent,
   type DayReport,
@@ -66,18 +73,18 @@ function checkPlace(input: { workType: WorkType; workNote?: string | null; citie
 async function allowanceLines(tx: Runner, personId: number, day: string, workType: WorkType) {
   const heads = await rows<{ code: string; allowance: "per_diem" | "ta" }>(
     tx,
-    sql`select code, allowance from mr_expense_head where active and allowance is not null`,
+    sql`select code, allowance from field_expense_head where active and allowance is not null`,
   );
   for (const head of heads) {
     const rate =
       head.allowance === "per_diem"
-        ? sql`(select per_diem from mr_allowance where work_type = ${workType})`
-        : sql`(select ta from mr_allowance where work_type = ${workType})`;
+        ? sql`(select per_diem from field_allowance where work_type = ${workType})`
+        : sql`(select ta from field_allowance where work_type = ${workType})`;
     await tx.execute(
-      sql`insert into mr_expense (person_id, day, head, auto, generated)
-        values (${personId}, ${day}::date, ${head.code}, true, coalesce(${rate}, 0))
+      sql`insert into field_expense (person_id, seat_id, day, head, auto, generated, amount, status)
+        values (${personId}, ${seatNow(sql`${personId}`)}, ${day}::date, ${head.code}, true, coalesce(${rate}, 0), 0, 'open')
         on conflict (person_id, day, head) where auto do update set generated = excluded.generated
-          where mr_expense.status = 'open'`,
+          where field_expense.status = 'open'`,
     );
   }
 }
@@ -86,7 +93,7 @@ async function allowanceLines(tx: Runner, personId: number, day: string, workTyp
 export async function startWorking(db: Database, me: Me, input: DayInput): Promise<void> {
   await mustWork(db, me);
   const { note, cities } = checkPlace(input);
-  const partners = await membersFrom(db, me, input.workingWith, "workingWith");
+  const partners = await peopleFrom(db, me, input.workingWith, "workingWith");
   const place = placeOf(input.place);
   const accuracy =
     typeof input.accuracy === "number" && Number.isFinite(input.accuracy)
@@ -96,13 +103,14 @@ export async function startWorking(db: Database, me: Me, input: DayInput): Promi
   await db.transaction(async (tx) => {
     const [made] = await rows<{ id: number }>(
       tx,
-      sql`insert into mr_day (person_id, day, work_type, work_note, cities, working_with, start_place, start_accuracy_m)
-        values (${me.id}, ${today}::date, ${input.workType}, ${note}, ${textArray(cities)}, ${idArray(partners)}, ${place}, ${accuracy})
+      sql`insert into field_day (person_id, seat_id, day, work_type, work_note, cities, working_with, start_place, start_accuracy_m)
+        values (${me.id}, ${seatNow(sql`${me.id}`, today)}, ${today}::date, ${input.workType}, ${note}, ${textArray(cities)},
+          ${idArray(partners)}, ${place}, ${accuracy})
         on conflict (person_id, day) do nothing returning id::int as id`,
     );
     if (!made) throw new Refusal(409, "taken", "Your day has started already.");
     await tx.execute(
-      sql`insert into mr_day_event (day_id, kind, place, work_type, cities, note)
+      sql`insert into field_day_event (day_id, kind, place, work_type, cities, note)
         values (${made.id}, 'start', ${place}, ${input.workType}, ${textArray(cities)}, ${note})`,
     );
     await allowanceLines(tx, me.id, today, input.workType);
@@ -115,9 +123,9 @@ async function openDay(tx: Runner, me: Me) {
   const [day] = await rows<{ id: number; endedAt: string | null; onBreak: boolean }>(
     tx,
     sql`select d.id::int as id, ${iso("d.ended_at")} as "endedAt",
-        coalesce((select e.kind = 'break' from mr_day_event e where e.day_id = d.id and e.kind in ('break', 'resume')
+        coalesce((select e.kind = 'break' from field_day_event e where e.day_id = d.id and e.kind in ('break', 'resume')
           order by e.at desc, e.id desc limit 1), false) as "onBreak"
-      from mr_day d where d.person_id = ${me.id} and d.day = ${todayManila()}::date for update`,
+      from field_day d where d.person_id = ${me.id} and d.day = ${todayManila()}::date for update`,
   );
   if (!day) throw new Refusal(409, "not_started", "Start working first.");
   if (day.endedAt) throw new Refusal(409, "closed", "Your day is closed: the day report was sent.");
@@ -136,10 +144,10 @@ export async function changePlace(
   await db.transaction(async (tx) => {
     const day = await openDay(tx, me);
     await tx.execute(
-      sql`update mr_day set work_type = ${input.workType}, work_note = ${note}, cities = ${textArray(cities)} where id = ${day.id}`,
+      sql`update field_day set work_type = ${input.workType}, work_note = ${note}, cities = ${textArray(cities)} where id = ${day.id}`,
     );
     await tx.execute(
-      sql`insert into mr_day_event (day_id, kind, place, work_type, cities, note)
+      sql`insert into field_day_event (day_id, kind, place, work_type, cities, note)
         values (${day.id}, 'place', ${place}, ${input.workType}, ${textArray(cities)}, ${note})`,
     );
     await allowanceLines(tx, me.id, todayManila(), input.workType);
@@ -154,7 +162,7 @@ export async function takeBreak(db: Database, me: Me, input: { on: boolean; plac
     if (input.on === day.onBreak)
       throw new Refusal(409, "invalid", day.onBreak ? "You are on a break already." : "You aren't on a break.");
     await tx.execute(
-      sql`insert into mr_day_event (day_id, kind, place) values (${day.id}, ${input.on ? "break" : "resume"}, ${placeOf(input.place)})`,
+      sql`insert into field_day_event (day_id, kind, place) values (${day.id}, ${input.on ? "break" : "resume"}, ${placeOf(input.place)})`,
     );
   });
 }
@@ -180,13 +188,13 @@ export async function dayState(db: Runner, personId: number, day: string): Promi
         ${iso("d.started_at")} as "startedAt", d.start_place as "startPlace", ${iso("d.ended_at")} as "endedAt",
         d.end_place as "endPlace", d.report_status as "reportStatus", d.report_note as "reportNote",
         ${iso("d.sent_at")} as "sentAt", s.name as "seenBy", ${iso("d.seen_at")} as "seenAt", d.seen_note as "seenNote"
-      from mr_day d left join person s on s.id = d.seen_by where d.person_id = ${personId} and d.day = ${day}::date`,
+      from field_day d left join person s on s.id = d.seen_by where d.person_id = ${personId} and d.day = ${day}::date`,
   );
   if (!found) return null;
   const events = await rows<DayEvent>(
     db,
     sql`select ${iso("e.at")} as at, e.kind, e.work_type as "workType", to_json(e.cities) as cities, e.note, e.place
-      from mr_day_event e where e.day_id = ${found.id} order by e.at, e.id`,
+      from field_day_event e where e.day_id = ${found.id} order by e.at, e.id`,
   );
   let breakMinutes = 0;
   let since: string | null = null;
@@ -213,9 +221,10 @@ export async function dayState(db: Runner, personId: number, day: string): Promi
 /** The MR's Home. */
 export async function mrHome(db: Database, me: Me): Promise<MrHome> {
   const access = await accessOf(db, me);
-  if (!access) throw new Refusal(403, "not_allowed", "The MR App is for its MRs and their team lead.");
+  if (!access) throw new Refusal(403, "not_allowed", "The field's day is the MedReps' and their leads'.");
   const today = todayManila();
   const work = (access === "mr" || access === "lead") && !me.viewedBy;
+  const mine = myCustomers(me.id, today);
   const [state, counted, next, tiles, planned, cities, partners] = await Promise.all([
     dayState(db, me.id, today),
     rows<MrHome["counts"]>(
@@ -227,11 +236,11 @@ export async function mrHome(db: Database, me: Me): Promise<MrHome> {
           count(*) filter (where v.status = 'missed')::int as missed,
           count(*) filter (where v.status = 'done' and v.meeting = 'met')::int as met,
           count(*) filter (where v.status = 'done' and v.productive = 'yes')::int as productive,
-          (select count(*) from mr_order o where o.person_id = ${me.id} and o.status = 'booked'
-            and (o.made_at at time zone 'Asia/Manila')::date = ${today}::date)::int as booked,
-          (select coalesce(sum(o.amount), 0) from mr_order o where o.person_id = ${me.id} and o.status = 'booked'
-            and (o.made_at at time zone 'Asia/Manila')::date = ${today}::date)::float8 as "bookedAmount"
-        from mr_visit v where v.person_id = ${me.id} and v.day = ${today}::date`,
+          (select count(*) from visit_order vo join sales_order o on o.id = vo.order_id join visit w on w.id = vo.visit_id
+            where w.person_id = ${me.id} and w.day = ${today}::date and o.status <> 'cancelled')::int as booked,
+          (select coalesce(sum(o.total), 0) from visit_order vo join sales_order o on o.id = vo.order_id join visit w on w.id = vo.visit_id
+            where w.person_id = ${me.id} and w.day = ${today}::date and o.status <> 'cancelled')::float8 as "bookedAmount"
+        from visit v where v.person_id = ${me.id} and v.day = ${today}::date`,
     ),
     rows<CardSql>(
       db,
@@ -241,21 +250,20 @@ export async function mrHome(db: Database, me: Me): Promise<MrHome> {
     rows<MrHome["tiles"]>(
       db,
       sql`select
-          (select count(*) from mr_client c where c.active and c.kind = 'doctor' and c.assigned_to = ${me.id})::int as doctors,
-          (select count(*) from mr_client c where c.active and c.kind = 'hospital' and c.assigned_to = ${me.id})::int as hospitals,
-          (select count(*) from mr_client c where c.active and c.kind = 'firm' and c.assigned_to = ${me.id})::int as firms,
-          (select count(*) from mr_follow_up f where f.person_id = ${me.id} and f.status = 'open' and f.due_on <= ${today}::date)::int as "followUpsDue",
-          (select coalesce(sum(x.claimed), 0) from mr_expense x where x.person_id = ${me.id}
+          (select count(*) from customer c where ${mine} and c.kind = 'doctor')::int as doctors,
+          (select count(*) from customer c where ${mine} and c.kind = 'hospital')::int as hospitals,
+          (select count(*) from customer c where ${mine} and c.kind in ('drugstore', 'distributor'))::int as firms,
+          (select count(*) from field_follow_up f where f.person_id = ${me.id} and f.status = 'open' and f.due_on <= ${today}::date)::int as "followUpsDue",
+          (select coalesce(sum(x.amount), 0) from field_expense x where x.person_id = ${me.id} and x.status <> 'open'
             and x.day >= ${`${today.slice(0, 7)}-01`}::date)::float8 as claimed`,
     ),
     rows<{ workType: WorkType; cities: string[] }>(
       db,
-      sql`select work_type as "workType", to_json(cities) as cities from mr_plan_day where person_id = ${me.id} and day = ${today}::date`,
+      sql`select work_type as "workType", to_json(cities) as cities from plan_day where person_id = ${me.id} and day = ${today}::date`,
     ),
     rows<{ city: string }>(
       db,
-      sql`select distinct c.city from mr_client c where c.active and c.city is not null and c.city <> ''
-        and (c.assigned_to = ${me.id} or not exists (select 1 from mr_client a where a.assigned_to = ${me.id} and a.active))
+      sql`select distinct c.city from customer c where ${mine} and c.city is not null and c.city <> ''
         order by c.city limit 400`,
     ),
     work ? partnersOf(db, me) : Promise.resolve([]),
@@ -264,7 +272,7 @@ export async function mrHome(db: Database, me: Me): Promise<MrHome> {
   if (!plannedCities.length) {
     const fromVisits = await rows<{ city: string }>(
       db,
-      sql`select distinct c.city from mr_visit v join mr_client c on c.id = v.client_id
+      sql`select distinct c.city from visit v join customer c on c.id = v.customer_id
         where v.person_id = ${me.id} and v.day = ${today}::date and v.status in ('planned', 'done') and c.city is not null
         order by c.city`,
     );
@@ -307,23 +315,24 @@ export async function dayReport(
     rows<DayReport["business"]>(
       db,
       sql`select
-          (select count(*) from mr_order o where o.person_id = ${personId} and o.status = 'booked'
-            and (o.made_at at time zone 'Asia/Manila')::date = ${day}::date)::int as booked,
-          (select coalesce(sum(o.amount), 0) from mr_order o where o.person_id = ${personId} and o.status = 'booked'
-            and (o.made_at at time zone 'Asia/Manila')::date = ${day}::date)::float8 as "bookedAmount",
-          (select count(*) from mr_visit v where v.person_id = ${personId} and v.day = ${day}::date and v.chance_amount is not null)::int as chances,
-          (select coalesce(sum(v.chance_amount), 0) from mr_visit v where v.person_id = ${personId} and v.day = ${day}::date)::float8 as "chanceAmount",
-          (select count(*) from mr_follow_up f where f.person_id = ${personId} and (f.made_at at time zone 'Asia/Manila')::date = ${day}::date)::int as "followUpsMade",
-          (select count(*) from mr_follow_up f where f.person_id = ${personId} and f.status = 'open' and f.due_on <= ${day}::date)::int as "followUpsDue",
-          (select coalesce(sum((p.item->>'samples')::int), 0) from mr_visit v, jsonb_array_elements(v.products) as p(item)
-            where v.person_id = ${personId} and v.day = ${day}::date and v.status = 'done' and (p.item->>'samples') ~ '^[0-9]+$')::int as samples`,
+          (select count(*) from visit_order vo join sales_order o on o.id = vo.order_id join visit w on w.id = vo.visit_id
+            where w.person_id = ${personId} and w.day = ${day}::date and o.status <> 'cancelled')::int as booked,
+          (select coalesce(sum(o.total), 0) from visit_order vo join sales_order o on o.id = vo.order_id join visit w on w.id = vo.visit_id
+            where w.person_id = ${personId} and w.day = ${day}::date and o.status <> 'cancelled')::float8 as "bookedAmount",
+          (select count(*) from visit v where v.person_id = ${personId} and v.day = ${day}::date and v.chance_amount is not null)::int as chances,
+          (select coalesce(sum(v.chance_amount), 0) from visit v where v.person_id = ${personId} and v.day = ${day}::date)::float8 as "chanceAmount",
+          (select count(*) from field_follow_up f where f.person_id = ${personId} and (f.made_at at time zone 'Asia/Manila')::date = ${day}::date)::int as "followUpsMade",
+          (select count(*) from field_follow_up f where f.person_id = ${personId} and f.status = 'open' and f.due_on <= ${day}::date)::int as "followUpsDue",
+          (select coalesce(sum(-m.qty), 0) from sample_move m where m.person_id = ${personId} and m.what = 'given'
+            and (m.at at time zone 'Asia/Manila')::date = ${day}::date)::int as samples`,
     ),
     rows<DayReport["expenses"]>(
       db,
-      sql`select coalesce(sum(x.generated), 0)::float8 as generated, coalesce(sum(x.claimed), 0)::float8 as claimed, count(*)::int as lines
-        from mr_expense x where x.person_id = ${personId} and x.day = ${day}::date`,
+      sql`select coalesce(sum(x.generated), 0)::float8 as generated,
+          coalesce(sum(x.amount) filter (where x.status <> 'open'), 0)::float8 as claimed, count(*)::int as lines
+        from field_expense x where x.person_id = ${personId} and x.day = ${day}::date`,
     ),
-    isLeadNow(db, me),
+    mayDecideFor(db, me, personId),
   ]);
   const all = cards.map(toCard);
   const count = (test: (one: (typeof all)[number]) => boolean) => all.filter(test).length;
@@ -383,7 +392,7 @@ export async function sendDayReport(
     const day = await openDay(tx, me);
     const open = await rows<{ id: number; checkedIn: boolean }>(
       tx,
-      sql`select id::int as id, checked_in_at is not null as "checkedIn" from mr_visit
+      sql`select id::int as id, checked_in_at is not null as "checkedIn" from visit
         where person_id = ${me.id} and day = ${today}::date and status = 'planned' for update`,
     );
     if (open.some((one) => one.checkedIn))
@@ -394,26 +403,25 @@ export async function sendDayReport(
     for (const one of open) {
       const why = given.get(one.id) as { reason: MissReason; note?: string | null };
       const text = clean(why.note) ? `${MISS_WORDS[why.reason]}: ${clean(why.note)}` : MISS_WORDS[why.reason];
-      await tx.execute(sql`update mr_visit set status = 'missed', skip_reason = ${text} where id = ${one.id}`);
-      await tx.execute(sql`insert into mr_visit_change (visit_id, what, note, by_person) values (${one.id}, 'missed', ${text}, ${me.id})`);
+      await tx.execute(sql`update visit set status = 'missed', skip_reason = ${text} where id = ${one.id}`);
+      await tx.execute(sql`insert into visit_change (visit_id, what, note, by_person) values (${one.id}, 'missed', ${text}, ${me.id})`);
     }
     await tx.execute(
-      sql`update mr_day set report_status = 'sent', report_note = ${note}, sent_at = now(), ended_at = now(), end_place = ${place}
+      sql`update field_day set report_status = 'sent', report_note = ${note}, sent_at = now(), ended_at = now(), end_place = ${place}
         where id = ${day.id}`,
     );
-    await tx.execute(sql`insert into mr_day_event (day_id, kind, place, note) values (${day.id}, 'stop', ${place}, ${note})`);
+    await tx.execute(sql`insert into field_day_event (day_id, kind, place, note) values (${day.id}, 'stop', ${place}, ${note})`);
   });
   await endDay(db, me, place).catch(() => undefined);
 }
 
 /** The team lead marks a sent day report seen, with a word. */
 export async function seeDayReport(db: Database, me: Me, input: { person: number; day: string; note?: string | null }): Promise<void> {
-  await mustLead(db, me);
-  if (input.person === me.id) throw new Refusal(403, "not_allowed", "Your own report is seen by someone else.");
+  await mustDecideFor(db, me, input.person);
   if (!DAY.test(input.day)) throw new Refusal(400, "invalid", "Pick the day.", "day");
   const changed = await rows<{ id: number }>(
     db,
-    sql`update mr_day set report_status = 'seen', seen_by = ${me.id}, seen_at = now(), seen_note = ${clean(input.note) ?? null}
+    sql`update field_day set report_status = 'seen', seen_by = ${me.id}, seen_at = now(), seen_note = ${clean(input.note) ?? null}
       where person_id = ${input.person} and day = ${input.day}::date and report_status = 'sent' returning id::int as id`,
   );
   if (!changed.length) throw new Refusal(409, "invalid", "That day report isn't waiting to be seen.");

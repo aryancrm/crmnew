@@ -1,6 +1,7 @@
-// SEFMED's Visits (docs/PLAN.md 22): tabs KOLs · Hospitals · KBLs, a day or a month, the state
-// (New, At the place, Closed, Skipped, Missed) with counts; each card opens the visit. An MR adds
-// visits (on the day itself with why); the team lead picks an MR or everyone.
+// The field's visits (SEFMED's Visits, docs/PLAN.md 22), on the CRM's own visits: tabs KOLs ·
+// Hospitals · KBLs, a day or a month, the state (New, At the place, Closed, Skipped, Missed) with
+// counts; each card opens the visit. A MedRep adds visits (on the day itself with why); a team lead
+// picks one of the team or everyone (the team switch narrows it), the head and the CEO the same.
 
 import type { ClientKind, VisitList, VisitState } from "@2mg/api/mr";
 import { CLIENT_KINDS, KIND_TABS, STATE_WORDS, stateOf } from "@2mg/api/mr";
@@ -9,6 +10,7 @@ import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { Button, CARD, PageState, Tabs, peso } from "../ui";
 import { AddVisitsDialog } from "./plan";
 import { dayWords, Initial, MrHead, monthWords, shiftDay, shiftMonth, StatePill, useMrMe } from "./parts";
@@ -22,11 +24,12 @@ export function MrVisitsPage() {
   const person = params.get("person");
   const [state, setState] = useState<VisitState | "all">("all");
   const [adding, setAdding] = useState(false);
+  const unit = useTeamUnit();
   const query = useQuery({
-    queryKey: ["mr", "visits", kind, month, day, person],
+    queryKey: ["mr", "visits", kind, month, day, person, unit],
     queryFn: () =>
       api<VisitList>(
-        `/api/mr/visits?${new URLSearchParams({ kind, ...(month ? { month } : {}), ...(day ? { day } : {}), ...(person ? { person } : {}) })}`,
+        withUnit(`/api/mr/visits?${new URLSearchParams({ kind, ...(month ? { month } : {}), ...(day ? { day } : {}), ...(person ? { person } : {}) })}`, unit),
       ),
     placeholderData: (previous) => previous,
   });
@@ -44,7 +47,6 @@ export function MrVisitsPage() {
     <div className={`mx-auto flex max-w-4xl flex-col gap-3 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
       <MrHead
         title="Visits"
-        back="/mr"
         sub={`${data.person ? data.person.name : "Everyone"} · ${data.month ? monthWords(data.month) : dayWords(thisDay)}`}
         actions={
           data.can.work && (
@@ -97,6 +99,7 @@ export function MrVisitsPage() {
           </select>
         )}
       </div>
+      {!data.person && <TeamSwitch />}
       <Tabs<VisitState | "all">
         value={state}
         onChange={setState}
@@ -111,7 +114,7 @@ export function MrVisitsPage() {
       <ul className="flex flex-col gap-2">
         {shown.map((one) => (
           <li key={one.id}>
-            <Link to={`/mr/visits/${one.id}`} className={`${CARD} flex items-start gap-3 p-3.5 hover:border-sky-300`}>
+            <Link to={`/visits/${one.id}`} className={`${CARD} flex items-start gap-3 p-3.5 hover:border-sky-300`}>
               <Initial name={one.client.name} />
               <span className="min-w-0 flex-1">
                 <span className="flex items-start justify-between gap-2">
@@ -126,7 +129,7 @@ export function MrVisitsPage() {
                   <span className="block text-xs text-slate-500">Emp name: {one.person.name}</span>
                 )}
                 {one.unplanned && <span className="mt-1 inline-block rounded bg-amber-100 px-1.5 text-[11px] font-semibold text-amber-800">Added on the day</span>}
-                {one.booked > 0 && <span className="mt-1 ml-1 inline-block rounded bg-emerald-100 px-1.5 text-[11px] font-semibold text-emerald-800">{peso(one.booked)} booked</span>}
+                {one.booked > 0 && <span className="mt-1 ml-1 inline-block rounded bg-emerald-100 px-1.5 text-[11px] font-semibold text-emerald-800">{peso(one.booked)} ordered</span>}
                 {one.skipReason && <span className="block text-xs text-rose-700">{one.skipReason}</span>}
               </span>
             </Link>
