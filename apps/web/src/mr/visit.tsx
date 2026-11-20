@@ -14,6 +14,7 @@ import type {
   FollowUpKind,
   Meeting,
   MissReason,
+  MrHome,
   Nature,
   Outcome,
   Productive,
@@ -46,6 +47,7 @@ import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { GiveSamplesDialog } from "../inventory/samples";
+import { StartWorkingDialog } from "./home";
 import { Button, CARD, Dialog, PageState, Problem, peso, useAction } from "../ui";
 import {
   Choices,
@@ -138,6 +140,10 @@ function WorkTheCall({ data }: { data: VisitPage }) {
   const [partners, setPartners] = useState<number[]>(v.workingWith.map((one) => one.id));
   const [priority, setPriority] = useState<number | null>(v.priority);
   const [open, setOpen] = useState<"skip" | "move" | null>(null);
+  const [starting, setStarting] = useState(false);
+  // Today's field day: undefined while it loads, null when not started.
+  const fieldDay = useQuery({ queryKey: ["mr", "home"], queryFn: () => api<MrHome>("/api/mr/home") });
+  const myDay = fieldDay.data ? fieldDay.data.day : undefined;
   const saved = v.objectives.length > 0;
   const refresh = () => queries.invalidateQueries({ queryKey: ["mr"] });
   const savePlan = () =>
@@ -203,6 +209,14 @@ function WorkTheCall({ data }: { data: VisitPage }) {
             )}
             {!v.client.pinned && v.checkInPlace && <PinButton visitId={v.id} />}
           </div>
+        ) : data.can.checkIn && myDay === null ? (
+          // The day not started yet (the call opened first): Start working right here, then I'm here.
+          <div className="flex flex-col gap-2">
+            <p className="text-sm text-slate-600">Start your day first (where you work today and the city), then I'm here.</p>
+            <Button variant="primary" className="w-full" onClick={() => setStarting(true)}>
+              <MapPin size={16} /> Start working
+            </Button>
+          </div>
         ) : data.can.checkIn ? (
           <Button variant="primary" className="w-full" disabled={action.busy || objectives.length === 0} onClick={checkIn}>
             <MapPin size={16} /> {action.busy ? "Taking your place…" : "I'M HERE"}
@@ -212,6 +226,7 @@ function WorkTheCall({ data }: { data: VisitPage }) {
         )}
         <Problem message={action.problem?.message} />
       </Step>
+      {starting && <StartWorkingDialog onClose={() => setStarting(false)} />}
 
       {v.checkedInAt && <CallForm key={data.draft ? "kept" : "new"} data={data} objectives={objectives} objectiveNote={objectiveNote} />}
       {open === "skip" && <SkipDialog visitId={v.id} onClose={() => setOpen(null)} />}

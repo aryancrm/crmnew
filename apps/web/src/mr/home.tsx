@@ -197,6 +197,14 @@ function Circle({ data, onStart, onEdit }: { data: MrHome; onStart: () => void; 
   );
 }
 
+/** Start working from the top bar's Start or from a call's I'm here: the same dialog, the same
+ *  start (the field day and the CRM's attendance day together). Aryan, 20 Nov: one Start. */
+export function StartWorkingDialog({ onClose }: { onClose: () => void }) {
+  const query = useQuery({ queryKey: ["mr", "home"], queryFn: () => api<MrHome>("/api/mr/home") });
+  if (!query.data) return null;
+  return <PlaceDialog home={query.data} mode="start" onClose={onClose} />;
+}
+
 /** Start working, or "Edit work location or Stop working for the day". */
 function PlaceDialog({ home, mode, onClose }: { home: MrHome; mode: "start" | "edit"; onClose: () => void }) {
   const queries = useQueryClient();

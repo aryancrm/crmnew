@@ -887,7 +887,8 @@ function ownDesk(me: Me): Space {
             numbersFolder(),
           ]),
           cta: newOrder,
-          cta2: { to: "/visits", label: "Log a call" },
+          // Log a call opens My day: Start working, the visits, Stop working (Aryan, 20 Nov).
+          cta2: { to: "/field", label: "Log a call" },
         };
       // A PAP MedRep's patients come as cases (the guarantee letter's road), not plain orders.
       const pap = me.channel?.code === "PAP";

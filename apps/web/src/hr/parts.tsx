@@ -1,13 +1,17 @@
 // HR's shared pieces: the times and hours in words, the top bar's "My day" (when it started, Start
 // or End my day, the hours so far), and the CEO Home's "At work today" card.
 
+import type { MrHome } from "@2mg/api/mr";
 import type { AttendanceDay, AttendanceToday, MyDay } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, LogIn, LogOut } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
+import { allItems, spaceFor } from "../menus";
+import { StartWorkingDialog } from "../mr/home";
+import { useMrMe } from "../mr/parts";
 import { Donut } from "../team/charts";
 import { GlanceCard, useSeeAll } from "../team/glance";
 import { Problem, useAction } from "../ui";
@@ -63,6 +67,24 @@ export function MyDayButton() {
     queryFn: () => api<MyDay>("/api/hr/my-day"),
     refetchInterval: 60_000,
   });
+  // A MedRep in the field has one Start (Aryan, 20 Nov): the top bar's Start is Start working
+  // itself (the field day and attendance together), and while the field day runs, ending the day
+  // is the day report (Stop working).
+  const navigate = useNavigate();
+  const [starting, setStarting] = useState(false);
+  const mr = useMrMe();
+  // Only a MedRep whose own menu has My day (Hospital, Rx, PAP…; not TeleSales, B2B, Bidding or
+  // the Online office): the others' Start stays attendance alone.
+  const fieldRep =
+    mr.data?.access === "mr" &&
+    Boolean(me) &&
+    spaceFor(me as NonNullable<typeof me>, "/").groups.some((group) => allItems(group.items).some((item) => item.to === "/field"));
+  const fieldDay = useQuery({
+    queryKey: ["mr", "home"],
+    queryFn: () => api<MrHome>("/api/mr/home"),
+    enabled: fieldRep,
+  });
+  const fieldRunning = fieldRep && Boolean(fieldDay.data?.day && !fieldDay.data.day.endedAt);
   useEffect(() => {
     if (!open) return;
     const away = (event: MouseEvent) => {
@@ -91,15 +113,18 @@ export function MyDayButton() {
   // Not started (a rest day, before work, or never signed in today): one button.
   if (!day.timeIn)
     return looking ? null : (
-      <button
-        type="button"
-        onClick={() => run("/api/hr/day/start")}
-        disabled={action.busy}
-        title={action.problem?.message ?? "Start your working day"}
-        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-xs font-semibold text-white hover:bg-brand-dark sm:px-3"
-      >
-        <LogIn size={14} aria-hidden="true" /> Start<span className="hidden sm:inline"> my day</span>
-      </button>
+      <>
+        <button
+          type="button"
+          onClick={() => (fieldRep ? setStarting(true) : run("/api/hr/day/start"))}
+          disabled={action.busy || mr.isPending}
+          title={action.problem?.message ?? "Start your working day"}
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-xs font-semibold text-white hover:bg-brand-dark sm:px-3"
+        >
+          <LogIn size={14} aria-hidden="true" /> Start<span className="hidden sm:inline"> my day</span>
+        </button>
+        {starting && <StartWorkingDialog onClose={() => setStarting(false)} />}
+      </>
     );
 
   return (
@@ -168,7 +193,11 @@ export function MyDayButton() {
             {day.working && !looking && (
               <button
                 type="button"
-                onClick={() => run("/api/hr/day/end")}
+                onClick={() => {
+                  if (!fieldRunning) return run("/api/hr/day/end");
+                  setOpen(false);
+                  navigate("/field/day-report");
+                }}
                 disabled={action.busy}
                 className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-xs font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
               >
