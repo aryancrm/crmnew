@@ -107,7 +107,7 @@ export async function decisions(db: Database, me: Me): Promise<Decisions> {
   if (COMPLAINT_ROLES.includes(me.role)) {
     const [open] = await rows<{ n: number; late: number }>(
       db,
-      sql`select count(*)::int as n, count(*) filter (where due_on < current_date)::int as late from complaint where status <> 'closed'`,
+      sql`select count(*)::int as n, count(*) filter (where due_on < (now() at time zone 'Asia/Manila')::date)::int as late from complaint where status <> 'closed'`,
     );
     add(forMe, { key: "complaints", label: `Complaints and side-effects open${open?.late ? ` (${open.late} past due)` : ""}`, count: open?.n ?? 0, to: "/complaints", kind: "people" });
   }

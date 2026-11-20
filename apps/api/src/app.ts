@@ -148,8 +148,9 @@ export function createApp(db: Database, options: AppOptions) {
   app.get("/api/desk/:desk/team", signedIn, async (c) => {
     const desk = deskParam(c.req.param("desk"));
     const team = await deskTeam(db, c.get("me"), desk);
-    // Opening the screen shares out anything still waiting for a name.
-    if (team.unassigned) {
+    // Opening the screen shares out anything still waiting for a name; not when someone is only
+    // looking as this person (read only: nothing given out, nothing written in their name).
+    if (team.unassigned && !c.get("me").viewedBy) {
       await shareOut(db, c.get("me"), desk);
       return c.json(await deskTeam(db, c.get("me"), desk));
     }
@@ -253,7 +254,7 @@ export function createApp(db: Database, options: AppOptions) {
     const [seat] = await rows<{ personId: number }>(
       db,
       sql`select h.person_id::int as "personId" from seat s
-        join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and h.starts_on <= current_date and (h.ends_on is null or h.ends_on >= current_date)
+        join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and h.starts_on <= (now() at time zone 'Asia/Manila')::date and (h.ends_on is null or h.ends_on >= (now() at time zone 'Asia/Manila')::date)
         join person p on p.id = h.person_id and p.active and p.role = ${input.desk}
         where s.active and s.module = ${input.desk} order by s.lead desc, s.sort, s.id limit 1`,
     );
@@ -364,7 +365,7 @@ export function createApp(db: Database, options: AppOptions) {
         sql`select (${target} in ${teamIds(me)} or exists (
             select 1 from seat_holder h join seat s on s.id = h.seat_id and s.active
             where h.person_id = ${target} and s.unit_id in (${led.length ? sql.join(led.map((id) => sql`${id}`), sql`, `) : sql`0`})
-              and h.starts_on <= current_date and (h.ends_on is null or h.ends_on >= current_date))) as ok`,
+              and h.starts_on <= (now() at time zone 'Asia/Manila')::date and (h.ends_on is null or h.ends_on >= (now() at time zone 'Asia/Manila')::date))) as ok`,
       );
       if (!under?.ok) throw new Refusal(403, "not_allowed", "That person isn't in your team.");
     }

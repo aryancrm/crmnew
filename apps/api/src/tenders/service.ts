@@ -50,7 +50,7 @@ async function approvesBids(db: Database, me: Me): Promise<boolean> {
   const [found] = await rows<{ ok: boolean }>(
     db,
     sql`select exists (select 1 from seat_holder h join seat s on s.id = h.seat_id and s.active and s.lead
-      where h.person_id = ${me.id} and h.starts_on <= current_date and (h.ends_on is null or h.ends_on >= current_date)
+      where h.person_id = ${me.id} and h.starts_on <= (now() at time zone 'Asia/Manila')::date and (h.ends_on is null or h.ends_on >= (now() at time zone 'Asia/Manila')::date)
         and unit_division(s.unit_id) = 'BID') as ok`,
   );
   return found?.ok === true;
@@ -204,8 +204,8 @@ export async function createTender(db: Database, me: Me, input: TenderInput): Pr
       await rows<{ ok: boolean }>(
         db,
         sql`select exists (select 1 from seat_holder h join seat s on s.id = h.seat_id and s.active
-          where h.person_id = ${me.id} and s.title ~* 'bidding' and h.starts_on <= current_date
-            and (h.ends_on is null or h.ends_on >= current_date)) as ok`,
+          where h.person_id = ${me.id} and s.title ~* 'bidding' and h.starts_on <= (now() at time zone 'Asia/Manila')::date
+            and (h.ends_on is null or h.ends_on >= (now() at time zone 'Asia/Manila')::date)) as ok`,
       )
     )[0]?.ok === true;
   if (!seesAll(me) && !coachee)

@@ -90,12 +90,12 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
       // Of two seats, the one that decides their screens (org/service.ts projectOrg): a lead seat
       // over one that leads nothing, else the first given.
       businessCode: sql<string | null>`(select seat_business_channel(h.seat_id) from seat_holder h join seat s on s.id = h.seat_id and s.active
-        where h.person_id = ${person.id} and h.starts_on <= current_date and (h.ends_on is null or h.ends_on >= current_date)
+        where h.person_id = ${person.id} and h.starts_on <= (now() at time zone 'Asia/Manila')::date and (h.ends_on is null or h.ends_on >= (now() at time zone 'Asia/Manila')::date)
         order by (h.kind = 'holder') desc, s.lead desc, h.starts_on, h.id limit 1)`,
       // The Divisions their orders carry: their seats' own (migration 0114), the main seat's first.
       seatDivisions: sql<string[] | null>`(select array_agg(seat_division(h.seat_id) order by (h.kind = 'holder') desc, s.lead desc, h.starts_on, h.id)
         from seat_holder h join seat s on s.id = h.seat_id and s.active
-        where h.person_id = ${person.id} and h.starts_on <= current_date and (h.ends_on is null or h.ends_on >= current_date))`,
+        where h.person_id = ${person.id} and h.starts_on <= (now() at time zone 'Asia/Manila')::date and (h.ends_on is null or h.ends_on >= (now() at time zone 'Asia/Manila')::date))`,
     })
     .from(session)
     .innerJoin(person, eq(person.id, session.personId))

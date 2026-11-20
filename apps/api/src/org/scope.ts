@@ -26,7 +26,7 @@ export const seatsUnder = (unitId: number): SQL =>
 /** The people sitting in the box or under it today, holders and covers. */
 export const peopleUnder = (unitId: number): SQL =>
   sql`(select h.person_id from seat_holder h where h.seat_id in ${seatsUnder(unitId)}
-      and h.starts_on <= current_date and (h.ends_on is null or h.ends_on >= current_date))`;
+      and h.starts_on <= (now() at time zone 'Asia/Manila')::date and (h.ends_on is null or h.ends_on >= (now() at time zone 'Asia/Manila')::date))`;
 
 /** The areas of the seats in the box or under it: their customers are the box's. */
 export const areasUnder = (unitId: number): SQL =>

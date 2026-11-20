@@ -1128,7 +1128,7 @@ export async function orderBoard(
     rows<BoardRep>(
       db,
       sql`${team(me)} select rep.id::int as id, rep.name, rch.code as channel, ra.name as area,
-          count(*)::int as orders, coalesce(sum(o.total), 0)::int as value,
+          count(*)::int as orders, coalesce(sum(o.total), 0)::float8 as value,
           ${iso("min(coalesce(o.submitted_at, o.created_at))")} as oldest
         ${from} left join channel rch on rch.id = rep.channel_id left join area ra on ra.id = rep.area_id
         where ${everyRep} and ${picked}

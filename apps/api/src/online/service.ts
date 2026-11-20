@@ -729,7 +729,9 @@ export async function leadCase(db: Database, me: Me, id: number): Promise<LeadCa
   await leadGate(db, me, id, "read", "see a case");
   const row = await readLead(db, id);
   const work = mayOnCase(me, row, "work");
-  if (work && row.unopened)
+  // Opened by the desk when it works the case (it counts for the reply time); not when someone is
+  // only looking as them.
+  if (work && row.unopened && !me.viewedBy)
     await db.execute(sql`update lead set opened_at = now() where id = ${id} and opened_at is null`);
   const [files, events, agents, web, wallet, program, trail, history, refill] = await Promise.all([
     rows<Omit<LeadPaper, "kindLabel">>(

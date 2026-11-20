@@ -65,7 +65,7 @@ export async function financeBoard(db: Database, me: Me): Promise<FinanceBoard> 
     rows<FinanceBoard["money"]>(
       db,
       sql`select
-          (select coalesce(sum(p.amount), 0) from payment p where p.active and p.method not in ('points', 'withholding', 'credit', 'deduction') and p.paid_on = ${today}::date)::int as "inToday",
+          (select coalesce(sum(p.amount), 0) from payment p where p.active and p.method not in ('points', 'withholding', 'credit', 'deduction') and p.paid_on = ${today}::date)::float8 as "inToday",
           (select coalesce(sum(p.amount), 0) from payment p where p.active and p.method not in ('points', 'withholding', 'credit', 'deduction')
             and date_trunc('month', p.paid_on) = date_trunc('month', ${today}::date))::int as "inMonth",
           (select coalesce(sum(i.total), 0) from invoice i where i.status <> 'cancelled'

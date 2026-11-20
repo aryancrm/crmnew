@@ -1385,10 +1385,10 @@ export async function customerStatement(
   const [aging] = await rows<Statement["aging"]>(
     db,
     sql`select
-        coalesce(sum(i.total - i.paid) filter (where i.due_on is null or i.due_on >= ${today}::date or ${notDueSql}), 0)::int as current,
-        coalesce(sum(i.total - i.paid) filter (where i.due_on < ${today}::date and ${today}::date - i.due_on <= 30 and not ${notDueSql}), 0)::int as d30,
-        coalesce(sum(i.total - i.paid) filter (where ${today}::date - i.due_on between 31 and 60 and not ${notDueSql}), 0)::int as d60,
-        coalesce(sum(i.total - i.paid) filter (where ${today}::date - i.due_on > 60 and not ${notDueSql}), 0)::int as older
+        coalesce(sum(i.total - i.paid) filter (where i.due_on is null or i.due_on >= ${today}::date or ${notDueSql}), 0)::float8 as current,
+        coalesce(sum(i.total - i.paid) filter (where i.due_on < ${today}::date and ${today}::date - i.due_on <= 30 and not ${notDueSql}), 0)::float8 as d30,
+        coalesce(sum(i.total - i.paid) filter (where ${today}::date - i.due_on between 31 and 60 and not ${notDueSql}), 0)::float8 as d60,
+        coalesce(sum(i.total - i.paid) filter (where ${today}::date - i.due_on > 60 and not ${notDueSql}), 0)::float8 as older
       from invoice i join sales_order o on o.id = i.order_id
       where i.customer_id = ${customerId} and i.status = 'open'`,
   );

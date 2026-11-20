@@ -69,7 +69,7 @@ export async function customerPage(db: Database, me: Me, id: number): Promise<Cu
       ),
       rows<{ orders: number; bought: number; firstAt: string | null; lastAt: string | null }>(
         db,
-        sql`select count(*)::int as orders, coalesce(sum(o.total) filter (where o.status <> 'cancelled'), 0)::int as bought,
+        sql`select count(*)::int as orders, coalesce(sum(o.total) filter (where o.status <> 'cancelled'), 0)::float8 as bought,
           ${iso("min(o.created_at)")} as "firstAt", ${iso("max(o.created_at)")} as "lastAt"
         from sales_order o where o.customer_id = ${id} and o.status not in ('draft', 'cancelled')`,
       ),
@@ -78,7 +78,7 @@ export async function customerPage(db: Database, me: Me, id: number): Promise<Cu
         sql`select i.medicine_id::int as id, md.name, md.strength, md.unit,
           count(distinct o.id)::int as times, sum(i.qty)::int as qty,
           sum(i.qty) filter (where i.free)::int as "freeQty",
-          sum(i.qty * i.unit_price)::int as amount, ${iso("max(o.created_at)")} as "lastAt",
+          sum(i.qty::bigint * i.unit_price)::float8 as amount, ${iso("max(o.created_at)")} as "lastAt",
           (array_agg(i.unit_price order by o.created_at desc) filter (where not i.free))[1]::int as "lastPrice"
         from order_item i
         join sales_order o on o.id = i.order_id

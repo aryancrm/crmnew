@@ -79,7 +79,7 @@ export async function ensureCompanyTree(db: Database): Promise<boolean> {
       );
       await tx.execute(
         sql`insert into seat_holder (seat_id, person_id, kind, starts_on, reason)
-          values (${seat?.id}, ${admin.id}, 'holder', current_date, 'Joined')`,
+          values (${seat?.id}, ${admin.id}, 'holder', (now() at time zone 'Asia/Manila')::date, 'Joined')`,
       );
     }
   });

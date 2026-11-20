@@ -36,7 +36,7 @@ export async function companyGlance(db: Database, me: Me): Promise<CompanyGlance
           union all select u.id, t.top from org_unit u join tree t on u.parent_id = t.id where u.active)
         select top.name, count(distinct h.person_id)::int as people from tree t join org_unit top on top.id = t.top
           join seat s on s.unit_id = t.id and s.active
-          join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and h.starts_on <= current_date and (h.ends_on is null or h.ends_on >= current_date)
+          join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and h.starts_on <= (now() at time zone 'Asia/Manila')::date and (h.ends_on is null or h.ends_on >= (now() at time zone 'Asia/Manila')::date)
           join person p on p.id = h.person_id and p.active
         group by top.name order by 2 desc`,
     ),
@@ -135,7 +135,7 @@ async function attendanceGlance(db: Database, me: Me, today: string): Promise<Co
           union all select u.id, t.top from org_unit u join tree t on u.parent_id = t.id where u.active)
         select distinct on (h.person_id) h.person_id::int as "personId", top.name from tree t join org_unit top on top.id = t.top
           join seat s on s.unit_id = t.id and s.active
-          join seat_holder h on h.seat_id = s.id and h.starts_on <= current_date and (h.ends_on is null or h.ends_on >= current_date)
+          join seat_holder h on h.seat_id = s.id and h.starts_on <= (now() at time zone 'Asia/Manila')::date and (h.ends_on is null or h.ends_on >= (now() at time zone 'Asia/Manila')::date)
         order by h.person_id, (h.kind = 'holder') desc, s.lead desc, h.starts_on`,
     ),
     rows<{ desk: string; seats: number; name: string | null; since: string | null }>(

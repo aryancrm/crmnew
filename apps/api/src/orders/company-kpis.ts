@@ -49,7 +49,7 @@ export async function companyKpis(
   const [byStatus, now, totals, byRep, byChannel, added] = await Promise.all([
     rows<{ status: OrderStatus; n: number; value: number }>(
       db,
-      sql`select o.status, count(*)::int as n, coalesce(sum(o.total), 0)::int as value
+      sql`select o.status, count(*)::int as n, coalesce(sum(o.total), 0)::float8 as value
         from sales_order o where ${inPeriod} group by o.status`,
     ),
     // What waits right now, whenever it was placed.
@@ -80,9 +80,9 @@ export async function companyKpis(
       sql`select
           -- Cancelled orders count for nothing here, in number as in value.
           count(*) filter (where ${placedOn} = ${today}::date and o.status <> 'cancelled')::int as "todayN",
-          coalesce(sum(o.total) filter (where ${placedOn} = ${today}::date and o.status <> 'cancelled'), 0)::int as "todayValue",
+          coalesce(sum(o.total) filter (where ${placedOn} = ${today}::date and o.status <> 'cancelled'), 0)::float8 as "todayValue",
           count(*) filter (where date_trunc('month', ${placedOn}) = ${month} and o.status <> 'cancelled')::int as "monthN",
-          coalesce(sum(o.total) filter (where date_trunc('month', ${placedOn}) = ${month} and o.status <> 'cancelled'), 0)::int as "monthValue",
+          coalesce(sum(o.total) filter (where date_trunc('month', ${placedOn}) = ${month} and o.status <> 'cancelled'), 0)::float8 as "monthValue",
           coalesce((select sum(i.total) from invoice i where i.status <> 'cancelled'
             and date_trunc('month', i.issued_on) = ${month}), 0)::float8 as sales,
           (coalesce((select sum(t.amount) from sales_target t where t.month = ${month}::date), 0)
@@ -95,7 +95,7 @@ export async function companyKpis(
     rows<CompanyKpis["byRep"][number]>(
       db,
       sql`select rep.id::int as id, rep.name, ch.code as channel, count(*)::int as orders,
-          coalesce(sum(o.total) filter (where o.status <> 'cancelled'), 0)::int as value,
+          coalesce(sum(o.total) filter (where o.status <> 'cancelled'), 0)::float8 as value,
           count(*) filter (where o.status = 'completed')::int as completed
         from sales_order o join person rep on rep.id = ${creditedTo(today)} left join channel ch on ch.id = o.channel_id
         where ${inPeriod}
@@ -105,7 +105,7 @@ export async function companyKpis(
     rows<CompanyKpis["byChannel"][number]>(
       db,
       sql`select coalesce(ch.code, 'Other') as channel, count(*)::int as orders,
-          coalesce(sum(o.total) filter (where o.status <> 'cancelled'), 0)::int as value
+          coalesce(sum(o.total) filter (where o.status <> 'cancelled'), 0)::float8 as value
         from sales_order o left join channel ch on ch.id = o.channel_id
         where ${inPeriod}
         group by ch.code order by value desc`,

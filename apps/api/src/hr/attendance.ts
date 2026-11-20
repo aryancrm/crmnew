@@ -77,7 +77,7 @@ export async function workCalendar(
     ),
     rows<{ day: string }>(
       db,
-      sql`select to_char(day, 'YYYY-MM-DD') as day from holiday where active and day >= current_date - 400`,
+      sql`select to_char(day, 'YYYY-MM-DD') as day from holiday where active and day >= (now() at time zone 'Asia/Manila')::date - 400`,
     ),
   ]);
   return {
@@ -389,8 +389,8 @@ async function visiblePeople(
     db,
     sql`select p.id::int as id, p.name, p.title, p.role,
         (select u.name from seat_holder h join seat s on s.id = h.seat_id and s.active join org_unit u on u.id = s.unit_id
-          where h.person_id = p.id and h.kind = 'holder' and h.starts_on <= current_date
-            and (h.ends_on is null or h.ends_on >= current_date) order by h.starts_on limit 1) as team,
+          where h.person_id = p.id and h.kind = 'holder' and h.starts_on <= (now() at time zone 'Asia/Manila')::date
+            and (h.ends_on is null or h.ends_on >= (now() at time zone 'Asia/Manila')::date) order by h.starts_on limit 1) as team,
         (select to_char(e.hire_date, 'YYYY-MM-DD') from employee e where e.person_id = p.id) as "hiredOn"
       from person p where p.active and p.role <> 'admin' and ${scope}
         -- Someone joining on a later day has no attendance yet.

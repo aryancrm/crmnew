@@ -45,7 +45,7 @@ const MODULES: Record<PortalKey, string[]> = {
 };
 
 const SINCE = sql`(now() - interval '30 days')`;
-const SINCE_DAY = sql`(current_date - 30)`;
+const SINCE_DAY = sql`((now() at time zone 'Asia/Manila')::date - 30)`;
 
 type Stat = PortalDepartment["stats"][number];
 
@@ -169,7 +169,7 @@ async function teamOf(db: Database, key: PortalKey): Promise<{ tree: PortalTeamN
     rows<{ unit: number; title: string; module: string; lead: boolean; held: number; sort: number }>(
       db,
       sql`select s.unit_id::int as unit, s.title, s.module, s.lead, s.sort,
-          (select count(*) from seat_holder h where h.seat_id = s.id and h.ends_on is null and h.starts_on <= current_date)::int as held
+          (select count(*) from seat_holder h where h.seat_id = s.id and h.ends_on is null and h.starts_on <= (now() at time zone 'Asia/Manila')::date)::int as held
         from seat s where s.active order by s.lead desc, s.sort, s.id`,
     ),
   ]);
