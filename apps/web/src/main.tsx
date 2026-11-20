@@ -8,6 +8,7 @@ import { ApiFailure } from "./api";
 import { placesOrders, readsOnlineDesk } from "./auth";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AdminChannelPage, AdminChannelsPage } from "./admin/channels";
@@ -139,6 +140,8 @@ if (!root) throw new Error("No #root element.");
 
 createRoot(root).render(
   <StrictMode>
+    {/* Vercel Web Analytics: page views and visitors, on the live site only (Aryan, 20 Nov). */}
+    <Analytics />
     <QueryClientProvider client={queries}>
       <BrowserRouter>
         <Routes>
