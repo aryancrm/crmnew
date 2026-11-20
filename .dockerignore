@@ -1,0 +1,13 @@
+# Both Dockerfiles build from the repository root (pnpm needs the workspace and lockfile).
+**/node_modules
+**/dist
+.data
+.git
+.env
+.env.*
+!.env.example
+.claude
+docs
+**/*.tsbuildinfo
+**/*.test.ts
+.DS_Store

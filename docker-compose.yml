@@ -1,0 +1,37 @@
+# The CRM on one server: the API and the web app, each from its own Dockerfile.
+#   cp .env.example .env   (fill in DATABASE_URL, WEB_URL, JOIN_PASSWORD, SECRETS_KEY, S3_*...)
+#   docker compose up -d --build
+# The web app listens on WEB_PORT (default 8080); put the server's HTTPS proxy in front of it.
+# The API is not published: the web app's nginx reaches it as http://api:4100.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file: .env
+    # Node as PID 1 ignores SIGTERM; tini passes it on so stops are quick and clean.
+    init: true
+    environment:
+      PORT: 4100
+      PGLITE_DIR: /data/pg
+    volumes:
+      # Only holds data when DATABASE_URL is empty (the embedded database).
+      - api-data:/data
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      API_UPSTREAM: http://api:4100
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  api-data:
