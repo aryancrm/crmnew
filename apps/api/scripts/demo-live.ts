@@ -35,7 +35,7 @@ const today = todayManila();
 
 /** Each area's two customers and the orders they get, by the step each order is left at. */
 type Step = "management" | "finance" | "invoiced" | "packing" | "shipped" | "delivered" | "paid" | "part" | "sent_back" | "held";
-const PLAN: { area: string; orders: [0 | 1, Step][] }[] = [
+const PLAN: { area: string; orders: [0 | 1, Step][]; placer?: string }[] = [
   { area: "HOS | PASAY", orders: [[0, "paid"], [0, "shipped"], [1, "management"]] },
   { area: "HOS | COMMONWEALTH", orders: [[0, "part"], [1, "finance"]] },
   { area: "HOS | LAGUNA", orders: [[0, "packing"], [1, "management"], [0, "held"]] },
@@ -62,7 +62,8 @@ const PLAN: { area: string; orders: [0 | 1, Step][] }[] = [
   // in Zoho's to borrow names from, so their two are named for the demo (doctors, as below).
   { area: "MD Telesales | Ailyn Mancilla", orders: [[0, "paid"], [1, "delivered"]] },
   { area: "MD Telesales | Mitzi Francisco", orders: [[0, "invoiced"], [1, "management"]] },
-  { area: "Modern Trade", orders: [[0, "part"], [1, "delivered"], [0, "invoiced"]] },
+  // Modern Trade's seats are empty (Arlene's, Jasper's): its head places the orders for the seat.
+  { area: "MT | ARLENE", placer: "Malou Jagonoy", orders: [[0, "part"], [1, "delivered"], [0, "invoiced"]] },
 ];
 const PRICE_KIND: Record<string, string> = { hospital: "hospital", government: "hospital", doctor: "doctor", distributor: "distributor", drugstore: "drugstore", bidding: "hospital" };
 
@@ -136,7 +137,7 @@ const management = await cookieOf("Kate Cagoyong", "management");
 const finance = await cookieOf("Sarla Devi", "finance");
 const dispatch = await cookieOf("Tiara Evangelista", "dispatch");
 
-for (const { area, orders } of PLAN) {
+for (const { area, orders, placer } of PLAN) {
   const [seat] = await rows<{ areaId: number; holder: string | null }>(
     db,
     sql`select a.id::int as "areaId", (select p.name from seat s join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and h.ends_on is null
@@ -144,8 +145,9 @@ for (const { area, orders } of PLAN) {
       from area a where a.name = ${area}`,
   );
   const people = names.get(area) ?? [];
-  if (!seat?.holder || people.length < 2) {
-    console.log(`${area}: skipped (${!seat ? "no such area" : !seat.holder ? "nobody in its seat" : "fewer than two customers in the copy"})`);
+  const by = placer ?? seat?.holder;
+  if (!seat || !by || people.length < 2) {
+    console.log(`${area}: skipped (${!seat ? "no such area" : !by ? "nobody in its seat" : "fewer than two customers in the copy"})`);
     continue;
   }
   const [already] = await rows<{ n: number }>(
@@ -156,9 +158,9 @@ for (const { area, orders } of PLAN) {
     console.log(`${area}: has its demo orders already`);
     continue;
   }
-  console.log(`${area} · ${seat.holder}: ${people.map((one) => `${one.name} (${one.kind})`).join(", ")} · ${orders.map(([, step]) => step).join(", ")}`);
+  console.log(`${area} · ${by}${placer ? " (for the empty seat)" : ""}: ${people.map((one) => `${one.name} (${one.kind})`).join(", ")} · ${orders.map(([, step]) => step).join(", ")}`);
   if (!apply) continue;
-  const medrep = await cookieOf(seat.holder);
+  const medrep = await cookieOf(by);
   const ids: number[] = [];
   for (const one of people) {
     const [found] = await rows<{ id: number }>(db, sql`select id::int as id from customer where lower(name) = lower(${one.name}) order by id limit 1`);

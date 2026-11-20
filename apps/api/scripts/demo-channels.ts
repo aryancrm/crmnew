@@ -364,7 +364,7 @@ for (const area of HOSP_AREAS) {
 // ---- MT: the chains' listings, and a deduction from a payment. ----
 console.log("\nMT listings and a deduction (Malou)");
 {
-  const chains = (await demoCustomers("Modern Trade")).filter((one) => ["drugstore", "distributor"].includes(one.kind));
+  const chains = (await demoCustomers("MT | ARLENE")).filter((one) => ["drugstore", "distributor"].includes(one.kind));
   const [done] = chains.length
     ? await rows<{ n: number }>(db, sql`select count(*)::int as n from mt_listing where customer_id in (${sql.join(chains.map((one) => sql`${one.id}`), sql`, `)})`)
     : [{ n: 0 }];
