@@ -49,6 +49,20 @@ const PLAN: { area: string; orders: [0 | 1, Step][] }[] = [
   { area: "BID | HAZEL", orders: [[0, "invoiced"], [1, "management"]] },
   { area: "CLIDP | Annie Maglatang", orders: [[0, "paid"], [1, "management"]] },
   { area: "TeleSales | Micah Jimena", orders: [[0, "finance"], [1, "delivered"]] },
+  // 20 Nov (Aryan: "put dummy data on live too, in all of them"): every channel's seats.
+  { area: "TeleSales | Aila Jane Zaragosa", orders: [[0, "paid"], [1, "delivered"], [0, "management"]] },
+  { area: "TeleSales | Sheena Mae Correa", orders: [[0, "invoiced"], [1, "paid"]] },
+  { area: "B2B | FLOREMEL TAN MEDINA", orders: [[0, "paid"], [1, "delivered"]] },
+  { area: "B2B | FAITH", orders: [[0, "part"], [1, "management"]] },
+  { area: "BID | ANGEL", orders: [[0, "delivered"], [1, "finance"]] },
+  { area: "CLIDP | NICKA", orders: [[0, "paid"], [1, "invoiced"]] },
+  { area: "RX | Cebu (Onco, Uro) | Antonette Lawas", orders: [[0, "paid"], [1, "delivered"]] },
+  { area: "RX | South Luzon (Onco, Uro) | Kevin Sean Apid", orders: [[0, "invoiced"], [1, "management"]] },
+  // MD Telesales sells by phone to patients and their doctors: its seats have no business customers
+  // in Zoho's to borrow names from, so their two are named for the demo (doctors, as below).
+  { area: "MD Telesales | Ailyn Mancilla", orders: [[0, "paid"], [1, "delivered"]] },
+  { area: "MD Telesales | Mitzi Francisco", orders: [[0, "invoiced"], [1, "management"]] },
+  { area: "Modern Trade", orders: [[0, "part"], [1, "delivered"], [0, "invoiced"]] },
 ];
 const PRICE_KIND: Record<string, string> = { hospital: "hospital", government: "hospital", doctor: "doctor", distributor: "distributor", drugstore: "drugstore", bidding: "hospital" };
 
@@ -88,6 +102,11 @@ for (const { area } of PLAN) {
       order by (select coalesce(sum(s.total), 0) from sale_invoice s where s.customer_id = c.id and s.issued_on >= '2026-01-01') desc, c.id
       limit 2`,
   );
+  // A seat with fewer than two business customers in Zoho's (MD Telesales, Modern Trade): demo names.
+  const kind = area.startsWith("Modern Trade") || area.startsWith("MT") ? "drugstore" : "doctor";
+  const who = area.split("|").pop()?.trim() ?? area;
+  for (let n = best.length; n < 2; n++)
+    best.push({ name: kind === "drugstore" ? `Demo Drugstore Chain ${n === 0 ? "A" : "B"}` : `Dr. Demo ${n === 0 ? "Reyes" : "Cruz"} (${who})`, kind, city: null });
   names.set(area, best);
 }
 
