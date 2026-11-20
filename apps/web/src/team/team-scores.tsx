@@ -1,6 +1,7 @@
 // A lead's (or the CEO's, the Admin's) scorecards: one row per scored seat under them, the
-// month's total, each KPI's points, the 12-month average and its increment, the improvement-plan
-// flag; then the questions waiting for their answer. A row opens the person's own card.
+// month's total, the card's kind and each KPI's points, the Field work card's total (PLAN 23), the
+// 12-month average and its increment, the improvement-plan flag; then the questions waiting for
+// their answer. A row opens the person's own card.
 
 import type { TeamScores } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
@@ -20,7 +21,6 @@ export function TeamScoresPage() {
   });
   const data = query.data;
   if (!data) return <PageState query={query} what="the team's scorecards" />;
-  const keys = [...new Set(data.rows.flatMap((row) => row.card?.kpis.map((kpi) => kpi.key) ?? []))];
   const filled = data.rows.filter((row) => row.card);
   const average = filled.length ? Math.round(filled.reduce((sum, row) => sum + (row.card?.percent ?? 0), 0) / filled.length) : null;
 
@@ -54,11 +54,8 @@ export function TeamScoresPage() {
             <tr className="border-b border-slate-100 bg-slate-50/60 text-left text-[11px] font-semibold tracking-wide text-slate-500 uppercase">
               <th className="px-4 py-2.5">Seat</th>
               <th className="px-3 py-2.5 text-right">Score</th>
-              {keys.map((key) => (
-                <th key={key} className="px-3 py-2.5 text-right">
-                  {key}
-                </th>
-              ))}
+              <th className="px-3 py-2.5">KPIs (points)</th>
+              <th className="px-3 py-2.5 text-right">Field</th>
               <th className="px-3 py-2.5 text-right">12-month</th>
               <th className="px-4 py-2.5">Increment</th>
             </tr>
@@ -87,14 +84,34 @@ export function TeamScoresPage() {
                     <span className="text-slate-400">—</span>
                   )}
                 </td>
-                {keys.map((key) => {
-                  const kpi = row.card?.kpis.find((one) => one.key === key);
-                  return (
-                    <td key={key} className="px-3 py-2.5 text-right text-slate-700 tabular-nums" title={kpi?.note}>
-                      {kpi?.points ?? "—"}
-                    </td>
-                  );
-                })}
+                <td className="px-3 py-2.5">
+                  {row.card ? (
+                    <>
+                      <div className="text-[11px] text-slate-500">{row.card.label}</div>
+                      <div className="flex flex-wrap gap-1">
+                        {row.card.kpis
+                          .filter((kpi) => kpi.weight > 0)
+                          .map((kpi) => (
+                            <span key={kpi.key} title={`${kpi.label}: ${kpi.note ?? ""}`} className="rounded bg-slate-100 px-1.5 py-0.5 text-[11px] text-slate-700 tabular-nums">
+                              {kpi.label.split(" ·")[0]} {kpi.points ?? "—"}/{kpi.weight}
+                            </span>
+                          ))}
+                      </div>
+                    </>
+                  ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
+                </td>
+                <td className="px-3 py-2.5 text-right">
+                  {row.field ? (
+                    <span className="font-semibold tabular-nums" style={{ color: toneOf(row.field.percent) }} title="Field work card (interim)">
+                      {row.field.total}
+                      <span className="text-[11px] font-normal text-slate-400">/{row.field.max}</span>
+                    </span>
+                  ) : (
+                    <span className="text-slate-400">—</span>
+                  )}
+                </td>
                 <td className="px-3 py-2.5 text-right tabular-nums">{row.average ?? "—"}</td>
                 <td className="px-4 py-2.5 whitespace-nowrap">
                   {row.increment ? `${row.increment.percent}% · ${row.increment.label}` : "—"}

@@ -6,8 +6,8 @@ import { migrate } from "../db/migrate";
 import { todayManila } from "../inventory/rules";
 import { seedDemo } from "../seed";
 import type { MyScore, TeamScores } from "../types";
-import { B2C, HOSPITAL, incrementOf, RX, scoreOf, TEAM, TELESALES } from "./recipes";
-import { lockDue, lockMonth } from "./service";
+import { B2C, BIDDING, FIELD, HOSPITAL, incrementOf, LEAD, NBD, RX, scoreOf, TEAM, TELESALES } from "./recipes";
+import { lockDue, lockMonth, recipeFor, worksField } from "./service";
 
 describe("the playbook cards", () => {
   it("score each KPI by its band and cap the total when IST scores nothing", () => {
@@ -76,6 +76,36 @@ beforeAll(async () => {
     });
     cookies[name] = response.headers.get("set-cookie")?.split(";")[0] as string;
   }
+});
+
+describe("the interim cards (PLAN 23)", () => {
+  it("every seller's seat gets a card; a lead their own; a MedRep the field's beside it", () => {
+    const medrep = (channel: string, title = "") => ({ module: "medrep", lead: false, channel, title, seatTitle: title });
+    expect(recipeFor(medrep("HOSP"))?.key).toBe("hospital");
+    expect(recipeFor(medrep("HOSP", "Government Bidding Coachee"))?.key).toBe("bidding");
+    expect(recipeFor(medrep("BID"))?.key).toBe("bidding");
+    expect(recipeFor(medrep("B2B", "NBD - Luzon"))?.key).toBe("nbd");
+    expect(recipeFor(medrep("B2B", "CRR – Mindanao"))?.key).toBe("crr");
+    expect(recipeFor(medrep("B2B", "CLIDP Sales Coachee"))?.key).toBe("clidp");
+    expect(recipeFor(medrep("MT"))?.key).toBe("mt");
+    expect(recipeFor(medrep("PAP"))?.key).toBe("pap");
+    expect(recipeFor({ module: "team_lead", lead: true, channel: "HOSP" })?.key).toBe("lead");
+    expect(recipeFor({ module: "staff", lead: false, channel: null })).toBeNull();
+    expect(worksField(medrep("HOSP"))).toBe(true);
+    expect(worksField({ module: "team_lead", lead: true })).toBe(false);
+  });
+
+  it("score on their bands and say they are interim", () => {
+    expect(scoreOf(FIELD, { calls: 9, coverage: 92, frequency: 80, tour: 100, reports: 100 })).toMatchObject({ total: 30 + 25 + 16 + 15 + 10, max: 100 });
+    expect(scoreOf(FIELD, { calls: 3, coverage: null, frequency: null, tour: null, reports: 50 }).max).toBe(40);
+    expect(scoreOf(NBD, { ist: 95, accounts: 2, nzsd: 92, ocr: 0 })).toMatchObject({ total: 40 + 18 + 15 + 15 });
+    expect(scoreOf(BIDDING, { ist: null, win: 50, dso: 60, nzsd: null })).toMatchObject({ total: 45, max: 45 });
+    expect(scoreOf(LEAD, { team: 80, teamist: 92, seen: 100, joint: 4 })).toMatchObject({ total: 32 + 30 + 15 + 15 });
+    for (const recipe of [FIELD, NBD, BIDDING, LEAD]) {
+      expect(recipe.source).toMatch(/Interim/);
+      expect(recipe.kpis.reduce((sum, kpi) => sum + kpi.weight, 0)).toBe(100);
+    }
+  });
 });
 
 describe("cards from the data", () => {
@@ -149,11 +179,30 @@ describe("cards from the data", () => {
     expect((await get("ryan", "/api/scores/team")).status).toBe(403);
     const team = (await (await get("admin", "/api/scores/team")).json()) as TeamScores;
     expect(team.rows.some((row) => row.name && row.card?.recipe === "hospital")).toBe(true);
-    // A lead's card is their team's average.
-    const lead = team.rows.find((row) => row.card?.recipe === "team");
-    if (lead?.card) {
-      expect(lead.card.kpis[0]?.key).toBe("team");
-      expect(lead.card.total).toBe(Math.round(lead.card.kpis[0]?.value ?? 0));
-    }
+    // A lead's own card: the team's cards, its sales, day reports seen, joint field work.
+    const lead = team.rows.find((row) => row.card?.recipe === "lead");
+    expect(lead?.card?.kpis.map((kpi) => kpi.key)).toEqual(["team", "teamist", "seen", "joint"]);
+  });
+
+  it("a MedRep's field days make the Field work card beside their channel's; the lead sees both", async () => {
+    const today = todayManila();
+    const [ryan] = await rows<{ id: number }>(db, sql`select id::int as id from person where email = 'ryan@2mg.test'`);
+    const [customer] = await rows<{ id: number }>(
+      db,
+      sql`insert into customer (kind, name, city, added_by) values ('hospital', 'Field Card Test Hospital', 'Pasay', ${ryan?.id})
+        returning id::int as id`,
+    );
+    await db.execute(sql`insert into field_day (person_id, day, work_type, cities) values (${ryan?.id}, ${today}::date, 'hq', '{Pasay}')
+      on conflict (person_id, day) do nothing`);
+    await db.execute(
+      sql`insert into visit (person_id, customer_id, day, status, checked_in_at, done_at, made_by)
+        values (${ryan?.id}, ${customer?.id}, ${today}::date, 'done', now(), now(), ${ryan?.id})`,
+    );
+    const mine = (await (await get("ryan", "/api/scores")).json()) as MyScore;
+    expect(mine.card?.recipe).toBe("hospital");
+    expect(mine.field?.recipe).toBe("field");
+    expect(mine.field?.kpis.find((kpi) => kpi.key === "calls")?.value).toBeGreaterThanOrEqual(1);
+    const team = (await (await get("admin", "/api/scores/team")).json()) as TeamScores;
+    expect(team.rows.find((row) => row.personId === ryan?.id)?.field?.recipe).toBe("field");
   });
 });

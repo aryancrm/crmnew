@@ -39,6 +39,7 @@ import {
 import { RangePicker } from "../team/range";
 import { PageState } from "../ui";
 import { CompanyGlance } from "./glance";
+import { KpiCard } from "./kpi-card";
 import { greeting, todayWords } from "../home/home";
 
 type Icon = React.ComponentType<{ className?: string }>;
@@ -470,6 +471,9 @@ export function CeoHomePage() {
 
       {/* The month's profit and how fast customers pay (ERP phase 1: from the books). */}
       <ProfitStrip />
+
+      {/* The month's KPIs: every scorecard in the company (Aryan, 20 Nov; PLAN 23). */}
+      <KpiCard month={data.range ? "" : asked} />
 
       {/* The company at a glance: the month's sales by day and channel, the top sellers, customers
           and medicines, enquiries, orders by step, stock, customers (Aryan, 19 Nov). */}

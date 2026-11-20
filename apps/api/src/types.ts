@@ -4839,9 +4839,32 @@ export type MyScore = ScoreYear & {
   month: string;
   today: string;
   card: ScoreCard | null;
+  /** A MedRep in the field: their Field work card beside their channel's (PLAN 23). */
+  field: ScoreCard | null;
   disputes: ScoreDispute[];
   mine: boolean;
 };
+
+/** The CEO's Home: the month's KPI picture of the whole company (PLAN 23). */
+export type CompanyScores = {
+  month: string;
+  today: string;
+  live: boolean;
+  /** People with a card this month (sellers and leads). */
+  scored: number;
+  /** The sellers' cards, averaged (percent of each card's maximum). */
+  average: number | null;
+  leadsAverage: number | null;
+  below60: number;
+  best: CompanyScorePerson[];
+  lowest: CompanyScorePerson[];
+  /** Each kind of card (Hospital CHC, Rx CHC, Field work…) and its average. */
+  kinds: { recipe: string; label: string; people: number; average: number; interim: boolean }[];
+  field: { people: number; average: number | null };
+  /** Questions on locked figures still open. */
+  questions: number;
+};
+export type CompanyScorePerson = { personId: number; name: string; title: string; unit: string; card: string; recipe: string; percent: number; lead: boolean };
 
 export type TeamScores = {
   month: string;
@@ -4854,6 +4877,7 @@ export type TeamScores = {
     personId: number | null;
     name: string | null;
     card: ScoreCard | null;
+    field: ScoreCard | null;
   })[];
   disputes: ScoreDispute[];
 };

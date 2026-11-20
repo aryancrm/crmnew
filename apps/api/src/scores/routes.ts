@@ -6,7 +6,7 @@ import { z } from "zod";
 import type { Database } from "../db/index";
 import { type Env, Refusal, readBody } from "../http";
 import { todayManila } from "../inventory/rules";
-import { answerDispute, lockMonth, myScore, raiseDispute, teamScores } from "./service";
+import { answerDispute, companyScores, lockMonth, myScore, raiseDispute, teamScores } from "./service";
 
 const MONTH = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Pick the month.");
 
@@ -34,6 +34,9 @@ export function scoreRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
       }),
     );
   });
+
+  // The CEO's Home: the month's KPI picture for the whole company (PLAN 23).
+  app.get("/api/scores/company", async (c) => c.json(await companyScores(db, c.get("me"), { month: c.req.query("month") })));
 
   app.post("/api/scores/disputes", async (c) => {
     const input = await readBody(

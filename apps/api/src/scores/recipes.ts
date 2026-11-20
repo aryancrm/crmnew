@@ -25,7 +25,7 @@ export type KpiRecipe = {
   direct?: boolean;
 };
 export type Recipe = {
-  key: "hospital" | "b2c" | "rx" | "telesales" | "team";
+  key: "hospital" | "b2c" | "rx" | "telesales" | "team" | "lead" | "field" | "nbd" | "crr" | "clidp" | "mt" | "bidding" | "pap";
   label: string;
   /** From the playbook named. */
   source: string;
@@ -215,7 +215,213 @@ export const TEAM: Recipe = {
   ],
 };
 
-export const RECIPES = { hospital: HOSPITAL, b2c: B2C, rx: RX, telesales: TELESALES, team: TEAM };
+// ---- Interim cards (Aryan, 20 Nov: "a KPI card for every seller and every lead; the field's on
+// interim weights, marked"; docs/PLAN.md 23, question 32). No playbook publishes these yet: the
+// weights and bands below stand until HR or Aryan gives the real ones. Every card says "interim".
+
+const INTERIM = "Interim, until HR publishes this card (PLAN 23)";
+
+/** A percentage KPI's bands for its weight: 90% and up full, then 75, 60, 40. */
+const pctBands = (weight: number): Band[] => [
+  { from: 90, points: weight, label: "On target" },
+  { from: 75, points: Math.round(weight * 0.8), label: "Near" },
+  { from: 60, points: Math.round(weight * 0.6), label: "Developing" },
+  { from: 40, points: Math.round(weight * 0.3), label: "Below" },
+  { from: 0, points: 0, label: "Critical" },
+];
+/** Sales against target (IST): the playbooks' steps (91, 81, 71, 60) for any weight. */
+const istBands = (weight: number): Band[] => [
+  { from: 91, points: weight, label: "On target" },
+  { from: 81, points: Math.round(weight * 0.8), label: "Near" },
+  { from: 71, points: Math.round(weight * 0.6), label: "Developing" },
+  { from: 60, points: Math.round(weight * 0.4), label: "Below" },
+  { from: 0, points: 0, label: "Critical" },
+];
+/** A count KPI: `steps` are the counts for full, 80%, 60%, 30% of the weight. */
+const countBands = (weight: number, steps: [number, number, number, number]): Band[] => [
+  { from: steps[0], points: weight, label: "On target" },
+  { from: steps[1], points: Math.round(weight * 0.8), label: "Near" },
+  { from: steps[2], points: Math.round(weight * 0.6), label: "Developing" },
+  { from: steps[3], points: Math.round(weight * 0.3), label: "Below" },
+  { from: 0, points: 0, label: "Critical" },
+];
+const ist = (weight: number, how = "Invoiced this month ÷ the month's target"): KpiRecipe => ({
+  key: "ist", label: "IST · sales vs target", how, weight, unit: "%", better: "high", bands: istBands(weight),
+});
+const dso = (weight: number): KpiRecipe => ({
+  key: "dso", label: "DSO · days to collect", how: "Owed now on credit ÷ the last 90 days' credit sales × 90", weight, unit: "days", better: "low",
+  bands: [
+    { from: 70, points: weight, label: "Healthy" },
+    { from: 89, points: Math.round(weight / 2), label: "Watch" },
+    { from: Number.POSITIVE_INFINITY, points: 0, label: "Escalate to the coach" },
+  ],
+});
+const nzsd = (weight: number): KpiRecipe => ({
+  key: "nzsd", label: "NZSD · days with an invoice", how: "Working days with at least one invoice ÷ working days", weight, unit: "%", better: "high", bands: pctBands(weight),
+});
+const reorder = (weight: number, label: string, who: string): KpiRecipe => ({
+  key: "crr", label, how: `${who} invoiced last month and this ÷ invoiced last month`, weight, unit: "%", better: "high", bands: pctBands(weight),
+});
+const ocr = (weight: number): KpiRecipe => ({
+  key: "ocr", label: "OCR · orders cancelled", how: "Cancelled orders ÷ orders this month (lower is better)", weight, unit: "%", better: "low",
+  bands: [
+    { from: 0.99, points: weight, label: "Full" },
+    { from: 4.99, points: Math.round(weight * 0.8), label: "High" },
+    { from: 9.99, points: Math.round(weight * 0.5), label: "Developing" },
+    { from: 14.99, points: Math.round(weight * 0.2), label: "Alert" },
+    { from: Number.POSITIVE_INFINITY, points: 0, label: "Critical" },
+  ],
+});
+
+/** The field's own card (SEFMED's day: calls, coverage, frequency, the tour plan, day reports),
+ *  for every MedRep who works field days; their channel's card stays beside it. */
+export const FIELD: Recipe = {
+  key: "field",
+  label: "Field work",
+  source: INTERIM,
+  kpis: [
+    {
+      key: "calls", label: "Calls a field day", how: "Calls closed ÷ field days (days with Start working)", weight: 30, unit: "count", better: "high",
+      bands: countBands(30, [8, 6, 4, 2]),
+    },
+    {
+      key: "coverage", label: "Coverage · classed customers seen", how: "Customers with a visit class (A–D) seen at least once this month ÷ all of them", weight: 25, unit: "%", better: "high",
+      bands: pctBands(25),
+    },
+    {
+      key: "frequency", label: "Frequency · seen as often as the class asks", how: "Classed customers seen A 4, B 2, C and D once this month ÷ all of them", weight: 20, unit: "%", better: "high",
+      bands: pctBands(20),
+    },
+    {
+      key: "tour", label: "Tour plan kept", how: "Planned visits up to today that were done ÷ planned visits up to today", weight: 15, unit: "%", better: "high",
+      bands: pctBands(15),
+    },
+    {
+      key: "reports", label: "Day reports sent", how: "Field days with the day report sent ÷ field days done", weight: 10, unit: "%", better: "high",
+      bands: pctBands(10),
+    },
+  ],
+};
+
+export const NBD: Recipe = {
+  key: "nbd",
+  label: "B2B NBD",
+  source: INTERIM,
+  kpis: [
+    ist(40),
+    {
+      key: "accounts", label: "New accounts with a first order", how: "Accounts I brought in whose first invoice is this month", weight: 30, unit: "count", better: "high",
+      bands: countBands(30, [5, 3, 2, 1]),
+    },
+    nzsd(15),
+    ocr(15),
+  ],
+};
+
+export const CRR: Recipe = {
+  key: "crr",
+  label: "B2B CRR",
+  source: INTERIM,
+  kpis: [ist(40), reorder(30, "Accounts reordering", "Accounts"), dso(15), nzsd(15)],
+};
+
+export const CLIDP: Recipe = {
+  key: "clidp",
+  label: "CLIDP",
+  source: INTERIM,
+  kpis: [ist(50), dso(20), reorder(15, "Distributors reordering", "Distributors"), nzsd(15)],
+};
+
+export const MT: Recipe = {
+  key: "mt",
+  label: "Modern Trade",
+  source: INTERIM,
+  kpis: [ist(50), dso(20), reorder(15, "Chains reordering", "Chains"), nzsd(15)],
+};
+
+export const BIDDING: Recipe = {
+  key: "bidding",
+  label: "Government Bidding",
+  source: INTERIM,
+  kpis: [
+    ist(40, "Awards invoiced this month ÷ the month's target"),
+    {
+      key: "win", label: "Win rate", how: "Tenders won ÷ tenders decided (won or lost) this month", weight: 30, unit: "%", better: "high",
+      bands: [
+        { from: 50, points: 30, label: "On target" },
+        { from: 35, points: 24, label: "Near" },
+        { from: 25, points: 18, label: "Developing" },
+        { from: 10, points: 9, label: "Below" },
+        { from: 0, points: 0, label: "Critical" },
+      ],
+    },
+    dso(15),
+    nzsd(15),
+  ],
+};
+
+export const PAP: Recipe = {
+  key: "pap",
+  label: "PAP",
+  source: INTERIM,
+  kpis: [
+    {
+      key: "pap", label: "Guarantee letters received", how: "Guarantee letters received this month on my PAP cases", weight: 40, unit: "count", better: "high",
+      bands: countBands(40, [10, 6, 3, 1]),
+    },
+    ist(30),
+    ocr(15),
+    nzsd(15),
+  ],
+};
+
+/** A lead's own card (a coach, mentor, manager or head): their team's cards and sales, and how
+ *  they lead the field (day reports seen, days worked beside their people). */
+export const LEAD: Recipe = {
+  key: "lead",
+  label: "Team lead",
+  source: INTERIM,
+  kpis: [
+    {
+      key: "team", label: "Team's cards", how: "The month's score of each scored person under them, averaged", weight: 40, unit: "%", better: "high",
+      bands: [
+        { from: 85, points: 40, label: "On target" },
+        { from: 75, points: 32, label: "Near" },
+        { from: 60, points: 24, label: "Developing" },
+        { from: 40, points: 12, label: "Below" },
+        { from: 0, points: 0, label: "Critical" },
+      ],
+    },
+    {
+      key: "teamist", label: "Team sales vs target", how: "Invoiced by the team this month ÷ the team's targets (on the working-day pace)", weight: 30, unit: "%", better: "high",
+      bands: istBands(30),
+    },
+    {
+      key: "seen", label: "Day reports seen", how: "The team's day reports sent this month that the lead marked seen ÷ sent", weight: 15, unit: "%", better: "high",
+      bands: pctBands(15),
+    },
+    {
+      key: "joint", label: "Joint field work", how: "Days this month the lead worked beside one of their people (working with)", weight: 15, unit: "count", better: "high",
+      bands: countBands(15, [4, 3, 2, 1]),
+    },
+  ],
+};
+
+export const RECIPES = {
+  hospital: HOSPITAL,
+  b2c: B2C,
+  rx: RX,
+  telesales: TELESALES,
+  team: TEAM,
+  lead: LEAD,
+  field: FIELD,
+  nbd: NBD,
+  crr: CRR,
+  clidp: CLIDP,
+  mt: MT,
+  bidding: BIDDING,
+  pap: PAP,
+};
 
 export type KpiScore = {
   key: string;

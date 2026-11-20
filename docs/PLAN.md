@@ -2172,6 +2172,33 @@ are the company's, the same for everyone); *Put employee on hold* and tour-plan 
 **Later:** SEFMED's data loaded (its clients matched to CRM customers, its visits), e-detailing,
 stock tally and secondary sales, payment from a firm, working offline.
 
+## 23. A KPI card for every seat, the field's too, on the CEO's Home (20 Nov 2026)
+
+Aryan, 20 Nov: "make the KPIs of everything, each person's, whoever has one; the MR app's KPIs, the
+team lead's and the manager's too; the KPI data must show on the CEO's Home; integrate it well and
+deploy live." His answers: **every seller and every lead** gets a card, a lead **their own card**
+(not only the team's average); the field's KPIs on **interim weights, marked interim**.
+
+The cards (the scorecard engine of change log 42–44, `apps/api/src/scores`): the playbooks' cards
+stay as they are (Hospital CHC, Rx CHC, B2C CHC, TeleSales on the B2C card). New, **interim** until
+HR publishes the real ones (each card says so; weights to change on Aryan's or HR's word):
+
+| Card | Who | KPIs (weight) |
+|---|---|---|
+| Field work | every MedRep who works the field days (Start working) | Calls a field day 30 (8 or more full) · Coverage 25 (classed customers seen this month) · Frequency 20 (seen as often as the class asks: A 4, B 2, C/D 1) · Tour plan kept 15 (planned visits done) · Day reports sent 10 |
+| B2B NBD | the NBD seats | IST 40 · New accounts with a first order 30 (count) · NZSD 15 · OCR 15 |
+| B2B CRR | the CRR seats | IST 40 · Accounts reordering 30 · DSO 15 · NZSD 15 |
+| CLIDP | the CLIDP seats | IST 50 · DSO 20 · Distributors reordering 15 · NZSD 15 |
+| Modern Trade | the MT seats | IST 50 · DSO 20 · Chains reordering 15 · NZSD 15 |
+| Government Bidding | BID seats and the Hospital Division's bidding coachee | IST 40 · Win rate 30 (won ÷ decided tenders this month) · DSO 15 · NZSD 15 |
+| PAP | the PAP seats | Guarantee letters 40 (count) · IST 30 · OCR 15 · NZSD 15 |
+| Team lead / manager / head | every lead seat | Team's cards 40 (their average) · Team sales vs target 30 · Day reports seen 15 · Joint field work 15 (days worked with their people) |
+
+A MedRep in the field has two cards: their channel's and Field work. The 12-month average and the
+increment band read the channel's card only. Each card is locked on the 1st as before. The CEO's
+Home shows the month's KPI picture: the company's average, people below 60, the best and the
+lowest, each division's average; Scorecards opens every card.
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -2265,6 +2292,10 @@ stock tally and secondary sales, payment from a firm, working offline.
     (SEFMED's track report), or only at start, I'm here, close and stop, as built?
 31. ~~The app's name and its people~~ Answered 20 Nov: no separate app; it lives in the MedRep's
     pages, with the company tree's people.
+
+32. **The real KPI cards** (23): the field's, B2B's, CLIDP's, MT's, Bidding's, PAP's and the leads'
+    KPIs and weights are interim (section 23). HR or Aryan to give the real ones; they change in
+    `scores/recipes.ts` without touching the data.
 
 ## 14. Change log
 
@@ -3003,3 +3034,4 @@ stock tally and secondary sales, payment from a firm, working offline.
 - 20 Nov (155), Aryan: "SEFMED's app is very good; make our own as a separate app for now, every screen working the same way, two sides (the MR's, the team lead's), one team lead who sees everything; keep it simple, tie it to the CRM later." **The MR App** (section 22, docs/FIELD-CHECKLIST.md): its own people, clients, days, visits with the five steps, orders booked, follow-ups, tour plan with revisions and deviations, expenses with SEFMED's heads, day report, the lead's team, approvals, call reports, attendance, map; migration 0129, `apps/api/src/mr`, `apps/web/src/mr`. Nothing else in the CRM changed. Checked: 12 new API tests (485 in all pass), the web build, and the whole day in the browser on a demo copy (start working, add visits, I'm here, Add order, close the call, day report with a missed reason, the lead's team and Mark seen). Questions 29–31.
 - 20 Nov (156), Aryan, the same day: "build MR properly first, then integrate it into our existing MR pages as options of their own. MRs made orders in the hub and kept records on SEFMED: we join both. Same hierarchy: their team lead / manager approves, above that the head, above that the CEO." **SEFMED's work in the MedRep's pages** (section 22, docs/FIELD-CHECKLIST.md): the separate app's own people, clients and order booking are gone (migration 0129_mr_app replaced by 0129_field_work, never applied outside demo copies). Visits are the CRM's `visit` (+ *missed*), customers the CRM's (doctors = KOLs, hospitals, drugstores and distributors = KBLs) with a field profile beside them, *Add order* opens the CRM's Create New Order and the order joins the visit (`visit_order`, in the same step as the order), samples through the samples module, the tour plan is the CRM's `visit_plan`, expenses the CRM's field expense lines with SEFMED's heads. The company tree is the hierarchy: the person's team lead decides, the head may stand in, the CEO reads only; the lead's waiting items are on *To decide* too. Pages in the MedRep's *Visits* folder, the leads' *Team visits* folder and the CEO's and the Admin's *Field* app. The older visits report counts *missed* with skipped and spends the approved amount. Checked: 487 API tests, the web build, the A-to-Z walk on a fresh copy of the real data, and every field page in the browser as the MedRep, team lead, head, CEO and Admin on a demo copy (no errors; the CEO sees no decide buttons). Local, not pushed. Questions 29–30; 31 answered.
 - 20 Nov (157), Aryan: "a MedRep comes, clicks here, the day starts; an order and he is in Create order; the Start up top must be the Start below; don't make two separate pages, Log a call just opens that one." **One way in, one Start** (section 22): *Log a call* opens My day; for a MedRep with My day in their menu the top bar's Start is Start working (field day + attendance in one) and End my day opens the day report while the field day runs; a call opened before the day started offers Start working in step 2. TeleSales, B2B, Bidding and the Online office keep the plain attendance Start. A bigger rework (everything on one Log a call page) was started from a side chat and dropped on Aryan's word: the pages stay as he liked them. Checked: web typecheck; in the browser on a demo copy as Joy (Rx CHC: Log a call → My day, top-bar Start → Start working → "In since" and the circle together, End my day → day report), Carlo (Hospital: a call before the day → Start working in step 2 → I'M HERE) and Ana (TeleSales: Start stays attendance only). Local, not pushed.
+- 20 Nov (158), Aryan: "make KPIs of everything, each person's; the MR app's, the team lead's, the manager's; the KPI data on the CEO's Home; integrate, check, deploy live" (answers: every seller and lead, a lead their own card, the field on interim weights marked). **A KPI card for every seat** (section 23, question 32): new interim cards for B2B NBD and CRR, CLIDP, Modern Trade, Government Bidding (now also the Hospital Division's bidding coachee) and PAP; a lead's own card (team's cards 40, team sales vs target 30, day reports seen 15, joint field days 15) instead of only the team's average; **Field work** (calls a field day 30, coverage 25, frequency by class 20, tour plan kept 15, day reports sent 10) for every MedRep beside their channel's card, from the field's own records (Start working, visits, classes, the tour plan, day reports). Migration 0130 keeps a locked month per card; the 12-month average and the increment read the channel's card only; questions work on either card. Screens: My score shows both cards (interim marked), Scorecards lists each card's kind, its KPI points and the Field score; the CEO's Home has the month's **KPIs** card (sellers' average, below 60, each card kind's average, the field, the leads, best and lowest; Scorecards opens all); My day has a My KPIs tile. The playbook cards are unchanged. Checked: score tests (12), the whole API suite, both type-checks, the web build, and in the browser on a demo copy as the CEO, a MedRep and a team lead.

@@ -13,6 +13,7 @@ import {
   CalendarRange,
   ClipboardList,
   Coffee,
+  Gauge,
   ListChecks,
   MapPin,
   PartyPopper,
@@ -108,6 +109,7 @@ export function MrDay() {
         <Tile to="/field/follow-ups" icon={ListChecks} label="Follow-ups" tone="bg-amber-50 text-amber-700" sub={data.tiles.followUpsDue ? `${data.tiles.followUpsDue} due` : undefined} />
         <Tile to="/field/day-report" icon={ClipboardList} label="Day report" tone="bg-sky-50 text-sky-700" />
         <Tile to="/field/reports" icon={BarChart3} label="Reports" tone="bg-lime-50 text-lime-700" />
+        <Tile to="/my/score" icon={Gauge} label="My KPIs" tone="bg-rose-50 text-rose-700" />
       </div>
 
       {placing && (

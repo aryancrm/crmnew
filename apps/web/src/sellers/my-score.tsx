@@ -130,49 +130,25 @@ export function MyScorePage() {
     <div className="mx-auto max-w-4xl">
       <PageHead
         title={data.mine ? "My score" : data.name}
-        sub={[data.seat, data.area, card ? `${card.label} · ${card.source}` : null].filter(Boolean).join(" · ")}
+        sub={[data.seat, data.area, card ? `${card.label} · ${card.source}` : data.field ? "Field work" : null].filter(Boolean).join(" · ")}
         actions={<MonthPicker month={data.month} today={data.today} onChange={pick} />}
       />
-      {!card ? (
+      {!card && !data.field ? (
         <div className={`${CARD} p-6 text-[13.5px] text-slate-600`}>
-          No scorecard for {monthLabel(data.month)}: only hospital and prescription MedReps and the online desk are scored for now, and only once
-          there is a target or a sale to measure.
+          No scorecard for {monthLabel(data.month)}: a card starts once there is a target, a sale, an order or a field day to
+          measure.
         </div>
       ) : (
         <>
-          <section className={`${CARD} mb-4 flex flex-col gap-5 p-5 sm:flex-row sm:items-center`}>
-            <Ring share={card.max ? card.total / 100 : null} color={toneOf(card.percent)} size={112}>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-slate-900 tabular-nums">{card.total}</div>
-                <div className="text-[11px] text-slate-500">of {card.max}</div>
-              </div>
-            </Ring>
-            <div className="min-w-0 flex-1 text-[13px] text-slate-600">
-              <div className="mb-1 flex flex-wrap items-center gap-2">
-                {card.live ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11.5px] font-semibold text-sky-800">
-                    <Radio className="size-3" /> Running, to {card.upTo.slice(8)} {monthLabel(card.month).split(" ")[0]}
-                  </span>
-                ) : (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11.5px] font-semibold text-slate-700">
-                    <Lock className="size-3" /> Locked on {card.lockedOn}
-                  </span>
-                )}
-                {card.capped && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11.5px] font-semibold text-red-800">
-                    <TriangleAlert className="size-3" /> Capped at {card.total}: {card.kpis.find((kpi) => kpi.weight === 0 && kpi.band !== "Pass") ? "coverage below the gate" : "IST scored nothing"}
-                  </span>
-                )}
-              </div>
-              {card.max < 100 && <div>KPIs with nothing to measure are left out: {card.max} points were in play.</div>}
-              {card.live && <div>It locks on the 1st; no one changes it by hand after that.</div>}
-            </div>
-          </section>
-          <section className={`${CARD} mb-4 divide-y divide-slate-100`}>
-            {card.kpis.map((kpi) => (
-              <KpiRow key={kpi.key} kpi={kpi} onQuestion={data.mine && !card.live ? () => setAsking(kpi.key) : undefined} />
-            ))}
-          </section>
+          {card && <CardBlock card={card} onQuestion={data.mine && !card.live ? setAsking : undefined} />}
+          {data.field && (
+            <>
+              <h2 className="mt-6 mb-2 text-[14px] font-semibold text-slate-900">
+                Field work <span className="font-normal text-slate-500">· {data.field.source}</span>
+              </h2>
+              <CardBlock card={data.field} onQuestion={data.mine && !data.field.live ? setAsking : undefined} />
+            </>
+          )}
         </>
       )}
       <section className={`${CARD} mb-4 p-5`}>
@@ -193,8 +169,58 @@ export function MyScorePage() {
         <YearBars history={data.history} />
       </section>
       {data.disputes.length > 0 && <Disputes disputes={data.disputes} canAnswer={!data.mine} />}
-      {asking && card && <AskDialog month={card.month} kpi={card.kpis.find((kpi) => kpi.key === asking)} onClose={() => setAsking(null)} />}
+      {asking && (card ?? data.field) && (
+        <AskDialog
+          month={(card ?? data.field)?.month as string}
+          kpi={[...(card?.kpis ?? []), ...(data.field?.kpis ?? [])].find((kpi) => kpi.key === asking)}
+          onClose={() => setAsking(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/** One card: its total in a ring, running or locked, any cap, then each KPI with its band. */
+function CardBlock({ card, onQuestion }: { card: ScoreCard; onQuestion?: (kpi: string) => void }) {
+  return (
+    <>
+      <section className={`${CARD} mb-4 flex flex-col gap-5 p-5 sm:flex-row sm:items-center`}>
+        <Ring share={card.max ? card.total / 100 : null} color={toneOf(card.percent)} size={112}>
+          <div className="text-center">
+            <div className="text-3xl font-bold text-slate-900 tabular-nums">{card.total}</div>
+            <div className="text-[11px] text-slate-500">of {card.max}</div>
+          </div>
+        </Ring>
+        <div className="min-w-0 flex-1 text-[13px] text-slate-600">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
+            {card.live ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[11.5px] font-semibold text-sky-800">
+                <Radio className="size-3" /> Running, to {card.upTo.slice(8)} {monthLabel(card.month).split(" ")[0]}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[11.5px] font-semibold text-slate-700">
+                <Lock className="size-3" /> Locked on {card.lockedOn}
+              </span>
+            )}
+            {card.capped && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[11.5px] font-semibold text-red-800">
+                <TriangleAlert className="size-3" /> Capped at {card.total}: {card.kpis.find((kpi) => kpi.weight === 0 && kpi.band !== "Pass") ? "coverage below the gate" : "IST scored nothing"}
+              </span>
+            )}
+            {card.source.startsWith("Interim") && (
+              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-[11.5px] font-semibold text-amber-800">Interim weights</span>
+            )}
+          </div>
+          {card.max < 100 && <div>KPIs with nothing to measure are left out: {card.max} points were in play.</div>}
+          {card.live && <div>It locks on the 1st; no one changes it by hand after that.</div>}
+        </div>
+      </section>
+      <section className={`${CARD} mb-4 divide-y divide-slate-100`}>
+        {card.kpis.map((kpi) => (
+          <KpiRow key={kpi.key} kpi={kpi} onQuestion={onQuestion ? () => onQuestion(kpi.key) : undefined} />
+        ))}
+      </section>
+    </>
   );
 }
 
