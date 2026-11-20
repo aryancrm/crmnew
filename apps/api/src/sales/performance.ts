@@ -60,7 +60,7 @@ export function linesSql(from: string, to: string): SQL {
       coalesce((select h.person_id from seat_holder h where h.seat_id = l.seat_id and h.kind = 'holder' and h.starts_on <= l.day
           and (h.ends_on is null or h.ends_on >= l.day) order by h.starts_on desc limit 1),
         -- A sale from before the seat was filled in this ERP (Zoho's history): its first holder after.
-        (select h.person_id from seat_holder h where h.seat_id = l.seat_id and h.kind = 'holder' and h.starts_on > l.day order by h.starts_on limit 1),
+        (select h.person_id from seat_holder h where h.seat_id = l.seat_id and h.kind = 'holder' and h.starts_on > l.day order by h.starts_on, h.id limit 1),
         l.fallback) as person_id,
       l.zoho_name, l.seat_id
     from line l`;

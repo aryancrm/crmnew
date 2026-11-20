@@ -84,7 +84,7 @@ const seatLateral = (today: string) => sql`left join lateral (
     from seat_holder h join seat s on s.id = h.seat_id and s.active join org_unit u on u.id = s.unit_id
       left join area a on a.id = s.area_id
     where h.person_id = p.id and h.kind = 'holder' and (h.ends_on is null or h.ends_on >= ${today}::date)
-    order by h.starts_on limit 1) seat on true`;
+    order by h.starts_on, h.id limit 1) seat on true`;
 
 /** What they sign in with: the email HR gave them, else their seat's login ID. */
 const loginIdOf = (seatLogin: string | null, email: string | null) =>
@@ -507,7 +507,7 @@ export async function setLogin(
       const [seat] = await rows<{ id: number }>(
         tx,
         sql`select h.seat_id::int as id from seat_holder h where h.person_id = ${personId} and h.kind = 'holder'
-          and (h.ends_on is null or h.ends_on >= ${today}::date) order by h.starts_on limit 1`,
+          and (h.ends_on is null or h.ends_on >= ${today}::date) order by h.starts_on, h.id limit 1`,
       );
       email = await checkLoginEmail(tx, input.email, personId, seat?.id ?? null);
       await tx.execute(sql`update person set email = ${email} where id = ${personId}`);

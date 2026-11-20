@@ -106,7 +106,7 @@ export async function personOfSeatLogin(
     db,
     sql`select p.id::int as id from seat s join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)}
         join person p on p.id = h.person_id and p.active
-      where s.active and lower(s.login) = ${login} order by h.starts_on limit 1`,
+      where s.active and lower(s.login) = ${login} order by h.starts_on, h.id limit 1`,
   );
   return found?.id ?? null;
 }
@@ -1001,7 +1001,7 @@ export async function resetPassword(db: Database, me: Me, personId: number): Pro
   const [seat] = await rows<{ id: number; login: string | null }>(
     db,
     sql`select s.id::int as id, s.login from seat_holder h join seat s on s.id = h.seat_id and s.active
-      where h.person_id = ${person.id} and h.kind = 'holder' and ${inForce("h", todayManila())} order by h.starts_on limit 1`,
+      where h.person_id = ${person.id} and h.kind = 'holder' and ${inForce("h", todayManila())} order by h.starts_on, h.id limit 1`,
   );
   return {
     personId: person.id,
@@ -1202,10 +1202,10 @@ export async function fillOrderSeats(db: Runner, today = todayManila()): Promise
   await db.execute(
     sql`update sales_order o set seat_id = coalesce(
         (select h.seat_id from seat_holder h join seat s on s.id = h.seat_id and s.active and s.area_id is not null
-          where h.person_id = o.medrep_id and h.kind = 'holder' and ${inForce("h", today)} order by h.starts_on limit 1),
+          where h.person_id = o.medrep_id and h.kind = 'holder' and ${inForce("h", today)} order by h.starts_on, h.id limit 1),
         (select s.id from customer c join seat s on s.area_id = c.area_id and s.active where c.id = o.customer_id limit 1),
         (select h.seat_id from seat_holder h join seat s on s.id = h.seat_id and s.active
-          where h.person_id = o.medrep_id and h.kind = 'holder' and ${inForce("h", today)} order by h.starts_on limit 1))
+          where h.person_id = o.medrep_id and h.kind = 'holder' and ${inForce("h", today)} order by h.starts_on, h.id limit 1))
       where o.seat_id is null`,
   );
 }

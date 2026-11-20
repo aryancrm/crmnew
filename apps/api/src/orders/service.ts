@@ -1880,7 +1880,7 @@ export async function orderForList(
       left join area a on a.id = p.area_id left join channel ch on ch.id = p.channel_id
       left join lateral (select s.login, u.name as team from seat_holder h join seat s on s.id = h.seat_id and s.active
         join org_unit u on u.id = s.unit_id where h.person_id = p.id and h.kind = 'holder' and ${inForce("h", today)}
-        order by h.starts_on limit 1) seat on true
+        order by h.starts_on, h.id limit 1) seat on true
       where p.active and p.role = 'medrep' and ${forWhom(me)} order by seat.team nulls last, p.name`,
   );
   // Each MedRep's own Divisions: the order picked for them carries one of theirs.

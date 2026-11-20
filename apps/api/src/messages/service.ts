@@ -89,7 +89,7 @@ export async function addressBook(db: Database, me: Me): Promise<MessageAddressB
       sql`select p.id::int as id, p.name, p.title, seat.login, seat.team from person p
         left join lateral (select s.login, u.name as team from seat_holder h join seat s on s.id = h.seat_id and s.active
           join org_unit u on u.id = s.unit_id where h.person_id = p.id and h.kind = 'holder' and ${inForce("h", today)}
-          order by h.starts_on limit 1) seat on true
+          order by h.starts_on, h.id limit 1) seat on true
         where p.active and p.id <> ${me.id} order by p.name`,
     ),
     rows<{ id: number; name: string; parentId: number | null; sort: number }>(

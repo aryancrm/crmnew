@@ -42,7 +42,7 @@ async function behind(db: Database, door: DoorKey): Promise<Behind[]> {
       sql`select s.id::int as "seatId", s.unit_id::int as "unitId", s.module, s.lead, s.login, s.sort,
           s.reports_to_seat_id::int as "reportsToSeat",
           (select h.person_id::int from seat_holder h join person p on p.id = h.person_id and p.active
-            where h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)} order by h.starts_on limit 1) as "personId"
+            where h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)} order by h.starts_on, h.id limit 1) as "personId"
         from seat s where s.active order by s.lead desc, s.sort, s.id`,
     ),
     rows<{ id: number; parentId: number | null; name: string; sort: number }>(

@@ -36,7 +36,7 @@ async function fieldPeople(db: Runner, me: Me): Promise<FieldCalendar["people"]>
     db,
     sql`select p.id::int as id, p.name,
         (select u.name from seat_holder h join seat s on s.id = h.seat_id and s.active join org_unit u on u.id = s.unit_id
-          where h.person_id = p.id and h.kind = 'holder' and ${inForce("h", today)} order by h.starts_on limit 1) as team
+          where h.person_id = p.id and h.kind = 'holder' and ${inForce("h", today)} order by h.starts_on, h.id limit 1) as team
       from person p where p.active and p.role in ('medrep', 'team_lead', 'manager') and ${scope}
       order by p.name`,
   );

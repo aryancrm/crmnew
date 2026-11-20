@@ -185,7 +185,7 @@ export async function makePlan(db: Database, me: Me, month: string): Promise<{ a
     const [seat] = await rows<{ id: number }>(
       tx,
       sql`select h.seat_id::int as id from seat_holder h join seat s on s.id = h.seat_id and s.active
-        where h.person_id = ${me.id} and h.kind = 'holder' and ${inForce("h", today)} order by h.starts_on limit 1`,
+        where h.person_id = ${me.id} and h.kind = 'holder' and ${inForce("h", today)} order by h.starts_on, h.id limit 1`,
     );
     let added = 0;
     for (const customer of page.customers) {

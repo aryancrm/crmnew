@@ -42,7 +42,7 @@ const columns = (
 ) => sql`f.id::int as id, f.person_id::int as "personId", p.name as "personName",
   (select u.name from seat_holder h join seat s on s.id = h.seat_id and s.active join org_unit u on u.id = s.unit_id
     where h.person_id = p.id and h.kind = 'holder' and h.starts_on <= ${today}::date
-      and (h.ends_on is null or h.ends_on >= ${today}::date) order by h.starts_on limit 1) as team,
+      and (h.ends_on is null or h.ends_on >= ${today}::date) order by h.starts_on, h.id limit 1) as team,
   f.kind, to_char(f.day, 'YYYY-MM-DD') as day, to_char(f.from_time, 'HH24:MI') as "from",
   to_char(f.to_time, 'HH24:MI') as "to", f.place, f.reason, f.status, f.approver_id::int as "approverId",
   a.name as approver, d.name as "decidedBy", f.decision_note as "decisionNote"`;

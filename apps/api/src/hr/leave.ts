@@ -121,7 +121,7 @@ const lineColumns = (
 ) => sql`l.id::int as id, l.person_id::int as "personId", p.name as "personName",
   (select u.name from seat_holder h join seat s on s.id = h.seat_id and s.active join org_unit u on u.id = s.unit_id
     where h.person_id = p.id and h.kind = 'holder' and h.starts_on <= ${today}::date
-      and (h.ends_on is null or h.ends_on >= ${today}::date) order by h.starts_on limit 1) as team,
+      and (h.ends_on is null or h.ends_on >= ${today}::date) order by h.starts_on, h.id limit 1) as team,
   l.kind, to_char(l.from_day, 'YYYY-MM-DD') as "from", to_char(l.to_day, 'YYYY-MM-DD') as "to",
   l.half_day as "halfDay", l.reason, l.status, l.approver_id::int as "approverId", a.name as approver,
   d.name as "decidedBy", ${iso("l.decided_at")} as "decidedAt", l.decision_note as "decisionNote",

@@ -56,7 +56,7 @@ export async function listTargets(db: Database, me: Me, asked?: string): Promise
       left join sales_target t on t.person_id = p.id and t.month = ${first}::date
       left join person setter on setter.id = t.set_by
       left join lateral (select s.unit_id, s.login from seat_holder h join seat s on s.id = h.seat_id and s.active
-        where h.person_id = p.id and h.kind = 'holder' and ${inForce("h", todayManila())} order by h.starts_on limit 1) seat on true
+        where h.person_id = p.id and h.kind = 'holder' and ${inForce("h", todayManila())} order by h.starts_on, h.id limit 1) seat on true
       where p.active and p.role in (${sql.join(
         SELLERS.map((role) => sql`${role}`),
         sql`, `,

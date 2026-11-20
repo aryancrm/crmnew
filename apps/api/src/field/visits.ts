@@ -219,7 +219,7 @@ async function planOn(
       values (${me.id},
         (select h.seat_id from seat_holder h join seat s on s.id = h.seat_id and s.active
           where h.person_id = ${me.id} and h.kind = 'holder' and ${inForce("h", todayManila())}
-          order by h.starts_on limit 1),
+          order by h.starts_on, h.id limit 1),
         ${customer.id}, ${input.day}::date, ${clean(input.objective) ?? null}, ${fromVisit}, ${me.id})
       returning id::int as id`,
   );
@@ -415,7 +415,7 @@ export async function fieldReport(
     db,
     sql`${team(me)} select p.id::int as "personId", p.name, p.title,
         (select u.name from seat_holder h join seat s on s.id = h.seat_id and s.active join org_unit u on u.id = s.unit_id
-          where h.person_id = p.id and h.kind = 'holder' and ${inForce("h", today)} order by h.starts_on limit 1) as team,
+          where h.person_id = p.id and h.kind = 'holder' and ${inForce("h", today)} order by h.starts_on, h.id limit 1) as team,
         count(v.id) filter (where v.status = 'planned')::int as planned,
         count(v.id) filter (where v.status = 'done')::int as done,
         count(v.id) filter (where v.status = 'skipped')::int as skipped,

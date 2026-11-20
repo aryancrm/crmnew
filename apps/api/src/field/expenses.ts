@@ -105,7 +105,7 @@ export async function addExpense(
         values (${me.id},
           (select h.seat_id from seat_holder h join seat s on s.id = h.seat_id and s.active
             where h.person_id = ${me.id} and h.kind = 'holder' and ${inForce("h", todayManila())}
-            order by h.starts_on limit 1),
+            order by h.starts_on, h.id limit 1),
           ${input.day}::date, ${input.kind}, ${input.amount}, ${input.km ?? null}, ${visitId},
           ${clean(input.note) ?? null}, ${kept?.name ?? null},
           ${kept?.mime ?? null}, ${kept?.size ?? null},
