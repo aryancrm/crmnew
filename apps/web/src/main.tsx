@@ -120,6 +120,16 @@ import { ToCallPage } from "./customers/to-call";
 import { TeamSalesPage } from "./team/team";
 import { VisitPlanPage } from "./field/visit-plan";
 import { VisitsPage } from "./field/visits";
+import { MrClientPage, MrClientsPage } from "./mr/clients";
+import { MrDayReportPage } from "./mr/day-report";
+import { MrExpensesPage } from "./mr/expenses";
+import { MrDay, MrHomePage } from "./mr/home";
+import { MrAddOrderPage, MrOrdersPage } from "./mr/orders";
+import { MrMapPage, MrPeoplePage } from "./mr/people";
+import { MrPlanPage } from "./mr/plan";
+import { MrFollowUpsPage, MrHolidaysPage, MrReportsPage } from "./mr/reports";
+import { MrVisitPage } from "./mr/visit";
+import { MrVisitsPage } from "./mr/visits";
 import { Shell } from "./shell";
 import "./styles.css";
 
@@ -305,6 +315,22 @@ createRoot(root).render(
             <Route path="field/live" element={<FieldLivePage />} />
             <Route path="visits/expenses" element={<FieldExpensesPage />} />
             <Route path="field/report" element={<FieldReportPage />} />
+            <Route path="mr" element={<MrHomePage />} />
+            <Route path="mr/my-day" element={<MrDay />} />
+            <Route path="mr/visits" element={<MrVisitsPage />} />
+            <Route path="mr/visits/:id" element={<MrVisitPage key="visit" />} />
+            <Route path="mr/clients" element={<MrClientsPage />} />
+            <Route path="mr/clients/:id" element={<MrClientPage key="client" />} />
+            <Route path="mr/orders" element={<MrOrdersPage />} />
+            <Route path="mr/orders/new" element={<MrAddOrderPage />} />
+            <Route path="mr/plan" element={<MrPlanPage />} />
+            <Route path="mr/expenses" element={<MrExpensesPage />} />
+            <Route path="mr/day-report" element={<MrDayReportPage />} />
+            <Route path="mr/reports" element={<MrReportsPage />} />
+            <Route path="mr/follow-ups" element={<MrFollowUpsPage />} />
+            <Route path="mr/holidays" element={<MrHolidaysPage />} />
+            <Route path="mr/people" element={<MrPeoplePage />} />
+            <Route path="mr/map" element={<MrMapPage />} />
             <Route path="hr/attendance/:id" element={<AttendanceMonthPage key="month" />} />
             <Route path="admin/channels" element={<AdminChannelsPage />} />
             <Route path="admin/data-checks" element={<AdminDataChecks />} />

@@ -31,6 +31,7 @@ import { fieldRoutes } from "./field/routes";
 import { financeRoutes } from "./finance/routes";
 import { markSeen } from "./hr/attendance";
 import { hrRoutes } from "./hr/routes";
+import { mrRoutes } from "./mr/routes";
 import { allow, type Env, idParam, Refusal, readBody, signedInWith } from "./http";
 import { inventoryRoutes } from "./inventory/routes";
 import { messageRoutes } from "./messages/routes";
@@ -448,6 +449,7 @@ export function createApp(db: Database, options: AppOptions) {
   decisionRoutes(app, db, signedIn);
   sampleRoutes(app, db, signedIn);
   complaintRoutes(app, db, signedIn);
+  mrRoutes(app, db, signedIn);
 
   return app;
 }

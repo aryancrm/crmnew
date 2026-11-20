@@ -74,6 +74,12 @@ import {
   ListChecks,
   ScrollText,
   ScanSearch,
+  Store,
+  PartyPopper,
+  Map as MapIcon,
+  UserCog,
+  Smartphone,
+  GitBranch,
 } from "lucide-react";
 import { ZOHO_REPORT_GROUPS } from "./zoho-reports";
 
@@ -490,6 +496,58 @@ const fieldApp: Space = {
   ],
 };
 
+/** The MR App (docs/PLAN.md 22): SEFMED's work as its own app, with its own people. An MR's side
+ *  (their day, visits, tour plan, clients, orders, expenses, reports) and the team lead's (the
+ *  team, approvals, everyone's visits and expenses, the map, the app's people); the CEO and the
+ *  Admin look at the team lead's side. */
+export function mrSpace(access: "mr" | "lead" | "viewer"): Space {
+  const mine: MenuItem[] = [
+    { to: access === "lead" ? "/mr/my-day" : "/mr", label: access === "lead" ? "My day" : "Home", icon: Smartphone },
+    { to: "/mr/visits", label: "Visits", icon: MapPin },
+    { to: "/mr/plan", label: "Tour plan", icon: CalendarRange },
+    { to: "/mr/clients?kind=doctor", label: "KOLs", icon: Stethoscope },
+    { to: "/mr/clients?kind=hospital", label: "Hospitals", icon: Building2 },
+    { to: "/mr/clients?kind=firm", label: "KBLs", icon: Store },
+    { to: "/mr/orders", label: "Order details", icon: ShoppingCart },
+    { to: "/mr/expenses", label: "Expenses", icon: Receipt },
+    { to: "/mr/follow-ups", label: "Follow-ups", icon: ListChecks },
+    { to: "/mr/day-report", label: "Day report", icon: ClipboardList },
+    { to: "/mr/reports", label: "Reports", icon: BarChart3 },
+    { to: "/me/leave", label: "Leaves", icon: CalendarDays },
+    { to: "/mr/holidays", label: "Holidays", icon: PartyPopper },
+  ];
+  const team: MenuItem[] = [
+    { to: "/mr", label: access === "lead" ? "My team" : "Dashboard", icon: Users },
+    { to: "/mr/visits?person=all", label: "Team visits", icon: MapPin },
+    { to: "/mr/plan?view=team", label: "Approve tour plan", icon: CalendarRange },
+    { to: "/mr/plan?view=deviations", label: "Deviation approval", icon: GitBranch },
+    { to: "/mr/expenses?person=all", label: "Team expenses", icon: Receipt },
+    { to: "/mr/orders", label: "Order details", icon: ShoppingCart },
+    { to: "/mr/reports", label: "Reports", icon: BarChart3 },
+    { to: "/mr/map", label: "All on map", icon: MapIcon },
+    { to: "/mr/clients?kind=doctor&scope=team", label: "KOLs", icon: Stethoscope },
+    { to: "/mr/clients?kind=hospital&scope=team", label: "Hospitals", icon: Building2 },
+    { to: "/mr/clients?kind=firm&scope=team", label: "KBLs", icon: Store },
+    { to: "/mr/clients?view=deletes", label: "Delete requests", icon: Undo2 },
+    { to: "/mr/people", label: "The app's people", icon: UserCog },
+  ];
+  return {
+    key: "mr",
+    label: "MR App",
+    icon: Smartphone,
+    tone: "bg-sky-600 text-white",
+    groups:
+      access === "mr"
+        ? [{ items: mine }]
+        : access === "lead"
+          ? [
+              { title: "Team", items: team },
+              { title: "My own work", items: mine },
+            ]
+          : [{ items: team }],
+  };
+}
+
 /** The apps on the Admin's and the CEO's page of apps, in order. */
 export const appsFor = (me: Me): Space[] =>
   APP_ROLES.includes(me.role)
@@ -501,6 +559,7 @@ export const appsFor = (me: Me): Space[] =>
         inventoryApp(me),
         customersApp(me),
         fieldApp,
+        mrSpace("viewer"),
         hrApp,
         reportsApp,
       ]
