@@ -1,0 +1,63 @@
+# The CRM's own code-scan rules (CI's security group). Only what a change adds is judged on a
+# branch (the baseline is where it left main); the nightly run lists everything.
+rules:
+  - id: raw-sql-with-a-value
+    languages: [typescript]
+    severity: ERROR
+    message: >-
+      sql.raw() puts text into the SQL as it is: built from a value, it is a way in for SQL
+      injection. Use the sql`` template's ${value} (a parameter), or pick the text from a fixed
+      list in the code (a Record of allowed columns) and say so in a comment.
+    patterns:
+      - pattern-either:
+          - pattern: sql.raw(`...${$X}...`)
+          - pattern: sql.raw($X)
+      - pattern-not: sql.raw("...")
+      - pattern-not: sql.raw('...')
+      - pattern-not: sql.raw(`...`)
+
+  - id: query-text-joined-by-hand
+    languages: [typescript]
+    severity: ERROR
+    message: Don't build a query by joining strings; use the sql`` template with ${value} parameters.
+    pattern-either:
+      - pattern: $DB.execute("..." + $X)
+      - pattern: $DB.execute(`...${$X}...`)
+
+  - id: html-from-a-value
+    languages: [typescript]
+    severity: ERROR
+    message: dangerouslySetInnerHTML shows text as HTML; from anything a person typed it is a way in for script injection.
+    pattern: <$EL dangerouslySetInnerHTML={...} />
+
+  - id: route-without-sign-in
+    languages: [typescript]
+    severity: WARNING
+    message: >-
+      A route without `signedIn` answers anyone. If it must (sign-in, a webhook with its own
+      signature check, the portal's public counts), say why in a comment above it.
+    patterns:
+      - pattern-either:
+          - pattern: $APP.post("$PATH", async ($C) => { ... })
+          - pattern: $APP.patch("$PATH", async ($C) => { ... })
+          - pattern: $APP.delete("$PATH", async ($C) => { ... })
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: ^/api/(?!auth/)
+
+  - id: secret-in-code
+    languages: [typescript]
+    severity: ERROR
+    message: A password, key or token is written in the code; read it from the environment instead.
+    patterns:
+      - pattern-either:
+          - pattern: |
+              $K = "$V"
+          - pattern: |
+              { $K: "$V" }
+      - metavariable-regex:
+          metavariable: $K
+          regex: (?i)^(password|secret|api_?key|token|secrets_key|join_password)$
+      - metavariable-regex:
+          metavariable: $V
+          regex: .{8,}

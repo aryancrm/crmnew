@@ -1,0 +1,293 @@
+# The checks on every branch (Aryan, 21 Nov: "not only main, in the branches too"): on each push to
+# any branch, on each pull request, nightly and by hand. The first job reads what changed
+# (scripts/ci/detect.ts) and switches on only the groups it needs; "CI passed" at the end is the one
+# check a branch's protection asks for (a group skipped on purpose doesn't block it).
+
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  schedule:
+    - cron: "0 18 * * *" # 2 am Manila: everything, against the whole code
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "24"
+
+jobs:
+  detect:
+    name: What changed
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      base: ${{ steps.base.outputs.base }}
+      web: ${{ steps.groups.outputs.web }}
+      webAuth: ${{ steps.groups.outputs.webAuth }}
+      api: ${{ steps.groups.outputs.api }}
+      apiAll: ${{ steps.groups.outputs.apiAll }}
+      apiRelated: ${{ steps.groups.outputs.apiRelated }}
+      security: ${{ steps.groups.outputs.security }}
+      database: ${{ steps.groups.outputs.database }}
+      deps: ${{ steps.groups.outputs.deps }}
+      docker: ${{ steps.groups.outputs.docker }}
+      scripts: ${{ steps.groups.outputs.scripts }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Compare with
+        id: base
+        run: |
+          case "${{ github.event_name }}" in
+            pull_request) base="${{ github.event.pull_request.base.sha }}" ;;
+            push)
+              if [ "${{ github.ref_name }}" = "main" ]; then base="${{ github.event.before }}"
+              else base="$(git merge-base origin/main HEAD 2>/dev/null || echo all)"; fi ;;
+            *) base="all" ;;
+          esac
+          # main, nightly and by hand: everything.
+          if [ "${{ github.ref_name }}" = "main" ] && [ "${{ github.event_name }}" != "pull_request" ]; then base="all"; fi
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          echo "Comparing with: $base"
+      - name: Groups
+        id: groups
+        run: node scripts/ci/detect.ts "${{ steps.base.outputs.base == 'all' && '--all' || steps.base.outputs.base }}"
+      - name: The detection's own tests
+        run: node --test "scripts/ci/*.test.ts"
+      - name: Migrations in order, none already in main edited
+        run: node scripts/ci/migrations.ts "${{ steps.base.outputs.base != 'all' && steps.base.outputs.base || '' }}"
+
+  secrets:
+    name: Secrets scan
+    runs-on: ubuntu-latest
+    needs: detect
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        run: |
+          base="${{ needs.detect.outputs.base }}"
+          if [ "$base" = "all" ]; then
+            docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest dir /repo --redact --no-banner
+          else
+            docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:latest git /repo --log-opts="$base..HEAD" --redact --no-banner
+          fi
+
+  web:
+    name: Web (types, build)
+    runs-on: ubuntu-latest
+    needs: detect
+    if: needs.detect.outputs.web == 'true'
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @2mg/web typecheck
+      - run: pnpm --filter @2mg/web build
+      - name: Bundle size
+        run: |
+          du -sh apps/web/dist apps/web/dist/assets
+          echo "### Web bundle" >> "$GITHUB_STEP_SUMMARY"
+          ls -lS apps/web/dist/assets | head -8 | awk '{print "- " $9 ": " int($5/1024) " KB"}' >> "$GITHUB_STEP_SUMMARY"
+
+  api:
+    name: API (types, tests)
+    runs-on: ubuntu-latest
+    needs: detect
+    if: needs.detect.outputs.api == 'true'
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @2mg/api typecheck
+      - name: Tests (every one, or the ones the change reaches)
+        working-directory: apps/api
+        run: |
+          related="${{ needs.detect.outputs.apiRelated }}"
+          if [ "${{ needs.detect.outputs.apiAll }}" = "true" ] || [ -z "$related" ]; then
+            echo "Every API test."
+            pnpm exec vitest run
+          else
+            echo "Tests related to: $related"
+            pnpm exec vitest related --run $related
+          fi
+
+  database:
+    name: Migrations on real Postgres
+    runs-on: ubuntu-latest
+    needs: detect
+    if: needs.detect.outputs.database == 'true'
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: crm
+          POSTGRES_USER: crm
+          POSTGRES_PASSWORD: ci-only
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U crm -d crm" --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @2mg/api
+      - name: Migrate twice, seed, data checks
+        working-directory: apps/api
+        env:
+          DATABASE_URL: postgres://crm:ci-only@localhost:5432/crm
+        run: node --import tsx scripts/ci-database.ts
+
+  deps:
+    name: Dependencies audit
+    runs-on: ubuntu-latest
+    needs: detect
+    if: needs.detect.outputs.deps == 'true'
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Lockfile matches every package.json
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Known holes (high and critical; reported, not blocking yet)
+        continue-on-error: true
+        run: pnpm audit --prod --audit-level high
+
+  docker:
+    name: Docker images, smoke test, image scan
+    runs-on: ubuntu-latest
+    needs: detect
+    if: needs.detect.outputs.docker == 'true'
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: A throwaway .env for the stack
+        run: |
+          cat > .env <<'EOF'
+          NODE_ENV=production
+          PORT=4100
+          POSTGRES_PASSWORD=ci-only
+          DATABASE_URL=postgres://crm:ci-only@db:5432/crm
+          WEB_URL=http://localhost:8080
+          SECRETS_KEY=ci-only-secrets-key-not-real-0000000000
+          LOGIN_DOMAIN=2mginc.com
+          EOF
+      - name: Build and start the stack (Postgres, API, web)
+        run: docker compose up -d --build
+      - name: Smoke test
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost:8080/api/health | grep -q '"ok":true'; then break; fi
+            sleep 3
+          done
+          curl -fsS http://localhost:8080/api/health
+          curl -fsS http://localhost:8080/login | grep -q 'id="root"' && echo "✓ web serves the app"
+          curl -fsS -o /dev/null -w "%{http_code}\n" http://localhost:8080/api/me | grep -q 401 && echo "✓ API refuses without a session" || { echo "API answered /api/me without a session"; exit 1; }
+      - name: Logs when it fails
+        if: failure()
+        run: docker compose logs --no-color --tail 200
+      - name: Image scan (high and critical; reported, not blocking yet)
+        continue-on-error: true
+        run: |
+          for image in $(docker compose config --images | grep -v postgres); do
+            echo "== $image"
+            docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image --severity HIGH,CRITICAL --ignore-unfixed --no-progress "$image"
+          done
+      - if: always()
+        run: docker compose down -v
+
+  security:
+    name: Code scan (injection, XSS, secrets in code)
+    runs-on: ubuntu-latest
+    needs: detect
+    if: needs.detect.outputs.security == 'true'
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet semgrep
+      - name: Semgrep (what this change adds; blocking)
+        run: |
+          base="${{ needs.detect.outputs.base }}"
+          if [ "$base" = "all" ]; then
+            # Nightly: every finding in the code, listed, not blocking.
+            semgrep scan --config .semgrep/rules.yml --config p/typescript --config p/react --severity ERROR --metrics off apps || true
+          else
+            semgrep scan --config .semgrep/rules.yml --config p/typescript --config p/react --severity ERROR               --baseline-commit "$base" --error --metrics off apps
+          fi
+      - name: Semgrep warnings (reported)
+        continue-on-error: true
+        run: |
+          base="${{ needs.detect.outputs.base }}"
+          baseline=""
+          if [ "$base" != "all" ]; then baseline="--baseline-commit $base"; fi
+          semgrep scan --config .semgrep/rules.yml --severity WARNING $baseline --metrics off apps
+
+  scripts:
+    name: One-off scripts type-check
+    runs-on: ubuntu-latest
+    needs: detect
+    if: needs.detect.outputs.scripts == 'true' || needs.detect.outputs.database == 'true'
+    timeout-minutes: 10
+    # Two old scripts (a-to-z, copy-to-file) don't type-check yet: reported, not blocking.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile --filter @2mg/api
+      - run: pnpm --filter @2mg/api exec tsc --noEmit -p tsconfig.scripts.json
+
+  passed:
+    name: CI passed
+    runs-on: ubuntu-latest
+    needs: [detect, secrets, web, api, database, deps, docker, security, scripts]
+    if: always()
+    steps:
+      - name: Every group that ran passed
+        run: |
+          echo '${{ toJSON(needs) }}' | node -e '
+            let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => {
+              const needs = JSON.parse(s);
+              const bad = Object.entries(needs).filter(([, job]) => ["failure", "cancelled"].includes(job.result));
+              for (const [name, job] of Object.entries(needs)) console.log(`${job.result.padEnd(9)} ${name}`);
+              if (bad.length) { console.error(`Failed: ${bad.map(([name]) => name).join(", ")}`); process.exit(1); }
+            });'
