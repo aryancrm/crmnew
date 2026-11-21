@@ -41,10 +41,10 @@ jobs:
       docker: ${{ steps.groups.outputs.docker }}
       scripts: ${{ steps.groups.outputs.scripts }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Compare with
@@ -75,7 +75,7 @@ jobs:
     needs: detect
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: gitleaks
@@ -94,9 +94,9 @@ jobs:
     if: needs.detect.outputs.web == 'true'
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -116,9 +116,9 @@ jobs:
     if: needs.detect.outputs.api == 'true'
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -153,9 +153,9 @@ jobs:
         options: >-
           --health-cmd "pg_isready -U crm -d crm" --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
@@ -173,9 +173,9 @@ jobs:
     if: needs.detect.outputs.deps == 'true'
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
       - name: Lockfile matches every package.json
@@ -191,7 +191,7 @@ jobs:
     if: needs.detect.outputs.docker == 'true'
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: A throwaway .env for the stack
         run: |
           cat > .env <<'EOF'
@@ -234,10 +234,10 @@ jobs:
     if: needs.detect.outputs.security == 'true'
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: pip install --quiet semgrep
@@ -264,17 +264,17 @@ jobs:
     needs: detect
     if: needs.detect.outputs.scripts == 'true' || needs.detect.outputs.database == 'true'
     timeout-minutes: 10
-    # Two old scripts (a-to-z, copy-to-file) don't type-check yet: reported, not blocking.
-    continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile --filter @2mg/api
-      - run: pnpm --filter @2mg/api exec tsc --noEmit -p tsconfig.scripts.json
+      - name: Type-check (two old scripts, a-to-z and copy-to-file, don't pass yet; reported, not blocking)
+        continue-on-error: true
+        run: pnpm --filter @2mg/api exec tsc --noEmit -p tsconfig.scripts.json
 
   passed:
     name: CI passed

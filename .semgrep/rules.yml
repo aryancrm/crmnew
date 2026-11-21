@@ -48,6 +48,9 @@ rules:
   - id: secret-in-code
     languages: [typescript]
     severity: ERROR
+    # The tests' made-up passwords and the CI's throwaway values aren't secrets.
+    paths:
+      exclude: ["*.test.ts", "apps/api/scripts/ci-*.ts", "apps/api/src/seed.ts"]
     message: A password, key or token is written in the code; read it from the environment instead.
     patterns:
       - pattern-either:
