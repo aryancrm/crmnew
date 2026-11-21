@@ -5,8 +5,8 @@
 import "@fontsource-variable/inter";
 import type { DoorList, Me } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, ChevronRight, Eye, EyeOff, KeyRound, LoaderCircle, Search, UserRound } from "lucide-react";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { ArrowLeft, ChevronRight, CircleAlert, Eye, EyeOff, LoaderCircle, Search } from "lucide-react";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiFailure, api } from "../api";
 import { ME, rememberPerson, returnTo, useMe } from "../auth";
@@ -207,8 +207,11 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
     document.addEventListener("keydown", close, true);
     return () => document.removeEventListener("keydown", close, true);
   }, [lifted]);
+  const ids = useId();
+  const [capsLock, setCapsLock] = useState(false);
   const field =
-    "h-12 w-full rounded-2xl border border-white/70 bg-white/70 pl-11 text-[15px] text-[#1f2733] shadow-[inset_0_1px_2px_rgba(20,30,50,0.06)] outline-none backdrop-blur placeholder:text-[#9aa2b0] focus:border-[#f36b21]/60 focus:bg-white focus:ring-4 focus:ring-[#f36b21]/15";
+    "h-12 w-full rounded-xl border border-[#d5d9e1] bg-white px-3.5 text-[15px] text-[#1f2733] outline-none transition-[border-color,box-shadow] placeholder:text-[#6b7380] hover:border-[#b9bfcb] focus:border-[#f36b21] focus:ring-4 focus:ring-[#f36b21]/15 disabled:bg-[#f6f7f9] aria-[invalid=true]:border-rose-500 aria-[invalid=true]:ring-rose-500/15";
+  const label = "text-[13px] font-semibold text-[#1f2733]";
 
   /** Signed in: the person's own landing, as always. */
   const signedInAs = (signedIn: Me) => {
@@ -255,46 +258,52 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
     }
   }
 
+  // Each error sits under the field it is about (proximity); one about neither, under the password.
+  const idError = problem?.field === "email" ? problem.message : null;
+  const passwordError = problem && problem.field !== "email" ? problem.message : null;
+  const sharedPassword = deskOnly || byName;
+
   return (
     <>
     {lifted && (
       <button type="button" aria-label="Back to the page" onClick={drop} className="fixed inset-0 z-40 cursor-default bg-[#eef0f5]/55 backdrop-blur-md" />
     )}
-    {/* Raised above the page around it, so the eye lands here (Aryan, 18 Nov). */}
+    {/* Raised above the page around it, so the eye lands here (Aryan, 18 Nov). Read top to bottom:
+        what this is, how to sign in, the fields, the one action, then help (Hick, Miller). */}
     <div
       ref={boxRef}
       onFocus={lift}
       role={lifted ? "dialog" : undefined}
       aria-modal={lifted || undefined}
       aria-label={lifted ? `Sign in to ${picked.label}` : undefined}
-      className={`relative w-full max-w-sm rounded-[2rem] border border-white bg-white p-6 text-center ring-1 ring-black/[0.04] transition-[scale,box-shadow] duration-200 ease-out ${
+      className={`relative w-full max-w-sm rounded-[1.75rem] border border-white bg-white p-7 text-left ring-1 ring-black/[0.04] transition-[scale,box-shadow] duration-200 ease-out ${
         lifted
-          ? "z-50 scale-[1.05] shadow-[0_60px_120px_-30px_rgba(20,30,50,0.6),0_24px_48px_-20px_rgba(20,30,50,0.4)]"
+          ? "z-50 scale-[1.03] shadow-[0_60px_120px_-30px_rgba(20,30,50,0.6),0_24px_48px_-20px_rgba(20,30,50,0.4)]"
           : "shadow-[0_50px_100px_-28px_rgba(20,30,50,0.55),0_18px_36px_-18px_rgba(20,30,50,0.35)]"
       }`}
     >
-      <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Sign in to {picked.label}</h2>
-      <p className="mt-0.5 text-sm text-[#7a8394]">
+      <h2 className="text-[24px] leading-tight font-semibold tracking-[-0.025em] text-[#1f2733]">Sign in</h2>
+      <p className="mt-1 text-[14px] text-[#5b6472]">
         {deskOnly
-          ? "The desk's shared screen: the company's password, no ID"
+          ? "Shared desk screen. Enter the company password."
           : byName
             ? names
-              ? "Press your name"
-              : "The company's password, then press your name"
-            : "Log in with your ID and password"}
+              ? "Select your name to continue."
+              : "Enter the company password, then select your name."
+            : `Use your login ID and password for ${picked.label}.`}
       </p>
       {/* Two ways in (Aryan, 19 Nov): the desk's shared screen, or each person's own login for their
-          own things (payslips, leave, their own work). */}
+          own things (payslips, leave, their own work). The choice comes before the fields it changes. */}
       {(isDesk || isDoor) && (
-        <div role="tablist" aria-label="How to sign in" className="mt-3 grid grid-cols-2 gap-1 rounded-2xl bg-[#f1f3f7] p-1 text-[13px] font-semibold">
+        <div role="tablist" aria-label="Sign-in method" className="mt-5 grid grid-cols-2 gap-1 rounded-xl bg-[#f1f3f7] p-1 text-[13px] font-semibold">
           {(
             [
-              [false, isDoor ? "Pick my name" : "Desk screen"],
-              [true, "My own login"],
+              [false, isDoor ? "Select name" : "Shared desk"],
+              [true, "Personal login"],
             ] as const
-          ).map(([own, label]) => (
+          ).map(([own, text]) => (
             <button
-              key={label}
+              key={text}
               type="button"
               role="tab"
               aria-selected={ownId === own}
@@ -303,9 +312,9 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
                 setProblem(null);
                 setNames(null);
               }}
-              className={`rounded-xl px-3 py-2 ${ownId === own ? "bg-white text-[#1f2733] shadow-sm" : "text-[#7a8394] hover:text-[#1f2733]"}`}
+              className={`h-9 rounded-lg px-3 transition-colors ${ownId === own ? "bg-white text-[#1f2733] shadow-[0_1px_3px_rgba(20,30,50,0.12)]" : "text-[#5b6472] hover:text-[#1f2733]"}`}
             >
-              {label}
+              {text}
             </button>
           ))}
         </div>
@@ -322,73 +331,92 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
           }}
         />
       ) : (
-      <form onSubmit={submit} className="mt-4 grid gap-3 text-left" aria-busy={busy}>
-        {!deskOnly && !byName && (
-        <label className="relative block">
-          <span className="sr-only">Login ID</span>
-          <UserRound className="pointer-events-none absolute top-1/2 left-4 z-10 size-4 -translate-y-1/2 text-[#9aa2b0]" aria-hidden="true" />
-          <input
-            type="text"
-            placeholder="Enter your login ID"
-            autoCapitalize="none"
-            spellCheck={false}
-            autoComplete="username"
-            required
-            disabled={busy}
-            value={email}
-            onChange={(event) => {
-              setEmail(event.target.value);
-              setProblem(null);
-            }}
-            aria-invalid={problem?.field === "email"}
-            className={field}
-          />
-        </label>
+      <form onSubmit={submit} className="mt-6 grid gap-4" aria-busy={busy}>
+        {!sharedPassword && (
+          <div className="grid gap-1.5">
+            <label htmlFor={`${ids}-id`} className={label}>
+              Login ID
+            </label>
+            <input
+              id={`${ids}-id`}
+              type="text"
+              placeholder="e.g. hos1"
+              autoCapitalize="none"
+              spellCheck={false}
+              autoComplete="username"
+              required
+              disabled={busy}
+              value={email}
+              onChange={(event) => {
+                setEmail(event.target.value);
+                setProblem(null);
+              }}
+              aria-invalid={idError ? true : undefined}
+              aria-describedby={idError ? `${ids}-id-error` : undefined}
+              className={field}
+            />
+            {idError && (
+              <p id={`${ids}-id-error`} role="alert" className="flex items-start gap-1.5 text-[13px] text-rose-700">
+                <CircleAlert className="mt-px size-4 shrink-0" aria-hidden="true" /> {idError}
+              </p>
+            )}
+          </div>
         )}
-        <label className="relative block">
-          <span className="sr-only">Password</span>
-          <KeyRound className="pointer-events-none absolute top-1/2 left-4 z-10 size-4 -translate-y-1/2 text-[#9aa2b0]" aria-hidden="true" />
-          <input
-            type={shown ? "text" : "password"}
-            placeholder={deskOnly || byName ? "Enter the company's password" : "Enter your login password"}
-            autoComplete="current-password"
-            required
-            disabled={busy}
-            value={password}
-            onChange={(event) => {
-              setPassword(event.target.value);
-              setProblem(null);
-            }}
-            aria-invalid={problem?.field === "password"}
-            aria-describedby={problem ? "login-error" : undefined}
-            className={`${field} pr-12`}
-          />
-          <button
-            type="button"
-            onClick={() => setShown(!shown)}
-            aria-label={shown ? "Hide password" : "Show password"}
-            aria-pressed={shown}
-            className="absolute inset-y-0 right-1 grid w-11 place-items-center text-[#9aa2b0] hover:text-[#1f2733]"
-          >
-            {shown ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
-          </button>
-        </label>
-        {problem && (
-          <p id="login-error" role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-            {problem.message}
-          </p>
-        )}
+        <div className="grid gap-1.5">
+          <label htmlFor={`${ids}-password`} className={label}>
+            {sharedPassword ? "Company password" : "Password"}
+          </label>
+          <div className="relative">
+            <input
+              id={`${ids}-password`}
+              type={shown ? "text" : "password"}
+              autoComplete="current-password"
+              required
+              disabled={busy}
+              value={password}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setProblem(null);
+              }}
+              onKeyUp={(event) => setCapsLock(event.getModifierState("CapsLock"))}
+              onBlur={() => setCapsLock(false)}
+              aria-invalid={passwordError ? true : undefined}
+              aria-describedby={[passwordError ? `${ids}-password-error` : "", capsLock ? `${ids}-caps` : ""].filter(Boolean).join(" ") || undefined}
+              className={`${field} pr-12`}
+            />
+            <button
+              type="button"
+              onClick={() => setShown(!shown)}
+              aria-label={shown ? "Hide password" : "Show password"}
+              aria-pressed={shown}
+              title={shown ? "Hide password" : "Show password"}
+              className="absolute inset-y-0 right-0.5 grid w-11 place-items-center rounded-xl text-[#6b7380] hover:text-[#1f2733] focus-visible:outline-2 focus-visible:outline-[#f36b21]"
+            >
+              {shown ? <EyeOff className="size-[18px]" aria-hidden="true" /> : <Eye className="size-[18px]" aria-hidden="true" />}
+            </button>
+          </div>
+          {capsLock && (
+            <p id={`${ids}-caps`} className="text-[13px] text-[#8a4b00]">
+              Caps Lock is on.
+            </p>
+          )}
+          {passwordError && (
+            <p id={`${ids}-password-error`} role="alert" className="flex items-start gap-1.5 text-[13px] text-rose-700">
+              <CircleAlert className="mt-px size-4 shrink-0" aria-hidden="true" /> {passwordError}
+            </p>
+          )}
+        </div>
         <button
           type="submit"
           disabled={busy}
-          className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#f36b21] text-sm font-semibold text-white shadow-[0_14px_30px_-12px_rgba(243,107,33,0.7)] transition-colors hover:bg-[#e05a12] disabled:opacity-60"
+          className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#f36b21] text-[15px] font-semibold text-white shadow-[0_12px_26px_-12px_rgba(243,107,33,0.7)] transition-colors hover:bg-[#e05a12] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f36b21] disabled:cursor-wait disabled:opacity-70"
         >
-          {busy ? (byName ? "Opening…" : "Signing in…") : byName ? `Show the ${picked.label.toLowerCase()}` : `Enter ${picked.label}`}
-          {busy ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <ArrowRight className="size-4" aria-hidden="true" />}
+          {busy && <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />}
+          {busy ? (byName ? "Checking…" : "Signing in…") : byName ? "Continue" : "Sign in"}
         </button>
       </form>
       )}
-      <p className="mt-4 text-xs text-[#9aa2b0]">Need access? Ask your administrator</p>
+      <p className="mt-6 border-t border-[#eceef3] pt-4 text-[13px] text-[#5b6472]">Need access? Contact your administrator.</p>
     </div>
     </>
   );
@@ -466,11 +494,9 @@ function DoorNames({
           {problem}
         </p>
       )}
-      <p className="mt-3 text-[12px] text-[#7a8394]">
-        Not in the list? Your own password is different: use My own login.
-      </p>
-      <button type="button" onClick={onBack} className="mt-2 text-[13px] font-semibold text-[#c2410c] hover:underline">
-        ← Type the password again
+      <p className="mt-3 text-[13px] text-[#5b6472]">Not listed? Use Personal login.</p>
+      <button type="button" onClick={onBack} className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#c2410c] hover:underline">
+        <ArrowLeft className="size-4" aria-hidden="true" /> Enter the password again
       </button>
     </div>
   );
