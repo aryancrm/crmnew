@@ -132,170 +132,151 @@ export function DepartmentPage({
     : [];
 
   return (
-    <div className="mx-auto my-auto w-[min(1240px,calc(100%-32px))] pb-4" style={{ "--org-line": `${color}55` } as CSSProperties}>
+    <div className="mx-auto w-[min(1240px,calc(100%-32px))] pt-2 pb-10" style={{ "--org-line": `${color}55` } as CSSProperties}>
       <button
         type="button"
         onClick={onBack}
-        className="mb-2 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#5b6472] hover:text-[#c2410c]"
+        className="mb-3 inline-flex min-h-9 items-center gap-1.5 text-[13px] font-semibold text-[#5b6472] hover:text-[#c2410c]"
       >
         <ArrowLeft className="size-4" aria-hidden="true" /> Back to departments
       </button>
 
-      {/* Who it is, with its picture. */}
-      <header className={`${card} relative overflow-hidden px-6 py-3 sm:px-7`}>
-        <div className="relative z-10 flex items-center gap-5 md:pr-72">
-          <span className="grid size-[58px] shrink-0 place-items-center rounded-full shadow-[0_16px_30px_-14px_rgba(20,30,50,0.45)]" style={{ background: color }}>
-            <span className="grid size-[42px] place-items-center rounded-full bg-white/95">
-              <span className="size-6">{TileIcon && <TileIcon />}</span>
-            </span>
+      {/* Where you are: the department, across the whole width (orientation). */}
+      <header className={`${card} flex items-center gap-5 px-6 py-5 sm:px-7`}>
+        <span className="grid size-[56px] shrink-0 place-items-center rounded-full shadow-[0_16px_30px_-14px_rgba(20,30,50,0.45)]" style={{ background: color }}>
+          <span className="grid size-[40px] place-items-center rounded-full bg-white/95">
+            <span className="size-6">{TileIcon && <TileIcon />}</span>
           </span>
-          <div className="min-w-0">
-            <h1 className="text-[clamp(22px,2.6vw,30px)] leading-tight font-semibold tracking-[-0.035em]">{workspace.label}</h1>
-            {info && <p className="mt-0.5 text-[14px] text-[#5b6472]">{info.about}</p>}
-          </div>
+        </span>
+        <div className="min-w-0">
+          <h1 className="text-[clamp(22px,2.6vw,30px)] leading-tight font-semibold tracking-[-0.035em]">{workspace.label}</h1>
+          {info && <p className="mt-1 max-w-[65ch] text-[14px] text-[#5b6472]">{info.about}</p>}
         </div>
-        <Picture color={color} TileIcon={TileIcon} first={stats[0]} />
       </header>
 
-      {/* What went well, counted. */}
-      <section aria-label="Highlights" className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        {(stats.length ? stats : [null, null, null, null]).map((one, index) => {
-          const tint = TINTS[index % TINTS.length] as (typeof TINTS)[number];
-          const Mark = tint.icon;
-          return (
-            <div
-              // biome-ignore lint/suspicious/noArrayIndexKey: the four places are fixed
-              key={index}
-              className={`flex items-center gap-3.5 rounded-[1.2rem] border px-4 py-2.5 ${tint.bg} ${tint.ring} ${one ? "" : "h-[70px] animate-pulse"}`}
-            >
-              {one && (
-                <>
-                  <span className="grid size-10 shrink-0 place-items-center rounded-full bg-white/80">
-                    <Mark className="size-5" style={{ color: tint.dot }} />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-[22px] leading-none font-semibold tracking-[-0.03em] text-[#1f2733] tabular-nums">{one.value}</span>
-                    <span className="mt-1 block text-[13px] font-medium text-[#3c4452]">{one.label}</span>
-                    <span className="block truncate text-[11px] text-[#7a8394]">{one.hint}</span>
-                  </span>
-                </>
-              )}
-            </div>
-          );
-        })}
-      </section>
-
-      {/* What it handles · the sign-in · its team. */}
-      <div className="mt-3 grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_23rem_minmax(0,1.25fr)]">
-        {info && (
-          <section className={`${card} order-2 p-4 lg:order-1`} aria-label="Key functions">
-            <h2 className={heading}>
-              <Settings className="size-5" style={{ color }} aria-hidden="true" /> Key functions
-            </h2>
-            <ul className="mt-2.5 grid gap-2">
-              {info.handles.map((line) => (
-                <li key={line} className="flex items-start gap-2.5 text-[14px] text-[#3c4452]">
-                  <CheckCircle2 className="mt-0.5 size-[18px] shrink-0 text-[#1f9d55]" aria-hidden="true" />
-                  {line}
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-        <section className="relative order-1 flex justify-center lg:order-2" aria-label={`Sign in to ${workspace.label}`}>
+      {/* Two parts that don't touch: the department's information on the left, the sign-in on its
+          own on the right, kept in view while the left scrolls. Phones: the sign-in comes first. */}
+      <div className="mt-8 grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_24rem] xl:gap-12">
+        <section className="relative lg:sticky lg:top-6 lg:order-2" aria-label={`Sign in to ${workspace.label}`}>
           {/* A soft glow of the department's colour behind the sign-in: the page's focus. */}
-          <span aria-hidden="true" className="pointer-events-none absolute inset-6 rounded-[2rem] opacity-30 blur-3xl" style={{ background: color }} />
-          <div className="relative w-full max-w-sm">{signIn}</div>
+          <span aria-hidden="true" className="pointer-events-none absolute inset-8 rounded-[2rem] opacity-25 blur-3xl" style={{ background: color }} />
+          <div className="relative mx-auto w-full max-w-sm">{signIn}</div>
         </section>
-        <section className={`${card} order-3 p-4`} aria-label="Team structure">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className={heading}>
-              <Network className="size-5" style={{ color }} aria-hidden="true" /> Team structure
-            </h2>
-            {page && page.people > 0 && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-[#e3e6ee] bg-white px-2.5 py-1 text-[12px] font-semibold text-[#3c4452]">
-                <Users className="size-3.5" style={{ color }} aria-hidden="true" /> Total team: {page.people}
-              </span>
+
+        <div className="grid gap-6 lg:order-1">
+          {/* What went well, counted. */}
+          <section aria-label="Highlights" className="grid grid-cols-2 gap-3">
+            {(stats.length ? stats : [null, null, null, null]).map((one, index) => {
+              const tint = TINTS[index % TINTS.length] as (typeof TINTS)[number];
+              const Mark = tint.icon;
+              return (
+                <div
+                  // biome-ignore lint/suspicious/noArrayIndexKey: the four places are fixed
+                  key={index}
+                  className={`flex items-center gap-3 rounded-[1.2rem] border px-4 py-3 ${tint.bg} ${tint.ring} ${one ? "" : "h-[76px] animate-pulse"}`}
+                >
+                  {one && (
+                    <>
+                      <span className="grid size-9 shrink-0 place-items-center rounded-full bg-white/80">
+                        <Mark className="size-[18px]" style={{ color: tint.dot }} />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-[22px] leading-none font-semibold tracking-[-0.03em] text-[#1f2733] tabular-nums">{one.value}</span>
+                        <span className="mt-1 block text-[13px] leading-snug font-medium text-[#3c4452]">
+                          {one.label}
+                        </span>
+                        <span className="block text-[11px] leading-snug text-[#5b6472]">
+                          {one.hint}
+                        </span>
+                      </span>
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </section>
+
+          {/* What it handles · its team. */}
+          <div className="grid gap-6 md:grid-cols-2">
+            {info && (
+              <section className={`${card} p-5`} aria-label="Key functions">
+                <h2 className={heading}>
+                  <Settings className="size-5" style={{ color }} aria-hidden="true" /> Key functions
+                </h2>
+                <ul className="mt-3 grid gap-2.5">
+                  {info.handles.map((line) => (
+                    <li key={line} className="flex items-start gap-2.5 text-[14px] text-[#3c4452]">
+                      <CheckCircle2 className="mt-0.5 size-[18px] shrink-0 text-[#1f9d55]" aria-hidden="true" />
+                      {line}
+                    </li>
+                  ))}
+                </ul>
+              </section>
             )}
+            <section className={`${card} p-5`} aria-label="Team structure">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className={heading}>
+                  <Network className="size-5" style={{ color }} aria-hidden="true" /> Team structure
+                </h2>
+                {page && page.people > 0 && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-[#e3e6ee] bg-white px-2.5 py-1 text-[12px] font-semibold text-[#3c4452]">
+                    <Users className="size-3.5" style={{ color }} aria-hidden="true" /> Total team: {page.people}
+                  </span>
+                )}
+              </div>
+              {page?.team ? (
+                <>
+                  <OrgChart tree={page.team} workspace={workspace} color={color} />
+                  <button
+                    type="button"
+                    onClick={() => setWhole(true)}
+                    className="mt-3 inline-flex min-h-9 items-center gap-1 text-[13px] font-semibold hover:underline"
+                    style={{ color }}
+                  >
+                    See the whole team <ArrowRight className="size-3.5" aria-hidden="true" />
+                  </button>
+                </>
+              ) : (
+                <p className="mt-3 text-sm text-[#5b6472]">{data.isLoading ? "Loading…" : "No seats on the company chart yet."}</p>
+              )}
+            </section>
           </div>
-          {page?.team ? (
-            <>
-              <OrgChart tree={page.team} workspace={workspace} color={color} />
-              <button
-                type="button"
-                onClick={() => setWhole(true)}
-                className="mt-3 inline-flex items-center gap-1 text-[13px] font-semibold hover:underline"
-                style={{ color }}
-              >
-                See the whole team <ArrowRight className="size-3.5" aria-hidden="true" />
-              </button>
-            </>
-          ) : (
-            <p className="mt-3 text-sm text-[#7a8394]">{data.isLoading ? "Loading…" : "No seats on the company chart yet."}</p>
+
+          {/* How work moves through it. */}
+          {info && (
+            <section className={`${card} p-5`} aria-label="Workflow overview">
+              <h2 className={heading}>
+                <Workflow className="size-5" style={{ color }} aria-hidden="true" /> Workflow overview
+              </h2>
+              <ol className="mt-4 flex flex-wrap items-start justify-center gap-y-4">
+                {info.flow.map((one, index) => {
+                  const Mark = ICONS[FLOW_ICONS[workspace.key]?.[index] ?? "check"] ?? CheckCircle2;
+                  return (
+                    <li key={one.step} className="flex items-start">
+                      <span className="flex w-[8.25rem] flex-col items-center text-center">
+                        <span className="grid size-11 place-items-center rounded-full" style={{ background: `${color}1f` }}>
+                          <Mark className="size-5" style={{ color }} />
+                        </span>
+                        <span className="mt-1.5 text-[13px] leading-snug font-semibold text-[#1f2733]">{one.step}</span>
+                        <span className="mt-0.5 text-[11px] leading-snug text-[#5b6472]">{one.who}</span>
+                      </span>
+                      {index < info.flow.length - 1 && (
+                        <ArrowRight className="mt-3.5 hidden size-4 shrink-0 text-[#9aa2b0] sm:block" aria-hidden="true" />
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+              <p className="mt-4 flex items-center justify-center gap-2 text-center text-[12px] text-[#5b6472]">
+                <Sparkles className="size-4 shrink-0" style={{ color }} aria-hidden="true" />
+                Every step works from the same record: no double entry, nothing lost between desks.
+              </p>
+            </section>
           )}
-        </section>
+        </div>
       </div>
 
       {whole && page?.team && <WholeTeam tree={page.team} workspace={workspace} color={color} people={page.people} onClose={() => setWhole(false)} />}
-
-      {/* How work moves through it. */}
-      {info && (
-        <section className={`${card} mt-3 px-4 py-3`} aria-label="Workflow overview">
-          <h2 className={heading}>
-            <Workflow className="size-5" style={{ color }} aria-hidden="true" /> Workflow overview
-          </h2>
-          <ol className="mt-1 flex flex-wrap items-start justify-center gap-y-3">
-            {info.flow.map((one, index) => {
-              const Mark = ICONS[FLOW_ICONS[workspace.key]?.[index] ?? "check"] ?? CheckCircle2;
-              return (
-                <li key={one.step} className="flex items-start">
-                  <span className="flex w-[9.5rem] flex-col items-center text-center">
-                    <span className="grid size-11 place-items-center rounded-full" style={{ background: `${color}1f` }}>
-                      <Mark className="size-5" style={{ color }} />
-                    </span>
-                    <span className="mt-1.5 text-[13px] leading-snug font-semibold text-[#1f2733]">{one.step}</span>
-                    <span className="mt-0.5 text-[11px] leading-snug text-[#7a8394]">{one.who}</span>
-                  </span>
-                  {index < info.flow.length - 1 && (
-                    <ArrowRight className="mt-3.5 hidden size-5 shrink-0 text-[#9aa2b0] sm:block" aria-hidden="true" />
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-          <p className="mt-2 flex items-center justify-center gap-2 text-center text-[12px] text-[#5b6472]">
-            <Sparkles className="size-4 shrink-0" style={{ color }} aria-hidden="true" />
-            Every step works from the same record: no double entry, nothing lost between desks.
-          </p>
-        </section>
-      )}
-    </div>
-  );
-}
-
-/** The header's picture: the department's mark on a floating card, its best number beside it. */
-function Picture({ color, TileIcon, first }: { color: string; TileIcon?: () => ReactNode; first?: { label: string; value: string } }) {
-  return (
-    <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 hidden w-80 md:block">
-      <svg viewBox="0 0 320 140" className="absolute inset-0 h-full w-full" preserveAspectRatio="xMaxYMid slice">
-        <circle cx="250" cy="70" r="90" fill={color} fillOpacity=".08" />
-        <circle cx="300" cy="10" r="40" fill={color} fillOpacity=".06" />
-        <path d="M0 120C80 100 140 40 320 30" stroke={color} strokeOpacity=".25" strokeWidth="2" fill="none" />
-        <circle className="orbit-twinkle" cx="120" cy="36" r="7" fill={color} fillOpacity=".35" />
-        <circle className="orbit-twinkle" style={{ animationDelay: "1.2s" }} cx="300" cy="118" r="4" fill={color} fillOpacity=".5" />
-      </svg>
-      <div className="absolute top-1/2 right-16 grid size-[72px] -translate-y-1/2 rotate-[-6deg] place-items-center rounded-[1.3rem] border border-white bg-white shadow-[0_24px_40px_-18px_rgba(20,30,50,0.45)]">
-        <span className="size-10">{TileIcon && <TileIcon />}</span>
-      </div>
-      {first && (
-        <div className="absolute top-2 right-40 rotate-[3deg] rounded-xl border border-white bg-white/95 px-3 py-1.5 shadow-[0_14px_28px_-16px_rgba(20,30,50,0.45)]">
-          <div className="text-[15px] leading-none font-semibold text-[#1f2733] tabular-nums">{first.value}</div>
-          <div className="mt-0.5 text-[10px] text-[#7a8394]">{first.label}</div>
-        </div>
-      )}
-      <div className="absolute right-6 bottom-2 grid size-8 place-items-center rounded-full bg-white shadow-[0_10px_20px_-10px_rgba(20,30,50,0.4)]">
-        <CheckCircle2 className="size-5 text-[#1f9d55]" />
-      </div>
     </div>
   );
 }
