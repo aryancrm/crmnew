@@ -47,6 +47,8 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ env.NODE_VERSION }}
+          # No pnpm here: setup-node v5 would try to cache it because package.json names it.
+          package-manager-cache: false
       - name: Compare with
         id: base
         run: |
