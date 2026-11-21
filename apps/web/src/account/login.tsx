@@ -11,6 +11,7 @@ import { Navigate, useLocation, useNavigate, useSearchParams } from "react-route
 import { ApiFailure, api } from "../api";
 import { ME, rememberPerson, returnTo, useMe } from "../auth";
 import { About } from "../portal/about";
+import { DepartmentMark, DepartmentSide } from "../portal/department-side";
 import { TILE_GLOW, TILE_ICONS } from "../portal/tiles";
 import { lastWorkspace, rememberWorkspace, type Workspace, WORKSPACES, workspaceOf } from "../workspaces";
 
@@ -69,19 +70,26 @@ function Launcher() {
             <img src="/brand/bishnoi-one-mark.png" alt="" className="size-7" />
             <span className="text-[18px] font-semibold tracking-[-0.03em]">Bishnoi One</span>
           </header>
-          {/* Only the sign-in (Aryan, 21 Nov: the department's figures, team and workflow beside it
-              bombarded people). Where you are on top, then the form, nothing else. */}
-          <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-4 pt-4 pb-16">
+          {/* Two sides (Aryan, 21 Nov): the department's icon and information on the left, the
+              sign-in alone on the right. Phones: where you are and the sign-in first, the rest below. */}
+          <div className="mx-auto w-[min(1180px,calc(100%-32px))] flex-1 pt-2 pb-16">
             <button
               type="button"
               onClick={() => open(null)}
-              className="mb-6 inline-flex min-h-9 items-center gap-1.5 self-start text-[13px] font-semibold text-[#5b6472] hover:text-[#c2410c]"
+              className="mb-6 inline-flex min-h-9 items-center gap-1.5 text-[13px] font-semibold text-[#5b6472] hover:text-[#c2410c]"
             >
               <ArrowLeft className="size-4" aria-hidden="true" /> All departments
             </button>
-            <DepartmentTitle workspace={picked} />
-            <div className="mt-6">
-              <SignIn workspace={picked} from={from} />
+            <div className="grid items-center gap-10 lg:min-h-[calc(100dvh-9rem)] lg:grid-cols-[minmax(0,1fr)_24rem] xl:gap-20">
+              <section className="mx-auto w-full max-w-sm lg:order-2" aria-label={`Sign in to ${picked.label}`}>
+                <div className="mb-6 lg:hidden">
+                  <DepartmentTitle workspace={picked} />
+                </div>
+                <SignIn workspace={picked} from={from} />
+              </section>
+              <div className="border-t border-[#e3e6ee] pt-8 lg:order-1 lg:border-t-0 lg:pt-0">
+                <DepartmentSide workspace={picked} titleOnPhone={false} />
+              </div>
             </div>
           </div>
         </div>
@@ -166,15 +174,9 @@ function Launcher() {
 
 /** Where you are: the department's mark, its name and what it is for, in one line. */
 function DepartmentTitle({ workspace }: { workspace: Workspace }) {
-  const Icon = TILE_ICONS[workspace.key];
   return (
     <div className="flex items-center gap-4">
-      <span
-        className="grid size-12 shrink-0 place-items-center rounded-2xl border border-white bg-white shadow-[0_12px_28px_-14px_rgba(20,30,50,0.4)]"
-        style={{ boxShadow: `0 0 0 4px ${TILE_GLOW[workspace.key] ?? "#f36b21"}22, 0 12px 28px -14px rgba(20,30,50,0.4)` }}
-      >
-        <span className="size-7">{Icon && <Icon />}</span>
-      </span>
+      <DepartmentMark workspace={workspace} size="sm" />
       <div className="min-w-0">
         <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.03em] text-[#1f2733]">{workspace.label}</h1>
         <p className="text-[14px] text-[#5b6472]">{workspace.about}</p>
