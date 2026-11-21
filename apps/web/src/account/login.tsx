@@ -6,12 +6,12 @@ import "@fontsource-variable/inter";
 import type { DoorList, Me } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ChevronRight, CircleAlert, Eye, EyeOff, LoaderCircle, Search } from "lucide-react";
-import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import { type FormEvent, useEffect, useId, useState } from "react";
 import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiFailure, api } from "../api";
 import { ME, rememberPerson, returnTo, useMe } from "../auth";
 import { About } from "../portal/about";
-import { DepartmentMark, DepartmentSide } from "../portal/department-side";
+import { DepartmentMark, DepartmentPanel } from "../portal/department-side";
 import { TILE_GLOW, TILE_ICONS } from "../portal/tiles";
 import { lastWorkspace, rememberWorkspace, type Workspace, WORKSPACES, workspaceOf } from "../workspaces";
 
@@ -65,33 +65,48 @@ function Launcher() {
         <div className="absolute bottom-0 left-1/3 size-[32rem] rounded-full bg-[#dcd6ff] opacity-45 blur-[130px]" />
       </div>
       {picked ? (
-        <div className="flex min-h-dvh flex-col">
-          <header className="mx-auto flex w-[min(1240px,calc(100%-32px))] items-center gap-2.5 py-2.5">
-            <img src="/brand/bishnoi-one-mark.png" alt="" className="size-7" />
-            <span className="text-[18px] font-semibold tracking-[-0.03em]">Bishnoi One</span>
-          </header>
-          {/* Two sides (Aryan, 21 Nov): the department's icon and information on the left, the
-              sign-in alone on the right. Phones: where you are and the sign-in first, the rest below. */}
-          <div className="mx-auto w-[min(1180px,calc(100%-32px))] flex-1 pt-2 pb-16">
-            <button
-              type="button"
-              onClick={() => open(null)}
-              className="mb-6 inline-flex min-h-9 items-center gap-1.5 text-[13px] font-semibold text-[#5b6472] hover:text-[#c2410c]"
-            >
-              <ArrowLeft className="size-4" aria-hidden="true" /> All departments
-            </button>
-            <div className="grid items-center gap-10 lg:min-h-[calc(100dvh-9rem)] lg:grid-cols-[minmax(0,1fr)_24rem] xl:gap-20">
-              <section className="mx-auto w-full max-w-sm lg:order-2" aria-label={`Sign in to ${picked.label}`}>
-                <div className="mb-6 lg:hidden">
-                  <DepartmentTitle workspace={picked} />
+        // A split screen (Aryan, 21 Nov, after a sign-in screen he liked): the department's panel on
+        // the left, tinted in its colour with its icon large; the form alone on white on the right.
+        // Phones: the form first, the panel below it.
+        <div className="relative z-10 flex min-h-dvh flex-col bg-white lg:flex-row">
+          <aside
+            className="order-2 flex flex-col px-6 py-10 lg:order-1 lg:w-[46%] lg:px-12 lg:py-8"
+            style={{ background: `linear-gradient(160deg, ${TILE_GLOW[picked.key] ?? "#f36b21"}14, #f6f5fb 55%, ${TILE_GLOW[picked.key] ?? "#f36b21"}0d)` }}
+          >
+            <span className="hidden items-center gap-2.5 lg:flex">
+              <img src="/brand/bishnoi-one-mark.png" alt="" className="size-8" />
+              <span className="text-[18px] font-semibold tracking-[-0.03em]">Bishnoi One</span>
+            </span>
+            <div className="flex flex-1 items-center py-6">
+              <DepartmentPanel workspace={picked} />
+            </div>
+          </aside>
+          <section className="order-1 flex flex-1 flex-col px-6 py-5 lg:order-2 lg:px-12 lg:py-8" aria-label={`Sign in to ${picked.label}`}>
+            <div className="flex items-center justify-between gap-3">
+              <span className="flex items-center gap-2.5 lg:invisible">
+                <img src="/brand/bishnoi-one-mark.png" alt="" className="size-7" />
+                <span className="text-[17px] font-semibold tracking-[-0.03em]">Bishnoi One</span>
+              </span>
+              <span className="flex items-center gap-3">
+                <span className="hidden text-[13px] text-[#7a8394] sm:inline">Wrong department?</span>
+                <button
+                  type="button"
+                  onClick={() => open(null)}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#d5d9e1] px-4 text-[12px] font-semibold tracking-[0.04em] text-[#3c4452] uppercase transition-colors hover:border-[#f36b21] hover:text-[#c2410c]"
+                >
+                  <ArrowLeft className="size-3.5" aria-hidden="true" /> All departments
+                </button>
+              </span>
+            </div>
+            <div className="flex flex-1 justify-center pt-8 pb-10 lg:items-center lg:py-10">
+              <div className="w-full max-w-[26rem]">
+                <div className="mb-5 lg:hidden">
+                  <DepartmentMark workspace={picked} />
                 </div>
                 <SignIn workspace={picked} from={from} />
-              </section>
-              <div className="border-t border-[#e3e6ee] pt-8 lg:order-1 lg:border-t-0 lg:pt-0">
-                <DepartmentSide workspace={picked} titleOnPhone={false} />
               </div>
             </div>
-          </div>
+          </section>
         </div>
       ) : (
         <>
@@ -172,19 +187,6 @@ function Launcher() {
   );
 }
 
-/** Where you are: the department's mark, its name and what it is for, in one line. */
-function DepartmentTitle({ workspace }: { workspace: Workspace }) {
-  return (
-    <div className="flex items-center gap-4">
-      <DepartmentMark workspace={workspace} size="sm" />
-      <div className="min-w-0">
-        <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.03em] text-[#1f2733]">{workspace.label}</h1>
-        <p className="text-[14px] text-[#5b6472]">{workspace.about}</p>
-      </div>
-    </div>
-  );
-}
-
 /** Where a person lands: the Books tile opens Books for those who keep the books. */
 const landing = (role: string, picked: Workspace | null, from: string) =>
   picked?.key === "books" && ["finance", "ceo", "admin"].includes(role) ? "/books/home" : from;
@@ -211,27 +213,6 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
   const byName = isDoor && !ownId;
   const [names, setNames] = useState<DoorList["people"] | null>(null);
   const [entering, setEntering] = useState<string | null>(null);
-  // Typing the login brings the box forward where it stands and blurs the page behind, as the old
-  // pop-up did (Aryan, 18 Nov); a click outside or Esc puts it back.
-  const [lifted, setLifted] = useState(false);
-  const boxRef = useRef<HTMLDivElement>(null);
-  const lift = () => {
-    if (!lifted) setLifted(true);
-  };
-  const drop = () => {
-    setLifted(false);
-    (document.activeElement as HTMLElement | null)?.blur();
-  };
-  useEffect(() => {
-    if (!lifted) return;
-    const close = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.stopPropagation();
-      drop();
-    };
-    document.addEventListener("keydown", close, true);
-    return () => document.removeEventListener("keydown", close, true);
-  }, [lifted]);
   const ids = useId();
   const [capsLock, setCapsLock] = useState(false);
   const field =
@@ -290,25 +271,11 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
 
   return (
     <>
-    {lifted && (
-      <button type="button" aria-label="Back to the page" onClick={drop} className="fixed inset-0 z-40 cursor-default bg-[#eef0f5]/55 backdrop-blur-md" />
-    )}
-    {/* Raised above the page around it, so the eye lands here (Aryan, 18 Nov). Read top to bottom:
-        what this is, how to sign in, the fields, the one action, then help (Hick, Miller). */}
-    <div
-      ref={boxRef}
-      onFocus={lift}
-      role={lifted ? "dialog" : undefined}
-      aria-modal={lifted || undefined}
-      aria-label={lifted ? `Sign in to ${picked.label}` : undefined}
-      className={`relative w-full max-w-sm rounded-[1.75rem] border border-white bg-white p-7 text-left ring-1 ring-black/[0.04] transition-[scale,box-shadow] duration-200 ease-out ${
-        lifted
-          ? "z-50 scale-[1.03] shadow-[0_60px_120px_-30px_rgba(20,30,50,0.6),0_24px_48px_-20px_rgba(20,30,50,0.4)]"
-          : "shadow-[0_50px_100px_-28px_rgba(20,30,50,0.55),0_18px_36px_-18px_rgba(20,30,50,0.35)]"
-      }`}
-    >
-      <h2 className="text-[24px] leading-tight font-semibold tracking-[-0.025em] text-[#1f2733]">Sign in</h2>
-      <p className="mt-1 text-[14px] text-[#5b6472]">
+    {/* Read top to bottom: what this is, how to sign in, the fields, the one action, then help
+        (Hick, Miller). It stands on the page's white, no card around it. */}
+    <div className="w-full text-left">
+      <h1 className="text-[clamp(28px,3vw,34px)] leading-tight font-semibold tracking-[-0.03em] text-[#1f2733]">Sign in to {picked.label}</h1>
+      <p className="mt-2 text-[15px] text-[#5b6472]">
         {deskOnly
           ? "Shared desk screen. Enter the company password."
           : byName
