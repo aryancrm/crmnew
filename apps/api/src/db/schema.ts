@@ -39,6 +39,11 @@ export const person = pgTable("person", {
   mustChangePassword: boolean("must_change_password").notNull().default(false),
   failedLogins: integer("failed_logins").notNull().default(0),
   lockedUntil: at("locked_until"),
+  /** Their own PIN (salted hash), set on their first sign-in; the password is the company's. */
+  pinHash: text("pin_hash"),
+  pinSetAt: at("pin_set_at"),
+  pinFailed: integer("pin_failed").notNull().default(0),
+  pinLockedUntil: at("pin_locked_until"),
   lastSignInAt: at("last_sign_in_at"),
   active: boolean("active").notNull().default(true),
   createdAt: at("created_at").notNull().defaultNow(),

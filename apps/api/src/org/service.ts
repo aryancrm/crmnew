@@ -8,6 +8,7 @@
 import { randomBytes } from "node:crypto";
 import { type SQL, sql } from "drizzle-orm";
 import { hashPassword, joinPassword, passwordProblem } from "../auth/password";
+import { clearPin } from "../auth/pins";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import { addDays, todayManila } from "../inventory/rules";
@@ -982,6 +983,15 @@ export async function personLeaves(
     );
     return { vacant: vacant.map((seat) => seat.title) };
   });
+}
+
+/** Clears a forgotten PIN (Aryan, 21 Nov); the person sets a new one on their next sign-in. */
+export async function resetPin(db: Database, me: Me, personId: number): Promise<{ ok: true }> {
+  allow(me, ORG_CHANGE_ROLES, "clear a PIN");
+  const [found] = await rows<{ id: number }>(db, sql`select id::int as id from person where id = ${personId} and active`);
+  if (!found) throw new Refusal(404, "not_found", "That person isn't working here any more.");
+  await clearPin(db, personId);
+  return { ok: true };
 }
 
 /** A new password for someone who forgot theirs, shown once; they change it when they sign in. */

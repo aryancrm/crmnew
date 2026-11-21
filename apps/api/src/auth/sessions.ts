@@ -24,6 +24,8 @@ export async function startSession(
   viewedBy?: number,
   desk?: "management" | "finance" | "dispatch",
   workspace?: string | null,
+  /** When it ends, if not the usual (a desk's common screen: the end of the working day). */
+  until?: Date,
 ): Promise<string> {
   const token = randomBytes(32).toString("base64url");
   await db.insert(session).values({
@@ -32,7 +34,7 @@ export async function startSession(
     desk: desk ?? null,
     workspace: workspace ?? null,
     // Looking as someone else lasts two hours at most.
-    expiresAt: new Date(Date.now() + (viewedBy ? 2 * 60 * 60 * 1000 : SESSION_DAYS * DAY)),
+    expiresAt: until ?? new Date(Date.now() + (viewedBy ? 2 * 60 * 60 * 1000 : SESSION_DAYS * DAY)),
     viewedBy: viewedBy ?? null,
   });
   return token;
@@ -117,7 +119,8 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
   if (!row || !isRole(row.role)) return null;
 
   // Keep a session in use alive, writing at most once a day.
-  if (!row.viewerId && Date.now() - row.lastSeenAt.getTime() > DAY)
+  // A desk's common screen ends with the working day: never kept alive past it.
+  if (!row.viewerId && !row.deskScreen && Date.now() - row.lastSeenAt.getTime() > DAY)
     await db
       .update(session)
       .set({ lastSeenAt: new Date(), expiresAt: new Date(Date.now() + SESSION_DAYS * DAY) })
@@ -147,4 +150,11 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
     reportsTo: row.bossName ? { name: row.bossName, title: row.bossTitle } : null,
     viewedBy: row.viewerId ? { id: row.viewerId, name: row.viewerName ?? "" } : null,
   };
+}
+
+/** The end of today's working day in Manila (11 pm), or of tomorrow's if that has passed. */
+export function endOfWorkingDay(now = new Date()): Date {
+  const manila = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  const end = Date.UTC(manila.getUTCFullYear(), manila.getUTCMonth(), manila.getUTCDate(), 23) - 8 * 60 * 60 * 1000;
+  return new Date(end > now.getTime() ? end : end + DAY);
 }

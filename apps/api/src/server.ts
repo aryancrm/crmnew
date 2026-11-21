@@ -118,7 +118,7 @@ setInterval(
 // Every connected Facebook page and mailbox is read on a timer, and the webhook's events worked.
 if (process.env.CHANNEL_JOBS !== "off") startChannelJobs(db);
 
-serve({ fetch: createApp(db, { webUrl }).fetch, port }, () => {
+serve({ fetch: createApp(db, { webUrl, pins: process.env.PINS !== "off" }).fetch, port }, () => {
   console.log(`api: listening on http://localhost:${port}`);
   startKeepAwake();
 });

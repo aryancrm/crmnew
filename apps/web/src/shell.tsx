@@ -1,6 +1,7 @@
 // The frame every signed-in screen sits in: the top bar, the role's menu down the left on a
 // desk, the same menu as a tab bar on a phone.
 
+import { DeskPinPrompt } from "./desk/pin-prompt";
 import { workspaceOf } from "./workspaces";
 import type {
   Decisions,
@@ -254,6 +255,7 @@ export function Shell() {
           <Outlet />
           <UndoConfirmBar />
           <Toasts />
+          {me.data.deskScreen && <DeskPinPrompt desk={me.data.deskScreen} />}
         </main>
       </div>
 

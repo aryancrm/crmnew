@@ -268,6 +268,14 @@ function Box({ node, hit, unfolded, onFold, open }: { node: Node; hit: boolean; 
                       run(`/api/org/people/${holder.personId}/password`, (answer) => open({ kind: "login", name: holder.name, login: answer as OrgLogin }));
                     },
                   },
+                  {
+                    label: "Clear their PIN…",
+                    icon: <KeyRound size={14} />,
+                    onClick: () => {
+                      if (!window.confirm(`Clear ${holder.name}'s PIN? They create a new one the next time they sign in.`)) return;
+                      run(`/api/org/people/${holder.personId}/pin`, () => window.alert(`${holder.name}'s PIN is cleared.`));
+                    },
+                  },
                   { label: "Someone covers (leave)", onClick: () => open({ kind: "cover", seat }) },
                   { label: "No longer with us…", icon: <UserMinus size={14} />, danger: true, onClick: () => open({ kind: "leave", holder }) },
                 ]

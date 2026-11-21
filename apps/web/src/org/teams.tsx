@@ -875,6 +875,14 @@ export function SeatRow({
                         open({ kind: "login", name: holder.name, login: answer as OrgLogin }),
                       ),
                   },
+                  {
+                    label: "Clear their PIN",
+                    icon: <KeyRound size={14} />,
+                    onClick: () => {
+                      if (!window.confirm(`Clear ${holder.name}'s PIN? They create a new one the next time they sign in.`)) return;
+                      run(`/api/org/people/${holder.personId}/pin`, {}, () => window.alert(`${holder.name}'s PIN is cleared.`));
+                    },
+                  },
                   // Kept in the menu, not on every row: someone leaving isn't news to show.
                   {
                     label: "No longer with us…",

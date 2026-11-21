@@ -4,7 +4,9 @@
 // the desk may still take one over (or act on it: the role decides, as always); the timeline says
 // who was given it and who acted.
 
-import { type SQL, sql } from "drizzle-orm";
+import { eq, type SQL, sql } from "drizzle-orm";
+import { checkPin } from "../auth/pins";
+import { person } from "../db/schema";
 import { type Database, rows } from "../db/index";
 import type { Runner } from "../inventory/service";
 import { Refusal } from "../http";
@@ -414,4 +416,31 @@ export async function deskPerson(
     open,
     done,
   };
+}
+
+/**
+ * Who is acting on a desk's common screen (Aryan, 21 Nov): the screen itself only reads; anything
+ * that changes something carries the name and the PIN of the person at the keyboard, and is done
+ * in their name. Signing out needs neither.
+ */
+export async function deskActor(
+  db: Database,
+  me: Me,
+  method: string,
+  path: string,
+  header: (name: string) => string | undefined,
+): Promise<Me | null> {
+  const desk = me.deskScreen;
+  if (!desk || method === "GET" || method === "HEAD" || path.startsWith("/api/auth/")) return null;
+  // Housekeeping the screen does by itself (an update read, a chat seen) changes nothing of record.
+  if (/^\/api\/(notifications\/[^/]+\/read|leads\/\d+\/seen)$/.test(path)) return null;
+  const id = Number(header("x-desk-person"));
+  const pin = header("x-desk-pin");
+  if (!Number.isInteger(id) || id <= 0 || !pin)
+    throw new Refusal(401, "desk_pin", "Select your name and enter your PIN to do this.", "pin");
+  const [who] = await db.select().from(person).where(eq(person.id, id)).limit(1);
+  if (!who || !who.active || who.role !== desk)
+    throw new Refusal(403, "not_allowed", `That person isn't in ${WORDS[desk]}.`, "pin");
+  await checkPin(db, who, pin);
+  return { ...me, id: who.id, name: who.name, title: who.title ?? me.title, email: who.email };
 }

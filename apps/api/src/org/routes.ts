@@ -24,6 +24,7 @@ import {
   personHistory,
   personLeaves,
   resetPassword,
+  resetPin,
   seatRequestForm,
   updateArea,
   updateChannel,
@@ -118,6 +119,7 @@ export function orgRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHand
   app.post("/api/org/people/:id/password", async (c) =>
     c.json(await resetPassword(db, c.get("me"), idParam(c))),
   );
+  app.post("/api/org/people/:id/pin", async (c) => c.json(await resetPin(db, c.get("me"), idParam(c))));
 
   app.post("/api/org/seats", async (c) =>
     c.json(await addSeat(db, c.get("me"), await readBody(c, z.object(seatFields))), 201),

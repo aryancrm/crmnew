@@ -56,7 +56,7 @@ export function signedInWith(
   onSeen?: (me: Me) => Promise<void>,
   /** Who the request acts as, when not the account itself (Management's and Finance's common
    *  screen: an order's own person). */
-  standIn?: (me: Me, method: string, path: string) => Promise<Me | null>,
+  standIn?: (me: Me, method: string, path: string, header: (name: string) => string | undefined) => Promise<Me | null>,
 ) {
   return createMiddleware<Env>(async (c, next) => {
     const token = getCookie(c, SESSION_COOKIE);
@@ -71,7 +71,10 @@ export function signedInWith(
         "viewing",
         `You are looking as ${me.name}: nothing can be changed. Go back to ${me.viewedBy.name} first.`,
       );
-    c.set("me", (!me.viewedBy && standIn ? await standIn(me, c.req.method, c.req.path) : null) ?? me);
+    c.set(
+      "me",
+      (!me.viewedBy && standIn ? await standIn(me, c.req.method, c.req.path, (name) => c.req.header(name)) : null) ?? me,
+    );
     c.set("token", token);
     if (onSeen && !me.viewedBy)
       void uncounted(() => onSeen(me)).catch((error) =>

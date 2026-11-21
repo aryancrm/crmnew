@@ -38,7 +38,7 @@ export function DeskPeople({ desk, onPick }: { desk: "management" | "finance" | 
 
   const start = (id: number, on: boolean) =>
     void action.run(async () => {
-      await api(`/api/desk/${desk}/people/${id}/start`, { body: { on } });
+      await api(`/api/desk/${desk}/people/${id}/start`, { body: { on }, asPerson: on ? id : undefined });
       await queries.invalidateQueries({ queryKey: ["desk", desk] });
       await queries.invalidateQueries({ queryKey: ["orders"] });
     });

@@ -227,6 +227,15 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
     navigate(landing(signedIn.role, workspace, back), { replace: true });
     rememberPerson(signedIn.id);
   };
+  // After the right password, the person's own PIN (Aryan, 21 Nov): entered, or created on their
+  // first sign-in. The login ID and password stay as typed (or the name pressed at a door).
+  const [pinStep, setPinStep] = useState<{ mode: "enter" | "setup"; login: string; name?: string } | null>(null);
+  const toPin = (error: unknown, login: string, name?: string) => {
+    if (!(error instanceof ApiFailure) || !["pin_needed", "pin_setup"].includes(error.code)) return false;
+    setPinStep({ mode: error.code === "pin_setup" ? "setup" : "enter", login, name });
+    setProblem(null);
+    return true;
+  };
   const failed = (error: unknown) =>
     setProblem(error instanceof ApiFailure ? { message: error.message, field: error.field } : { message: "Couldn't sign in. Try again." });
 
@@ -245,6 +254,7 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
         : await api<{ me: Me }>("/api/auth/login", { body: { email, password, workspace: picked.key } });
       signedInAs(signedIn);
     } catch (error) {
+      if (!deskOnly && toPin(error, email)) return;
       failed(error);
     } finally {
       setBusy(false);
@@ -258,6 +268,7 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
     try {
       signedInAs((await api<{ me: Me }>("/api/auth/login", { body: { email: login, password, workspace: picked.key } })).me);
     } catch (error) {
+      if (toPin(error, login, names?.find((one) => one.login === login)?.name)) return;
       failed(error);
     } finally {
       setEntering(null);
@@ -276,7 +287,11 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
     <div className="w-full text-left">
       <h1 className="text-[clamp(28px,3vw,34px)] leading-tight font-semibold tracking-[-0.03em] text-[#1f2733]">Sign in to {picked.label}</h1>
       <p className="mt-2 text-[15px] text-[#5b6472]">
-        {deskOnly
+        {pinStep
+          ? pinStep.mode === "setup"
+            ? "Create your PIN. Only you know it; you'll use it to sign in and on the desk screens."
+            : `Enter your PIN${pinStep.name ? `, ${pinStep.name}` : ""}.`
+          : deskOnly
           ? "Shared desk screen. Enter the company password."
           : byName
             ? names
@@ -286,7 +301,7 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
       </p>
       {/* Two ways in (Aryan, 19 Nov): the desk's shared screen, or each person's own login for their
           own things (payslips, leave, their own work). The choice comes before the fields it changes. */}
-      {(isDesk || isDoor) && (
+      {(isDesk || isDoor) && !pinStep && (
         <div role="tablist" aria-label="Sign-in method" className="mt-5 grid grid-cols-2 gap-1 rounded-xl bg-[#f1f3f7] p-1 text-[13px] font-semibold">
           {(
             [
@@ -311,7 +326,32 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
           ))}
         </div>
       )}
-      {byName && names ? (
+      {pinStep ? (
+        <PinStep
+          step={pinStep}
+          busy={busy}
+          problem={problem}
+          field={field}
+          label={label}
+          onBack={() => {
+            setPinStep(null);
+            setProblem(null);
+          }}
+          onSubmit={async (pins) => {
+            setBusy(true);
+            setProblem(null);
+            try {
+              signedInAs(
+                (await api<{ me: Me }>("/api/auth/login", { body: { email: pinStep.login, password, workspace: picked.key, ...pins } })).me,
+              );
+            } catch (error) {
+              failed(error);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        />
+      ) : byName && names ? (
         <DoorNames
           names={names}
           entering={entering}
@@ -411,6 +451,118 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
       <p className="mt-6 border-t border-[#eceef3] pt-4 text-[13px] text-[#5b6472]">Need access? Contact your administrator.</p>
     </div>
     </>
+  );
+}
+
+/** The PIN after the password: entered, or created (twice, to be sure) on the first sign-in. */
+function PinStep({
+  step,
+  busy,
+  problem,
+  field,
+  label,
+  onBack,
+  onSubmit,
+}: {
+  step: { mode: "enter" | "setup"; login: string; name?: string };
+  busy: boolean;
+  problem: { message: string; field?: string } | null;
+  field: string;
+  label: string;
+  onBack: () => void;
+  onSubmit: (pins: { pin: string } | { newPin: string }) => void;
+}) {
+  const ids = useId();
+  const [pin, setPin] = useState("");
+  const [again, setAgain] = useState("");
+  const [mismatch, setMismatch] = useState(false);
+  const setup = step.mode === "setup";
+  const error = mismatch ? "The two PINs don't match." : (problem?.message ?? null);
+  const digits = (value: string) => value.replace(/\D/g, "").slice(0, 6);
+  const pinField = `${field} text-center text-[20px] tracking-[0.5em]`;
+  return (
+    <form
+      className="mt-6 grid gap-4"
+      aria-busy={busy}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (setup && pin !== again) {
+          setMismatch(true);
+          return;
+        }
+        onSubmit(setup ? { newPin: pin } : { pin });
+      }}
+    >
+      <div className="grid gap-1.5">
+        <label htmlFor={`${ids}-pin`} className={label}>
+          {setup ? "New PIN" : "PIN"}
+        </label>
+        <input
+          id={`${ids}-pin`}
+          type="password"
+          inputMode="numeric"
+          autoComplete={setup ? "new-password" : "one-time-code"}
+          // biome-ignore lint/a11y/noAutofocus: the one field on this step
+          autoFocus
+          required
+          minLength={4}
+          maxLength={6}
+          disabled={busy}
+          value={pin}
+          onChange={(event) => {
+            setPin(digits(event.target.value));
+            setMismatch(false);
+          }}
+          aria-invalid={error && !setup ? true : undefined}
+          aria-describedby={`${ids}-hint`}
+          className={pinField}
+        />
+        <p id={`${ids}-hint`} className="text-[12px] text-[#5b6472]">
+          {setup ? "4 to 6 digits. Not all the same, not in a row like 1234." : `Signing in as ${step.name ?? step.login}.`}
+        </p>
+      </div>
+      {setup && (
+        <div className="grid gap-1.5">
+          <label htmlFor={`${ids}-again`} className={label}>
+            Enter it again
+          </label>
+          <input
+            id={`${ids}-again`}
+            type="password"
+            inputMode="numeric"
+            autoComplete="new-password"
+            required
+            minLength={4}
+            maxLength={6}
+            disabled={busy}
+            value={again}
+            onChange={(event) => {
+              setAgain(digits(event.target.value));
+              setMismatch(false);
+            }}
+            aria-invalid={error ? true : undefined}
+            className={pinField}
+          />
+        </div>
+      )}
+      {error && (
+        <p role="alert" className="flex items-center gap-1.5 text-[13px] text-rose-700">
+          <CircleAlert className="size-4 shrink-0" aria-hidden="true" /> {error}
+        </p>
+      )}
+      <button
+        type="submit"
+        disabled={busy || pin.length < 4 || (setup && again.length < 4)}
+        className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#f36b21] text-[15px] font-semibold text-white shadow-[0_12px_26px_-12px_rgba(243,107,33,0.7)] transition-colors hover:bg-[#e05a12] disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {busy && <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />}
+        {setup ? "Create PIN and sign in" : "Sign in"}
+      </button>
+      <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 justify-self-start text-[13px] font-semibold text-[#c2410c] hover:underline">
+        <ArrowLeft className="size-4" aria-hidden="true" /> Back
+      </button>
+      {!setup && <p className="text-[13px] text-[#5b6472]">Forgot your PIN? Ask your administrator to clear it.</p>}
+    </form>
   );
 }
 

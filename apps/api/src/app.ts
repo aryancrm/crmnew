@@ -4,18 +4,20 @@ import { createMiddleware } from "hono/factory";
 import { decisionRoutes } from "./decisions/routes";
 import { sampleRoutes } from "./samples/routes";
 import { complaintRoutes } from "./complaints/routes";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { cors } from "hono/cors";
 import { z } from "zod";
 import { DOORS, doorPeople } from "./auth/doors";
-import { hashPassword, passwordMatches, passwordProblem } from "./auth/password";
+import { hashPassword, joinPassword, passwordMatches, passwordProblem } from "./auth/password";
+import { checkPin, setPin } from "./auth/pins";
 import { ownWorkspace, WORKSPACE_KEYS, type WorkspaceKey, workspaceAllows, workspaceByKey } from "./auth/workspaces";
 import type { Role } from "./people/roles";
 import {
   BACK_COOKIE,
+  endOfWorkingDay,
   endOtherSessions,
   endSession,
   SESSION_COOKIE,
@@ -66,13 +68,17 @@ import { kpiRoutes } from "./kpis/routes";
 import { sellerRoutes } from "./sellers/routes";
 import { targetRoutes } from "./targets/routes";
 import { teamRoutes } from "./team/routes";
-import { DUTY_DESKS, type DutyDesk, deskPerson, deskReport, deskStandIn, deskTeam, shareOut, shareOutAll, startPerson, takeFinanceOrder } from "./desks/service";
+import { DUTY_DESKS, type DutyDesk, deskPerson, deskActor, deskReport, deskStandIn, deskTeam, shareOut, shareOutAll, startPerson, takeFinanceOrder } from "./desks/service";
 import { portalDepartment } from "./portal/service";
 import type { ApiError, Me } from "./types";
 
 export type AppOptions = {
   /** The web app's address: allowed to call with the cookie; https makes the cookie Secure. */
   webUrl: string;
+  /** Each person's own PIN asked (Aryan, 21 Nov): after the password, at the doors and on a desk's
+   *  common screen before anything is done. On in the server; the tests that don't sign in with a
+   *  PIN leave it off. */
+  pins?: boolean;
 };
 
 const MAX_WRONG = 5;
@@ -128,7 +134,9 @@ export function createApp(db: Database, options: AppOptions) {
   const signedInOnly = signedInWith(
     db,
     (me) => markSeen(db, me),
-    (me, method, path) => deskStandIn(db, me, method, path),
+    // With PINs, the person at the keyboard (their name and PIN); before them, the order's person.
+    (me, method, path, header) =>
+      options.pins ? deskActor(db, me, method, path, header) : deskStandIn(db, me, method, path),
   );
   // A lead's page reading one box of the team switch (?unit=): checked once here, then every
   // service's team is that box and what is under it (org/scope.ts).
@@ -179,6 +187,9 @@ export function createApp(db: Database, options: AppOptions) {
   app.post("/api/desk/:desk/people/:id/start", signedIn, async (c) => {
     const input = await readBody(c, z.object({ on: z.boolean() }));
     const desk = deskParam(c.req.param("desk"));
+    // On the common screen a person starts themselves (their own PIN); anyone may stop someone.
+    if (options.pins && c.get("me").deskScreen && input.on && c.get("me").id !== idParam(c))
+      throw new Refusal(403, "not_allowed", "Each person starts themselves: select your own name and enter your PIN.", "pin");
     await startPerson(db, c.get("me"), desk, idParam(c), input.on);
     return c.json(await deskTeam(db, c.get("me"), desk));
   });
@@ -202,6 +213,8 @@ export function createApp(db: Database, options: AppOptions) {
     desk?: "management" | "finance" | "dispatch",
     /** The department signed in at: refused when the login's role doesn't belong there. */
     workspace?: WorkspaceKey,
+    /** Their own PIN, or a new one on their first sign-in (when PINs are on). */
+    pins?: { pin?: string; newPin?: string },
   ) => {
     if (!found || !found.active) throw wrong;
 
@@ -241,6 +254,19 @@ export function createApp(db: Database, options: AppOptions) {
       );
     }
 
+    // Then the PIN, theirs alone (the password is the company's): asked once it is set, set on the
+    // first sign-in. Its wrong tries lock only the PIN.
+    if (options.pins && pins) {
+      if (!found.pinHash) {
+        if (!pins.newPin)
+          throw new Refusal(401, "pin_setup", "Create your PIN: 4 to 6 digits only you know. You'll use it to sign in.", "newPin");
+        await setPin(db, found.id, pins.newPin);
+      } else {
+        if (!pins.pin) throw new Refusal(401, "pin_needed", "Enter your PIN.", "pin");
+        await checkPin(db, found, pins.pin);
+      }
+    }
+
     await db
       .update(person)
       .set({ failedLogins: 0, lockedUntil: null, lastSignInAt: new Date() })
@@ -263,6 +289,7 @@ export function createApp(db: Database, options: AppOptions) {
   // screen and sign in beside it; one password for it, everyone uses it"): the desk opens with the
   // company's password alone, as the desk's first seat; each person then presses Start beside it,
   // and what is done on an order is written in the name of the person it was given to.
+  const deskTries = new Map<string, { wrong: number; until: number }>();
   app.post("/api/auth/desk", async (c) => {
     const input = await readBody(
       c,
@@ -279,7 +306,33 @@ export function createApp(db: Database, options: AppOptions) {
         where s.active and s.module = ${input.desk} order by s.lead desc, s.sort, s.id limit 1`,
     );
     const [found] = seat ? await db.select().from(person).where(eq(person.id, seat.personId)).limit(1) : [];
-    return signInAs(c, found, input.password, new Refusal(401, "wrong_login", "Wrong password."), input.desk, input.desk);
+    if (!options.pins)
+      return signInAs(c, found, input.password, new Refusal(401, "wrong_login", "Wrong password."), input.desk, input.desk);
+
+    // With PINs the screen belongs to the desk (Aryan, 21 Nov): it reads, and everything done on it
+    // carries the PIN of whoever does it. Wrong passwords lock this desk's screen for a while,
+    // never a person's own login; it lasts until the end of the working day.
+    const words = workspaceByKey(input.desk)?.label ?? input.desk;
+    const tries = deskTries.get(input.desk);
+    if (tries && tries.until > Date.now()) {
+      const minutes = Math.ceil((tries.until - Date.now()) / 60000);
+      throw new Refusal(429, "locked", `Too many wrong passwords on ${words}'s screen. Try again in ${minutes} minutes.`, "password");
+    }
+    if (!found || !found.active)
+      throw new Refusal(409, "no_seat", `${words}'s desk has nobody on its lead seat today. Ask the administrator.`);
+    const common = joinPassword();
+    const right = common
+      ? timingSafeEqual(createHash("sha256").update(input.password).digest(), createHash("sha256").update(common).digest())
+      : await passwordMatches(input.password, found.passwordHash);
+    if (!right) {
+      const wrong = (tries?.wrong ?? 0) + 1;
+      deskTries.set(input.desk, wrong >= MAX_WRONG ? { wrong: 0, until: Date.now() + LOCK_MINUTES * 60000 } : { wrong, until: 0 });
+      throw new Refusal(401, "wrong_login", "Wrong password.", "password");
+    }
+    deskTries.delete(input.desk);
+    const token = await startSession(db, found.id, undefined, input.desk, input.desk, endOfWorkingDay());
+    setCookie(c, SESSION_COOKIE, token, { httpOnly: true, secure, sameSite: "Lax", path: "/", expires: endOfWorkingDay() });
+    return c.json({ me: await whoIs(db, token) });
   });
 
   // The sales line's doors (Aryan, 19 Nov: "open Heads, one password, all the heads come; press one
@@ -323,6 +376,8 @@ export function createApp(db: Database, options: AppOptions) {
         // The department page signed in at. The web app always sends it; without it the session
         // is opened for the login's own department.
         workspace: z.enum(WORKSPACE_KEYS, { error: "Pick the department." }).optional(),
+        pin: z.string().trim().max(6).optional(),
+        newPin: z.string().trim().max(6).optional(),
       }),
     );
     const wrong = new Refusal(401, "wrong_login", "Wrong login ID or password.");
@@ -337,7 +392,7 @@ export function createApp(db: Database, options: AppOptions) {
           : eq(sql`lower(${person.email})`, input.email.toLowerCase()),
       )
       .limit(1);
-    return signInAs(c, found, input.password, wrong, undefined, input.workspace);
+    return signInAs(c, found, input.password, wrong, undefined, input.workspace, { pin: input.pin, newPin: input.newPin });
   });
 
   app.post("/api/auth/logout", async (c) => {
