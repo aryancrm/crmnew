@@ -55,4 +55,6 @@ export const session = pgTable("session", {
   viewedBy: ref("viewed_by"),
   /** A desk's common screen (management, finance, dispatch), opened with the company's password. */
   desk: text("desk"),
+  /** The department it was opened for (auth/workspaces.ts): the sign-in page it was made on. */
+  workspace: text("workspace"),
 });

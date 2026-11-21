@@ -4,7 +4,6 @@
 
 import { ArrowRight, Check } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { TILE_GLOW, TILE_ICONS } from "./tiles";
 import { WORKSPACES } from "../workspaces";
 
@@ -392,9 +391,6 @@ export function About() {
             >
               Choose your workspace <ArrowRight className="size-4" aria-hidden="true" />
             </button>
-            <Link to="/login?with=password" className="inline-flex items-center gap-2 rounded-full border border-[#1f2733]/15 bg-white/70 px-7 py-3.5 text-sm font-semibold text-[#1f2733] transition hover:bg-white">
-              Log in with ID and password
-            </Link>
           </div>
         </div>
       </section>

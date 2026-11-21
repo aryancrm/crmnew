@@ -1,32 +1,39 @@
 // The company portal's workspaces (Aryan, 18 Nov): the front door shows the company's departments;
-// a person picks theirs and signs in with their own login ID and password as always. Only a look:
-// who someone is and what they may do still come from their own login (their role, their seat),
-// and the API checks every call as before.
+// a person picks theirs and signs in there. Which roles may sign in at each comes from the API's own
+// list (@2mg/api/workspaces, Aryan 21 Nov: the token is the source of truth): a login is refused on
+// a department it doesn't belong to, and the session keeps the department. Only the words and the
+// grouping of the tiles are kept here.
 
 import type { Me } from "@2mg/api/types";
+import { WORKSPACE_ACCESS } from "@2mg/api/workspaces";
 
 export type Workspace = { key: string; label: string; about: string; roles: string[]; group?: "selling" | "operations" | "office" };
 
-// In the order line's order (Aryan, 19 Nov): Sales and field, Management, Finance, Dispatch, then the rest.
-export const WORKSPACES: Workspace[] = [
-  // The sales line's three doors (Aryan, 19 Nov: "where do team leads sign in, where do heads?"),
-  // as the sales tracker has it: the sales people, their managers, the heads of the channels.
-  { key: "sales", group: "selling", label: "MedReps", about: "Visits, orders, your customers", roles: ["medrep"] },
-  { key: "leads", group: "selling", label: "Team leads", about: "Managers: your team's orders and figures", roles: ["team_lead"] },
-  { key: "heads", group: "selling", label: "Heads", about: "Your channels, managers and people", roles: ["manager"] },
-  { key: "management", group: "operations", label: "Management", about: "Order approvals, customers", roles: ["management"] },
-  { key: "finance", group: "operations", label: "Finance", about: "Payments, invoices, the books", roles: ["finance"] },
-  { key: "dispatch", group: "operations", label: "Dispatch", about: "Packing and delivery", roles: ["dispatch"] },
-  { key: "inventory", group: "operations", label: "Inventory", about: "Stock, purchasing", roles: ["inventory"] },
-  { key: "online", group: "selling", label: "Online desk", about: "Messenger, websites, cases", roles: ["online"] },
-  { key: "hr", group: "office", label: "HR", about: "People, attendance, payroll", roles: ["hr"] },
-  { key: "regulatory", group: "office", label: "Regulatory", about: "Registrations, complaints", roles: ["regulatory"] },
-  { key: "office", group: "office", label: "Office staff", about: "Work log", roles: ["staff"] },
-  { key: "ceo", group: "office", label: "CEO", about: "The whole company", roles: ["ceo"] },
-  { key: "admin", group: "office", label: "Administration", about: "Setup, logins, audit", roles: ["admin"] },
-  // Its own app (docs/BOOKS-PLAN.md): opens Books Home. Last, so a person's own workspace stays theirs.
-  { key: "books", group: "office", label: "Books", about: "Accounts, banking, reports", roles: ["finance", "ceo", "admin"] },
-];
+const LOOK: Record<string, Pick<Workspace, "about" | "group">> = {
+  sales: { group: "selling", about: "Visits, orders, your customers" },
+  leads: { group: "selling", about: "Managers: your team's orders and figures" },
+  heads: { group: "selling", about: "Your channels, managers and people" },
+  management: { group: "operations", about: "Order approvals, customers" },
+  finance: { group: "operations", about: "Payments, invoices, the books" },
+  dispatch: { group: "operations", about: "Packing and delivery" },
+  inventory: { group: "operations", about: "Stock, purchasing" },
+  online: { group: "selling", about: "Messenger, websites, cases" },
+  hr: { group: "office", about: "People, attendance, payroll" },
+  regulatory: { group: "office", about: "Registrations, complaints" },
+  office: { group: "office", about: "Work log" },
+  ceo: { group: "office", about: "The whole company" },
+  admin: { group: "office", about: "Setup, logins, audit" },
+  books: { group: "office", about: "Accounts, banking, reports" },
+};
+
+// In the order line's order (Aryan, 19 Nov), as the API lists them.
+export const WORKSPACES: Workspace[] = WORKSPACE_ACCESS.map((one) => ({
+  key: one.key,
+  label: one.label,
+  roles: [...one.roles],
+  about: LOOK[one.key]?.about ?? "",
+  group: LOOK[one.key]?.group,
+}));
 
 /** The workspace a person's own login opens (their role decides, not the tile pressed). */
 export const workspaceOf = (me: Pick<Me, "role">): Workspace =>

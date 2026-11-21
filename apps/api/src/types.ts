@@ -119,6 +119,8 @@ export type Me = {
   /** Signed in at a desk's tile with the company's password: the desk's common screen, not the
    *  person's own (no "Me" on it). */
   deskScreen?: "management" | "finance" | "dispatch" | null;
+  /** The department this session was opened for (the sign-in page it was made on). */
+  workspace?: string | null;
   /** The box picked on a lead's team switch for this request (?unit=, checked): the page counts the
    *  seats in it and under it (org/scope.ts). */
   unit?: number | null;

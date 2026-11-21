@@ -7,19 +7,17 @@ import type { DoorList, Me } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, ChevronRight, CircleAlert, Eye, EyeOff, LoaderCircle, Search } from "lucide-react";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
-import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiFailure, api } from "../api";
 import { ME, rememberPerson, returnTo, useMe } from "../auth";
-import { ClassicLogin } from "./login-classic";
 import { About } from "../portal/about";
-import { DepartmentPage } from "../portal/department-page";
 import { TILE_GLOW, TILE_ICONS } from "../portal/tiles";
 import { lastWorkspace, rememberWorkspace, type Workspace, WORKSPACES, workspaceOf } from "../workspaces";
 
-/** The sign-in: the workspace launcher, or (Log in with ID and password) the screen as it was. */
+/** The sign-in: the departments, then the one picked (Aryan, 21 Nov: no other way in; the old
+ *  "Log in with ID and password" page is gone, so every session is opened for a department). */
 export function Login() {
-  const [params] = useSearchParams();
-  return params.get("with") === "password" ? <ClassicLogin /> : <Launcher />;
+  return <Launcher />;
 }
 
 function Launcher() {
@@ -71,7 +69,21 @@ function Launcher() {
             <img src="/brand/bishnoi-one-mark.png" alt="" className="size-7" />
             <span className="text-[18px] font-semibold tracking-[-0.03em]">Bishnoi One</span>
           </header>
-          <DepartmentPage workspace={picked} onBack={() => open(null)} signIn={<SignIn workspace={picked} from={from} />} />
+          {/* Only the sign-in (Aryan, 21 Nov: the department's figures, team and workflow beside it
+              bombarded people). Where you are on top, then the form, nothing else. */}
+          <div className="mx-auto flex w-full max-w-sm flex-1 flex-col justify-center px-4 pt-4 pb-16">
+            <button
+              type="button"
+              onClick={() => open(null)}
+              className="mb-6 inline-flex min-h-9 items-center gap-1.5 self-start text-[13px] font-semibold text-[#5b6472] hover:text-[#c2410c]"
+            >
+              <ArrowLeft className="size-4" aria-hidden="true" /> All departments
+            </button>
+            <DepartmentTitle workspace={picked} />
+            <div className="mt-6">
+              <SignIn workspace={picked} from={from} />
+            </div>
+          </div>
         </div>
       ) : (
         <>
@@ -138,17 +150,9 @@ function Launcher() {
         {!shownTiles.length && <p className="text-center text-sm text-[#7a8394]">No workspace by that name.</p>}
       </section>
 
-      {/* The other way in: the sign-in as it was. */}
       <footer className="mx-auto flex w-[min(1180px,calc(100%-32px))] shrink-0 flex-wrap items-center justify-between gap-3 pb-5">
         <a href="#about" className="text-xs font-medium text-[#5b6472] hover:text-[#c2410c]">What is Bishnoi One? ↓</a>
-        <Link
-          to="/login?with=password"
-          state={location.state}
-          className="flex items-center gap-1.5 rounded-full border border-white/90 bg-white/70 px-4 py-2 text-sm font-semibold text-[#1f2733] shadow-[0_8px_24px_-12px_rgba(20,30,50,0.25)] backdrop-blur-xl hover:text-[#c2410c]"
-        >
-          Log in with ID and password <ChevronRight className="size-4" aria-hidden="true" />
-        </Link>
-        <span className="text-xs text-[#8a93a3]">Need access? Ask your administrator</span>
+        <span className="text-xs text-[#5b6472]">Need access? Contact your administrator.</span>
       </footer>
       </div>
 
@@ -157,6 +161,25 @@ function Launcher() {
         </>
       )}
     </main>
+  );
+}
+
+/** Where you are: the department's mark, its name and what it is for, in one line. */
+function DepartmentTitle({ workspace }: { workspace: Workspace }) {
+  const Icon = TILE_ICONS[workspace.key];
+  return (
+    <div className="flex items-center gap-4">
+      <span
+        className="grid size-12 shrink-0 place-items-center rounded-2xl border border-white bg-white shadow-[0_12px_28px_-14px_rgba(20,30,50,0.4)]"
+        style={{ boxShadow: `0 0 0 4px ${TILE_GLOW[workspace.key] ?? "#f36b21"}22, 0 12px 28px -14px rgba(20,30,50,0.4)` }}
+      >
+        <span className="size-7">{Icon && <Icon />}</span>
+      </span>
+      <div className="min-w-0">
+        <h1 className="text-[26px] leading-tight font-semibold tracking-[-0.03em] text-[#1f2733]">{workspace.label}</h1>
+        <p className="text-[14px] text-[#5b6472]">{workspace.about}</p>
+      </div>
+    </div>
   );
 }
 
@@ -236,7 +259,7 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
       }
       const { me: signedIn } = deskOnly
         ? await api<{ me: Me }>("/api/auth/desk", { body: { desk: picked.key, password } })
-        : await api<{ me: Me }>("/api/auth/login", { body: { email, password } });
+        : await api<{ me: Me }>("/api/auth/login", { body: { email, password, workspace: picked.key } });
       signedInAs(signedIn);
     } catch (error) {
       failed(error);
@@ -250,7 +273,7 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
     setEntering(login);
     setProblem(null);
     try {
-      signedInAs((await api<{ me: Me }>("/api/auth/login", { body: { email: login, password } })).me);
+      signedInAs((await api<{ me: Me }>("/api/auth/login", { body: { email: login, password, workspace: picked.key } })).me);
     } catch (error) {
       failed(error);
     } finally {
@@ -259,9 +282,9 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
   }
 
   // Each error sits under the field it is about (proximity); one about neither, under the password.
-  const idError = problem?.field === "email" ? problem.message : null;
-  const passwordError = problem && problem.field !== "email" ? problem.message : null;
   const sharedPassword = deskOnly || byName;
+  const idError = !sharedPassword && problem?.field === "email" ? problem.message : null;
+  const passwordError = problem && !idError ? problem.message : null;
 
   return (
     <>
@@ -290,7 +313,7 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
             ? names
               ? "Select your name to continue."
               : "Enter the company password, then select your name."
-            : `Use your login ID and password for ${picked.label}.`}
+            : "Use your login ID and password."}
       </p>
       {/* Two ways in (Aryan, 19 Nov): the desk's shared screen, or each person's own login for their
           own things (payslips, leave, their own work). The choice comes before the fields it changes. */}

@@ -12,6 +12,8 @@ import { cors } from "hono/cors";
 import { z } from "zod";
 import { DOORS, doorPeople } from "./auth/doors";
 import { hashPassword, passwordMatches, passwordProblem } from "./auth/password";
+import { ownWorkspace, WORKSPACE_KEYS, type WorkspaceKey, workspaceAllows, workspaceByKey } from "./auth/workspaces";
+import type { Role } from "./people/roles";
 import {
   BACK_COOKIE,
   endOtherSessions,
@@ -198,6 +200,8 @@ export function createApp(db: Database, options: AppOptions) {
     password: string,
     wrong: Refusal,
     desk?: "management" | "finance" | "dispatch",
+    /** The department signed in at: refused when the login's role doesn't belong there. */
+    workspace?: WorkspaceKey,
   ) => {
     if (!found || !found.active) throw wrong;
 
@@ -223,12 +227,26 @@ export function createApp(db: Database, options: AppOptions) {
       throw wrong;
     }
 
+    // Checked only after the password is right, so a wrong page never tells a stranger whose login
+    // it is. A right password on the wrong department isn't a wrong try: it opens nothing.
+    const role = found.role as Role;
+    const own = ownWorkspace(role);
+    if (workspace && !workspaceAllows(workspace, role)) {
+      await db.update(person).set({ failedLogins: 0, lockedUntil: null }).where(eq(person.id, found.id));
+      throw new Refusal(
+        403,
+        "wrong_department",
+        `This login has no access to ${workspaceByKey(workspace)?.label ?? "this department"}.${own ? ` Sign in on the ${own.label} page.` : ""}`,
+        "email",
+      );
+    }
+
     await db
       .update(person)
       .set({ failedLogins: 0, lockedUntil: null, lastSignInAt: new Date() })
       .where(eq(person.id, found.id));
 
-    const token = await startSession(db, found.id, undefined, desk);
+    const token = await startSession(db, found.id, undefined, desk, workspace ?? own?.key ?? null);
     setCookie(c, SESSION_COOKIE, token, {
       httpOnly: true,
       secure,
@@ -261,7 +279,7 @@ export function createApp(db: Database, options: AppOptions) {
         where s.active and s.module = ${input.desk} order by s.lead desc, s.sort, s.id limit 1`,
     );
     const [found] = seat ? await db.select().from(person).where(eq(person.id, seat.personId)).limit(1) : [];
-    return signInAs(c, found, input.password, new Refusal(401, "wrong_login", "Wrong password."), input.desk);
+    return signInAs(c, found, input.password, new Refusal(401, "wrong_login", "Wrong password."), input.desk, input.desk);
   });
 
   // The sales line's doors (Aryan, 19 Nov: "open Heads, one password, all the heads come; press one
@@ -302,6 +320,9 @@ export function createApp(db: Database, options: AppOptions) {
       z.object({
         email: z.string().trim().min(1, "Type your login ID."),
         password: z.string().min(1, "Type your password."),
+        // The department page signed in at. The web app always sends it; without it the session
+        // is opened for the login's own department.
+        workspace: z.enum(WORKSPACE_KEYS, { error: "Pick the department." }).optional(),
       }),
     );
     const wrong = new Refusal(401, "wrong_login", "Wrong login ID or password.");
@@ -316,7 +337,7 @@ export function createApp(db: Database, options: AppOptions) {
           : eq(sql`lower(${person.email})`, input.email.toLowerCase()),
       )
       .limit(1);
-    return signInAs(c, found, input.password, wrong);
+    return signInAs(c, found, input.password, wrong, undefined, input.workspace);
   });
 
   app.post("/api/auth/logout", async (c) => {
