@@ -1131,7 +1131,8 @@ sees every team under them, a cover brings the covered team in, and an empty sea
 
 ## 12.6 Sidebar folders, Messages boxes, regions and areas, desk work (15 Nov, late)
 
-- **No sidebar swaps.** A link with pages under it is a folder that opens in place (Orders,
+- **No sidebar swaps.** A link with pages under it is a folder that opens in place and goes nowhere
+  by itself (Orders,
   Company, Finance, Dispatch, Inventory, Customers, Reports for the CEO; My orders / Team orders
   by stage for MedReps and leads; My team with its teams). Under Company the divisions are listed,
   and the open division's teams under it (`GET /api/org/menu`). Speed is its own link.

@@ -108,14 +108,14 @@ export type MenuItem = {
   badge?: Badge;
   /** What the phone's tab bar calls it, where the label is too long for a tab. */
   short?: string;
-  /** Its own pages, opened under it in the same sidebar (never a sidebar of their own). The
-   *  item itself opens the first of them. */
+  /** Its own pages, opened under it in the same sidebar (never a sidebar of their own). In the
+   *  sidebar it only opens the list; as a phone's tab it opens the first of them. */
   children?: MenuItem[];
   /** The company's teams (or the lead's) are listed under this link, each opening its page. */
   teams?: boolean;
 };
 
-/** A link with its pages under it: opens the first; open (unfolded) while any of them is. */
+/** A list of pages under one name: a press unfolds it, and it is open while any of them is. */
 const folder = (
   label: string,
   icon: LucideIcon,
@@ -1340,7 +1340,8 @@ function ownDesk(me: Me): Space {
               { to: "/purchases/bills?view=open", label: "Supplier bills to pay", icon: Receipt, short: "Bills" },
               { to: "/desk/team", label: "Team figures", icon: BarChart3, short: "Team" },
               folder("Money", Banknote, moneyLinks.filter((link) => link.to !== "/refunds"), "Money"),
-              folder("Books", Landmark, booksLinks, "Books"),
+              // Another app, so a link (↗), never a folder: its pages are Books' own menu.
+              { to: "/books/home", label: "Books", icon: Landmark },
             ],
           },
           {

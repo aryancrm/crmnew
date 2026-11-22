@@ -29,7 +29,7 @@ import {
   ShieldCheck,
   UserRound,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
 import { ME, onlineDesk, useMe } from "./auth";
@@ -469,7 +469,7 @@ function MenuList({
   badges?: Record<Badge, number>;
 }) {
   const location = useLocation();
-  const navigate = useNavigate();
+  const listId = useId();
   const every = allItems(groups.flatMap((group) => group.items));
   const openOf = linkOpen(location, every);
   // Folders the person unfolded or folded by hand; the rest follow the page that is open.
@@ -616,6 +616,7 @@ function MenuList({
   const folder = (item: MenuItem) => {
     const here = inFolder(item, location);
     const open = folded[item.label] ?? here;
+    const id = `${listId}-${item.label.replace(/\W+/g, "-")}`;
     // Folded, it still says what waits inside.
     const waiting = allItems(item.children ?? []).reduce(
       (sum, one) => sum + (one.badge && counts ? (counts[one.badge] ?? 0) : 0),
@@ -626,12 +627,13 @@ function MenuList({
         <button
           type="button"
           aria-expanded={open}
-          onClick={() => {
-            if (!open && !here) {
-              navigate(item.to);
-              onPick?.();
-            }
+          aria-controls={open ? id : undefined}
+          // A ⌄ only opens and closes its list: going somewhere is a press on what is in it.
+          onClick={(event) => {
             setFolded((now) => ({ ...now, [item.label]: !open }));
+            const box = event.currentTarget.parentElement;
+            // Opened near the foot of the menu, its list would be out of sight.
+            if (!open) requestAnimationFrame(() => box?.scrollIntoView({ block: "nearest" }));
           }}
           className={`group flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] transition-colors ${
             here
@@ -657,7 +659,7 @@ function MenuList({
           />
         </button>
         {open && (
-          <div className="mt-0.5 mb-1 ml-[18px] flex flex-col gap-0.5 border-l border-slate-200 pl-2">
+          <div id={id} className="menu-list mt-0.5 mb-1 ml-[18px] flex flex-col gap-0.5 border-l border-slate-200 pl-2">
             {(item.children ?? []).flatMap((child) =>
               child.teams ? [link(child, true), ...teamLinks()] : [link(child, true)],
             )}
