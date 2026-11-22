@@ -196,7 +196,9 @@ describe("the channels and the CEO", () => {
   it("draws the CEO Home from the same figures", async () => {
     const home = await read<CeoHome>("naresh", "/api/ceo/home");
     expect(home.sales).toMatchObject({ achieved: sold, target: sold * 4, pct: 25, collected: 0 });
-    expect(home.sales.channels.find((row) => row.code === "HOSP")?.sold).toBe(sold);
+    // The channels are the Company tree's boxes under each business (22 Nov): they add up to it.
+    expect(home.sales.channels.filter((row) => row.business === "Hospital Division").reduce((sum, row) => sum + row.sold, 0)).toBe(sold);
+    expect(home.sales.channels.reduce((sum, row) => sum + row.sold, 0)).toBe(sold);
     expect(home.money.owed).toBe(sold);
     expect(home.orders).toMatchObject({ finance: 1, onHold: 1 });
     expect(home.alerts.map((alert) => alert.text)).toContain("1 order is on hold");

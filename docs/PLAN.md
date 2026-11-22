@@ -3144,3 +3144,19 @@ lowest, each division's average; Scorecards opens every card.
   first eight channels (HOSP, RX, B2B, BID, PAP, TS, MT, ONLINE: CLIDP inside B2B, both telesales
   as one), not by the sheet's (RX Business, MD Telesales, B2B, BID, CLIDP, TeleSales, HOSP, MT),
   which the tree, Divisions and the Target sheet use.
+- **22 Nov 2026 (Aryan: "move them": one list of channels, the sheet's)** The CEO's Home ("Sales
+  this month") and the **Sales by channel** report now count by the target sheet's channels: the
+  box straight under a business on the Company tree (HOSP, TeleSales, RX Business, MD Telesales,
+  CLIDP, B2B Telesales, Government Bidding, Modern Trade's own), each with its manager and its
+  business (`sheetChannelSales` and `SHEET_PLACE` in sales/service.ts; the report in
+  books/insights.ts with Business, Head, Channel, Manager, people, vacant seats, customers, sales
+  and what is owed). They counted by the first eight channels (CLIDP inside B2B, both telesales as
+  one, PAP and ONLINE of their own). Sales by a seller tied to no seat are a last row, so the rows
+  add up to the company's figure: checked on a copy of the real data against the invoices
+  themselves (November ₱20,667,621.21, the year, what is owed and 619 invoices: the same to the
+  centavo). Targets are the seats' (the sheet's, vacant seats too): each channel's equals the
+  sheet's and the Home's headline is their sum, ₱57,642,166 (it read ₱52.8M: its people's targets,
+  without the vacant seats'). The loader takes a target off a seat that is on no row of the sheet
+  (Claire's ₱500,000 sat on her Mindanao coach seat as well as on her B2B seat and made HOSP's
+  target too high). The first eight channels still decide each seat's screens and an order's
+  channel; only these two lists changed. Local only.

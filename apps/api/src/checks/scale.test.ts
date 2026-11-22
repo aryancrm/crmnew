@@ -289,10 +289,13 @@ describe("the whole company, 130 people", () => {
     const mine = await sum(sql`o.id = ${orders.h11}`);
     expect(all).toBeGreaterThan(0);
     const ceo = await read<{
-      sales: { achieved: number; channels: { code: string; sold: number }[] };
+      sales: { achieved: number; channels: { business: string | null; sold: number }[] };
     }>("ceo", "/api/ceo/home");
     expect(ceo.sales.achieved).toBe(all);
-    expect(ceo.sales.channels.find((one) => one.code === "HOSP")?.sold).toBe(hosp);
+    // The channels are the Company tree's boxes under each business (22 Nov): the Hospital
+    // Division's add up to its head's figure, and all of them to the company's.
+    expect(ceo.sales.channels.filter((one) => one.business === "Hospital Division").reduce((sum, one) => sum + one.sold, 0)).toBe(hosp);
+    expect(ceo.sales.channels.reduce((sum, one) => sum + one.sold, 0)).toBe(all);
     const vanessa = await read<{ total: { sold: number } }>("vanessa", "/api/team/sales");
     expect(vanessa.total.sold).toBe(hosp);
     const lead = await read<{ total: { sold: number } }>("hlead1", "/api/team/sales");

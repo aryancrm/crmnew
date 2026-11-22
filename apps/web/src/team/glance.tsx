@@ -490,7 +490,7 @@ export function ChannelSalesCard({
     <GlanceCard
       title={title}
       note={head ? undefined : `${shortPeso(sold)} sold · ${label}`}
-      to="/reports/channels"
+      to="/divisions"
       seeAll={seeAll}
       head={head}
     >
@@ -498,8 +498,9 @@ export function ChannelSalesCard({
         rows={shown.map((row) => {
           const more = extra.get(row.code);
           return {
-            key: row.code,
-            label: `${row.code} · ${row.name}`,
+            // The sheet's channels are named by their box on the Company tree (no code).
+            key: row.code || `box-${row.id}`,
+            label: row.code ? `${row.code} · ${row.name}` : row.name,
             sub: [
               row.head ?? "No head named",
               more ? `${more.people} people · ${count(more.customers)} customers` : null,
