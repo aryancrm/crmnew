@@ -3115,3 +3115,19 @@ lowest, each division's average; Scorecards opens every card.
   given the hospital price) is now a price finding for Management ("No drugstore price set"); a
   government buyer at the bidding price is not. Left for Aryan: Finance can confirm a prepaid
   order with less than its total (it goes to Dispatch with the rest "still to pay").
+- **22 Nov 2026 (Aryan: "this sheet is the hierarchy; leave the organisational chart; build by
+  the seat, not by the name; no confusion left")** Checked the Company tree against the November
+  target sheet with a new read-only script, `scripts/sheet-check.ts` (the tree as Head → Channel →
+  Manager → Sales person, each seat with its holder and its row; rows with no seat; selling seats
+  on no row). The local data was 17 steps behind the sheet (the HOSP box over the five hospital
+  teams, B2B's sellers in CRR or NBD, Jimmy as a seller of BID): applied with
+  `scripts/align-org-to-sheet.ts` after a backup (`.data/pg.before-sheet-hierarchy-2026-11-22`).
+  The one row with no seat, **RX | YZA** (E. Rodriguez, ₱823,030), is now the Rx seat of NCR 2
+  (held by Eloisa Villanda; the holder is changed on the Company tree if Yza is someone else), so
+  all 57 rows have a seat and the targets add to the sheet's ₱57,642,166. `scripts/a-to-z.ts`
+  approves as the screen does since today (each check, then the order): 43 of 43 and data checks
+  18 of 18 on a copy of the real data. Local only; live on Aryan's word. Open, for Aryan: the
+  sellers on the tree who are on no row (Fhaye, Reynan's Government Account seat, Saurav, Jomari,
+  Mitzi, Emmanuel, Ailyn, Khalygen, Benjie, Arron) keep their seats under their manager with no
+  target; six seats the sheet names are vacant here (Dhon, Pillow, Charle, Mani Mishra, Arlene,
+  Jasper); the sheet's Zamboanga row says VACANT while Maycarl Degamo holds the seat.
