@@ -71,6 +71,7 @@ import { DocListPage, DocPage, NewBillOrCredit, NewVendorPayment } from "./buyin
 import { NewPurchaseOrder, PurchaseOrderPage, PurchaseOrdersPage } from "./buying/orders";
 import { VendorPage as BuyingVendor, VendorsPage as BuyingVendors } from "./buying/vendors";
 import { ChannelsReport, Reports } from "./company/reports";
+import { CustomReportPage } from "./company/custom-report";
 import { Returns } from "./orders/all-returns";
 import { SalesOrderPage } from "./orders/sales-order";
 import { CustomerPoPage } from "./orders/purchase-order";
@@ -336,6 +337,7 @@ createRoot(root).render(
             <Route path="speed" element={<SpeedPage />} />
             <Route path="messages/:id" element={<MessagesPage />} />
             <Route path="my-team/seat/:id" element={<TeamSeatPage />} />
+            <Route path="custom-report" element={<CustomReportPage />} />
             <Route path="reports" element={<Reports />} />
             <Route path="reports/channels" element={<ChannelsReport />} />
             <Route path="adjustments" element={<Moves key="adjust" kind="adjust" />} />

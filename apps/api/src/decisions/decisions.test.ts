@@ -88,6 +88,21 @@ describe("to decide", () => {
     expect((await app.request("/api/audit", { headers: { cookie: cookies.ryan as string } })).status).toBe(403);
     expect((await app.request("/api/audit", { headers: { cookie: cookies.sarla as string } })).status).toBe(403);
   });
+  it("the CEO's custom report: one person, the days and the parts picked (22 Nov)", async () => {
+    type Report = { people: { id: number; name: string }[]; person: { name: string } | null; sections: { key: string; rows: unknown[][]; totals: { value: number }[] }[] };
+    const empty = await read<Report>("naresh", "/api/reports/person");
+    expect(empty.person).toBeNull();
+    const ryan = empty.people.find((one) => one.name === "Ryan");
+    const all = await read<Report>("naresh", `/api/reports/person?person=${ryan?.id}&from=2020-01-01`);
+    expect(all.person?.name).toBe("Ryan");
+    expect(all.sections.map((one) => one.key)).toEqual(["orders", "sales", "money", "visits", "attendance", "leave", "history", "actions"]);
+    const orders = all.sections.find((one) => one.key === "orders");
+    expect(orders?.totals[0]?.value).toBe(orders?.rows.length);
+    const two = await read<Report>("naresh", `/api/reports/person?person=${ryan?.id}&parts=orders,actions`);
+    expect(two.sections.map((one) => one.key)).toEqual(["orders", "actions"]);
+    expect((await app.request("/api/reports/person", { headers: { cookie: cookies.ryan as string } })).status).toBe(403);
+    expect((await app.request("/api/reports/person", { headers: { cookie: cookies.sarla as string } })).status).toBe(403);
+  });
   it("gives the old CRM's insight reports to the desks they serve", async () => {
     for (const key of ["sales-trend", "sales-by-branch", "top-medicines", "stock-aging", "stock-turnover", "abc", "purchases", "cases", "senior-pwd"]) {
       const response = await app.request(`/api/books/insights/${key}`, { headers: { cookie: cookies.naresh as string } });

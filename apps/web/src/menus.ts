@@ -448,7 +448,12 @@ const reportsApp: Space = {
   icon: BarChart3,
   tone: "bg-violet-600 text-white",
   groups: [
-    { items: [{ to: "/reports", label: "All reports", icon: BarChart3 }] },
+    {
+      items: [
+        { to: "/reports", label: "All reports", icon: BarChart3 },
+        { to: "/custom-report", label: "Custom report", icon: FileBarChart },
+      ],
+    },
     {
       title: "Sales",
       items: [
@@ -1486,6 +1491,7 @@ function ownDesk(me: Me): Space {
           {
             title: "Reports",
             items: [
+              { to: "/custom-report", label: "Custom report", icon: FileBarChart },
               { to: "/key-reports/customers", label: "Customers", icon: Users },
               { to: "/key-reports/channels", label: "Sales by channel", icon: Network },
               { to: "/calls", label: "Calls", icon: PhoneCall },

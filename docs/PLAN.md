@@ -3089,3 +3089,11 @@ lowest, each division's average; Scorecards opens every card.
   reconciliation can't be taken off or moved; the stock desk no longer reads customers' invoices and
   payments through the Books lists; an amount beyond what the database holds is refused plainly.
   Every finding and what became of it: `docs/system/README.md`.
+- **22 Nov 2026 (Aryan: "a custom report on the CEO's page: anything about any person, the old
+  history too")** Custom report, at `/custom-report` (the CEO's sidebar under Reports, and the
+  Reports app): pick a person (those who left are in the list), any days, and tick the parts: orders
+  placed, invoices, money received on their orders, visits, attendance, leave, the old system's
+  invoices on the seats they held, and everything they did (the audit's list). Each part shows its
+  totals and downloads as CSV; "Download all" gives one file. CEO and Admin only
+  (`/api/reports/person`, `reports/person.ts`). Interim choices of mine: sales are the invoices of
+  orders where they are the MedRep, with VAT; a part shows the newest 500 rows.

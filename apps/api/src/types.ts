@@ -6421,3 +6421,24 @@ export type TargetSheet = {
   /** Sales this month under names on no row of the sheet. */
   apart: { name: string; ach: number; today: number }[];
 };
+
+/** The CEO's custom report (22 Nov): one person, any days, the parts ticked; each part is a table
+ *  with its totals, ready to show and to export. */
+export type PersonReport = {
+  people: { id: number; name: string; title: string | null; role: string; active: boolean }[];
+  parts: { key: string; label: string }[];
+  person: { id: number; name: string; title: string | null; roleLabel: string; active: boolean; reportsTo: string | null } | null;
+  from: string;
+  to: string;
+  sections: {
+    key: string;
+    label: string;
+    totals: { label: string; value: number; money?: boolean }[];
+    columns: { label: string; kind: "text" | "money" | "day" | "time" }[];
+    rows: (string | number | null)[][];
+    /** Where each row opens, when it has a page. */
+    links: (string | null)[];
+    /** More rows than shown: narrow the days. */
+    more: boolean;
+  }[];
+};
