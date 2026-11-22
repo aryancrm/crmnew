@@ -64,7 +64,7 @@ export function AppSwitch() {
   const me = useMe().data;
   const { pathname } = useLocation();
   const here = useMemo(
-    () => (me && !me.mustChangePassword && !pathname.startsWith("/login") ? appOf(me, pathname) : null),
+    () => (me && !me.mustChangePassword && !/^\/(login|signup|welcome)(\/|$)/.test(pathname) ? appOf(me, pathname) : null),
     [me, pathname],
   );
   const [last, setLast] = useState(here);

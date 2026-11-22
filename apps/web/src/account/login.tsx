@@ -112,7 +112,7 @@ function Launcher() {
                 <div className="mb-5 lg:hidden">
                   <DepartmentMark workspace={picked} />
                 </div>
-                <SignIn workspace={picked} from={from} />
+                <SignIn workspace={picked} from={from} loginId={(location.state as { loginId?: string } | null)?.loginId} />
               </div>
             </div>
           </section>
@@ -150,7 +150,14 @@ function Launcher() {
             className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-[#7a8394] focus:outline-none focus-visible:outline-none"
           />
         </label>
-        <span className="hidden w-[150px] shrink-0 sm:block" aria-hidden="true" />
+        <span className="flex shrink-0 justify-end sm:w-[150px]">
+          <Link
+            to="/signup"
+            className="inline-flex h-11 items-center rounded-full bg-[#f36b21] px-4 text-[14px] font-semibold whitespace-nowrap text-white transition-colors hover:bg-[#e05a12] sm:px-5"
+          >
+            Sign up
+          </Link>
+        </span>
       </header>
 
       {/* A word on what this is. */}
@@ -196,7 +203,12 @@ function Launcher() {
 
       <footer className="mx-auto flex w-[min(1180px,calc(100%-32px))] shrink-0 flex-wrap items-center justify-between gap-3 pb-5">
         <a href="#about" className="text-xs font-medium text-[#5b6472] hover:text-[#c2410c]">What is Bishnoi One? ↓</a>
-        <span className="text-xs text-[#5b6472]">Need access? Contact your administrator.</span>
+        <span className="text-xs text-[#5b6472]">
+          New here?{" "}
+          <Link to="/signup" className="font-semibold text-[#c2410c] hover:underline">
+            Create your account
+          </Link>
+        </span>
       </footer>
       </div>
 
@@ -220,10 +232,10 @@ const landing = (role: string, picked: Workspace | null, from: string) =>
   picked?.key === "books" && ["finance", "ceo", "admin"].includes(role) ? "/books/home" : from;
 
 /** The sign-in, the same for every department: login ID and password, as always. */
-function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
+function SignIn({ workspace, from, loginId }: { workspace: Workspace; from: string; loginId?: string }) {
   const queries = useQueryClient();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(loginId ?? "");
   const [password, setPassword] = useState("");
   const [shown, setShown] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -392,9 +404,17 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
           {busy ? "Signing in…" : "Sign in"}
         </button>
       </form>
-      <p className="mt-6 border-t border-[#eceef3] pt-4 text-[13px] text-[#5b6472]">
-        First sign-in or forgot your password? Ask your administrator for a one-time password.
-      </p>
+      <div className="mt-6 grid gap-1 border-t border-[#eceef3] pt-2 text-[13px] text-[#5b6472]">
+        {!["ceo", "admin", "books"].includes(picked.key) && (
+          <p>
+            No account yet?{" "}
+            <Link to={`/signup/${picked.key}`} className="inline-flex min-h-11 items-center font-semibold text-[#c2410c] hover:underline">
+              Sign up
+            </Link>
+          </p>
+        )}
+        <p>Forgot your password? Ask your administrator for a one-time password.</p>
+      </div>
     </div>
     </>
   );

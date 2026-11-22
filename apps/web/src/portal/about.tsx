@@ -401,7 +401,7 @@ export function About() {
             <img src="/brand/bishnoi-one-mark.png" alt="" className="size-7" />
             <span className="font-semibold text-[#1f2733]">Bishnoi One</span>
           </span>
-          <span>Each person signs in as themselves · Need access? Ask your administrator</span>
+          <span>Each person signs in as themselves · No account? Sign up at the top of this page</span>
         </div>
       </footer>
       </div>

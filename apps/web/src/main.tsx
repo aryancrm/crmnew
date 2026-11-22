@@ -20,6 +20,8 @@ import { AttendanceMonthPage, AttendancePage } from "./hr/attendance";
 import { AttendanceReportPage } from "./hr/attendance-report";
 import { ChangePassword } from "./account/change-password";
 import { ProfilePage } from "./account/profile";
+import { SignUp } from "./account/sign-up";
+import { Welcome } from "./account/welcome";
 import { AdminSignUps } from "./admin/sign-ups";
 import { ChannelsPage } from "./online/channels";
 import { Customer } from "./customers/customer";
@@ -157,6 +159,8 @@ createRoot(root).render(
       <BrowserRouter>
         <Routes>
           <Route path="/login/:dept?" element={<Login />} />
+          <Route path="/signup/:dept?" element={<SignUp />} />
+          <Route path="/welcome" element={<Welcome />} />
           {/* Zoho Inventory's Sales and Purchases, in Zoho's own frame (docs/PLAN.md 17). */}
           <Route path="/books" element={<BooksShell />}>
             <Route index element={<BooksIndex />} />
