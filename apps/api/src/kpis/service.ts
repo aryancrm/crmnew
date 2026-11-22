@@ -45,7 +45,9 @@ function invoicesSql(from: string, to: string): SQL {
     with inv as (
       select 'crm' as source, i.id, i.code as invoice, i.issued_on as day, o.seat_id, o.medrep_id as fallback, o.raised_by,
         o.id as order_id, o.code as order_code, o.customer_id, o.created_at as order_at, i.total::bigint as total,
-        (select coalesce(sum(round(oi.qty::numeric * oi.unit_price / case when coalesce(oi.vat_then, m.vat) = 'vat12' then 1.12 else 1 end)), 0)
+        -- Less what came back and was credited: the invoice's total is lowered by the same pieces, so
+        -- sales with and without VAT stay one figure (22 Nov).
+        (select coalesce(sum(round((oi.qty - coalesce((select sum(rl.qty) from sales_return_line rl join sales_return rr on rr.id = rl.return_id where rl.order_item_id = oi.id and rr.credited_at is not null and rl.outcome <> 'missing'), 0))::numeric * oi.unit_price / case when coalesce(oi.vat_then, m.vat) = 'vat12' then 1.12 else 1 end)), 0)
           from order_item oi join medicine m on m.id = oi.medicine_id where oi.order_id = o.id)::bigint as net
       from invoice i join sales_order o on o.id = i.order_id
       where i.status <> 'cancelled' and i.issued_on between ${from}::date and ${to}::date

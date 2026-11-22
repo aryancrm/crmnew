@@ -3097,3 +3097,12 @@ lowest, each division's average; Scorecards opens every card.
   totals and downloads as CSV; "Download all" gives one file. CEO and Admin only
   (`/api/reports/person`, `reports/person.ts`). Interim choices of mine: sales are the invoices of
   orders where they are the MedRep, with VAT; a part shows the newest 500 rows.
+- **22 Nov 2026 (the order line run by hand on a demo copy)** One order from the MedRep to delivered
+  and paid; holds by Management, Finance and Dispatch; send-back and fix; unpack; a shipped parcel's
+  exception; cancel after approval; two returns (restocked, damaged on a paid bill) and the refund;
+  the MedRep's day start, a doctor visit and an order from it; what the team lead and the head see.
+  All behaved as the plan says. Two figures were wrong after a return and are put right: My KPIs and
+  Sales performance now leave out pieces that came back and were credited (they showed sales
+  without VAT above sales with VAT, and above By person, the CEO's Home and Finance's board); the
+  Invoices page's balance no longer counts a refunded overpayment as owed to the customer. Known
+  and left: the demo seed's two shipped orders have no picks (Data checks names them; demo only).

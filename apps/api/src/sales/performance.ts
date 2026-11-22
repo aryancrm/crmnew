@@ -38,7 +38,8 @@ export function linesSql(from: string, to: string): SQL {
       select i.issued_on as day, o.seat_id, o.medrep_id as fallback, null::text as zoho_name,
         coalesce((select s.sku from medicine_sku s where s.medicine_id = oi.medicine_id order by s.id limit 1), 'M' || oi.medicine_id) as sku,
         'C' || i.customer_id as cust,
-        round(oi.qty::numeric * oi.unit_price / case when coalesce(oi.vat_then, m.vat) = 'vat12' then 1.12 else 1 end)::bigint as amount,
+        -- Less what came back and was credited, as the invoice's own total (22 Nov).
+        round((oi.qty - coalesce((select sum(rl.qty) from sales_return_line rl join sales_return rr on rr.id = rl.return_id where rl.order_item_id = oi.id and rr.credited_at is not null and rl.outcome <> 'missing'), 0))::numeric * oi.unit_price / case when coalesce(oi.vat_then, m.vat) = 'vat12' then 1.12 else 1 end)::bigint as amount,
         coalesce(seat_report_channel(o.seat_id), (select case c.code when 'TS' then 'TELESALES' when 'ONLINE' then 'B2C' else c.code end from channel c where c.id = o.channel_id)) as channel
       from invoice i join sales_order o on o.id = i.order_id join order_item oi on oi.order_id = o.id join medicine m on m.id = oi.medicine_id
       where i.status <> 'cancelled' and i.issued_on between ${from}::date and ${to}::date

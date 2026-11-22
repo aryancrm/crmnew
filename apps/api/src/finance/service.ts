@@ -101,7 +101,8 @@ const shown = (row: InvoiceSql, today: string): InvoiceRow => {
   return {
     ...rest,
     invoiceFromLabel: INVOICE_FROM_LABEL[row.invoiceFrom],
-    balance: row.status === "cancelled" ? 0 : row.total - row.paid,
+    // Money given back is no longer money paid: a refunded overpayment leaves nothing owed either way.
+    balance: row.status === "cancelled" ? 0 : row.total - row.paid + row.refunded,
     state: invoiceState({ ...row, delivered }, today),
   };
 };
@@ -1055,7 +1056,7 @@ export async function listInvoices(
     rows<{ total: number; balance: number }>(
       db,
       sql`select coalesce(sum(i.total), 0)::float8 as total,
-          coalesce(sum(i.total - i.paid) filter (where i.status <> 'cancelled'), 0)::float8 as balance
+          coalesce(sum(i.total - i.paid + i.refunded) filter (where i.status <> 'cancelled'), 0)::float8 as balance
         ${invoiceFrom} where ${where}`,
     ),
     filter.customer
