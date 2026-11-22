@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { ticked } from "../testing/approve";
+import { ticked, shelfBack } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -279,6 +279,8 @@ describe("packing", () => {
 
   it("refuses when the warehouse hasn't enough that hasn't expired, and says so", async () => {
     const id = await readyToPack(credit, 500);
+    // Approved while the shelf had it (what isn't in stock isn't approved, 23 Nov); then it went.
+    await shelfBack(db, id);
     const plan = await read<PackPlan>("marco", `/api/dispatch/orders/${id}/pack`);
     expect(plan.lines[0]?.short).toBe(500 - 30 - (await shelf("FAR")));
     const refused = await pack("marco", id);

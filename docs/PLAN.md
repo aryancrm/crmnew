@@ -3406,3 +3406,21 @@ lowest, each division's average; Scorecards opens every card.
   approved and is then invoiced whole, and stops at Dispatch, which can't pack it; nothing ships
   in part. And the server takes an order with short stock without the MedRep's "why are you
   proceeding" (only the screen asks). 500 API tests. Local only.
+- **23 Nov 2026 (Aryan: "not in stock: it stops right there, on hold; Reject and Hold do the same,
+  keep one; what does the same work, take out; check where a held or sent-back order shows for the
+  MedRep and where it comes back, and that it is marked")** (1) **What isn't in stock isn't
+  approved.** Approve, and the stock check's own Approve, are refused while a medicine on the order
+  is short ("Not in stock: … needs 5, 0 free"), and also when the warehouse picked hasn't enough
+  though another has ("pick another warehouse, or move stock there"); the stock check shows "Wait
+  for stock" in place of Approve, which holds the order until the stock is in (Management and the
+  MedRep are told then, as built before). Before, such an order was approved, invoiced whole and
+  stopped at the packing table. (2) **Reject is gone** (`can.reject` false, button off the order
+  page; on the cards it is "Hold"): it left the order on hold exactly as Put on hold does. The
+  demo seed holds where it rejected. (3) Walked by hand, MedRep to Management and back. The MedRep's
+  side was right: My orders has a badge, a "Sent back to me" tab, the reason on the card with "Fix
+  and send again", and an "On hold" tab with the question. Management's side lacked the mark:
+  an order sent again now says "Sent again: <the MedRep's answer>" on its card (the order page
+  already said it), and an answer to a hold is kept on the order (`reply`) and shown on the held
+  card ("Answered: …") and on the order page (it was only a line on the timeline). Tests: the
+  approve helper stocks the shelf with exactly what an order is short of (`testing/approve.ts`,
+  `shelfUp` / `shelfBack`). 500 API tests. Not re-run: `scripts/a-to-z.ts`. Local only.

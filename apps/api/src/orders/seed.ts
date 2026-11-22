@@ -124,7 +124,7 @@ export async function seedDemoOrders(db: Database): Promise<boolean> {
     item("Letrozole", "hospital", 900, 300, "Customer asked for a bulk price"),
   ]);
   if (held)
-    await actOnOrder(db, sarla, held, "reject", {
+    await actOnOrder(db, sarla, held, "hold", {
       reason: "Major price difference: needs approval from Ms. Van",
     });
   const back = await place(ryan, "Olivarez", [item("Bortezomib", "hospital", 4)]);

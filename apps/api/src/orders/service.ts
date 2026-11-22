@@ -2235,6 +2235,16 @@ export async function actOnOrder(
         // Every check is fine or approved before the order is (Aryan, 22 Nov: "approve is blocked
         // until everything is checked"): Documents by hand always, the others when the system
         // found something on them.
+        // What isn't on the shelf isn't approved (Aryan, 23 Nov: "not in stock: it stops right
+        // there, on hold"): it went on to Finance and Dispatch with a whole invoice and stopped at
+        // the packing table. Management holds it with Wait for stock, or changes its medicines.
+        const short = await shortLines(tx, id);
+        if (short.length)
+          throw new Refusal(
+            409,
+            "short_stock",
+            `Not in stock: ${shortWords(short)}. It can't be approved: press Wait for stock (it is held until the stock is in, and you are told), or change its medicines.`,
+          );
         const open = await openChecks(tx, id);
         if (open.length)
           throw new Refusal(
@@ -2253,6 +2263,15 @@ export async function actOnOrder(
             );
         if (!place)
           throw new Refusal(400, "invalid", "Pick the warehouse it ships from.", "warehouseId");
+        // Enough in the company but not in the warehouse picked: Dispatch couldn't pack it there.
+        const there = (await warehouseFill(tx, id))?.find((one) => one.id === place.id);
+        if (there?.short.length)
+          throw new Refusal(
+            409,
+            "short_stock",
+            `${place.name} doesn't have enough: ${there.short.map((one) => `${one.medicine} (needs ${one.need.toLocaleString("en-PH")}, ${one.have.toLocaleString("en-PH")} there)`).join("; ")}. Pick another warehouse, or move stock there first.`,
+            "warehouseId",
+          );
         // Management says on approving whether Finance checks it too.
         const financeCheck = input.finance === undefined ? order.financeCheck : input.finance;
         if (financeCheck !== order.financeCheck)
@@ -2305,6 +2324,8 @@ export async function actOnOrder(
           "status",
           `Sent back to the MedRep to fix and place again. Reason: ${reason}`,
         );
+      // No longer offered (Aryan, 23 Nov: "Reject and Put on hold do the same: keep one"); kept
+      // for an old page still open, where it does what it always did: a hold with its reason.
       case "reject":
         await set(
           sql`status = 'on_hold', held_from = 'pending_approval', held_role = 'management', flag_reason = ${reason}`,
@@ -2335,7 +2356,7 @@ export async function actOnOrder(
           );
         }
         await set(
-          sql`status = 'on_hold', held_from = ${order.status}, held_role = ${role}, flag_reason = ${reason}`,
+          sql`status = 'on_hold', held_from = ${order.status}, held_role = ${role}, flag_reason = ${reason}, reply = null`,
         );
         return logEvent(
           tx,
@@ -2413,7 +2434,9 @@ export async function actOnOrder(
         );
       }
       case "answer":
-        // Only words on the order's timeline: the hold stays until its desk takes it off.
+        // The hold stays until its desk takes it off; the answer is kept on the order too, so the
+        // desk's card and page show it (it was only a line on the timeline, 23 Nov).
+        await set(sql`reply = ${reason}`);
         return logEvent(tx, id, me, "note", `Answer to the hold, from ${me.name}: ${reason}`);
       case "cancel": {
         await set(sql`status = 'cancelled', flag_reason = ${reason ?? "Cancelled by the MedRep"}`);
@@ -2979,6 +3002,12 @@ export async function approveCheck(db: Database, me: Me, orderId: number, key: s
     if (!decides) throw new Refusal(403, "not_allowed", "Management approves an order's checks.");
     if (row?.status !== "pending_approval")
       throw new Refusal(409, "not_now", `${order.code} isn't waiting for approval now. Reload it.`);
+    // Short stock isn't approved away (23 Nov): the order waits for the stock, or its medicines change.
+    if (check === "stock") {
+      const short = await shortLines(db, orderId);
+      if (short.length)
+        throw new Refusal(409, "short_stock", `Not in stock: ${shortWords(short)}. Press Wait for stock, or change the medicines.`);
+    }
   }
   await db.transaction(async (tx) => {
     await tx.execute(

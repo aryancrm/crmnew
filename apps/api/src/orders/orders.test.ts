@@ -5,7 +5,7 @@ import { countQueries, type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { seedDemo } from "../seed";
-import { ticked } from "../testing/approve";
+import { shelfUp, ticked } from "../testing/approve";
 import type {
   Catalogue,
   CustomerDetail,
@@ -140,7 +140,8 @@ describe("placing an order", () => {
     expect((await order("sarla", made.body.id)).can).toMatchObject({
       approve: true,
       send_back: true,
-      reject: true,
+      // Reject is gone (23 Nov): it left the order on hold as Put on hold does.
+      reject: false,
       hold: true,
     });
   });
@@ -216,6 +217,12 @@ describe("placing an order", () => {
 
   it("Approve is refused until every check is approved (22 Nov)", async () => {
     const made = await place("ryan", { customerId: hospital, items: [line()] });
+    // What isn't in stock isn't approved at all (23 Nov): held with Wait for stock instead.
+    const noStock = await post("sarla", `/api/orders/${made.body.id}/approve`);
+    expect(noStock.status).toBe(409);
+    expect(((await noStock.json()) as { error: { code: string } }).error.code).toBe("short_stock");
+    expect((await post("sarla", `/api/orders/${made.body.id}/checks/stock`)).status).toBe(409);
+    await shelfUp(db, made.body.id);
     const refused = await post("sarla", `/api/orders/${made.body.id}/approve`);
     expect(refused.status).toBe(409);
     expect(((await refused.json()) as { error: { code: string } }).error.code).toBe("checks_open");
@@ -316,6 +323,7 @@ describe("what Management does with an order", () => {
     const id = made.body.id;
     expect((await post("ryan", `/api/orders/${id}/checks/price`, {})).status).toBe(403);
     expect((await post("sarla", `/api/orders/${id}/checks/nope`, {})).status).toBe(404);
+    await shelfUp(db, id);
     for (const key of ["papers", "price", "stock", "customer"]) {
       const answer = await post("sarla", `/api/orders/${id}/checks/${key}`, {});
       expect(answer.status, await answer.clone().text()).toBe(200);
@@ -640,9 +648,10 @@ describe("what Management does with an order", () => {
     );
   });
 
-  it("rejects, holds and marks an exception with a reason, and resumes to where it was", async () => {
+  it("holds with a reason and resumes to where it was; Reject and Exception are gone (23 Nov)", async () => {
     const made = await place("ryan", { customerId: hospital, items: [line()] });
-    await act("sarla", made.body.id, "reject", { reason: "Price too low" });
+    expect((await act("sarla", made.body.id, "reject", { reason: "Price too low" })).status).toBe(409);
+    await act("sarla", made.body.id, "hold", { reason: "Price too low" });
     expect((await order("sarla", made.body.id)).order).toMatchObject({
       status: "on_hold",
       flagReason: "Price too low",
@@ -652,7 +661,7 @@ describe("what Management does with an order", () => {
 
     await act("sarla", made.body.id, "approve");
     await act("sarla", made.body.id, "hold", { reason: "Waiting for stock" });
-    // An order on hold can't also be marked an exception.
+    // No order is marked an exception any more.
     expect(
       (await act("sarla", made.body.id, "exception", { reason: "Customer disputes the order" }))
         .status,

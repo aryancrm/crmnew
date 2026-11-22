@@ -1353,7 +1353,23 @@ export function OrderCardItem({
               >
                 {card.next}
               </p>
+              {/* The MedRep answered the hold: said on the card, so the desk knows it is its turn (23 Nov). */}
+              {stopped && card.reply && (
+                <p className="mb-2 line-clamp-2 rounded-md bg-emerald-50 px-2 py-1 text-[11px] leading-snug font-medium text-emerald-900" title={card.reply}>
+                  Answered: {card.reply}
+                </p>
+              )}
             </>
+          )}
+          {/* Back from the MedRep after being sent back: marked, with what they answered (23 Nov). */}
+          {card.status === "pending_approval" && card.sentBackCount > 0 && (
+            <p
+              className="mb-2 line-clamp-2 rounded-md bg-amber-50 px-2 py-1 text-[11px] leading-snug font-medium text-amber-900"
+              title={[card.sentBackReason, card.reply].filter(Boolean).join(" → ")}
+            >
+              Sent again{card.sentBackCount > 1 ? ` (${card.sentBackCount}×)` : ""}
+              {card.reply ? `: ${card.reply}` : ""}
+            </p>
           )}
           {/* Every order in Management's (or Finance's) queue stands at the same step: no strip there. */}
           {!checking && !financeChecking && (
@@ -1573,10 +1589,10 @@ export function OrderCardItem({
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => onAsk("reject")}
-                    className="h-8 rounded-lg text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                    onClick={() => onAsk("hold")}
+                    className="h-8 rounded-lg text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-50"
                   >
-                    Reject
+                    Hold
                   </button>
                 </>
               ) : (

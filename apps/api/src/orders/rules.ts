@@ -173,7 +173,8 @@ export function orderActions(
   return {
     approve: decides && pending,
     send_back: decides && pending,
-    reject: decides && pending,
+    // Gone with Exception (Aryan, 23 Nov): Reject left the order on hold exactly as Put on hold does.
+    reject: false,
     hold:
       (manage && OPEN.includes(order.status)) ||
       (finance && FINANCE_STATUSES.includes(order.status)) ||

@@ -393,7 +393,7 @@ export function Order() {
   }[] = [
     // Management's whole-order answers, under its checks (each check sends back for itself too).
     { action: "send_back", label: "Send back", icon: Undo2, reason: true },
-    { action: "reject", label: "Reject", icon: CircleX, danger: true, reason: true },
+    // "Reject" is gone (Aryan, 23 Nov): it left the order on hold, as Put on hold does.
     // Management says why it can go on and from where (the hub's Resume); Finance and Dispatch
     // lift their own holds with a press.
     { action: "resume", label: "Take off hold", icon: Play, reason: data.resumeTo.length > 0 },
@@ -1112,6 +1112,12 @@ export function Order() {
             )}
           </div>
         ) : null}
+        {/* The MedRep's answer to a hold, where the desk decides (it was only a line on the timeline). */}
+        {(order.status === "on_hold" || order.status === "exception") && order.reply && (
+          <div className="mt-3 rounded-lg bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-950">
+            <b>{order.medrep}'s answer:</b> {order.reply}
+          </div>
+        )}
         {order.status !== "draft" && order.sentBackCount > 0 && order.sentBackReason && (
           <div className="mt-3 rounded-lg bg-slate-50 px-3.5 py-2.5 text-sm text-ink">
             <b>
@@ -1204,14 +1210,28 @@ export function Order() {
                         <div key={item.key} className="flex items-center gap-1">
                           <div className="min-w-0 flex-1">{row}</div>
                           <span className="flex shrink-0 flex-col gap-1">
-                            <button
-                              type="button"
-                              disabled={act.busy}
-                              onClick={() => approveOne(item.key)}
-                              className="rounded-lg bg-brand px-2 py-1 text-[11px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
-                            >
-                              Approve
-                            </button>
+                            {/* What isn't in stock isn't approved (Aryan, 23 Nov): the order waits on
+                                hold until the stock is in (Management and the MedRep are told then). */}
+                            {item.key === "stock" && can.waitStock ? (
+                              <button
+                                type="button"
+                                disabled={act.busy}
+                                title="Hold it until what it needs is on the shelf; you are told when it comes in"
+                                onClick={() => act.act(order.id, "hold", { stock: true })}
+                                className="rounded-lg bg-amber-500 px-2 py-1 text-[11px] font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+                              >
+                                Wait for stock
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                disabled={act.busy}
+                                onClick={() => approveOne(item.key)}
+                                className="rounded-lg bg-brand px-2 py-1 text-[11px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
+                              >
+                                Approve
+                              </button>
+                            )}
                             {can.send_back && !state.ok && (
                               <button
                                 type="button"
