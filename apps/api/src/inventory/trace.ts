@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import type { BatchTrace, Me, Role } from "../types";
+import { COST_ROLES } from "./rules";
 
 /** Who traces a batch: the stock desks, Management, Regulatory, the CEO and the Admin. */
 export const TRACE_ROLES: readonly Role[] = ["inventory", "dispatch", "management", "regulatory", "ceo", "admin"];
@@ -23,6 +24,8 @@ export async function traceBatch(db: Database, me: Me, asked: { batch?: string |
       where lower(b.batch_no) = lower(${words}) or lower(b.batch_no) like lower(${`%${words}%`})
       order by lower(b.batch_no) = lower(${words}) desc, b.expires_on nulls last limit 20`,
   );
+  // What a piece cost goes only to the cost roles, as on every other stock page.
+  if (!COST_ROLES.includes(me.role)) for (const one of batches) one.unitCost = null;
   if (!batches.length) return { batches: [], places: [], moves: [], customers: [] };
   const ids = sql.join(batches.map((one) => sql`${one.id}`), sql`, `);
   const [places, moves, customers] = await Promise.all([

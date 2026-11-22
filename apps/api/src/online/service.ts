@@ -300,7 +300,7 @@ function cardOf(row: LeadRow): LeadCard {
 const agentsOf = (db: Runner) =>
   rows<{ id: number; name: string }>(
     db,
-    sql`select id::int as id, name from person where active and role in ('online', 'admin') order by role = 'admin', name`,
+    sql`select id::int as id, name from person where active and (role in ('online', 'admin') or (role = 'medrep' and channel_id = (select id from channel where code = 'ONLINE'))) order by role = 'admin', name`,
   );
 
 // ---------------------------------------------------------------- the desk
@@ -1105,7 +1105,7 @@ async function agentOrNull(tx: Runner, id: number | null | undefined): Promise<n
   if (!id) return null;
   const [agent] = await rows<{ id: number }>(
     tx,
-    sql`select id::int as id from person where id = ${id} and active and role in ('online', 'admin')`,
+    sql`select id::int as id from person where id = ${id} and active and (role in ('online', 'admin') or (role = 'medrep' and channel_id = (select id from channel where code = 'ONLINE')))`,
   );
   if (!agent) throw new Refusal(400, "invalid", "Pick someone on the Online desk.", "assignedTo");
   return agent.id;
@@ -1131,7 +1131,7 @@ export async function addLead(db: Database, me: Me, input: LeadInput): Promise<n
     const assigned = pap
       ? me.id
       : input.assignedTo === undefined
-        ? me.role === "online"
+        ? onlineDesk(me)
           ? me.id
           : null
         : await agentOrNull(tx, input.assignedTo);

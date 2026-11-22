@@ -2866,11 +2866,12 @@ async function visibleOrder(db: Runner, me: Me, id: number) {
     medrepId: number;
     code: string;
     heldFrom: OrderStatus | null;
+    heldRole: HoldRole | null;
     leadId: number | null;
     team: boolean;
   }>(
     db,
-    sql`${team(me)} select o.status, o.raised_by::int as "raisedBy", o.medrep_id::int as "medrepId", o.code, o.held_from as "heldFrom",
+    sql`${team(me)} select o.status, o.raised_by::int as "raisedBy", o.medrep_id::int as "medrepId", o.code, o.held_from as "heldFrom", o.held_role as "heldRole",
         o.lead_id::int as "leadId", ${inTeamSql(me)} as team
       from sales_order o where o.id = ${id} and ${seen(me)}`,
   );
@@ -3053,7 +3054,9 @@ export async function addPaper(
     if (
       paper.kind === "payment_proof" &&
       order.status === "on_hold" &&
-      order.heldFrom === "finance_check"
+      order.heldFrom === "finance_check" &&
+      // Only Finance's own hold: one Management placed at this step stays until Management lifts it.
+      order.heldRole !== "management"
     ) {
       await tx.execute(
         sql`update sales_order set status = 'finance_check', held_from = null, flag_reason = null, updated_at = now() where id = ${orderId}`,

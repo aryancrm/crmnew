@@ -82,7 +82,9 @@ export async function returnable(db: Runner, orderId: number) {
         i.qty::int as qty, i.unit_price::int as "unitPrice", i.free,
         (i.qty - coalesce((select sum(l.qty) from sales_return_line l join sales_return r on r.id = l.return_id
           where l.order_item_id = i.id
-            and (r.status in ('requested', 'approved') or (r.status in ('checked', 'received') and l.outcome <> 'missing'))), 0))::int as left
+            and (r.status in ('requested', 'approved') or (r.status in ('checked', 'received') and l.outcome <> 'missing')
+              -- Checked back onto the shelf, then not credited: those pieces are here, not with the customer.
+              or (r.status = 'rejected' and l.outcome = 'restocked'))), 0))::int as left
       from order_item i join medicine m on m.id = i.medicine_id where i.order_id = ${orderId} order by i.id`,
   );
 }
@@ -455,7 +457,7 @@ export async function receiveReturn(
         const [pick] = await rows<{ batchId: number; warehouseId: number }>(
           tx,
           sql`select batch_id::int as "batchId", warehouse_id::int as "warehouseId" from order_pick
-            where order_item_id = ${line.orderItemId} order by qty desc, id limit 1`,
+            where order_item_id = ${line.orderItemId} order by active desc, qty desc, id limit 1`,
         );
         // None on record (an older order): the medicine's latest batch, in the order's warehouse.
         const [fallback] = pick
