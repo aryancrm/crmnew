@@ -3166,3 +3166,10 @@ lowest, each division's average; Scorecards opens every card.
   so the tree's total is the CEO Home's, ₱57,642,166 (it read ₱53.3M). A month from before seats
   had targets still reads its holder's. The CEO Home's channel rows had lost "N people · N
   customers" when they moved to the sheet's channels; they show it again. Local only.
+- **22 Nov 2026 (the first eight channels against the sheet, step 1: a list only)**
+  `apps/api/scripts/box-channels.ts` (reads only) lists every box of the tree with the old channel
+  code it carries beside the sheet's channel of its seats. On the local data: CLIDP carries B2B's
+  code; the Hospital's TeleSales and the Rx side's MD Telesales both carry TS, and MD Telesales'
+  two sheet seats (B2C Sales Coaching) carry ONLINE; URO is on no box and no person; five people
+  with two seats carry the channel of one seat only (Claire, Honey, Malou, Reynan, Subir); no open
+  order's channel differs from its seat's. Nothing changed.
