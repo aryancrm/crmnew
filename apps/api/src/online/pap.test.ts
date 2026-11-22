@@ -217,25 +217,46 @@ describe("PAP cases", () => {
       ).status,
     ).toBe(200);
 
-    // The claim: the pick-up photo, then sent to PCSO; Finance records the agency's money.
+    // From here the PAP person only watches (Aryan, 22 Nov): Finance sends the claim and records
+    // the money. The agency often pays less than its letter: the patient pays the rest, or it is let go.
     now = await lead("paula", id);
     expect(now.step.value).toBe("claim");
-    expect(now.next).toBe("Delivered: add the pick-up photo, then send the claim to PCSO");
-    expect(
-      (await post("paula", `/api/leads/${id}/claim`, { sentOn: todayManila(), ref: "CL-1" }))
-        .status,
-    ).toBe(400);
-    expect((await file("paula", id, "pickup_photo")).status).toBe(200);
-    expect(
-      (await post("paula", `/api/leads/${id}/claim`, { sentOn: todayManila(), ref: "CL-1" }))
-        .status,
-    ).toBe(200);
+    expect(now.next).toBe("Delivered: Finance sends the claim to PCSO");
+    expect((await post("paula", `/api/leads/${id}/claim`, { sentOn: todayManila(), ref: "CL-1" })).status).toBe(403);
+    expect((await post("paula", `/api/finance/orders/${orderId}/gl-claim`, { sentOn: todayManila(), ref: "CL-1" })).status).toBe(403);
+    expect((await post("fiona", `/api/finance/orders/${orderId}/gl-claim`, { sentOn: todayManila(), ref: "CL-1" })).status).toBe(200);
     now = await lead("paula", id);
     expect(now.step.value).toBe("billed");
     expect(now.next).toBe("Claim sent: waiting for PCSO to pay");
     expect(now.lead).toMatchObject({ claimSentOn: todayManila(), claimRef: "CL-1" });
-    // The agency's money is Finance's to record, not the MedRep's.
     expect(now.can).toMatchObject({ pay: false, deliver: false });
+    order = await read<OrderDetail>("fiona", `/api/orders/${orderId}`);
+    expect(order.order.glClaim).toMatchObject({ sentOn: todayManila(), ref: "CL-1", agency: "pcso" });
+    const invoiceId = order.money.invoice?.id as number;
+    expect(order.money.invoice?.balance).toBe(total);
+    // PCSO pays 1,000 less than its letter; the patient pays 600 of it; the last 400 is let go.
+    const pay = (body: Record<string, unknown>) =>
+      post("fiona", `/api/invoices/${invoiceId}/payments`, { method: "bank", moneyAccount: null, paidOn: todayManila(), ...body });
+    const first = await pay({ amount: total - 100000, reference: "PCSO-CHK-1" });
+    expect(first.status, await first.clone().text()).toBe(200);
+    expect((await pay({ amount: 60000, payer: "patient", method: "cash" })).status).toBe(200);
+    expect((await lead("paula", id)).step.value).toBe("billed");
+    // Nothing in cash, the rest let go: the invoice closes, and the case is done.
+    const gone = await pay({ amount: 0, deducted: 40000, deductionKind: "gl_waived" });
+    expect(gone.status, await gone.clone().text()).toBe(200);
+    order = await read<OrderDetail>("fiona", `/api/orders/${orderId}`);
+    expect(order.money.invoice).toMatchObject({ balance: 0, status: "paid" });
+    const paid = order.money.payments.filter((payment) => payment.active);
+    expect(paid.map((payment) => [payment.amount, payment.payer, payment.method, payment.deductionKind ?? null])).toEqual(
+      expect.arrayContaining([
+        [total - 100000, "agency", "bank", null],
+        [60000, "customer", "cash", null],
+        [40000, "customer", "deduction", "gl_waived"],
+      ]),
+    );
+    now = await lead("paula", id);
+    expect(now.step.value).toBe("done");
+    expect(now.order?.trail.payments.map((payment) => payment.who)).toEqual(expect.arrayContaining(["The agency", "The patient", "Let go"]));
   });
 
   it("keeps a PAP MedRep to their own cases", async () => {

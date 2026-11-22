@@ -600,6 +600,8 @@ export async function setCasePoints(
 
 /** What happened to a case's order on the order line, for its Order & delivery and Payment steps. */
 async function orderTrail(db: Runner, orderId: number): Promise<CaseOrderTrail> {
+  const [kind] = await rows<{ gl: boolean }>(db, sql`select coalesce(order_type = 'gl', false) as gl from sales_order where id = ${orderId}`);
+  const gl = Boolean(kind?.gl);
   const [order] = await rows<{
     status: OrderStatus;
     approvedAt: string | null;
@@ -736,6 +738,17 @@ async function orderTrail(db: Runner, orderId: number): Promise<CaseOrderTrail> 
         reference: payment.reference,
         paidOn: payment.paidOn,
         by: payment.by,
+        // A guarantee letter is often paid short: who paid each part, and what was let go.
+        who:
+          payment.method === "deduction"
+            ? payment.deductionKind === "gl_waived"
+              ? "Let go"
+              : "Deducted"
+            : payment.payer === "agency"
+              ? "The agency"
+              : gl
+                ? "The patient"
+                : null,
       })),
   };
 }
@@ -1531,7 +1544,9 @@ export async function saveClaim(
   id: number,
   input: { sentOn?: string | null; ref?: string | null },
 ): Promise<void> {
-  await leadGate(db, me, id, "work", "record the claim");
+  // Finance's from here (Aryan, 22 Nov): the PAP person gets the letter in and places the order,
+  // then only watches; Finance sends the claim and records what the agency pays.
+  allow(me, ["finance", "admin"], "record the claim");
   if (input.sentOn && input.sentOn > todayManila())
     throw new Refusal(400, "invalid", "That day hasn't come yet.", "sentOn");
   await db.transaction(async (tx) => {
@@ -1540,17 +1555,6 @@ export async function saveClaim(
       throw new Refusal(409, "not_now", "This case doesn't pay by a guarantee letter.");
     if (lead.orderStatus !== "completed")
       throw new Refusal(409, "not_now", "The claim goes after the delivery.");
-    const [photo] = await rows<{ n: number }>(
-      tx,
-      sql`select count(*)::int as n from lead_file where lead_id = ${id} and kind = 'pickup_photo' and active`,
-    );
-    if (input.sentOn && !photo?.n)
-      throw new Refusal(
-        400,
-        "invalid",
-        "Add the pick-up photo before sending the claim.",
-        "sentOn",
-      );
     await tx.execute(
       sql`update lead set claim_sent_on = ${input.sentOn ?? null}::date, claim_ref = ${clean(input.ref)} where id = ${id}`,
     );
@@ -1940,7 +1944,7 @@ export async function orderFromLead(
         );
         if (pap) {
           await tx.execute(
-            sql`insert into lead_event (lead_id, kind, message, by_person) values (${id}, 'status', ${`Order ${code?.code} placed: ${pap ? "the PAP head approves it" : "Management checks it"}, then Finance, then Dispatch.`}, ${me.id})`,
+            sql`insert into lead_event (lead_id, kind, message, by_person) values (${id}, 'status', ${`Order ${code?.code} placed: Management checks it, then Finance, then Dispatch.`}, ${me.id})`,
           );
           return;
         }

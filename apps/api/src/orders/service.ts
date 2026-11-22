@@ -1334,6 +1334,8 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         case when ${takeBackSql} then ${iso(`(o.approved_at + make_interval(mins => ${TAKE_BACK_MINUTES}))`)} end as "takeBackUntil",
         case when o.relief_kind is not null then json_build_object('kind', o.relief_kind, 'idNo', o.relief_id_no, 'name', o.relief_name) end as relief,
         o.order_type as type, o.headquarter, o.no_rx_reason as "noRxReason",
+        (select json_build_object('leadId', gc.id, 'agency', gc.agency, 'sentOn', to_char(gc.claim_sent_on, 'YYYY-MM-DD'), 'ref', gc.claim_ref)
+          from lead gc where gc.order_id = o.id and gc.road = 'gl' order by gc.id desc limit 1) as "glClaim",
         o.gl_number as "glNumber", o.gl_amount::int as "glAmount", (select gp.name from person gp where gp.id = o.gl_set_by) as "glSetBy",
         ${restorableSql} as restorable, ${paidInSql} as "paidIn", ${iso("o.waiting_stock_at")} as "waitingSince",
         (select wp.name from person wp where wp.id = o.waiting_stock_by) as "waitingBy"

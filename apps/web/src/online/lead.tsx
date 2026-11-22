@@ -194,7 +194,7 @@ export function LeadPage() {
       key: "pay",
       number: "4",
       label: gl ? "Claim & payment" : "Payment & follow-up",
-      who: gl ? "You send the claim · the agency pays" : "Money in · the refill reminder",
+      who: gl ? "Finance sends the claim · the agency pays" : "Money in · the refill reminder",
     },
   ];
   const roadLock = orderLive
@@ -2528,7 +2528,8 @@ function OrderStep({ data, onNext }: { data: LeadCase; onNext: () => void }) {
 }
 
 /** The guarantee letter's claim after delivery: 4.1 the pick-up photo, 4.2 sent to the agency
- *  (the day and its reference), 4.3 the agency's money, which Finance records on the invoice. */
+ *  (the day and its reference), 4.3 the agency's money. Finance's from here (Aryan, 22 Nov): the
+ *  PAP person gets the letter in and places the order, then only watches these. */
 function ClaimSteps({ data }: { data: LeadCase }) {
   const { lead } = data;
   const write = useCaseWrite(lead.id);
@@ -2571,7 +2572,7 @@ function ClaimSteps({ data }: { data: LeadCase }) {
                   {...field}
                   type="date"
                   className={INPUT}
-                  disabled={!data.can.work}
+                  disabled
                   value={sentOn}
                   onChange={(event) => setSentOn(event.target.value)}
                 />
@@ -2582,27 +2583,13 @@ function ClaimSteps({ data }: { data: LeadCase }) {
                 <input
                   {...field}
                   className={INPUT}
-                  disabled={!data.can.work}
+                  disabled
                   value={ref}
                   onChange={(event) => setRef(event.target.value)}
                 />
               )}
             </Field>
-            {data.can.work && (
-              <Button
-                small
-                variant={lead.claimSentOn ? "plain" : "primary"}
-                disabled={write.busy || !sentOn}
-                onClick={() =>
-                  write.send(`/api/leads/${lead.id}/claim`, {
-                    sentOn: sentOn || null,
-                    ref: ref.trim() || null,
-                  })
-                }
-              >
-                {write.busy ? "Saving…" : lead.claimSentOn ? "Save" : "Claim sent"}
-              </Button>
-            )}
+            <span className="text-[12px] text-slate-500">Finance sends the claim and writes it here.</span>
           </div>
           <Problem message={write.general(["sentOn", "ref"])} />
         </div>
@@ -2693,7 +2680,8 @@ function PayStep({ data, onBack }: { data: LeadCase; onBack: () => void }) {
                 className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
               >
                 <span>
-                  <b className="tabular-nums">{peso(payment.amount)}</b> · {payment.methodLabel}
+                  <b className="tabular-nums">{peso(payment.amount)}</b> · {payment.who ? `${payment.who} · ` : ""}
+                  {payment.methodLabel}
                   {payment.reference ? ` · ${payment.reference}` : ""}
                 </span>
                 <span className="text-[12px] text-slate-500">

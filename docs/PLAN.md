@@ -3276,3 +3276,21 @@ lowest, each division's average; Scorecards opens every card.
   of the order (confirmed, on the way, delivered, payment received) when an email is on file, a
   PAP case's too. Not built: the PAP person recording the agency's payment (Finance records it
   today); his earlier wish, not repeated here. Proposal of the Hospital head approving: dropped.
+- **22 Nov 2026 (Aryan: "PAP puts the guarantee letter in and leaves it; then it only sees the
+  rest. Finance fills the claim and the payment: how much the letter said, how much came. The
+  agency pays later and often less: the patient pays the rest, or we let it go. Then PAP sees the
+  order complete")** Built. (1) The claim is Finance's: `POST /api/finance/orders/:id/gl-claim`
+  (the day it went and its reference, after the delivery; no pick-up photo needed first); the PAP
+  person is refused and sees the step read-only ("Finance sends the claim"). (2) On a
+  guarantee-letter order Finance says who paid each payment, the agency or the patient
+  (`payment.payer`; it was always the agency, and never on a PAP case's order, whose `lead_id` is
+  empty: the order's own type decides now), and may let the rest go: a deduction of kind
+  `gl_waived` (migration 0135), recordable with nothing in cash. (3) The order's Paid step shows a
+  guarantee letter's money in one box: on the letter, agency paid, patient paid, let go, still
+  owed, with the claim's day and reference; the payment window says the letter's amount and asks
+  who paid. (4) The case shows each payment with who paid it and reads Done when nothing is owed.
+  Hand-run on the demo copy: Ryan's patient handed to PAP, quotation and three quotations, papers,
+  the letter (one for less than the quotation is refused), order as Ryan's sale in HOSP, in
+  Management's queue, approved, invoiced, delivered, claim by Finance (refused before delivery and
+  to PAP), the agency ₱1,500 short, the patient ₱1,000, ₱500 let go: invoice paid, order
+  completed, PAP's case Done. 500 API tests. Local only.

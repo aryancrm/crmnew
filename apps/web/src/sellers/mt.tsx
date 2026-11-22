@@ -119,6 +119,7 @@ const KIND: Record<MtDay["deductions"][number]["kind"], string> = {
   promo: "Promos and rebates",
   penalty: "Penalties",
   other: "Other",
+  gl_waived: "Guarantee letter shortfall let go",
 };
 
 /** Modern Trade on the COO's Home (a press on MT): the chains' money with Modern Trade, what they

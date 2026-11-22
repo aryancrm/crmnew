@@ -1322,6 +1322,9 @@ export type OrderDetail = {
     glNumber: string | null;
     glAmount: number | null;
     glSetBy: string | null;
+    /** A guarantee letter's claim on the agency, which Finance sends after the delivery (22 Nov):
+     *  its case, the agency, the day it went and its reference. Null on any other order. */
+    glClaim: { leadId: number; agency: string | null; sentOn: string | null; ref: string | null } | null;
   };
   items: {
     id: number;
@@ -1540,7 +1543,7 @@ export type PaymentMethod =
   | "credit"
   /** What the customer deducted (a near-expiry return kept, a listing fee…): a settlement, not cash. */
   | "deduction";
-export type DeductionKind = "near_expiry" | "listing_fee" | "promo" | "penalty" | "other";
+export type DeductionKind = "near_expiry" | "listing_fee" | "promo" | "penalty" | "other" | "gl_waived";
 
 /** A customer's credit: Zoho's open credit notes, and money paid beyond a bill kept for the next. */
 export type CustomerCredit = {
@@ -1619,6 +1622,10 @@ export type PaymentRow = {
   proofId: number | null;
   by: string;
   at: string;
+  /** Who paid it: the customer, or a guarantee letter's agency. */
+  payer?: "customer" | "agency";
+  /** Why it was deducted, when it is a deduction. */
+  deductionKind?: DeductionKind | null;
   active: boolean;
   removedReason: string | null;
 };
@@ -1775,7 +1782,10 @@ export type ConfirmPaymentInput = {
 };
 
 export type PaymentInput = {
+  /** May be nothing when the whole of it is tax withheld or a deduction (a letter's shortfall let go). */
   amount: number;
+  /** A guarantee letter's order: the agency paid it (the default), or the patient paid the rest. */
+  payer?: "agency" | "patient" | null;
   method: PaymentMethod;
   reference?: string | null;
   paidOn: string;
@@ -2397,6 +2407,8 @@ export type CaseOrderTrail = {
     reference: string | null;
     paidOn: string;
     by: string;
+    /** On a guarantee letter's order: "The agency", "The patient" or "Let go"; null otherwise. */
+    who?: string | null;
   }[];
 };
 

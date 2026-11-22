@@ -474,7 +474,16 @@ export function RecordPaymentDialog({
   const [deducted, setDeducted] = useState("");
   const [deductionKind, setDeductionKind] = useState("");
   const [deductionRef, setDeductionRef] = useState("");
-  const typed = centavos(amount);
+  // A guarantee letter's order (Aryan, 22 Nov): the agency often pays less than its letter; the
+  // patient pays the rest, or it is let go. Finance says who paid each part.
+  const about = useQuery({
+    queryKey: ["orders", "kind", orderId],
+    queryFn: () => api<{ order: { type: string | null; glAmount: number | null; glNumber: string | null } }>(`/api/orders/${orderId}`),
+  });
+  const gl = about.data?.order.type === "gl";
+  const letter = about.data?.order.glAmount ?? null;
+  const [payer, setPayer] = useState<"agency" | "patient">("agency");
+  const typed = amount.trim() ? centavos(amount) : 0;
   const withheldTyped = withheld.trim() ? centavos(withheld) : 0;
   const deductedTyped = deducted.trim() ? centavos(deducted) : 0;
 
@@ -483,6 +492,7 @@ export function RecordPaymentDialog({
     if (!account.ready()) return;
     const done = await money.send(`/api/invoices/${invoiceId}/payments`, {
       amount: typed,
+      payer: gl ? payer : null,
       method,
       moneyAccount: account.value,
       reference,
@@ -505,6 +515,23 @@ export function RecordPaymentDialog({
           <span>Still owed</span>
           <span className="text-lg font-bold tabular-nums">{peso(balance)}</span>
         </div>
+        {gl && (
+          <div className="flex flex-col gap-2 rounded-xl bg-sky-50 px-4 py-3 text-[13px] text-sky-950">
+            <span>
+              <b>Guarantee letter{about.data?.order.glNumber ? ` ${about.data.order.glNumber}` : ""}:</b>{" "}
+              {letter != null ? `${peso(letter)} written on the letter.` : "the letter's amount isn't written on the order yet."} If the
+              agency pays less, record what it paid, then the rest as the patient's payment, or let it go below
+              (type 0 as the amount received).
+            </span>
+            <label className="flex flex-wrap items-center gap-2">
+              <span className="font-semibold">Who paid this</span>
+              <select className={INPUT} style={{ width: "auto" }} value={payer} onChange={(event) => setPayer(event.target.value as "agency" | "patient")}>
+                <option value="agency">The agency</option>
+                <option value="patient">The patient</option>
+              </select>
+            </label>
+          </div>
+        )}
         <AmountField
           label="Amount received"
           value={amount}
@@ -537,7 +564,7 @@ export function RecordPaymentDialog({
           </Field>
         </div>
         <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="Deducted by them (optional)" error={money.at("deducted")}>
+          <Field label={gl ? "Let go / deducted (optional)" : "Deducted by them (optional)"} error={money.at("deducted")}>
             {(field) => (
               <input
                 {...field}
@@ -553,6 +580,7 @@ export function RecordPaymentDialog({
             {(field) => (
               <select {...field} className={INPUT} disabled={!deducted.trim()} value={deductionKind} onChange={(event) => setDeductionKind(event.target.value)}>
                 <option value="">Pick…</option>
+                {gl && <option value="gl_waived">Guarantee letter shortfall let go</option>}
                 <option value="near_expiry">Near-expiry goods kept</option>
                 <option value="listing_fee">Listing fee</option>
                 <option value="promo">Promo / rebate</option>

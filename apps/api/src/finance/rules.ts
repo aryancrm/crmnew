@@ -27,6 +27,7 @@ export const DEDUCTION_LABEL: Record<DeductionKind, string> = {
   promo: "Promo / rebate",
   penalty: "Penalty",
   other: "Other",
+  gl_waived: "Guarantee letter shortfall let go",
 };
 export const METHODS = Object.keys(METHOD_LABEL) as PaymentMethod[];
 /** What a person records by hand: points are paid only by the points the order used; tax withheld

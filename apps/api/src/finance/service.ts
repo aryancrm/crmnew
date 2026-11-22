@@ -110,7 +110,7 @@ const shown = (row: InvoiceSql, today: string): InvoiceRow => {
 const paymentColumns = sql`p.id::int as id, p.invoice_id::int as "invoiceId", i.code as "invoiceCode",
   i.order_id::int as "orderId", o.code as "orderCode", p.customer_id::int as "customerId", c.name as customer,
   p.amount::int as amount, p.method, p.reference, ${day("p.paid_on")} as "paidOn", p.note, p.proof_id::int as "proofId",
-  who.name as by, ${iso("p.at")} as at, p.active, p.removed_reason as "removedReason"`;
+  who.name as by, ${iso("p.at")} as at, p.active, p.removed_reason as "removedReason", p.payer, p.deduction_kind as "deductionKind"`;
 const paymentFrom = sql`from payment p join invoice i on i.id = p.invoice_id join sales_order o on o.id = i.order_id
   join customer c on c.id = p.customer_id join person who on who.id = p.by_person`;
 const withMethod = <T extends { method: PaymentRow["method"] }>(row: T) => ({
@@ -482,15 +482,19 @@ async function addPayment(
     note?: string | null;
     proofId?: number | null;
     moneyAccount?: string | null;
+    payer?: "agency" | "patient" | null;
   },
 ) {
   const into = NOT_CASH_SET.has(input.method) ? null : await moneyAccountOf(tx, input.moneyAccount);
-  // On a guarantee letter's order the money is the agency's (a patient's top-up is told apart later).
+  // On a guarantee letter's order the money is the agency's, unless Finance says the patient paid
+  // it (the rest of a letter paid short, Aryan 22 Nov). A PAP case's order has no lead_id, so the
+  // order's own type says it is a guarantee letter's.
   const [road] = await rows<{ gl: boolean }>(
     tx,
-    sql`select coalesce(l.road = 'gl', false) as gl from invoice i join sales_order o on o.id = i.order_id left join lead l on l.id = o.lead_id where i.id = ${invoice.id}`,
+    sql`select (o.order_type = 'gl' or coalesce(l.road = 'gl', false)) as gl from invoice i join sales_order o on o.id = i.order_id left join lead l on l.id = o.lead_id where i.id = ${invoice.id}`,
   );
-  const payer = input.method !== "points" && road?.gl ? "agency" : "customer";
+  const payer =
+    input.method !== "points" && input.method !== "deduction" && road?.gl && input.payer !== "patient" ? "agency" : "customer";
   await tx.execute(
     sql`insert into payment (invoice_id, customer_id, amount, method, reference, paid_on, proof_id, note, by_person, payer, money_account)
       values (${invoice.id}, ${invoice.customerId}, ${input.amount}, ${input.method}, ${clean(input.reference)}, ${input.paidOn}::date,
@@ -779,7 +783,12 @@ export async function recordPayment(
   // Finance records the money received, an Online case's order's too (Aryan, 19 Nov: Online
   // orders go the way every channel's do).
   allow(me, FINANCE_ROLES, "record a payment");
-  payable(input);
+  // Nothing in cash is fine when the whole of it is tax withheld or a deduction (a guarantee
+  // letter's shortfall let go after the agency paid short).
+  const noCash = input.amount === 0 && ((input.withheld ?? 0) > 0 || (input.deducted ?? 0) > 0);
+  if (noCash) {
+    if (input.paidOn > todayManila()) throw new Refusal(400, "invalid", "That day hasn't come yet.", "paidOn");
+  } else payable(input);
   await db.transaction(async (tx) => {
     // A locked period takes no more money (the books' Transaction locking), the CRM's own too.
     await assertOpen(tx, "customer_payment", input.paidOn);
@@ -832,18 +841,18 @@ export async function recordPayment(
       if (!proof)
         throw new Refusal(400, "invalid", "That proof of payment isn't on this order.", "proofId");
     }
-    const first = await addPayment(tx, me, invoice, input);
+    let left = owed;
+    if (!noCash) ({ left } = await addPayment(tx, me, invoice, input));
     // The tax withheld settles the invoice as well (Zoho kept it on the payment).
-    let { left } = withheld
-      ? await addPayment(tx, me, invoice, {
-          amount: withheld,
-          method: "withholding",
-          reference: clean(input.form2307),
-          paidOn: input.paidOn,
-          note: null,
-          proofId: null,
-        })
-      : first;
+    if (withheld)
+      ({ left } = await addPayment(tx, me, invoice, {
+        amount: withheld,
+        method: "withholding",
+        reference: clean(input.form2307),
+        paidOn: input.paidOn,
+        note: null,
+        proofId: null,
+      }));
     // What the customer deducted (a chain's near-expiry return kept, a listing fee…) settles the
     // invoice too, never as cash.
     if (deducted) {
@@ -864,7 +873,7 @@ export async function recordPayment(
       invoice.orderId,
       me,
       "payment",
-      `${how(input)}${withheld ? `, and ${peso(withheld)} tax withheld (Form 2307 ${clean(input.form2307)})` : ""}${deducted ? `, and ${peso(deducted)} deducted by the customer (${DEDUCTION_LABEL[input.deductionKind as DeductionKind].toLowerCase()}${clean(input.deductionRef) ? `, memo ${clean(input.deductionRef)}` : ""})` : ""} received for ${invoice.code}. ${left > 0 ? `${peso(left)} still owed.` : "Paid in full."}`,
+      `${noCash ? "Nothing in cash" : `${how(input)}${input.payer === "patient" ? " (paid by the patient)" : ""}`}${withheld ? `, and ${peso(withheld)} tax withheld (Form 2307 ${clean(input.form2307)})` : ""}${deducted ? `, and ${peso(deducted)} deducted by the customer (${DEDUCTION_LABEL[input.deductionKind as DeductionKind].toLowerCase()}${clean(input.deductionRef) ? `, memo ${clean(input.deductionRef)}` : ""})` : ""} received for ${invoice.code}. ${left > 0 ? `${peso(left)} still owed.` : "Paid in full."}`,
       left > 0 ? null : "paid",
     );
     if (left === 0) {
