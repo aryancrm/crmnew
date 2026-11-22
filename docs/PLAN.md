@@ -3375,3 +3375,18 @@ lowest, each division's average; Scorecards opens every card.
   against the target, My KPIs without; and the scorecard's days-to-collect and repeat-customer
   measures still count only this CRM's invoices. Homes not yet read card by card: the head's,
   Management's, Finance's, Dispatch's, Inventory's, HR's, the CEO's. 500 API tests. Local only.
+- **23 Nov 2026 (Aryan: "Management: the side menu, every card, every step and its box, every
+  button; take Exception out of Management")** Management walked on the demo copy by its own
+  login. Removed: **Mark exception** (it was a second "Put on hold" under another name; `can.exception`
+  is false for everyone, the button is gone; an order already marked is still taken off hold).
+  Found and fixed: (1) a card with nothing flagged said "Everything checks out: approve it" and its
+  Approve opened a window that could only refuse ("Check first: Documents"): the card now says
+  "Nothing flagged: read the documents, then approve" and Approve opens the order on its Documents
+  until they are read; (2) the customer check of a new customer said only "New customer": it shows
+  who it is (name, phone, city, who added it and when) with a link to the customer. Read and found
+  right: the four checks with their own Approve and Send back, the last approval approving the
+  order with a minute to undo, the warehouse picked on the stock check, the documents listed for a
+  patient (prescription, ID, senior/PWD ID, guarantee letter, medical certificate, other) with
+  "Papers are right" after reading each, Send back / Reject / Put on hold / Cancel each asking a
+  reason, Stopped orders, Returns to approve, Customers to check, Team figures. For Aryan to say:
+  Reject and Put on hold both leave the order on hold. Next: Finance, Dispatch, Inventory.

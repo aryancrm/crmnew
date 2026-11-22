@@ -1303,6 +1303,9 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
   >(
     db,
     sql`${team(me)} select ${rowColumns}, ${caseColumns}, c.kind as "customerKind", c.city as "customerCity", c.review as "customerReview",
+        -- Who the customer is, for Management's check of a new one (23 Nov): its phone, who added it and when.
+        c.phone as "customerPhone", (select ap.name from person ap where ap.id = c.added_by) as "customerAddedBy",
+        to_char(c.created_at at time zone 'Asia/Manila', 'YYYY-MM-DD') as "customerAddedOn",
         coalesce(c.licence_expires < (now() at time zone 'Asia/Manila')::date, false) as "licenceExpired",
         c.licence_no as "licenceNo", ${day("c.licence_expires")} as "licenceExpires", c.tin,
         o.no_proof_reason as "noProofReason", o.no_proof_note as "noProofNote", ${approverSql} as "approverId",

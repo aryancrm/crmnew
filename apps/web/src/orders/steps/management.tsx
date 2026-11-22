@@ -391,6 +391,22 @@ export function ManagementStep({
         )
       )}
       {/* What Management checks besides the price: the buyer's licence and the papers. */}
+      {/* A new customer is checked by its own details (Aryan, 23 Nov: the check said "New customer"
+          and showed nothing of who it is): phone, city, who added it and when, and its page. */}
+      {shows("customer") && order.customerReview === "to_review" && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-50 px-3 py-2 text-[12.5px] text-amber-950">
+          <span className="min-w-0">
+            <b>{order.customer}</b>
+            {[order.customerPhone, order.customerCity, order.customerAddedBy ? `added by ${order.customerAddedBy}${order.customerAddedOn ? ` on ${dayLabel(order.customerAddedOn)}` : ""}` : null]
+              .filter(Boolean)
+              .map((fact) => ` · ${fact}`)
+              .join("")}
+          </span>
+          <Link to={`/customers/${order.customerId}`} className="shrink-0 font-semibold text-emerald-700 hover:underline">
+            Open the customer
+          </Link>
+        </div>
+      )}
       {shows("customer") && <CustomerStory orderId={order.id} name={order.customer} />}
       {shows("customer") && <LicenceFacts order={order} />}
       {check === "papers" ? (

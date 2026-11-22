@@ -405,14 +405,8 @@ export function Order() {
       icon: Undo2,
       reason: true,
     },
+    // "Mark exception" is gone (Aryan, 23 Nov): Put on hold, with its reason, is the one way to stop.
     { action: "hold", label: "Put on hold", icon: CirclePause, reason: true },
-    {
-      action: "exception",
-      label: "Mark exception",
-      icon: TriangleAlert,
-      danger: true,
-      reason: true,
-    },
     { action: "cancel", label: "Cancel order", icon: CircleX, danger: true, reason: true },
     { action: "restore", label: "Restore", icon: RotateCcw, reason: true },
   ];

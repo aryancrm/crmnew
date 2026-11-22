@@ -421,7 +421,16 @@ export function OrdersToCheck({
       manage={finance ? data.can.finance : dispatch ? data.can.dispatch : data.can.manage}
       busy={busy}
       // Approving picks the warehouse, as the hub did: the order opens with its approve window.
-      onApprove={() => navigate(`/orders/${card.id}?step=management&check=approve&approve=1`)}
+      // The documents are read by hand before anything is approved (22 Nov: Approve waits for
+      // every check): until they are, Approve opens the order on its Documents, not on a window
+      // that would only refuse.
+      onApprove={() =>
+        navigate(
+          card.papersCheckedAt
+            ? `/orders/${card.id}?step=management&check=approve&approve=1`
+            : `/orders/${card.id}?step=management&check=papers`,
+        )
+      }
       // Management says why it can go on (the hub's Resume); Finance and Dispatch lift their own.
       onResume={() =>
         manager ? setAsking({ card, what: "resume" }) : order.act(card.id, "resume")
@@ -823,7 +832,9 @@ function CheckSteps({ card }: { card: OrderCard }) {
       >
         {warns.length
           ? `Look at: ${warns.map((one) => one.label).join(", ")}`
-          : "Everything checks out: approve it"}
+          : card.papersCheckedAt
+            ? "Everything checks out: approve it"
+            : "Nothing flagged: read the documents, then approve"}
       </p>
       <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-slate-500">
         <span className="font-semibold text-slate-700">Management check</span>

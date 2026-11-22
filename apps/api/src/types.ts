@@ -1238,6 +1238,10 @@ export type OrderDetail = {
     customerKind: CustomerKind;
     customerCity: string | null;
     customerReview: "ok" | "to_review";
+    /** Who the customer is, shown on Management's check of a new one: phone, who added it, the day. */
+    customerPhone?: string | null;
+    customerAddedBy?: string | null;
+    customerAddedOn?: string | null;
     /** The licence that lets them buy (a hospital's LTO, a doctor's PRC), its expiry and TIN:
      *  what Management checks. */
     licenceNo: string | null;

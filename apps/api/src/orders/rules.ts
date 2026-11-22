@@ -178,7 +178,10 @@ export function orderActions(
       (manage && OPEN.includes(order.status)) ||
       (finance && FINANCE_STATUSES.includes(order.status)) ||
       (dispatch && (order.status === "ready_for_dispatch" || order.status === "packing")),
-    exception: manage && (OPEN.includes(order.status) || order.status === "shipped"),
+    // Gone (Aryan, 23 Nov: "take Exception out of Management, it looks like an extra"). It was a
+    // second "Put on hold" under another name; Management stops an order with Put on hold and its
+    // reason. An order already marked an exception is still taken off hold like any held one.
+    exception: false,
     resume:
       (manage && flagged) || (finance && held === "finance") || (dispatch && held === "dispatch"),
     // The MedRep may cancel their own order while it is a draft, or held before Finance acted.
