@@ -3254,3 +3254,12 @@ lowest, each division's average; Scorecards opens every card.
   with where it came from; in the tests the Online case's order comes out as Jane's, approved by
   Management. 500 API tests. Open: a case the PAP person opens themselves is still approved by the
   PAP channel's head, not Management (asked Aryan). Local only.
+- **22 Nov 2026 (Aryan, thinking aloud on PAP; not decided, nothing built)** "Is there a PAP head?
+  I don't know how many work in PAP. Management will get confused, PAP has so much in it: better a
+  separate team handles it. The government's payment comes later: better the PAP person keeps
+  that record." On the local data PAP is one person (Fhaye Norella, Patient Assistance Program
+  Officer, reports to Vanessa Escalderon); its box has no lead, so the PAP channel has no head and
+  a PAP order falls to Management (yet is left out of Management's shared queue). Proposed to him:
+  a guarantee-letter order is checked by whoever leads PAP's box on the tree, else the head above
+  it (Vanessa), not by Management; Finance still bills the agency; the PAP person records the
+  agency's payment with its proof and Finance confirms it against the bank. Waiting for his yes.
