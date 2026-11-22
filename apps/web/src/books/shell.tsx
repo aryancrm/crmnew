@@ -132,7 +132,7 @@ export function BooksShell() {
     (segment === "banking" || segment === "bankstatement" || segment === "reconcile" ? "Banking" : segment === "reports" ? "Reports" : !segment || segment === "home" ? "" : "Purchases");
   const [open, setOpen] = useState<Record<string, boolean>>({ [openGroup]: true });
   if (me.isPending) return null;
-  if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   if (!BOOK_ROLES.includes(me.data.role)) return <Navigate to="/" replace />;
   const ledger = LEDGER_ROLES.includes(me.data.role);
   const groups = GROUPS.filter((group) => ledger || !group.ledger).map((group) => ({ ...group, items: group.items.filter((item) => ledger || !item.ledger) }));

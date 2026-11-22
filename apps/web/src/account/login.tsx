@@ -7,7 +7,7 @@ import type { Me } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CircleAlert, Eye, EyeOff, LoaderCircle, Search } from "lucide-react";
 import { type FormEvent, useEffect, useId, useState } from "react";
-import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ApiFailure, api } from "../api";
 import { ME, rememberPerson, returnTo, useMe } from "../auth";
 import { About } from "../portal/about";
@@ -26,15 +26,19 @@ function Launcher() {
   const me = useMe();
   const navigate = useNavigate();
   const location = useLocation();
+  const { dept } = useParams();
   const [params] = useSearchParams();
   const from = (location.state as { from?: string } | null)?.from ?? "/";
   // The tile pressed opens its department's page, the sign-in below it (the login decides what
   // opens inside, as always).
-  const picked = WORKSPACES.find((one) => one.key === params.get("dept")) ?? null;
+  // Its address is /login/<key>. The older /login?dept=<key> is still read, then rewritten.
+  const asked = (dept ?? params.get("dept"))?.toLowerCase();
+  const picked = WORKSPACES.find((one) => one.key === asked) ?? null;
+  const address = loginPath(picked?.key);
   const [find, setFind] = useState("");
   const last = lastWorkspace();
   const open = (key: string | null) =>
-    navigate({ search: key ? `?dept=${key}` : "" }, { state: location.state });
+    navigate(loginPath(key), { state: location.state });
 
   useEffect(() => {
     if (!picked) return;
@@ -46,6 +50,9 @@ function Launcher() {
   }, [picked?.key]);
 
   if (me.data) return <Navigate to={landing(me.data.role, picked, returnTo(me.data.id, from))} replace />;
+  // An old link, an unknown department or other capitals: the one right address, without a step back to the wrong one.
+  if (location.pathname !== address || params.has("dept"))
+    return <Navigate to={{ pathname: address, hash: location.hash }} state={location.state} replace />;
 
   const words = find.trim().toLowerCase();
   const shownTiles = WORKSPACES.filter(
@@ -187,6 +194,9 @@ function Launcher() {
     </main>
   );
 }
+
+/** The sign-in's address: the launcher, or one department's page. */
+const loginPath = (key?: string | null) => (key ? `/login/${key}` : "/login");
 
 /** Where a person lands: the Books tile opens Books for those who keep the books. */
 const landing = (role: string, picked: Workspace | null, from: string) =>

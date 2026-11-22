@@ -153,7 +153,7 @@ createRoot(root).render(
     <QueryClientProvider client={queries}>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<Login />} />
+          <Route path="/login/:dept?" element={<Login />} />
           {/* Zoho Inventory's Sales and Purchases, in Zoho's own frame (docs/PLAN.md 17). */}
           <Route path="/books" element={<BooksShell />}>
             <Route index element={<BooksIndex />} />

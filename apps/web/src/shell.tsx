@@ -119,7 +119,7 @@ export function Shell() {
         </div>
       </Centered>
     );
-  if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   if (me.data.mustChangePassword)
     return location.pathname === "/password" ? (
       <div className="flex min-h-dvh items-center bg-ground p-6">
