@@ -13,6 +13,7 @@ import { addDays, todayManila } from "../inventory/rules";
 import { rxTelesales } from "../org/boxes";
 import { inForce } from "../org/service";
 import { careGroups } from "../rx/groups";
+import { salesByPerson } from "../kpis/invoices";
 import { HOSPITAL } from "../scores/recipes";
 import { measure } from "../scores/service";
 import { teamSeats } from "../team/service";
@@ -52,11 +53,9 @@ export async function pulse(db: Database, me: Me): Promise<Pulse> {
   const [{ values, notes }, slipping, invoicedRow] = await Promise.all([
     measure(db, me.id, HOSPITAL, today.slice(0, 7), today, true),
     reorders(db, me, { state: "late" }),
-    rows<{ n: number; total: number }>(
-      db,
-      sql`select count(*)::int as n, coalesce(sum(i.total), 0)::float8 as total from invoice i join sales_order o on o.id = i.order_id
-        where ${whoseOrders(me)} and i.status <> 'cancelled' and i.issued_on = ${lastDay}::date`,
-    ),
+    // The last working day's invoices as My KPIs counts them (Zoho's too): it said "a zero-sales
+    // day" beside a day with sales (22 Nov).
+    salesByPerson(db, lastDay, lastDay).then((all) => [{ n: all.get(me.id)?.invoices ?? 0, total: all.get(me.id)?.withVat ?? 0 }]),
   ]);
   const ist = values.ist ?? null;
   const dso = values.dso ?? null;
@@ -66,7 +65,7 @@ export async function pulse(db: Database, me: Me): Promise<Pulse> {
   const dayWords = new Date(`${lastDay}T00:00:00Z`).toLocaleDateString("en-PH", { weekday: "short", day: "numeric", month: "short", timeZone: "UTC" });
   const salesTile: Pulse["tiles"][number] = {
     key: "sales",
-    label: "Sales vs target",
+    label: "Sales pace vs target",
     value: ist === null ? "No target" : `${round(ist)}%`,
     sub: notes.ist ?? "",
     tone: ist === null ? "none" : ist >= 91 ? "green" : ist >= 71 ? "amber" : "red",
@@ -117,7 +116,7 @@ export async function pulse(db: Database, me: Me): Promise<Pulse> {
     tiles: [
       {
         key: "sales",
-        label: "Sales vs target",
+        label: "Sales pace vs target",
         value: ist === null ? "No target" : `${round(ist)}%`,
         sub: notes.ist ?? "",
         tone: ist === null ? "none" : ist >= 91 ? "green" : ist >= 71 ? "amber" : "red",
@@ -250,8 +249,14 @@ async function actualsOf(db: Database, personIds: number[], day: string) {
         (select count(*) from visit v where v.person_id = p.id and v.status = 'done' and v.day = ${day}::date)::int as visits
       from person p where p.id in (${list})`,
   );
+  // The day's sales and whether there was an invoice, as My KPIs counts them (Zoho's invoices too):
+  // a lead was told "three working days without an invoice" of a CHC whose invoices were in Zoho.
+  const counted = await salesByPerson(db, day, day);
   return new Map(
-    found.map((row) => [row.personId, { sales: row.sales, collected: row.collected, visits: row.visits, invoiced: row.invoices > 0 }]),
+    found.map((row) => {
+      const kpi = counted.get(row.personId);
+      return [row.personId, { sales: kpi?.withVat ?? 0, collected: row.collected, visits: row.visits, invoiced: (kpi?.invoices ?? 0) > 0 }];
+    }),
   );
 }
 

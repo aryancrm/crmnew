@@ -3352,3 +3352,26 @@ lowest, each division's average; Scorecards opens every card.
   also "send to my team lead"), and both "My day" and "Today's visits"; Dispatch has "On the road"
   and "Shipments"; the Hospital MedRep's "Hospital list" lists doctors and patients too. Each
   seat's Home was opened, not yet read card by card against its work.
+- **22 Nov 2026 (Aryan: "merge what is one thing; no feature may go; then every seat's Home, card
+  by card, against its work")** Merged or renamed: (1) the field MedRep's two plans are one plan
+  (one `visit_plan` a month, sent to the team lead once) seen two ways, so the menu has one "Tour
+  plan"; its calendar has a "By customer" link (the visits each class asks for, Make my plan) and
+  that page a "Calendar" link, titled "My tour plan · by customer". (2) "My day" and "Today's
+  visits" are two things (the day's start, stop and tiles; the list of visits): both stay.
+  (3) Dispatch: "Shipments" is the register of every parcel with its receipt and address slip to
+  print, not the desk's work list, so the page is titled "Shipments" (it said "On the road" like
+  the desk's tab). (4) The Hospital MedRep's "Hospital list" is "All my customers" (doctors and
+  patients are on it), page title too. Homes read so far (the four kinds of MedRep, the Online
+  desk, the Hospital coach): one figure for one thing. A seller's Home said ₱192,272 under My KPIs
+  and ₱0 under "Sales vs target", and a lead was told "three working days without an invoice" of
+  people whose invoices are in Zoho: the scorecard, the pulse and the huddle counted only this
+  CRM's invoices. Now the month's sales, the days with an invoice and the day's sales come from
+  the invoices My KPIs counts (`kpis/invoices.ts`: this CRM's and Zoho's, by the seat's holder,
+  without VAT against the target), counted once per reading request (and once when a month is
+  locked); the tile is named "Sales pace vs target" (it is the month's pace, My KPIs the plain
+  share). The company's scorecards went from all near zero to an average of 17 with a best of 77.
+  The Online desk's Home starts with the greeting, then My KPIs (they were the other way round).
+  Not changed, for Aryan to say: the boards, the tree and the CEO Home count sales with VAT
+  against the target, My KPIs without; and the scorecard's days-to-collect and repeat-customer
+  measures still count only this CRM's invoices. Homes not yet read card by card: the head's,
+  Management's, Finance's, Dispatch's, Inventory's, HR's, the CEO's. 500 API tests. Local only.

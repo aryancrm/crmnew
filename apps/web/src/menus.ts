@@ -206,16 +206,18 @@ const ordersLink = (label: string): MenuItem => ({
  *  day (Start working, the day report, the tiles), the day's visits (or calls), the tour plan, the
  *  customers as KOLs, hospitals and KBLs, the visit plan by class, the calendar, their phone log,
  *  expenses and samples. */
-const fieldFolder = (label: string, today: string, plan: string, phone = "My calls"): MenuItem =>
+const fieldFolder = (label: string, today: string, _plan: string, phone = "My calls"): MenuItem =>
   folder(
     label,
     CalendarCheck,
     [
       { to: "/field", label: "My day", icon: Smartphone },
       { to: "/visits", label: today, icon: CalendarCheck },
+      // One plan, one link (Aryan, 22 Nov: "two features of one thing: merge them"). The tour plan's
+      // calendar and its view by customer (the visits each class asks for) are the same
+      // month's plan, sent to the team lead once: each page opens the other.
       { to: "/field/plan", label: "Tour plan", icon: CalendarRange },
       { to: "/field/clients", label: "KOLs, hospitals, KBLs", icon: Stethoscope },
-      { to: "/visits/plan", label: plan, icon: CalendarRange },
       { to: "/visits/calendar", label: "Calendar", icon: CalendarDays },
       { to: "/calls", label: phone, icon: PhoneCall },
       { to: "/visits/expenses", label: "My expenses", icon: Receipt },
@@ -769,7 +771,9 @@ function ownDesk(me: Me): Space {
                 { to: "/hospital-board", label: "My hospitals", icon: Building2 },
                 { to: "/to-call", label: "Hospitals to call", icon: PhoneCall, badge: "refills" },
                 { to: "/collections", label: "Collections", icon: HandCoins },
-                { to: "/my/area", label: "Hospital list", icon: Building2 },
+                // Every customer of the area (hospitals, and their doctors and patients): it said
+                // "Hospital list" (22 Nov).
+                { to: "/my/area", label: "All my customers", icon: Building2 },
               ],
               "Hospitals",
             ),

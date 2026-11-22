@@ -89,9 +89,9 @@ export function Shipments() {
   return (
     <div className="mx-auto max-w-[88rem]">
       <PageHead
-        title={
-          data.tab === "road" ? "On the road" : data.tab === "delivered" ? "Delivered" : "Shipments"
-        }
+        // The register of every parcel (with its receipt and address slip to print), whichever tab
+        // is open: it was titled "On the road" like the desk's own work list (22 Nov).
+        title="Shipments"
         sub={
           data.tab === "road"
             ? "Parcels out with a courier or our rider, the longest out first to chase"

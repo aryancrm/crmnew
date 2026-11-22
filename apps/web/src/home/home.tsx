@@ -72,12 +72,8 @@ export function Home() {
   // The B2C CHC starts on their morning pulse and the replies waiting (docs/PLAN.md 16.3).
   if (onlineDesk(me))
     return (
-      <div className="space-y-4">
-        <div className="mx-auto max-w-screen-xl">
-          <MyKpis />
-        </div>
-        <B2cHome />
-      </div>
+      // The greeting first, then My KPIs, then the day's pulse (My KPIs sat above the greeting).
+      <B2cHome top={<MyKpis />} />
     );
   // HR's Home is People: everyone's record.
   if (me.role === "hr") return <HrPeoplePage />;

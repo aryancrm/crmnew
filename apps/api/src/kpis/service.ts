@@ -28,6 +28,7 @@ import { todayManila } from "../inventory/rules";
 import { creditedTo, inForce } from "../org/service";
 import { teamSeats } from "../team/service";
 import type { KpiDay, KpiFigures, KpiPanel, Me } from "../types";
+import { invoicesSql } from "./invoices";
 
 const WHOLE = ["ceo", "admin"];
 const isDay = (value?: string | null) => Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
@@ -36,36 +37,6 @@ const lastOf = (month: string) => {
   return `${month}-${String(new Date(Date.UTC(y, m, 0)).getUTCDate()).padStart(2, "0")}`;
 };
 const ids = (list: number[]) => sql.join(list.map((id) => sql`${id}`), sql`, `);
-
-/** Every invoice in the days, with its sales without VAT (line by line, as Sales performance),
- *  its total with VAT, and the person it counts for (the seat's holder on the invoice's day; a
- *  sale from before the seat was filled here, its first holder after; else the order's MedRep). */
-function invoicesSql(from: string, to: string): SQL {
-  return sql`
-    with inv as (
-      select 'crm' as source, i.id, i.code as invoice, i.issued_on as day, o.seat_id, o.medrep_id as fallback, o.raised_by,
-        o.id as order_id, o.code as order_code, o.customer_id, o.created_at as order_at, i.total::bigint as total,
-        -- Less what came back and was credited: the invoice's total is lowered by the same pieces, so
-        -- sales with and without VAT stay one figure (22 Nov).
-        (select coalesce(sum(round((oi.qty - coalesce((select sum(rl.qty) from sales_return_line rl join sales_return rr on rr.id = rl.return_id where rl.order_item_id = oi.id and rr.credited_at is not null and rl.outcome <> 'missing'), 0))::numeric * oi.unit_price / case when coalesce(oi.vat_then, m.vat) = 'vat12' then 1.12 else 1 end)), 0)
-          from order_item oi join medicine m on m.id = oi.medicine_id where oi.order_id = o.id)::bigint as net
-      from invoice i join sales_order o on o.id = i.order_id
-      where i.status <> 'cancelled' and i.issued_on between ${from}::date and ${to}::date
-      union all
-      select 'zoho', d.id, coalesce(d.number, ''), d.doc_date, zs.seat_id, null::bigint, null::bigint,
-        null::bigint, null::text, d.customer_id, null::timestamptz, round(d.total * d.fx_rate)::bigint,
-        (select coalesce(sum(round(coalesce(l.amount, 0) * d.fx_rate)), 0) from book_line l where l.doc_id = d.id and coalesce(l.qty, 1) > 0)::bigint
-      from book_doc d left join zoho_seller zs on zs.name = coalesce(d.fields->>'Sales Person', d.fields->>'salesperson_name')
-      where d.kind = 'invoice' and d.zoho_id is not null and d.status not in ('draft', 'void') and d.voided_at is null
-        and d.doc_date between ${from}::date and ${to}::date
-    )
-    select inv.*,
-      coalesce((select h.person_id from seat_holder h where h.seat_id = inv.seat_id and h.kind = 'holder' and h.starts_on <= inv.day
-          and (h.ends_on is null or h.ends_on >= inv.day) order by h.starts_on desc limit 1),
-        (select h.person_id from seat_holder h where h.seat_id = inv.seat_id and h.kind = 'holder' and h.starts_on > inv.day order by h.starts_on, h.id limit 1),
-        inv.fallback) as person_id
-    from inv`;
-}
 
 /** Whose figures: one person (their own), or a team (people and the seats under the lead). */
 type Scope =

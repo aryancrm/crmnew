@@ -6,6 +6,7 @@
 
 import { type SQL, sql } from "drizzle-orm";
 import { type Database, requestMemo, rows } from "../db/index";
+import { salesBatch, salesByPerson } from "../kpis/invoices";
 import { DEFAULT_SCHEDULE, isWorkDay } from "../hr/work-time";
 import { Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
@@ -136,8 +137,7 @@ export async function measure(
   }>(
     db,
     sql`select
-        coalesce((select sum(i.total) from invoice i join sales_order o on o.id = i.order_id
-          where ${mine} and i.status <> 'cancelled' and i.issued_on between ${first}::date and ${upTo}::date), 0)::float8 as sales,
+        0::float8 as sales,
         (select t.amount::float8 from sales_target t where t.person_id = ${personId} and t.month = ${first}::date) as target,
         coalesce((select sum(i.total - coalesce((select sum(pm.amount) from payment pm where pm.invoice_id = i.id and pm.paid_on <= ${upTo}::date), 0))
           from invoice i join sales_order o on o.id = i.order_id
@@ -162,17 +162,17 @@ export async function measure(
         (select count(*) from sales_order o where ${mine} and o.status = 'cancelled'
           and (coalesce(o.submitted_at, o.created_at) at time zone 'Asia/Manila')::date between ${first}::date and ${upTo}::date)::int as cancelled`,
   );
-  const invoiceDays = await rows<{ day: string }>(
-    db,
-    sql`select distinct to_char(i.issued_on, 'YYYY-MM-DD') as day from invoice i join sales_order o on o.id = i.order_id
-      where ${mine} and i.status <> 'cancelled' and i.issued_on between ${first}::date and ${upTo}::date`,
-  );
+  // The month's sales and the days with an invoice are the ones My KPIs counts (this CRM's
+  // invoices and Zoho's, by the seat's holder, without VAT against the target): one figure on the
+  // Home, the score and the boards (Aryan, 22 Nov). Asked once for everyone in a reading request.
+  const counted = (await salesByPerson(db, first, upTo)).get(personId);
+  const invoiceDays = (counted?.days ?? []).map((day) => ({ day }));
   const holidays = await holidaysIn(db, first, last);
   const workDay = (day: string) => isWorkDay(day, DEFAULT_SCHEDULE, holidays);
   const workedSoFar = daysBetween(first, upTo).filter(workDay).length;
   const workInMonth = daysBetween(first, last).filter(workDay).length;
   const daysWithInvoice = invoiceDays.filter((one) => workDay(one.day)).length;
-  const r = row as NonNullable<typeof row>;
+  const r = { ...(row as NonNullable<typeof row>), sales: counted?.sales ?? 0 };
   const peso = (centavos: number) => `₱${Math.round(centavos / 100).toLocaleString("en-PH")}`;
 
   const values: Record<string, number | null> = {};
@@ -497,7 +497,11 @@ async function cardNow(
 
 /** Locks a month for everyone who held a scored seat in it; a card with nothing to measure is
  *  not kept (nor one with no target, sale, order or enquiry). Returns how many were locked. `again` (the Admin) rewrites ones already locked. */
-export async function lockMonth(db: Database, month: string, again = false): Promise<number> {
+export function lockMonth(db: Database, month: string, again = false): Promise<number> {
+  return salesBatch(() => lockMonthNow(db, month, again));
+}
+
+async function lockMonthNow(db: Database, month: string, again: boolean): Promise<number> {
   const first = firstOf(month);
   const last = lastOf(month);
   const people = await rows<{ personId: number; seatId: number; module: string; lead: boolean; channel: string | null; business: string | null }>(

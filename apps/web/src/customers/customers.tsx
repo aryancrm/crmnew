@@ -70,7 +70,13 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
   const data = query.data;
   if (!data) return <PageState query={query} what={mine ? `the ${seatWords(me).customers}` : "the customers"} />;
   const kindLabel = data.kinds.find((entry) => entry.key === picked);
-  const title = mine ? seatWords(me).myCustomers : (kindLabel?.plural ?? "Customers");
+  // A hospital seat's "My hospitals" is its board (accreditation, formulary, buying); this list
+  // has every customer of the area, doctors and patients too, so it says so (22 Nov).
+  const title = mine
+    ? seatWords(me).myCustomers === "My hospitals"
+      ? "All my customers"
+      : seatWords(me).myCustomers
+    : (kindLabel?.plural ?? "Customers");
   const pages = Math.max(1, Math.ceil(data.total / data.pageSize));
   const label = (key: CustomerKind) => data.kinds.find((entry) => entry.key === key)?.label ?? key;
   const plural = (kindLabel?.plural ?? "Customers").toLowerCase();

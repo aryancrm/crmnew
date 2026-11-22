@@ -59,7 +59,18 @@ function PlanCalendar({ person, month, onMonth }: { person: string | null; month
         title="Tour plan calendar"
         back="/field"
         sub={`${mine ? "" : `${data.person.name} · `}${status ? `${PLAN_WORDS[status]}${data.plan.revision ? ` · revision ${data.plan.revision}` : ""}` : "Not made yet"}`}
-        actions={<Button small variant="quiet" onClick={() => setList(!list)}><List size={15} /> {list ? "Calendar view" : "List view"}</Button>}
+        actions={
+          <span className="flex items-center gap-1">
+            {/* The same plan seen by customer: how many visits each one's class asks for, and "Make my plan". */}
+            <Link
+              to={`/visits/plan?${new URLSearchParams({ ...(person ? { person } : {}), month: data.month.slice(0, 7) })}`}
+              className="rounded-lg px-2 py-1 text-[13px] font-semibold text-emerald-700 hover:bg-emerald-50"
+            >
+              By customer
+            </Link>
+            <Button small variant="quiet" onClick={() => setList(!list)}><List size={15} /> {list ? "Calendar view" : "List view"}</Button>
+          </span>
+        }
       />
       {data.plan.note && <div className={`rounded-xl px-3 py-2 text-sm ${status === "sent_back" ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-800"}`}>{data.plan.decidedBy}: {data.plan.note}</div>}
       <div className={`${CARD} overflow-hidden`}>
