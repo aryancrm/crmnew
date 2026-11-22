@@ -457,7 +457,8 @@ const reportsApp: Space = {
     {
       title: "Sales",
       items: [
-        { to: "/reports/channels", label: "By channel", icon: Users },
+        // One page for sales by channel, the CEO's report with its print and CSV (22 Nov).
+        { to: "/key-reports/channels", label: "By channel", icon: Users },
         { to: "/team", label: "By person", icon: User },
         { to: "/team-scores", label: "Scorecards", icon: Gauge },
         { to: "/to-call", label: "Customers to call", icon: PhoneCall, badge: "refills" },
@@ -1475,11 +1476,12 @@ function ownDesk(me: Me): Space {
                 Network,
                 [
                   { to: "/my-team", label: "Company view", icon: BarChart3, teams: true },
-                  // The Admin panel's channels, each with its head, managers and sales people
-                  // (Aryan, 19 Nov: "put the Admin panel's Channels in the CEO's too").
-                  { to: "/admin/channels", label: "Channels", icon: Network },
+                  // Who heads and manages what is said in one place, the Company tree above (Aryan,
+                  // 22 Nov: "the same thing is repeated in many places; it must be in one"): the
+                  // Admin panel's Channels and the second chart are no longer listed here. The tree
+                  // has the same chart ("Org chart") and every team ("Every team"); Channels stays
+                  // the Admin's page.
                   { to: "/company/map", label: "Map", icon: MapPin },
-                  { to: "/company", label: "Company chart", icon: Network },
                   { to: "/audit", label: "Audit", icon: ScrollText },
                 ],
                 "Company",

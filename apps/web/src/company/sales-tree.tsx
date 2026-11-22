@@ -61,6 +61,29 @@ export const COLOR: Record<Tone, string> = {
 // Each head's part of the company in the Org chart (teal, indigo, purple, amber, rose, sky…).
 const HUES = ["#0f766e", "#4f46e5", "#9333ea", "#b45309", "#be123c", "#0369a1", "#4d7c0f"];
 
+/** How a box is named on the tree (Aryan, 22 Nov: "the business's name big, its head or manager
+ *  smaller: the business is the main thing"): a business, a channel or a team by its own name,
+ *  with who heads or manages it small under it; a person's box by the person. Only how it is
+ *  written: the tree's data (and the pages that share it) is as it was. */
+export function face(node: Node): { big: string; small: string } {
+  const unit = node.unit;
+  if (!unit || node.level === "person") return { big: node.name, small: node.sub };
+  const parts = node.sub.split(" · ").filter(Boolean);
+  if (node.level === "root" || node.level === "head")
+    return node.name === unit.name
+      ? { big: node.name, small: node.sub }
+      : { big: unit.name, small: [node.name, ...parts.filter((part) => part !== unit.name)].join(" · ") };
+  if (node.level === "channel") {
+    // One manager for the whole channel (RX Business · Honey): said on the channel's own box.
+    const only = node.children.length === 1 && node.children[0]?.level === "manager" ? node.children[0].name : null;
+    return { big: node.name, small: [only, ...parts].filter(Boolean).join(" · ") };
+  }
+  // A manager: of a team inside a channel (HOSP's NCR 1), the team's name with the manager under
+  // it; the channel's own manager stays a person's box under the channel.
+  const team = node.key === `m:${unit.id}` && !node.path.includes(`u:${unit.id}`);
+  return team ? { big: unit.name, small: [node.name, ...parts].join(" · ") } : { big: node.name, small: node.sub };
+}
+
 export const pctOf = (figures: Figures) =>
   figures.target ? Math.round((figures.sold / figures.target) * 1000) / 10 : null;
 export const toneOfNode = (node: Node, pace: number): Tone =>
@@ -456,12 +479,12 @@ function Card({ node, pace, picked, hitKeys, onPick, onHover }: { node: Node } &
       } ${picked === node.key ? "ring-2 ring-emerald-500" : hitKeys.has(node.key) ? "ring-2 ring-amber-400" : ""}`}
     >
       <div className="flex items-baseline justify-between gap-2">
-        <span className={`truncate text-[15px] font-semibold ${root ? "text-white" : "text-slate-900"}`}>{node.name}</span>
+        <span className={`truncate text-[15px] font-semibold ${root ? "text-white" : "text-slate-900"}`}>{face(node).big}</span>
         <span className="shrink-0 text-[13px] font-bold tabular-nums" style={{ color: root ? "#ffffff" : COLOR[tone] }}>
           {vacant ? "VACANT" : share === null ? shortPeso(node.figures.sold) : `${share}%`}
         </span>
       </div>
-      <div className={`mt-0.5 truncate text-[12px] ${root ? "text-emerald-100" : "text-slate-500"}`}>{node.sub}</div>
+      <div className={`mt-0.5 truncate text-[12px] ${root ? "text-emerald-100" : "text-slate-500"}`}>{face(node).small}</div>
       <div className={`relative mt-2.5 h-[5px] rounded-full ${root ? "bg-white/25" : "bg-slate-200"}`}>
         <div className="h-[5px] rounded-full" style={{ width: `${Math.min(100, share ?? 0)}%`, background: root ? "#ffffff" : COLOR[tone] }} />
         {/* The pace mark: where the bar should be by today. */}
@@ -574,8 +597,8 @@ function ChartLabel({ node, pace, onPick, onHover, picked, hitKeys, big }: { nod
       onMouseLeave={() => onHover(null)}
       className={`rounded-xl px-3 py-1 text-center ${picked === node.key ? "ring-2 ring-emerald-500" : hitKeys.has(node.key) ? "ring-2 ring-amber-400" : ""}`}
     >
-      <div className={`${big ? "text-[18px]" : "text-[15px]"} font-semibold text-slate-900`}>{node.name}</div>
-      <div className="text-[12px] text-slate-500">{node.sub}</div>
+      <div className={`${big ? "text-[18px]" : "text-[15px]"} font-semibold text-slate-900`}>{face(node).big}</div>
+      <div className="text-[12px] text-slate-500">{face(node).small}</div>
       <div className="text-[13px] font-bold tabular-nums" style={{ color: COLOR[tone] }}>
         {share === null ? shortPeso(node.figures.sold) : `${share}%`}
       </div>
@@ -605,8 +628,8 @@ function ChartNode({ node, ...props }: { node: Node } & ViewProps) {
           </span>
         </Ring>
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-[13px] font-semibold text-slate-900">{node.name}</span>
-          <span className="block truncate text-[11px] text-slate-500">{node.sub}</span>
+          <span className="block truncate text-[13px] font-semibold text-slate-900">{face(node).big}</span>
+          <span className="block truncate text-[11px] text-slate-500">{face(node).small}</span>
         </span>
         <span className="text-[12px] font-bold tabular-nums" style={{ color: COLOR[tone] }}>
           {vacant ? "" : share === null ? "" : `${share}%`}
@@ -631,8 +654,8 @@ function ChartNode({ node, ...props }: { node: Node } & ViewProps) {
               {node.code}
             </span>
           </Ring>
-          <span className="mt-1.5 max-w-[160px] truncate text-[14px] font-semibold text-slate-900">{node.name}</span>
-          <span className="max-w-[170px] truncate text-[11px] text-slate-500">{node.sub}</span>
+          <span className="mt-1.5 max-w-[160px] truncate text-[14px] font-semibold text-slate-900">{face(node).big}</span>
+          <span className="max-w-[170px] truncate text-[11px] text-slate-500">{face(node).small}</span>
           <span className="text-[12px] font-bold tabular-nums" style={{ color: COLOR[tone] }}>
             {share === null ? shortPeso(node.figures.sold) : `${share}%`}
           </span>
@@ -686,12 +709,12 @@ function Hover({ node, pace, x, y }: { node: Node; pace: number; x: number; y: n
   return (
     <div className="pointer-events-none fixed z-[60] w-[260px] rounded-xl border border-slate-200 bg-white p-3 text-[12px] shadow-lg" style={{ left, top }}>
       <div className="flex items-baseline justify-between gap-2">
-        <span className="truncate text-[14px] font-semibold text-slate-900">{node.name}</span>
+        <span className="truncate text-[14px] font-semibold text-slate-900">{face(node).big}</span>
         <span className="font-bold tabular-nums" style={{ color: COLOR[tone] }}>
           {node.seat && !node.seat.person ? "VACANT" : share === null ? "—" : `${share}%`}
         </span>
       </div>
-      <div className="truncate text-slate-500">{node.sub}</div>
+      <div className="truncate text-slate-500">{face(node).small}</div>
       <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
         <dt className="text-slate-500">Target</dt>
         <dd className="text-right font-semibold tabular-nums">{node.figures.target ? shortPeso(node.figures.target) : "—"}</dd>
@@ -874,8 +897,8 @@ function Details({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           {trail && <div className="truncate text-[13px] text-slate-500">{trail}</div>}
-          <h2 className="mt-1 text-[22px] font-bold text-slate-900">{node.name}</h2>
-          <div className="text-[14px] text-slate-500">{node.sub}</div>
+          <h2 className="mt-1 text-[22px] font-bold text-slate-900">{face(node).big}</h2>
+          <div className="text-[14px] text-slate-500">{face(node).small}</div>
         </div>
         <button type="button" onClick={onClose} aria-label="Close" className="text-slate-400 hover:text-slate-800">
           <X className="size-5" />
@@ -925,7 +948,7 @@ function Details({
       {under.length > 0 && (
         <div className="mt-5">
           <h3 className="mb-2 text-[12px] font-semibold tracking-wide text-slate-500 uppercase">
-            Under {node.name} · best first
+            Under {face(node).big} · best first
           </h3>
           <ul className="space-y-2.5">
             {under.map((child) => {
@@ -936,7 +959,7 @@ function Details({
                 <li key={child.key}>
                   <button type="button" onClick={() => onPick(child)} className="w-full text-left">
                     <div className="flex justify-between gap-2 text-[14px]">
-                      <span className="truncate font-semibold text-slate-800">{child.name}</span>
+                      <span className="truncate font-semibold text-slate-800">{face(child).big}</span>
                       <span className="font-bold tabular-nums" style={{ color: COLOR[childTone] }}>
                         {childVacant ? "VACANT" : childShare === null ? shortPeso(child.figures.sold) : `${childShare}%`}
                       </span>

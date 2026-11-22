@@ -3131,3 +3131,16 @@ lowest, each division's average; Scorecards opens every card.
   Mitzi, Emmanuel, Ailyn, Khalygen, Benjie, Arron) keep their seats under their manager with no
   target; six seats the sheet names are vacant here (Dhon, Pillow, Charle, Mani Mishra, Arlene,
   Jasper); the sheet's Zamboanga row says VACANT while Maycarl Degamo holds the seat.
+- **22 Nov 2026 (Aryan: "the business's name big, its head or manager smaller; the same thing is
+  repeated in many places, it must be in one")** On the **Company tree** each box is named by what
+  it is: the company, a business (Hospital Division), a channel (RX Business) or a team (NCR 1)
+  big, with who heads or manages it small under it (`face()` in sales-tree.tsx: only how it is
+  written; the tree's data, and the heads' Homes that share it, are as they were). **Divisions**
+  names each business first the same way. The CEO's Company folder no longer lists the Admin
+  panel's Channels or the second Company chart (the tree has "Org chart" and "Every team"; both
+  pages stay at their addresses, Channels in the Admin panel); the Reports app's "By channel"
+  opens the same page as the CEO's "Sales by channel". Found and left for Aryan's word, because
+  it changes figures: the CEO's Home, Sales by channel and the Admin's Channels still count by the
+  first eight channels (HOSP, RX, B2B, BID, PAP, TS, MT, ONLINE: CLIDP inside B2B, both telesales
+  as one), not by the sheet's (RX Business, MD Telesales, B2B, BID, CLIDP, TeleSales, HOSP, MT),
+  which the tree, Divisions and the Target sheet use.
