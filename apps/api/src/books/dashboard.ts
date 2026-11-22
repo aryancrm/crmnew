@@ -66,10 +66,16 @@ export async function booksDashboard(db: Database, me: Me, asked: { year?: strin
     ),
     rows<{ id: number; name: string; type: string; balance: number; uncategorized: number }>(
       db,
+      // The ledger is read once and added up by account, then matched to the money accounts: the
+      // same balances as reading the whole ledger again for each of the 44 accounts (31 seconds of
+      // this page, 22 Nov).
       sql`select a.id::int as id, a.name, a.type,
-          coalesce((select sum(e.debit - e.credit) from book_entry e where lower(e.account) = lower(a.name) and e.on_date <= ${today}::date), 0)::float8 as balance,
+          coalesce(b.balance, 0)::float8 as balance,
           (select count(*) from bank_line l where lower(l.account) = lower(a.name) and l.status = 'uncategorized')::int as uncategorized
-        from book_account a where a.active and a.type in (${sql.join(MONEY.map((t) => sql`${t}`), sql`, `)})
+        from book_account a
+          left join (select lower(e.account) as key, sum(e.debit - e.credit) as balance from book_entry e
+            where e.account is not null and e.on_date <= ${today}::date group by 1) b on b.key = lower(a.name)
+        where a.active and a.type in (${sql.join(MONEY.map((t) => sql`${t}`), sql`, `)})
         order by uncategorized desc, a.type, lower(a.name)`,
     ),
   ]);

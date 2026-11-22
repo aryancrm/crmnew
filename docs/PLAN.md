@@ -3321,3 +3321,8 @@ lowest, each division's average; Scorecards opens every card.
   times could be measured). The CEO Home lost nothing (33 cards); its late cards were these calls.
   500 API tests, data checks 18/18. Not done yet: his ask to walk every seat's left menu and each
   page under it (MedRep to CEO); the scorecards still ask about six questions a person.
+- **22 Nov 2026 (speed, the Books home)** Found by opening every link of the CEO's menu (all 125
+  open, no call fails): Open Books took 23 to 37 seconds. Its bank and cash balances read the whole
+  ledger again for each of the 44 money accounts; now the ledger is read once, added up by account
+  and matched (the same answer, byte for byte): 37 s → 3.8 s. Banking and the chart of accounts
+  are a second each (one pass over the ledger, as they must).
