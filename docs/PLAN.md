@@ -3294,3 +3294,5 @@ lowest, each division's average; Scorecards opens every card.
   Management's queue, approved, invoiced, delivered, claim by Finance (refused before delivery and
   to PAP), the agency ₱1,500 short, the patient ₱1,000, ₱500 let go: invoice paid, order
   completed, PAP's case Done. 500 API tests. Local only.
+- **22 Nov 2026 (Aryan: "Finance alone")** Letting go the unpaid rest of a guarantee letter is
+  Finance's own call: no one else's yes is asked. As built; nothing changed.
