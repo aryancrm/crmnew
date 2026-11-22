@@ -294,6 +294,8 @@ export type MedicineDetail = {
   /** On placed orders not packed yet, and what is left free to sell (never under zero). */
   promised: number;
   promisedOrders: number;
+  /** The orders holding it, oldest first (only for the desks that see every order). */
+  promisedTo: { id: number; code: string; customer: string; qty: number; status: OrderStatus; placedOn: string }[];
   free: number;
   expired: number;
   batches: {
@@ -2839,6 +2841,10 @@ export type CustomerPrices = {
     seller: string | null;
     medicines: string | null;
   }[];
+  /** The old system's invoices, newest first, with what each still owes (centavos). */
+  invoices: { id: number; number: string; on: string; dueOn: string | null; order: string | null; total: number; balance: number; status: "paid" | "open" | "void" }[];
+  /** The payments the old system took from them, newest first. */
+  payments: { id: number; number: string | null; on: string; mode: string | null; reference: string | null; amount: number }[];
   medicines: MedicinePrices[];
 };
 

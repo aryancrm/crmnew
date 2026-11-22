@@ -74,6 +74,8 @@ export const REPORTS: Report[] = [
   { key: "sales-trend", title: "Sales by Channel, Month by Month", about: "Six months of billing (the old system's and the CRM's) by channel, to the day picked.", group: "Sales", days: "range", insight: true, roles: SALES },
   { key: "sales-by-branch", title: "Sales by Branch, Month by Month", about: "Six months of billing by warehouse (Main, Cebu, Davao…).", group: "Sales", days: "range", insight: true, roles: SALES },
   { key: "top-medicines", title: "Top Medicines", about: "What sold most in these days, against the same number of days before.", group: "Sales", days: "range", insight: true, roles: SALES },
+  { key: "sales-by-person-medicine", title: "Sales by Salesperson and Medicine", about: "Who sold which medicine, how many and for how much, with what came back (the old system's Sales Person item Sale).", group: "Sales", days: "range", insight: true, roles: SALES },
+  { key: "sales-by-city", title: "Sales by City", about: "What was sold into each city, by the customer's city (the old system's City Sale).", group: "Sales", days: "range", insight: true, roles: SALES },
   { key: "abc", title: "ABC Classes", about: "The last 12 months' sales by medicine: A the first 80%, B the next 15%, C the rest.", group: "Sales", days: "none", insight: true, roles: SALES },
   { key: "senior-pwd", title: "Senior Citizen and PWD Sales", about: "Lines sold with the relief, the ID on file and the relief given: for the BIR.", group: "Taxes", days: "range", insight: true, roles: SALES },
   { key: "stock-aging", title: "Stock by Age and Expiry", about: "Every batch on a shelf: days held, expiry, value at cost.", group: "Inventory", days: "none", insight: true, roles: STOCK },

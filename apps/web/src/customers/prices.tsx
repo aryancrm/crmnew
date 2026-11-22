@@ -867,6 +867,58 @@ export function PricesGiven({ customerId }: { customerId: number }) {
           </div>
         )}
       </SectionPanel>
+
+      {data.invoices.length > 0 && (
+        <SectionPanel
+          icon={History}
+          title={`Earlier invoices · ${count(data.invoices.length)}`}
+          actions={
+            <span className="text-xs text-slate-500">
+              {data.zoho.owed > 0 ? <b className="text-amber-800">{peso(data.zoho.owed)} still owed</b> : "nothing owed"}
+            </span>
+          }
+          flush
+        >
+          <ul className="divide-y divide-slate-100">
+            {data.invoices.map((invoice) => (
+              <li key={invoice.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 px-4 py-2 text-sm sm:px-5">
+                <span className="flex flex-wrap items-center gap-x-2">
+                  <b className="text-slate-900">{invoice.number}</b>
+                  <span className="text-slate-500">{dayLabel(invoice.on)}</span>
+                  {invoice.order && <span className="text-xs text-slate-500">{invoice.order}</span>}
+                </span>
+                <span className="flex items-center gap-2.5">
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                      invoice.status === "void" ? "bg-slate-100 text-slate-500" : invoice.status === "paid" ? "bg-emerald-50 text-emerald-700" : "bg-amber-100 text-amber-900"
+                    }`}
+                  >
+                    {invoice.status === "void" ? "Cancelled" : invoice.status === "paid" ? "Paid" : `Owes ${peso(invoice.balance)}${invoice.dueOn ? ` · due ${dayLabel(invoice.dueOn)}` : ""}`}
+                  </span>
+                  <span className={`font-bold tabular-nums ${invoice.status === "void" ? "text-slate-400 line-through" : "text-slate-900"}`}>{peso(invoice.total)}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </SectionPanel>
+      )}
+
+      {data.payments.length > 0 && (
+        <SectionPanel icon={History} title={`Earlier payments · ${count(data.payments.length)}`} flush>
+          <ul className="divide-y divide-slate-100">
+            {data.payments.map((payment) => (
+              <li key={payment.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 px-4 py-2 text-sm sm:px-5">
+                <span className="flex flex-wrap items-center gap-x-2">
+                  <span className="text-slate-500">{dayLabel(payment.on)}</span>
+                  <span className="text-slate-800">{[payment.mode, payment.reference].filter(Boolean).join(" · ") || "Payment"}</span>
+                  {payment.number && <span className="text-xs text-slate-400">#{payment.number}</span>}
+                </span>
+                <b className="tabular-nums text-emerald-700">{peso(payment.amount)}</b>
+              </li>
+            ))}
+          </ul>
+        </SectionPanel>
+      )}
     </>
   );
 }

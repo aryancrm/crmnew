@@ -231,6 +231,28 @@ export function Medicine() {
           />
         </div>
 
+        {/* Which orders hold the promised pieces (the old system's Committed Stock Details). */}
+        {data.promisedTo.length > 0 && (
+          <details className="border-t border-slate-100 pt-2 text-[13px]">
+            <summary className="cursor-pointer font-semibold text-slate-700">
+              Promised to {count(data.promisedTo.length)} {data.promisedTo.length === 1 ? "order" : "orders"}: {count(data.promised)} pieces
+            </summary>
+            <ul className="mt-2 divide-y divide-slate-100">
+              {data.promisedTo.map((one) => (
+                <li key={one.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
+                  <span className="min-w-0">
+                    <Link to={`/orders/${one.id}`} className="font-semibold text-emerald-700 hover:underline">
+                      {one.code}
+                    </Link>{" "}
+                    <span className="text-slate-700">{one.customer}</span>
+                    <span className="text-xs text-slate-500"> · placed {dayLabel(one.placedOn)} · {one.status.replaceAll("_", " ")}</span>
+                  </span>
+                  <b className="tabular-nums">{count(one.qty)}</b>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
         {data.news.length > 0 && (
           <div className="border-t border-slate-100 pt-2">
             <NewsList news={data.news} canClose={can.stock} />

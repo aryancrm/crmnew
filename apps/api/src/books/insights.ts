@@ -41,6 +41,27 @@ const SOLD_LINES = sql`(
   where o.status in ('invoiced', 'partially_invoiced', 'closed') and not p.free
 ) s`;
 
+/** The same lines with who sold each and where the customer is: the order's seat as the target
+ *  sheet names it ("HOS | PASAY", Zoho's own salesperson word, so the old orders and the new ones
+ *  fall under one name), else the MedRep's name. Free pieces left out. */
+const SOLD_BY = sql`(
+  select i.issued_on as day, coalesce(m.name || coalesce(' ' || m.strength, ''), oi.name_then) as medicine,
+    coalesce(a.name, rep.name) as seller, coalesce(nullif(trim(c.city), ''), 'No city written') as city, i.id as invoice,
+    oi.qty::bigint as qty, (oi.qty::bigint * oi.unit_price) as amount
+  from invoice i join sales_order o on o.id = i.order_id join order_item oi on oi.order_id = i.order_id
+    join medicine m on m.id = oi.medicine_id join customer c on c.id = i.customer_id join person rep on rep.id = o.medrep_id
+    left join seat st on st.id = o.seat_id left join area a on a.id = st.area_id
+  where i.status <> 'cancelled' and not oi.free
+  union all
+  select o.ordered_on, coalesce(m.name || coalesce(' ' || m.strength, ''), p.name),
+    coalesce(nullif(trim(o.seller), ''), 'No salesperson written'), coalesce(nullif(trim(c.city), ''), 'No city written'), -o.id,
+    p.qty::bigint, (p.qty::bigint * p.unit_price)
+  from past_order o join past_order_item p on p.past_order_id = o.id join customer c on c.id = o.customer_id
+    left join lateral (select x.id, x.name, x.strength from medicine x where x.sku = p.sku
+      or x.id = (select s.medicine_id from medicine_sku s where s.sku = p.sku limit 1) limit 1) m on true
+  where o.status in ('invoiced', 'partially_invoiced', 'closed') and not p.free
+) s`;
+
 type Column = Insight["columns"][number];
 const col = (key: string, label: string, kind: Column["kind"] = "text"): Column => ({ key, label, kind });
 
@@ -451,12 +472,69 @@ async function channelsReport(db: Database, asked: { from?: string | null; to?: 
   };
 }
 
+/** Zoho's "Sales Person item Sale" (its Analytics tab the office used): who sold which medicine,
+ *  how many and for how much, with what came back and was credited here. */
+async function salesByPersonMedicine(db: Database, asked: { from?: string | null; to?: string | null }): Promise<Insight> {
+  const { from, to } = period(asked);
+  const [sold, back] = await Promise.all([
+    rows<{ seller: string; medicine: string; qty: number; amount: number }>(
+      db,
+      sql`select s.seller, s.medicine, sum(s.qty)::float8 as qty, sum(s.amount)::float8 as amount
+        from ${SOLD_BY} where s.day between ${from}::date and ${to}::date group by 1, 2 order by 1, 4 desc`,
+    ),
+    // Goods back and credited in this CRM, by the day Management credited them.
+    rows<{ seller: string; medicine: string; qty: number; amount: number }>(
+      db,
+      sql`select coalesce(a.name, rep.name) as seller, m.name || coalesce(' ' || m.strength, '') as medicine,
+          sum(l.qty)::float8 as qty, sum(l.qty::bigint * l.unit_price)::float8 as amount
+        from sales_return r join sales_return_line l on l.return_id = r.id and l.outcome <> 'missing'
+          join medicine m on m.id = l.medicine_id join sales_order o on o.id = r.order_id join person rep on rep.id = o.medrep_id
+          left join seat st on st.id = o.seat_id left join area a on a.id = st.area_id
+        where r.credited_at is not null and r.credit > 0
+          and (r.credited_at at time zone 'Asia/Manila')::date between ${from}::date and ${to}::date
+        group by 1, 2`,
+    ),
+  ]);
+  const returned = new Map(back.map((row) => [`${row.seller}|${row.medicine}`, row]));
+  const found = sold.map((row) => {
+    const came = returned.get(`${row.seller}|${row.medicine}`);
+    return { ...row, returnedQty: came?.qty ?? 0, credited: came?.amount ?? 0 };
+  });
+  const sum = (key: "qty" | "amount" | "returnedQty" | "credited") => found.reduce((n, row) => n + row[key], 0);
+  return {
+    title: "Sales by salesperson and medicine",
+    note: `Sold ${from} to ${to}: the old system's invoiced orders and this CRM's billed ones, free pieces left out, under the salesperson's name on the target sheet. Returned and credited: this CRM's returns only.`,
+    columns: [col("seller", "Salesperson"), col("medicine", "Medicine"), col("qty", "Pieces", "number"), col("amount", "Sold", "money"), col("returnedQty", "Returned", "number"), col("credited", "Credited", "money")],
+    rows: found,
+    totals: { seller: "Total", qty: sum("qty"), amount: sum("amount"), returnedQty: sum("returnedQty"), credited: sum("credited") },
+  };
+}
+
+/** Zoho's "City Sale": what was sold into each city, by the customer's city. */
+async function salesByCity(db: Database, asked: { from?: string | null; to?: string | null }): Promise<Insight> {
+  const { from, to } = period(asked);
+  const found = await rows<{ city: string; orders: number; qty: number; amount: number }>(
+    db,
+    sql`select s.city, count(distinct s.invoice)::int as orders, sum(s.qty)::float8 as qty, sum(s.amount)::float8 as amount
+      from ${SOLD_BY} where s.day between ${from}::date and ${to}::date group by 1 order by 4 desc`,
+  );
+  return {
+    title: "Sales by city",
+    note: `Sold ${from} to ${to}, by the city on the customer's record (the old system's invoiced orders and this CRM's billed ones, free pieces left out).`,
+    columns: [col("city", "City"), col("orders", "Orders", "number"), col("qty", "Pieces", "number"), col("amount", "Sold", "money")],
+    rows: found,
+    totals: { city: "Total", orders: found.reduce((n, row) => n + row.orders, 0), qty: found.reduce((n, row) => n + row.qty, 0), amount: found.reduce((n, row) => n + row.amount, 0) },
+  };
+}
+
 export const INSIGHTS: Record<string, { roles: Role[]; run: (db: Database, asked: { from?: string | null; to?: string | null; by?: string | null }) => Promise<Insight> }> = {
   "sales-trend": { roles: SALES_ROLES, run: (db, asked) => salesTrend(db, asked) },
   customers: { roles: SALES_ROLES, run: customersReport },
   channels: { roles: SALES_ROLES, run: channelsReport },
   "sales-by-branch": { roles: SALES_ROLES, run: (db, asked) => salesByBranch(db, asked) },
   "top-medicines": { roles: SALES_ROLES, run: topMedicines },
+  "sales-by-person-medicine": { roles: SALES_ROLES, run: salesByPersonMedicine },
+  "sales-by-city": { roles: SALES_ROLES, run: salesByCity },
   "stock-aging": { roles: STOCK_ROLES, run: (db) => stockAging(db) },
   "stock-turnover": { roles: STOCK_ROLES, run: (db) => stockTurnover(db) },
   abc: { roles: SALES_ROLES, run: (db) => abc(db) },

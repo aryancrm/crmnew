@@ -341,9 +341,21 @@ export function Customer() {
           and what happened on the right. */}
       <div className="flex flex-wrap items-start gap-4">
         <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-4">
-          <Orders data={data} />
-          <Medicines data={data} />
-          <PricesGiven customerId={customer.id} />
+          {/* A customer known only from before this CRM: what they were given, at what price, their
+              old orders, invoices and payments come first (Aryan, 23 Nov: the office opened Zoho's
+              Sales for exactly this); the two empty "no orders yet" panels would only hide them. */}
+          {data.totals.orders === 0 ? (
+            <>
+              <PricesGiven customerId={customer.id} />
+              <Orders data={data} />
+            </>
+          ) : (
+            <>
+              <Orders data={data} />
+              <Medicines data={data} />
+              <PricesGiven customerId={customer.id} />
+            </>
+          )}
           <Money data={data} />
           {data.cases && (patient || data.cases.length > 0) && <Cases data={data} />}
         </div>

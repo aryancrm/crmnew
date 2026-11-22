@@ -3558,3 +3558,24 @@ lowest, each division's average; Scorecards opens every card.
   Business Mentor) and nine selling seats are on no sheet row. Zoho Books and Inventory could not
   be opened this turn (the Chrome extension was not connected; the app's own browser is not signed
   in to Zoho): the 18 Nov side-by-side in docs/BOOKS-PLAN.md stands.
+- **23 Nov 2026 (Aryan: "build the reports; go through all of Zoho, how its workflow runs; the
+  office opens Zoho's Sales to see a hospital's name, what it was given last, at what price, and
+  whether anything is pending: one place for that here")** Zoho Books and Zoho Inventory were opened
+  in his Chrome, read only. Every section Zoho uses is here; Estimates, Recurring invoices,
+  Projects, Timesheets, Budgets, Composite items, Assemblies, Move orders and Putaways are empty in
+  Zoho itself; its custom module "Sales Person Target Report" holds two test rows from 2023. Zoho
+  Inventory has 13 users, 2 active (the orders reach it from the hub, reference GM-…). A customer's
+  Transactions tab there (invoices with balance, payments, sales orders) is the record the office
+  reads. **Built:** (1) *The customer's page is that one place*: beside Prices given (each
+  medicine's last price and every earlier one) and Earlier orders it now lists the old system's
+  **invoices** with what each still owes and its **payments** (`/api/customers/:id/prices`);
+  checked against Zoho for ACE Medical Center Palawan: the same four invoices (₱372,000; ₱9,000;
+  ₱12,540; ₱39,000) and three payments to the centavo. A customer with no order here yet shows
+  that old record first, not two empty panels. (2) Report **Sales by Salesperson and Medicine**
+  (Zoho's "Sales Person item Sale") and (3) **Sales by City** (Zoho's "City Sale"), both in
+  Reports → Sales, on the same lines as Top Medicines; June 2026 on the real copy: ₱31,840,850.67
+  (Zoho's own dashboard says ₱31,695,681.78 by invoice day; here an order counts on its order day).
+  Most customers have no city written, as in Zoho, where the blank city is the largest row too.
+  (4) The stock report says who each batch was **bought from** (on screen and in the Excel file):
+  362 of 521 batch rows on the real copy. (5) A medicine's page lists the **orders holding** its
+  promised pieces (Zoho's Committed Stock Details), for the desks that see every order.
