@@ -315,7 +315,7 @@ export const leadOfBox = (box: SQL, today: string): SQL =>
  *  come last, so the rows add up to the company's figure. */
 export async function sheetChannelSales(db: Database, facts: MonthFacts): Promise<ChannelFigures[]> {
   const today = facts.today;
-  const found = await rows<{ id: number; name: string; business: string; own: boolean; manager: string | null; head: string | null; target: number | null; sold: number; today: number }>(
+  const found = await rows<{ id: number; name: string; business: string; own: boolean; manager: string | null; head: string | null; target: number | null; sold: number; today: number; people: number; customers: number }>(
     db,
     sql`with recursive ${SHEET_PLACE},
       sold as (
@@ -329,7 +329,12 @@ export async function sheetChannelSales(db: Database, facts: MonthFacts): Promis
         from seat st join place pl on pl.id = st.unit_id join org_unit box on box.id = pl.box left join sold so on so.seat_id = st.id
         group by 1, 2)
       select box.id::int as id, box.name, biz.name as business, box.id = biz.id as own,
-        ${leadOfBox(sql`box.id`, today)} as manager, ${leadOfBox(sql`biz.id`, today)} as head, f.target, f.sold, f.today
+        ${leadOfBox(sql`box.id`, today)} as manager, ${leadOfBox(sql`biz.id`, today)} as head, f.target, f.sold, f.today,
+        (select count(distinct lh.person_id) from seat st join place pl on pl.id = st.unit_id
+            join seat_holder lh on lh.seat_id = st.id and lh.kind = 'holder' and ${inForce("lh", today)}
+          where st.active and pl.box = box.id)::int as people,
+        (select count(*) from customer c where c.active and c.area_id in
+          (select st.area_id from seat st join place pl on pl.id = st.unit_id where pl.box = box.id and st.area_id is not null))::int as customers
       from figures f join org_unit box on box.id = f.box join org_unit biz on biz.id = f.business
       where biz.kind = 'business' and (f.sold > 0 or f.target is not null or f.selling)
       order by biz.sort, biz.id, box.id = biz.id, box.sort, box.id`,
@@ -339,13 +344,15 @@ export async function sheetChannelSales(db: Database, facts: MonthFacts): Promis
     sql`select coalesce(sum(i.total), 0)::float8 as sold, coalesce(sum(i.total) filter (where i.issued_on = ${today}::date), 0)::float8 as today
       from sale_invoice i where ${soldIn(facts)}`,
   );
-  const listed = found.map((row) => ({
+  const listed: ChannelFigures[] = found.map((row) => ({
     id: row.id,
     code: "",
     name: row.name,
     // Who manages it (its own lead, else the business's head), then the business it is under.
     head: [row.manager ?? row.head ?? "No manager named", row.own ? null : row.business].filter(Boolean).join(" · "),
     business: row.business as string | null,
+    people: row.people,
+    customers: row.customers,
     target: row.target,
     sold: row.sold,
     today: row.today,

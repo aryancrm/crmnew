@@ -358,12 +358,27 @@ export async function teamBoard(
     ),
   ]);
   const holders = seats.flatMap((seat) => (seat.personId ? [seat.personId] : []));
-  const [targets, needs] = await Promise.all([
+  const [targets, seatTargets, seatedTargets, needs] = await Promise.all([
     rows<{ personId: number; month: string; amount: number }>(
       db,
       sql`select person_id::int as "personId", ${day("month")} as month, amount::float8 as amount from sales_target
         where month between date_trunc('month', ${from}::date) and date_trunc('month', ${to}::date)
           and person_id in (${ids(holders)})`,
+    ),
+    // The targets set on the seats themselves (the target sheet's): a vacant seat's counts too, and
+    // someone holding two seats has each seat's own, so this adds up to the CEO Home's figure.
+    rows<{ seatId: number; month: string; amount: number }>(
+      db,
+      sql`select seat_id::int as "seatId", ${day("month")} as month, amount::float8 as amount from seat_target
+        where month between date_trunc('month', ${from}::date) and date_trunc('month', ${to}::date)
+          and seat_id in (${list})`,
+    ),
+    // Holders whose target sits on a seat of theirs (maybe another one than those shown here).
+    rows<{ personId: number }>(
+      db,
+      sql`select distinct h.person_id::int as "personId" from seat_holder h join seat_target t on t.seat_id = h.seat_id
+        where h.kind = 'holder' and ${inForce("h", today)} and h.person_id in (${ids(holders)})
+          and t.month between date_trunc('month', ${from}::date) and date_trunc('month', ${to}::date)`,
     ),
     teamNeeds(db, seatIds, today),
   ]);
@@ -402,13 +417,21 @@ export async function teamBoard(
           }
         : null,
       acting: seat.actingName ? { name: seat.actingName, until: seat.actingUntil } : null,
-      target: seat.personId
+      // The seat's own target; a month from before seats had targets: its holder's (never when the
+      // holder's target is on another seat of theirs, so one target is not counted on two seats).
+      target: seatTargets.some((row) => row.seatId === seat.seatId)
         ? prorated(
-            targets.filter((row) => row.personId === seat.personId),
+            seatTargets.filter((row) => row.seatId === seat.seatId),
             from,
             to,
           )
-        : null,
+        : seat.personId && !seatedTargets.some((row) => row.personId === seat.personId)
+          ? prorated(
+              targets.filter((row) => row.personId === seat.personId),
+              from,
+              to,
+            )
+          : null,
       sold: sumOf(sold, seat.seatId, (row) => row.amount),
       today: soldDays.get(today) ?? 0,
       collected: sumOf(collected, seat.seatId, (row) => row.amount),

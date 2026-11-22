@@ -3160,3 +3160,9 @@ lowest, each division's average; Scorecards opens every card.
   (Claire's ₱500,000 sat on her Mindanao coach seat as well as on her B2B seat and made HOSP's
   target too high). The first eight channels still decide each seat's screens and an order's
   channel; only these two lists changed. Local only.
+- **22 Nov 2026 (Aryan: "align it, not one thing here and another there"; "did the CEO Home lose
+  data?")** One target everywhere: the Company tree, Divisions and every lead's board now read each
+  seat's own target (the sheet's; a vacant seat's too, and someone on two seats is counted once),
+  so the tree's total is the CEO Home's, ₱57,642,166 (it read ₱53.3M). A month from before seats
+  had targets still reads its holder's. The CEO Home's channel rows had lost "N people · N
+  customers" when they moved to the sheet's channels; they show it again. Local only.

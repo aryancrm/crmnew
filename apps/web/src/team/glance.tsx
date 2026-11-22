@@ -496,7 +496,7 @@ export function ChannelSalesCard({
     >
       <Bars
         rows={shown.map((row) => {
-          const more = extra.get(row.code);
+          const more = row.people != null ? { people: row.people, customers: row.customers ?? 0 } : extra.get(row.code);
           return {
             // The sheet's channels are named by their box on the Company tree (no code).
             key: row.code || `box-${row.id}`,

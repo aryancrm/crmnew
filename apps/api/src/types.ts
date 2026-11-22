@@ -1976,6 +1976,9 @@ export type ChannelFigures = {
   head: string | null;
   /** The business the channel is under on the Company tree (the sheet's channels, 22 Nov). */
   business?: string | null;
+  /** People in the channel's seats and the customers in their areas (the sheet's channels). */
+  people?: number;
+  customers?: number;
   target: number | null;
   sold: number;
   today: number;
