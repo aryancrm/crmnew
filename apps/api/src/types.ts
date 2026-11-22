@@ -6447,3 +6447,44 @@ export type Profile = {
 };
 /** The sign-in's answer: in, or the password was right and the code is asked next. */
 export type SignInAnswer = { me: Me; twoStep?: undefined } | { twoStep: true; ticket: string; me?: undefined };
+
+// ---- Sign-ups (account/sign-up.ts)
+
+export type SignUpInput = {
+  firstName: string;
+  middleName?: string | null;
+  lastName: string;
+  suffix?: string | null;
+  email: string;
+  phone: string;
+  /** What they say they work in: it grants nothing. */
+  department: string;
+};
+export type SignUpRow = {
+  id: number;
+  name: string;
+  firstName: string;
+  middleName: string | null;
+  lastName: string;
+  suffix: string | null;
+  email: string;
+  phone: string;
+  department: string;
+  departmentLabel: string;
+  status: "pending" | "accepted" | "declined";
+  createdAt: string;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  reason: string | null;
+  emailedAt: string | null;
+  emailProblem: string | null;
+  account: "waiting" | "expired" | "ready" | "left" | null;
+  /** Whose account already has this email. */
+  knownAs: string | null;
+  /** A colleague of the same name. */
+  sameName: string | null;
+};
+export type SignUpList = { rows: SignUpRow[]; mailFrom: string | null };
+/** `link` only when the email didn't go, for the Admin to pass on. */
+export type SignUpSent = { email: string; emailed: boolean; problem: string | null; link: string | null };
+export type WelcomeInfo = { firstName: string; email: string; seatLogin: string | null; department: string | null };

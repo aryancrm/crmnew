@@ -14,6 +14,7 @@ import { secureHeaders } from "hono/secure-headers";
 import { z } from "zod";
 import { accountEvent } from "./account/events";
 import { accountRoutes } from "./account/routes";
+import { signUpRoutes } from "./account/sign-up-routes";
 import { deviceCookie, deviceMark, passwordGuard } from "./auth/guard";
 import { makeTicket, readTicket, spendTicket, twoStepOn, useCode } from "./auth/two-step";
 import { hashPassword, passwordProblem } from "./auth/password";
@@ -286,7 +287,7 @@ export function createApp(db: Database, options: AppOptions) {
       throw new Refusal(
         403,
         "password_pending",
-        "This login needs a one-time password. Ask your administrator for yours.",
+        "This login has no password yet. Use the link in your acceptance email, or ask your administrator for a one-time password.",
         "email",
       );
     if (!(await passwordRight(found, input.password, getCookie(c, deviceCookie(found.id))))) throw wrong;
@@ -433,6 +434,7 @@ export function createApp(db: Database, options: AppOptions) {
     return c.json({ ok: true });
   });
   accountRoutes(app, db, signedIn, passwordRight);
+  signUpRoutes(app, db, signedIn, options.webUrl);
 
   inventoryRoutes(app, db, signedIn);
   notifyRoutes(app, db, signedIn);

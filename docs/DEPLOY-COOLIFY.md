@@ -85,6 +85,8 @@ instances yet.
   `pnpm --filter @2mg/api passwords --role=admin --apply` (one Admin: shown on the screen), then
   the rest from Admin panel → Teams & people, or `--all --apply --out=<a file outside the repository>`.
 - Sign in with that one-time password: it asks for a password of your own first.
+- Admin panel → **Online pages & mail**: connect a mailbox, then accept a test sign-up. Acceptance
+  emails go from the first connected mailbox; their link is built from `WEB_URL`.
 - Admin panel → **Data checks**: all green.
 - Upload a photo on an order. It should open again, so the bucket settings are right.
 - Coolify → `crmnew-api` → Logs: no `couldn't` lines from automations, org or channels.

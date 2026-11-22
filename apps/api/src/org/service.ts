@@ -649,7 +649,13 @@ function startDay(asked: string | null | undefined, today: string): string {
 }
 
 /** A new person: their login and the seat they sit in. The password is answered once. */
-export async function addPerson(db: Database, me: Me, input: OrgPersonInput): Promise<OrgLogin> {
+export async function addPerson(
+  db: Database,
+  me: Me,
+  input: OrgPersonInput,
+  /** More to write in the same transaction (a sign-up accepted); refusing there undoes it all. */
+  also?: (tx: Runner, made: { personId: number; seatId: number; module: Role }) => Promise<void>,
+): Promise<OrgLogin> {
   allow(me, ORG_CHANGE_ROLES, "add people");
   const name = input.name.trim();
   // Their own email is only a way to reach them; they sign in with the seat's login ID.
@@ -739,6 +745,7 @@ export async function addPerson(db: Database, me: Me, input: OrgPersonInput): Pr
       sql`insert into employee (person_id, hire_date, position, mobile, employee_code, created_by)
         values (${personId}, ${starts}::date, ${seat.title}, ${clean(input.phone)}, ${code}, ${me.id})`,
     );
+    await also?.(tx, { personId, seatId, module: seat.module as Role });
     // Its login ID now signs this person in.
     await fillSeatLogins(tx);
     const [login] = await rows<{ login: string | null }>(

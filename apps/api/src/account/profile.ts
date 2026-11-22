@@ -19,7 +19,7 @@ import { ACCOUNT_EVENT, type AccountEventKind, accountEvent } from "./events";
 
 export const SUFFIXES = ["Jr.", "Sr.", "II", "III", "IV", "V"] as const;
 const NAME = /^\p{Script=Latin}[\p{Script=Latin} .'’-]*$/u;
-const PHONE = /^\+?[0-9][0-9 -]{6,18}$/;
+export const PHONE = /^\+?[0-9][0-9 -]{6,18}$/;
 const EMAIL = /^[^\s@<>()",;:]+@[^\s@<>()",;:]+\.[^\s@<>()",;:]+$/;
 const YOUNGEST = 16;
 const OLDEST = 100;
@@ -36,7 +36,7 @@ export function shownName(one: { first: string; middle: string | null; last: str
     .join(" ");
 }
 
-const folded = (text: string) =>
+export const folded = (text: string) =>
   text
     .normalize("NFD")
     .replace(/\p{M}/gu, "")
@@ -136,7 +136,7 @@ export async function profileOf(db: Database, me: Me, token: string): Promise<Pr
   };
 }
 
-function namePart(value: string | null | undefined, field: string, label: string): string | null {
+export function namePart(value: string | null | undefined, field: string, label: string): string | null {
   const text = (value ?? "").normalize("NFC").trim().replace(/\s+/g, " ");
   if (!text) return null;
   if (text.length > 60) throw new Refusal(400, "invalid", `Keep the ${label} to 60 letters.`, field);

@@ -6,6 +6,8 @@ import { rows } from "../db/index";
 import type { Runner } from "../inventory/service";
 
 export const ACCOUNT_EVENT = {
+  accepted: "Sign-up accepted",
+  password_set: "Password set from the acceptance email",
   name: "Name changed",
   details: "Personal details changed",
   contact: "Contact details changed",
