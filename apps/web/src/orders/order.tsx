@@ -14,6 +14,7 @@ import { api } from "../api";
 import { useMe } from "../auth";
 import { DISPATCH_HOLDS, type DispatchAsk, DispatchDialogs } from "../dispatch/parts";
 import { ConfirmPaymentDialog, InvoiceStatus, useMoney } from "../finance/parts";
+import { rememberConfirm } from "../finance/undo";
 import { ApproveDialog, shipsFromOf } from "./approve-dialog";
 import { ReasonDialog, StatusPill, shortSpan, useOrderAction } from "./parts";
 import { AskUpBox } from "./asks";
@@ -542,13 +543,15 @@ export function Order() {
                       financeReady
                         ? can.confirm_payment
                           ? "The money is in the bank: record it and send the order to Dispatch"
-                          : "Makes the invoice and sends the order to Dispatch"
+                          : "Sends the order to Dispatch (its invoice is made already)"
                         : "Approve or hold what is marked first"
                     }
                     onClick={() =>
                       can.confirm_payment
                         ? setConfirmingPayment(true)
-                        : money.send(`/api/finance/orders/${order.id}/invoice`, {})
+                        : money
+                            .send(`/api/finance/orders/${order.id}/invoice`, {})
+                            .then((done) => done && rememberConfirm(order.id, order.code, true))
                     }
                     className="rounded-lg bg-brand px-2 py-1 text-[11px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
                   >
@@ -1378,7 +1381,7 @@ export function Order() {
                 <div className="flex flex-col gap-3 text-[13px]">
                   <p className="text-slate-600">
                     {["finance_check", "ready_for_invoice"].includes(order.status)
-                      ? "With Finance now: they check the payment (or what the customer owes) and make the invoice."
+                      ? "With Finance now: they check the payment (or what the customer owes) and send it to Dispatch."
                       : order.status === "pending_approval" || order.status === "draft"
                         ? "Comes to Finance once Management approves."
                         : "Finance checked it."}

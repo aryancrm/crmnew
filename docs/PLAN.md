@@ -3424,3 +3424,38 @@ lowest, each division's average; Scorecards opens every card.
   card ("Answered: …") and on the order page (it was only a line on the timeline). Tests: the
   approve helper stocks the shelf with exactly what an order is short of (`testing/approve.ts`,
   `shelfUp` / `shelfBack`). 500 API tests. Not re-run: `scripts/a-to-z.ts`. Local only.
+- **23 Nov 2026 (Aryan: "Finance too: every option opened, every button pressed, every case;
+  refund orders come there, and PAP's")** Finance walked by its own login on the demo copy: Home
+  (Cards, Table, Board, every tab, I'll handle it, Hold with its screenshots, Take off hold), an
+  order's four checks and Paid, Prepaid orders, Due payments, Refunds owed, Invoices and one
+  invoice, Payments received, Customers owe, the statement, Returns, My confirmations, Team figures.
+  Hand-run: a paid-first order (no tick, no slip, too much, part payment, undo, held and answered),
+  credit and cash on delivery, money on an invoice (tax withheld, deducted, taken off), a paid
+  order cancelled (refund in money, and kept as credit), that credit used on the next order, a
+  return after delivery through Management, Dispatch and Finance, and a guarantee letter's order
+  (the agency short, the patient's part, the rest let go) through the screen. **Put right:**
+  (1) *Money lost on a return.* A bill paid partly from the customer's credit and then lowered by
+  a return gave back only the money part; the part paid from credit vanished. It is the customer's
+  credit again (`creditBack`, finance/credit.ts; test in returns.test.ts). (2) *Refunds owed badge*
+  counted only cancelled orders; a return's refund showed no count. One count now for the menu and
+  the board (`refundsOwedCountSql`). (3) *An invoice paid beyond its bill* had no "Give money back"
+  on its own page and printed "Balance Due -1,300" with no line for the return: it has the button,
+  a "Returned goods credited" line, "Given back" and "To give back". (4) *Customer's page:* Paid
+  was the listed payments added up (a cancelled order's money and a used credit counted twice, a
+  refund never taken off) and Bought ignored returns; both now come from the bills (billed less
+  returns; settled less given back), as the statement of account has them. (5) *Payments received:*
+  "Collected" counted credit, deductions and tax withheld as money; it is money only, as Finance's
+  Home counts it, the rest said beside it. (6) *A paid-first invoice waiting for Finance's check*
+  read "Overdue by 1 day" the next morning: it reads "Payment to check". (7) *The customer's
+  credit* was told only under Owed before and Paid: the Payment check now says it with "Use their
+  credit". (8) *Sending a credit order on* from a card or the order page had no Undo (the API
+  allowed it for 90 seconds): the same Undo bar as a confirmed payment; "Send on the N with nothing
+  found" asks once before sending several. (9) *A database with no bank account in Books* (a new
+  one) could record no payment: the form no longer stops there, and never asks for an account when
+  no money moves (a shortfall let go). (10) Words: the invoice is made at Management's approval,
+  so "make the invoice / To invoice / Invoice the N" are "send to Dispatch / Credit check / Send
+  on the N"; Refunds owed says refunds, not cancelled orders; a letter's shortfall reads "let go by
+  the company", not "deducted by the customer"; Due payments opens on the terms that have a late
+  payment; a card names its channel once. **Asked of Aryan, not decided:** a refund by bank, GCash
+  or check is saved without a reference number; a paid-first order confirmed with less than the
+  bill still goes to Dispatch (the rest lands in Due payments).

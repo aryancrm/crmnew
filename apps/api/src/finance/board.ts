@@ -12,7 +12,7 @@ import { day, iso } from "../inventory/service";
 import { POINT_CENTAVOS } from "../points/service";
 import type { FinanceBoard, FinanceCollect, FinanceOrderCard, Me } from "../types";
 import { FINANCE_READ_ROLES, FINANCE_ROLES } from "./rules";
-import { duesSql, notDueSql } from "./dues";
+import { duesSql, notDueSql, refundsOwedCountSql } from "./dues";
 
 const LANE_SIZE = 100;
 
@@ -76,9 +76,7 @@ export async function financeBoard(db: Database, me: Me): Promise<FinanceBoard> 
             where i.status = 'open' and ${onDelivery})::float8 as "onDelivery",
           -- Refunds owed, as Finance's Refunds list counts them: a cancelled order's money, and
           -- money paid beyond a bill a return lowered.
-          ((select count(*) from invoice i join sales_order o on o.id = i.order_id where i.status = 'cancelled' and o.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit', 'deduction')) > i.refunded)
-            + (select count(*) from invoice i where i.status <> 'cancelled' and least(i.paid - i.refunded - i.total,
-                i.paid - i.refunded - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit', 'deduction'))) > 0))::int as refunds,
+          ${refundsOwedCountSql}::int as refunds,
           (select count(*) from sales_order o where o.status in ('on_hold', 'exception')
             and (o.held_role = 'finance' or o.held_from in ('finance_check', 'ready_for_invoice')))::int as held,
           (select count(*) from sales_order o where o.status = 'pending_approval')::int as coming,

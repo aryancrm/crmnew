@@ -32,6 +32,7 @@ export function PaidStep({
   const byAgency = sumOf((payment) => payment.method !== "deduction" && payment.payer === "agency");
   const letGo = sumOf((payment) => payment.method === "deduction" && payment.deductionKind === "gl_waived");
   const byPatient = sumOf((payment) => payment.method !== "deduction" && payment.payer !== "agency");
+  const notCash = sumOf((payment) => ["points", "withholding", "credit", "deduction"].includes(payment.method));
   const whoOf = (payment: (typeof live)[number]) =>
     !gl
       ? ""
@@ -73,7 +74,8 @@ export function PaidStep({
             {(
               [
                 ["Total", invoice.total],
-                ["Received", invoice.paid],
+                // Settled without money too (let go, tax withheld, deducted, credit, points).
+                [notCash > 0 ? "Settled" : "Received", invoice.paid],
                 ["Still owed", invoice.balance],
               ] as [string, number][]
             ).map(([label, value]) => (
@@ -83,6 +85,12 @@ export function PaidStep({
               </div>
             ))}
           </dl>
+          {notCash > 0 && (
+            <p className="-mt-1 text-xs text-ink-2">
+              {peso(invoice.paid - notCash)} came as money; {peso(notCash)} was settled without money
+              (let go, tax withheld, deducted, or paid from credit or points).
+            </p>
+          )}
           {data.money.payments.length > 0 && (
             <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 text-[13px]">
               {data.money.payments.map((payment) => (

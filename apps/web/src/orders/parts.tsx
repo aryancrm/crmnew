@@ -602,7 +602,7 @@ export function OrderChecksBox({
           "Send to Finance",
           finance,
           finance
-            ? "Finance checks the payment or makes the invoice first"
+            ? "Finance checks the payment, or what the customer owes, first"
             : "The invoice is made at once; Finance records the money when it comes",
           false,
           onFinance,

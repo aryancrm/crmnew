@@ -11,6 +11,7 @@
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { DISPATCH_ROLES } from "../dispatch/rules";
+import { creditBack } from "../finance/credit";
 import { vatSplit } from "../finance/rules";
 import { allow, Refusal } from "../http";
 import { clean, iso, logMove, putIn, type Runner } from "../inventory/service";
@@ -285,8 +286,21 @@ async function applyCredit(
         where id = ${invoice.id}`,
     );
     const over = invoice.paid - invoice.refunded - (invoice.total - amount);
-    if (over > 0)
-      refundNote = ` ${peso(over)} was already paid beyond the new bill: Finance gives it back.`;
+    if (over > 0) {
+      // Only money is given back as money. What was paid beyond the new bill from the customer's
+      // own credit is their credit again (it was lost before: Refunds owed counts cash only).
+      const [nonCash] = await rows<{ amount: number }>(
+        tx,
+        sql`select coalesce(sum(amount), 0)::int as amount from payment
+          where invoice_id = ${invoice.id} and active and method in ('points', 'withholding', 'credit', 'deduction')`,
+      );
+      const cash = Math.max(0, invoice.paid - invoice.refunded - (nonCash?.amount ?? 0));
+      const back = over > cash ? await creditBack(tx, me, invoice.id, over - cash) : 0;
+      const give = Math.min(over - back, cash);
+      refundNote = `${give > 0 ? ` ${peso(give)} was already paid beyond the new bill: Finance gives it back.` : ""}${
+        back > 0 ? ` ${peso(back)} of what was paid came from the customer's credit: it is their credit again.` : ""
+      }`;
+    }
   }
   await tx.execute(
     sql`update sales_return set status = 'received', credit = ${credit}, credited_by = ${me.id}, credited_at = now() where id = ${found.id}`,

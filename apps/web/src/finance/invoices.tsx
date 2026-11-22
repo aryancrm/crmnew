@@ -193,7 +193,12 @@ export function Invoices() {
                   <td
                     className={`num whitespace-nowrap ${row.balance > 0 ? "font-semibold" : "text-ink-2"}`}
                   >
-                    {peso(row.balance)}
+                    {/* Paid beyond the bill (a return lowered it): it is on Refunds owed. */}
+                    {row.balance < 0 ? (
+                      <span className="font-semibold text-amber-700">{peso(-row.balance)} to give back</span>
+                    ) : (
+                      peso(row.balance)
+                    )}
                   </td>
                 </tr>
               ))}
@@ -239,7 +244,7 @@ export function Invoice() {
   if (!data) return <PageState query={query} what="this invoice" />;
   const { invoice, can } = data;
   const active = data.payments.filter((payment) => payment.active);
-  const owedBack = invoice.paid - invoice.refunded;
+  const owedBack = invoice.refundOwed;
   const fields: [string, string][] = [
     ["Doctor Name", invoice.doctor ?? ""],
     ["Invoicing From", invoice.invoiceFromLabel],
@@ -510,8 +515,8 @@ function InvoicePaper({ data }: { data: InvoiceDetail }) {
         <div className="text-left sm:text-right">
           <div className="text-[34px] leading-none font-light text-black">Invoice</div>
           <div className="mt-2 text-[12px] font-semibold text-black"># {invoice.code}</div>
-          <div className="mt-5 text-[11px] font-semibold text-black">Balance Due</div>
-          <div className="text-[15px] font-semibold text-black">{php(invoice.balance)}</div>
+          <div className="mt-5 text-[11px] font-semibold text-black">{invoice.balance < 0 ? "To give back" : "Balance Due"}</div>
+          <div className="text-[15px] font-semibold text-black">{php(invoice.balance < 0 ? invoice.refundOwed : invoice.balance)}</div>
         </div>
       </div>
 
@@ -534,11 +539,20 @@ function InvoicePaper({ data }: { data: InvoiceDetail }) {
             exempt: invoice.exempt > 0,
             zeroRated: invoice.zeroRated > 0,
           })}
+          {/* Goods returned and credited: the line between the lines' sum and the bill's total. */}
+          {invoice.credited > 0 && (
+            <TotalRow label="Returned goods credited" value={`(-) ${plain(invoice.credited)}`} red />
+          )}
           <TotalRow label="Total" value={php(invoice.total)} strong />
           {invoice.paid > 0 && (
             <TotalRow label="Payment Made" value={`(-) ${plain(invoice.paid)}`} red />
           )}
-          <TotalRow label="Balance Due" value={php(invoice.balance)} strong shaded />
+          {invoice.refunded > 0 && <TotalRow label="Given back" value={plain(invoice.refunded)} />}
+          {invoice.balance < 0 ? (
+            <TotalRow label="To give back" value={php(invoice.refundOwed)} strong shaded />
+          ) : (
+            <TotalRow label="Balance Due" value={php(invoice.balance)} strong shaded />
+          )}
         </tbody>
       </table>
 

@@ -67,11 +67,17 @@ export async function customerPage(db: Database, me: Me, id: number): Promise<Cu
         where o.customer_id = ${id} and o.status <> 'draft'
         order by o.created_at desc, o.id desc limit ${LIMIT}`,
       ),
-      rows<{ orders: number; bought: number; firstAt: string | null; lastAt: string | null }>(
+      // Bought is what was billed: an order's invoice once it has one (returns credited come off
+      // it), its own total before. Paid is what is settled on those bills, less what was given
+      // back; it was the listed payments added up, which counted a cancelled order's money and a
+      // credit twice and never took a refund off (23 Nov).
+      rows<{ orders: number; bought: number; paid: number; firstAt: string | null; lastAt: string | null }>(
         db,
-        sql`select count(*)::int as orders, coalesce(sum(o.total) filter (where o.status <> 'cancelled'), 0)::float8 as bought,
+        sql`select count(*)::int as orders, coalesce(sum(coalesce(v.total, o.total)), 0)::float8 as bought,
+          coalesce(sum(v.paid - v.refunded), 0)::float8 as paid,
           ${iso("min(o.created_at)")} as "firstAt", ${iso("max(o.created_at)")} as "lastAt"
-        from sales_order o where o.customer_id = ${id} and o.status not in ('draft', 'cancelled')`,
+        from sales_order o left join invoice v on v.order_id = o.id and v.status <> 'cancelled'
+        where o.customer_id = ${id} and o.status not in ('draft', 'cancelled')`,
       ),
       rows<CustomerPage["medicines"][number]>(
         db,
@@ -220,7 +226,7 @@ export async function customerPage(db: Database, me: Me, id: number): Promise<Cu
       zohoDays: zoho?.days ?? 0,
       firstOrderAt: counted[0]?.firstAt ?? null,
       lastOrderAt: counted[0]?.lastAt ?? null,
-      paid: payments.reduce((sum, payment) => sum + payment.amount, 0),
+      paid: counted[0]?.paid ?? 0,
     },
     orders: orders.map((order) => {
       const invoice =

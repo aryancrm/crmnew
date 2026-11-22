@@ -40,6 +40,7 @@ import { api } from "../api";
 import { useMe } from "../auth";
 import { DISPATCH_HOLDS, type DispatchAsk, DispatchDialogs } from "../dispatch/parts";
 import { ConfirmPaymentDialog, useMoney } from "../finance/parts";
+import { rememberConfirm } from "../finance/undo";
 import { avatarTone, dayHeading, initials, PRIMARY_SM, QUIET_SM } from "../look";
 import { Checks, checksOf } from "./checks";
 import { ReasonDialog, useOrderAction, waited } from "./parts";
@@ -106,7 +107,7 @@ const DESK_HOME: Record<Desk, BoardTab> = {
 const STEP_LINE: { status: OrderStatus; label: string }[] = [
   { status: "pending_approval", label: "Waiting" },
   { status: "finance_check", label: "Payment check" },
-  { status: "ready_for_invoice", label: "To invoice" },
+  { status: "ready_for_invoice", label: "Credit check" },
   { status: "ready_for_dispatch", label: "To pack" },
   { status: "packing", label: "Packed" },
   { status: "shipped", label: "On the way" },
@@ -385,6 +386,12 @@ export function OrdersToCheck({
   const headCount = data.counts[defaultTab] ?? 0;
 
   async function approveClean() {
+    // Several orders at one press: asked once, so a stray click sends nothing.
+    if (
+      finance &&
+      !window.confirm(`Send these ${clean.length} orders to Dispatch? Nothing was found on them: on credit or cash on delivery, the customer owes nothing late.`)
+    )
+      return;
     setApprovingAll(true);
     for (const card of clean) {
       const done = finance
@@ -445,7 +452,10 @@ export function OrdersToCheck({
             : undefined
       }
       onConfirm={() => setConfirming(card)}
-      onInvoice={() => money.send(`/api/finance/orders/${card.id}/invoice`, {})}
+      onInvoice={async () => {
+        // One press sends it on: the same 90-second Undo as a confirmed payment.
+        if (await money.send(`/api/finance/orders/${card.id}/invoice`, {})) rememberConfirm(card.id, card.code, true);
+      }}
       onDispatch={(what) =>
         setDispatching({
           what,
@@ -516,7 +526,7 @@ export function OrdersToCheck({
               disabled={busy || approvingAll}
             >
               <CheckCheck className="size-3.5 text-emerald-600" />
-              {approvingAll ? "Invoicing…" : `Invoice the ${clean.length} with nothing found`}
+              {approvingAll ? "Sending on…" : `Send on the ${clean.length} with nothing found`}
             </button>
           )}
           {!side && data.desk === "management" && (
@@ -942,7 +952,7 @@ function FinanceSteps({ card }: { card: OrderCard }) {
         <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
       </div>
       <p className="mb-2 line-clamp-2 text-[11px] leading-snug font-medium text-slate-800" title={warns.map((one) => one.note).join("\n") || undefined}>
-        {warns.length ? `Look at: ${warns.map((one) => one.note).join(", ")}` : card.status === "finance_check" ? "Everything checks out: check it and send it on" : "Everything checks out: make the invoice"}
+        {warns.length ? `Look at: ${warns.map((one) => one.note).join(", ")}` : card.status === "finance_check" ? "Everything checks out: check it and send it on" : "Everything checks out: send it to Dispatch"}
       </p>
       <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-slate-500">
         <span className="font-semibold text-slate-700">Finance check</span>
@@ -1190,7 +1200,8 @@ export function OrderCardItem({
             >
               {kind?.label}
             </span>
-            {card.channel && (
+            {/* Only when the Division chip beside the code doesn't say it already. */}
+            {card.channel && card.channel !== card.division && (
               <span className="max-w-[120px] truncate text-[10px] font-semibold text-slate-600">
                 {card.channel}
               </span>
@@ -2079,7 +2090,7 @@ function OrdersCardTable({
 const LANES: { key: OrderStatus; label: string; also?: OrderStatus[]; dot: string }[] = [
   { key: "pending_approval", label: "Waiting", dot: "bg-violet-500" },
   { key: "finance_check", label: "Payment check", dot: "bg-amber-500" },
-  { key: "ready_for_invoice", label: "To invoice", dot: "bg-amber-500" },
+  { key: "ready_for_invoice", label: "Credit check", dot: "bg-amber-500" },
   { key: "ready_for_dispatch", label: "To pack", dot: "bg-sky-500" },
   { key: "packing", label: "Packed", dot: "bg-sky-500" },
   { key: "shipped", label: "On the way", dot: "bg-teal-500" },

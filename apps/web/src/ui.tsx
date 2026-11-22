@@ -417,7 +417,7 @@ export function Dialog({
         if (pressedOutside.current && event.target === event.currentTarget && !busy) onClose();
         pressedOutside.current = false;
       }}
-      className={`m-auto ${wide ? "w-[min(48rem,calc(100vw-2rem))]" : "w-[min(40rem,calc(100vw-2rem))]"} max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-900/40`}
+      className={`m-auto ${wide ? "w-[min(48rem,calc(100vw-2rem))]" : "w-[min(40rem,calc(100vw-2rem))]"} max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-900/40`}
     >
       <div className="p-5 text-sm sm:p-6">
         <header className="mb-5 flex items-start justify-between gap-3">

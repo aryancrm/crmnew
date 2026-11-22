@@ -1664,6 +1664,10 @@ export type RefundRow = {
 
 export type InvoiceDetail = {
   invoice: InvoiceRow & {
+    /** Taken off the bill by returns Management credited. */
+    credited: number;
+    /** What Finance still gives back as money (a cancelled invoice, or paid beyond the bill). */
+    refundOwed: number;
     vatable: number;
     vat: number;
     exempt: number;

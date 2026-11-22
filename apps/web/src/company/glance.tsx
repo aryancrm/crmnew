@@ -15,7 +15,7 @@ const PALETTE = ["#1f9d55", "#2563eb", "#f59e0b", "#e11d48", "#7c3aed", "#0d9488
 const STEP: Record<string, string> = {
   pending_approval: "At Management",
   finance_check: "At Finance",
-  ready_for_invoice: "To invoice",
+  ready_for_invoice: "Credit check",
   ready_for_dispatch: "To pack",
   packing: "Packing",
   shipped: "On the road",

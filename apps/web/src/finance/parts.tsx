@@ -104,11 +104,21 @@ export function useMoneyAccount(method: PaymentMethod) {
   };
   const [value, setValue] = useState(read);
   const [missing, setMissing] = useState(false);
+  // The books' bank, cash and e-wallet accounts (the form's list reads the same answer).
+  const accounts = useQuery({
+    queryKey: ["finance", "money-accounts"],
+    queryFn: () => api<MoneyAccounts>("/api/finance/money-accounts"),
+    staleTime: 10 * 60_000,
+  });
+  // Books with no bank or cash account yet (a new database): there is nothing to pick, so the
+  // money is recorded without one instead of the form stopping for ever.
+  const none = accounts.data?.accounts.length === 0;
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new way of paying brings its own last account
   useEffect(() => setValue(read()), [key]);
   return {
-    value,
+    value: none ? "" : value,
     missing,
+    none,
     set(next: string) {
       setValue(next);
       setMissing(false);
@@ -118,6 +128,7 @@ export function useMoneyAccount(method: PaymentMethod) {
     },
     /** True when one is picked; else the form says so. */
     ready() {
+      if (none) return true;
       setMissing(!value);
       return Boolean(value);
     },
@@ -215,6 +226,12 @@ function HowFields({
           </select>
         )}
       </Field>
+      {account.none && (
+        <p className="-mt-2 text-xs text-slate-500">
+          Books has no bank, cash or e-wallet account yet (Books → Chart of accounts): it is recorded
+          without one.
+        </p>
+      )}
       <Field
         label={method === "check" ? "Check number and bank" : "Reference (bank or GCash reference)"}
         error={at("reference")}
@@ -489,7 +506,8 @@ export function RecordPaymentDialog({
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!account.ready()) return;
+    // Nothing in cash (a shortfall let go, tax withheld only) went through no account.
+    if (typed > 0 && !account.ready()) return;
     const done = await money.send(`/api/invoices/${invoiceId}/payments`, {
       amount: typed,
       payer: gl ? payer : null,
