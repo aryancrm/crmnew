@@ -284,6 +284,9 @@ export function Order() {
   const checking = desk === "management" && (!picked || picked === "management");
   const glance = checking && pageLook === "glance";
   const states = checkStates(data);
+  const toLookAt = CHECKS.filter((item) => !states[item.key].ok);
+  // Whoever only follows the order reads at the top what it waits for and what was found on it.
+  const waitsOnManagement = !desk && order.status === "pending_approval" && !order.flagReason;
   const askedCheck = params.get("check") as CheckKey | null;
   const check: CheckKey = CHECKS.some((item) => item.key === askedCheck)
     ? (askedCheck as CheckKey)
@@ -783,45 +786,24 @@ export function Order() {
       </button>
 
       <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+        {/* Read in this order: which order and where it stands, whom it is for and how much, what
+            stops it, then its facts and papers. Colour is kept for the state and for what is pressed. */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
           <div className="min-w-0">
-            <div className="text-xs text-ink-2">Order ID</div>
-            <h1 className="text-2xl font-bold tracking-tight text-brand">{order.code}</h1>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-ink-2">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h1 className="text-2xl leading-8 font-bold tracking-tight text-ink">
+                <span className="sr-only">Order </span>
+                {order.code}
+              </h1>
+              <StatusPill status={order.status} label={order.statusLabel} />
+            </div>
+            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-ink-2">
               <Link
                 to={`/customers/${order.customerId}`}
-                className="font-medium text-ink hover:text-brand"
+                className="text-base font-semibold text-ink hover:text-brand hover:underline"
               >
                 {order.customer}
               </Link>
-              <span>·</span>
-              <span className="rounded bg-brand-tint px-2 py-0.5 text-xs font-medium text-brand-dark">
-                {order.customerKind[0]?.toUpperCase() + order.customerKind.slice(1)}
-              </span>
-              <span className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
-                {pays}
-              </span>
-              {/* Its Division (the MedRep may pick another than their own), which says its papers. */}
-              {order.division && (
-                <span
-                  className="rounded bg-indigo-50 px-2 py-0.5 text-xs font-bold text-indigo-700"
-                  title={[order.subDivision, order.headquarter && order.headquarter !== "N/A" ? `HQ ${order.headquarter}` : null].filter(Boolean).join(" · ") || undefined}
-                >
-                  {order.division}
-                </span>
-              )}
-              {/* The order's type, picked first (19 Nov); Senior / PWD shows as its ID below. */}
-              {order.type && order.type !== "senior_pwd" && (
-                <span
-                  className="rounded bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700"
-                  title={ORDER_TYPE_HINT[order.type]}
-                >
-                  {order.type === "patient" && order.customerKind !== "patient"
-                    ? "For one patient"
-                    : ORDER_TYPE_LABEL[order.type]}
-                  {order.type === "po" && order.customerPo ? ` · ${order.customerPo}` : ""}
-                </span>
-              )}
               {order.via && (
                 <Link
                   to={`/leads/${order.leadId}`}
@@ -844,10 +826,24 @@ export function Order() {
                 <Pill tone="warn">New customer</Pill>
               )}
             </div>
-            <div className="mt-1 text-xs text-ink-2">
-              MedRep: {order.medrep} · Placed {timeLabel(order.submittedAt ?? order.createdAt)}
+            <div className="mt-1 text-[13px] text-ink-2">
+              {order.customerKind[0]?.toUpperCase() + order.customerKind.slice(1)}
+              {" · "}
+              <span className="text-ink">{pays}</span>
+              {/* The order's type, picked first (19 Nov); Senior / PWD shows as its ID above. */}
+              {order.type && order.type !== "senior_pwd" && !(order.type === "patient" && order.customerKind === "patient") && (
+                <span title={ORDER_TYPE_HINT[order.type]}>
+                  {" · "}
+                  {order.type === "patient" && order.customerKind !== "patient"
+                    ? "For one patient"
+                    : ORDER_TYPE_LABEL[order.type]}
+                  {order.type === "po" && order.customerPo ? ` · ${order.customerPo}` : ""}
+                </span>
+              )}
+              {" · "}MedRep: {order.medrep} · Placed {timeLabel(order.submittedAt ?? order.createdAt)}
               {order.raisedBy !== order.medrep ? ` by ${order.raisedBy}` : ""}
-              {order.channel ? ` · ${order.channel}` : ""}
+              {/* The Division is in the facts below: the channel only when it says something else. */}
+              {order.channel && order.channel !== order.division ? ` · ${order.channel}` : ""}
               {order.leadId && (
                 <>
                   {" · "}
@@ -857,104 +853,227 @@ export function Order() {
                 </>
               )}
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Link
-                to={`/orders/${order.id}/sales-order`}
-                className="inline-flex items-center gap-1.5 rounded-md border border-brand/40 px-3 py-1.5 text-xs font-semibold text-brand-dark hover:bg-brand-tint"
-              >
-                <FileText className="size-3.5" aria-hidden="true" /> Sales order
-              </Link>
-              {/* A business's order: its purchase order, printed for them to sign (19 Nov). */}
-              {order.customerKind !== "patient" && !order.patientOrder && (
-                <Link
-                  to={`/orders/${order.id}/purchase-order`}
-                  className="inline-flex items-center gap-1.5 rounded-md border border-brand/40 px-3 py-1.5 text-xs font-semibold text-brand-dark hover:bg-brand-tint"
-                >
-                  <FileText className="size-3.5" aria-hidden="true" /> Purchase order
-                </Link>
-              )}
-              <SendToCustomer orderId={order.id} small />
-              <RefundButton orderId={order.id} />
-            </div>
-            {/* A guarantee letter's order: what the agency approves for our quotation, written when
-                the letter is in (Aryan, 19 Nov). */}
-            {order.type === "gl" && <GlLetter data={data} />}
-            {/* An order with their PO and no signed PO yet: print it, have it signed, add its photo
-                (Aryan, 19 Nov). */}
-            {order.type === "po" &&
-              !data.papers.some((paper) => paper.kind === "po") &&
-              !["cancelled", "completed"].includes(order.status) && (
-                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2.5 text-[13px] text-amber-950">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold">Their signed PO isn't on the order yet.</span>
-                    <Link
-                      to={`/orders/${order.id}/purchase-order`}
-                      className="font-semibold text-brand-dark underline"
-                    >
-                      Print the purchase order
-                    </Link>
-                    <span>for them to sign and stamp, then add its photo:</span>
-                  </div>
-                  {can.addPaper && (
-                    <div className="mt-2">
-                      <Papers data={data} kinds={["po"]} />
-                    </div>
-                  )}
-                </div>
-              )}
           </div>
-          <div className="flex flex-col items-end gap-2 text-right">
-            <div className="flex items-center gap-3">
-              <StatusPill status={order.status} label={order.statusLabel} />
-              <span className="text-2xl font-bold tabular-nums text-ink">{peso(order.total)}</span>
-            </div>
+          <div className="flex shrink-0 flex-wrap items-center gap-x-3 sm:flex-col sm:items-end sm:text-right">
+            <span className="text-2xl leading-8 font-bold tabular-nums text-ink">
+              <span className="sr-only">Total </span>
+              {peso(order.total)}
+            </span>
             {data.money.invoice && <InvoiceStatus state={data.money.invoice.state} />}
           </div>
         </div>
+
+        {/* 2. What stops it or needs someone, straight under whose order it is. */}
+        {order.status === "draft" && (order.sentBackReason ?? order.flagReason) ? (
+          // Sent back: Management's reason in the hub's yellow band, and the MedRep's two answers.
+          <div className="mt-3 flex flex-col gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center">
+            <div className="min-w-0 flex-1">
+              <b>
+                Sent back{order.sentBackBy ? ` by ${order.sentBackBy}` : ""}
+                {order.sentBackAt ? ` · ${timeLabel(order.sentBackAt)}` : ""}
+                {order.sentBackCount > 1 ? ` · ${order.sentBackCount} times` : ""} — What to fix:
+              </b>{" "}
+              {order.sentBackReason ?? order.flagReason}
+            </div>
+            {can.resubmit && (
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Link
+                  to={`/orders/${order.id}/fix`}
+                  className="inline-flex items-center rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-dark"
+                >
+                  Fix and resubmit
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setAsking("resubmit")}
+                  className="inline-flex items-center rounded-md border border-brand/40 bg-white px-3 py-1.5 text-xs font-semibold text-brand-dark hover:bg-brand-tint"
+                >
+                  ↩ Resubmit as it is
+                </button>
+              </div>
+            )}
+          </div>
+        ) : order.flagReason ? (
+          <div className="mt-3 flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 sm:flex-row sm:items-center">
+            <span className="flex flex-1 gap-2">
+              <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+              <span>
+                <b>{order.statusLabel}:</b> {order.flagReason}
+                {data.waitingStock && (
+                  // Waiting for stock: crmnew watches the shelf and tells whoever held it.
+                  <span className="mt-1 block text-xs">
+                    Waiting since {timeLabel(data.waitingStock.since)}
+                    {data.waitingStock.by ? ` · held by ${data.waitingStock.by}` : ""}.{" "}
+                    {data.waitingStock.short.length === 0 ? (
+                      <b className="text-good">Stock is back: everything is on the shelf now. Take it off hold.</b>
+                    ) : (
+                      // Said only when it changed since the hold (the reason says what was short then).
+                      (() => {
+                        const now = data.waitingStock.short
+                          .map((one) => `${one.name} (needs ${one.need.toLocaleString("en-PH")}, ${one.free.toLocaleString("en-PH")} free)`)
+                          .join("; ");
+                        return order.flagReason?.includes(now) ? null : <>Short now: {now}.</>;
+                      })()
+                    )}
+                  </span>
+                )}
+                {order.holdProofs.length > 0 && (
+                  // Finance's screenshots with the hold, for the MedRep to see what it saw.
+                  <span className="mt-2 flex flex-wrap gap-2">
+                    {order.holdProofs.map((shot) => (
+                      <a
+                        key={shot.id}
+                        href={`/api/papers/${shot.id}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        title={shot.name}
+                        className="block overflow-hidden rounded-md border border-slate-200 bg-white hover:border-slate-400"
+                      >
+                        <img src={`/api/papers/${shot.id}`} alt={shot.name} loading="lazy" className="h-16 w-20 object-cover" />
+                      </a>
+                    ))}
+                  </span>
+                )}
+              </span>
+            </span>
+            {can.answer && (
+              <span className="flex shrink-0 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setAsking("answer")}
+                  className="inline-flex items-center rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-dark"
+                >
+                  ↩ Re-submit
+                </button>
+                {can.cancel && (
+                  <button
+                    type="button"
+                    onClick={() => setAsking("cancel")}
+                    className="inline-flex items-center rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
+                  >
+                    Cancel order
+                  </button>
+                )}
+              </span>
+            )}
+          </div>
+        ) : null}
+        {waitsOnManagement && (
+          <div
+            className={`mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-3.5 py-2.5 text-sm ${toLookAt.length ? "bg-amber-50 text-amber-950" : "bg-slate-50 text-ink"}`}
+          >
+            {toLookAt.length > 0 ? (
+              <TriangleAlert className="size-4 shrink-0 text-warn" aria-hidden="true" />
+            ) : (
+              <Hourglass className="size-4 shrink-0 text-ink-2" aria-hidden="true" />
+            )}
+            <span className="min-w-0 flex-1">
+              {toLookAt.length > 0 && <b>{toLookAt.map((item) => states[item.key].note).join(" · ")}. </b>}
+              Waiting for Management to read it and approve.
+            </span>
+            {opened !== "management" && (
+              <button
+                type="button"
+                onClick={() => open("management")}
+                className="font-semibold text-brand-dark hover:underline pointer-coarse:min-h-11"
+              >
+                See the check
+              </button>
+            )}
+          </div>
+        )}
+        {/* A guarantee letter's order: what the agency approves for our quotation, written when
+            the letter is in (Aryan, 19 Nov). */}
+        {order.type === "gl" && <GlLetter data={data} />}
+        {/* An order with their PO and no signed PO yet: print it, have it signed, add its photo
+            (Aryan, 19 Nov). */}
+        {order.type === "po" &&
+          !data.papers.some((paper) => paper.kind === "po") &&
+          !["cancelled", "completed"].includes(order.status) && (
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 px-3 py-2.5 text-[13px] text-amber-950">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold">Their signed PO isn't on the order yet.</span>
+                <Link
+                  to={`/orders/${order.id}/purchase-order`}
+                  className="font-semibold text-brand-dark underline"
+                >
+                  Print the purchase order
+                </Link>
+                <span>for them to sign and stamp, then add its photo:</span>
+              </div>
+              {can.addPaper && (
+                <div className="mt-2">
+                  <Papers data={data} kinds={["po"]} />
+                </div>
+              )}
+            </div>
+          )}
+        {order.note && (
+          <div className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-[13px] text-amber-950">
+            <b>Customer remarks:</b> {order.note}
+          </div>
+        )}
 
         {shortTop && (
           // Every order page (Aryan, 19 Nov: "ours, not the hub's"): the facts that matter in one
           // line; the rest on a press.
           <>
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t border-slate-100 pt-3 text-[13px] text-ink-2">
-              <span className="inline-flex min-w-0 items-center gap-1">
-                <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
-                <span className="truncate">{order.deliveryAddress ?? "No address"}</span>
-              </span>
-              {order.warehouse && <span>Ships from {order.warehouse}</span>}
-              <span>
-                Invoice{" "}
-                {data.money.invoice ? (
-                  <Link to={`/invoices/${data.money.invoice.id}`} className="font-medium text-brand hover:underline">
-                    {data.money.invoice.code}
-                  </Link>
-                ) : (
-                  "made when approved"
-                )}
-              </span>
-              {order.division && (
-                <span>
-                  Division {order.division}
-                  {order.subDivision ? ` · ${order.subDivision}` : ""}
-                  {order.headquarter && order.headquarter !== "N/A" ? ` · HQ ${order.headquarter}` : ""}
+            <div className="mt-3 flex flex-col gap-3 border-t border-slate-100 pt-3 xl:flex-row xl:items-center xl:justify-between">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1.5 text-[13px] text-ink-2">
+                <span className="inline-flex min-w-0 items-center gap-1">
+                  <MapPin className="size-3.5 shrink-0" aria-hidden="true" />
+                  <span className="truncate">{order.deliveryAddress ?? "No address"}</span>
                 </span>
-              )}
-              {order.customerPo && <span>PO {order.customerPo}</span>}
-              {order.doctor && <span>Dr. {order.doctor.replace(/^Dr\.?\s*/i, "")}</span>}
-              <button
-                type="button"
-                onClick={() => setMoreOpen(!moreOpen)}
-                className="ml-auto inline-flex items-center gap-1 font-semibold text-brand hover:underline"
-              >
-                {moreOpen ? "Fewer details" : "More details"}
-                <ChevronDown className={`size-3.5 transition-transform ${moreOpen ? "rotate-180" : ""}`} aria-hidden="true" />
-              </button>
-            </div>
-            {order.note && (
-              <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[13px] text-amber-950">
-                <b>Customer remarks:</b> {order.note}
+                {order.warehouse && <span>Ships from {order.warehouse}</span>}
+                <span>
+                  Invoice{" "}
+                  {data.money.invoice ? (
+                    <Link to={`/invoices/${data.money.invoice.id}`} className="font-medium text-brand hover:underline">
+                      {data.money.invoice.code}
+                    </Link>
+                  ) : (
+                    "made when approved"
+                  )}
+                </span>
+                {order.division && (
+                  <span>
+                    Division {order.division}
+                    {order.subDivision ? ` · ${order.subDivision}` : ""}
+                    {order.headquarter && order.headquarter !== "N/A" ? ` · HQ ${order.headquarter}` : ""}
+                  </span>
+                )}
+                {order.customerPo && <span>PO {order.customerPo}</span>}
+                {order.doctor && <span>Dr. {order.doctor.replace(/^Dr\.?\s*/i, "")}</span>}
+                <button
+                  type="button"
+                  onClick={() => setMoreOpen(!moreOpen)}
+                  aria-expanded={moreOpen}
+                  className="inline-flex items-center gap-1 font-semibold text-brand-dark hover:underline pointer-coarse:min-h-11"
+                >
+                  {moreOpen ? "Fewer details" : "More details"}
+                  <ChevronDown className={`size-3.5 transition-transform ${moreOpen ? "rotate-180" : ""}`} aria-hidden="true" />
+                </button>
               </div>
-            )}
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
+                <Link
+                  to={`/orders/${order.id}/sales-order`}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 pointer-coarse:h-11"
+                >
+                  <FileText className="size-3.5" aria-hidden="true" /> Sales order
+                </Link>
+                {/* A business's order: its purchase order, printed for them to sign (19 Nov). */}
+                {order.customerKind !== "patient" && !order.patientOrder && (
+                  <Link
+                    to={`/orders/${order.id}/purchase-order`}
+                    className="inline-flex h-8 items-center gap-1.5 rounded-md border border-slate-300 px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 pointer-coarse:h-11"
+                  >
+                    <FileText className="size-3.5" aria-hidden="true" /> Purchase order
+                  </Link>
+                )}
+                <SendToCustomer orderId={order.id} small />
+                <RefundButton orderId={order.id} />
+              </div>
+            </div>
           </>
         )}
         {(!shortTop || moreOpen) && (
@@ -1024,100 +1143,6 @@ export function Order() {
             </div>
           </div>
         )}
-        {order.status === "draft" && (order.sentBackReason ?? order.flagReason) ? (
-          // Sent back: Management's reason in the hub's yellow band, and the MedRep's two answers.
-          <div className="mt-4 flex flex-col gap-2.5 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 sm:flex-row sm:items-center">
-            <div className="min-w-0 flex-1">
-              <b>
-                Sent back{order.sentBackBy ? ` by ${order.sentBackBy}` : ""}
-                {order.sentBackAt ? ` · ${timeLabel(order.sentBackAt)}` : ""}
-                {order.sentBackCount > 1 ? ` · ${order.sentBackCount} times` : ""} — What to fix:
-              </b>{" "}
-              {order.sentBackReason ?? order.flagReason}
-            </div>
-            {can.resubmit && (
-              <div className="flex shrink-0 flex-wrap gap-2">
-                <Link
-                  to={`/orders/${order.id}/fix`}
-                  className="inline-flex items-center rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-dark"
-                >
-                  Fix and resubmit
-                </Link>
-                <button
-                  type="button"
-                  onClick={() => setAsking("resubmit")}
-                  className="inline-flex items-center rounded-md border border-brand/40 bg-white px-3 py-1.5 text-xs font-semibold text-brand-dark hover:bg-brand-tint"
-                >
-                  ↩ Resubmit as it is
-                </button>
-              </div>
-            )}
-          </div>
-        ) : order.flagReason ? (
-          <div className="mt-4 flex flex-col gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900 sm:flex-row sm:items-center">
-            <span className="flex flex-1 gap-2">
-              <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-              <span>
-                <b>{order.statusLabel}:</b> {order.flagReason}
-                {data.waitingStock && (
-                  // Waiting for stock: crmnew watches the shelf and tells whoever held it.
-                  <span className="mt-1 block text-xs">
-                    Waiting since {timeLabel(data.waitingStock.since)}
-                    {data.waitingStock.by ? ` · held by ${data.waitingStock.by}` : ""}.{" "}
-                    {data.waitingStock.short.length === 0 ? (
-                      <b className="text-good">Stock is back: everything is on the shelf now. Take it off hold.</b>
-                    ) : (
-                      // Said only when it changed since the hold (the reason says what was short then).
-                      (() => {
-                        const now = data.waitingStock.short
-                          .map((one) => `${one.name} (needs ${one.need.toLocaleString("en-PH")}, ${one.free.toLocaleString("en-PH")} free)`)
-                          .join("; ");
-                        return order.flagReason?.includes(now) ? null : <>Short now: {now}.</>;
-                      })()
-                    )}
-                  </span>
-                )}
-                {order.holdProofs.length > 0 && (
-                  // Finance's screenshots with the hold, for the MedRep to see what it saw.
-                  <span className="mt-2 flex flex-wrap gap-2">
-                    {order.holdProofs.map((shot) => (
-                      <a
-                        key={shot.id}
-                        href={`/api/papers/${shot.id}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        title={shot.name}
-                        className="block overflow-hidden rounded-md border border-slate-200 bg-white hover:border-slate-400"
-                      >
-                        <img src={`/api/papers/${shot.id}`} alt={shot.name} loading="lazy" className="h-16 w-20 object-cover" />
-                      </a>
-                    ))}
-                  </span>
-                )}
-              </span>
-            </span>
-            {can.answer && (
-              <span className="flex shrink-0 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setAsking("answer")}
-                  className="inline-flex items-center rounded-md bg-brand px-3 py-1.5 text-xs font-semibold text-white hover:bg-brand-dark"
-                >
-                  ↩ Re-submit
-                </button>
-                {can.cancel && (
-                  <button
-                    type="button"
-                    onClick={() => setAsking("cancel")}
-                    className="inline-flex items-center rounded-md border border-red-300 bg-white px-3 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-50"
-                  >
-                    Cancel order
-                  </button>
-                )}
-              </span>
-            )}
-          </div>
-        ) : null}
         {order.status !== "draft" && order.sentBackCount > 0 && order.sentBackReason && (
           <div className="mt-3 rounded-lg bg-slate-50 px-3.5 py-2.5 text-sm text-ink">
             <b>
@@ -1135,137 +1160,132 @@ export function Order() {
       </section>
 
       {deskView && (
-        <div className="mt-4 grid items-start gap-4 lg:grid-cols-[19rem_minmax(0,1fr)] 2xl:grid-cols-[21rem_minmax(0,1fr)]">
-          <div className="flex min-w-0 flex-col gap-4">
-            <nav aria-label="Steps" className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-              <div className="px-2.5 pt-1.5 pb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-400 uppercase">
-                {desk === "management" ? "Management checks" : "Finance checks"}
-              </div>
-              {desk === "management"
-                ? [
-                    // After approving: an Undo for a minute (Aryan, 19 Nov), above the checks.
-                    undoLeft > 0 && (
-                      <div
-                        key="undo"
-                        className="mb-1 flex items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 px-2.5 py-2 text-[13px]"
+        <div className="mt-4 grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[19rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] 2xl:grid-cols-[21rem_minmax(0,1fr)]">
+          <nav aria-label="Steps" className="min-w-0 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm lg:col-start-1 lg:row-start-1">
+            <div className="px-2.5 pt-1.5 pb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">
+              {desk === "management" ? "Management checks" : "Finance checks"}
+            </div>
+            {desk === "management"
+              ? [
+                  // After approving: an Undo for a minute (Aryan, 19 Nov), above the checks.
+                  undoLeft > 0 && (
+                    <div
+                      key="undo"
+                      className="mb-1 flex items-center justify-between gap-2 rounded-xl border border-emerald-200 bg-emerald-50/60 px-2.5 py-2 text-[13px]"
+                    >
+                      <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-900">
+                        <CircleCheck className="size-4" aria-hidden="true" /> Order approved
+                      </span>
+                      <button
+                        type="button"
+                        disabled={act.busy}
+                        onClick={undoApproval}
+                        className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[12px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
                       >
-                        <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-900">
-                          <CircleCheck className="size-4" aria-hidden="true" /> Order approved
+                        Undo · {undoLeft}s
+                      </button>
+                    </div>
+                  ),
+                  ...CHECKS.map((item, index) => {
+                    const on = item.key === check && checking;
+                    const state = states[item.key];
+                    const ok = fine(item.key);
+                    const by = approvedChecks.get(item.key)?.by;
+                    const note = by
+                      ? state.ok
+                        ? `${state.note} · approved by ${by}`
+                        : `Approved by ${by}: ${state.note}`
+                      : state.note;
+                    const row = (
+                      <button
+                        key={item.key}
+                        type="button"
+                        aria-current={on ? "step" : undefined}
+                        onClick={() => openCheck(item.key)}
+                        className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2.5 text-left text-[13px] transition-colors ${on ? "border-emerald-200 bg-emerald-50/70 font-semibold text-emerald-950" : "border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50"}`}
+                      >
+                        <span
+                          className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                            ok
+                              ? "bg-emerald-600 text-white"
+                              : state.ok
+                                ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
+                                : "bg-amber-400 text-white"
+                          }`}
+                        >
+                          {ok ? <Check className="size-3.5" /> : state.ok ? index + 1 : "!"}
                         </span>
-                        <button
-                          type="button"
-                          disabled={act.busy}
-                          onClick={undoApproval}
-                          className="rounded-lg bg-emerald-600 px-2.5 py-1 text-[12px] font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                        >
-                          Undo · {undoLeft}s
-                        </button>
-                      </div>
-                    ),
-                    ...CHECKS.map((item, index) => {
-                      const on = item.key === check && checking;
-                      const state = states[item.key];
-                      const ok = fine(item.key);
-                      const by = approvedChecks.get(item.key)?.by;
-                      const note = by
-                        ? state.ok
-                          ? `${state.note} · approved by ${by}`
-                          : `Approved by ${by}: ${state.note}`
-                        : state.note;
-                      const row = (
-                        <button
-                          key={item.key}
-                          type="button"
-                          aria-current={on ? "step" : undefined}
-                          onClick={() => openCheck(item.key)}
-                          className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2.5 text-left text-[13px] transition-colors ${on ? "border-emerald-200 bg-emerald-50/70 font-semibold text-emerald-950" : "border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50"}`}
-                        >
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate">{checkLabel(item.key, data)}</span>
                           <span
-                            className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
-                              ok
-                                ? "bg-emerald-600 text-white"
-                                : state.ok
-                                  ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
-                                  : "bg-amber-400 text-white"
-                            }`}
+                            className={`block truncate text-[11px] font-normal ${ok || state.ok ? "text-slate-500" : "font-semibold text-amber-700"}`}
+                            title={note}
                           >
-                            {ok ? <Check className="size-3.5" /> : state.ok ? index + 1 : "!"}
+                            {note}
                           </span>
-                          <span className="min-w-0 flex-1">
-                            <span className="block truncate">{checkLabel(item.key, data)}</span>
-                            <span
-                              className={`block truncate text-[11px] font-normal ${ok || state.ok ? "text-slate-500" : "font-semibold text-amber-700"}`}
-                              title={note}
-                            >
-                              {note}
-                            </span>
-                          </span>
-                        </button>
-                      );
-                      // Each check its own Approve, right in its row; Send back for what the system
-                      // found (Aryan, 19 Nov). What it finds fine is ticked by itself; Documents
-                      // waits for Management's own look (papers are read by hand), so Management
-                      // presses at least once, and the last press approves the order.
-                      return can.approve && !ok ? (
-                        <div key={item.key} className="flex items-center gap-1">
-                          <div className="min-w-0 flex-1">{row}</div>
-                          <span className="flex shrink-0 flex-col gap-1">
+                        </span>
+                      </button>
+                    );
+                    // Each check its own Approve, right in its row; Send back for what the system
+                    // found (Aryan, 19 Nov). What it finds fine is ticked by itself; Documents
+                    // waits for Management's own look (papers are read by hand), so Management
+                    // presses at least once, and the last press approves the order.
+                    return can.approve && !ok ? (
+                      <div key={item.key} className="flex items-center gap-1">
+                        <div className="min-w-0 flex-1">{row}</div>
+                        <span className="flex shrink-0 flex-col gap-1">
+                          <button
+                            type="button"
+                            disabled={act.busy}
+                            onClick={() => approveOne(item.key)}
+                            className="rounded-lg bg-brand px-2 py-1 text-[11px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
+                          >
+                            Approve
+                          </button>
+                          {can.send_back && !state.ok && (
                             <button
                               type="button"
-                              disabled={act.busy}
-                              onClick={() => approveOne(item.key)}
-                              className="rounded-lg bg-brand px-2 py-1 text-[11px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
+                              onClick={() => askWith("send_back", sendBackFrom(data, item.key))}
+                              className="rounded-lg border border-rose-200 bg-white px-2 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
                             >
-                              Approve
+                              Send back
                             </button>
-                            {can.send_back && !state.ok && (
-                              <button
-                                type="button"
-                                onClick={() => askWith("send_back", sendBackFrom(data, item.key))}
-                                className="rounded-lg border border-rose-200 bg-white px-2 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50"
-                              >
-                                Send back
-                              </button>
-                            )}
-                          </span>
-                        </div>
-                      ) : (
-                        row
-                      );
-                    }),
-                    // Every check fine and still waiting (its approval was refused): the reason
-                    // and the press to try again.
-                    can.approve && undoLeft <= 0 && CHECK_KEYS.every(fine) && (
-                      <div key="retry" className="mt-1 flex flex-col gap-1 px-1">
-                        {act.problem && !asking && (
-                          <p className="text-[11px] font-medium text-rose-700">{act.problem.message}</p>
-                        )}
-                        <button
-                          type="button"
-                          disabled={act.busy}
-                          onClick={approveOrder}
-                          className="rounded-lg bg-brand px-2.5 py-1.5 text-[12px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
-                        >
-                          Approve the order
-                        </button>
+                          )}
+                        </span>
                       </div>
-                    ),
-                    can.approve && act.problem && !asking && !CHECK_KEYS.every(fine) && (
-                      <p key="problem" className="mt-1 px-1 text-[11px] font-medium text-rose-700">
-                        {act.problem.message}
-                      </p>
-                    ),
-                  ]
-                : financeList}
-              {otherButtons && (
-                <div className="mt-1 flex flex-wrap gap-1.5 border-t border-slate-100 px-1 pt-2">{otherButtons}</div>
-              )}
-            </nav>
-            {/* The order's timeline up here, beside its checks (Aryan, 19 Nov), not at the foot. */}
-            <Activity data={data} />
-            <MoneyCard data={data} />
-          </div>
-          <div className="min-w-0">
+                    ) : (
+                      row
+                    );
+                  }),
+                  // Every check fine and still waiting (its approval was refused): the reason
+                  // and the press to try again.
+                  can.approve && undoLeft <= 0 && CHECK_KEYS.every(fine) && (
+                    <div key="retry" className="mt-1 flex flex-col gap-1 px-1">
+                      {act.problem && !asking && (
+                        <p className="text-[11px] font-medium text-rose-700">{act.problem.message}</p>
+                      )}
+                      <button
+                        type="button"
+                        disabled={act.busy}
+                        onClick={approveOrder}
+                        className="rounded-lg bg-brand px-2.5 py-1.5 text-[12px] font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
+                      >
+                        Approve the order
+                      </button>
+                    </div>
+                  ),
+                  can.approve && act.problem && !asking && !CHECK_KEYS.every(fine) && (
+                    <p key="problem" className="mt-1 px-1 text-[11px] font-medium text-rose-700">
+                      {act.problem.message}
+                    </p>
+                  ),
+                ]
+              : financeList}
+            {otherButtons && (
+              <div className="mt-1 flex flex-wrap gap-1.5 border-t border-slate-100 px-1 pt-2">{otherButtons}</div>
+            )}
+          </nav>
+          <div className="min-w-0 lg:col-start-2 lg:row-span-2 lg:row-start-1">
             {desk === "management" ? (
               <ManagementStep
                 data={data}
@@ -1300,57 +1320,58 @@ export function Order() {
                 tabs below repeated them); once it has moved on, they show where it went. */}
             {!atMyDesk && tabsBox}
           </div>
-        </div>
-      )}
-      {roadView && (
-        <div className="mt-4 grid items-start gap-4 lg:grid-cols-[19rem_minmax(0,1fr)] 2xl:grid-cols-[21rem_minmax(0,1fr)]">
-          <div className="flex min-w-0 flex-col gap-4">
-            <nav aria-label="Steps" className="rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-              <div className="px-2.5 pt-1.5 pb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-400 uppercase">
-                {desk === "dispatch" ? "Dispatch steps" : "Where the order is"}
-              </div>
-              {railSteps.map((item) => {
-                const on = item.key === opened;
-                return (
-                  <button
-                    key={item.key}
-                    type="button"
-                    aria-current={on ? "step" : undefined}
-                    onClick={() => open(item.key)}
-                    className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2.5 text-left text-[13px] transition-colors ${on ? "border-emerald-200 bg-emerald-50/70 font-semibold text-emerald-950" : "border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50"}`}
-                  >
-                    <span
-                      className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
-                        item.shape === "done" || item.shape === "skipped"
-                          ? "bg-emerald-600 text-white"
-                          : item.shape === "stopped"
-                            ? "bg-rose-100 text-rose-700"
-                            : on || item.shape === "now"
-                              ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
-                              : "bg-slate-100 text-slate-500"
-                      }`}
-                    >
-                      {item.shape === "done" || item.shape === "skipped" ? <Check className="size-3.5" /> : item.number}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate">{item.label}</span>
-                      <span
-                        className={`block truncate text-[11px] font-normal ${item.mine && item.shape !== "done" ? "font-semibold text-amber-700" : item.shape === "now" ? "font-semibold text-emerald-700" : "text-slate-500"}`}
-                      >
-                        {item.mine && item.shape !== "done" ? "Your step" : item.shape === "now" ? `Now · ${item.who}` : item.who}
-                      </span>
-                    </span>
-                  </button>
-                );
-              })}
-              {otherButtons && (
-                <div className="mt-1 flex flex-wrap gap-1.5 border-t border-slate-100 px-1 pt-2">{otherButtons}</div>
-              )}
-            </nav>
+          <div className="flex min-w-0 flex-col gap-4 lg:col-start-1 lg:row-start-2">
+            {/* The order's timeline up here, beside its checks (Aryan, 19 Nov), not at the foot. */}
             <Activity data={data} />
             <MoneyCard data={data} />
           </div>
-          <div className="flex min-w-0 flex-col gap-4">
+        </div>
+      )}
+      {roadView && (
+        <div className="mt-4 grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[19rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] 2xl:grid-cols-[21rem_minmax(0,1fr)]">
+          <nav aria-label="Steps" className="min-w-0 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm lg:col-start-1 lg:row-start-1">
+            <div className="px-2.5 pt-1.5 pb-2 text-[11px] font-semibold tracking-[0.12em] text-slate-500 uppercase">
+              {desk === "dispatch" ? "Dispatch steps" : "Where the order is"}
+            </div>
+            {railSteps.map((item) => {
+              const on = item.key === opened;
+              return (
+                <button
+                  key={item.key}
+                  type="button"
+                  aria-current={on ? "step" : undefined}
+                  onClick={() => open(item.key)}
+                  className={`flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2.5 text-left text-[13px] transition-colors ${on ? "border-emerald-200 bg-emerald-50/70 font-semibold text-emerald-950" : "border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50"}`}
+                >
+                  <span
+                    className={`flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${
+                      item.shape === "done" || item.shape === "skipped"
+                        ? "bg-emerald-600 text-white"
+                        : item.shape === "stopped"
+                          ? "bg-rose-100 text-rose-700"
+                          : on || item.shape === "now"
+                            ? "bg-white text-emerald-800 ring-2 ring-emerald-500"
+                            : "bg-slate-100 text-slate-500"
+                    }`}
+                  >
+                    {item.shape === "done" || item.shape === "skipped" ? <Check className="size-3.5" /> : item.number}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{item.label}</span>
+                    <span
+                      className={`block truncate text-[11px] font-normal ${item.mine && item.shape !== "done" ? "font-semibold text-amber-700" : item.shape === "now" ? "font-semibold text-emerald-700" : "text-slate-500"}`}
+                    >
+                      {item.mine && item.shape !== "done" ? "Your step" : item.shape === "now" ? `Now · ${item.who}` : item.who}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+            {otherButtons && (
+              <div className="mt-1 flex flex-wrap gap-1.5 border-t border-slate-100 px-1 pt-2">{otherButtons}</div>
+            )}
+          </nav>
+          <div className="flex min-w-0 flex-col gap-4 lg:col-start-2 lg:row-span-2 lg:row-start-1">
             {/* Asked up the line: the Team Lead or Business Mentor answers here; others read it. */}
             {data.asks.length > 0 && <AskUpBox data={data} />}
             {opened === "dispatch" ? (
@@ -1375,29 +1396,34 @@ export function Order() {
             ) : opened === "management" ? (
               <StepPanel number={2} title="Management check">
                 <div className="flex flex-col gap-3 text-[13px]">
-                  <ul className="flex flex-col gap-2">
+                  {!waitsOnManagement && (
+                    <p className="rounded-lg bg-slate-50 px-3 py-2 font-semibold text-slate-900">
+                      {order.approvedAt
+                        ? `Approved${order.approvedBy ? ` by ${order.approvedBy}` : ""} · ${timeLabel(order.approvedAt)}`
+                        : order.status === "pending_approval"
+                          ? "Waiting for Management to read it and approve."
+                          : order.status === "draft"
+                            ? `Sent back: ${order.flagReason ?? "fix it and place it again"}`
+                            : "Not approved."}
+                    </p>
+                  )}
+                  <ul className="flex flex-col gap-1">
                     {CHECKS.map((item) => {
                       const state = states[item.key];
                       return (
-                        <li key={item.key} className="flex items-start gap-2.5">
+                        <li
+                          key={item.key}
+                          className={`flex items-start gap-2.5 rounded-lg px-2 py-1.5 ${!state.ok && !order.approvedAt ? "bg-amber-50" : ""}`}
+                        >
                           <span className={`mt-1 size-2.5 shrink-0 rounded-full ${state.ok ? "bg-emerald-500" : "bg-amber-400"}`} aria-hidden="true" />
                           <span className="min-w-0">
-                            <b className="text-slate-900">{checkLabel(item.key, data)}</b>
+                            <span className={`text-slate-900 ${state.ok ? "font-medium" : "font-semibold"}`}>{checkLabel(item.key, data)}</span>
                             <span className={`block text-[12px] ${state.ok ? "text-slate-500" : "font-semibold text-amber-700"}`}>{state.note}</span>
                           </span>
                         </li>
                       );
                     })}
                   </ul>
-                  <p className="rounded-lg bg-slate-50 px-3 py-2 text-slate-700">
-                    {order.approvedAt
-                      ? `Approved${order.approvedBy ? ` by ${order.approvedBy}` : ""} · ${timeLabel(order.approvedAt)}`
-                      : order.status === "pending_approval"
-                        ? "Waiting for Management to read it and approve."
-                        : order.status === "draft"
-                          ? `Sent back: ${order.flagReason ?? "fix it and place it again"}`
-                          : "Not approved."}
-                  </p>
                 </div>
               </StepPanel>
             ) : (
@@ -1410,6 +1436,10 @@ export function Order() {
               </StepPanel>
             )}
             <Problem message={problem?.message} />
+          </div>
+          <div className="flex min-w-0 flex-col gap-4 lg:col-start-1 lg:row-start-2">
+            <Activity data={data} />
+            <MoneyCard data={data} />
           </div>
         </div>
       )}
