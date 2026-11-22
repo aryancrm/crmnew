@@ -32,6 +32,7 @@ import {
 import { useEffect, useId, useRef, useState } from "react";
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
+import { LeavesArrow, useLeavesTo } from "./app-switch";
 import { ME, onlineDesk, useMe } from "./auth";
 import { DeskPeople } from "./desk/people";
 import { LiveLocationSender } from "./field/live-sender";
@@ -49,6 +50,7 @@ export function Shell() {
   const ready = Boolean(me.data && !me.data.mustChangePassword);
   useIdleSignOut(me.data?.viewedBy ? undefined : me.data?.role, () => void leaveNow(queries, navigate));
   const location = useLocation();
+  const leavesTo = useLeavesTo();
   const [drawer, setDrawer] = useState(false);
   // On a computer the menu button hides the sidebar for more room, and the choice is kept.
   const wide = useWide();
@@ -313,7 +315,10 @@ export function Shell() {
               }
             >
               <item.icon size={20} strokeWidth={1.8} aria-hidden="true" />
-              <span className="max-w-full truncate px-1">{item.short ?? item.label}</span>
+              <span className="flex max-w-full items-center px-1">
+                <span className="truncate">{item.short ?? item.label}</span>
+                {leavesTo(item.to) && <LeavesArrow app={leavesTo(item.to) as string} size={11} />}
+              </span>
             </NavLink>
           );
           return (
@@ -469,6 +474,7 @@ function MenuList({
   badges?: Record<Badge, number>;
 }) {
   const location = useLocation();
+  const leavesTo = useLeavesTo();
   const listId = useId();
   const every = allItems(groups.flatMap((group) => group.items));
   const openOf = linkOpen(location, every);
@@ -560,10 +566,12 @@ function MenuList({
   const link = (item: MenuItem, inner = false) => {
     // "Company view" / "Whole team" isn't lit while one of the teams under it is open.
     const lit = (isActive: boolean) => openOf(item.to, isActive) && !(item.teams && unitHere);
+    const leaves = leavesTo(item.to);
     return (
       <NavLink
         key={item.to}
         to={item.to}
+        title={leaves ? `${item.label}: opens ${leaves}` : undefined}
         end={
           item.to === "/" ||
           item.to.includes("?") ||
@@ -607,6 +615,7 @@ function MenuList({
             {item.badge && counts && counts[item.badge] > 0 && (
               <span className={PILL(item.badge)}>{counts[item.badge]}</span>
             )}
+            {leaves && <LeavesArrow app={leaves} size={15} className="text-slate-500 group-hover:text-brand-dark" />}
           </>
         )}
       </NavLink>

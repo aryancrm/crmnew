@@ -3,6 +3,7 @@
 // (/books/…, kept as they are for showing both): purchase orders, receives, bills, payments made
 // and vendor credits, Zoho's history and those made here. These are the pieces every page shares.
 
+import { LeavesArrow } from "../app-switch";
 import type { BookDoc, BookKind, BookList, BookRow, DoneState } from "@2mg/api/types";
 import { keepPreviousData, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronLeft, ChevronRight, FileText, Paperclip, Search } from "lucide-react";
@@ -169,8 +170,8 @@ export const TD = "border-b border-slate-100 px-3 py-3 align-middle first:pl-4 l
 /** "Books view": the same records in the books' own look, kept to show both. */
 export function ZohoLink({ to }: { to: string }) {
   return (
-    <Link to={to} className="inline-flex h-10 items-center rounded-[10px] px-3 text-[13px] font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800" title="The same records in the books' own look">
-      Books view
+    <Link to={to} className="inline-flex h-10 items-center gap-1 rounded-[10px] px-3 text-[13px] font-semibold text-slate-500 hover:bg-slate-100 hover:text-slate-800" title="The same records in the books' own look">
+      Books view <LeavesArrow app="Books" />
     </Link>
   );
 }

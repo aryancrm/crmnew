@@ -5,6 +5,7 @@ import "@fontsource/poppins/500.css";
 import "@fontsource/poppins/600.css";
 import "@fontsource/poppins/700.css";
 import { ApiFailure } from "./api";
+import { AppSwitch } from "./app-switch";
 import { placesOrders, readsOnlineDesk } from "./auth";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
@@ -376,6 +377,7 @@ createRoot(root).render(
             <Route path="*" element={<NotBuilt />} />
           </Route>
         </Routes>
+        <AppSwitch />
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,
