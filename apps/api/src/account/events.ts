@@ -13,7 +13,7 @@ export const ACCOUNT_EVENT = {
   contact: "Contact details changed",
   photo: "Profile picture changed",
   photo_removed: "Profile picture removed",
-  password: "Password changed",
+  password_changed: "Password changed",
   password_given: "One-time password given",
   two_step_on: "Two-step sign-in turned on",
   two_step_off: "Two-step sign-in turned off",

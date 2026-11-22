@@ -429,7 +429,7 @@ export function createApp(db: Database, options: AppOptions) {
       .returning({ id: person.id });
     if (!changed.length) throw new Refusal(409, "not_now", "Your password was changed meanwhile. Sign in again.");
     await endOtherSessions(db, me.id, c.get("token"));
-    await accountEvent(db, me.id, me.id, "password");
+    await accountEvent(db, me.id, me.id, "password_changed");
     rememberDevice(c, { id: me.id, passwordHash });
     return c.json({ ok: true });
   });
