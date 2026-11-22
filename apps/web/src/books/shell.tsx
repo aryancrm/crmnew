@@ -6,7 +6,8 @@
 // check, customers owe, refunds owed…) opening inside it. Inventory and Management keep the
 // Inventory frame with the purchases. One module: the same screens and the same data either way.
 
-import { ArrowLeftRight, BarChart3, BookOpen, BookOpenCheck, ChevronDown, ChevronRight, CircleUserRound, HandCoins, House, Landmark, PackageOpen, Plus, Search, ShoppingBag, ShoppingBasket, ShoppingCart } from "lucide-react";
+import { Avatar } from "../account/avatar";
+import { ArrowLeftRight, BarChart3, BookOpen, BookOpenCheck, ChevronDown, ChevronRight, HandCoins, House, Landmark, PackageOpen, Plus, Search, ShoppingBag, ShoppingBasket, ShoppingCart } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useMe } from "../auth";
@@ -195,10 +196,10 @@ export function BooksShell() {
           <div className="ml-auto flex items-center gap-3 text-[13px] text-[#222536]">
             <span className="hidden sm:inline">2MG Inc. / GetMeds</span>
             {ledger && <QuickCreate />}
-            <span className="flex items-center gap-1.5" title={me.data.name}>
-              <CircleUserRound size={22} className="text-[#f76831]" aria-hidden="true" />
+            <Link to="/profile" className="flex items-center gap-1.5" title={me.data.name} aria-label={`${me.data.name}: my profile`}>
+              <Avatar person={me.data} size="xs" />
               <span className="hidden max-w-32 truncate md:inline">{me.data.name}</span>
-            </span>
+            </Link>
           </div>
         </header>
         <main className="min-h-0 flex-1 overflow-hidden">

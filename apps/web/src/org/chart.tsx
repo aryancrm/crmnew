@@ -5,9 +5,10 @@
 
 import type { OrgLogin, OrgSeat, OrgTree, OrgUnit } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Eye, KeyRound, Minus, Pencil, Plus, Search, UserMinus, UserPlus } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, KeyRound, Minus, Pencil, Plus, Search, ShieldOff, UserMinus, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../api";
+import { useMe } from "../auth";
 import type { Pop } from "./teams";
 import { Menu } from "./teams";
 import { lookAs } from "../shell";
@@ -207,6 +208,7 @@ function Box({ node, hit, unfolded, onFold, open }: { node: Node; hit: boolean; 
   const holder = seat.holder;
   const queries = useQueryClient();
   const act = useAction();
+  const admin = useMe().data?.role === "admin";
   const run = (path: string, then?: (answer: unknown) => void) =>
     act.run(async () => {
       const answer = await api(path, { body: {} });
@@ -268,6 +270,9 @@ function Box({ node, hit, unfolded, onFold, open }: { node: Node; hit: boolean; 
                       run(`/api/org/people/${holder.personId}/password`, (answer) => open({ kind: "login", name: holder.name, login: answer as OrgLogin }));
                     },
                   },
+                  ...(admin
+                    ? [{ label: "Reset two-step sign-in…", icon: <ShieldOff size={14} />, onClick: () => open({ kind: "twoStep", holder }) }]
+                    : []),
                   { label: "Someone covers (leave)", onClick: () => open({ kind: "cover", seat }) },
                   { label: "No longer with us…", icon: <UserMinus size={14} />, danger: true, onClick: () => open({ kind: "leave", holder }) },
                 ]

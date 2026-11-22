@@ -1,12 +1,14 @@
 // The frame every signed-in screen sits in: the top bar, the role's menu down the left on a
 // desk, the same menu as a tab bar on a phone.
 
+import { Avatar } from "./account/avatar";
 import { useIdleSignOut } from "./account/idle";
 import { workspaceOf } from "./workspaces";
 import type {
   Decisions,
   FormList,
   LeaveList,
+  Me,
   OrderDashboard,
   OrgMenuUnit,
   SearchResult,
@@ -24,12 +26,13 @@ import {
   Menu,
   Plus,
   Search,
-  UsersRound,
+  ShieldCheck,
+  UserRound,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
-import { initials, ME, onlineDesk, useMe } from "./auth";
+import { ME, onlineDesk, useMe } from "./auth";
 import { DeskPeople } from "./desk/people";
 import { LiveLocationSender } from "./field/live-sender";
 import { UndoConfirmBar } from "./finance/undo";
@@ -233,7 +236,7 @@ export function Shell() {
         <LiveLocationSender />
         {/* Always the person signed in: a desk shares its queue, never a login. */}
         <Account
-          name={me.data.name}
+          me={me.data}
           // Under a seller's or a lead's name, their own job (PH Country Mentor, District Sales Coach,
           // Hospital CHC), not the role's word: a head and a team lead share one role.
           role={
@@ -241,7 +244,6 @@ export function Shell() {
               ? me.data.title
               : me.data.roleLabel
           }
-          desk={Boolean(commonDesk)}
         />
       </header>
 
@@ -788,7 +790,7 @@ function SearchBox() {
   );
 }
 
-function Account({ name, role, desk = false }: { name: string; role: string; desk?: boolean }) {
+function Account({ me, role }: { me: Me; role: string }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -824,22 +826,54 @@ function Account({ name, role, desk = false }: { name: string; role: string; des
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
         className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-1 hover:bg-head"
-        aria-label={`${name}, ${role}`}
+        aria-label={`${me.name}, ${role}`}
       >
-        <span className="flex size-9 items-center justify-center rounded-full bg-sky-700 text-[13px] font-semibold text-white">
-          {desk ? <UsersRound size={17} aria-hidden="true" /> : initials(name)}
-        </span>
+        <Avatar person={me} />
         <ChevronDown size={15} className="hidden text-slate-400 sm:block" aria-hidden="true" />
       </button>
       {open && (
         <div
           role="menu"
-          className="absolute right-0 mt-1 w-56 rounded-xl bg-white p-1.5 text-[13px] shadow-pop"
+          className="absolute right-0 mt-1 w-64 rounded-xl bg-white p-1.5 text-[13px] shadow-pop"
         >
-          <div className="border-b border-line-soft px-3 pt-1.5 pb-2.5">
-            <div className="font-semibold">{name}</div>
-            <div className="text-xs text-ink-2">{role}</div>
+          <div className="mb-1 flex items-center gap-3 border-b border-line-soft px-3 pt-1.5 pb-2.5">
+            <Avatar person={me} size="md" />
+            <div className="min-w-0">
+              <div className="font-semibold wrap-break-word">{me.name}</div>
+              <div className="text-xs text-ink-2">{role}</div>
+            </div>
           </div>
+          {/* Someone looking as them doesn't get their profile. */}
+          {!me.viewedBy && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  navigate("/profile");
+                }}
+                className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
+              >
+                <UserRound size={17} aria-hidden="true" /> My profile
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  navigate("/profile/security");
+                }}
+                className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
+              >
+                <ShieldCheck size={17} aria-hidden="true" />
+                <span className="flex-1">Security</span>
+                <span className={`text-xs font-semibold ${me.twoStep ? "text-good" : "text-warn"}`}>
+                  {me.twoStep ? "2FA on" : "2FA off"}
+                </span>
+              </button>
+            </>
+          )}
           <button
             type="button"
             role="menuitem"
@@ -847,7 +881,7 @@ function Account({ name, role, desk = false }: { name: string; role: string; des
               setOpen(false);
               navigate("/password");
             }}
-            className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
+            className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
           >
             <KeyRound size={17} aria-hidden="true" /> Change password
           </button>
@@ -855,7 +889,7 @@ function Account({ name, role, desk = false }: { name: string; role: string; des
             type="button"
             role="menuitem"
             onClick={signOut}
-            className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
+            className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
           >
             <LogOut size={17} aria-hidden="true" /> Sign out
           </button>

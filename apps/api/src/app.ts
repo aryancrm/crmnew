@@ -13,6 +13,7 @@ import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { z } from "zod";
 import { accountEvent } from "./account/events";
+import { accountRoutes } from "./account/routes";
 import { deviceCookie, deviceMark, passwordGuard } from "./auth/guard";
 import { makeTicket, readTicket, spendTicket, twoStepOn, useCode } from "./auth/two-step";
 import { hashPassword, passwordProblem } from "./auth/password";
@@ -431,6 +432,7 @@ export function createApp(db: Database, options: AppOptions) {
     rememberDevice(c, { id: me.id, passwordHash });
     return c.json({ ok: true });
   });
+  accountRoutes(app, db, signedIn, passwordRight);
 
   inventoryRoutes(app, db, signedIn);
   notifyRoutes(app, db, signedIn);

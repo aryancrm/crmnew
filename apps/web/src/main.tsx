@@ -18,6 +18,7 @@ import { AdminZohoSellers } from "./admin/zoho-sellers";
 import { AttendanceMonthPage, AttendancePage } from "./hr/attendance";
 import { AttendanceReportPage } from "./hr/attendance-report";
 import { ChangePassword } from "./account/change-password";
+import { ProfilePage } from "./account/profile";
 import { ChannelsPage } from "./online/channels";
 import { Customer } from "./customers/customer";
 import { Customers } from "./customers/customers";
@@ -198,6 +199,7 @@ createRoot(root).render(
           <Route element={<Shell />}>
             <Route index element={<Home />} />
             <Route path="password" element={<ChangePassword />} />
+            <Route path="profile/:section?" element={<ProfilePage />} />
             <Route path="inventory" element={<Inventory />} />
             <Route path="medicines" element={<Medicines />} />
             <Route path="medicines/:id" element={<Medicine />} />
