@@ -180,7 +180,18 @@ describe("an advance order", () => {
     expect((await confirm("sarla", id, pay(total))).status).toBe(403);
 
     expect((await upload("ryan", id)).status).toBe(200);
-    expect((await confirm("fiona", id, pay(total, { reference: "" }))).status).toBe(200);
+    // Paid first means paid whole (23 Nov): a part goes on the invoice and the order stays with
+    // Finance; only the rest sends it to Dispatch.
+    const part = await confirm("fiona", id, pay(total - 1000, { reference: "" }));
+    expect(part.status).toBe(200);
+    expect(await part.json()).toMatchObject({ sent: false, left: 1000 });
+    const half = await order("fiona", id);
+    expect(half.order.status).toBe("finance_check");
+    expect(half.can.confirm_payment).toBe(true);
+    expect(half.money.invoice).toMatchObject({ paid: total - 1000, balance: 1000, status: "open" });
+    expect(half.money.invoice?.state.word).toBe("Partly paid · Payment to check");
+    expect(await fieldOf(await confirm("fiona", id, pay(total, { reference: "" })))).toBe("amount");
+    expect((await confirm("fiona", id, pay(1000, { reference: "" }))).status).toBe(200);
     const done = await order("ryan", id);
     expect(done.order.status).toBe("ready_for_dispatch");
     expect(done.money.invoice).toMatchObject({
@@ -192,8 +203,9 @@ describe("an advance order", () => {
     });
     expect(done.money.invoice?.code).toMatch(/^2MG-SI-\d{6}$/);
     expect(done.money.invoice?.state.word).toBe("Paid");
+    expect(done.money.payments.map((one) => one.amount)).toEqual([total - 1000, 1000]);
     expect(done.money.payments[0]).toMatchObject({
-      amount: total,
+      amount: total - 1000,
       method: "bank",
       methodLabel: "Bank transfer",
       proofId: expect.any(Number),
@@ -442,6 +454,10 @@ describe("a cancelled order Finance took money for", () => {
         refundedOn: todayManila(),
       });
     expect(await fieldOf(await refund(total + 1))).toBe("amount");
+    // Sent back through a bank: its reference number is asked (23 Nov); cash by hand has none.
+    expect(
+      await fieldOf(await post("fiona", `/api/invoices/${invoiceId}/refunds`, { amount: 100, method: "bank", refundedOn: todayManila() })),
+    ).toBe("reference");
     expect((await refund(total)).status).toBe(200);
     expect((await refund(1)).status).toBe(409);
     const later = await read<RefundList>("fiona", "/api/finance/refunds");

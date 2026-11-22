@@ -529,14 +529,14 @@ const how = (input: {
 }) =>
   `${peso(input.amount)} by ${METHOD_LABEL[input.method].toLowerCase()}${clean(input.reference) ? ` (ref ${clean(input.reference)})` : ""} on ${dated(input.paidOn)}`;
 
-/** An advance order: Finance has checked the slip and seen the money, so it records the payment,
- *  makes the invoice and lets the order go to Dispatch, all at once. */
+/** An advance order: Finance has checked the slip and seen the money, so it records the payment
+ *  and, once the whole amount is in, lets the order go to Dispatch. */
 export async function confirmPayment(
   db: Database,
   me: Me,
   orderId: number,
   input: ConfirmPaymentInput,
-): Promise<{ invoiceId: number }> {
+): Promise<{ invoiceId: number; sent: boolean; left: number }> {
   allow(me, FINANCE_ROLES, "confirm a payment");
   if (!input.checked)
     throw new Refusal(
@@ -579,17 +579,36 @@ export async function confirmPayment(
         "There is no proof of payment on the order. Add the slip, or type the bank reference you checked.",
         "reference",
       );
+    const left = due - input.amount;
+    // Paid first means paid whole (Aryan, 23 Nov: "it goes to Dispatch only once the whole money
+    // is in"): a part is put on the invoice and the order stays with Finance for the rest. It used
+    // to go to Dispatch with the rest left in Due payments.
+    if (left > 0) {
+      await addPayment(
+        tx,
+        me,
+        { id: invoice.id, customerId: order.customerId },
+        { ...input, proofId: proof?.id ?? null },
+      );
+      await logEvent(
+        tx,
+        orderId,
+        me,
+        "payment",
+        `Part of the payment received: ${how(input)}${proof ? ", proof of payment on file" : ""}. ${peso(left)} still to come: it stays with Finance until the whole amount is in.${clean(input.note) ? ` ${clean(input.note)}` : ""}`,
+      );
+      return { invoiceId: invoice.id, sent: false, left };
+    }
     await tx.execute(
       sql`update sales_order set status = 'ready_for_dispatch', finance_checked_at = now(), finance_checked_by = ${me.id},
           held_from = null, held_role = null, flag_reason = null, updated_at = now() where id = ${orderId}`,
     );
-    const left = due - input.amount;
     await logEvent(
       tx,
       orderId,
       me,
       "status",
-      `Payment checked: ${input.amount > 0 ? how(input) : `already paid on ${invoice.code}`}${proof ? ", proof of payment on file" : ""}.${left > 0 ? ` ${peso(left)} still to pay.` : ""} It goes to Dispatch.${clean(input.note) ? ` ${clean(input.note)}` : ""}`,
+      `Payment checked: ${input.amount > 0 ? how(input) : `already paid on ${invoice.code}`}${proof ? ", proof of payment on file" : ""}. It goes to Dispatch.${clean(input.note) ? ` ${clean(input.note)}` : ""}`,
       "finance_verified",
     );
     if (input.amount > 0)
@@ -599,9 +618,8 @@ export async function confirmPayment(
         { id: invoice.id, customerId: order.customerId },
         { ...input, proofId: proof?.id ?? null },
       );
-    if (left === 0)
-      await logEvent(tx, orderId, me, "payment", `Paid in full (invoice ${invoice.code}).`, "paid");
-    return { invoiceId: invoice.id };
+    await logEvent(tx, orderId, me, "payment", `Paid in full (invoice ${invoice.code}).`, "paid");
+    return { invoiceId: invoice.id, sent: true, left: 0 };
   });
 }
 
@@ -987,6 +1005,17 @@ export async function recordRefund(
 ): Promise<void> {
   allow(me, FINANCE_ROLES, "record a refund");
   payable({ amount: input.amount, paidOn: input.refundedOn }, "refundedOn");
+  // Money sent back through a bank, an e-wallet or a check has its reference number (Aryan, 23 Nov:
+  // "a refund needs its reference"); cash given by hand has none, nor money kept as credit.
+  if (["bank", "ewallet", "check"].includes(input.method) && !clean(input.reference))
+    throw new Refusal(
+      400,
+      "invalid",
+      input.method === "check"
+        ? "Type the check's number and bank: a refund needs its reference."
+        : "Type the bank or GCash reference of the refund.",
+      "reference",
+    );
   await db.transaction(async (tx) => {
     await assertOpen(tx, "refund", input.refundedOn);
     const invoice = await lockInvoice(tx, invoiceId);

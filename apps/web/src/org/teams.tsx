@@ -251,13 +251,17 @@ function Org({ tree }: { tree: OrgTree }) {
                 totals={totals}
                 picked={picked?.id ?? null}
                 onPick={(unit) => set({ unit: String(unit.id), q: null })}
-                onDropItem={(item, to) => {
-                  if (item.kind === "unit" && item.id === to.id) return;
-                  setPending({ item, to });
-                }}
               />
             )}
-            <p className="px-2 pt-2 text-[11px] text-slate-400">Drag a person's seat (from the team's list) or a team onto another team to move it.</p>
+            {/* Who is under whom is changed in one place, the Company tree (Aryan, 20 and 23 Nov:
+                "keep it one flow, by the sheet"): seats and teams are no longer dragged here. */}
+            <p className="px-2 pt-2 text-[11px] text-slate-500">
+              To move a seat or a team, use the{" "}
+              <Link to="/company/sales?edit=1&all=1" className="font-semibold text-emerald-700 hover:underline">
+                Company tree → Edit positions
+              </Link>
+              : the one place that says who is under whom (non-sales seats too).
+            </p>
           </nav>
           <div className="flex min-w-0 flex-col gap-4">
             {/* On a phone the tree is a list to pick from, so the team picked stays in view. */}
@@ -429,7 +433,7 @@ function TreeNode({
       <button
         type="button"
         onClick={() => onPick(unit)}
-        draggable={unit.kind !== "company"}
+        draggable={Boolean(onDropItem) && unit.kind !== "company"}
         onDragStart={(event) => event.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ kind: "unit", id: unit.id, label: unit.name } satisfies Dragged))}
         onDragOver={(event) => {
           if (!event.dataTransfer.types.includes(DRAG_TYPE)) return;
@@ -771,12 +775,7 @@ export function SeatRow({
   ].filter(Boolean);
   return (
     <li
-      draggable={!fixed}
-      onDragStart={(event) =>
-        event.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ kind: "seat", id: seat.id, label: holder ? `${holder.name} (${seat.title})` : `the empty seat "${seat.title}"` } satisfies Dragged))
-      }
-      title={fixed ? undefined : "Drag onto a team in the tree to move"}
-      className={`flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ${fixed ? "" : "cursor-grab active:cursor-grabbing"} ${holder ? "" : "bg-amber-50/40"}`}
+      className={`flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ${holder ? "" : "bg-amber-50/40"}`}
     >
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex flex-wrap items-center gap-2">

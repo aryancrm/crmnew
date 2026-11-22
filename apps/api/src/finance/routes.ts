@@ -87,10 +87,12 @@ export function financeRoutes(
     const done = await confirmPayment(db, c.get("me"), idParam(c), input as ConfirmPaymentInput);
     // The order was confirmed to the customer at Management's approval (sent now if it wasn't);
     // the money Finance checked is "Payment received".
-    void (async () => {
-      await tellCustomer(db, c.get("me"), idParam(c), "confirmed");
-      if ((input as ConfirmPaymentInput).amount > 0) await tellCustomer(db, c.get("me"), idParam(c), "paid");
-    })();
+    // A part payment only: the order is still with Finance, so the customer isn't told yet.
+    if (done.sent)
+      void (async () => {
+        await tellCustomer(db, c.get("me"), idParam(c), "confirmed");
+        if ((input as ConfirmPaymentInput).amount > 0) await tellCustomer(db, c.get("me"), idParam(c), "paid");
+      })();
     return c.json(done);
   });
   app.post("/api/finance/orders/:id/undo-confirm", async (c) => {

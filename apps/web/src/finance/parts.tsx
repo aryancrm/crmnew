@@ -330,7 +330,8 @@ export function ConfirmPaymentDialog({
       note,
     });
     if (done) {
-      rememberConfirm(orderId, code);
+      // Only a whole payment sends it on (and offers Undo); a part stays with Finance.
+      if (short === 0) rememberConfirm(orderId, code);
       onClose();
     }
   }
@@ -399,7 +400,8 @@ export function ConfirmPaymentDialog({
         )}
         {short > 0 && (
           <div className="-mt-2 text-[13px] text-amber-800">
-            {peso(short)} less than the order: it stays owed on the invoice.
+            {peso(short)} less than the order. It is paid first, so this part is put on the invoice
+            and the order stays here: it goes to Dispatch once the whole amount is in.
           </div>
         )}
         <HowFields
@@ -445,11 +447,13 @@ export function ConfirmPaymentDialog({
             Close
           </Button>
           <Button type="submit" variant="primary" disabled={money.busy || !checked}>
-            {money.busy ? "Confirming…" : "Confirm payment"}
+            {money.busy ? "Confirming…" : short > 0 ? "Record this part" : "Confirm payment"}
           </Button>
         </div>
         <div className="-mt-1 text-right text-xs text-ink-2">
-          The money goes on {bill?.code ?? "its invoice"} and the order goes to Dispatch.
+          {short > 0
+            ? `The money goes on ${bill?.code ?? "its invoice"}; the order waits here for the other ${peso(short)}.`
+            : `The money goes on ${bill?.code ?? "its invoice"} and the order goes to Dispatch.`}
         </div>
       </form>
     </Dialog>

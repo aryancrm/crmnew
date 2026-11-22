@@ -5,7 +5,7 @@ import { countQueries, type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { seedDemo } from "../seed";
-import { shelfUp, ticked } from "../testing/approve";
+import { shelfBack, shelfUp, ticked } from "../testing/approve";
 import type {
   Catalogue,
   CustomerDetail,
@@ -213,6 +213,28 @@ describe("placing an order", () => {
     const detail = await order("sarla", made.body.id);
     expect(detail.order).toMatchObject({ status: "pending_approval", raisedBy: "Admin", medrep: "Ryan" });
     expect((await queue("sarla")).some((row) => row.id === made.body.id)).toBe(true);
+  });
+
+  it("stock short for two orders: the one placed first is served, the later one waits (23 Nov)", async () => {
+    const code = async (response: Response) => ((await response.json()) as { error: { code: string } }).error.code;
+    // The shelf holds just what the first order needs (the earlier orders have theirs); a second
+    // one placed after it finds nothing left.
+    const first = await place("ryan", { customerId: hospital, items: [line({ qty: 30 })] });
+    await shelfUp(db, first.body.id);
+    const second = await place("ryan", { customerId: hospital, items: [line({ qty: 10 })], stockReason: "They will wait" });
+    // The first isn't short (only its checks are open); it used to be refused for the second's promise.
+    expect(await code(await post("sarla", `/api/orders/${first.body.id}/approve`))).toBe("checks_open");
+    expect((await order("sarla", first.body.id)).can.waitStock).toBe(false);
+    // The second is: it is held (Wait for stock) or sent back, never approved.
+    expect(await code(await post("sarla", `/api/orders/${second.body.id}/approve`))).toBe("short_stock");
+    expect((await order("sarla", second.body.id)).findings.some((one) => one.kind === "stock")).toBe(true);
+    expect((await act("sarla", second.body.id, "hold", { stock: true })).status).toBe(200);
+    // The first gone, its pieces are free: the second has enough.
+    await act("sarla", first.body.id, "cancel", { reason: "Hospital withdrew it" });
+    expect((await order("sarla", second.body.id)).waitingStock?.short ?? []).toEqual([]);
+    await act("sarla", second.body.id, "cancel", { reason: "Test done" });
+    // The shelf as it was, for the tests after this one.
+    await shelfBack(db, first.body.id);
   });
 
   it("Approve is refused until every check is approved (22 Nov)", async () => {

@@ -123,7 +123,9 @@ export function SalesTreePage() {
   });
   const [open, setOpen] = useState<Set<string> | "all" | null>(null);
   const [headsOnly, setHeadsOnly] = useState(false);
-  const [everyone, setEveryone] = useState(false);
+  // The seats that don't sell (Finance, Dispatch, HR, IT…) are on the same tree: shown when asked,
+  // and always while positions are edited, so everyone's place is set here (Aryan, 23 Nov).
+  const [everyone, setEveryone] = useState(params.get("all") === "1");
   const [find, setFind] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
   const [hover, setHover] = useState<{ key: string; x: number; y: number } | null>(null);
@@ -137,7 +139,7 @@ export function SalesTreePage() {
   const [pop, setPop] = useState<Pop | null>(null);
   // Changing is one button on top (Aryan, 20 Nov: "an Edit button; otherwise the normal data, no
   // clutter"): off, a box's panel is its figures as before; on, it has the changes.
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(params.get("edit") === "1");
   const queries = useQueryClient();
   const orgStamp = useRef(0);
   // A change saved: the tree is read again.
@@ -247,7 +249,14 @@ export function SalesTreePage() {
             />
           </label>
           {canChange && (
-            <Toggle on={editing} onClick={() => setEditing(!editing)} title="Move people, change a job, add or close a seat or a team">
+            <Toggle
+              on={editing}
+              onClick={() => {
+                if (!editing) setEveryone(true);
+                setEditing(!editing);
+              }}
+              title="Move people, change a job, add or close a seat or a team: sales and non-sales"
+            >
               {editing ? "Done editing" : "Edit positions"}
             </Toggle>
           )}
@@ -257,8 +266,8 @@ export function SalesTreePage() {
           <Toggle on={headsOnly} onClick={() => setHeadsOnly(!headsOnly)}>
             Heads only
           </Toggle>
-          <Toggle on={everyone} onClick={() => setEveryone(!everyone)} title="The teams that don't sell too (HR, IT, Finance…)">
-            Every team
+          <Toggle on={everyone} onClick={() => setEveryone(!everyone)} title="The teams that don't sell too (Finance, Dispatch, Inventory, HR, IT…)">
+            Non-sales seats too
           </Toggle>
           <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-0.5" role="tablist" aria-label="Look">
             {(

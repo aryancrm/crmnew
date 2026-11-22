@@ -3510,3 +3510,18 @@ lowest, each division's average; Scorecards opens every card.
   seats (it is the only place for the seats outside sales: asked of Aryan). **Asked of Aryan:**
   when stock is short for several orders, which is served first (today each order counts every
   other order's promise, so 20 pieces wait until all 210 are in)?
+- **23 Nov 2026 (Aryan's answers to the four questions, then "check every page's side menu once
+  more, then push")** (1) **Stock short for several orders: the first placed is served first.**
+  An order is short only when the shelf, less what the orders ahead of it are promised (placed
+  before it, or approved already), doesn't cover it (`aheadOf`, orders/stock-wait.ts; the order's
+  own stock finding and the approval's check now count the same way). Before, the approval counted
+  every other order's promise, so 20 pieces with six orders wanting 210 served nobody. The rest are
+  held (Wait for stock) or sent back by Management, as before. (2) **A refund sent through a bank,
+  GCash or a check needs its reference number**; cash by hand and money kept as credit don't.
+  (3) **Paid first means paid whole:** a part payment is put on the invoice and the order stays
+  with Finance ("Record this part"); only the whole amount sends it to Dispatch. It went to
+  Dispatch with the rest left in Due payments. (4) **One place for who is under whom, the Company
+  tree, non-sales seats too:** its "Every team" switch is "Non-sales seats too" and comes on with
+  Edit positions; the Admin's Teams & people no longer drags seats or teams and points there.
+  **Checked again:** every menu link of the 13 seats opened on a copy of the real data (412
+  links): no call failed. 503 tests pass.

@@ -91,7 +91,7 @@ import { FINANCE_ROLES } from "../finance/rules";
 import { asksOf, leadsUp } from "./asks";
 import { duesSql } from "../finance/dues";
 import { activeOffers, withOfferLines } from "./offers";
-import { shortLines, shortWords } from "./stock-wait";
+import { aheadOf, shortLines, shortWords } from "./stock-wait";
 
 const PAGE = 25;
 const list = (values: readonly string[]): SQL =>
@@ -386,12 +386,12 @@ const itemsOf = (db: Runner, orderIds: number[]) =>
             i.qty::int as qty, i.price_kind as "priceKind", i.list_price::int as "listPrice",
             i.unit_price::int as "unitPrice", i.price_reason as reason, (i.qty * i.unit_price)::int as amount, i.relief, m.vat, i.free, m.rx,
             i.offer_id::int as "offerId", m.cold_chain as cold, m.cold_box as "coldBox",
-            -- Free for this order: sellable on the shelf, less what orders placed before it are
-            -- promised and not packed yet (first placed, first served).
+            -- Free for this order: sellable on the shelf, less what the orders ahead of it (placed
+            -- before it, or approved already) are promised and not packed yet: first placed, first served.
             greatest(0, coalesce((select sum(s.qty) from stock s join batch b on b.id = s.batch_id
               where b.medicine_id = i.medicine_id and b.expires_on >= (now() at time zone 'Asia/Manila')::date), 0)
               - case when so.status in ('packing', 'shipped', 'completed', 'cancelled', 'draft') then 0 else coalesce((select sum(oi.qty) from order_item oi join sales_order o on o.id = oi.order_id
-                  where oi.medicine_id = i.medicine_id and o.id < i.order_id and ${PROMISED_ORDER}), 0) end)::int as "inStock",
+                  where oi.medicine_id = i.medicine_id and ${aheadOf(sql`i.order_id`)}), 0) end)::int as "inStock",
             (select mp.amount::int from medicine_price mp where mp.medicine_id = i.medicine_id and mp.buyer_type = c.kind) as "ownPrice",
             c.kind as "ownKind",
             (select oi.unit_price::int from order_item oi join sales_order o2 on o2.id = oi.order_id

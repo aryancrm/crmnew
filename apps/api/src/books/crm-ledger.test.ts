@@ -165,7 +165,7 @@ describe("this CRM's money in the books", () => {
     expect(on(restocked, "Inventory Asset")).toBeGreaterThan(0);
 
     // Paid beyond the new bill: Finance gives it back out of the bank.
-    await ok("fiona", `/api/invoices/${invoiceId}/refunds`, { amount: credit, method: "bank", refundedOn: todayManila(), moneyAccount: BANK });
+    await ok("fiona", `/api/invoices/${invoiceId}/refunds`, { amount: credit, method: "bank", reference: "BDO-RF-1", refundedOn: todayManila(), moneyAccount: BANK });
     const refund = await entries(sql`kind = 'crm_refund' and doc_id in (select id from refund where invoice_id = ${invoiceId})`);
     expect(on(refund, BANK)).toBe(-credit);
     expect(on(refund, "Accounts Receivable")).toBe(credit);
