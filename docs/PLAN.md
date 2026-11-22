@@ -3326,3 +3326,14 @@ lowest, each division's average; Scorecards opens every card.
   ledger again for each of the 44 money accounts; now the ledger is read once, added up by account
   and matched (the same answer, byte for byte): 37 s → 3.8 s. Banking and the chart of accounts
   are a second each (one pass over the ledger, as they must).
+- **22 Nov 2026 (Aryan: "every seat's left menu, from MedRep to CEO: open each link and see")**
+  First pass, by machine, on a copy of the local data: thirteen kinds of seat (CEO; Hospital, Rx,
+  CLIDP and Telesales MedReps; Online desk; team lead; head; Management; Finance; Dispatch;
+  Inventory; HR), every link of each one's menu opened (about 400 in all, the CEO's 125): every
+  page opens, no call is refused or fails. Slow ones met on the way: the Books home (fixed above).
+  One wording fixed: the Calls page said "My calls" to a lead, Management and the CEO on a day
+  with no call; it says "Calls" to anyone who doesn't log calls themselves. Still to do by eye, one
+  seat at a time: whether each menu holds what that seat's work needs and nothing else (noted for
+  Aryan: Dispatch has both "On the road" and "Shipments", which open the same list; the Hospital
+  MedRep has "My hospitals" and "Hospital list", both titled My hospitals; Management's menu has
+  Calls and Sales performance; the Hospital head's has Government tenders and Bid report).

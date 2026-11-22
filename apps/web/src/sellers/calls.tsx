@@ -143,7 +143,9 @@ export function Calls() {
   return (
     <div>
       <PageHead
-        title={many ? "Calls" : "My calls"}
+        // "My calls" only for someone who logs calls themselves: a lead, Management or the CEO
+        // reads the team's, also on a day with no call yet (it said "My calls" to them then).
+        title={many || !(me.data?.role === "medrep" || me.data?.role === "online") ? "Calls" : "My calls"}
         sub={data ? `${data.rows.length} ${data.rows.length === 1 ? "call" : "calls"} ${from === to ? (from === today ? "today" : `on ${from}`) : `from ${from} to ${to}`}` : undefined}
         actions={
           <div className="flex flex-wrap items-center gap-2">
