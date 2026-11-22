@@ -304,6 +304,15 @@ export const SHEET_PLACE = sql`place as (
     select b.id, b.id as business, b.id as box, 0 as depth from org_unit b join org_unit c on c.id = b.parent_id and c.kind = 'company'
     union all
     select k.id, p.business, case when p.depth = 0 then k.id else p.box end, p.depth + 1 from org_unit k join place p on k.parent_id = p.id)`;
+/** A channel's name as the target sheet writes it (Aryan, 22 Nov: "the sheet's names": B2B, BID,
+ *  MT, not the box's B2B Telesales, Government Bidding, Modern Trade): the word the latest sheet
+ *  gives the rows of the box's seats; a box on no row (PAP, Government Account) keeps its own
+ *  name. The boxes are not renamed (code and scripts find them by name). Needs SHEET_PLACE. */
+export const sheetNameOfBox = (box: SQL): SQL =>
+  sql`coalesce((select r.channel from target_sheet_row r join seat rs on rs.id = r.seat_id join place rp on rp.id = rs.unit_id
+      where rp.box = ${box} and r.month = (select max(month) from target_sheet_row)
+      group by r.channel order by count(*) desc, r.channel limit 1),
+    (select bx.name from org_unit bx where bx.id = ${box}))`;
 /** Who leads a box (alias given) today, by name. */
 export const leadOfBox = (box: SQL, today: string): SQL =>
   sql`(select p.name from seat ls join seat_holder lh on lh.seat_id = ls.id and lh.kind = 'holder' and ${inForce("lh", today)} join person p on p.id = lh.person_id
@@ -328,7 +337,7 @@ export async function sheetChannelSales(db: Database, facts: MonthFacts): Promis
           bool_or(st.active and box.active and st.module in ('medrep', 'online', 'team_lead', 'manager') and (pl.box <> pl.business or not st.lead)) as selling
         from seat st join place pl on pl.id = st.unit_id join org_unit box on box.id = pl.box left join sold so on so.seat_id = st.id
         group by 1, 2)
-      select box.id::int as id, box.name, biz.name as business, box.id = biz.id as own,
+      select box.id::int as id, ${sheetNameOfBox(sql`box.id`)} as name, biz.name as business, box.id = biz.id as own,
         ${leadOfBox(sql`box.id`, today)} as manager, ${leadOfBox(sql`biz.id`, today)} as head, f.target, f.sold, f.today,
         (select count(distinct lh.person_id) from seat st join place pl on pl.id = st.unit_id
             join seat_holder lh on lh.seat_id = st.id and lh.kind = 'holder' and ${inForce("lh", today)}

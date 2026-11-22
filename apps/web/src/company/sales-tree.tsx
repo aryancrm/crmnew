@@ -1121,9 +1121,10 @@ export function build(board: TeamBoard, everyone: boolean): Node {
       level: "channel",
       unit,
       seat: null,
-      name: unit.name,
+      // The sheet's own word for the channel (B2B, BID), where its box is named longer (22 Nov).
+      name: unit.sheetName ?? unit.name,
       sub: [people_(figures.people), figures.vacant ? `${figures.vacant} vacant` : null].filter(Boolean).join(" · "),
-      code: codeOf(unit.name),
+      code: codeOf(unit.sheetName ?? unit.name),
       hue,
       figures,
       children: kids,

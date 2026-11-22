@@ -324,11 +324,18 @@ export async function teamBoard(
       parentId: number | null;
       leadSeatId: number | null;
       division: string | null;
+      sheetName: string | null;
     }>(
       db,
       sql`select u.id::int as id, u.name, u.kind, u.parent_id::int as "parentId",
             (select s.id::int from seat s where s.unit_id = u.id and s.active and s.lead order by s.sort, s.id limit 1) as "leadSeatId",
-            unit_division(u.id) as division
+            unit_division(u.id) as division,
+            -- The one word the latest target sheet gives the rows of the seats in the box and under it
+            -- (B2B for B2B Telesales, BID for Government Bidding); null when none or more than one.
+            (with recursive down as (select u.id union all select k.id from org_unit k join down d on k.parent_id = d.id)
+              select case when count(distinct r.channel) = 1 then min(r.channel) end
+              from down d join seat rs on rs.unit_id = d.id join target_sheet_row r on r.seat_id = rs.id
+                and r.month = (select max(month) from target_sheet_row)) as "sheetName"
           from org_unit u where u.active order by u.sort, u.id`,
     ),
     rows<TeamBoard["topMedicines"][number]>(

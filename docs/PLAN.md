@@ -3207,3 +3207,12 @@ lowest, each division's average; Scorecards opens every card.
   box, so the PAP approver follows the tree too). What only a channel has stays on the page: Add
   channel, Name & Division, take out of use, its areas; "Open in Teams & people" stays in its
   menu. Teams & people itself still changes seats (not touched). Web only; local only.
+- **22 Nov 2026 (Aryan: "the sheet's names" for B2B, BID and MT)** One word for a channel
+  everywhere, the target sheet's: the CEO Home's two lists, Sales by channel, Sales trend, Divisions
+  and the Company tree now write B2B, BID and MT (they wrote the box's name: B2B Telesales,
+  Government Bidding, Modern Trade), as the orders already did. The word is read from the latest
+  sheet's rows on the box's seats (`sheetNameOfBox`; `sheetName` on the board's units); a box on no
+  row (PAP, Government Account) keeps its own name, and the Modern Trade business keeps its name
+  as a business. The boxes themselves are not renamed: `unit_division`, the seeds and the align
+  scripts find them by name. No figure moved (₱20,667,621.21 of ₱57,642,166; trend
+  ₱241,139,697.66). Local only.

@@ -3567,6 +3567,9 @@ export type TeamBoard = {
     leadSeatId: number | null;
     /** The sales tracker's channel the box is part of (RX Business … MT), null outside sales. */
     division: string | null;
+    /** The channel's name as the target sheet writes it, when the box's seats are all on one (B2B
+     *  for the B2B Telesales box, BID for Government Bidding); null otherwise. */
+    sheetName?: string | null;
   }[];
   seats: TeamSeatCard[];
   needs: TeamNeed[];

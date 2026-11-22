@@ -9,7 +9,7 @@ import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
 import { inForce } from "../org/service";
-import { leadOfBox, SHEET_PLACE } from "../sales/service";
+import { leadOfBox, SHEET_PLACE, sheetNameOfBox } from "../sales/service";
 import type { Insight, Me, Role } from "../types";
 import { LEDGER_INSIGHTS } from "./ledger-reports";
 
@@ -52,7 +52,7 @@ async function salesTrend(db: Database, asked: { to?: string | null }): Promise<
     db,
     // By the target sheet's channel: the seller's seat's box on the Company tree, as Sales by channel.
     sql`with recursive ${SHEET_PLACE}
-      select case when biz.id is not null then box.name else 'Not tied to a seat yet' end as channel, to_char(s.issued_on, 'YYYY-MM') as month, sum(s.total)::float8 as amount
+      select case when biz.id is not null then ${sheetNameOfBox(sql`box.id`)} else 'Not tied to a seat yet' end as channel, to_char(s.issued_on, 'YYYY-MM') as month, sum(s.total)::float8 as amount
       from sale_invoice s left join seat st on st.id = s.seat_id left join place pl on pl.id = st.unit_id
         left join org_unit biz on biz.id = pl.business and biz.kind = 'business' left join org_unit box on box.id = pl.box
       where s.status <> 'cancelled' and s.issued_on >= ${first}::date and s.issued_on <= ${to}::date
@@ -405,7 +405,7 @@ async function channelsReport(db: Database, asked: { from?: string | null; to?: 
           coalesce(sum(s.buyers), 0)::int as buyers, coalesce(sum(s.invoices), 0)::int as invoices,
           coalesce(sum(s.period), 0)::float8 as period, coalesce(sum(s.year), 0)::float8 as year, coalesce(sum(s.owed), 0)::float8 as owed
         from seated se left join s on s.seat_id = se.seat_id group by 1, 2)
-      select biz.name as business, coalesce(${leadOfBox(sql`biz.id`, today)}, '—') as head, box.name as channel,
+      select biz.name as business, coalesce(${leadOfBox(sql`biz.id`, today)}, '—') as head, ${sheetNameOfBox(sql`box.id`)} as channel,
         coalesce(${leadOfBox(sql`box.id`, today)}, ${leadOfBox(sql`biz.id`, today)}, '—') as manager,
         b.people, b.vacant, b.customers, b.buyers, b.invoices, b.period, b.year, b.owed, biz.sort as biz_sort, biz.id as biz_id, (box.id = biz.id)::int as own, box.sort as box_sort, box.id as box_id
       from boxes b join org_unit box on box.id = b.box join org_unit biz on biz.id = b.business
