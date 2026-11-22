@@ -11,6 +11,7 @@ import { Navigate, useLocation, useNavigate, useSearchParams } from "react-route
 import { ApiFailure, api } from "../api";
 import { ME, rememberPerson, returnTo, useMe } from "../auth";
 import { About } from "../portal/about";
+import { markActive } from "./idle";
 import { DepartmentMark, DepartmentPanel } from "../portal/department-side";
 import { TILE_GLOW, TILE_ICONS } from "../portal/tiles";
 import { lastWorkspace, rememberWorkspace, type Workspace, WORKSPACES, workspaceOf } from "../workspaces";
@@ -210,6 +211,7 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
   /** Signed in: the person's own landing, as always. */
   const signedInAs = (signedIn: Me) => {
     const back = returnTo(signedIn.id, from);
+    markActive();
     queries.setQueryData(ME, signedIn);
     rememberWorkspace(workspaceOf(signedIn).key);
     navigate(landing(signedIn.role, workspace, back), { replace: true });

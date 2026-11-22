@@ -1,6 +1,7 @@
 // The frame every signed-in screen sits in: the top bar, the role's menu down the left on a
 // desk, the same menu as a tab bar on a phone.
 
+import { useIdleSignOut } from "./account/idle";
 import { workspaceOf } from "./workspaces";
 import type {
   Decisions,
@@ -39,8 +40,11 @@ import { unreadIn, useUpdates } from "./updates";
 
 export function Shell() {
   const me = useMe();
+  const queries = useQueryClient();
+  const navigate = useNavigate();
   // Nothing else is asked for until they have chosen their own password.
   const ready = Boolean(me.data && !me.data.mustChangePassword);
+  useIdleSignOut(me.data?.viewedBy ? undefined : me.data?.role, () => void leaveNow(queries, navigate));
   const location = useLocation();
   const [drawer, setDrawer] = useState(false);
   // On a computer the menu button hides the sidebar for more room, and the choice is kept.
