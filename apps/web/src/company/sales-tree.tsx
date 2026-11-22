@@ -1103,8 +1103,11 @@ export function build(board: TeamBoard, everyone: boolean): Node {
       const { people, managers } = gather(unit, hue);
       if (!people.length && !managers.length) return null;
       if (managers.length) kids = [...managers, ...people];
-      else if (head && nameOf(head)) {
+      else if (head && nameOf(head) && unit.sheetName) {
         // No lead of its own and nobody inside leading: the head manages it (the tracker's CLIDP · SUBIR).
+        // Only where the target sheet has the box as a channel: a box on no sheet row (Patient
+        // Assistance, a process with no head; Aryan, 22 Nov) isn't given the head above as its
+        // manager, it only sits in that division.
         const figures = sum(people);
         kids = [
           {
@@ -1132,7 +1135,9 @@ export function build(board: TeamBoard, everyone: boolean): Node {
       seat: null,
       // The sheet's own word for the channel (B2B, BID), where its box is named longer (22 Nov).
       name: unit.sheetName ?? unit.name,
-      sub: [people_(figures.people), figures.vacant ? `${figures.vacant} vacant` : null].filter(Boolean).join(" · "),
+      sub: [!lead && !unit.sheetName ? "no head · not on the target sheet" : null, people_(figures.people), figures.vacant ? `${figures.vacant} vacant` : null]
+        .filter(Boolean)
+        .join(" · "),
       code: codeOf(unit.sheetName ?? unit.name),
       hue,
       figures,

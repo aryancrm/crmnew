@@ -3539,3 +3539,22 @@ lowest, each division's average; Scorecards opens every card.
   already taken (or wanted more of than there was) never came up to buy: free is the shelf less
   what placed orders are promised, with "orders need N more" when they need beyond it.
   (2) *Batch trace* showed each move's time in the database's own clock: Manila time now.
+- **23 Nov 2026 (Aryan: "see that two or three hierarchies aren't being made; by the sheet; the
+  seat is fixed, the person changes; check the Admin, the CEO and the Company tree, on a real
+  case")** Checked on a copy of the real data (35 boxes, 131 seats, 8 vacant, 118 people): nobody
+  without a seat, no seat with two holders, no box with two leads; each person's own record (role,
+  title, channel, area, boss) is exactly what the seat tree gives (`projectOrg`: 0 differences); the
+  November sheet's 57 rows are each tied to a seat and the seats' targets add up to the sheet's
+  ₱57,642,166. Five people hold two seats (Subir, Reynan, Malou, Honey, Claire), as the sheet has
+  them. **Real case run on the copy:** a Hospital CHC leaves (his login stops, his seat shows
+  vacant on his lead's board with its target and sales), another person is put in the seat: he gets
+  the seat's title, area, lead, its 102 customers and its ₱600,000 target, his old seat is vacant,
+  the first person's history is kept; data checks 18 of 18. **Put right:** (1) the Admin's menu
+  listed a second chart, typed by hand from the paper chart on 17 Nov ("Company chart (as built)"):
+  it is off the menu and says on itself that the Company tree is the one place. (2) The Company
+  tree gave a box on no sheet row (Patient Assistance, Government Account) the head above as its
+  "Manager": it now says "no head · not on the target sheet" (PAP is a process with no head).
+  Noted for Aryan: one seat names its own boss (a District Sales Coach seat in Mindanao → the
+  Business Mentor) and nine selling seats are on no sheet row. Zoho Books and Inventory could not
+  be opened this turn (the Chrome extension was not connected; the app's own browser is not signed
+  in to Zoho): the 18 Nov side-by-side in docs/BOOKS-PLAN.md stands.

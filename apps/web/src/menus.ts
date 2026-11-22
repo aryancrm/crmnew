@@ -1633,8 +1633,10 @@ function adminPanel(me: Me): Space {
           { to: "/targets", label: "Targets", icon: Target },
           // Once, from the old system's orders: who sold to each old customer, placed in a seat here.
           { to: "/admin/zoho-sellers", label: "Old customers to seats", icon: Link2 },
-          // The 2026 chart as the CRM is built to it: every box, seat, work and desk.
-          { to: "/admin/company-chart", label: "Company chart (as built)", icon: Network },
+          // The 2026 paper chart typed out on 17 Nov ("/admin/company-chart") is no longer listed:
+          // it was a second picture of who is under whom, typed by hand, and the Company tree is
+          // the one place (Aryan, 23 Nov: "no two or three hierarchies"). The page stays at its
+          // address, saying what it is, with a link to the tree.
         ],
       },
       {
