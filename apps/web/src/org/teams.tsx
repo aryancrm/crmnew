@@ -870,17 +870,11 @@ export function SeatRow({
                   {
                     label: "Give a new password",
                     icon: <KeyRound size={14} />,
-                    onClick: () =>
+                    onClick: () => {
+                      if (!window.confirm(`Give ${holder.name} a new password? Their old one stops working and they are signed out.`)) return;
                       run(`/api/org/people/${holder.personId}/password`, {}, (answer) =>
                         open({ kind: "login", name: holder.name, login: answer as OrgLogin }),
-                      ),
-                  },
-                  {
-                    label: "Clear their PIN",
-                    icon: <KeyRound size={14} />,
-                    onClick: () => {
-                      if (!window.confirm(`Clear ${holder.name}'s PIN? They create a new one the next time they sign in.`)) return;
-                      run(`/api/org/people/${holder.personId}/pin`, {}, () => window.alert(`${holder.name}'s PIN is cleared.`));
+                      );
                     },
                   },
                   // Kept in the menu, not on every row: someone leaving isn't news to show.

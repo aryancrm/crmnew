@@ -39,11 +39,8 @@ export const person = pgTable("person", {
   mustChangePassword: boolean("must_change_password").notNull().default(false),
   failedLogins: integer("failed_logins").notNull().default(0),
   lockedUntil: at("locked_until"),
-  /** Their own PIN (salted hash), set on their first sign-in; the password is the company's. */
-  pinHash: text("pin_hash"),
-  pinSetAt: at("pin_set_at"),
-  pinFailed: integer("pin_failed").notNull().default(0),
-  pinLockedUntil: at("pin_locked_until"),
+  /** No password of their own yet (here before migration 0133): can't sign in until given one. */
+  passwordPending: boolean("password_pending").notNull().default(false),
   lastSignInAt: at("last_sign_in_at"),
   active: boolean("active").notNull().default(true),
   createdAt: at("created_at").notNull().defaultNow(),
@@ -58,7 +55,7 @@ export const session = pgTable("session", {
   expiresAt: at("expires_at").notNull(),
   /** The CEO or Admin looking as this person (read only), on such a session. */
   viewedBy: ref("viewed_by"),
-  /** A desk's common screen (management, finance, dispatch), opened with the company's password. */
+  /** A shared desk screen of before migration 0133: such a session no longer signs anyone in. */
   desk: text("desk"),
   /** The department it was opened for (auth/workspaces.ts): the sign-in page it was made on. */
   workspace: text("workspace"),

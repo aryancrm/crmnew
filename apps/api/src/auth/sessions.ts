@@ -3,7 +3,7 @@
 
 import { divisionsOf } from "../orders/divisions";
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt, ne, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "../db/index";
 import { area, channel, person, session } from "../db/schema";
@@ -15,6 +15,8 @@ export const SESSION_COOKIE = "sid";
 export const BACK_COOKIE = "sid_back";
 export const SESSION_DAYS = 30;
 const DAY = 24 * 60 * 60 * 1000;
+/** They work on shared computers: their session ends with the working day, never kept alive. */
+export const DAY_SESSION_ROLES: readonly string[] = ["management", "finance", "dispatch"];
 
 const hashOf = (token: string) => createHash("sha256").update(token).digest("hex");
 
@@ -22,16 +24,14 @@ export async function startSession(
   db: Database,
   personId: number,
   viewedBy?: number,
-  desk?: "management" | "finance" | "dispatch",
   workspace?: string | null,
-  /** When it ends, if not the usual (a desk's common screen: the end of the working day). */
+  /** When it ends, if not the usual (Management, Finance, Dispatch: the end of the working day). */
   until?: Date,
 ): Promise<string> {
   const token = randomBytes(32).toString("base64url");
   await db.insert(session).values({
     tokenHash: hashOf(token),
     personId,
-    desk: desk ?? null,
     workspace: workspace ?? null,
     // Looking as someone else lasts two hours at most.
     expiresAt: until ?? new Date(Date.now() + (viewedBy ? 2 * 60 * 60 * 1000 : SESSION_DAYS * DAY)),
@@ -54,7 +54,7 @@ export async function endSession(db: Database, token: string): Promise<void> {
   await db.delete(session).where(eq(session.tokenHash, hashOf(token)));
 }
 
-/** Ends every session of a person except the one given (after a password change). */
+/** Ends every session of a person, those looking as someone else too, except the one given. */
 export async function endOtherSessions(
   db: Database,
   personId: number,
@@ -62,7 +62,7 @@ export async function endOtherSessions(
 ): Promise<void> {
   await db
     .delete(session)
-    .where(and(eq(session.personId, personId), ne(session.tokenHash, hashOf(keep))));
+    .where(and(or(eq(session.personId, personId), eq(session.viewedBy, personId)), ne(session.tokenHash, hashOf(keep))));
 }
 
 /** Who is asking, in one query. Null when the token is unknown, expired or the person is off. */
@@ -89,7 +89,6 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
       bossTitle: boss.title,
       viewerId: viewer.id,
       viewerName: viewer.name,
-      deskScreen: session.desk,
       workspace: session.workspace,
       // The business box their seat sits in (by its channel), so a seat's desk follows the chart.
       // Of two seats, the one that decides their screens (org/service.ts projectOrg): a lead seat
@@ -113,14 +112,19 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
         eq(session.tokenHash, hashOf(token)),
         gt(session.expiresAt, sql`now()`),
         eq(person.active, true),
+        // Whoever is at the keyboard (the viewer, when looking as someone) has a password of their
+        // own and still works here; a shared screen's session signs nobody in.
+        sql`coalesce(${viewer.passwordPending}, ${person.passwordPending}) = false`,
+        sql`coalesce(${viewer.active}, true)`,
+        isNull(session.desk),
       ),
     )
     .limit(1);
   if (!row || !isRole(row.role)) return null;
 
   // Keep a session in use alive, writing at most once a day.
-  // A desk's common screen ends with the working day: never kept alive past it.
-  if (!row.viewerId && !row.deskScreen && Date.now() - row.lastSeenAt.getTime() > DAY)
+  // A shared computer's session ends with the working day: never kept alive past it.
+  if (!row.viewerId && !DAY_SESSION_ROLES.includes(row.role) && Date.now() - row.lastSeenAt.getTime() > DAY)
     await db
       .update(session)
       .set({ lastSeenAt: new Date(), expiresAt: new Date(Date.now() + SESSION_DAYS * DAY) })
@@ -135,7 +139,6 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
     roleLabel: ROLE_LABEL[row.role],
     business: row.businessCode ?? null,
     divisions: divisionsOf(row.seatDivisions, row.channelDivision ?? null),
-    deskScreen: (row.deskScreen as Me["deskScreen"]) ?? null,
     workspace: row.workspace ?? null,
     // Someone looking as this person isn't asked to change their password.
     mustChangePassword: row.viewerId ? false : row.mustChangePassword,

@@ -1,7 +1,6 @@
 // The frame every signed-in screen sits in: the top bar, the role's menu down the left on a
 // desk, the same menu as a tab bar on a phone.
 
-import { DeskPinPrompt } from "./desk/pin-prompt";
 import { workspaceOf } from "./workspaces";
 import type {
   Decisions,
@@ -40,6 +39,8 @@ import { unreadIn, useUpdates } from "./updates";
 
 export function Shell() {
   const me = useMe();
+  // Nothing else is asked for until they have chosen their own password.
+  const ready = Boolean(me.data && !me.data.mustChangePassword);
   const location = useLocation();
   const [drawer, setDrawer] = useState(false);
   // On a computer the menu button hides the sidebar for more room, and the choice is kept.
@@ -72,20 +73,20 @@ export function Shell() {
   const badges = useQuery({
     queryKey: ["orders", "dashboard"],
     queryFn: () => api<OrderDashboard>("/api/orders/dashboard"),
-    enabled: Boolean(counted),
+    enabled: ready && counted,
   });
   // Conversations with something unread, beside Messages.
   const messages = useQuery({
     queryKey: ["messages"],
     queryFn: () => api<{ unread: number }>("/api/messages"),
-    enabled: Boolean(me.data),
+    enabled: ready,
     refetchInterval: () => (document.visibilityState === "visible" ? 30_000 : false),
   });
   // Conversations waiting for a reply (and new email senders), beside the Inbox.
   const chats = useQuery({
     queryKey: ["inbox", "count"],
     queryFn: () => api<{ needs: number; held: number }>("/api/inbox/count"),
-    enabled: onlineDesk(me.data) || ["admin", "ceo"].includes(me.data?.role ?? ""),
+    enabled: ready && (onlineDesk(me.data) || ["admin", "ceo"].includes(me.data?.role ?? "")),
     refetchInterval: () => (document.visibilityState === "visible" ? 30_000 : false),
   });
 
@@ -93,7 +94,7 @@ export function Shell() {
   const refills = useQuery({
     queryKey: ["refills-waiting"],
     queryFn: () => api<{ soon: number; due: number }>("/api/my/refills-waiting"),
-    enabled: ["medrep", "online", "team_lead", "manager"].includes(me.data?.role ?? "") && !me.data?.deskScreen,
+    enabled: ready && ["medrep", "online", "team_lead", "manager"].includes(me.data?.role ?? ""),
     staleTime: 5 * 60_000,
   });
 
@@ -115,8 +116,14 @@ export function Shell() {
       </Centered>
     );
   if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-  if (me.data.mustChangePassword && location.pathname !== "/password")
-    return <Navigate to="/password" replace />;
+  if (me.data.mustChangePassword)
+    return location.pathname === "/password" ? (
+      <div className="flex min-h-dvh items-center bg-ground p-6">
+        <Outlet />
+      </div>
+    ) : (
+      <Navigate to="/password" replace />
+    );
 
   const space = spaceFor(me.data, location.pathname);
   const flat = space.groups.flatMap((group) => group.items);
@@ -220,18 +227,15 @@ export function Shell() {
         {/* The person's working day: when it started, Start / End my day. */}
         <MyDayButton />
         <LiveLocationSender />
-        {/* The common desk shows the desk, not the one person signed in on it (Aryan, 18 Nov). */}
+        {/* Always the person signed in: a desk shares its queue, never a login. */}
         <Account
-          // The shared screen is the desk's, nobody's own (Aryan, 19 Nov): no person's name on it.
-          name={commonDesk && me.data.deskScreen ? `${space.label} desk` : me.data.name}
+          name={me.data.name}
           // Under a seller's or a lead's name, their own job (PH Country Mentor, District Sales Coach,
           // Hospital CHC), not the role's word: a head and a team lead share one role.
           role={
-            commonDesk && me.data.deskScreen
-              ? "Shared desk screen"
-              : ["team_lead", "manager", "medrep"].includes(me.data.role) && me.data.title
-                ? me.data.title
-                : me.data.roleLabel
+            ["team_lead", "manager", "medrep"].includes(me.data.role) && me.data.title
+              ? me.data.title
+              : me.data.roleLabel
           }
           desk={Boolean(commonDesk)}
         />
@@ -255,7 +259,6 @@ export function Shell() {
           <Outlet />
           <UndoConfirmBar />
           <Toasts />
-          {me.data.deskScreen && <DeskPinPrompt desk={me.data.deskScreen} />}
         </main>
       </div>
 

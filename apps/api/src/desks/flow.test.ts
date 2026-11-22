@@ -26,6 +26,16 @@ const post = (who: string, path: string, body: unknown = {}) =>
 const idOf = async (name: string) =>
   (await rows<{ id: number }>(db, sql`select id::int as id from person where name = ${name}`))[0]?.id as number;
 
+/** The login of whoever was given the order. */
+const handlerOf = async (id: number, by: "manage_by" | "finance_by") => {
+  const column = by === "manage_by" ? sql`o.manage_by` : sql`o.finance_by`;
+  const [row] = await rows<{ name: string }>(
+    db,
+    sql`select p.name from sales_order o join person p on p.id = ${column} where o.id = ${id}`,
+  );
+  return (row?.name ?? "").toLowerCase();
+};
+
 beforeAll(async () => {
   db = openDatabase({ dir: "memory" });
   await migrate(db);
@@ -90,9 +100,9 @@ describe("three at Management, three at Finance, terms of any length", () => {
       ["days", 120, null],
     ]);
 
-    // Nobody started yet: nobody has them. On the common screen all three start.
+    // Nobody started yet: nobody has them. All three start, each on their own login.
     for (const name of ["Sarla", "Kate", "Veronica"])
-      expect((await post("sarla", `/api/desk/management/people/${await idOf(name)}/start`, { on: true })).status).toBe(200);
+      expect((await post(name.toLowerCase(), `/api/desk/management/people/${await idOf(name)}/start`, { on: true })).status).toBe(200);
     const owners = await rows<{ name: string; n: number }>(
       db,
       sql`select p.name, count(*)::int as n from sales_order o join person p on p.id = o.manage_by
@@ -109,11 +119,11 @@ describe("three at Management, three at Finance, terms of any length", () => {
     expect(card(orders[1] as number)).toMatchObject({ paymentDays: 75 });
     expect(card(orders[3] as number)).toMatchObject({ payBy: later });
 
-    // Finance's three start too; everything is approved from Sarla's account, each in its person's name.
+    // Finance's three start too; each order is approved by its person, on their own login.
     for (const name of ["Fiona", "Fred", "Gina"])
-      expect((await post("fiona", `/api/desk/finance/people/${await idOf(name)}/start`, { on: true })).status).toBe(200);
+      expect((await post(name.toLowerCase(), `/api/desk/finance/people/${await idOf(name)}/start`, { on: true })).status).toBe(200);
     for (const id of orders) {
-      const response = await post("sarla", `/api/orders/${id}/approve`);
+      const response = await post(await handlerOf(id, "manage_by"), `/api/orders/${id}/approve`);
       expect(response.status, await response.clone().text()).toBe(200);
     }
     const approved = await rows<{ owner: string; approver: string }>(
@@ -140,9 +150,9 @@ describe("three at Management, three at Finance, terms of any length", () => {
     );
     expect(byDate?.due).toBe(later);
 
-    // Finance lets them go from Fiona's account: each in its person's name.
+    // Finance lets them go, each on their own login.
     for (const id of orders) {
-      const response = await post("fiona", `/api/finance/orders/${id}/invoice`, {});
+      const response = await post(await handlerOf(id, "finance_by"), `/api/finance/orders/${id}/invoice`, {});
       expect(response.status, await response.clone().text()).toBe(200);
     }
     const checked = await rows<{ owner: string; checker: string }>(

@@ -1,11 +1,11 @@
 // Bishnoi One's company portal (the sign-in page), as an app launcher (Aryan, 18 Nov): a tile per
-// workspace; any tile opens the same sign-in (login ID and password, as always), and each person's
-// own login decides what opens inside. Only a look: permissions and the pages are unchanged.
+// workspace; any tile opens the same sign-in (the person's own login ID and password), and each
+// person's own login decides what opens inside. Only a look: permissions and the pages are unchanged.
 
 import "@fontsource-variable/inter";
-import type { DoorList, Me } from "@2mg/api/types";
+import type { Me } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ChevronRight, CircleAlert, Eye, EyeOff, LoaderCircle, Search } from "lucide-react";
+import { ArrowLeft, CircleAlert, Eye, EyeOff, LoaderCircle, Search } from "lucide-react";
 import { type FormEvent, useEffect, useId, useState } from "react";
 import { Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { ApiFailure, api } from "../api";
@@ -201,18 +201,6 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<{ message: string; field?: string } | null>(null);
   const picked = workspace;
-  // Management, Finance and Dispatch share one screen (Aryan, 19 Nov): the company's password opens
-  // it, no ID; each person presses Start on it. Their own ID still works ("with my own ID").
-  const isDesk = ["management", "finance", "dispatch"].includes(picked.key);
-  // The heads' and the team leads' doors (Aryan, 19 Nov: "open Heads, one password, all the heads
-  // come; press one and their page opens"): the company's password, then each name; a press signs
-  // that person in with their own login ID and that password. Their own ID still works.
-  const isDoor = picked.key === "heads" || picked.key === "leads";
-  const [ownId, setOwnId] = useState(false);
-  const deskOnly = isDesk && !ownId;
-  const byName = isDoor && !ownId;
-  const [names, setNames] = useState<DoorList["people"] | null>(null);
-  const [entering, setEntering] = useState<string | null>(null);
   const ids = useId();
   const [capsLock, setCapsLock] = useState(false);
   const field =
@@ -227,57 +215,21 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
     navigate(landing(signedIn.role, workspace, back), { replace: true });
     rememberPerson(signedIn.id);
   };
-  // After the right password, the person's own PIN (Aryan, 21 Nov): entered, or created on their
-  // first sign-in. The login ID and password stay as typed (or the name pressed at a door).
-  const [pinStep, setPinStep] = useState<{ mode: "enter" | "setup"; login: string; name?: string } | null>(null);
-  const toPin = (error: unknown, login: string, name?: string) => {
-    if (!(error instanceof ApiFailure) || !["pin_needed", "pin_setup"].includes(error.code)) return false;
-    setPinStep({ mode: error.code === "pin_setup" ? "setup" : "enter", login, name });
-    setProblem(null);
-    return true;
-  };
-  const failed = (error: unknown) =>
-    setProblem(error instanceof ApiFailure ? { message: error.message, field: error.field } : { message: "Couldn't sign in. Try again." });
-
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
     setProblem(null);
     try {
-      if (byName) {
-        // The door's names, for the password typed (nobody is signed in yet).
-        setNames((await api<DoorList>("/api/auth/door", { body: { door: picked.key, password } })).people);
-        return;
-      }
-      const { me: signedIn } = deskOnly
-        ? await api<{ me: Me }>("/api/auth/desk", { body: { desk: picked.key, password } })
-        : await api<{ me: Me }>("/api/auth/login", { body: { email, password, workspace: picked.key } });
-      signedInAs(signedIn);
+      signedInAs((await api<{ me: Me }>("/api/auth/login", { body: { email, password, workspace: picked.key } })).me);
     } catch (error) {
-      if (!deskOnly && toPin(error, email)) return;
-      failed(error);
+      setProblem(error instanceof ApiFailure ? { message: error.message, field: error.field } : { message: "Couldn't sign in. Try again." });
     } finally {
       setBusy(false);
     }
   }
 
-  /** A name pressed: that person signs in with their own login ID and the password typed. */
-  async function enter(login: string) {
-    setEntering(login);
-    setProblem(null);
-    try {
-      signedInAs((await api<{ me: Me }>("/api/auth/login", { body: { email: login, password, workspace: picked.key } })).me);
-    } catch (error) {
-      if (toPin(error, login, names?.find((one) => one.login === login)?.name)) return;
-      failed(error);
-    } finally {
-      setEntering(null);
-    }
-  }
-
   // Each error sits under the field it is about (proximity); one about neither, under the password.
-  const sharedPassword = deskOnly || byName;
-  const idError = !sharedPassword && problem?.field === "email" ? problem.message : null;
+  const idError = problem?.field === "email" ? problem.message : null;
   const passwordError = problem && !idError ? problem.message : null;
 
   return (
@@ -286,117 +238,39 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
         (Hick, Miller). It stands on the page's white, no card around it. */}
     <div className="w-full text-left">
       <h1 className="text-[clamp(28px,3vw,34px)] leading-tight font-semibold tracking-[-0.03em] text-[#1f2733]">Sign in to {picked.label}</h1>
-      <p className="mt-2 text-[15px] text-[#5b6472]">
-        {pinStep
-          ? pinStep.mode === "setup"
-            ? "Create your PIN. Only you know it; you'll use it to sign in and on the desk screens."
-            : `Enter your PIN${pinStep.name ? `, ${pinStep.name}` : ""}.`
-          : deskOnly
-          ? "Shared desk screen. Enter the company password."
-          : byName
-            ? names
-              ? "Select your name to continue."
-              : "Enter the company password, then select your name."
-            : "Use your login ID and password."}
-      </p>
-      {/* Two ways in (Aryan, 19 Nov): the desk's shared screen, or each person's own login for their
-          own things (payslips, leave, their own work). The choice comes before the fields it changes. */}
-      {(isDesk || isDoor) && !pinStep && (
-        <div role="tablist" aria-label="Sign-in method" className="mt-5 grid grid-cols-2 gap-1 rounded-xl bg-[#f1f3f7] p-1 text-[13px] font-semibold">
-          {(
-            [
-              [false, isDoor ? "Select name" : "Shared desk"],
-              [true, "Personal login"],
-            ] as const
-          ).map(([own, text]) => (
-            <button
-              key={text}
-              type="button"
-              role="tab"
-              aria-selected={ownId === own}
-              onClick={() => {
-                setOwnId(own);
-                setProblem(null);
-                setNames(null);
-              }}
-              className={`h-9 rounded-lg px-3 transition-colors ${ownId === own ? "bg-white text-[#1f2733] shadow-[0_1px_3px_rgba(20,30,50,0.12)]" : "text-[#5b6472] hover:text-[#1f2733]"}`}
-            >
-              {text}
-            </button>
-          ))}
-        </div>
-      )}
-      {pinStep ? (
-        <PinStep
-          step={pinStep}
-          busy={busy}
-          problem={problem}
-          field={field}
-          label={label}
-          onBack={() => {
-            setPinStep(null);
-            setProblem(null);
-          }}
-          onSubmit={async (pins) => {
-            setBusy(true);
-            setProblem(null);
-            try {
-              signedInAs(
-                (await api<{ me: Me }>("/api/auth/login", { body: { email: pinStep.login, password, workspace: picked.key, ...pins } })).me,
-              );
-            } catch (error) {
-              failed(error);
-            } finally {
-              setBusy(false);
-            }
-          }}
-        />
-      ) : byName && names ? (
-        <DoorNames
-          names={names}
-          entering={entering}
-          problem={problem?.message ?? null}
-          onEnter={enter}
-          onBack={() => {
-            setNames(null);
-            setProblem(null);
-          }}
-        />
-      ) : (
+      <p className="mt-2 text-[15px] text-[#5b6472]">Use your own login ID and password.</p>
       <form onSubmit={submit} className="mt-6 grid gap-4" aria-busy={busy}>
-        {!sharedPassword && (
-          <div className="grid gap-1.5">
-            <label htmlFor={`${ids}-id`} className={label}>
-              Login ID
-            </label>
-            <input
-              id={`${ids}-id`}
-              type="text"
-              placeholder="e.g. hos1"
-              autoCapitalize="none"
-              spellCheck={false}
-              autoComplete="username"
-              required
-              disabled={busy}
-              value={email}
-              onChange={(event) => {
-                setEmail(event.target.value);
-                setProblem(null);
-              }}
-              aria-invalid={idError ? true : undefined}
-              aria-describedby={idError ? `${ids}-id-error` : undefined}
-              className={field}
-            />
-            {idError && (
-              <p id={`${ids}-id-error`} role="alert" className="flex items-start gap-1.5 text-[13px] text-rose-700">
-                <CircleAlert className="mt-px size-4 shrink-0" aria-hidden="true" /> {idError}
-              </p>
-            )}
-          </div>
-        )}
+        <div className="grid gap-1.5">
+          <label htmlFor={`${ids}-id`} className={label}>
+            Login ID
+          </label>
+          <input
+            id={`${ids}-id`}
+            type="text"
+            placeholder="e.g. hos1"
+            autoCapitalize="none"
+            spellCheck={false}
+            autoComplete="username"
+            required
+            disabled={busy}
+            value={email}
+            onChange={(event) => {
+              setEmail(event.target.value);
+              setProblem(null);
+            }}
+            aria-invalid={idError ? true : undefined}
+            aria-describedby={idError ? `${ids}-id-error` : undefined}
+            className={field}
+          />
+          {idError && (
+            <p id={`${ids}-id-error`} role="alert" className="flex items-start gap-1.5 text-[13px] text-rose-700">
+              <CircleAlert className="mt-px size-4 shrink-0" aria-hidden="true" /> {idError}
+            </p>
+          )}
+        </div>
         <div className="grid gap-1.5">
           <label htmlFor={`${ids}-password`} className={label}>
-            {sharedPassword ? "Company password" : "Password"}
+            Password
           </label>
           <div className="relative">
             <input
@@ -444,205 +318,14 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
           className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#f36b21] text-[15px] font-semibold text-white shadow-[0_12px_26px_-12px_rgba(243,107,33,0.7)] transition-colors hover:bg-[#e05a12] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f36b21] disabled:cursor-wait disabled:opacity-70"
         >
           {busy && <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />}
-          {busy ? (byName ? "Checking…" : "Signing in…") : byName ? "Continue" : "Sign in"}
+          {busy ? "Signing in…" : "Sign in"}
         </button>
       </form>
-      )}
-      <p className="mt-6 border-t border-[#eceef3] pt-4 text-[13px] text-[#5b6472]">Need access? Contact your administrator.</p>
+      <p className="mt-6 border-t border-[#eceef3] pt-4 text-[13px] text-[#5b6472]">
+        First sign-in or forgot your password? Ask your administrator for a one-time password.
+      </p>
     </div>
     </>
-  );
-}
-
-/** The PIN after the password: entered, or created (twice, to be sure) on the first sign-in. */
-function PinStep({
-  step,
-  busy,
-  problem,
-  field,
-  label,
-  onBack,
-  onSubmit,
-}: {
-  step: { mode: "enter" | "setup"; login: string; name?: string };
-  busy: boolean;
-  problem: { message: string; field?: string } | null;
-  field: string;
-  label: string;
-  onBack: () => void;
-  onSubmit: (pins: { pin: string } | { newPin: string }) => void;
-}) {
-  const ids = useId();
-  const [pin, setPin] = useState("");
-  const [again, setAgain] = useState("");
-  const [mismatch, setMismatch] = useState(false);
-  const setup = step.mode === "setup";
-  const error = mismatch ? "The two PINs don't match." : (problem?.message ?? null);
-  const digits = (value: string) => value.replace(/\D/g, "").slice(0, 6);
-  const pinField = `${field} text-center text-[20px] tracking-[0.5em]`;
-  return (
-    <form
-      className="mt-6 grid gap-4"
-      aria-busy={busy}
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (setup && pin !== again) {
-          setMismatch(true);
-          return;
-        }
-        onSubmit(setup ? { newPin: pin } : { pin });
-      }}
-    >
-      <div className="grid gap-1.5">
-        <label htmlFor={`${ids}-pin`} className={label}>
-          {setup ? "New PIN" : "PIN"}
-        </label>
-        <input
-          id={`${ids}-pin`}
-          type="password"
-          inputMode="numeric"
-          autoComplete={setup ? "new-password" : "one-time-code"}
-          // biome-ignore lint/a11y/noAutofocus: the one field on this step
-          autoFocus
-          required
-          minLength={4}
-          maxLength={6}
-          disabled={busy}
-          value={pin}
-          onChange={(event) => {
-            setPin(digits(event.target.value));
-            setMismatch(false);
-          }}
-          aria-invalid={error && !setup ? true : undefined}
-          aria-describedby={`${ids}-hint`}
-          className={pinField}
-        />
-        <p id={`${ids}-hint`} className="text-[12px] text-[#5b6472]">
-          {setup ? "4 to 6 digits. Not all the same, not in a row like 1234." : `Signing in as ${step.name ?? step.login}.`}
-        </p>
-      </div>
-      {setup && (
-        <div className="grid gap-1.5">
-          <label htmlFor={`${ids}-again`} className={label}>
-            Enter it again
-          </label>
-          <input
-            id={`${ids}-again`}
-            type="password"
-            inputMode="numeric"
-            autoComplete="new-password"
-            required
-            minLength={4}
-            maxLength={6}
-            disabled={busy}
-            value={again}
-            onChange={(event) => {
-              setAgain(digits(event.target.value));
-              setMismatch(false);
-            }}
-            aria-invalid={error ? true : undefined}
-            className={pinField}
-          />
-        </div>
-      )}
-      {error && (
-        <p role="alert" className="flex items-center gap-1.5 text-[13px] text-rose-700">
-          <CircleAlert className="size-4 shrink-0" aria-hidden="true" /> {error}
-        </p>
-      )}
-      <button
-        type="submit"
-        disabled={busy || pin.length < 4 || (setup && again.length < 4)}
-        className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#f36b21] text-[15px] font-semibold text-white shadow-[0_12px_26px_-12px_rgba(243,107,33,0.7)] transition-colors hover:bg-[#e05a12] disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        {busy && <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />}
-        {setup ? "Create PIN and sign in" : "Sign in"}
-      </button>
-      <button type="button" onClick={onBack} className="inline-flex items-center gap-1.5 justify-self-start text-[13px] font-semibold text-[#c2410c] hover:underline">
-        <ArrowLeft className="size-4" aria-hidden="true" /> Back
-      </button>
-      {!setup && <p className="text-[13px] text-[#5b6472]">Forgot your PIN? Ask your administrator to clear it.</p>}
-    </form>
-  );
-}
-
-/** A door's people by name (a team lead's under their head); a press signs that one in. */
-function DoorNames({
-  names,
-  entering,
-  problem,
-  onEnter,
-  onBack,
-}: {
-  names: DoorList["people"];
-  entering: string | null;
-  problem: string | null;
-  onEnter: (login: string) => void;
-  onBack: () => void;
-}) {
-  const groups: { head: string | null; people: DoorList["people"] }[] = [];
-  for (const one of names) {
-    const last = groups.at(-1);
-    if (last && last.head === one.head) last.people.push(one);
-    else groups.push({ head: one.head, people: [one] });
-  }
-  return (
-    <div className="mt-4 text-left">
-      <div className="max-h-[min(26rem,55vh)] overflow-y-auto rounded-2xl border border-[#eef0f4] bg-[#fafbfc] p-1.5">
-        {groups.map((group) => (
-          <div key={group.head ?? "heads"}>
-            {group.head && (
-              <p className="px-2.5 pt-2 pb-1 text-[11px] font-semibold tracking-wide text-[#9aa2b0] uppercase">
-                Under {group.head}
-              </p>
-            )}
-            <ul className="grid gap-1">
-              {group.people.map((one) => (
-                <li key={one.login}>
-                  <button
-                    type="button"
-                    disabled={entering !== null}
-                    onClick={() => onEnter(one.login)}
-                    className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition hover:bg-white hover:shadow-[0_6px_18px_-10px_rgba(20,30,50,0.35)] disabled:opacity-60"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className="grid size-9 shrink-0 place-items-center rounded-full bg-[#fff1e8] text-[13px] font-semibold text-[#c2410c]"
-                    >
-                      {one.name
-                        .split(/\s+/)
-                        .filter(Boolean)
-                        .slice(0, 2)
-                        .map((word) => word[0])
-                        .join("")
-                        .toUpperCase()}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px] font-semibold text-[#1f2733]">{one.name}</span>
-                      <span className="block truncate text-[12px] text-[#7a8394]">{one.boxes.join(" · ")}</span>
-                    </span>
-                    {entering === one.login ? (
-                      <LoaderCircle className="size-4 shrink-0 animate-spin text-[#f36b21]" aria-hidden="true" />
-                    ) : (
-                      <ChevronRight className="size-4 shrink-0 text-[#9aa2b0]" aria-hidden="true" />
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-      {problem && (
-        <p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-          {problem}
-        </p>
-      )}
-      <p className="mt-3 text-[13px] text-[#5b6472]">Not listed? Use Personal login.</p>
-      <button type="button" onClick={onBack} className="mt-2 inline-flex items-center gap-1.5 text-[13px] font-semibold text-[#c2410c] hover:underline">
-        <ArrowLeft className="size-4" aria-hidden="true" /> Enter the password again
-      </button>
-    </div>
   );
 }
 

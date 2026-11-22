@@ -81,20 +81,6 @@ export type PortalDepartment = {
   at: string;
 };
 
-/** The sign-in page's Heads or Team leads door, opened with the company's password (Aryan, 19 Nov):
- *  its people by name, the chart's order; a press signs one in with their own login ID. */
-export type DoorList = {
-  door: "heads" | "leads";
-  people: {
-    login: string;
-    name: string;
-    /** The boxes of the chart they sit in, in the chart's order. */
-    boxes: string[];
-    /** A team lead's head; null at the heads' door. */
-    head: string | null;
-  }[];
-};
-
 export type Me = {
   id: number;
   name: string;
@@ -116,9 +102,6 @@ export type Me = {
   divisions?: string[];
   /** The CEO or Admin looking as this person (read only), when it is that. */
   viewedBy?: { id: number; name: string } | null;
-  /** Signed in at a desk's tile with the company's password: the desk's common screen, not the
-   *  person's own (no "Me" on it). */
-  deskScreen?: "management" | "finance" | "dispatch" | null;
   /** The department this session was opened for (the sign-in page it was made on). */
   workspace?: string | null;
   /** The box picked on a lead's team switch for this request (?unit=, checked): the page counts the
@@ -3322,8 +3305,6 @@ export type OrgUnit = {
 
 export type OrgTree = {
   today: string;
-  /** New people get the company's common password: nobody types one. */
-  commonPassword: boolean;
   /** Seat login IDs end in this: "hos1@2mginc.com". */
   loginDomain: string;
   units: OrgUnit[];
@@ -3400,8 +3381,6 @@ export type OrgLogin = {
   login: string | null;
   email: string | null;
   password: string | null;
-  /** The password is the company's common one (they keep it). */
-  common?: boolean;
 };
 
 /** One person's seats now and before, for their page. */
@@ -4194,8 +4173,6 @@ export type HrRecordInput = Partial<{
 /** What HR picks from to add a joiner: the seats nobody holds or is joining. */
 export type JoinerForm = {
   today: string;
-  /** New joiners get the company's common password: HR types none. */
-  commonPassword: boolean;
   seats: { id: number; title: string; team: string; channel: string | null; area: string | null }[];
 };
 

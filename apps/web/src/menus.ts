@@ -569,11 +569,8 @@ function deskFor(me: Me): Space {
   if (!first) return space;
   const listed = allItems(space.groups.flatMap((group) => group.items));
   // Everyone asks for their own leave, except the CEO and the Admin (HR records theirs).
-  // The desk's common screen (signed in at its tile with the company's password) is nobody's own:
-  // no "Me", no one person's messages (Aryan, 19 Nov). Each person's own login keeps them.
-  const shared = Boolean(me.deskScreen);
   const mine: MenuItem[] =
-    me.role === "ceo" || me.role === "admin" || shared
+    me.role === "ceo" || me.role === "admin"
       ? []
       : [
           folder(
@@ -611,7 +608,7 @@ function deskFor(me: Me): Space {
   // Their own leave, payslips and messages at the foot of every menu, under the work (19 Nov: "each
   // one's own things on top").
   // The CEO's and the Admin's messages (decisions to take) stay at the top with their work.
-  const personal = [...mine, ...(shared ? [] : [messagesLink])];
+  const personal = [...mine, messagesLink];
   const onTop = me.role === "ceo" || me.role === "admin";
   return {
     ...space,

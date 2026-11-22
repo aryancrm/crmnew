@@ -35,7 +35,7 @@ const list = seats
 const lines = [
   "# Live CRM: who signs in with which ID",
   "",
-  "Open https://crmnew-psi.vercel.app, type the **Login ID** below and the company's common password (Aryan has it). Nobody is asked to change it.",
+  "Open https://crmnew-psi.vercel.app, type the **Login ID** below and your own password (the first time, the one-time one the administrator gave you).",
   "",
   "| Team | Name | Job | Login ID |",
   "|---|---|---|---|",

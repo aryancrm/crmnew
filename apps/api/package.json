@@ -16,6 +16,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "start": "tsx src/server.ts",
+    "passwords": "tsx scripts/give-passwords.ts",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

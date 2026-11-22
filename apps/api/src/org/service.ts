@@ -7,8 +7,7 @@
 
 import { randomBytes } from "node:crypto";
 import { type SQL, sql } from "drizzle-orm";
-import { hashPassword, joinPassword, passwordProblem } from "../auth/password";
-import { clearPin } from "../auth/pins";
+import { hashPassword, passwordProblem } from "../auth/password";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import { addDays, todayManila } from "../inventory/rules";
@@ -396,7 +395,6 @@ export async function orgTree(db: Database, me: Me): Promise<OrgTree> {
   return {
     today,
     loginDomain: LOGIN_DOMAIN,
-    commonPassword: joinPassword() !== null,
     units: units.map(({ channelId, code, channelName, ...unit }) => ({
       ...unit,
       channel: channelId ? { id: channelId, code: code ?? "", name: channelName ?? "" } : null,
@@ -668,10 +666,8 @@ export async function addPerson(db: Database, me: Me, input: OrgPersonInput): Pr
     const problem = passwordProblem(typed);
     if (problem) throw new Refusal(400, "invalid", problem, "password");
   }
-  // Nothing typed: the company's common password, kept as it is (Aryan, 17 Nov); without one set,
-  // a fresh one they change at their first sign-in.
-  const common = typed ? null : joinPassword();
-  const password = typed ?? common ?? freshPassword();
+  // Typed or made here, it is a one-time password: they choose their own at the first sign-in.
+  const password = typed ?? freshPassword();
   const hash = await hashPassword(password);
   const result = await change(db, async (tx, today) => {
     const [used] = email
@@ -718,7 +714,7 @@ export async function addPerson(db: Database, me: Me, input: OrgPersonInput): Pr
     const [made] = await rows<{ id: number }>(
       tx,
       sql`insert into person (name, email, phone, title, role, password_hash, must_change_password)
-        values (${name}, ${email}, ${clean(input.phone)}, ${seat.title}, ${seat.module}, ${hash}, ${!common})
+        values (${name}, ${email}, ${clean(input.phone)}, ${seat.title}, ${seat.module}, ${hash}, true)
         returning id::int as id`,
     );
     const personId = made?.id as number;
@@ -748,7 +744,7 @@ export async function addPerson(db: Database, me: Me, input: OrgPersonInput): Pr
     );
     return { personId, seatId, login: login?.login ? `${login.login}@${LOGIN_DOMAIN}` : null };
   });
-  return { ...result, email, password: typed ? null : password, common: Boolean(common) };
+  return { ...result, email, password: typed ? null : password };
 }
 
 /** A vacant seat (to fill later). */
@@ -985,29 +981,18 @@ export async function personLeaves(
   });
 }
 
-/** Clears a forgotten PIN (Aryan, 21 Nov); the person sets a new one on their next sign-in. */
-export async function resetPin(db: Database, me: Me, personId: number): Promise<{ ok: true }> {
-  allow(me, ORG_CHANGE_ROLES, "clear a PIN");
-  const [found] = await rows<{ id: number }>(db, sql`select id::int as id from person where id = ${personId} and active`);
-  if (!found) throw new Refusal(404, "not_found", "That person isn't working here any more.");
-  await clearPin(db, personId);
-  return { ok: true };
-}
-
 /** A new password for someone who forgot theirs, shown once; they change it when they sign in. */
 export async function resetPassword(db: Database, me: Me, personId: number): Promise<OrgLogin> {
   allow(me, ORG_CHANGE_ROLES, "give a new password");
-  // Back to the company's common password when there is one; else a fresh one to change.
-  const common = joinPassword();
-  const password = common ?? freshPassword();
+  const password = freshPassword();
   const hash = await hashPassword(password);
   const [person] = await rows<{ id: number; email: string | null }>(
     db,
-    sql`update person set password_hash = ${hash}, must_change_password = ${!common}, failed_logins = 0, locked_until = null
+    sql`update person set password_hash = ${hash}, must_change_password = true, password_pending = false, failed_logins = 0, locked_until = null
       where id = ${personId} and active returning id::int as id, email`,
   );
   if (!person) throw new Refusal(404, "not_found", "That person isn't working here any more.");
-  await db.execute(sql`delete from session where person_id = ${person.id}`);
+  await db.execute(sql`delete from session where person_id = ${person.id} or viewed_by = ${person.id}`);
   const [seat] = await rows<{ id: number; login: string | null }>(
     db,
     sql`select s.id::int as id, s.login from seat_holder h join seat s on s.id = h.seat_id and s.active
@@ -1019,7 +1004,6 @@ export async function resetPassword(db: Database, me: Me, personId: number): Pro
     login: seat?.login ? `${seat.login}@${LOGIN_DOMAIN}` : person.email,
     email: person.email,
     password,
-    common: Boolean(common),
   };
 }
 

@@ -30,9 +30,11 @@ pnpm --filter @2mg/web dev         # web on :5180
 
 Local: `.claude/launch.json` (`crmnew-api`, `crmnew-web`). Since 17 Nov the local database holds
 the real company (the 2026 chart's people, `docs/PEOPLE-2026.md`; the demo people left, their orders,
-customers and desk work closed by `scripts/close-demo.ts`, the Admin login stays): everyone signs in with their seat's login ID (`hos1`…) and the company's common
-password, `JOIN_PASSWORD` (Aryan's rule: same for all, never forced to change; keep it out of code
-and docs). Tests still seed their own demo company. One process per PGlite folder: check nothing
+customers and desk work closed by `scripts/close-demo.ts`, the Admin login stays): everyone signs in with their seat's login ID (`hos1`…) and their own password,
+first a one-time one (`pnpm --filter @2mg/api passwords`, or the Admin's "Give a new password"), then
+one they choose. This replaces Aryan's 17 Nov rule (`JOIN_PASSWORD` for all, never forced to change)
+and waits for Aryan's approval before it is merged to main or deployed (PLAN, change log 164); keep
+passwords out of code and docs. Tests still seed their own demo company. One process per PGlite folder: check nothing
 listens on :4100 before starting the API.
 
 ## Rules worth knowing

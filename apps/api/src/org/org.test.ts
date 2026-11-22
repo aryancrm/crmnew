@@ -333,6 +333,10 @@ describe("the company's tree", () => {
     expect(bySeat.response.status).toBe(200);
     expect(((await bySeat.response.json()) as { me: Me }).me.name).toBe("Mika Tan");
     expect((await login("hos1@2mginc.com", PASSWORD)).response.status).toBe(401);
+    // The password given opens only choosing their own.
+    expect(mika.mustChangePassword).toBe(true);
+    const own = await send("mika", "/api/auth/password", { current: "mika-password-1", next: "mika-own-words-2" });
+    expect(own.status).toBe(200);
     expect(mika.area?.name).toBe("HOS | Pasay");
     expect(mika.reportsTo?.name).toBe("Daniel");
     const theirs = await read<CustomerList>("mika", "/api/customers?q=Pasay General");

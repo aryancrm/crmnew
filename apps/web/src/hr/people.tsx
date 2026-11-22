@@ -558,29 +558,20 @@ function NewJoinerDialog({ onClose }: { onClose: () => void }) {
                 placeholder="juan@2mginc.com"
               />
             </Label>
-            {form.data?.commonPassword ? (
-              <div className="self-end pb-2 text-[13px] text-slate-500">
-                Password: the company's common one, the same for everyone.
+            <Label text="One-time password *" error={at("password")}>
+              <div className="flex gap-2">
+                <input
+                  value={values.password}
+                  onChange={(event) => set({ password: event.target.value })}
+                  className={`${FIELD} min-w-0 flex-1 font-mono`}
+                  autoComplete="new-password"
+                  placeholder="At least 8 characters"
+                />
+                <Button small onClick={() => set({ password: makePassword() })}>
+                  Make one
+                </Button>
               </div>
-            ) : (
-              <Label text="Password *" error={at("password")}>
-                <div className="flex gap-2">
-                  <input
-                    value={values.password}
-                    onChange={(event) => set({ password: event.target.value })}
-                    className={`${FIELD} min-w-0 flex-1 font-mono`}
-                    autoComplete="new-password"
-                    placeholder="At least 8 characters"
-                  />
-                  <Button
-                    small
-                    onClick={() => set({ password: makePassword() })}
-                  >
-                    Make one
-                  </Button>
-                </div>
-              </Label>
-            )}
+            </Label>
           </div>
         </Section>
         <Problem
@@ -1216,7 +1207,7 @@ function LoginDialog({
   return (
     <Dialog
       title={`${person.name}'s login`}
-      sub="A new password signs them out everywhere."
+      sub="A new password signs them out everywhere and works once: they then choose their own."
       onClose={onClose}
       busy={action.busy}
     >

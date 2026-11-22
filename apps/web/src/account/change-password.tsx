@@ -10,6 +10,8 @@ export function ChangePassword() {
   const navigate = useNavigate();
   const [current, setCurrent] = useState("");
   const [next, setNext] = useState("");
+  const [again, setAgain] = useState("");
+  const first = me?.mustChangePassword;
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<{ message: string; field?: string } | null>(null);
   const [done, setDone] = useState(false);
@@ -18,9 +20,17 @@ export function ChangePassword() {
     event.preventDefault();
     setBusy(true);
     setProblem(null);
+    if (next !== again) {
+      setBusy(false);
+      setProblem({ message: "The two passwords don't match.", field: "again" });
+      return;
+    }
     try {
       await api("/api/auth/password", { body: { current, next } });
       await queries.invalidateQueries({ queryKey: ME });
+      // The first password of their own: straight on to their work.
+      if (first) return navigate("/", { replace: true });
+      setAgain("");
       setDone(true);
       setCurrent("");
       setNext("");
@@ -38,17 +48,17 @@ export function ChangePassword() {
   return (
     <form
       onSubmit={submit}
-      className="mx-auto flex max-w-sm flex-col gap-4 rounded-xl border border-line bg-white p-6 shadow-card"
+      className="mx-auto flex w-full max-w-sm flex-col gap-4 rounded-xl border border-line bg-white p-6 shadow-card"
     >
-      <h1 className="text-xl font-bold">Change password</h1>
+      <h1 className="text-xl font-bold text-ink">{first ? "Choose your password" : "Change password"}</h1>
       {me?.mustChangePassword && (
         <div className="rounded-lg bg-warn-tint px-3 py-2.5 text-warn">
-          Choose your own password before you start.
+          Choose a password only you know. You need it before you start.
         </div>
       )}
       <Field
         id="current"
-        label="Current password"
+        label={first ? "One-time password you were given" : "Current password"}
         value={current}
         onChange={setCurrent}
         autoComplete="current-password"
@@ -61,6 +71,14 @@ export function ChangePassword() {
         onChange={setNext}
         autoComplete="new-password"
         error={problem?.field === "next" ? problem.message : undefined}
+      />
+      <Field
+        id="again"
+        label="New password again"
+        value={again}
+        onChange={setAgain}
+        autoComplete="new-password"
+        error={problem?.field === "again" ? problem.message : undefined}
       />
       {problem && !problem.field && (
         <div role="alert" className="rounded-lg bg-bad-tint px-3 py-2.5 text-bad">
@@ -80,7 +98,19 @@ export function ChangePassword() {
         >
           {busy ? "Saving…" : "Change password"}
         </button>
-        {!me?.mustChangePassword && (
+        {first ? (
+          <button
+            type="button"
+            onClick={async () => {
+              await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+              queries.setQueryData(ME, null);
+              navigate("/login", { replace: true });
+            }}
+            className="h-11 rounded-lg border border-field px-4"
+          >
+            Sign out
+          </button>
+        ) : (
           <button
             type="button"
             onClick={() => navigate(-1)}

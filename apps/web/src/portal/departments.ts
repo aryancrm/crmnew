@@ -30,7 +30,6 @@ export const DEPARTMENTS: Record<string, DepartmentInfo> = {
       "Score, targets and sales performance",
     ],
   },
-  // The sales line's two doors (19 Nov): the company's password, then each name.
   heads: {
     about: "The head of each sales business, as the sales tracker has it: their channels, team leads and people.",
     flow: [
