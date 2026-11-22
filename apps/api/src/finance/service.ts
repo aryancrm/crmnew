@@ -426,6 +426,16 @@ export async function moneyAccounts(db: Database, me: Me): Promise<MoneyAccounts
   return { accounts };
 }
 
+/** Refuses to take off or move money that is in a finished bank reconciliation (the books'
+ *  documents have the same guard, books/bank.ts). */
+async function guardCleared(tx: Runner, key: string): Promise<void> {
+  const [cleared] = await rows<{ n: number }>(
+    tx,
+    sql`select count(*)::int as n from bank_cleared c join bank_reconciliation r on r.id = c.reconciliation_id and r.status = 'done' where c.entry_key = ${key}`,
+  );
+  if (cleared?.n) throw new Refusal(409, "reconciled", "It is in a bank reconciliation: undo that reconciliation first.");
+}
+
 /** Finance puts a payment (or a refund) on the account it really went through. */
 export async function setMoneyAccount(
   db: Database,
@@ -445,6 +455,8 @@ export async function setMoneyAccount(
     );
     if (!found) throw new Refusal(404, "not_found", `That ${what.kind} isn't here.`);
     if (NOT_CASH_SET.has(found.method)) throw new Refusal(409, "not_now", "It moved no money: it has no account.");
+    // Ticked in a finished bank reconciliation: it stays on its account until that is undone.
+    await guardCleared(tx, `crm:crm_${what.kind}:${what.id}`);
     if (what.kind === "payment") await tx.execute(sql`update payment set money_account = ${account} where id = ${what.id}`);
     else await tx.execute(sql`update refund set money_account = ${account} where id = ${what.id}`);
     await logEvent(
@@ -914,6 +926,7 @@ export async function removePayment(
     );
     if (!payment?.active) throw new Refusal(404, "not_found", "That payment isn't there any more.");
     await assertOpen(tx, "customer_payment", payment.paidOn);
+    await guardCleared(tx, `crm:crm_payment:${paymentId}`);
     if (payment.method === "points")
       throw new Refusal(
         409,
@@ -1573,24 +1586,32 @@ export async function undoConfirm(db: Database, me: Me, orderId: number): Promis
         "too_late",
         `${order.code} was paid partly with points: put it on hold instead.`,
       );
-    const [invoice] = await rows<{ id: number; code: string }>(
+    const [invoice] = await rows<{ id: number; code: string; terms: string }>(
       tx,
-      sql`select id::int as id, code from invoice where order_id = ${orderId} and status <> 'cancelled' for update`,
+      sql`select id::int as id, code, terms from invoice where order_id = ${orderId} and status <> 'cancelled' for update`,
     );
-    // The invoice keeps its number (one invoice an order); the money taken in with the check goes.
-    if (invoice) {
+    // A credit or cash-on-delivery order was only let go: no money came in with the check, so none
+    // is taken off and it goes back to where Finance let it go from.
+    const advance = !invoice || invoice.terms === "advance";
+    // The invoice keeps its number (one invoice an order); the money taken in with the check goes,
+    // and only that: money recorded before the check stays.
+    if (invoice && advance) {
       await tx.execute(
         sql`update payment set active = false, removed_reason = 'Payment check undone', removed_by = ${me.id},
-            removed_at = now() where invoice_id = ${invoice.id} and active`,
+            removed_at = now() where invoice_id = ${invoice.id} and active
+            and at >= (select finance_checked_at from sales_order where id = ${orderId})`,
       );
-      await tx.execute(sql`update invoice set paid = 0, status = 'open' where id = ${invoice.id}`);
+      await tx.execute(
+        sql`update invoice set paid = (select coalesce(sum(p.amount), 0) from payment p where p.invoice_id = ${invoice.id} and p.active), status = 'open'
+          where id = ${invoice.id}`,
+      );
     }
     // The steps the check marked are taken off the order's road.
     await tx.execute(
       sql`update order_event set stage = null where order_id = ${orderId} and stage in ('finance_verified', 'paid')`,
     );
     await tx.execute(
-      sql`update sales_order set status = 'finance_check', finance_checked_at = null, finance_checked_by = null,
+      sql`update sales_order set status = ${advance ? "finance_check" : "ready_for_invoice"}, finance_checked_at = null, finance_checked_by = null,
           updated_at = now() where id = ${orderId}`,
     );
     await logEvent(
@@ -1598,7 +1619,7 @@ export async function undoConfirm(db: Database, me: Me, orderId: number): Promis
       orderId,
       me,
       "status",
-      `${me.name} undid the payment check${invoice ? ` (the payment on invoice ${invoice.code} taken off)` : ""}: it is back with Finance.`,
+      `${me.name} undid the ${advance ? "payment check" : "check"}${invoice && advance ? ` (the payment on invoice ${invoice.code} taken off)` : ""}: it is back with Finance.`,
     );
     await settleOrderPoints(tx, orderId);
   });

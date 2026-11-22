@@ -39,7 +39,8 @@ const amount = z
   .number({ error: "Type the amount." })
   .int("Type the amount in pesos and centavos.")
   .positive("Type the amount.")
-  .max(100_000_000_00, "That amount is too large.");
+  // What the amount columns hold (about 21.4 million pesos): beyond it a plain "too large".
+  .max(2_147_483_647, "That amount is too large.");
 const method = z.enum(STAFF_METHODS as [string, ...string[]], { error: "Pick how it was paid." });
 
 const paymentInput = z.object({

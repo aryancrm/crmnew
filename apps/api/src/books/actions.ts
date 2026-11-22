@@ -815,7 +815,12 @@ export async function applyCredit(db: Database, me: Me, id: number, input: { dat
     const bills = await billsFor(tx, credit.partyId, applied, sales ? "invoice" : "bill");
     const used = applied.reduce((sum, entry) => sum + entry.amount, 0);
     if (!used) throw new Refusal(400, "invalid", "Put an amount on at least one bill.", "bills");
-    if (used > credit.balance) throw new Refusal(400, "invalid", "More is put on the bills than the credit has left.", "bills");
+    // A customer's credit may already be used on the CRM's own invoices (payment.credit_doc_id):
+    // what is left is the balance less that, as its refund counts it (books/write.ts).
+    const [taken] = sales
+      ? await rows<{ used: number }>(tx, sql`select coalesce(sum(amount), 0)::float8 as used from payment where active and credit_doc_id = ${credit.id}`)
+      : [];
+    if (used > credit.balance - (taken?.used ?? 0)) throw new Refusal(400, "invalid", "More is put on the bills than the credit has left.", "bills");
     for (const [at, bill] of bills.entries()) {
       const amount = applied[at]?.amount as number;
       await settle(tx, bill, amount);

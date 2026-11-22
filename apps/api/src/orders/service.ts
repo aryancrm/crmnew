@@ -678,6 +678,22 @@ export async function routeOrder(
   await tx.execute(
     sql`update sales_order set finance_check = ${financeStep} where id = ${orderId}`,
   );
+  // A PAP case's order is its PAP head's to approve, and never shared out by the desk: the head
+  // is told it waits for them (once an order).
+  const [pap] = await rows<{ head: number | null; code: string; customer: string }>(
+    tx,
+    sql`select ${approverSql} as head, o.code, c.name as customer from sales_order o join customer c on c.id = o.customer_id where o.id = ${orderId}`,
+  );
+  if (pap?.head && pap.head !== me.id)
+    await notify(tx, {
+      to: [pap.head],
+      kind: "to_approve",
+      title: `Order to approve: ${pap.code} · ${pap.customer}`,
+      body: "A PAP order waits for your approval.",
+      link: `/orders/${orderId}`,
+      orderId,
+      key: `pap-approve:${orderId}`,
+    });
   // Management approves every order that comes in, of every channel and of every placer, the
   // Admin's own too (Aryan, 22 Nov: "nothing skips Management").
   return "management";
@@ -2314,6 +2330,8 @@ export async function actOnOrder(
           // (the same number) when it is approved.
           await cancelInvoiceOf(tx, me, id, `Back to Management: ${reason ?? "taken off hold"}`);
           await set(sql`approved_at = null, approved_by = null`);
+          // Its checks are looked at afresh, as after a take-back.
+          await clearChecks(tx, id);
         }
         await set(
           sql`status = ${back}, held_from = null, held_role = null, flag_reason = null,
@@ -2336,6 +2354,8 @@ export async function actOnOrder(
             finance_checked_by = null, held_from = null, held_role = null, flag_reason = null,
             waiting_stock_at = null, waiting_stock_by = null, packed_at = null, packed_by = null`,
         );
+        // Its checks are looked at afresh: it is approved again like a new order.
+        await clearChecks(tx, id);
         // Packed before the cancel: its pieces went back on the shelf, so it is packed afresh.
         await tx.execute(
           sql`update order_event set stage = null where order_id = ${id} and stage in ('finance_verified', 'paid', 'packed')`,

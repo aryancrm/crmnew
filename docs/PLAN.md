@@ -3082,3 +3082,10 @@ lowest, each division's average; Scorecards opens every card.
   they were; the ledger and Gross Profit read the kept cost. No figure changed on the day of the
   migration. Transaction locking now covers the CRM's own money too: a payment or refund dated in a
   locked period is refused, and a payment of a locked period can't be taken off.
+- **22 Nov 2026 (audit, second pass)** Checks are cleared when an order comes back to Management
+  (resume, restore); Finance's undo takes off only that check's money and sends a credit or COD
+  order back to its own step; the PAP head is told of each new PAP order; a customer's credit
+  already used on a CRM invoice can't be put on a Zoho invoice again; a payment in a finished bank
+  reconciliation can't be taken off or moved; the stock desk no longer reads customers' invoices and
+  payments through the Books lists; an amount beyond what the database holds is refused plainly.
+  Every finding and what became of it: `docs/system/README.md`.

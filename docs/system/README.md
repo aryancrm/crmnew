@@ -23,49 +23,57 @@ report inventory, scripts and deployment.
   Management, Finance, Dispatch, Inventory, HR, Online desk lead, Head, Team lead, Hospital MedRep.
   Other seats were not opened. No order was pushed through the line by hand.
 
-## Problems, checked against the code by a second read
+## What happened to each finding (22 Nov)
 
-| # | Problem | Where |
-|---|---|---|
-| 1 | Approve never looks at Management's or Finance's check ticks: an order can be approved with none ticked | `orders/service.ts:2215` |
-| 2 | Revising an order that was ever packed deletes its lines while packing records still point at them: the database will refuse (not run) | `orders/service.ts:2671`, migration 0013 |
-| 3 | A payment proof lifts any hold at the Finance step, Management's too | `orders/service.ts:3053` |
-| 4 | On the desks, an action on a colleague's order is recorded in the colleague's name, for personal logins too | `desks/service.ts:244` |
-| 5 | Exception is allowed on a shipped order (reader: it can then be cancelled and the stock returns to the shelf; second half not checked) | `orders/rules.ts:181` |
-| 6 | A website prescription or enquiry joins the customer's newest open case on any desk, so it can land on a PAP case the Online desk cannot open | `online/websites.ts:1004` |
-| 7 | The Online channel's MedRep can work cases but cannot own one: their new leads stay unassigned | `online/service.ts:300` |
-| 8 | "Mark as seen" on a chat checks the role only, not the desk or owner | `online/inbox.ts:159` |
+Fixed and committed (tests green, not yet tried by hand except the Approve block):
 
-## Problems reported by the readers, not yet checked a second time
+| Finding | Fix |
+|---|---|
+| Approve ignored the check ticks | Approve is refused until Documents and every flagged check is approved |
+| An Admin's own order skipped Management | Every order waits for Management |
+| Editing an order that was ever packed failed | Migration 0131 |
+| A payment proof lifted Management's hold | Lifts Finance's own hold only |
+| A shipped order could be cancelled through Exception | Refused while the parcel is on the road |
+| Checks stayed ticked when an order came back to Management (resume, restore) | Cleared, as after a take-back |
+| Finance's undo wiped every payment and sent a credit order to the wrong step | Takes off only the money of that check; a credit or COD order goes back to its own step |
+| The PAP head was never told of a new order | Told once per order |
+| A website prescription or enquiry could land on a PAP case | Joins an Online desk case only |
+| The Online channel's MedRep couldn't own a case | Can |
+| "Seen" marked any desk's chat | Online desk chats only |
+| Stock bought on a bill was counted as cost twice | Migration 0132: a medicine's bill line goes to Inventory Asset |
+| Past cost of goods moved when a batch's cost changed | Migration 0133: each move keeps its cost; later changes post on their own day |
+| Period locks didn't cover CRM money | A payment or refund in a locked period is refused |
+| A customer's credit could be used twice | The CRM invoices' use is counted |
+| A reconciled CRM payment could be taken off or moved | Refused until the reconciliation is undone |
+| Finance board failed above ₱21.47M a month; the API accepted amounts the database can't hold | Sums widened; a plain "too large" above the limit |
+| The stock desk could read customers' invoices and payments through the Books lists | Refused |
+| A return restocked, then not credited, could be returned again | Counted as returned |
+| Unpack or a restocked return didn't wake orders waiting for stock | They are told |
+| Batch trace showed cost to Dispatch and Regulatory | Cost roles only |
+| A sample acknowledgement could be any file type | Photo or PDF only |
+| Desk report "Rejected" counted cancellations | Named "Cancelled" |
 
-Money:
-- A bill line with no account posts to Cost of Goods Sold, and delivery posts cost again: stock bought through a purchase order is counted twice unless "Inventory Asset" is typed on each line.
-- Past cost of goods moves when a batch's cost changes later; closed months can change.
-- The chart of accounts is not made by any migration; an empty database (the own server) has no accounts for the payment forms.
-- Period locks do not cover the CRM's own invoices, payments, refunds or stock.
-- A customer's credit can be used twice (once on a Zoho invoice, once on a CRM invoice).
-- Amounts are 32-bit: the Finance board fails in a month above about ₱21.47M.
-- Credit limit and "owed before" are shown, never enforced.
+Looked at and left as it is, with why:
+
+| Finding | Why left |
+|---|---|
+| Desk actions recorded in the order owner's name | Aryan's rule of 19 Nov |
+| Credit limit and "owed before" only flagged | Aryan, 22 Nov: flag, never block |
+| A stock count needs no approval | Aryan, 22 Nov |
+| A question to a lead can't be asked twice until answered | A sensible rule, not a fault |
+| `GET /api/website-order` has no role check | Gives two numbers only; each page checks who may open it |
+| Returned pieces go back into one batch | A return line holds one batch; splitting needs a new table |
+| Website order webhook has no timestamp | The websites would have to send one first |
+| Points passwords of 4 characters | Marked in the code as the owner's choice |
+
+Still open (not built, each is new work rather than a fault):
+
+- No rate limit on addresses that need no sign-in.
+- The Leads screen loads every case on each refresh; every save re-shares the desks' orders (speed, at volume).
+- The chart of accounts is not made on an empty database (the own server needs the live data copied in first).
+- Amount columns are 32-bit: one invoice above about ₱21.4M cannot be stored.
 - "Customers owe", "collected" and "sales" are worked out differently on different pages (finance file, section 8.8).
-
-Stock and dispatch:
-- A return restocked by Dispatch and then refused by Management can be returned and restocked again.
-- Batch trace shows landed cost to Dispatch and Regulatory.
-- The sample acknowledgement upload has no file-type check.
-- Returned pieces all go into one batch even if packed from several.
-- A stock count can set any number with a typed reason, no approval; damaged returns write no stock line.
-- Two buying systems exist (first pages and the Books' purchases); warehouses cannot be added or closed in the app.
-- Nothing reminds anyone of a CPR running out or a complaint's due day.
-
-Orders and desks:
-- An Admin's own order skips Management.
-- Nobody is told of a new order until a desk person has pressed Start; the PAP head never is.
-- Stock put back by unpack or a return does not wake orders waiting for stock.
-- The desk report counts cancellations as "Rejected" and rejects as "Held".
-- Every successful save anywhere re-shares the desks' waiting orders.
-
-Online:
-- No rate limit on any address, including those needing no sign-in.
-- The Leads screen loads every case on each refresh (every 60 seconds).
-- `GET /api/website-order` has no role check.
+- Two buying systems side by side; warehouses can't be added in the app; no history on purchase edits.
+- No reminder for a CPR running out or a complaint's due day; no notice of a new online enquiry.
 - Held emails, website calls and quotation links are never cleaned up.
+- Never read: sales channels and field, sign-in and roles, customers and KPIs, scripts and deployment.
