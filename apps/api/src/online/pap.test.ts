@@ -183,17 +183,16 @@ describe("PAP cases", () => {
     let order = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
     expect(order.order).toMatchObject({ status: "pending_approval", medrep: "Paula" });
     expect(order.order.channel).toBe("PAP");
-    // The PAP head approves it, not Management.
-    expect(order.can.approve).toBe(false);
-    expect((await post("sarla", await ticked(db, `/api/orders/${orderId}/approve`), { finance: true })).status).toBe(
-      409,
-    );
+    // PAP has no head (Aryan, 22 Nov): once the letter is in, Management approves it like any
+    // order (prescription, the letter and its amount), then Finance. The PAP lead can't.
+    expect(order.can.approve).toBe(true);
     const queue = await read<{ orders: { id: number }[] }>("sarla", "/api/orders/queue");
-    expect(queue.orders.map((row) => row.id)).not.toContain(orderId);
-    const piaQueue = await read<{ orders: { id: number }[] }>("pia", "/api/orders/queue");
-    expect(piaQueue.orders.map((row) => row.id)).toContain(orderId);
-    expect((await read<OrderDetail>("pia", `/api/orders/${orderId}`)).can.approve).toBe(true);
-    expect((await post("pia", await ticked(db, `/api/orders/${orderId}/approve`), { finance: true })).status).toBe(
+    expect(queue.orders.map((row) => row.id)).toContain(orderId);
+    expect((await read<OrderDetail>("pia", `/api/orders/${orderId}`)).can.approve).toBe(false);
+    const byPia = await post("pia", await ticked(db, `/api/orders/${orderId}/approve`), { finance: true });
+    expect(byPia.status, await byPia.clone().text()).toBe(409);
+    await db.execute(sql`delete from order_check where order_id = ${orderId}`);
+    expect((await post("sarla", await ticked(db, `/api/orders/${orderId}/approve`), { finance: true })).status).toBe(
       200,
     );
     order = await read<OrderDetail>("fiona", `/api/orders/${orderId}`);

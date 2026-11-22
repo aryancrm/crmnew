@@ -1280,12 +1280,12 @@ function ownDesk(me: Me): Space {
       return {
         ...desk([
           home,
-          // The PAP head approves the PAP orders (not Management): one link straight to them.
+          // A lead seated over PAP sees its orders waiting for Management (Management approves them, 22 Nov).
           ...(me.channel?.code === "PAP"
             ? [
                 {
                   to: "/orders?stage=management",
-                  label: "PAP orders to approve",
+                  label: "PAP orders with Management",
                   icon: ClipboardCheck,
                   short: "Approve",
                 },

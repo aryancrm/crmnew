@@ -702,22 +702,6 @@ export async function routeOrder(
   await tx.execute(
     sql`update sales_order set finance_check = ${financeStep} where id = ${orderId}`,
   );
-  // A PAP case's order is its PAP head's to approve, and never shared out by the desk: the head
-  // is told it waits for them (once an order).
-  const [pap] = await rows<{ head: number | null; code: string; customer: string }>(
-    tx,
-    sql`select ${approverSql} as head, o.code, c.name as customer from sales_order o join customer c on c.id = o.customer_id where o.id = ${orderId}`,
-  );
-  if (pap?.head && pap.head !== me.id)
-    await notify(tx, {
-      to: [pap.head],
-      kind: "to_approve",
-      title: `Order to approve: ${pap.code} · ${pap.customer}`,
-      body: "A PAP order waits for your approval.",
-      link: `/orders/${orderId}`,
-      orderId,
-      key: `pap-approve:${orderId}`,
-    });
   // Management approves every order that comes in, of every channel and of every placer, the
   // Admin's own too (Aryan, 22 Nov: "nothing skips Management").
   return "management";
@@ -794,9 +778,11 @@ type CardRow = Omit<OrderCard, "statusLabel" | "lines" | "items" | "findings" | 
 const caseColumns = sql`o.lead_id::int as "leadId", coalesce((select l.road = 'gl' from lead l where l.id = o.lead_id), false) as gl`;
 
 /** Everything a card shows about an order (alias `o`), with `cardFrom`. */
-/** Who decides this order instead of Management: a PAP order's channel head (patient
- *  assistance is approved apart, Aryan). None for every other order. */
-const approverSql = sql`(select ch2.head_id::int from channel ch2 where ch2.id = o.channel_id and ch2.code = 'PAP')`;
+/** Who decides this order instead of Management: nobody (Aryan, 22 Nov: PAP has no head; the PAP
+ *  person gets the papers and the guarantee letter ready on the case, then the order goes to
+ *  Management, which reads the prescription, the letter and its amount, then to Finance). It was
+ *  a PAP order's channel head until then; kept as one place should a desk ever approve apart. */
+const approverSql = sql`(null::int)`;
 
 const cardColumns = sql`${rowColumns}, o.medrep_id::int as "medrepId", ${approverSql} as "approverId",
   (select ap.name from person ap where ap.id = ${approverSql}) as "approverName", ${sentBackColumns},
@@ -878,8 +864,7 @@ function nextLine(viewer: Viewer, row: CardRow, findings: OrderFinding[]): strin
     case "draft":
       return `Sent back to you${row.flagReason ? `: ${row.flagReason}` : ""}. Fix it and place it again.`;
     case "pending_approval": {
-      // A PAP order is approved by the PAP head, not Management.
-      const who = row.approverName ? `${row.approverName} (PAP head)` : "Management";
+      const who = row.approverName ?? "Management";
       return findings.length
         ? `${who} is checking it: ${findings.map((finding) => finding.short.toLowerCase()).join(", ")}`
         : `${who} is checking it`;

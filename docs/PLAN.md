@@ -3263,3 +3263,16 @@ lowest, each division's average; Scorecards opens every card.
   a guarantee-letter order is checked by whoever leads PAP's box on the tree, else the head above
   it (Vanessa), not by Management; Finance still bills the agency; the PAP person records the
   agency's payment with its proof and Finance confirms it against the bank. Waiting for his yes.
+- **22 Nov 2026 (Aryan decides PAP's check)** "Don't read the organisation chart, only the sheet.
+  Vanessa doesn't check PAP's orders, she only sees its sales. PAP has no head for now: the PAP
+  person gets the documents ready herself; when they are in and the guarantee letter has come, the
+  order goes to Management, which reads the prescription, the guarantee letter and every relevant
+  paper, the amount written on the letter against what the medicines cost; then to Finance."
+  Done: a PAP order is no longer its channel head's to approve (`approverSql` is nobody); it waits
+  for Management like every order and is in Management's shared queue; the screens say "Waiting
+  for Management". Already so, checked: a case can't place its order until the papers are filed
+  and the letter is verified, not expired and not less than the quotation; the order page shows
+  the letter's number and amount against the order's total; the customer is emailed at each step
+  of the order (confirmed, on the way, delivered, payment received) when an email is on file, a
+  PAP case's too. Not built: the PAP person recording the agency's payment (Finance records it
+  today); his earlier wish, not repeated here. Proposal of the Hospital head approving: dropped.

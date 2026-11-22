@@ -343,7 +343,7 @@ export function ManagementStep({
       ) : waiting ? (
         <Fact shape="now">
           <b>
-            Waiting for {order.approverName ? `${order.approverName} (PAP head)` : "Management"}
+            Waiting for {order.approverName ?? "Management"}
           </b>
         </Fact>
       ) : order.status === "draft" ? (

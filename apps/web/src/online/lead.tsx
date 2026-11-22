@@ -2087,7 +2087,7 @@ function orderWord(order: NonNullable<LeadCase["order"]>, pap = false): string {
   if (order.status === "shipped") return "On the way";
   if (order.status === "packing") return "Packed";
   if (order.status === "pending_approval")
-    return pap ? "Waiting for the PAP head" : "Waiting for Management";
+    return "Waiting for Management";
   if (order.status === "on_hold" || order.status === "exception") return "On hold";
   if (order.status === "draft") return "Sent back";
   if (order.status === "finance_check" || order.status === "ready_for_invoice") return "With Finance";
@@ -2369,7 +2369,7 @@ function CaseRoute({
   pay: "cod" | "advance" | "terms" | null;
 }) {
   const steps = [
-    pap ? "The PAP head approves" : "Management approves",
+    "Management approves",
     gl
       ? "Finance checks the agency's bill"
       : pay === "advance"

@@ -29,8 +29,8 @@ const VERB: Record<DutyDesk, string> = { management: "check", finance: "check fo
 
 /** The orders waiting at a desk (alias `o`), and the column naming who has each in hand. */
 const AT_DESK: Record<DutyDesk, SQL> = {
-  // A PAP case's order is its PAP head's to approve: never shared out.
-  management: sql`(o.status = 'pending_approval' and not exists (select 1 from channel ch where ch.id = o.channel_id and ch.code = 'PAP'))`,
+  // Every order waiting for approval, a PAP case's too (Aryan, 22 Nov: PAP has no head).
+  management: sql`(o.status = 'pending_approval')`,
   finance: sql`o.status in ('finance_check', 'ready_for_invoice')`,
   dispatch: sql`o.status in ('ready_for_dispatch', 'packing')`,
 };
