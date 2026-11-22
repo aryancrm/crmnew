@@ -25,6 +25,7 @@ import {
   myConfirmations,
   orderOfInvoice,
   collectedLater,
+  owedGlance,
   owedInvoices,
   recordPayment,
   recordRefund,
@@ -143,6 +144,7 @@ export function financeRoutes(
   );
   app.get("/api/finance/refunds", async (c) => c.json(await refundsOwed(db, c.get("me"))));
   app.get("/api/finance/owed/invoices", async (c) => c.json(await owedInvoices(db, c.get("me"))));
+  app.get("/api/finance/owed/glance", async (c) => c.json(await owedGlance(db, c.get("me"))));
   app.get("/api/finance/collected", async (c) =>
     c.json(await collectedLater(db, c.get("me"), Number(c.req.query("days") ?? 30) || 30)),
   );

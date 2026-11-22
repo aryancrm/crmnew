@@ -6,7 +6,7 @@
 import type {
   ChannelFigures,
   ChannelReport,
-  OwedInvoices,
+  OwedGlance,
   PaymentList,
   SpeedReport,
   TeamBoard,
@@ -535,75 +535,23 @@ const _AGE: {
 /** What customers owe, big: how late it is and who owes most, from the same report as its page;
  *  cash on delivery not delivered yet is said apart, not in the total. */
 export function OwedCard() {
+  // Added up on the server from the same invoices as the page (22 Nov: the card downloaded every
+  // invoice, 800 KB, to show five names).
   const query = useQuery({
-    queryKey: ["finance", "owed", "invoices"],
-    queryFn: () => api<OwedInvoices>("/api/finance/owed/invoices"),
+    queryKey: ["finance", "owed", "glance"],
+    queryFn: () => api<OwedGlance>("/api/finance/owed/glance"),
   });
   const data = query.data;
-  const owed = (data?.rows ?? []).filter((row) => row.state !== "on_delivery");
-  const customers = [
-    ...owed
-      .reduce(
-        (map, row) => {
-          const now = map.get(row.customerId) ?? {
-            id: row.customerId,
-            name: row.customer,
-            medrep: row.medrep,
-            team: row.team,
-            total: 0,
-            late: 0,
-            oldest: 0,
-            invoices: 0,
-          };
-          now.total += row.balance;
-          now.invoices += 1;
-          if (row.state === "late") {
-            now.late += row.balance;
-            now.oldest = Math.max(now.oldest, row.daysLate);
-          }
-          return map.set(row.customerId, now);
-        },
-        new Map<
-          number,
-          {
-            id: number;
-            name: string;
-            medrep: string;
-            team: string | null;
-            total: number;
-            late: number;
-            oldest: number;
-            invoices: number;
-          }
-        >(),
-      )
-      .values(),
-  ].sort((a, b) => b.late - a.late || b.total - a.total);
+  const customers = data?.customers ?? [];
   const { shown, seeAll } = useSeeAll(customers, 5);
   if (!data) return null;
   const total = data.totals.owed;
   const ages = [
-    {
-      label: "Not due yet",
-      color: "bg-emerald-500",
-      amount: owed.filter((row) => row.state === "due"),
-    },
-    {
-      label: "1–30 days late",
-      color: "bg-amber-400",
-      amount: owed.filter((row) => row.state === "late" && row.daysLate <= 30),
-    },
-    {
-      label: "31–60 days",
-      color: "bg-orange-500",
-      amount: owed.filter((row) => row.state === "late" && row.daysLate > 30 && row.daysLate <= 60),
-    },
-    {
-      label: "Over 60 days",
-      color: "bg-rose-600",
-      amount: owed.filter((row) => row.state === "late" && row.daysLate > 60),
-    },
-  ].map((age) => ({ ...age, amount: age.amount.reduce((sum, row) => sum + row.balance, 0) }));
+    { label: "Not due yet", color: "bg-emerald-500", amount: data.ages.notDue },
+    { label: "1–30 days late", color: "bg-amber-400", amount: data.ages.d30 },
+    { label: "31–60 days", color: "bg-orange-500", amount: data.ages.d60 },
+    { label: "Over 60 days", color: "bg-rose-600", amount: data.ages.older },
+  ];
   return (
     <GlanceCard
       title="Customers owe us"

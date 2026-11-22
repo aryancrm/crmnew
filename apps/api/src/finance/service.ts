@@ -40,6 +40,7 @@ import type {
   OrderPaper,
   OrderStatus,
   CollectedLater,
+  OwedGlance,
   OwedInvoices,
   OwedList,
   OwedRow,
@@ -1470,6 +1471,37 @@ export async function collectedLater(db: Database, me: Me, days = 30): Promise<C
       ...row,
       terms: termsKey === "cod" ? "COD" : `${payDays ?? ""} days`.trim(),
     })),
+  };
+}
+
+/** What customers owe, added up for the Home's card from the very list its page shows (the same
+ *  invoices, the same sums the card made in the browser), so the card is a few lines, not every
+ *  invoice. */
+export async function owedGlance(db: Database, me: Me): Promise<OwedGlance> {
+  const all = await owedInvoices(db, me);
+  const owed = all.rows.filter((row) => row.state !== "on_delivery");
+  const byCustomer = new Map<number, OwedGlance["customers"][number]>();
+  for (const row of owed) {
+    const now = byCustomer.get(row.customerId) ?? { id: row.customerId, name: row.customer, medrep: row.medrep, team: row.team, total: 0, late: 0, oldest: 0, invoices: 0 };
+    now.total += row.balance;
+    now.invoices += 1;
+    if (row.state === "late") {
+      now.late += row.balance;
+      now.oldest = Math.max(now.oldest, row.daysLate);
+    }
+    byCustomer.set(row.customerId, now);
+  }
+  const sumOf = (test: (row: (typeof owed)[number]) => boolean) => owed.filter(test).reduce((sum, row) => sum + row.balance, 0);
+  return {
+    today: all.today,
+    totals: all.totals,
+    ages: {
+      notDue: sumOf((row) => row.state === "due"),
+      d30: sumOf((row) => row.state === "late" && row.daysLate <= 30),
+      d60: sumOf((row) => row.state === "late" && row.daysLate > 30 && row.daysLate <= 60),
+      older: sumOf((row) => row.state === "late" && row.daysLate > 60),
+    },
+    customers: [...byCustomer.values()].sort((a, b) => b.late - a.late || b.total - a.total).slice(0, 100),
   };
 }
 

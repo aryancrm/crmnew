@@ -271,9 +271,16 @@ export async function teamBoard(
             coalesce(sum(i.total - i.paid) filter (where i.status = 'open' and ${due} and i.due_on < ${today}::date), 0)::float8 as overdue
           from invoice i join sales_order o on o.id = i.order_id where o.seat_id in (${list}) group by o.seat_id
           union all
-          -- Zoho's unpaid invoices of the seat's Zoho salesperson.
-          select i.seat_id::int, sum(i.total - i.paid)::float8, coalesce(sum(i.total - i.paid) filter (where i.due_on < ${today}::date), 0)::float8
-          from sale_invoice i where i.source = 'zoho' and i.status = 'open' and i.seat_id in (${list}) group by i.seat_id`,
+          -- Zoho's unpaid invoices of the seat's Zoho salesperson: the sales view's Zoho half asked
+          -- directly (the same documents, amounts and day: unpaid = a balance, not void, not a
+          -- draft), so the database reads only the invoices with a balance, not every invoice the
+          -- seats ever had (1.2 seconds of the board, 22 Nov).
+          select zs.seat_id::int,
+            sum(round(d.total * d.fx_rate)::bigint - round((d.total - d.balance) * d.fx_rate)::bigint)::float8,
+            coalesce(sum(round(d.total * d.fx_rate)::bigint - round((d.total - d.balance) * d.fx_rate)::bigint) filter (where d.due_date < ${today}::date), 0)::float8
+          from book_doc d join zoho_seller zs on zs.name = coalesce(d.fields->>'Sales Person', d.fields->>'salesperson_name')
+          where d.kind = 'invoice' and d.zoho_id is not null and d.status not in ('draft', 'void') and d.balance > 0
+            and zs.seat_id in (${list}) group by zs.seat_id`,
     ),
     rows<{ seatId: number; day: string; amount: number }>(
       db,

@@ -193,13 +193,15 @@ export async function collections(db: Database, me: Me): Promise<Collections> {
       )
       select c.id::int as "customerId", c.name as customer, c.kind, c.phone,
         sum(inv.owed)::float8 as owed, count(*)::int as invoices,
-        (array_agg(inv.code order by inv.issued_on))[1] as "oldestCode",
-        (array_agg(inv.order_id order by inv.issued_on))[1]::int as "oldestOrderId",
-        (array_agg(inv.href order by inv.issued_on))[1] as "oldestHref",
+        -- Two invoices of one day: always the same one first (by its number), whatever way the
+        -- database reads them.
+        (array_agg(inv.code order by inv.issued_on, inv.code))[1] as "oldestCode",
+        (array_agg(inv.order_id order by inv.issued_on, inv.code))[1]::int as "oldestOrderId",
+        (array_agg(inv.href order by inv.issued_on, inv.code))[1] as "oldestHref",
         to_char(min(inv.issued_on), 'YYYY-MM-DD') as "oldestOn",
         (${today}::date - min(inv.issued_on))::int as age,
         coalesce(max(${today}::date - inv.due_on) filter (where inv.due_on < ${today}::date), 0)::int as "daysLate",
-        (array_agg(inv.seller order by inv.issued_on))[1] as seller
+        (array_agg(inv.seller order by inv.issued_on, inv.code))[1] as seller
       from inv join customer c on c.id = inv.customer_id
       group by c.id, c.name, c.kind, c.phone
       order by min(inv.issued_on), sum(inv.owed) desc limit 300`,

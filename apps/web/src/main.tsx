@@ -13,6 +13,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AdminChannelPage, AdminChannelsPage } from "./admin/channels";
 import { AdminDataChecks } from "./admin/data-checks";
+import { AdminSlowScreens } from "./admin/slow-screens";
 import { AdminCompanyChartPage } from "./admin/company-chart-page";
 import { AdminZohoSellers } from "./admin/zoho-sellers";
 import { AttendanceMonthPage, AttendancePage } from "./hr/attendance";
@@ -329,6 +330,7 @@ createRoot(root).render(
             <Route path="hr/attendance/:id" element={<AttendanceMonthPage key="month" />} />
             <Route path="admin/channels" element={<AdminChannelsPage />} />
             <Route path="admin/data-checks" element={<AdminDataChecks />} />
+            <Route path="admin/slow-screens" element={<AdminSlowScreens />} />
             <Route path="admin/zoho-sellers" element={<AdminZohoSellers />} />
             <Route path="admin/company-chart" element={<AdminCompanyChartPage />} />
             <Route path="admin/channels/:id" element={<AdminChannelPage />} />

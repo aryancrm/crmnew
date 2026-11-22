@@ -1580,6 +1580,7 @@ function adminPanel(me: Me): Space {
           { to: "/channels", label: "Online pages & mail", icon: Radio },
           // The data checked against itself: every bill, payment, return and shelf adds up.
           { to: "/admin/data-checks", label: "Data checks", icon: ShieldCheck },
+          { to: "/admin/slow-screens", label: "Slow screens", icon: Gauge },
           { to: "/audit", label: "Audit", icon: ScrollText },
           { to: "/calls", label: "Calls", icon: PhoneCall },
         ],

@@ -3296,3 +3296,28 @@ lowest, each division's average; Scorecards opens every card.
   completed, PAP's case Done. 500 API tests. Local only.
 - **22 Nov 2026 (Aryan: "Finance alone")** Letting go the unpaid rest of a guarantee letter is
   Finance's own call: no one else's yes is asked. As built; nothing changed.
+- **22 Nov 2026 (Aryan: "every page of every person is slow; the CEO Home shows its data late;
+  don't remove anything for speed, the data must not change")** Speed only, each change checked by
+  saving every screen's answer before and after for nine kinds of seat and comparing them byte for
+  byte. What was slow and why: Zoho's 69,000 invoices find their seat through the salesperson's
+  name, and "this seat's invoices" read all of them each time; "what is owed" read every document
+  to find the few with a balance; one person's scorecard was worked out several times in one
+  request. Done: (1) indexes only (migrations 0136, 0137, 0139): Zoho invoices and old orders by
+  salesperson, documents with a balance, customers with a visit class; (2) Telesales team: the
+  "new customer" test asks the sales view's two halves directly, 30 s → 0.2 s; (3) the customer
+  list: each area's MedRep and each customer's enquiry owner worked out once, not per customer
+  (proved the same for all 91,614 customers), its heaviest question 576 → 69 ms; (4) the team
+  board: Zoho's unpaid invoices per seat asked directly (the same figures for all 56 seats),
+  1.3 s → 0.05 s; (5) scorecards: a person's card is worked out once per reading request
+  (`requestMemo`), the company's page 1,562 → 690 questions and 2.0 → 0.6 s, the team board
+  392 → 334 and 1.6 → 0.5 s; (6) the CEO Home's "Customers owe us" card gets a summary
+  (`/api/finance/owed/glance`, 16 KB) instead of every invoice (800 KB), from the same list; (7)
+  Finance's board 300 → 96 ms, Customers owe 250 → 74 ms. One thing differs, on purpose: on
+  Collections, a customer with two unpaid invoices of the same day showed either as "the oldest",
+  as the database happened to read them; it is now always the lower number (no amount, total or
+  order changed). New: **Admin panel → Slow screens** (migration 0138): the server notes every
+  answer that takes it over 0.8 s, with its address, time, number of questions and seat, so what
+  is slow online can be seen (online the database and server are smaller than here, and only local
+  times could be measured). The CEO Home lost nothing (33 cards); its late cards were these calls.
+  500 API tests, data checks 18/18. Not done yet: his ask to walk every seat's left menu and each
+  page under it (MedRep to CEO); the scorecards still ask about six questions a person.

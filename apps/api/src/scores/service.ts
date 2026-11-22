@@ -5,7 +5,7 @@
 // increment band. Working days are the company calendar: Monday to Saturday, less holidays.
 
 import { type SQL, sql } from "drizzle-orm";
-import { type Database, rows } from "../db/index";
+import { type Database, requestMemo, rows } from "../db/index";
 import { DEFAULT_SCHEDULE, isWorkDay } from "../hr/work-time";
 import { Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
@@ -94,7 +94,11 @@ async function seatOn(db: Database, personId: number, day: string): Promise<Seat
   return own;
 }
 
-export async function holidaysIn(db: Database, from: string, to: string): Promise<Set<string>> {
+export function holidaysIn(db: Database, from: string, to: string): Promise<Set<string>> {
+  return requestMemo(`holidays:${from}:${to}`, () => holidaysNow(db, from, to));
+}
+
+async function holidaysNow(db: Database, from: string, to: string): Promise<Set<string>> {
   const found = await rows<{ day: string }>(
     db,
     sql`select to_char(day, 'YYYY-MM-DD') as day from holiday where active and day between ${from}::date and ${to}::date`,
@@ -440,12 +444,24 @@ async function fieldMeasure(db: Database, personId: number, month: string, upTo:
 }
 
 /** A person's card for a month: the locked one when the month is locked, else worked out now. */
-export async function cardOf(
+export function cardOf(
   db: Database,
   personId: number,
   month: string,
   today = todayManila(),
   which: "main" | "field" = "main",
+): Promise<ScoreCard | null> {
+  // One person's card is asked for by their own row, their lead's card and their head's: worked
+  // out once in a reading request.
+  return requestMemo(`score-card:${personId}:${month}:${today}:${which}`, () => cardNow(db, personId, month, today, which));
+}
+
+async function cardNow(
+  db: Database,
+  personId: number,
+  month: string,
+  today: string,
+  which: "main" | "field",
 ): Promise<ScoreCard | null> {
   const [locked] = await rows<{ recipe: string; total: number; max: number; capped: boolean; kpis: ScoreCard["kpis"]; lockedAt: string }>(
     db,

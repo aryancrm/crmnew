@@ -3926,6 +3926,17 @@ export type OwedInvoices = {
   };
 };
 
+/** What customers owe, in short, for the Home's card: the same invoices as OwedInvoices, added up
+ *  on the server so the card doesn't download every invoice (22 Nov). */
+export type OwedGlance = {
+  today: string;
+  totals: OwedInvoices["totals"];
+  /** Not due yet, 1–30 days late, 31–60 days, over 60 days: what is owed in each (not cash on delivery to come). */
+  ages: { notDue: number; d30: number; d60: number; older: number };
+  /** Who owes, the most overdue first (at most 100). */
+  customers: { id: number; name: string; medrep: string; team: string | null; total: number; late: number; oldest: number; invoices: number }[];
+};
+
 /** One channel's sales, opened: each of its sellers against their target, its best customers and
  *  medicines, for the month (invoiced, as Sales this month counts). */
 export type ChannelSalesDetail = {
@@ -6465,4 +6476,13 @@ export type PersonReport = {
     /** More rows than shown: narrow the days. */
     more: boolean;
   }[];
+};
+
+/** The Admin's Slow screens: every address whose answer took the server longer than slowMs, in the
+ *  last two weeks, the costliest first. */
+export type SlowScreens = {
+  slowMs: number;
+  times: number;
+  since: string | null;
+  rows: { method: string; path: string; times: number; avgMs: number; worstMs: number; questions: number; roles: string; lastAt: string }[];
 };
