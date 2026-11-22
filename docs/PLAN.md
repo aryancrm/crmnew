@@ -3199,3 +3199,11 @@ lowest, each division's average; Scorecards opens every card.
   `seat_report_channel`), Targets (no channel on the screen), the Admin's Channels page (step 4).
   Two words for three channels remain: sales reports name the tree's box (B2B Telesales, Government
   Bidding, Modern Trade), orders the sheet's Division (B2B, BID, MT): asked Aryan. Local only.
+- **22 Nov 2026 (the first eight channels against the sheet, step 4: the Admin's Channels page)**
+  A channel's page (Admin panel → Channels → a channel) shows its head, teams, team leads and
+  MedReps and no longer changes them: no add, move, rename, close, fill or drag there; one line
+  on top opens the Company tree, where places are changed (Edit positions). The head it names was
+  already the tree's (`projectOrg` writes `channel.head_id` from the lead of the channel's top
+  box, so the PAP approver follows the tree too). What only a channel has stays on the page: Add
+  channel, Name & Division, take out of use, its areas; "Open in Teams & people" stays in its
+  menu. Teams & people itself still changes seats (not touched). Web only; local only.

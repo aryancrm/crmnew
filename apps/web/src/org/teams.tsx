@@ -747,10 +747,13 @@ export function SeatRow({
   seat,
   unit,
   open,
+  fixed = false,
 }: {
   seat: OrgSeat;
   unit: OrgUnit;
   open: (pop: Pop) => void;
+  /** Shown only, nothing to press or drag (the Admin's Channels: places change on the Company tree). */
+  fixed?: boolean;
 }) {
   const queries = useQueryClient();
   const act = useAction();
@@ -768,12 +771,12 @@ export function SeatRow({
   ].filter(Boolean);
   return (
     <li
-      draggable
+      draggable={!fixed}
       onDragStart={(event) =>
         event.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ kind: "seat", id: seat.id, label: holder ? `${holder.name} (${seat.title})` : `the empty seat "${seat.title}"` } satisfies Dragged))
       }
-      title="Drag onto a team in the tree to move"
-      className={`flex cursor-grab flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 active:cursor-grabbing ${holder ? "" : "bg-amber-50/40"}`}
+      title={fixed ? undefined : "Drag onto a team in the tree to move"}
+      className={`flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-3 ${fixed ? "" : "cursor-grab active:cursor-grabbing"} ${holder ? "" : "bg-amber-50/40"}`}
     >
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex flex-wrap items-center gap-2">
@@ -835,7 +838,7 @@ export function SeatRow({
           )}
         </div>
       )}
-      <div className="flex items-center gap-1.5">
+      <div className={fixed ? "hidden" : "flex items-center gap-1.5"}>
         {!holder && (
           <Button small variant="primary" onClick={() => open({ kind: "add", unit, seat })}>
             <UserPlus size={14} /> Fill
