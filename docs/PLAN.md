@@ -3337,3 +3337,18 @@ lowest, each division's average; Scorecards opens every card.
   Aryan: Dispatch has both "On the road" and "Shipments", which open the same list; the Hospital
   MedRep has "My hospitals" and "Hospital list", both titled My hospitals; Management's menu has
   Calls and Sales performance; the Hospital head's has Government tenders and Bid report).
+- **22 Nov 2026 (Aryan: "each seat's side menu: take out what is extra, group what can be
+  grouped")** Each seat's menu read as the code builds it for a real person of that seat, and the
+  loose links grouped; no link was taken off (each menu has the same number of links as before,
+  all opened again). Sellers: the score, calls and sales figures sit together in "My numbers"
+  (CLIDP's and the Online desk's were loose; made where there was none). CLIDP: Collections with
+  its Accounts. Online desk: twelve links in a row are now the day's work, a Patients folder
+  (Patients, Points), My numbers, and Medicines & stock under Look up. Team leads and heads: the
+  loose team links (Targets, Scorecards, Calls, Sales performance) in one "Team numbers" folder;
+  the Hospital head's two tender links in one folder. Management: Calls and Sales performance
+  moved under Look up (its work is the orders). HR: Medicines & stock under Look up. Left for
+  Aryan to say: a field MedRep has two plans in the menu, "Tour plan" (the month's calendar, sent
+  to the team lead to approve) and "Visit plan" / "Route plan" (visits by each customer's class,
+  also "send to my team lead"), and both "My day" and "Today's visits"; Dispatch has "On the road"
+  and "Shipments"; the Hospital MedRep's "Hospital list" lists doctors and patients too. Each
+  seat's Home was opened, not yet read card by card against its work.

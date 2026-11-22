@@ -619,11 +619,20 @@ function deskFor(me: Me): Space {
   // team, what they look things up in) so it doesn't read as one long list. Nothing is taken off
   // (Aryan, 17 Nov), and the phone's tab bar keeps the links it had.
   const sorted = LEAD_ROLES.includes(me.role) ? sortLead(first.items) : null;
-  // A seller's look-ups (the stock) sit under Look up too, below their own work (19 Nov).
-  const sellerLookUp = !sorted && me.role === "medrep" ? first.items.filter((item) => SELLER_LOOK_UP.includes(item.to)) : [];
-  const work = sorted ? sorted.work : first.items.filter((item) => !sellerLookUp.includes(item));
-  const found = sorted ? sorted.lookUp : [];
-  const team = sorted?.team ?? [];
+  // A seller's look-ups (the stock) sit under Look up too, below their own work (19 Nov); the
+  // Online desk's as well (22 Nov).
+  const seller = !sorted && (me.role === "medrep" || me.role === "online");
+  // HR's one link into the stock is a look-up too (HR's own work is people, leave and pay).
+  const sellerLookUp = seller || me.role === "hr" ? first.items.filter((item) => SELLER_LOOK_UP.includes(item.to)) : [];
+  // Management approves orders: the calls and the sales figures are what it looks up (22 Nov).
+  const deskLookUp = me.role === "management" ? first.items.filter((item) => !item.children && MANAGEMENT_LOOK_UP.includes(item.to)) : [];
+  const own = first.items.filter((item) => !sellerLookUp.includes(item) && !deskLookUp.includes(item));
+  // Aryan, 22 Nov: "what can be grouped, group": a seller's score, calls and sales figures go in
+  // one "My numbers" folder; a lead's loose team links (targets, scorecards, calls, sales figures)
+  // in one "Team numbers" folder. Every link stays, in its folder.
+  const work = sorted ? sorted.work : seller ? numbersTogether(own) : own;
+  const found = [...(sorted ? sorted.lookUp : []), ...deskLookUp];
+  const team = looseTogether(sorted?.team ?? []);
   const lookUpItems = [...(lookUp?.items ?? []), ...found, ...sellerLookUp, ...speed];
   // Their own leave, payslips and messages at the foot of every menu, under the work (19 Nov: "each
   // one's own things on top").
@@ -645,6 +654,40 @@ function deskFor(me: Me): Space {
 
 /** What a seller only looks things up in. */
 const SELLER_LOOK_UP = ["/medicines"];
+/** What Management only looks things up in, beside the orders it approves. */
+const MANAGEMENT_LOOK_UP = ["/calls", "/sales-performance"];
+/** A seller's own figures: their score, their calls, the day's sales. */
+const NUMBER_LINKS = ["/my/score", "/calls", "/sales-performance"];
+
+/** A seller's loose number links into their "My numbers" folder (made when there is none and two
+ *  or more are loose), where the first of them stood. Nothing is taken off. */
+function numbersTogether(items: MenuItem[]): MenuItem[] {
+  const loose = items.filter((item) => !item.children && NUMBER_LINKS.includes(item.to));
+  if (!loose.length) return items;
+  const kept = items.find((item) => item.children && item.label === "My numbers");
+  if (kept) {
+    const more = loose.filter((one) => !kept.children?.some((kid) => kid.to === one.to));
+    return items
+      .filter((item) => !loose.includes(item))
+      .map((item) => (item === kept ? { ...kept, children: [...(kept.children ?? []), ...more] } : item));
+  }
+  if (loose.length < 2) return items;
+  const before = items.slice(0, items.indexOf(loose[0] as MenuItem)).filter((item) => !loose.includes(item)).length;
+  const rest = items.filter((item) => !loose.includes(item));
+  rest.splice(before, 0, folder("My numbers", Gauge, loose, "Numbers"));
+  return rest;
+}
+
+/** A lead's loose team links (not in a folder) into one "Team numbers" folder, where the first
+ *  of them stood; one alone stays as it is. Nothing is taken off. */
+function looseTogether(items: MenuItem[]): MenuItem[] {
+  const loose = items.filter((item) => !item.children);
+  if (loose.length < 2) return items;
+  const before = items.slice(0, items.indexOf(loose[0] as MenuItem)).filter((item) => item.children).length;
+  const rest = items.filter((item) => item.children);
+  rest.splice(before, 0, folder("Team numbers", Gauge, loose, "Numbers"));
+  return rest;
+}
 
 /** Calls and the daily sales performance on every selling desk and those above them (18 Nov,
  *  the B2B team's Google Form and end-of-day Excel, now here). */
@@ -830,11 +873,12 @@ function ownDesk(me: Me): Space {
                 { to: "/my/area", label: "My accounts", icon: Building2 },
                 { to: "/to-call", label: "Accounts to call", icon: PhoneCall, badge: "refills" },
                 { to: "/clidp/listings", label: "Listings", icon: FileText },
+                // What the accounts owe sits with the accounts (22 Nov: loose links grouped).
+                { to: "/collections", label: "Collections", icon: HandCoins },
               ],
               "Accounts",
             ),
             ordersLink("My orders"),
-            { to: "/collections", label: "Collections", icon: HandCoins },
             { to: "/calls", label: "My calls", icon: PhoneCall },
             { to: "/sales-performance", label: "Sales performance", icon: TrendingUp },
           ]),
@@ -1259,8 +1303,16 @@ function ownDesk(me: Me): Space {
             { to: "/collections", label: "Collections", icon: HandCoins },
             { to: "/hospital-board", label: "Hospitals", icon: Building2 },
             { to: "/to-call", label: "Hospitals to call", icon: PhoneCall, badge: "refills" },
-            { to: "/tenders", label: "Government tenders", icon: FileText },
-            { to: "/tenders/report", label: "Bid report", icon: FileText },
+            // The two tender links in one folder (22 Nov: what can be grouped, grouped).
+            folder(
+              "Government tenders",
+              FileText,
+              [
+                { to: "/tenders", label: "Tenders", icon: FileText },
+                { to: "/tenders/report", label: "Bid report", icon: FileText },
+              ],
+              "Tenders",
+            ),
             ordersLink("Division orders"),
             folder("Visits", CalendarCheck, teamFieldItems(), "Visits"),
             folder(
@@ -1333,8 +1385,16 @@ function ownDesk(me: Me): Space {
             { to: "/pap", label: "With PAP", icon: HeartHandshake },
             { to: "/to-call", label: "Refills due", icon: Pill, badge: "refills", short: "Refills" },
             { to: "/orders", label: "My orders", icon: ClipboardList },
-            { to: "/customers", label: "Patients", icon: Users },
-            { to: "/points", label: "Points", icon: Gift },
+            // The patients and their points in one folder (22 Nov: a flat list of twelve links).
+            folder(
+              "Patients",
+              Users,
+              [
+                { to: "/customers", label: "Patients", icon: Users },
+                { to: "/points", label: "Points", icon: Gift },
+              ],
+              "Patients",
+            ),
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ],
           Inbox,
