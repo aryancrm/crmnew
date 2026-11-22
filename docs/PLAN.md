@@ -3459,3 +3459,27 @@ lowest, each division's average; Scorecards opens every card.
   payment; a card names its channel once. **Asked of Aryan, not decided:** a refund by bank, GCash
   or check is saved without a reference number; a paid-first order confirmed with less than the
   bill still goes to Dispatch (the rest lands in Due payments).
+- **23 Nov 2026 (Aryan: "yes, do Dispatch")** Dispatch walked by its own login on the demo copy:
+  Home (To pack & ship, On the road, Delivered, the paid-by filters), the Pack, Ship, Delivered,
+  Came back, Hold and Note-the-cash boxes, On hold, Returns to check, Shipments, Team figures and
+  an order's two steps. Hand-run: picks (too few, too many, another medicine's batch, another
+  order's line), unpack, a six-medicine order the shelf can't fill, courier with and without
+  tracking, rider, pick-up at the warehouse, the address slip not ticked, delivery with no receipt
+  photo, a failed delivery shipped again, cash on delivery (short, noted later, after Finance
+  recorded it), Dispatch's hold answered by the MedRep, Management cancelling a packed order (its
+  pieces back on the shelf) and returned goods checked. **Put right:** (1) *A delivery day before
+  the parcel left* was taken ("delivered 1 Jan" on a November order made its invoice "overdue by
+  296 days" and would stop the customer's next order): the day can't be earlier than the day it
+  left the warehouse. (2) *Delivered showed the day before* on Home for anything marked between
+  midnight and 8 in the morning (the UTC day of the moment it was marked): it shows the delivery
+  day Dispatch said (`deliveredOn` on the card). The same cut was on the customer's page, the
+  customer list, a seller's Home, My team, a case's head and a visit's changes: one `manilaDay`
+  now. (3) *The Pack box was a dead end* when the shelf was short (only Close): "Hold it: not
+  enough stock" holds it there, as Wait for stock when the whole company is short (told when it
+  comes in), else as an ordinary hold naming what is missing in that warehouse. (4) *Returned
+  goods were all-or-nothing per line* (ten crushed tablets wrote off the twenty good ones, or put
+  the crushed back on the shelf): a line can be counted in parts, good, damaged and not received,
+  each a line of its own afterwards (`receiveReturn`; test in returns.test.ts). (5) *On hold* for
+  Dispatch opened the old board with To pack, To ship, On the road and Delivered a second time:
+  it is only its holds. (6) Words: a parcel that can't be shipped for unpicked pieces says "Unpack
+  it and pack it again"; "add the photo first" goes once a photo is picked.

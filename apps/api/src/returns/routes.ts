@@ -72,9 +72,11 @@ export function returnRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
             z.object({
               lineId: z.number().int().positive(),
               outcome: z.enum(["restocked", "damaged", "missing"]),
+              // How many of the line this outcome is; none: the whole line.
+              qty: z.number().int("Use whole pieces.").min(0).nullish(),
             }),
           )
-          .min(1),
+          .min(1, "Say what came back of each medicine."),
       }),
     );
     const received = await receiveReturn(db, c.get("me"), idParam(c), input);

@@ -64,6 +64,7 @@ import {
   peso,
   timeLabel,
   useAction,
+  manilaDay,
 } from "../ui";
 
 const KIND_TONE: Record<string, BadgeTone> = {
@@ -80,7 +81,7 @@ const LIST_OF: Record<string, [string, string]> = {
   patient: ["Patients", "/patients"],
 };
 
-const day = (iso: string) => dayLabel(iso.slice(0, 10));
+const day = (iso: string) => dayLabel(manilaDay(iso));
 
 
 export function Customer() {

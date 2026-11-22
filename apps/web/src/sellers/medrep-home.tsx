@@ -24,7 +24,7 @@ import { useMe } from "../auth";
 import { shortPeso } from "../ceo";
 import { avatarTone, dayHeading, initials, PRIMARY_SM } from "../look";
 import { Donut } from "../team/charts";
-import { count, dayLabel, PageState, peso } from "../ui";
+import { count, dayLabel, PageState, peso, manilaDay } from "../ui";
 import { Figure, type Period, PeriodBox, periodWord as periodWordOf } from "../home/figures";
 import { GoHereFirst, HuddleCard, TodaysPulse } from "./hospital-day";
 import { RxHome } from "./rx";
@@ -529,7 +529,7 @@ export function MedrepHome() {
                       </span>
                       <span className="block truncate text-[11px] text-slate-500">
                         {row.orders > 0
-                          ? `${count(row.orders)} order${row.orders === 1 ? "" : "s"} · last ${row.lastOrderAt ? dayLabel(row.lastOrderAt.slice(0, 10)) : ""}`
+                          ? `${count(row.orders)} order${row.orders === 1 ? "" : "s"} · last ${row.lastOrderAt ? dayLabel(manilaDay(row.lastOrderAt)) : ""}`
                           : [row.city, row.phone].filter(Boolean).join(" · ") || "No order yet"}
                       </span>
                     </span>

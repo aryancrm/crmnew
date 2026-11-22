@@ -423,7 +423,8 @@ export async function receiveReturn(
   db: Database,
   me: Me,
   id: number,
-  input: { lines: { lineId: number; outcome: ReturnOutcome }[] },
+  /** One outcome for a whole line, or several with how many each (20 good, 10 damaged). */
+  input: { lines: { lineId: number; outcome: ReturnOutcome; qty?: number | null }[] },
 ): Promise<{ credit: number }> {
   allow(me, DISPATCH_ROLES, "check returned goods");
   return db.transaction(async (tx) => {
@@ -449,21 +450,51 @@ export async function receiveReturn(
           m.name || coalesce(' ' || m.strength, '') as medicine, l.qty::int as qty, l.unit_price::int as "unitPrice"
         from sales_return_line l join medicine m on m.id = l.medicine_id where l.return_id = ${id} order by l.id`,
     );
-    const outcomeOf = new Map(input.lines.map((line) => [line.lineId, line.outcome]));
+    // A line may come back in parts (some good, some crushed, some never sent): each part is a
+    // line of its own from here on, so the shelf, the write-off and the credit each count theirs
+    // (it was one outcome for the whole line: 10 crushed tablets wrote off the 20 good ones too, 23 Nov).
+    const checked: ((typeof lines)[number] & { outcome: ReturnOutcome })[] = [];
     for (const line of lines) {
-      const outcome = outcomeOf.get(line.id);
-      if (!outcome || outcome === "kept")
+      const told = input.lines.filter((one) => one.lineId === line.id && one.outcome !== "kept");
+      if (!told.length)
         throw new Refusal(
           400,
           "invalid",
           `Say what came back of ${line.medicine}: good, damaged or not received.`,
           "lines",
         );
+      const whole = told.length === 1 && told[0]?.qty == null;
+      const parts = new Map<ReturnOutcome, number>();
+      for (const one of told) parts.set(one.outcome, (parts.get(one.outcome) ?? 0) + (whole ? line.qty : Math.max(0, one.qty ?? 0)));
+      const sum = [...parts.values()].reduce((total, qty) => total + qty, 0);
+      if (sum !== line.qty)
+        throw new Refusal(
+          400,
+          "invalid",
+          `${line.medicine}: ${line.qty} are on this return, and the good, damaged and not received add up to ${sum}.`,
+          "lines",
+        );
+      let first = true;
+      for (const [outcome, qty] of parts) {
+        if (qty <= 0) continue;
+        if (first) {
+          if (qty !== line.qty) await tx.execute(sql`update sales_return_line set qty = ${qty} where id = ${line.id}`);
+          checked.push({ ...line, qty, outcome });
+          first = false;
+          continue;
+        }
+        const [made] = await rows<{ id: number }>(
+          tx,
+          sql`insert into sales_return_line (return_id, order_item_id, medicine_id, qty, unit_price)
+            values (${id}, ${line.orderItemId}, ${line.medicineId}, ${qty}, ${line.unitPrice}) returning id::int as id`,
+        );
+        checked.push({ ...line, id: made?.id as number, qty, outcome });
+      }
     }
     let credit = 0;
     const said: string[] = [];
-    for (const line of lines) {
-      const outcome = outcomeOf.get(line.id) as ReturnOutcome;
+    for (const line of checked) {
+      const outcome = line.outcome;
       let batchId: number | null = null;
       let warehouseId: number | null = null;
       if (outcome === "restocked") {

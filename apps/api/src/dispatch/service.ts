@@ -400,7 +400,7 @@ async function mustBePicked(tx: Runner, orderId: number): Promise<void> {
     throw new Refusal(
       409,
       "not_now",
-      `${short.medicine}: ${short.picked} of ${short.ordered} taken off the shelf. Pack it again so every piece is picked by batch.`,
+      `${short.medicine}: ${short.picked} of ${short.ordered} taken off the shelf. Unpack it and pack it again, so every piece is picked by batch.`,
     );
 }
 
@@ -526,6 +526,19 @@ export async function deliverOrder(
         "invalid",
         "Add the photo of the signed delivery receipt first: it is the proof the customer has it.",
         "proof",
+      );
+    // It can't have arrived before it left (a day mistyped as January made a November delivery's
+    // invoice "overdue by 296 days", and the customer's next order was stopped for it, 23 Nov).
+    const [left] = await rows<{ day: string | null }>(
+      tx,
+      sql`select to_char(coalesce(shipped_at, packed_at) at time zone 'Asia/Manila', 'YYYY-MM-DD') as day from sales_order where id = ${orderId}`,
+    );
+    if (left?.day && input.deliveredOn < left.day)
+      throw new Refusal(
+        400,
+        "invalid",
+        `It left the warehouse on ${dated(left.day)}: pick that day or a later one.`,
+        "deliveredOn",
       );
     const pickup = order.status === "packing";
     await tx.execute(

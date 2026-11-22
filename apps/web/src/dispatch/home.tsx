@@ -271,7 +271,7 @@ function Row({ card, stage, today, children }: { card: DispatchCard; stage: Stag
           </>
         ) : (
           <>
-            <div className="text-slate-800">{card.deliveredAt ? dayLabel(card.deliveredAt.slice(0, 10)) : "Delivered"}</div>
+            <div className="text-slate-800">{card.deliveredOn ? dayLabel(card.deliveredOn) : "Delivered"}</div>
             <div className="truncate text-[11px] text-slate-500">
               {card.receivedBy ? `Received by ${card.receivedBy}` : "—"}
               {card.papers.includes("dr") && " · signed receipt ✓"}

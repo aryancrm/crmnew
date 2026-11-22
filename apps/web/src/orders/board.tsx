@@ -215,7 +215,13 @@ export function OrdersToCheck({
   // Management and Admin say why a held order goes on, on any desk's board (the API asks them).
   const me = useMe().data;
   const manager = ["management", "admin"].includes(me?.role ?? "");
-  const TABS = all ? [{ key: "all" as const, label: "All orders" }, ...ALL_TABS] : DESK_TABS[desk];
+  // Dispatch's On hold page is only its holds: to pack, to ship, on the road and delivered are its
+  // Home's three tabs, so they aren't said a second time here (23 Nov).
+  const TABS = all
+    ? [{ key: "all" as const, label: "All orders" }, ...ALL_TABS]
+    : desk === "dispatch" && defaultTab === "hold"
+      ? DESK_TABS[desk].filter((one) => one.key === "hold")
+      : DESK_TABS[desk];
   const [params, setParams] = useSearchParams();
   // Cards (the usual look), Table or Board, as the Leads desk offers them: picked by whoever
   // uses it and remembered on this device, per desk.

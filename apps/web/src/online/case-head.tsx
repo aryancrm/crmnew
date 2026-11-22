@@ -8,7 +8,7 @@ import { ChevronDown, Lock } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiFailure, api } from "../api";
-import { dayLabel, peso } from "../ui";
+import { dayLabel, peso, manilaDay } from "../ui";
 import { AGENCIES, roadOf } from "./parts";
 
 /** What the case's own form holds, to change one or two of them. */
@@ -239,7 +239,7 @@ export function CustomerOrdersBar({ data, aside }: { data: LeadCase; aside?: Rea
                         Order {history.ordersTotal - index}
                       </span>
                       <span className="w-20 shrink-0 text-slate-500">
-                        {dayLabel(order.at.slice(0, 10))}
+                        {dayLabel(manilaDay(order.at))}
                       </span>
                       <span className="min-w-0 flex-1 truncate text-slate-700">
                         {order.medicines ?? order.code}
@@ -294,7 +294,7 @@ export function CustomerOrdersBar({ data, aside }: { data: LeadCase; aside?: Rea
                       : "bg-emerald-50 text-emerald-800"
                   }`}
                 >
-                  {enquiry.code} · {dayLabel(enquiry.at.slice(0, 10))}
+                  {enquiry.code} · {dayLabel(manilaDay(enquiry.at))}
                   {enquiry.orderCode ? ` · ${enquiry.orderCode}` : ""}
                 </Link>
               ))}

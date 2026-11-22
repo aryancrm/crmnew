@@ -3177,6 +3177,8 @@ export type DispatchCard = {
   cameBackReason: string | null;
   receivedBy: string | null;
   deliveredAt: string | null;
+  /** The day it reached the customer, as Dispatch said it (not the moment it was marked). */
+  deliveredOn: string | null;
   /** Cash the courier or rider collects on delivery (an open cash-on-delivery invoice). */
   collect: number | null;
   /** How it is paid, from its invoice: cash on delivery, paid in advance, or on terms (days or a

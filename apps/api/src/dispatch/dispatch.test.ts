@@ -463,6 +463,10 @@ describe("shipping and delivery", () => {
         }),
       ),
     ).toBe("deliveredOn");
+    // Nor a day before it left the warehouse (a mistyped month would make its invoice long overdue).
+    expect(
+      await fieldOf(await deliver("marco", id, { receivedBy: "Nurse Ana", deliveredOn: addDays(todayManila(), -30) })),
+    ).toBe("deliveredOn");
     expect(
       (await deliver("ryan", id, { receivedBy: "Nurse Ana", deliveredOn: todayManila() })).status,
     ).toBe(403);

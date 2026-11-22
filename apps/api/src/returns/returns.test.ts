@@ -428,6 +428,42 @@ describe("returns", () => {
     expect((await read<RefundList>("fiona", "/api/finance/refunds")).owed.some((one) => one.orderId === orderId)).toBe(false);
   });
 
+  it("a line comes back in parts: the good go on the shelf, the damaged are written off, the missing aren't credited", async () => {
+    const orderId = await delivered(creditHospital, 10);
+    const itemId = (
+      await read<{ left: { orderItemId: number }[] }>("ryan", `/api/orders/${orderId}/returns`)
+    ).left[0]?.orderItemId as number;
+    const returnId = (
+      (await (
+        await post("ryan", `/api/orders/${orderId}/returns`, { reason: "damaged", lines: [{ orderItemId: itemId, qty: 6 }] })
+      ).json()) as { id: number }
+    ).id;
+    await post("sarla", `/api/returns/${returnId}/decide`, { approve: true });
+    const line = (await read<ReturnList>("marco", "/api/returns")).rows.find((one) => one.id === returnId)?.lines[0];
+    const receive = (lines: unknown) => post("marco", `/api/returns/${returnId}/receive`, { lines });
+    // The parts must add up to what is on the return.
+    expect((await receive([{ lineId: line?.id, outcome: "restocked", qty: 3 }, { lineId: line?.id, outcome: "damaged", qty: 2 }])).status).toBe(400);
+    const before = await onShelf();
+    expect(
+      (
+        await receive([
+          { lineId: line?.id, outcome: "restocked", qty: 3 },
+          { lineId: line?.id, outcome: "damaged", qty: 2 },
+          { lineId: line?.id, outcome: "missing", qty: 1 },
+        ])
+      ).status,
+    ).toBe(200);
+    expect(await onShelf()).toBe(before + 3);
+    const row = (await read<ReturnList>("sarla", "/api/returns")).rows.find((one) => one.id === returnId) as ReturnRow;
+    expect(row.lines.map((one) => [one.qty, one.outcome])).toEqual([[3, "restocked"], [2, "damaged"], [1, "missing"]]);
+    // Good and damaged are credited; what never came back isn't.
+    expect(row.credit).toBe(5 * medicine.price);
+    expect((await post("sarla", `/api/returns/${returnId}/credit`, { credit: true })).status).toBe(200);
+    expect((await invoiceOf(orderId))?.total).toBe(5 * medicine.price);
+    // Five came back; the one not received is still the customer's, so five can still come back.
+    expect((await read<{ left: { left: number }[] }>("ryan", `/api/orders/${orderId}/returns`)).left[0]?.left).toBe(5);
+  });
+
   it("a rejected return needs a reason and changes nothing", async () => {
     const orderId = await delivered(creditHospital, 6);
     const before = await invoiceOf(orderId);

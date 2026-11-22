@@ -46,6 +46,13 @@ export function dayLabel(day: string, thisYear?: string): string {
   return thisYear && year === thisYear.slice(0, 4) ? text : `${text} ${year}`;
 }
 
+/** The Manila day (YYYY-MM-DD) of an ISO time. Its first ten letters are the UTC day: a day early
+ *  for anything done between midnight and 8 in the morning here (23 Nov). A plain day stays. */
+export const manilaDay = (iso: string) =>
+  iso.length <= 10
+    ? iso
+    : new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+
 /** An ISO time as "14 Nov, 5:30 PM" in Manila. */
 export const timeLabel = (iso: string) =>
   new Intl.DateTimeFormat("en-PH", {
