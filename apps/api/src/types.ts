@@ -89,6 +89,10 @@ export type Me = {
   role: Role;
   roleLabel: string;
   mustChangePassword: boolean;
+  /** The picture shown for them (/api/people/<id>/photo/<photo>), if they put one. */
+  photo?: number | null;
+  /** Two-step sign-in is on. */
+  twoStep?: boolean;
   /** Their channel, and the Division its orders carry (set in the Admin panel). */
   channel: { code: string; name: string; division: string | null } | null;
   area: { id: number; name: string; cities: string[] } | null;
@@ -6400,3 +6404,46 @@ export type TargetSheet = {
   /** Sales this month under names on no row of the sheet. */
   apart: { name: string; ach: number; today: number }[];
 };
+
+// ---- A person's own profile (account/profile.ts)
+
+export type ProfilePersonal = {
+  firstName: string;
+  middleName: string | null;
+  lastName: string;
+  suffix: string | null;
+  /** YYYY-MM-DD. */
+  birthDate: string;
+};
+export type ProfileContact = {
+  mobile: string | null;
+  personalEmail: string | null;
+  address: string | null;
+  emergencyName: string | null;
+  emergencyPhone: string | null;
+  emergencyRelation: string | null;
+};
+export type Profile = {
+  name: string;
+  personal: ProfilePersonal;
+  /** First and last name and birth date are saved. */
+  complete: boolean;
+  contact: ProfileContact;
+  work: {
+    loginId: string | null;
+    position: string | null;
+    team: string | null;
+    reportsTo: string | null;
+    employeeCode: string | null;
+    hireDate: string;
+  };
+  security: {
+    twoStep: { on: boolean; since: string | null; codesLeft: number };
+    lastSignIn: string | null;
+    otherSessions: number;
+    /** `by` is set only when someone else did it. */
+    events: { id: number; what: string; detail: string | null; by: string | null; at: string }[];
+  };
+};
+/** The sign-in's answer: in, or the password was right and the code is asked next. */
+export type SignInAnswer = { me: Me; twoStep?: undefined } | { twoStep: true; ticket: string; me?: undefined };

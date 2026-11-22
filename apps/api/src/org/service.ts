@@ -7,6 +7,7 @@
 
 import { randomBytes } from "node:crypto";
 import { type SQL, sql } from "drizzle-orm";
+import { accountEvent } from "../account/events";
 import { hashPassword, passwordProblem } from "../auth/password";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
@@ -993,6 +994,8 @@ export async function resetPassword(db: Database, me: Me, personId: number): Pro
   );
   if (!person) throw new Refusal(404, "not_found", "That person isn't working here any more.");
   await db.execute(sql`delete from session where person_id = ${person.id} or viewed_by = ${person.id}`);
+  // Two-step sign-in stays on: a given password alone opens nothing of theirs.
+  await accountEvent(db, person.id, me.id, "password_given");
   const [seat] = await rows<{ id: number; login: string | null }>(
     db,
     sql`select s.id::int as id, s.login from seat_holder h join seat s on s.id = h.seat_id and s.active

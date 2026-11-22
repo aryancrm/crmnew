@@ -41,7 +41,9 @@ same today). The API needs no domain of its own.
    Each one should be **runtime only** ("Not available during build"). Most important:
    - `DATABASE_URL` = step 1's internal URL.
    - `WEB_URL` = `https://crm.<domain>` (the web app's domain from step 3).
-   - `SECRETS_KEY` = the same value as on Render, if the live data moves over.
+   - `SECRETS_KEY` = the same value as on Render, if the live data moves over. Two-step sign-in seals
+     its keys with it: without it nobody can turn it on; changed or lost, each who had it on must be
+     reset (`pnpm --filter @2mg/api two-step-off --only=<login> --apply`, or the Admin on screen).
    - `JOIN_PASSWORD` is retired: it signs nobody in. Left set, its value is only refused as
      anyone's own password.
 7. Deploy. The log shows `database: applied …` (the migrations), then

@@ -3,7 +3,7 @@
 // person's own login decides what opens inside. Only a look: permissions and the pages are unchanged.
 
 import "@fontsource-variable/inter";
-import type { Me } from "@2mg/api/types";
+import type { Me, SignInAnswer } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CircleAlert, Eye, EyeOff, LoaderCircle, Search } from "lucide-react";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
@@ -232,6 +232,9 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
   const ids = useId();
   const [capsLock, setCapsLock] = useState(false);
   const submitButton = useRef<HTMLButtonElement>(null);
+  // Two-step sign-in: set once the password was right, until the code signs them in.
+  const [ticket, setTicket] = useState<string | null>(null);
+  useEffect(() => setTicket(null), [workspace.key]);
   const field =
     "h-12 w-full rounded-xl border border-[#d5d9e1] bg-white px-3.5 text-[15px] text-[#1f2733] outline-none transition-[border-color,box-shadow] placeholder:text-[#6b7380] hover:border-[#b9bfcb] focus:border-[#f36b21] focus:ring-4 focus:ring-[#f36b21]/15 disabled:bg-[#f6f7f9] aria-[invalid=true]:border-rose-500 aria-[invalid=true]:ring-rose-500/15";
   const label = "text-[13px] font-semibold text-[#1f2733]";
@@ -250,7 +253,13 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
     setBusy(true);
     setProblem(null);
     try {
-      signedInAs((await api<{ me: Me }>("/api/auth/login", { body: { email, password, workspace: picked.key } })).me);
+      const answer = await api<SignInAnswer>("/api/auth/login", { body: { email, password, workspace: picked.key } });
+      if (answer.twoStep) {
+        // The password has done its part: it isn't kept on the screen.
+        setPassword("");
+        setShown(false);
+        setTicket(answer.ticket);
+      } else signedInAs(answer.me);
     } catch (error) {
       setProblem(error instanceof ApiFailure ? { message: error.message, field: error.field } : { message: "Couldn't sign in. Try again." });
     } finally {
@@ -261,6 +270,21 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
   // Each error sits under the field it is about (proximity); one about neither, under the password.
   const idError = problem?.field === "email" ? problem.message : null;
   const passwordError = problem && !idError ? problem.message : null;
+
+  if (ticket)
+    return (
+      <CodeStep
+        ticket={ticket}
+        loginId={email}
+        field={field}
+        label={label}
+        onDone={signedInAs}
+        onBack={(message) => {
+          setTicket(null);
+          setProblem(message ? { message } : null);
+        }}
+      />
+    );
 
   return (
     <>
@@ -373,6 +397,111 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
       </p>
     </div>
     </>
+  );
+}
+
+/** The second step: the six digits their authenticator app shows, or a recovery code. */
+function CodeStep(props: {
+  ticket: string;
+  loginId: string;
+  field: string;
+  label: string;
+  onDone: (me: Me) => void;
+  /** Back to the password, with why when it wasn't their choice. */
+  onBack: (message?: string) => void;
+}) {
+  const [code, setCode] = useState("");
+  const [recovery, setRecovery] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const id = useId();
+  useEffect(() => {
+    if (!busy) input.current?.focus();
+  }, [recovery, busy]);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setProblem(null);
+    try {
+      props.onDone((await api<{ me: Me }>("/api/auth/login/code", { body: { ticket: props.ticket, code } })).me);
+    } catch (error) {
+      if (error instanceof ApiFailure && error.status === 401) return props.onBack(error.message);
+      setProblem(error instanceof ApiFailure ? error.message : "Couldn't check the code. Try again.");
+      setBusy(false);
+    }
+  }
+  const quiet = "inline-flex min-h-11 items-center font-semibold text-[#5b6472] hover:text-[#c2410c]";
+
+  return (
+    <div className="w-full text-left">
+      <h1 className="text-[clamp(28px,3vw,34px)] leading-tight font-semibold tracking-[-0.03em] text-[#1f2733]">
+        {recovery ? "Enter a recovery code" : "Enter your code"}
+      </h1>
+      <p className="mt-2 text-[15px] text-[#5b6472]">
+        {recovery ? "One of the codes you saved when you set up two-step sign-in, for " : "Open your authenticator app and type the six digits for "}
+        <span className="inline-block max-w-full font-semibold break-all text-[#1f2733]">{props.loginId}</span>.
+      </p>
+      <form onSubmit={submit} className="mt-6 grid gap-4" aria-busy={busy}>
+        <div className="grid gap-1.5">
+          <label htmlFor={id} className={props.label}>
+            {recovery ? "Recovery code" : "Six-digit code"}
+          </label>
+          <input
+            ref={input}
+            id={id}
+            inputMode={recovery ? "text" : "numeric"}
+            autoComplete="one-time-code"
+            autoCapitalize="characters"
+            spellCheck={false}
+            required
+            disabled={busy}
+            maxLength={24}
+            value={code}
+            onChange={(event) => {
+              setCode(event.target.value);
+              setProblem(null);
+            }}
+            aria-invalid={problem ? true : undefined}
+            aria-describedby={problem ? `${id}-error` : undefined}
+            className={`${props.field} font-mono`}
+          />
+          {problem && (
+            <p id={`${id}-error`} role="alert" className="flex items-start gap-1.5 text-[13px] text-rose-700">
+              <CircleAlert className="mt-px size-4 shrink-0" aria-hidden="true" /> {problem}
+            </p>
+          )}
+        </div>
+        <button
+          type="submit"
+          disabled={busy}
+          className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#f36b21] text-[15px] font-semibold text-white transition-colors hover:bg-[#e05a12] disabled:cursor-wait disabled:opacity-70"
+        >
+          {busy && <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />}
+          {busy ? "Checking…" : "Verify and sign in"}
+        </button>
+      </form>
+      <div className="mt-3 flex flex-wrap justify-between gap-x-4 text-[13px]">
+        <button
+          type="button"
+          className={quiet}
+          onClick={() => {
+            setRecovery(!recovery);
+            setCode("");
+            setProblem(null);
+          }}
+        >
+          {recovery ? "Use your authenticator app" : "Use a recovery code"}
+        </button>
+        <button type="button" className={quiet} onClick={() => props.onBack()}>
+          Back to password
+        </button>
+      </div>
+      <p className="mt-3 border-t border-[#eceef3] pt-4 text-[13px] text-[#5b6472]">
+        Lost your phone and your codes? Ask your administrator to reset two-step sign-in.
+      </p>
+    </div>
   );
 }
 

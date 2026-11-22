@@ -3,6 +3,7 @@
 // the system sends nothing), and leaving (the record is kept). HR, the CEO and the Admin keep
 // records; pay, bank and government IDs are theirs and the person's own.
 
+import { accountEvent } from "../account/events";
 import { type SQL, sql } from "drizzle-orm";
 import { hashPassword, passwordProblem } from "../auth/password";
 import { type Database, rows } from "../db/index";
@@ -519,6 +520,7 @@ export async function setLogin(
       await tx.execute(
         sql`delete from session where (person_id = ${personId} and viewed_by is null) or viewed_by = ${personId}`,
       );
+      await accountEvent(tx, personId, me.id, "password_given");
     }
     return { loginEmail: email };
   });

@@ -65,6 +65,23 @@ export async function endOtherSessions(
     .where(and(or(eq(session.personId, personId), eq(session.viewedBy, personId)), ne(session.tokenHash, hashOf(keep))));
 }
 
+/** How many other browsers they are signed in on. */
+export async function otherSessionCount(db: Database, personId: number, keep: string): Promise<number> {
+  const [found] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(session)
+    .where(
+      and(
+        eq(session.personId, personId),
+        isNull(session.viewedBy),
+        isNull(session.desk),
+        gt(session.expiresAt, sql`now()`),
+        ne(session.tokenHash, hashOf(keep)),
+      ),
+    );
+  return found?.n ?? 0;
+}
+
 /** Who is asking, in one query. Null when the token is unknown, expired or the person is off. */
 export async function whoIs(db: Database, token: string): Promise<Me | null> {
   const boss = alias(person, "boss");
@@ -91,6 +108,8 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
       viewerName: viewer.name,
       viewerRole: viewer.role,
       workspace: session.workspace,
+      photo: sql<number | null>`(select ph.id::int from person_photo ph where ph.person_id = ${person.id} and ph.archived_at is null)`,
+      twoStep: sql<boolean>`exists (select 1 from person_two_step ts where ts.person_id = ${person.id} and ts.on_at is not null)`,
       // The business box their seat sits in (by its channel), so a seat's desk follows the chart.
       // Of two seats, the one that decides their screens (org/service.ts projectOrg): a lead seat
       // over one that leads nothing, else the first given.
@@ -141,6 +160,8 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
     business: row.businessCode ?? null,
     divisions: divisionsOf(row.seatDivisions, row.channelDivision ?? null),
     workspace: row.workspace ?? null,
+    photo: row.photo ?? null,
+    twoStep: row.viewerId ? undefined : row.twoStep,
     // Someone looking as this person isn't asked to change their password.
     mustChangePassword: row.viewerId ? false : row.mustChangePassword,
     channel:

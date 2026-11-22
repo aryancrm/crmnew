@@ -12,9 +12,11 @@ import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
 import { secureHeaders } from "hono/secure-headers";
 import { z } from "zod";
+import { accountEvent } from "./account/events";
 import { deviceCookie, deviceMark, passwordGuard } from "./auth/guard";
+import { makeTicket, readTicket, spendTicket, twoStepOn, useCode } from "./auth/two-step";
 import { hashPassword, passwordProblem } from "./auth/password";
-import { ownWorkspace, WORKSPACE_KEYS, workspaceAllows, workspaceByKey } from "./auth/workspaces";
+import { ownWorkspace, WORKSPACE_KEYS, type WorkspaceKey, workspaceAllows, workspaceByKey } from "./auth/workspaces";
 import type { Role } from "./people/roles";
 import {
   BACK_COOKIE,
@@ -218,8 +220,42 @@ export function createApp(db: Database, options: AppOptions) {
       maxAge: 365 * 24 * 60 * 60,
     });
 
-  // The one way in: a person's own login ID and their own password. It opens one session, theirs,
-  // good in every app their role has; what they may do is checked on each call.
+  /** The end of every sign-in, with or without a code. */
+  async function letIn(c: Context<Env>, found: typeof person.$inferSelect, workspace: string | null) {
+    // A password changed or a person switched off while this one was being checked: not signed in.
+    const still = await db
+      .update(person)
+      .set({ lastSignInAt: new Date() })
+      .where(
+        and(
+          eq(person.id, found.id),
+          eq(person.passwordHash, found.passwordHash),
+          eq(person.active, true),
+          eq(person.passwordPending, false),
+        ),
+      )
+      .returning({ id: person.id });
+    if (!still.length) throw new Refusal(401, "wrong_login", "Wrong login ID or password.");
+
+    const role = found.role as Role;
+    const until = DAY_SESSION_ROLES.includes(role) ? endOfWorkingDay() : undefined;
+    const token = await startSession(db, found.id, undefined, workspace ?? ownWorkspace(role)?.key ?? null, until);
+    setCookie(c, SESSION_COOKIE, token, {
+      httpOnly: true,
+      secure,
+      sameSite: "Lax",
+      path: "/",
+      ...(until ? { expires: until } : { maxAge: SESSION_DAYS * 24 * 60 * 60 }),
+    });
+    // An earlier "look as" of whoever used this browser before isn't this person's.
+    deleteCookie(c, BACK_COOKIE, { path: "/" });
+    rememberDevice(c, found);
+    return c.json({ me: await whoIs(db, token) });
+  }
+
+  // The one way in: a person's own login ID and their own password (and, for whoever turned on
+  // two-step sign-in, their code). It opens one session, theirs, good in every app their role has;
+  // what they may do is checked on each call.
   app.post("/api/auth/login", async (c) => {
     const input = await readBody(
       c,
@@ -267,34 +303,33 @@ export function createApp(db: Database, options: AppOptions) {
         "email",
       );
 
-    // A password changed or a person switched off while this one was being checked: not signed in.
-    const still = await db
-      .update(person)
-      .set({ lastSignInAt: new Date() })
-      .where(
-        and(
-          eq(person.id, found.id),
-          eq(person.passwordHash, found.passwordHash),
-          eq(person.active, true),
-          eq(person.passwordPending, false),
-        ),
-      )
-      .returning({ id: person.id });
-    if (!still.length) throw wrong;
+    // Two-step sign-in: the password was right; the session waits for the code.
+    if (await twoStepOn(db, found.id)) {
+      const ticket = await makeTicket(db, found, workspace ?? null);
+      c.header("cache-control", "no-store");
+      return c.json({ twoStep: true, ticket });
+    }
+    return letIn(c, found, workspace ?? null);
+  });
 
-    const until = DAY_SESSION_ROLES.includes(role) ? endOfWorkingDay() : undefined;
-    const token = await startSession(db, found.id, undefined, workspace ?? own?.key ?? null, until);
-    setCookie(c, SESSION_COOKIE, token, {
-      httpOnly: true,
-      secure,
-      sameSite: "Lax",
-      path: "/",
-      ...(until ? { expires: until } : { maxAge: SESSION_DAYS * 24 * 60 * 60 }),
-    });
-    // An earlier "look as" of whoever used this browser before isn't this person's.
-    deleteCookie(c, BACK_COOKIE, { path: "/" });
-    rememberDevice(c, found);
-    return c.json({ me: await whoIs(db, token) });
+  // The second step: the code from their app, or a recovery code, for the ticket the password got.
+  app.post("/api/auth/login/code", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        ticket: z.string().min(20).max(100),
+        code: z.string().trim().min(6, "Enter the code.").max(24),
+      }),
+    );
+    const waiting = await readTicket(db, input.ticket);
+    await useCode(db, waiting.personId, input.code);
+    await spendTicket(db, input.ticket);
+    const [found] = await db.select().from(person).where(eq(person.id, waiting.personId)).limit(1);
+    const workspace = waiting.workspace as WorkspaceKey | null;
+    // A new password or another role since the password step: start again.
+    if (!found || found.passwordHash !== waiting.passwordHash || (workspace && !workspaceAllows(workspace, found.role as Role)))
+      throw new Refusal(401, "sign_in_again", "Your account changed meanwhile. Sign in again.");
+    return letIn(c, found, workspace);
   });
 
   app.post("/api/auth/logout", async (c) => {
@@ -392,6 +427,7 @@ export function createApp(db: Database, options: AppOptions) {
       .returning({ id: person.id });
     if (!changed.length) throw new Refusal(409, "not_now", "Your password was changed meanwhile. Sign in again.");
     await endOtherSessions(db, me.id, c.get("token"));
+    await accountEvent(db, me.id, me.id, "password");
     rememberDevice(c, { id: me.id, passwordHash });
     return c.json({ ok: true });
   });
