@@ -1919,6 +1919,12 @@ return, as the people who will do it, before the next)**
   and in Zoho, what they take, what they owe now (Zoho's too), and a link to the whole history.
 - *Guarantee-letter cases go to PAP* (the PAP person), not the Online desk (question 11: today an
   Online case turned GL stays with the Online agent).
+  **Aryan, 22 Nov: PAP is not a department or a channel, it is a process one person looks after.**
+  An order from any channel whose patient wants a guarantee letter is PAP's: we send the patient
+  three quotations; the patient takes them to the agency (PCSO, DSWD, OVP, OP); the agency gives
+  the guarantee letter; the patient gives it to us; then we give the medicine; afterwards it is
+  recorded whether the whole payment came. The three roads are the old code's: guarantee letter,
+  Senior citizen / PWD, Regular. Not built yet as he says it (see the change log of 22 Nov).
 - *Approvals.* Management approves every MedRep order. When something is an exception, the
   approval is taken from the MedRep's Team Lead; when Management itself needs a yes, from its
   Business Mentor. Approval is a button in the CRM (name and time kept on the order), not a
@@ -2238,8 +2244,9 @@ lowest, each division's average; Scorecards opens every card.
    screen).
 10. Price kinds (18): keep doctor, distributor and bidding beside patient, hospital and drugstore?
     And "Extra": one more price per medicine set in Inventory (higher), that the MedRep can pick?
-11. A guarantee-letter case (18): when an Online case becomes GL, does it move to the PAP head (who
-    gives it to a PAP MedRep) or straight to one PAP person?
+11. ~~A guarantee-letter case (18): when an Online case becomes GL, does it move to the PAP head (who
+    gives it to a PAP MedRep) or straight to one PAP person?~~ Answered 22 Nov: PAP is a process one
+    person looks after; a guarantee-letter case from anywhere is theirs.
 12. ~~Pharmacy~~ Answered 17 Nov: Management checks prescriptions on approving (no separate
     Pharmacy login); a prescription is required whenever a patient buys (a patient customer, or
     an order for one patient), whatever the channel.
@@ -3216,3 +3223,14 @@ lowest, each division's average; Scorecards opens every card.
   as a business. The boxes themselves are not renamed: `unit_division`, the seeds and the align
   scripts find them by name. No figure moved (₱20,667,621.21 of ₱57,642,166; trend
   ₱241,139,697.66). Local only.
+- **22 Nov 2026 (Aryan: what PAP is)** PAP is a process, not a channel: a guarantee-letter case
+  from any channel is the PAP person's (three quotations, the agency's letter from PCSO, DSWD, OVP
+  or OP, then the medicine, then whether the whole payment came). Written into the rules above;
+  question 11 answered. Nothing built on it yet. Where the CRM differs today: (1) an Online case
+  whose road is changed to guarantee letter stays with the Online agent; (2) a MedRep's own
+  guarantee-letter order (RX Business, MD Telesales, HOSP) goes straight to Management, the PAP
+  person never sees it; (3) a PAP case's order is stamped channel PAP and Division MD Telesales,
+  whatever channel the patient came from, and PAP shows as a channel on the CEO Home and Divisions;
+  (4) only PCSO's quotation carries the two other vendors' totals; (5) the order form's agencies
+  are DSWD, PCSO, Office of the President, Other (no OVP), the case's are DSWD, PCSO, OVP, OP.
+  Told Aryan, waiting for his word before changing who works a case.
