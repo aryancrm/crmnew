@@ -173,12 +173,20 @@ const holder = sql`(select string_agg(p.name, ', ' order by p.name) from person 
 
 /** Who looks after each customer (alias `c`): their area's MedRep (`u`), else, for a patient
  * with no area, whoever works their latest enquiry (`d`). `under` is that person's id. */
+/** The channel a person shows (alias `p`, their first channel `ch`): the target sheet's channel
+ *  of their main seat (its Division: CLIDP, MD Telesales, RX Business…), PAP as PAP, else the code. */
+const SHOWN_CHANNEL = sql`(case when ch.code = 'PAP' then ch.code else coalesce((select seat_division(dh.seat_id)
+    from seat_holder dh join seat ds on ds.id = dh.seat_id and ds.active
+    where dh.person_id = p.id and dh.starts_on <= (now() at time zone 'Asia/Manila')::date
+      and (dh.ends_on is null or dh.ends_on >= (now() at time zone 'Asia/Manila')::date)
+    order by (dh.kind = 'holder') desc, ds.lead desc, dh.starts_on, dh.id limit 1), ch.code) end)`;
+
 const lookedAfter = sql`
-  left join lateral (select p.id, p.name, ch.code as channel, pa.name as area from person p
+  left join lateral (select p.id, p.name, ${SHOWN_CHANNEL} as channel, pa.name as area from person p
       left join channel ch on ch.id = p.channel_id left join area pa on pa.id = p.area_id
     -- (No area: nobody to look for; with tens of thousands of patients this is most rows.)
     where c.area_id is not null and p.area_id = c.area_id and p.role = 'medrep' and p.active order by p.name limit 1) u on true
-  left join lateral (select p.id, p.name, ch.code as channel from lead l join person p on p.id = l.assigned_to
+  left join lateral (select p.id, p.name, ${SHOWN_CHANNEL} as channel from lead l join person p on p.id = l.assigned_to
       left join channel ch on ch.id = p.channel_id
     where l.customer_id = c.id order by l.first_contact_at desc limit 1) d on true`;
 const under = sql`coalesce(u.id, d.id)`;
@@ -304,7 +312,10 @@ export async function customerDetail(db: Database, me: Me, id: number): Promise<
             c.specialty, c.works_at::int as "worksAtId", h.name as "worksAt",
             c.licence_no as "licenceNo", ${day("c.licence_expires")} as "licenceExpires", c.tin, c.note,
             c.licence_owner as "licenceOwner", c.lto_type as "ltoType", ${day("c.licence_issued")} as "licenceIssued",
-            c.area_id::int as "areaId", a.name as area, ch.code as channel, ${holder} as medrep,
+            c.area_id::int as "areaId", a.name as area,
+            -- The sheet's channel of the seat that has the customer's area; PAP as PAP; else the area's code.
+            (case when ch.code = 'PAP' then ch.code else coalesce((select seat_division(ds.id) from seat ds
+              where ds.area_id = c.area_id and ds.active order by ds.id limit 1), ch.code) end) as channel, ${holder} as medrep,
             c.payment_terms as "paymentTerms", c.payment_days::int as "paymentDays", c.credit_limit::int as "creditLimit",
             c.review, r.name as "reviewedBy", p.name as "addedBy", ${iso("c.created_at")} as "addedAt",
             (select to_char(max(o.created_at) at time zone 'Asia/Manila', 'YYYY-MM-DD') from sales_order o

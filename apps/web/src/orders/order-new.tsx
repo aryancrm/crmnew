@@ -66,6 +66,7 @@ import { api } from "../api";
 import { VAT_WORDS } from "../inventory/vat";
 import { MedicineFinder } from "./medicine-finder";
 import { useMe } from "../auth";
+import { shownChannel } from "../seat-words";
 import { shortPeso } from "../ceo";
 import { CustomerDialog } from "../customers/dialog";
 import { NO_PROOF_REASONS } from "../finance/no-proof";
@@ -1146,7 +1147,7 @@ export function OrderNew({
               <span className="truncate">
                 {changing || sentBack
                   ? (changing ?? sentBack)?.medrep
-                  : [me?.name, me?.channel?.code, me?.area?.name].filter(Boolean).join(" · ")}
+                  : [me?.name, shownChannel(me), me?.area?.name].filter(Boolean).join(" · ")}
               </span>
             </div>
             {me?.role === "medrep" && !fixId && (

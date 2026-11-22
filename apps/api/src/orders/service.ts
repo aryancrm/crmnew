@@ -60,7 +60,7 @@ import type {
   Vat,
 } from "../types";
 import { stuckNow } from "./clock";
-import { divisionOf, divisionRule, divisionsOf, isPatientType, subDivisionOfArea, termsOfLabel } from "./divisions";
+import { DIVISIONS, divisionOf, divisionRule, divisionsOf, isPatientType, subDivisionOfArea, termsOfLabel } from "./divisions";
 import { logEvent, peso } from "./events";
 import {
   DESK_HOME,
@@ -182,6 +182,12 @@ const rowColumns = sql`
   ${iso("o.created_at")} as "createdAt", ${iso("o.updated_at")} as "updatedAt", o.flag_reason as "flagReason",
   o.patient_order as "patientOrder", o.patient_name as "patientName", o.note, o.order_type as "orderType", o.division,
   exists (select 1 from order_version v where v.order_id = o.id and v.kind = 'changed') as changed, ${viaSql} as via`;
+
+/** The channel an order shows (Aryan, 22 Nov: one list of channels, the target sheet's): its
+ *  Division, which is the sheet's channel of the seat it was placed from (CLIDP, MD Telesales, RX
+ *  Business…); a PAP order keeps PAP (the sheet has no PAP row); an older order with no Division
+ *  its first channel's code. Screens are still decided by the seat, never by this word. */
+const SHOWN_CHANNEL = sql`(case when ch.code = 'PAP' then ch.code else coalesce(o.division, ch.code) end)`;
 
 const rowJoins = sql`
   join customer c on c.id = o.customer_id
@@ -802,7 +808,7 @@ const cardColumns = sql`${rowColumns}, o.medrep_id::int as "medrepId", ${approve
   -- Who has it in hand at its desk now: Finance's person while it is with Finance, else Management's.
   (select p.name from person p where p.id = case when o.status in ('finance_check', 'ready_for_invoice') then o.finance_by else o.manage_by end) as "handledBy",
   (case when o.status in ('finance_check', 'ready_for_invoice') then o.finance_by else o.manage_by end)::int as "handledById",
-  o.came_back_count::int as "cameBackCount", o.came_back_reason as "cameBackReason", c.kind as "customerKind", c.city as "customerCity", ch.code as channel, a.name as area,
+  o.came_back_count::int as "cameBackCount", o.came_back_reason as "cameBackReason", c.kind as "customerKind", c.city as "customerCity", ${SHOWN_CHANNEL} as channel, a.name as area,
   o.payment_terms as "paymentTerms", o.payment_days::int as "paymentDays", ${day("o.pay_by")} as "payBy",
   ${iso("coalesce(o.submitted_at, o.created_at)")} as "submittedAt", o.held_from as "heldFrom", c.review,
   to_char(coalesce(o.submitted_at, o.created_at) at time zone 'Asia/Manila', 'YYYY-MM-DD') as "placedOn",
@@ -1027,7 +1033,8 @@ export async function orderBoard(
     : null;
   const today = sql`(now() at time zone 'Asia/Manila')::date`;
   const narrowed: SQL[] = [seen(me)];
-  if (filter.channel) narrowed.push(sql`ch.code = ${filter.channel}`);
+  // The sheet's channel as the board shows it; an old link's first-channel code still works.
+  if (filter.channel) narrowed.push(sql`(${SHOWN_CHANNEL} = ${filter.channel} or ch.code = ${filter.channel})`);
   if (filter.terms && ["advance", "cod", "days"].includes(filter.terms))
     narrowed.push(sql`o.payment_terms = ${filter.terms}`);
   for (const word of (filter.q ?? "").toLowerCase().split(/\s+/).filter(Boolean).slice(0, 5)) {
@@ -1106,7 +1113,8 @@ export async function orderBoard(
     ),
     rows<BoardRep>(
       db,
-      sql`${team(me)} select rep.id::int as id, rep.name, rch.code as channel, ra.name as area,
+      sql`${team(me)} select rep.id::int as id, rep.name,
+          (case when rch.code = 'PAP' then rch.code else coalesce((${seatDivisionsSql(sql`rep.id`, todayManila())})[1], rch.code) end) as channel, ra.name as area,
           count(*)::int as orders, coalesce(sum(o.total), 0)::float8 as value,
           ${iso("min(coalesce(o.submitted_at, o.created_at))")} as oldest
         ${from} left join channel rch on rch.id = rep.channel_id left join area ra on ra.id = rep.area_id
@@ -1124,9 +1132,8 @@ export async function orderBoard(
     cards: await toCards(db, me, found, desk === "management" ? viewerOf(me) : desk),
     // Every channel, in the company's order (Aryan, 19 Nov: the list showed only the channels with
     // orders, and looked short).
-    channels: (await rows<{ code: string }>(db, sql`select code from channel order by sort, code`)).map(
-      (row) => row.code,
-    ),
+    // The sheet's channels (the Divisions), and PAP, which is on no row of the sheet.
+    channels: [...DIVISIONS, "PAP"],
     medreps: [
       ...new Map(choices.map((row) => [row.id, { id: row.id, name: row.name }])).values(),
     ].sort((x, y) => x.name.localeCompare(y.name)),
@@ -1326,7 +1333,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
             and f.hold_event_id = (select max(g.hold_event_id) from order_file g where g.order_id = o.id and g.active))
           as "holdProofs",
         raiser.name as "raisedBy", o.raised_by::int as "raisedById", o.medrep_id::int as "medrepId",
-        ch.code as channel, a.name as area,
+        ${SHOWN_CHANNEL} as channel, a.name as area,
         o.payment_terms as "paymentTerms", o.payment_days::int as "paymentDays",
         o.delivery_address as "deliveryAddress", o.receiver, o.receiver_phone as "receiverPhone", o.note,
         o.customer_po as "customerPo", o.invoice_from as "invoiceFrom", o.doctor_id::int as "doctorId", doc.name as doctor,

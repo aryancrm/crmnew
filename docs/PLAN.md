@@ -3173,3 +3173,17 @@ lowest, each division's average; Scorecards opens every card.
   two sheet seats (B2C Sales Coaching) carry ONLINE; URO is on no box and no person; five people
   with two seats carry the channel of one seat only (Claire, Honey, Malou, Reynan, Subir); no open
   order's channel differs from its seat's. Nothing changed.
+- **22 Nov 2026 (the first eight channels against the sheet, step 2: the names people see)** An
+  order and a seat already carry the sheet's channel as their Division (19 Nov, migration 0124), so
+  the screens now print that word where they printed the first channel's code: a person's Home
+  ("Channel"), the MedRep Home's chip and the new order's MedRep line (`shownChannel`, each seat's
+  Division, the main seat's first); the order page, the order cards, the board's Channel filter
+  (the sheet's eight and PAP; an old link's code still works) and its MedRep strip; a customer's
+  page and the customer list's MedRep strip; HR's person page. CLIDP's people and orders say CLIDP
+  (not B2B), the Online desk's MD Telesales, both telesales their own. PAP stays PAP (the sheet has
+  no PAP row; its orders' Division says MD Telesales while its box is under the Hospital Division:
+  asked Aryan). An order with no Division (four closed Rx demo orders) keeps its code. Which
+  screens a seat gets is untouched. The five people with two seats carry their leading seat's
+  channel, as `projectOrg` means them to; the other seat is reached by the team switch. Still on
+  the first channels: Sales performance ("HOSP | name", the hub's format), the map, Targets, the
+  Company KPIs' and the sales trend's grouping, the Admin's Channels page. Local only.

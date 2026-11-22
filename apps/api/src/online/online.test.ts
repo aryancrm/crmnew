@@ -208,7 +208,8 @@ describe("a regular enquiry", () => {
     expect(order.order).toMatchObject({
       status: "ready_for_dispatch",
       medrep: "Jane",
-      channel: "ONLINE",
+      // The target sheet's channel of the Online desk's seats (22 Nov).
+      channel: "MD Telesales",
       customer: "Maria Santos",
       receiver: "Maria Santos",
       deliveryAddress: "Pasay",

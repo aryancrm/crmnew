@@ -32,7 +32,7 @@ import { TelesalesDay } from "./telesales";
 import { CrrHome, NbdHome } from "./b2b";
 import { ClidpHome } from "./clidp";
 import { BiddingHome } from "./tenders";
-import { b2bRole } from "../seat-words";
+import { b2bRole, shownChannel } from "../seat-words";
 import { greeting, todayWords } from "../home/home";
 import { OrderCardItem } from "../orders/board";
 import { HospitalsCard } from "./hospitals";
@@ -165,7 +165,7 @@ export function MedrepHome() {
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
             {me.channel && (
               <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium tracking-wide text-slate-600 uppercase">
-                {me.channel.code}
+                {shownChannel(me)}
               </span>
             )}
             {me.area && <span>{me.area.name}</span>}

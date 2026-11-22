@@ -8,6 +8,7 @@ import { Building2, Stethoscope, User, UserPlus } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { api } from "../api";
 import { onlineDesk, useMe } from "../auth";
+import { shownChannel } from "../seat-words";
 import { NewsList } from "../inventory/news";
 import { RegulatoryHome } from "../regulatory/regulatory";
 import { WorkLogPage } from "../hr/work-log";
@@ -117,7 +118,7 @@ function Desk() {
                 ? `${me.roleLabel} · ${me.title}`
                 : me.roleLabel,
             ],
-            ["Channel", me.channel ? `${me.channel.code} · ${me.channel.name}` : null],
+            ["Channel", shownChannel(me)],
             ["Area", me.area?.name],
             ["Cities", me.area?.cities.join(", ")],
             [
