@@ -4,6 +4,7 @@
 
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -61,7 +62,7 @@ async function delivered(qty: number): Promise<{ orderId: number; invoiceId: num
     await ok("ryan", "/api/orders", { customerId: hospital, items: [{ medicineId: medicine.id, qty, priceKind: "hospital" }] })
   ).json()) as { id: number };
   const id = placed.id;
-  await ok("sarla", `/api/orders/${id}/approve`, { finance: true });
+  await ok("sarla", await ticked(db, `/api/orders/${id}/approve`), { finance: true });
   await ok("fiona", `/api/finance/orders/${id}/invoice`);
   await ok("marco", `/api/dispatch/orders/${id}/pack`);
   await ok("marco", `/api/dispatch/orders/${id}/ship`, { method: "courier", addressChecked: true, courier: "LBC", tracking: "1" });

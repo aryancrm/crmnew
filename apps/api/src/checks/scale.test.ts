@@ -6,6 +6,7 @@
 
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -232,8 +233,8 @@ describe("the whole company, 130 people", () => {
     for (const who of ["mgmt2", "fin2", "ceo", "admin"])
       for (const order of ["h11", "h21", "r11"]) expect(await sees(who, order), who).toBe(true);
     for (const who of ["h11", "hlead1", "vanessa", "hr2", "fin2"])
-      expect((await post(who, `/api/orders/${orders.h21}/approve`)).status, who).not.toBe(200);
-    expect((await post("mgmt2", `/api/orders/${orders.h21}/approve`)).status).toBe(200);
+      expect((await post(who, await ticked(db, `/api/orders/${orders.h21}/approve`))).status, who).not.toBe(200);
+    expect((await post("mgmt2", await ticked(db, `/api/orders/${orders.h21}/approve`))).status).toBe(200);
   });
 
   it("HR sees every person and no order", async () => {
@@ -253,7 +254,7 @@ describe("the whole company, 130 people", () => {
         await read<{ order: { status: string; total: number } }>("ceo", `/api/orders/${id}`)
       ).order;
       if (before.status === "pending_approval")
-        expect((await post("mgmt2", `/api/orders/${id}/approve`, { finance: true })).status).toBe(
+        expect((await post("mgmt2", await ticked(db, `/api/orders/${id}/approve`), { finance: true })).status).toBe(
           200,
         );
       const now = (await read<{ order: { status: string } }>("ceo", `/api/orders/${id}`)).order;

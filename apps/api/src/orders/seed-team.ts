@@ -10,7 +10,8 @@ import { type Database, rows } from "../db/index";
 import { addPerson, addSeat, coverSeat, projectOrg } from "../org/service";
 import type { BuyerType, Me, OrderItemInput } from "../types";
 import { alignDemoMoneyDates, spreadDemoStepTimes } from "./seed-times";
-import { actOnOrder, placeOrder } from "./service";
+import { actOnOrder,
+  tickChecks, placeOrder } from "./service";
 
 export async function seedDemoTeam(db: Database, password: string): Promise<boolean> {
   const found = await rows<{ id: number; email: string; role: string; name: string }>(
@@ -215,7 +216,10 @@ export async function seedDemoTeam(db: Database, password: string): Promise<bool
   await place(joy, tan, [item("Imatinib", "doctor", 60)], 5);
   // Through Management already.
   const approved = await place(mia, makatiMed, [item("Anastrozole", "hospital", 240)], 26);
-  if (approved) await actOnOrder(db, sarla, approved, "approve", {});
+  if (approved) {
+    await tickChecks(db, approved, sarla.id);
+    await actOnOrder(db, sarla, approved, "approve", {});
+  }
   // Every demo order moved within a second; give the steps believable times.
   await spreadDemoStepTimes(db);
   await alignDemoMoneyDates(db);

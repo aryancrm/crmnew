@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -59,7 +60,7 @@ async function approved(customerId: number, more: object = {}): Promise<number> 
   const placed = (await (
     await post("ryan", "/api/orders", { customerId, items: [line()], ...more })
   ).json()) as { id: number };
-  expect((await post("sarla", `/api/orders/${placed.id}/approve`)).status).toBe(200);
+  expect((await post("sarla", await ticked(db, `/api/orders/${placed.id}/approve`))).status).toBe(200);
   return placed.id;
 }
 const confirm = (who: string, id: number, body: object) =>
@@ -228,10 +229,12 @@ describe("an advance order", () => {
     expect(back.events.at(-1)?.message).toBe("Proof of payment added: back with Finance to check.");
   });
 
-  it("the Admin's own order skips the queue, ships from the default warehouse and waits for Finance", async () => {
+  it("the Admin's own order waits for Management (22 Nov), then ships from the default warehouse and waits for Finance", async () => {
     const placed = (await (
       await post("admin", "/api/orders", { customerId: hospital, items: [line()] })
     ).json()) as { id: number };
+    expect((await order("fiona", placed.id)).order.status).toBe("pending_approval");
+    expect((await post("sarla", await ticked(db, `/api/orders/${placed.id}/approve`))).status).toBe(200);
     const own = await order("fiona", placed.id);
     expect(own.order.status).toBe("finance_check");
     expect(own.order.warehouse).not.toBeNull();
@@ -242,7 +245,7 @@ describe("an advance order", () => {
       await post("ryan", "/api/orders", { customerId: hospital, items: [line()] })
     ).json()) as { id: number };
     expect((await order("fiona", placed.id)).can).toMatchObject({ approve: false, hold: false });
-    expect((await post("fiona", `/api/orders/${placed.id}/approve`)).status).toBe(409);
+    expect((await post("fiona", await ticked(db, `/api/orders/${placed.id}/approve`))).status).toBe(409);
     expect(
       (await post("sarla", `/api/orders/${placed.id}/hold`, { reason: "Ask Ms. Van" })).status,
     ).toBe(200);

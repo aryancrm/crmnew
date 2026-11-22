@@ -2,6 +2,7 @@
 // person asked others for.
 
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { sql } from "drizzle-orm";
 import { type Database, openDatabase, rows as dbRows } from "../db/index";
@@ -56,7 +57,7 @@ describe("to decide", () => {
     // The MedRep decides none of it; Finance has nothing of it yet.
     expect(line((await read<Decisions>("ryan", "/api/decisions")).forMe, "awaiting")).toBe(0);
     const financeBefore = line((await read<Decisions>("fiona", "/api/decisions")).forMe, "toInvoice");
-    expect((await post("sarla", `/api/orders/${placed.id}/approve`, { finance: true })).status).toBe(200);
+    expect((await post("sarla", await ticked(db, `/api/orders/${placed.id}/approve`), { finance: true })).status).toBe(200);
     expect(line((await read<Decisions>("sarla", "/api/decisions")).forMe, "awaiting")).toBe(line(before.forMe, "awaiting"));
     const finance = await read<Decisions>("fiona", "/api/decisions");
     expect(line(finance.forMe, "toInvoice") + line(finance.forMe, "toConfirm")).toBeGreaterThan(financeBefore);

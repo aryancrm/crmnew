@@ -3062,3 +3062,11 @@ lowest, each division's average; Scorecards opens every card.
   a PAP case); the Online channel's MedRep can own a case; "seen" marks Online desk chats only;
   batch trace shows cost to the cost roles only; Finance's board no longer fails above ₱21.47M in a
   month; a sample acknowledgement must be a photo or a PDF. No business rule changed.
+- **22 Nov 2026 (Aryan's rules)** Approve is blocked until every check is done: Documents read by
+  hand always, and Medicines & price, Stock, Customer & licence whenever the system found something
+  on them (the API refuses with "Check first: …"; what the system finds fine still ticks itself).
+  Nothing skips Management: the Admin's own order waits for approval like every other. Over the
+  credit limit stays a flag, never a block. A stock count needs no approval. An order stopped as an
+  exception after it shipped can't be cancelled (the parcel is on the road: it comes back through
+  Dispatch or as a return). The desk report's "Rejected" column is named "Cancelled", which is what
+  it counts.

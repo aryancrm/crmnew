@@ -4,6 +4,7 @@
 
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -122,7 +123,7 @@ describe("a hospital's order", () => {
     orderId = ((await placed.json()) as { id: number }).id;
     // A MedRep's order always waits for Management (Aryan, 17 Nov), whatever the switch says;
     // Management approves it straight to Dispatch.
-    expect((await post("sarla", `/api/orders/${orderId}/approve`, { finance: false })).status).toBe(200);
+    expect((await post("sarla", await ticked(db, `/api/orders/${orderId}/approve`), { finance: false })).status).toBe(200);
     const order = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
     expect(order.order.status).toBe("ready_for_dispatch");
     const [mail] = await mailTo(to, 1);
@@ -239,7 +240,7 @@ describe("a hospital's order", () => {
       }),
     );
     const id = ((await placed.json()) as { id: number }).id;
-    expect((await post("sarla", `/api/orders/${id}/approve`, { finance: false })).status).toBe(200);
+    expect((await post("sarla", await ticked(db, `/api/orders/${id}/approve`), { finance: false })).status).toBe(200);
     const refused = await post("ryan", `/api/orders/${id}/update/email`);
     expect(refused.status).toBe(409);
     expect(((await refused.json()) as { error: { message: string } }).error.message).toContain(
@@ -284,7 +285,7 @@ describe("a patient's case", () => {
     const orderId = ((await placed.json()) as { id: number }).id;
     // Confirmed as soon as Management approves it (18 Nov), with how they pay; Finance's check
     // after it sends nothing twice.
-    expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(200);
+    expect((await post("sarla", await ticked(db, `/api/orders/${orderId}/approve`))).status).toBe(200);
     const [mail] = await mailTo("maria@example.test", 1);
     expect(mail?.subject).toMatch(/is confirmed$/);
     expect(mail?.text).toContain("Good day, Maria!");

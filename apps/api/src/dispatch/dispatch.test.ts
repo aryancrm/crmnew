@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -64,7 +65,7 @@ async function readyToPack(customerId: number, qty: number): Promise<number> {
       items: [{ medicineId, qty, priceKind: "hospital" }],
     })
   ).json()) as { id: number };
-  expect((await post("sarla", `/api/orders/${placed.id}/approve`)).status).toBe(200);
+  expect((await post("sarla", await ticked(db, `/api/orders/${placed.id}/approve`))).status).toBe(200);
   expect((await post("fiona", `/api/finance/orders/${placed.id}/invoice`)).status).toBe(200);
   return placed.id;
 }
@@ -257,7 +258,7 @@ describe("packing", () => {
       await db.execute(
         sql`insert into order_item (order_id, medicine_id, qty, price_kind, list_price, unit_price, free) values (${placed.id}, ${twin?.id}, 6, 'hospital', 1000, 0, true)`,
       );
-      expect((await post("sarla", `/api/orders/${placed.id}/approve`)).status).toBe(200);
+      expect((await post("sarla", await ticked(db, `/api/orders/${placed.id}/approve`))).status).toBe(200);
       expect((await post("fiona", `/api/finance/orders/${placed.id}/invoice`)).status).toBe(200);
       return placed.id;
     };
@@ -368,7 +369,7 @@ describe("the cold-chain box", () => {
     expect(after.order.total).toBe(2 * 1000 + 8900);
 
     // It goes on like any order, and the box comes off the shelf when packed.
-    expect((await post("sarla", `/api/orders/${placed.id}/approve`)).status).toBe(200);
+    expect((await post("sarla", await ticked(db, `/api/orders/${placed.id}/approve`))).status).toBe(200);
     expect((await post("fiona", `/api/finance/orders/${placed.id}/invoice`)).status).toBe(200);
     expect((await pack("marco", placed.id)).status).toBe(200);
     const [left] = await rows<{ qty: number }>(
@@ -699,7 +700,7 @@ describe("the warehouse's day and the bell", () => {
       kind: "resent",
     });
     // Approved: Finance hears it has an invoice to make; invoiced: Dispatch hears it has one to pack.
-    await post("sarla", `/api/orders/${id}/approve`);
+    await post("sarla", await ticked(db, `/api/orders/${id}/approve`));
     expect(
       (await bell("fiona")).rows.some(
         (row) => row.kind === "to_finance" && row.link === `/orders/${id}`,

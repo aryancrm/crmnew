@@ -3,6 +3,7 @@
 
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -113,7 +114,7 @@ describe("three at Management, three at Finance, terms of any length", () => {
     for (const name of ["Fiona", "Fred", "Gina"])
       expect((await post("fiona", `/api/desk/finance/people/${await idOf(name)}/start`, { on: true })).status).toBe(200);
     for (const id of orders) {
-      const response = await post("sarla", `/api/orders/${id}/approve`);
+      const response = await post("sarla", await ticked(db, `/api/orders/${id}/approve`));
       expect(response.status, await response.clone().text()).toBe(200);
     }
     const approved = await rows<{ owner: string; approver: string }>(

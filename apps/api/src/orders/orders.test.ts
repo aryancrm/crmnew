@@ -5,6 +5,7 @@ import { countQueries, type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { seedDemo } from "../seed";
+import { ticked } from "../testing/approve";
 import type {
   Catalogue,
   CustomerDetail,
@@ -46,8 +47,8 @@ const place = async (who: string, body: object) => {
   };
 };
 const order = (who: string, id: number) => read<OrderDetail>(who, `/api/orders/${id}`);
-const act = (who: string, id: number, action: string, body: object = {}) =>
-  post(who, `/api/orders/${id}/${action}`, body);
+const act = async (who: string, id: number, action: string, body: object = {}) =>
+  post(who, action === "approve" ? await ticked(db, `/api/orders/${id}/approve`) : `/api/orders/${id}/${action}`, body);
 const queue = async (who: string) =>
   (await read<{ orders: OrderRow[] }>(who, "/api/orders/queue")).orders;
 const line = (more: object = {}) => ({
@@ -204,18 +205,26 @@ describe("placing an order", () => {
     ).toBe(400);
   });
 
-  it("Management places no orders (19 Nov); the Admin's own order skips the queue", async () => {
+  it("Management places no orders (19 Nov); the Admin's own order waits for Management too (22 Nov)", async () => {
     // Management checks and approves orders; it doesn't raise them (Aryan, 19 Nov).
     expect((await post("sarla", "/api/orders", { customerId: hospital, items: [line()] })).status).toBe(403);
     const made = await place("admin", { customerId: hospital, items: [line()] });
     const detail = await order("sarla", made.body.id);
-    expect(detail.order).toMatchObject({
-      status: "finance_check",
-      raisedBy: "Admin",
-      medrep: "Ryan",
-    });
-    expect(detail.stages[1]?.at).not.toBeNull();
-    expect((await queue("sarla")).some((row) => row.id === made.body.id)).toBe(false);
+    expect(detail.order).toMatchObject({ status: "pending_approval", raisedBy: "Admin", medrep: "Ryan" });
+    expect((await queue("sarla")).some((row) => row.id === made.body.id)).toBe(true);
+  });
+
+  it("Approve is refused until every check is approved (22 Nov)", async () => {
+    const made = await place("ryan", { customerId: hospital, items: [line()] });
+    const refused = await post("sarla", `/api/orders/${made.body.id}/approve`);
+    expect(refused.status).toBe(409);
+    expect(((await refused.json()) as { error: { code: string } }).error.code).toBe("checks_open");
+    expect((await post("sarla", `/api/orders/${made.body.id}/checks/papers`)).status).toBe(200);
+    const open = await order("sarla", made.body.id);
+    for (const key of ["price", "stock", "customer"])
+      if (open.findings.some((one) => (key === "price" ? ["price", "note"] : key === "stock" ? ["stock"] : ["customer", "licence", "owes", "credit"]).includes(one.kind)))
+        expect((await post("sarla", `/api/orders/${made.body.id}/checks/${key}`)).status).toBe(200);
+    expect((await post("sarla", `/api/orders/${made.body.id}/approve`)).status).toBe(200);
   });
 });
 
@@ -341,7 +350,7 @@ describe("what Management does with an order", () => {
     const answer = await post("fiona", `/api/orders/${id}/checks/finance_dues`, {});
     expect(answer.status, await answer.clone().text()).toBe(200);
     const detail = await order("fiona", id);
-    expect(detail.checksApproved.map((one) => one.key)).toEqual(["finance_dues"]);
+    expect(detail.checksApproved.map((one) => one.key).filter((key) => key.startsWith("finance_"))).toEqual(["finance_dues"]);
     expect(detail.events.some((event) => event.message === "Owed from before: approved by Fiona.")).toBe(true);
   });
 

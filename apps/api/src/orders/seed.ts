@@ -5,7 +5,8 @@
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import type { Me, OrderItemInput } from "../types";
-import { actOnOrder, placeOrder } from "./service";
+import { actOnOrder,
+  tickChecks, placeOrder } from "./service";
 
 export async function seedDemoOrders(db: Database): Promise<boolean> {
   const [counted] = await rows<{ count: number }>(
@@ -112,7 +113,10 @@ export async function seedDemoOrders(db: Database): Promise<boolean> {
     ["San Juan", "Capecitabine", 120, "ready_for_dispatch", 60],
   ] as const) {
     const id = await place(ryan, name, [item(medicine, "hospital", qty)]);
-    if (id) await actOnOrder(db, sarla, id, "approve", {});
+    if (id) {
+      await tickChecks(db, id, sarla.id);
+      await actOnOrder(db, sarla, id, "approve", {});
+    }
     if (status) await move(id, status, hours);
   }
   // On hold, and one sent back to the MedRep.

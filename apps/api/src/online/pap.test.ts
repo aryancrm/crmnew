@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { PDFDocument } from "pdf-lib";
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -182,7 +183,7 @@ describe("PAP cases", () => {
     expect(order.order.channel).toBe("PAP");
     // The PAP head approves it, not Management.
     expect(order.can.approve).toBe(false);
-    expect((await post("sarla", `/api/orders/${orderId}/approve`, { finance: true })).status).toBe(
+    expect((await post("sarla", await ticked(db, `/api/orders/${orderId}/approve`), { finance: true })).status).toBe(
       409,
     );
     const queue = await read<{ orders: { id: number }[] }>("sarla", "/api/orders/queue");
@@ -190,7 +191,7 @@ describe("PAP cases", () => {
     const piaQueue = await read<{ orders: { id: number }[] }>("pia", "/api/orders/queue");
     expect(piaQueue.orders.map((row) => row.id)).toContain(orderId);
     expect((await read<OrderDetail>("pia", `/api/orders/${orderId}`)).can.approve).toBe(true);
-    expect((await post("pia", `/api/orders/${orderId}/approve`, { finance: true })).status).toBe(
+    expect((await post("pia", await ticked(db, `/api/orders/${orderId}/approve`), { finance: true })).status).toBe(
       200,
     );
     order = await read<OrderDetail>("fiona", `/api/orders/${orderId}`);

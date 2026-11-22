@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -58,7 +59,7 @@ async function delivered(customerId: number, qty: number, advance = false): Prom
     })
   ).json()) as { id: number };
   const id = placed.id;
-  expect((await post("sarla", `/api/orders/${id}/approve`, { finance: true })).status).toBe(200);
+  expect((await post("sarla", await ticked(db, `/api/orders/${id}/approve`), { finance: true })).status).toBe(200);
   if (advance) {
     const total = (await read<OrderDetail>("fiona", `/api/orders/${id}`)).order.total;
     expect(
@@ -289,7 +290,7 @@ describe("returns", () => {
     ).json()) as { id: number };
     // Before Management approves there is nothing to ask: it is still the MedRep's to take back.
     expect((await read<OrderReturns>("ryan", `/api/orders/${placed.id}/returns`)).can.ask).toBe(false);
-    expect((await post("sarla", `/api/orders/${placed.id}/approve`)).status).toBe(200);
+    expect((await post("sarla", await ticked(db, `/api/orders/${placed.id}/approve`))).status).toBe(200);
     const ask = await read<OrderReturns>("ryan", `/api/orders/${placed.id}/returns`);
     expect(ask.can.goods).toEqual(["not_shipped"]);
     // Management cancels it itself instead.

@@ -649,13 +649,10 @@ export async function caseOrderChecks(db: Runner, orderId: number): Promise<Orde
 
 /**
  * Sends a just-placed order on along the order line. Every order placed by anyone but Management
- * goes to Management, then Finance (Management may switch Finance off on approving). Management's
- * own order follows the switch at the top of its form: to Management or not, to Finance or not;
- * it is checked anyway when the system finds something wrong on it (a price below the list, over
- * the credit limit, money overdue, a new business customer, an expired licence; a missing proof
- * of payment while Finance is off). An Online case's order goes Management → Finance → Dispatch
- * like every other (Aryan, 18 Nov). Management's own order skips Management. Short stock is never
- * Management's: Dispatch sees it.
+ * goes to Management, then Finance (Management may switch Finance off on approving). The
+ * Admin's own order too (Aryan, 22 Nov: nothing skips Management); its form's switch only says
+ * whether Finance checks it. An Online case's order goes Management → Finance → Dispatch like
+ * every other (Aryan, 18 Nov).
  */
 export async function routeOrder(
   tx: Runner,
@@ -665,19 +662,12 @@ export async function routeOrder(
 ): Promise<"management" | "finance" | "dispatch"> {
   const read = await findingsOfOrder(tx, orderId);
   if (!read) return "management";
-  const { order, found } = read;
+  const { order } = read;
   const fromCase = Boolean(order.leadId);
   const manager = ORDER_MANAGE_ROLES.includes(me.role);
   // Who checks an order is Management's call (Aryan, 17 Nov: MedRep → Management → Finance →
   // Dispatch). Anyone else's switch is not read: the API, not only the form, keeps the line.
   const allowed = manager || fromCase ? choice : undefined;
-  // Management's own order goes on by itself, unless it was placed to wait (a patient's order
-  // waits for its prescription): then it is approved like any other.
-  const [placed] = await rows<{ status: OrderStatus }>(
-    tx,
-    sql`select status from sales_order where id = ${orderId}`,
-  );
-  const manages = manager && placed?.status !== "pending_approval";
   const [kept] = await rows<{ finance: boolean }>(
     tx,
     sql`select finance_check as finance from sales_order where id = ${orderId}`,
@@ -688,54 +678,9 @@ export async function routeOrder(
   await tx.execute(
     sql`update sales_order set finance_check = ${financeStep} where id = ${orderId}`,
   );
-  // Management approves every order that comes in, of every channel: a MedRep's, a Team
-  // Lead's, an Online or PAP case's (Aryan, 17 Nov). Only Management's own order goes on by itself.
-  if (!manages) return "management";
-  const checks = manages
-    ? []
-    : // A proof of payment is Finance's to check while Finance is on; an Online case's order the
-      // same (Aryan, 19 Nov: Online orders go the way every channel's do).
-      found.filter(
-          (finding) => finding.kind !== "stock" && (financeStep ? finding.kind !== "papers" : true),
-        );
-  if (checks.length > 0) {
-    await logEvent(
-      tx,
-      orderId,
-      me,
-      "status",
-      `Management checks it first: ${checks.map((check) => check.short.toLowerCase()).join(", ")}.`,
-    );
-    return "management";
-  }
-  if (!manages && allowed?.management) {
-    await logEvent(tx, orderId, me, "status", `${me.name} sent it to Management to check.`);
-    return "management";
-  }
-  const why = "Nothing for Management to check";
-  if (financeStep) {
-    // Management's own order: its invoice is made as it goes on (it was approved when placed).
-    if (manages) await invoiceOnApproval(tx, me, orderId);
-    if (!manages) {
-      const next = afterApproval(order.terms);
-      const [place] = await rows<{ id: number }>(
-        tx,
-        sql`select id::int as id from warehouse where active order by is_default desc, id limit 1`,
-      );
-      await tx.execute(
-        sql`update sales_order set status = ${next}, approved_at = now(), warehouse_id = coalesce(warehouse_id, ${place?.id ?? null}), updated_at = now() where id = ${orderId}`,
-      );
-      await logEvent(tx, orderId, me, "status", `${why}: it goes to Finance.`, "approved");
-    }
-    return "finance";
-  }
-  await clearCaseOrder(
-    tx,
-    me,
-    orderId,
-    manages ? undefined : `${why}: it goes to Dispatch with its invoice.`,
-  );
-  return "dispatch";
+  // Management approves every order that comes in, of every channel and of every placer, the
+  // Admin's own too (Aryan, 22 Nov: "nothing skips Management").
+  return "management";
 }
 
 /** The orders waiting for Management, the longest wait first, each with what the system found. */
@@ -1980,7 +1925,8 @@ export async function placeOrder(
   const patientOrder =
     customer.kind !== "patient" && (type ? isPatientType(type) : Boolean(input.patientOrder));
   const patientBuys = customer.kind === "patient" || patientOrder;
-  const manages = orderCan(me).manage && !patientBuys;
+  // Nothing skips Management (Aryan, 22 Nov): the Admin's own order waits for approval too.
+  const manages = false as boolean;
   // Whose order it is: the MedRep who placed it; for one a team lead or Management places, the
   // MedRep they pick (one of the lead's own people), else the MedRep of the customer's area.
   const picked = input.medrepId ? await pickedMedrep(db, me, input.medrepId) : null;
@@ -2225,6 +2171,16 @@ export async function actOnOrder(
             409,
             "no_prescription",
             "A patient's order is approved only with the prescription: attach it first (under Documents), or send it back for it.",
+          );
+        // Every check is fine or approved before the order is (Aryan, 22 Nov: "approve is blocked
+        // until everything is checked"): Documents by hand always, the others when the system
+        // found something on them.
+        const open = await openChecks(tx, id);
+        if (open.length)
+          throw new Refusal(
+            409,
+            "checks_open",
+            `Check first: ${open.map((key) => CHECK_LABEL[key]).join(", ")}. Open the order and approve each.`,
           );
         const [place] = input.warehouseId
           ? await rows<{ id: number; name: string }>(
@@ -2895,6 +2851,36 @@ const CHECK_LABEL: Record<OrderCheckKey, string> = {
   finance_dues: "Owed from before",
   finance_credit: "Credit limit",
 };
+
+/** Management's checks still to approve on an order: Documents until someone read the papers, and
+ *  each of the others the system found something on. The order's page shows the same (checks.tsx). */
+export async function openChecks(tx: Runner, orderId: number): Promise<OrderCheckKey[]> {
+  const read = await findingsOfOrder(tx, orderId);
+  const kinds = new Set((read?.found ?? []).map((finding) => finding.kind));
+  const [done] = await rows<{ keys: string[]; papers: boolean }>(
+    tx,
+    sql`select coalesce((select array_agg(k.check_key) from order_check k where k.order_id = o.id), '{}') as keys,
+        o.papers_checked_at is not null as papers from sales_order o where o.id = ${orderId}`,
+  );
+  const approved = new Set(done?.keys ?? []);
+  const open: OrderCheckKey[] = [];
+  if (!approved.has("papers") && !done?.papers) open.push("papers");
+  if ((kinds.has("price") || kinds.has("note")) && !approved.has("price")) open.push("price");
+  if (kinds.has("stock") && !approved.has("stock")) open.push("stock");
+  if ((["customer", "licence", "owes", "credit"] as const).some((kind) => kinds.has(kind)) && !approved.has("customer"))
+    open.push("customer");
+  return open;
+}
+
+/** Marks every Management check approved by this person: for the demo seeds and the tests, which
+ *  approve orders without the screen. Never called from an address. */
+export async function tickChecks(tx: Runner, orderId: number, personId: number): Promise<void> {
+  for (const key of CHECK_KEYS)
+    await tx.execute(
+      sql`insert into order_check (order_id, check_key, by_person) values (${orderId}, ${key}, ${personId})
+        on conflict (order_id, check_key) do nothing`,
+    );
+}
 
 /** Clears an order's check approvals (all, or one): it is looked at afresh. */
 export async function clearChecks(tx: Runner, orderId: number, key?: OrderCheckKey): Promise<void> {

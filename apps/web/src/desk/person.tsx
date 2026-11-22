@@ -23,7 +23,7 @@ const OUTCOME: Record<DeskPerson["done"][number]["outcome"], { word: string; ton
   done: { word: "Approved", tone: "bg-emerald-100 text-emerald-800" },
   sent_back: { word: "Sent back", tone: "bg-amber-100 text-amber-800" },
   held: { word: "Held", tone: "bg-orange-100 text-orange-800" },
-  rejected: { word: "Rejected", tone: "bg-rose-100 text-rose-700" },
+  rejected: { word: "Cancelled", tone: "bg-rose-100 text-rose-700" },
   moved: { word: "Moved on", tone: "bg-slate-100 text-slate-600" },
 };
 

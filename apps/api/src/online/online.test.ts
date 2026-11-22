@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -189,7 +190,7 @@ describe("a regular enquiry", () => {
     const orderId = ((await placed.json()) as { id: number }).id;
     // Management approves every order (Aryan, 17 Nov); approved, it goes to Finance with its
     // invoice, then to Dispatch (Aryan, 18 Nov: a case's order too).
-    expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(200);
+    expect((await post("sarla", await ticked(db, `/api/orders/${orderId}/approve`))).status).toBe(200);
     let order = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
     expect(order.order.status).toBe("finance_check");
     expect((await lead("jane", id)).next).toBe("With Finance: they confirm the advance payment (put the slip on the order)");
@@ -234,7 +235,7 @@ describe("a regular enquiry", () => {
     ).toBe("road");
     expect(now.order).toMatchObject({ terms: "advance", proof: false });
     // Approved once: nothing more for Management.
-    expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(409);
+    expect((await post("sarla", await ticked(db, `/api/orders/${orderId}/approve`))).status).toBe(409);
     // A second enquiry on the same number finds the patient already on file.
     const again = await addLead({ name: "Maria Santos", source: "phone" });
     await post("jane", `/api/leads/${again}/quote`, {
@@ -348,7 +349,7 @@ describe("the other roads", () => {
     ).id;
     // Management approves it; Finance looks at the agency's bill (60 days), then it goes to
     // Dispatch with the agency's invoice.
-    expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(200);
+    expect((await post("sarla", await ticked(db, `/api/orders/${orderId}/approve`))).status).toBe(200);
     expect((await read<OrderDetail>("sarla", `/api/orders/${orderId}`)).order.status).toBe("ready_for_invoice");
     expect((await post("fiona", `/api/finance/orders/${orderId}/invoice`, {})).status).toBe(200);
     const order = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
@@ -421,7 +422,7 @@ describe("the agent takes the case to Paid", () => {
 
     // Sarla passes it: it goes to Finance with its invoice (cash on delivery: Finance looks at
     // what the customer owes), then to Dispatch.
-    expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(200);
+    expect((await post("sarla", await ticked(db, `/api/orders/${orderId}/approve`))).status).toBe(200);
     now = await lead("jane", id);
     expect(now.order?.status).toBe("ready_for_invoice");
     expect(now.next).toBe("With Finance for a check");
@@ -550,7 +551,7 @@ describe("the agent takes the case to Paid", () => {
     expect((await read<OrderDetail>("sarla", `/api/orders/${orderId}`)).order.status).toBe(
       "pending_approval",
     );
-    expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(200);
+    expect((await post("sarla", await ticked(db, `/api/orders/${orderId}/approve`))).status).toBe(200);
     expect((await read<OrderDetail>("sarla", `/api/orders/${orderId}`)).order.status).not.toBe(
       "ready_for_dispatch",
     );

@@ -183,7 +183,9 @@ export function orderActions(
       (manage && flagged) || (finance && held === "finance") || (dispatch && held === "dispatch"),
     // The MedRep may cancel their own order while it is a draft, or held before Finance acted.
     cancel:
-      (manage && !["shipped", "completed", "cancelled"].includes(order.status)) ||
+      // Never while the parcel is on the road (stopped as an exception after it shipped): a cancel
+      // would put its pieces back on the shelf. It comes back through Dispatch, or as a return.
+      (manage && !["shipped", "completed", "cancelled"].includes(order.status) && order.heldFrom !== "shipped") ||
       (mine && order.status === "draft") ||
       (mine && flagged && (!order.heldFrom || order.heldFrom === "pending_approval")),
     answer: mine && flagged,

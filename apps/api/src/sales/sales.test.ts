@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -44,7 +45,7 @@ async function order(qty: number, invoice: boolean): Promise<{ id: number; total
       items: [{ medicineId: medicine.id, qty, priceKind: "hospital" }],
     })
   ).json()) as { id: number };
-  expect((await post("sarla", `/api/orders/${placed.id}/approve`)).status).toBe(200);
+  expect((await post("sarla", await ticked(db, `/api/orders/${placed.id}/approve`))).status).toBe(200);
   if (invoice)
     expect((await post("fiona", `/api/finance/orders/${placed.id}/invoice`)).status).toBe(200);
   const detail = (await (await get("ryan", `/api/orders/${placed.id}`)).json()) as OrderDetail;
