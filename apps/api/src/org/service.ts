@@ -671,6 +671,8 @@ export async function addPerson(db: Database, me: Me, input: OrgPersonInput): Pr
   const password = typed ?? freshPassword();
   const hash = await hashPassword(password);
   const result = await change(db, async (tx, today) => {
+    // Two presses at once: one after the other, so the second is told the email is taken.
+    if (email) await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`person-email:${email}`}))`);
     const [used] = email
       ? await rows<{ name: string; active: boolean }>(
           tx,
