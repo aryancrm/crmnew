@@ -533,6 +533,24 @@ function findingsOf(
         decide: `${item.medicine} priced as ${item.priceLabel.toLowerCase()} (${peso(item.unitPrice)}); a ${buyerLabel(item.ownKind).toLowerCase()} pays ${peso(item.ownPrice)}`,
         text: `${item.medicine}: the ${item.priceLabel.toLowerCase()} price (${peso(item.unitPrice)}) given to a ${buyerLabel(item.ownKind).toLowerCase()}, whose price is ${peso(item.ownPrice)} (${peso((item.ownPrice - item.unitPrice) * item.qty)} less in all)`,
       });
+    // Priced as another kind of buyer because Inventory has no price for this customer's own kind
+    // (a drugstore given the hospital price): nothing to compare with, so Management looks (22 Nov).
+    if (
+      priced &&
+      !item.relief &&
+      item.priceKind !== "promo" &&
+      item.priceKind !== "offer" &&
+      item.priceKind !== item.ownKind &&
+      // A government buyer's own price is the bidding price.
+      !(item.ownKind === "government" && item.priceKind === "bidding") &&
+      item.ownPrice == null
+    )
+      found.push({
+        kind: "price",
+        short: `No ${buyerLabel(item.ownKind).toLowerCase()} price set`,
+        decide: `${item.medicine} has no ${buyerLabel(item.ownKind).toLowerCase()} price in Inventory; the ${item.priceLabel.toLowerCase()} price (${peso(item.unitPrice)}) was used`,
+        text: `${item.medicine}: Inventory has no ${buyerLabel(item.ownKind).toLowerCase()} price, so the ${item.priceLabel.toLowerCase()} price (${peso(item.unitPrice)}) was given. Check it is right, or set the price in Inventory.`,
+      });
     const need = wanted.get(item.medicineId) ?? item.qty;
     if (item.inStock < need && !stockSaid.has(item.medicineId)) {
       stockSaid.add(item.medicineId);

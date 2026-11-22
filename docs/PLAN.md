@@ -3106,3 +3106,12 @@ lowest, each division's average; Scorecards opens every card.
   without VAT above sales with VAT, and above By person, the CEO's Home and Finance's board); the
   Invoices page's balance no longer counts a refunded overpayment as owed to the customer. Known
   and left: the demo seed's two shipped orders have no picks (Data checks names them; demo only).
+- **22 Nov 2026 (second hand run on the demo copy)** A patient's prepaid order (prescription rule,
+  Finance's hold for proof, the proof bringing it back, confirm, undo, a failed delivery), cash on
+  delivery, an Online desk case to a delivered order, a PAP case, one order from CLIDP, B2B, Rx,
+  MD Telesales, Bidding, Modern Trade and Mindanao, leave and overtime, who sees payroll, and stock
+  received, transferred and counted: all as the plan says. One gap put right: an order priced as
+  another kind of buyer because Inventory has no price for the customer's own kind (a drugstore
+  given the hospital price) is now a price finding for Management ("No drugstore price set"); a
+  government buyer at the bidding price is not. Left for Aryan: Finance can confirm a prepaid
+  order with less than its total (it goes to Dispatch with the rest "still to pay").
