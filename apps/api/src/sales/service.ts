@@ -334,7 +334,9 @@ export async function sheetChannelSales(db: Database, facts: MonthFacts): Promis
         select pl.business, pl.box, coalesce(sum(so.sold), 0)::float8 as sold, coalesce(sum(so.today), 0)::float8 as today,
           nullif(sum((select sum(${targetShare(facts)}) from seat_target t where t.seat_id = st.id)), 0)::float8 as target,
           -- Someone sells in it: in a business's own box, someone other than its head.
-          bool_or(st.active and box.active and st.module in ('medrep', 'online', 'team_lead', 'manager') and (pl.box <> pl.business or not st.lead)) as selling
+          bool_or(st.active and box.active and st.module in ('medrep', 'online', 'team_lead', 'manager') and (pl.box <> pl.business or not st.lead)
+            -- PAP is a process, not a channel (22 Nov): its box is listed only while old sales sit on it.
+            and box.channel_id is distinct from (select pc.id from channel pc where pc.code = 'PAP')) as selling
         from seat st join place pl on pl.id = st.unit_id join org_unit box on box.id = pl.box left join sold so on so.seat_id = st.id
         group by 1, 2)
       select box.id::int as id, ${sheetNameOfBox(sql`box.id`)} as name, biz.name as business, box.id = biz.id as own,

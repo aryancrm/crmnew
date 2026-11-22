@@ -442,6 +442,16 @@ const onlineApp: Space = {
   ],
 };
 
+/** PAP (Aryan, 22 Nov: a process, not a channel): every guarantee-letter case in one place,
+ *  whichever channel the patient came from, with the step it is at and where its sale counts. */
+const papApp: Space = {
+  key: "pap",
+  label: "PAP",
+  icon: HeartHandshake,
+  tone: "bg-rose-600 text-white",
+  groups: [{ items: [{ to: "/pap", label: "Guarantee-letter cases", icon: HeartHandshake }] }],
+};
+
 const reportsApp: Space = {
   key: "reports",
   label: "Reports",
@@ -535,6 +545,7 @@ export const appsFor = (me: Me): Space[] =>
     ? [
         ordersApp(me),
         onlineApp,
+        papApp,
         financeApp,
         dispatchApp,
         inventoryApp(me),
@@ -688,6 +699,8 @@ function ownDesk(me: Me): Space {
             home,
             { to: "/leads", label: "Leads & enquiries", icon: Inbox },
             { to: "/inbox", label: "Inbox", icon: MessagesSquare, badge: "inbox" },
+            // Their guarantee-letter cases, which the PAP person works (22 Nov).
+            { to: "/pap", label: "With PAP", icon: HeartHandshake },
             { to: "/to-call", label: "Refills due", icon: Pill, badge: "refills", short: "Refills" },
             ordersLink("My orders"),
             { to: "/customers", label: "Patients", icon: Users },
@@ -1316,6 +1329,8 @@ function ownDesk(me: Me): Space {
             home,
             { to: "/leads", label: "Leads & enquiries", icon: Inbox },
             { to: "/inbox", label: "Inbox", icon: MessagesSquare, badge: "inbox" },
+            // Their guarantee-letter cases, which the PAP person works (22 Nov).
+            { to: "/pap", label: "With PAP", icon: HeartHandshake },
             { to: "/to-call", label: "Refills due", icon: Pill, badge: "refills", short: "Refills" },
             { to: "/orders", label: "My orders", icon: ClipboardList },
             { to: "/customers", label: "Patients", icon: Users },

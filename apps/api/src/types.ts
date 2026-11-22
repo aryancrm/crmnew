@@ -2185,6 +2185,8 @@ export type LeadCard = {
   sourceLabel: string;
   caseType: CaseType;
   road: LeadRoad;
+  /** Who a PAP case came from, with the channel its sale counts in ("Ryan · HOSP"); null otherwise. */
+  cameFrom?: string | null;
   /** A business buying through the desk (its kind); null: a patient. */
   buyer: BuyerBusiness | null;
   agency: GlAgency | null;
@@ -2287,6 +2289,8 @@ export type LeadCase = {
     canvass: { vendor: string; amount: number }[];
     /** online: the Online desk's; pap: a PAP MedRep's patient-assistance case. */
     desk: "online" | "pap";
+    /** Who the case came to PAP from (an Online agent, a MedRep) and the channel the sale counts in. */
+    cameFrom: { id: number; name: string; channel: string | null } | null;
     state: "open" | "lost";
     lostReason: string | null;
     firstContactAt: string;

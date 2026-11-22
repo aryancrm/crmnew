@@ -3234,3 +3234,23 @@ lowest, each division's average; Scorecards opens every card.
   (4) only PCSO's quotation carries the two other vendors' totals; (5) the order form's agencies
   are DSWD, PCSO, Office of the President, Other (no OVP), the case's are DSWD, PCSO, OVP, OP.
   Told Aryan, waiting for his word before changing who works a case.
+- **22 Nov 2026 (Aryan: "the sale counts where it came from; make an app for PAP, or a better
+  plan")** PAP built as a process. (1) A guarantee-letter case goes to the PAP person wherever it
+  starts: an Online case whose road becomes guarantee letter (on adding or on saving) moves to PAP
+  (`lead.desk` pap, the PAP MedRep with the fewest open cases), and goes back to its agent if the
+  road is changed away again; a seller's guarantee-letter patient is handed over from the order
+  form ("Hand to PAP": patient, phone, agency, medicines; `POST /api/leads/hand-to-pap`, the order
+  form no longer places a guarantee-letter order for a MedRep, a lead, a head or the Online desk).
+  (2) The case keeps who it came from (`lead.origin_person_id`, migration 0134): that person reads
+  it to the end ("My patients with PAP" at `/pap`, "With PAP" in the Online desk's menu) and can't
+  work it. (3) The order the PAP person places from such a case is the origin's sale: their name
+  as its MedRep, their channel, seat, Division and target (`creditTo`); the PAP person is who
+  raised it; Management approves it like any order. A case the PAP person opened themselves stays
+  as it was (channel PAP). (4) PAP is off the channel lists (CEO Home, Sales by channel) unless
+  old sales sit on its box; its seat stays on the tree. (5) The PAP app for the CEO and the Admin
+  (Apps → PAP): every guarantee-letter case with its step, agency and "From Ryan · HOSP".
+  (6) Three quotations for every agency, not PCSO only. Hand-run on the demo copy: Ryan hands a
+  patient over from the order form, sees it under My patients with PAP, Paula and the CEO see it
+  with where it came from; in the tests the Online case's order comes out as Jane's, approved by
+  Management. 500 API tests. Open: a case the PAP person opens themselves is still approved by the
+  PAP channel's head, not Management (asked Aryan). Local only.

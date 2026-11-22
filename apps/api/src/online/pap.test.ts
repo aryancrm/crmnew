@@ -100,7 +100,9 @@ describe("PAP cases", () => {
     expect(online.cards.map((card) => card.id)).not.toContain(id);
     expect((await get("jane", `/api/leads/${id}`)).status).toBe(404);
     expect((await get("ryan", `/api/leads/${id}`)).status).toBe(403);
-    expect((await get("ryan", "/api/leads?desk=pap")).status).toBe(403);
+    // A seller reads only the cases they handed to PAP (22 Nov): none yet. Finance reads none.
+    expect((await read<LeadDesk>("ryan", "/api/leads?desk=pap&queue=all")).cards).toHaveLength(0);
+    expect((await get("fiona", "/api/leads?desk=pap")).status).toBe(403);
     const seen = await lead("sarla", id);
     expect(seen.lead.desk).toBe("pap");
     expect(seen.can.work).toBe(false);
@@ -248,5 +250,85 @@ describe("PAP cases", () => {
     );
     const cards = (await read<LeadDesk>("paula", "/api/leads?desk=pap&queue=all")).cards;
     expect(cards.map((card) => card.id)).not.toContain(other?.id);
+  });
+  it("an Online case that turns guarantee letter goes to PAP; its sale stays with the agent", async () => {
+    const made = await post("jane", "/api/leads", { source: "phone", name: "Rosa Lim", phone: "0917 555 1212", city: "Pasig" });
+    expect(made.status).toBe(200);
+    const id = ((await made.json()) as { id: number }).id;
+    expect((await lead("jane", id)).lead.desk).toBe("online");
+    // The patient will pay by a guarantee letter: PAP works it from here.
+    expect(
+      (await post("jane", `/api/leads/${id}`, { source: "phone", name: "Rosa Lim", phone: "0917 555 1212", city: "Pasig", road: "gl", agency: "dswd" })).status,
+    ).toBe(200);
+    const moved = await lead("jane", id);
+    expect(moved.lead.desk).toBe("pap");
+    expect(moved.lead.cameFrom?.name).toBe("Jane");
+    // Jane reads it to the end, and can't work it; it left the Online desk's list for hers "with PAP".
+    expect(moved.can.work).toBe(false);
+    expect((await post("jane", `/api/leads/${id}/note`, { message: "hi" })).status).toBe(403);
+    expect((await read<LeadDesk>("jane", "/api/leads?queue=all")).cards.map((card) => card.id)).not.toContain(id);
+    const withPap = await read<LeadDesk>("jane", "/api/leads?desk=pap&queue=all");
+    expect(withPap.cards.map((card) => card.id)).toContain(id);
+    expect(withPap.can.add).toBe(false);
+    // Paula has it, with where it came from.
+    const hers = await read<LeadDesk>("paula", "/api/leads?desk=pap&queue=all");
+    expect(hers.cards.find((card) => card.id === id)?.cameFrom).toContain("Jane");
+    expect((await lead("paula", id)).can.work).toBe(true);
+
+    // Three quotations for DSWD too, then the letter and the papers.
+    await post("paula", `/api/leads/${id}/quote`, { lines: [{ medicineId: medicine.id, qty: 2 }] });
+    const total = medicine.price * 2;
+    expect(
+      (
+        await post("paula", `/api/leads/${id}/canvass`, {
+          lines: [
+            { vendor: "MedExpress Pharma", amount: total + 5000 },
+            { vendor: "Rose Pharmacy", amount: total + 9000 },
+          ],
+        })
+      ).status,
+    ).toBe(200);
+    const pdf = await get("paula", `/api/leads/${id}/quotation.pdf`);
+    expect((await PDFDocument.load(new Uint8Array(await pdf.arrayBuffer()))).getPageCount()).toBe(3);
+    await file("paula", id, "gl_letter");
+    await file("paula", id, "rx");
+    await file("paula", id, "valid_id");
+    await file("paula", id, "med_cert");
+    await post("paula", `/api/leads/${id}/gl`, {
+      appliedOn: todayManila(),
+      letterNo: "DSWD-101",
+      amount: total,
+      letterOn: todayManila(),
+      expiresOn: shift(30),
+      verify: true,
+    });
+    expect((await lead("paula", id)).step.value).toBe("ready");
+    const placed = await post("paula", `/api/leads/${id}/order`);
+    expect(placed.status, await placed.clone().text()).toBe(200);
+    const orderId = ((await placed.json()) as { id: number }).id;
+    // The order is Jane's sale (her channel, not PAP), raised by Paula; Management approves it.
+    const order = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
+    expect(order.order).toMatchObject({ status: "pending_approval", medrep: "Jane", raisedBy: "Paula" });
+    expect(order.order.channel).not.toBe("PAP");
+    expect(order.can.approve).toBe(true);
+    // Both see the order: the one who sold and the one who works it.
+    expect((await get("jane", `/api/orders/${orderId}`)).status).toBe(200);
+    expect((await get("paula", `/api/orders/${orderId}`)).status).toBe(200);
+  });
+
+  it("a MedRep hands a guarantee-letter patient to PAP and keeps the sale", async () => {
+    const handed = await post("ryan", "/api/leads/hand-to-pap", { name: "Pedro Reyes", phone: "0918 111 2222", agency: "ovp", request: "Letrozole 2.5 mg × 30" });
+    expect(handed.status, await handed.clone().text()).toBe(200);
+    const id = ((await handed.json()) as { id: number }).id;
+    const seen = await lead("ryan", id);
+    expect(seen.lead).toMatchObject({ desk: "pap", road: "gl", agency: "ovp" });
+    expect(seen.lead.cameFrom?.name).toBe("Ryan");
+    expect(seen.can.work).toBe(false);
+    expect((await read<LeadDesk>("ryan", "/api/leads?desk=pap&queue=all")).cards.map((card) => card.id)).toEqual([id]);
+    expect((await read<LeadDesk>("paula", "/api/leads?desk=pap&queue=all")).cards.map((card) => card.id)).toContain(id);
+    expect((await lead("paula", id)).can.work).toBe(true);
+    // Not Finance's to hand over, and PAP starts its own case.
+    expect((await post("fiona", "/api/leads/hand-to-pap", { name: "X", agency: "pcso" })).status).toBe(403);
+    expect((await post("paula", "/api/leads/hand-to-pap", { name: "X", agency: "pcso" })).status).toBe(400);
   });
 });

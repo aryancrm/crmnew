@@ -409,7 +409,7 @@ async function channelsReport(db: Database, asked: { from?: string | null; to?: 
         coalesce(${leadOfBox(sql`box.id`, today)}, ${leadOfBox(sql`biz.id`, today)}, '—') as manager,
         b.people, b.vacant, b.customers, b.buyers, b.invoices, b.period, b.year, b.owed, biz.sort as biz_sort, biz.id as biz_id, (box.id = biz.id)::int as own, box.sort as box_sort, box.id as box_id
       from boxes b join org_unit box on box.id = b.box join org_unit biz on biz.id = b.business
-      where biz.kind = 'business' and (b.period > 0 or b.year > 0 or b.owed > 0 or (b.selling and box.active))
+      where biz.kind = 'business' and (b.period > 0 or b.year > 0 or b.owed > 0 or (b.selling and box.active and box.channel_id is distinct from (select pc.id from channel pc where pc.code = 'PAP')))
       union all
       select '', '—', 'Not tied to a seat yet', '—', 0, 0, 0, coalesce(sum(s.buyers), 0)::int, coalesce(sum(s.invoices), 0)::int, coalesce(sum(s.period), 0)::float8,
         coalesce(sum(s.year), 0)::float8, coalesce(sum(s.owed), 0)::float8, 2147483647, 0, 1, 0, 0

@@ -320,6 +320,11 @@ export function LeadPage() {
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500">
                 <span className="shrink-0 text-slate-400">Intake {intakeAt}</span>
+                {lead.cameFrom && (
+                  <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-800" title="The sale counts where the patient came from">
+                    From {[lead.cameFrom.name, lead.cameFrom.channel].filter(Boolean).join(" · ")}
+                  </span>
+                )}
                 <span className="inline-flex items-center gap-1.5">
                   <UserRound className="size-3.5 text-slate-400" />
                   <span className="text-slate-400">{lead.desk === "pap" ? "MedRep" : "Owner"}</span>
@@ -1262,7 +1267,7 @@ const toDraft = (line: QuoteLine): Draft => ({
 });
 const centavos = (text: string) => Math.round(Number(text.replace(/,/g, "")) * 100);
 
-/** PCSO asks for three quotations: ours and two other vendors' totals, each from that
+/** A guarantee letter's agency asks for three quotations (every agency, 22 Nov): ours and two other vendors' totals, each from that
  *  vendor's written quotation. They print after ours, one page each. */
 function Canvass({ data, editable }: { data: LeadCase; editable: boolean }) {
   const { lead } = data;
@@ -1293,7 +1298,7 @@ function Canvass({ data, editable }: { data: LeadCase; editable: boolean }) {
           className={`size-2 rounded-full ${saved ? "bg-emerald-500" : "bg-amber-400"}`}
           aria-hidden="true"
         />
-        PCSO's 3 quotations: ours, and two other vendors'
+        The agency's 3 quotations: ours, and two other vendors'
       </div>
       <div className="grid gap-2">
         {rows.map((row, at) => (
@@ -1785,7 +1790,7 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
           </dl>
         )}
 
-        {quoted && lead.road === "gl" && lead.agency === "pcso" && (
+        {quoted && lead.road === "gl" && (
           <Canvass data={data} editable={editable} />
         )}
         {quoted && <QuotationOut data={data} />}

@@ -1596,6 +1596,9 @@ export type PlaceOptions = {
   inside?: (tx: Runner, orderId: number) => Promise<void>;
   /** An Online case's order: the agent asks Management to check it although nothing is wrong. */
   toManagement?: boolean;
+  /** A PAP case's order (Aryan, 22 Nov: PAP is a process, the sale counts where the patient came
+   *  from): the person the case came from is its MedRep; the PAP person only raised it. */
+  creditTo?: number;
 };
 
 type KeptRelief = { unitPrice: number; priceKind: string; listPrice: number; reason: string | null };
@@ -1971,7 +1974,15 @@ export async function placeOrder(
   // Whose order it is: the MedRep who placed it; for one a team lead or Management places, the
   // MedRep they pick (one of the lead's own people), else the MedRep of the customer's area.
   const picked = input.medrepId ? await pickedMedrep(db, me, input.medrepId) : null;
-  const [holder] = picked
+  const [credited] = options.creditTo
+    ? await rows<{ id: number; channelId: number | null }>(
+        db,
+        sql`select id::int as id, channel_id::int as "channelId" from person where id = ${options.creditTo} and active`,
+      )
+    : [];
+  const [holder] = credited
+    ? [credited]
+    : picked
     ? [picked]
     : // A MedRep's and the Online desk's own orders are theirs; the agent is the Online channel's MedRep.
       me.role === "medrep" || me.role === "online" || !customer.areaId
