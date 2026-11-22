@@ -94,21 +94,22 @@ export async function companyKpis(
     ),
     rows<CompanyKpis["byRep"][number]>(
       db,
-      sql`select rep.id::int as id, rep.name, ch.code as channel, count(*)::int as orders,
+      sql`select rep.id::int as id, rep.name, (case when ch.code = 'PAP' then ch.code else coalesce(o.division, ch.code) end) as channel, count(*)::int as orders,
           coalesce(sum(o.total) filter (where o.status <> 'cancelled'), 0)::float8 as value,
           count(*) filter (where o.status = 'completed')::int as completed
         from sales_order o join person rep on rep.id = ${creditedTo(today)} left join channel ch on ch.id = o.channel_id
         where ${inPeriod}
-        group by rep.id, rep.name, ch.code
+        group by rep.id, rep.name, 3
         order by value desc, orders desc limit 12`,
     ),
     rows<CompanyKpis["byChannel"][number]>(
       db,
-      sql`select coalesce(ch.code, 'Other') as channel, count(*)::int as orders,
+      // By the target sheet's channel (the order's Division; PAP as PAP), 22 Nov.
+      sql`select coalesce((case when ch.code = 'PAP' then ch.code else coalesce(o.division, ch.code) end), 'Other') as channel, count(*)::int as orders,
           coalesce(sum(o.total) filter (where o.status <> 'cancelled'), 0)::float8 as value
         from sales_order o left join channel ch on ch.id = o.channel_id
         where ${inPeriod}
-        group by ch.code order by value desc`,
+        group by 1 order by value desc`,
     ),
     rows<{ n: number; toReview: number }>(
       db,

@@ -3187,3 +3187,15 @@ lowest, each division's average; Scorecards opens every card.
   channel, as `projectOrg` means them to; the other seat is reached by the team switch. Still on
   the first channels: Sales performance ("HOSP | name", the hub's format), the map, Targets, the
   Company KPIs' and the sales trend's grouping, the Admin's Channels page. Local only.
+- **22 Nov 2026 (the first eight channels against the sheet, step 3: what the reports group by)**
+  The CEO Home's second list ("Channels: sold against the month's target") reads the same sheet
+  channels as "Sales this month" above it (it still listed the first eight). Sales trend groups the
+  invoices by the seller's seat's box, as Sales by channel does; gross profit by channel and the
+  Company KPIs' by-channel group the orders by their Division (PAP as PAP); the customer list
+  report and the map name the sheet's channel of the seat that has the area. No total moved: on
+  the local data the trend's six months equal the invoices (₱241,139,697.66), the Home's list adds
+  to ₱20,667,621.21 against ₱57,642,166; on the demo copy gross profit by channel equals by
+  medicine. Left as they are: Sales performance (the hub's own words, TELESALES and B2C, from
+  `seat_report_channel`), Targets (no channel on the screen), the Admin's Channels page (step 4).
+  Two words for three channels remain: sales reports name the tree's box (B2B Telesales, Government
+  Bidding, Modern Trade), orders the sheet's Division (B2B, BID, MT): asked Aryan. Local only.

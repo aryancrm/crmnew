@@ -724,7 +724,9 @@ export async function territories(
         lead: string | null;
       }>(
         db,
-        sql`select s.id::int as "seatId", s.title, a.id::int as "areaId", a.name as area, ch.code as channel, a.cities,
+        sql`select s.id::int as "seatId", s.title, a.id::int as "areaId", a.name as area,
+            -- The target sheet's channel of the seat (CLIDP, MD Telesales…); PAP as PAP.
+            (case when ch.code = 'PAP' then ch.code else coalesce(seat_division(s.id), ch.code) end) as channel, a.cities,
             (select p.name from seat_holder h join person p on p.id = h.person_id
               where h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", todayManila())} order by h.starts_on desc limit 1) as holder,
             -- Their lead: the seat it reports to, else the nearest lead seat up its boxes.
@@ -739,7 +741,7 @@ export async function territories(
                   join person p on p.id = h.person_id order by up.depth limit 1)) as lead
           from seat s join area a on a.id = s.area_id left join channel ch on ch.id = a.channel_id
           where s.active and s.id in (${ids(view.seatIds)})
-          order by ch.code, a.name`,
+          order by 5, a.name`,
       )
     : [];
   return {

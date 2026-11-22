@@ -194,10 +194,10 @@ export function CompanyGlance({ part = "business" }: { part?: "business" | "peop
             {data.channels.map((one, at) => {
               const pct = one.target > 0 ? (one.sold / one.target) * 100 : null;
               return (
-                <li key={one.code} className="text-[12.5px]">
+                <li key={one.code || one.name} className="text-[12.5px]">
                   <div className="mb-0.5 flex justify-between gap-2">
                     <span className="truncate">
-                      <b className="text-slate-900">{one.code}</b> <span className="text-slate-500">{one.name}</span>
+                      <b className="text-slate-900">{one.code || one.name}</b> {one.code && <span className="text-slate-500">{one.name}</span>}
                     </span>
                     <span className="shrink-0 tabular-nums">
                       <b className="text-slate-900">{shortPeso(one.sold)}</b>

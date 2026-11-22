@@ -50,8 +50,11 @@ async function salesTrend(db: Database, asked: { to?: string | null }): Promise<
   const first = new Date(Date.UTC(Number(to.slice(0, 4)), Number(to.slice(5, 7)) - 6, 1)).toISOString().slice(0, 10);
   const found = await rows<{ channel: string; month: string; amount: number }>(
     db,
-    sql`select coalesce(ch.name, 'No channel yet') as channel, to_char(s.issued_on, 'YYYY-MM') as month, sum(s.total)::float8 as amount
-      from sale_invoice s left join channel ch on ch.id = s.channel_id
+    // By the target sheet's channel: the seller's seat's box on the Company tree, as Sales by channel.
+    sql`with recursive ${SHEET_PLACE}
+      select case when biz.id is not null then box.name else 'Not tied to a seat yet' end as channel, to_char(s.issued_on, 'YYYY-MM') as month, sum(s.total)::float8 as amount
+      from sale_invoice s left join seat st on st.id = s.seat_id left join place pl on pl.id = st.unit_id
+        left join org_unit biz on biz.id = pl.business and biz.kind = 'business' left join org_unit box on box.id = pl.box
       where s.status <> 'cancelled' and s.issued_on >= ${first}::date and s.issued_on <= ${to}::date
       group by 1, 2`,
   );
@@ -324,7 +327,10 @@ async function customersReport(db: Database, asked: { from?: string | null; to?:
           coalesce(sum(greatest(total - paid, 0)) filter (where status not in ('cancelled', 'paid')), 0)::float8 as owed,
           to_char(max(issued_on) filter (where status <> 'cancelled'), 'YYYY-MM-DD') as last
         from sale_invoice where customer_id is not null group by 1)
-      select c.name as customer, c.kind, coalesce(ch.name, '—') as channel,
+      select c.name as customer, c.kind,
+        -- The sheet's channel of the seat that has the customer's area; PAP and an area on no seat: the area's first channel.
+        coalesce(case when ch.code = 'PAP' then ch.name else coalesce((select seat_division(ds.id) from seat ds
+          where ds.area_id = c.area_id and ds.active order by ds.id limit 1), ch.name) end, '—') as channel,
         coalesce((select p.name from seat st join seat_holder h on h.seat_id = st.id and h.ends_on is null and h.kind = 'holder'
           join person p on p.id = h.person_id where st.area_id = c.area_id and st.active order by st.id limit 1), '—') as "lookedAfter",
         coalesce(c.city, '') as city, coalesce(s.invoices, 0) as invoices, coalesce(s.period, 0) as period, coalesce(s.year, 0) as year,
