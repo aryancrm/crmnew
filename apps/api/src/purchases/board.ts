@@ -9,6 +9,7 @@ import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { allow } from "../http";
 import { COST_ROLES, todayManila } from "../inventory/rules";
+import { PROMISED_ORDER } from "../inventory/service";
 import { companyInfo } from "../settings/service";
 import type { Me, PurchaseBoard, PurchaseOrderExtra, VendorItems } from "../types";
 
@@ -57,9 +58,18 @@ export async function purchaseBoard(db: Database, me: Me): Promise<PurchaseBoard
     // what is coming, and where it was bought last and at what price, to order it again.
     rows<PurchaseBoard["buyMore"][number]>(
       db,
-      sql`with free as (
+      sql`with shelf as (
             select s_b.medicine_id, sum(s.qty)::int as qty from stock s join batch s_b on s_b.id = s.batch_id
             where s.qty > 0 and s_b.expires_on >= ${today}::date group by 1),
+          -- Pieces on placed orders not packed yet: on the shelf, but sold. "Free" is what is left
+          -- after them (it was the whole shelf, so a medicine its orders had already taken, or
+          -- wanted more of than there was, never came up to buy; 23 Nov).
+          promised as (
+            select i.medicine_id, sum(i.qty)::int as qty from order_item i join sales_order o on o.id = i.order_id
+            where ${PROMISED_ORDER} group by 1),
+          free as (
+            select m.id as medicine_id, coalesce(sh.qty, 0) - coalesce(pr.qty, 0) as qty
+            from medicine m left join shelf sh on sh.medicine_id = m.id left join promised pr on pr.medicine_id = m.id),
           sold as (
             select medicine_id, sum(-qty)::int as qty from stock_move
             where kind = 'deliver' and at >= now() - interval '30 days' group by 1),
@@ -73,9 +83,10 @@ export async function purchaseBoard(db: Database, me: Me): Promise<PurchaseBoard
             where d.kind in ('purchase_order', 'bill') and d.status not in ('void', 'cancelled', 'draft') and l.medicine_id is not null and coalesce(l.rate, 0) > 0
             order by l.medicine_id, d.doc_date desc, d.id desc)
         select m.id::int as id, m.name || coalesce(' ' || m.strength, '') as name, m.pack, m.pack_size::int as "packSize",
-          coalesce(f.qty, 0)::int as free, m.reorder_level::int as "reorderLevel", coalesce(so.qty, 0)::int as "sold30",
+          greatest(coalesce(f.qty, 0), 0)::int as free, greatest(-coalesce(f.qty, 0), 0)::int as short,
+          m.reorder_level::int as "reorderLevel", coalesce(so.qty, 0)::int as "sold30",
           coalesce(c.qty, 0)::int as coming,
-          case when coalesce(so.qty, 0) > 0 then floor(coalesce(f.qty, 0) * 30.0 / so.qty)::int end as "daysLeft",
+          case when coalesce(so.qty, 0) > 0 then floor(greatest(coalesce(f.qty, 0), 0) * 30.0 / so.qty)::int end as "daysLeft",
           la.supplier_id::int as "vendorId", la.vendor, la.rate as "lastRate", la.currency as "lastCurrency", la.on as "lastOn"
         from medicine m
           left join free f on f.medicine_id = m.id left join sold so on so.medicine_id = m.id

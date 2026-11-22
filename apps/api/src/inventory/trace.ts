@@ -7,6 +7,7 @@ import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import type { BatchTrace, Me, Role } from "../types";
 import { COST_ROLES } from "./rules";
+import { iso } from "./service";
 
 /** Who traces a batch: the stock desks, Management, Regulatory, the CEO and the Admin. */
 export const TRACE_ROLES: readonly Role[] = ["inventory", "dispatch", "management", "regulatory", "ceo", "admin"];
@@ -36,7 +37,7 @@ export async function traceBatch(db: Database, me: Me, asked: { batch?: string |
     ),
     rows<BatchTrace["moves"][number]>(
       db,
-      sql`select m.batch_id::int as "batchId", m.at::text as at, m.kind, m.qty::int as qty, w.name as warehouse, m.ref, m.note, p.name as by,
+      sql`select m.batch_id::int as "batchId", ${iso("m.at")} as at, m.kind, m.qty::int as qty, w.name as warehouse, m.ref, m.note, p.name as by,
           o.id::int as "orderId", c.name as customer
         from stock_move m join warehouse w on w.id = m.warehouse_id join person p on p.id = m.by_person
           left join sales_order o on o.code = m.ref left join customer c on c.id = o.customer_id

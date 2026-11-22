@@ -6036,7 +6036,10 @@ export type PurchaseBoard = {
     name: string;
     pack: string | null;
     packSize: number;
+    /** On the shelf less what placed orders are promised (never under zero). */
     free: number;
+    /** What placed orders need beyond the shelf. */
+    short: number;
     reorderLevel: number;
     sold30: number;
     coming: number;

@@ -3525,3 +3525,17 @@ lowest, each division's average; Scorecards opens every card.
   Edit positions; the Admin's Teams & people no longer drags seats or teams and points there.
   **Checked again:** every menu link of the 13 seats opened on a copy of the real data (412
   links): no call failed. 503 tests pass.
+- **23 Nov 2026 (Aryan: "did you look at Inventory? it is joined to everything; make it live")**
+  The part of Inventory left unrun was run by hand on the demo copy: a MedRep's order short of a
+  medicine (held, Wait for stock) → a purchase order (the medicine's "coming" and its day follow)
+  → refused receives (no batch number, expired, more than ordered, by a MedRep) → half received
+  (the order still short, nobody told) → the rest received (Management and the MedRep told) →
+  the goods' bill, billed twice refused, Finance pays part (Inventory can't, more than the bill
+  refused), the vendor's balance → off hold, approved, packed first-expiry-first across the old
+  batch and the new one → delivered → the batch's trace names the customer, and its cost is in
+  the gross profit. Samples: a MedRep asks, the lead approves, Inventory issues (off the shelf by
+  batch), the MedRep receives; on the samples page, the stock report and the trace. **Put right:**
+  (1) *Buy again before it runs out* counted the whole shelf as free, so a medicine its orders had
+  already taken (or wanted more of than there was) never came up to buy: free is the shelf less
+  what placed orders are promised, with "orders need N more" when they need beyond it.
+  (2) *Batch trace* showed each move's time in the database's own clock: Manila time now.
