@@ -77,7 +77,7 @@ function Teams({ rows }: { rows: Row[] }) {
       <header className="flex items-baseline justify-between gap-3 px-4 pt-4 pb-2 sm:px-5">
         <h2 className="text-sm font-semibold text-slate-900">Division vs target, team by team</h2>
         <span className="text-xs text-slate-500">
-          {shortPeso(sales)} of {shortPeso(target)} · worst pace first
+          {target > 0 ? `${shortPeso(sales)} of ${shortPeso(target)}` : `${shortPeso(sales)} · no target set`} · worst pace first
         </span>
       </header>
       <table className="w-full text-[13px]">

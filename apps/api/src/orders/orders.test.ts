@@ -284,13 +284,12 @@ describe("an order's type, picked first (Aryan, 19 Nov)", () => {
 
 describe("a guarantee letter's amount (Aryan, 19 Nov)", () => {
   it("is written when the letter is in, by the order's MedRep, Management or Finance", async () => {
-    const made = await place("ryan", {
-      customerId: hospital,
-      items: [line()],
-      type: "gl",
-      patientName: "Lito Ramos",
-      source: "DSWD",
-    });
+    const gl = { customerId: hospital, items: [line()], type: "gl", patientName: "Lito Ramos", source: "DSWD" };
+    // A seller doesn't place it himself: a guarantee letter is PAP's work (22 Nov), and the server
+    // says so as the form does. (Here the Admin places it for him, so the letter's amount is tried.)
+    expect((await place("ryan", gl)).status).toBe(403);
+    const [ryan] = await rows<{ id: number }>(db, sql`select id::int as id from person where email = 'ryan@2mg.test'`);
+    const made = await place("admin", { ...gl, medrepId: ryan?.id });
     expect(made.status, JSON.stringify(made.body)).toBe(200);
     const id = made.body.id;
     expect((await order("ryan", id)).order.glAmount).toBeNull();

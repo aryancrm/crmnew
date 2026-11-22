@@ -203,10 +203,17 @@ export function Medicine() {
 
       <Card className="flex flex-col gap-4 p-4">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {/* On the shelf and free to sell are two figures: what orders already took is not free
+              (this read "Free to sell 375" with 310 of them promised, 23 Nov). */}
           <Figure
-            label={`Free to sell${size > 1 ? ` · ${inPacks(data.total, size) || "0 packs"}` : ""}`}
-            value={count(data.total)}
+            label={`Free to sell${data.promised > 0 ? ` · ${count(data.promised)} promised to ${count(data.promisedOrders)} ${data.promisedOrders === 1 ? "order" : "orders"}` : ""}`}
+            value={count(data.free)}
             strong
+            tone={data.promised > data.total ? "bad" : undefined}
+          />
+          <Figure
+            label={`On the shelf${size > 1 ? ` · ${inPacks(data.total, size) || "0 packs"}` : ""}`}
+            value={count(data.total)}
           />
           {warehouses.map((warehouse) => (
             <Figure

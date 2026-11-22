@@ -3483,3 +3483,30 @@ lowest, each division's average; Scorecards opens every card.
   Dispatch opened the old board with To pack, To ship, On the road and Delivered a second time:
   it is only its holds. (6) Words: a parcel that can't be shipped for unpicked pieces says "Unpack
   it and pack it again"; "add the photo first" goes once a photo is picked.
+- **23 Nov 2026 (Aryan: "the work left over from the last sessions, do that too, and Inventory")**
+  **Inventory walked** by its own login on the demo copy: Overview, Medicines & prices and a
+  medicine's page, Medicine requests, Stock by warehouse, Stock report, Adjustments, Transfers,
+  Batch trace, Samples to reps and Purchases (vendors, orders, receives, bills, payments, credits,
+  To do & buy again). Hand-run: stock put in (expired, a batch on file with another expiry, no
+  batch number), moved between warehouses, counted up and down with and without a reason, and an
+  order waiting for stock followed from the hold to "stock is in" (Dispatch and the MedRep told),
+  off hold and packed. **Put right:** (1) *To reorder read "40 short"* for a medicine its orders
+  needed 390 more of than the shelf had ("free" stops at zero): it counts what is left after every
+  order, and a new panel, **Orders waiting on stock**, says per medicine how many orders need how
+  many, what is on the shelf and what is coming. (2) *A medicine's page said "Free to sell 375"*
+  with 310 of them promised to orders: On the shelf and Free to sell are two figures there now, as
+  on the stock list (`promised`, `free` on the medicine's detail). (3) The Overview's "to be
+  received" counted orders made on the first purchase pages that the Purchase orders list didn't
+  show: the list links to them. (4) Samples says the month in words.
+  **Left over, done:** Books' own pages pressed (a bank and a cash account made, the expense and
+  journal forms, locking) and the new-bill form; "Send on the N" pressed (asks once, then sends);
+  Dispatch's address slip and delivery receipt opened; `scripts/a-to-z.ts` run on a fresh copy of
+  the real data after the short-stock rule: 43 of 43; **the server refuses a seller's direct
+  guarantee-letter order** (403: hand the patient to PAP), as the form did. The head's, HR's and
+  the CEO's Homes opened card by card: **the CEO's Collected counted credit, deductions and tax
+  withheld as money** (Finance's Home did not): money only now, on both and on the Collected card.
+  **Not done, and why:** the server asking a reason for a short-stock order (Management's stock
+  check stops such an order anyway; the form still asks); the Admin's Teams & people still moves
+  seats (it is the only place for the seats outside sales: asked of Aryan). **Asked of Aryan:**
+  when stock is short for several orders, which is served first (today each order counts every
+  other order's promise, so 20 pieces wait until all 210 are in)?

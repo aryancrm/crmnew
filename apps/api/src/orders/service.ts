@@ -1968,6 +1968,22 @@ export async function placeOrder(
   const type = input.type ?? null;
   if (type && !isPatientType(type) && customer.kind === "patient")
     throw new Refusal(400, "invalid", "A patient's order is Patient, Senior / PWD or Guarantee letter.", "type");
+  // A guarantee letter is PAP's work (Aryan, 22 Nov): a seller hands the patient to PAP, who gets
+  // the quotations and the letter and places the case's order (the sale stays the seller's). The
+  // order form said so; the server refuses it too, so the form isn't the only guard.
+  if (
+    type === "gl" &&
+    !options.leadId &&
+    !options.creditTo &&
+    ["medrep", "team_lead", "manager", "online"].includes(me.role) &&
+    me.channel?.code !== "PAP"
+  )
+    throw new Refusal(
+      403,
+      "forbidden",
+      "A guarantee letter is PAP's work: hand the patient to PAP (Hand to PAP on the order form). The sale stays yours.",
+      "type",
+    );
   if (type === "po" && !clean(input.customerPo))
     throw new Refusal(400, "invalid", "Type their PO number: it goes on the invoice.", "customerPo");
   if (type === "senior_pwd" && !relief)

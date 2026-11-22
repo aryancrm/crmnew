@@ -430,8 +430,10 @@ export async function ceoHome(
       sql`select
           coalesce((select sum(i.total) from sale_invoice i where ${soldIn(facts)}), 0)::float8 as achieved,
           coalesce((select sum(i.total) from sale_invoice i where ${soldIn(facts)} and i.issued_on = ${today}::date), 0)::float8 as today,
-          coalesce((select sum(amount) from payment where active and paid_on >= ${first}::date and paid_on < ${next}::date), 0)::float8 as collected,
-          coalesce((select sum(amount) from payment where active and paid_on >= ${before.from}::date and paid_on <= ${before.to}::date), 0)::float8 as before,
+          -- Money only, as Finance's Home counts it: a bill settled with the customer's credit, a
+          -- deduction, tax withheld or points brought no money in (the two Homes disagreed, 23 Nov).
+          coalesce((select sum(amount) from payment where active and method not in ('points', 'withholding', 'credit', 'deduction') and paid_on >= ${first}::date and paid_on < ${next}::date), 0)::float8 as collected,
+          coalesce((select sum(amount) from payment where active and method not in ('points', 'withholding', 'credit', 'deduction') and paid_on >= ${before.from}::date and paid_on <= ${before.to}::date), 0)::float8 as before,
           -- The targets set on the seats (the target sheet's, the vacant seats' too), so the headline is
           -- the sum of the channels under it; a month from before seats had targets: its people's.
           coalesce((select nullif(sum(${targetShare(facts)}), 0) from seat_target t),

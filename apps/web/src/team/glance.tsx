@@ -18,7 +18,7 @@ import { api } from "../api";
 import { counted, shortPeso } from "../ceo";
 import { StepCard, took } from "../desk/speed";
 import { span } from "../orders/parts";
-import { count } from "../ui";
+import { count, dayLabel } from "../ui";
 import { Bars, Donut } from "./charts";
 
 const CARD = "rounded-2xl border border-slate-200 bg-white shadow-sm";
@@ -652,12 +652,16 @@ export function CollectedCard({ head, all = false }: { head?: ReactNode; all?: b
   const { shown, seeAll } = useSeeAll(data?.rows ?? [], 5);
   if (!data) return null;
   const top = Math.max(1, ...data.byDay.map((one) => one.amount));
+  // Money only, as Finance's Home and Payments received count it.
+  const notMoney = data.byMethod
+    .filter((one) => ["points", "withholding", "credit", "deduction"].includes(one.method))
+    .reduce((sum, one) => sum + one.amount, 0);
   return (
     <GlanceCard title="Collected" note={data.monthLabel} to="/payments" seeAll={seeAll} head={head}>
       {!head && (
         <>
           <div className="text-3xl font-semibold tracking-tight text-emerald-700 tabular-nums">
-            {shortPeso(data.sum)}
+            {shortPeso(data.sum - notMoney)}
           </div>
           <div className="mb-3 text-xs text-slate-500">
             {counted(data.total, "payment")} received
@@ -696,7 +700,7 @@ export function CollectedCard({ head, all = false }: { head?: ReactNode; all?: b
               <span className="min-w-0">
                 <span className="block truncate font-medium text-slate-800">{row.customer}</span>
                 <span className="block text-[11px] text-slate-500">
-                  {row.paidOn} · {row.methodLabel}
+                  {dayLabel(row.paidOn)} · {row.methodLabel}
                   {row.reference ? ` · ${row.reference}` : ""}
                 </span>
               </span>

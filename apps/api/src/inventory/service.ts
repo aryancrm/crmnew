@@ -394,6 +394,12 @@ export async function medicineDetail(db: Database, me: Me, id: number): Promise<
     return { ...batch, unitCost: can.cost ? batch.unitCost : null, state };
   });
 
+  // Pieces on placed orders not packed yet: on the shelf, but sold (as the stock list counts them).
+  const [held] = await rows<{ qty: number; orders: number }>(
+    db,
+    sql`select coalesce(sum(i.qty), 0)::int as qty, count(distinct o.id)::int as orders
+      from order_item i join sales_order o on o.id = i.order_id where i.medicine_id = ${id} and ${PROMISED_ORDER}`,
+  );
   return {
     can,
     today,
@@ -402,6 +408,9 @@ export async function medicineDetail(db: Database, me: Me, id: number): Promise<
     medicine: { ...facts, reorderLevel: reorder },
     status: stockStatus(total, reorder),
     total,
+    promised: held?.qty ?? 0,
+    promisedOrders: held?.orders ?? 0,
+    free: Math.max(0, total - (held?.qty ?? 0)),
     expired,
     batches: lines,
     cost: can.cost && costed > 0 ? { min, max, average: Math.round(costSum / costed) } : null,

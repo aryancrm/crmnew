@@ -291,6 +291,10 @@ export type MedicineDetail = {
   medicine: MedicineInput & { id: number; code: string; active: boolean; packSize: number };
   status: StockStatus;
   total: number;
+  /** On placed orders not packed yet, and what is left free to sell (never under zero). */
+  promised: number;
+  promisedOrders: number;
+  free: number;
   expired: number;
   batches: {
     batchId: number;
