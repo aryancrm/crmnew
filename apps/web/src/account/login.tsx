@@ -7,7 +7,7 @@ import type { Me } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CircleAlert, Eye, EyeOff, LoaderCircle, Search } from "lucide-react";
 import { type FormEvent, useEffect, useId, useState } from "react";
-import { Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ApiFailure, api } from "../api";
 import { ME, rememberPerson, returnTo, useMe } from "../auth";
 import { About } from "../portal/about";
@@ -81,20 +81,20 @@ function Launcher() {
             className="order-2 flex flex-col px-6 py-10 lg:order-1 lg:w-[46%] lg:px-12 lg:py-8"
             style={{ background: `linear-gradient(160deg, ${TILE_GLOW[picked.key] ?? "#f36b21"}14, #f6f5fb 55%, ${TILE_GLOW[picked.key] ?? "#f36b21"}0d)` }}
           >
-            <span className="hidden items-center gap-2.5 lg:flex">
+            <Link to={loginPath()} state={location.state} className={`${HOME_LINK} hidden lg:flex`}>
               <img src="/brand/bishnoi-one-mark.png" alt="" className="size-8" />
               <span className="text-[18px] font-semibold tracking-[-0.03em]">Bishnoi One</span>
-            </span>
+            </Link>
             <div className="flex flex-1 items-center py-6">
               <DepartmentPanel workspace={picked} />
             </div>
           </aside>
           <section className="order-1 flex flex-1 flex-col px-6 py-5 lg:order-2 lg:px-12 lg:py-8" aria-label={`Sign in to ${picked.label}`}>
             <div className="flex items-center justify-between gap-3">
-              <span className="flex items-center gap-2.5 lg:invisible">
+              <Link to={loginPath()} state={location.state} className={`${HOME_LINK} flex lg:invisible`}>
                 <img src="/brand/bishnoi-one-mark.png" alt="" className="size-7" />
                 <span className="text-[17px] font-semibold tracking-[-0.03em]">Bishnoi One</span>
-              </span>
+              </Link>
               <span className="flex items-center gap-3">
                 <span className="hidden text-[13px] text-[#7a8394] sm:inline">Wrong department?</span>
                 <button
@@ -197,6 +197,10 @@ function Launcher() {
 
 /** The sign-in's address: the launcher, or one department's page. */
 const loginPath = (key?: string | null) => (key ? `/login/${key}` : "/login");
+
+/** The logo on a department's page goes home, to all departments (Jakob); 44px to press (Fitts). */
+const HOME_LINK =
+  "min-h-11 items-center gap-2.5 self-start rounded-lg transition-colors hover:text-[#c2410c] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f36b21]";
 
 /** Where a person lands: the Books tile opens Books for those who keep the books. */
 const landing = (role: string, picked: Workspace | null, from: string) =>
