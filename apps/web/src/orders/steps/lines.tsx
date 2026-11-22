@@ -35,7 +35,7 @@ export function Lines({
     <div className="-mx-4 overflow-x-auto border-y border-slate-100">
       {medicine !== null && <MedicinePopup id={medicine} onClose={() => setMedicine(null)} />}
       {anyBefore && <LineLookSwitch look={look} onPick={pickLook} />}
-      <table className="t">
+      <table className="t text-sm [&_td]:text-sm [&_th]:text-xs">
         <thead>
           <tr>
             <th>Medicine</th>
@@ -70,7 +70,7 @@ export function Lines({
                       {item.reason && item.reason !== "Free" ? ` · ${item.reason}` : ""}
                     </div>
                     {/* VAT as Inventory keeps it; an SC/PWD line is sold without it. */}
-                    <div className="mt-0.5 flex flex-wrap gap-1 text-[10px] font-semibold">
+                    <div className="mt-0.5 flex flex-wrap gap-1 text-xs font-semibold">
                       <span
                         className={`rounded px-1.5 py-0.5 ${item.relief ? "bg-sky-50 text-sky-800" : item.vat === "vat12" ? "bg-amber-50 text-amber-800" : "bg-slate-100 text-slate-600"}`}
                       >
@@ -115,7 +115,7 @@ export function Lines({
                     {/* Worked out for Management, not by hand (Aryan, 17 Nov): how far from the list. */}
                     {!item.free && !item.relief && item.listPrice > 0 && item.unitPrice !== item.listPrice && (
                       <div
-                        className={`text-[11px] font-semibold ${item.unitPrice < item.listPrice ? "text-amber-700" : "text-brand-dark"}`}
+                        className={`text-xs font-semibold ${item.unitPrice < item.listPrice ? "text-amber-700" : "text-brand-dark"}`}
                         title={`${peso(Math.abs(item.listPrice - item.unitPrice) * item.qty)} ${item.unitPrice < item.listPrice ? "less" : "more"} on this line`}
                       >
                         {item.unitPrice < item.listPrice ? "−" : "+"}
@@ -151,7 +151,7 @@ export function Lines({
         </tbody>
       </table>
       {order.deliveryFee > 0 && (
-        <div className="flex items-center justify-end gap-6 border-t border-slate-100 px-4 py-2 text-[13px] text-ink-2">
+        <div className="flex items-center justify-end gap-6 border-t border-slate-100 px-4 py-2 text-sm text-ink-2">
           <span>Delivery fee</span>
           <span className="tabular-nums">{peso(order.deliveryFee)}</span>
         </div>

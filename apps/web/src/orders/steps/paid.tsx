@@ -43,7 +43,7 @@ export function PaidStep({
               <b>{peso(invoice.balance)} still owed</b> on {invoice.code}
             </Fact>
           )}
-          <dl className="grid grid-cols-3 gap-3 text-[13px]">
+          <dl className="grid grid-cols-3 gap-3 text-sm">
             {(
               [
                 ["Total", invoice.total],
@@ -58,7 +58,7 @@ export function PaidStep({
             ))}
           </dl>
           {data.money.payments.length > 0 && (
-            <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 text-[13px]">
+            <ul className="divide-y divide-slate-100 rounded-xl border border-slate-200 text-sm">
               {data.money.payments.map((payment) => (
                 <li
                   key={payment.id}
@@ -72,7 +72,7 @@ export function PaidStep({
                     {payment.reference ? ` · ${payment.reference}` : ""}
                     {!payment.active && ` · taken off: ${payment.removedReason}`}
                   </span>
-                  <span className="text-[12px] text-slate-500">
+                  <span className="text-xs text-slate-500">
                     {dayLabel(payment.paidOn)} · {payment.by}
                   </span>
                 </li>
@@ -80,7 +80,7 @@ export function PaidStep({
             </ul>
           )}
           {data.money.refunds.length > 0 && (
-            <div className="text-[13px] text-ink-2">
+            <div className="text-sm text-ink-2">
               Given back:{" "}
               {data.money.refunds
                 .map((refund) => `${peso(refund.amount)} on ${dayLabel(refund.refundedOn)}`)

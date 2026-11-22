@@ -17,9 +17,9 @@ export function MoneyCard({ data }: { data: OrderDetail }) {
   const row = "flex items-baseline justify-between gap-3";
   return (
     <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <h2 className="flex items-center justify-between border-b border-slate-100 px-3.5 py-2.5 text-[13px] font-semibold text-ink">
+      <h2 className="flex items-center justify-between border-b border-slate-100 px-3.5 py-2.5 text-sm font-semibold text-ink">
         Money
-        <span className="text-[11px] font-normal text-slate-500">
+        <span className="text-xs font-normal text-slate-500">
           {data.items.length} {data.items.length === 1 ? "line" : "lines"}
           {free ? ` · ${free} free` : ""}
         </span>
@@ -28,12 +28,12 @@ export function MoneyCard({ data }: { data: OrderDetail }) {
         {data.items.map((item) => (
           <li key={item.id} className="py-2">
             <div className={row}>
-              <span className="line-clamp-2 min-w-0 text-[12.5px] font-medium text-slate-800">{item.medicine}</span>
-              <span className={`shrink-0 text-[13px] font-semibold tabular-nums ${item.free ? "text-emerald-700" : "text-slate-900"}`}>
+              <span className="line-clamp-2 min-w-0 text-sm font-medium text-slate-800">{item.medicine}</span>
+              <span className={`shrink-0 text-sm font-semibold tabular-nums ${item.free ? "text-emerald-700" : "text-slate-900"}`}>
                 {item.free ? "Free" : peso(item.amount)}
               </span>
             </div>
-            <div className="mt-0.5 text-[11.5px] text-slate-500 tabular-nums">
+            <div className="mt-0.5 text-xs text-slate-500 tabular-nums">
               {count(item.qty)} × {peso(item.unitPrice)}
               {!item.free && item.unitPrice < item.listPrice ? (
                 <span className="ml-1.5 font-semibold text-amber-700">list {peso(item.listPrice)}</span>
@@ -42,7 +42,7 @@ export function MoneyCard({ data }: { data: OrderDetail }) {
           </li>
         ))}
       </ul>
-      <dl className="flex flex-col gap-1 border-t border-slate-100 bg-slate-50/60 px-3.5 py-2.5 text-[13px]">
+      <dl className="flex flex-col gap-1 border-t border-slate-100 bg-slate-50/60 px-3.5 py-2.5 text-sm">
         {order.deliveryFee > 0 && (
           <div className={row}>
             <dt className="text-slate-600">Medicines</dt>
@@ -55,7 +55,7 @@ export function MoneyCard({ data }: { data: OrderDetail }) {
             <dd className="tabular-nums">{peso(order.deliveryFee)}</dd>
           </div>
         )}
-        <div className={`${row} text-[14px] font-bold text-slate-900`}>
+        <div className={`${row} text-sm font-semibold text-slate-900`}>
           <dt>Order total</dt>
           <dd className="tabular-nums">{peso(goods + order.deliveryFee)}</dd>
         </div>
@@ -74,7 +74,7 @@ export function MoneyCard({ data }: { data: OrderDetail }) {
         )}
         {invoice ? (
           <>
-            <div className={`${row} mt-1 border-t border-slate-200 pt-1.5 text-[12px] text-slate-500`}>
+            <div className={`${row} mt-1 border-t border-slate-200 pt-1.5 text-xs text-slate-500`}>
               <dt>Invoice {invoice.code}</dt>
               <dd>due {invoice.dueOn}</dd>
             </div>
@@ -90,7 +90,7 @@ export function MoneyCard({ data }: { data: OrderDetail }) {
             </div>
           </>
         ) : (
-          <p className="mt-1 border-t border-slate-200 pt-1.5 text-[11.5px] text-slate-500">No invoice yet: it is made when Management approves.</p>
+          <p className="mt-1 border-t border-slate-200 pt-1.5 text-xs text-slate-500">No invoice yet: it is made when Management approves.</p>
         )}
       </dl>
     </section>
@@ -103,12 +103,12 @@ export function Activity({ data }: { data: OrderDetail }) {
   const shown = all ? events : events.slice(0, 8);
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-3.5 shadow-sm">
-      <h2 className="mb-2 text-[13px] font-semibold text-ink">Timeline</h2>
-      <ul className="flex flex-col gap-2.5 text-[13px]">
+      <h2 className="mb-2 text-sm font-semibold text-ink">Timeline</h2>
+      <ul className="flex flex-col gap-2.5 text-sm">
         {shown.map((event) => (
           <li key={event.id}>
             <div className="text-slate-800">{event.message}</div>
-            <div className="text-[11px] text-slate-500">
+            <div className="text-xs text-slate-500">
               {event.by} ({event.byRole}) · {timeLabel(event.at)}
             </div>
           </li>

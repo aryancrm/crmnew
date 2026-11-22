@@ -49,7 +49,7 @@ function DuesVerdict({ data }: { data: OrderDetail }) {
         ? "border-amber-200 bg-amber-50 text-amber-900"
         : "border-good/20 bg-good-tint text-good";
   return (
-    <div className={`flex flex-col gap-1 rounded-xl border px-3 py-2.5 text-[13px] ${tone}`}>
+    <div className={`flex flex-col gap-1 rounded-xl border px-3 py-2.5 text-sm ${tone}`}>
       <b>
         {dues.overdue > 0
           ? `${peso(dues.overdue)} overdue, the oldest ${dues.days} days late`
@@ -113,7 +113,7 @@ function CreditFacts({ data }: { data: OrderDetail }) {
         ]}
       />
       {dues.credit > 0 && (
-        <p className="text-[13px] text-good">
+        <p className="text-sm text-good">
           They have {peso(dues.credit)} of credit (open credit notes, or money kept from a bill): use
           it on the invoice at the payment step.
         </p>
@@ -192,7 +192,7 @@ export function FinanceStep({
           )}
           {/* A guarantee letter's order: the agency pays what its letter approves (19 Nov). */}
           {order.type === "gl" && (
-            <div className="rounded-xl bg-sky-50 px-3 py-2 text-[13px] text-sky-950">
+            <div className="rounded-xl bg-sky-50 px-3 py-2 text-sm text-sky-950">
               <b>Paid by the agency's guarantee letter{order.source ? ` (${order.source})` : ""}:</b>{" "}
               {order.glAmount != null
                 ? `${peso(order.glAmount)} approved${order.glNumber ? `, letter ${order.glNumber}` : ""}${
@@ -204,7 +204,7 @@ export function FinanceStep({
             </div>
           )}
           {!checked && noProofWords(order.noProofReason, order.noProofNote) && (
-            <div className="flex gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[13px] text-slate-700">
+            <div className="flex gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">
               <span className="mt-1.5 size-2 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
               <span>
                 <b>No slip.</b> {order.medrep} says: {noProofWords(order.noProofReason, order.noProofNote)}
@@ -212,7 +212,7 @@ export function FinanceStep({
             </div>
           )}
           {!checked && slipFindings.length > 0 && (
-            <ul className="flex flex-col gap-1.5 rounded-xl bg-slate-50 px-3 py-2.5 text-[13px] text-slate-800">
+            <ul className="flex flex-col gap-1.5 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-800">
               {slipFindings.map((finding) => (
                 <li key={finding.text} className="flex gap-2">
                   <TriangleAlert size={15} className="mt-0.5 shrink-0 text-amber-600" aria-hidden="true" />

@@ -137,7 +137,7 @@ function DetailsLine({ data }: { data: OrderDetail }) {
   ].filter(Boolean);
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center justify-between gap-2 text-[12.5px]">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
         <span className="min-w-0 text-slate-700">
           <span className="font-semibold text-slate-600">Details</span>{" "}
           {facts.length ? facts.join(" · ") : "Division, payment terms and delivery not filled yet"}
@@ -169,7 +169,7 @@ function ShipsFrom({
   const picked = value || String(fill.find((place) => place.isDefault)?.id ?? fill[0]?.id ?? "");
   return (
     <fieldset className="flex flex-col gap-1.5">
-      <legend className="mb-1 text-[12px] font-semibold text-slate-600">Ships from</legend>
+      <legend className="mb-1 text-xs font-semibold text-slate-600">Ships from</legend>
       <div className="grid gap-2 sm:grid-cols-2">
         {fill.map((place) => {
           const chosen = String(place.id) === picked;
@@ -177,7 +177,7 @@ function ShipsFrom({
           return (
             <label
               key={place.id}
-              className={`flex cursor-pointer gap-2.5 rounded-xl border px-3 py-2.5 text-[13px] ${
+              className={`flex cursor-pointer gap-2.5 rounded-xl border px-3 py-2.5 text-sm ${
                 chosen
                   ? "border-emerald-400 bg-emerald-50/60 ring-1 ring-emerald-300"
                   : "border-slate-200 bg-white hover:border-slate-300"
@@ -194,7 +194,7 @@ function ShipsFrom({
                 <span className="font-semibold text-slate-900">
                   {place.name}
                   {place.isDefault && (
-                    <span className="ml-1.5 text-[11px] font-medium text-slate-500">main</span>
+                    <span className="ml-1.5 text-xs font-medium text-slate-500">main</span>
                   )}
                 </span>
                 <span className={`block text-xs ${fills ? "text-emerald-700" : "text-amber-800"}`}>
@@ -233,7 +233,7 @@ function LicenceFacts({ order }: { order: OrderDetail["order"] }) {
       ].filter(Boolean);
   return (
     <div
-      className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-[13px] ${
+      className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-sm ${
         expired || missing.length
           ? "border-transparent bg-slate-50 text-slate-800"
           : "border-slate-200 text-slate-700"
@@ -352,7 +352,7 @@ export function ManagementStep({
         </Fact>
       ) : null}
       {shownFindings.length > 0 && (
-        <ul className="flex flex-col gap-1.5 rounded-xl bg-slate-50 px-3 py-2.5 text-[13px] text-slate-800">
+        <ul className="flex flex-col gap-1.5 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-800">
           {shownFindings.map((finding) => (
             <li key={finding.text} className="flex gap-2">
               <TriangleAlert
@@ -372,7 +372,7 @@ export function ManagementStep({
           <>
             {/* An Online order's prices are the case's quotation: one click to it as the agent made it. */}
             {order.via && order.leadId && check === "price" && (
-              <div className="rounded-xl bg-violet-50 px-3 py-2 text-[13px] text-violet-900">
+              <div className="rounded-xl bg-violet-50 px-3 py-2 text-sm text-violet-900">
                 Priced as quoted on the Online case {order.via.code} ({order.via.source}).{" "}
                 <Link to={`/leads/${order.leadId}?step=quote`} className="font-semibold underline">
                   Open the quotation
@@ -456,7 +456,7 @@ function CompleteDetails({ data }: { data: OrderDetail }) {
     more: { list?: string; type?: string; wide?: boolean; placeholder?: string } = {},
   ) => (
     <label className={`flex flex-col gap-1 ${more.wide ? "sm:col-span-2" : ""}`}>
-      <span className="text-[12px] font-semibold text-slate-600">{label}</span>
+      <span className="text-xs font-semibold text-slate-600">{label}</span>
       <input
         type={more.type ?? "text"}
         list={more.list}
@@ -473,10 +473,10 @@ function CompleteDetails({ data }: { data: OrderDetail }) {
       onSubmit={save}
       className="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3"
     >
-      <div className="text-[13px] font-semibold text-ink">Complete the order</div>
+      <div className="text-sm font-semibold text-ink">Complete the order</div>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="flex flex-col gap-1">
-          <span className="text-[12px] font-semibold text-slate-600">Division</span>
+          <span className="text-xs font-semibold text-slate-600">Division</span>
           <select
             value={value.division}
             onChange={(event) =>
@@ -494,7 +494,7 @@ function CompleteDetails({ data }: { data: OrderDetail }) {
         </label>
         {(SUB_DIVISIONS[value.division] ?? []).length > 0 ? (
           <label className="flex flex-col gap-1">
-            <span className="text-[12px] font-semibold text-slate-600">Sub-division</span>
+            <span className="text-xs font-semibold text-slate-600">Sub-division</span>
             <select
               value={value.subDivision}
               onChange={(event) => set("subDivision", event.target.value)}
@@ -517,13 +517,13 @@ function CompleteDetails({ data }: { data: OrderDetail }) {
         ) : (
           input("subDivision", "Sub-division", { placeholder: "The area within the Division" })
         )}
-        <p className="-mt-1 text-[11px] text-slate-500 sm:col-span-2">
+        <p className="-mt-1 text-xs text-slate-500 sm:col-span-2">
           Division: the sales tracker's channel the order counts for (RX Business and MD Telesales,
           Javed's; B2B, BID and CLIDP, Subir's; TeleSales and HOSP, Vanessa's; MT, Mhalou's).
           Sub-division: the area within it.
         </p>
         <label className="flex flex-col gap-1">
-          <span className="text-[12px] font-semibold text-slate-600">Payment terms</span>
+          <span className="text-xs font-semibold text-slate-600">Payment terms</span>
           <select
             value={value.paymentTerm}
             onChange={(event) => set("paymentTerm", event.target.value)}
@@ -542,7 +542,7 @@ function CompleteDetails({ data }: { data: OrderDetail }) {
             ))}
           </select>
           {value.paymentTerm && (
-            <span className="text-[11px] text-slate-500">{termWords(value.paymentTerm)}</span>
+            <span className="text-xs text-slate-500">{termWords(value.paymentTerm)}</span>
           )}
           {action.at("paymentTerm") && (
             <span className="text-xs text-rose-700">{action.at("paymentTerm")}</span>
@@ -554,7 +554,7 @@ function CompleteDetails({ data }: { data: OrderDetail }) {
         {input("deliveryAddress", "Delivery address", { wide: true })}
         {input("customerPo", "Customer's PO")}
         <label className="flex flex-col gap-1">
-          <span className="text-[12px] font-semibold text-slate-600">Invoicing from</span>
+          <span className="text-xs font-semibold text-slate-600">Invoicing from</span>
           <select
             value={value.invoiceFrom}
             onChange={(event) => set("invoiceFrom", event.target.value)}
@@ -571,7 +571,7 @@ function CompleteDetails({ data }: { data: OrderDetail }) {
         <Button type="submit" small disabled={action.busy}>
           {action.busy ? "Saving…" : "Save the details"}
         </Button>
-        {saved && <span className="text-[13px] font-medium text-emerald-700">Saved.</span>}
+        {saved && <span className="text-sm font-medium text-emerald-700">Saved.</span>}
       </div>
     </form>
   );

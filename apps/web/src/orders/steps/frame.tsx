@@ -33,10 +33,10 @@ export function StepPanel({
   return (
     <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="flex items-center gap-2.5 border-b border-slate-100 px-4 py-3">
-        <span className="flex size-6 items-center justify-center rounded-full bg-emerald-600 text-[10px] font-bold text-white">
+        <span className="flex size-6 items-center justify-center rounded-full bg-emerald-600 text-xs font-semibold text-white">
           {number}
         </span>
-        <h2 className="text-[15px] font-semibold text-ink">{title}</h2>
+        <h2 className="text-base font-semibold text-ink">{title}</h2>
       </div>
       <div className="flex flex-col gap-4 p-4">{children}</div>
       {footer && (
@@ -61,7 +61,7 @@ export function Fact({ shape, children, note }: { shape: Shape; children: ReactN
   const tone = shape === "later" ? "text-slate-500" : "text-slate-800";
   return (
     <div
-      className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-slate-50 px-3 py-2.5 text-[13px] ${tone}`}
+      className={`flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-slate-50 px-3 py-2.5 text-sm ${tone}`}
     >
       <span
         aria-hidden="true"
@@ -77,12 +77,12 @@ export function Fact({ shape, children, note }: { shape: Shape; children: ReactN
 
 export function Facts({ rows }: { rows: [string, ReactNode][] }) {
   return (
-    <dl className="grid gap-x-4 gap-y-3 text-[13px] sm:grid-cols-2 xl:grid-cols-3">
+    <dl className="grid gap-x-4 gap-y-3 text-sm sm:grid-cols-2 xl:grid-cols-3">
       {rows
         .filter(([, value]) => value !== null && value !== undefined && value !== "")
         .map(([label, value]) => (
           <div key={label}>
-            <dt className="text-[12px] font-semibold text-slate-600">{label}</dt>
+            <dt className="text-xs font-semibold text-slate-600">{label}</dt>
             <dd>{value}</dd>
           </div>
         ))}
