@@ -6,11 +6,12 @@ import "@fontsource-variable/inter";
 import type { Me } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, CircleAlert, Eye, EyeOff, LoaderCircle, Search } from "lucide-react";
-import { type FormEvent, useEffect, useId, useState } from "react";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ApiFailure, api } from "../api";
 import { ME, rememberPerson, returnTo, useMe } from "../auth";
 import { About } from "../portal/about";
+import { DevUserPicker } from "./dev-user-picker";
 import { markActive } from "./idle";
 import { DepartmentMark, DepartmentPanel } from "../portal/department-side";
 import { TILE_GLOW, TILE_ICONS } from "../portal/tiles";
@@ -230,6 +231,7 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
   const picked = workspace;
   const ids = useId();
   const [capsLock, setCapsLock] = useState(false);
+  const submitButton = useRef<HTMLButtonElement>(null);
   const field =
     "h-12 w-full rounded-xl border border-[#d5d9e1] bg-white px-3.5 text-[15px] text-[#1f2733] outline-none transition-[border-color,box-shadow] placeholder:text-[#6b7380] hover:border-[#b9bfcb] focus:border-[#f36b21] focus:ring-4 focus:ring-[#f36b21]/15 disabled:bg-[#f6f7f9] aria-[invalid=true]:border-rose-500 aria-[invalid=true]:ring-rose-500/15";
   const label = "text-[13px] font-semibold text-[#1f2733]";
@@ -265,7 +267,23 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
     {/* Read top to bottom: what this is, how to sign in, the fields, the one action, then help
         (Hick, Miller). It stands on the page's white, no card around it. */}
     <div className="w-full text-left">
-      <h1 className="text-[clamp(28px,3vw,34px)] leading-tight font-semibold tracking-[-0.03em] text-[#1f2733]">Sign in to {picked.label}</h1>
+      <div className="relative flex items-center gap-3">
+        <h1 className="min-w-0 text-[clamp(28px,3vw,34px)] leading-tight font-semibold tracking-[-0.03em] text-[#1f2733]">Sign in to {picked.label}</h1>
+        {/* Vite's dev server only: no build has import.meta.hot, so none carries the picker. */}
+        {import.meta.hot && (
+          <DevUserPicker
+            workspace={picked}
+            current={email}
+            onPick={(id, secret) => {
+              setEmail(id);
+              setPassword(secret);
+              setShown(false);
+              setProblem(null);
+              submitButton.current?.focus();
+            }}
+          />
+        )}
+      </div>
       <p className="mt-2 text-[15px] text-[#5b6472]">Use your own login ID and password.</p>
       <form onSubmit={submit} className="mt-6 grid gap-4" aria-busy={busy}>
         <div className="grid gap-1.5">
@@ -341,6 +359,7 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
           )}
         </div>
         <button
+          ref={submitButton}
           type="submit"
           disabled={busy}
           className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#f36b21] text-[15px] font-semibold text-white shadow-[0_12px_26px_-12px_rgba(243,107,33,0.7)] transition-colors hover:bg-[#e05a12] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f36b21] disabled:cursor-wait disabled:opacity-70"
