@@ -308,6 +308,20 @@ describe("a credit order", () => {
     expect(early.status).toBe(409);
   });
 
+  it("takes no money dated in a locked period (the books' Transaction locking, 22 Nov)", async () => {
+    const id = await approved(creditHospital);
+    await post("fiona", `/api/finance/orders/${id}/invoice`);
+    const invoice = (await order("fiona", id)).money.invoice;
+    if (!invoice) throw new Error("no invoice");
+    await db.execute(sql`insert into book_lock (module, lock_date, reason) values ('sales', ${todayManila()}::date, 'test')`);
+    const pay = () => post("fiona", `/api/invoices/${invoice.id}/payments`, { amount: 100, method: "cash", reference: "LOCK-1", paidOn: todayManila() });
+    const locked = await pay();
+    expect(locked.status).toBe(409);
+    expect(((await locked.json()) as { error: { code: string } }).error.code).toBe("locked");
+    await db.execute(sql`delete from book_lock where module = 'sales'`);
+    expect((await pay()).status).toBe(200);
+  });
+
   it("takes its money later, part by part; a mistaken payment is taken off with why", async () => {
     const id = await approved(creditHospital);
     await post("fiona", `/api/finance/orders/${id}/invoice`);

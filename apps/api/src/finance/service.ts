@@ -3,6 +3,7 @@
 // cancelled order, and the lists: invoices, payments received, customers owe, refunds owed.
 // Every change is one transaction that also writes the order's timeline.
 
+import { assertOpen } from "../books/write";
 import { keepFile } from "../files/store";
 import { releaseCredit } from "./credit";
 import { awaitingPaymentSql, duesSql, notDueSql } from "./dues";
@@ -767,6 +768,8 @@ export async function recordPayment(
   allow(me, FINANCE_ROLES, "record a payment");
   payable(input);
   await db.transaction(async (tx) => {
+    // A locked period takes no more money (the books' Transaction locking), the CRM's own too.
+    await assertOpen(tx, "customer_payment", input.paidOn);
     const invoice = await lockInvoice(tx, invoiceId);
     if (invoice.status === "cancelled")
       throw new Refusal(
@@ -910,6 +913,7 @@ export async function removePayment(
       sql`select invoice_id::int as "invoiceId", amount::int as amount, method, ${day("paid_on")} as "paidOn", active from payment where id = ${paymentId} for update`,
     );
     if (!payment?.active) throw new Refusal(404, "not_found", "That payment isn't there any more.");
+    await assertOpen(tx, "customer_payment", payment.paidOn);
     if (payment.method === "points")
       throw new Refusal(
         409,
@@ -950,6 +954,7 @@ export async function recordRefund(
   allow(me, FINANCE_ROLES, "record a refund");
   payable({ amount: input.amount, paidOn: input.refundedOn }, "refundedOn");
   await db.transaction(async (tx) => {
+    await assertOpen(tx, "refund", input.refundedOn);
     const invoice = await lockInvoice(tx, invoiceId);
     // A cancelled order gives back what came in; a return gives back what was paid beyond the
     // bill it left (never the points).

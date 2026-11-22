@@ -3075,3 +3075,10 @@ lowest, each division's average; Scorecards opens every card.
   pieces are delivered. Only bills made in the CRM change; Zoho's own bills keep Zoho's lines. Still
   open in the Books: past cost follows the batch's cost today; period locks don't cover the CRM's
   own invoices and payments.
+- **22 Nov 2026 (Books, Aryan's go)** What stock cost is kept as it was on the day it moved
+  (migration 0133: `stock_move.unit_cost`, set by the database on every move). When a batch's cost
+  changes later (a landed-cost bill, more received at another cost), the difference on the pieces
+  already gone is posted on the day of the change (`batch_cost_change`), so closed months stay as
+  they were; the ledger and Gross Profit read the kept cost. No figure changed on the day of the
+  migration. Transaction locking now covers the CRM's own money too: a payment or refund dated in a
+  locked period is refused, and a payment of a locked period can't be taken off.

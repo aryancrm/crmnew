@@ -333,8 +333,8 @@ export async function grossProfit(
         group by 1, 2
       ),
       cost as (
-        select o.id as order_id, x.medicine_id, sum(-x.qty::bigint * coalesce(b.unit_cost, 0)) as cost,
-          bool_or(coalesce(b.unit_cost, 0) = 0) as uncosted
+        select o.id as order_id, x.medicine_id, sum(-x.qty::bigint * coalesce(x.unit_cost, b.unit_cost, 0)) as cost,
+          bool_or(coalesce(x.unit_cost, b.unit_cost, 0) = 0) as uncosted
         from stock_move x join batch b on b.id = x.batch_id
           join sales_order o on o.code = x.ref or o.id = (select r.order_id from sales_return r where r.code = x.ref)
         where x.kind in ('deliver', 'return') and o.id in (select order_id from sold)
