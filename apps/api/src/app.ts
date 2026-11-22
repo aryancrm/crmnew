@@ -8,7 +8,9 @@ import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
+import { secureHeaders } from "hono/secure-headers";
 import { z } from "zod";
 import { DOORS, doorPeople } from "./auth/doors";
 import { hashPassword, joinPassword, passwordMatches, passwordProblem } from "./auth/password";
@@ -89,6 +91,15 @@ const deskParam = (value: string): DutyDesk => {
 };
 const LOCK_MINUTES = 15;
 
+// The proxy's own limit (nginx: 50 MB, for photos and papers) holds without the proxy too.
+const MB = 1024 * 1024;
+const atMost = (maxSize: number) =>
+  bodyLimit({
+    maxSize,
+    onError: (c) =>
+      c.json({ error: { code: "too_large", message: "That is too large to send." } } satisfies ApiError, 413),
+  });
+
 export function createApp(db: Database, options: AppOptions) {
   const app = new Hono<Env>();
   const secure = options.webUrl.startsWith("https://");
@@ -101,7 +112,11 @@ export function createApp(db: Database, options: AppOptions) {
     c.header("Server-Timing", `app;dur=${ms}, db;desc="${queries} queries"`);
   });
 
+  app.use("*", secureHeaders());
   app.use("/api/*", cors({ origin: options.webUrl, credentials: true }));
+  app.use("/api/auth/*", atMost(16 * 1024));
+  app.use("/api/*", atMost(50 * MB));
+  app.use("/webhooks/*", atMost(2 * MB));
 
   app.onError((error, c) => {
     if (error instanceof Refusal) {
