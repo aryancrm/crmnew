@@ -3070,3 +3070,8 @@ lowest, each division's average; Scorecards opens every card.
   exception after it shipped can't be cancelled (the parcel is on the road: it comes back through
   Dispatch or as a return). The desk report's "Rejected" column is named "Cancelled", which is what
   it counts.
+- **22 Nov 2026 (Books, Aryan's go)** A bill's line for a medicine with no account typed posts to
+  Inventory Asset, not Cost of Goods Sold (migration 0132): the cost is counted once, when the
+  pieces are delivered. Only bills made in the CRM change; Zoho's own bills keep Zoho's lines. Still
+  open in the Books: past cost follows the batch's cost today; period locks don't cover the CRM's
+  own invoices and payments.

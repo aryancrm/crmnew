@@ -123,6 +123,18 @@ describe("one road for buying", () => {
     );
     expect(kept?.account).toBe("Inventory Asset");
 
+    // The goods' own bill: a medicine bought is stock, so its line sits in Inventory Asset until it
+    // is sold (22 Nov; it was posted to Cost of Goods Sold, and again on delivery).
+    const goods = await made(
+      await post("irene", `/api/books/purchase_order/${order.id}/bill`, { number: "GOODS-1", date: choices.today, orderLines: [{ lineId: line?.id, qty: 100, rate: 50 }] }),
+    );
+    const posted = await rows<{ account: string; debit: number }>(
+      db,
+      sql`select account, debit::int as debit from book_entry where source = 'books' and doc_id = ${goods.id} and debit > 0`,
+    );
+    expect(posted.some((one) => one.account === "Inventory Asset")).toBe(true);
+    expect(posted.some((one) => one.account === "Cost of Goods Sold")).toBe(false);
+
     // The vendor's invoice goes on the bill (a PDF), and opens again.
     const form = new FormData();
     form.set("file", new File([new TextEncoder().encode("%PDF-1.4 freight invoice")], "freight-invoice.pdf", { type: "application/pdf" }));
