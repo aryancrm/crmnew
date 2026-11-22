@@ -223,9 +223,13 @@ export async function packOrder(
       if (!input.picks) for (const pick of chosen) used.set(pick.batchId, (used.get(pick.batchId) ?? 0) + pick.qty);
       const picked = chosen.reduce((sum, pick) => sum + pick.qty, 0);
       if (!input.picks && picked < item.qty) {
-        const have = batches
-          .filter((row) => row.expiresOn >= today)
-          .reduce((sum, row) => sum + Math.max(0, row.onShelf - (used.get(row.batchId) ?? 0)), 0);
+        // What was there for this line: what is left now plus what this line itself just took (it
+        // said "only 0" of a medicine with 160 on the shelf, having counted its own picks away, 23 Nov).
+        const have =
+          picked +
+          batches
+            .filter((row) => row.expiresOn >= today)
+            .reduce((sum, row) => sum + Math.max(0, row.onShelf - (used.get(row.batchId) ?? 0)), 0);
         throw new Refusal(
           409,
           "short",

@@ -539,6 +539,24 @@ function findingsOf(
         decide: `${item.medicine} priced as ${item.priceLabel.toLowerCase()} (${peso(item.unitPrice)}); a ${buyerLabel(item.ownKind).toLowerCase()} pays ${peso(item.ownPrice)}`,
         text: `${item.medicine}: the ${item.priceLabel.toLowerCase()} price (${peso(item.unitPrice)}) given to a ${buyerLabel(item.ownKind).toLowerCase()}, whose price is ${peso(item.ownPrice)} (${peso((item.ownPrice - item.unitPrice) * item.qty)} less in all)`,
       });
+    // Priced as another kind of buyer, dearer than this customer's own (a hospital charged the
+    // patient price): nothing said it, the price being "at list" of the list picked (23 Nov).
+    if (
+      priced &&
+      !item.relief &&
+      item.priceKind !== "promo" &&
+      item.priceKind !== "offer" &&
+      item.priceKind !== item.ownKind &&
+      !(item.ownKind === "government" && item.priceKind === "bidding") &&
+      item.ownPrice != null &&
+      item.unitPrice > item.ownPrice
+    )
+      found.push({
+        kind: "price",
+        short: `${item.priceLabel} price to a ${buyerLabel(item.ownKind).toLowerCase()}`,
+        decide: `${item.medicine} priced as ${item.priceLabel.toLowerCase()} (${peso(item.unitPrice)}); a ${buyerLabel(item.ownKind).toLowerCase()} pays ${peso(item.ownPrice)}`,
+        text: `${item.medicine}: the ${item.priceLabel.toLowerCase()} price (${peso(item.unitPrice)}) charged to a ${buyerLabel(item.ownKind).toLowerCase()}, whose price is ${peso(item.ownPrice)} (${peso((item.unitPrice - item.ownPrice) * item.qty)} more in all)${item.reason ? `. Reason: ${item.reason}` : ""}`,
+      });
     // Priced as another kind of buyer because Inventory has no price for this customer's own kind
     // (a drugstore given the hospital price): nothing to compare with, so Management looks (22 Nov).
     if (

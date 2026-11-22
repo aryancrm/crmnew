@@ -3390,3 +3390,19 @@ lowest, each division's average; Scorecards opens every card.
   "Papers are right" after reading each, Send back / Reject / Put on hold / Cancel each asking a
   reason, Stopped orders, Returns to approve, Customers to check, Team figures. For Aryan to say:
   Reject and Put on hold both leave the order on hold. Next: Finance, Dispatch, Inventory.
+- **23 Nov 2026 (Aryan: "every possibility: several medicines on one order, how the stock is
+  decided, how the price list comes, a medicine not there, a price above or below")** Hand-run on
+  the demo copy as a Hospital MedRep, then Management, Finance and Dispatch. Right as it is: a
+  price below or above the list without a reason is refused; the same medicine on two paid lines is
+  refused (a second line only as free goods); a buyer with no price of its kind for a medicine is
+  refused ("pick another price"); one order of six medicines shows Management every thing at once
+  (the MedRep's note, each short medicine with ordered against free, below list, above list, free
+  goods, over the credit limit), and each warehouse's own count per medicine. Found and fixed:
+  (1) a hospital charged from the patient list (dearer than its own) had nothing flagged, the
+  price being "at list" of the list picked: Management now sees "Patient price to a hospital" with
+  both prices and the difference; (2) Dispatch's refusal to pack said "only 0 in Main warehouse" of
+  a medicine with 160 there (it had counted the line's own picks away): it says 160. For Aryan to
+  say (no rule yet): an order with a medicine that is not there (or not enough of it) can be
+  approved and is then invoiced whole, and stops at Dispatch, which can't pack it; nothing ships
+  in part. And the server takes an order with short stock without the MedRep's "why are you
+  proceeding" (only the screen asks). 500 API tests. Local only.
