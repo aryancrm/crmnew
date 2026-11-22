@@ -100,7 +100,8 @@ export type Badge =
   | "leave"
   | "decisions"
   | "refills"
-  | "latePayments";
+  | "latePayments"
+  | "signUps";
 export type MenuItem = {
   to: string;
   label: string;
@@ -1532,6 +1533,7 @@ function adminPanel(me: Me): Space {
           { to: "/", label: "Channels", icon: Network },
           // The same tree the CEO has: who is under whom, changed from a box's panel.
           { to: "/company/sales", label: "Company tree", icon: Network },
+          { to: "/admin/sign-ups", label: "Sign-ups", icon: UserPlus, badge: "signUps" },
           { to: "/people", label: "Teams & people", icon: Users },
           { to: "/people?tab=areas", label: "Areas", icon: MapPin },
           {

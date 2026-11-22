@@ -82,6 +82,8 @@ export const WORK_ORDER: Role[] = [
   "dispatch",
   "inventory",
   "hr",
+  "regulatory",
+  "staff",
   "admin",
   "ceo",
 ];
@@ -212,7 +214,7 @@ export function LoginCard({
   );
 }
 
-type JobState = {
+export type JobState = {
   module: Role;
   title: string;
   titleTouched: boolean;
@@ -224,7 +226,7 @@ type JobState = {
 };
 
 /** The job part of a form: the work, the title, whom it reports to, lead or not, its area. */
-function JobFields({
+export function JobFields({
   tree,
   unit,
   job,
@@ -357,7 +359,7 @@ function JobFields({
   );
 }
 
-const jobBody = (job: JobState) => ({
+export const jobBody = (job: JobState) => ({
   module: job.module,
   title: job.title,
   lead: job.lead,
@@ -375,7 +377,7 @@ const jobBody = (job: JobState) => ({
       : null,
 });
 
-const freshJob = (module: Role, lead = false): JobState => ({
+export const freshJob = (module: Role, lead = false): JobState => ({
   module,
   title: WORK[module].title,
   titleTouched: false,

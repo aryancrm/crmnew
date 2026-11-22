@@ -20,6 +20,7 @@ import { AttendanceMonthPage, AttendancePage } from "./hr/attendance";
 import { AttendanceReportPage } from "./hr/attendance-report";
 import { ChangePassword } from "./account/change-password";
 import { ProfilePage } from "./account/profile";
+import { AdminSignUps } from "./admin/sign-ups";
 import { ChannelsPage } from "./online/channels";
 import { Customer } from "./customers/customer";
 import { Customers } from "./customers/customers";
@@ -201,6 +202,7 @@ createRoot(root).render(
             <Route index element={<Home />} />
             <Route path="password" element={<ChangePassword />} />
             <Route path="profile/:section?" element={<ProfilePage />} />
+            <Route path="admin/sign-ups" element={<AdminSignUps />} />
             <Route path="inventory" element={<Inventory />} />
             <Route path="medicines" element={<Medicines />} />
             <Route path="medicines/:id" element={<Medicine />} />

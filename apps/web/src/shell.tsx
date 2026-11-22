@@ -503,6 +503,14 @@ function MenuList({
     enabled: wantsLeave,
     staleTime: 60_000,
   });
+  // Who signed up and waits for the Admin.
+  const signUps = useQuery({
+    queryKey: ["sign-ups", "count"],
+    queryFn: () => api<{ waiting: number }>("/api/sign-ups/count"),
+    enabled: every.some((item) => item.badge === "signUps"),
+    staleTime: 30_000,
+    refetchInterval: () => (document.visibilityState === "visible" ? 60_000 : false),
+  });
   // Everything waiting on the person, beside To decide.
   const decisions = useQuery({
     queryKey: ["decisions"],
@@ -517,6 +525,7 @@ function MenuList({
       ? {
           ...badges,
           orgRequests: teams.data?.openRequests ?? 0,
+          signUps: signUps.data?.waiting ?? 0,
           important: unreadIn(news.data, "important"),
           updates: unreadIn(news.data, "updates"),
           leave: (leave.data?.counts.waiting ?? 0) + (forms.data?.counts.waiting ?? 0),
