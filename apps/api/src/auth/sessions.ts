@@ -89,6 +89,7 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
       bossTitle: boss.title,
       viewerId: viewer.id,
       viewerName: viewer.name,
+      viewerRole: viewer.role,
       workspace: session.workspace,
       // The business box their seat sits in (by its channel), so a seat's desk follows the chart.
       // Of two seats, the one that decides their screens (org/service.ts projectOrg): a lead seat
@@ -151,7 +152,7 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
         ? { id: row.areaId, name: row.areaName, cities: row.areaCities ?? [] }
         : null,
     reportsTo: row.bossName ? { name: row.bossName, title: row.bossTitle } : null,
-    viewedBy: row.viewerId ? { id: row.viewerId, name: row.viewerName ?? "" } : null,
+    viewedBy: row.viewerId ? { id: row.viewerId, name: row.viewerName ?? "", role: row.viewerRole ?? "" } : null,
   };
 }
 

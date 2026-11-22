@@ -101,7 +101,7 @@ export type Me = {
    *  else its channel's), the main seat's first. One seat, one Division (Aryan, 19 Nov). */
   divisions?: string[];
   /** The CEO or Admin looking as this person (read only), when it is that. */
-  viewedBy?: { id: number; name: string } | null;
+  viewedBy?: { id: number; name: string; role: string } | null;
   /** The department this session was opened for (the sign-in page it was made on). */
   workspace?: string | null;
   /** The box picked on a lead's team switch for this request (?unit=, checked): the page counts the
