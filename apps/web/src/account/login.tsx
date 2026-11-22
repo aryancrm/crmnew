@@ -81,7 +81,7 @@ function Launcher() {
             className="order-2 flex flex-col px-6 py-10 lg:order-1 lg:w-[46%] lg:px-12 lg:py-8"
             style={{ background: `linear-gradient(160deg, ${TILE_GLOW[picked.key] ?? "#f36b21"}14, #f6f5fb 55%, ${TILE_GLOW[picked.key] ?? "#f36b21"}0d)` }}
           >
-            <Link to={loginPath()} state={location.state} className={`${HOME_LINK} hidden lg:flex`}>
+            <Link to={loginPath()} state={location.state} className={`${HOME_LINK} hidden self-start lg:flex`}>
               <img src="/brand/bishnoi-one-mark.png" alt="" className="size-8" />
               <span className="text-[18px] font-semibold tracking-[-0.03em]">Bishnoi One</span>
             </Link>
@@ -123,10 +123,22 @@ function Launcher() {
       <Orbits />
 
       <header className="mx-auto flex w-[min(1180px,calc(100%-32px))] shrink-0 items-center gap-4 py-5">
-        <span className="flex shrink-0 items-center gap-2.5">
+        {/* Already home, so it starts the page afresh. Named here: on phones only the mark shows. */}
+        <Link
+          to={loginPath()}
+          state={location.state}
+          aria-label="Bishnoi One"
+          onClick={(event) => {
+            // Ctrl, Cmd or Shift opens another tab or window: this one stays as it is.
+            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            setFind("");
+            window.scrollTo({ top: 0 });
+          }}
+          className={`${HOME_LINK} flex min-w-11 shrink-0 justify-center`}
+        >
           <img src="/brand/bishnoi-one-mark.png" alt="" className="size-10" />
           <span className="hidden text-[22px] font-semibold tracking-[-0.03em] sm:inline">Bishnoi One</span>
-        </span>
+        </Link>
         <label className="mx-auto flex h-12 w-full max-w-md items-center gap-3 rounded-2xl border border-white/80 bg-white/70 px-4 shadow-[0_8px_30px_-12px_rgba(20,30,50,0.18)] backdrop-blur-xl transition focus-within:bg-white/90 focus-within:shadow-[0_12px_36px_-12px_rgba(20,30,50,0.26)]">
           <Search className="size-5 text-[#f36b21]" aria-hidden="true" />
           <input
@@ -198,9 +210,9 @@ function Launcher() {
 /** The sign-in's address: the launcher, or one department's page. */
 const loginPath = (key?: string | null) => (key ? `/login/${key}` : "/login");
 
-/** The logo on a department's page goes home, to all departments (Jakob); 44px to press (Fitts). */
+/** The logo, on the portal and on a department's page, goes home (Jakob); 44px to press (Fitts). */
 const HOME_LINK =
-  "min-h-11 items-center gap-2.5 self-start rounded-lg transition-colors hover:text-[#c2410c] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f36b21]";
+  "min-h-11 items-center gap-2.5 rounded-lg transition-colors hover:text-[#c2410c] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f36b21]";
 
 /** Where a person lands: the Books tile opens Books for those who keep the books. */
 const landing = (role: string, picked: Workspace | null, from: string) =>
