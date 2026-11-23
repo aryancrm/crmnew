@@ -486,8 +486,10 @@ const reportsApp: Space = {
         { to: "/b2b/team", label: "B2B team", icon: Building2 },
         { to: "/clidp/team", label: "CLIDP", icon: FileText },
         { to: "/clidp/road", label: "CLIDP pharmacies", icon: Building2 },
+        // Government tenders, side by side: found, bid, how they went. Not a folder here: this app sits
+        // inside the CEO's and the Admin's "Reports" folder, and a folder inside a folder shows as one link.
         { to: "/tenders", label: "Tenders", icon: FileText },
-        { to: "/tenders/finder", label: "Tender finder", icon: Search, short: "Finder" },
+        { to: "/tenders/finder", label: "Tender finder", icon: Search },
         { to: "/tenders/report", label: "Bid report", icon: FileText },
         { to: "/targets", label: "Targets", icon: Target },
       ],
@@ -789,7 +791,7 @@ function ownDesk(me: Me): Space {
                     FileText,
                     [
                       { to: "/tenders", label: "Tenders", icon: FileText },
-                      { to: "/tenders/finder", label: "Tender finder", icon: Search, short: "Finder" },
+                      { to: "/tenders/finder", label: "Tender finder", icon: Search },
                       { to: "/tenders/report", label: "Bid report", icon: FileText },
                       { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
                     ],
@@ -855,7 +857,7 @@ function ownDesk(me: Me): Space {
               FileText,
               [
                 { to: "/tenders", label: "Tenders", icon: FileText },
-                { to: "/tenders/finder", label: "Tender finder", icon: Search, short: "Finder" },
+                { to: "/tenders/finder", label: "Tender finder", icon: Search },
                 { to: "/tenders/report", label: "Bid report", icon: FileText },
                 { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
               ],
@@ -1064,10 +1066,18 @@ function ownDesk(me: Me): Space {
           cta: newOrder,
           ...desk([
             home,
-            { to: "/tenders", label: "Tenders", icon: FileText, short: "Tenders" },
-            { to: "/tenders/finder", label: "Tender finder", icon: Search, short: "Finder" },
-            { to: "/tenders/report", label: "Bid report", icon: FileText },
-            { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
+            // Found, bid, how they went, the company's papers: one folder, as the coachees have it.
+            folder(
+              "Tenders",
+              FileText,
+              [
+                { to: "/tenders", label: "Tenders", icon: FileText },
+                { to: "/tenders/finder", label: "Tender finder", icon: Search },
+                { to: "/tenders/report", label: "Bid report", icon: FileText },
+                { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
+              ],
+              "Tenders",
+            ),
             ordersLink("Team orders"),
             { to: "/collections", label: "Collections", icon: HandCoins },
             folder(
@@ -1123,9 +1133,16 @@ function ownDesk(me: Me): Space {
           ...desk([
             home,
             { to: "/my-team", label: "Whole business", icon: Users, teams: true },
-            { to: "/tenders", label: "Tenders", icon: FileText },
-            { to: "/tenders/finder", label: "Tender finder", icon: Search, short: "Finder" },
-            { to: "/tenders/report", label: "Bid report", icon: FileText },
+            folder(
+              "Tenders",
+              FileText,
+              [
+                { to: "/tenders", label: "Tenders", icon: FileText },
+                { to: "/tenders/finder", label: "Tender finder", icon: Search },
+                { to: "/tenders/report", label: "Bid report", icon: FileText },
+              ],
+              "Tenders",
+            ),
             { to: "/clidp/road", label: "CLIDP pharmacies", icon: Building2 },
             { to: "/team-scores", label: "Scorecards", icon: Gauge, short: "Scores" },
             { to: "/targets", label: "Targets", icon: Target },
@@ -1210,7 +1227,7 @@ function ownDesk(me: Me): Space {
               FileText,
               [
                 { to: "/tenders", label: "Tenders", icon: FileText },
-                { to: "/tenders/finder", label: "Tender finder", icon: Search, short: "Finder" },
+                { to: "/tenders/finder", label: "Tender finder", icon: Search },
                 { to: "/tenders/report", label: "Bid report", icon: FileText },
                 { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
               ],
