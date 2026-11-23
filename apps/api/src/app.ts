@@ -128,7 +128,10 @@ export function createApp(db: Database, options: AppOptions) {
   app.use("/api/*", cors({ origin: options.webUrl, credentials: true }));
   app.use("/api/auth/*", atMost(16 * 1024));
   app.use("/api/*", atMost(50 * MB));
-  app.use("/webhooks/*", atMost(2 * MB));
+  // A webhook is small, but for the tender papers the robot hands in (bid documents, tens of MB).
+  const small = atMost(2 * MB);
+  const paper = atMost(60 * MB);
+  app.use("/webhooks/*", (c, next) => (c.req.path === "/webhooks/tender-finder/papers/file" ? paper(c, next) : small(c, next)));
 
   app.onError((error, c) => {
     if (error instanceof Refusal) {

@@ -1,0 +1,93 @@
+import { createClient } from '@supabase/supabase-js';
+import { OCR_VERSION } from './ocr.mjs';
+import { wakeDocs } from './docsIdle.mjs';
+import { allRows } from './allRows.mjs';
+
+// Scanned documents still waiting to be read with OCR, on both sides, and the ocr_status row the dashboard
+// reads (schema.sql). A document "waits" when the last reading listed it as scanned without OCR text
+// (documents_read: { kind: 'scanned' } and no `ocr` mark). Used by the GitHub OCR job (scripts/ocr-job.mjs,
+// layer 1) and the Google Vision backup (ocrVision.mjs, layer 2).
+// Plain .mjs (no Next imports) so it can also be run directly with node.
+
+export function admin() {
+  const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!url || !process.env.SUPABASE_KEY) throw new Error('SUPABASE_URL and SUPABASE_KEY are not set.');
+  return createClient(url, process.env.SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+}
+
+// Scanned documents of a reading: tried = the current OCR (tesseract) already ran and found no readable text.
+// One an older OCR found nothing in counts as waiting: the current one reads more (OCR_VERSION in ocr.mjs).
+// So does one an older OCR read (ocr_pages, kind 'text'): the current one reads it better. And a text file with
+// scanned pages OCR couldn't run on where it was read (ocr_waiting, psDocs.mjs): until OCR reads them its file is
+// kept (documentKeep.mjs fullyRead), so one left out here waited for ever (64 PS files, 113 MB, 2026-11-10).
+const scannedIn = (read) =>
+  (read || [])
+    .filter((d) => d.kind === 'scanned' || d.ocr_waiting || (d.ocr_pages && d.ocr !== OCR_VERSION))
+    .map((d) => ({ name: d.name, tried: d.kind === 'scanned' && d.ocr === OCR_VERSION }));
+
+// [{ side: 'ps' | 'philgeps', ref, bucket, doc: { name, path, size }, since, tried }] oldest first.
+// Without includeTried only the documents OCR hasn't run on yet (what the dashboard counts as waiting).
+export async function scannedWaiting(supabase, { includeTried = false } = {}) {
+  const out = [];
+
+  // PS-PhilGEPS: ps_tender_analysis (what was read) + the snapshot's notices (where the files are), only the
+  // documents of the tenders with scanned files, not every notice (~0.8 MB each time: Supabase egress, 2026-11-19)
+  const { data: readings } = await allRows(() => supabase.from('ps_tender_analysis').select('ref, documents_read, analyzed_at').order('ref'));
+  const scanned = (readings || []).filter((r) => scannedIn(r.documents_read).length);
+  const docsOf = new Map();
+  for (let i = 0; i < scanned.length; i += 40) {
+    const refs = scanned.slice(i, i + 40).map((r) => r.ref).filter((ref) => /^\d+$/.test(ref));
+    if (!refs.length) continue;
+    const { data } = await supabase.from('ps_philgeps_snapshot').select(refs.map((ref) => `d${ref}:notices->"${ref}"->documents`).join(',')).eq('id', 'latest').maybeSingle();
+    for (const ref of refs) docsOf.set(ref, data?.[`d${ref}`] || []);
+  }
+  for (const r of scanned) {
+    const docs = docsOf.get(r.ref) || [];
+    for (const { name, tried } of scannedIn(r.documents_read)) {
+      if (tried && !includeTried) continue;
+      const doc = docs.find((d) => d.name === name && d.path && !d.removed);
+      if (doc) out.push({ side: 'ps', ref: r.ref, bucket: 'ps-documents', doc, since: r.analyzed_at, tried });
+    }
+  }
+
+  // PhilGEPS: philgeps_opportunities.details (documents and what was read from them), open tenders only (a
+  // closed one's scans are never bid on; ~0.5 MB for all of them each time)
+  const { data: rows } = await supabase
+    .from('philgeps_opportunities')
+    .select('ref_no, details->documents, details->documents_read, details->documents_checked_at')
+    .not('details->documents_read', 'is', null)
+    .or(`closing_date.is.null,closing_date.gt.${new Date().toISOString()}`);
+  for (const o of rows || []) {
+    for (const { name, tried } of scannedIn(o.documents_read)) {
+      if (tried && !includeTried) continue;
+      const doc = (o.documents || []).find((d) => d.name === name && d.path && !d.removed);
+      if (doc) out.push({ side: 'philgeps', ref: o.ref_no, bucket: 'philgeps-documents', doc, since: o.documents_checked_at || null, tried });
+    }
+  }
+  return out.sort((a, b) => String(a.since || '').localeCompare(String(b.since || '')));
+}
+
+// Updates ocr_status: how many scanned documents wait, since when, plus the given fields
+export async function saveOcrStatus(supabase, fields = {}) {
+  const waiting = await scannedWaiting(supabase);
+  const oldest = waiting.find((w) => w.since)?.since || null;
+  await supabase
+    .from('ocr_status')
+    .update({ ...fields, waiting: waiting.length, oldest_waiting_since: oldest, updated_at: new Date().toISOString() })
+    .eq('id', 'latest');
+  return waiting;
+}
+
+// After new OCR text is cached for a document, make its tender be read again with it:
+// PS-PhilGEPS by forgetting the reading's key, PhilGEPS by forgetting documents_read_key
+export async function rereadTender(supabase, side, ref) {
+  if (side === 'ps') {
+    await supabase.from('ps_tender_analysis').update({ documents_key: null }).eq('ref', ref);
+    // The keep-alive's document run looks again (it stops early when nothing changed, lib/docsIdle.mjs)
+    await wakeDocs(supabase);
+    return;
+  }
+  const { data } = await supabase.from('philgeps_opportunities').select('details').eq('ref_no', ref).maybeSingle();
+  if (!data?.details) return;
+  await supabase.from('philgeps_opportunities').update({ details: { ...data.details, documents_read_key: null } }).eq('ref_no', ref);
+}

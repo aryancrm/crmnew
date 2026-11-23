@@ -263,7 +263,8 @@ describe("the tender finder: the robot's door", () => {
     // The budget for one piece worked out from the line's total.
     expect(read.lines).toMatchObject([{ itemNo: "7", qty: 5000, unit: "tablet", abcTotal: 11398000, abcUnit: 2280, medicine: "Letrozole 2.5 mg" }]);
     const [kept] = await rows<{ details: Record<string, unknown> }>(db, sql`select details from tender_found where id = ${id}`);
-    expect(Object.keys(kept?.details ?? {})).toEqual(["notice_type"]);
+    // What is kept of the details: the notice's facts and its own lines; nothing unknown.
+    expect(Object.keys(kept?.details ?? {})).toEqual(["notice_type", "matched_items"]);
 
     // The robot asks what it has read already, and gets it back as it sent it.
     const known = (await (await robot("known", { refs: ["13000001", "99999999"] })).json()) as { ref_no: string; abc_amount: number; items_text: string }[];
@@ -498,5 +499,125 @@ describe("the tender finder: the team's pages", () => {
       expect(refused.status).toBe(400);
       expect((await one("hazel", await idOf("13000010"))).found.tenderId).toBeNull();
     }
+  });
+});
+
+describe("the tender papers", () => {
+  const door = (path: string, init: RequestInit = {}) =>
+    app.request(`/webhooks/tender-finder/${path}`, { ...init, headers: { authorization: `Bearer ${KEY}`, ...(init.headers as Record<string, string> | undefined) } });
+
+  it("the robot is told which notices want their papers (screened, open, on PhilGEPS) and our medicines as its product list", async () => {
+    process.env.TENDER_FINDER_KEY = KEY;
+    const products = (await (await door("products")).json()) as { generic_name: string; brand_name: string; dosage: string }[];
+    expect(products.find((one) => one.generic_name === "Imatinib mesylate")).toMatchObject({ brand_name: "Imatinib", dosage: "400 mg" });
+    // The seed's screened notice is on the other portal: not for this log-in.
+    const before = (await (await door("papers")).json()) as { ref_no: string }[];
+    expect(before.map((one) => one.ref_no)).not.toContain("109877");
+    expect(before.map((one) => one.ref_no)).not.toContain("12451017");
+    expect((await post("hazel", `/api/tenders/found/${await idOf("12451017")}/screen`, { on: true })).status).toBe(200);
+    const wanted = (await (await door("papers")).json()) as { ref_no: string; closing_date: string; abc_amount: number; items_text: string; details: Record<string, unknown> }[];
+    const one = wanted.find((row) => row.ref_no === "12451017");
+    expect(one).toMatchObject({ abc_amount: 486000, procuring_entity: "Department of Health - Central Office" });
+    // Philippine time without a zone, as the robot keeps a notice.
+    expect(one?.closing_date).toMatch(/^\d{4}-\d{2}-\d{2} 10:00:00$/);
+    expect((await app.request("/webhooks/tender-finder/papers")).status).toBe(401);
+  });
+
+  it("a paper is kept whole, shown on the notice to the seats that have the finder, and given back to the robot", async () => {
+    const id = await idOf("12451017");
+    const bytes = new Uint8Array(3 * 1024 * 1024).map((_, n) => n % 251);
+    const query = new URLSearchParams({ ref: "12451017", path: "12451017/Price Schedule.pdf", name: "Price Schedule.pdf", kind: "paper" });
+    const kept = await door(`papers/file?${query}`, { method: "POST", body: bytes, headers: { "content-type": "application/octet-stream" } });
+    expect(kept.status).toBe(200);
+    // A bid bulletin's file, and the same paper handed in again takes the first one's place.
+    await door(`papers/file?${new URLSearchParams({ ref: "12451017", path: "12451017/Bid Bulletin 1 - BB1.pdf", name: "Bid Bulletin 1 - BB1.pdf", kind: "bulletin" })}`, { method: "POST", body: new Uint8Array([1, 2, 3]) });
+    await door(`papers/file?${query}`, { method: "POST", body: bytes });
+    expect((await door(`papers/file?${new URLSearchParams({ ref: "99999999", path: "x", name: "x.pdf" })}`, { method: "POST", body: bytes })).status).toBe(404);
+    expect((await door("papers/file?ref=12451017", { method: "POST", body: bytes })).status).toBe(400);
+    // Any other webhook stays small.
+    expect((await door("notices", { method: "POST", body: bytes, headers: { "content-type": "application/json" } })).status).toBe(413);
+
+    const detail = await one("hazel", id);
+    expect(detail.papers.files.map((file) => [file.kind, file.name, file.size])).toEqual([
+      ["paper", "Price Schedule.pdf", bytes.byteLength],
+      ["bulletin", "Bid Bulletin 1 - BB1.pdf", 3],
+    ]);
+    const fileId = detail.papers.files[0]?.id as number;
+    const opened = await get("jimmy", `/api/tenders/found/files/${fileId}`);
+    expect(opened.status).toBe(200);
+    expect(opened.headers.get("content-type")).toBe("application/pdf");
+    expect(opened.headers.get("content-disposition")).toContain("attachment");
+    expect(new Uint8Array(await opened.arrayBuffer())).toEqual(bytes);
+    expect((await get("ryan", `/api/tenders/found/files/${fileId}`)).status).toBe(403);
+    expect((await app.request(`/api/tenders/found/files/${fileId}`)).status).toBe(401);
+    const back = await door(`papers/file?${new URLSearchParams({ ref: "12451017", path: "12451017/Price Schedule.pdf" })}`);
+    expect(new Uint8Array(await back.arrayBuffer()).byteLength).toBe(bytes.byteLength);
+    expect((await door(`papers/file?${new URLSearchParams({ ref: "12451017", path: "nothing" })}`)).status).toBe(404);
+  });
+
+  it("what was read in the papers becomes the notice's lines, stays when the notice is read again, and its page says what the papers say", async () => {
+    const id = await idOf("12451017");
+    const wanted = (await (await door("papers")).json()) as (Record<string, unknown> & { ref_no: string; details: Record<string, unknown> })[];
+    const notice = wanted.find((row) => row.ref_no === "12451017") as (typeof wanted)[number];
+    const read = {
+      ...notice.details,
+      documents: [{ name: "Price Schedule.pdf", title: "Bidding Documents", size: 3145728, path: "12451017/Price Schedule.pdf", order_no: "5551", source: "order", downloaded_at: "2026-11-23T09:00:00.000Z" }],
+      documents_status: "downloaded",
+      documents_remark: "Ordered by the system on PhilGEPS (free) (order 5551); 1 file downloaded.",
+      documents_checked_at: "2026-11-23T09:00:00.000Z",
+      documents_items: [
+        { our_products: ["Letrozole"], item_no: "1", description: "Letrozole 2.5 mg film-coated tablet", quantity: 15000, unit: "tablet", unit_price: 21, total: 315000, line: "1 Letrozole 2.5 mg film-coated tablet 15,000 tablet 21.00 315,000.00", source: "Price Schedule.pdf, page 1" },
+      ],
+      documents_read: [{ name: "Price Schedule.pdf", kind: "text", pages: 4 }],
+      documents_read_key: "read-63|list-1|12451017/Price Schedule.pdf:3145728",
+      documents_accuracy: { percent: 100, reasons: [], version: 1 },
+      documents_bid_data_sheet: { prebid_conference: "November 27, 2026 at 10:00 AM, BAC Conference Room", bid_opening: null, bid_security: "Bid Securing Declaration" },
+      documents_outside_table: [{ line: "x".repeat(1000) }],
+    };
+    expect((await robot("notices", { notices: [{ ...notice, source: "philgeps", details: read }] })).status).toBe(200);
+    const detail = await one("hazel", id);
+    // The papers' line for Letrozole takes the notice's own; the notice's line stays for the molecule the papers do not give.
+    expect(detail.lines.map((line) => [line.origin, line.medicine, line.qty, line.abcUnit])).toEqual([
+      ["papers", "Letrozole 2.5 mg", 15000, 2100],
+      ["notice", "Anastrozole 1 mg", 9000, 2400],
+    ]);
+    expect(detail.papers).toMatchObject({
+      status: "downloaded",
+      remark: "Ordered by the system on PhilGEPS (free) (order 5551); 1 file downloaded.",
+      accuracy: 100,
+      reading: false,
+      sheet: [
+        { label: "Pre-bid conference", said: "November 27, 2026 at 10:00 AM, BAC Conference Room" },
+        { label: "Bid security", said: "Bid Securing Declaration" },
+      ],
+    });
+    // The robot gets its own record back (to know what is done), without what is only for checking.
+    const known = (await (await robot("known", { refs: ["12451017"] })).json()) as { details: Record<string, unknown> }[];
+    expect(known[0]?.details).toMatchObject({ documents_status: "downloaded", documents_read_key: read.documents_read_key, documents_checked_at: read.documents_checked_at });
+    expect(known[0]?.details.documents_outside_table).toBeUndefined();
+    // The next hour's reading of the public notice hands that record back: the papers' lines stay.
+    await robot("notices", { notices: [{ ref_no: "12451017", title: notice.title, items_text: notice.items_text, details: known[0]?.details }] });
+    expect((await one("hazel", id)).lines.map((line) => line.origin)).toEqual(["papers", "notice"]);
+  });
+
+  it("the robot's log-ins are kept; a refused one stops it until a person says to try again", async () => {
+    const state = async () => (await list("hazel")).robot.login;
+    expect((await state()).state).toBe("never");
+    const note = (outcome: string, detail?: string) => door("logins", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ site: "philgeps", outcome, detail, source: "github" }) });
+    await note("started");
+    await note("ok");
+    expect(await state()).toMatchObject({ state: "ok" });
+    expect((await post("hazel", "/api/tenders/found/robot/login-again", {})).status).toBe(409);
+    await note("started");
+    await note("rejected", 'PhilGEPS did not accept the log-in: "Invalid User ID or Password."');
+    expect(await state()).toMatchObject({ state: "refused", said: 'PhilGEPS did not accept the log-in: "Invalid User ID or Password."' });
+    expect(await (await door("login-state")).json()).toMatchObject({ state: "refused" });
+    const kept = (await (await door("logins?site=philgeps")).json()) as { outcome: string }[];
+    expect(kept.map((one) => one.outcome)).toEqual(["rejected", "started", "ok", "started"]);
+    expect((await post("ryan", "/api/tenders/found/robot/login-again", {})).status).toBe(403);
+    expect((await post("jimmy", "/api/tenders/found/robot/login-again", {})).status).toBe(200);
+    expect(await state()).toMatchObject({ state: "ok", said: "A person said to try the log-in again." });
+    expect(await (await door("login-state")).json()).toMatchObject({ state: "ok" });
+    expect((await door("logins", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ site: "philgeps", outcome: "made-up" }) })).status).toBe(400);
   });
 });

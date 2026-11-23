@@ -103,4 +103,37 @@ async function send(notices) {
 // How a run went: { source, trigger, status: 'success' | 'failed', summary, found, matched, fresh }
 const run = (report) => call('run', { ...report, summary: String(report.summary || '').slice(0, 2000) });
 
-module.exports = { molecules, known, send, run };
+// ---- the tender papers (papers/papers.mjs) ----
+
+// Our medicines as the paper reader's product list: [{ generic_name, brand_name, dosage, dosage_form, ... }]
+const products = () => call('products');
+
+// The notices whose papers the robot looks after (the ones the team screened), as it keeps a notice
+const papers = () => call('papers');
+
+// Bytes in, bytes out: a paper handed to the CRM, a kept paper asked back (null when the CRM has none)
+async function raw(pathAndQuery, bytes) {
+    const res = await fetch(`${base()}/${pathAndQuery}`, {
+        method: bytes ? 'POST' : 'GET',
+        headers: { authorization: `Bearer ${await whoIAm()}`, ...(bytes ? { 'content-type': 'application/octet-stream' } : {}) },
+        body: bytes || undefined,
+        signal: AbortSignal.timeout(300000)
+    });
+    if (res.status === 404 && !bytes) return null;
+    if (!res.ok) {
+        const said = await res.json().catch(() => ({}));
+        throw new Error(`The CRM refused a paper (${res.status}): ${said.error?.message || res.statusText}`);
+    }
+    return bytes ? res.json() : Buffer.from(await res.arrayBuffer());
+}
+const query = (fields) => new URLSearchParams(fields).toString();
+const keepPaper = ({ ref, path, name, bulletin, bytes }) => raw(`papers/file?${query({ ref, path, name, kind: bulletin ? 'bulletin' : 'paper' })}`, bytes);
+const paper = (ref, path) => raw(`papers/file?${query({ ref, path })}`);
+
+// The robot's log-ins to a portal, kept by the CRM across runs: the last day's (for the guard's counts),
+// a new one, and where the log-in stands ({ state: 'never' | 'ok' | 'refused' | 'busy' | 'trouble', at, said })
+const logins = (site, since) => call(`logins?${query({ site, ...(since ? { since } : {}) })}`);
+const login = (row) => call('logins', { site: row.site, outcome: row.outcome, detail: row.detail || null, source: row.source || null });
+const loginState = () => call('login-state');
+
+module.exports = { molecules, known, send, run, products, papers, keepPaper, paper, logins, login, loginState };

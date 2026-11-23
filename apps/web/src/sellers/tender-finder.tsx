@@ -3,7 +3,7 @@
 // ones made tenders, and everything found; a notice's own page with what it asks line by line;
 // and the join: Make it a tender, after which the tender's own page takes over (tenders.tsx).
 
-import type { Catalogue, CustomerList, FoundDetail, FoundLine, FoundList, FoundTender, FoundView, TenderMode } from "@2mg/api/types";
+import type { Catalogue, CustomerList, FoundDetail, FoundLine, FoundList, FoundPapers, FoundTender, FoundView, TenderMode } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Search } from "lucide-react";
 import { useState } from "react";
@@ -61,6 +61,8 @@ function State({ found }: { found: FoundTender }) {
 
 /** The robot's last word: when it last read the portals and what it found; its earlier runs under it. */
 function Robot({ robot }: { robot: FoundList["robot"] }) {
+  const queries = useQueryClient();
+  const action = useAction();
   const [last, ...earlier] = robot.runs;
   // It runs every hour of the working day: a day with no word from it is worth a look.
   const hours = last ? Math.floor((Date.now() - Date.parse(last.at)) / 3_600_000) : 0;
@@ -86,6 +88,37 @@ function Robot({ robot }: { robot: FoundList["robot"] }) {
           quiet !== null && <span className="text-[12px] font-semibold text-amber-700">No run for {quiet} hours</span>
         )}
       </div>
+      {robot.login.state === "refused" && (
+        <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[12.5px] text-rose-900">
+          <b>PhilGEPS refused the robot's log-in</b>
+          {robot.login.at ? ` (${when(robot.login.at)})` : ""}
+          {robot.login.said ? `: ${robot.login.said}` : "."} The papers of screened tenders wait. The robot does not send a refused password again by
+          itself (that locks the account): once the password is put right where the robot keeps it,{" "}
+          <button
+            type="button"
+            disabled={action.busy}
+            className="font-semibold underline disabled:opacity-50"
+            onClick={() =>
+              void action.run(async () => {
+                await api("/api/tenders/found/robot/login-again", { method: "POST", body: {} });
+                await queries.invalidateQueries({ queryKey: ["tenders", "found"] });
+              })
+            }
+          >
+            let it try again
+          </button>
+          .
+          <Problem message={action.problem?.message} />
+        </div>
+      )}
+      {robot.login.state === "busy" && (
+        <p className="mt-1 text-[12px] text-amber-700">
+          The PhilGEPS account was in use on another computer{robot.login.at ? ` at ${when(robot.login.at)}` : ""}: the robot tries the papers again later.
+        </p>
+      )}
+      {robot.login.state === "never" && (
+        <p className="mt-1 text-[12px] text-slate-500">Tender papers: the robot has not logged in to PhilGEPS yet (it needs the company's log-in); screened tenders' papers wait for it.</p>
+      )}
       {earlier.length > 0 && (
         <details className="mt-1">
           <summary className="cursor-pointer text-[12px] font-semibold text-slate-500">Its earlier runs</summary>
@@ -449,6 +482,80 @@ function MakeTenderDialog({ detail, onClose }: { detail: FoundDetail; onClose: (
   );
 }
 
+const PAPERS: Record<string, string> = {
+  downloaded: "Downloaded from PhilGEPS",
+  "needs-payment": "PhilGEPS asks a payment for these papers: the robot did not order them (it never pays)",
+  "pick-up": "Only by pick-up at the agency",
+  closed: "The notice is closed on PhilGEPS",
+  "none-found": "PhilGEPS has no papers for this notice",
+  "no-order-link": "The notice has no way to order its papers",
+  "order-flow-changed": "PhilGEPS showed an unexpected page, so the robot stopped; it tries again",
+};
+const fileSize = (bytes: number) => (bytes >= 1_048_576 ? `${(bytes / 1_048_576).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
+
+/** The notice's papers: the bid documents the robot got from PhilGEPS (ordered there at no cost
+ *  in the company's name, for screened notices), what it said, and what the bid data sheet says. */
+function Papers({ found, papers, listed }: { found: FoundTender; papers: FoundPapers; listed: string[] }) {
+  const waiting =
+    found.source === "ps"
+      ? "PS-PhilGEPS's papers are not read by the robot yet."
+      : !found.open
+        ? "The notice is closed: its papers were not got."
+        : found.screenedAt
+          ? "Screened: the robot gets its papers from PhilGEPS on its next run (every hour, 6 am to 5 pm)."
+          : "Add it to screened and the robot gets its papers from PhilGEPS (ordered there in the company's name, at no cost; it never pays).";
+  return (
+    <section className={`${CARD} p-4`}>
+      <h3 className="text-sm font-bold text-slate-900">
+        Its papers {papers.files.length > 0 && <span className="font-normal text-slate-400">· {papers.files.length}</span>}
+      </h3>
+      <p className={`mt-1 text-[12.5px] ${papers.status && papers.status !== "downloaded" ? "text-amber-800" : "text-slate-600"}`}>
+        {papers.status ? (PAPERS[papers.status] ?? papers.status) : waiting}
+        {papers.checkedAt ? ` · looked at ${when(papers.checkedAt)}` : ""}
+      </p>
+      {papers.remark && papers.status === "downloaded" && <p className="text-[12px] text-slate-500">{papers.remark}</p>}
+      {papers.files.length > 0 ? (
+        <ul className="mt-2 space-y-1 text-[13px]">
+          {papers.files.map((file) => (
+            <li key={file.id} className="flex flex-wrap items-baseline justify-between gap-2">
+              <a href={`/api/tenders/found/files/${file.id}`} className="min-w-0 font-semibold text-emerald-700 hover:underline">
+                {file.name}
+              </a>
+              <span className="shrink-0 text-[11.5px] text-slate-500">
+                {file.kind === "bulletin" ? "bid bulletin · " : ""}
+                {fileSize(file.size)}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        listed.length > 0 && (
+          <ul className="mt-2 space-y-0.5 text-[12.5px] text-slate-700">
+            {listed.map((name) => (
+              <li key={name}>{name}</li>
+            ))}
+          </ul>
+        )
+      )}
+      {papers.reading && <p className="mt-2 text-[12px] text-sky-800">Scanned pages are still being read: their lines come with the next runs.</p>}
+      {papers.readNote && !papers.reading && <p className="mt-2 text-[12px] text-amber-800">{papers.readNote}</p>}
+      {papers.accuracy !== null && papers.accuracy <= 70 && (
+        <p className="mt-2 text-[12px] font-semibold text-amber-800">The reading may be off ({papers.accuracy}%): check the lines against the paper.</p>
+      )}
+      {papers.sheet.length > 0 && (
+        <dl className="mt-3 space-y-1.5 border-t border-slate-100 pt-2">
+          {papers.sheet.map((one) => (
+            <div key={one.label}>
+              <dt className="text-[11.5px] font-semibold text-slate-500">{one.label} (as the papers say)</dt>
+              <dd className="text-[12.5px] text-slate-800">{one.said}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </section>
+  );
+}
+
 const EVENT: Record<string, string> = { screened: "Added to screened", unscreened: "Taken off screened", agency: "Its customer picked", tender: "Made a tender" };
 
 export function FoundTenderPage() {
@@ -588,35 +695,21 @@ export function FoundTenderPage() {
             ))}
           </section>
         )}
-        {(d.supplements.length > 0 || d.documents.length > 0) && (
+        <Papers found={found} papers={data.papers} listed={d.documents} />
+        {d.supplements.length > 0 && (
           <section className={`${CARD} p-4`}>
-            {d.supplements.length > 0 && (
-              <>
-                <h3 className="text-sm font-bold text-slate-900">Bid bulletins and addenda</h3>
-                <ul className="mt-1 space-y-0.5 text-[12.5px] text-slate-700">
-                  {d.supplements.map((one) => (
-                    <li key={`${one.no}-${one.title}`}>
-                      {one.no}. {one.title}
-                      <span className="text-slate-500">
-                        {one.type ? ` · ${one.type}` : ""}
-                        {one.published ? ` · ${dayLabel(one.published)}` : ""}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-            {d.documents.length > 0 && (
-              <>
-                <h3 className={`text-sm font-bold text-slate-900 ${d.supplements.length ? "mt-3" : ""}`}>Its papers</h3>
-                <ul className="mt-1 space-y-0.5 text-[12.5px] text-slate-700">
-                  {d.documents.map((name) => (
-                    <li key={name}>{name}</li>
-                  ))}
-                </ul>
-                <p className="mt-1 text-[11.5px] text-slate-500">Read by the robot; the files open on the portal.</p>
-              </>
-            )}
+            <h3 className="text-sm font-bold text-slate-900">Bid bulletins and addenda</h3>
+            <ul className="mt-1 space-y-0.5 text-[12.5px] text-slate-700">
+              {d.supplements.map((one) => (
+                <li key={`${one.no}-${one.title}`}>
+                  {one.no}. {one.title}
+                  <span className="text-slate-500">
+                    {one.type ? ` · ${one.type}` : ""}
+                    {one.published ? ` · ${dayLabel(one.published)}` : ""}
+                  </span>
+                </li>
+              ))}
+            </ul>
           </section>
         )}
       </div>

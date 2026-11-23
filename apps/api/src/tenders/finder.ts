@@ -10,6 +10,7 @@ import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
 import type { FindRun, FoundDetail, FoundLine, FoundList, FoundTender, FoundView, Me, TenderMode } from "../types";
+import { papersOf, robotLoginState } from "./papers";
 import { robotReady } from "./robot-caller";
 import { createTender, recordsTenders, setLines } from "./service";
 
@@ -274,7 +275,7 @@ type RobotItem = { line?: unknown; description?: unknown; item_no?: unknown; qua
 /** What of a notice's details is kept (and given back to the robot, which re-reads only what is new). */
 const KEPT = [
   "notice_type", "solicitation_no", "procurement_mode", "classification", "area_of_delivery", "delivery_period", "client_agency",
-  "contact_name", "status", "last_updated", "pre_bid", "bid_opening", "supplements_checked_at", "documents_status",
+  "contact_name", "status", "last_updated", "pre_bid", "bid_opening", "supplements_checked_at",
 ] as const;
 function keptDetails(details: Record<string, unknown>): Record<string, unknown> {
   const kept: Record<string, unknown> = {};
@@ -290,8 +291,20 @@ function keptDetails(details: Record<string, unknown>): Record<string, unknown> 
       type: short(one?.type, 80) ?? "",
       published: isoDay(short(one?.published, 20)),
     }));
+  // The papers' own record (which files, what was read in them, what is still to read), kept as
+  // the robot hands it in: it reads it back to know what is done. Its lines too, and the notice's
+  // own (matched_items), so a later hand-in of only one of the two does not lose the other.
+  for (const [key, value] of Object.entries(details)) {
+    if (!/^documents(?:_|$)/.test(key) && key !== "package" && key !== "matched_items") continue;
+    if (key === "documents_outside_table" || value === undefined) continue;
+    const size = JSON.stringify(value ?? null).length;
+    if (size <= 400_000) kept[key] = value;
+  }
   if (Array.isArray(details.documents))
-    kept.documents = (details.documents as Record<string, unknown>[]).slice(0, 60).map((one) => ({ name: short(one?.name, 200) ?? "" })).filter((one) => one.name);
+    kept.documents = (details.documents as Record<string, unknown>[])
+      .slice(0, 80)
+      .map((one) => ({ ...one, name: short(one?.name, 200) ?? "" }))
+      .filter((one) => one.name);
   return kept;
 }
 
@@ -356,18 +369,21 @@ function linesOf(notice: RobotNotice, match: (text: string) => LineMatch): ReadL
   const papers = list(details.documents_items).map((item) => read(item, "papers")).filter((line): line is ReadLine => line !== null && line.qty !== null);
   const inPapers = new Set(papers.flatMap((line) => line.match.molecules));
   const table = tableLines(notice.items_text, match);
-  const onNotice = (table ?? list(details.matched_items).map((item) => read(item, "notice")))
+  // With no table of PhilGEPS's own and no lines kept by the robot: each line of the notice's
+  // text that names a molecule of ours, as written.
+  const named = (): ReadLine[] =>
+    String(notice.items_text ?? "")
+      .split("\n")
+      .map((line) => line.replace(/\s+/g, " ").trim())
+      .filter((line) => line.length >= 3)
+      .map((line) => ({ line, hit: match(line) }))
+      .filter(({ hit }) => hit.molecules.length > 0)
+      .slice(0, 400)
+      .map(({ line, hit }) => ({ origin: "notice" as const, itemNo: null, description: line.slice(0, 500), qty: null, unit: null, abcUnit: null, abcTotal: null, match: hit }));
+  const kept = list(details.matched_items);
+  const onNotice = (table ?? (kept.length ? kept.map((item) => read(item, "notice")) : named()))
     .filter((line): line is ReadLine => line !== null && !(line.match.molecules.length > 0 && line.match.molecules.every((name) => inPapers.has(name))));
-  const lines = [...papers, ...onNotice];
-  if (lines.length || table) return lines.slice(0, 400);
-  return String(notice.items_text ?? "")
-    .split("\n")
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter((line) => line.length >= 3)
-    .map((line) => ({ line, hit: match(line) }))
-    .filter(({ hit }) => hit.molecules.length > 0)
-    .slice(0, 400)
-    .map(({ line, hit }) => ({ origin: "notice" as const, itemNo: null, description: line.slice(0, 500), qty: null, unit: null, abcUnit: null, abcTotal: null, match: hit }));
+  return [...papers, ...onNotice].slice(0, 400);
 }
 
 /** What the robot found, kept: a notice seen before is brought up to date (what a later run does
@@ -533,7 +549,7 @@ export async function listFound(
   if (asked.source === "philgeps" || asked.source === "ps") filters.push(sql`f.source = ${asked.source}`);
   if (asked.molecule?.trim()) filters.push(sql`${asked.molecule.trim()} = any(f.molecules)`);
   const where = filters.length ? sql.join(filters, sql` and `) : sql`true`;
-  const [found, [counts], molecules, runs] = await Promise.all([
+  const [found, [counts], molecules, runs, login] = await Promise.all([
     rows<FoundTender>(db, sql`${foundSelect} where ${VIEW[view]} and ${where} order by ${ORDER[view]} limit 300`),
     rows<Record<FoundView, number>>(
       db,
@@ -543,13 +559,14 @@ export async function listFound(
     ),
     rows<{ name: string }>(db, sql`select distinct unnest(molecules) as name from tender_found order by 1`),
     lastRuns(db),
+    robotLoginState(db),
   ]);
   return {
     view,
     rows: found,
     counts: counts ?? { new: 0, screened: 0, tenders: 0, all: 0 },
     molecules: molecules.map((one) => one.name),
-    robot: { ready: robotReady(), runs },
+    robot: { ready: robotReady(), runs, login },
   };
 }
 
@@ -634,6 +651,7 @@ export async function foundDetail(db: Database, me: Me, id: number): Promise<Fou
       },
     },
     lines,
+    papers: await papersOf(db, id, raw),
     events,
     agencies,
     mode: modeOf(rest.noticeType, rest.procurementMode),

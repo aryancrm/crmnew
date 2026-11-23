@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { Database } from "../db/index";
 import { type Env, idParam, readBody } from "../http";
 import { foundCount, foundDetail, listFound, makeTender, noteRun, robotKnown, robotMolecules, screenFound, takeFound } from "./finder";
+import { foundFile, keepPaper, noteRobotLogin, paperForRobot, papersWanted, robotLoginState, robotLogins, robotProducts, tryLoginAgain } from "./papers";
 import { robotCaller } from "./robot-caller";
 import {
   addCompanyPaper,
@@ -63,6 +64,21 @@ export function tenderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
     c.json(await listFound(db, c.get("me"), { view: c.req.query("view"), q: c.req.query("q"), source: c.req.query("source"), molecule: c.req.query("molecule") })),
   );
   app.get("/api/tenders/found/count", async (c) => c.json(await foundCount(db, c.get("me"))));
+  // A paper of a notice, as the robot got it from PhilGEPS: downloaded, never run in the page.
+  app.get("/api/tenders/found/files/:id", async (c) => {
+    const file = await foundFile(db, c.get("me"), idParam(c));
+    return c.body(file.bytes as Uint8Array<ArrayBuffer>, 200, {
+      "content-type": file.mime,
+      "content-disposition": `attachment; filename="${encodeURIComponent(file.name)}"`,
+      "x-content-type-options": "nosniff",
+      "cache-control": "private, max-age=86400",
+    });
+  });
+  // The robot's PhilGEPS log-in was refused: a person, the password put right, lets it try again.
+  app.post("/api/tenders/found/robot/login-again", async (c) => {
+    await tryLoginAgain(db, c.get("me"));
+    return c.json({ ok: true });
+  });
   app.get("/api/tenders/found/:id", async (c) => c.json(await foundDetail(db, c.get("me"), idParam(c))));
   app.post("/api/tenders/found/:id/screen", async (c) => {
     const input = await readBody(c, z.object({ on: z.boolean() }));
@@ -207,6 +223,38 @@ export function tenderFinderDoor(app: Hono<Env>, db: Database): void {
       }),
     );
     return c.json(await takeFound(db, input.notices));
+  });
+  // The tender papers (tenders/papers.ts): our medicines as the paper reader's product list, the
+  // notices whose papers it looks after, a paper handed in or asked back, and its PhilGEPS log-ins.
+  app.get("/webhooks/tender-finder/products", async (c) => c.json(await robotProducts(db)));
+  app.get("/webhooks/tender-finder/papers", async (c) => c.json(await papersWanted(db)));
+  app.post("/webhooks/tender-finder/papers/file", async (c) => {
+    const ref = (c.req.query("ref") ?? "").trim();
+    const path = (c.req.query("path") ?? "").trim();
+    const name = (c.req.query("name") ?? "").trim();
+    if (!ref || !path || !name || ref.length > 60 || path.length > 400) return c.json({ error: { code: "invalid", message: "Say the notice, the file's path and its name." } }, 400);
+    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    return c.json(await keepPaper(db, { ref, path, name, bulletin: c.req.query("kind") === "bulletin", bytes }));
+  });
+  app.get("/webhooks/tender-finder/papers/file", async (c) => {
+    const bytes = await paperForRobot(db, (c.req.query("ref") ?? "").trim(), (c.req.query("path") ?? "").trim());
+    if (!bytes) return c.json({ error: { code: "not_found", message: "No such paper." } }, 404);
+    return c.body(bytes as Uint8Array<ArrayBuffer>, 200, { "content-type": "application/octet-stream" });
+  });
+  app.get("/webhooks/tender-finder/login-state", async (c) => c.json(await robotLoginState(db)));
+  app.get("/webhooks/tender-finder/logins", async (c) => c.json(await robotLogins(db, (c.req.query("site") ?? "philgeps").slice(0, 40), c.req.query("since") ?? null)));
+  app.post("/webhooks/tender-finder/logins", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        site: z.string().min(1).max(40),
+        outcome: z.enum(["started", "submitted", "ok", "rejected", "busy", "error", "cancelled", "unset"]),
+        detail: z.string().max(2000).nullish(),
+        source: z.string().max(40).nullish(),
+      }),
+    );
+    await noteRobotLogin(db, input);
+    return c.json({ ok: true });
   });
   app.post("/webhooks/tender-finder/run", async (c) => {
     const input = await readBody(

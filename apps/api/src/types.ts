@@ -5749,8 +5749,25 @@ export type FoundList = {
   counts: Record<FoundView, number>;
   /** Our molecules among what was found, for the filter. */
   molecules: string[];
-  /** The robot: whether its key is set on this server, and its last runs. */
-  robot: { ready: boolean; runs: FindRun[] };
+  /** The robot: whether it has a way in on this server, its last runs, and where its PhilGEPS
+   *  log-in for the tender papers stands ("refused" stops it until a person says to try again). */
+  robot: { ready: boolean; runs: FindRun[]; login: { state: "never" | "ok" | "refused" | "busy" | "trouble"; at: string | null; said: string | null } };
+};
+
+/** A found notice's papers: the files the robot got from PhilGEPS and what it said of them. */
+export type FoundPapers = {
+  files: { id: number; kind: "paper" | "bulletin"; name: string; size: number }[];
+  /** downloaded | pick-up | closed | needs-payment | none-found | no-order-link | order-flow-changed; null = not looked at yet. */
+  status: string | null;
+  remark: string | null;
+  checkedAt: string | null;
+  readNote: string | null;
+  /** Scanned pages still waiting for their reading. */
+  reading: boolean;
+  /** How well the papers were read, 0 to 100. */
+  accuracy: number | null;
+  /** What the bid data sheet says, as written. */
+  sheet: { label: string; said: string }[];
 };
 
 /** A line a found notice asks for. */
@@ -5789,6 +5806,7 @@ export type FoundDetail = {
     };
   };
   lines: FoundLine[];
+  papers: FoundPapers;
   events: { what: string; note: string | null; by: string; at: string }[];
   /** For "Make it a tender": the customers the agency could be, the mode and days read. */
   agencies: { id: number; name: string; city: string | null }[];

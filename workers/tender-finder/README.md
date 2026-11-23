@@ -38,17 +38,45 @@ office PC), with a key in place of GitHub's token:
 | `TENDER_FINDER_KEY` | Any long random text (24 characters or more), the same value set on the CRM's API server |
 
 ```
-npm ci                               # downloads Puppeteer's Chrome (about 300 MB)
+npm ci                               # Puppeteer (its Chrome: npx puppeteer browsers install chrome) and the paper reader
 npm run find                         # one run
 node scraper.js --dry-run            # first page only, nothing sent, prints what matched
 node scraper.js --from-file=sample-notices.json   # no browser: hands a saved list to the CRM
-npm test                             # the line and date readings (no browser, no CRM)
+npm test                             # every check: readings, matching, the papers run against stand-ins
+```
+
+## The tender papers (`papers/`)
+
+After the public reading, the same run gets the papers of the notices the team **screened** in
+the CRM (PLAN 24, "The papers' rules"): it logs in to PhilGEPS with the company's account, orders
+each notice's bid documents at no cost (it stops at anything that asks a payment), downloads them
+and their bid bulletins, logs out, reads them (PDF, Word, Excel; scans by OCR) and hands the
+files and the lines to the CRM.
+
+- `papers/lib/`: the bidding team's own modules, **unchanged**. Do not edit them here; a newer
+  copy from their repository replaces them whole.
+- `papers/supabase-shim/`: what those modules get when they import `@supabase/supabase-js` (it is
+  installed under that name from this folder): their tables and files are the CRM's.
+- `papers/papers.mjs`: one run.
+- `papers/checks/`: their three checks (run by `npm test`), and a stand-in PhilGEPS for this
+  computer (`stand-in-philgeps.mjs`), which `papers.test.mjs` runs the whole thing against.
+
+The log-in is two **repository secrets** on GitHub (Settings → Secrets and variables → Actions →
+New repository secret), typed by whoever holds the account, never written in a file:
+`PHILGEPS_USERNAME` and `PHILGEPS_PASSWORD`. With none set the step logs in nowhere. If PhilGEPS
+refuses the password, the robot stops trying and the Tender finder page says so; once the secret
+is put right, someone presses *let it try again* there.
+
+To try it on this computer without the real PhilGEPS:
+
+```
+node papers/checks/stand-in-philgeps.mjs papers/checks/price-schedule.pdf   # prints its address
+PHILGEPS_TEST_HOST=http://127.0.0.1:<port> PHILGEPS_USERNAME=company PHILGEPS_PASSWORD=right-password \
+  CRM_URL=http://localhost:4100 TENDER_FINDER_KEY=<the local key> node papers/papers.mjs
 ```
 
 ## Not here yet
 
-- The tender papers (PDF, Word, Excel, scans by OCR): they need the company's PhilGEPS log-in.
-  The CRM's door already takes their lines (`details.documents_items`).
 - PS-PhilGEPS (the new portal: Bid Match, My Opportunities, Award Notices): it needs the merchant
   log-in and a person to tick its captcha. The CRM already takes its notices (`source: "ps"`).
 

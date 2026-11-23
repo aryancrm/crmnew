@@ -2,10 +2,14 @@
 # it opens the public PhilGEPS list of medicine tenders in a browser, reads the new notices and
 # hands them to the CRM, where the bidding team sees them under Tenders → Tender finder.
 #
+# Then, for the notices the team screened, it gets the tender papers with the company's PhilGEPS
+# log-in and reads them (see the last step).
+#
 # It runs here, on GitHub's computers, so no office PC has to stay on and no server has to carry
 # a browser. Who it is: GitHub signs a short-lived token for this workflow ("id-token"), and the
 # CRM's door (/webhooks/tender-finder) lets in only this workflow on this repository's main
-# branch (apps/api/src/tenders/robot-caller.ts). There is no secret to set or to leak.
+# branch (apps/api/src/tenders/robot-caller.ts): for the CRM there is no secret to set or to leak.
+# The only secrets are the PhilGEPS log-in for the papers, which GitHub hides in every log.
 
 name: Tender finder
 
@@ -52,8 +56,17 @@ jobs:
         with:
           path: ~/.cache/puppeteer
           key: puppeteer-${{ hashFiles('workers/tender-finder/package-lock.json') }}
-      - name: Install (Puppeteer and its Chrome)
+      # What the paper reader has read of long scans so far, so the next run goes on from there.
+      - name: Keep the scans' reading between runs
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/papers-cache
+          key: papers-${{ github.run_id }}
+          restore-keys: papers-
+      - name: Install (Puppeteer, the paper reader)
         run: npm ci --no-audit --no-fund
+      - name: Chrome for Puppeteer (when the install did not bring it)
+        run: npx puppeteer browsers install chrome
       - name: Let Chrome keep its sandbox on this runner
         run: echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
       - name: The readings still read right
@@ -81,3 +94,13 @@ jobs:
         run: node scraper.js --dry-run
       - name: Read PhilGEPS and hand in to the CRM
         run: node scraper.js --trigger=${{ github.event_name == 'schedule' && 'schedule' || 'manual' }}
+      # The papers of the notices the team screened (papers/papers.mjs): logs in to PhilGEPS with the
+      # company's account, orders each one's bid documents at no cost (never pays), downloads, logs
+      # out, reads them. The log-in is two repository secrets (Settings > Secrets and variables >
+      # Actions): PHILGEPS_USERNAME and PHILGEPS_PASSWORD. With none set this step logs in nowhere.
+      - name: The papers of the screened tenders
+        env:
+          PHILGEPS_USERNAME: ${{ secrets.PHILGEPS_USERNAME }}
+          PHILGEPS_PASSWORD: ${{ secrets.PHILGEPS_PASSWORD }}
+          PAPERS_CACHE_DIR: ${{ runner.temp }}/papers-cache
+        run: node papers/papers.mjs
