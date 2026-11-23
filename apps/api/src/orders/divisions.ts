@@ -166,6 +166,8 @@ export function divisionRule(
   if (!division) return null;
   if (pap && PAP_DIVISIONS.includes(division)) return { sub: "Telesales", hq: "Telesales" };
   if (division === "RX Business") return { sub: "MD Telesales", hq: "", hqOptions: SUB_DIVISIONS[division] ?? [] };
+  // The hub's B2C (walked on localhost, 23 Nov): MD Telesales / B2C.
+  if (division === "MD Telesales") return { sub: "MD Telesales", hq: "B2C" };
   if (division === "HOSP") return { sub: "Hospital", hq: "N/A" };
   if (division === "CLIDP") return { sub: "CLIDP", hq: "ON SITE" };
   if (division === "B2B") return { subOptions: ["CRR", "NBD"], hq: "ON SITE" };
