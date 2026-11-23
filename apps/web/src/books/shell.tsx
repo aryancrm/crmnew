@@ -6,9 +6,11 @@
 // check, customers owe, refunds owed…) opening inside it. Inventory and Management keep the
 // Inventory frame with the purchases. One module: the same screens and the same data either way.
 
-import { ArrowLeftRight, BarChart3, BookOpen, BookOpenCheck, ChevronDown, ChevronRight, CircleUserRound, HandCoins, House, Landmark, PackageOpen, Plus, Search, ShoppingBag, ShoppingBasket, ShoppingCart } from "lucide-react";
+import { Avatar } from "../account/avatar";
+import { ArrowLeft, BarChart3, BookOpen, BookOpenCheck, ChevronDown, ChevronRight, HandCoins, House, Landmark, PackageOpen, Plus, Search, ShoppingBag, ShoppingBasket, ShoppingCart } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { LeavesArrow, useLeavesTo } from "../app-switch";
 import { useMe } from "../auth";
 import { kindByPath, LEDGER_ROLES } from "./kinds";
 
@@ -126,15 +128,18 @@ const BOOK_ROLES = ["inventory", "management", "finance", "ceo", "admin"];
 export function BooksShell() {
   const me = useMe();
   const location = useLocation();
+  const leavesTo = useLeavesTo();
   const segment = location.pathname.split("/")[2];
   const openGroup =
     GROUPS.find((group) => group.items.some((item) => item.to === `/books/${segment}` || (segment === "finance" && location.pathname.startsWith(item.to))))?.label ??
     (segment === "banking" || segment === "bankstatement" || segment === "reconcile" ? "Banking" : segment === "reports" ? "Reports" : !segment || segment === "home" ? "" : "Purchases");
   const [open, setOpen] = useState<Record<string, boolean>>({ [openGroup]: true });
   if (me.isPending) return null;
-  if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
   if (!BOOK_ROLES.includes(me.data.role)) return <Navigate to="/" replace />;
   const ledger = LEDGER_ROLES.includes(me.data.role);
+  const homeLeaves = leavesTo(ledger ? "/books/home" : "/");
+  const reportsLeave = leavesTo("/reports");
   const groups = GROUPS.filter((group) => ledger || !group.ledger).map((group) => ({ ...group, items: group.items.filter((item) => ledger || !item.ledger) }));
   const listName =
     segment === "home" ? "Customers" : segment === "finance" ? "Customers" : segment === "vendors" ? "Vendors" : segment === "customers" ? "Customers" : segment === "items" ? "Items" : segment === "accounts" ? "Chart of Accounts" : segment === "locking" ? "Transaction Locking" : segment === "bankstatement" || segment === "reconcile" ? "Banking" : segment === "banking" ? "Banking" : segment === "reports" ? "Reports" : (kindByPath(segment)?.plural ?? "Purchases");
@@ -149,7 +154,8 @@ export function BooksShell() {
             to={ledger ? "/books/home" : "/"}
             className={({ isActive }) => `flex h-[30px] items-center gap-2.5 rounded-md px-2 ${isActive && ledger ? "bg-[#408dfb] text-white" : "hover:bg-white/5"}`}
           >
-            <House size={16} aria-hidden="true" /> Home
+            <House size={16} aria-hidden="true" /> <span className="flex-1">Home</span>
+            {homeLeaves && <LeavesArrow app={homeLeaves} className="text-white/70" />}
           </NavLink>
           {groups.map((group) => {
             const isOpen = open[group.label] ?? false;
@@ -172,21 +178,24 @@ export function BooksShell() {
                       to={item.to}
                       end={item.to === "/books/reports"}
                       className={({ isActive }) =>
-                        `my-0.5 flex h-[30px] items-center rounded-md pr-6 pl-10 ${isActive ? "bg-[#408dfb] text-white" : "hover:bg-white/5"}`
+                        `my-0.5 flex h-[30px] items-center rounded-md pr-2 pl-10 ${isActive ? "bg-[#408dfb] text-white" : "hover:bg-white/5"}`
                       }
+                      title={leavesTo(item.to) ? `${item.label}: opens ${leavesTo(item.to)}` : undefined}
                     >
-                      {item.label}
+                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                      {leavesTo(item.to) && <LeavesArrow app={leavesTo(item.to) as string} className="text-white/70" />}
                     </NavLink>
                   ))}
               </div>
             );
           })}
-          <NavLink to="/reports" className="mt-2 flex h-[30px] items-center gap-2.5 rounded-md pl-5 hover:bg-white/5">
-            <BarChart3 size={16} aria-hidden="true" /> Sales reports
+          <NavLink to="/reports" className="mt-2 flex h-[30px] items-center gap-2.5 rounded-md pr-2 pl-5 hover:bg-white/5">
+            <BarChart3 size={16} aria-hidden="true" /> <span className="flex-1">Sales reports</span>
+            {reportsLeave && <LeavesArrow app={reportsLeave} className="text-white/70" />}
           </NavLink>
         </div>
         <Link to="/" className="mx-2.5 mt-auto flex h-[34px] items-center gap-2.5 rounded-md border border-white/10 px-3 text-white/80 hover:bg-white/5">
-          <ArrowLeftRight size={15} aria-hidden="true" /> Back to the CRM
+          <ArrowLeft size={15} aria-hidden="true" /> Back to the CRM
         </Link>
       </nav>
       <div className="flex min-w-0 flex-1 flex-col">
@@ -195,10 +204,10 @@ export function BooksShell() {
           <div className="ml-auto flex items-center gap-3 text-[13px] text-[#222536]">
             <span className="hidden sm:inline">2MG Inc. / GetMeds</span>
             {ledger && <QuickCreate />}
-            <span className="flex items-center gap-1.5" title={me.data.name}>
-              <CircleUserRound size={22} className="text-[#f76831]" aria-hidden="true" />
+            <Link to="/profile" className="flex items-center gap-1.5" title={me.data.name} aria-label={`${me.data.name}: my profile`}>
+              <Avatar person={me.data} size="xs" />
               <span className="hidden max-w-32 truncate md:inline">{me.data.name}</span>
-            </span>
+            </Link>
           </div>
         </header>
         <main className="min-h-0 flex-1 overflow-hidden">
@@ -267,6 +276,7 @@ const QUICK: { group: string; items: [string, string][] }[] = [
 ];
 function QuickCreate() {
   const [open, setOpen] = useState(false);
+  const leavesTo = useLeavesTo();
   const location = useLocation();
   useEffect(() => setOpen(false), [location.pathname]);
   return (
@@ -284,6 +294,7 @@ function QuickCreate() {
                   <li key={to}>
                     <Link to={to} className="flex items-center gap-1 text-[13px] text-[#212529] hover:text-[#408dfb]">
                       <Plus size={12} /> {label}
+                      {leavesTo(to) && <LeavesArrow app={leavesTo(to) as string} size={12} />}
                     </Link>
                   </li>
                 ))}

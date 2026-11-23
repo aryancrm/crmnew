@@ -217,6 +217,17 @@ select.field {
   .orbit-drift, .orbit-drift-back, .orbit-flow, .orbit-twinkle, .star-twinkle, .sun-breathe, .portal-flow { animation: none; }
 }
 
+/* The sidebar: a list opens in place; going to another app says so (app-switch.tsx). */
+@keyframes menu-list { from { opacity: 0; transform: translateY(-4px); } }
+.menu-list { animation: menu-list 160ms ease-out; }
+@keyframes app-switch-bar { from { transform: translateX(-100%); } to { transform: translateX(250%); } }
+.app-switch-bar { animation: app-switch-bar 1s ease-in-out infinite; }
+@keyframes app-switch-arrow { from { transform: translateX(-3px); } to { transform: translateX(3px); } }
+.app-switch-arrow { animation: app-switch-arrow 500ms ease-in-out infinite alternate; }
+@media (prefers-reduced-motion: reduce) {
+  .menu-list, .app-switch-bar, .app-switch-arrow { animation: none; }
+}
+
 /* A department's team on the portal, drawn as a chart: each row hangs from the card above. */
 .org-row { display: flex; justify-content: center; position: relative; padding-top: 1rem; }
 .org-row > .org-col { position: relative; display: flex; flex-direction: column; align-items: center; flex: 1 1 0; min-width: 0; padding: 0 0.3rem; }

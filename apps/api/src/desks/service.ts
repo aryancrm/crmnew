@@ -3,6 +3,7 @@
 // (whoever has the fewest open, someone on leave skipped), so each card names who has it. Anyone at
 // the desk may still take one over (or act on it: the role decides, as always); the timeline says
 // who was given it and who acted.
+// Each signs in as themselves: what is done is written in the name of whoever did it.
 
 import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
@@ -14,7 +15,7 @@ import type { DeskDuty, DeskPerson, DeskReport, Me } from "../types";
 
 export type DutyDesk = "management" | "finance" | "dispatch";
 // Dispatch is one of them since 19 Nov (Aryan: "make Dispatch's like Management's"): its people
-// press Start, the orders to pack are shared out, what is done is written in its person's name.
+// press Start and the orders to pack are shared out.
 export const DUTY_DESKS: DutyDesk[] = ["management", "finance", "dispatch"];
 
 const WORDS: Record<DutyDesk, string> = { management: "Management", finance: "Finance", dispatch: "Dispatch" };
@@ -233,26 +234,6 @@ async function evenOut(db: Database, me: Me, desk: DutyDesk): Promise<void> {
       });
     }
   });
-}
-
-/**
- * On the common screen, what is done on an order is written in the name of the person it was given
- * to (Aryan, 18 Nov): a Management (or Finance) account acting on an order at its desk acts as that
- * order's person, when they are started today. Taking an order over or letting it go stays the
- * account's own.
- */
-export async function deskStandIn(db: Database, me: Me, method: string, path: string): Promise<Me | null> {
-  if (method !== "POST" || !DUTY_DESKS.includes(me.role as DutyDesk)) return null;
-  const found = path.match(/^\/api\/(?:finance\/|dispatch\/)?orders\/(\d+)\/([a-z-]+)$/);
-  if (!found || ["handle", "take", "release"].includes(found[2] as string)) return null;
-  const desk = me.role as DutyDesk;
-  const [owner] = await rows<{ id: number; name: string; title: string | null }>(
-    db,
-    sql`select p.id::int as id, p.name, p.title from sales_order o join person p on p.id = o.${OWNER[desk]} and p.active and p.role = ${desk}
-      where o.id = ${Number(found[1])} and ${AT_DESK[desk]} and ${startedSql(desk, sql`p.id`)}`,
-  );
-  if (!owner || owner.id === me.id) return null;
-  return { ...me, id: owner.id, name: owner.name, title: owner.title ?? me.title };
 }
 
 /** Finance's own "I'll take it" / "Take over" / "Let go" on one order (Management's is handleOrder). */

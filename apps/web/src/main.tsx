@@ -5,6 +5,7 @@ import "@fontsource/poppins/500.css";
 import "@fontsource/poppins/600.css";
 import "@fontsource/poppins/700.css";
 import { ApiFailure } from "./api";
+import { AppSwitch } from "./app-switch";
 import { placesOrders, readsOnlineDesk } from "./auth";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
@@ -19,6 +20,10 @@ import { AdminZohoSellers } from "./admin/zoho-sellers";
 import { AttendanceMonthPage, AttendancePage } from "./hr/attendance";
 import { AttendanceReportPage } from "./hr/attendance-report";
 import { ChangePassword } from "./account/change-password";
+import { ProfilePage } from "./account/profile";
+import { SignUp } from "./account/sign-up";
+import { Welcome } from "./account/welcome";
+import { AdminSignUps } from "./admin/sign-ups";
 import { ChannelsPage } from "./online/channels";
 import { Customer } from "./customers/customer";
 import { Customers } from "./customers/customers";
@@ -155,7 +160,9 @@ createRoot(root).render(
     <QueryClientProvider client={queries}>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<Login />} />
+          <Route path="/login/:dept?" element={<Login />} />
+          <Route path="/signup/:dept?" element={<SignUp />} />
+          <Route path="/welcome" element={<Welcome />} />
           {/* Zoho Inventory's Sales and Purchases, in Zoho's own frame (docs/PLAN.md 17). */}
           <Route path="/books" element={<BooksShell />}>
             <Route index element={<BooksIndex />} />
@@ -200,6 +207,8 @@ createRoot(root).render(
           <Route element={<Shell />}>
             <Route index element={<Home />} />
             <Route path="password" element={<ChangePassword />} />
+            <Route path="profile/:section?" element={<ProfilePage />} />
+            <Route path="admin/sign-ups" element={<AdminSignUps />} />
             <Route path="inventory" element={<Inventory />} />
             <Route path="medicines" element={<Medicines />} />
             <Route path="medicines/:id" element={<Medicine />} />
@@ -378,6 +387,7 @@ createRoot(root).render(
             <Route path="*" element={<NotBuilt />} />
           </Route>
         </Routes>
+        <AppSwitch />
       </BrowserRouter>
     </QueryClientProvider>
   </StrictMode>,

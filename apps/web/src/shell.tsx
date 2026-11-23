@@ -1,11 +1,14 @@
 // The frame every signed-in screen sits in: the top bar, the role's menu down the left on a
 // desk, the same menu as a tab bar on a phone.
 
+import { Avatar } from "./account/avatar";
+import { useIdleSignOut } from "./account/idle";
 import { workspaceOf } from "./workspaces";
 import type {
   Decisions,
   FormList,
   LeaveList,
+  Me,
   OrderDashboard,
   OrgMenuUnit,
   SearchResult,
@@ -23,12 +26,14 @@ import {
   Menu,
   Plus,
   Search,
-  UsersRound,
+  ShieldCheck,
+  UserRound,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
-import { initials, ME, onlineDesk, useMe } from "./auth";
+import { LeavesArrow, useLeavesTo } from "./app-switch";
+import { ME, onlineDesk, useMe } from "./auth";
 import { DeskPeople } from "./desk/people";
 import { LiveLocationSender } from "./field/live-sender";
 import { UndoConfirmBar } from "./finance/undo";
@@ -39,7 +44,13 @@ import { unreadIn, useUpdates } from "./updates";
 
 export function Shell() {
   const me = useMe();
+  const queries = useQueryClient();
+  const navigate = useNavigate();
+  // Nothing else is asked for until they have chosen their own password.
+  const ready = Boolean(me.data && !me.data.mustChangePassword);
+  useIdleSignOut(me.data?.viewedBy ? undefined : me.data?.role, () => void leaveNow(queries, navigate));
   const location = useLocation();
+  const leavesTo = useLeavesTo();
   const [drawer, setDrawer] = useState(false);
   // On a computer the menu button hides the sidebar for more room, and the choice is kept.
   const wide = useWide();
@@ -71,20 +82,20 @@ export function Shell() {
   const badges = useQuery({
     queryKey: ["orders", "dashboard"],
     queryFn: () => api<OrderDashboard>("/api/orders/dashboard"),
-    enabled: Boolean(counted),
+    enabled: ready && counted,
   });
   // Conversations with something unread, beside Messages.
   const messages = useQuery({
     queryKey: ["messages"],
     queryFn: () => api<{ unread: number }>("/api/messages"),
-    enabled: Boolean(me.data),
+    enabled: ready,
     refetchInterval: () => (document.visibilityState === "visible" ? 30_000 : false),
   });
   // Conversations waiting for a reply (and new email senders), beside the Inbox.
   const chats = useQuery({
     queryKey: ["inbox", "count"],
     queryFn: () => api<{ needs: number; held: number }>("/api/inbox/count"),
-    enabled: onlineDesk(me.data) || ["admin", "ceo"].includes(me.data?.role ?? ""),
+    enabled: ready && (onlineDesk(me.data) || ["admin", "ceo"].includes(me.data?.role ?? "")),
     refetchInterval: () => (document.visibilityState === "visible" ? 30_000 : false),
   });
 
@@ -92,7 +103,7 @@ export function Shell() {
   const refills = useQuery({
     queryKey: ["refills-waiting"],
     queryFn: () => api<{ soon: number; due: number }>("/api/my/refills-waiting"),
-    enabled: ["medrep", "online", "team_lead", "manager"].includes(me.data?.role ?? "") && !me.data?.deskScreen,
+    enabled: ready && ["medrep", "online", "team_lead", "manager"].includes(me.data?.role ?? ""),
     staleTime: 5 * 60_000,
   });
 
@@ -113,9 +124,15 @@ export function Shell() {
         </div>
       </Centered>
     );
-  if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname }} />;
-  if (me.data.mustChangePassword && location.pathname !== "/password")
-    return <Navigate to="/password" replace />;
+  if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  if (me.data.mustChangePassword)
+    return location.pathname === "/password" ? (
+      <div className="flex min-h-dvh items-center bg-ground p-6">
+        <Outlet />
+      </div>
+    ) : (
+      <Navigate to="/password" replace />
+    );
 
   const space = spaceFor(me.data, location.pathname);
   const flat = space.groups.flatMap((group) => group.items);
@@ -219,20 +236,16 @@ export function Shell() {
         {/* The person's working day: when it started, Start / End my day. */}
         <MyDayButton />
         <LiveLocationSender />
-        {/* The common desk shows the desk, not the one person signed in on it (Aryan, 18 Nov). */}
+        {/* Always the person signed in: a desk shares its queue, never a login. */}
         <Account
-          // The shared screen is the desk's, nobody's own (Aryan, 19 Nov): no person's name on it.
-          name={commonDesk && me.data.deskScreen ? `${space.label} desk` : me.data.name}
+          me={me.data}
           // Under a seller's or a lead's name, their own job (PH Country Mentor, District Sales Coach,
           // Hospital CHC), not the role's word: a head and a team lead share one role.
           role={
-            commonDesk && me.data.deskScreen
-              ? "Shared desk screen"
-              : ["team_lead", "manager", "medrep"].includes(me.data.role) && me.data.title
-                ? me.data.title
-                : me.data.roleLabel
+            ["team_lead", "manager", "medrep"].includes(me.data.role) && me.data.title
+              ? me.data.title
+              : me.data.roleLabel
           }
-          desk={Boolean(commonDesk)}
         />
       </header>
 
@@ -302,7 +315,10 @@ export function Shell() {
               }
             >
               <item.icon size={20} strokeWidth={1.8} aria-hidden="true" />
-              <span className="max-w-full truncate px-1">{item.short ?? item.label}</span>
+              <span className="flex max-w-full items-center px-1">
+                <span className="truncate">{item.short ?? item.label}</span>
+                {leavesTo(item.to) && <LeavesArrow app={leavesTo(item.to) as string} size={11} />}
+              </span>
             </NavLink>
           );
           return (
@@ -458,7 +474,8 @@ function MenuList({
   badges?: Record<Badge, number>;
 }) {
   const location = useLocation();
-  const navigate = useNavigate();
+  const leavesTo = useLeavesTo();
+  const listId = useId();
   const every = allItems(groups.flatMap((group) => group.items));
   const openOf = linkOpen(location, every);
   // Folders the person unfolded or folded by hand; the rest follow the page that is open.
@@ -486,6 +503,14 @@ function MenuList({
     enabled: wantsLeave,
     staleTime: 60_000,
   });
+  // Who signed up and waits for the Admin.
+  const signUps = useQuery({
+    queryKey: ["sign-ups", "count"],
+    queryFn: () => api<{ waiting: number }>("/api/sign-ups/count"),
+    enabled: every.some((item) => item.badge === "signUps"),
+    staleTime: 30_000,
+    refetchInterval: () => (document.visibilityState === "visible" ? 60_000 : false),
+  });
   // Everything waiting on the person, beside To decide.
   const decisions = useQuery({
     queryKey: ["decisions"],
@@ -500,6 +525,7 @@ function MenuList({
       ? {
           ...badges,
           orgRequests: teams.data?.openRequests ?? 0,
+          signUps: signUps.data?.waiting ?? 0,
           important: unreadIn(news.data, "important"),
           updates: unreadIn(news.data, "updates"),
           leave: (leave.data?.counts.waiting ?? 0) + (forms.data?.counts.waiting ?? 0),
@@ -549,10 +575,12 @@ function MenuList({
   const link = (item: MenuItem, inner = false) => {
     // "Company view" / "Whole team" isn't lit while one of the teams under it is open.
     const lit = (isActive: boolean) => openOf(item.to, isActive) && !(item.teams && unitHere);
+    const leaves = leavesTo(item.to);
     return (
       <NavLink
         key={item.to}
         to={item.to}
+        title={leaves ? `${item.label}: opens ${leaves}` : undefined}
         end={
           item.to === "/" ||
           item.to.includes("?") ||
@@ -596,6 +624,7 @@ function MenuList({
             {item.badge && counts && counts[item.badge] > 0 && (
               <span className={PILL(item.badge)}>{counts[item.badge]}</span>
             )}
+            {leaves && <LeavesArrow app={leaves} size={15} className="text-slate-500 group-hover:text-brand-dark" />}
           </>
         )}
       </NavLink>
@@ -605,6 +634,7 @@ function MenuList({
   const folder = (item: MenuItem) => {
     const here = inFolder(item, location);
     const open = folded[item.label] ?? here;
+    const id = `${listId}-${item.label.replace(/\W+/g, "-")}`;
     // Folded, it still says what waits inside.
     const waiting = allItems(item.children ?? []).reduce(
       (sum, one) => sum + (one.badge && counts ? (counts[one.badge] ?? 0) : 0),
@@ -615,12 +645,13 @@ function MenuList({
         <button
           type="button"
           aria-expanded={open}
-          onClick={() => {
-            if (!open && !here) {
-              navigate(item.to);
-              onPick?.();
-            }
+          aria-controls={open ? id : undefined}
+          // A ⌄ only opens and closes its list: going somewhere is a press on what is in it.
+          onClick={(event) => {
             setFolded((now) => ({ ...now, [item.label]: !open }));
+            const box = event.currentTarget.parentElement;
+            // Opened near the foot of the menu, its list would be out of sight.
+            if (!open) requestAnimationFrame(() => box?.scrollIntoView({ block: "nearest" }));
           }}
           className={`group flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] transition-colors ${
             here
@@ -646,7 +677,7 @@ function MenuList({
           />
         </button>
         {open && (
-          <div className="mt-0.5 mb-1 ml-[18px] flex flex-col gap-0.5 border-l border-slate-200 pl-2">
+          <div id={id} className="menu-list mt-0.5 mb-1 ml-[18px] flex flex-col gap-0.5 border-l border-slate-200 pl-2">
             {(item.children ?? []).flatMap((child) =>
               child.teams ? [link(child, true), ...teamLinks()] : [link(child, true)],
             )}
@@ -779,7 +810,7 @@ function SearchBox() {
   );
 }
 
-function Account({ name, role, desk = false }: { name: string; role: string; desk?: boolean }) {
+function Account({ me, role }: { me: Me; role: string }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
@@ -815,22 +846,54 @@ function Account({ name, role, desk = false }: { name: string; role: string; des
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
         className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg px-1 hover:bg-head"
-        aria-label={`${name}, ${role}`}
+        aria-label={`${me.name}, ${role}`}
       >
-        <span className="flex size-9 items-center justify-center rounded-full bg-sky-700 text-[13px] font-semibold text-white">
-          {desk ? <UsersRound size={17} aria-hidden="true" /> : initials(name)}
-        </span>
+        <Avatar person={me} />
         <ChevronDown size={15} className="hidden text-slate-400 sm:block" aria-hidden="true" />
       </button>
       {open && (
         <div
           role="menu"
-          className="absolute right-0 mt-1 w-56 rounded-xl bg-white p-1.5 text-[13px] shadow-pop"
+          className="absolute right-0 mt-1 w-64 rounded-xl bg-white p-1.5 text-[13px] shadow-pop"
         >
-          <div className="border-b border-line-soft px-3 pt-1.5 pb-2.5">
-            <div className="font-semibold">{name}</div>
-            <div className="text-xs text-ink-2">{role}</div>
+          <div className="mb-1 flex items-center gap-3 border-b border-line-soft px-3 pt-1.5 pb-2.5">
+            <Avatar person={me} size="md" />
+            <div className="min-w-0">
+              <div className="font-semibold wrap-break-word">{me.name}</div>
+              <div className="text-xs text-ink-2">{role}</div>
+            </div>
           </div>
+          {/* Someone looking as them doesn't get their profile. */}
+          {!me.viewedBy && (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  navigate("/profile");
+                }}
+                className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
+              >
+                <UserRound size={17} aria-hidden="true" /> My profile
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  navigate("/profile/security");
+                }}
+                className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
+              >
+                <ShieldCheck size={17} aria-hidden="true" />
+                <span className="flex-1">Security</span>
+                <span className={`text-xs font-semibold ${me.twoStep ? "text-good" : "text-warn"}`}>
+                  {me.twoStep ? "2FA on" : "2FA off"}
+                </span>
+              </button>
+            </>
+          )}
           <button
             type="button"
             role="menuitem"
@@ -838,7 +901,7 @@ function Account({ name, role, desk = false }: { name: string; role: string; des
               setOpen(false);
               navigate("/password");
             }}
-            className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
+            className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
           >
             <KeyRound size={17} aria-hidden="true" /> Change password
           </button>
@@ -846,7 +909,7 @@ function Account({ name, role, desk = false }: { name: string; role: string; des
             type="button"
             role="menuitem"
             onClick={signOut}
-            className="flex h-10 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
+            className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
           >
             <LogOut size={17} aria-hidden="true" /> Sign out
           </button>

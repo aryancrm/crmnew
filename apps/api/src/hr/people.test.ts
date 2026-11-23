@@ -254,11 +254,13 @@ describe("HR's people", () => {
     ).toContain("Mia Santos");
     const form = await read<JoinerForm>("helen", "/api/hr/joiners/form");
     expect(form.seats.some((one) => one.team === "Mindanao")).toBe(true);
-    // Marked as left by mistake: back at work, the login works again (a seat comes from Teams & people).
+    // Marked as left by mistake: back at work, the login works again once a one-time password is given (a seat comes from Teams & people).
     expect(record.can.back).toBe(true);
     expect((await send("helen", `/api/hr/people/${mia?.personId}/back`, {})).status).toBe(200);
     expect((await send("helen", `/api/hr/people/${mia?.personId}/back`, {})).status).toBe(409);
-    expect((await signIn("mia.santos@2mginc.com", "given-by-hr-1")).status).toBe(200);
+    expect((await signIn("mia.santos@2mginc.com", "given-by-hr-1")).status).toBe(403);
+    expect((await send("helen", `/api/hr/people/${mia?.personId}/login`, { password: "given-by-hr-2" })).status).toBe(200);
+    expect((await signIn("mia.santos@2mginc.com", "given-by-hr-2")).status).toBe(200);
     const again = await read<HrPerson>("helen", `/api/hr/people/${mia?.personId}`);
     expect(again.record).toMatchObject({ leftReason: null, leftOn: null });
   });

@@ -54,9 +54,6 @@ export function idParam(c: Context, name = "id"): number {
 export function signedInWith(
   db: Database,
   onSeen?: (me: Me) => Promise<void>,
-  /** Who the request acts as, when not the account itself (Management's and Finance's common
-   *  screen: an order's own person). */
-  standIn?: (me: Me, method: string, path: string) => Promise<Me | null>,
 ) {
   return createMiddleware<Env>(async (c, next) => {
     const token = getCookie(c, SESSION_COOKIE);
@@ -71,7 +68,10 @@ export function signedInWith(
         "viewing",
         `You are looking as ${me.name}: nothing can be changed. Go back to ${me.viewedBy.name} first.`,
       );
-    c.set("me", (!me.viewedBy && standIn ? await standIn(me, c.req.method, c.req.path) : null) ?? me);
+    // A one-time password opens one thing: choosing their own. (A hidden screen isn't the guard.)
+    if (me.mustChangePassword && !["/api/me", "/api/auth/password"].includes(c.req.path))
+      throw new Refusal(403, "password_change", "Choose your own password first.");
+    c.set("me", me);
     c.set("token", token);
     if (onSeen && !me.viewedBy)
       void uncounted(() => onSeen(me)).catch((error) =>

@@ -1,40 +1,45 @@
 // Bishnoi One's company portal (the sign-in page), as an app launcher (Aryan, 18 Nov): a tile per
-// workspace; any tile opens the same sign-in (login ID and password, as always), and each person's
-// own login decides what opens inside. Only a look: permissions and the pages are unchanged.
+// workspace; any tile opens the same sign-in (the person's own login ID and password), and each
+// person's own login decides what opens inside. Only a look: permissions and the pages are unchanged.
 
 import "@fontsource-variable/inter";
-import type { DoorList, Me } from "@2mg/api/types";
+import type { Me, SignInAnswer } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, ChevronRight, Eye, EyeOff, KeyRound, LoaderCircle, Search, UserRound } from "lucide-react";
-import { type FormEvent, useEffect, useRef, useState } from "react";
-import { Link, Navigate, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { ArrowLeft, CircleAlert, Eye, EyeOff, LoaderCircle, Search } from "lucide-react";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ApiFailure, api } from "../api";
 import { ME, rememberPerson, returnTo, useMe } from "../auth";
-import { ClassicLogin } from "./login-classic";
 import { About } from "../portal/about";
-import { DepartmentPage } from "../portal/department-page";
+import { DevUserPicker } from "./dev-user-picker";
+import { markActive } from "./idle";
+import { DepartmentMark, DepartmentPanel } from "../portal/department-side";
 import { TILE_GLOW, TILE_ICONS } from "../portal/tiles";
 import { lastWorkspace, rememberWorkspace, type Workspace, WORKSPACES, workspaceOf } from "../workspaces";
 
-/** The sign-in: the workspace launcher, or (Log in with ID and password) the screen as it was. */
+/** The sign-in: the departments, then the one picked (Aryan, 21 Nov: no other way in; the old
+ *  "Log in with ID and password" page is gone, so every session is opened for a department). */
 export function Login() {
-  const [params] = useSearchParams();
-  return params.get("with") === "password" ? <ClassicLogin /> : <Launcher />;
+  return <Launcher />;
 }
 
 function Launcher() {
   const me = useMe();
   const navigate = useNavigate();
   const location = useLocation();
+  const { dept } = useParams();
   const [params] = useSearchParams();
   const from = (location.state as { from?: string } | null)?.from ?? "/";
   // The tile pressed opens its department's page, the sign-in below it (the login decides what
   // opens inside, as always).
-  const picked = WORKSPACES.find((one) => one.key === params.get("dept")) ?? null;
+  // Its address is /login/<key>. The older /login?dept=<key> is still read, then rewritten.
+  const asked = (dept ?? params.get("dept"))?.toLowerCase();
+  const picked = WORKSPACES.find((one) => one.key === asked) ?? null;
+  const address = loginPath(picked?.key);
   const [find, setFind] = useState("");
   const last = lastWorkspace();
   const open = (key: string | null) =>
-    navigate({ search: key ? `?dept=${key}` : "" }, { state: location.state });
+    navigate(loginPath(key), { state: location.state });
 
   useEffect(() => {
     if (!picked) return;
@@ -46,6 +51,9 @@ function Launcher() {
   }, [picked?.key]);
 
   if (me.data) return <Navigate to={landing(me.data.role, picked, returnTo(me.data.id, from))} replace />;
+  // An old link, an unknown department or other capitals: the one right address, without a step back to the wrong one.
+  if (location.pathname !== address || params.has("dept"))
+    return <Navigate to={{ pathname: address, hash: location.hash }} state={location.state} replace />;
 
   const words = find.trim().toLowerCase();
   const shownTiles = WORKSPACES.filter(
@@ -66,12 +74,48 @@ function Launcher() {
         <div className="absolute bottom-0 left-1/3 size-[32rem] rounded-full bg-[#dcd6ff] opacity-45 blur-[130px]" />
       </div>
       {picked ? (
-        <div className="flex min-h-dvh flex-col">
-          <header className="mx-auto flex w-[min(1240px,calc(100%-32px))] items-center gap-2.5 py-2.5">
-            <img src="/brand/bishnoi-one-mark.png" alt="" className="size-7" />
-            <span className="text-[18px] font-semibold tracking-[-0.03em]">Bishnoi One</span>
-          </header>
-          <DepartmentPage workspace={picked} onBack={() => open(null)} signIn={<SignIn workspace={picked} from={from} />} />
+        // A split screen (Aryan, 21 Nov, after a sign-in screen he liked): the department's panel on
+        // the left, tinted in its colour with its icon large; the form alone on white on the right.
+        // Phones: the form first, the panel below it.
+        <div className="relative z-10 flex min-h-dvh flex-col bg-white lg:flex-row">
+          <aside
+            className="order-2 flex flex-col px-6 py-10 lg:order-1 lg:w-[46%] lg:px-12 lg:py-8"
+            style={{ background: `linear-gradient(160deg, ${TILE_GLOW[picked.key] ?? "#f36b21"}14, #f6f5fb 55%, ${TILE_GLOW[picked.key] ?? "#f36b21"}0d)` }}
+          >
+            <Link to={loginPath()} state={location.state} className={`${HOME_LINK} hidden self-start lg:flex`}>
+              <img src="/brand/bishnoi-one-mark.png" alt="" className="size-8" />
+              <span className="text-[18px] font-semibold tracking-[-0.03em]">Bishnoi One</span>
+            </Link>
+            <div className="flex flex-1 items-center py-6">
+              <DepartmentPanel workspace={picked} />
+            </div>
+          </aside>
+          <section className="order-1 flex flex-1 flex-col px-6 py-5 lg:order-2 lg:px-12 lg:py-8" aria-label={`Sign in to ${picked.label}`}>
+            <div className="flex items-center justify-between gap-3">
+              <Link to={loginPath()} state={location.state} className={`${HOME_LINK} flex lg:invisible`}>
+                <img src="/brand/bishnoi-one-mark.png" alt="" className="size-7" />
+                <span className="text-[17px] font-semibold tracking-[-0.03em]">Bishnoi One</span>
+              </Link>
+              <span className="flex items-center gap-3">
+                <span className="hidden text-[13px] text-[#7a8394] sm:inline">Wrong department?</span>
+                <button
+                  type="button"
+                  onClick={() => open(null)}
+                  className="inline-flex h-9 items-center gap-1.5 rounded-full border border-[#d5d9e1] px-4 text-[12px] font-semibold tracking-[0.04em] text-[#3c4452] uppercase transition-colors hover:border-[#f36b21] hover:text-[#c2410c]"
+                >
+                  <ArrowLeft className="size-3.5" aria-hidden="true" /> All departments
+                </button>
+              </span>
+            </div>
+            <div className="flex flex-1 justify-center pt-8 pb-10 lg:items-center lg:py-10">
+              <div className="w-full max-w-[26rem]">
+                <div className="mb-5 lg:hidden">
+                  <DepartmentMark workspace={picked} />
+                </div>
+                <SignIn workspace={picked} from={from} loginId={(location.state as { loginId?: string } | null)?.loginId} />
+              </div>
+            </div>
+          </section>
         </div>
       ) : (
         <>
@@ -80,11 +124,23 @@ function Launcher() {
       <Orbits />
 
       <header className="mx-auto flex w-[min(1180px,calc(100%-32px))] shrink-0 items-center gap-4 py-5">
-        <span className="flex shrink-0 items-center gap-2.5">
+        {/* Already home, so it starts the page afresh. Named here: on phones only the mark shows. */}
+        <Link
+          to={loginPath()}
+          state={location.state}
+          aria-label="Bishnoi One"
+          onClick={(event) => {
+            // Ctrl, Cmd or Shift opens another tab or window: this one stays as it is.
+            if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+            setFind("");
+            window.scrollTo({ top: 0 });
+          }}
+          className={`${HOME_LINK} flex min-w-11 shrink-0 justify-center`}
+        >
           <img src="/brand/bishnoi-one-mark.png" alt="" className="size-10" />
           <span className="hidden text-[22px] font-semibold tracking-[-0.03em] sm:inline">Bishnoi One</span>
-        </span>
-        <label className="mx-auto flex h-12 w-full max-w-md items-center gap-3 rounded-2xl border border-white/80 bg-white/70 px-4 shadow-[0_8px_30px_-12px_rgba(20,30,50,0.18)] backdrop-blur-xl transition focus-within:bg-white/90 focus-within:shadow-[0_12px_36px_-12px_rgba(20,30,50,0.26)]">
+        </Link>
+        <label className="mx-auto flex h-12 w-full max-w-md min-w-0 items-center gap-3 rounded-2xl border border-white/80 bg-white/70 px-4 shadow-[0_8px_30px_-12px_rgba(20,30,50,0.18)] backdrop-blur-xl transition focus-within:bg-white/90 focus-within:shadow-[0_12px_36px_-12px_rgba(20,30,50,0.26)]">
           <Search className="size-5 text-[#f36b21]" aria-hidden="true" />
           <input
             value={find}
@@ -94,7 +150,14 @@ function Launcher() {
             className="min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-[#7a8394] focus:outline-none focus-visible:outline-none"
           />
         </label>
-        <span className="hidden w-[150px] shrink-0 sm:block" aria-hidden="true" />
+        <span className="flex shrink-0 justify-end sm:w-[150px]">
+          <Link
+            to="/signup"
+            className="inline-flex h-11 items-center rounded-full bg-[#f36b21] px-4 text-[14px] font-semibold whitespace-nowrap text-white transition-colors hover:bg-[#e05a12] sm:px-5"
+          >
+            Sign up
+          </Link>
+        </span>
       </header>
 
       {/* A word on what this is. */}
@@ -138,17 +201,14 @@ function Launcher() {
         {!shownTiles.length && <p className="text-center text-sm text-[#7a8394]">No workspace by that name.</p>}
       </section>
 
-      {/* The other way in: the sign-in as it was. */}
       <footer className="mx-auto flex w-[min(1180px,calc(100%-32px))] shrink-0 flex-wrap items-center justify-between gap-3 pb-5">
         <a href="#about" className="text-xs font-medium text-[#5b6472] hover:text-[#c2410c]">What is Bishnoi One? ↓</a>
-        <Link
-          to="/login?with=password"
-          state={location.state}
-          className="flex items-center gap-1.5 rounded-full border border-white/90 bg-white/70 px-4 py-2 text-sm font-semibold text-[#1f2733] shadow-[0_8px_24px_-12px_rgba(20,30,50,0.25)] backdrop-blur-xl hover:text-[#c2410c]"
-        >
-          Log in with ID and password <ChevronRight className="size-4" aria-hidden="true" />
-        </Link>
-        <span className="text-xs text-[#8a93a3]">Need access? Ask your administrator</span>
+        <span className="text-xs text-[#5b6472]">
+          New here?{" "}
+          <Link to="/signup" className="font-semibold text-[#c2410c] hover:underline">
+            Create your account
+          </Link>
+        </span>
       </footer>
       </div>
 
@@ -160,176 +220,116 @@ function Launcher() {
   );
 }
 
+/** The sign-in's address: the launcher, or one department's page. */
+const loginPath = (key?: string | null) => (key ? `/login/${key}` : "/login");
+
+/** The logo, on the portal and on a department's page, goes home (Jakob); 44px to press (Fitts). */
+const HOME_LINK =
+  "min-h-11 items-center gap-2.5 rounded-lg transition-colors hover:text-[#c2410c] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-[#f36b21]";
+
 /** Where a person lands: the Books tile opens Books for those who keep the books. */
 const landing = (role: string, picked: Workspace | null, from: string) =>
   picked?.key === "books" && ["finance", "ceo", "admin"].includes(role) ? "/books/home" : from;
 
 /** The sign-in, the same for every department: login ID and password, as always. */
-function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
+function SignIn({ workspace, from, loginId }: { workspace: Workspace; from: string; loginId?: string }) {
   const queries = useQueryClient();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(loginId ?? "");
   const [password, setPassword] = useState("");
   const [shown, setShown] = useState(false);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<{ message: string; field?: string } | null>(null);
   const picked = workspace;
-  // Management, Finance and Dispatch share one screen (Aryan, 19 Nov): the company's password opens
-  // it, no ID; each person presses Start on it. Their own ID still works ("with my own ID").
-  const isDesk = ["management", "finance", "dispatch"].includes(picked.key);
-  // The heads' and the team leads' doors (Aryan, 19 Nov: "open Heads, one password, all the heads
-  // come; press one and their page opens"): the company's password, then each name; a press signs
-  // that person in with their own login ID and that password. Their own ID still works.
-  const isDoor = picked.key === "heads" || picked.key === "leads";
-  const [ownId, setOwnId] = useState(false);
-  const deskOnly = isDesk && !ownId;
-  const byName = isDoor && !ownId;
-  const [names, setNames] = useState<DoorList["people"] | null>(null);
-  const [entering, setEntering] = useState<string | null>(null);
-  // Typing the login brings the box forward where it stands and blurs the page behind, as the old
-  // pop-up did (Aryan, 18 Nov); a click outside or Esc puts it back.
-  const [lifted, setLifted] = useState(false);
-  const boxRef = useRef<HTMLDivElement>(null);
-  const lift = () => {
-    if (!lifted) setLifted(true);
-  };
-  const drop = () => {
-    setLifted(false);
-    (document.activeElement as HTMLElement | null)?.blur();
-  };
-  useEffect(() => {
-    if (!lifted) return;
-    const close = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.stopPropagation();
-      drop();
-    };
-    document.addEventListener("keydown", close, true);
-    return () => document.removeEventListener("keydown", close, true);
-  }, [lifted]);
+  const ids = useId();
+  const [capsLock, setCapsLock] = useState(false);
+  const submitButton = useRef<HTMLButtonElement>(null);
+  // Two-step sign-in: set once the password was right, until the code signs them in.
+  const [ticket, setTicket] = useState<string | null>(null);
+  useEffect(() => setTicket(null), [workspace.key]);
   const field =
-    "h-12 w-full rounded-2xl border border-white/70 bg-white/70 pl-11 text-[15px] text-[#1f2733] shadow-[inset_0_1px_2px_rgba(20,30,50,0.06)] outline-none backdrop-blur placeholder:text-[#9aa2b0] focus:border-[#f36b21]/60 focus:bg-white focus:ring-4 focus:ring-[#f36b21]/15";
+    "h-12 w-full rounded-xl border border-[#d5d9e1] bg-white px-3.5 text-[15px] text-[#1f2733] outline-none transition-[border-color,box-shadow] placeholder:text-[#6b7380] hover:border-[#b9bfcb] focus:border-[#f36b21] focus:ring-4 focus:ring-[#f36b21]/15 disabled:bg-[#f6f7f9] aria-[invalid=true]:border-rose-500 aria-[invalid=true]:ring-rose-500/15";
+  const label = "text-[13px] font-semibold text-[#1f2733]";
 
   /** Signed in: the person's own landing, as always. */
   const signedInAs = (signedIn: Me) => {
     const back = returnTo(signedIn.id, from);
+    markActive();
     queries.setQueryData(ME, signedIn);
     rememberWorkspace(workspaceOf(signedIn).key);
     navigate(landing(signedIn.role, workspace, back), { replace: true });
     rememberPerson(signedIn.id);
   };
-  const failed = (error: unknown) =>
-    setProblem(error instanceof ApiFailure ? { message: error.message, field: error.field } : { message: "Couldn't sign in. Try again." });
-
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
     setProblem(null);
     try {
-      if (byName) {
-        // The door's names, for the password typed (nobody is signed in yet).
-        setNames((await api<DoorList>("/api/auth/door", { body: { door: picked.key, password } })).people);
-        return;
-      }
-      const { me: signedIn } = deskOnly
-        ? await api<{ me: Me }>("/api/auth/desk", { body: { desk: picked.key, password } })
-        : await api<{ me: Me }>("/api/auth/login", { body: { email, password } });
-      signedInAs(signedIn);
+      const answer = await api<SignInAnswer>("/api/auth/login", { body: { email, password, workspace: picked.key } });
+      if (answer.twoStep) {
+        // The password has done its part: it isn't kept on the screen.
+        setPassword("");
+        setShown(false);
+        setTicket(answer.ticket);
+      } else signedInAs(answer.me);
     } catch (error) {
-      failed(error);
+      setProblem(error instanceof ApiFailure ? { message: error.message, field: error.field } : { message: "Couldn't sign in. Try again." });
     } finally {
       setBusy(false);
     }
   }
 
-  /** A name pressed: that person signs in with their own login ID and the password typed. */
-  async function enter(login: string) {
-    setEntering(login);
-    setProblem(null);
-    try {
-      signedInAs((await api<{ me: Me }>("/api/auth/login", { body: { email: login, password } })).me);
-    } catch (error) {
-      failed(error);
-    } finally {
-      setEntering(null);
-    }
-  }
+  // Each error sits under the field it is about (proximity); one about neither, under the password.
+  const idError = problem?.field === "email" ? problem.message : null;
+  const passwordError = problem && !idError ? problem.message : null;
+
+  if (ticket)
+    return (
+      <CodeStep
+        ticket={ticket}
+        loginId={email}
+        field={field}
+        label={label}
+        onDone={signedInAs}
+        onBack={(message) => {
+          setTicket(null);
+          setProblem(message ? { message } : null);
+        }}
+      />
+    );
 
   return (
     <>
-    {lifted && (
-      <button type="button" aria-label="Back to the page" onClick={drop} className="fixed inset-0 z-40 cursor-default bg-[#eef0f5]/55 backdrop-blur-md" />
-    )}
-    {/* Raised above the page around it, so the eye lands here (Aryan, 18 Nov). */}
-    <div
-      ref={boxRef}
-      onFocus={lift}
-      role={lifted ? "dialog" : undefined}
-      aria-modal={lifted || undefined}
-      aria-label={lifted ? `Sign in to ${picked.label}` : undefined}
-      className={`relative w-full max-w-sm rounded-[2rem] border border-white bg-white p-6 text-center ring-1 ring-black/[0.04] transition-[scale,box-shadow] duration-200 ease-out ${
-        lifted
-          ? "z-50 scale-[1.05] shadow-[0_60px_120px_-30px_rgba(20,30,50,0.6),0_24px_48px_-20px_rgba(20,30,50,0.4)]"
-          : "shadow-[0_50px_100px_-28px_rgba(20,30,50,0.55),0_18px_36px_-18px_rgba(20,30,50,0.35)]"
-      }`}
-    >
-      <h2 className="text-[22px] font-semibold tracking-[-0.02em]">Sign in to {picked.label}</h2>
-      <p className="mt-0.5 text-sm text-[#7a8394]">
-        {deskOnly
-          ? "The desk's shared screen: the company's password, no ID"
-          : byName
-            ? names
-              ? "Press your name"
-              : "The company's password, then press your name"
-            : "Log in with your ID and password"}
-      </p>
-      {/* Two ways in (Aryan, 19 Nov): the desk's shared screen, or each person's own login for their
-          own things (payslips, leave, their own work). */}
-      {(isDesk || isDoor) && (
-        <div role="tablist" aria-label="How to sign in" className="mt-3 grid grid-cols-2 gap-1 rounded-2xl bg-[#f1f3f7] p-1 text-[13px] font-semibold">
-          {(
-            [
-              [false, isDoor ? "Pick my name" : "Desk screen"],
-              [true, "My own login"],
-            ] as const
-          ).map(([own, label]) => (
-            <button
-              key={label}
-              type="button"
-              role="tab"
-              aria-selected={ownId === own}
-              onClick={() => {
-                setOwnId(own);
-                setProblem(null);
-                setNames(null);
-              }}
-              className={`rounded-xl px-3 py-2 ${ownId === own ? "bg-white text-[#1f2733] shadow-sm" : "text-[#7a8394] hover:text-[#1f2733]"}`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      )}
-      {byName && names ? (
-        <DoorNames
-          names={names}
-          entering={entering}
-          problem={problem?.message ?? null}
-          onEnter={enter}
-          onBack={() => {
-            setNames(null);
-            setProblem(null);
-          }}
-        />
-      ) : (
-      <form onSubmit={submit} className="mt-4 grid gap-3 text-left" aria-busy={busy}>
-        {!deskOnly && !byName && (
-        <label className="relative block">
-          <span className="sr-only">Login ID</span>
-          <UserRound className="pointer-events-none absolute top-1/2 left-4 z-10 size-4 -translate-y-1/2 text-[#9aa2b0]" aria-hidden="true" />
+    {/* Read top to bottom: what this is, how to sign in, the fields, the one action, then help
+        (Hick, Miller). It stands on the page's white, no card around it. */}
+    <div className="w-full text-left">
+      <div className="relative flex items-center gap-3">
+        <h1 className="min-w-0 text-[clamp(28px,3vw,34px)] leading-tight font-semibold tracking-[-0.03em] text-[#1f2733]">Sign in to {picked.label}</h1>
+        {/* Vite's dev server only: no build has import.meta.hot, so none carries the picker. */}
+        {import.meta.hot && (
+          <DevUserPicker
+            workspace={picked}
+            current={email}
+            onPick={(id, secret) => {
+              setEmail(id);
+              setPassword(secret);
+              setShown(false);
+              setProblem(null);
+              submitButton.current?.focus();
+            }}
+          />
+        )}
+      </div>
+      <p className="mt-2 text-[15px] text-[#5b6472]">Use your own login ID and password.</p>
+      <form onSubmit={submit} className="mt-6 grid gap-4" aria-busy={busy}>
+        <div className="grid gap-1.5">
+          <label htmlFor={`${ids}-id`} className={label}>
+            Login ID
+          </label>
           <input
+            id={`${ids}-id`}
             type="text"
-            placeholder="Enter your login ID"
+            placeholder="e.g. hos1"
             autoCapitalize="none"
             spellCheck={false}
             autoComplete="username"
@@ -340,138 +340,187 @@ function SignIn({ workspace, from }: { workspace: Workspace; from: string }) {
               setEmail(event.target.value);
               setProblem(null);
             }}
-            aria-invalid={problem?.field === "email"}
+            aria-invalid={idError ? true : undefined}
+            aria-describedby={idError ? `${ids}-id-error` : undefined}
             className={field}
           />
-        </label>
-        )}
-        <label className="relative block">
-          <span className="sr-only">Password</span>
-          <KeyRound className="pointer-events-none absolute top-1/2 left-4 z-10 size-4 -translate-y-1/2 text-[#9aa2b0]" aria-hidden="true" />
-          <input
-            type={shown ? "text" : "password"}
-            placeholder={deskOnly || byName ? "Enter the company's password" : "Enter your login password"}
-            autoComplete="current-password"
-            required
-            disabled={busy}
-            value={password}
-            onChange={(event) => {
-              setPassword(event.target.value);
-              setProblem(null);
-            }}
-            aria-invalid={problem?.field === "password"}
-            aria-describedby={problem ? "login-error" : undefined}
-            className={`${field} pr-12`}
-          />
-          <button
-            type="button"
-            onClick={() => setShown(!shown)}
-            aria-label={shown ? "Hide password" : "Show password"}
-            aria-pressed={shown}
-            className="absolute inset-y-0 right-1 grid w-11 place-items-center text-[#9aa2b0] hover:text-[#1f2733]"
-          >
-            {shown ? <EyeOff className="size-4" aria-hidden="true" /> : <Eye className="size-4" aria-hidden="true" />}
-          </button>
-        </label>
-        {problem && (
-          <p id="login-error" role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-            {problem.message}
-          </p>
-        )}
+          {idError && (
+            <p id={`${ids}-id-error`} role="alert" className="flex items-start gap-1.5 text-[13px] text-rose-700">
+              <CircleAlert className="mt-px size-4 shrink-0" aria-hidden="true" /> {idError}
+            </p>
+          )}
+        </div>
+        <div className="grid gap-1.5">
+          <label htmlFor={`${ids}-password`} className={label}>
+            Password
+          </label>
+          <div className="relative">
+            <input
+              id={`${ids}-password`}
+              type={shown ? "text" : "password"}
+              autoComplete="current-password"
+              required
+              disabled={busy}
+              value={password}
+              onChange={(event) => {
+                setPassword(event.target.value);
+                setProblem(null);
+              }}
+              onKeyUp={(event) => setCapsLock(event.getModifierState("CapsLock"))}
+              onBlur={() => setCapsLock(false)}
+              aria-invalid={passwordError ? true : undefined}
+              aria-describedby={[passwordError ? `${ids}-password-error` : "", capsLock ? `${ids}-caps` : ""].filter(Boolean).join(" ") || undefined}
+              className={`${field} pr-12`}
+            />
+            <button
+              type="button"
+              onClick={() => setShown(!shown)}
+              aria-label={shown ? "Hide password" : "Show password"}
+              aria-pressed={shown}
+              title={shown ? "Hide password" : "Show password"}
+              className="absolute inset-y-0 right-0.5 grid w-11 place-items-center rounded-xl text-[#6b7380] hover:text-[#1f2733] focus-visible:outline-2 focus-visible:outline-[#f36b21]"
+            >
+              {shown ? <EyeOff className="size-[18px]" aria-hidden="true" /> : <Eye className="size-[18px]" aria-hidden="true" />}
+            </button>
+          </div>
+          {capsLock && (
+            <p id={`${ids}-caps`} className="text-[13px] text-[#8a4b00]">
+              Caps Lock is on.
+            </p>
+          )}
+          {passwordError && (
+            <p id={`${ids}-password-error`} role="alert" className="flex items-start gap-1.5 text-[13px] text-rose-700">
+              <CircleAlert className="mt-px size-4 shrink-0" aria-hidden="true" /> {passwordError}
+            </p>
+          )}
+        </div>
         <button
+          ref={submitButton}
           type="submit"
           disabled={busy}
-          className="mt-1 flex h-12 w-full items-center justify-center gap-2 rounded-2xl bg-[#f36b21] text-sm font-semibold text-white shadow-[0_14px_30px_-12px_rgba(243,107,33,0.7)] transition-colors hover:bg-[#e05a12] disabled:opacity-60"
+          className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#f36b21] text-[15px] font-semibold text-white shadow-[0_12px_26px_-12px_rgba(243,107,33,0.7)] transition-colors hover:bg-[#e05a12] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f36b21] disabled:cursor-wait disabled:opacity-70"
         >
-          {busy ? (byName ? "Opening…" : "Signing in…") : byName ? `Show the ${picked.label.toLowerCase()}` : `Enter ${picked.label}`}
-          {busy ? <LoaderCircle className="size-4 animate-spin" aria-hidden="true" /> : <ArrowRight className="size-4" aria-hidden="true" />}
+          {busy && <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />}
+          {busy ? "Signing in…" : "Sign in"}
         </button>
       </form>
-      )}
-      <p className="mt-4 text-xs text-[#9aa2b0]">Need access? Ask your administrator</p>
+      <div className="mt-6 grid gap-1 border-t border-[#eceef3] pt-2 text-[13px] text-[#5b6472]">
+        {!["ceo", "admin", "books"].includes(picked.key) && (
+          <p>
+            No account yet?{" "}
+            <Link to={`/signup/${picked.key}`} className="inline-flex min-h-11 items-center font-semibold text-[#c2410c] hover:underline">
+              Sign up
+            </Link>
+          </p>
+        )}
+        <p>Forgot your password? Ask your administrator for a one-time password.</p>
+      </div>
     </div>
     </>
   );
 }
 
-/** A door's people by name (a team lead's under their head); a press signs that one in. */
-function DoorNames({
-  names,
-  entering,
-  problem,
-  onEnter,
-  onBack,
-}: {
-  names: DoorList["people"];
-  entering: string | null;
-  problem: string | null;
-  onEnter: (login: string) => void;
-  onBack: () => void;
+/** The second step: the six digits their authenticator app shows, or a recovery code. */
+function CodeStep(props: {
+  ticket: string;
+  loginId: string;
+  field: string;
+  label: string;
+  onDone: (me: Me) => void;
+  /** Back to the password, with why when it wasn't their choice. */
+  onBack: (message?: string) => void;
 }) {
-  const groups: { head: string | null; people: DoorList["people"] }[] = [];
-  for (const one of names) {
-    const last = groups.at(-1);
-    if (last && last.head === one.head) last.people.push(one);
-    else groups.push({ head: one.head, people: [one] });
+  const [code, setCode] = useState("");
+  const [recovery, setRecovery] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const id = useId();
+  useEffect(() => {
+    if (!busy) input.current?.focus();
+  }, [recovery, busy]);
+
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    setProblem(null);
+    try {
+      props.onDone((await api<{ me: Me }>("/api/auth/login/code", { body: { ticket: props.ticket, code } })).me);
+    } catch (error) {
+      if (error instanceof ApiFailure && error.status === 401) return props.onBack(error.message);
+      setProblem(error instanceof ApiFailure ? error.message : "Couldn't check the code. Try again.");
+      setBusy(false);
+    }
   }
+  const quiet = "inline-flex min-h-11 items-center font-semibold text-[#5b6472] hover:text-[#c2410c]";
+
   return (
-    <div className="mt-4 text-left">
-      <div className="max-h-[min(26rem,55vh)] overflow-y-auto rounded-2xl border border-[#eef0f4] bg-[#fafbfc] p-1.5">
-        {groups.map((group) => (
-          <div key={group.head ?? "heads"}>
-            {group.head && (
-              <p className="px-2.5 pt-2 pb-1 text-[11px] font-semibold tracking-wide text-[#9aa2b0] uppercase">
-                Under {group.head}
-              </p>
-            )}
-            <ul className="grid gap-1">
-              {group.people.map((one) => (
-                <li key={one.login}>
-                  <button
-                    type="button"
-                    disabled={entering !== null}
-                    onClick={() => onEnter(one.login)}
-                    className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2 text-left transition hover:bg-white hover:shadow-[0_6px_18px_-10px_rgba(20,30,50,0.35)] disabled:opacity-60"
-                  >
-                    <span
-                      aria-hidden="true"
-                      className="grid size-9 shrink-0 place-items-center rounded-full bg-[#fff1e8] text-[13px] font-semibold text-[#c2410c]"
-                    >
-                      {one.name
-                        .split(/\s+/)
-                        .filter(Boolean)
-                        .slice(0, 2)
-                        .map((word) => word[0])
-                        .join("")
-                        .toUpperCase()}
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px] font-semibold text-[#1f2733]">{one.name}</span>
-                      <span className="block truncate text-[12px] text-[#7a8394]">{one.boxes.join(" · ")}</span>
-                    </span>
-                    {entering === one.login ? (
-                      <LoaderCircle className="size-4 shrink-0 animate-spin text-[#f36b21]" aria-hidden="true" />
-                    ) : (
-                      <ChevronRight className="size-4 shrink-0 text-[#9aa2b0]" aria-hidden="true" />
-                    )}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-      {problem && (
-        <p role="alert" className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
-          {problem}
-        </p>
-      )}
-      <p className="mt-3 text-[12px] text-[#7a8394]">
-        Not in the list? Your own password is different: use My own login.
+    <div className="w-full text-left">
+      <h1 className="text-[clamp(28px,3vw,34px)] leading-tight font-semibold tracking-[-0.03em] text-[#1f2733]">
+        {recovery ? "Enter a recovery code" : "Enter your code"}
+      </h1>
+      <p className="mt-2 text-[15px] text-[#5b6472]">
+        {recovery ? "One of the codes you saved when you set up two-step sign-in, for " : "Open your authenticator app and type the six digits for "}
+        <span className="inline-block max-w-full font-semibold break-all text-[#1f2733]">{props.loginId}</span>.
       </p>
-      <button type="button" onClick={onBack} className="mt-2 text-[13px] font-semibold text-[#c2410c] hover:underline">
-        ← Type the password again
-      </button>
+      <form onSubmit={submit} className="mt-6 grid gap-4" aria-busy={busy}>
+        <div className="grid gap-1.5">
+          <label htmlFor={id} className={props.label}>
+            {recovery ? "Recovery code" : "Six-digit code"}
+          </label>
+          <input
+            ref={input}
+            id={id}
+            inputMode={recovery ? "text" : "numeric"}
+            autoComplete="one-time-code"
+            autoCapitalize="characters"
+            spellCheck={false}
+            required
+            disabled={busy}
+            maxLength={24}
+            value={code}
+            onChange={(event) => {
+              setCode(event.target.value);
+              setProblem(null);
+            }}
+            aria-invalid={problem ? true : undefined}
+            aria-describedby={problem ? `${id}-error` : undefined}
+            className={`${props.field} font-mono`}
+          />
+          {problem && (
+            <p id={`${id}-error`} role="alert" className="flex items-start gap-1.5 text-[13px] text-rose-700">
+              <CircleAlert className="mt-px size-4 shrink-0" aria-hidden="true" /> {problem}
+            </p>
+          )}
+        </div>
+        <button
+          type="submit"
+          disabled={busy}
+          className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#f36b21] text-[15px] font-semibold text-white transition-colors hover:bg-[#e05a12] disabled:cursor-wait disabled:opacity-70"
+        >
+          {busy && <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />}
+          {busy ? "Checking…" : "Verify and sign in"}
+        </button>
+      </form>
+      <div className="mt-3 flex flex-wrap justify-between gap-x-4 text-[13px]">
+        <button
+          type="button"
+          className={quiet}
+          onClick={() => {
+            setRecovery(!recovery);
+            setCode("");
+            setProblem(null);
+          }}
+        >
+          {recovery ? "Use your authenticator app" : "Use a recovery code"}
+        </button>
+        <button type="button" className={quiet} onClick={() => props.onBack()}>
+          Back to password
+        </button>
+      </div>
+      <p className="mt-3 border-t border-[#eceef3] pt-4 text-[13px] text-[#5b6472]">
+        Lost your phone and your codes? Ask your administrator to reset two-step sign-in.
+      </p>
     </div>
   );
 }

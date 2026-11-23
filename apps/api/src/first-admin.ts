@@ -31,6 +31,8 @@ export async function makeFirstAdmin(
       role: "admin",
       title: "System admin",
       passwordHash: hash,
+      // The environment's password opens it once; the Admin then chooses their own.
+      mustChangePassword: true,
     });
   });
   return true;

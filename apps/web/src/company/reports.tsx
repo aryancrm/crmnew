@@ -1,6 +1,7 @@
 // Reports: sales by channel (each channel's sales against its people's targets, its head, its
 // team by who reports to whom, its areas and customers), sales by person, and the company tree.
 
+import { LeavesArrow } from "../app-switch";
 import type { ChannelFigures, ChannelReport, ChannelSalesDetail, MonthFacts } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronDown, ChevronLeft, ChevronRight, Network, User, Users } from "lucide-react";
@@ -48,7 +49,9 @@ function MoreReports() {
       <div className="grid gap-2 sm:grid-cols-2">
         {shown.map((one) => (
           <Link key={one.key} to={`/books/reports/${one.key}`} className="rounded-xl border border-slate-200 bg-white px-4 py-3 hover:border-emerald-300">
-            <div className="text-sm font-semibold text-slate-900">{one.title}</div>
+            <div className="flex items-center justify-between gap-2 text-sm font-semibold text-slate-900">
+              {one.title} <LeavesArrow app="Books" className="text-slate-500" />
+            </div>
             <div className="text-xs text-slate-500">{one.about}</div>
           </Link>
         ))}

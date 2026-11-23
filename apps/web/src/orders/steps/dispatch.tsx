@@ -85,7 +85,7 @@ export function DispatchStep({
       )}
       {data.picks.length === 0 && <Lines data={data} />}
       {data.items.some((item) => item.cold) && order.status !== "completed" && (
-        <div className="flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-[13px] text-sky-900">
+        <div className="flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900">
           <Snowflake size={16} aria-hidden="true" />
           <span>
             <b>Keep cold:</b>{" "}

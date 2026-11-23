@@ -10,6 +10,7 @@ import {
   Building2,
   ChevronRight,
   Ellipsis,
+  ShieldOff,
   Eye,
   FolderTree,
   KeyRound,
@@ -23,6 +24,7 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
+import { ResetTwoStep } from "../account/two-step";
 import { ApproversTab } from "./approvers";
 import { AreasTab, RequestsTab } from "./areas-requests";
 import { OrgChart } from "./chart";
@@ -63,6 +65,7 @@ export type Pop =
   | { kind: "cover"; seat: OrgSeat }
   | { kind: "leave"; holder: OrgHolder }
   | { kind: "unit"; parent?: OrgUnit; unit?: OrgUnit; team?: boolean }
+  | { kind: "twoStep"; holder: { personId: number; name: string } }
   | { kind: "login"; name: string; login: OrgLogin };
 
 const fmtDay = (day: string) =>
@@ -373,6 +376,9 @@ export function OrgPops({
       )}
       {pop?.kind === "login" && (
         <LoginCard name={pop.name} login={pop.login} onClose={() => setPop(null)} />
+      )}
+      {pop?.kind === "twoStep" && (
+        <ResetTwoStep person={{ id: pop.holder.personId, name: pop.holder.name }} onClose={() => setPop(null)} />
       )}
     </>
   );
@@ -759,6 +765,7 @@ export function SeatRow({
   /** Shown only, nothing to press or drag (the Admin's Channels: places change on the Company tree). */
   fixed?: boolean;
 }) {
+  const admin = useMe().data?.role === "admin";
   const queries = useQueryClient();
   const act = useAction();
   const holder = seat.holder;
@@ -872,11 +879,22 @@ export function SeatRow({
                   {
                     label: "Give a new password",
                     icon: <KeyRound size={14} />,
-                    onClick: () =>
+                    onClick: () => {
+                      if (!window.confirm(`Give ${holder.name} a new password? Their old one stops working and they are signed out.`)) return;
                       run(`/api/org/people/${holder.personId}/password`, {}, (answer) =>
                         open({ kind: "login", name: holder.name, login: answer as OrgLogin }),
-                      ),
+                      );
+                    },
                   },
+                  ...(admin
+                    ? [
+                        {
+                          label: "Reset two-step sign-in…",
+                          icon: <ShieldOff size={14} />,
+                          onClick: () => open({ kind: "twoStep", holder }),
+                        },
+                      ]
+                    : []),
                   // Kept in the menu, not on every row: someone leaving isn't news to show.
                   {
                     label: "No longer with us…",

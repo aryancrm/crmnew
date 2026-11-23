@@ -155,6 +155,12 @@ describe("the Admin panel's channels", () => {
     expect(paolo.channel?.code).toBe("URO");
     expect(paolo.area?.name).toBe("URO | Iloilo");
     expect(paolo.reportsTo?.name).toBe("Rosa Lim");
+    // The password given opens only choosing their own.
+    const own = await send("paolo", "/api/auth/password", {
+      current: paoloLogin.password,
+      next: "paolo-own-words-2",
+    });
+    expect(own.status, await own.clone().text()).toBe(200);
 
     // A hospital in his area becomes his; his order carries the channel's own Division.
     const customer = await send("sarla", "/api/customers", {

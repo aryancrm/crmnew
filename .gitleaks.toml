@@ -1,0 +1,13 @@
+# The secrets scan (CI): gitleaks' own rules, minus the tests' made-up passwords, the CI's
+# throwaway values and the env examples (blank on purpose).
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Tests, CI throwaway values, env examples"
+paths = [
+  '''\.test\.ts$''',
+  '''^\.github/workflows/ci\.yml$''',
+  '''^apps/api/scripts/ci-database\.ts$''',
+  '''(^|/)\.env[^/]*\.example$''',
+]

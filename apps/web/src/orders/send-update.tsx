@@ -151,7 +151,7 @@ export function SendToCustomer({
       {open && (
         <div
           role="menu"
-          className={`absolute left-0 z-30 w-80 sm:right-0 sm:left-auto max-w-[calc(100vw-2rem)] rounded-xl bg-white p-1.5 text-[13px] shadow-pop ${up ? "bottom-full mb-1" : "mt-1"}`}
+          className={`absolute left-0 z-30 w-80 sm:right-0 sm:left-auto max-w-[calc(100vw-3rem)] rounded-xl bg-white p-1.5 text-[13px] shadow-pop ${up ? "bottom-full mb-1" : "mt-1"}`}
         >
           {query.isPending ? (
             <div className="px-3 py-3 text-ink-2">Getting the words ready…</div>

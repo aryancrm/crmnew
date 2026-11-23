@@ -5,15 +5,25 @@ import { decisionRoutes } from "./decisions/routes";
 import { sampleRoutes } from "./samples/routes";
 import { complaintRoutes } from "./complaints/routes";
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { deleteCookie, getCookie, setCookie } from "hono/cookie";
+import { bodyLimit } from "hono/body-limit";
 import { cors } from "hono/cors";
+import { secureHeaders } from "hono/secure-headers";
 import { z } from "zod";
-import { DOORS, doorPeople } from "./auth/doors";
-import { hashPassword, passwordMatches, passwordProblem } from "./auth/password";
+import { accountEvent } from "./account/events";
+import { accountRoutes } from "./account/routes";
+import { signUpRoutes } from "./account/sign-up-routes";
+import { deviceCookie, deviceMark, passwordGuard } from "./auth/guard";
+import { makeTicket, readTicket, spendTicket, twoStepOn, useCode } from "./auth/two-step";
+import { hashPassword, passwordProblem } from "./auth/password";
+import { ownWorkspace, WORKSPACE_KEYS, type WorkspaceKey, workspaceAllows, workspaceByKey } from "./auth/workspaces";
+import type { Role } from "./people/roles";
 import {
   BACK_COOKIE,
+  DAY_SESSION_ROLES,
+  endOfWorkingDay,
   endOtherSessions,
   endSession,
   SESSION_COOKIE,
@@ -64,7 +74,7 @@ import { kpiRoutes } from "./kpis/routes";
 import { sellerRoutes } from "./sellers/routes";
 import { targetRoutes } from "./targets/routes";
 import { teamRoutes } from "./team/routes";
-import { DUTY_DESKS, type DutyDesk, deskPerson, deskReport, deskStandIn, deskTeam, shareOut, shareOutAll, startPerson, takeFinanceOrder } from "./desks/service";
+import { DUTY_DESKS, type DutyDesk, deskPerson, deskReport, deskTeam, shareOut, shareOutAll, startPerson, takeFinanceOrder } from "./desks/service";
 import { portalDepartment } from "./portal/service";
 import type { ApiError, Me } from "./types";
 
@@ -73,13 +83,19 @@ export type AppOptions = {
   webUrl: string;
 };
 
-const MAX_WRONG = 5;
 
 const deskParam = (value: string): DutyDesk => {
   if (!DUTY_DESKS.includes(value as DutyDesk)) throw new Refusal(404, "not_found", "No such desk.");
   return value as DutyDesk;
 };
-const LOCK_MINUTES = 15;
+// The proxy's own limit (nginx: 50 MB, for photos and papers) holds without the proxy too.
+const MB = 1024 * 1024;
+const atMost = (maxSize: number) =>
+  bodyLimit({
+    maxSize,
+    onError: (c) =>
+      c.json({ error: { code: "too_large", message: "That is too large to send." } } satisfies ApiError, 413),
+  });
 
 /** An answer slower than this (on the server) is noted for the Admin's Slow screens page. */
 const SLOW_MS = 800;
@@ -87,6 +103,7 @@ const SLOW_MS = 800;
 export function createApp(db: Database, options: AppOptions) {
   const app = new Hono<Env>();
   const secure = options.webUrl.startsWith("https://");
+  const passwordRight = passwordGuard(db);
 
   // Time and query count on every response: how a slow screen is found.
   app.use("*", async (c, next) => {
@@ -107,7 +124,11 @@ export function createApp(db: Database, options: AppOptions) {
     }
   });
 
+  app.use("*", secureHeaders());
   app.use("/api/*", cors({ origin: options.webUrl, credentials: true }));
+  app.use("/api/auth/*", atMost(16 * 1024));
+  app.use("/api/*", atMost(50 * MB));
+  app.use("/webhooks/*", atMost(2 * MB));
 
   app.onError((error, c) => {
     if (error instanceof Refusal) {
@@ -137,11 +158,7 @@ export function createApp(db: Database, options: AppOptions) {
   );
 
   // Every signed-in request notes who is working (their day starts with the first one).
-  const signedInOnly = signedInWith(
-    db,
-    (me) => markSeen(db, me),
-    (me, method, path) => deskStandIn(db, me, method, path),
-  );
+  const signedInOnly = signedInWith(db, (me) => markSeen(db, me));
   // A lead's page reading one box of the team switch (?unit=): checked once here, then every
   // service's team is that box and what is under it (org/scope.ts).
   const signedIn = createMiddleware<Env>((c, next) =>
@@ -191,6 +208,10 @@ export function createApp(db: Database, options: AppOptions) {
   app.post("/api/desk/:desk/people/:id/start", signedIn, async (c) => {
     const input = await readBody(c, z.object({ on: z.boolean() }));
     const desk = deskParam(c.req.param("desk"));
+    // A person starts themselves, on their own login (the Admin may start anyone); anyone at the
+    // desk may stop someone.
+    if (input.on && c.get("me").role !== "admin" && c.get("me").id !== idParam(c))
+      throw new Refusal(403, "not_allowed", "Each person starts themselves, on their own login.");
     await startPerson(db, c.get("me"), desk, idParam(c), input.on);
     return c.json(await deskTeam(db, c.get("me"), desk));
   });
@@ -205,117 +226,61 @@ export function createApp(db: Database, options: AppOptions) {
     c.json(await portalDepartment(db, c.req.param("key"))),
   );
 
-  /** Signs a person in with a password: the lock after wrong tries, the session, its cookie. */
-  const signInAs = async (
-    c: Context<Env>,
-    found: typeof person.$inferSelect | undefined,
-    password: string,
-    wrong: Refusal,
-    desk?: "management" | "finance" | "dispatch",
-  ) => {
-    if (!found || !found.active) throw wrong;
+  /** This browser is one of theirs from now on (auth/guard.ts). */
+  const rememberDevice = (c: Context<Env>, who: { id: number; passwordHash: string }) =>
+    setCookie(c, deviceCookie(who.id), deviceMark(who), {
+      httpOnly: true,
+      secure,
+      sameSite: "Lax",
+      path: "/api/auth",
+      maxAge: 365 * 24 * 60 * 60,
+    });
 
-    if (found.lockedUntil && found.lockedUntil.getTime() > Date.now()) {
-      const minutes = Math.ceil((found.lockedUntil.getTime() - Date.now()) / 60000);
-      throw new Refusal(
-        429,
-        "locked",
-        `Too many wrong passwords. Try again in ${minutes} minutes.`,
-      );
-    }
-
-    if (!(await passwordMatches(password, found.passwordHash))) {
-      const failed = found.failedLogins + 1;
-      const lock = failed >= MAX_WRONG;
-      await db
-        .update(person)
-        .set({
-          failedLogins: lock ? 0 : failed,
-          lockedUntil: lock ? new Date(Date.now() + LOCK_MINUTES * 60000) : null,
-        })
-        .where(eq(person.id, found.id));
-      throw wrong;
-    }
-
-    await db
+  /** The end of every sign-in, with or without a code. */
+  async function letIn(c: Context<Env>, found: typeof person.$inferSelect, workspace: string | null) {
+    // A password changed or a person switched off while this one was being checked: not signed in.
+    const still = await db
       .update(person)
-      .set({ failedLogins: 0, lockedUntil: null, lastSignInAt: new Date() })
-      .where(eq(person.id, found.id));
+      .set({ lastSignInAt: new Date() })
+      .where(
+        and(
+          eq(person.id, found.id),
+          eq(person.passwordHash, found.passwordHash),
+          eq(person.active, true),
+          eq(person.passwordPending, false),
+        ),
+      )
+      .returning({ id: person.id });
+    if (!still.length) throw new Refusal(401, "wrong_login", "Wrong login ID or password.");
 
-    const token = await startSession(db, found.id, undefined, desk);
+    const role = found.role as Role;
+    const until = DAY_SESSION_ROLES.includes(role) ? endOfWorkingDay() : undefined;
+    const token = await startSession(db, found.id, undefined, workspace ?? ownWorkspace(role)?.key ?? null, until);
     setCookie(c, SESSION_COOKIE, token, {
       httpOnly: true,
       secure,
       sameSite: "Lax",
       path: "/",
-      maxAge: SESSION_DAYS * 24 * 60 * 60,
+      ...(until ? { expires: until } : { maxAge: SESSION_DAYS * 24 * 60 * 60 }),
     });
-    const me = await whoIs(db, token);
-    return c.json({ me });
-    return c.json({ me });
-  };
+    // An earlier "look as" of whoever used this browser before isn't this person's.
+    deleteCookie(c, BACK_COOKIE, { path: "/" });
+    rememberDevice(c, found);
+    return c.json({ me: await whoIs(db, token) });
+  }
 
-  // Management's, Finance's and Dispatch's common screen (Aryan, 19 Nov: "they all have the same
-  // screen and sign in beside it; one password for it, everyone uses it"): the desk opens with the
-  // company's password alone, as the desk's first seat; each person then presses Start beside it,
-  // and what is done on an order is written in the name of the person it was given to.
-  app.post("/api/auth/desk", async (c) => {
-    const input = await readBody(
-      c,
-      z.object({
-        desk: z.enum(["management", "finance", "dispatch"], { error: "Pick the desk." }),
-        password: z.string().min(1, "Type the password."),
-      }),
-    );
-    const [seat] = await rows<{ personId: number }>(
-      db,
-      sql`select h.person_id::int as "personId" from seat s
-        join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and h.starts_on <= (now() at time zone 'Asia/Manila')::date and (h.ends_on is null or h.ends_on >= (now() at time zone 'Asia/Manila')::date)
-        join person p on p.id = h.person_id and p.active and p.role = ${input.desk}
-        where s.active and s.module = ${input.desk} order by s.lead desc, s.sort, s.id limit 1`,
-    );
-    const [found] = seat ? await db.select().from(person).where(eq(person.id, seat.personId)).limit(1) : [];
-    return signInAs(c, found, input.password, new Refusal(401, "wrong_login", "Wrong password."), input.desk);
-  });
-
-  // The sales line's doors (Aryan, 19 Nov: "open Heads, one password, all the heads come; press one
-  // and their page opens"): the company's password once, then the heads or the team leads by name;
-  // a press signs that person in with their own login (/api/auth/login, their seat's ID and the
-  // password). Wrong passwords close the door for a while, as a person's own login is locked.
-  const doorTries = new Map<string, { wrong: number; until: number }>();
-  app.post("/api/auth/door", async (c) => {
-    const input = await readBody(
-      c,
-      z.object({
-        door: z.enum(DOORS, { error: "Pick Heads or Team leads." }),
-        password: z.string().min(1, "Type the password."),
-      }),
-    );
-    const key = `${input.door}:${c.req.header("x-forwarded-for")?.split(",")[0]?.trim() ?? ""}`;
-    const tries = doorTries.get(key);
-    if (tries && tries.until > Date.now()) {
-      const minutes = Math.ceil((tries.until - Date.now()) / 60000);
-      throw new Refusal(429, "locked", `Too many wrong passwords. Try again in ${minutes} minutes.`);
-    }
-    const people = await doorPeople(db, input.door, input.password);
-    if (!people.length) {
-      const wrong = (tries?.wrong ?? 0) + 1;
-      doorTries.set(
-        key,
-        wrong >= MAX_WRONG ? { wrong: 0, until: Date.now() + LOCK_MINUTES * 60000 } : { wrong, until: 0 },
-      );
-      throw new Refusal(401, "wrong_login", "Wrong password.", "password");
-    }
-    doorTries.delete(key);
-    return c.json({ door: input.door, people });
-  });
-
+  // The one way in: a person's own login ID and their own password (and, for whoever turned on
+  // two-step sign-in, their code). It opens one session, theirs, good in every app their role has;
+  // what they may do is checked on each call.
   app.post("/api/auth/login", async (c) => {
     const input = await readBody(
       c,
       z.object({
-        email: z.string().trim().min(1, "Type your login ID."),
-        password: z.string().min(1, "Type your password."),
+        email: z.string().trim().min(1, "Type your login ID.").max(200),
+        password: z.string().min(1, "Type your password.").max(200),
+        // The department page signed in at. The web app always sends it; without it the session
+        // is opened for the login's own department.
+        workspace: z.enum(WORKSPACE_KEYS, { error: "Pick the department." }).optional(),
       }),
     );
     const wrong = new Refusal(401, "wrong_login", "Wrong login ID or password.");
@@ -330,7 +295,57 @@ export function createApp(db: Database, options: AppOptions) {
           : eq(sql`lower(${person.email})`, input.email.toLowerCase()),
       )
       .limit(1);
-    return signInAs(c, found, input.password, wrong);
+    if (!found?.active) throw wrong;
+    // Said before any password is checked, so this is no way to test the company's old one.
+    if (found.passwordPending)
+      throw new Refusal(
+        403,
+        "password_pending",
+        "This login has no password yet. Use the link in your acceptance email, or ask your administrator for a one-time password.",
+        "email",
+      );
+    if (!(await passwordRight(found, input.password, getCookie(c, deviceCookie(found.id))))) throw wrong;
+
+    // Checked only after the password is right, so a wrong page never tells a stranger whose login
+    // it is. A right password on the wrong department isn't a wrong try: it opens nothing.
+    const role = found.role as Role;
+    const own = ownWorkspace(role);
+    const workspace = input.workspace;
+    if (workspace && !workspaceAllows(workspace, role))
+      throw new Refusal(
+        403,
+        "wrong_department",
+        `This login has no access to ${workspaceByKey(workspace)?.label ?? "this department"}.${own ? ` Sign in on the ${own.label} page.` : ""}`,
+        "email",
+      );
+
+    // Two-step sign-in: the password was right; the session waits for the code.
+    if (await twoStepOn(db, found.id)) {
+      const ticket = await makeTicket(db, found, workspace ?? null);
+      c.header("cache-control", "no-store");
+      return c.json({ twoStep: true, ticket });
+    }
+    return letIn(c, found, workspace ?? null);
+  });
+
+  // The second step: the code from their app, or a recovery code, for the ticket the password got.
+  app.post("/api/auth/login/code", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        ticket: z.string().min(20).max(100),
+        code: z.string().trim().min(6, "Enter the code.").max(24),
+      }),
+    );
+    const waiting = await readTicket(db, input.ticket);
+    await useCode(db, waiting.personId, input.code);
+    await spendTicket(db, input.ticket);
+    const [found] = await db.select().from(person).where(eq(person.id, waiting.personId)).limit(1);
+    const workspace = waiting.workspace as WorkspaceKey | null;
+    // A new password or another role since the password step: start again.
+    if (!found || found.passwordHash !== waiting.passwordHash || (workspace && !workspaceAllows(workspace, found.role as Role)))
+      throw new Refusal(401, "sign_in_again", "Your account changed meanwhile. Sign in again.");
+    return letIn(c, found, workspace);
   });
 
   app.post("/api/auth/logout", async (c) => {
@@ -404,10 +419,11 @@ export function createApp(db: Database, options: AppOptions) {
   });
 
   app.post("/api/auth/password", signedIn, async (c) => {
-    const input = await readBody(c, z.object({ current: z.string(), next: z.string() }));
+    const input = await readBody(c, z.object({ current: z.string().max(200), next: z.string() }));
     const me = c.get("me");
     const [row] = await db.select().from(person).where(eq(person.id, me.id)).limit(1);
-    if (!row || !(await passwordMatches(input.current, row.passwordHash)))
+    if (!row) throw new Refusal(401, "signed_out", "Sign in first.");
+    if (!(await passwordRight(row, input.current, getCookie(c, deviceCookie(row.id)))))
       throw new Refusal(400, "invalid", "That isn't your current password.", "current");
     const problem = passwordProblem(input.next);
     if (problem) throw new Refusal(400, "invalid", problem, "next");
@@ -418,13 +434,21 @@ export function createApp(db: Database, options: AppOptions) {
         "Choose a password different from the current one.",
         "next",
       );
-    await db
+    const passwordHash = await hashPassword(input.next);
+    // Only over the password just checked: one the administrator gave meanwhile stands.
+    const changed = await db
       .update(person)
-      .set({ passwordHash: await hashPassword(input.next), mustChangePassword: false })
-      .where(eq(person.id, me.id));
+      .set({ passwordHash, mustChangePassword: false })
+      .where(and(eq(person.id, me.id), eq(person.passwordHash, row.passwordHash)))
+      .returning({ id: person.id });
+    if (!changed.length) throw new Refusal(409, "not_now", "Your password was changed meanwhile. Sign in again.");
     await endOtherSessions(db, me.id, c.get("token"));
+    await accountEvent(db, me.id, me.id, "password_changed");
+    rememberDevice(c, { id: me.id, passwordHash });
     return c.json({ ok: true });
   });
+  accountRoutes(app, db, signedIn, passwordRight);
+  signUpRoutes(app, db, signedIn, options.webUrl);
 
   inventoryRoutes(app, db, signedIn);
   notifyRoutes(app, db, signedIn);

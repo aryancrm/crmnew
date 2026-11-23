@@ -4,6 +4,7 @@
 // specialty and hospital; a patient's details from their orders), then every field Zoho kept, its
 // people, and Transactions — Zoho's documents and the CRM's own, newest first.
 
+import { LeavesArrow } from "../app-switch";
 import type { BookCustomer, BookCustomerList, BookKind } from "@2mg/api/types";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
@@ -57,8 +58,8 @@ export function CustomersPage() {
   const header = (
     <div className="flex h-[60px] shrink-0 items-center justify-between border-b border-[#ebeaf2] px-5">
       <ViewMenu views={data?.views ?? []} view={data?.view ?? "all"} plural="Customers" labelOf={(key) => VIEW_LABEL[key] ?? key} onPick={(key) => set({ view: key === "all" ? null : key, page: null })} />
-      <Link to="/customers?new=1" className="flex h-[32px] items-center gap-1 rounded-[5px] bg-[#408dfb] px-2.5 text-white hover:bg-[#2f7ef0]">
-        <Plus size={15} aria-hidden="true" /> New
+      <Link to="/customers?new=1" title="Opens the CRM" className="flex h-[32px] items-center gap-1 rounded-[5px] bg-[#408dfb] px-2.5 text-white hover:bg-[#2f7ef0]">
+        <Plus size={15} aria-hidden="true" /> New <LeavesArrow app="the CRM" />
       </Link>
     </div>
   );

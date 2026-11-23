@@ -3,7 +3,7 @@
 
 import { CHANNEL_DIVISION, divisionsOf } from "../orders/divisions";
 import { createHash, randomBytes } from "node:crypto";
-import { and, eq, gt, ne, sql } from "drizzle-orm";
+import { and, eq, gt, isNull, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "../db/index";
 import { area, channel, person, session } from "../db/schema";
@@ -15,6 +15,8 @@ export const SESSION_COOKIE = "sid";
 export const BACK_COOKIE = "sid_back";
 export const SESSION_DAYS = 30;
 const DAY = 24 * 60 * 60 * 1000;
+/** They work on shared computers: their session ends with the working day, never kept alive. */
+export const DAY_SESSION_ROLES: readonly string[] = ["management", "finance", "dispatch"];
 
 const hashOf = (token: string) => createHash("sha256").update(token).digest("hex");
 
@@ -22,15 +24,17 @@ export async function startSession(
   db: Database,
   personId: number,
   viewedBy?: number,
-  desk?: "management" | "finance" | "dispatch",
+  workspace?: string | null,
+  /** When it ends, if not the usual (Management, Finance, Dispatch: the end of the working day). */
+  until?: Date,
 ): Promise<string> {
   const token = randomBytes(32).toString("base64url");
   await db.insert(session).values({
     tokenHash: hashOf(token),
     personId,
-    desk: desk ?? null,
+    workspace: workspace ?? null,
     // Looking as someone else lasts two hours at most.
-    expiresAt: new Date(Date.now() + (viewedBy ? 2 * 60 * 60 * 1000 : SESSION_DAYS * DAY)),
+    expiresAt: until ?? new Date(Date.now() + (viewedBy ? 2 * 60 * 60 * 1000 : SESSION_DAYS * DAY)),
     viewedBy: viewedBy ?? null,
   });
   return token;
@@ -50,7 +54,7 @@ export async function endSession(db: Database, token: string): Promise<void> {
   await db.delete(session).where(eq(session.tokenHash, hashOf(token)));
 }
 
-/** Ends every session of a person except the one given (after a password change). */
+/** Ends every session of a person, those looking as someone else too, except the one given. */
 export async function endOtherSessions(
   db: Database,
   personId: number,
@@ -58,7 +62,24 @@ export async function endOtherSessions(
 ): Promise<void> {
   await db
     .delete(session)
-    .where(and(eq(session.personId, personId), ne(session.tokenHash, hashOf(keep))));
+    .where(and(or(eq(session.personId, personId), eq(session.viewedBy, personId)), ne(session.tokenHash, hashOf(keep))));
+}
+
+/** How many other browsers they are signed in on. */
+export async function otherSessionCount(db: Database, personId: number, keep: string): Promise<number> {
+  const [found] = await db
+    .select({ n: sql<number>`count(*)::int` })
+    .from(session)
+    .where(
+      and(
+        eq(session.personId, personId),
+        isNull(session.viewedBy),
+        isNull(session.desk),
+        gt(session.expiresAt, sql`now()`),
+        ne(session.tokenHash, hashOf(keep)),
+      ),
+    );
+  return found?.n ?? 0;
 }
 
 /** Who is asking, in one query. Null when the token is unknown, expired or the person is off. */
@@ -85,7 +106,10 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
       bossTitle: boss.title,
       viewerId: viewer.id,
       viewerName: viewer.name,
-      deskScreen: session.desk,
+      viewerRole: viewer.role,
+      workspace: session.workspace,
+      photo: sql<number | null>`(select ph.id::int from person_photo ph where ph.person_id = ${person.id} and ph.archived_at is null)`,
+      twoStep: sql<boolean>`exists (select 1 from person_two_step ts where ts.person_id = ${person.id} and ts.on_at is not null)`,
       // The business box their seat sits in (by its channel), so a seat's desk follows the chart.
       // Of two seats, the one that decides their screens (org/service.ts projectOrg): a lead seat
       // over one that leads nothing, else the first given.
@@ -108,13 +132,19 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
         eq(session.tokenHash, hashOf(token)),
         gt(session.expiresAt, sql`now()`),
         eq(person.active, true),
+        // Whoever is at the keyboard (the viewer, when looking as someone) has a password of their
+        // own and still works here; a shared screen's session signs nobody in.
+        sql`coalesce(${viewer.passwordPending}, ${person.passwordPending}) = false`,
+        sql`coalesce(${viewer.active}, true)`,
+        isNull(session.desk),
       ),
     )
     .limit(1);
   if (!row || !isRole(row.role)) return null;
 
   // Keep a session in use alive, writing at most once a day.
-  if (!row.viewerId && Date.now() - row.lastSeenAt.getTime() > DAY)
+  // A shared computer's session ends with the working day: never kept alive past it.
+  if (!row.viewerId && !DAY_SESSION_ROLES.includes(row.role) && Date.now() - row.lastSeenAt.getTime() > DAY)
     await db
       .update(session)
       .set({ lastSeenAt: new Date(), expiresAt: new Date(Date.now() + SESSION_DAYS * DAY) })
@@ -129,7 +159,9 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
     roleLabel: ROLE_LABEL[row.role],
     business: row.businessCode ?? null,
     divisions: divisionsOf(row.seatDivisions, row.channelDivision ?? CHANNEL_DIVISION[row.channelCode ?? ""] ?? null),
-    deskScreen: (row.deskScreen as Me["deskScreen"]) ?? null,
+    workspace: row.workspace ?? null,
+    photo: row.photo ?? null,
+    twoStep: row.viewerId ? undefined : row.twoStep,
     // Someone looking as this person isn't asked to change their password.
     mustChangePassword: row.viewerId ? false : row.mustChangePassword,
     channel:
@@ -141,6 +173,13 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
         ? { id: row.areaId, name: row.areaName, cities: row.areaCities ?? [] }
         : null,
     reportsTo: row.bossName ? { name: row.bossName, title: row.bossTitle } : null,
-    viewedBy: row.viewerId ? { id: row.viewerId, name: row.viewerName ?? "" } : null,
+    viewedBy: row.viewerId ? { id: row.viewerId, name: row.viewerName ?? "", role: row.viewerRole ?? "" } : null,
   };
+}
+
+/** The end of today's working day in Manila (11 pm), or of tomorrow's if that has passed. */
+export function endOfWorkingDay(now = new Date()): Date {
+  const manila = new Date(now.getTime() + 8 * 60 * 60 * 1000);
+  const end = Date.UTC(manila.getUTCFullYear(), manila.getUTCMonth(), manila.getUTCDate(), 23) - 8 * 60 * 60 * 1000;
+  return new Date(end > now.getTime() ? end : end + DAY);
 }

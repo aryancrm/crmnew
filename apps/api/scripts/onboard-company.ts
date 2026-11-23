@@ -1,6 +1,6 @@
 // Puts the 2026 chart's people into the CRM (docs/company-map.units.js, HR's chart of 10 Oct 2026):
-// every unit, every seat and the person in it, with the seat's login ID and the company's common
-// password (JOIN_PASSWORD, never in the code; nobody has to change it, Aryan 17 Nov 2026). Then
+// every unit, every seat and the person in it, with the seat's login ID and no password yet
+// (scripts/give-passwords.ts then gives each person a one-time password of their own). Then
 // Zoho's salespeople are tied to their seats (docs/ORG-CHART-2026.md), which moves the customers
 // they last sold to under that seat. With --retire-demo, the demo company's people (…@2mg.test)
 // leave first, the Admin's login stays; their seats close, their history stays.
@@ -8,7 +8,7 @@
 // Safe to run again: a person already here by name is skipped, a unit already here is reused.
 // Dry run by default (prints what it would do); --apply writes.
 //
-//   TEST_PGLITE_DIR=<a local database> JOIN_PASSWORD=… npx tsx scripts/onboard-company.ts [--apply] [--retire-demo] [--no-zoho] [--zoho-only]
+//   TEST_PGLITE_DIR=<a local database> npx tsx scripts/onboard-company.ts [--apply] [--retire-demo] [--no-zoho] [--zoho-only]
 //   (the live database only with --live and Aryan's word; 17 Nov: live with --no-zoho, no Zoho data yet)
 //
 // A fresh CRM's boxes (one per channel: "Hospitals", "Doctors"…) are taken over and renamed to the
@@ -20,7 +20,6 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runInNewContext } from "node:vm";
 import { sql } from "drizzle-orm";
-import { joinPassword } from "../src/auth/password";
 import { type Database, rows } from "../src/db/index";
 import { addPerson, addSeat, addUnit, fillSeat, fillSeatLogins, projectOrg, updateUnit } from "../src/org/service";
 import type { Me, OrgUnitKind, Role } from "../src/types";
@@ -38,8 +37,8 @@ if (!process.env.TEST_PGLITE_DIR && !process.argv.includes("--live")) {
   console.log("Give TEST_PGLITE_DIR (a local database). The live one only with --live, on Aryan's word.");
   process.exit(1);
 }
-if (write && !joinPassword()) {
-  console.log("Set JOIN_PASSWORD (the company's common password, at least 8 characters).");
+if (write && process.env.JOIN_PASSWORD) {
+  console.log("JOIN_PASSWORD is retired: unset it. Each person gets their own from scripts/give-passwords.ts.");
   process.exit(1);
 }
 
@@ -251,6 +250,13 @@ const me = {
   area: null,
   reportsTo: null,
 } as Me;
+
+/** Added with no password yet: scripts/give-passwords.ts hands theirs out. */
+async function withoutPassword(input: Parameters<typeof addPerson>[2]) {
+  const added = await addPerson(db, me, input);
+  await db.execute(sql`update person set password_pending = true where id = ${added.personId}`);
+  return added;
+}
 
 // ---- 1. The demo company leaves (its Admin's login stays) ----
 const demo = await rows<{ id: number; name: string; role: Role }>(
@@ -470,7 +476,7 @@ for (const seat of seats) {
     });
     Object.assign(row, { status: "vacant seat added", seatId });
   } else {
-    const made = await addPerson(db, me, {
+    const made = await withoutPassword({
       name: seat.who,
       ...(reuse
         ? { seatId: reuse }
@@ -488,7 +494,7 @@ const [ceoSeat] = await rows<{ id: number; holder: string | null }>(
     from seat s where s.active and s.module = 'ceo' order by s.id limit 1`,
 );
 if (write && ceoSeat && !ceoSeat.holder && !byName.has("naresh bishnoi")) {
-  const made = await addPerson(db, me, { name: "Naresh Bishnoi", seatId: ceoSeat.id });
+  const made = await withoutPassword({ name: "Naresh Bishnoi", seatId: ceoSeat.id });
   byName.set("naresh bishnoi", made.personId);
   console.log("  Naresh Bishnoi in the CEO's seat.");
 }
@@ -496,7 +502,7 @@ if (write && ceoSeat && !ceoSeat.holder && !byName.has("naresh bishnoi")) {
 if (write && !ceoSeat && !byName.has("naresh bishnoi")) {
   const companyId = unitIds.get("company") as number;
   const [lead] = await rows<{ id: number }>(db, sql`select id::int as id from seat where unit_id = ${companyId} and active and lead limit 1`);
-  const made = await addPerson(db, me, { name: "Naresh Bishnoi", unitId: companyId, module: "ceo", title: "CEO", lead: !lead });
+  const made = await withoutPassword({ name: "Naresh Bishnoi", unitId: companyId, module: "ceo", title: "CEO", lead: !lead });
   byName.set("naresh bishnoi", made.personId);
   console.log("  Naresh Bishnoi in a new CEO's seat at the top.");
 }

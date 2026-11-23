@@ -62,6 +62,16 @@ const classification = z.enum(["probationary", "regular", "part_time", "intern"]
 
 export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandler<Env>) {
   app.use("/api/hr/*", signedIn);
+  // Looking as someone shows their work, not their private record: pay, bank, government numbers,
+  // birth date, contact, a medical certificate. A team lead or a head gets none of it that way; the
+  // CEO and the Admin read these on their own login anyway.
+  for (const path of ["/api/hr/people/*", "/api/hr/payslips/*", "/api/hr/payroll/*", "/api/hr/leave/:id/file"])
+    app.use(path, async (c, next) => {
+      const viewer = c.get("me").viewedBy;
+      if (viewer && viewer.role !== "ceo" && viewer.role !== "admin")
+        throw new Refusal(403, "private", "Pay and personal records are private: looking as someone doesn't open them.");
+      await next();
+    });
   // The company's working hours and holidays: every screen's desk clock runs on them.
   app.get("/api/hr/calendar", async (c) => {
     const { schedule, holidays } = await workCalendar(db);

@@ -84,7 +84,7 @@ export function OrderVersions({ versions }: { versions: OrderVersion[] }) {
   const last = at > 0 ? versions[at] : undefined;
   const before = at > 0 ? versions[at - 1] : undefined;
   return (
-    <div className="mt-3 rounded-xl bg-slate-50 px-3.5 py-3 text-[13px] text-slate-800">
+    <div className="mt-3 rounded-xl bg-slate-50 px-3.5 py-3 text-sm text-slate-800">
       {last && before && (
         <div className="flex gap-2.5">
           <PencilLine className="mt-0.5 size-4 shrink-0 text-sky-600" aria-hidden="true" />

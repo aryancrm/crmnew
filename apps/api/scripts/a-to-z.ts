@@ -18,6 +18,8 @@ import type { Me } from "../src/types";
 if (!process.env.TEST_PGLITE_DIR) throw new Error("Give TEST_PGLITE_DIR: a copy of a local database (never the live one).");
 const db = openDatabase({ dir: process.env.TEST_PGLITE_DIR });
 await migrate(db);
+// A copy: everyone counts as having a password of their own, so their sessions work here.
+await db.execute(sql`update person set password_pending = false, must_change_password = false`);
 const app = createApp(db, { webUrl: "http://localhost:5180" });
 const today = todayManila();
 
@@ -43,19 +45,18 @@ function must(condition: unknown, why: string): asserts condition {
   if (!condition) throw new Error(why);
 }
 
-// ---- the people, each with their own login (and the desks' shared screens) ----
+// ---- the people, each with their own login ----
 const idOf = async (name: string) => {
   const [found] = await rows<{ id: number }>(db, sql`select id::int as id from person where active and name = ${name} order by id limit 1`);
   must(found, `${name} is not in this database`);
   return found.id;
 };
 const cookies = new Map<string, string>();
-const as = async (name: string, desk?: "management" | "finance" | "dispatch") => {
-  const key = `${name}${desk ? `@${desk}` : ""}`;
-  const known = cookies.get(key);
+const as = async (name: string) => {
+  const known = cookies.get(name);
   if (known) return known;
-  const cookie = `sid=${await startSession(db, await idOf(name), undefined, desk)}`;
-  cookies.set(key, cookie);
+  const cookie = `sid=${await startSession(db, await idOf(name))}`;
+  cookies.set(name, cookie);
   return cookie;
 };
 /** Management approves as its screen does since 22 Nov: each check the order needs first
@@ -72,7 +73,7 @@ async function approveAs(who: string, id: number): Promise<void> {
 }
 
 async function call<T = Record<string, unknown>>(who: string, path: string, body?: unknown, method?: string): Promise<T> {
-  const cookie = who.includes("@") ? await as(who.split("@")[0] as string, who.split("@")[1] as "management") : await as(who);
+  const cookie = await as(who);
   const form = body instanceof FormData;
   const response = await app.request(path, {
     method: method ?? (body === undefined ? "GET" : "POST"),
@@ -176,18 +177,14 @@ await step("a MedRep can't approve his own order", async () => {
 });
 
 // ================================================================== Management
-part("2 · Management (Kate Cagoyong, Sheila Mae Bazar; the shared screen and their own logins)");
+part("2 · Management (Kate Cagoyong, Sheila Mae Bazar; their own logins)");
 let owner = "";
-await step("both press Start on the shared screen; the order is given to one of them", async () => {
-  for (const name of MGMT) await call(`${MGMT[0]}@management`, `/api/desk/management/people/${await idOf(name)}/start`, { on: true });
+await step("each presses Start on their own login; the order is given to one of them", async () => {
+  for (const name of MGMT) await call(name, `/api/desk/management/people/${await idOf(name)}/start`, { on: true });
   const [row] = await rows<{ by: string | null }>(db, sql`select p.name as by from sales_order o left join person p on p.id = o.manage_by where o.id = ${o1}`);
   must(row?.by && MGMT.includes(row.by), `given to ${row?.by ?? "nobody"}`);
   owner = row.by;
   return `given to ${owner}`;
-});
-await step("the shared screen shows Management's desk, no person's own things", async () => {
-  const me = await call<{ me: { deskScreen: string | null } }>(`${MGMT[0]}@management`, "/api/me");
-  must(me.me.deskScreen === "management", "not marked as the desk's screen");
 });
 await step("each person's own login sees the queue with the order and its person", async () => {
   for (const name of MGMT) {
@@ -265,7 +262,7 @@ await step("the papers asked again after the change, then approved", async () =>
 part("3 · Finance (Sarla Devi, Rommel Arcanghel)");
 let fin = "";
 await step("both Start; the order is given to one of them", async () => {
-  for (const name of FIN) await call(`${FIN[0]}@finance`, `/api/desk/finance/people/${await idOf(name)}/start`, { on: true });
+  for (const name of FIN) await call(name, `/api/desk/finance/people/${await idOf(name)}/start`, { on: true });
   const [row] = await rows<{ by: string | null }>(db, sql`select p.name as by from sales_order o left join person p on p.id = o.finance_by where o.id = ${o1}`);
   must(row?.by && FIN.includes(row.by), `given to ${row?.by ?? "nobody"}`);
   fin = row.by;
@@ -295,7 +292,7 @@ part("4 · Dispatch (Tiara Evangelista, Glyssa Delfino) and the warehouse");
 let packer = "";
 const beforePack = await shelf(sugama.id);
 await step("both Start; the order to pack is given to one of them", async () => {
-  for (const name of DISP) await call(`${DISP[0]}@dispatch`, `/api/desk/dispatch/people/${await idOf(name)}/start`, { on: true });
+  for (const name of DISP) await call(name, `/api/desk/dispatch/people/${await idOf(name)}/start`, { on: true });
   const [row] = await rows<{ by: string | null }>(db, sql`select p.name as by from sales_order o left join person p on p.id = o.dispatch_by where o.id = ${o1}`);
   must(row?.by && DISP.includes(row.by), `given to ${row?.by ?? "nobody"}`);
   packer = row.by;

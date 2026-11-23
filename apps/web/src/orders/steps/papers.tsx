@@ -23,7 +23,7 @@ export function PaperChips({ data, kinds }: { data: OrderDetail; kinds: PaperKin
   if (rows.length === 0) return null;
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[12.5px]">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-sm">
         <span className="font-semibold text-slate-600">Papers</span>
         {rows.map((row) => {
           const onFile = data.papers.filter((paper) => paper.kind === row.kind);
@@ -106,12 +106,12 @@ export function Documents({ data }: { data: OrderDetail }) {
   return (
     <div className="flex flex-col gap-3">
       {data.order.patientOrder && (
-        <div className="text-[13px] text-slate-700">
+        <div className="text-sm text-slate-700">
           <b>For a patient:</b> {data.order.patientName ?? "name not given"}
         </div>
       )}
       {suggestion && (
-        <div className="flex gap-2 rounded-xl bg-slate-50 px-3 py-2 text-[13px] text-slate-700">
+        <div className="flex gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">
           <span className="mt-1.5 size-2 shrink-0 rounded-full bg-amber-400" aria-hidden="true" />
           <span>{suggestion}</span>
         </div>
@@ -144,7 +144,7 @@ function PapersCheck({ data }: { data: OrderDetail }) {
       await queries.invalidateQueries({ queryKey: ["orders"] });
     });
   return (
-    <div className={`flex flex-wrap items-center gap-3 rounded-xl px-3.5 py-2.5 text-[13px] ${checkedAt ? "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200" : "bg-amber-50 text-amber-900 ring-1 ring-amber-200"}`}>
+    <div className={`flex flex-wrap items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm ${checkedAt ? "bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200" : "bg-amber-50 text-amber-900 ring-1 ring-amber-200"}`}>
       <span className="min-w-0 flex-1">
         {checkedAt
           ? `Papers checked by hand${data.order.papersCheckedBy ? ` by ${data.order.papersCheckedBy}` : ""}, ${new Date(checkedAt).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Manila" })}.`
@@ -155,12 +155,12 @@ function PapersCheck({ data }: { data: OrderDetail }) {
           type="button"
           disabled={action.busy}
           onClick={() => void set(!checkedAt)}
-          className={checkedAt ? "text-[12.5px] font-semibold text-slate-600 underline hover:text-slate-900" : "rounded-lg bg-emerald-600 px-3 py-1.5 text-[12.5px] font-semibold text-white hover:bg-emerald-700"}
+          className={checkedAt ? "text-sm font-semibold text-slate-600 underline hover:text-slate-900" : "rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700"}
         >
           {action.busy ? "Saving…" : checkedAt ? "Take back" : "Papers are right"}
         </button>
       )}
-      {action.problem && <span className="basis-full text-[12px] text-rose-700">{action.problem.message}</span>}
+      {action.problem && <span className="basis-full text-xs text-rose-700">{action.problem.message}</span>}
     </div>
   );
 }
@@ -176,14 +176,14 @@ export function Papers({ data, kinds }: { data: OrderDetail; kinds: PaperKind[] 
   if (rows.length === 0) return null;
   return (
     <div className="flex flex-col gap-2">
-      <div className="text-[12px] font-semibold text-slate-600">Papers</div>
+      <div className="text-xs font-semibold text-slate-600">Papers</div>
       {rows.map((row) => {
         const onFile = data.papers.filter((paper) => paper.kind === row.kind);
         return (
           <div key={row.kind} className="rounded-xl border border-slate-200 px-3 py-2.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
-                <div className="text-[13px] font-semibold">{row.label}</div>
+                <div className="text-sm font-semibold">{row.label}</div>
                 {row.why && (
                   <div
                     className={`text-xs ${row.needed && !row.onFile ? "text-amber-700" : "text-ink-2"}`}
@@ -258,7 +258,7 @@ export function Papers({ data, kinds }: { data: OrderDetail; kinds: PaperKind[] 
                     href={`/api/papers/${paper.id}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="block truncate text-[13px] font-semibold hover:underline"
+                    className="block truncate text-sm font-semibold hover:underline"
                   >
                     {paper.name}
                   </a>

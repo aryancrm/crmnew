@@ -194,7 +194,7 @@ export function Button({
       type="button"
       {...props}
       className={`inline-flex items-center justify-center gap-2 rounded-[10px] font-semibold whitespace-nowrap transition-colors disabled:opacity-50 ${
-        small ? "h-8 px-2.5 text-[13px]" : "h-10 px-4 text-sm"
+        small ? "h-8 px-2.5 text-[length:var(--button-small,13px)]" : "h-10 px-4 text-sm"
       } pointer-coarse:h-11 ${BUTTONS[variant]} ${className}`}
     />
   );

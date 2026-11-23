@@ -82,6 +82,8 @@ export const WORK_ORDER: Role[] = [
   "dispatch",
   "inventory",
   "hr",
+  "regulatory",
+  "staff",
   "admin",
   "ceo",
 ];
@@ -174,11 +176,7 @@ export function LoginCard({
   return (
     <Dialog
       title={`${name} can sign in`}
-      sub={
-        login.common
-          ? "Give them these. Everyone signs in with the company's common password."
-          : "Give them these. They choose their own password the first time they sign in."
-      }
+      sub="Give these to them alone. They choose their own password the first time they sign in."
       onClose={onClose}
     >
       <div className="flex flex-col gap-4">
@@ -192,7 +190,7 @@ export function LoginCard({
             )}
           </dd>
         </dl>
-        {login.password && !login.common && (
+        {login.password && (
           <p className="flex items-center gap-2 text-xs text-slate-500">
             <KeyRound size={14} className="shrink-0" /> This password is shown only now. Lost it?
             Give a new one from their row.
@@ -216,7 +214,7 @@ export function LoginCard({
   );
 }
 
-type JobState = {
+export type JobState = {
   module: Role;
   title: string;
   titleTouched: boolean;
@@ -228,7 +226,7 @@ type JobState = {
 };
 
 /** The job part of a form: the work, the title, whom it reports to, lead or not, its area. */
-function JobFields({
+export function JobFields({
   tree,
   unit,
   job,
@@ -361,7 +359,7 @@ function JobFields({
   );
 }
 
-const jobBody = (job: JobState) => ({
+export const jobBody = (job: JobState) => ({
   module: job.module,
   title: job.title,
   lead: job.lead,
@@ -379,7 +377,7 @@ const jobBody = (job: JobState) => ({
       : null,
 });
 
-const freshJob = (module: Role, lead = false): JobState => ({
+export const freshJob = (module: Role, lead = false): JobState => ({
   module,
   title: WORK[module].title,
   titleTouched: false,
@@ -585,18 +583,15 @@ export function AddPersonDialog({
                     autoComplete="off"
                   />
                 </Label>
-                {/* With the company's common password, nobody types one (Aryan, 17 Nov). */}
-                {!tree.commonPassword && (
-                  <Label text="Password" error={action.at("password")}>
-                    <input
-                      value={password}
-                      onChange={(event) => setPassword(event.target.value)}
-                      className={FIELD}
-                      placeholder="Leave empty: one is made for them"
-                      autoComplete="new-password"
-                    />
-                  </Label>
-                )}
+                <Label text="One-time password" error={action.at("password")}>
+                  <input
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                    className={FIELD}
+                    placeholder="Leave empty: one is made for them"
+                    autoComplete="new-password"
+                  />
+                </Label>
               </div>
             </Section>
             {!seat && (

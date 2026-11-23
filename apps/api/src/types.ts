@@ -81,20 +81,6 @@ export type PortalDepartment = {
   at: string;
 };
 
-/** The sign-in page's Heads or Team leads door, opened with the company's password (Aryan, 19 Nov):
- *  its people by name, the chart's order; a press signs one in with their own login ID. */
-export type DoorList = {
-  door: "heads" | "leads";
-  people: {
-    login: string;
-    name: string;
-    /** The boxes of the chart they sit in, in the chart's order. */
-    boxes: string[];
-    /** A team lead's head; null at the heads' door. */
-    head: string | null;
-  }[];
-};
-
 export type Me = {
   id: number;
   name: string;
@@ -103,6 +89,10 @@ export type Me = {
   role: Role;
   roleLabel: string;
   mustChangePassword: boolean;
+  /** The picture shown for them (/api/people/<id>/photo/<photo>), if they put one. */
+  photo?: number | null;
+  /** Two-step sign-in is on. */
+  twoStep?: boolean;
   /** Their channel, and the Division its orders carry (set in the Admin panel). */
   channel: { code: string; name: string; division: string | null } | null;
   area: { id: number; name: string; cities: string[] } | null;
@@ -115,10 +105,9 @@ export type Me = {
    *  else its channel's), the main seat's first. One seat, one Division (Aryan, 19 Nov). */
   divisions?: string[];
   /** The CEO or Admin looking as this person (read only), when it is that. */
-  viewedBy?: { id: number; name: string } | null;
-  /** Signed in at a desk's tile with the company's password: the desk's common screen, not the
-   *  person's own (no "Me" on it). */
-  deskScreen?: "management" | "finance" | "dispatch" | null;
+  viewedBy?: { id: number; name: string; role: string } | null;
+  /** The department this session was opened for (the sign-in page it was made on). */
+  workspace?: string | null;
   /** The box picked on a lead's team switch for this request (?unit=, checked): the page counts the
    *  seats in it and under it (org/scope.ts). */
   unit?: number | null;
@@ -3362,8 +3351,6 @@ export type OrgUnit = {
 
 export type OrgTree = {
   today: string;
-  /** New people get the company's common password: nobody types one. */
-  commonPassword: boolean;
   /** Seat login IDs end in this: "hos1@2mginc.com". */
   loginDomain: string;
   units: OrgUnit[];
@@ -3440,8 +3427,6 @@ export type OrgLogin = {
   login: string | null;
   email: string | null;
   password: string | null;
-  /** The password is the company's common one (they keep it). */
-  common?: boolean;
 };
 
 /** One person's seats now and before, for their page. */
@@ -4248,8 +4233,6 @@ export type HrRecordInput = Partial<{
 /** What HR picks from to add a joiner: the seats nobody holds or is joining. */
 export type JoinerForm = {
   today: string;
-  /** New joiners get the company's common password: HR types none. */
-  commonPassword: boolean;
   seats: { id: number; title: string; team: string; channel: string | null; area: string | null }[];
 };
 
@@ -6511,3 +6494,87 @@ export type SlowScreens = {
   since: string | null;
   rows: { method: string; path: string; times: number; avgMs: number; worstMs: number; questions: number; roles: string; lastAt: string }[];
 };
+
+// ---- A person's own profile (account/profile.ts)
+
+export type ProfilePersonal = {
+  firstName: string;
+  middleName: string | null;
+  lastName: string;
+  suffix: string | null;
+  /** YYYY-MM-DD. */
+  birthDate: string;
+};
+export type ProfileContact = {
+  mobile: string | null;
+  personalEmail: string | null;
+  address: string | null;
+  emergencyName: string | null;
+  emergencyPhone: string | null;
+  emergencyRelation: string | null;
+};
+export type Profile = {
+  name: string;
+  personal: ProfilePersonal;
+  /** First and last name and birth date are saved. */
+  complete: boolean;
+  contact: ProfileContact;
+  work: {
+    loginId: string | null;
+    position: string | null;
+    team: string | null;
+    reportsTo: string | null;
+    employeeCode: string | null;
+    hireDate: string;
+  };
+  security: {
+    twoStep: { on: boolean; since: string | null; codesLeft: number };
+    lastSignIn: string | null;
+    otherSessions: number;
+    /** `by` is set only when someone else did it. */
+    events: { id: number; what: string; detail: string | null; by: string | null; at: string }[];
+  };
+};
+/** The sign-in's answer: in, or the password was right and the code is asked next. */
+export type SignInAnswer = { me: Me; twoStep?: undefined } | { twoStep: true; ticket: string; me?: undefined };
+
+// ---- Sign-ups (account/sign-up.ts)
+
+export type SignUpInput = {
+  firstName: string;
+  middleName?: string | null;
+  lastName: string;
+  suffix?: string | null;
+  email: string;
+  phone: string;
+  /** What they say they work in: it grants nothing. */
+  department: string;
+};
+export type SignUpRow = {
+  id: number;
+  name: string;
+  firstName: string;
+  middleName: string | null;
+  lastName: string;
+  suffix: string | null;
+  email: string;
+  phone: string;
+  department: string;
+  departmentLabel: string;
+  status: "pending" | "accepted" | "declined";
+  createdAt: string;
+  decidedAt: string | null;
+  decidedBy: string | null;
+  reason: string | null;
+  emailedAt: string | null;
+  emailProblem: string | null;
+  account: "waiting" | "expired" | "ready" | "left" | null;
+  /** Whose account already has this email. */
+  knownAs: string | null;
+  /** A colleague of the same name. */
+  sameName: string | null;
+};
+export type SignUpList = { rows: SignUpRow[]; mailFrom: string | null };
+/** `link` only when the email didn't go, for the Admin to pass on. */
+export type SignUpSent = { email: string; emailed: boolean; problem: string | null; link: string | null };
+export type WelcomeInfo = { firstName: string; email: string; seatLogin: string | null; department: string | null };

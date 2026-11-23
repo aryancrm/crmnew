@@ -1,13 +1,14 @@
 // The desk's people in the left menu of Management's (or Finance's) common screen (Aryan, 18 Nov):
-// one screen for the whole desk; each person from the chart presses Start when they begin and Stop
+// one queue for the whole desk; each, on their own login, presses Start when they begin and Stop
 // when they end. The waiting orders are shared out among the people started (fewest open first),
-// and what is done on an order is written in its person's name. A name opens that person's page.
+// and what is done on an order is written in the name of whoever did it. A name opens their page.
 
 import type { DeskDuty } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { api } from "../api";
+import { useMe } from "../auth";
 import { useAction } from "../ui";
 
 const at = (iso: string) =>
@@ -15,6 +16,7 @@ const at = (iso: string) =>
 
 export function DeskPeople({ desk, onPick }: { desk: "management" | "finance" | "dispatch"; onPick?: () => void }) {
   const queries = useQueryClient();
+  const me = useMe().data;
   const action = useAction();
   const navigate = useNavigate();
   const location = useLocation();
@@ -51,7 +53,7 @@ export function DeskPeople({ desk, onPick }: { desk: "management" | "finance" | 
         </span>
       </div>
       <ul className="flex flex-col gap-0.5">
-        {team.people.filter((one) => everyone || one.startedAt || !team.people.some((other) => other.startedAt)).map((one) => {
+        {team.people.filter((one) => everyone || one.startedAt || one.id === me?.id || !team.people.some((other) => other.startedAt)).map((one) => {
           const on = Boolean(one.startedAt);
           return (
             <li
@@ -78,7 +80,7 @@ export function DeskPeople({ desk, onPick }: { desk: "management" | "finance" | 
                   </span>
                 </span>
               </button>
-              {team.canStart && (
+              {team.canStart && (on || one.id === me?.id || me?.role === "admin") && (
                 <button
                   type="button"
                   disabled={action.busy}
@@ -98,7 +100,7 @@ export function DeskPeople({ desk, onPick }: { desk: "management" | "finance" | 
           onClick={() => setEveryone(!everyone)}
           className="mt-0.5 w-full rounded-lg px-2 py-1 text-left text-[11.5px] font-semibold text-brand hover:bg-slate-50"
         >
-          {everyone ? "Only those started" : `+ ${team.people.filter((one) => !one.startedAt).length} not started: Start someone`}
+          {everyone ? "Only those started" : `+ ${team.people.filter((one) => !one.startedAt).length} not started`}
         </button>
       )}
       {action.problem && <p className="px-2 pt-1 text-[11px] text-rose-700">{action.problem.message}</p>}

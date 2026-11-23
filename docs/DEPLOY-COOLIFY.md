@@ -41,8 +41,11 @@ same today). The API needs no domain of its own.
    Each one should be **runtime only** ("Not available during build"). Most important:
    - `DATABASE_URL` = step 1's internal URL.
    - `WEB_URL` = `https://crm.<domain>` (the web app's domain from step 3).
-   - `SECRETS_KEY` and `JOIN_PASSWORD` = the same values as on Render, if the live data moves
-     over.
+   - `SECRETS_KEY` = the same value as on Render, if the live data moves over. Two-step sign-in seals
+     its keys with it: without it nobody can turn it on; changed or lost, each who had it on must be
+     reset (`pnpm --filter @2mg/api two-step-off --only=<login> --apply`, or the Admin on screen).
+   - `JOIN_PASSWORD` is retired: it signs nobody in. Left set, its value is only refused as
+     anyone's own password.
 7. Deploy. The log shows `database: applied …` (the migrations), then
    `api: listening on http://localhost:4100`.
 
@@ -77,7 +80,13 @@ instances yet.
 
 ## 5. Checks after the first deploy
 
-- Sign in with a seat's login ID and the common password.
+- Migration 0142 signs out everyone who was there before it, and none of them can sign in until
+  given a one-time password. In the API's container, before telling anyone:
+  `pnpm --filter @2mg/api passwords --role=admin --apply` (one Admin: shown on the screen), then
+  the rest from Admin panel → Teams & people, or `--all --apply --out=<a file outside the repository>`.
+- Sign in with that one-time password: it asks for a password of your own first.
+- Admin panel → **Online pages & mail**: connect a mailbox, then accept a test sign-up. Acceptance
+  emails go from the first connected mailbox; their link is built from `WEB_URL`.
 - Admin panel → **Data checks**: all green.
 - Upload a photo on an order. It should open again, so the bucket settings are right.
 - Coolify → `crmnew-api` → Logs: no `couldn't` lines from automations, org or channels.

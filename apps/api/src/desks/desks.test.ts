@@ -50,7 +50,7 @@ beforeAll(async () => {
 });
 
 describe("on duty at Management and Finance", () => {
-  it("shares the waiting orders among the people started on the common screen, in their names", async () => {
+  it("shares the waiting orders among the people started, each acting in their own name", async () => {
     const customer = (await (
       await post("sarla", "/api/customers", { kind: "hospital", name: "Duty Hospital", city: "Pasay" })
     ).json()) as { id: number };
@@ -79,7 +79,8 @@ describe("on duty at Management and Finance", () => {
 
     // On the common screen Sarla and Kate press Start: the waiting orders are shared between them.
     expect((await start("sarla", "Sarla", "management")).status).toBe(200);
-    expect((await start("sarla", "Kate", "management")).status).toBe(200);
+    expect((await start("sarla", "Kate", "management")).status).toBe(403); // not for someone else
+    expect((await start("kate", "Kate", "management")).status).toBe(200);
     const second = await place();
     expect([(await ownerOf(first))?.manage, (await ownerOf(second))?.manage].sort()).toEqual(["Kate", "Sarla"]);
     const team = (await (await get("sarla", "/api/desk/management/team")).json()) as DeskDuty;
@@ -87,10 +88,10 @@ describe("on duty at Management and Finance", () => {
     expect(team.people.filter((one) => one.startedAt).map((one) => [one.name, one.open])).toEqual([["Kate", 1], ["Sarla", 1]]);
     expect((await get("ryan", "/api/desk/management/team")).status).toBe(403);
 
-    // Approved from the common screen (Sarla's account): written in the name of the order's person.
+    // Each approves on their own login, in their own name.
     const kates = (await ownerOf(first))?.manage === "Kate" ? first : second;
     const sarlas = kates === first ? second : first;
-    expect((await post("sarla", await ticked(db, `/api/orders/${kates}/approve`))).status).toBe(200);
+    expect((await post("kate", await ticked(db, `/api/orders/${kates}/approve`))).status).toBe(200);
     const [approved] = await rows<{ by: string }>(
       db,
       sql`select p.name as by from sales_order o join person p on p.id = o.approved_by where o.id = ${kates}`,

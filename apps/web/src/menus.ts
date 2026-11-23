@@ -100,7 +100,8 @@ export type Badge =
   | "leave"
   | "decisions"
   | "refills"
-  | "latePayments";
+  | "latePayments"
+  | "signUps";
 export type MenuItem = {
   to: string;
   label: string;
@@ -108,14 +109,14 @@ export type MenuItem = {
   badge?: Badge;
   /** What the phone's tab bar calls it, where the label is too long for a tab. */
   short?: string;
-  /** Its own pages, opened under it in the same sidebar (never a sidebar of their own). The
-   *  item itself opens the first of them. */
+  /** Its own pages, opened under it in the same sidebar (never a sidebar of their own). In the
+   *  sidebar it only opens the list; as a phone's tab it opens the first of them. */
   children?: MenuItem[];
   /** The company's teams (or the lead's) are listed under this link, each opening its page. */
   teams?: boolean;
 };
 
-/** A link with its pages under it: opens the first; open (unfolded) while any of them is. */
+/** A list of pages under one name: a press unfolds it, and it is open while any of them is. */
 const folder = (
   label: string,
   icon: LucideIcon,
@@ -591,11 +592,8 @@ function deskFor(me: Me): Space {
   if (!first) return space;
   const listed = allItems(space.groups.flatMap((group) => group.items));
   // Everyone asks for their own leave, except the CEO and the Admin (HR records theirs).
-  // The desk's common screen (signed in at its tile with the company's password) is nobody's own:
-  // no "Me", no one person's messages (Aryan, 19 Nov). Each person's own login keeps them.
-  const shared = Boolean(me.deskScreen);
   const mine: MenuItem[] =
-    me.role === "ceo" || me.role === "admin" || shared
+    me.role === "ceo" || me.role === "admin"
       ? []
       : [
           folder(
@@ -642,7 +640,7 @@ function deskFor(me: Me): Space {
   // Their own leave, payslips and messages at the foot of every menu, under the work (19 Nov: "each
   // one's own things on top").
   // The CEO's and the Admin's messages (decisions to take) stay at the top with their work.
-  const personal = [...mine, ...(shared ? [] : [messagesLink])];
+  const personal = [...mine, messagesLink];
   const onTop = me.role === "ceo" || me.role === "admin";
   return {
     ...space,
@@ -1431,7 +1429,8 @@ function ownDesk(me: Me): Space {
               { to: "/purchases/bills?view=open", label: "Supplier bills to pay", icon: Receipt, short: "Bills" },
               { to: "/desk/team", label: "Team figures", icon: BarChart3, short: "Team" },
               folder("Money", Banknote, moneyLinks.filter((link) => link.to !== "/refunds"), "Money"),
-              folder("Books", Landmark, booksLinks, "Books"),
+              // Another app, so a link (↗), never a folder: its pages are Books' own menu.
+              { to: "/books/home", label: "Books", icon: Landmark },
             ],
           },
           {
@@ -1649,6 +1648,7 @@ function adminPanel(me: Me): Space {
           { to: "/", label: "Channels", icon: Network },
           // The same tree the CEO has: who is under whom, changed from a box's panel.
           { to: "/company/sales", label: "Company tree", icon: Network },
+          { to: "/admin/sign-ups", label: "Sign-ups", icon: UserPlus, badge: "signUps" },
           { to: "/people", label: "Teams & people", icon: Users },
           { to: "/people?tab=areas", label: "Areas", icon: MapPin },
           {

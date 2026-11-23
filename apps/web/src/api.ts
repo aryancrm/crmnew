@@ -19,16 +19,15 @@ export async function api<T>(
   path: string,
   options: { method?: "GET" | "POST" | "PATCH"; body?: unknown } = {},
 ): Promise<T> {
+  const method = options.method ?? (options.body === undefined ? "GET" : "POST");
   let response: Response;
   const form = options.body instanceof FormData;
-  const method = options.method ?? (options.body === undefined ? "GET" : "POST");
   try {
     response = await fetch(path, {
       method,
       credentials: "include",
       // A FormData body (a file upload) sets its own content type.
-      headers:
-        options.body === undefined || form ? undefined : { "content-type": "application/json" },
+      headers: options.body === undefined || form ? {} : { "content-type": "application/json" },
       body:
         options.body === undefined
           ? undefined

@@ -119,6 +119,8 @@ beforeAll(async () => {
   const ops = await unitOf("Supply Chain, Ops & Finance");
   await person("Finance Two", ops, "finance");
   await person("Dispatch Two", ops, "dispatch");
+  // Each has chosen their own password already (auth.test.ts checks that step): this is who sees what.
+  await db.execute(sql`update person set must_change_password = false`);
 
   const catalogue = await (async () => {
     cookies.sarla = await login("sarla@2mg.test");

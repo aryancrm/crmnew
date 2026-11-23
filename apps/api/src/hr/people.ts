@@ -3,8 +3,9 @@
 // the system sends nothing), and leaving (the record is kept). HR, the CEO and the Admin keep
 // records; pay, bank and government IDs are theirs and the person's own.
 
+import { accountEvent } from "../account/events";
 import { type SQL, sql } from "drizzle-orm";
-import { hashPassword, joinPassword, passwordProblem } from "../auth/password";
+import { hashPassword, passwordProblem } from "../auth/password";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import { addDays, todayManila } from "../inventory/rules";
@@ -339,7 +340,7 @@ export async function joinerForm(db: Database, me: Me): Promise<JoinerForm> {
         where h.seat_id = s.id and h.kind = 'holder' and (h.ends_on is null or h.ends_on >= ${today}::date))
       order by u.name, s.title`,
   );
-  return { today, seats, commonPassword: joinPassword() !== null };
+  return { today, seats };
 }
 
 const text = (value: string | null | undefined) => clean(value) ?? null;
@@ -430,9 +431,8 @@ export async function addJoiner(
   ] as const)
     if (value !== null && value !== undefined && (!Number.isInteger(value) || value < 0))
       throw new Refusal(400, "invalid", "Type the monthly amount in pesos.", field);
-  // HR types only the login and the employee ID; the password is the company's common one.
-  const common = clean(input.password) ? null : joinPassword();
-  const password = common ?? checkPassword(input.password);
+  // HR hands over a one-time password; the joiner chooses their own at the first sign-in.
+  const password = checkPassword(input.password);
   const code = text(input.employeeCode)?.toUpperCase() ?? null;
   const hash = await hashPassword(password);
 
@@ -457,7 +457,7 @@ export async function addJoiner(
     const [person] = await rows<{ id: number }>(
       tx,
       sql`insert into person (name, email, phone, title, role, password_hash, must_change_password)
-        values (${name}, ${loginEmail}, ${mobile}, ${position}, ${seat.module}, ${hash}, false)
+        values (${name}, ${loginEmail}, ${mobile}, ${position}, ${seat.module}, ${hash}, true)
         returning id::int as id`,
     );
     const personId = person?.id as number;
@@ -516,12 +516,13 @@ export async function setLogin(
     }
     if (hash) {
       await tx.execute(
-        sql`update person set password_hash = ${hash}, must_change_password = false, failed_logins = 0,
-            locked_until = null where id = ${personId}`,
+        sql`update person set password_hash = ${hash}, must_change_password = true, password_pending = false,
+            failed_logins = 0, locked_until = null where id = ${personId}`,
       );
       await tx.execute(
-        sql`delete from session where person_id = ${personId} and viewed_by is null`,
+        sql`delete from session where (person_id = ${personId} and viewed_by is null) or viewed_by = ${personId}`,
       );
+      await accountEvent(tx, personId, me.id, "password_given");
     }
     return { loginEmail: email };
   });
@@ -639,15 +640,16 @@ export async function updateRecord(
 }
 
 /** HR marks someone as left: the login stops, the seat falls vacant, the record is kept. */
-/** Someone marked as left is back (a mistake, or rehired): their login works again with the
- *  company's password; they are put in a seat from Teams & people (they show as "no seat"). */
+/** Someone marked as left is back (a mistake, or rehired): they sign in again once given a
+ *  one-time password (the old one and old sessions don't return); they are put in a seat from Teams & people (they show as "no seat"). */
 export async function personBack(db: Database, me: Me, personId: number): Promise<void> {
   allow(me, HR_WRITE_ROLES, "bring someone back");
   const changed = await rows<{ name: string }>(
     db,
-    sql`update person set active = true where id = ${personId} and not active returning name`,
+    sql`update person set active = true, password_pending = true where id = ${personId} and not active returning name`,
   );
   if (!changed.length) throw new Refusal(409, "not_now", "They are at work already.");
+  await db.execute(sql`delete from session where person_id = ${personId} or viewed_by = ${personId}`);
   await db.execute(
     sql`update employee set status = 'active', left_on = null, left_reason = null, updated_at = now(), updated_by = ${me.id}
       where person_id = ${personId}`,
