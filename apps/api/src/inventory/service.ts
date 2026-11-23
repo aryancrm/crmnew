@@ -394,6 +394,19 @@ export async function medicineDetail(db: Database, me: Me, id: number): Promise<
     return { ...batch, unitCost: can.cost ? batch.unitCost : null, state };
   });
 
+  // Pieces on placed orders not packed yet: on the shelf, but sold (as the stock list counts them).
+  // Each order holding some of it (Zoho's Committed Stock Details): the oldest first, as they are served.
+  const holding = await rows<MedicineDetail["promisedTo"][number]>(
+    db,
+    sql`select o.id::int as id, o.code, c.name as customer, sum(i.qty)::int as qty, o.status,
+        to_char(o.created_at at time zone 'Asia/Manila', 'YYYY-MM-DD') as "placedOn"
+      from order_item i join sales_order o on o.id = i.order_id join customer c on c.id = o.customer_id
+      where i.medicine_id = ${id} and ${PROMISED_ORDER}
+      group by o.id, o.code, c.name, o.status, o.created_at order by o.id`,
+  );
+  const held = { qty: holding.reduce((sum, one) => sum + one.qty, 0), orders: holding.length };
+  // Which orders they are is for the desks that see every order; a seller sees the count only.
+  const seesOrders = ["inventory", "dispatch", "management", "finance", "ceo", "admin"].includes(me.role);
   return {
     can,
     today,
@@ -402,6 +415,10 @@ export async function medicineDetail(db: Database, me: Me, id: number): Promise<
     medicine: { ...facts, reorderLevel: reorder },
     status: stockStatus(total, reorder),
     total,
+    promised: held.qty,
+    promisedOrders: held.orders,
+    promisedTo: seesOrders ? holding : [],
+    free: Math.max(0, total - held.qty),
     expired,
     batches: lines,
     cost: can.cost && costed > 0 ? { min, max, average: Math.round(costSum / costed) } : null,

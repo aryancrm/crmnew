@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -50,7 +51,13 @@ const onShelf = async () =>
 
 /** Ryan's order, approved, its money done (an invoice on credit, or paid in advance), packed,
  *  shipped and delivered. */
-async function delivered(customerId: number, qty: number, advance = false): Promise<number> {
+async function delivered(
+  customerId: number,
+  qty: number,
+  advance = false,
+  /** Some of the customer's credit used on the bill before the money is checked. */
+  credit?: { sourceId: number; amount: number },
+): Promise<number> {
   const placed = (await (
     await post("ryan", "/api/orders", {
       customerId,
@@ -58,9 +65,14 @@ async function delivered(customerId: number, qty: number, advance = false): Prom
     })
   ).json()) as { id: number };
   const id = placed.id;
-  expect((await post("sarla", `/api/orders/${id}/approve`, { finance: true })).status).toBe(200);
+  expect((await post("sarla", await ticked(db, `/api/orders/${id}/approve`), { finance: true })).status).toBe(200);
   if (advance) {
-    const total = (await read<OrderDetail>("fiona", `/api/orders/${id}`)).order.total;
+    const bill = (await read<OrderDetail>("fiona", `/api/orders/${id}`)).money.invoice;
+    if (credit)
+      expect(
+        (await post("fiona", `/api/invoices/${bill?.id}/credit`, { kind: "zoho", ...credit })).status,
+      ).toBe(200);
+    const total = (bill?.total ?? 0) - (credit?.amount ?? 0);
     expect(
       (
         await post("fiona", `/api/finance/orders/${id}/confirm-payment`, {
@@ -289,7 +301,7 @@ describe("returns", () => {
     ).json()) as { id: number };
     // Before Management approves there is nothing to ask: it is still the MedRep's to take back.
     expect((await read<OrderReturns>("ryan", `/api/orders/${placed.id}/returns`)).can.ask).toBe(false);
-    expect((await post("sarla", `/api/orders/${placed.id}/approve`)).status).toBe(200);
+    expect((await post("sarla", await ticked(db, `/api/orders/${placed.id}/approve`))).status).toBe(200);
     const ask = await read<OrderReturns>("ryan", `/api/orders/${placed.id}/returns`);
     expect(ask.can.goods).toEqual(["not_shipped"]);
     // Management cancels it itself instead.
@@ -360,6 +372,96 @@ describe("returns", () => {
     );
     expect(left).toBeUndefined();
     expect(await badge()).toBe(before);
+  });
+
+  it("paid partly from the customer's credit: a return gives money back as money and credit back as credit", async () => {
+    const price = medicine.price;
+    // A credit note of 8 pieces' worth; the order of 10 is paid with it and 2 pieces' money.
+    const [note] = await rows<{ id: number }>(
+      db,
+      sql`insert into book_doc (kind, zoho_id, number, doc_date, status, customer_id, party_name, total, balance)
+        values ('credit_note', 'zcn-ret', 'CN-RET-1', '2026-03-02', 'open', ${advanceHospital}, 'Advance Hospital', ${8 * price}, ${8 * price})
+        returning id::int as id`,
+    );
+    const credit = async () =>
+      (await read<{ total: number }>("fiona", `/api/customers/${advanceHospital}/credit`)).total;
+    const had = await credit();
+    const orderId = await delivered(advanceHospital, 10, true, { sourceId: note?.id as number, amount: 8 * price });
+    expect(await credit()).toBe(had - 8 * price);
+    const itemId = (
+      await read<{ left: { orderItemId: number }[] }>("ryan", `/api/orders/${orderId}/returns`)
+    ).left[0]?.orderItemId as number;
+    const returnId = (
+      (await (
+        await post("ryan", `/api/orders/${orderId}/returns`, { reason: "not_needed", lines: [{ orderItemId: itemId, qty: 5 }] })
+      ).json()) as { id: number }
+    ).id;
+    await post("sarla", `/api/returns/${returnId}/decide`, { approve: true });
+    const row = (await read<ReturnList>("marco", "/api/returns")).rows.find((one) => one.id === returnId) as ReturnRow;
+    await post("marco", `/api/returns/${returnId}/receive`, { lines: [{ lineId: row.lines[0]?.id, outcome: "restocked" }] });
+    // The menu's badge (the dashboard's count) and the board's count are one count.
+    const badge = async () =>
+      (await read<{ attention: { refunds: number } }>("fiona", "/api/orders/dashboard")).attention.refunds;
+    const before = await badge();
+    expect((await post("sarla", `/api/returns/${returnId}/credit`, { credit: true })).status).toBe(200);
+    // Five pieces came off the bill: 2 were paid in money (Finance gives them back), 3 from the
+    // credit note (their credit again: it was lost before, Refunds owed counts money only).
+    const owed = (await read<RefundList>("fiona", "/api/finance/refunds")).owed.find((one) => one.orderId === orderId);
+    expect(owed?.owed).toBe(2 * price);
+    expect(await badge()).toBe(before + 1);
+    expect(await credit()).toBe(had - 5 * price);
+    const after = await read<OrderDetail>("fiona", `/api/orders/${orderId}`);
+    expect(after.money.invoice).toMatchObject({ total: 5 * price, paid: 7 * price, status: "paid" });
+    expect(after.money.payments.filter((one) => one.active && one.method === "credit").map((one) => one.amount)).toEqual([5 * price]);
+    expect(after.events.at(-1)?.message).toContain("it is their credit again");
+    expect(
+      (
+        await post("fiona", `/api/invoices/${owed?.invoiceId}/refunds`, {
+          amount: 2 * price,
+          method: "bank",
+          reference: "BDO-R2",
+          refundedOn: todayManila(),
+        })
+      ).status,
+    ).toBe(200);
+    expect(await badge()).toBe(before);
+    expect((await read<RefundList>("fiona", "/api/finance/refunds")).owed.some((one) => one.orderId === orderId)).toBe(false);
+  });
+
+  it("a line comes back in parts: the good go on the shelf, the damaged are written off, the missing aren't credited", async () => {
+    const orderId = await delivered(creditHospital, 10);
+    const itemId = (
+      await read<{ left: { orderItemId: number }[] }>("ryan", `/api/orders/${orderId}/returns`)
+    ).left[0]?.orderItemId as number;
+    const returnId = (
+      (await (
+        await post("ryan", `/api/orders/${orderId}/returns`, { reason: "damaged", lines: [{ orderItemId: itemId, qty: 6 }] })
+      ).json()) as { id: number }
+    ).id;
+    await post("sarla", `/api/returns/${returnId}/decide`, { approve: true });
+    const line = (await read<ReturnList>("marco", "/api/returns")).rows.find((one) => one.id === returnId)?.lines[0];
+    const receive = (lines: unknown) => post("marco", `/api/returns/${returnId}/receive`, { lines });
+    // The parts must add up to what is on the return.
+    expect((await receive([{ lineId: line?.id, outcome: "restocked", qty: 3 }, { lineId: line?.id, outcome: "damaged", qty: 2 }])).status).toBe(400);
+    const before = await onShelf();
+    expect(
+      (
+        await receive([
+          { lineId: line?.id, outcome: "restocked", qty: 3 },
+          { lineId: line?.id, outcome: "damaged", qty: 2 },
+          { lineId: line?.id, outcome: "missing", qty: 1 },
+        ])
+      ).status,
+    ).toBe(200);
+    expect(await onShelf()).toBe(before + 3);
+    const row = (await read<ReturnList>("sarla", "/api/returns")).rows.find((one) => one.id === returnId) as ReturnRow;
+    expect(row.lines.map((one) => [one.qty, one.outcome])).toEqual([[3, "restocked"], [2, "damaged"], [1, "missing"]]);
+    // Good and damaged are credited; what never came back isn't.
+    expect(row.credit).toBe(5 * medicine.price);
+    expect((await post("sarla", `/api/returns/${returnId}/credit`, { credit: true })).status).toBe(200);
+    expect((await invoiceOf(orderId))?.total).toBe(5 * medicine.price);
+    // Five came back; the one not received is still the customer's, so five can still come back.
+    expect((await read<{ left: { left: number }[] }>("ryan", `/api/orders/${orderId}/returns`)).left[0]?.left).toBe(5);
   });
 
   it("a rejected return needs a reason and changes nothing", async () => {

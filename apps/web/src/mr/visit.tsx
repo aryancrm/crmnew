@@ -48,7 +48,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { GiveSamplesDialog } from "../inventory/samples";
 import { StartWorkingDialog } from "./home";
-import { Button, CARD, Dialog, PageState, Problem, peso, useAction } from "../ui";
+import { Button, CARD, Dialog, PageState, Problem, peso, useAction, manilaDay } from "../ui";
 import {
   Choices,
   clockOf,
@@ -807,7 +807,7 @@ function History({ data }: { data: VisitPage }) {
           <ul className="text-[13px] text-slate-700">
             {data.visit.changes.map((one) => (
               <li key={`${one.what}-${one.at}`}>
-                {clockOf(one.at)} {dayWords(one.at.slice(0, 10))} · {one.by}: {one.what}
+                {clockOf(one.at)} {dayWords(manilaDay(one.at))} · {one.by}: {one.what}
                 {one.fromDay ? ` from ${dayWords(one.fromDay)}` : ""}
                 {one.toDay ? ` to ${dayWords(one.toDay)}` : ""}
                 {one.note ? ` · ${one.note}` : ""}

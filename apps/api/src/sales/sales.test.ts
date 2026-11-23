@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -44,7 +45,7 @@ async function order(qty: number, invoice: boolean): Promise<{ id: number; total
       items: [{ medicineId: medicine.id, qty, priceKind: "hospital" }],
     })
   ).json()) as { id: number };
-  expect((await post("sarla", `/api/orders/${placed.id}/approve`)).status).toBe(200);
+  expect((await post("sarla", await ticked(db, `/api/orders/${placed.id}/approve`))).status).toBe(200);
   if (invoice)
     expect((await post("fiona", `/api/finance/orders/${placed.id}/invoice`)).status).toBe(200);
   const detail = (await (await get("ryan", `/api/orders/${placed.id}`)).json()) as OrderDetail;
@@ -195,7 +196,9 @@ describe("the channels and the CEO", () => {
   it("draws the CEO Home from the same figures", async () => {
     const home = await read<CeoHome>("naresh", "/api/ceo/home");
     expect(home.sales).toMatchObject({ achieved: sold, target: sold * 4, pct: 25, collected: 0 });
-    expect(home.sales.channels.find((row) => row.code === "HOSP")?.sold).toBe(sold);
+    // The channels are the Company tree's boxes under each business (22 Nov): they add up to it.
+    expect(home.sales.channels.filter((row) => row.business === "Hospital Division").reduce((sum, row) => sum + row.sold, 0)).toBe(sold);
+    expect(home.sales.channels.reduce((sum, row) => sum + row.sold, 0)).toBe(sold);
     expect(home.money.owed).toBe(sold);
     expect(home.orders).toMatchObject({ finance: 1, onHold: 1 });
     expect(home.alerts.map((alert) => alert.text)).toContain("1 order is on hold");

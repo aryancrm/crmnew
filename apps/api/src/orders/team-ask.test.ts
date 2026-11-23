@@ -3,6 +3,7 @@
 // or the Business Mentor for a yes on the order; and who approves what is set per division.
 
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -87,13 +88,13 @@ describe("the Team Lead and the team's orders", () => {
   it("hears when one stops, fixes and sends it again, and may ask a refund; approves nothing", async () => {
     const id = await placed();
     expect((await order("daniel", id)).can.approve).toBe(false);
-    expect((await post("daniel", `/api/orders/${id}/approve`)).status).toBe(409);
+    expect((await post("daniel", await ticked(db, `/api/orders/${id}/approve`))).status).toBe(409);
     await ok("sarla", `/api/orders/${id}/send_back`, { reason: "Add the hospital's PO" });
     expect((await news("daniel")).some((row) => row.kind === "team_stop" && row.title.startsWith("Ryan's order sent back"))).toBe(true);
     expect((await order("daniel", id)).can.resubmit).toBe(true);
     await ok("daniel", `/api/orders/${id}/resubmit`, { reason: "PO is on the order now" });
     expect((await order("sarla", id)).order.status).toBe("pending_approval");
-    await ok("sarla", `/api/orders/${id}/approve`);
+    await ok("sarla", await ticked(db, `/api/orders/${id}/approve`));
     expect((await news("daniel")).some((row) => row.kind === "team_news" && row.title.startsWith("Ryan's order approved"))).toBe(true);
     // Approved, not shipped: the lead asks Management to cancel it and refund (the hub's Request refund).
     const asking = await read<OrderReturns>("daniel", `/api/orders/${id}/returns`);
@@ -114,9 +115,9 @@ describe("who approves what", () => {
     await ok("admin", `/api/org/approvers/${sarla?.id}`, { approves: [other] });
     const needs = await read<OrderBoard>("sarla", "/api/orders/board?desk=management&tab=needs");
     expect(needs.cards.some((card) => card.id === id)).toBe(false);
-    expect((await post("sarla", `/api/orders/${id}/approve`)).status).toBe(403);
+    expect((await post("sarla", await ticked(db, `/api/orders/${id}/approve`))).status).toBe(403);
     await ok("admin", `/api/org/approvers/${sarla?.id}`, { approves: [division] });
-    await ok("sarla", `/api/orders/${id}/approve`);
+    await ok("sarla", await ticked(db, `/api/orders/${id}/approve`));
     await ok("admin", `/api/org/approvers/${sarla?.id}`, { approves: null });
   });
 });

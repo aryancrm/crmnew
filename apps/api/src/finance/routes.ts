@@ -1,9 +1,11 @@
 // Finance's addresses. The service checks who may do what.
 
+import { sql } from "drizzle-orm";
 import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
-import type { Database } from "../db/index";
+import { type Database, rows } from "../db/index";
 import { type Env, idParam, Refusal, readBody } from "../http";
+import { saveClaim } from "../online/service";
 import { tellCustomer } from "../online/tell";
 import type { ConfirmPaymentInput, PaymentInput, RefundInput } from "../types";
 import { financeBoard } from "./board";
@@ -23,6 +25,7 @@ import {
   myConfirmations,
   orderOfInvoice,
   collectedLater,
+  owedGlance,
   owedInvoices,
   recordPayment,
   recordRefund,
@@ -39,11 +42,15 @@ const amount = z
   .number({ error: "Type the amount." })
   .int("Type the amount in pesos and centavos.")
   .positive("Type the amount.")
-  .max(100_000_000_00, "That amount is too large.");
+  // What the amount columns hold (about 21.4 million pesos): beyond it a plain "too large".
+  .max(2_147_483_647, "That amount is too large.");
 const method = z.enum(STAFF_METHODS as [string, ...string[]], { error: "Pick how it was paid." });
 
 const paymentInput = z.object({
-  amount,
+  // Nothing in cash is allowed when tax was withheld or something deducted (a letter's shortfall let go).
+  amount: z.number({ error: "Type the amount." }).int("Type the amount in pesos and centavos.").min(0, "Type the amount.").max(2_147_483_647, "That amount is too large."),
+  // A guarantee letter's order: who paid this, the agency or the patient (the rest of a short letter).
+  payer: z.enum(["agency", "patient"]).nullish(),
   method,
   reference: optional(80),
   paidOn: day,
@@ -56,7 +63,7 @@ const paymentInput = z.object({
   form2307: optional(60),
   // What the customer deducted, why, and their debit memo.
   deducted: z.number().int().min(0).nullish(),
-  deductionKind: z.enum(["near_expiry", "listing_fee", "promo", "penalty", "other"]).nullish(),
+  deductionKind: z.enum(["near_expiry", "listing_fee", "promo", "penalty", "other", "gl_waived"]).nullish(),
   deductionRef: optional(60),
 });
 
@@ -80,10 +87,12 @@ export function financeRoutes(
     const done = await confirmPayment(db, c.get("me"), idParam(c), input as ConfirmPaymentInput);
     // The order was confirmed to the customer at Management's approval (sent now if it wasn't);
     // the money Finance checked is "Payment received".
-    void (async () => {
-      await tellCustomer(db, c.get("me"), idParam(c), "confirmed");
-      if ((input as ConfirmPaymentInput).amount > 0) await tellCustomer(db, c.get("me"), idParam(c), "paid");
-    })();
+    // A part payment only: the order is still with Finance, so the customer isn't told yet.
+    if (done.sent)
+      void (async () => {
+        await tellCustomer(db, c.get("me"), idParam(c), "confirmed");
+        if ((input as ConfirmPaymentInput).amount > 0) await tellCustomer(db, c.get("me"), idParam(c), "paid");
+      })();
     return c.json(done);
   });
   app.post("/api/finance/orders/:id/undo-confirm", async (c) => {
@@ -118,6 +127,18 @@ export function financeRoutes(
     return c.json(done);
   });
 
+  // A guarantee letter's claim on the agency: Finance sends it after the delivery (Aryan, 22 Nov).
+  app.post("/api/finance/orders/:id/gl-claim", async (c) => {
+    const input = await readBody(c, z.object({ sentOn: day.nullish(), ref: optional(80) }));
+    const [found] = await rows<{ id: number }>(
+      db,
+      sql`select id::int as id from lead where order_id = ${idParam(c)} and road = 'gl' order by id desc limit 1`,
+    );
+    if (!found) throw new Refusal(404, "not_found", "This order has no guarantee-letter case.");
+    await saveClaim(db, c.get("me"), found.id, input);
+    return c.json({ ok: true });
+  });
+
   app.get("/api/finance/board", async (c) => c.json(await financeBoard(db, c.get("me"))));
 
   app.get("/api/finance/owed", async (c) =>
@@ -125,6 +146,7 @@ export function financeRoutes(
   );
   app.get("/api/finance/refunds", async (c) => c.json(await refundsOwed(db, c.get("me"))));
   app.get("/api/finance/owed/invoices", async (c) => c.json(await owedInvoices(db, c.get("me"))));
+  app.get("/api/finance/owed/glance", async (c) => c.json(await owedGlance(db, c.get("me"))));
   app.get("/api/finance/collected", async (c) =>
     c.json(await collectedLater(db, c.get("me"), Number(c.req.query("days") ?? 30) || 30)),
   );

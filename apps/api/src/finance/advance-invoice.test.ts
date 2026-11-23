@@ -6,6 +6,7 @@
 
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { runChecks } from "../checks/integrity";
 import { type Database, openDatabase, rows } from "../db/index";
@@ -46,7 +47,7 @@ async function approved(customerId: number): Promise<number> {
     items: [{ medicineId: medicine.id, qty: 10, priceKind: "hospital" }],
   });
   const { id } = (await response.json()) as { id: number };
-  await ok("sarla", `/api/orders/${id}/approve`);
+  await ok("sarla", await ticked(db, `/api/orders/${id}/approve`));
   return id;
 }
 const pay = (amount: number) => ({
@@ -136,7 +137,7 @@ describe("the invoice made at approval", () => {
     // Brought back: the money waits for the order again, off Refunds owed and its count.
     expect((await owed()).owed.some((row) => row.orderId === id)).toBe(false);
     expect(await count()).toBe(before - 1);
-    await ok("sarla", `/api/orders/${id}/approve`);
+    await ok("sarla", await ticked(db, `/api/orders/${id}/approve`));
     const again = await order(id);
     expect(again.order.status).toBe("finance_check");
     expect(again.money.invoice).toMatchObject({ status: "paid", paid: total });
@@ -216,9 +217,9 @@ describe("the invoice made at approval", () => {
     const placed = await order(id);
     expect(placed.order.status).toBe("pending_approval");
     expect(placed.money.invoice).toBeNull();
-    expect((await post("sarla", `/api/orders/${id}/approve`)).status).toBe(409);
+    expect((await post("sarla", await ticked(db, `/api/orders/${id}/approve`))).status).toBe(409);
     expect(await attachPaper(app, cookies.sarla as string, id, "prescription")).toBe(200);
-    await ok("sarla", `/api/orders/${id}/approve`);
+    await ok("sarla", await ticked(db, `/api/orders/${id}/approve`));
     expect((await order(id)).money.invoice?.status).toBe("open");
   });
 });

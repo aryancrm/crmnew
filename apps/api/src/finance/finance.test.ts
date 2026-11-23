@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -59,7 +60,7 @@ async function approved(customerId: number, more: object = {}): Promise<number> 
   const placed = (await (
     await post("ryan", "/api/orders", { customerId, items: [line()], ...more })
   ).json()) as { id: number };
-  expect((await post("sarla", `/api/orders/${placed.id}/approve`)).status).toBe(200);
+  expect((await post("sarla", await ticked(db, `/api/orders/${placed.id}/approve`))).status).toBe(200);
   return placed.id;
 }
 const confirm = (who: string, id: number, body: object) =>
@@ -179,7 +180,18 @@ describe("an advance order", () => {
     expect((await confirm("sarla", id, pay(total))).status).toBe(403);
 
     expect((await upload("ryan", id)).status).toBe(200);
-    expect((await confirm("fiona", id, pay(total, { reference: "" }))).status).toBe(200);
+    // Paid first means paid whole (23 Nov): a part goes on the invoice and the order stays with
+    // Finance; only the rest sends it to Dispatch.
+    const part = await confirm("fiona", id, pay(total - 1000, { reference: "" }));
+    expect(part.status).toBe(200);
+    expect(await part.json()).toMatchObject({ sent: false, left: 1000 });
+    const half = await order("fiona", id);
+    expect(half.order.status).toBe("finance_check");
+    expect(half.can.confirm_payment).toBe(true);
+    expect(half.money.invoice).toMatchObject({ paid: total - 1000, balance: 1000, status: "open" });
+    expect(half.money.invoice?.state.word).toBe("Partly paid · Payment to check");
+    expect(await fieldOf(await confirm("fiona", id, pay(total, { reference: "" })))).toBe("amount");
+    expect((await confirm("fiona", id, pay(1000, { reference: "" }))).status).toBe(200);
     const done = await order("ryan", id);
     expect(done.order.status).toBe("ready_for_dispatch");
     expect(done.money.invoice).toMatchObject({
@@ -191,8 +203,9 @@ describe("an advance order", () => {
     });
     expect(done.money.invoice?.code).toMatch(/^2MG-SI-\d{6}$/);
     expect(done.money.invoice?.state.word).toBe("Paid");
+    expect(done.money.payments.map((one) => one.amount)).toEqual([total - 1000, 1000]);
     expect(done.money.payments[0]).toMatchObject({
-      amount: total,
+      amount: total - 1000,
       method: "bank",
       methodLabel: "Bank transfer",
       proofId: expect.any(Number),
@@ -228,10 +241,12 @@ describe("an advance order", () => {
     expect(back.events.at(-1)?.message).toBe("Proof of payment added: back with Finance to check.");
   });
 
-  it("the Admin's own order skips the queue, ships from the default warehouse and waits for Finance", async () => {
+  it("the Admin's own order waits for Management (22 Nov), then ships from the default warehouse and waits for Finance", async () => {
     const placed = (await (
       await post("admin", "/api/orders", { customerId: hospital, items: [line()] })
     ).json()) as { id: number };
+    expect((await order("fiona", placed.id)).order.status).toBe("pending_approval");
+    expect((await post("sarla", await ticked(db, `/api/orders/${placed.id}/approve`))).status).toBe(200);
     const own = await order("fiona", placed.id);
     expect(own.order.status).toBe("finance_check");
     expect(own.order.warehouse).not.toBeNull();
@@ -242,7 +257,7 @@ describe("an advance order", () => {
       await post("ryan", "/api/orders", { customerId: hospital, items: [line()] })
     ).json()) as { id: number };
     expect((await order("fiona", placed.id)).can).toMatchObject({ approve: false, hold: false });
-    expect((await post("fiona", `/api/orders/${placed.id}/approve`)).status).toBe(409);
+    expect((await post("fiona", await ticked(db, `/api/orders/${placed.id}/approve`))).status).toBe(409);
     expect(
       (await post("sarla", `/api/orders/${placed.id}/hold`, { reason: "Ask Ms. Van" })).status,
     ).toBe(200);
@@ -303,6 +318,20 @@ describe("a credit order", () => {
       paidOn: todayManila(),
     });
     expect(early.status).toBe(409);
+  });
+
+  it("takes no money dated in a locked period (the books' Transaction locking, 22 Nov)", async () => {
+    const id = await approved(creditHospital);
+    await post("fiona", `/api/finance/orders/${id}/invoice`);
+    const invoice = (await order("fiona", id)).money.invoice;
+    if (!invoice) throw new Error("no invoice");
+    await db.execute(sql`insert into book_lock (module, lock_date, reason) values ('sales', ${todayManila()}::date, 'test')`);
+    const pay = () => post("fiona", `/api/invoices/${invoice.id}/payments`, { amount: 100, method: "cash", reference: "LOCK-1", paidOn: todayManila() });
+    const locked = await pay();
+    expect(locked.status).toBe(409);
+    expect(((await locked.json()) as { error: { code: string } }).error.code).toBe("locked");
+    await db.execute(sql`delete from book_lock where module = 'sales'`);
+    expect((await pay()).status).toBe(200);
   });
 
   it("takes its money later, part by part; a mistaken payment is taken off with why", async () => {
@@ -425,6 +454,10 @@ describe("a cancelled order Finance took money for", () => {
         refundedOn: todayManila(),
       });
     expect(await fieldOf(await refund(total + 1))).toBe("amount");
+    // Sent back through a bank: its reference number is asked (23 Nov); cash by hand has none.
+    expect(
+      await fieldOf(await post("fiona", `/api/invoices/${invoiceId}/refunds`, { amount: 100, method: "bank", refundedOn: todayManila() })),
+    ).toBe("reference");
     expect((await refund(total)).status).toBe(200);
     expect((await refund(1)).status).toBe(409);
     const later = await read<RefundList>("fiona", "/api/finance/refunds");

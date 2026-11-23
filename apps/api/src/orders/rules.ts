@@ -173,17 +173,23 @@ export function orderActions(
   return {
     approve: decides && pending,
     send_back: decides && pending,
-    reject: decides && pending,
+    // Gone with Exception (Aryan, 23 Nov): Reject left the order on hold exactly as Put on hold does.
+    reject: false,
     hold:
       (manage && OPEN.includes(order.status)) ||
       (finance && FINANCE_STATUSES.includes(order.status)) ||
       (dispatch && (order.status === "ready_for_dispatch" || order.status === "packing")),
-    exception: manage && (OPEN.includes(order.status) || order.status === "shipped"),
+    // Gone (Aryan, 23 Nov: "take Exception out of Management, it looks like an extra"). It was a
+    // second "Put on hold" under another name; Management stops an order with Put on hold and its
+    // reason. An order already marked an exception is still taken off hold like any held one.
+    exception: false,
     resume:
       (manage && flagged) || (finance && held === "finance") || (dispatch && held === "dispatch"),
     // The MedRep may cancel their own order while it is a draft, or held before Finance acted.
     cancel:
-      (manage && !["shipped", "completed", "cancelled"].includes(order.status)) ||
+      // Never while the parcel is on the road (stopped as an exception after it shipped): a cancel
+      // would put its pieces back on the shelf. It comes back through Dispatch, or as a return.
+      (manage && !["shipped", "completed", "cancelled"].includes(order.status) && order.heldFrom !== "shipped") ||
       (mine && order.status === "draft") ||
       (mine && flagged && (!order.heldFrom || order.heldFrom === "pending_approval")),
     answer: mine && flagged,

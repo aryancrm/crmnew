@@ -297,17 +297,36 @@ function ReceiveDialog({ row, onClose }: { row: ReturnRow; onClose: () => void }
   const [outcomes, setOutcomes] = useState<Record<number, ReturnOutcome>>(() =>
     Object.fromEntries(row.lines.map((line) => [line.id, "restocked" as ReturnOutcome])),
   );
+  // A line that came back in parts (20 good, 10 crushed): how many of each, typed.
+  const [parts, setParts] = useState<Record<number, Record<ReturnOutcome, string>>>({});
   const action = useAction();
   const queries = useQueryClient();
+  const counted = (lineId: number, outcome: ReturnOutcome) => Math.max(0, Math.floor(Number(parts[lineId]?.[outcome]) || 0));
+  const sumOf = (lineId: number) => OUTCOMES.reduce((sum, one) => sum + counted(lineId, one.value), 0);
   const credit = row.lines.reduce(
-    (sum, line) => sum + (outcomes[line.id] === "missing" ? 0 : line.qty * line.unitPrice),
+    (sum, line) =>
+      sum +
+      (parts[line.id]
+        ? (counted(line.id, "restocked") + counted(line.id, "damaged")) * line.unitPrice
+        : outcomes[line.id] === "missing"
+          ? 0
+          : line.qty * line.unitPrice),
     0,
   );
+  const wrong = row.lines.some((line) => parts[line.id] && sumOf(line.id) !== line.qty);
   async function save() {
     const done = await action.run(async () => {
       await api(`/api/returns/${row.id}/receive`, {
         body: {
-          lines: row.lines.map((line) => ({ lineId: line.id, outcome: outcomes[line.id] })),
+          lines: row.lines.flatMap((line) =>
+            parts[line.id]
+              ? OUTCOMES.filter((one) => counted(line.id, one.value) > 0).map((one) => ({
+                  lineId: line.id,
+                  outcome: one.value,
+                  qty: counted(line.id, one.value),
+                }))
+              : [{ lineId: line.id, outcome: outcomes[line.id] }],
+          ),
         },
       });
     });
@@ -323,30 +342,81 @@ function ReceiveDialog({ row, onClose }: { row: ReturnRow; onClose: () => void }
       busy={action.busy}
     >
       <div className="flex flex-col gap-3">
-        {row.lines.map((line) => (
-          <div
-            key={line.id}
-            className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2 text-[13px]"
-          >
-            <span className="font-semibold text-slate-900">
-              {line.medicine} × {count(line.qty)}
-            </span>
-            <select
-              aria-label={`What came back of ${line.medicine}`}
-              value={outcomes[line.id]}
-              onChange={(event) =>
-                setOutcomes((all) => ({ ...all, [line.id]: event.target.value as ReturnOutcome }))
-              }
-              className={`${INPUT} h-9 max-w-56`}
-            >
-              {OUTCOMES.map((one) => (
-                <option key={one.value} value={one.value}>
-                  {one.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        ))}
+        {row.lines.map((line) => {
+          const split = parts[line.id];
+          return (
+            <div key={line.id} className="border-b border-slate-100 pb-2 text-[13px]">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-semibold text-slate-900">
+                  {line.medicine} × {count(line.qty)}
+                </span>
+                {!split && (
+                  <select
+                    aria-label={`What came back of ${line.medicine}`}
+                    value={outcomes[line.id]}
+                    onChange={(event) =>
+                      setOutcomes((all) => ({ ...all, [line.id]: event.target.value as ReturnOutcome }))
+                    }
+                    className={`${INPUT} h-9 max-w-56`}
+                  >
+                    {OUTCOMES.map((one) => (
+                      <option key={one.value} value={one.value}>
+                        {one.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+              {split ? (
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {OUTCOMES.map((one) => (
+                    <label key={one.value} className="flex flex-col gap-1 text-xs font-semibold text-slate-600">
+                      {one.label}
+                      <input
+                        inputMode="numeric"
+                        className={`${INPUT} h-9`}
+                        value={split[one.value]}
+                        onChange={(event) =>
+                          setParts((all) => ({
+                            ...all,
+                            [line.id]: { ...split, [one.value]: event.target.value.replace(/\D/g, "") },
+                          }))
+                        }
+                      />
+                    </label>
+                  ))}
+                  <span className={`col-span-3 text-xs ${sumOf(line.id) === line.qty ? "text-slate-500" : "font-semibold text-rose-700"}`}>
+                    {sumOf(line.id) === line.qty
+                      ? `All ${count(line.qty)} counted.`
+                      : `They add up to ${count(sumOf(line.id))}; ${count(line.qty)} are on this return.`}{" "}
+                    <button
+                      type="button"
+                      className="font-semibold text-emerald-700 hover:underline"
+                      onClick={() => setParts(({ [line.id]: _gone, ...rest }) => rest)}
+                    >
+                      All the same
+                    </button>
+                  </span>
+                </div>
+              ) : (
+                line.qty > 1 && (
+                  <button
+                    type="button"
+                    className="mt-1 text-xs font-semibold text-emerald-700 hover:underline"
+                    onClick={() =>
+                      setParts((all) => ({
+                        ...all,
+                        [line.id]: { restocked: String(line.qty), damaged: "0", missing: "0", kept: "0" },
+                      }))
+                    }
+                  >
+                    Some damaged or not received? Count each
+                  </button>
+                )
+              )}
+            </div>
+          );
+        })}
         <div className="flex justify-between text-[13px]">
           <span className="text-slate-600">To credit on the bill (Management decides)</span>
           <b className="tabular-nums">{peso(credit)}</b>
@@ -356,7 +426,7 @@ function ReceiveDialog({ row, onClose }: { row: ReturnRow; onClose: () => void }
           <Button onClick={onClose} disabled={action.busy}>
             Close
           </Button>
-          <Button variant="primary" onClick={save} disabled={action.busy}>
+          <Button variant="primary" onClick={save} disabled={action.busy || wrong}>
             {action.busy ? "Saving…" : "Goods checked"}
           </Button>
         </div>

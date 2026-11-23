@@ -3,7 +3,7 @@
 // one open beside them, as the Leads case and the order page draw theirs), and the new order with
 // what each medicine has on the shelf, what is coming and what it cost last time.
 
-import type { BookDoc, InventoryList, PurchaseOrderExtra } from "@2mg/api/types";
+import type { BookDoc, InventoryList, PurchaseList, PurchaseOrderExtra } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, CircleSlash, ClipboardList, PackageCheck, Plus, Printer, ReceiptText, RotateCcw, Trash2, Truck, Wallet } from "lucide-react";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
@@ -60,8 +60,24 @@ export function PurchaseOrdersPage() {
     setParams(out, { replace: true });
   };
   const data = query.data;
+  // Orders made on the first purchase pages and still to come: Inventory's Overview counts them
+  // as "to be received", so they are said here too (the list read 0 beside a count of 2, 23 Nov).
+  const first = useQuery({
+    queryKey: ["inventory", "purchases"],
+    queryFn: () => api<PurchaseList>("/api/purchases"),
+  });
+  const firstOpen = (first.data?.rows ?? []).filter((row) => row.state === "ordered").length;
   return (
     <div className="mx-auto flex max-w-[88rem] flex-col gap-4">
+      {firstOpen > 0 && (
+        <Link
+          to="/purchases/old"
+          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-[13px] font-semibold text-amber-900 hover:bg-amber-100"
+        >
+          {firstOpen} {firstOpen === 1 ? "order" : "orders"} made on the first purchase pages {firstOpen === 1 ? "is" : "are"} still to
+          receive: open {firstOpen === 1 ? "it" : "them"} →
+        </Link>
+      )}
       <PageHead
         title="Purchase orders"
         sub="Every order to a vendor, the old system's and those made here, by where it stands"

@@ -10,7 +10,7 @@ import { api } from "../api";
 import { shortPeso } from "../ceo";
 import { reportRange } from "../team/range";
 import { PageState } from "../ui";
-import { build, COLOR, type Node, pctOf, toneOfNode } from "./sales-tree";
+import { build, COLOR, face, type Node, pctOf, toneOfNode } from "./sales-tree";
 
 export function DivisionsPage() {
   const { from, to } = reportRange(new URLSearchParams());
@@ -39,8 +39,9 @@ export function DivisionsPage() {
       {heads.map((head) => (
         <section key={head.key}>
           <div className="mb-2 flex flex-wrap items-baseline gap-x-3">
-            <h2 className="text-[15px] font-semibold text-slate-900">{head.name}</h2>
-            <span className="text-[12px] text-slate-500">{head.sub}</span>
+            {/* The business's name big, its head small, as on the Company tree. */}
+            <h2 className="text-[17px] font-semibold text-slate-900">{face(head).big}</h2>
+            <span className="text-[12px] text-slate-500">{face(head).small}</span>
             <Share node={head} pace={data.pace} />
           </div>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

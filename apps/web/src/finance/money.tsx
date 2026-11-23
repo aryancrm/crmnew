@@ -81,6 +81,9 @@ export function Payments() {
   });
   const data = query.data;
   if (!data) return <PageState query={query} what="the payments" />;
+  const notMoney = data.byMethod
+    .filter((one) => ["points", "withholding", "credit", "deduction"].includes(one.method))
+    .reduce((sum, one) => sum + one.amount, 0);
   const pages = Math.max(1, Math.ceil(data.total / data.pageSize));
   const thisMonth = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" })
     .format(new Date())
@@ -121,11 +124,14 @@ export function Payments() {
       >
         <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <div className="text-xs text-slate-500">Collected in {data.monthLabel}</div>
+          {/* Money only, as Finance's Home counts it: a bill settled with the customer's credit,
+              a deduction, tax withheld or points brought no money in. */}
           <div className="mt-1 text-3xl font-semibold tracking-tight text-emerald-700 tabular-nums">
-            {shortPeso(data.sum)}
+            {shortPeso(data.sum - notMoney)}
           </div>
           <div className="text-xs text-slate-500">
             {data.total} {data.total === 1 ? "payment" : "payments"}
+            {notMoney > 0 && ` · ${shortPeso(notMoney)} more settled without money (credit, deducted, tax withheld, points)`}
           </div>
           {data.byDay.length > 0 && (
             <div
@@ -424,8 +430,8 @@ export function Refunds() {
         title="Refunds owed"
         sub={
           data.owed.length
-            ? `${count(data.owed.length)} cancelled ${data.owed.length === 1 ? "order" : "orders"} · ${peso(owed)} to give back`
-            : "Money for cancelled orders the customer had paid"
+            ? `${count(data.owed.length)} ${data.owed.length === 1 ? "refund" : "refunds"} · ${peso(owed)} to give back`
+            : "Money to give back: orders cancelled after the customer paid, and goods returned after paying"
         }
       />
       <Card className="mb-4 overflow-x-auto">
@@ -435,7 +441,7 @@ export function Refunds() {
           <table className="t">
             <thead>
               <tr>
-                <th>Cancelled</th>
+                <th>Since</th>
                 <th>Order</th>
                 <th>Customer</th>
                 <th>Why</th>

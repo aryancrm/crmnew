@@ -5,6 +5,7 @@ import { countQueries, type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { seedDemo } from "../seed";
+import { shelfBack, shelfUp, ticked } from "../testing/approve";
 import type {
   Catalogue,
   CustomerDetail,
@@ -46,8 +47,8 @@ const place = async (who: string, body: object) => {
   };
 };
 const order = (who: string, id: number) => read<OrderDetail>(who, `/api/orders/${id}`);
-const act = (who: string, id: number, action: string, body: object = {}) =>
-  post(who, `/api/orders/${id}/${action}`, body);
+const act = async (who: string, id: number, action: string, body: object = {}) =>
+  post(who, action === "approve" ? await ticked(db, `/api/orders/${id}/approve`) : `/api/orders/${id}/${action}`, body);
 const queue = async (who: string) =>
   (await read<{ orders: OrderRow[] }>(who, "/api/orders/queue")).orders;
 const line = (more: object = {}) => ({
@@ -139,7 +140,8 @@ describe("placing an order", () => {
     expect((await order("sarla", made.body.id)).can).toMatchObject({
       approve: true,
       send_back: true,
-      reject: true,
+      // Reject is gone (23 Nov): it left the order on hold as Put on hold does.
+      reject: false,
       hold: true,
     });
   });
@@ -204,18 +206,54 @@ describe("placing an order", () => {
     ).toBe(400);
   });
 
-  it("Management places no orders (19 Nov); the Admin's own order skips the queue", async () => {
+  it("Management places no orders (19 Nov); the Admin's own order waits for Management too (22 Nov)", async () => {
     // Management checks and approves orders; it doesn't raise them (Aryan, 19 Nov).
     expect((await post("sarla", "/api/orders", { customerId: hospital, items: [line()] })).status).toBe(403);
     const made = await place("admin", { customerId: hospital, items: [line()] });
     const detail = await order("sarla", made.body.id);
-    expect(detail.order).toMatchObject({
-      status: "finance_check",
-      raisedBy: "Admin",
-      medrep: "Ryan",
-    });
-    expect(detail.stages[1]?.at).not.toBeNull();
-    expect((await queue("sarla")).some((row) => row.id === made.body.id)).toBe(false);
+    expect(detail.order).toMatchObject({ status: "pending_approval", raisedBy: "Admin", medrep: "Ryan" });
+    expect((await queue("sarla")).some((row) => row.id === made.body.id)).toBe(true);
+  });
+
+  it("stock short for two orders: the one placed first is served, the later one waits (23 Nov)", async () => {
+    const code = async (response: Response) => ((await response.json()) as { error: { code: string } }).error.code;
+    // The shelf holds just what the first order needs (the earlier orders have theirs); a second
+    // one placed after it finds nothing left.
+    const first = await place("ryan", { customerId: hospital, items: [line({ qty: 30 })] });
+    await shelfUp(db, first.body.id);
+    const second = await place("ryan", { customerId: hospital, items: [line({ qty: 10 })], stockReason: "They will wait" });
+    // The first isn't short (only its checks are open); it used to be refused for the second's promise.
+    expect(await code(await post("sarla", `/api/orders/${first.body.id}/approve`))).toBe("checks_open");
+    expect((await order("sarla", first.body.id)).can.waitStock).toBe(false);
+    // The second is: it is held (Wait for stock) or sent back, never approved.
+    expect(await code(await post("sarla", `/api/orders/${second.body.id}/approve`))).toBe("short_stock");
+    expect((await order("sarla", second.body.id)).findings.some((one) => one.kind === "stock")).toBe(true);
+    expect((await act("sarla", second.body.id, "hold", { stock: true })).status).toBe(200);
+    // The first gone, its pieces are free: the second has enough.
+    await act("sarla", first.body.id, "cancel", { reason: "Hospital withdrew it" });
+    expect((await order("sarla", second.body.id)).waitingStock?.short ?? []).toEqual([]);
+    await act("sarla", second.body.id, "cancel", { reason: "Test done" });
+    // The shelf as it was, for the tests after this one.
+    await shelfBack(db, first.body.id);
+  });
+
+  it("Approve is refused until every check is approved (22 Nov)", async () => {
+    const made = await place("ryan", { customerId: hospital, items: [line()] });
+    // What isn't in stock isn't approved at all (23 Nov): held with Wait for stock instead.
+    const noStock = await post("sarla", `/api/orders/${made.body.id}/approve`);
+    expect(noStock.status).toBe(409);
+    expect(((await noStock.json()) as { error: { code: string } }).error.code).toBe("short_stock");
+    expect((await post("sarla", `/api/orders/${made.body.id}/checks/stock`)).status).toBe(409);
+    await shelfUp(db, made.body.id);
+    const refused = await post("sarla", `/api/orders/${made.body.id}/approve`);
+    expect(refused.status).toBe(409);
+    expect(((await refused.json()) as { error: { code: string } }).error.code).toBe("checks_open");
+    expect((await post("sarla", `/api/orders/${made.body.id}/checks/papers`)).status).toBe(200);
+    const open = await order("sarla", made.body.id);
+    for (const key of ["price", "stock", "customer"])
+      if (open.findings.some((one) => (key === "price" ? ["price", "note"] : key === "stock" ? ["stock"] : ["customer", "licence", "owes", "credit"]).includes(one.kind)))
+        expect((await post("sarla", `/api/orders/${made.body.id}/checks/${key}`)).status).toBe(200);
+    expect((await post("sarla", `/api/orders/${made.body.id}/approve`)).status).toBe(200);
   });
 });
 
@@ -268,13 +306,12 @@ describe("an order's type, picked first (Aryan, 19 Nov)", () => {
 
 describe("a guarantee letter's amount (Aryan, 19 Nov)", () => {
   it("is written when the letter is in, by the order's MedRep, Management or Finance", async () => {
-    const made = await place("ryan", {
-      customerId: hospital,
-      items: [line()],
-      type: "gl",
-      patientName: "Lito Ramos",
-      source: "DSWD",
-    });
+    const gl = { customerId: hospital, items: [line()], type: "gl", patientName: "Lito Ramos", source: "DSWD" };
+    // A seller doesn't place it himself: a guarantee letter is PAP's work (22 Nov), and the server
+    // says so as the form does. (Here the Admin places it for him, so the letter's amount is tried.)
+    expect((await place("ryan", gl)).status).toBe(403);
+    const [ryan] = await rows<{ id: number }>(db, sql`select id::int as id from person where email = 'ryan@2mg.test'`);
+    const made = await place("admin", { ...gl, medrepId: ryan?.id });
     expect(made.status, JSON.stringify(made.body)).toBe(200);
     const id = made.body.id;
     expect((await order("ryan", id)).order.glAmount).toBeNull();
@@ -307,6 +344,7 @@ describe("what Management does with an order", () => {
     const id = made.body.id;
     expect((await post("ryan", `/api/orders/${id}/checks/price`, {})).status).toBe(403);
     expect((await post("sarla", `/api/orders/${id}/checks/nope`, {})).status).toBe(404);
+    await shelfUp(db, id);
     for (const key of ["papers", "price", "stock", "customer"]) {
       const answer = await post("sarla", `/api/orders/${id}/checks/${key}`, {});
       expect(answer.status, await answer.clone().text()).toBe(200);
@@ -341,7 +379,7 @@ describe("what Management does with an order", () => {
     const answer = await post("fiona", `/api/orders/${id}/checks/finance_dues`, {});
     expect(answer.status, await answer.clone().text()).toBe(200);
     const detail = await order("fiona", id);
-    expect(detail.checksApproved.map((one) => one.key)).toEqual(["finance_dues"]);
+    expect(detail.checksApproved.map((one) => one.key).filter((key) => key.startsWith("finance_"))).toEqual(["finance_dues"]);
     expect(detail.events.some((event) => event.message === "Owed from before: approved by Fiona.")).toBe(true);
   });
 
@@ -631,9 +669,10 @@ describe("what Management does with an order", () => {
     );
   });
 
-  it("rejects, holds and marks an exception with a reason, and resumes to where it was", async () => {
+  it("holds with a reason and resumes to where it was; Reject and Exception are gone (23 Nov)", async () => {
     const made = await place("ryan", { customerId: hospital, items: [line()] });
-    await act("sarla", made.body.id, "reject", { reason: "Price too low" });
+    expect((await act("sarla", made.body.id, "reject", { reason: "Price too low" })).status).toBe(409);
+    await act("sarla", made.body.id, "hold", { reason: "Price too low" });
     expect((await order("sarla", made.body.id)).order).toMatchObject({
       status: "on_hold",
       flagReason: "Price too low",
@@ -643,7 +682,7 @@ describe("what Management does with an order", () => {
 
     await act("sarla", made.body.id, "approve");
     await act("sarla", made.body.id, "hold", { reason: "Waiting for stock" });
-    // An order on hold can't also be marked an exception.
+    // No order is marked an exception any more.
     expect(
       (await act("sarla", made.body.id, "exception", { reason: "Customer disputes the order" }))
         .status,
@@ -777,8 +816,8 @@ describe("the dashboard and the lists", () => {
       ),
     ).toBe(true);
     expect((await read<OrderBoard>("sarla", "/api/orders/board?channel=RX")).cards).toHaveLength(0);
-    // Every channel, not only those with orders (19 Nov).
-    expect(board.channels).toEqual(expect.arrayContaining(["HOSP", "RX", "B2B"]));
+    // Every channel, not only those with orders (19 Nov): the target sheet's, and PAP (22 Nov).
+    expect(board.channels).toEqual(["RX Business", "MD Telesales", "B2B", "BID", "CLIDP", "TeleSales", "HOSP", "MT", "PAP"]);
     // The step line's counts and one status picked from it.
     expect(board.byStatus.pending_approval).toBe(board.counts.needs);
     const picked = await read<OrderBoard>("sarla", "/api/orders/board?status=finance_check");

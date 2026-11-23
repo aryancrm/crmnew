@@ -14,6 +14,7 @@ import { api } from "../api";
 import { useMe } from "../auth";
 import { DISPATCH_HOLDS, type DispatchAsk, DispatchDialogs } from "../dispatch/parts";
 import { ConfirmPaymentDialog, InvoiceStatus, useMoney } from "../finance/parts";
+import { rememberConfirm } from "../finance/undo";
 import { ApproveDialog, shipsFromOf } from "./approve-dialog";
 import { ReasonDialog, StatusPill, shortSpan, useOrderAction } from "./parts";
 import { AskUpBox } from "./asks";
@@ -396,7 +397,7 @@ export function Order() {
   }[] = [
     // Management's whole-order answers, under its checks (each check sends back for itself too).
     { action: "send_back", label: "Send back", icon: Undo2, reason: true },
-    { action: "reject", label: "Reject", icon: CircleX, danger: true, reason: true },
+    // "Reject" is gone (Aryan, 23 Nov): it left the order on hold, as Put on hold does.
     // Management says why it can go on and from where (the hub's Resume); Finance and Dispatch
     // lift their own holds with a press.
     { action: "resume", label: "Take off hold", icon: Play, reason: data.resumeTo.length > 0 },
@@ -408,14 +409,8 @@ export function Order() {
       icon: Undo2,
       reason: true,
     },
+    // "Mark exception" is gone (Aryan, 23 Nov): Put on hold, with its reason, is the one way to stop.
     { action: "hold", label: "Put on hold", icon: CirclePause, reason: true },
-    {
-      action: "exception",
-      label: "Mark exception",
-      icon: TriangleAlert,
-      danger: true,
-      reason: true,
-    },
     { action: "cancel", label: "Cancel order", icon: CircleX, danger: true, reason: true },
     { action: "restore", label: "Restore", icon: RotateCcw, reason: true },
   ];
@@ -551,13 +546,15 @@ export function Order() {
                       financeReady
                         ? can.confirm_payment
                           ? "The money is in the bank: record it and send the order to Dispatch"
-                          : "Makes the invoice and sends the order to Dispatch"
+                          : "Sends the order to Dispatch (its invoice is made already)"
                         : "Approve or hold what is marked first"
                     }
                     onClick={() =>
                       can.confirm_payment
                         ? setConfirmingPayment(true)
-                        : money.send(`/api/finance/orders/${order.id}/invoice`, {})
+                        : money
+                            .send(`/api/finance/orders/${order.id}/invoice`, {})
+                            .then((done) => done && rememberConfirm(order.id, order.code, true))
                     }
                     className="rounded-lg bg-brand px-2 py-1 text-xs font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
                   >
@@ -1146,6 +1143,12 @@ export function Order() {
               </div>
             </div>
           )}
+          {/* The MedRep's answer to a hold, where the desk decides (it was only a line on the timeline). */}
+          {(order.status === "on_hold" || order.status === "exception") && order.reply && (
+            <div className="mt-3 rounded-lg bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-950">
+              <b>{order.medrep}'s answer:</b> {order.reply}
+            </div>
+          )}
           {order.status !== "draft" && order.sentBackCount > 0 && order.sentBackReason && (
             <div className="mt-3 rounded-lg bg-slate-50 px-3.5 py-2.5 text-sm text-ink">
               <b>
@@ -1238,14 +1241,28 @@ export function Order() {
                       <div key={item.key} className="flex items-center gap-1">
                         <div className="min-w-0 flex-1">{row}</div>
                         <span className="flex shrink-0 flex-col gap-1">
-                          <button
-                            type="button"
-                            disabled={act.busy}
-                            onClick={() => approveOne(item.key)}
-                            className="rounded-lg bg-brand px-2 py-1 text-xs font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
-                          >
-                            Approve
-                          </button>
+                          {/* What isn't in stock isn't approved (Aryan, 23 Nov): the order waits on
+                              hold until the stock is in (Management and the MedRep are told then). */}
+                          {item.key === "stock" && can.waitStock ? (
+                            <button
+                              type="button"
+                              disabled={act.busy}
+                              title="Hold it until what it needs is on the shelf; you are told when it comes in"
+                              onClick={() => act.act(order.id, "hold", { stock: true })}
+                              className="rounded-lg bg-amber-500 px-2 py-1 text-xs font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+                            >
+                              Wait for stock
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={act.busy}
+                              onClick={() => approveOne(item.key)}
+                              className="rounded-lg bg-brand px-2 py-1 text-xs font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
+                            >
+                              Approve
+                            </button>
+                          )}
                           {can.send_back && !state.ok && (
                             <button
                               type="button"
@@ -1389,7 +1406,7 @@ export function Order() {
                 <div className="flex flex-col gap-3 text-sm">
                   <p className="text-slate-600">
                     {["finance_check", "ready_for_invoice"].includes(order.status)
-                      ? "With Finance now: they check the payment (or what the customer owes) and make the invoice."
+                      ? "With Finance now: they check the payment (or what the customer owes) and send it to Dispatch."
                       : order.status === "pending_approval" || order.status === "draft"
                         ? "Comes to Finance once Management approves."
                         : "Finance checked it."}

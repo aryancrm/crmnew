@@ -292,7 +292,12 @@ export async function payablesAging(db: Database, me: Me): Promise<PayablesAging
 
 const GP_KEY: Record<GrossProfitBy, { key: SQL; label: SQL; link: SQL }> = {
   medicine: { key: sql`l.medicine_id::text`, label: sql`max(m.name || coalesce(' ' || m.strength, ''))`, link: sql`null::text` },
-  channel: { key: sql`coalesce(o.channel_id::text, '-')`, label: sql`coalesce(max(ch.name), 'No channel')`, link: sql`null::text` },
+  // The target sheet's channel (the order's Division; PAP as PAP; an older order its first channel's code), 22 Nov.
+  channel: {
+    key: sql`coalesce((case when ch.code = 'PAP' then ch.code else coalesce(o.division, ch.code) end), '-')`,
+    label: sql`coalesce(max((case when ch.code = 'PAP' then ch.code else coalesce(o.division, ch.code) end)), 'No channel')`,
+    link: sql`null::text`,
+  },
   customer: { key: sql`o.customer_id::text`, label: sql`max(c.name)`, link: sql`'/customers/' || o.customer_id::text` },
   order: { key: sql`o.id::text`, label: sql`max(o.code || ' · ' || c.name)`, link: sql`'/orders/' || o.id::text` },
   // A branch is a warehouse (Main, Cebu, Davao…), decided 18 Nov on Aryan's word.
@@ -333,8 +338,8 @@ export async function grossProfit(
         group by 1, 2
       ),
       cost as (
-        select o.id as order_id, x.medicine_id, sum(-x.qty::bigint * coalesce(b.unit_cost, 0)) as cost,
-          bool_or(coalesce(b.unit_cost, 0) = 0) as uncosted
+        select o.id as order_id, x.medicine_id, sum(-x.qty::bigint * coalesce(x.unit_cost, b.unit_cost, 0)) as cost,
+          bool_or(coalesce(x.unit_cost, b.unit_cost, 0) = 0) as uncosted
         from stock_move x join batch b on b.id = x.batch_id
           join sales_order o on o.code = x.ref or o.id = (select r.order_id from sales_return r where r.code = x.ref)
         where x.kind in ('deliver', 'return') and o.id in (select order_id from sold)

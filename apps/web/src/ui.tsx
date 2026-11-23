@@ -46,6 +46,13 @@ export function dayLabel(day: string, thisYear?: string): string {
   return thisYear && year === thisYear.slice(0, 4) ? text : `${text} ${year}`;
 }
 
+/** The Manila day (YYYY-MM-DD) of an ISO time. Its first ten letters are the UTC day: a day early
+ *  for anything done between midnight and 8 in the morning here (23 Nov). A plain day stays. */
+export const manilaDay = (iso: string) =>
+  iso.length <= 10
+    ? iso
+    : new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(iso));
+
 /** An ISO time as "14 Nov, 5:30 PM" in Manila. */
 export const timeLabel = (iso: string) =>
   new Intl.DateTimeFormat("en-PH", {
@@ -417,7 +424,7 @@ export function Dialog({
         if (pressedOutside.current && event.target === event.currentTarget && !busy) onClose();
         pressedOutside.current = false;
       }}
-      className={`m-auto ${wide ? "w-[min(48rem,calc(100vw-2rem))]" : "w-[min(40rem,calc(100vw-2rem))]"} max-h-[calc(100dvh-2rem)] overflow-y-auto rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-900/40`}
+      className={`m-auto ${wide ? "w-[min(48rem,calc(100vw-2rem))]" : "w-[min(40rem,calc(100vw-2rem))]"} max-h-[calc(100dvh-2rem)] overflow-y-auto overscroll-contain rounded-2xl border border-slate-200 bg-white p-0 text-slate-800 shadow-2xl backdrop:bg-slate-900/40`}
     >
       <div className="p-5 text-sm sm:p-6">
         <header className="mb-5 flex items-start justify-between gap-3">

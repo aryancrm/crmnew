@@ -5,9 +5,10 @@
 
 import type { OrderDetail, PaperKind } from "@2mg/api/types";
 import { TriangleAlert } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { noProofWords } from "../../finance/no-proof";
-import type { useMoney } from "../../finance/parts";
+import { UseCreditDialog, type useMoney } from "../../finance/parts";
 import { dayLabel, peso } from "../../ui";
 import { Fact, Facts, NextButton, short, StepPanel } from "./frame";
 import { Papers } from "./papers";
@@ -143,6 +144,11 @@ export function FinanceStep({
   const { order, can } = data;
   const invoice = data.money.invoice;
   const checked = financeChecked(data);
+  const [usingCredit, setUsingCredit] = useState(false);
+  // The customer's credit, where the money is checked (it was only said under Owed before and
+  // Paid, so a whole payment could be confirmed while their credit sat unused).
+  const creditToUse =
+    (can.confirm_payment || can.make_invoice) && invoice?.status === "open" && invoice.balance > 0 ? data.dues.credit : 0;
   const after = FINANCE_PARTS[FINANCE_PARTS.indexOf(part) + 1];
   // The slip missing, as the system found it (the rest of its findings are Management's).
   const slipFindings = data.findings.filter((finding) => finding.kind === "papers");
@@ -174,7 +180,15 @@ export function FinanceStep({
             </Fact>
           ) : order.status === "finance_check" ? (
             <Fact shape="now">
-              <b>Paid first:</b> match the slip with the money in the bank, then Confirm payment
+              {invoice?.status === "paid" ? (
+                <>
+                  <b>Paid already</b> (their credit, or points): Confirm payment sends it to Dispatch
+                </>
+              ) : (
+                <>
+                  <b>Paid first:</b> match the slip with the money in the bank, then Confirm payment
+                </>
+              )}
             </Fact>
           ) : order.status === "ready_for_invoice" ? (
             <Fact shape="now">
@@ -183,7 +197,7 @@ export function FinanceStep({
                   ? `On credit: pays ${order.paymentDays ?? 30} days after delivery`
                   : `Cash on delivery: ${peso(order.total)} at the door`}
               </b>{" "}
-              · Approve makes the invoice and sends it to Dispatch
+              · Approve sends it to Dispatch (its invoice is made already)
             </Fact>
           ) : (
             <Fact shape="later">
@@ -202,6 +216,30 @@ export function FinanceStep({
                   }`
                 : "the letter's amount isn't written yet (the order's MedRep or Management writes it when it is in)."}
             </div>
+          )}
+          {creditToUse > 0 && invoice && (
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-[13px] text-emerald-950">
+              <span>
+                <b>They have {peso(creditToUse)} of credit</b> with us (a credit note, or money kept
+                from an earlier bill). Use it first; they pay only the rest.
+              </span>
+              <button
+                type="button"
+                onClick={() => setUsingCredit(true)}
+                className="h-8 shrink-0 rounded-lg border border-emerald-300 bg-white px-3 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+              >
+                Use their credit
+              </button>
+            </div>
+          )}
+          {usingCredit && invoice && (
+            <UseCreditDialog
+              invoiceId={invoice.id}
+              code={invoice.code}
+              owed={invoice.balance}
+              customerId={order.customerId}
+              onClose={() => setUsingCredit(false)}
+            />
           )}
           {!checked && noProofWords(order.noProofReason, order.noProofNote) && (
             <div className="flex gap-2 rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-700">

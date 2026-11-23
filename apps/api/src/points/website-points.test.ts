@@ -4,6 +4,7 @@
 import { createHmac } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -122,7 +123,7 @@ async function placeFromWebsite(ref: string): Promise<number> {
   expect(placed.status, await placed.clone().text()).toBe(200);
   const orderId = ((await placed.json()) as { id: number }).id;
   // Management approves every order (Aryan, 17 Nov).
-  const approved = await post("sarla", `/api/orders/${orderId}/approve`);
+  const approved = await post("sarla", await ticked(db, `/api/orders/${orderId}/approve`));
   expect(approved.status, await approved.clone().text()).toBe(200);
   return orderId;
 }

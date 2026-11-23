@@ -34,7 +34,7 @@ import {
 } from "./auth/sessions";
 import { checkRoutes } from "./checks/routes";
 import { customerRoutes } from "./customers/routes";
-import { countQueries, type Database, rows } from "./db/index";
+import { countQueries, type Database, rows, uncounted } from "./db/index";
 import { person } from "./db/schema";
 import { dispatchRoutes } from "./dispatch/routes";
 import { fieldRoutes } from "./field/routes";
@@ -97,6 +97,9 @@ const atMost = (maxSize: number) =>
       c.json({ error: { code: "too_large", message: "That is too large to send." } } satisfies ApiError, 413),
   });
 
+/** An answer slower than this (on the server) is noted for the Admin's Slow screens page. */
+const SLOW_MS = 800;
+
 export function createApp(db: Database, options: AppOptions) {
   const app = new Hono<Env>();
   const secure = options.webUrl.startsWith("https://");
@@ -105,9 +108,20 @@ export function createApp(db: Database, options: AppOptions) {
   // Time and query count on every response: how a slow screen is found.
   app.use("*", async (c, next) => {
     const started = performance.now();
-    const { queries } = await countQueries(next);
+    const { queries } = await countQueries(next, c.req.method === "GET");
     const ms = (performance.now() - started).toFixed(1);
     c.header("Server-Timing", `app;dur=${ms}, db;desc="${queries} queries"`);
+    // A slow answer is noted (address by its pattern, never the ids in it), so the Admin's Slow
+    // screens page shows what is slow online, where the database and the server are smaller than a
+    // developer's computer. Never waited for; a failure to note is nothing.
+    if (Number(ms) >= SLOW_MS && c.req.path.startsWith("/api/")) {
+      const path = (c.req.routePath && c.req.routePath !== "/api/*" && c.req.routePath !== "*" ? c.req.routePath : c.req.path.replace(/\/\d+(?=\/|$)/g, "/:id")).slice(0, 200);
+      const role = (c.get("me") as { role?: string } | undefined)?.role ?? null;
+      void uncounted(async () => {
+        await db.execute(sql`insert into slow_request (method, path, ms, queries, role) values (${c.req.method}, ${path}, ${Math.round(Number(ms))}, ${queries}, ${role})`);
+        if (Math.random() < 0.02) await db.execute(sql`delete from slow_request where at < now() - interval '14 days'`);
+      }).catch(() => {});
+    }
   });
 
   app.use("*", secureHeaders());

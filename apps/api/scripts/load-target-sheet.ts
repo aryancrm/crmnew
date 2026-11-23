@@ -119,6 +119,20 @@ for (const [at, row] of SHEET_2026_11.entries()) {
     );
 }
 
+// 3b · A seat that is on no row of the sheet carries no target this month (22 Nov: the sheet is
+// the base, seat by seat; Claire's ₱500,000 sat on her Mindanao coach seat as well as on her B2B
+// seat, the sheet's row, and made HOSP's target ₱500,000 too high).
+const onSheet = seats.filter((id): id is number => Boolean(id));
+const stray = await rows<{ seatId: number; title: string; unit: string; amount: number }>(
+  db,
+  sql`select t.seat_id::int as "seatId", s.title, u.name as unit, t.amount::float8 as amount from seat_target t join seat s on s.id = t.seat_id join org_unit u on u.id = s.unit_id
+    where t.month = ${MONTH}::date and t.amount > 0 and t.seat_id not in (${sql.join(onSheet.map((id) => sql`${id}`), sql`, `)})`,
+);
+for (const one of stray) {
+  console.log(`  off (on no row of the sheet): ${one.title} · ${one.unit} ₱${(one.amount / 100).toLocaleString("en-US")}`);
+  if (apply) await db.execute(sql`delete from seat_target where seat_id = ${one.seatId} and month = ${MONTH}::date`);
+}
+
 // 4 · Who reports to whom, as the sheet's managers say.
 const MANAGERS: Record<string, string | null> = {
   Honey: "Honey Cordero",

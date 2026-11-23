@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -242,7 +243,7 @@ describe("a website order", () => {
     expect(placed.status).toBe(200);
     const orderId = ((await placed.json()) as { id: number }).id;
     // Management approves every order (Aryan, 17 Nov).
-    expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(200);
+    expect((await post("sarla", await ticked(db, `/api/orders/${orderId}/approve`))).status).toBe(200);
     const detail = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
     expect(detail.order).toMatchObject({
       total: 2 * 140000 + 15000,

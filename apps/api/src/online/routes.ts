@@ -9,6 +9,7 @@ import { openQuotationLink, quotationLink, quotationPdf, sendQuotation } from ".
 import { SOURCES } from "./rules";
 import {
   addLead,
+  handToPap,
   addLeadFile,
   addLeadNote,
   caseRefill,
@@ -84,6 +85,22 @@ export function onlineRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
   app.post("/api/leads", async (c) =>
     c.json({ id: await addLead(db, c.get("me"), (await readBody(c, leadInput)) as LeadInput) }),
   );
+  // A seller hands their patient to PAP: a guarantee letter is PAP's to work (22 Nov).
+  app.post("/api/leads/hand-to-pap", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        name: z.string().trim().min(1, "Type the patient's name.").max(160),
+        patientName: z.string().max(160).nullish(),
+        phone: z.string().max(40).nullish(),
+        agency: z.enum(["dswd", "pcso", "ovp", "op"]),
+        request: z.string().max(2000).nullish(),
+        city: z.string().max(120).nullish(),
+        address: z.string().max(400).nullish(),
+      }),
+    );
+    return c.json({ id: await handToPap(db, c.get("me"), input) });
+  });
   app.get("/api/leads/:id", async (c) => c.json(await leadCase(db, c.get("me"), idParam(c))));
   app.post("/api/leads/:id", async (c) => {
     await saveLead(db, c.get("me"), idParam(c), (await readBody(c, leadInput)) as LeadInput);

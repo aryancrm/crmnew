@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { Fragment, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
+import { useMe } from "../auth";
 import { api } from "../api";
 import { avatarTone, dayHeading, initials, PRIMARY_SM } from "../look";
 import { DeskBoard } from "./desk-board";
@@ -62,6 +63,7 @@ const STEP_LINE: { key: DeskStep; label: string }[] = [
 
 export function LeadsDesk({ desk = "online" }: { desk?: "online" | "pap" }) {
   const pap = desk === "pap";
+  const me = useMe().data;
   const [params, setParams] = useSearchParams();
   const queue = (params.get("queue") ?? HOME) as LeadQueue;
   const step = params.get("at") ?? "";
@@ -161,7 +163,7 @@ export function LeadsDesk({ desk = "online" }: { desk?: "online" | "pap" }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
           <h1 className="text-2xl font-bold tracking-tight text-ink">
-            {pap ? "PAP cases" : "Leads & enquiries"}
+            {pap ? (me && me.role !== "admin" && me.role !== "ceo" && me.channel?.code !== "PAP" ? "My patients with PAP" : "PAP cases") : "Leads & enquiries"}
           </h1>
           <span className="rounded-full bg-stone-200/75 px-2.5 py-0.5 text-xs font-semibold text-stone-600 tabular-nums">
             {count(data.counts.active)}
@@ -609,6 +611,11 @@ function LeadCardItem({ card }: { card: LeadCard }) {
             <UserRound className="size-3 shrink-0 text-slate-400" />
             <span className="truncate">{card.owner || "Unassigned"}</span>
           </span>
+          {card.cameFrom && (
+            <span className="inline-flex min-w-0 items-center gap-1 rounded bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-800" title="Who the case came from: the sale counts there">
+              <span className="truncate">From {card.cameFrom}</span>
+            </span>
+          )}
           {card.order && (
             <span
               className="inline-flex min-w-0 items-center gap-1"

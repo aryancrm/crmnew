@@ -27,6 +27,7 @@ type Row = {
   warehouseId: number;
   warehouse: string;
   receivedOn: string | null;
+  vendor: string | null;
   received: number;
   moved: number;
   packed: number;
@@ -291,6 +292,7 @@ export function StockReportPage() {
                           Received {dayLabel(row.receivedOn, today)}
                         </div>
                       )}
+                      {row.vendor && <div className="max-w-56 truncate text-xs text-ink-2" title={row.vendor}>from {row.vendor}</div>}
                     </td>
                     <td className="whitespace-nowrap">
                       <div

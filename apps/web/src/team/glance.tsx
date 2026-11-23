@@ -6,7 +6,7 @@
 import type {
   ChannelFigures,
   ChannelReport,
-  OwedInvoices,
+  OwedGlance,
   PaymentList,
   SpeedReport,
   TeamBoard,
@@ -18,7 +18,7 @@ import { api } from "../api";
 import { counted, shortPeso } from "../ceo";
 import { StepCard, took } from "../desk/speed";
 import { span } from "../orders/parts";
-import { count } from "../ui";
+import { count, dayLabel } from "../ui";
 import { Bars, Donut } from "./charts";
 
 const CARD = "rounded-2xl border border-slate-200 bg-white shadow-sm";
@@ -490,16 +490,17 @@ export function ChannelSalesCard({
     <GlanceCard
       title={title}
       note={head ? undefined : `${shortPeso(sold)} sold · ${label}`}
-      to="/reports/channels"
+      to="/divisions"
       seeAll={seeAll}
       head={head}
     >
       <Bars
         rows={shown.map((row) => {
-          const more = extra.get(row.code);
+          const more = row.people != null ? { people: row.people, customers: row.customers ?? 0 } : extra.get(row.code);
           return {
-            key: row.code,
-            label: `${row.code} · ${row.name}`,
+            // The sheet's channels are named by their box on the Company tree (no code).
+            key: row.code || `box-${row.id}`,
+            label: row.code ? `${row.code} · ${row.name}` : row.name,
             sub: [
               row.head ?? "No head named",
               more ? `${more.people} people · ${count(more.customers)} customers` : null,
@@ -534,75 +535,23 @@ const _AGE: {
 /** What customers owe, big: how late it is and who owes most, from the same report as its page;
  *  cash on delivery not delivered yet is said apart, not in the total. */
 export function OwedCard() {
+  // Added up on the server from the same invoices as the page (22 Nov: the card downloaded every
+  // invoice, 800 KB, to show five names).
   const query = useQuery({
-    queryKey: ["finance", "owed", "invoices"],
-    queryFn: () => api<OwedInvoices>("/api/finance/owed/invoices"),
+    queryKey: ["finance", "owed", "glance"],
+    queryFn: () => api<OwedGlance>("/api/finance/owed/glance"),
   });
   const data = query.data;
-  const owed = (data?.rows ?? []).filter((row) => row.state !== "on_delivery");
-  const customers = [
-    ...owed
-      .reduce(
-        (map, row) => {
-          const now = map.get(row.customerId) ?? {
-            id: row.customerId,
-            name: row.customer,
-            medrep: row.medrep,
-            team: row.team,
-            total: 0,
-            late: 0,
-            oldest: 0,
-            invoices: 0,
-          };
-          now.total += row.balance;
-          now.invoices += 1;
-          if (row.state === "late") {
-            now.late += row.balance;
-            now.oldest = Math.max(now.oldest, row.daysLate);
-          }
-          return map.set(row.customerId, now);
-        },
-        new Map<
-          number,
-          {
-            id: number;
-            name: string;
-            medrep: string;
-            team: string | null;
-            total: number;
-            late: number;
-            oldest: number;
-            invoices: number;
-          }
-        >(),
-      )
-      .values(),
-  ].sort((a, b) => b.late - a.late || b.total - a.total);
+  const customers = data?.customers ?? [];
   const { shown, seeAll } = useSeeAll(customers, 5);
   if (!data) return null;
   const total = data.totals.owed;
   const ages = [
-    {
-      label: "Not due yet",
-      color: "bg-emerald-500",
-      amount: owed.filter((row) => row.state === "due"),
-    },
-    {
-      label: "1–30 days late",
-      color: "bg-amber-400",
-      amount: owed.filter((row) => row.state === "late" && row.daysLate <= 30),
-    },
-    {
-      label: "31–60 days",
-      color: "bg-orange-500",
-      amount: owed.filter((row) => row.state === "late" && row.daysLate > 30 && row.daysLate <= 60),
-    },
-    {
-      label: "Over 60 days",
-      color: "bg-rose-600",
-      amount: owed.filter((row) => row.state === "late" && row.daysLate > 60),
-    },
-  ].map((age) => ({ ...age, amount: age.amount.reduce((sum, row) => sum + row.balance, 0) }));
+    { label: "Not due yet", color: "bg-emerald-500", amount: data.ages.notDue },
+    { label: "1–30 days late", color: "bg-amber-400", amount: data.ages.d30 },
+    { label: "31–60 days", color: "bg-orange-500", amount: data.ages.d60 },
+    { label: "Over 60 days", color: "bg-rose-600", amount: data.ages.older },
+  ];
   return (
     <GlanceCard
       title="Customers owe us"
@@ -703,12 +652,16 @@ export function CollectedCard({ head, all = false }: { head?: ReactNode; all?: b
   const { shown, seeAll } = useSeeAll(data?.rows ?? [], 5);
   if (!data) return null;
   const top = Math.max(1, ...data.byDay.map((one) => one.amount));
+  // Money only, as Finance's Home and Payments received count it.
+  const notMoney = data.byMethod
+    .filter((one) => ["points", "withholding", "credit", "deduction"].includes(one.method))
+    .reduce((sum, one) => sum + one.amount, 0);
   return (
     <GlanceCard title="Collected" note={data.monthLabel} to="/payments" seeAll={seeAll} head={head}>
       {!head && (
         <>
           <div className="text-3xl font-semibold tracking-tight text-emerald-700 tabular-nums">
-            {shortPeso(data.sum)}
+            {shortPeso(data.sum - notMoney)}
           </div>
           <div className="mb-3 text-xs text-slate-500">
             {counted(data.total, "payment")} received
@@ -747,7 +700,7 @@ export function CollectedCard({ head, all = false }: { head?: ReactNode; all?: b
               <span className="min-w-0">
                 <span className="block truncate font-medium text-slate-800">{row.customer}</span>
                 <span className="block text-[11px] text-slate-500">
-                  {row.paidOn} · {row.methodLabel}
+                  {dayLabel(row.paidOn)} · {row.methodLabel}
                   {row.reference ? ` · ${row.reference}` : ""}
                 </span>
               </span>

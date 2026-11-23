@@ -3,6 +3,7 @@
 import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
+import { afterStockIn } from "../orders/stock-wait";
 import { type Env, idParam, readBody } from "../http";
 import { tellAboutOrder } from "../notify/service";
 import { tellCustomer } from "../online/tell";
@@ -70,6 +71,8 @@ export function dispatchRoutes(
   app.post("/api/dispatch/orders/:id/unpack", async (c) => {
     const input = await readBody(c, z.object({ reason: optional(300) }));
     await unpackOrder(db, c.get("me"), idParam(c), input.reason ?? null);
+    // The pieces are back on the shelf: orders waiting for that stock are told.
+    await afterStockIn(db);
     return c.json({ ok: true });
   });
   app.post("/api/dispatch/orders/:id/ship", async (c) => {

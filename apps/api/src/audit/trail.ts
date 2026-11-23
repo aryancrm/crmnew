@@ -21,7 +21,7 @@ export const AUDIT_KINDS: Record<string, string> = {
 };
 
 /** Every line any log holds: when, who, what kind, about which record, what happened. */
-const TRAIL = sql`(
+export const TRAIL = sql`(
   select e.at, p.name as who, 'order' as kind, o.code as record, '/orders/' || o.id as link, e.message as what
     from order_event e join person p on p.id = e.by_person join sales_order o on o.id = e.order_id
   union all

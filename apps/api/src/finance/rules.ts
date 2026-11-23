@@ -27,6 +27,7 @@ export const DEDUCTION_LABEL: Record<DeductionKind, string> = {
   promo: "Promo / rebate",
   penalty: "Penalty",
   other: "Other",
+  gl_waived: "Guarantee letter shortfall let go",
 };
 export const METHODS = Object.keys(METHOD_LABEL) as PaymentMethod[];
 /** What a person records by hand: points are paid only by the points the order used; tax withheld
@@ -91,12 +92,17 @@ export function invoiceState(
     paid: number;
     total: number;
     delivered: boolean;
+    /** Paid first, the money not checked by Finance yet. */
+    awaiting?: boolean;
   },
   today: string,
 ): InvoiceState {
   if (invoice.status === "cancelled") return { word: "Cancelled", tone: "plain", overdueDays: 0 };
   if (invoice.status === "paid") return { word: "Paid", tone: "good", overdueDays: 0 };
   const partly = invoice.paid > 0 ? "Partly paid · " : "";
+  // Paid first and waiting for Finance's check: nobody is late, the money is checked there (it
+  // read "Overdue by 1 day" the morning after Management approved it).
+  if (invoice.awaiting) return { word: `${partly}Payment to check`, tone: "warn", overdueDays: 0 };
   if (invoice.terms === "cod" && !invoice.delivered)
     return { word: `${partly}Collect on delivery`, tone: "info", overdueDays: 0 };
   const late = daysBetween(invoice.dueOn, today);

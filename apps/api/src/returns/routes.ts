@@ -3,6 +3,7 @@
 import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
+import { afterStockIn } from "../orders/stock-wait";
 import { type Env, idParam, Refusal, readBody } from "../http";
 import type { ReturnGoods, ReturnReason } from "../types";
 import {
@@ -71,12 +72,17 @@ export function returnRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
             z.object({
               lineId: z.number().int().positive(),
               outcome: z.enum(["restocked", "damaged", "missing"]),
+              // How many of the line this outcome is; none: the whole line.
+              qty: z.number().int("Use whole pieces.").min(0).nullish(),
             }),
           )
-          .min(1),
+          .min(1, "Say what came back of each medicine."),
       }),
     );
-    return c.json(await receiveReturn(db, c.get("me"), idParam(c), input));
+    const received = await receiveReturn(db, c.get("me"), idParam(c), input);
+    // Good pieces went back on the shelf: orders waiting for that stock are told.
+    if (input.lines.some((line) => line.outcome === "restocked")) await afterStockIn(db);
+    return c.json(received);
   });
   app.post("/api/returns/:id/credit", async (c) => {
     const input = await readBody(

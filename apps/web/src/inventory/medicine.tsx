@@ -203,10 +203,17 @@ export function Medicine() {
 
       <Card className="flex flex-col gap-4 p-4">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          {/* On the shelf and free to sell are two figures: what orders already took is not free
+              (this read "Free to sell 375" with 310 of them promised, 23 Nov). */}
           <Figure
-            label={`Free to sell${size > 1 ? ` · ${inPacks(data.total, size) || "0 packs"}` : ""}`}
-            value={count(data.total)}
+            label={`Free to sell${data.promised > 0 ? ` · ${count(data.promised)} promised to ${count(data.promisedOrders)} ${data.promisedOrders === 1 ? "order" : "orders"}` : ""}`}
+            value={count(data.free)}
             strong
+            tone={data.promised > data.total ? "bad" : undefined}
+          />
+          <Figure
+            label={`On the shelf${size > 1 ? ` · ${inPacks(data.total, size) || "0 packs"}` : ""}`}
+            value={count(data.total)}
           />
           {warehouses.map((warehouse) => (
             <Figure
@@ -224,6 +231,28 @@ export function Medicine() {
           />
         </div>
 
+        {/* Which orders hold the promised pieces (the old system's Committed Stock Details). */}
+        {data.promisedTo.length > 0 && (
+          <details className="border-t border-slate-100 pt-2 text-[13px]">
+            <summary className="cursor-pointer font-semibold text-slate-700">
+              Promised to {count(data.promisedTo.length)} {data.promisedTo.length === 1 ? "order" : "orders"}: {count(data.promised)} pieces
+            </summary>
+            <ul className="mt-2 divide-y divide-slate-100">
+              {data.promisedTo.map((one) => (
+                <li key={one.id} className="flex flex-wrap items-center justify-between gap-2 py-1.5">
+                  <span className="min-w-0">
+                    <Link to={`/orders/${one.id}`} className="font-semibold text-emerald-700 hover:underline">
+                      {one.code}
+                    </Link>{" "}
+                    <span className="text-slate-700">{one.customer}</span>
+                    <span className="text-xs text-slate-500"> · placed {dayLabel(one.placedOn)} · {one.status.replaceAll("_", " ")}</span>
+                  </span>
+                  <b className="tabular-nums">{count(one.qty)}</b>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
         {data.news.length > 0 && (
           <div className="border-t border-slate-100 pt-2">
             <NewsList news={data.news} canClose={can.stock} />

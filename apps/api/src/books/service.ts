@@ -21,7 +21,14 @@ export const isBookKind = (value: string): value is BookKind => (ALL_KINDS as st
 
 /** Who reads the books: purchases and their money are for the stock and money desks; Books' own
  *  money (expenses, journals, banks) for Finance, the CEO and the Admin. */
-const mayRead = (me: Me, kind?: BookKind) => (kind && LEDGER_KINDS.includes(kind) ? mayReadLedger(me) : allow(me, COST_ROLES, "see the purchases"));
+const mayRead = (me: Me, kind?: BookKind) => {
+  if (kind && LEDGER_KINDS.includes(kind)) return mayReadLedger(me);
+  allow(me, COST_ROLES, "see the purchases");
+  // Customers' invoices, payments and credits are the money desks': the stock desk reads the
+  // purchases here, as Finance's own lists refuse it (finance/service.ts).
+  if (kind && me.role === "inventory" && (["invoice", "customer_payment", "credit_note"] as BookKind[]).includes(kind))
+    throw new Refusal(403, "not_allowed", "Only Finance, Management, the CEO and the Admin see customers' invoices and payments.");
+};
 
 
 /** A bill or invoice with money owed past its due day reads "overdue", whatever Zoho last said. */

@@ -59,6 +59,19 @@ const as = async (name: string) => {
   cookies.set(name, cookie);
   return cookie;
 };
+/** Management approves as its screen does since 22 Nov: each check the order needs first
+ *  (Documents always; price, stock, customer when the system found something), then the order. */
+async function approveAs(who: string, id: number): Promise<void> {
+  const detail = await call<{ findings: { kind: string }[] }>(who, `/api/orders/${id}`);
+  const kinds = new Set(detail.findings.map((one) => one.kind));
+  const checks = ["papers"];
+  if (kinds.has("price") || kinds.has("note")) checks.push("price");
+  if (kinds.has("stock")) checks.push("stock");
+  if (["customer", "licence", "owes", "credit"].some((kind) => kinds.has(kind))) checks.push("customer");
+  for (const check of checks) await call(who, `/api/orders/${id}/checks/${check}`, {});
+  await call(who, `/api/orders/${id}/approve`, {});
+}
+
 async function call<T = Record<string, unknown>>(who: string, path: string, body?: unknown, method?: string): Promise<T> {
   const cookie = await as(who);
   const form = body instanceof FormData;
@@ -239,7 +252,7 @@ await step("put on hold with a question, the MedRep answers, Management goes on"
 });
 await step("the papers asked again after the change, then approved", async () => {
   if ((await order(other, o1)).order.papersCheckedAt === null) await call(other, `/api/orders/${o1}/papers-check`, { ok: true });
-  await call(other, `/api/orders/${o1}/approve`, {});
+  await approveAs(other, o1);
   const now = await order(other, o1);
   must(["finance_check", "ready_for_invoice"].includes(now.order.status), `status ${now.order.status}`);
   return `on to Finance (${now.order.status})`;
@@ -380,7 +393,7 @@ await step("an advance-pay hospital's order: approved, at Finance", async () => 
   await call(MGMT[0] as string, `/api/customers/${hospital.id}/credit`, { paymentTerms: "advance", paymentDays: null, creditLimit: null });
   o2 = (await call<{ id: number }>(MEDREP, "/api/orders", { customerId: hospital.id, items: [{ medicineId: rocu.id, qty: 4, priceKind: "hospital" }] })).id;
   const [held] = await rows<{ by: string | null }>(db, sql`select p.name as by from sales_order o left join person p on p.id = o.manage_by where o.id = ${o2}`);
-  await call(held?.by ?? (MGMT[0] as string), `/api/orders/${o2}/approve`, {});
+  await approveAs(held?.by ?? (MGMT[0] as string), o2);
   must((await order(fin, o2)).order.status === "finance_check", `status ${(await order(fin, o2)).order.status}`);
 });
 await step("Finance holds it for the proof; the MedRep's proof sends it back to Finance by itself", async () => {

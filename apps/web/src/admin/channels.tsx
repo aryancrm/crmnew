@@ -1,7 +1,7 @@
 // The Admin panel's Channels: how many sales channels the company has, a new one added in one
 // step (its code, name and Division; its box at the top of the company is made with it), and each
 // channel opened as its structure: who heads it, its teams with their team leads, the MedReps
-// under them, and its areas. Everything that reads channels (orders, sales, targets, the CEO's
+// under them (shown only: who is under whom is changed on the Company tree, 22 Nov), and its areas. Everything that reads channels (orders, sales, targets, the CEO's
 // figures) takes a new channel from here. People are added through the same dialogs as Teams &
 // people, so a seat, its login and its area work the same everywhere.
 
@@ -470,6 +470,9 @@ function ChannelPage({ tree, channel }: { tree: OrgTree; channel: Channel }) {
   const shape = useMemo(() => shapeOf(tree, channel), [tree, channel]);
   const { top, head } = shape;
   const can = tree.can.change;
+  // Who is under whom is changed in one place, the Company tree (Aryan, 20 and 22 Nov): this page
+  // shows the channel's people and keeps what only a channel has (its name, Division, areas).
+  const place = false as boolean;
   const seatOfArea = new Map(
     tree.units.flatMap((unit) =>
       unit.seats.flatMap((seat) => (seat.area ? [[seat.area.id, seat] as const] : [])),
@@ -546,7 +549,7 @@ function ChannelPage({ tree, channel }: { tree: OrgTree; channel: Channel }) {
           {shape.insideOf && (
             <p className="mt-2 inline-flex flex-wrap items-center gap-2 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900 ring-1 ring-amber-200">
               Sits inside {shape.insideOf.name}: it counts there too.
-              {can && (
+              {place && (
                 <button
                   type="button"
                   disabled={retire.busy}
@@ -624,7 +627,7 @@ function ChannelPage({ tree, channel }: { tree: OrgTree; channel: Channel }) {
       {!top ? (
         <section className={`${CARD} p-5 text-sm text-slate-600`}>
           This channel has no box in the company yet.{" "}
-          {can && (
+          {place && (
             <Button
               small
               onClick={() => {
@@ -638,19 +641,30 @@ function ChannelPage({ tree, channel }: { tree: OrgTree; channel: Channel }) {
         </section>
       ) : (
         <>
+          <Link
+            to="/company/sales"
+            className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50"
+          >
+            <span>
+              Who is under whom is changed in one place: the <b>Company tree</b> (Edit positions).
+              This page shows it.
+            </span>
+            <span className="shrink-0 font-semibold text-brand">Open the tree →</span>
+          </Link>
+
           {/* 1 · The head */}
           <Step n={1} title="Head of the channel">
             {head ? (
               <ul
                 className={`${CARD} [&>li:last-child]:rounded-b-2xl [&>li:first-child]:rounded-t-2xl`}
               >
-                <SeatRow seat={head} unit={top} open={setPop} />
+                <SeatRow fixed seat={head} unit={top} open={setPop} />
               </ul>
             ) : (
               <Empty
                 text="Nobody heads this channel yet."
                 action={
-                  can && (
+                  place && (
                     <Button
                       small
                       variant="primary"
@@ -676,7 +690,7 @@ function ChannelPage({ tree, channel }: { tree: OrgTree; channel: Channel }) {
             n={2}
             title="Teams, their team leads and MedReps"
             action={
-              can && (
+              place && (
                 <Button small onClick={() => setPop({ kind: "unit", parent: top, team: true })}>
                   <FolderTree size={14} /> Add team
                 </Button>
@@ -687,7 +701,7 @@ function ChannelPage({ tree, channel }: { tree: OrgTree; channel: Channel }) {
               <Empty
                 text="No team yet. Add a team, then its team lead and MedReps."
                 action={
-                  can && (
+                  place && (
                     <Button
                       small
                       variant="primary"
@@ -711,7 +725,7 @@ function ChannelPage({ tree, channel }: { tree: OrgTree; channel: Channel }) {
                     teams={shape.teams.map((one) => one.unit)}
                     top={top}
                     sitsIn={shape.elsewhere.get(unit.id)}
-                    can={can}
+                    can={place}
                     open={setPop}
                   />
                 ))}
@@ -721,7 +735,7 @@ function ChannelPage({ tree, channel }: { tree: OrgTree; channel: Channel }) {
                     <h3 className="text-sm font-semibold text-slate-900">
                       Straight under the head
                     </h3>
-                    {can && (
+                    {place && (
                       <Button
                         small
                         onClick={() => setPop({ kind: "add", unit: top, module: "medrep" })}
@@ -732,7 +746,7 @@ function ChannelPage({ tree, channel }: { tree: OrgTree; channel: Channel }) {
                   </div>
                   <ul className="divide-y divide-slate-100 [&>li:last-child]:rounded-b-2xl">
                     {direct.map((seat) => (
-                      <SeatRow key={seat.id} seat={seat} unit={top} open={setPop} />
+                      <SeatRow fixed key={seat.id} seat={seat} unit={top} open={setPop} />
                     ))}
                   </ul>
                 </section>
@@ -971,7 +985,7 @@ function TeamCard({
       )}
       <ul className="divide-y divide-slate-100 [&>li:last-child]:rounded-b-2xl">
         {lead ? (
-          <SeatRow seat={lead} unit={unit} open={open} />
+          <SeatRow fixed seat={lead} unit={unit} open={open} />
         ) : (
           <li className="flex flex-wrap items-center justify-between gap-2 bg-amber-50/40 px-4 py-2.5">
             <span className="text-xs font-semibold text-amber-800">No team lead yet</span>
@@ -987,7 +1001,7 @@ function TeamCard({
           </li>
         )}
         {repsOf(lead).map((seat) => (
-          <SeatRow key={seat.id} seat={seat} unit={unit} open={open} />
+          <SeatRow fixed key={seat.id} seat={seat} unit={unit} open={open} />
         ))}
         {others.length === 0 && coLeads.length === 0 && (
           <li className="px-4 py-2.5 text-xs text-slate-400">No MedRep yet.</li>
@@ -1003,9 +1017,9 @@ function TeamCard({
               )}
             </div>
             <ul className="divide-y divide-slate-100">
-              <SeatRow seat={co} unit={unit} open={open} />
+              <SeatRow fixed seat={co} unit={unit} open={open} />
               {repsOf(co).map((seat) => (
-                <SeatRow key={seat.id} seat={seat} unit={unit} open={open} />
+                <SeatRow fixed key={seat.id} seat={seat} unit={unit} open={open} />
               ))}
             </ul>
           </li>

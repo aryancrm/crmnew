@@ -80,7 +80,7 @@ instances yet.
 
 ## 5. Checks after the first deploy
 
-- Migration 0133 signs out everyone who was there before it, and none of them can sign in until
+- Migration 0142 signs out everyone who was there before it, and none of them can sign in until
   given a one-time password. In the API's container, before telling anyone:
   `pnpm --filter @2mg/api passwords --role=admin --apply` (one Admin: shown on the screen), then
   the rest from Admin panel → Teams & people, or `--all --apply --out=<a file outside the repository>`.

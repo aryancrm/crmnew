@@ -283,6 +283,8 @@ describe("the stock report", () => {
       "On the shelf",
       "Cost of one (₱)",
       "Value on the shelf (₱)",
+      // Who the batch was bought from, as Zoho's batch report had it (23 Nov): the last column.
+      "Bought from",
     ]);
     // A title, the headings, one line per batch and warehouse, and the total.
     expect(batches?.rows).toHaveLength(data.rows.length + 3);
@@ -303,6 +305,8 @@ describe("the stock report", () => {
       35,
       905,
       35 * 905,
+      // Opening stock, not bought on a purchase here: no vendor.
+      null,
     ]);
     expect(text(batches?.rows.at(-1))[13]).toBe(data.totals.onShelf);
     expect(byMedicine?.name).toBe("By medicine");

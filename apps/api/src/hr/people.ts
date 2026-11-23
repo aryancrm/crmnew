@@ -257,7 +257,9 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
           db,
           sql`with recursive up as (select u.id, u.parent_id, u.channel_id from seat s join org_unit u on u.id = s.unit_id where s.id = ${one.seatId}
               union all select o.id, o.parent_id, o.channel_id from org_unit o join up on o.id = up.parent_id)
-            select c.name from up join channel c on c.id = up.channel_id limit 1`,
+            -- The target sheet's channel of the seat (CLIDP, MD Telesales…); PAP and a seat with none: the first channel's name.
+            select case when c.code = 'PAP' then c.name else coalesce(seat_division(${one.seatId}), c.name) end as name
+            from up join channel c on c.id = up.channel_id limit 1`,
         )
       )[0]?.name ?? null)
     : null;

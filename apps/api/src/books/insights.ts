@@ -8,6 +8,8 @@ import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
+import { inForce } from "../org/service";
+import { leadOfBox, SHEET_PLACE, sheetNameOfBox } from "../sales/service";
 import type { Insight, Me, Role } from "../types";
 import { LEDGER_INSIGHTS } from "./ledger-reports";
 
@@ -39,6 +41,27 @@ const SOLD_LINES = sql`(
   where o.status in ('invoiced', 'partially_invoiced', 'closed') and not p.free
 ) s`;
 
+/** The same lines with who sold each and where the customer is: the order's seat as the target
+ *  sheet names it ("HOS | PASAY", Zoho's own salesperson word, so the old orders and the new ones
+ *  fall under one name), else the MedRep's name. Free pieces left out. */
+const SOLD_BY = sql`(
+  select i.issued_on as day, coalesce(m.name || coalesce(' ' || m.strength, ''), oi.name_then) as medicine,
+    coalesce(a.name, rep.name) as seller, coalesce(nullif(trim(c.city), ''), 'No city written') as city, i.id as invoice,
+    oi.qty::bigint as qty, (oi.qty::bigint * oi.unit_price) as amount
+  from invoice i join sales_order o on o.id = i.order_id join order_item oi on oi.order_id = i.order_id
+    join medicine m on m.id = oi.medicine_id join customer c on c.id = i.customer_id join person rep on rep.id = o.medrep_id
+    left join seat st on st.id = o.seat_id left join area a on a.id = st.area_id
+  where i.status <> 'cancelled' and not oi.free
+  union all
+  select o.ordered_on, coalesce(m.name || coalesce(' ' || m.strength, ''), p.name),
+    coalesce(nullif(trim(o.seller), ''), 'No salesperson written'), coalesce(nullif(trim(c.city), ''), 'No city written'), -o.id,
+    p.qty::bigint, (p.qty::bigint * p.unit_price)
+  from past_order o join past_order_item p on p.past_order_id = o.id join customer c on c.id = o.customer_id
+    left join lateral (select x.id, x.name, x.strength from medicine x where x.sku = p.sku
+      or x.id = (select s.medicine_id from medicine_sku s where s.sku = p.sku limit 1) limit 1) m on true
+  where o.status in ('invoiced', 'partially_invoiced', 'closed') and not p.free
+) s`;
+
 type Column = Insight["columns"][number];
 const col = (key: string, label: string, kind: Column["kind"] = "text"): Column => ({ key, label, kind });
 
@@ -48,8 +71,11 @@ async function salesTrend(db: Database, asked: { to?: string | null }): Promise<
   const first = new Date(Date.UTC(Number(to.slice(0, 4)), Number(to.slice(5, 7)) - 6, 1)).toISOString().slice(0, 10);
   const found = await rows<{ channel: string; month: string; amount: number }>(
     db,
-    sql`select coalesce(ch.name, 'No channel yet') as channel, to_char(s.issued_on, 'YYYY-MM') as month, sum(s.total)::float8 as amount
-      from sale_invoice s left join channel ch on ch.id = s.channel_id
+    // By the target sheet's channel: the seller's seat's box on the Company tree, as Sales by channel.
+    sql`with recursive ${SHEET_PLACE}
+      select case when biz.id is not null then ${sheetNameOfBox(sql`box.id`)} else 'Not tied to a seat yet' end as channel, to_char(s.issued_on, 'YYYY-MM') as month, sum(s.total)::float8 as amount
+      from sale_invoice s left join seat st on st.id = s.seat_id left join place pl on pl.id = st.unit_id
+        left join org_unit biz on biz.id = pl.business and biz.kind = 'business' left join org_unit box on box.id = pl.box
       where s.status <> 'cancelled' and s.issued_on >= ${first}::date and s.issued_on <= ${to}::date
       group by 1, 2`,
   );
@@ -322,7 +348,10 @@ async function customersReport(db: Database, asked: { from?: string | null; to?:
           coalesce(sum(greatest(total - paid, 0)) filter (where status not in ('cancelled', 'paid')), 0)::float8 as owed,
           to_char(max(issued_on) filter (where status <> 'cancelled'), 'YYYY-MM-DD') as last
         from sale_invoice where customer_id is not null group by 1)
-      select c.name as customer, c.kind, coalesce(ch.name, '—') as channel,
+      select c.name as customer, c.kind,
+        -- The sheet's channel of the seat that has the customer's area; PAP and an area on no seat: the area's first channel.
+        coalesce(case when ch.code = 'PAP' then ch.name else coalesce((select seat_division(ds.id) from seat ds
+          where ds.area_id = c.area_id and ds.active order by ds.id limit 1), ch.name) end, '—') as channel,
         coalesce((select p.name from seat st join seat_holder h on h.seat_id = st.id and h.ends_on is null and h.kind = 'holder'
           join person p on p.id = h.person_id where st.area_id = c.area_id and st.active order by st.id limit 1), '—') as "lookedAfter",
         coalesce(c.city, '') as city, coalesce(s.invoices, 0) as invoices, coalesce(s.period, 0) as period, coalesce(s.year, 0) as year,
@@ -366,65 +395,61 @@ async function customersReport(db: Database, asked: { from?: string | null; to?:
 }
 
 /** Each channel (Aryan, 18 Nov: "the second important report: every channel; first tell me how
- *  many channels there are"): its head, people, customers, what it sold in the days picked and this
- *  year, what its customers owe. Zoho's sales by salespeople not yet tied to a seat show apart. */
+ *  many channels there are"), as the target sheet has the channels since 22 Nov ("one list of
+ *  channels, the sheet's": Head → Channel → Manager): the box straight under a business on the
+ *  Company tree, its head and manager, its people and customers, what its seats sold in the days
+ *  picked and this year, what their customers owe. Zoho's sales by salespeople not yet tied to a
+ *  seat show apart, so the rows add up to the company's figures. */
 async function channelsReport(db: Database, asked: { from?: string | null; to?: string | null }): Promise<Insight> {
   const { from, to } = period(asked);
+  const today = todayManila();
   const found = await rows<Record<string, string | number | null>>(
     db,
-    sql`with recursive s as (
-        select channel_id, count(*) filter (where status <> 'cancelled' and issued_on between ${from}::date and ${to}::date)::int as invoices,
+    sql`with recursive ${SHEET_PLACE},
+      s as (
+        select seat_id, count(*) filter (where status <> 'cancelled' and issued_on between ${from}::date and ${to}::date)::int as invoices,
           count(distinct customer_id) filter (where status <> 'cancelled' and issued_on between ${from}::date and ${to}::date)::int as buyers,
           coalesce(sum(total) filter (where status <> 'cancelled' and issued_on between ${from}::date and ${to}::date), 0)::float8 as period,
           coalesce(sum(total) filter (where status <> 'cancelled' and issued_on >= date_trunc('year', ${to}::date)), 0)::float8 as year,
           coalesce(sum(greatest(total - paid, 0)) filter (where status not in ('cancelled', 'paid')), 0)::float8 as owed
         from sale_invoice group by 1),
-      -- The channel's own box and every team under it (a box of another channel under it is that
-      -- channel's): its head, team leads, teams and MedReps as the Admin panel sets them.
-      tree as (
-        select u.id, u.channel_id as ch, 0 as depth from org_unit u
-        where u.active and u.channel_id is not null
-          and not exists (select 1 from org_unit up where up.id = u.parent_id and up.channel_id = u.channel_id)
-        union all
-        select k.id, t.ch, t.depth + 1 from org_unit k join tree t on k.parent_id = t.id
-        where k.active and (k.channel_id is null or k.channel_id = t.ch)),
-      held as (
-        select t.ch, t.depth, st.lead, st.module, h.person_id from seat st join tree t on t.id = st.unit_id
-          left join seat_holder h on h.seat_id = st.id and h.ends_on is null and h.kind = 'holder'
-        where st.active),
-      people as (
-        select ch as channel_id, count(distinct person_id)::int as n,
-          count(distinct person_id) filter (where module in ('team_lead', 'manager') and not (depth = 0 and lead))::int as leads,
-          count(person_id) filter (where module = 'medrep')::int as medreps
-        from held group by ch),
-      teams as (select ch as channel_id, count(*) filter (where depth > 0)::int as n from tree group by ch),
-      heads as (
-        select distinct on (held.ch) held.ch as channel_id, p.name from held join person p on p.id = held.person_id
-        where held.depth = 0 and held.lead order by held.ch, p.name),
-      cust as (select a.channel_id, count(*)::int as n from customer c join area a on a.id = c.area_id where c.active group by 1)
-      select ch.code, ch.name as channel, coalesce(hd.name, '—') as head, coalesce(pe.leads, 0) as leads, coalesce(tm.n, 0) as teams,
-        coalesce(pe.medreps, 0) as medreps, coalesce(pe.n, 0) as people, coalesce(cu.n, 0) as customers,
-        coalesce(s.buyers, 0) as buyers, coalesce(s.invoices, 0) as invoices, coalesce(s.period, 0) as period,
-        coalesce(s.year, 0) as year, coalesce(s.owed, 0) as owed
-      from channel ch left join s on s.channel_id = ch.id left join people pe on pe.channel_id = ch.id left join cust cu on cu.channel_id = ch.id
-        left join teams tm on tm.channel_id = ch.id left join heads hd on hd.channel_id = ch.id
-      where ch.active
+      seated as (
+        select st.id as seat_id, st.active, st.module, st.lead, st.area_id, pl.business, pl.box,
+          (select h.person_id from seat_holder h where h.seat_id = st.id and h.kind = 'holder' and ${inForce("h", today)} order by h.starts_on desc limit 1) as person_id
+        from seat st join place pl on pl.id = st.unit_id),
+      boxes as (
+        select se.business, se.box,
+          count(distinct se.person_id) filter (where se.active)::int as people,
+          count(*) filter (where se.active and se.person_id is null and se.module in ('medrep', 'online'))::int as vacant,
+          bool_or(se.active and se.module in ('medrep', 'online', 'team_lead', 'manager') and (se.box <> se.business or not se.lead)) as selling,
+          (select count(distinct c.id) from customer c where c.active and c.area_id in (select x.area_id from seated x where x.box = se.box and x.business = se.business and x.area_id is not null))::int as customers,
+          coalesce(sum(s.buyers), 0)::int as buyers, coalesce(sum(s.invoices), 0)::int as invoices,
+          coalesce(sum(s.period), 0)::float8 as period, coalesce(sum(s.year), 0)::float8 as year, coalesce(sum(s.owed), 0)::float8 as owed
+        from seated se left join s on s.seat_id = se.seat_id group by 1, 2)
+      select biz.name as business, coalesce(${leadOfBox(sql`biz.id`, today)}, '—') as head, ${sheetNameOfBox(sql`box.id`)} as channel,
+        coalesce(${leadOfBox(sql`box.id`, today)}, ${leadOfBox(sql`biz.id`, today)}, '—') as manager,
+        b.people, b.vacant, b.customers, b.buyers, b.invoices, b.period, b.year, b.owed, biz.sort as biz_sort, biz.id as biz_id, (box.id = biz.id)::int as own, box.sort as box_sort, box.id as box_id
+      from boxes b join org_unit box on box.id = b.box join org_unit biz on biz.id = b.business
+      where biz.kind = 'business' and (b.period > 0 or b.year > 0 or b.owed > 0 or (b.selling and box.active and box.channel_id is distinct from (select pc.id from channel pc where pc.code = 'PAP')))
       union all
-      select '', 'Not tied to a channel yet', '—', 0, 0, 0, 0, 0, buyers, invoices, period, year, owed from s where channel_id is null
-      order by 11 desc`,
+      select '', '—', 'Not tied to a seat yet', '—', 0, 0, 0, coalesce(sum(s.buyers), 0)::int, coalesce(sum(s.invoices), 0)::int, coalesce(sum(s.period), 0)::float8,
+        coalesce(sum(s.year), 0)::float8, coalesce(sum(s.owed), 0)::float8, 2147483647, 0, 1, 0, 0
+      from s where s.seat_id is null or not exists (select 1 from seated se join org_unit biz on biz.id = se.business and biz.kind = 'business' where se.seat_id = s.seat_id)
+      having coalesce(sum(s.period), 0) <> 0 or coalesce(sum(s.year), 0) <> 0 or coalesce(sum(s.owed), 0) <> 0
+      order by 13, 14, 15, 16, 17`,
   );
-  const named = found.filter((row) => row.code);
+  const named = found.filter((row) => row.business);
+  const total = (key: string) => found.reduce((sum, row) => sum + Number(row[key] ?? 0), 0);
   return {
     title: `Channels: ${named.length}`,
-    note: `Head, team leads, teams and MedReps as set in the Admin panel. Sales: Zoho's invoices and ours, with tax, by the channel of the seat that sold. "Not tied to a channel yet": Zoho sales by salespeople not yet tied to a seat (Admin panel → Old customers to seats).`,
+    note: `The channels as the target sheet has them: each box under a business on the Company tree, with its head and manager. Sales: Zoho's invoices and ours, with tax, by the seat that sold. "Not tied to a seat yet": Zoho sales by salespeople not yet tied to a seat (Admin panel → Old customers to seats).`,
     columns: [
-      col("channel", "Channel"),
-      col("code", "Code"),
+      col("business", "Business"),
       col("head", "Head"),
-      col("leads", "Team leads", "number"),
-      col("teams", "Teams", "number"),
-      col("medreps", "MedReps", "number"),
+      col("channel", "Channel"),
+      col("manager", "Manager"),
       col("people", "People", "number"),
+      col("vacant", "Vacant seats", "number"),
       col("customers", "Customers", "number"),
       col("buyers", "Bought in the days", "number"),
       col("invoices", "Invoices", "number"),
@@ -434,18 +459,71 @@ async function channelsReport(db: Database, asked: { from?: string | null; to?: 
     ],
     rows: found,
     totals: {
-      channel: "Total",
-      leads: found.reduce((sum, row) => sum + Number(row.leads ?? 0), 0),
-      teams: found.reduce((sum, row) => sum + Number(row.teams ?? 0), 0),
-      medreps: found.reduce((sum, row) => sum + Number(row.medreps ?? 0), 0),
-      people: found.reduce((sum, row) => sum + Number(row.people ?? 0), 0),
-      customers: found.reduce((sum, row) => sum + Number(row.customers ?? 0), 0),
-      buyers: found.reduce((sum, row) => sum + Number(row.buyers ?? 0), 0),
-      invoices: found.reduce((sum, row) => sum + Number(row.invoices ?? 0), 0),
-      period: found.reduce((sum, row) => sum + Number(row.period ?? 0), 0),
-      year: found.reduce((sum, row) => sum + Number(row.year ?? 0), 0),
-      owed: found.reduce((sum, row) => sum + Number(row.owed ?? 0), 0),
+      business: "Total",
+      people: total("people"),
+      vacant: total("vacant"),
+      customers: total("customers"),
+      buyers: total("buyers"),
+      invoices: total("invoices"),
+      period: total("period"),
+      year: total("year"),
+      owed: total("owed"),
     },
+  };
+}
+
+/** Zoho's "Sales Person item Sale" (its Analytics tab the office used): who sold which medicine,
+ *  how many and for how much, with what came back and was credited here. */
+async function salesByPersonMedicine(db: Database, asked: { from?: string | null; to?: string | null }): Promise<Insight> {
+  const { from, to } = period(asked);
+  const [sold, back] = await Promise.all([
+    rows<{ seller: string; medicine: string; qty: number; amount: number }>(
+      db,
+      sql`select s.seller, s.medicine, sum(s.qty)::float8 as qty, sum(s.amount)::float8 as amount
+        from ${SOLD_BY} where s.day between ${from}::date and ${to}::date group by 1, 2 order by 1, 4 desc`,
+    ),
+    // Goods back and credited in this CRM, by the day Management credited them.
+    rows<{ seller: string; medicine: string; qty: number; amount: number }>(
+      db,
+      sql`select coalesce(a.name, rep.name) as seller, m.name || coalesce(' ' || m.strength, '') as medicine,
+          sum(l.qty)::float8 as qty, sum(l.qty::bigint * l.unit_price)::float8 as amount
+        from sales_return r join sales_return_line l on l.return_id = r.id and l.outcome <> 'missing'
+          join medicine m on m.id = l.medicine_id join sales_order o on o.id = r.order_id join person rep on rep.id = o.medrep_id
+          left join seat st on st.id = o.seat_id left join area a on a.id = st.area_id
+        where r.credited_at is not null and r.credit > 0
+          and (r.credited_at at time zone 'Asia/Manila')::date between ${from}::date and ${to}::date
+        group by 1, 2`,
+    ),
+  ]);
+  const returned = new Map(back.map((row) => [`${row.seller}|${row.medicine}`, row]));
+  const found = sold.map((row) => {
+    const came = returned.get(`${row.seller}|${row.medicine}`);
+    return { ...row, returnedQty: came?.qty ?? 0, credited: came?.amount ?? 0 };
+  });
+  const sum = (key: "qty" | "amount" | "returnedQty" | "credited") => found.reduce((n, row) => n + row[key], 0);
+  return {
+    title: "Sales by salesperson and medicine",
+    note: `Sold ${from} to ${to}: the old system's invoiced orders and this CRM's billed ones, free pieces left out, under the salesperson's name on the target sheet. Returned and credited: this CRM's returns only.`,
+    columns: [col("seller", "Salesperson"), col("medicine", "Medicine"), col("qty", "Pieces", "number"), col("amount", "Sold", "money"), col("returnedQty", "Returned", "number"), col("credited", "Credited", "money")],
+    rows: found,
+    totals: { seller: "Total", qty: sum("qty"), amount: sum("amount"), returnedQty: sum("returnedQty"), credited: sum("credited") },
+  };
+}
+
+/** Zoho's "City Sale": what was sold into each city, by the customer's city. */
+async function salesByCity(db: Database, asked: { from?: string | null; to?: string | null }): Promise<Insight> {
+  const { from, to } = period(asked);
+  const found = await rows<{ city: string; orders: number; qty: number; amount: number }>(
+    db,
+    sql`select s.city, count(distinct s.invoice)::int as orders, sum(s.qty)::float8 as qty, sum(s.amount)::float8 as amount
+      from ${SOLD_BY} where s.day between ${from}::date and ${to}::date group by 1 order by 4 desc`,
+  );
+  return {
+    title: "Sales by city",
+    note: `Sold ${from} to ${to}, by the city on the customer's record (the old system's invoiced orders and this CRM's billed ones, free pieces left out).`,
+    columns: [col("city", "City"), col("orders", "Orders", "number"), col("qty", "Pieces", "number"), col("amount", "Sold", "money")],
+    rows: found,
+    totals: { city: "Total", orders: found.reduce((n, row) => n + row.orders, 0), qty: found.reduce((n, row) => n + row.qty, 0), amount: found.reduce((n, row) => n + row.amount, 0) },
   };
 }
 
@@ -455,6 +533,8 @@ export const INSIGHTS: Record<string, { roles: Role[]; run: (db: Database, asked
   channels: { roles: SALES_ROLES, run: channelsReport },
   "sales-by-branch": { roles: SALES_ROLES, run: (db, asked) => salesByBranch(db, asked) },
   "top-medicines": { roles: SALES_ROLES, run: topMedicines },
+  "sales-by-person-medicine": { roles: SALES_ROLES, run: salesByPersonMedicine },
+  "sales-by-city": { roles: SALES_ROLES, run: salesByCity },
   "stock-aging": { roles: STOCK_ROLES, run: (db) => stockAging(db) },
   "stock-turnover": { roles: STOCK_ROLES, run: (db) => stockTurnover(db) },
   abc: { roles: SALES_ROLES, run: (db) => abc(db) },

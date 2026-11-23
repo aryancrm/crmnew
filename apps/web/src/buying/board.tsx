@@ -111,7 +111,10 @@ export function PurchasesBoard() {
                           </Link>
                           {row.pack && <div className="text-[12px] text-slate-500">{row.pack}</div>}
                         </td>
-                        <td className={`${TD} text-right font-semibold tabular-nums ${row.free === 0 ? "text-rose-700" : "text-amber-700"}`}>{count(row.free)}</td>
+                        <td className={`${TD} text-right font-semibold tabular-nums ${row.free === 0 ? "text-rose-700" : "text-amber-700"}`}>
+                          {count(row.free)}
+                          {row.short > 0 && <div className="text-[11px] font-semibold text-rose-700">orders need {count(row.short)} more</div>}
+                        </td>
                         <td className={`${TD} text-right tabular-nums text-slate-500`}>{count(row.reorderLevel)}</td>
                         <td className={`${TD} text-right tabular-nums`}>{count(row.sold30)}</td>
                         <td className={`${TD} text-right tabular-nums`}>

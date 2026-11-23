@@ -8,6 +8,7 @@ import { Building2, Stethoscope, User, UserPlus } from "lucide-react";
 import { Navigate } from "react-router-dom";
 import { api } from "../api";
 import { onlineDesk, useMe } from "../auth";
+import { shownChannel } from "../seat-words";
 import { NewsList } from "../inventory/news";
 import { RegulatoryHome } from "../regulatory/regulatory";
 import { WorkLogPage } from "../hr/work-log";
@@ -71,12 +72,8 @@ export function Home() {
   // The B2C CHC starts on their morning pulse and the replies waiting (docs/PLAN.md 16.3).
   if (onlineDesk(me))
     return (
-      <div className="space-y-4">
-        <div className="mx-auto max-w-screen-xl">
-          <MyKpis />
-        </div>
-        <B2cHome />
-      </div>
+      // The greeting first, then My KPIs, then the day's pulse (My KPIs sat above the greeting).
+      <B2cHome top={<MyKpis />} />
     );
   // HR's Home is People: everyone's record.
   if (me.role === "hr") return <HrPeoplePage />;
@@ -117,7 +114,7 @@ function Desk() {
                 ? `${me.roleLabel} · ${me.title}`
                 : me.roleLabel,
             ],
-            ["Channel", me.channel ? `${me.channel.code} · ${me.channel.name}` : null],
+            ["Channel", shownChannel(me)],
             ["Area", me.area?.name],
             ["Cities", me.area?.cities.join(", ")],
             [

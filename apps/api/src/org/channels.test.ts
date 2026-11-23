@@ -187,7 +187,8 @@ describe("the Admin panel's channels", () => {
 
     // The CEO's channels list it with every other.
     const home = await read<CeoHome>("naresh", "/api/ceo/home");
-    expect(home.sales.channels.some((one) => one.code === "URO")).toBe(true);
+    // By its box on the Company tree, as the target sheet names the channels (22 Nov).
+    expect(home.sales.channels.some((one) => one.business === "Uro & Onco Care" && one.name === "Visayas")).toBe(true);
 
     // A rename keeps its box's name in step; it can't leave use while people work in it.
     expect(
@@ -219,7 +220,7 @@ describe("the Admin panel's channels", () => {
     expect(out.status, await out.clone().text()).toBe(200);
     expect((await tree()).channels.find((one) => one.id === channelId)?.active).toBe(false);
     const home = await read<CeoHome>("naresh", "/api/ceo/home");
-    expect(home.sales.channels.some((one) => one.code === "STC")).toBe(false);
+    expect(home.sales.channels.some((one) => one.business === "Solid Tumor Care" || one.name === "Solid Tumor Care")).toBe(false);
     const menu = await read<{ units: { name: string }[] }>("naresh", "/api/org/menu");
     expect(menu.units.some((unit) => unit.name === "Solid Tumor Care")).toBe(false);
     expect(

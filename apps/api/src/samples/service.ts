@@ -278,6 +278,9 @@ export async function giveSamples(
   if (!isKind(input.kind)) throw new Refusal(400, "invalid", "Samples or gifts?", "kind");
   checkLines(input.lines, 100, 20);
   if (!input.ack) throw new Refusal(400, "invalid", "Attach the doctor's signed acknowledgement.", "file");
+  // A photo or a PDF only: the file is shown back from the CRM's own address.
+  if (!["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "application/pdf"].includes(input.ack.mime))
+    throw new Refusal(400, "invalid", "Attach a photo or a PDF.", "file");
   const kept = await keepFile("samples", input.ack);
   const today = todayManila();
   await db.transaction(async (tx) => {

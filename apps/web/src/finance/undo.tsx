@@ -6,7 +6,7 @@ import { useEffect, useState, useSyncExternalStore } from "react";
 import { api } from "../api";
 
 const UNDO_SECONDS = 90;
-type Confirmed = { orderId: number; code: string; until: number } | null;
+type Confirmed = { orderId: number; code: string; until: number; sent?: boolean } | null;
 
 let current: Confirmed = null;
 const listeners = new Set<() => void>();
@@ -14,9 +14,10 @@ const tell = () => {
   for (const listen of listeners) listen();
 };
 
-/** Called when a payment is confirmed: the bar shows for 90 seconds. */
-export function rememberConfirm(orderId: number, code: string) {
-  current = { orderId, code, until: Date.now() + UNDO_SECONDS * 1000 };
+/** Called when a payment is confirmed, or a credit or cash-on-delivery order is sent on to
+ *  Dispatch (`sent`): the bar shows for 90 seconds. */
+export function rememberConfirm(orderId: number, code: string, sent = false) {
+  current = { orderId, code, until: Date.now() + UNDO_SECONDS * 1000, sent };
   tell();
 }
 
@@ -69,7 +70,7 @@ export function UndoConfirmBar() {
       <span>
         {problem ?? (
           <>
-            Payment confirmed · <b>{confirmed.code}</b>
+            {confirmed.sent ? "Sent to Dispatch" : "Payment confirmed"} · <b>{confirmed.code}</b>
           </>
         )}
       </span>

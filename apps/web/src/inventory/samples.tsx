@@ -147,6 +147,10 @@ function CountDialog({ data, kind, onClose }: { data: SamplesOfPerson; kind: Sam
   );
 }
 
+/** "2026-11" as "November 2026". */
+const monthWords = (month: string) =>
+  new Date(`${month}-01T00:00:00Z`).toLocaleString("en-PH", { month: "long", year: "numeric", timeZone: "UTC" });
+
 export function MySamplesPage() {
   const [params, setParams] = useSearchParams();
   const kind = (params.get("show") === "gifts" ? "gifts" : "samples") as SampleKind;
@@ -187,7 +191,7 @@ export function MySamplesPage() {
       </header>
       {data.own && (
         <div className={`flex flex-wrap items-center justify-between gap-2 rounded-xl border px-4 py-3 text-sm ${counted ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-amber-200 bg-amber-50 text-amber-900"}`}>
-          <span>{counted ? `Your ${kind} are counted for ${data.month}.` : `Count your ${kind} this month: what you really hold, and why it differs.`}</span>
+          <span>{counted ? `Your ${kind} are counted for ${monthWords(data.month)}.` : `Count your ${kind} this month: what you really hold, and why it differs.`}</span>
           <div className="flex gap-2">
             <button type="button" className={BTN} onClick={() => setCounting(true)} disabled={!held.length}>
               Count now
@@ -283,7 +287,7 @@ export function TeamSamplesPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Samples & gifts</h1>
           <p className="mt-1 text-[13px] text-slate-500">
-            Given {data.reps.reduce((sum, one) => sum + one.given, 0).toLocaleString("en-PH")} pieces to {data.doctors.length} doctors in {month} ·{" "}
+            Given {data.reps.reduce((sum, one) => sum + one.given, 0).toLocaleString("en-PH")} pieces to {data.doctors.length} doctors in {monthWords(month)} ·{" "}
             {data.reps.filter((one) => !one.counted).length} reps not counted
           </p>
         </div>
@@ -291,7 +295,7 @@ export function TeamSamplesPage() {
           <button type="button" className={BTN} onClick={() => setParams({ month: shift(-1) })}>
             ‹
           </button>
-          <span className="font-semibold">{month}</span>
+          <span className="font-semibold">{monthWords(month)}</span>
           <button type="button" className={BTN} onClick={() => setParams({ month: shift(1) })}>
             ›
           </button>

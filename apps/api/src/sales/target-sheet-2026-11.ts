@@ -48,8 +48,10 @@ export const SHEET_2026_11: SheetRow[] = [
   rx("RX | MERYANIE", ["RX | DAVAO"], "DAVAO", 800_000, "Meryanie Arcangel"),
   rx("RX | MARWIN", ["RX | TAFT"], "TAFT", 1_851_098, "Marwin Dy"),
   rx("RX | JOYCE", ["RX | EAST AVE"], "EAST AVE", 1_546_328, "Merry Joyce Sebastian"),
-  // "Yza" is nobody by that name in the ERP's org yet: the sheet's figures, no person.
-  rx("RX | YZA", ["RX | RODRIGUEZ", "RX | E. RODRIGUEZ"], "RODRIGUEZ", 823_030),
+  // The sheet's "Yza" sells E. Rodriguez (Quezon City): that is the Rx seat of NCR 2 beside Noel's
+  // (Ortigas/TMC), held by Eloisa Villanda on HR's chart. The row is the seat's (22 Nov: the sheet
+  // is the base, by seat, not by name); if Yza is someone else, the Company tree changes the holder.
+  rx("RX | YZA", ["RX | RODRIGUEZ", "RX | E. RODRIGUEZ"], "RODRIGUEZ", 823_030, "Eloisa Villanda"),
   rx("RX | ANGELICA", ["RX | KALAW"], "KALAW", 600_000, "Angelica Mae Saludes"),
   rx("RX | NOEL", ["RX | ORTIGAS/TMC", "RX | ORTIGAS / TMC"], "ORTIGAS/TMC", 600_000, "Noel Valencia"),
   { head: "Javed", channel: "MD Telesales", manager: "Honey", salesperson: "B2C | RACHELLE UPAO", zoho: ["B2C | Rachelle Upao"], hq: "ON SITE", target: 500_000, person: "Rachelle Upao" },

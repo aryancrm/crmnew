@@ -52,7 +52,9 @@ export function CollectPage() {
   const all = owed.data?.rows ?? [];
   const terms = [...new Set(all.map(termOf))].sort((a, b) => termRank(a) - termRank(b));
   const tabs: Tab[] = [...terms, "collected"];
-  const tab: Tab = askedTab && tabs.includes(askedTab) ? askedTab : (terms[0] ?? "collected");
+  // Opens on the terms that have a late payment (the menu's count is the late ones), else the first.
+  const lateTerm = terms.find((key) => all.some((row) => termOf(row) === key && stateOf(row) === "late"));
+  const tab: Tab = askedTab && tabs.includes(askedTab) ? askedTab : (lateTerm ?? terms[0] ?? "collected");
   const byTab = (key: Tab) =>
     all
       .filter((row) => termOf(row) === key)

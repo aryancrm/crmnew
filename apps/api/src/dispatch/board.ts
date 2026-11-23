@@ -26,7 +26,7 @@ export async function dispatchBoard(db: Database, me: Me): Promise<DispatchBoard
     ${iso("o.status_since")} as "stepSince", (select p.name from person p where p.id = o.dispatch_by) as "dispatchBy",
     o.dispatch_by::int as "dispatchById", o.came_back_count::int as "cameBackCount", o.came_back_reason as "cameBackReason",
     (o.status = 'packing' and o.came_back_at is not null) as "cameBack", o.received_by as "receivedBy",
-    ${iso("o.delivered_at")} as "deliveredAt",
+    ${iso("o.delivered_at")} as "deliveredAt", ${day("o.delivered_on")} as "deliveredOn",
     -- Cash the courier or rider collects: an open cash-on-delivery invoice's balance.
     (select (i.total - i.paid)::int from invoice i where i.order_id = o.id and i.status = 'open' and i.terms = 'cod'
       and i.total > i.paid limit 1) as collect,

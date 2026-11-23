@@ -63,9 +63,11 @@ import {
 import { type FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { AGENCIES } from "../online/parts";
 import { VAT_WORDS } from "../inventory/vat";
 import { MedicineFinder } from "./medicine-finder";
 import { useMe } from "../auth";
+import { shownChannel } from "../seat-words";
 import { shortPeso } from "../ceo";
 import { CustomerDialog } from "../customers/dialog";
 import { NO_PROOF_REASONS } from "../finance/no-proof";
@@ -415,6 +417,8 @@ export function OrderNew({
   const [source, setSource] = useState("");
   // The hub's last step: a Confirm window, and "why are you proceeding?" when a medicine is short.
   const [confirming, setConfirming] = useState(false);
+  // The "Hand to PAP" window (a guarantee-letter patient, 22 Nov).
+  const [handing, setHanding] = useState(false);
   const [stockReason, setStockReason] = useState("");
   const [invoiceFrom, setInvoiceFrom] = useState<InvoiceFrom>("2mg");
   const [doctor, setDoctor] = useState<{ id: number; name: string } | null>(null);
@@ -916,10 +920,22 @@ export function OrderNew({
   // quotation, the application, the letter and the claim are tracked.
   const papPatient =
     me?.role === "medrep" && me.channel?.code === "PAP" && picked?.kind === "patient";
+  // PAP is a process one person looks after (Aryan, 22 Nov): a guarantee-letter patient from any
+  // channel is handed to PAP, who gets the quotations and the letter; the sale stays the seller's.
+  const handsToPap =
+    orderType === "gl" &&
+    !fixId &&
+    !management &&
+    !papPatient &&
+    Boolean(me && ["medrep", "team_lead", "manager", "online"].includes(me.role) && me.channel?.code !== "PAP");
   function submit(event: FormEvent) {
     event.preventDefault();
     if (papPatient && !fixId) {
       navigate("/pap?new=1");
+      return;
+    }
+    if (handsToPap) {
+      setHanding(true);
       return;
     }
     if (missing.length) {
@@ -1034,6 +1050,32 @@ export function OrderNew({
 
   return (
     <form onSubmit={submit} className="mx-auto flex max-w-4xl flex-col gap-4 pb-4">
+      {handsToPap && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-50 px-4 py-3 text-[13px] text-amber-950 ring-1 ring-amber-200">
+          <span className="flex items-center gap-2">
+            <span className="size-2 rounded-full bg-amber-400" aria-hidden="true" />A guarantee letter
+            is PAP's work: hand the patient over. The sale stays yours.
+          </span>
+          <span className="flex items-center gap-3">
+            <Link to="/pap" className="text-amber-800 hover:underline">
+              My patients with PAP
+            </Link>
+            <button type="button" onClick={() => setHanding(true)} className="font-semibold text-emerald-700 hover:underline">
+              Hand to PAP
+            </button>
+          </span>
+        </div>
+      )}
+      {handing && (
+        <HandToPapDialog
+          name={picked?.name ?? ""}
+          phone={picked?.phone ?? ""}
+          city={picked?.city ?? ""}
+          address={picked?.address ?? ""}
+          onClose={() => setHanding(false)}
+          onDone={(id) => navigate(`/leads/${id}`)}
+        />
+      )}
       {papPatient && !fixId && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-4 py-3 text-[13px] text-slate-700">
           <span className="flex items-center gap-2">
@@ -1146,7 +1188,7 @@ export function OrderNew({
               <span className="truncate">
                 {changing || sentBack
                   ? (changing ?? sentBack)?.medrep
-                  : [me?.name, me?.channel?.code, me?.area?.name].filter(Boolean).join(" · ")}
+                  : [me?.name, shownChannel(me), me?.area?.name].filter(Boolean).join(" · ")}
               </span>
             </div>
             {me?.role === "medrep" && !fixId && (
@@ -2690,7 +2732,9 @@ export function OrderNew({
                 ? "Send to Management"
                 : papPatient
                   ? "Start a PAP case"
-                  : "Place order"}
+                  : handsToPap
+                    ? "Hand to PAP"
+                    : "Place order"}
         </button>
       </div>
 
@@ -2813,5 +2857,81 @@ export function OrderNew({
         />
       )}
     </form>
+  );
+}
+
+/** A seller's guarantee-letter patient goes to PAP: who, which agency, what they need. PAP sends
+ *  the three quotations and gets the letter; the order it places counts for the seller. */
+function HandToPapDialog({
+  name: firstName,
+  phone: firstPhone,
+  city,
+  address,
+  onClose,
+  onDone,
+}: {
+  name: string;
+  phone: string;
+  city: string;
+  address: string;
+  onClose: () => void;
+  onDone: (id: number) => void;
+}) {
+  const action = useAction();
+  const [name, setName] = useState(firstName);
+  const [phone, setPhone] = useState(firstPhone);
+  const [agency, setAgency] = useState("");
+  const [request, setRequest] = useState("");
+  const field = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900";
+  const label = "mb-1 block text-xs font-semibold text-slate-600";
+  return (
+    <Dialog title="Hand the patient to PAP" sub="PAP gets the quotations and the guarantee letter. The sale stays yours." onClose={onClose} busy={action.busy}>
+      <div className="flex flex-col gap-3">
+        <label>
+          <span className={label}>Patient *</span>
+          <input className={field} value={name} onChange={(event) => setName(event.target.value)} />
+        </label>
+        <label>
+          <span className={label}>Phone</span>
+          <input className={field} value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="tel" />
+        </label>
+        <label>
+          <span className={label}>Agency that gives the letter *</span>
+          <select className={field} value={agency} onChange={(event) => setAgency(event.target.value)}>
+            <option value="">Pick one</option>
+            {AGENCIES.map((one) => (
+              <option key={one.key} value={one.key}>
+                {one.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span className={label}>Medicines and how many</span>
+          <textarea className={field} rows={3} value={request} onChange={(event) => setRequest(event.target.value)} />
+        </label>
+        {action.problem && <p className="text-sm text-rose-700">{action.problem.message}</p>}
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} disabled={action.busy} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={action.busy || !name.trim() || !agency}
+            onClick={() =>
+              void action.run(async () => {
+                const made = await api<{ id: number }>("/api/leads/hand-to-pap", {
+                  body: { name: name.trim(), phone: phone.trim() || null, agency, request: request.trim() || null, city: city || null, address: address || null },
+                });
+                onDone(made.id);
+              })
+            }
+            className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {action.busy ? "Handing over…" : "Hand to PAP"}
+          </button>
+        </div>
+      </div>
+    </Dialog>
   );
 }

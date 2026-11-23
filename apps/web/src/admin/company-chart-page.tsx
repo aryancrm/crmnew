@@ -4,6 +4,7 @@
 
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 import { type ChartBox, type ChartSeat, COMPANY_CHART, type Status } from "./company-chart";
 import { CARD, PageHead } from "../ui";
 
@@ -90,6 +91,15 @@ export function AdminCompanyChartPage() {
         title="Company chart, as the CRM is built"
         sub="From the 2026 chart, box by box: who heads each box, who is under whom, each seat's work, its desk in the CRM and how far it is built. Filled one business at a time."
       />
+      {/* Not the hierarchy: a note typed on 17 Nov from the paper chart, to check the build. */}
+      <p className="mb-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-[13px] text-amber-900">
+        This page was typed by hand from the 2026 paper chart on 17 Nov, to check what was built. It does not follow
+        changes. Who is under whom today is the{" "}
+        <Link to="/company/sales" className="font-semibold underline">
+          Company tree
+        </Link>
+        , the one place it is set.
+      </p>
       <div className={`${CARD} p-4`}>
         <Box box={COMPANY_CHART} depth={0} />
       </div>
