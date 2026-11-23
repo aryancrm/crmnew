@@ -12,6 +12,7 @@ import { Refusal } from "../http";
 import type { FindRun, FoundDetail, FoundLine, FoundList, FoundTender, FoundView, Me, TenderMode } from "../types";
 import { papersOf, robotLoginState } from "./papers";
 import { robotReady } from "./robot-caller";
+import { psState } from "./robot-store";
 import { createTender, recordsTenders, setLines } from "./service";
 
 // ---------------------------------------------------------------- names
@@ -575,7 +576,7 @@ export async function listFound(
   if (asked.source === "philgeps" || asked.source === "ps") filters.push(sql`f.source = ${asked.source}`);
   if (asked.molecule?.trim()) filters.push(sql`${asked.molecule.trim()} = any(f.molecules)`);
   const where = filters.length ? sql.join(filters, sql` and `) : sql`true`;
-  const [found, [counts], molecules, runs, login] = await Promise.all([
+  const [found, [counts], molecules, runs, login, ps] = await Promise.all([
     rows<FoundTender>(db, sql`${foundSelect} where ${VIEW[view]} and ${where} order by ${ORDER[view]} limit 300`),
     rows<Record<FoundView, number>>(
       db,
@@ -586,13 +587,14 @@ export async function listFound(
     rows<{ name: string }>(db, sql`select distinct unnest(molecules) as name from tender_found order by 1`),
     lastRuns(db),
     robotLoginState(db),
+    psState(db),
   ]);
   return {
     view,
     rows: found,
     counts: counts ?? { new: 0, screened: 0, tenders: 0, all: 0 },
     molecules: molecules.map((one) => one.name),
-    robot: { ready: robotReady(), runs, login },
+    robot: { ready: robotReady(), runs, login, ps },
   };
 }
 

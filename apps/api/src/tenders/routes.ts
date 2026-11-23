@@ -5,8 +5,9 @@ import { z } from "zod";
 import type { Database } from "../db/index";
 import { type Env, idParam, readBody } from "../http";
 import { feedSince, foundCount, foundDetail, listFound, makeTender, noteRun, robotKnown, robotMolecules, screenFound, takeFound, takeScreened } from "./finder";
-import { foundFile, keepPaper, noteRobotLogin, paperForRobot, papersWanted, robotLoginState, robotLogins, robotProducts, tryLoginAgain } from "./papers";
+import { foundFile, keepPaper, noteRobotLogin, paperForRobot, papersKept, papersWanted, robotLoginState, robotLogins, robotProducts, screenedMarks, tryLoginAgain } from "./papers";
 import { robotCaller } from "./robot-caller";
+import { robotRows, writeRobotRows } from "./robot-store";
 import {
   addCompanyPaper,
   bidReport,
@@ -237,7 +238,7 @@ export function tenderFinderDoor(app: Hono<Env>, db: Database): void {
     return c.json(await keepPaper(db, { source: c.req.query("source") === "ps" ? "ps" : "philgeps", ref, path, name, bulletin: c.req.query("kind") === "bulletin", bytes }));
   });
   app.get("/webhooks/tender-finder/papers/file", async (c) => {
-    const bytes = await paperForRobot(db, (c.req.query("ref") ?? "").trim(), (c.req.query("path") ?? "").trim());
+    const bytes = await paperForRobot(db, c.req.query("source") === "ps" ? "ps" : "philgeps", (c.req.query("ref") ?? "").trim(), (c.req.query("path") ?? "").trim());
     if (!bytes) return c.json({ error: { code: "not_found", message: "No such paper." } }, 404);
     return c.body(bytes as Uint8Array<ArrayBuffer>, 200, { "content-type": "application/octet-stream" });
   });
@@ -258,6 +259,25 @@ export function tenderFinderDoor(app: Hono<Env>, db: Database): void {
   });
   // The bidding team's own system hands over while it moves in (docs/PLAN.md 25): what it
   // screened, and since when it has handed over.
+  // The robots' own records (tenders/robot-store.ts): a table's rows, rows handed in or taken away.
+  app.get("/webhooks/tender-finder/store", async (c) => c.json({ rows: await robotRows(db, c.req.query("table") ?? "") }));
+  app.post("/webhooks/tender-finder/store", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        table: z.string().min(3).max(40),
+        upsert: z.array(z.object({ key: z.string().min(1).max(300), value: z.record(z.string(), z.unknown()) })).max(500).optional(),
+        remove: z.array(z.string().min(1).max(300)).max(500).optional(),
+      }),
+    );
+    return c.json(await writeRobotRows(db, input.table, input));
+  });
+  // What is screened in the CRM, and the papers it keeps of one notice: the robot keeps the files
+  // of screened tenders and does not download again what the CRM has.
+  app.get("/webhooks/tender-finder/screened", async (c) => c.json(await screenedMarks(db)));
+  app.get("/webhooks/tender-finder/papers/list", async (c) =>
+    c.json(await papersKept(db, c.req.query("source") === "ps" ? "ps" : "philgeps", (c.req.query("ref") ?? "").trim())),
+  );
   app.get("/webhooks/tender-finder/feed-state", async (c) => c.json(await feedSince(db)));
   app.post("/webhooks/tender-finder/screened", async (c) => {
     const input = await readBody(

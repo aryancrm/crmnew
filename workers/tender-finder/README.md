@@ -84,10 +84,31 @@ It only reads that system. Two repository secrets: `BIDDING_SUPABASE_URL` (its d
 and `BIDDING_SUPABASE_KEY` (a key that may read it). With none set it does nothing. It goes away
 when the robots have moved (PLAN 25, step 7).
 
+## PS-PhilGEPS, the new portal (`ps/`)
+
+`ps/ps.mjs` runs the bidding team's own Sync (`papers/lib/psSync.mjs`, unchanged) every hour: Bid
+Match, My Opportunities, Award Notices, the open medicine notices Bid Match leaves out, each
+notice with its lines, dates and papers, then the papers' reading; and puts the tenders on the
+CRM's finder. It only reads. Its records are kept by the CRM (`papers/supabase-shim` sends them to
+the door's `store`). `--keepalive` (its own workflow, every 5 minutes) opens one page so
+PS-PhilGEPS does not end the session.
+
+It needs a session, and PS-PhilGEPS's log-in has a captcha: **a person connects once**, and again
+whenever PS-PhilGEPS ends the session (the Tender finder page says "not connected"). On a computer
+with Google Chrome and Node 22 or newer:
+
+```
+npm ci                       # in this folder
+# a file named .env here, never committed:
+#   PS_PHILGEPS_USERNAME=…   PS_PHILGEPS_PASSWORD=…   (the merchant log-in)
+#   CRM_URL=…                TENDER_FINDER_KEY=…      (the same key as on the CRM's API server)
+npm run connect              # opens the log-in window: tick "I'm not a robot"
+```
+
 ## Not here yet
 
-- PS-PhilGEPS (the new portal: Bid Match, My Opportunities, Award Notices): it needs the merchant
-  log-in and a person to tick its captcha. The CRM already takes its notices (`source: "ps"`).
+- An award's Accept / Refuse (`papers/lib/psAward.mjs` is copied, not wired to a page), the award
+  e-mails (off: the robot is given no mail settings), the hospitals' own websites check.
 
 ## State (23 Nov 2026)
 

@@ -1,0 +1,41 @@
+# PS-PhilGEPS ends a log-in session that sits idle (well under an hour), and a new one needs a
+# person's captcha tick. So every few minutes the robot opens one page with the saved session
+# (workers/tender-finder/ps/ps.mjs --keepalive; docs/PLAN.md 25, step 6). When PS-PhilGEPS is not
+# connected this does nothing but say so. It is let in by GitHub's signature, as the hourly run is.
+
+name: Tender finder keep-alive
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: tender-finder-keepalive
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  keepalive:
+    name: Keep the PS-PhilGEPS session alive
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    defaults:
+      run:
+        working-directory: workers/tender-finder
+    env:
+      CRM_URL: https://crmnew-api.onrender.com
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          package-manager-cache: false
+      # No browser here: only the packages (no install scripts, so no Chrome is fetched)
+      - name: Install
+        run: npm ci --no-audit --no-fund --ignore-scripts
+      - name: One page with the saved session
+        run: node ps/ps.mjs --keepalive

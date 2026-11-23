@@ -679,3 +679,40 @@ describe("the bidding system hands over (the bridge)", () => {
     expect(((await (await robot("feed-state")).json()) as { since: string }).since).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 });
+
+describe("the robots' own records", () => {
+  it("are kept row by row as handed in, only for the robots' tables; a log-in session is sealed; the finder's page says whether PS-PhilGEPS is connected", async () => {
+    process.env.TENDER_FINDER_KEY = KEY;
+    const write = (body: unknown) => robot("store", body);
+    const read = async (table: string) => ((await (await robot(`store?table=${table}`)).json()) as { rows: Record<string, unknown>[] }).rows;
+    expect((await list("hazel")).robot.ps).toMatchObject({ connected: false, status: null });
+    expect(await read("ps_sync_status")).toEqual([]);
+    expect((await write({ table: "ps_sync_status", upsert: [{ key: "latest", value: { id: "latest", status: "idle", connected_at: "2026-11-23T09:00:00.000Z" } }] })).status).toBe(200);
+    expect((await write({ table: "ps_tender_analysis", upsert: [{ key: "152987", value: { ref: "152987", status: "done", result: { items: [] } } }, { key: "153000", value: { ref: "153000", status: "failed" } }] })).status).toBe(200);
+    expect(await read("ps_tender_analysis")).toEqual([{ ref: "152987", status: "done", result: { items: [] } }, { ref: "153000", status: "failed" }]);
+    // A row handed in again takes the first one's place; one taken away is gone.
+    await write({ table: "ps_tender_analysis", upsert: [{ key: "152987", value: { ref: "152987", status: "skipped" } }], remove: ["153000", "never-there"] });
+    expect(await read("ps_tender_analysis")).toEqual([{ ref: "152987", status: "skipped" }]);
+    expect((await list("jimmy")).robot.ps).toMatchObject({ connected: true, connectedAt: "2026-11-23T09:00:00.000Z", status: "idle" });
+
+    // The session's cookies come back to the robot as it wrote them, and are not readable at rest.
+    const session = { id: "current", cookies: [{ name: "PHPSESSID", value: "a-live-log-in" }], saved_at: "2026-11-23T09:00:00.000Z" };
+    await write({ table: "ps_philgeps_session", upsert: [{ key: "current", value: session }] });
+    expect(await read("ps_philgeps_session")).toEqual([session]);
+    const [kept] = await rows<{ value: unknown; sealed: string | null }>(db, sql`select value, sealed from tender_robot_row where tbl = 'ps_philgeps_session'`);
+    expect(kept?.value).toBeNull();
+    expect(kept?.sealed).toMatch(/^v1\./);
+    expect(JSON.stringify(kept)).not.toContain("a-live-log-in");
+
+    // Not a way to write anywhere: another table's name is refused, and so is anyone without the robot's way in.
+    expect((await write({ table: "person", upsert: [{ key: "1", value: { role: "admin" } }] })).status).toBe(400);
+    expect((await robot("store?table=sales_order")).status).toBe(400);
+    expect((await app.request("/webhooks/tender-finder/store?table=ps_philgeps_session")).status).toBe(401);
+    expect((await get("hazel", "/webhooks/tender-finder/store?table=ps_philgeps_session")).status).toBe(401);
+    // What is screened in the CRM, and the papers it keeps of a notice, as the robot asks for them.
+    const screened = (await (await robot("screened")).json()) as { source: string; ref: string }[];
+    expect(screened).toContainEqual({ source: "philgeps", ref: "12451017" });
+    expect(await (await robot("papers/list?source=philgeps&ref=12451017")).json()).toMatchObject([{ path: "12451017/Price Schedule.pdf" }, { path: "12451017/Bid Bulletin 1 - BB1.pdf" }]);
+    expect(await (await robot("papers/list?source=ps&ref=12451017")).json()).toEqual([]);
+  });
+});

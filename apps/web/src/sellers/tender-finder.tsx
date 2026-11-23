@@ -88,6 +88,12 @@ function Robot({ robot }: { robot: FoundList["robot"] }) {
           quiet !== null && <span className="text-[12px] font-semibold text-amber-700">No run for {quiet} hours</span>
         )}
       </div>
+      <p className={`mt-1 text-[12px] ${robot.ps.connected ? "text-slate-500" : "text-amber-700"}`}>
+        <b className="font-semibold">PS-PhilGEPS</b>{" "}
+        {robot.ps.connected
+          ? `connected${robot.ps.connectedAt ? ` since ${when(robot.ps.connectedAt)}` : ""}${robot.ps.status === "failed" && robot.ps.error ? ` · the last Sync stopped: ${robot.ps.error}` : robot.ps.stage ? ` · ${robot.ps.stage}` : ""}`
+          : "is not connected: its log-in has a captcha, so a person connects once on a computer with Chrome (the robot then reads it every hour)."}
+      </p>
       {robot.login.state === "refused" && (
         <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[12.5px] text-rose-900">
           <b>PhilGEPS refused the robot's log-in</b>
@@ -483,7 +489,7 @@ function MakeTenderDialog({ detail, onClose }: { detail: FoundDetail; onClose: (
 }
 
 const PAPERS: Record<string, string> = {
-  downloaded: "Downloaded from PhilGEPS",
+  downloaded: "Downloaded",
   "needs-payment": "PhilGEPS asks a payment for these papers: the robot did not order them (it never pays)",
   "pick-up": "Only by pick-up at the agency",
   closed: "The notice is closed on PhilGEPS",
@@ -498,7 +504,7 @@ const fileSize = (bytes: number) => (bytes >= 1_048_576 ? `${(bytes / 1_048_576)
 function Papers({ found, papers, listed }: { found: FoundTender; papers: FoundPapers; listed: string[] }) {
   const waiting =
     found.source === "ps"
-      ? "PS-PhilGEPS's papers are not read by the robot yet."
+      ? "The robot gets its papers with the next PS-PhilGEPS reading (once PS-PhilGEPS is connected)."
       : !found.open
         ? "The notice is closed: its papers were not got."
         : found.screenedAt
@@ -510,7 +516,7 @@ function Papers({ found, papers, listed }: { found: FoundTender; papers: FoundPa
         Its papers {papers.files.length > 0 && <span className="font-normal text-slate-400">· {papers.files.length}</span>}
       </h3>
       <p className={`mt-1 text-[12.5px] ${papers.status && papers.status !== "downloaded" ? "text-amber-800" : "text-slate-600"}`}>
-        {papers.status ? (PAPERS[papers.status] ?? papers.status) : waiting}
+        {papers.status ? `${PAPERS[papers.status] ?? papers.status}${papers.status === "downloaded" ? ` from ${PORTAL[found.source]}` : ""}` : waiting}
         {papers.checkedAt ? ` · looked at ${when(papers.checkedAt)}` : ""}
       </p>
       {papers.remark && papers.status === "downloaded" && <p className="text-[12px] text-slate-500">{papers.remark}</p>}

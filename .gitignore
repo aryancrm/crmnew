@@ -13,3 +13,5 @@ docs/user-book/*.pdf
 docs/user-book/book.html
 docs/user-book/.chrome*
 .DS_Store
+# The tender finder's Connect tool keeps a live log-in here (workers/tender-finder/ps/connect)
+.ps-philgeps/

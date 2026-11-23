@@ -88,9 +88,22 @@ type FileRow = { id: number; name: string; mime: string; data: Uint8Array | null
 const fileSelect = sql`select f.id::int as id, f.name, f.mime, f.data, f.store_key as key from tender_found_file f`;
 
 /** A kept paper back to the robot (a scan it could not finish reading is read again without a new log-in). */
-export async function paperForRobot(db: Database, ref: string, path: string): Promise<Uint8Array | null> {
-  const [file] = await rows<FileRow>(db, sql`${fileSelect} join tender_found t on t.id = f.found_id where t.source = 'philgeps' and t.ref_no = ${ref} and f.path = ${path}`);
+export async function paperForRobot(db: Database, source: "philgeps" | "ps", ref: string, path: string): Promise<Uint8Array | null> {
+  const [file] = await rows<FileRow>(db, sql`${fileSelect} join tender_found t on t.id = f.found_id where t.source = ${source} and t.ref_no = ${ref} and f.path = ${path}`);
   return file ? bytesOf(file) : null;
+}
+
+/** The papers the CRM keeps of one notice, by the robot's own path: it does not download them again. */
+export async function papersKept(db: Database, source: "philgeps" | "ps", ref: string) {
+  return rows<{ path: string; name: string; size: number }>(
+    db,
+    sql`select f.path, f.name, f.size from tender_found_file f join tender_found t on t.id = f.found_id where t.source = ${source} and t.ref_no = ${ref} order by f.id`,
+  );
+}
+
+/** What is screened in the CRM, as the robot's own modules ask for it. */
+export async function screenedMarks(db: Database) {
+  return rows<{ source: string; ref: string }>(db, sql`select source, ref_no as ref from tender_found where screened_at is not null order by id`);
 }
 
 /** A kept paper for a person: the seats that have the finder. */

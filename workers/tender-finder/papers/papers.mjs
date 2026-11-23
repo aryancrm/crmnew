@@ -18,6 +18,7 @@
 // until a person says so in the CRM, the log-in guard's limits (papers/lib/loginGuard.mjs) count
 // across runs, and the log-out is always made and confirmed, whatever happened in between.
 
+import fs from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
@@ -158,7 +159,14 @@ async function main() {
             };
             files += await handIn(o.ref_no, result.documents);
             if (sync.needsReading({ details }, matcher.key)) details = await read(supabase, matcher, o, details);
-            for (const doc of result.documents) uploads.delete(doc.path);
+            for (const doc of result.documents) {
+                try {
+                    fs.rmSync(uploads.get(doc.path)?.file || '', { force: true });
+                } catch {
+                    // a leftover file in the robot's own folder
+                }
+                uploads.delete(doc.path);
+            }
             await toCrm(o, details);
             say(`${o.ref_no}: ${details.documents_status}${result.documents.length ? `, ${result.documents.length} files` : ''}${result.ordered ? ' (ordered now, at no cost)' : ''}`);
             done++;

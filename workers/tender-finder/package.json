@@ -9,7 +9,9 @@
     "find": "node scraper.js --trigger=schedule",
     "papers": "node papers/papers.mjs",
     "dry-run": "node scraper.js --dry-run",
-    "test": "node --test && node papers/checks/check-matching.mjs && node papers/checks/check-item-lines.mjs && node papers/checks/check-sync-safety.mjs"
+    "test": "node --test && node papers/checks/check-matching.mjs && node papers/checks/check-item-lines.mjs && node papers/checks/check-sync-safety.mjs",
+    "ps": "node ps/ps.mjs",
+    "connect": "node ps/connect/connect.js"
   },
   "engines": {
     "node": ">=20"
@@ -17,8 +19,10 @@
   "dependencies": {
     "@supabase/supabase-js": "file:./papers/supabase-shim",
     "@tesseract.js-data/eng": "^1.0.0",
+    "dotenv": "^18.0.8",
     "jszip": "^3.10.2",
     "node-html-parser": "^7.0.1",
+    "nodemailer": "^10.2.1",
     "puppeteer": "^25.14.0",
     "tesseract.js": "^6.0.1",
     "unpdf": "^1.3.2"

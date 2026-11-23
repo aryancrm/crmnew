@@ -24,6 +24,7 @@ on:
       - ".github/workflows/tender-finder.yml"
       # How the CRM reads what the robot hands in: after a change the notices are read again.
       - "apps/api/src/tenders/finder.ts"
+      # (the keep-alive has its own workflow)
 
 concurrency:
   group: tender-finder
@@ -105,6 +106,14 @@ jobs:
         run: node scraper.js --dry-run
       - name: Read PhilGEPS and hand in to the CRM
         run: node scraper.js --trigger=${{ github.event_name == 'schedule' && 'schedule' || 'manual' }}
+      # The new portal (ps/ps.mjs): with the session a person made (its log-in has a captcha), reads
+      # Bid Match, My Opportunities and Award Notices, each notice and its papers, and puts the
+      # tenders on the CRM's finder. Only reads. With PS-PhilGEPS not connected it does nothing.
+      - name: PS-PhilGEPS (the new portal)
+        continue-on-error: true
+        env:
+          PAPERS_CACHE_DIR: ${{ runner.temp }}/papers-cache
+        run: node ps/ps.mjs
       # The papers of the notices the team screened (papers/papers.mjs): logs in to PhilGEPS with the
       # company's account, orders each one's bid documents at no cost (never pays), downloads, logs
       # out, reads them. The log-in is two repository secrets (Settings > Secrets and variables >

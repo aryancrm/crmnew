@@ -5751,7 +5751,13 @@ export type FoundList = {
   molecules: string[];
   /** The robot: whether it has a way in on this server, its last runs, and where its PhilGEPS
    *  log-in for the tender papers stands ("refused" stops it until a person says to try again). */
-  robot: { ready: boolean; runs: FindRun[]; login: { state: "never" | "ok" | "refused" | "busy" | "trouble"; at: string | null; said: string | null } };
+  robot: {
+    ready: boolean;
+    runs: FindRun[];
+    login: { state: "never" | "ok" | "refused" | "busy" | "trouble"; at: string | null; said: string | null };
+    /** The PS-PhilGEPS robot: connected or not (a person's captcha tick makes its session), and its last Sync. */
+    ps: { connected: boolean; connectedAt: string | null; status: string | null; stage: string | null; error: string | null; finishedAt: string | null };
+  };
 };
 
 /** A found notice's papers: the files the robot got from PhilGEPS and what it said of them. */

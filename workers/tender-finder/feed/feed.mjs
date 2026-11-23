@@ -103,6 +103,21 @@ export function psNotice(row, headers, notice, reading) {
     };
 }
 
+// The Bid Match rows of a Sync as notices for the CRM: all of them, or (sinceMs) only those read again since
+export function psNotices(snapshot, readings, sinceMs = 0) {
+    const list = snapshot?.lists?.bidMatch || { headers: [], rows: [] };
+    const out = [];
+    for (const row of list.rows || []) {
+        const ref = psRef(row);
+        const notice = ref ? snapshot.notices?.[ref] : null;
+        const reading = ref ? readings.get(ref) : null;
+        const changed = !sinceMs || (notice?.read_at || 0) > sinceMs || Date.parse(reading?.analyzed_at || 0) > sinceMs || (notice?.first_seen || 0) > sinceMs;
+        const one = changed ? psNotice(row, list.headers || [], notice, reading) : null;
+        if (one) out.push(one);
+    }
+    return { notices: out, listed: (list.rows || []).length };
+}
+
 // ---------- one hand-over ----------
 
 export async function handOver({ base, key, all = false }) {
@@ -119,19 +134,9 @@ export async function handOver({ base, key, all = false }) {
     // 2. Its PS-PhilGEPS tenders: the last Sync's Bid Match, each notice, the papers' reading
     const [snapshot] = await table(base, key, 'ps_philgeps_snapshot?id=eq.latest&select=synced_at,lists,notices');
     const readings = new Map((await table(base, key, 'ps_tender_analysis?select=ref,status,result,documents_read,analyzed_at&order=ref')).map((r) => [String(r.ref), r]));
-    const list = snapshot?.lists?.bidMatch || { headers: [], rows: [] };
-    const ps = [];
-    for (const row of list.rows || []) {
-        const ref = psRef(row);
-        const notice = ref ? snapshot.notices?.[ref] : null;
-        const reading = ref ? readings.get(ref) : null;
-        // Only what was read again since the last hand-over
-        const changed = !since || (notice?.read_at || 0) > sinceMs || Date.parse(reading?.analyzed_at || 0) > sinceMs || (notice?.first_seen || 0) > sinceMs;
-        const one = changed ? psNotice(row, list.headers || [], notice, reading) : null;
-        if (one) ps.push(one);
-    }
+    const { notices: ps, listed } = psNotices(snapshot, readings, sinceMs);
     const second = ps.length ? await crm.send(ps) : { taken: 0, fresh: 0, matched: 0 };
-    say(`PS-PhilGEPS: ${second.taken} of ${(list.rows || []).length} tenders handed over (${second.fresh} new to the CRM)`);
+    say(`PS-PhilGEPS: ${second.taken} of ${listed} tenders handed over (${second.fresh} new to the CRM)`);
 
     // 3. What the team screened there
     const marks = (await table(base, key, 'screened_tenders?select=source,ref,added_by,added_at&order=added_at')).map((s) => ({ source: s.source === 'ps' ? 'ps' : 'philgeps', ref: String(s.ref), by: s.added_by || null, at: s.added_at || null }));

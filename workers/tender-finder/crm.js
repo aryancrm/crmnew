@@ -128,7 +128,21 @@ async function raw(pathAndQuery, bytes) {
 }
 const query = (fields) => new URLSearchParams(fields).toString();
 const keepPaper = ({ source, ref, path, name, bulletin, bytes }) => raw(`papers/file?${query({ source: source || 'philgeps', ref, path, name, kind: bulletin ? 'bulletin' : 'paper' })}`, bytes);
-const paper = (ref, path) => raw(`papers/file?${query({ ref, path })}`);
+const paper = (ref, path, source = 'philgeps') => raw(`papers/file?${query({ source, ref, path })}`);
+// The papers the CRM keeps of one notice: [{ path, name, size }]
+const papersList = (source, ref) => call(`papers/list?${query({ source, ref })}`);
+// What is screened in the CRM: [{ source, ref }]
+const screenedList = () => call('screened');
+
+// ---- the robots' own records (papers/supabase-shim) ----
+
+// A table's rows as the robot keeps them; rows handed in ({ key, value }) or taken away (keys)
+const store = async (table) => (await call(`store?${query({ table })}`)).rows;
+async function storeWrite(table, { upsert = [], remove = [] }) {
+    // (a Sync's lists and notices are several MB: one row a call when rows are large)
+    for (let i = 0; i < upsert.length; i += 50) await call('store', { table, upsert: upsert.slice(i, i + 50) });
+    if (remove.length) await call('store', { table, remove });
+}
 
 // The robot's log-ins to a portal, kept by the CRM across runs: the last day's (for the guard's counts),
 // a new one, and where the log-in stands ({ state: 'never' | 'ok' | 'refused' | 'busy' | 'trouble', at, said })
@@ -146,4 +160,4 @@ async function screened(marks) {
     return done;
 }
 
-module.exports = { molecules, known, send, run, products, papers, keepPaper, paper, logins, login, loginState, feedState, screened };
+module.exports = { molecules, known, send, run, products, papers, keepPaper, paper, papersList, screenedList, store, storeWrite, logins, login, loginState, feedState, screened };
