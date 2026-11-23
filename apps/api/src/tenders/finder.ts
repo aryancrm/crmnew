@@ -53,14 +53,22 @@ export function agencyMatcher(customers: { id: number; name: string }[]): (name:
 const SALT = "(?:hydrochloride|hcl|sodium|potassium|carbonate|monohydrate|besilate|besylate|mesylate|citrate|phosphate|acetate|maleate|tartrate|trihydrate|dihydrate|olamine)";
 const titleCase = (text: string) => text.toLowerCase().replace(/(^|[\s-])([a-z])/g, (_all, gap: string, letter: string) => gap + letter.toUpperCase());
 
+/** Words that say how a medicine comes, not what it is. A generic name that is only one of
+ *  these (an item kept as "Syringe") is not looked for: it would claim every "pre-filled syringe". */
+const FORM_WORDS = new Set(["syringe", "vial", "ampoule", "ampule", "tablet", "capsule", "bottle", "sachet", "solution", "suspension", "syrup", "cream", "ointment", "injection", "powder", "drops"]);
+/** Whether a molecule name is looked for in tenders: four letters or more, and not a form word. */
+export const lookedFor = (name: string) => name.length >= 4 && !FORM_WORDS.has(name.toLowerCase());
+
 /** The molecule a medicine's generic name is matched by: "Abiraterone acetate" → Abiraterone,
- *  "Iodine (as Iohexol)" → Iohexol, "Cefazolin (as sodium)" → Cefazolin. "+" joins a combination. */
+ *  "Salbutamol (as sulfate)" → Salbutamol, "Iodine (as Iohexol)" → Iohexol. "+" joins a combination. */
 export function moleculeName(generic: string | null | undefined): string {
   let text = String(generic ?? "")
     .replace(/\*/g, "")
     .replace(/\[[^\]]*\]/g, " ");
+  // "(as X)" says the salt it comes as (Salbutamol (as sulfate), Clopidogrel (as bisulfate)): it
+  // goes with the other brackets. Only an element kept as a compound is that compound.
   const as = /\(\s*as\s+([^)]+)\)/i.exec(text);
-  if (as && !new RegExp(`^${SALT}\\b`, "i").test((as[1] as string).trim())) text = as[1] as string;
+  if (as && /^\s*iodine\b/i.test(text)) text = as[1] as string;
   text = text
     .replace(/\([^)]*\)/g, " ")
     .replace(/\s+/g, " ")
@@ -126,7 +134,7 @@ export function medicineMatcher(medicines: FinderMedicine[]): (text: string) => 
   const groups = new Map<string, { name: string; parts: string[]; alternatives: RegExp[][]; medicines: FinderMedicine[] }>();
   for (const one of medicines) {
     const name = moleculeName(one.generic);
-    if (name.length < 3) continue;
+    if (!lookedFor(name)) continue;
     const key = name.toLowerCase();
     const group = groups.get(key) ?? {
       name,
@@ -422,7 +430,7 @@ export async function robotMolecules(db: Database): Promise<{ name: string; matc
   const names = new Map<string, string>();
   for (const one of await ourMedicines(db)) {
     const name = moleculeName(one.generic);
-    if (name.length >= 3) names.set(name.toLowerCase(), name);
+    if (lookedFor(name)) names.set(name.toLowerCase(), name);
   }
   return [...names.values()].sort().map((name) => ({ name, match: aliasesOf(name) }));
 }

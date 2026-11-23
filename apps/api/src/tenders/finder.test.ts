@@ -81,6 +81,13 @@ describe("the tender finder: matching", () => {
     expect(moleculeName("Imatinib mesylate")).toBe("Imatinib");
     expect(moleculeName("Abiraterone acetate")).toBe("Abiraterone");
     expect(moleculeName("Cefazolin (as sodium)")).toBe("Cefazolin");
+    // Live's own spellings: whatever salt it comes as goes, the molecule stays.
+    expect(moleculeName("Salbutamol (as sulfate)")).toBe("Salbutamol");
+    expect(moleculeName("Clopidogrel (as bisulfate)")).toBe("Clopidogrel");
+    expect(moleculeName("Dapagliflozin (as propanediol monohydrate)")).toBe("Dapagliflozin");
+    expect(moleculeName("Hydrocortisone (As Sodium Succinate)")).toBe("Hydrocortisone");
+    expect(moleculeName("Sitagliptin (as Monohydrate Phosphate) + Metformin Hydrochloride")).toBe("Sitagliptin + Metformin");
+    expect(moleculeName("Bupivacaine Hydrochloride in dextrose")).toBe("Bupivacaine");
     expect(moleculeName("Iodine (as Iohexol)")).toBe("Iohexol");
     expect(moleculeName("Rocuronium [COLD CHAIN]*")).toBe("Rocuronium");
     expect(moleculeName("Sitagliptin + Metformin")).toBe("Sitagliptin + Metformin");
@@ -130,6 +137,13 @@ describe("the tender finder: matching", () => {
     expect(vials("Dexmedetomidine 200mcg/2mL vial")).toMatchObject({ medicineId: 13 });
     expect(vials("Dexmedetomidine 100 mcg/mL, 2 mL vial")).toMatchObject({ medicineId: null, candidates: [12, 13] });
     expect(vials("Sugammadex 200mg/2ml vial")).toMatchObject({ medicineId: null, candidates: [14, 15] });
+    // An item kept under a form word, or a name of two or three letters, is not looked for.
+    const items = medicineMatcher([
+      { id: 21, name: "Syringe 3 mL", generic: "Syringe", strength: null },
+      { id: 22, name: "Test", generic: "hb", strength: null },
+      { id: 23, name: "Filgrastim", generic: "Filgrastim", strength: "300 mcg/0.5 mL" },
+    ]);
+    expect(items("Filgrastim 300mcg/0.5mL pre-filled syringe, HB 12")).toMatchObject({ molecules: ["Filgrastim"], medicineId: 23, candidates: [23] });
     // A spelling tenders use, and no match inside another word.
     expect(match("Anastrazole 1mg tab")).toMatchObject({ medicineId: 6 });
     expect(match("Paracetamol 500 mg and Dimetformine")).toEqual({ molecules: [], medicineId: null, candidates: [] });
