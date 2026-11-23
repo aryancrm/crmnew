@@ -162,10 +162,13 @@ export function PackDialog({
   orderId,
   code,
   onClose,
+  onPacked,
 }: {
   orderId: number;
   code: string;
   onClose: () => void;
+  /** What follows a pack that went through (the Ship dialog); left out, the dialog just closes. */
+  onPacked?: () => void;
 }) {
   const plan = useQuery({
     queryKey: ["dispatch", "pack", orderId],
@@ -200,7 +203,7 @@ export function PackDialog({
     const body = Object.entries(picks).flatMap(([itemId, rows]) =>
       rows.map((row) => ({ itemId: Number(itemId), batchId: row.batchId, qty: Number(row.qty) })),
     );
-    if (await work.send(`/api/dispatch/orders/${orderId}/pack`, { picks: body })) onClose();
+    if (await work.send(`/api/dispatch/orders/${orderId}/pack`, { picks: body })) (onPacked ?? onClose)();
   }
 
   /** The shelf can't fill it: held from here, so the box isn't a dead end (it only had Close). */
@@ -868,10 +871,18 @@ export type DispatchAsk = {
 } | null;
 
 export function DispatchDialogs({ ask, onClose }: { ask: DispatchAsk; onClose: () => void }) {
+  // One job leads to the next (Aryan, 23 Nov): Packed opens the same order's Ship dialog, where
+  // the courier and tracking go in; closing it leaves the order packed, to ship later.
+  const [shipNext, setShipNext] = useState<number | null>(null);
   if (!ask) return null;
   const { what, orderId, code, collect, carrier } = ask;
-  if (what === "pack") return <PackDialog orderId={orderId} code={code} onClose={onClose} />;
-  if (what === "ship") return <ShipDialog orderId={orderId} code={code} onClose={onClose} />;
+  const closeAll = () => {
+    setShipNext(null);
+    onClose();
+  };
+  if (what === "pack" && shipNext !== orderId)
+    return <PackDialog orderId={orderId} code={code} onClose={onClose} onPacked={() => setShipNext(orderId)} />;
+  if (what === "ship" || what === "pack") return <ShipDialog orderId={orderId} code={code} onClose={closeAll} />;
   if (what === "deliver")
     return <DeliverDialog orderId={orderId} code={code} collect={collect} carrier={carrier} onClose={onClose} />;
   if (what === "cod")

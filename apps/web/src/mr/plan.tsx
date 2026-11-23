@@ -449,6 +449,7 @@ export function AddVisitsDialog({
 
 function DecideDialog({ data, approve, onClose }: { data: PlanMonth; approve: boolean; onClose: () => void }) {
   const queries = useQueryClient();
+  const navigate = useNavigate();
   const action = useAction();
   const [note, setNote] = useState("");
   return (
@@ -466,6 +467,8 @@ function DecideDialog({ data, approve, onClose }: { data: PlanMonth; approve: bo
               await api("/api/mr/plan/decide", { body: { person: data.person.id, month: data.month, approve, note: note || null } });
               await queries.invalidateQueries({ queryKey: ["mr"] });
               onClose();
+              // Back to the team's plans: the next one waiting is there.
+              navigate("/field/plan?view=team");
             })
           }
         >

@@ -1177,6 +1177,17 @@ export function Order() {
                         </button>
                       </div>
                     ),
+                    // One job leads to the next (Aryan, 23 Nov): from an approved order straight to the
+                    // ones still waiting.
+                    undoUntil > 0 && (
+                      <Link
+                        key="next"
+                        to="/"
+                        className="mb-1 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-2.5 py-2 text-[13px] font-semibold text-emerald-800 hover:bg-emerald-50"
+                      >
+                        Next order to approve <span aria-hidden="true">→</span>
+                      </Link>
+                    ),
                     ...CHECKS.map((item, index) => {
                       const on = item.key === check && checking;
                       const state = states[item.key];

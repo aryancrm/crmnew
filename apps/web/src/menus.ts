@@ -125,7 +125,9 @@ const folder = (
   to: children[0]?.to ?? "/",
   label,
   icon,
-  children,
+  // A link named like its own folder read as the same thing twice (Aryan, 23 Nov: Tenders under
+  // Tenders, Patients under Patients): inside the folder it is "All tenders", "All patients".
+  children: children.map((child) => (child.label === label ? { ...child, label: `All ${label.charAt(0).toLowerCase()}${label.slice(1)}` } : child)),
   ...(short ? { short } : {}),
 });
 
@@ -1535,7 +1537,7 @@ function ownDesk(me: Me): Space {
       // The Admin login's desk is the Admin panel: setting the company up, apart from the CEO.
       return adminPanel(me);
     case "ceo":
-      return {
+      return withoutRepeats({
         key: "desk",
         label: me.roleLabel,
         icon: LayoutGrid,
@@ -1603,8 +1605,33 @@ function ownDesk(me: Me): Space {
             ),
           },
         ],
-      };
+      });
   }
+}
+
+/** The CEO's Apps folders hold every app whole; a link already in the groups above them isn't
+ *  said again inside a folder (Aryan, 23 Nov: "one thing shows twice in the side menu"). It stays
+ *  where it was first: nothing is taken away. */
+function withoutRepeats(space: Space): Space {
+  const apps = space.groups.find((group) => group.title === "Apps");
+  if (!apps) return space;
+  const above = new Set(space.groups.filter((group) => group !== apps).flatMap((group) => allItems(group.items).map((item) => item.to)));
+  return {
+    ...space,
+    groups: space.groups.map((group) =>
+      group !== apps
+        ? group
+        : {
+            ...group,
+            items: group.items.map((app) => {
+              // Nor twice across the folders: a page two apps share stays in the first.
+              const kept = (app.children ?? []).filter((child) => !above.has(child.to));
+              for (const child of kept) if (!child.children) above.add(child.to);
+              return kept.length ? { ...app, children: kept, to: kept[0]?.to ?? app.to } : app;
+            }),
+          },
+    ),
+  };
 }
 
 /** The Admin panel, the Admin login's own desk: where the company is set up (its channels, who
