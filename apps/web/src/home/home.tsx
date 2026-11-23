@@ -23,6 +23,7 @@ import { B2cHome } from "../online/b2c-home";
 import { LeadsDesk } from "../online/leads";
 import { MedrepHome } from "../sellers/medrep-home";
 import { MyKpis } from "../kpis/my-kpis";
+import { FieldDayCard } from "../mr/home";
 import { OrdersToCheck } from "../orders/board";
 import { TeamSalesPage } from "../team/team";
 
@@ -62,7 +63,9 @@ export function Home() {
   if (me.role === "medrep" && me.channel?.code === "PAP")
     return (
       <div className="space-y-4">
-        <div className="mx-auto max-w-screen-xl">
+        <div className="mx-auto max-w-screen-xl space-y-4">
+          {/* The PAP MedRep visits too: the day first (Start working, the next visit), as every field rep's Home. */}
+          <FieldDayCard />
           <MyKpis />
         </div>
         <LeadsDesk key="pap" desk="pap" />

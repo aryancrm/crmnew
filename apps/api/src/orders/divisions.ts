@@ -35,6 +35,10 @@ export function divisionOf(name: string | null | undefined): string | null {
   );
 }
 
+/** A channel with no Division written on it is read by its code: the doctors' channel (RX) is the
+ *  tracker's RX Business. So an Rx MedRep's order opens on their own Division like everyone's. */
+export const CHANNEL_DIVISION: Record<string, string> = { RX: "RX Business" };
+
 /** The Divisions a person's orders carry (Aryan, 19 Nov: a MedRep comes under one Division): their
  *  seats' own (the database's seat_division, migration 0114), the main seat's first, each once;
  *  with no seat, their channel's. */

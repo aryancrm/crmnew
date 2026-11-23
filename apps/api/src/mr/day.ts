@@ -290,7 +290,8 @@ export async function mrHome(db: Database, me: Me): Promise<MrHome> {
     day: state,
     plannedCities,
     plannedWork: planned[0]?.workType ?? null,
-    cities: cities.map((one) => one.city),
+    // The towns to offer first: the person's own area's (the company tree), then their customers'.
+    cities: [...new Set([...(me.area?.cities ?? []), ...cities.map((one) => one.city)])],
     partners,
     counts: counted[0] ?? { planned: 0, open: 0, done: 0, skipped: 0, missed: 0, met: 0, productive: 0, booked: 0, bookedAmount: 0 },
     next: next[0] ? toCard(next[0]) : null,

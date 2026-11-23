@@ -325,9 +325,15 @@ export async function customerDetail(db: Database, me: Me, id: number): Promise<
               where ds.area_id = c.area_id and ds.active order by ds.id limit 1), ch.code) end) as channel, ${holder} as medrep,
             c.payment_terms as "paymentTerms", c.payment_days::int as "paymentDays", c.credit_limit::int as "creditLimit",
             c.review, r.name as "reviewedBy", p.name as "addedBy", ${iso("c.created_at")} as "addedAt",
-            (select to_char(max(o.created_at) at time zone 'Asia/Manila', 'YYYY-MM-DD') from sales_order o
-              where o.customer_id = c.id and o.status <> 'cancelled') as "lastOrderOn",
-            coalesce(c.area_id = ${me.area?.id ?? null}, false) as "inMyArea",
+            -- The last order anywhere: the CRM's own, or the old invoices kept from Zoho (a customer of
+            -- years must not read "no order yet" on the order form).
+            to_char(greatest(
+              (select max(o.created_at at time zone 'Asia/Manila')::date from sales_order o
+                where o.customer_id = c.id and o.status <> 'cancelled'),
+              (select max(v.issued_on) from sale_invoice v where v.customer_id = c.id and v.status <> 'cancelled')),
+              'YYYY-MM-DD') as "lastOrderOn",
+            -- A MedRep's own: their area's, and the accounts given to them by name (B2B's NBD and CRR, PAP cases).
+            ${me.role === "medrep" ? sql`coalesce((${seen(me)}), false)` : sql`coalesce(c.area_id = ${me.area?.id ?? null}, false)`} as "inMyArea",
             ${owedOf(today)} as owed, ${overdueOf(today)} as overdue,
             coalesce((select max(dd.late)::int from ${duesSql(today)} dd
               where dd.customer_id = c.id and not dd.on_delivery and dd.late > 0), 0) as "overdueDays"

@@ -33,7 +33,7 @@ import { type ReactNode, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { Button, CARD, Dialog, PageState, Problem, peso, useAction } from "../ui";
-import { ActionSheet, Ask, Choices, clockOf, FIELD, Initial, Label, StatePill, useMrMe, whereAmI } from "./parts";
+import { ActionSheet, Ask, Choices, clockOf, FIELD, Initial, Label, StatePill, useFieldRep, useMrMe, whereAmI } from "./parts";
 import { AddVisitsDialog } from "./plan";
 import { TownPicker } from "./towns";
 
@@ -169,7 +169,11 @@ function Tile({ to, icon: Icon, label, tone, sub }: { to: string; icon: typeof U
 
 /** The day on the seller's Home (Aryan, 23 Nov: "after signing in I can't tell where the day
  *  starts"): where the day stands and the one thing to do next, the same as My day says it. */
-export function MyDayCard() {
+export function FieldDayCard() {
+  return useFieldRep() ? <MyDayCard /> : null;
+}
+
+function MyDayCard() {
   const query = useQuery({ queryKey: ["mr", "home"], queryFn: () => api<MrHome>("/api/mr/home") });
   const [starting, setStarting] = useState(false);
   const data = query.data;

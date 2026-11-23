@@ -524,6 +524,15 @@ export function OrderNew({
     enabled: !doctor && findDoctor.trim().length >= 1,
   });
 
+  // An order placed at a visit to a doctor names that doctor (Aryan, 23 Nov: the order is made
+  // right there on the call): if the buyer is then changed to the doctor's patient, the doctor stays.
+  const doctorFromVisit = useRef(false);
+  useEffect(() => {
+    if (!visitId || doctorFromVisit.current || !picked) return;
+    doctorFromVisit.current = true;
+    if (picked.kind === "doctor") setDoctor((now) => now ?? { id: picked.id, name: picked.name });
+  }, [visitId, picked]);
+
   // A draft saved on this device comes back when the form is opened again.
   // biome-ignore lint/correctness/useExhaustiveDependencies: only once, when the person is known
   useEffect(() => {

@@ -37,8 +37,7 @@ import { greeting, todayWords } from "../home/home";
 import { OrderCardItem } from "../orders/board";
 import { HospitalsCard } from "./hospitals";
 import { MyKpis as KpiPanel } from "../kpis/my-kpis";
-import { MyDayCard } from "../mr/home";
-import { useFieldRep } from "../mr/parts";
+import { FieldDayCard } from "../mr/home";
 
 const NEWS: Record<StockNews["kind"], { label: string; style: string }> = {
   out: { label: "Out of stock", style: "bg-rose-50 text-rose-700" },
@@ -151,7 +150,6 @@ export function MedrepHome() {
   const anesthesia = me.channel?.code === "TS" && me.business === "HOSP";
   const b2b = b2bRole(me);
   const bidding = me.channel?.code === "BID";
-  const fieldRep = useFieldRep();
   const data = kpis.data;
   const sales = mine.data?.sales;
   const periodWord = periodWordOf(period, data?.day ?? null);
@@ -180,7 +178,7 @@ export function MedrepHome() {
       </div>
 
       {/* A field rep's day first: where it stands and the one thing to do next (Aryan, 23 Nov). */}
-      {fieldRep && <MyDayCard />}
+      <FieldDayCard />
 
       {/* The hub's My KPIs: sales without VAT against target, the counts, a day's sales (PLAN 23). */}
       <KpiPanel />
