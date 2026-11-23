@@ -39,9 +39,12 @@ jobs:
       CRM_URL: https://crmnew-api.onrender.com
     steps:
       - uses: actions/checkout@v5
+      # The repository's root names pnpm for the CRM; the robot is a plain npm folder of its own,
+      # so Node's set-up must not look for pnpm's cache here.
       - uses: actions/setup-node@v5
         with:
           node-version: "24"
+          package-manager-cache: false
       - name: Keep Chrome between runs
         uses: actions/cache@v4
         with:
