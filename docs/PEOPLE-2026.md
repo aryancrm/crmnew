@@ -3,9 +3,9 @@
 > **Live CRM login IDs are in [LOGINS-LIVE.md](LOGINS-LIVE.md)** (crmnew-psi.vercel.app, from 17 Nov). The IDs below are the local database's; on live they are numbered afresh, so many differ.
 
 
-Every person on HR's 2026 chart (`docs/company-map.units.js`) is in the CRM with a seat, the seat's login ID and the company's common password. Built by `apps/api/scripts/onboard-company.ts` (safe to run again); on the live database only with Aryan's word.
+Every person on HR's 2026 chart (`docs/company-map.units.js`) is in the CRM with a seat and the seat's login ID. Built by `apps/api/scripts/onboard-company.ts` (safe to run again); on the live database only with Aryan's word.
 
-- **Sign in**: the login ID below (or the same with `@2mginc.com`) and the company's common password. The password lives only in the server's `JOIN_PASSWORD` setting, not in the code. Nobody is asked to change it (Aryan, 17 Nov). A new joiner (HR's New joiner, or Add person in Teams & people) gets the same password; HR types only their name, login and employee ID.
+- **Sign in**: the login ID below (or the same with `@2mginc.com`) and the person's own password (Aryan, 23 Nov; it replaces the common `JOIN_PASSWORD` of 17 Nov, which signs nobody in now). The first time it is a one-time password (`pnpm --filter @2mg/api passwords`, or the Admin's Give a new password) that only lets them choose their own. A new joiner (HR's New joiner, Add person in Teams & people, or an accepted Sign-up) starts the same way.
 - **Employee IDs**: none were found (not on the chart, not in the old CRM); HR fills them in on each person's page.
 - **118 people** (117 on the chart and the Admin login), **2 vacant seats** (Pampanga CHC, Training Coach). The demo company's people left (their history stays).
 - **Zoho's salespeople**: 2,963 customers are now under the seat of the person who last sold to them. 102 Zoho names are not tied (5,187 customers): which seat takes them is the heads' call (list below). Tie them in Admin panel → Old customers to seats.

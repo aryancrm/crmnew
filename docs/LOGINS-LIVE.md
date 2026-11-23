@@ -1,6 +1,6 @@
 # Live CRM: who signs in with which ID
 
-Open https://crmnew-psi.vercel.app, type the **Login ID** below and the company's common password (Aryan has it). Nobody is asked to change it.
+Open https://crmnew-psi.vercel.app, pick your department, type the **Login ID** below and your own password. There is no common password any more (Aryan, 23 Nov). The first time, use the one-time password the Admin gives you (Give a new password); it only lets you choose your own, which nobody else knows.
 
 | Team | Name | Job | Login ID |
 |---|---|---|---|
