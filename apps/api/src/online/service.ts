@@ -1790,13 +1790,25 @@ async function patientOf(
     }
     const patient = lead.patient ?? lead.name;
     const [found] = lead.key
-      ? await rows<{ id: number }>(
+      ? await rows<{ id: number; name: string }>(
           tx,
-          sql`select id::int as id from customer where active and kind = 'patient' and phone_key = ${lead.key}
+          sql`select id::int as id, name from customer where active and kind = 'patient' and phone_key = ${lead.key}
             order by (lower(name) = ${patient.toLowerCase()}) desc, id limit 1`,
         )
       : [];
     let customerId = found?.id;
+    // The number is another name's in the CRM (a family sharing one phone, or a typo): the case is
+    // tied to that customer as before, but it is said on the case, so nobody finds an order under
+    // another patient's name without having been told (found walking a PAP case, 23 Nov; whether
+    // such a patient should be a customer of their own is Aryan's to say).
+    if (found && found.name.trim().toLowerCase() !== patient.trim().toLowerCase())
+      await note(
+        tx,
+        id,
+        me,
+        "status",
+        `This number is ${found.name}'s in the CRM: the case and its order are under that name, not ${patient}. If it is another person, tell Management before the order goes on.`,
+      );
     if (!customerId) {
       const [made] = await rows<{ id: number }>(
         tx,
