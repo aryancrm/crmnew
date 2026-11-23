@@ -61,6 +61,13 @@ function newsQuery(where: SQL): SQL {
     join medicine m on m.id = n.medicine_id
     join person p on p.id = n.by_person
     where n.closed_at is null and ${where}
+      -- "Out of stock" and "Low stock" say what the shelf said that day: once the stock is back
+      -- (received, moved in) the line steps aside by itself, nobody has to take it down (Aryan,
+      -- 23 Nov: 6,000 received and the news still read "only 35 boxes left"). Nothing is erased.
+      and not (n.kind in ('out', 'low') and (
+        select coalesce(sum(s.qty), 0) from stock s join batch b on b.id = s.batch_id
+        where b.medicine_id = n.medicine_id and b.expires_on >= (now() at time zone 'Asia/Manila')::date
+      ) > case n.kind when 'out' then 0 else m.reorder_level end)
     order by n.created_at desc
     limit 30`;
 }

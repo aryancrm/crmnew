@@ -75,6 +75,13 @@ export function DocListPage({ kind }: { kind: DocKind }) {
     kind === "bill" && may.bill ? "/purchases/bills/new" : kind === "vendor_payment" && may.pay ? "/purchases/payments/new" : kind === "vendor_credit" && may.pay ? "/purchases/credits/new" : null;
   return (
     <div className="mx-auto flex max-w-[88rem] flex-col gap-4">
+      {kind === "purchase_receive" && (
+        // A delivery received on the first purchase pages, or stock added without buying, has no
+        // receive paper here: the shelf's own list has every batch that came in.
+        <Link to="/receives" className="self-start text-[13px] font-semibold text-brand-dark hover:underline">
+          Every batch that came onto the shelf, also without a receive paper →
+        </Link>
+      )}
       <PageHead
         title={word.title}
         sub={word.sub}

@@ -27,11 +27,20 @@ export async function purchaseBoard(db: Database, me: Me): Promise<PurchaseBoard
   const [receive, bill, owed, credits, buyMore, recent] = await Promise.all([
     rows<PurchaseBoard["toReceive"]>(
       db,
-      sql`select count(distinct d.id)::int as orders, coalesce(sum(${LEFT}), 0)::int as pieces,
-          count(distinct d.id) filter (where d.due_date < ${today}::date)::int as late,
-          coalesce(sum(round(${LEFT} * coalesce(l.rate, 0) * d.fx_rate * 100)), 0)::bigint::float8 as value
-        from book_doc d join book_line l on l.doc_id = d.id
-        where ${RUNNING(today)} and ${LEFT} > 0`,
+      // The purchase orders in Purchases, and the few still open on the first purchase pages: the
+      // same count the stock pages give (Aryan, 23 Nov: Overview said 2 to receive, this page 0).
+      sql`select (a.orders + b.orders)::int as orders, (a.pieces + b.pieces)::int as pieces, (a.late + b.late)::int as late,
+          (a.value + b.value)::float8 as value, b.orders::int as old
+        from (
+          select count(distinct d.id) as orders, coalesce(sum(${LEFT}), 0) as pieces,
+            count(distinct d.id) filter (where d.due_date < ${today}::date) as late,
+            coalesce(sum(round(${LEFT} * coalesce(l.rate, 0) * d.fx_rate * 100)), 0)::bigint as value
+          from book_doc d join book_line l on l.doc_id = d.id
+          where ${RUNNING(today)} and ${LEFT} > 0) a,
+          (select count(distinct p.id) as orders, coalesce(sum(l.qty), 0) as pieces,
+            count(distinct p.id) filter (where p.expected_on < ${today}::date) as late,
+            coalesce(sum(round(l.qty * l.unit_cost * p.fx_rate * 100)), 0)::bigint as value
+          from purchase p join purchase_line l on l.purchase_id = p.id where p.state = 'ordered') b`,
     ),
     rows<PurchaseBoard["toBill"]>(
       db,
@@ -74,8 +83,12 @@ export async function purchaseBoard(db: Database, me: Me): Promise<PurchaseBoard
             select medicine_id, sum(-qty)::int as qty from stock_move
             where kind = 'deliver' and at >= now() - interval '30 days' group by 1),
           coming as (
-            select l.medicine_id, sum(${LEFT})::int as qty from book_doc d join book_line l on l.doc_id = d.id
-            where ${RUNNING(today)} and l.medicine_id is not null and ${LEFT} > 0 group by 1),
+            select medicine_id, sum(qty)::int as qty from (
+              select l.medicine_id, ${LEFT} as qty from book_doc d join book_line l on l.doc_id = d.id
+                where ${RUNNING(today)} and l.medicine_id is not null and ${LEFT} > 0
+              union all
+              select l.medicine_id, l.qty from purchase_line l join purchase p on p.id = l.purchase_id where p.state = 'ordered'
+            ) c group by 1),
           last as (
             select distinct on (l.medicine_id) l.medicine_id, d.supplier_id, coalesce(s.name, d.party_name) as vendor, l.rate::float8 as rate,
               d.currency, to_char(d.doc_date, 'YYYY-MM-DD') as on
@@ -106,7 +119,7 @@ export async function purchaseBoard(db: Database, me: Me): Promise<PurchaseBoard
   ]);
   return {
     today,
-    toReceive: receive[0] ?? { orders: 0, pieces: 0, late: 0, value: 0 },
+    toReceive: receive[0] ?? { orders: 0, pieces: 0, late: 0, value: 0, old: 0 },
     toBill: bill[0] ?? { orders: 0, value: 0 },
     bills: owed[0] ?? { open: 0, owed: 0, overdue: 0, overdueAmount: 0, dueThisWeek: 0 },
     unusedCredits: credits[0]?.amount ?? 0,

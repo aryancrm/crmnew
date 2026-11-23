@@ -48,7 +48,7 @@ export function InventoryOverview() {
             <div className="flex flex-wrap gap-3">
               {Boolean(data.toReceive?.late) && (
                 <Attention
-                  to="/purchases/orders?stage=to_receive"
+                  to="/purchases"
                   tone="bad"
                   icon={CalendarClock}
                   value={data.toReceive?.late as number}
@@ -109,7 +109,7 @@ export function InventoryOverview() {
             />
             {data.toReceive && (
               <Tile
-                to="/purchases/orders?stage=to_receive"
+                to="/purchases"
                 label="To be received"
                 value={count(data.toReceive.purchases)}
                 sub={`${count(data.toReceive.pieces)} pieces on order`}

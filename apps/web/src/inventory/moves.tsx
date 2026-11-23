@@ -8,16 +8,24 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { Button, Card, count, dayLabel, PageHead, PageState, timeLabel } from "../ui";
 
+/** Where each is done from: a count or a move starts on the medicine in Stock by warehouse, a
+ *  receive on its purchase order (Aryan, 23 Nov: the empty list didn't say where to begin). */
+const START: Record<MoveKind, { to: string; label: string }> = {
+  adjust: { to: "/inventory", label: "Count a medicine's stock" },
+  transfer: { to: "/inventory", label: "Move stock to another warehouse" },
+  receive: { to: "/purchases", label: "Receive a purchase order" },
+};
+
 const WORDS: Record<MoveKind, { title: string; sub: string; empty: string }> = {
   adjust: {
     title: "Inventory adjustments",
     sub: "Stock counted on the shelf and corrected",
-    empty: "No stock has been adjusted yet. A count from a medicine's page shows here.",
+    empty: "No stock has been adjusted yet. Open a medicine in Stock by warehouse and count it: the correction shows here.",
   },
   transfer: {
     title: "Transfers",
     sub: "Stock moved from one warehouse to another",
-    empty: "No stock has been moved between warehouses yet.",
+    empty: "No stock has been moved between warehouses yet. Open a medicine in Stock by warehouse and move it: the move shows here.",
   },
   receive: {
     title: "Receives",
@@ -46,6 +54,11 @@ export function Moves({ kind }: { kind: MoveKind }) {
           data
             ? `${words.sub} · ${count(data.total)} ${data.total === 1 ? "line" : "lines"}`
             : words.sub
+        }
+        actions={
+          <Link to={START[kind].to} className="inline-flex h-10 items-center rounded-[10px] bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-dark">
+            {START[kind].label}
+          </Link>
         }
       />
       {!data ? (

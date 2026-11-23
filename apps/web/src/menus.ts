@@ -302,6 +302,8 @@ function inventoryApp(me: Me): Space {
         items: [
           ...(seesCost
             ? [
+                // The day's purchase work first (to receive, to bill, to pay, buy again), then the lists.
+                { to: "/purchases", label: "To do & buy again", icon: LayoutDashboard },
                 { to: "/purchases/vendors", label: "Vendors", icon: Factory },
                 { to: "/purchases/orders", label: "Purchase orders", icon: ShoppingCart },
               ]
@@ -315,7 +317,6 @@ function inventoryApp(me: Me): Space {
                 { to: "/purchases/bills", label: "Bills", icon: ReceiptText },
                 { to: "/purchases/payments", label: "Payments made", icon: Banknote },
                 { to: "/purchases/credits", label: "Vendor credits", icon: Undo2 },
-                { to: "/purchases", label: "To do & buy again", icon: LayoutDashboard },
                 { to: "/books/purchaseorders", label: "Books view", icon: BookOpen },
               ]
             : []),

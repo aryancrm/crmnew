@@ -6032,7 +6032,8 @@ export type VendorDetail = VendorRow & {
 /** Purchases' board: what the Inventory and Finance desks act on. Money in centavos of pesos. */
 export type PurchaseBoard = {
   today: string;
-  toReceive: { orders: number; pieces: number; late: number; value: number };
+  /** `old`: how many of them are on the first purchase pages (opened from there). */
+  toReceive: { orders: number; pieces: number; late: number; value: number; old: number };
   toBill: { orders: number; value: number };
   bills: { open: number; owed: number; overdue: number; overdueAmount: number; dueThisWeek: number };
   /** Vendor credits and payments not put on a bill yet. */
