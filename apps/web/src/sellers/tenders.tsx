@@ -98,6 +98,9 @@ function List({ title, tenders, empty, extra }: { title: string; tenders: Tender
 const sinceDays = (day: string | null, today: string) =>
   day ? Math.round((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${day}T00:00:00Z`)) / 86_400_000) : 0;
 
+/** Where the bidding team's tender finder runs (its own deployment); empty when not set. */
+const FINDER_URL = String(import.meta.env.VITE_TENDER_FINDER_URL ?? "").trim();
+
 export function BiddingHome() {
   const query = useQuery({ queryKey: ["tenders", "desk"], queryFn: () => api<TenderDesk>("/api/tenders/desk") });
   const data = query.data;
@@ -273,11 +276,41 @@ export function TendersPage() {
         title="Tenders"
         sub="Found on PhilGEPS → preparing → price approved → submitted → won or lost → contract → delivered → accepted (IAR) → billed → paid"
         actions={
-          <Button variant="primary" onClick={() => setAdding(true)}>
-            <Plus className="size-4" /> Record a tender
-          </Button>
+          <>
+            {/* The tender finder (the bidding team's own system: it reads PhilGEPS by itself, the
+                tender papers and the awards) opens from here, for every seat that has Tenders
+                (the bidding coachees, their admin, the mentor above them, the CEO): one CRM, the
+                finder a press away (Aryan, 23 Nov). Its address is the deployment's
+                VITE_TENDER_FINDER_URL; with none set the button says so. */}
+            {FINDER_URL ? (
+              <a
+                href={FINDER_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Find tenders on PhilGEPS ↗
+              </a>
+            ) : (
+              <span
+                title="The tender finder's address isn't set yet (VITE_TENDER_FINDER_URL)"
+                className="inline-flex h-10 items-center rounded-[10px] border border-dashed border-slate-300 px-4 text-sm text-slate-400"
+              >
+                Tender finder: address not set
+              </span>
+            )}
+            <Button variant="primary" onClick={() => setAdding(true)}>
+              <Plus className="size-4" /> Record a tender
+            </Button>
+          </>
         }
       />
+      {FINDER_URL && (
+        <p className="-mt-2 text-[13px] text-slate-500">
+          New tenders are found and read in the tender finder. One worth bidding on is recorded here with <b>Record a tender</b>:
+          its price, papers, award, order and payment are kept in this CRM.
+        </p>
+      )}
       <Tabs
         tabs={[
           { key: "open" as const, label: "Bidding", count: groups.open.length },
