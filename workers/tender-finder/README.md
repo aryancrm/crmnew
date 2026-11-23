@@ -75,6 +75,15 @@ PHILGEPS_TEST_HOST=http://127.0.0.1:<port> PHILGEPS_USERNAME=company PHILGEPS_PA
   CRM_URL=http://localhost:4100 TENDER_FINDER_KEY=<the local key> node papers/papers.mjs
 ```
 
+## The bridge (`feed/`)
+
+While the bidding team's own system (the "Government Bidding System") moves into the CRM
+(PLAN 25), `feed/feed.mjs` hands the CRM what that system holds, every hour, before the CRM's own
+reading: its tenders on both portals, what it read in their papers, what the team screened there.
+It only reads that system. Two repository secrets: `BIDDING_SUPABASE_URL` (its database's address)
+and `BIDDING_SUPABASE_KEY` (a key that may read it). With none set it does nothing. It goes away
+when the robots have moved (PLAN 25, step 7).
+
 ## Not here yet
 
 - PS-PhilGEPS (the new portal: Bid Match, My Opportunities, Award Notices): it needs the merchant

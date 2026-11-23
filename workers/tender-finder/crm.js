@@ -127,7 +127,7 @@ async function raw(pathAndQuery, bytes) {
     return bytes ? res.json() : Buffer.from(await res.arrayBuffer());
 }
 const query = (fields) => new URLSearchParams(fields).toString();
-const keepPaper = ({ ref, path, name, bulletin, bytes }) => raw(`papers/file?${query({ ref, path, name, kind: bulletin ? 'bulletin' : 'paper' })}`, bytes);
+const keepPaper = ({ source, ref, path, name, bulletin, bytes }) => raw(`papers/file?${query({ source: source || 'philgeps', ref, path, name, kind: bulletin ? 'bulletin' : 'paper' })}`, bytes);
 const paper = (ref, path) => raw(`papers/file?${query({ ref, path })}`);
 
 // The robot's log-ins to a portal, kept by the CRM across runs: the last day's (for the guard's counts),
@@ -136,4 +136,14 @@ const logins = (site, since) => call(`logins?${query({ site, ...(since ? { since
 const login = (row) => call('logins', { site: row.site, outcome: row.outcome, detail: row.detail || null, source: row.source || null });
 const loginState = () => call('login-state');
 
-module.exports = { molecules, known, send, run, products, papers, keepPaper, paper, logins, login, loginState };
+// ---- the bidding team's own system handing over (feed/feed.mjs) ----
+
+// Since when it has handed over ({ since: ISO | null }), and what it screened: [{ source, ref, by, at }]
+const feedState = () => call('feed-state');
+async function screened(marks) {
+    let done = 0;
+    for (let i = 0; i < marks.length; i += 500) done += (await call('screened', { marks: marks.slice(i, i + 500) })).screened || 0;
+    return done;
+}
+
+module.exports = { molecules, known, send, run, products, papers, keepPaper, paper, logins, login, loginState, feedState, screened };

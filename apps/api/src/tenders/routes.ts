@@ -4,7 +4,7 @@ import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
 import { type Env, idParam, readBody } from "../http";
-import { foundCount, foundDetail, listFound, makeTender, noteRun, robotKnown, robotMolecules, screenFound, takeFound } from "./finder";
+import { feedSince, foundCount, foundDetail, listFound, makeTender, noteRun, robotKnown, robotMolecules, screenFound, takeFound, takeScreened } from "./finder";
 import { foundFile, keepPaper, noteRobotLogin, paperForRobot, papersWanted, robotLoginState, robotLogins, robotProducts, tryLoginAgain } from "./papers";
 import { robotCaller } from "./robot-caller";
 import {
@@ -234,7 +234,7 @@ export function tenderFinderDoor(app: Hono<Env>, db: Database): void {
     const name = (c.req.query("name") ?? "").trim();
     if (!ref || !path || !name || ref.length > 60 || path.length > 400) return c.json({ error: { code: "invalid", message: "Say the notice, the file's path and its name." } }, 400);
     const bytes = new Uint8Array(await c.req.arrayBuffer());
-    return c.json(await keepPaper(db, { ref, path, name, bulletin: c.req.query("kind") === "bulletin", bytes }));
+    return c.json(await keepPaper(db, { source: c.req.query("source") === "ps" ? "ps" : "philgeps", ref, path, name, bulletin: c.req.query("kind") === "bulletin", bytes }));
   });
   app.get("/webhooks/tender-finder/papers/file", async (c) => {
     const bytes = await paperForRobot(db, (c.req.query("ref") ?? "").trim(), (c.req.query("path") ?? "").trim());
@@ -255,6 +255,16 @@ export function tenderFinderDoor(app: Hono<Env>, db: Database): void {
     );
     await noteRobotLogin(db, input);
     return c.json({ ok: true });
+  });
+  // The bidding team's own system hands over while it moves in (docs/PLAN.md 25): what it
+  // screened, and since when it has handed over.
+  app.get("/webhooks/tender-finder/feed-state", async (c) => c.json(await feedSince(db)));
+  app.post("/webhooks/tender-finder/screened", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({ marks: z.array(z.object({ source: SOURCE, ref: z.string().trim().min(1).max(60), by: z.string().max(200).nullish(), at: z.string().max(40).nullish() })).max(2000) }),
+    );
+    return c.json(await takeScreened(db, input.marks));
   });
   app.post("/webhooks/tender-finder/run", async (c) => {
     const input = await readBody(

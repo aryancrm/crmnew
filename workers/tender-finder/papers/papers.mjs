@@ -82,7 +82,9 @@ async function main() {
 
     // 1. Papers the CRM keeps that are not read yet (a scan left unfinished, a changed medicine list): no log-in
     let reread = 0;
-    for (const o of wanted.filter((one) => sync.needsReading(one, matcher.key))) {
+    // (only papers the CRM itself keeps: ones the bidding team's own system still holds are read there)
+    const kept = (o) => (o.details?.documents || []).filter((d) => d.path && !d.removed).every((d) => (o.kept || []).includes(d.path));
+    for (const o of wanted.filter((one) => kept(one) && sync.needsReading(one, matcher.key))) {
         say(`${o.ref_no}: reading its papers again`);
         const details = await read(supabase, matcher, o, o.details || {});
         await toCrm(o, details);

@@ -480,6 +480,32 @@ export async function noteRun(
   );
 }
 
+/** Notices screened in the bidding team's own system, screened here too (only ones not screened
+ *  here yet; taking one off there does not take it off here: a person of the CRM does that). */
+export async function takeScreened(db: Database, marks: { source: "philgeps" | "ps"; ref: string; by?: string | null; at?: string | null }[]): Promise<{ screened: number }> {
+  let screened = 0;
+  for (const mark of marks) {
+    const at = mark.at && !Number.isNaN(Date.parse(mark.at)) ? new Date(Date.parse(mark.at)).toISOString() : null;
+    const done = await rows<{ id: number }>(
+      db,
+      sql`update tender_found set screened_at = coalesce(${at}::timestamptz, now()), screened_as = ${short(mark.by, 80) ? `${short(mark.by, 80)} (in the bidding system)` : "In the bidding system"}
+        where source = ${mark.source} and ref_no = ${mark.ref} and screened_at is null returning id::int as id`,
+    );
+    screened += done.length;
+  }
+  return { screened };
+}
+
+/** When the bidding team's own system last handed its tenders over without a problem: the next
+ *  hand-over sends only what changed since. */
+export async function feedSince(db: Database): Promise<{ since: string | null }> {
+  const [last] = await rows<{ at: string }>(
+    db,
+    sql`select to_char(at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as at from tender_find_run where trigger = 'feed' and status = 'success' order by at desc limit 1`,
+  );
+  return { since: last?.at ?? null };
+}
+
 /** Our molecules for the robot, in the shape of its own list: [{ name, match: [spellings] }]. */
 export async function robotMolecules(db: Database): Promise<{ name: string; match: string[] }[]> {
   const names = new Map<string, string>();
@@ -514,7 +540,7 @@ async function mustFind(db: Database, me: Me): Promise<void> {
 const foundSelect = sql`select f.id::int as id, f.source, f.ref_no as "refNo", f.title, f.agency_name as agency, f.agency_id::int as "agencyId", c.name as customer,
     f.notice_type as "noticeType", f.procurement_mode as "procurementMode", f.abc::float8 as abc, to_char(f.published_on, 'YYYY-MM-DD') as "publishedOn",
     to_char(f.closing_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "closingAt", f.link, f.molecules,
-    to_char(f.first_seen_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "firstSeenAt", to_char(f.screened_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "screenedAt", p.name as "screenedBy",
+    to_char(f.first_seen_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "firstSeenAt", to_char(f.screened_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "screenedAt", coalesce(p.name, f.screened_as) as "screenedBy",
     f.tender_id::int as "tenderId", t.code as "tenderCode", (f.closing_at is null or f.closing_at >= now()) as open,
     (select count(*) from tender_found_line l where l.found_id = f.id and l.replaced_at is null)::int as lines
   from tender_found f left join customer c on c.id = f.agency_id left join person p on p.id = f.screened_by left join tender t on t.id = f.tender_id`;

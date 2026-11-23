@@ -88,6 +88,17 @@ jobs:
           if [ "$code" = "401" ]; then echo "Going on with the code the CRM runs now"; exit 0; fi
           echo "The CRM's door did not open"
           exit 1
+      # While the bidding team's own system moves into the CRM (docs/PLAN.md 25), what it holds is
+      # handed over every hour: its tenders on both portals, what it read in their papers, what the
+      # team screened there. It is only read. Two repository secrets say where it is
+      # (BIDDING_SUPABASE_URL) and let it be read (BIDDING_SUPABASE_KEY); with none set this step
+      # does nothing. A problem here never stops the CRM's own reading below.
+      - name: The bidding system's own tenders (handed over while it moves in)
+        continue-on-error: true
+        env:
+          BIDDING_SUPABASE_URL: ${{ secrets.BIDDING_SUPABASE_URL }}
+          BIDDING_SUPABASE_KEY: ${{ secrets.BIDDING_SUPABASE_KEY }}
+        run: node feed/feed.mjs
       # Started by hand or by a change to the robot: a look at the first page before the real run.
       - name: First page only, nothing sent
         if: github.event_name != 'schedule'

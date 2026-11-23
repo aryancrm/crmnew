@@ -40,7 +40,9 @@ export async function papersWanted(db: Database) {
     db,
     sql`select ref_no, title, agency_name as procuring_entity, to_char(published_on, 'YYYY-MM-DD') as publish_date,
         to_char(closing_at at time zone 'Asia/Manila', 'YYYY-MM-DD HH24:MI:SS') as closing_date, abc::float8 / 100 as abc_amount,
-        molecules as matched_molecules, items_text, details
+        molecules as matched_molecules, items_text, details,
+        -- The papers the CRM itself keeps (the robot reads again only what it can ask back).
+        coalesce((select array_agg(k.path) from tender_found_file k where k.found_id = tender_found.id), '{}') as kept
       from tender_found
       where source = 'philgeps' and screened_at is not null and (closing_at is null or closing_at >= now())
       order by closing_at nulls last, id
@@ -64,8 +66,8 @@ const MIME: Record<string, string> = {
 const mimeOf = (name: string) => MIME[(/\.[^.]+$/.exec(name)?.[0] ?? "").toLowerCase()] ?? "application/octet-stream";
 
 /** A paper the robot downloaded, kept on its notice. The same path again takes the earlier copy's place. */
-export async function keepPaper(db: Database, input: { ref: string; path: string; name: string; bulletin: boolean; bytes: Uint8Array }): Promise<{ id: number }> {
-  const [found] = await rows<{ id: number }>(db, sql`select id::int as id from tender_found where source = 'philgeps' and ref_no = ${input.ref}`);
+export async function keepPaper(db: Database, input: { source?: "philgeps" | "ps"; ref: string; path: string; name: string; bulletin: boolean; bytes: Uint8Array }): Promise<{ id: number }> {
+  const [found] = await rows<{ id: number }>(db, sql`select id::int as id from tender_found where source = ${input.source ?? "philgeps"} and ref_no = ${input.ref}`);
   if (!found) throw new Refusal(404, "not_found", "No such notice.");
   if (!input.bytes.byteLength) throw new Refusal(400, "invalid", "The file is empty.");
   const name = input.name.replace(/[\u0000-\u001f<>:"/\\|?*]/g, "_").trim().slice(0, 200) || "paper";

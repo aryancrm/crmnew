@@ -525,7 +525,8 @@ describe("the tender papers", () => {
 
   it("a paper is kept whole, shown on the notice to the seats that have the finder, and given back to the robot", async () => {
     const id = await idOf("12451017");
-    const bytes = new Uint8Array(3 * 1024 * 1024).map((_, n) => n % 251);
+    // Larger than any other webhook may be (2 MB), small enough to stay quick.
+    const bytes = new Uint8Array(2.2 * 1024 * 1024).map((_, n) => n % 251);
     const query = new URLSearchParams({ ref: "12451017", path: "12451017/Price Schedule.pdf", name: "Price Schedule.pdf", kind: "paper" });
     const kept = await door(`papers/file?${query}`, { method: "POST", body: bytes, headers: { "content-type": "application/octet-stream" } });
     expect(kept.status).toBe(200);
@@ -547,7 +548,7 @@ describe("the tender papers", () => {
     expect(opened.status).toBe(200);
     expect(opened.headers.get("content-type")).toBe("application/pdf");
     expect(opened.headers.get("content-disposition")).toContain("attachment");
-    expect(new Uint8Array(await opened.arrayBuffer())).toEqual(bytes);
+    expect(Buffer.from(await opened.arrayBuffer()).equals(Buffer.from(bytes))).toBe(true);
     expect((await get("ryan", `/api/tenders/found/files/${fileId}`)).status).toBe(403);
     expect((await app.request(`/api/tenders/found/files/${fileId}`)).status).toBe(401);
     const back = await door(`papers/file?${new URLSearchParams({ ref: "12451017", path: "12451017/Price Schedule.pdf" })}`);
@@ -619,5 +620,62 @@ describe("the tender papers", () => {
     expect(await state()).toMatchObject({ state: "ok", said: "A person said to try the log-in again." });
     expect(await (await door("login-state")).json()).toMatchObject({ state: "ok" });
     expect((await door("logins", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ site: "philgeps", outcome: "made-up" }) })).status).toBe(400);
+  });
+});
+
+describe("the bidding system hands over (the bridge)", () => {
+  it("a PS-PhilGEPS tender arrives with its lines and its papers' reading; what was screened there is screened here, once", async () => {
+    process.env.TENDER_FINDER_KEY = KEY;
+    expect(await (await robot("feed-state")).json()).toEqual({ since: null });
+    const ps = {
+      source: "ps",
+      ref_no: "152987",
+      title: "Procurement of Drugs and Medicines",
+      procuring_entity: "East Avenue Medical Center",
+      publish_date: "2026-11-23",
+      closing_date: "2099-11-26 09:00:00",
+      abc_amount: 1484125,
+      detail_link: "https://philgeps.gov.ph/tenders/viewBidNotice/152987",
+      items_text: "1 Letrozole 2.5 mg tablet 2500 Tablet 55,000.00",
+      details: {
+        procurement_mode: "Small Value Procurement",
+        bid_opening: "26-Nov-2099 09:00 AM",
+        matched_items: [{ line: "1 Letrozole 2.5 mg tablet 2500 Tablet 55,000.00", description: "Letrozole 2.5 mg tablet", quantity: 2500, unit: "Tablet", total: 55000 }],
+        documents: [{ name: "S20266637.pdf", size: 551936, path: "152987/S20266637.pdf", source: "notice" }],
+        documents_status: "downloaded",
+        documents_items: [{ our_products: ["Imatinib"], item_no: "4", description: "Imatinib 400 mg tablet", quantity: 900, unit: "Tablet", unit_price: 95, total: 85500 }],
+        documents_bid_data_sheet: { bid_security: "Bid Securing Declaration" },
+        documents_accuracy: { percent: 100 },
+      },
+    };
+    expect(await (await robot("notices", { notices: [ps] })).json()).toMatchObject({ fresh: 1, matched: 1 });
+    const id = (await rows<{ id: number }>(db, sql`select id::int as id from tender_found where source = 'ps' and ref_no = '152987'`))[0]?.id as number;
+    const detail = await one("hazel", id);
+    expect(detail.found).toMatchObject({ source: "ps", customer: "East Avenue Medical Center", abc: 148412500, closingAt: "2099-11-26T01:00:00Z", procurementMode: "Small Value Procurement" });
+    expect(detail.found.link).toBe("https://philgeps.gov.ph/tenders/viewBidNotice/152987");
+    expect(detail.mode).toBe("small_value");
+    expect(detail.lines.map((line) => [line.origin, line.medicine, line.qty, line.abcUnit])).toEqual([
+      ["papers", "Imatinib 400 mg", 900, 9500],
+      ["notice", "Letrozole 2.5 mg", 2500, 2200],
+    ]);
+    expect(detail.papers).toMatchObject({ status: "downloaded", sheet: [{ label: "Bid security", said: "Bid Securing Declaration" }] });
+    expect(detail.found.details.documents).toEqual(["S20266637.pdf"]);
+
+    // Screened there: screened here, by the name it has there; a second hand-over changes nothing,
+    // and one screened here by a person keeps that person.
+    const marks = { marks: [{ source: "ps", ref: "152987", by: "2mgincorporated", at: "2026-11-21T00:29:00Z" }, { source: "philgeps", ref: "12451017", by: "someone" }, { source: "ps", ref: "nowhere" }] };
+    expect(await (await robot("screened", marks)).json()).toEqual({ screened: 1 });
+    expect(await (await robot("screened", marks)).json()).toEqual({ screened: 0 });
+    expect((await one("hazel", id)).found).toMatchObject({ screenedBy: "2mgincorporated (in the bidding system)", screenedAt: "2026-11-21T00:29:00Z" });
+    expect((await one("hazel", await idOf("12451017"))).found.screenedBy).toBe("Hazel");
+    expect((await list("hazel", "?view=screened&source=ps")).rows.map((row) => row.refNo)).toContain("152987");
+    // The papers of the new portal are not for the CRM's own PhilGEPS log-in.
+    expect(((await (await app.request("/webhooks/tender-finder/papers", { headers: { authorization: `Bearer ${KEY}` } })).json()) as { ref_no: string }[]).map((one) => one.ref_no)).not.toContain("152987");
+
+    // After a hand-over that went well, the next one is told since when.
+    await robot("run", { source: "ps", trigger: "feed", status: "failed", summary: "The bidding system's database refused" });
+    expect(await (await robot("feed-state")).json()).toEqual({ since: null });
+    await robot("run", { source: "ps", trigger: "feed", status: "success", summary: "From the bidding system: 1 PhilGEPS and 1 PS-PhilGEPS tenders" });
+    expect(((await (await robot("feed-state")).json()) as { since: string }).since).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 });
