@@ -756,6 +756,18 @@ export async function payVendor(db: Database, me: Me, input: PaymentInput): Prom
     const used = applied.reduce((sum, entry) => sum + entry.amount, 0);
     if (used > input.amount) throw new Refusal(400, "invalid", "More is put on the bills than was paid.", "amount");
     const number = await nextNumber(tx, "vendor_payment", "", 0);
+    // A vendor billed in another currency is paid in it: the payment keeps the rate of the bill it
+    // pays (else the vendor's latest), so its peso worth is right in every report. It used to be
+    // kept at 1, which made a USD 2,520 payment read as ₱2,520 (found walking Books, 23 Nov).
+    const [rated] =
+      vendor.currency === "PHP"
+        ? []
+        : await rows<{ rate: number }>(
+            tx,
+            sql`select fx_rate::float8 as rate from book_doc
+              where supplier_id = ${vendor.id} and currency = ${vendor.currency} and kind in ('bill', 'purchase_order') and fx_rate > 0 and fx_rate <> 1
+              order by (id in (${bills.length ? sql.join(bills.map((bill) => sql`${bill.id}`), sql`, `) : sql`0`})) desc, doc_date desc, id desc limit 1`,
+          );
     const id = await insertDoc(tx, {
       kind: "vendor_payment",
       number,
@@ -763,6 +775,7 @@ export async function payVendor(db: Database, me: Me, input: PaymentInput): Prom
       date,
       status: "paid",
       vendor,
+      fxRate: rated?.rate ?? 1,
       total: input.amount,
       balance: input.amount - used,
       notes: input.notes,
