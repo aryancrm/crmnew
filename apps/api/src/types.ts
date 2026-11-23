@@ -607,7 +607,8 @@ export type CustomerDetail = {
   standing: {
     accreditation: { status: "applied" | "accredited" | "refused"; onDay: string; validUntil: string | null } | null;
     formulary: { approved: number; requested: number };
-    awards: { id: number; code: string; title: string; step: string; deliverBy: string | null }[];
+    /** `lines`: the bid, medicine by medicine (one piece's price in centavos, VAT in). */
+    awards: { id: number; code: string; title: string; step: string; deliverBy: string | null; lines: { medicineId: number; qty: number; unitPrice: number }[] }[];
     clidpRates: { medicineId: number; medicine: string; unitPrice: number; moq: number | null; agreedOn: string }[];
     listed: number;
   };

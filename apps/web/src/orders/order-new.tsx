@@ -1525,6 +1525,40 @@ export function OrderNew({
                   ))}
                 </select>
                 <span className={HELP}>Its tender won, with no order yet: the tender keeps this order as its delivery.</span>
+                {/* A tender's order is placed at the bid that won it (Aryan, 23 Nov): its medicines,
+                    pieces and prices in one press. Each line says it is the bid's price. */}
+                {(() => {
+                  const award = standing.awards.find((one) => one.id === tenderId);
+                  if (!award || award.lines.length === 0) return null;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLines(
+                          award.lines.flatMap((bid, at) => {
+                            const row = byId.get(bid.medicineId);
+                            const first = row ? pricesOf(row)[0] : undefined;
+                            if (!row || !first) return [];
+                            return [
+                              {
+                                key: at + 1,
+                                medicineId: bid.medicineId,
+                                priceKind: first.kind,
+                                qty: bid.qty,
+                                lower: bid.unitPrice !== first.amount,
+                                given: (bid.unitPrice / 100).toFixed(2),
+                                reason: `Bid price of ${award.code}`,
+                              },
+                            ];
+                          }),
+                        )
+                      }
+                      className="self-start rounded-[10px] border border-emerald-300 bg-emerald-50 px-3 py-2 text-[13px] font-semibold text-emerald-800 hover:bg-emerald-100"
+                    >
+                      Take the bid's {award.lines.length} {award.lines.length === 1 ? "medicine" : "medicines"} and prices
+                    </button>
+                  );
+                })()}
               </label>
             )}
             {standing && standing.clidpRates.length > 0 && (

@@ -406,8 +406,12 @@ async function standingOf(db: Database, id: number, kind: string): Promise<Custo
     ),
     rows<CustomerDetail["standing"]["awards"][number]>(
       db,
-      sql`select id::int as id, code, title, step, ${day("deliver_by")} as "deliverBy" from tender
-        where agency_id = ${id} and order_id is null and step in ('won', 'contract') order by noa_on desc nulls last, id desc`,
+      // With the bid's own lines: the award's order is placed at the prices that won it (Aryan, 23 Nov).
+      sql`select t.id::int as id, t.code, t.title, t.step, ${day("t.deliver_by")} as "deliverBy",
+          coalesce((select json_agg(json_build_object('medicineId', l.medicine_id::int, 'qty', l.qty::int, 'unitPrice', l.unit_price::int) order by l.id)
+            from tender_line l where l.tender_id = t.id), '[]'::json) as lines
+        from tender t
+        where t.agency_id = ${id} and t.order_id is null and t.step in ('won', 'contract') order by t.noa_on desc nulls last, t.id desc`,
     ),
     rows<CustomerDetail["standing"]["clidpRates"][number]>(
       db,
