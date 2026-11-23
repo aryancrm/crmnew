@@ -290,6 +290,37 @@ describe("the tender finder: the robot's door", () => {
     expect((await robot("notices", { notices: [] })).status).toBe(400);
   });
 
+  it("reads PhilGEPS's own line table: quantity, unit and the line's budget, and leaves the words above it out", async () => {
+    const itemsText = [
+      "Description",
+      "The City Government invites bids for the Supply and Delivery of Letrozole and other items; Imatinib included.",
+      "Line Items",
+      "Item No. Product/Service Name Description Quantity UOM Budget (PHP)",
+      "1 Letrozole 2.5 mg tablet 80000 Tablet 792,800.00",
+      "2 Albumin, Human 20%, 50ml. 4500 Vial 9,893,250.00",
+      "7 Imatinib (as mesilate) 400 mg film-coated tablet, in blister pack with certificate of analysis 1,500 Tablet 142,500.00",
+      "8 Capecitabine 500 mg tablet",
+      "9 Bortezomib 3.5 mg vial 1 Lot 950,000.00",
+    ].join("\n");
+    const notice = {
+      ref_no: "13000020",
+      title: "Supply and Delivery of Letrozole and other items",
+      closing_date: "2099-12-01 13:00:00",
+      items_text: itemsText,
+      // As the robot hands them in: every line naming a molecule of ours, the words above the table too, unread.
+      details: { matched_items: itemsText.split("\n").filter((line) => /letrozole|imatinib|capecitabine|bortezomib/i.test(line)).map((line) => ({ line, products: [] })) },
+    };
+    expect(await (await robot("notices", { notices: [notice] })).json()).toMatchObject({ fresh: 1, matched: 1 });
+    const read = await one("hazel", await idOf("13000020"));
+    expect(read.lines.map((line) => [line.itemNo, line.description, line.qty, line.unit, line.abcTotal, line.abcUnit, line.medicine])).toEqual([
+      ["1", "Letrozole 2.5 mg tablet", 80000, "Tablet", 79280000, 991, "Letrozole 2.5 mg"],
+      ["7", "Imatinib (as mesilate) 400 mg film-coated tablet, in blister pack with certificate of analysis", 1500, "Tablet", 14250000, 9500, "Imatinib 400 mg"],
+      // A row cut short keeps its words; a lot is one lot at its budget.
+      [null, "8 Capecitabine 500 mg tablet", null, null, null, null, "Capecitabine 500 mg"],
+      ["9", "Bortezomib 3.5 mg vial", 1, "Lot", 95000000, 95000000, "Bortezomib 3.5 mg"],
+    ]);
+  });
+
   it("keeps each run as the robot reports it", async () => {
     expect((await robot("run", { status: "failed", trigger: "schedule", summary: "The PhilGEPS website is down right now." })).status).toBe(200);
     const found = await list("jimmy");

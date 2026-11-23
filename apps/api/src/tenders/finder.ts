@@ -297,9 +297,48 @@ function keptDetails(details: Record<string, unknown>): Record<string, unknown> 
 
 type ReadLine = { origin: "notice" | "papers"; itemNo: string | null; description: string; qty: number | null; unit: string | null; abcUnit: number | null; abcTotal: number | null; match: LineMatch };
 
+/** PhilGEPS's own table on a notice page, under "Line Items":
+ *  Item No. | Product/Service Name | Description | Quantity | UOM | Budget (PHP), one row a line,
+ *  the budget being the whole line's: "14 Rocuronium Bromide 10mg/ml, 5ml injection 2500 Ampule 287,225.00". */
+const LINE_TABLE = /^Item No\.?\s+Product\/Service Name\s+Description\s+Quantity\s+UOM\s+Budget.*$/im;
+const TABLE_ROW = /^(\d+)[.)]?\s+(.+?)\s+([\d,]+(?:\.\d+)?)\s+([A-Za-z][A-Za-z.'’/-]*)\s+([\d,]+\.\d{2})$/;
+const amount = (text: string) => Number(text.replace(/,/g, ""));
+
+/** The rows of that table that name a molecule of ours, each with its quantity, unit and budget
+ *  (the budget for one piece worked out); null when the notice has no such table. What stands
+ *  above the table is the notice's own words about the tender, not lines. */
+function tableLines(itemsText: string | null | undefined, match: (text: string) => LineMatch): ReadLine[] | null {
+  const text = String(itemsText ?? "");
+  const head = LINE_TABLE.exec(text);
+  if (!head) return null;
+  const lines: ReadLine[] = [];
+  for (const raw of text.slice(head.index + head[0].length).split("\n")) {
+    const line = raw.replace(/\s+/g, " ").trim();
+    if (line.length < 3) continue;
+    const hit = match(line);
+    if (!hit.molecules.length) continue;
+    const row = TABLE_ROW.exec(line);
+    const qty = row ? amount(row[3] as string) : null;
+    const abcTotal = row ? centavos(amount(row[5] as string)) : null;
+    lines.push({
+      origin: "notice",
+      itemNo: row ? (row[1] as string) : null,
+      description: (row ? (row[2] as string) : line).slice(0, 500),
+      qty: qty !== null && qty > 0 && qty < 1e9 ? qty : null,
+      unit: row ? (row[4] as string).slice(0, 30) : null,
+      abcUnit: qty && abcTotal !== null ? Math.round(abcTotal / qty) : null,
+      abcTotal,
+      match: hit,
+    });
+    if (lines.length >= 400) break;
+  }
+  return lines;
+}
+
 /** The lines a notice asks for: those read in its papers (with a quantity) first, then the
- *  notice's own lines for the molecules the papers give no line for; with neither, each line of
- *  the notice's text that names a molecule of ours. */
+ *  notice's own lines for the molecules the papers give no line for (PhilGEPS's own line table
+ *  when the notice has one, else the lines the robot kept); with neither, each line of the
+ *  notice's text that names a molecule of ours. */
 function linesOf(notice: RobotNotice, match: (text: string) => LineMatch): ReadLine[] {
   const details = notice.details ?? {};
   const read = (item: RobotItem, origin: "notice" | "papers"): ReadLine | null => {
@@ -316,11 +355,11 @@ function linesOf(notice: RobotNotice, match: (text: string) => LineMatch): ReadL
   const list = (value: unknown) => (Array.isArray(value) ? (value as RobotItem[]).slice(0, 400) : []);
   const papers = list(details.documents_items).map((item) => read(item, "papers")).filter((line): line is ReadLine => line !== null && line.qty !== null);
   const inPapers = new Set(papers.flatMap((line) => line.match.molecules));
-  const onNotice = list(details.matched_items)
-    .map((item) => read(item, "notice"))
+  const table = tableLines(notice.items_text, match);
+  const onNotice = (table ?? list(details.matched_items).map((item) => read(item, "notice")))
     .filter((line): line is ReadLine => line !== null && !(line.match.molecules.length > 0 && line.match.molecules.every((name) => inPapers.has(name))));
   const lines = [...papers, ...onNotice];
-  if (lines.length) return lines.slice(0, 400);
+  if (lines.length || table) return lines.slice(0, 400);
   return String(notice.items_text ?? "")
     .split("\n")
     .map((line) => line.replace(/\s+/g, " ").trim())

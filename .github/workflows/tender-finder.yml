@@ -18,6 +18,8 @@ on:
     paths:
       - "workers/tender-finder/**"
       - ".github/workflows/tender-finder.yml"
+      # How the CRM reads what the robot hands in: after a change the notices are read again.
+      - "apps/api/src/tenders/finder.ts"
 
 concurrency:
   group: tender-finder
@@ -56,15 +58,21 @@ jobs:
         run: echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
       - name: The readings still read right
         run: npm test
-      # A deploy of the CRM restarts its server for a minute or two; 401 = the door is there.
+      # A deploy of the CRM restarts its server for a minute or two; 401 = the door is there. A run
+      # set off by a change (to the robot, or to how the CRM reads what it hands in) also waits
+      # until the CRM runs that very change (its health answer names its commit), ten minutes at most.
       - name: Wait for the CRM's door
+        env:
+          WANTED: ${{ github.event_name == 'push' && github.sha || '' }}
         run: |
           for try in $(seq 1 60); do
             code=$(curl -s -o /dev/null -m 60 -w "%{http_code}" "$CRM_URL/webhooks/tender-finder/molecules" || true)
-            if [ "$code" = "401" ]; then exit 0; fi
-            echo "The door answers $code; trying again in 10 s"
+            running=$(curl -s -m 60 "$CRM_URL/api/health" | sed -n 's/.*"commit":"\([0-9a-f]*\)".*/\1/p' || true)
+            if [ "$code" = "401" ] && { [ -z "$WANTED" ] || [ "$running" = "$WANTED" ]; }; then exit 0; fi
+            echo "The door answers $code, the CRM runs ${running:-an unnamed commit}; trying again in 10 s"
             sleep 10
           done
+          if [ "$code" = "401" ]; then echo "Going on with the code the CRM runs now"; exit 0; fi
           echo "The CRM's door did not open"
           exit 1
       # Started by hand or by a change to the robot: a look at the first page before the real run.

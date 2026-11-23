@@ -169,7 +169,10 @@ export function createApp(db: Database, options: AppOptions) {
     }),
   );
 
-  app.get("/api/health", (c) => c.json({ ok: true }));
+  // Which code is running, where the host says (Render and Coolify name the commit they built):
+  // the tender finder's workflow waits for its own commit before a run that follows a change.
+  const commit = (process.env.RENDER_GIT_COMMIT || process.env.SOURCE_COMMIT || "").slice(0, 40) || null;
+  app.get("/api/health", (c) => c.json({ ok: true, commit }));
   // Management's and Finance's waiting orders, each given to one of the desk's people: after
   // anything that may have moved an order, the new ones are shared out; the team on the screen.
   app.use("/api/*", async (c, next) => {
