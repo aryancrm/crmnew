@@ -144,7 +144,7 @@ export function MrVisitsPage() {
           )}
         </div>
       )}
-      {adding && <AddVisitsDialog day={data.day && data.day >= data.today ? data.day : data.today} kind={kind} onClose={() => setAdding(false)} onTheDay />}
+      {adding && <AddVisitsDialog day={data.day && data.day >= data.today ? data.day : data.today} kind={params.get("kind") ? kind : undefined} onClose={() => setAdding(false)} />}
     </div>
   );
 }

@@ -4,7 +4,7 @@
 import type { ClientCard, MrMe, VisitCard, VisitState } from "@2mg/api/mr";
 import { STATE_WORDS, stateOf } from "@2mg/api/mr";
 import { useQuery } from "@tanstack/react-query";
-import { MapPin } from "lucide-react";
+import { Check, MapPin } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
@@ -198,5 +198,20 @@ export function Row({ to, children }: { to: string; children: ReactNode }) {
     <Link to={to} className="block rounded-2xl border border-slate-200 bg-white p-3.5 shadow-2xs hover:border-sky-300">
       {children}
     </Link>
+  );
+}
+
+/** One question of a form asked in order: its number (a tick once answered) and the words. */
+export function Ask({ n, text, done, children }: { n: number; text: string; done?: boolean; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-2">
+      <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+        <span className={`grid size-6 shrink-0 place-items-center rounded-full text-xs text-white ${done ? "bg-emerald-600" : "bg-sky-600"}`}>
+          {done ? <Check size={13} /> : n}
+        </span>
+        {text}
+      </h3>
+      {children}
+    </section>
   );
 }

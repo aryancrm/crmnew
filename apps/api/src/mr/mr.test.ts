@@ -28,6 +28,7 @@ import type {
   VisitList,
   VisitPage,
 } from "./words";
+import { townKey } from "./words";
 
 const PASSWORD = "test-password-1";
 let db: Database;
@@ -167,6 +168,14 @@ describe("the MedRep's day", () => {
     expect(home.day?.workType).toBe("hq");
     expect(home.counts.planned).toBe(4);
     expect(home.tiles.doctors).toBe(2);
+    // My day lists today's visits of every kind together (where are you going now?).
+    expect(home.visits.map((one) => one.id).sort()).toEqual(Object.values(visits).sort());
+    // The day's town comes from the country's list: "Makati City", "City of Makati" and "Makati" are one town.
+    expect(townKey("City of Makati")).toBe(townKey("Makati City"));
+    expect(townKey("San Jose, Batangas")).toBe("san jose");
+    const [where] = await rows<{ city: string }>(db, sql`select city from customer where id = ${customers.hospital}`);
+    const inTown = await read<{ id: number }[]>("ryan", `/api/mr/clients/pick?kind=hospital&cities=${encodeURIComponent(`City of ${(where?.city ?? "").replace(/ City$/, "")}`)}`);
+    expect(inTown.map((one) => one.id)).toContain(customers.hospital);
     const [attendance] = await rows<{ n: number }>(
       db,
       sql`select count(*)::int as n from attendance where person_id = ${ids.ryan} and day = ${today()}::date and time_in is not null`,

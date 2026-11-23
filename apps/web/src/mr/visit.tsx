@@ -161,7 +161,7 @@ function WorkTheCall({ data }: { data: VisitPage }) {
     });
   return (
     <>
-      <Step n={1} title="Select call objective" done={saved}>
+      <Step n={1} title="What is this call for? (call objective)" done={saved}>
         <div className="flex flex-col gap-3">
           <Choices
             options={OBJECTIVES.map((key) => ({ key, label: OBJECTIVE_WORDS[key] }))}
@@ -344,11 +344,13 @@ function CallForm({ data, objectives, objectiveNote }: { data: VisitPage; object
       };
       await api(`/api/mr/visits/${v.id}/close`, { body });
       await queries.invalidateQueries({ queryKey: ["mr"] });
+      // Back to My day, which asks the next thing: where are you going next (Aryan, 23 Nov).
+      navigate("/field");
     });
   const isMet = meeting === "met";
   return (
     <>
-      <Step n={3} title="The call">
+      <Step n={3} title="What happened? (the call)">
         <div className="flex flex-col gap-4">
           <Label text="Did you meet them? *" error={action.at("meeting")}>
             <Choices options={MEETINGS.map((key) => ({ key, label: MEETING_WORDS[key] }))} value={meeting ? [meeting] : []} onChange={(next) => setMeeting(next[0] ?? null)} />
@@ -493,7 +495,7 @@ function CallForm({ data, objectives, objectiveNote }: { data: VisitPage; object
         </div>
       </Step>
 
-      <Step n={4} title="Business" done={data.placed.some((one) => one.status !== "cancelled")}>
+      <Step n={4} title="Any order? (business)" done={data.placed.some((one) => one.status !== "cancelled")}>
         <div className="flex flex-col gap-4">
           <PlacedOrders orders={data.placed} />
           {data.can.book && (

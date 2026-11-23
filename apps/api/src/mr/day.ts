@@ -225,7 +225,7 @@ export async function mrHome(db: Database, me: Me): Promise<MrHome> {
   const today = todayManila();
   const work = (access === "mr" || access === "lead") && !me.viewedBy;
   const mine = myCustomers(me.id, today);
-  const [state, counted, next, tiles, planned, cities, partners] = await Promise.all([
+  const [state, counted, next, visits, tiles, planned, cities, partners] = await Promise.all([
     dayState(db, me.id, today),
     rows<MrHome["counts"]>(
       db,
@@ -246,6 +246,11 @@ export async function mrHome(db: Database, me: Me): Promise<MrHome> {
       db,
       sql`select ${cardColumns} ${cardFrom} where v.person_id = ${me.id} and v.day = ${today}::date and v.status = 'planned'
         order by v.checked_in_at is null, v.priority nulls last, v.id limit 1`,
+    ),
+    rows<CardSql>(
+      db,
+      sql`select ${cardColumns} ${cardFrom} where v.person_id = ${me.id} and v.day = ${today}::date
+        order by v.status <> 'planned', v.checked_in_at is null, v.priority nulls last, v.done_at, v.id limit 80`,
     ),
     rows<MrHome["tiles"]>(
       db,
@@ -289,6 +294,7 @@ export async function mrHome(db: Database, me: Me): Promise<MrHome> {
     partners,
     counts: counted[0] ?? { planned: 0, open: 0, done: 0, skipped: 0, missed: 0, met: 0, productive: 0, booked: 0, bookedAmount: 0 },
     next: next[0] ? toCard(next[0]) : null,
+    visits: visits.map(toCard),
     tiles: tiles[0] ?? { doctors: 0, hospitals: 0, firms: 0, followUpsDue: 0, claimed: 0 },
     can: { work },
   };

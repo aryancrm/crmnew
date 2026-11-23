@@ -2130,6 +2130,18 @@ booking are gone.
   signed acknowledgement); the tour plan is the CRM's month plan (`visit_plan`) with days, cities,
   revisions and deviations; expenses are the CRM's field expense lines with SEFMED's heads and the
   day's per diem and TA; *Start working* starts the CRM's attendance day and the day report ends it.
+- **My day asks in order, in one place (23 Nov).** 1 *Start working*: "Where do you work today?"
+  (the work place in plain words, SEFMED's name under it), then "Which town or city?", picked from
+  every city and municipality of the Philippines (1,634, with the province; `public/places/ph-towns.json`
+  from the PSGC; the towns of the rep's own customers and the tour plan's first; a place not on the
+  list is kept as typed), then who works along. Nothing is picked beforehand unless the tour plan
+  said it. 2 *Where are you going now?*: today's visits of every kind in one list; a tap opens the
+  visit (what is the call for → I'm here → what happened → any order → close), *Someone not on this
+  list* adds one and opens it; a closed call comes back to My day, which asks *Where are you going
+  next?* and lists what is done. 3 *Stop working* (the day report). Add a visit asks when, whom
+  (search by name, the town only narrows the list) and, when the rule asks, why. A tour plan's day
+  is one sheet: where, whom, Add visits; three lines over the calendar say how it goes and how many
+  working days are filled.
 - **The company tree is the hierarchy.** A MedRep works their own day; their team lead (whom they
   report to) sees the team, gets the tour plans, changes, expenses, day reports and *not sure yet*
   calls, and decides them; the head above sees everything under them and may stand in; the CEO reads
@@ -3579,3 +3591,4 @@ lowest, each division's average; Scorecards opens every card.
   (4) The stock report says who each batch was **bought from** (on screen and in the Excel file):
   362 of 521 batch rows on the real copy. (5) A medicine's page lists the **orders holding** its
   promised pieces (Zoho's Committed Stock Details), for the desks that see every order.
+- 23 Nov, Aryan: "the MedRep's Log a call → Start working isn't made well; it should go in order in one place: the day starts, then where are you visiting, what did you do; the location comes ready-made and typed, put the Philippines' places; in Today's calls → Add visit I don't know what to do; the Tour plan isn't understandable." **My day asks in order** (section 22). The pages stay (My day, the visit, the tour plan); what changed is how they ask. *Start working* asks the work place in plain words, then the town from the country's own list (1,634 cities and municipalities with their province, read from the PSGC through psgc.gitlab.io; "Makati", "Makati City" and "City of Makati" are one town when customers are matched to it), then who works along; nothing is pre-picked unless the tour plan said it. Once started, My day shows the three steps (Started · Visits n/m · Report) and one card: *Where are you going now?* with today's visits of every kind, *Someone not on this list* (added and opened straight away), the call being worked (*You are here since… Say what happened and close the call*), *Done today*, and *Stop working*. Closing a call returns to My day. The circle, once started, opens three choices (working somewhere else now, take a break, stop for today). *Add a visit* asks When (Today, Tomorrow, another day), Whom (it opens on the kind the rep has most of) and Why with one-tap reasons, only when the rule asks. The tour plan's day opens one sheet (where, whom, Add visits) instead of seven choices, with three lines over the calendar and "n of m working days filled"; the button reads *Send the month to my team lead*. No rule changed: the same starts, visits, reasons and approvals in the API (the home also returns today's visits). Checked: field tests (28), the whole API suite, both type-checks, and by hand on a demo copy as a Hospital MedRep on a phone-sized screen (start → pick a hospital → I'm here → close → next → tour plan day). Local, not pushed.
