@@ -54,5 +54,6 @@ npm test                             # the line and date readings (no browser, n
 
 ## State (23 Nov 2026)
 
-`--from-file` was run against a local CRM and the notices arrived. The first browser run is the
-workflow's own, on GitHub, watched from its log (see docs/PLAN.md, change log 174).
+Live. The first real run was the workflow's own, on GitHub (docs/PLAN.md, change log 175): 93
+open tenders read from PhilGEPS and kept in the CRM, 21 of them asking for our medicines, in 80
+seconds. `--from-file` was run against a local CRM before that.
