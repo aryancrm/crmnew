@@ -8,6 +8,8 @@ import { Check, MapPin } from "lucide-react";
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { useMe } from "../auth";
+import { allItems, spaceFor } from "../menus";
 import { Dialog } from "../ui";
 
 export { FIELD } from "../org/dialogs";
@@ -55,6 +57,18 @@ export const distanceWords = (metres: number) => (metres >= 1000 ? `${(metres / 
 /** How the app stands for this person: MR, team lead, a viewer (CEO, Admin), or not in it. */
 export function useMrMe() {
   return useQuery({ queryKey: ["mr", "me"], queryFn: () => api<MrMe>("/api/mr/me"), staleTime: 60_000 });
+}
+
+/** A MedRep whose own menu has My day (Hospital, Rx, PAP…; not TeleSales, B2B, Bidding or the
+ *  Online office): their working day is the field day, started with Start working. */
+export function useFieldRep(): boolean {
+  const me = useMe().data;
+  const mr = useMrMe();
+  return (
+    mr.data?.access === "mr" &&
+    Boolean(me) &&
+    spaceFor(me as NonNullable<typeof me>, "/").groups.some((group) => allItems(group.items).some((item) => item.to === "/field"))
+  );
 }
 
 const STATE_TONE: Record<VisitState, string> = {

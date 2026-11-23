@@ -251,6 +251,18 @@ export function Order() {
     else {
       await queries.invalidateQueries({ queryKey: ["orders"] });
       await queries.invalidateQueries({ queryKey: ["dispatch"] });
+      // On to the next check still waiting, so the page shows what to read next (Aryan, 23 Nov).
+      const next = CHECK_KEYS.find((other) => other !== key && !fine(other));
+      if (done && next)
+        setParams(
+          (now) => {
+            const out = new URLSearchParams(now);
+            out.set("step", "management");
+            out.set("check", next);
+            return out;
+          },
+          { replace: true },
+        );
     }
   }
   async function undoApproval() {

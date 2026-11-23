@@ -295,8 +295,10 @@ function CallForm({ data, objectives, objectiveNote }: { data: VisitPage; object
   );
   const [call, setCall] = useState<CallDetails>(kept.call ?? {});
   const [met, setMet] = useState(kept.met ?? "");
-  const [nature, setNature] = useState<Nature | null>(kept.nature ?? null);
-  const [outcome, setOutcome] = useState<Outcome | null>(kept.outcome ?? null);
+  // An order placed at this visit is business generated: picked already, the MR can change it.
+  const ordered = data.placed.some((one) => one.status !== "cancelled");
+  const [nature, setNature] = useState<Nature | null>(kept.nature ?? (ordered ? "business" : null));
+  const [outcome, setOutcome] = useState<Outcome | null>(kept.outcome ?? (ordered ? "business" : null));
   const [productive, setProductive] = useState<Productive | null>(kept.productive ?? null);
   const [chance, setChance] = useState(kept.chance ?? "");
   const [chanceOn, setChanceOn] = useState(kept.chanceOn ?? "");

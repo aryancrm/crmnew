@@ -9,9 +9,8 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
-import { allItems, spaceFor } from "../menus";
 import { StartWorkingDialog } from "../mr/home";
-import { useMrMe } from "../mr/parts";
+import { useFieldRep, useMrMe } from "../mr/parts";
 import { Donut } from "../team/charts";
 import { GlanceCard, useSeeAll } from "../team/glance";
 import { Problem, useAction } from "../ui";
@@ -75,10 +74,7 @@ export function MyDayButton() {
   const mr = useMrMe();
   // Only a MedRep whose own menu has My day (Hospital, Rx, PAP…; not TeleSales, B2B, Bidding or
   // the Online office): the others' Start stays attendance alone.
-  const fieldRep =
-    mr.data?.access === "mr" &&
-    Boolean(me) &&
-    spaceFor(me as NonNullable<typeof me>, "/").groups.some((group) => allItems(group.items).some((item) => item.to === "/field"));
+  const fieldRep = useFieldRep();
   const fieldDay = useQuery({
     queryKey: ["mr", "home"],
     queryFn: () => api<MrHome>("/api/mr/home"),
@@ -110,8 +106,12 @@ export function MyDayButton() {
       setOpen(false);
     });
 
+  // A field rep who has signed in but not started the field day (Aryan, 23 Nov: "where does the day
+  // start?"): signing in marks attendance by itself, so the button would read "In since" before any
+  // work. Until Start working is pressed it stays Start, the same one as on Home and My day.
+  const fieldWaiting = fieldRep && fieldDay.isSuccess && !fieldDay.data.day;
   // Not started (a rest day, before work, or never signed in today): one button.
-  if (!day.timeIn)
+  if (!day.timeIn || fieldWaiting)
     return looking ? null : (
       <>
         <button
@@ -121,7 +121,7 @@ export function MyDayButton() {
           title={action.problem?.message ?? "Start your working day"}
           className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-xs font-semibold text-white hover:bg-brand-dark sm:px-3"
         >
-          <LogIn size={14} aria-hidden="true" /> Start<span className="hidden sm:inline"> my day</span>
+          <LogIn size={14} aria-hidden="true" /> Start<span className="hidden sm:inline">{fieldRep ? " working" : " my day"}</span>
         </button>
         {starting && <StartWorkingDialog onClose={() => setStarting(false)} />}
       </>
@@ -146,7 +146,7 @@ export function MyDayButton() {
         {day.working ? (
           <>
             <span className="hidden sm:inline">In since </span>
-            {clock(day.timeIn)}
+            {clock(fieldRunning && fieldDay.data?.day ? fieldDay.data.day.startedAt : day.timeIn)}
           </>
         ) : (
           `Done · ${hours(day.workedMinutes)}`

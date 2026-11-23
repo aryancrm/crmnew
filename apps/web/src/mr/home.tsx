@@ -167,6 +167,67 @@ function Tile({ to, icon: Icon, label, tone, sub }: { to: string; icon: typeof U
   );
 }
 
+/** The day on the seller's Home (Aryan, 23 Nov: "after signing in I can't tell where the day
+ *  starts"): where the day stands and the one thing to do next, the same as My day says it. */
+export function MyDayCard() {
+  const query = useQuery({ queryKey: ["mr", "home"], queryFn: () => api<MrHome>("/api/mr/home") });
+  const [starting, setStarting] = useState(false);
+  const data = query.data;
+  if (!data || !data.can.work) return null;
+  const day = data.day;
+  const at = data.visits.find((one) => one.status === "planned" && one.checkedInAt);
+  const open = data.visits.filter((one) => one.status === "planned" && !one.checkedInAt);
+  const over = data.visits.filter((one) => one.status !== "planned");
+  const go = "inline-flex h-11 w-full items-center justify-center gap-2 rounded-[10px] bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-dark sm:w-auto";
+  let line: ReactNode;
+  let next: ReactNode;
+  if (!day) {
+    line = (
+      <>
+        <b className="text-slate-900">Your day hasn't started.</b>{" "}
+        {data.visits.length ? `${data.visits.length} visit${data.visits.length === 1 ? "" : "s"} planned for today.` : "Start, then pick whom you are going to see."}
+      </>
+    );
+    next = (
+      <button type="button" className={go} onClick={() => setStarting(true)}>
+        <MapPin size={16} /> Start working
+      </button>
+    );
+  } else if (day.endedAt) {
+    line = <><b className="text-slate-900">Day closed {clockOf(day.endedAt)}.</b> {over.length} visit{over.length === 1 ? "" : "s"} done, the day report is sent.</>;
+    next = <Link to="/field/day-report" className="text-sm font-semibold text-sky-700 hover:underline">See the day report</Link>;
+  } else if (day.onBreak) {
+    line = <><b className="text-slate-900">On a break since {clockOf(day.breakSince)}.</b></>;
+    next = <Link to="/field" className={go}>Back to work <ChevronRight size={16} /></Link>;
+  } else if (at) {
+    line = <><b className="text-slate-900">You are at {at.client.name}</b> since {clockOf(at.checkedInAt)}.</>;
+    next = <Link to={`/visits/${at.id}`} className={go}>Say what happened and close the call <ChevronRight size={16} /></Link>;
+  } else if (open.length) {
+    line = <><b className="text-slate-900">Where are you going now?</b> {open.length} visit{open.length === 1 ? "" : "s"} left today, next {open[0]?.client.name}.</>;
+    next = <Link to="/field" className={go}>Open my day <ChevronRight size={16} /></Link>;
+  } else if (over.length) {
+    line = <><b className="text-slate-900">Today's visits are done</b> ({over.length}). One more visit, or stop working and send the day report.</>;
+    next = <Link to="/field" className={go}>Open my day <ChevronRight size={16} /></Link>;
+  } else {
+    line = <><b className="text-slate-900">Working since {clockOf(day.startedAt)}{day.cities.length ? ` in ${day.cities.join(", ")}` : ""}.</b> Nothing is planned for today yet.</>;
+    next = <Link to="/field" className={go}>Pick whom to visit <ChevronRight size={16} /></Link>;
+  }
+  return (
+    <section className={`${CARD} flex flex-col gap-3 border-sky-200 p-4`}>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-bold text-slate-900">My day</h2>
+        <Link to="/field" className="text-xs font-semibold text-sky-700 hover:underline">Open</Link>
+      </div>
+      <Steps data={data} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-slate-600">{line}</p>
+        <div className="shrink-0">{next}</div>
+      </div>
+      {starting && <PlaceDialog home={data} mode="start" onClose={() => setStarting(false)} />}
+    </section>
+  );
+}
+
 /** SEFMED's circle: Start working, or since when, where, and Stop working. */
 function Circle({ data, onStart, onEdit }: { data: MrHome; onStart: () => void; onEdit: () => void }) {
   const queries = useQueryClient();

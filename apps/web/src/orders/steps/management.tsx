@@ -102,7 +102,9 @@ export function checkStates(data: OrderDetail): Record<CheckKey, { ok: boolean; 
       ? "Patient"
       : order.licenceExpires
         ? `Licence till ${dayLabel(order.licenceExpires)}`
-        : "Licence on file";
+        : order.licenceNo
+          ? "Licence on file"
+          : "No licence on file";
   return {
     price: state(
       ["price", "note"],
