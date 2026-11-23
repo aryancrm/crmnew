@@ -4,7 +4,8 @@ import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
 import { type Env, idParam, readBody } from "../http";
-import { foundCount, foundDetail, listFound, makeTender, noteRun, robotKey, robotKnown, robotMolecules, screenFound, takeFound } from "./finder";
+import { foundCount, foundDetail, listFound, makeTender, noteRun, robotKnown, robotMolecules, screenFound, takeFound } from "./finder";
+import { robotCaller } from "./robot-caller";
 import {
   addCompanyPaper,
   bidReport,
@@ -165,14 +166,15 @@ export function tenderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
 }
 
 /** The robot's own door (docs/PLAN.md 24): the tender finder's worker is no person, so it has no
- *  sign-in; it shows its key (TENDER_FINDER_KEY) on every call. It may ask which molecules are
- *  ours and which notices are already read, and hand in what it found and how its run went.
- *  Nothing else of the CRM opens with that key. */
+ *  sign-in; on every call it shows who it is (tenders/robot-caller.ts: this repository's own
+ *  GitHub workflow, by GitHub's signature, or the key TENDER_FINDER_KEY). It may ask which
+ *  molecules are ours and which notices are already read, and hand in what it found and how its
+ *  run went. Nothing else of the CRM opens that way. */
 export function tenderFinderDoor(app: Hono<Env>, db: Database): void {
   app.use("/webhooks/tender-finder/*", async (c, next) => {
-    const key = robotKey(c.req.header("authorization"));
-    if (key === "off") return c.json({ error: { code: "not_set_up", message: "The tender finder's key is not set on this server." } }, 503);
-    if (key === "no") return c.json({ error: { code: "not_allowed", message: "Wrong key." } }, 401);
+    const caller = await robotCaller(c.req.header("authorization"));
+    if (caller === "off") return c.json({ error: { code: "not_set_up", message: "The tender finder's robot has no way in on this server." } }, 503);
+    if (caller === "no") return c.json({ error: { code: "not_allowed", message: "Not the tender finder's robot." } }, 401);
     await next();
   });
   const SOURCE = z.enum(["philgeps", "ps"]);

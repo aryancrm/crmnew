@@ -1,3 +1,4 @@
+import { createSign, generateKeyPairSync } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../app";
@@ -9,6 +10,7 @@ import { seedDemo } from "../seed";
 import { seedHospitalBoxes } from "../sellers/seed";
 import type { FoundDetail, FoundList, Tender } from "../types";
 import { agencyKey, agencyMatcher, dayIn, medicineMatcher, modeOf, moleculeName, strengthsOf } from "./finder";
+import { ROBOT_AUDIENCE, useGithubKeys } from "./robot-caller";
 import { seedBidding, seedFound } from "./seed";
 
 const PASSWORD = "test-password-1";
@@ -51,6 +53,7 @@ beforeAll(async () => {
 });
 afterAll(() => {
   delete process.env.TENDER_FINDER_KEY;
+  delete process.env.TENDER_FINDER_GITHUB;
 });
 
 describe("the tender finder: matching", () => {
@@ -111,6 +114,22 @@ describe("the tender finder: matching", () => {
     // A combination is the combination, not also its part; the part alone is the part.
     expect(match("Sitagliptin 50mg + Metformin 500mg tab")).toMatchObject({ molecules: ["Sitagliptin + Metformin"], medicineId: 4 });
     expect(match("Metformin 500 mg tablet")).toMatchObject({ molecules: ["Metformin"], medicineId: 5 });
+    // Ours are kept as the concentration and the vial ("10mg/ml (50 mg/5 ml)"): the vial's amount
+    // on the line is ours; the concentration alone settles it only when we keep one such medicine;
+    // two brands of one strength are left to the person.
+    const vials = medicineMatcher([
+      { id: 11, name: "RocuGet", generic: "Rocuronium", strength: "10mg/ml (50 mg/5 ml)" },
+      { id: 12, name: "DexmidoGet", generic: "Dexmedetomidine", strength: "100 mcg/1 ml" },
+      { id: 13, name: "DexmidoGet", generic: "Dexmedetomidine (As Hydrochloride)", strength: "200 mcg/2 ml" },
+      { id: 14, name: "Kontra", generic: "Sugammadex", strength: "100 mg/ml (200 mg/2 ml)" },
+      { id: 15, name: "SugamaGet 200", generic: "Sugammadex", strength: "100 mg/ml (200 mg/2 ml)" },
+    ]);
+    expect(vials("Rocuronium bromide 50mg/5ml vial")).toMatchObject({ molecules: ["Rocuronium"], medicineId: 11 });
+    expect(vials("Rocuronium 10 mg/mL, 5 mL vial")).toMatchObject({ medicineId: 11 });
+    expect(vials("Rocuronium 100mg/10ml vial")).toMatchObject({ medicineId: null, candidates: [11] });
+    expect(vials("Dexmedetomidine 200mcg/2mL vial")).toMatchObject({ medicineId: 13 });
+    expect(vials("Dexmedetomidine 100 mcg/mL, 2 mL vial")).toMatchObject({ medicineId: null, candidates: [12, 13] });
+    expect(vials("Sugammadex 200mg/2ml vial")).toMatchObject({ medicineId: null, candidates: [14, 15] });
     // A spelling tenders use, and no match inside another word.
     expect(match("Anastrazole 1mg tab")).toMatchObject({ medicineId: 6 });
     expect(match("Paracetamol 500 mg and Dimetformine")).toEqual({ molecules: [], medicineId: null, candidates: [] });
@@ -130,7 +149,8 @@ describe("the tender finder: matching", () => {
 });
 
 describe("the tender finder: the robot's door", () => {
-  it("is shut with no key on the server, and to a wrong key", async () => {
+  it("is shut with no way in on the server, and to a wrong key", async () => {
+    process.env.TENDER_FINDER_GITHUB = "off";
     delete process.env.TENDER_FINDER_KEY;
     expect((await robot("molecules")).status).toBe(503);
     process.env.TENDER_FINDER_KEY = "short";
@@ -139,8 +159,55 @@ describe("the tender finder: the robot's door", () => {
     expect((await robot("molecules", undefined, null)).status).toBe(401);
     expect((await robot("molecules", undefined, "robot-key-for-the-tests-0123456780")).status).toBe(401);
     expect((await robot("notices", { notices: [{ ref_no: "1", title: "x" }] }, "wrong")).status).toBe(401);
+    expect((await robot("molecules")).status).toBe(200);
     // The key opens nothing else of the CRM.
     expect((await app.request("/api/tenders/found", { headers: { authorization: `Bearer ${KEY}` } })).status).toBe(401);
+  });
+
+  it("lets in this repository's own GitHub workflow by GitHub's signature, and nothing that only looks like it", async () => {
+    delete process.env.TENDER_FINDER_KEY;
+    delete process.env.TENDER_FINDER_GITHUB;
+    const github = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    const stranger = generateKeyPairSync("rsa", { modulusLength: 2048 });
+    useGithubKeys(async () => [{ ...github.publicKey.export({ format: "jwk" }), kid: "key-1" }]);
+    const part = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+    const token = (changes: Record<string, unknown> = {}, signer = github.privateKey, header: Record<string, unknown> = { alg: "RS256", kid: "key-1" }) => {
+      const claims = {
+        iss: "https://token.actions.githubusercontent.com",
+        aud: ROBOT_AUDIENCE,
+        exp: Math.floor(Date.now() / 1000) + 300,
+        repository: "aryancrm/crmnew",
+        ref: "refs/heads/main",
+        job_workflow_ref: "aryancrm/crmnew/.github/workflows/tender-finder.yml@refs/heads/main",
+        ...changes,
+      };
+      const signed = `${part(header)}.${part(claims)}`;
+      return `${signed}.${createSign("RSA-SHA256").update(signed).sign(signer).toString("base64url")}`;
+    };
+    const status = async (bearer: string) => (await robot("molecules", undefined, bearer)).status;
+    expect(await status(token())).toBe(200);
+    expect((await robot("run", { status: "success", summary: "From the workflow", found: 1 }, token())).status).toBe(200);
+    // Another repository (a fork), another branch, another workflow, a token made for something
+    // else, an expired one, one signed by someone else, one not signed, an unknown key.
+    expect(await status(token({ repository: "someone/crmnew", job_workflow_ref: "someone/crmnew/.github/workflows/tender-finder.yml@refs/heads/main" }))).toBe(401);
+    expect(await status(token({ ref: "refs/heads/other", job_workflow_ref: "aryancrm/crmnew/.github/workflows/tender-finder.yml@refs/heads/other" }))).toBe(401);
+    expect(await status(token({ ref: "refs/pull/7/merge" }))).toBe(401);
+    expect(await status(token({ job_workflow_ref: "aryancrm/crmnew/.github/workflows/ci.yml@refs/heads/main" }))).toBe(401);
+    expect(await status(token({ aud: "https://github.com/aryancrm" }))).toBe(401);
+    expect(await status(token({ iss: "https://example.com" }))).toBe(401);
+    expect(await status(token({ exp: Math.floor(Date.now() / 1000) - 5 }))).toBe(401);
+    expect(await status(token({}, stranger.privateKey))).toBe(401);
+    const unsigned = `${part({ alg: "none", kid: "key-1" })}.${token().split(".")[1]}.`;
+    expect(await status(unsigned)).toBe(401);
+    expect(await status(token({}, github.privateKey, { alg: "RS256", kid: "key-9" }))).toBe(401);
+    expect(await status(token({}, github.privateKey, { alg: "HS256", kid: "key-1" }))).toBe(401);
+    // Neither does it open anything else of the CRM, and switched off it lets nobody in.
+    expect((await app.request("/api/tenders/found", { headers: { authorization: `Bearer ${token()}` } })).status).toBe(401);
+    process.env.TENDER_FINDER_GITHUB = "off";
+    expect(await status(token())).toBe(503);
+    process.env.TENDER_FINDER_KEY = KEY;
+    expect(await status(token())).toBe(401);
+    expect((await robot("molecules")).status).toBe(200);
   });
 
   it("gives our molecules in the robot's own shape", async () => {

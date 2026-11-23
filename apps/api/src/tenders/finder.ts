@@ -5,11 +5,12 @@
 // have Tenders, screened by them, and turned into a CRM tender in one press. From there the
 // tender's own road goes on (tenders/service.ts).
 
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash } from "node:crypto";
 import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
 import type { FindRun, FoundDetail, FoundLine, FoundList, FoundTender, FoundView, Me, TenderMode } from "../types";
+import { robotReady } from "./robot-caller";
 import { createTender, recordsTenders, setLines } from "./service";
 
 // ---------------------------------------------------------------- names
@@ -119,8 +120,8 @@ export type FinderMedicine = { id: number; name: string; generic: string | null;
 export type LineMatch = { molecules: string[]; medicineId: number | null; candidates: number[] };
 
 /** Matches a line of a tender to our medicines: by molecule (every part of a combination must be
- *  on the line), then by strength when we keep several. One medicine fitting: that one. None or
- *  several: the person picks among the candidates. */
+ *  on the line), then by strength. One medicine fitting: that one. None or several (two brands
+ *  of one strength, a strength we do not keep): the person picks among the candidates. */
 export function medicineMatcher(medicines: FinderMedicine[]): (text: string) => LineMatch {
   const groups = new Map<string, { name: string; parts: string[]; alternatives: RegExp[][]; medicines: FinderMedicine[] }>();
   for (const one of medicines) {
@@ -146,19 +147,17 @@ export function medicineMatcher(medicines: FinderMedicine[]): (text: string) => 
     hits = hits.filter((group) => group.parts.length > 1 || !inCombination.has(group.parts[0] as string));
     const candidates = hits.flatMap((group) => group.medicines);
     const written = new Set(strengthsOf(text));
-    let fits: FinderMedicine[];
-    if (written.size === 0) fits = candidates.length === 1 ? candidates : [];
-    else {
-      const first = candidates.filter((one) => {
-        const ours = strengthsOf(one.strength);
-        return ours.length > 0 && written.has(ours[0] as string);
-      });
-      const whole = first.filter((one) => strengthsOf(one.strength).every((amount) => written.has(amount)));
-      fits = first.length > 1 && whole.length >= 1 ? whole : first;
-    }
+    // A medicine fits when an amount of its strength (not only a volume) is written on the line:
+    // ours are kept as "10mg/ml (50 mg/5 ml)", tenders write "50mg/5ml" or "10 mg/mL, 5 mL".
+    const fits = candidates.filter((one) => strengthsOf(one.strength).some((amount) => !amount.endsWith("ml") && written.has(amount)));
+    // "10 mg/mL" alone is a concentration, shared by vials of several sizes: it settles the
+    // medicine only when we keep one medicine of that molecule.
+    const perMl = /(?:mcg|µg|ug|mg|g|iu)\s*\/\s*ml/i.test(text);
+    const sure = written.size === 0 ? candidates.length === 1 : perMl ? candidates.length === 1 && fits.length === 1 : fits.length === 1;
+    const picked = !sure ? null : written.size === 0 ? candidates[0] : fits[0];
     return {
       molecules: hits.map((group) => group.name),
-      medicineId: fits.length === 1 ? (fits[0] as FinderMedicine).id : null,
+      medicineId: picked?.id ?? null,
       candidates: candidates.map((one) => one.id),
     };
   };
@@ -439,17 +438,6 @@ export async function robotKnown(db: Database, source: "philgeps" | "ps", refs: 
   );
   return found.map((one) => ({ ref_no: one.ref_no, items_text: one.items_text, abc_amount: one.abc === null ? null : one.abc / 100, details: one.details }));
 }
-
-/** The robot's key (TENDER_FINDER_KEY on the server, 24 characters or more): "off" when none is
- *  set, so the door stays shut. */
-export function robotKey(header: string | undefined): "ok" | "off" | "no" {
-  const key = (process.env.TENDER_FINDER_KEY ?? "").trim();
-  if (key.length < 24) return "off";
-  const given = header?.startsWith("Bearer ") ? header.slice(7).trim() : "";
-  const hash = (text: string) => createHash("sha256").update(text).digest();
-  return timingSafeEqual(hash(key), hash(given)) ? "ok" : "no";
-}
-const robotReady = () => (process.env.TENDER_FINDER_KEY ?? "").trim().length >= 24;
 
 // ---------------------------------------------------------------- the team's pages
 

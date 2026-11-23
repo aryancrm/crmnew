@@ -1,0 +1,72 @@
+# The tender finder's robot (docs/PLAN.md 24, workers/tender-finder): every hour of the working day
+# it opens the public PhilGEPS list of medicine tenders in a browser, reads the new notices and
+# hands them to the CRM, where the bidding team sees them under Tenders → Tender finder.
+#
+# It runs here, on GitHub's computers, so no office PC has to stay on and no server has to carry
+# a browser. Who it is: GitHub signs a short-lived token for this workflow ("id-token"), and the
+# CRM's door (/webhooks/tender-finder) lets in only this workflow on this repository's main
+# branch (apps/api/src/tenders/robot-caller.ts). There is no secret to set or to leak.
+
+name: Tender finder
+
+on:
+  schedule:
+    - cron: "7 22,23,0-9 * * *" # every hour from 6:07 am to 5:07 pm Manila
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "workers/tender-finder/**"
+      - ".github/workflows/tender-finder.yml"
+
+concurrency:
+  group: tender-finder
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  find:
+    name: Read PhilGEPS and hand in to the CRM
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: workers/tender-finder
+    env:
+      CRM_URL: https://crmnew-api.onrender.com
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+      - name: Keep Chrome between runs
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/puppeteer
+          key: puppeteer-${{ hashFiles('workers/tender-finder/package-lock.json') }}
+      - name: Install (Puppeteer and its Chrome)
+        run: npm ci --no-audit --no-fund
+      - name: Let Chrome keep its sandbox on this runner
+        run: echo 0 | sudo tee /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+      - name: The readings still read right
+        run: npm test
+      # A deploy of the CRM restarts its server for a minute or two; 401 = the door is there.
+      - name: Wait for the CRM's door
+        run: |
+          for try in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -m 60 -w "%{http_code}" "$CRM_URL/webhooks/tender-finder/molecules" || true)
+            if [ "$code" = "401" ]; then exit 0; fi
+            echo "The door answers $code; trying again in 10 s"
+            sleep 10
+          done
+          echo "The CRM's door did not open"
+          exit 1
+      # Started by hand or by a change to the robot: a look at the first page before the real run.
+      - name: First page only, nothing sent
+        if: github.event_name != 'schedule'
+        run: node scraper.js --dry-run
+      - name: Read PhilGEPS and hand in to the CRM
+        run: node scraper.js --trigger=${{ github.event_name == 'schedule' && 'schedule' || 'manual' }}

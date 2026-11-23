@@ -62,6 +62,9 @@ function State({ found }: { found: FoundTender }) {
 /** The robot's last word: when it last read the portals and what it found; its earlier runs under it. */
 function Robot({ robot }: { robot: FoundList["robot"] }) {
   const [last, ...earlier] = robot.runs;
+  // It runs every hour of the working day: a day with no word from it is worth a look.
+  const hours = last ? Math.floor((Date.now() - Date.parse(last.at)) / 3_600_000) : 0;
+  const quiet = hours >= 26 ? hours : null;
   const line = (run: FoundList["robot"]["runs"][number]) => (
     <>
       {PORTAL[run.source]} {when(run.at)}
@@ -75,10 +78,12 @@ function Robot({ robot }: { robot: FoundList["robot"] }) {
         <span className="min-w-0 text-slate-600">
           <b className="text-slate-900">Robot</b> {last ? <>last read {line(last)}</> : "has not handed anything in yet."}
         </span>
-        {!robot.ready && (
-          <span className="text-[12px] font-semibold text-amber-700" title="The robot shows its key (TENDER_FINDER_KEY) on every call; none is set on this server.">
-            Not connected on this server yet
+        {!robot.ready ? (
+          <span className="text-[12px] font-semibold text-amber-700" title="The robot has no way in on this server (its GitHub workflow is switched off and no key is set).">
+            Not connected on this server
           </span>
+        ) : (
+          quiet !== null && <span className="text-[12px] font-semibold text-amber-700">No run for {quiet} hours</span>
         )}
       </div>
       {earlier.length > 0 && (

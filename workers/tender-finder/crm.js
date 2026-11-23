@@ -1,10 +1,16 @@
-// The robot's way into the CRM (docs/PLAN.md 24): its own door, /webhooks/tender-finder, opened
-// with its own key. It asks which molecules are ours and which notices the CRM has already read,
-// and hands in what it found and how each run went. It holds no database password and no
-// person's login.
+// The robot's way into the CRM (docs/PLAN.md 24): its own door, /webhooks/tender-finder. It asks
+// which molecules are ours and which notices the CRM has already read, and hands in what it found
+// and how each run went. It holds no database password and no person's login.
 //
 //   CRM_URL            the CRM's API, e.g. https://api.example.com (no trailing slash needed)
-//   TENDER_FINDER_KEY  the same key as on the CRM's server (24 characters or more)
+//
+// Who it is, on every call:
+// - on GitHub (the workflow .github/workflows/tender-finder.yml): a short-lived token GitHub signs
+//   for that workflow, asked fresh for each call. Nothing to set, no secret anywhere.
+// - elsewhere (the company's server, the office PC): TENDER_FINDER_KEY, the same key as on the
+//   CRM's server (24 characters or more).
+
+const AUDIENCE = 'crmnew-tender-finder';
 
 const base = () => {
     const url = (process.env.CRM_URL || '').replace(/\/+$/, '');
@@ -12,20 +18,43 @@ const base = () => {
     return `${url}/webhooks/tender-finder`;
 };
 
-async function call(path, body) {
-    const key = process.env.TENDER_FINDER_KEY || '';
-    if (!key) throw new Error('TENDER_FINDER_KEY is not set (the robot\'s key, the same as on the CRM\'s server)');
-    const res = await fetch(`${base()}/${path}`, {
-        method: body === undefined ? 'GET' : 'POST',
-        headers: { authorization: `Bearer ${key}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
-        body: body === undefined ? undefined : JSON.stringify(body),
-        signal: AbortSignal.timeout(120000)
-    });
-    if (!res.ok) {
-        const said = await res.json().catch(() => ({}));
-        throw new Error(`The CRM refused ${path} (${res.status}): ${said.error?.message || res.statusText}`);
+async function whoIAm() {
+    if (process.env.TENDER_FINDER_KEY) return process.env.TENDER_FINDER_KEY;
+    const url = process.env.ACTIONS_ID_TOKEN_REQUEST_URL;
+    const ask = process.env.ACTIONS_ID_TOKEN_REQUEST_TOKEN;
+    if (!url || !ask) {
+        throw new Error('No way in to the CRM: on GitHub the workflow needs "id-token: write"; elsewhere set TENDER_FINDER_KEY');
     }
-    return res.json();
+    const res = await fetch(`${url}&audience=${AUDIENCE}`, { headers: { authorization: `Bearer ${ask}` }, signal: AbortSignal.timeout(30000) });
+    if (!res.ok) throw new Error(`GitHub gave no token for the CRM (${res.status})`);
+    return (await res.json()).value;
+}
+
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// A server waking up or restarting (a deploy) answers 502-504 or not at all for a moment: tried
+// three times. A refusal (wrong key, wrong shape) is said at once.
+async function call(path, body) {
+    let last;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+        try {
+            const res = await fetch(`${base()}/${path}`, {
+                method: body === undefined ? 'GET' : 'POST',
+                headers: { authorization: `Bearer ${await whoIAm()}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+                body: body === undefined ? undefined : JSON.stringify(body),
+                signal: AbortSignal.timeout(120000)
+            });
+            if (res.ok) return res.json();
+            const said = await res.json().catch(() => ({}));
+            last = new Error(`The CRM refused ${path} (${res.status}): ${said.error?.message || res.statusText}`);
+            if (![502, 503, 504].includes(res.status)) throw last;
+        } catch (err) {
+            if (err === last && !/\((?:502|503|504)\)/.test(err.message)) throw err;
+            last = err;
+        }
+        if (attempt < 3) await pause(attempt * 5000);
+    }
+    throw last;
 }
 
 // Our molecules, as the CRM's medicines give them: [{ name, match: [spellings] }]
