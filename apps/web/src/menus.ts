@@ -32,6 +32,7 @@ import {
   Factory,
   FlaskConical,
   FileText,
+  Search,
   Gauge,
   Gift,
   ShieldAlert,
@@ -486,6 +487,7 @@ const reportsApp: Space = {
         { to: "/clidp/team", label: "CLIDP", icon: FileText },
         { to: "/clidp/road", label: "CLIDP pharmacies", icon: Building2 },
         { to: "/tenders", label: "Tenders", icon: FileText },
+        { to: "/tenders/finder", label: "Tender finder", icon: Search, short: "Finder" },
         { to: "/tenders/report", label: "Bid report", icon: FileText },
         { to: "/targets", label: "Targets", icon: Target },
       ],
@@ -787,6 +789,7 @@ function ownDesk(me: Me): Space {
                     FileText,
                     [
                       { to: "/tenders", label: "Tenders", icon: FileText },
+                      { to: "/tenders/finder", label: "Tender finder", icon: Search, short: "Finder" },
                       { to: "/tenders/report", label: "Bid report", icon: FileText },
                       { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
                     ],
@@ -852,6 +855,7 @@ function ownDesk(me: Me): Space {
               FileText,
               [
                 { to: "/tenders", label: "Tenders", icon: FileText },
+                { to: "/tenders/finder", label: "Tender finder", icon: Search, short: "Finder" },
                 { to: "/tenders/report", label: "Bid report", icon: FileText },
                 { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
               ],
@@ -1061,6 +1065,7 @@ function ownDesk(me: Me): Space {
           ...desk([
             home,
             { to: "/tenders", label: "Tenders", icon: FileText, short: "Tenders" },
+            { to: "/tenders/finder", label: "Tender finder", icon: Search, short: "Finder" },
             { to: "/tenders/report", label: "Bid report", icon: FileText },
             { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
             ordersLink("Team orders"),
@@ -1119,6 +1124,7 @@ function ownDesk(me: Me): Space {
             home,
             { to: "/my-team", label: "Whole business", icon: Users, teams: true },
             { to: "/tenders", label: "Tenders", icon: FileText },
+            { to: "/tenders/finder", label: "Tender finder", icon: Search, short: "Finder" },
             { to: "/tenders/report", label: "Bid report", icon: FileText },
             { to: "/clidp/road", label: "CLIDP pharmacies", icon: Building2 },
             { to: "/team-scores", label: "Scorecards", icon: Gauge, short: "Scores" },
@@ -1204,6 +1210,7 @@ function ownDesk(me: Me): Space {
               FileText,
               [
                 { to: "/tenders", label: "Tenders", icon: FileText },
+                { to: "/tenders/finder", label: "Tender finder", icon: Search, short: "Finder" },
                 { to: "/tenders/report", label: "Bid report", icon: FileText },
                 { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
               ],
@@ -1308,7 +1315,8 @@ function ownDesk(me: Me): Space {
             { to: "/collections", label: "Collections", icon: HandCoins },
             { to: "/hospital-board", label: "Hospitals", icon: Building2 },
             { to: "/to-call", label: "Hospitals to call", icon: PhoneCall, badge: "refills" },
-            // The two tender links in one folder (22 Nov: what can be grouped, grouped).
+            // The two tender links in one folder (22 Nov: what can be grouped, grouped). No tender
+            // finder here: it is the bidding line's (docs/PLAN.md 24), and the API refuses it.
             folder(
               "Government tenders",
               FileText,

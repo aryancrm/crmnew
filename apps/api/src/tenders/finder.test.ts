@@ -1,0 +1,390 @@
+import { sql } from "drizzle-orm";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createApp } from "../app";
+import { seedB2bTeam } from "../b2b/seed";
+import { type Database, openDatabase, rows } from "../db/index";
+import { migrate } from "../db/migrate";
+import { seedDemoInventory } from "../inventory/seed";
+import { seedDemo } from "../seed";
+import { seedHospitalBoxes } from "../sellers/seed";
+import type { FoundDetail, FoundList, Tender } from "../types";
+import { agencyKey, agencyMatcher, dayIn, medicineMatcher, modeOf, moleculeName, strengthsOf } from "./finder";
+import { seedBidding, seedFound } from "./seed";
+
+const PASSWORD = "test-password-1";
+const KEY = "robot-key-for-the-tests-0123456789";
+let db: Database;
+let app: ReturnType<typeof createApp>;
+const cookies: Record<string, string> = {};
+const get = (who: string, path: string) => app.request(path, { headers: { cookie: cookies[who] as string } });
+const post = (who: string, path: string, body: unknown) =>
+  app.request(path, { method: "POST", headers: { "content-type": "application/json", cookie: cookies[who] as string }, body: JSON.stringify(body) });
+const robot = (path: string, body?: unknown, key: string | null = KEY) =>
+  app.request(`/webhooks/tender-finder/${path}`, {
+    method: body === undefined ? "GET" : "POST",
+    headers: { "content-type": "application/json", ...(key ? { authorization: `Bearer ${key}` } : {}) },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+const list = async (who: string, query = "") => (await (await get(who, `/api/tenders/found${query}`)).json()) as FoundList;
+const one = async (who: string, id: number) => (await (await get(who, `/api/tenders/found/${id}`)).json()) as FoundDetail;
+const idOf = async (ref: string) => (await rows<{ id: number }>(db, sql`select id::int as id from tender_found where ref_no = ${ref}`))[0]?.id as number;
+
+beforeAll(async () => {
+  db = openDatabase({ dir: "memory" });
+  await migrate(db);
+  await seedDemo(db, PASSWORD);
+  await seedDemoInventory(db);
+  await seedB2bTeam(db, PASSWORD);
+  await seedBidding(db, PASSWORD);
+  await seedHospitalBoxes(db, PASSWORD);
+  expect(await seedFound(db)).toBe(true);
+  expect(await seedFound(db)).toBe(false);
+  app = createApp(db, { webUrl: "http://localhost:5180" });
+  for (const name of ["jimmy", "hazel", "sam", "ryan", "naresh"]) {
+    const response = await app.request("/api/auth/login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email: `${name}@2mg.test`, password: PASSWORD }),
+    });
+    cookies[name] = response.headers.get("set-cookie")?.split(";")[0] as string;
+  }
+});
+afterAll(() => {
+  delete process.env.TENDER_FINDER_KEY;
+});
+
+describe("the tender finder: matching", () => {
+  it("an agency is the customer of the same name, whatever the punctuation or the portal's suffix", () => {
+    expect(agencyKey("Dr. Paulino J. Garcia Memorial Research & Medical Center")).toBe("DR PAULINO J GARCIA MEMORIAL RESEARCH AND MEDICAL CENTER");
+    expect(agencyKey("Las Piñas General Hospital")).toBe("LAS PINAS GENERAL HOSPITAL");
+    const match = agencyMatcher([
+      { id: 1, name: "East Avenue Medical Center" },
+      { id: 2, name: "Department of Health – Central Office" },
+      { id: 3, name: "Vicente Sotto Memorial Medical Center" },
+      { id: 4, name: "City Health Office" },
+      { id: 5, name: "City Health Office" },
+    ]);
+    expect(match("EAST AVENUE MEDICAL CENTER")).toBe(1);
+    expect(match("Department of Health - Central Office")).toBe(2);
+    expect(match("VICENTE SOTTO MEMORIAL MEDICAL CENTER - REGION VII")).toBe(3);
+    expect(match("Vicente Sotto Memorial Medical Center Pharmacy Division")).toBe(3);
+    // Two customers of one name: nobody guesses.
+    expect(match("City Health Office")).toBeNull();
+    expect(match("Quirino Memorial Medical Center")).toBeNull();
+    expect(match(null)).toBeNull();
+  });
+
+  it("a medicine's molecule: salts and brackets dropped", () => {
+    expect(moleculeName("Imatinib mesylate")).toBe("Imatinib");
+    expect(moleculeName("Abiraterone acetate")).toBe("Abiraterone");
+    expect(moleculeName("Cefazolin (as sodium)")).toBe("Cefazolin");
+    expect(moleculeName("Iodine (as Iohexol)")).toBe("Iohexol");
+    expect(moleculeName("Rocuronium [COLD CHAIN]*")).toBe("Rocuronium");
+    expect(moleculeName("Sitagliptin + Metformin")).toBe("Sitagliptin + Metformin");
+  });
+
+  it("amounts compare whatever the unit they are written in", () => {
+    expect(strengthsOf("Bortezomib 3.5 mg vial")).toEqual(["3500mcg"]);
+    expect(strengthsOf("1 g")).toEqual(strengthsOf("1,000 mg"));
+    expect(strengthsOf("0.5mg")).toEqual(strengthsOf("500 mcg"));
+    expect(strengthsOf("100mg/10 mL")).toEqual(["100000mcg", "10ml"]);
+    expect(strengthsOf("6000 tablet")).toEqual([]);
+  });
+
+  it("a line is our medicine by its molecule, then its strength; no single fit is left to a person", () => {
+    const match = medicineMatcher([
+      { id: 1, name: "Imatinib", generic: "Imatinib mesylate", strength: "400 mg" },
+      { id: 2, name: "Imatinib", generic: "Imatinib mesylate", strength: "100 mg" },
+      { id: 3, name: "Abiraterone", generic: "Abiraterone acetate", strength: "250 mg" },
+      { id: 4, name: "Janumet", generic: "Sitagliptin + Metformin", strength: "50 mg/500 mg" },
+      { id: 5, name: "Glucophage", generic: "Metformin", strength: "500 mg" },
+      { id: 6, name: "Anastrozole", generic: "Anastrozole", strength: "1 mg" },
+      { id: 7, name: "No generic", generic: null, strength: null },
+    ]);
+    expect(match("2 3000 tablet Imatinib 400 mg tablet 95.00")).toMatchObject({ molecules: ["Imatinib"], medicineId: 1 });
+    expect(match("IMATINIB (as mesilate) 100mg capsule")).toMatchObject({ medicineId: 2 });
+    // A strength we do not keep: ours by molecule, the medicine left to pick.
+    expect(match("Imatinib 600 mg tablet")).toEqual({ molecules: ["Imatinib"], medicineId: null, candidates: [1, 2] });
+    expect(match("Abiraterone Acetate 500 mg tablet")).toMatchObject({ molecules: ["Abiraterone"], medicineId: null, candidates: [3] });
+    // No strength written and one medicine of that molecule: that one.
+    expect(match("Abiraterone tablets")).toMatchObject({ medicineId: 3 });
+    // A combination is the combination, not also its part; the part alone is the part.
+    expect(match("Sitagliptin 50mg + Metformin 500mg tab")).toMatchObject({ molecules: ["Sitagliptin + Metformin"], medicineId: 4 });
+    expect(match("Metformin 500 mg tablet")).toMatchObject({ molecules: ["Metformin"], medicineId: 5 });
+    // A spelling tenders use, and no match inside another word.
+    expect(match("Anastrazole 1mg tab")).toMatchObject({ medicineId: 6 });
+    expect(match("Paracetamol 500 mg and Dimetformine")).toEqual({ molecules: [], medicineId: null, candidates: [] });
+  });
+
+  it("the days and the mode a notice writes", () => {
+    expect(dayIn("27/10/2026 2:00 PM")).toBe("2026-10-27");
+    expect(dayIn("October 27, 2026 at 10:00am")).toBe("2026-10-27");
+    expect(dayIn("28 OCTOBER 2026")).toBe("2026-10-28");
+    expect(dayIn("to be announced")).toBeNull();
+    expect(dayIn("31/02/2026")).toBeNull();
+    expect(modeOf("Invitation to Bid (ITB)", "Public Bidding")).toBe("competitive_bidding");
+    expect(modeOf("Request for Quotation (RFQ)", "Negotiated Procurement - Small Value Procurement (Sec. 53.9)")).toBe("small_value");
+    expect(modeOf("Notice for Negotiated Procurement", null)).toBe("negotiated");
+    expect(modeOf(null, null)).toBe("other");
+  });
+});
+
+describe("the tender finder: the robot's door", () => {
+  it("is shut with no key on the server, and to a wrong key", async () => {
+    delete process.env.TENDER_FINDER_KEY;
+    expect((await robot("molecules")).status).toBe(503);
+    process.env.TENDER_FINDER_KEY = "short";
+    expect((await robot("molecules")).status).toBe(503);
+    process.env.TENDER_FINDER_KEY = KEY;
+    expect((await robot("molecules", undefined, null)).status).toBe(401);
+    expect((await robot("molecules", undefined, "robot-key-for-the-tests-0123456780")).status).toBe(401);
+    expect((await robot("notices", { notices: [{ ref_no: "1", title: "x" }] }, "wrong")).status).toBe(401);
+    // The key opens nothing else of the CRM.
+    expect((await app.request("/api/tenders/found", { headers: { authorization: `Bearer ${KEY}` } })).status).toBe(401);
+  });
+
+  it("gives our molecules in the robot's own shape", async () => {
+    const molecules = (await (await robot("molecules")).json()) as { name: string; match: string[] }[];
+    expect(molecules.map((one) => one.name)).toEqual(["Abiraterone", "Anastrozole", "Bortezomib", "Capecitabine", "Imatinib", "Letrozole"]);
+    expect(molecules.find((one) => one.name === "Anastrozole")?.match).toEqual(["anastrozole", "anastrazole"]);
+  });
+
+  it("takes notices in the robot's shape; one seen again is brought up to date, its lines written again only when they changed", async () => {
+    const notice = {
+      ref_no: "13000001",
+      title: "Supply of Letrozole 2.5 mg Tablet",
+      procuring_entity: "East Avenue Medical Center",
+      publish_date: "2026-11-20",
+      closing_date: "2099-12-01 13:00:00",
+      abc_amount: 113980.5,
+      detail_link: "https://notices.philgeps.gov.ph/GEPSNONPILOT/Tender/SplashBidNoticeAbstractUI.aspx?menuIndex=3&refID=13000001",
+      items_text: "Description\n7 5000 tablet Letrozole 2.5 mg tablet 22.796 113,980.00",
+      details: {
+        notice_type: "Request for Quotation (RFQ)",
+        matched_items: [{ line: "7 5000 tablet Letrozole 2.5 mg tablet 22.796 113,980.00", description: "Letrozole 2.5 mg tablet", item_no: "7", quantity: 5000, unit: "tablet", total: 113980 }],
+        something_else: { big: "x".repeat(5000) },
+      },
+    };
+    expect(await (await robot("notices", { notices: [notice] })).json()).toEqual({ taken: 1, fresh: 1, matched: 1 });
+    const id = await idOf("13000001");
+    const read = await one("hazel", id);
+    expect(read.found).toMatchObject({
+      source: "philgeps",
+      agency: "East Avenue Medical Center",
+      customer: "East Avenue Medical Center",
+      abc: 11398050,
+      publishedOn: "2026-11-20",
+      closingAt: "2099-12-01T05:00:00Z",
+      molecules: ["Letrozole"],
+      open: true,
+    });
+    expect(read.found.link).toContain("refID=13000001");
+    // The budget for one piece worked out from the line's total.
+    expect(read.lines).toMatchObject([{ itemNo: "7", qty: 5000, unit: "tablet", abcTotal: 11398000, abcUnit: 2280, medicine: "Letrozole 2.5 mg" }]);
+    const [kept] = await rows<{ details: Record<string, unknown> }>(db, sql`select details from tender_found where id = ${id}`);
+    expect(Object.keys(kept?.details ?? {})).toEqual(["notice_type"]);
+
+    // The robot asks what it has read already, and gets it back as it sent it.
+    const known = (await (await robot("known", { refs: ["13000001", "99999999"] })).json()) as { ref_no: string; abc_amount: number; items_text: string }[];
+    expect(known).toMatchObject([{ ref_no: "13000001", abc_amount: 113980.5 }]);
+
+    // Seen again from the list only (no page read): nothing of it is lost.
+    expect(await (await robot("notices", { notices: [{ ref_no: "13000001", title: notice.title, closing_date: "2099-12-05 13:00:00" }] })).json()).toMatchObject({ fresh: 0, matched: 1 });
+    const again = await one("hazel", id);
+    expect(again.found).toMatchObject({ abc: 11398050, closingAt: "2099-12-05T05:00:00Z", customer: "East Avenue Medical Center" });
+    expect(again.lines.length).toBe(1);
+    // Read again unchanged: the same lines. Changed (a bid bulletin): the new ones, the old kept.
+    await robot("notices", { notices: [notice] });
+    const count = async () => (await rows<{ live: number; replaced: number }>(db, sql`select count(*) filter (where replaced_at is null)::int as live, count(*) filter (where replaced_at is not null)::int as replaced from tender_found_line where found_id = ${id}`))[0];
+    expect(await count()).toEqual({ live: 1, replaced: 0 });
+    const changed = { ...notice, details: { ...notice.details, matched_items: [{ ...notice.details.matched_items[0], quantity: 6000 }] } };
+    await robot("notices", { notices: [changed] });
+    expect(await count()).toEqual({ live: 1, replaced: 1 });
+    expect((await one("hazel", id)).lines[0]?.qty).toBe(6000);
+
+    // A link that is not the portal's is not kept; a wrong shape is refused.
+    await robot("notices", { notices: [{ ref_no: "13000002", title: "Imatinib 400 mg", detail_link: "https://evil.example/philgeps.gov.ph" }] });
+    expect((await one("hazel", await idOf("13000002"))).found.link).toBeNull();
+    expect((await robot("notices", { notices: [{ title: "no reference" }] })).status).toBe(400);
+    expect((await robot("notices", { notices: [] })).status).toBe(400);
+  });
+
+  it("keeps each run as the robot reports it", async () => {
+    expect((await robot("run", { status: "failed", trigger: "schedule", summary: "The PhilGEPS website is down right now." })).status).toBe(200);
+    const found = await list("jimmy");
+    expect(found.robot.ready).toBe(true);
+    expect(found.robot.runs[0]).toMatchObject({ status: "failed", summary: "The PhilGEPS website is down right now." });
+    expect(found.robot.runs.some((run) => run.status === "success" && run.found === 543)).toBe(true);
+  });
+});
+
+describe("the tender finder: the team's pages", () => {
+  it("is for the seats that have Tenders: the bidding line, the mentor above it, the CEO; not a MedRep of another line", async () => {
+    for (const who of ["hazel", "jimmy", "sam", "naresh"]) expect((await get(who, "/api/tenders/found")).status).toBe(200);
+    const id = await idOf("12451001");
+    expect((await get("ryan", "/api/tenders/found")).status).toBe(403);
+    expect((await get("ryan", `/api/tenders/found/${id}`)).status).toBe(403);
+    expect((await post("ryan", `/api/tenders/found/${id}/screen`, { on: true })).status).toBe(403);
+    expect((await post("ryan", `/api/tenders/found/${id}/tender`, { agencyId: 1, mode: "other", lines: [] })).status).toBe(403);
+    expect(await (await get("ryan", "/api/tenders/found/count")).json()).toEqual({ allowed: false, fresh: 0 });
+    expect(((await (await get("hazel", "/api/tenders/found/count")).json()) as { allowed: boolean; fresh: number }).allowed).toBe(true);
+    expect((await app.request("/api/tenders/found")).status).toBe(401);
+  });
+
+  it("New holds the open notices asking for our medicines that nobody took; the rest is under Everything found", async () => {
+    const fresh = await list("hazel", "?q=1245");
+    expect(fresh.rows.map((row) => row.refNo).sort()).toEqual(["12451001", "12451017", "12451033"]);
+    const all = await list("hazel", "?view=all&q=1245");
+    // The closed one and the one that is not ours are found, not new.
+    expect(all.rows.map((row) => row.refNo).sort()).toEqual(["12450900", "12451001", "12451017", "12451033", "12451050"]);
+    expect(all.rows.find((row) => row.refNo === "12450900")).toMatchObject({ open: false, molecules: ["Capecitabine"] });
+    expect(all.rows.find((row) => row.refNo === "12451050")?.molecules).toEqual([]);
+    expect((await list("hazel", "?view=screened")).rows.map((row) => row.refNo)).toEqual(["109877"]);
+    expect((await list("hazel", "?view=all&source=ps")).rows.map((row) => row.refNo)).toEqual(["109877"]);
+    expect((await list("hazel", "?molecule=Abiraterone")).rows.map((row) => row.refNo)).toEqual(["12451033"]);
+    expect((await list("hazel", "?q=vicente")).rows.map((row) => row.refNo)).toEqual(["12451033"]);
+    expect(fresh.molecules).toContain("Bortezomib");
+  });
+
+  it("a notice's page: its lines matched to our medicines, the agency to a customer, the mode and days read", async () => {
+    const detail = await one("hazel", await idOf("12451001"));
+    expect(detail.found).toMatchObject({ customer: "East Avenue Medical Center", abc: 243700000, noticeType: "Invitation to Bid (ITB)" });
+    expect(detail.mode).toBe("competitive_bidding");
+    expect(detail.prebidOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(detail.openingOn).toBe(detail.found.closingAt?.slice(0, 10));
+    expect(detail.lines.map((line) => [line.medicine, line.qty, line.abcUnit])).toEqual([
+      ["Bortezomib 3.5 mg", 200, 950000],
+      ["Imatinib 400 mg", 3000, 9500],
+      ["Capecitabine 500 mg", 6000, 4200],
+    ]);
+    // Our price starts from the price book's Bidding price, where there is one.
+    expect(detail.lines[0]?.candidates[0]?.price).toBe(920000);
+    expect(detail.lines[1]?.candidates[0]?.price).toBeNull();
+    expect(detail.found.details.supplements.length).toBe(1);
+    // Read in the papers, on the other portal.
+    const papers = await one("hazel", await idOf("109877"));
+    expect(papers.lines).toMatchObject([{ origin: "papers", qty: 10000, medicine: "Imatinib 400 mg" }]);
+    expect(papers.found.details.documents).toEqual(["PBD-Imatinib-2026.pdf", "Technical-Specifications.docx"]);
+    // A strength we do not keep and an agency that is no customer: both left to the person.
+    const other = await one("hazel", await idOf("12451033"));
+    expect(other.found.customer).toBeNull();
+    expect(other.lines).toMatchObject([{ medicineId: null, molecules: ["Abiraterone"] }]);
+    expect(other.lines[0]?.candidates.map((one) => one.name)).toEqual(["Abiraterone 250 mg"]);
+  });
+
+  it("screened and taken off, kept with who and when", async () => {
+    const id = await idOf("12451017");
+    expect((await post("hazel", `/api/tenders/found/${id}/screen`, { on: true })).status).toBe(200);
+    expect((await list("hazel", "?view=screened")).rows.map((row) => row.refNo).sort()).toEqual(["109877", "12451017"]);
+    expect((await one("jimmy", id)).found).toMatchObject({ screenedBy: "Hazel" });
+    expect((await post("jimmy", `/api/tenders/found/${id}/screen`, { on: false })).status).toBe(200);
+    expect((await one("hazel", id)).events.map((event) => [event.what, event.by])).toEqual([["screened", "Hazel"], ["unscreened", "Jimmy"]]);
+    expect((await list("hazel", "?q=12451017")).rows.length).toBe(1);
+  });
+
+  it("the join: a notice becomes a tender with its agency, budget, dates and lines, then goes the tender's own road to the award", async () => {
+    const id = await idOf("12451001");
+    const detail = await one("hazel", id);
+    const lines = detail.lines.map((line) => ({ lineId: line.id, medicineId: line.medicineId as number, qty: line.qty as number, unitPrice: line.candidates[0]?.price ?? (line.abcUnit as number) - 100 }));
+    // A line that is another notice's, a medicine we do not keep, pieces that are not whole: refused.
+    const body = { agencyId: detail.found.agencyId, mode: detail.mode, lines };
+    expect((await post("hazel", `/api/tenders/found/${id}/tender`, { ...body, lines: [{ ...lines[0], lineId: 999999 }] })).status).toBe(400);
+    expect((await post("hazel", `/api/tenders/found/${id}/tender`, { ...body, lines: [{ ...lines[0], medicineId: 999999 }] })).status).toBe(400);
+    expect((await post("hazel", `/api/tenders/found/${id}/tender`, { ...body, lines: [{ ...lines[0], qty: 1.5 }] })).status).toBe(400);
+    expect((await rows(db, sql`select 1 from tender where philgeps_ref = '12451001'`)).length).toBe(0);
+
+    const made = await post("hazel", `/api/tenders/found/${id}/tender`, body);
+    expect(made.status).toBe(200);
+    const tenderId = ((await made.json()) as { id: number }).id;
+    const tender = (await (await get("hazel", `/api/tenders/${tenderId}`)).json()) as {
+      tender: Tender;
+      lines: { medicine: string; qty: number; unitPrice: number }[];
+      events: { step: string; note: string | null }[];
+      found: { refNo: string; asked: { description: string; abcUnit: number | null }[] } | null;
+    };
+    expect(tender.tender).toMatchObject({
+      agency: "East Avenue Medical Center",
+      title: "Supply and Delivery of Various Anti-Cancer Medicines",
+      philgepsRef: "12451001",
+      mode: "competitive_bidding",
+      abc: 243700000,
+      step: "found",
+      owner: "Hazel",
+      postedOn: detail.found.publishedOn,
+      prebidOn: detail.prebidOn,
+      openingOn: detail.openingOn,
+      // 200 × ₱9,200 (the price book's Bidding price) + 3,000 × ₱94 + 6,000 × ₱41.
+      ourBid: 200 * 920000 + 3000 * 9400 + 6000 * 4100,
+    });
+    expect(new Date(tender.tender.deadlineAt as string).getTime()).toBe(new Date(detail.found.closingAt as string).getTime());
+    expect(tender.lines.map((line) => [line.medicine, line.qty, line.unitPrice])).toEqual([
+      ["Bortezomib 3.5 mg", 200, 920000],
+      ["Imatinib 400 mg", 3000, 9400],
+      ["Capecitabine 500 mg", 6000, 4100],
+    ]);
+    expect(tender.events).toMatchObject([{ step: "found", note: "From the tender finder: PhilGEPS 12451001" }]);
+    expect(tender.found?.asked.map((line) => line.abcUnit)).toEqual([950000, 9500, 4200]);
+
+    // The notice says which tender it is; it makes one tender only and stays screened.
+    const after = await one("hazel", id);
+    expect(after.found).toMatchObject({ tenderId, tenderCode: tender.tender.code, screenedBy: "Hazel" });
+    expect(after.events.map((event) => event.what)).toEqual(["tender"]);
+    expect((await post("jimmy", `/api/tenders/found/${id}/tender`, body)).status).toBe(409);
+    expect((await post("hazel", `/api/tenders/found/${id}/screen`, { on: false })).status).toBe(409);
+    expect((await list("hazel", "?view=tenders")).rows.map((row) => row.refNo)).toEqual(["12451001"]);
+    expect((await list("hazel", "?q=12451001")).rows.length).toBe(0);
+
+    // The tender's own road: the Admin approves the price, a complete envelope, submitted, won.
+    const step = (who: string, input: unknown) => post(who, `/api/tenders/${tenderId}/step`, input);
+    expect((await step("hazel", { step: "preparing" })).status).toBe(200);
+    expect((await step("hazel", { step: "price_approved" })).status).toBe(403);
+    // A line left without a price (the price book had none) stops the approval, by its name.
+    const priced = lines.map((line) => ({ medicineId: line.medicineId, qty: line.qty, unitPrice: line.unitPrice }));
+    expect((await post("hazel", `/api/tenders/${tenderId}/lines`, { lines: priced.map((line, n) => (n === 1 ? { ...line, unitPrice: 0 } : line)) })).status).toBe(200);
+    const unpriced = await step("jimmy", { step: "price_approved" });
+    expect(unpriced.status).toBe(400);
+    expect(((await unpriced.json()) as { error: { message: string } }).error.message).toContain("Imatinib 400 mg has no price yet");
+    expect((await post("hazel", `/api/tenders/${tenderId}/lines`, { lines: priced })).status).toBe(200);
+    expect((await step("jimmy", { step: "price_approved" })).status).toBe(200);
+    expect((await post("hazel", `/api/tenders/${tenderId}/lines`, { lines: [{ medicineId: lines[0]?.medicineId, qty: 1, unitPrice: 1 }] })).status).toBe(409);
+    expect((await step("hazel", { step: "submitted" })).status).toBe(400);
+    expect((await post("hazel", `/api/tenders/${tenderId}`, { papers: tender.tender.papers.map((paper) => ({ ...paper, done: true })) })).status).toBe(200);
+    expect((await step("hazel", { step: "submitted" })).status).toBe(200);
+    expect((await step("hazel", { step: "won" })).status).toBe(200);
+  });
+
+  it("an agency and a medicine picked by hand are remembered", async () => {
+    // Two notices of an agency that is no customer of that name.
+    await robot("notices", {
+      notices: [
+        { ref_no: "13000010", title: "Abiraterone 250 mg tablet", procuring_entity: "Vicente Sotto Memorial Medical Center - Region VII", closing_date: "2099-01-01 10:00:00",
+          details: { matched_items: [{ line: "Abiraterone tablet 1000 tablets", description: "Abiraterone 500mg tablet", quantity: 1000, unit: "tablets" }] } },
+      ],
+    });
+    const id = await idOf("12451033");
+    const detail = await one("hazel", id);
+    expect(detail.found.agencyId).toBeNull();
+    const [agency] = await rows<{ id: number }>(db, sql`select id::int as id from customer where name = 'Department of Health – Central Office'`);
+    const line = detail.lines[0] as FoundDetail["lines"][number];
+    const made = await post("hazel", `/api/tenders/found/${id}/tender`, {
+      agencyId: agency?.id,
+      mode: detail.mode,
+      title: "Abiraterone for the regional cancer center",
+      lines: [{ lineId: line.id, medicineId: line.candidates[0]?.id, qty: 6000, unitPrice: 20000 }],
+    });
+    expect(made.status).toBe(200);
+    const after = await one("hazel", id);
+    expect(after.found.customer).toBe("Department of Health – Central Office");
+    expect(after.lines[0]).toMatchObject({ medicine: "Abiraterone 250 mg" });
+    expect(after.events.map((event) => [event.what, event.note])).toMatchObject([["agency", "Department of Health – Central Office"], ["tender", expect.stringMatching(/^TND-/)]]);
+    // The agency's other notice knows its customer now.
+    expect((await one("hazel", await idOf("13000010"))).found.customer).toBe("Department of Health – Central Office");
+    // An agency that is no government buyer or hospital is refused, and nothing is made.
+    const [patient] = await rows<{ id: number }>(db, sql`select id::int as id from customer where kind = 'patient' limit 1`);
+    if (patient) {
+      const refused = await post("hazel", `/api/tenders/found/${await idOf("13000010")}/tender`, { agencyId: patient.id, mode: "other", lines: [] });
+      expect(refused.status).toBe(400);
+      expect((await one("hazel", await idOf("13000010"))).found.tenderId).toBeNull();
+    }
+  });
+});

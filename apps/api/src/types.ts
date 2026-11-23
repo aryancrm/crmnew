@@ -5710,6 +5710,93 @@ export type BidReport = {
   comingUp: Pick<Tender, "id" | "code" | "title" | "agency" | "agencyCity" | "owner" | "abc" | "step" | "deadlineAt" | "prebidOn" | "openingOn">[];
 };
 
+/** A notice the tender finder's robot found on PhilGEPS or PS-PhilGEPS. Money in centavos. */
+export type FoundTender = {
+  id: number;
+  source: "philgeps" | "ps";
+  refNo: string;
+  title: string;
+  /** The procuring entity as the portal writes it, and the CRM customer it is (when known). */
+  agency: string | null;
+  agencyId: number | null;
+  customer: string | null;
+  noticeType: string | null;
+  procurementMode: string | null;
+  abc: number | null;
+  publishedOn: string | null;
+  closingAt: string | null;
+  link: string | null;
+  /** Our molecules it asks for. */
+  molecules: string[];
+  firstSeenAt: string;
+  screenedAt: string | null;
+  screenedBy: string | null;
+  tenderId: number | null;
+  tenderCode: string | null;
+  /** Still open for bids (no closing date read, or it is not past). */
+  open: boolean;
+  lines: number;
+};
+
+export type FoundView = "new" | "screened" | "tenders" | "all";
+
+/** One run of the robot, as it reported it. */
+export type FindRun = { id: number; source: "philgeps" | "ps"; trigger: string | null; status: "success" | "failed"; summary: string | null; found: number; matched: number; fresh: number; at: string };
+
+export type FoundList = {
+  view: FoundView;
+  rows: FoundTender[];
+  counts: Record<FoundView, number>;
+  /** Our molecules among what was found, for the filter. */
+  molecules: string[];
+  /** The robot: whether its key is set on this server, and its last runs. */
+  robot: { ready: boolean; runs: FindRun[] };
+};
+
+/** A line a found notice asks for. */
+export type FoundLine = {
+  id: number;
+  origin: "notice" | "papers";
+  itemNo: string | null;
+  description: string;
+  qty: number | null;
+  unit: string | null;
+  /** The budget for one piece and for the line. */
+  abcUnit: number | null;
+  abcTotal: number | null;
+  molecules: string[];
+  /** Our medicine it is (matched, or picked by a person), and the ones it could be. */
+  medicineId: number | null;
+  medicine: string | null;
+  candidates: { id: number; name: string; price: number | null }[];
+};
+
+export type FoundDetail = {
+  found: FoundTender & {
+    itemsText: string | null;
+    details: {
+      solicitationNo: string | null;
+      classification: string | null;
+      areaOfDelivery: string | null;
+      deliveryPeriod: string | null;
+      contactName: string | null;
+      contactInfo: string[];
+      preBid: string | null;
+      bidOpening: string | null;
+      status: string | null;
+      supplements: { no: string; title: string; type: string; published: string | null }[];
+      documents: string[];
+    };
+  };
+  lines: FoundLine[];
+  events: { what: string; note: string | null; by: string; at: string }[];
+  /** For "Make it a tender": the customers the agency could be, the mode and days read. */
+  agencies: { id: number; name: string; city: string | null }[];
+  mode: TenderMode;
+  prebidOn: string | null;
+  openingOn: string | null;
+};
+
 export type TenderInput = {
   agencyId: number;
   title: string;

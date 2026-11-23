@@ -113,6 +113,7 @@ import { BankStatementPage, ReconcilePage } from "./books/bank";
 import { BooksHome } from "./books/home";
 import { LockingPage, NewCreditNotePage, NewDepositPage, NewExpensePage, NewJournalPage, NewTransferPage } from "./books/ledger";
 import { BidReportPage } from "./sellers/bid-report";
+import { FoundTenderPage, TenderFinderPage } from "./sellers/tender-finder";
 import { CompanyPapersPage, TenderPage, TendersPage } from "./sellers/tenders";
 import { ClidpListingsPage, ClidpTeamPage } from "./sellers/clidp";
 import { ClidpRoadPage } from "./sellers/clidp-road";
@@ -289,6 +290,8 @@ createRoot(root).render(
             <Route path="rx/business" element={<RxBusinessPage />} />
             <Route path="tenders" element={<TendersPage />} />
             <Route path="tenders/report" element={<BidReportPage />} />
+            <Route path="tenders/finder" element={<TenderFinderPage />} />
+            <Route path="tenders/finder/:id" element={<FoundTenderPage />} />
             <Route path="tenders/:id" element={<TenderPage />} />
             <Route path="company-papers" element={<CompanyPapersPage />} />
             <Route path="mt/chains" element={<MtChainsPage />} />

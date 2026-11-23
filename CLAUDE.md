@@ -17,6 +17,7 @@ to be shut down once this one is live and everything has moved over.
 |---|---|
 | `apps/api` | Hono + Zod + Drizzle API. `src/` code, `migrations/` hand-written SQL applied in order on start, tests beside the code. |
 | `apps/web` | React (Vite) app. Screens only, each area in its own folder (`orders/`, `sellers/`, `hr/`…, see the README); menus are data in `src/menus.ts`. |
+| `workers/tender-finder` | The tender finder's robot (PLAN 24): a browser that reads PhilGEPS and hands in to the CRM through `/webhooks/tender-finder`. Own `package.json`, not in the pnpm workspace (it needs Chrome). |
 | `docs/` | The plan, the role audit, the hub's inventory and modules. |
 
 ## Commands

@@ -1,0 +1,694 @@
+// The tender finder inside the CRM (docs/PLAN.md 24; Aryan, 23 Nov: "we keep one CRM, not two").
+// The robot (workers/tender-finder: a browser that reads PhilGEPS and PS-PhilGEPS, a separate
+// process) hands in what it found through its own door; here the notices are kept, matched to our
+// customers (the agency) and our medicines (by molecule, then strength), shown to the seats that
+// have Tenders, screened by them, and turned into a CRM tender in one press. From there the
+// tender's own road goes on (tenders/service.ts).
+
+import { createHash, timingSafeEqual } from "node:crypto";
+import { type SQL, sql } from "drizzle-orm";
+import { type Database, rows } from "../db/index";
+import { Refusal } from "../http";
+import type { FindRun, FoundDetail, FoundLine, FoundList, FoundTender, FoundView, Me, TenderMode } from "../types";
+import { createTender, recordsTenders, setLines } from "./service";
+
+// ---------------------------------------------------------------- names
+
+/** A name in capitals without accents or punctuation: the portals and our customer list spell
+ *  the same hospital slightly differently ("Dr. Paulino J. Garcia Memorial Research & Medical…"). */
+export const agencyKey = (name: string) =>
+  name
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/['’]/g, "")
+    .replace(/&/g, " and ")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim();
+
+/** The region / DOH suffix the portals add ("… MEDICAL CENTER - REGION VII", "…-DOH R6"). */
+const PORTAL_SUFFIX = / (?:DOH|CHD|REGION|R ?\d+)\b.*$/;
+
+/** Finds the customer an agency name is: the same name, the name without the portal's suffix, or
+ *  the portal's name starting with ours (three words or more). Two customers fitting: none. */
+export function agencyMatcher(customers: { id: number; name: string }[]): (name: string | null | undefined) => number | null {
+  const byKey = new Map<string, number | null>();
+  for (const one of customers) {
+    const key = agencyKey(one.name);
+    if (key) byKey.set(key, byKey.has(key) ? null : one.id);
+  }
+  const long = [...byKey.entries()].filter(([key, id]) => id !== null && key.split(" ").length >= 3) as [string, number][];
+  return (name) => {
+    const key = agencyKey(name ?? "");
+    if (!key) return null;
+    const exact = byKey.get(key) ?? byKey.get(key.replace(PORTAL_SUFFIX, ""));
+    if (exact) return exact;
+    const starts = long.filter(([ours]) => key.startsWith(`${ours} `));
+    return starts.length === 1 ? (starts[0] as [string, number])[1] : null;
+  };
+}
+
+/** Salt and form words after the molecule ("Imatinib mesylate", "Palonosetron Hydrochloride"). */
+const SALT = "(?:hydrochloride|hcl|sodium|potassium|carbonate|monohydrate|besilate|besylate|mesylate|citrate|phosphate|acetate|maleate|tartrate|trihydrate|dihydrate|olamine)";
+const titleCase = (text: string) => text.toLowerCase().replace(/(^|[\s-])([a-z])/g, (_all, gap: string, letter: string) => gap + letter.toUpperCase());
+
+/** The molecule a medicine's generic name is matched by: "Abiraterone acetate" → Abiraterone,
+ *  "Iodine (as Iohexol)" → Iohexol, "Cefazolin (as sodium)" → Cefazolin. "+" joins a combination. */
+export function moleculeName(generic: string | null | undefined): string {
+  let text = String(generic ?? "")
+    .replace(/\*/g, "")
+    .replace(/\[[^\]]*\]/g, " ");
+  const as = /\(\s*as\s+([^)]+)\)/i.exec(text);
+  if (as && !new RegExp(`^${SALT}\\b`, "i").test((as[1] as string).trim())) text = as[1] as string;
+  text = text
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\s+(?:in|with)\s+.*$/i, "")
+    .replace(/\s+RTU$/i, "");
+  return titleCase(text.replace(new RegExp(`\\s+${SALT}$`, "i"), "").trim());
+}
+
+/** Other ways tenders write a molecule we keep (spellings, short names). Helpers only: a molecule
+ *  we do not keep is never matched. */
+const OTHER_NAMES: Record<string, string[]> = {
+  amikacin: ["amikacide"],
+  anastrozole: ["anastrazole"],
+  "ferrous sulfate": ["ferrous sulphate"],
+  fluorouracil: ["5-fu"],
+  hydroxyurea: ["hydroxycarbamide"],
+  "zoledronic acid": ["zoledronic"],
+  "l-asparaginase": ["asparaginase"],
+  "epoetin alfa": ["epoetin", "erythropoietin"],
+  "polymyxin b": ["polymyxin", "polymixin"],
+};
+
+const escapeRegex = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const aliasesOf = (molecule: string) => [molecule.toLowerCase(), ...(OTHER_NAMES[molecule.toLowerCase()] ?? [])];
+
+/** The amounts written in a text ("200 mg", "100mg/10 mL", "1 g"), as one unit each so that
+ *  1 g = 1000 mg and 0.5 mg = 500 mcg compare equal. */
+export function strengthsOf(text: string | null | undefined): string[] {
+  const found: string[] = [];
+  const clean = String(text ?? "")
+    .toLowerCase()
+    .replace(/,(?=\d{3}(?!\d))/g, "");
+  for (const one of clean.matchAll(/(\d+(?:\.\d+)?)\s*(mcg|µg|ug|mg|g|iu|i\.u\.|ml|l|%|units?)(?![a-z])/g)) {
+    const value = Number(one[1]);
+    const unit = one[2] as string;
+    const [amount, name] =
+      unit === "g"
+        ? [value * 1_000_000, "mcg"]
+        : unit === "mg"
+          ? [value * 1000, "mcg"]
+          : unit === "mcg" || unit === "µg" || unit === "ug"
+            ? [value, "mcg"]
+            : unit === "l"
+              ? [value * 1000, "ml"]
+              : unit === "ml"
+                ? [value, "ml"]
+                : unit === "%"
+                  ? [value, "%"]
+                  : [value, "iu"];
+    found.push(`${Math.round(amount * 1000) / 1000}${name}`);
+  }
+  return found;
+}
+
+export type FinderMedicine = { id: number; name: string; generic: string | null; strength: string | null };
+export type LineMatch = { molecules: string[]; medicineId: number | null; candidates: number[] };
+
+/** Matches a line of a tender to our medicines: by molecule (every part of a combination must be
+ *  on the line), then by strength when we keep several. One medicine fitting: that one. None or
+ *  several: the person picks among the candidates. */
+export function medicineMatcher(medicines: FinderMedicine[]): (text: string) => LineMatch {
+  const groups = new Map<string, { name: string; parts: string[]; alternatives: RegExp[][]; medicines: FinderMedicine[] }>();
+  for (const one of medicines) {
+    const name = moleculeName(one.generic);
+    if (name.length < 3) continue;
+    const key = name.toLowerCase();
+    const group = groups.get(key) ?? {
+      name,
+      parts: key.split("+").map((part) => part.trim()),
+      alternatives: aliasesOf(name).map((alias) =>
+        alias.split("+").map((part) => new RegExp(`(?<![a-z0-9])${escapeRegex(part.trim()).replace(/\s+/g, "[\\s-]+")}(?![a-z0-9])`, "i")),
+      ),
+      medicines: [],
+    };
+    group.medicines.push(one);
+    groups.set(key, group);
+  }
+  const list = [...groups.values()];
+  return (text) => {
+    let hits = list.filter((group) => group.alternatives.some((parts) => parts.every((part) => part.test(text))));
+    // A combination on the line is the combination, not also each of its parts.
+    const inCombination = new Set(hits.filter((group) => group.parts.length > 1).flatMap((group) => group.parts));
+    hits = hits.filter((group) => group.parts.length > 1 || !inCombination.has(group.parts[0] as string));
+    const candidates = hits.flatMap((group) => group.medicines);
+    const written = new Set(strengthsOf(text));
+    let fits: FinderMedicine[];
+    if (written.size === 0) fits = candidates.length === 1 ? candidates : [];
+    else {
+      const first = candidates.filter((one) => {
+        const ours = strengthsOf(one.strength);
+        return ours.length > 0 && written.has(ours[0] as string);
+      });
+      const whole = first.filter((one) => strengthsOf(one.strength).every((amount) => written.has(amount)));
+      fits = first.length > 1 && whole.length >= 1 ? whole : first;
+    }
+    return {
+      molecules: hits.map((group) => group.name),
+      medicineId: fits.length === 1 ? (fits[0] as FinderMedicine).id : null,
+      candidates: candidates.map((one) => one.id),
+    };
+  };
+}
+
+async function ourMedicines(db: Pick<Database, "execute">): Promise<FinderMedicine[]> {
+  // Interim (PLAN 24, question 33): every active medicine with a generic name.
+  return rows<FinderMedicine>(
+    db,
+    sql`select id::int as id, name, generic, strength from medicine where active and coalesce(trim(generic), '') <> '' order by id`,
+  );
+}
+
+// ---------------------------------------------------------------- reading what the robot sends
+
+const MONTHS: Record<string, number> = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+const pad = (value: number | string) => String(value).padStart(2, "0");
+
+/** The first day written in a passage ("27/10/2026 2:00 PM", "October 27, 2026 at 10:00am",
+ *  "28 OCTOBER 2026"), as YYYY-MM-DD; null when none is. */
+export function dayIn(text: string | null | undefined): string | null {
+  const passage = String(text ?? "");
+  const numbers = /\b(\d{1,2})\/(\d{1,2})\/(\d{4})\b/.exec(passage);
+  if (numbers) return validDay(Number(numbers[3]), Number(numbers[2]), Number(numbers[1]));
+  const monthFirst = /\b([A-Za-z]{3,9})\.?\s+(\d{1,2})\s*,?\s+(\d{4})\b/.exec(passage);
+  if (monthFirst && MONTHS[(monthFirst[1] as string).slice(0, 3).toLowerCase()])
+    return validDay(Number(monthFirst[3]), MONTHS[(monthFirst[1] as string).slice(0, 3).toLowerCase()] as number, Number(monthFirst[2]));
+  const dayFirst = /\b(\d{1,2})\s+([A-Za-z]{3,9})\.?,?\s+(\d{4})\b/.exec(passage);
+  if (dayFirst && MONTHS[(dayFirst[2] as string).slice(0, 3).toLowerCase()])
+    return validDay(Number(dayFirst[3]), MONTHS[(dayFirst[2] as string).slice(0, 3).toLowerCase()] as number, Number(dayFirst[1]));
+  return null;
+}
+function validDay(year: number, month: number, day: number): string | null {
+  const date = new Date(Date.UTC(year, month - 1, day));
+  const real = date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+  return real && year >= 2000 && year <= 2100 ? `${year}-${pad(month)}-${pad(day)}` : null;
+}
+
+/** The portals write closing times as Philippine time without a zone ("2026-10-23 13:00:00"). */
+function manilaInstant(value: string | null | undefined): string | null {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  const zoned = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(text);
+  const local = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})(?::(\d{2}))?/.exec(text);
+  const iso = zoned ? text.replace(" ", "T") : local ? `${local[1]}T${local[2]}:${local[3] ?? "00"}+08:00` : /^\d{4}-\d{2}-\d{2}$/.test(text) ? `${text}T23:59:00+08:00` : "";
+  const at = iso ? Date.parse(iso) : Number.NaN;
+  return Number.isNaN(at) ? null : new Date(at).toISOString();
+}
+
+const isoDay = (value: string | null | undefined) => {
+  const found = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value ?? ""));
+  return found ? validDay(Number(found[1]), Number(found[2]), Number(found[3])) : null;
+};
+
+/** Pesos as the portal writes them → whole centavos; null when it is not an amount. */
+const centavos = (pesos: unknown): number | null => {
+  const value = typeof pesos === "number" ? pesos : Number.NaN;
+  return Number.isFinite(value) && value >= 0 && value < 1e12 ? Math.round(value * 100) : null;
+};
+
+const short = (value: unknown, max: number): string | null => {
+  const text = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : typeof value === "number" ? String(value) : "";
+  return text ? text.slice(0, max) : null;
+};
+
+/** Only a link to the portals themselves is kept (it is shown as a link to press). */
+function portalLink(value: unknown): string | null {
+  try {
+    const url = new URL(String(value ?? ""));
+    const ok = (url.protocol === "https:" || url.protocol === "http:") && (url.hostname === "philgeps.gov.ph" || url.hostname.endsWith(".philgeps.gov.ph"));
+    return ok ? url.toString().slice(0, 600) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The mode a notice is, in the CRM's words; "other" when it does not say. */
+export function modeOf(noticeType: string | null, procurementMode: string | null): TenderMode {
+  const text = `${procurementMode ?? ""} ${noticeType ?? ""}`;
+  if (/small value|shopping|request for quotation|\(rfq\)/i.test(text)) return "small_value";
+  if (/direct contracting/i.test(text)) return "direct_contracting";
+  if (/direct acquisition/i.test(text)) return "direct_acquisition";
+  if (/limited source/i.test(text)) return "limited_source";
+  if (/repeat order/i.test(text)) return "repeat_order";
+  if (/negotiated/i.test(text)) return "negotiated";
+  if (/public bidding|competitive bidding|invitation to bid|\(itb\)/i.test(text)) return "competitive_bidding";
+  return "other";
+}
+
+/** A notice as the robot sends it: the shape its own table had (philgeps_opportunities), so its
+ *  code changes in one place only. Amounts in pesos, times in Philippine time. */
+export type RobotNotice = {
+  source?: "philgeps" | "ps";
+  ref_no: string;
+  title: string;
+  procuring_entity?: string | null;
+  publish_date?: string | null;
+  closing_date?: string | null;
+  abc_amount?: number | null;
+  detail_link?: string | null;
+  items_text?: string | null;
+  details?: Record<string, unknown> | null;
+};
+type RobotItem = { line?: unknown; description?: unknown; item_no?: unknown; quantity?: unknown; unit?: unknown; unit_price?: unknown; total?: unknown };
+
+/** What of a notice's details is kept (and given back to the robot, which re-reads only what is new). */
+const KEPT = [
+  "notice_type", "solicitation_no", "procurement_mode", "classification", "area_of_delivery", "delivery_period", "client_agency",
+  "contact_name", "status", "last_updated", "pre_bid", "bid_opening", "supplements_checked_at", "documents_status",
+] as const;
+function keptDetails(details: Record<string, unknown>): Record<string, unknown> {
+  const kept: Record<string, unknown> = {};
+  for (const key of KEPT) {
+    const value = short(details[key], 400);
+    if (value) kept[key] = value;
+  }
+  if (Array.isArray(details.contact_info)) kept.contact_info = details.contact_info.map((one) => short(one, 200)).filter(Boolean).slice(0, 10);
+  if (Array.isArray(details.supplements))
+    kept.supplements = (details.supplements as Record<string, unknown>[]).slice(0, 60).map((one) => ({
+      no: short(one?.no, 40) ?? "",
+      title: short(one?.title, 300) ?? "",
+      type: short(one?.type, 80) ?? "",
+      published: isoDay(short(one?.published, 20)),
+    }));
+  if (Array.isArray(details.documents))
+    kept.documents = (details.documents as Record<string, unknown>[]).slice(0, 60).map((one) => ({ name: short(one?.name, 200) ?? "" })).filter((one) => one.name);
+  return kept;
+}
+
+type ReadLine = { origin: "notice" | "papers"; itemNo: string | null; description: string; qty: number | null; unit: string | null; abcUnit: number | null; abcTotal: number | null; match: LineMatch };
+
+/** The lines a notice asks for: those read in its papers (with a quantity) first, then the
+ *  notice's own lines for the molecules the papers give no line for; with neither, each line of
+ *  the notice's text that names a molecule of ours. */
+function linesOf(notice: RobotNotice, match: (text: string) => LineMatch): ReadLine[] {
+  const details = notice.details ?? {};
+  const read = (item: RobotItem, origin: "notice" | "papers"): ReadLine | null => {
+    const description = short(item.description, 500) ?? short(item.line, 500);
+    if (!description) return null;
+    const qty = typeof item.quantity === "number" && item.quantity >= 0 && item.quantity < 1e9 ? item.quantity : null;
+    let abcUnit = centavos(item.unit_price);
+    let abcTotal = centavos(item.total);
+    // The missing one worked out as the team's sheet does: total ÷ quantity, quantity × a piece.
+    if (abcUnit === null && abcTotal !== null && qty) abcUnit = Math.round(abcTotal / qty);
+    if (abcTotal === null && abcUnit !== null && qty) abcTotal = Math.round(abcUnit * qty);
+    return { origin, itemNo: short(item.item_no, 30), description, qty, unit: short(item.unit, 30), abcUnit, abcTotal, match: match(`${description} ${short(item.line, 500) ?? ""}`) };
+  };
+  const list = (value: unknown) => (Array.isArray(value) ? (value as RobotItem[]).slice(0, 400) : []);
+  const papers = list(details.documents_items).map((item) => read(item, "papers")).filter((line): line is ReadLine => line !== null && line.qty !== null);
+  const inPapers = new Set(papers.flatMap((line) => line.match.molecules));
+  const onNotice = list(details.matched_items)
+    .map((item) => read(item, "notice"))
+    .filter((line): line is ReadLine => line !== null && !(line.match.molecules.length > 0 && line.match.molecules.every((name) => inPapers.has(name))));
+  const lines = [...papers, ...onNotice];
+  if (lines.length) return lines.slice(0, 400);
+  return String(notice.items_text ?? "")
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter((line) => line.length >= 3)
+    .map((line) => ({ line, hit: match(line) }))
+    .filter(({ hit }) => hit.molecules.length > 0)
+    .slice(0, 400)
+    .map(({ line, hit }) => ({ origin: "notice" as const, itemNo: null, description: line.slice(0, 500), qty: null, unit: null, abcUnit: null, abcTotal: null, match: hit }));
+}
+
+/** What the robot found, kept: a notice seen before is brought up to date (what a later run does
+ *  not send again stays), its lines are written again only when they changed (the old ones kept,
+ *  marked replaced; a medicine a person picked stays picked). */
+export async function takeFound(db: Database, notices: RobotNotice[]): Promise<{ taken: number; fresh: number; matched: number }> {
+  const match = medicineMatcher(await ourMedicines(db));
+  const agencyOf = agencyMatcher(await rows<{ id: number; name: string }>(db, sql`select id::int as id, name from customer where active and kind in ('government', 'hospital')`));
+  let fresh = 0;
+  let matched = 0;
+  for (const notice of notices) {
+    const source = notice.source === "ps" ? "ps" : "philgeps";
+    const refNo = notice.ref_no.trim().slice(0, 60);
+    const title = short(notice.title, 500) ?? "(no title)";
+    const agency = short(notice.procuring_entity, 300);
+    const sent = notice.details ? keptDetails(notice.details) : null;
+    const itemsText = typeof notice.items_text === "string" && notice.items_text.trim() ? notice.items_text.slice(0, 60_000) : null;
+    await db.transaction(async (tx) => {
+      const [known] = await rows<{ id: number; linesKey: string | null; itemsText: string | null }>(
+        tx,
+        sql`select id::int as id, lines_key as "linesKey", items_text as "itemsText" from tender_found where source = ${source} and ref_no = ${refNo} for update`,
+      );
+      // A run that does not read the notice's page again sends neither its text nor its details:
+      // the lines stay as they are.
+      const reread = itemsText !== null || notice.details != null;
+      const lines = reread ? linesOf({ ...notice, items_text: itemsText }, match) : [];
+      const text = `${title}\n${itemsText ?? known?.itemsText ?? ""}`;
+      const molecules = [...new Set([...match(text).molecules, ...lines.flatMap((line) => line.match.molecules)])].sort();
+      if (molecules.length) matched += 1;
+      const values = {
+        agencyKey: agency ? agencyKey(agency) : null,
+        agencyId: agencyOf(agency),
+        noticeType: short(sent?.notice_type, 200),
+        mode: short(sent?.procurement_mode, 200),
+        abc: centavos(notice.abc_amount),
+        publishedOn: isoDay(notice.publish_date),
+        closingAt: manilaInstant(notice.closing_date),
+        link: portalLink(notice.detail_link),
+      };
+      let id = known?.id;
+      if (!id) {
+        const [made] = await rows<{ id: number }>(
+          tx,
+          sql`insert into tender_found (source, ref_no, title, agency_name, agency_key, agency_id, notice_type, procurement_mode, abc, published_on, closing_at, link, items_text, details, molecules)
+            values (${source}, ${refNo}, ${title}, ${agency}, ${values.agencyKey}, ${values.agencyId}, ${values.noticeType}, ${values.mode}, ${values.abc},
+              ${values.publishedOn}::date, ${values.closingAt}::timestamptz, ${values.link}, ${itemsText}, ${JSON.stringify(sent ?? {})}::jsonb, ${`{${molecules.map((name) => JSON.stringify(name)).join(",")}}`}::text[])
+            returning id::int as id`,
+        );
+        id = made?.id as number;
+        fresh += 1;
+      } else
+        await tx.execute(
+          sql`update tender_found set title = ${title}, agency_name = coalesce(${agency}, agency_name), agency_key = coalesce(${values.agencyKey}, agency_key),
+              agency_id = coalesce(agency_id, ${values.agencyId}), notice_type = coalesce(${values.noticeType}, notice_type),
+              procurement_mode = coalesce(${values.mode}, procurement_mode), abc = coalesce(${values.abc}, abc),
+              published_on = coalesce(${values.publishedOn}::date, published_on), closing_at = coalesce(${values.closingAt}::timestamptz, closing_at),
+              link = coalesce(${values.link}, link), items_text = coalesce(${itemsText}, items_text), details = details || ${JSON.stringify(sent ?? {})}::jsonb,
+              molecules = ${`{${molecules.map((name) => JSON.stringify(name)).join(",")}}`}::text[], seen_at = now()
+            where id = ${id}`,
+        );
+      if (!reread) return;
+      const key = createHash("sha1")
+        .update(JSON.stringify(lines.map((line) => [line.origin, line.itemNo, line.description, line.qty, line.unit, line.abcUnit, line.abcTotal, line.match.medicineId, line.match.molecules])))
+        .digest("hex");
+      if (key === known?.linesKey) return;
+      const picked = await rows<{ description: string; medicineId: number; pickedBy: number }>(
+        tx,
+        sql`select description, medicine_id::int as "medicineId", picked_by::int as "pickedBy" from tender_found_line
+          where found_id = ${id} and replaced_at is null and picked_by is not null and medicine_id is not null`,
+      );
+      await tx.execute(sql`update tender_found_line set replaced_at = now() where found_id = ${id} and replaced_at is null`);
+      for (const [position, line] of lines.entries()) {
+        const pick = picked.find((one) => one.description === line.description);
+        await tx.execute(
+          sql`insert into tender_found_line (found_id, position, origin, item_no, description, qty, unit, abc_unit, abc_total, molecules, medicine_id, picked_by)
+            values (${id}, ${position}, ${line.origin}, ${line.itemNo}, ${line.description}, ${line.qty}, ${line.unit}, ${line.abcUnit}, ${line.abcTotal},
+              ${`{${line.match.molecules.map((name) => JSON.stringify(name)).join(",")}}`}::text[], ${pick?.medicineId ?? line.match.medicineId}, ${pick?.pickedBy ?? null})`,
+        );
+      }
+      await tx.execute(sql`update tender_found set lines_key = ${key} where id = ${id}`);
+    });
+  }
+  return { taken: notices.length, fresh, matched };
+}
+
+/** A run of the robot, as it reports it. */
+export async function noteRun(
+  db: Database,
+  run: { source?: "philgeps" | "ps"; trigger?: string | null; status: "success" | "failed"; summary?: string | null; found?: number; matched?: number; fresh?: number },
+): Promise<void> {
+  await db.execute(
+    sql`insert into tender_find_run (source, trigger, status, summary, found, matched, fresh)
+      values (${run.source ?? "philgeps"}, ${short(run.trigger, 40)}, ${run.status}, ${short(run.summary, 600)}, ${run.found ?? 0}, ${run.matched ?? 0}, ${run.fresh ?? 0})`,
+  );
+}
+
+/** Our molecules for the robot, in the shape of its own list: [{ name, match: [spellings] }]. */
+export async function robotMolecules(db: Database): Promise<{ name: string; match: string[] }[]> {
+  const names = new Map<string, string>();
+  for (const one of await ourMedicines(db)) {
+    const name = moleculeName(one.generic);
+    if (name.length >= 3) names.set(name.toLowerCase(), name);
+  }
+  return [...names.values()].sort().map((name) => ({ name, match: aliasesOf(name) }));
+}
+
+/** Which of these notices are kept with their page already read, with what was read: the robot
+ *  opens only the pages of the others. Amounts back in pesos, as it sent them. */
+export async function robotKnown(db: Database, source: "philgeps" | "ps", refs: string[]) {
+  if (!refs.length) return [];
+  const found = await rows<{ ref_no: string; items_text: string; abc: number | null; details: Record<string, unknown> }>(
+    db,
+    sql`select ref_no, items_text, abc::float8 as abc, details from tender_found
+      where source = ${source} and items_text is not null and ref_no in (${sql.join(refs.map((ref) => sql`${ref}`), sql`, `)})`,
+  );
+  return found.map((one) => ({ ref_no: one.ref_no, items_text: one.items_text, abc_amount: one.abc === null ? null : one.abc / 100, details: one.details }));
+}
+
+/** The robot's key (TENDER_FINDER_KEY on the server, 24 characters or more): "off" when none is
+ *  set, so the door stays shut. */
+export function robotKey(header: string | undefined): "ok" | "off" | "no" {
+  const key = (process.env.TENDER_FINDER_KEY ?? "").trim();
+  if (key.length < 24) return "off";
+  const given = header?.startsWith("Bearer ") ? header.slice(7).trim() : "";
+  const hash = (text: string) => createHash("sha256").update(text).digest();
+  return timingSafeEqual(hash(key), hash(given)) ? "ok" : "no";
+}
+const robotReady = () => (process.env.TENDER_FINDER_KEY ?? "").trim().length >= 24;
+
+// ---------------------------------------------------------------- the team's pages
+
+/** The seats that have the finder: the ones that record tenders (the bidding line, the mentor
+ *  above it, the CEO, the Admin, a government bidding coachee). */
+export const finds = recordsTenders;
+async function mustFind(db: Database, me: Me): Promise<void> {
+  if (!(await finds(db, me))) throw new Refusal(403, "not_allowed", "The tender finder is the bidding team's.");
+}
+
+const foundSelect = sql`select f.id::int as id, f.source, f.ref_no as "refNo", f.title, f.agency_name as agency, f.agency_id::int as "agencyId", c.name as customer,
+    f.notice_type as "noticeType", f.procurement_mode as "procurementMode", f.abc::float8 as abc, to_char(f.published_on, 'YYYY-MM-DD') as "publishedOn",
+    to_char(f.closing_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "closingAt", f.link, f.molecules,
+    to_char(f.first_seen_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "firstSeenAt", to_char(f.screened_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "screenedAt", p.name as "screenedBy",
+    f.tender_id::int as "tenderId", t.code as "tenderCode", (f.closing_at is null or f.closing_at >= now()) as open,
+    (select count(*) from tender_found_line l where l.found_id = f.id and l.replaced_at is null)::int as lines
+  from tender_found f left join customer c on c.id = f.agency_id left join person p on p.id = f.screened_by left join tender t on t.id = f.tender_id`;
+
+const VIEW: Record<FoundView, SQL> = {
+  // New: asks for our molecules, still open, nobody has screened it or made it a tender.
+  new: sql`f.tender_id is null and f.screened_at is null and cardinality(f.molecules) > 0 and (f.closing_at is null or f.closing_at >= now())`,
+  screened: sql`f.screened_at is not null and f.tender_id is null`,
+  tenders: sql`f.tender_id is not null`,
+  all: sql`true`,
+};
+const ORDER: Record<FoundView, SQL> = {
+  new: sql`f.first_seen_at desc, f.id desc`,
+  screened: sql`f.closing_at nulls last, f.id desc`,
+  tenders: sql`f.tender_id desc`,
+  all: sql`f.published_on desc nulls last, f.id desc`,
+};
+
+export async function listFound(
+  db: Database,
+  me: Me,
+  asked: { view?: string | null; q?: string | null; source?: string | null; molecule?: string | null },
+): Promise<FoundList> {
+  await mustFind(db, me);
+  const view: FoundView = asked.view === "screened" || asked.view === "tenders" || asked.view === "all" ? asked.view : "new";
+  const filters: SQL[] = [];
+  const q = (asked.q ?? "").trim().slice(0, 80);
+  if (q) {
+    const like = `%${q.replace(/[\\%_]/g, "\\$&")}%`;
+    filters.push(sql`(f.title ilike ${like} or f.agency_name ilike ${like} or f.ref_no ilike ${like} or array_to_string(f.molecules, ' ') ilike ${like})`);
+  }
+  if (asked.source === "philgeps" || asked.source === "ps") filters.push(sql`f.source = ${asked.source}`);
+  if (asked.molecule?.trim()) filters.push(sql`${asked.molecule.trim()} = any(f.molecules)`);
+  const where = filters.length ? sql.join(filters, sql` and `) : sql`true`;
+  const [found, [counts], molecules, runs] = await Promise.all([
+    rows<FoundTender>(db, sql`${foundSelect} where ${VIEW[view]} and ${where} order by ${ORDER[view]} limit 300`),
+    rows<Record<FoundView, number>>(
+      db,
+      sql`select count(*) filter (where ${VIEW.new})::int as new, count(*) filter (where ${VIEW.screened})::int as screened,
+          count(*) filter (where ${VIEW.tenders})::int as tenders, count(*)::int as all
+        from tender_found f where ${where}`,
+    ),
+    rows<{ name: string }>(db, sql`select distinct unnest(molecules) as name from tender_found order by 1`),
+    lastRuns(db),
+  ]);
+  return {
+    view,
+    rows: found,
+    counts: counts ?? { new: 0, screened: 0, tenders: 0, all: 0 },
+    molecules: molecules.map((one) => one.name),
+    robot: { ready: robotReady(), runs },
+  };
+}
+
+const lastRuns = (db: Database) =>
+  rows<FindRun>(db, sql`select id::int as id, source, trigger, status, summary, found, matched, fresh, to_char(at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as at from tender_find_run order by at desc, id desc limit 6`);
+
+/** For the Tenders page's button: whether this seat has the finder, and how many are new. */
+export async function foundCount(db: Database, me: Me): Promise<{ allowed: boolean; fresh: number }> {
+  if (!(await finds(db, me))) return { allowed: false, fresh: 0 };
+  const [count] = await rows<{ n: number }>(db, sql`select count(*)::int as n from tender_found f where ${VIEW.new}`);
+  return { allowed: true, fresh: count?.n ?? 0 };
+}
+
+export async function foundDetail(db: Database, me: Me, id: number): Promise<FoundDetail> {
+  await mustFind(db, me);
+  const [found] = await rows<FoundTender & { itemsText: string | null; raw: Record<string, unknown>; agencyKey: string | null }>(
+    db,
+    sql`select one.*, f.items_text as "itemsText", f.details as raw, f.agency_key as "agencyKey"
+      from (${foundSelect} where f.id = ${id}) one join tender_found f on f.id = one.id`,
+  );
+  if (!found) throw new Refusal(404, "not_found", "No such notice.");
+  const { raw, agencyKey: key, ...rest } = found;
+  const [lineRows, events, medicines, prices] = await Promise.all([
+    rows<Omit<FoundLine, "candidates" | "medicine">>(
+      db,
+      sql`select id::int as id, origin, item_no as "itemNo", description, qty::float8 as qty, unit, abc_unit::float8 as "abcUnit", abc_total::float8 as "abcTotal",
+          molecules, medicine_id::int as "medicineId"
+        from tender_found_line where found_id = ${id} and replaced_at is null order by position, id`,
+    ),
+    rows<{ what: string; note: string | null; by: string; at: string }>(
+      db,
+      sql`select e.what, e.note, p.name as by, to_char(e.at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as at from tender_found_event e join person p on p.id = e.by_person where e.found_id = ${id} order by e.at, e.id`,
+    ),
+    ourMedicines(db),
+    // Our price starts from the price book's Bidding price.
+    rows<{ id: number; amount: number }>(db, sql`select medicine_id::int as id, amount from medicine_price where buyer_type = 'bidding'`),
+  ]);
+  const priceOf = new Map(prices.map((one) => [one.id, one.amount]));
+  const label = (one: FinderMedicine) => `${one.name}${one.strength ? ` ${one.strength}` : ""}`;
+  const byMolecule = new Map<string, FinderMedicine[]>();
+  for (const one of medicines) {
+    const name = moleculeName(one.generic);
+    byMolecule.set(name, [...(byMolecule.get(name) ?? []), one]);
+  }
+  const byId = new Map(medicines.map((one) => [one.id, one]));
+  const lines: FoundLine[] = lineRows.map((line) => {
+    const could = line.molecules.flatMap((name) => byMolecule.get(name) ?? []);
+    const picked = line.medicineId !== null ? byId.get(line.medicineId) : undefined;
+    const list = picked && !could.some((one) => one.id === picked.id) ? [picked, ...could] : could;
+    return {
+      ...line,
+      medicine: picked ? label(picked) : null,
+      candidates: list.map((one) => ({ id: one.id, name: label(one), price: priceOf.get(one.id) ?? null })),
+    };
+  });
+  // The customers the agency could be: the one matched, then the names sharing its first words.
+  const words = (key ?? "").split(" ").filter((word) => word.length >= 4).slice(0, 2);
+  const agencies = await rows<{ id: number; name: string; city: string | null }>(
+    db,
+    sql`select id::int as id, name, city from customer
+      where active and kind in ('government', 'hospital')
+        and (id = ${rest.agencyId ?? 0} or ${words.length ? sql.join(words.map((word) => sql`name ilike ${`%${word}%`}`), sql` and `) : sql`false`})
+      order by (id = ${rest.agencyId ?? 0}) desc, name limit 8`,
+  );
+  const text = (name: string) => short(raw[name], 400);
+  return {
+    found: {
+      ...rest,
+      itemsText: found.itemsText,
+      details: {
+        solicitationNo: text("solicitation_no"),
+        classification: text("classification"),
+        areaOfDelivery: text("area_of_delivery"),
+        deliveryPeriod: text("delivery_period"),
+        contactName: text("contact_name"),
+        contactInfo: Array.isArray(raw.contact_info) ? (raw.contact_info as unknown[]).map((one) => short(one, 200)).filter((one): one is string => one !== null) : [],
+        preBid: text("pre_bid"),
+        bidOpening: text("bid_opening"),
+        status: text("status"),
+        supplements: Array.isArray(raw.supplements) ? (raw.supplements as FoundDetail["found"]["details"]["supplements"]) : [],
+        documents: Array.isArray(raw.documents) ? (raw.documents as { name: string }[]).map((one) => one.name) : [],
+      },
+    },
+    lines,
+    events,
+    agencies,
+    mode: modeOf(rest.noticeType, rest.procurementMode),
+    prebidOn: dayIn(text("pre_bid")),
+    openingOn: dayIn(text("bid_opening")),
+  };
+}
+
+/** Onto the team's screened list, or off it (kept: who and when). */
+export async function screenFound(db: Database, me: Me, id: number, on: boolean): Promise<void> {
+  await mustFind(db, me);
+  const [found] = await rows<{ screened: boolean; tenderId: number | null }>(
+    db,
+    sql`select screened_at is not null as screened, tender_id::int as "tenderId" from tender_found where id = ${id}`,
+  );
+  if (!found) throw new Refusal(404, "not_found", "No such notice.");
+  if (found.screened === on) return;
+  if (!on && found.tenderId) throw new Refusal(409, "is_tender", "It is a tender already: drop the tender itself if it is not pursued.");
+  await db.transaction(async (tx) => {
+    await tx.execute(sql`update tender_found set screened_at = ${on ? sql`now()` : sql`null`}, screened_by = ${on ? me.id : null} where id = ${id}`);
+    await tx.execute(sql`insert into tender_found_event (found_id, what, by_person) values (${id}, ${on ? "screened" : "unscreened"}, ${me.id})`);
+  });
+}
+
+export type MakeTenderInput = {
+  agencyId: number;
+  mode: TenderMode;
+  title?: string | null;
+  /** The lines bid: the notice's line, our medicine for it, how many pieces, our price for one. */
+  lines: { lineId: number; medicineId: number; qty: number; unitPrice: number }[];
+};
+
+/** The join: a found notice becomes a CRM tender, with its agency, budget, dates, reference and
+ *  the lines matched to our medicines. One notice, one tender; from here the tender's own road. */
+export async function makeTender(db: Database, me: Me, id: number, input: MakeTenderInput): Promise<{ id: number }> {
+  await mustFind(db, me);
+  const detail = await foundDetail(db, me, id);
+  const found = detail.found;
+  if (found.tenderId) throw new Refusal(409, "is_tender", `It is tender ${found.tenderCode} already.`);
+  const known = new Map(detail.lines.map((line) => [line.id, line]));
+  for (const line of input.lines) if (!known.has(line.lineId)) throw new Refusal(400, "invalid", "A line is not this notice's any more. Open the notice again.", "lines");
+  const medicineIds = [...new Set(input.lines.map((line) => line.medicineId))];
+  if (medicineIds.length) {
+    const active = await rows<{ id: number }>(
+      db,
+      sql`select id::int as id from medicine where active and id in (${sql.join(medicineIds.map((one) => sql`${one}`), sql`, `)})`,
+    );
+    if (active.length !== medicineIds.length) throw new Refusal(400, "invalid", "Pick a medicine we keep for each line.", "lines");
+  }
+  return db.transaction(async (tx) => {
+    const inside = tx as unknown as Database;
+    const [held] = await rows<{ tenderId: number | null; agencyKey: string | null; agencyId: number | null }>(
+      tx,
+      sql`select tender_id::int as "tenderId", agency_key as "agencyKey", agency_id::int as "agencyId" from tender_found where id = ${id} for update`,
+    );
+    if (!held || held.tenderId) throw new Refusal(409, "is_tender", "It was made a tender a moment ago.");
+    const made = await createTender(inside, me, {
+      agencyId: input.agencyId,
+      title: (input.title?.trim() || found.title).slice(0, 300),
+      philgepsRef: found.refNo,
+      mode: input.mode,
+      abc: found.abc,
+      postedOn: found.publishedOn,
+      prebidOn: detail.prebidOn,
+      deadlineAt: found.closingAt,
+      openingOn: detail.openingOn,
+    });
+    if (input.lines.length)
+      await setLines(inside, me, made.id, input.lines.map((line) => ({ medicineId: line.medicineId, qty: line.qty, unitPrice: line.unitPrice })));
+    // A medicine picked by hand stays on the notice's line.
+    for (const line of input.lines)
+      if (known.get(line.lineId)?.medicineId !== line.medicineId)
+        await tx.execute(sql`update tender_found_line set medicine_id = ${line.medicineId}, picked_by = ${me.id} where id = ${line.lineId} and found_id = ${id}`);
+    await tx.execute(
+      sql`update tender_found set tender_id = ${made.id}, agency_id = ${input.agencyId},
+          screened_at = coalesce(screened_at, now()), screened_by = coalesce(screened_by, ${me.id})
+        where id = ${id}`,
+    );
+    // The agency picked by hand is remembered for its other notices.
+    if (held.agencyId !== input.agencyId) {
+      if (held.agencyKey) await tx.execute(sql`update tender_found set agency_id = ${input.agencyId} where agency_key = ${held.agencyKey} and tender_id is null`);
+      await tx.execute(sql`insert into tender_found_event (found_id, what, note, by_person) values (${id}, 'agency', (select name from customer where id = ${input.agencyId}), ${me.id})`);
+    }
+    const [code] = await rows<{ code: string }>(tx, sql`select code from tender where id = ${made.id}`);
+    await tx.execute(sql`insert into tender_found_event (found_id, what, note, by_person) values (${id}, 'tender', ${code?.code ?? null}, ${me.id})`);
+    // The tender's first line of history says where it came from.
+    await tx.execute(
+      sql`update tender_event set note = ${`From the tender finder: ${found.source === "ps" ? "PS-PhilGEPS" : "PhilGEPS"} ${found.refNo}`}
+        where tender_id = ${made.id} and step = 'found'`,
+    );
+    return made;
+  });
+}

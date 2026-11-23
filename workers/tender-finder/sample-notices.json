@@ -1,0 +1,32 @@
+[
+  {
+    "ref_no": "SAMPLE-0001",
+    "publish_date": "2026-11-20",
+    "closing_date": "2099-12-01 13:00:00",
+    "title": "Supply of Letrozole and Capecitabine (a sample to test the CRM's door, not a real tender)",
+    "procuring_entity": "East Avenue Medical Center",
+    "category": "Drugs and Medicines",
+    "detail_link": null,
+    "abc_amount": 522000,
+    "items_text": "Description\n1 12000 tablet Letrozole 2.5 mg tablet 22.50 270,000.00\n2 6000 tablet Capecitabine 500 mg tablet 42.00 252,000.00\n3 100 bottle Plain NSS 1 L 50.00 5,000.00",
+    "details": {
+      "notice_type": "Request for Quotation (RFQ)",
+      "procurement_mode": "Negotiated Procurement - Small Value Procurement (Sec. 53.9)",
+      "area_of_delivery": "Metro Manila",
+      "delivery_period": "15 Day/s",
+      "status": "Active"
+    }
+  },
+  {
+    "ref_no": "SAMPLE-0002",
+    "publish_date": "2026-11-21",
+    "closing_date": "2099-12-03 10:00:00",
+    "title": "Supply of Office Paper (a sample that asks for none of our medicines)",
+    "procuring_entity": "Department of Health - Central Office",
+    "category": "Drugs and Medicines",
+    "detail_link": null,
+    "abc_amount": 80000,
+    "items_text": "Description\n1 400 ream Bond paper A4 200.00 80,000.00",
+    "details": { "notice_type": "Request for Quotation (RFQ)", "status": "Active" }
+  }
+]

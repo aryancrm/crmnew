@@ -67,7 +67,7 @@ import { regulatoryRoutes } from "./regulatory/routes";
 import { bookRoutes } from "./books/routes";
 import { hospitalRoutes } from "./hospitals/routes";
 import { telesalesRoutes } from "./telesales/routes";
-import { tenderRoutes } from "./tenders/routes";
+import { tenderFinderDoor, tenderRoutes } from "./tenders/routes";
 import { rxRoutes } from "./rx/routes";
 import { scoreRoutes } from "./scores/routes";
 import { kpiRoutes } from "./kpis/routes";
@@ -480,6 +480,7 @@ export function createApp(db: Database, options: AppOptions) {
   b2bRoutes(app, db, signedIn);
   clidpRoutes(app, db, signedIn);
   tenderRoutes(app, db, signedIn);
+  tenderFinderDoor(app, db);
   hospitalRoutes(app, db, signedIn);
   telesalesRoutes(app, db, signedIn);
   mtRoutes(app, db, signedIn);

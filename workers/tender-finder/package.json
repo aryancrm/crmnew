@@ -1,0 +1,19 @@
+{
+  "name": "tender-finder-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The tender finder's robot: reads PhilGEPS and hands what it finds to the CRM. Not part of the CRM's own build (it needs Chrome).",
+  "type": "commonjs",
+  "license": "ISC",
+  "scripts": {
+    "find": "node scraper.js --trigger=schedule",
+    "dry-run": "node scraper.js --dry-run",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "puppeteer": "^25.14.0"
+  }
+}

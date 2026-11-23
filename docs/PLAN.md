@@ -1649,6 +1649,9 @@ watched by the Admin.
 | Sales Admin (Prescription, Bidding) | — | Not a CRM seat yet: their work (order → Finance → dispatch) is the order line's Management step | — | Note |
 | Sales & Marketing Mentor | adds Tenders | Bidding pipeline: active, submitted, won / lost this month and win rate, awarded value to deliver, government money owed from acceptance | → Founder (Reports: Tenders) | Done 17 Nov |
 
+Since 23 Nov the seats that record tenders also have the **Tender finder** (section 24): what the
+robot found on PhilGEPS, the team's screened list, and *Make it a tender*.
+
 ### 16.7 Modern Trade (done 17 Nov, partly: deductions and returns wait for Finance)
 
 Read from the chart (Modern Trade box cropped alone, 17 Nov): one person, Ms. Malou Jagonoy, Chief
@@ -2235,6 +2238,76 @@ increment band read the channel's card only. Each card is locked on the 1st as b
 Home shows the month's KPI picture: the company's average, people below 60, the best and the
 lowest, each division's average; Scorecards opens every card.
 
+## 24. The tender finder inside the CRM (23 Nov 2026)
+
+Aryan, 23 Nov: "we keep one CRM, not two; when someone clicks it in our CRM it must open inside our
+CRM; the code is here, you only have to integrate it." The friend's app
+(`github.com/kenshiiir0/Hospital-Bidding-System`, Next.js + Supabase + a robot browser) was read in
+full, not run: it needs its own Supabase and PhilGEPS log-ins, and its robot must never be pointed
+at the live PhilGEPS from a developer's computer.
+
+**What it is.** Three things in one: (1) a robot that reads PhilGEPS (the public notices site, the
+"Drugs and Medicines" category, every hour) and PS-PhilGEPS (the new logged-in portal) and the
+tender papers (PDF, Word, Excel, scans by OCR) into item lines; (2) a matcher that keeps the
+tenders asking for our molecules in our strengths; (3) a dashboard where the team screens them,
+exports the team's Opportunity sheet, keeps hospitals, products, abstracts of bids and who handles
+which hospital.
+
+**The split.** One system for people, two processes behind it:
+
+| Part | Where it lives | Why |
+|---|---|---|
+| Everything a person sees and presses | The CRM: pages under Tenders, the CRM's sign-in, the company tree's seats | One address, one sign-in |
+| Everything kept | The CRM's database (migration 0145: `tender_found`, `tender_found_line`, `tender_found_event`, `tender_find_run`) | One set of data; Supabase goes |
+| The robot (Chrome by Puppeteer, the paper reader, OCR) | A separate worker, `workers/tender-finder`, on a computer with Chrome: the company's own server (Coolify, beside the API) or the office PC | A browser and OCR cannot run inside the web app or its API; it needs minutes, memory and a PhilGEPS log-in |
+| The robot's way in | `/webhooks/tender-finder` with its own key (`TENDER_FINDER_KEY`): it asks which molecules are ours, which notices are known, and hands in what it found and each run's result | The robot holds no database password and no person's login |
+
+**Each of its screens.**
+
+| Its screen | In the CRM | State |
+|---|---|---|
+| Bid Match (`/`): both portals' tenders for our products, filters, View details | **Tender finder** (`/tenders/finder`): New · Screened · Made tenders · Everything found; search, portal, medicine; a notice's page with its lines, budget per piece, dates, contact, the PhilGEPS link | Built |
+| Screened Tenders (`/screened`): the team's pick | The **Screened** tab; Add to screened / Take off (kept with who and when) | Built |
+| (not in it) | **Make it a tender**: the join, below | Built |
+| History, Report log | The finder's **Robot** line and its last runs (`tender_find_run`) | Built (runs); OCR's own report comes with the papers |
+| Product List, Add Molecule | Dropped as a double: **our medicines** (Inventory) are the list the robot looks for | Built (the robot asks the CRM) |
+| Hospital List, contacts, Message Hospitals | Dropped as a double: **Customers** (government, hospital). A notice's agency is matched to a customer by name; one picked by hand is remembered for that agency | Built (matching); mass e-mail not moved |
+| Assigned Persons, the award e-mails | Dropped as a double: the company tree and the customer's owner say who handles a hospital | Not moved; the bell can tell them later |
+| Abstract of Bids (Results, Overall Abstract, All Bids) | Mostly a double: a tender's **bids read at the opening** and the **Bid report**. The team's Overall_Abstract workbook import/export is not moved | Question 34 |
+| Excel export of the screened list (the team's Opportunity sheet) and the papers' ZIP | Not moved yet | Question 34 |
+| Documents viewer, the papers' reading, OCR | With the robot's second step (it needs the PhilGEPS log-in): the files into the CRM's file store, the lines through the same door | Next |
+| PS-PhilGEPS My Opportunities, Award Notices, Accept / Refuse | With the robot's second step (it needs the PS-PhilGEPS log-in and a person's captcha) | Next |
+| Its log-in (Supabase accounts) | Dropped: the CRM's sign-in | Done |
+
+**Who sees it:** the seats that have Tenders today: the Government Bidding coachees, their Admin,
+the mentor above them (B2B, CLIDP and BID), the CEO and the Admin. The API checks it on every call
+(`finds` in `tenders/finder.ts`); a Hospital CHC who runs one tender of their own does not get the
+finder.
+
+**The join (a found notice becomes a CRM tender in one press).** On a notice's page, *Make it a
+tender* opens with: the agency matched to a customer (same name without punctuation, or the name
+with the portal's region / DOH suffix dropped; else the person picks, and the pick is remembered),
+what it buys, the ABC, the closing date as the bid deadline, the PhilGEPS reference, the mode read
+from the notice (Invitation to Bid → competitive bidding, RFQ / small value → small value,
+negotiated → negotiated, else other; the person can change it), and each line matched to our
+medicine **by molecule** (the medicine's generic name, salts and brackets dropped; when we keep
+several strengths, the one whose strength is written on the line; no single fit: the person picks).
+Quantity as read; our price starts from the price book's Bidding price (empty when there is none)
+and is changed on the tender before the price is approved (a line still at ₱0 stops the
+approval). The tender is then the CRM's own:
+price approval, envelope, submitted, won, *Place the delivery order*, *Take the bid's medicines and
+prices*. A notice makes one tender only; the tender's page shows what the notice asked, line by
+line with the budget for one piece.
+
+**Interim choices (mine, until Aryan says):** the robot looks for every active medicine that has a
+generic name (question 33); a line whose molecule is ours but whose strength is not is shown as
+"pick the medicine", never matched by itself and never hidden; a notice needs no screening first to
+become a tender (making it a tender screens it).
+
+**Not checked:** the robot was never run against PhilGEPS by me (no log-in, and not from here); its
+door was tested with notices in the robot's own shape. Before go-live: one run of the worker on the
+chosen computer, on Aryan's word.
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -2333,6 +2406,16 @@ lowest, each division's average; Scorecards opens every card.
 32. **The real KPI cards** (23): the field's, B2B's, CLIDP's, MT's, Bidding's, PAP's and the leads'
     KPIs and weights are interim (section 23). HR or Aryan to give the real ones; they change in
     `scores/recipes.ts` without touching the data.
+33. **Which medicines the tender finder looks for** (24): every active medicine with a generic
+    name (as built), or only a bidding list (the friend's app used the B2B price list and the
+    team's PRODUCT LIST)? And when a tender asks for our molecule in a strength we do not keep:
+    show it to the team (as built: "pick the medicine") or hide it (the friend's app hid it)?
+34. **The bidding team's Excel sheets** (24): the Opportunity sheet exported from the screened
+    list, and the Overall_Abstract workbook (import / export): still needed once the tenders, the
+    bids read and the Bid report are in the CRM, or do the CRM's pages replace them?
+35. **Where the robot runs and whose PhilGEPS log-in it uses** (24): the company's own server
+    (Coolify) or the office PC; the PhilGEPS and PS-PhilGEPS accounts for reading the papers and
+    the awards (PS-PhilGEPS needs a person to tick its captcha now and then).
 
 ## 14. Change log
 
@@ -3620,3 +3703,4 @@ lowest, each division's average; Scorecards opens every card.
 - 23 Nov (171), asked by the backend developer ("it looks like a dropdown but it redirects to another app"): **⌄ opens, ↗ leaves.** A sidebar folder only opens and closes its list (it used to jump to its first page). Finance's *Books* is one link with ↗ in place of a folder (its pages are Books' own menu). Every menu link that leaves the app open has ↗, worked out from the address (`app-switch.tsx`), in the CRM and in Books. Changing app, by a link or Back / Forward, shows "Opening Books…" until the first figures are in (at least 0.45 s, at most 8).
 - 23 Nov (172), asked by the backend developer ("make the accounts by sign up; the Administration confirms who gets in; email them that they're accepted"), **waiting for Aryan's approval before main or deploy** (it reverses 15 Nov (18)'s "no invite or email system"): **Sign up** (`/signup`, from the sign-in pages): name in parts, email, mobile, department; no password, no account, no email, and the same answer whether the email is known or not (40 an hour, 500 waiting at most, over the whole form). **Admin panel > Sign-ups** (`/admin/sign-ups`, count on the menu, the Admin told once an hour): warns of a known email or a colleague's name; Review and accept needs the confirmation tick and a seat (it decides the role; never CEO or Admin), else Decline (kept). Accepting makes the account with no way in, and emails from the first connected mailbox ("accepted and can be used") a link (`/welcome#…`, once, three days) to set the password; when no email goes, the Admin is told and gets the link to pass on. Migration 0144. Add person and HR's New joiner stay. Teams & people's work list now offers Regulatory and Office staff too.
 - 23 Nov, Aryan: "we keep one CRM, not two things; integrate the bidding system my friend built (github kenshiiir0/Hospital-Bidding-System); a button that opens it, by the hierarchy (Government Bidding under Subir)." **Read, not run** (it needs its own Supabase and PhilGEPS login): a Next.js + Supabase app with a robot browser that reads PhilGEPS and PS-PhilGEPS on a schedule, reads the tender papers (PDF, Word, Excel, scans by OCR) into lots and items, matches them to our molecules, screens them, tracks abstracts of bids and award notices. It finds and reads tenders; the CRM's Tenders does what comes after (price approval, envelope, award, order at the bid's prices, delivery, bill, payment). **First join:** the Tenders page has **Find tenders on PhilGEPS ↗** for every seat that has Tenders (the bidding coachees, their admin, the mentor above them, the CEO, the Admin), opening the finder in its own tab; its address is the web deployment's `VITE_TENDER_FINDER_URL` (not set yet: the button says so). **Not built yet:** a screened tender coming into the CRM's Tenders by itself (agency, title, ABC, deadline, PhilGEPS reference, the lines by molecule), and one sign-in for both. Checked: web type-check and build. Local, not pushed.
+- 23 Nov (173), Aryan: "we keep one CRM, not two; when someone clicks it in our CRM it must open inside our CRM; the code is here, you only have to integrate it; make a plan first; build the real integration too." **The tender finder lives inside the CRM** (section 24; the friend's app read in full, not run). **Kept in the CRM** (migration 0145: `tender_found`, `tender_found_line`, `tender_found_event`, `tender_find_run`): each notice the robot finds on PhilGEPS and PS-PhilGEPS with its agency, budget, dates and item lines. **Pages** (`sellers/tender-finder.tsx`): *Tender finder* (`/tenders/finder`: New, Screened, Made tenders, Everything found; search, portal, our medicine; the robot's last run) and a notice's page (what it asks line by line with the budget for one piece, dates, contact, bid bulletins, history); in the menu of the six seats that record tenders and behind the Tenders page's button, which replaces **Find tenders on PhilGEPS ↗** (the `VITE_TENDER_FINDER_URL` setting is gone). **The join:** *Make it a tender* turns a notice into a CRM tender in one press: agency matched to a customer by name (one picked by hand is remembered for that agency), title, ABC, PhilGEPS reference, closing as the deadline, pre-bid and opening days, mode read from the notice, each line matched to our medicine by molecule then strength (no single fit: the person picks), our price starting from the price book's Bidding price; one notice, one tender; the tender's page shows what the notice asked. Then the tender's own road, with one guard added: a bid line still at ₱0 (the price book had no Bidding price) stops the price approval, named ("Imatinib 400 mg has no price yet"), as a missing bid price always did for the whole tender. **Who:** the seats that record tenders (`recordsTenders`: bidding line, the mentor above it, CEO, Admin, a government bidding coachee), checked on every call. **The robot** is a separate worker (`workers/tender-finder`: the friend's PhilGEPS reader, Supabase replaced by the CRM) that comes in through `/webhooks/tender-finder` with its own key (`TENDER_FINDER_KEY`; no key, no door); our medicines are its product list, our customers its hospital list, our sign-in its log-in. **Checked:** 15 API tests (`tenders/finder.test.ts`) in the whole suite (104 files, 670 tests, all passing), both type-checks, the web build, 4 worker tests; walked by hand on a demo copy as Hazel and Jimmy: finder → notice → Make it a tender → preparing → envelope → price approved → submitted → won → Place the delivery order → Take the bid's 3 medicines and prices (₱2,368,000 on the order form); the worker handed a saved list to a local CRM over HTTP. **Not checked:** the robot's browser run against PhilGEPS (never from a developer's computer; no log-in); the order itself was not placed in this walk. **Not moved yet:** the papers' reading and OCR, PS-PhilGEPS's own lists and award answers, the team's Excel sheets (questions 33 to 35). Committed locally, not pushed.
