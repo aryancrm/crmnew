@@ -463,6 +463,16 @@ export function TenderPage() {
         tags={<span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[12px] font-semibold text-emerald-800 ring-1 ring-emerald-200">{STEP[t.step]}</span>}
         actions={
           <div className="flex flex-wrap gap-2">
+            {/* One job leads to the next (Aryan, 23 Nov): a tender won has its delivery to order; the
+                order form opens on the agency and ties the order to the tender. */}
+            {(t.step === "won" || t.step === "contract") && (
+              <Link
+                to={`/orders/new?customer=${t.agencyId}`}
+                className="inline-flex h-8 items-center rounded-[10px] border border-emerald-300 bg-emerald-50 px-2.5 text-[13px] font-semibold text-emerald-800 hover:bg-emerald-100"
+              >
+                Place the delivery order
+              </Link>
+            )}
             {moves.map((step) => (
               <Button key={step} small variant={step === "dropped" || step === "lost" ? undefined : "primary"} onClick={() => setMoving(step)}>
                 {STEP[step]}

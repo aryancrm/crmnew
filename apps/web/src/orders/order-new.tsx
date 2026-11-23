@@ -1071,6 +1071,7 @@ export function OrderNew({
   const lineError = (index: number, name: string) => action.at(`items.${index}.${name}`);
 
   return (
+    <>
     <form onSubmit={submit} className="mx-auto flex max-w-4xl flex-col gap-4 pb-4">
       {handsToPap && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-50 px-4 py-3 text-[13px] text-amber-950 ring-1 ring-amber-200">
@@ -2818,6 +2819,9 @@ export function OrderNew({
         </Dialog>
       )}
 
+    </form>
+      {/* Outside the order's own form: a form inside a form sent the page away when "Add doctor"
+          was pressed, and the customer was never saved (found walking TeleSales, 23 Nov). */}
       {adding && customers.data && (
         <CustomerDialog
           can={customers.data.can}
@@ -2829,7 +2833,7 @@ export function OrderNew({
           onPick={(id) => setCustomerId(id)}
         />
       )}
-    </form>
+    </>
   );
 }
 
