@@ -1,7 +1,8 @@
 // Who is at the robot's door (docs/PLAN.md 24). The tender finder's robot is no person, so it has
 // no sign-in. It is let in one of two ways:
 //
-// 1. From this repository's own GitHub workflow (.github/workflows/tender-finder.yml on main),
+// 1. From this repository's own GitHub workflows (.github/workflows/tender-finder.yml and
+//    tender-finder-keepalive.yml, on main),
 //    where the robot runs: GitHub signs a short-lived token saying which repository, branch and
 //    workflow is asking, and that signature is checked here against GitHub's published keys.
 //    No shared secret exists, so none can leak or needs typing anywhere.
@@ -15,7 +16,8 @@ import { createHash, createPublicKey, type JsonWebKey, timingSafeEqual, verify }
 const ISSUER = "https://token.actions.githubusercontent.com";
 /** What the workflow asks its token for; a token made for anything else is refused. */
 export const ROBOT_AUDIENCE = "crmnew-tender-finder";
-const WORKFLOW = ".github/workflows/tender-finder.yml";
+/** The robot's workflows: the hourly run, and the keep-alive of the PS-PhilGEPS session (every 5 minutes). */
+const WORKFLOWS = [".github/workflows/tender-finder.yml", ".github/workflows/tender-finder-keepalive.yml"];
 /** The repository whose workflow is the robot: this one. TENDER_FINDER_GITHUB names another
  *  ("owner/name"), or "off" to shut this way in. */
 const trustedRepository = () => (process.env.TENDER_FINDER_GITHUB || "aryancrm/crmnew").trim();
@@ -81,7 +83,7 @@ export async function fromRobotWorkflow(token: string, now = Date.now()): Promis
     (typeof claims.nbf !== "number" || claims.nbf <= seconds + 60) &&
     claims.repository === repository &&
     claims.ref === "refs/heads/main" &&
-    claims.job_workflow_ref === `${repository}/${WORKFLOW}@refs/heads/main`
+    WORKFLOWS.some((workflow) => claims.job_workflow_ref === `${repository}/${workflow}@refs/heads/main`)
   );
 }
 

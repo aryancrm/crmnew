@@ -207,6 +207,9 @@ describe("the tender finder: the robot's door", () => {
     expect(await status(token({ ref: "refs/heads/other", job_workflow_ref: "aryancrm/crmnew/.github/workflows/tender-finder.yml@refs/heads/other" }))).toBe(401);
     expect(await status(token({ ref: "refs/pull/7/merge" }))).toBe(401);
     expect(await status(token({ job_workflow_ref: "aryancrm/crmnew/.github/workflows/ci.yml@refs/heads/main" }))).toBe(401);
+    // The keep-alive of the PS-PhilGEPS session is the robot's other workflow; on another branch it is not.
+    expect(await status(token({ job_workflow_ref: "aryancrm/crmnew/.github/workflows/tender-finder-keepalive.yml@refs/heads/main" }))).toBe(200);
+    expect(await status(token({ ref: "refs/heads/other", job_workflow_ref: "aryancrm/crmnew/.github/workflows/tender-finder-keepalive.yml@refs/heads/other" }))).toBe(401);
     expect(await status(token({ aud: "https://github.com/aryancrm" }))).toBe(401);
     expect(await status(token({ iss: "https://example.com" }))).toBe(401);
     expect(await status(token({ exp: Math.floor(Date.now() / 1000) - 5 }))).toBe(401);
