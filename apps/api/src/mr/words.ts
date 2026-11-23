@@ -552,7 +552,7 @@ export type TeamToday = {
   clients: { doctors: number; hospitals: number; firms: number };
   closed: { today: number; week: number; month: number };
   champions: { id: number; name: string; closed: number }[];
-  feed: { at: string; name: string; what: "checked_in" | "closed"; client: string; visitId: number }[];
+  feed: { at: string; name: string; what: "checked_in" | "closed"; client: string; visitId: number; meeting: Meeting | null; booked: number }[];
 };
 
 export type LeadQueue = {

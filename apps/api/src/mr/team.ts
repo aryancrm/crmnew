@@ -106,11 +106,15 @@ export async function teamToday(db: Database, me: Me, asked: { day?: string | nu
     rows<TeamToday["feed"][number]>(
       db,
       sql`${teamSql(me)} select * from (
-          select ${iso("v.checked_in_at")} as at, p.name, 'checked_in' as what, c.name as client, v.id::int as "visitId"
+          select ${iso("v.checked_in_at")} as at, p.name, 'checked_in' as what, c.name as client, v.id::int as "visitId",
+              null::text as meeting, 0::float8 as booked
             from visit v join person p on p.id = v.person_id join customer c on c.id = v.customer_id
             where v.day = ${day}::date and v.checked_in_at is not null and ${inTeam(me, "v.person_id")}
           union all
-          select ${iso("v.done_at")} as at, p.name, 'closed' as what, c.name as client, v.id::int as "visitId"
+          -- A closed visit says what came of it: met or not, and what was ordered there.
+          select ${iso("v.done_at")} as at, p.name, 'closed' as what, c.name as client, v.id::int as "visitId", v.meeting,
+              (select coalesce(sum(o.total), 0) from visit_order vo join sales_order o on o.id = vo.order_id
+                where vo.visit_id = v.id and o.status <> 'cancelled')::float8
             from visit v join person p on p.id = v.person_id join customer c on c.id = v.customer_id
             where v.day = ${day}::date and v.done_at is not null and ${inTeam(me, "v.person_id")}) f
         order by at desc limit 40`,

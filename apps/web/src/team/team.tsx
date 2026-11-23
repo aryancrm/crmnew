@@ -9,6 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, CirclePause, Undo2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { MyKpis } from "../kpis/my-kpis";
+import { FieldTodayCard } from "../mr/team";
 import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
@@ -147,6 +148,8 @@ export function TeamSalesPage() {
       </header>
 
       {/* The hub's My KPIs: their own and their team's (Aryan, 20 Nov; PLAN 23). */}
+      {/* What the MedReps are doing in the field today, and what of it waits for this lead. */}
+      {!whole && <FieldTodayCard />}
       {!whole && <MyKpis />}
 
       <section aria-label="The team's month" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
