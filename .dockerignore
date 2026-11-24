@@ -8,7 +8,8 @@
 !.env.example
 !.env.*.example
 .claude
-docs
+docs/*
+!docs/company-map.units.js
 **/*.tsbuildinfo
 **/*.test.ts
 .DS_Store
