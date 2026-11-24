@@ -1,8 +1,9 @@
 // Leave as a list: what waits for this person's decision (a team lead's team, everything for HR),
 // and every request by where it stands. HR and team leads approve or refuse with a word; HR also
-// cancels; the CEO reads. A month narrows it.
+// cancels; the CEO reads. A month narrows it. Forms (OB, WFH, overtime) and requests to put an
+// attendance day right are decided here too, so a lead and HR decide in one place.
 
-import type { FormList, LeaveLine, LeaveList } from "@2mg/api/types";
+import type { FixList, FormList, LeaveLine, LeaveList } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronLeft, ChevronRight, FileText, Undo2 } from "lucide-react";
 import { useState } from "react";
@@ -11,6 +12,7 @@ import { api } from "../api";
 import { manilaToday } from "../team/range";
 import { Button, CARD, PageHead, PageState, Problem, Tabs, useAction } from "../ui";
 import { LEAVE_WORDS } from "./attendance-report";
+import { FixLineRow } from "./corrections";
 import { daysWords, FormLineRow, LEAVE_STATUS, spanWords } from "./my-leave";
 
 type View = "waiting" | "asked" | "approved" | "refused" | "cancelled";
@@ -29,7 +31,18 @@ export function LeaveListPage() {
   const [params, setParams] = useSearchParams();
   const view = (params.get("view") as View | null) ?? "waiting";
   const month = params.get("month");
-  const forms = params.get("of") === "forms";
+  const of = params.get("of");
+  const forms = of === "forms";
+  const fixes = of === "fixes";
+  const fixesQuery = useQuery({
+    queryKey: ["leave", "fixes", view, month],
+    queryFn: () =>
+      api<FixList>(
+        `/api/hr/fixes/list?${new URLSearchParams({ view, ...(month ? { month } : {}) })}`,
+      ),
+    placeholderData: (previous) => previous,
+    enabled: fixes,
+  });
   const formsQuery = useQuery({
     queryKey: ["leave", "forms", view, month],
     queryFn: () =>
@@ -49,7 +62,11 @@ export function LeaveListPage() {
   });
   const data = query.data;
   if (!data) return <PageState query={query} what="the leave" />;
-  const counts = forms ? (formsQuery.data?.counts ?? data.counts) : data.counts;
+  const counts = forms
+    ? (formsQuery.data?.counts ?? data.counts)
+    : fixes
+      ? (fixesQuery.data?.counts ?? data.counts)
+      : data.counts;
   const set = (key: string, value: string | null) => {
     const out = new URLSearchParams(params);
     if (value === null) out.delete(key);
@@ -70,18 +87,19 @@ export function LeaveListPage() {
   return (
     <div className={`flex flex-col gap-4 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
       <PageHead
-        title={forms ? "Forms" : "Leave"}
+        title={forms ? "Forms" : fixes ? "Attendance days to put right" : "Leave"}
         tags={
           <span className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5 text-xs font-semibold">
             {[
               { key: null, label: "Leave" },
               { key: "forms", label: "Forms" },
+              { key: "fixes", label: "Attendance" },
             ].map((one) => (
               <button
                 key={one.label}
                 type="button"
                 onClick={() => set("of", one.key)}
-                className={`rounded-md px-2.5 py-1 ${(one.key === "forms") === forms ? "bg-brand text-white" : "text-slate-600 hover:bg-slate-100"}`}
+                className={`rounded-md px-2.5 py-1 ${one.key === of || (one.key === null && !forms && !fixes) ? "bg-brand text-white" : "text-slate-600 hover:bg-slate-100"}`}
               >
                 {one.label}
               </button>
@@ -125,8 +143,16 @@ export function LeaveListPage() {
             ? (formsQuery.data?.lines ?? []).map((line) => (
                 <FormLineRow key={line.id} line={line} showPerson />
               ))
-            : data.lines.map((line) => <Line key={line.id} line={line} />)}
-          {(forms ? (formsQuery.data?.lines.length ?? 0) : data.lines.length) === 0 && (
+            : fixes
+              ? (fixesQuery.data?.lines ?? []).map((line) => (
+                  <FixLineRow key={line.id} line={line} showPerson />
+                ))
+              : data.lines.map((line) => <Line key={line.id} line={line} />)}
+          {(forms
+            ? (formsQuery.data?.lines.length ?? 0)
+            : fixes
+              ? (fixesQuery.data?.lines.length ?? 0)
+              : data.lines.length) === 0 && (
             <li className="px-4 py-8 text-center text-sm text-slate-500">
               {view === "waiting" ? "Nothing waiting for you." : "Nothing here."}
             </li>

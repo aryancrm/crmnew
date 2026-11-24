@@ -16,6 +16,7 @@ import type {
   HrPerson,
   HrPersonRow,
   HrRecordInput,
+  HrSchedules,
   JoinerForm,
 } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -40,6 +41,7 @@ import { api } from "../api";
 import { useMe } from "../auth";
 import { FIELD } from "../org/dialogs";
 import { smaller } from "../photo";
+import { weekdaysWords } from "./schedules";
 import {
   Button,
   CARD,
@@ -685,7 +687,7 @@ export function HrPersonPage() {
     queryKey: ["hr", "person", id],
     queryFn: () => api<HrPerson>(`/api/hr/people/${id}`),
   });
-  const [open, setOpen] = useState<"edit" | "login" | "left" | null>(null);
+  const [open, setOpen] = useState<"edit" | "login" | "left" | "schedule" | null>(null);
   const data = query.data;
   if (!data) return <PageState query={query} what="the record" />;
   const mine = me?.id === data.personId;
@@ -779,6 +781,10 @@ export function HrPersonPage() {
             ["Channel", data.seat?.channel ?? null],
             ["Area", data.seat?.area ?? null],
             ["Reports to", data.seat?.boss ?? null],
+            [
+              "Schedule",
+              `${data.schedule.name}${data.schedule.id === null ? " (company default)" : ""} · ${data.schedule.start}–${data.schedule.end}, ${weekdaysWords(data.schedule.days)}`,
+            ],
             ["Employee ID", r.employeeCode],
             ["Employed as", CLASS[r.classification]],
             ["Works", r.workArrangement ? ARRANGEMENT[r.workArrangement] : null],
@@ -797,6 +803,11 @@ export function HrPersonPage() {
                 ] as [string, ReactNode][])
               : []),
           ]),
+          data.can.schedule && (
+            <Button small onClick={() => setOpen("schedule")}>
+              <Pencil size={14} /> Change schedule
+            </Button>
+          ),
         )}
         {box(
           "Login",
@@ -932,7 +943,73 @@ export function HrPersonPage() {
       {open === "left" && (
         <LeftDialog person={data} onClose={() => setOpen(null)} />
       )}
+      {open === "schedule" && (
+        <ScheduleDialog person={data} onClose={() => setOpen(null)} />
+      )}
     </div>
+  );
+}
+
+/** HR gives the person a work schedule (a shift), or puts them back on the company's default. */
+function ScheduleDialog({ person, onClose }: { person: HrPerson; onClose: () => void }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const list = useQuery({
+    queryKey: ["hr", "schedules"],
+    queryFn: () => api<HrSchedules>("/api/hr/schedules"),
+  });
+  const [picked, setPicked] = useState<string>(person.schedule.id === null ? "" : String(person.schedule.id));
+  const offered = (list.data?.schedules ?? []).filter((one) => !one.archived && !one.isDefault);
+  const fallback = list.data?.schedules.find((one) => one.isDefault);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const done = await action.run(() =>
+      api(`/api/hr/people/${person.personId}/schedule`, {
+        body: { scheduleId: picked ? Number(picked) : null },
+      }),
+    );
+    if (done) {
+      await Promise.all([
+        queries.invalidateQueries({ queryKey: ["hr"] }),
+        queries.invalidateQueries({ queryKey: ["attendance"] }),
+      ]);
+      onClose();
+    }
+  }
+  return (
+    <Dialog
+      title={`${person.name}'s schedule`}
+      sub="Late and undertime count on it, and which days are rest days. New shifts are added under Schedules."
+      onClose={onClose}
+      busy={action.busy}
+    >
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <Label text="Schedule" error={action.at("scheduleId")}>
+          <select value={picked} onChange={(event) => setPicked(event.target.value)} className={FIELD}>
+            <option value="">
+              {fallback
+                ? `${fallback.name} (company default) · ${fallback.start}–${fallback.end}, ${weekdaysWords(fallback.days)}`
+                : "Company default"}
+            </option>
+            {offered.map((one) => (
+              <option key={one.id} value={one.id}>
+                {one.name} · {one.start}–{one.end}, {weekdaysWords(one.days)}
+              </option>
+            ))}
+          </select>
+        </Label>
+        {list.isError && <Problem message="Couldn't load the schedules." />}
+        <Problem message={action.general(["scheduleId"])} />
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button onClick={onClose} disabled={action.busy}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" disabled={action.busy || !list.data}>
+            {action.busy ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 

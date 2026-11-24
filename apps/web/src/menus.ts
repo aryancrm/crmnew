@@ -1520,6 +1520,7 @@ function ownDesk(me: Me): Space {
           { to: "/hr/payroll", label: "Payroll", icon: Wallet },
           { to: "/hr/report", label: "Attendance report", icon: BarChart3 },
           { to: "/hr/positions", label: "Positions", icon: Briefcase },
+          { to: "/hr/schedules", label: "Schedules", icon: Timer },
         ]),
         icon: Users,
       };

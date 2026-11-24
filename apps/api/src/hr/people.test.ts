@@ -88,7 +88,7 @@ describe("HR's people", () => {
     ).toBe(200);
     const own = await read<HrPerson>("ryan", `/api/hr/people/${ids.ryan}`);
     expect(own.record).toMatchObject({ salary: 3_000_000, sss: "34-1234567-8" });
-    expect(own.can).toEqual({ edit: false, login: false, leave: false, back: false });
+    expect(own.can).toEqual({ edit: false, login: false, leave: false, back: false, schedule: false });
     expect((await get("ryan", `/api/hr/people/${ids.daniel}`)).status).toBe(403);
     expect((await send("ryan", `/api/hr/people/${ids.ryan}`, { salary: 9 }, "PATCH")).status).toBe(
       403,

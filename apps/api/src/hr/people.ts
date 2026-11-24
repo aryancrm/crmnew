@@ -258,7 +258,7 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
       where p.id = ${personId}`,
   );
   if (!one) throw new Refusal(404, "not_found", "No such person.");
-  const [history, boss, career] = await Promise.all([
+  const [history, boss, career, schedule] = await Promise.all([
     rows<HrPerson["history"][number]>(
       db,
       sql`select s.title, u.name as team, to_char(h.starts_on, 'YYYY-MM-DD') as "from",
@@ -272,6 +272,15 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
       sql`select b.name from person p join person b on b.id = p.reports_to and b.active where p.id = ${personId}`,
     ),
     careerOf(db, personId),
+    // Their work schedule: the one HR gave them, else the company's default.
+    rows<{ id: number | null; name: string; start: string; end: string; days: number[] }>(
+      db,
+      sql`select p.schedule_id::int as id, w.name, to_char(w.starts, 'HH24:MI') as start,
+          to_char(w.ends, 'HH24:MI') as "end", w.days
+        from person p join work_schedule w on w.id = coalesce(p.schedule_id,
+          (select id from work_schedule where is_default and active limit 1))
+        where p.id = ${personId}`,
+    ),
   ]);
   const channel = one.seatId
     ? ((
@@ -356,7 +365,9 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
       leave: works && one.active && me.id !== one.personId && one.role !== "ceo",
       // Marked as left by mistake, or back after leaving (the hub couldn't reactivate anyone).
       back: works && !one.active,
+      schedule: works && one.active && one.role !== "admin",
     },
+    schedule: schedule[0] ?? { id: null, name: "Office hours", start: "07:00", end: "16:00", days: [1, 2, 3, 4, 5, 6] },
   };
 }
 

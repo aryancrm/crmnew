@@ -17,7 +17,9 @@ import {
   startDay,
   workCalendar,
 } from "./attendance";
+import { cancelFix, decideFix, fixList, myFixes, requestFix } from "./corrections";
 import { hrHistory } from "./events";
+import { addSchedule, archiveSchedule, hrSchedules, setPersonSchedule } from "./schedules";
 import { cancelForm, decideForm, formList, myForms, requestForm } from "./forms";
 import { addPosition, hrPositions, setPositionArchived } from "./positions";
 import { addPaper, archivePaper, hrPapers, PAPER_MAX_BYTES, type PaperFile, paperFile } from "./papers";
@@ -198,6 +200,29 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
     await cancelForm(db, c.get("me"), idParam(c));
     return c.json({ ok: true });
   });
+  // Asking for a day of one's own attendance to be put right; whom they report to (or HR) decides.
+  app.get("/api/hr/fixes/mine", async (c) => c.json({ lines: await myFixes(db, c.get("me")) }));
+  app.get("/api/hr/fixes/list", async (c) =>
+    c.json(
+      await fixList(db, c.get("me"), { view: c.req.query("view"), month: c.req.query("month") }),
+    ),
+  );
+  app.post("/api/hr/fixes", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({ day, timeIn: clock, timeOut: clock.nullish(), reason: z.string().max(300) }),
+    );
+    return c.json(await requestFix(db, c.get("me"), input));
+  });
+  app.post("/api/hr/fixes/:id/decide", async (c) => {
+    const input = await readBody(c, z.object({ approve: z.boolean(), note: words(300) }));
+    await decideFix(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+  app.post("/api/hr/fixes/:id/cancel", async (c) => {
+    await cancelFix(db, c.get("me"), idParam(c));
+    return c.json({ ok: true });
+  });
   app.post("/api/hr/leave/:id/cancel", async (c) => {
     await cancelLeave(db, c.get("me"), idParam(c));
     return c.json({ ok: true });
@@ -228,6 +253,31 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   app.post("/api/hr/positions/:id", async (c) => {
     const input = await readBody(c, z.object({ archived: z.boolean() }));
     await setPositionArchived(db, c.get("me"), idParam(c), input.archived);
+    return c.json({ ok: true });
+  });
+  // Work schedules: HR gives people a shift, or the company's default.
+  app.get("/api/hr/schedules", async (c) => c.json(await hrSchedules(db, c.get("me"))));
+  app.post("/api/hr/schedules", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        name: z.string().max(200),
+        days: z.array(z.number().int().min(0).max(6)).max(7),
+        start: clock,
+        end: clock,
+        graceMinutes: z.number().int().nullish(),
+        breakMinutes: z.number().int().nullish(),
+      }),
+    );
+    return c.json(await addSchedule(db, c.get("me"), input));
+  });
+  app.post("/api/hr/schedules/:id/archive", async (c) => {
+    await archiveSchedule(db, c.get("me"), idParam(c));
+    return c.json({ ok: true });
+  });
+  app.post("/api/hr/people/:id/schedule", async (c) => {
+    const input = await readBody(c, z.object({ scheduleId: z.number().int().positive().nullable() }));
+    await setPersonSchedule(db, c.get("me"), idParam(c), input.scheduleId);
     return c.json({ ok: true });
   });
   app.get("/api/hr/people/:id/papers", async (c) =>

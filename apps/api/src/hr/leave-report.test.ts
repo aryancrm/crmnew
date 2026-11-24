@@ -102,7 +102,7 @@ describe("HR's work and the CEO's report", () => {
       "naresh",
       `/api/hr/attendance/${ids.ryan}?month=${(workDays[0] as string).slice(0, 7)}`,
     );
-    expect(month.can).toEqual({ putRight: false, leave: false });
+    expect(month.can).toEqual({ putRight: false, leave: false, askFix: false });
 
     expect((await send("helen", "/api/hr/leave", leave)).status).toBe(200);
     expect((await send("helen", "/api/hr/leave", { ...leave, kind: "sl" })).status).toBe(409);
@@ -120,7 +120,7 @@ describe("HR's work and the CEO's report", () => {
     const onLeave = month.days.find((one) => one.day === workDays[1]);
     expect(onLeave).toMatchObject({ leave: "vl", absent: false });
     expect(month.leaves.map((one) => one.kind)).toContain("vl");
-    expect(month.can).toEqual({ putRight: true, leave: true });
+    expect(month.can).toEqual({ putRight: true, leave: true, askFix: false });
   });
 
   it("reports who worked how long, late, absent and on leave over the chosen days", async () => {

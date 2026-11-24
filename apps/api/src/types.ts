@@ -3973,8 +3973,8 @@ export type AttendanceDay = {
   timeIn: string | null;
   timeOut: string | null;
   /** Where time out came from: their button, the last thing they did, HR. */
-  outFrom: "button" | "last_seen" | "field" | "hr" | null;
-  inFrom: "sign_in" | "button" | "field" | "hr" | null;
+  outFrom: "button" | "last_seen" | "field" | "hr" | "request" | null;
+  inFrom: "sign_in" | "button" | "field" | "hr" | "request" | null;
   /** Still working (today, not ended). */
   working: boolean;
   workedMinutes: number;
@@ -4059,8 +4059,64 @@ export type AttendanceMonth = {
     leaveDays: number;
   };
   leaves: LeaveRow[];
-  /** putRight: change a day's times; leave: record or cancel leave (HR's work). */
-  can: { putRight: boolean; leave: boolean };
+  /** The person's requests to put a day of this month right. */
+  fixes: FixLine[];
+  /** putRight: change a day's times; leave: record or cancel leave (HR's work); askFix: the
+   *  person asks for one of their own days to be put right. */
+  can: { putRight: boolean; leave: boolean; askFix: boolean };
+};
+
+/** A request to put a day of one's own attendance right (a missed time in or out, a wrong time). */
+export type FixLine = {
+  id: number;
+  person: { id: number; name: string; team: string | null };
+  day: string;
+  /** "HH:MM", Manila time. */
+  timeIn: string;
+  timeOut: string | null;
+  reason: string;
+  status: LeaveStatus;
+  approver: string | null;
+  decidedBy: string | null;
+  decisionNote: string | null;
+  madeAt: string;
+  canDecide: boolean;
+  canCancel: boolean;
+};
+
+export type FixList = {
+  lines: FixLine[];
+  counts: { waiting: number; asked: number; approved: number; refused: number; cancelled: number };
+};
+
+export type FixInput = { day: string; timeIn: string; timeOut?: string | null; reason: string };
+
+/** HR's work schedules (shifts): each with how many people at work are on it. */
+export type HrSchedules = {
+  schedules: {
+    id: number;
+    name: string;
+    /** 0 Sunday … 6 Saturday. */
+    days: number[];
+    /** "HH:MM". */
+    start: string;
+    end: string;
+    graceMinutes: number;
+    breakMinutes: number;
+    isDefault: boolean;
+    archived: boolean;
+    people: number;
+  }[];
+  can: { change: boolean };
+};
+
+export type ScheduleInput = {
+  name: string;
+  days: number[];
+  start: string;
+  end: string;
+  graceMinutes?: number | null;
+  breakMinutes?: number | null;
 };
 
 /** The CEO's (and HR's, a team lead's for the team) attendance report over chosen days: who
@@ -4209,8 +4265,10 @@ export type HrPerson = {
   };
   missing: string[];
   /** edit: the record; login: the login email and password; leave: mark as left. */
-  /** back: marked as left, and can be brought back. */
-  can: { edit: boolean; login: boolean; leave: boolean; back: boolean };
+  /** back: marked as left, and can be brought back; schedule: give them another work schedule. */
+  can: { edit: boolean; login: boolean; leave: boolean; back: boolean; schedule: boolean };
+  /** Their work schedule: one HR gave them (id), or the company's default (id null). */
+  schedule: { id: number | null; name: string; start: string; end: string; days: number[] };
   /** Their working life here, newest first: joined, position, department, employment, company,
    *  regularized, pay changed (never the amount), left, back. From HR's trail (since 24 Nov 2026). */
   career: { at: string; what: string }[];
@@ -4228,7 +4286,7 @@ export type HrPositions = {
 /** One field of a record as it was and as it is. `hidden`: pay, bank, a government number or the
  *  birth date: the trail says it changed, never the values (both null). */
 export type HrChange = { field: string; label: string; from: string | null; to: string | null; hidden: boolean };
-export type HrEventKind = "joined" | "record" | "login" | "left" | "back" | "paper";
+export type HrEventKind = "joined" | "record" | "login" | "left" | "back" | "paper" | "attendance";
 export type HrPaperKind = "contract" | "government_id" | "certificate" | "clearance" | "medical" | "other";
 /** A person's papers on their HR record: the ones kept, then the ones taken off (archived). */
 export type HrPapers = {

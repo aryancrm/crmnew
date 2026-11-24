@@ -68,6 +68,20 @@ One feature per commit, each with its tests; `checks/integrity.ts` and `scale.te
      area does it), position category, contract status, training date, company rules.
 2. **Attendance (about 1.5 weeks).** The biometric Excel import into a DTR, *Needs review*,
    correction requests, schedules. *Done when* one real cut-off's DTR matches HR's own sheet.
+   - [x] **Correction requests** (24 Nov): migration 0152 `attendance_fix`, `hr/corrections.ts`. A
+     person asks for a day of the last 31 (not ahead) to be put right: time in, time out if any, what
+     happened; one open a day. It goes to whom they report to (HR when that is the CEO, the Admin or
+     nobody), HR may decide any, never while looking as someone; refusing needs a word; the person
+     cancels one still waiting (kept). Approved, the day is set as HR's "put a day right" does,
+     marked *request* (in/out source), and HR's trail says "Attendance of … put right (request)".
+     The person: *Ask to fix a day* on My leave & forms and on their attendance month; leads and HR
+     decide under Leave & forms › Attendance and on *To decide*; HR sees them on the person's month.
+     Test: `hr/corrections.test.ts`.
+   - [x] **Schedules** (24 Nov): migration 0152, `hr/schedules.ts`, HR's *Schedules* page. HR and the
+     Admin add a schedule (name, days, start and end on the same day, break, grace), archive one
+     nobody is on (never the default, never deleted), and give a person one on their page (Job ›
+     Change schedule) or put them back on the company's default; written in HR's trail. Late,
+     undertime, rest days and leave days count on the person's own schedule. Test: `hr/schedules.test.ts`.
 3. **Leave and forms (about 1.5 weeks).** Credits, the leave rules, the overtime rules, revoke,
    printable forms, HR's one queue.
 4. **Payroll (about 1.5 weeks).** The decided cadence, holidays by town, the inputs from 2 and 3,

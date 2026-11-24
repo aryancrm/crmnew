@@ -46,12 +46,14 @@ export const OUT_FROM: Record<NonNullable<AttendanceDay["outFrom"]>, string> = {
   last_seen: "Last seen (didn't end the day)",
   field: "Field day ended",
   hr: "Put right by HR",
+  request: "Put right on their request",
 };
 export const IN_FROM: Record<NonNullable<AttendanceDay["inFrom"]>, string> = {
   sign_in: "First thing they did",
   button: "Started the day",
   field: "Field day started",
   hr: "Put right by HR",
+  request: "Put right on their request",
 };
 
 /** The top bar's "My day": the day's start, Start / End my day, and a way to the month. */

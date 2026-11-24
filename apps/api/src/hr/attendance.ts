@@ -6,6 +6,8 @@
 // the report (who worked how long, who less, late, absent, on leave), with nothing to change.
 
 import { peopleUnder } from "../org/scope";
+import { fixesOf, mayAskFix } from "./corrections";
+import { hrEvent } from "./events";
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
@@ -144,7 +146,7 @@ export async function endDay(db: Database, me: Me, place?: string | null): Promi
     throw new Refusal(409, "not_started", "Your day hasn't started yet: press Start my day first.");
 }
 
-/** HR (for now the CEO and the Admin) puts a day right: its time in and out, with why. */
+/** HR (with the Admin as its backup) puts a day right: its time in and out, with why. */
 export async function putDayRight(
   db: Database,
   me: Me,
@@ -154,24 +156,51 @@ export async function putDayRight(
   allow(me, ATTENDANCE_WRITE_ROLES, "put attendance right");
   const note = input.note.trim();
   if (!note) throw new Refusal(400, "invalid", "Say why the day is changed.", "note");
+  checkDay(input);
+  const [found] = await rows<{ id: number }>(
+    db,
+    sql`select id::int as id from person where id = ${personId}`,
+  );
+  if (!found) throw new Refusal(404, "not_found", "No such person.");
+  await db.transaction(async (tx) => {
+    await setDay(tx, personId, me.id, { ...input, note }, "hr");
+    // HR's trail: every change to someone's HR record, a day of attendance too.
+    await hrEvent(
+      tx,
+      personId,
+      me.id,
+      "attendance",
+      `Attendance of ${input.day} put right: ${input.timeIn}–${input.timeOut ?? "no time out"}: ${note}`,
+    );
+  });
+}
+
+/** A day's times make sense: time out after time in, and the day has come. */
+export function checkDay(input: { day: string; timeIn: string; timeOut: string | null }): void {
   const timeIn = manilaMoment(input.day, input.timeIn);
   const timeOut = input.timeOut ? manilaMoment(input.day, input.timeOut) : null;
   if (timeOut !== null && timeOut < timeIn)
     throw new Refusal(400, "invalid", "Time out comes after time in.", "timeOut");
   if (input.day > todayManila())
     throw new Refusal(400, "invalid", "That day hasn't come yet.", "day");
-  const [found] = await rows<{ id: number }>(
-    db,
-    sql`select id::int as id from person where id = ${personId}`,
-  );
-  if (!found) throw new Refusal(404, "not_found", "No such person.");
-  const inAt = new Date(timeIn).toISOString();
-  const outAt = timeOut === null ? null : new Date(timeOut).toISOString();
+}
+
+/** Sets a day's time in and out as it really was: put right by HR, or from a person's request
+ *  HR or their lead approved (`request`). */
+export async function setDay(
+  db: Runner,
+  personId: number,
+  by: number,
+  input: { day: string; timeIn: string; timeOut: string | null; note: string },
+  source: "hr" | "request",
+): Promise<void> {
+  const inAt = new Date(manilaMoment(input.day, input.timeIn)).toISOString();
+  const outAt = input.timeOut ? new Date(manilaMoment(input.day, input.timeOut)).toISOString() : null;
   await db.execute(
     sql`insert into attendance (person_id, day, time_in, in_source, time_out, out_source, last_seen, note, changed_by)
-      values (${personId}, ${input.day}::date, ${inAt}::timestamptz, 'hr', ${outAt}::timestamptz,
-        ${outAt ? "hr" : null}, coalesce(${outAt}::timestamptz, ${inAt}::timestamptz), ${note}, ${me.id})
-      on conflict (person_id, day) do update set time_in = excluded.time_in, in_source = 'hr',
+      values (${personId}, ${input.day}::date, ${inAt}::timestamptz, ${source}, ${outAt}::timestamptz,
+        ${outAt ? source : null}, coalesce(${outAt}::timestamptz, ${inAt}::timestamptz), ${input.note}, ${by})
+      on conflict (person_id, day) do update set time_in = excluded.time_in, in_source = excluded.in_source,
         time_out = excluded.time_out, out_source = excluded.out_source, note = excluded.note,
         changed_by = excluded.changed_by`,
   );
@@ -569,7 +598,7 @@ export async function attendanceMonth(
   const first = `${month}-01`;
   const lastOfMonth = addDays(`${nextMonth(month)}-01`, -1);
   const last = lastOfMonth < today ? lastOfMonth : today;
-  const [schedules, holidays, leaveMap, formMap, found, named] = await Promise.all([
+  const [schedules, holidays, leaveMap, formMap, found, named, fixes] = await Promise.all([
     schedulesOf(db, [personId]),
     holidaysBetween(db, first, lastOfMonth),
     leavesOf(db, [personId], first, lastOfMonth),
@@ -584,6 +613,7 @@ export async function attendanceMonth(
       sql`select w.name from person p join work_schedule w on w.id = coalesce(p.schedule_id,
           (select id from work_schedule where is_default and active limit 1)) where p.id = ${personId}`,
     ),
+    fixesOf(db, me, personId, month),
   ]);
   const schedule = schedules.get(personId) ?? DEFAULT_SCHEDULE;
   const holidaySet = new Set(holidays.keys());
@@ -621,9 +651,11 @@ export async function attendanceMonth(
       leaveDays: days.reduce((sum, one) => sum + (one.leave ? (one.halfDay ? 0.5 : 1) : 0), 0),
     },
     leaves,
+    fixes,
     can: {
       putRight: ATTENDANCE_WRITE_ROLES.includes(me.role),
       leave: ATTENDANCE_WRITE_ROLES.includes(me.role),
+      askFix: me.id === personId && mayAskFix(me),
     },
   };
 }

@@ -1,11 +1,11 @@
 // A person's own leave and forms: the vacation and sick leave left this year, asking for leave
 // (with a paper such as a medical certificate), filing official business, work from home or
-// overtime, and what they asked for with whoever decided it. Everything waits for whom they
-// report to (HR when that is the CEO).
+// overtime, asking for a day of their attendance to be put right, and what they asked for with
+// whoever decided it. Everything waits for whom they report to (HR when that is the CEO).
 
-import type { FormKind, FormLine, LeaveKind, LeaveLine, MyLeave } from "@2mg/api/types";
+import type { FixLine, FormKind, FormLine, LeaveKind, LeaveLine, MyLeave } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BriefcaseBusiness, CalendarPlus, Camera, FileText } from "lucide-react";
+import { BriefcaseBusiness, CalendarPlus, Camera, Clock, FileText } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
@@ -15,6 +15,7 @@ import { Ring } from "../team/charts";
 import { manilaToday } from "../team/range";
 import { Button, CARD, Dialog, PageHead, PageState, Problem, useAction } from "../ui";
 import { LEAVE_WORDS } from "./attendance-report";
+import { FixDialog, FixLineRow } from "./corrections";
 
 export const LEAVE_STATUS: Record<LeaveLine["status"], { word: string; tone: string }> = {
   asked: { word: "Waiting", tone: "bg-amber-50 text-amber-800 ring-amber-200" },
@@ -54,6 +55,11 @@ export function MyLeavePage() {
   });
   const [asking, setAsking] = useState(params.get("new") === "1");
   const [filing, setFiling] = useState(false);
+  const [fixing, setFixing] = useState(false);
+  const fixes = useQuery({
+    queryKey: ["leave", "fixes", "mine"],
+    queryFn: () => api<{ lines: FixLine[] }>("/api/hr/fixes/mine"),
+  });
   const forms = useQuery({
     queryKey: ["leave", "forms", "mine"],
     queryFn: () => api<{ lines: FormLine[] }>("/api/hr/forms/mine"),
@@ -86,6 +92,9 @@ export function MyLeavePage() {
         sub={`${data.year} · your requests go to ${data.approver}`}
         actions={
           <>
+            <Button onClick={() => setFixing(true)}>
+              <Clock size={16} /> Ask to fix a day
+            </Button>
             <Button onClick={() => setFiling(true)}>
               <BriefcaseBusiness size={16} /> File a form
             </Button>
@@ -135,7 +144,23 @@ export function MyLeavePage() {
           )}
         </ul>
       </section>
+      <section className={`${CARD} overflow-hidden`}>
+        <h2 className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
+          Attendance days to put right
+        </h2>
+        <ul className="divide-y divide-slate-100">
+          {(fixes.data?.lines ?? []).map((line) => (
+            <FixLineRow key={line.id} line={line} />
+          ))}
+          {fixes.data && fixes.data.lines.length === 0 && (
+            <li className="px-4 py-6 text-center text-sm text-slate-500">
+              None asked this year. Missed a time in or out? Ask to fix the day.
+            </li>
+          )}
+        </ul>
+      </section>
       {asking && <AskDialog mine={data} onClose={() => setAsking(false)} />}
+      {fixing && <FixDialog approver={data.approver} onClose={() => setFixing(false)} />}
       {filing && <FormDialog approver={data.approver} onClose={() => setFiling(false)} />}
     </div>
   );
