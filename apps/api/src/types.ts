@@ -4182,6 +4182,19 @@ export type HrPerson = {
     emergencyName: string | null;
     emergencyPhone: string | null;
     emergencyRelation: string | null;
+    gender: Gender | null;
+    civilStatus: CivilStatus | null;
+    citizenship: string | null;
+    spouseName: string | null;
+    fatherName: string | null;
+    motherName: string | null;
+    education: string | null;
+    school: string | null;
+    course: string | null;
+    workArrangement: WorkArrangement | null;
+    companyPhone: string | null;
+    issuedEquipment: string | null;
+    jobDescription: string | null;
     /** Pay, bank and government IDs: null for anyone but HR, the CEO, the Admin and the person. */
     salary: number | null;
     allowance: number | null;
@@ -4201,6 +4214,15 @@ export type HrPerson = {
   /** Their working life here, newest first: joined, position, department, employment, company,
    *  regularized, pay changed (never the amount), left, back. From HR's trail (since 24 Nov 2026). */
   career: { at: string; what: string }[];
+};
+
+export type Gender = "female" | "male";
+export type CivilStatus = "single" | "married" | "widowed" | "separated";
+export type WorkArrangement = "office" | "field" | "hybrid" | "remote";
+/** The positions a record may say: HR keeps the list (archived ones stay on old records). */
+export type HrPositions = {
+  positions: { id: number; name: string; people: number; archived: boolean }[];
+  can: { change: boolean };
 };
 
 /** One field of a record as it was and as it is. `hidden`: pay, bank, a government number or the
@@ -4248,6 +4270,19 @@ export type HrRecordInput = Partial<{
   emergencyName: string | null;
   emergencyPhone: string | null;
   emergencyRelation: string | null;
+  gender: Gender | null;
+  civilStatus: CivilStatus | null;
+  citizenship: string | null;
+  spouseName: string | null;
+  fatherName: string | null;
+  motherName: string | null;
+  education: string | null;
+  school: string | null;
+  course: string | null;
+  workArrangement: WorkArrangement | null;
+  companyPhone: string | null;
+  issuedEquipment: string | null;
+  jobDescription: string | null;
   salary: number | null;
   allowance: number | null;
   bankName: string | null;

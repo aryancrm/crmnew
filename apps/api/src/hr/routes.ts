@@ -19,6 +19,7 @@ import {
 } from "./attendance";
 import { hrHistory } from "./events";
 import { cancelForm, decideForm, formList, myForms, requestForm } from "./forms";
+import { addPosition, hrPositions, setPositionArchived } from "./positions";
 import { addPaper, archivePaper, hrPapers, PAPER_MAX_BYTES, type PaperFile, paperFile } from "./papers";
 import {
   cancelLeave,
@@ -219,6 +220,16 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   app.get("/api/hr/people/:id/history", async (c) =>
     c.json(await hrHistory(db, c.get("me"), idParam(c))),
   );
+  app.get("/api/hr/positions", async (c) => c.json(await hrPositions(db, c.get("me"))));
+  app.post("/api/hr/positions", async (c) => {
+    const input = await readBody(c, z.object({ name: z.string().max(200) }));
+    return c.json(await addPosition(db, c.get("me"), input));
+  });
+  app.post("/api/hr/positions/:id", async (c) => {
+    const input = await readBody(c, z.object({ archived: z.boolean() }));
+    await setPositionArchived(db, c.get("me"), idParam(c), input.archived);
+    return c.json({ ok: true });
+  });
   app.get("/api/hr/people/:id/papers", async (c) =>
     c.json(await hrPapers(db, c.get("me"), idParam(c))),
   );
@@ -276,6 +287,23 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
           emergencyName: words(120),
           emergencyPhone: words(30),
           emergencyRelation: words(60),
+          gender: z.enum(["female", "male"], { message: "Pick one from the list." }).nullish(),
+          civilStatus: z
+            .enum(["single", "married", "widowed", "separated"], { message: "Pick one from the list." })
+            .nullish(),
+          citizenship: words(60),
+          spouseName: words(120),
+          fatherName: words(120),
+          motherName: words(120),
+          education: words(120),
+          school: words(160),
+          course: words(160),
+          workArrangement: z
+            .enum(["office", "field", "hybrid", "remote"], { message: "Pick one from the list." })
+            .nullish(),
+          companyPhone: words(30),
+          issuedEquipment: words(500),
+          jobDescription: words(2000),
           salary: pesos,
           allowance: pesos,
           bankName: words(120),

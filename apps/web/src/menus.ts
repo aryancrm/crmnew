@@ -9,6 +9,7 @@ import type { Me, Role } from "@2mg/api/types";
 import {
   ArrowLeftRight,
   BookOpen,
+  Briefcase,
   LayoutDashboard,
   FileBarChart,
   BookOpenCheck,
@@ -1518,6 +1519,7 @@ function ownDesk(me: Me): Space {
           { to: "/hr/leave", label: "Leave & forms", icon: CalendarDays, badge: "leave" },
           { to: "/hr/payroll", label: "Payroll", icon: Wallet },
           { to: "/hr/report", label: "Attendance report", icon: BarChart3 },
+          { to: "/hr/positions", label: "Positions", icon: Briefcase },
         ]),
         icon: Users,
       };

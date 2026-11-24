@@ -61,6 +61,7 @@ describe("the changes worked out", () => {
 describe("HR's trail", () => {
   it("writes down a record change, field by field, with who made it", async () => {
     const ryan = ids.ryan as number;
+    expect((await send("helen", "/api/hr/positions", { name: "Senior Hospital CHC" })).status).toBe(200);
     const saved = await send(
       "helen",
       `/api/hr/people/${ryan}`,

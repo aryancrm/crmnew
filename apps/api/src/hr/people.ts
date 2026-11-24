@@ -23,8 +23,11 @@ import {
 } from "../org/service";
 import { ROLE_LABEL, type Role } from "../people/roles";
 import type {
+  CivilStatus,
   Classification,
   Company,
+  Gender,
+  WorkArrangement,
   HrLoginInput,
   HrPeople,
   HrPerson,
@@ -203,6 +206,19 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
     emergencyName: string | null;
     emergencyPhone: string | null;
     emergencyRelation: string | null;
+    gender: Gender | null;
+    civilStatus: CivilStatus | null;
+    citizenship: string | null;
+    spouseName: string | null;
+    fatherName: string | null;
+    motherName: string | null;
+    education: string | null;
+    school: string | null;
+    course: string | null;
+    workArrangement: WorkArrangement | null;
+    companyPhone: string | null;
+    issuedEquipment: string | null;
+    jobDescription: string | null;
     salary: number | null;
     allowance: number | null;
     bankName: string | null;
@@ -230,6 +246,10 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
         to_char(e.left_on, 'YYYY-MM-DD') as "leftOn", e.left_reason as "leftReason", e.mobile, e.personal_email as "personalEmail",
         to_char(e.birth_date, 'YYYY-MM-DD') as "birthDate", e.address, e.emergency_name as "emergencyName",
         e.emergency_phone as "emergencyPhone", e.emergency_relation as "emergencyRelation",
+        e.gender, e.civil_status as "civilStatus", e.citizenship, e.spouse_name as "spouseName",
+        e.father_name as "fatherName", e.mother_name as "motherName", e.education, e.school, e.course,
+        e.work_arrangement as "workArrangement", e.company_phone as "companyPhone",
+        e.issued_equipment as "issuedEquipment", e.job_description as "jobDescription",
         e.salary, e.allowance, e.bank_name as "bankName", e.bank_account as "bankAccount", e.sss, e.philhealth, e.pagibig, e.tin,
         e.no_sss as "noSss", e.no_philhealth as "noPhilhealth", e.no_pagibig as "noPagibig", e.no_tax as "noTax",
         seat.id as "seatId", seat.title as "seatTitle", seat.login as "seatLogin", seat.team, seat.area,
@@ -303,6 +323,19 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
       emergencyName: one.emergencyName,
       emergencyPhone: one.emergencyPhone,
       emergencyRelation: one.emergencyRelation,
+      gender: one.gender,
+      civilStatus: one.civilStatus,
+      citizenship: one.citizenship,
+      spouseName: one.spouseName,
+      fatherName: one.fatherName,
+      motherName: one.motherName,
+      education: one.education,
+      school: one.school,
+      course: one.course,
+      workArrangement: one.workArrangement,
+      companyPhone: one.companyPhone,
+      issuedEquipment: one.issuedEquipment,
+      jobDescription: one.jobDescription,
       salary: pay ? one.salary : null,
       allowance: pay ? one.allowance : null,
       bankName: pay ? one.bankName : null,
@@ -456,6 +489,8 @@ export async function addJoiner(
       if (taken)
         throw new Refusal(409, "taken", `Employee ID ${code} is ${taken.name}'s.`, "employeeCode");
     }
+    // A position typed for them is one of HR's list; none typed, the seat's title.
+    if (text(input.position)) await refuseUnknownPosition(tx, text(input.position) as string);
     const position = text(input.position) ?? seat.title;
     const [person] = await rows<{ id: number }>(
       tx,
@@ -552,6 +587,19 @@ const RECORD_COLUMNS: Record<keyof HrRecordInput, string> = {
   emergencyName: "emergency_name",
   emergencyPhone: "emergency_phone",
   emergencyRelation: "emergency_relation",
+  gender: "gender",
+  civilStatus: "civil_status",
+  citizenship: "citizenship",
+  spouseName: "spouse_name",
+  fatherName: "father_name",
+  motherName: "mother_name",
+  education: "education",
+  school: "school",
+  course: "course",
+  workArrangement: "work_arrangement",
+  companyPhone: "company_phone",
+  issuedEquipment: "issued_equipment",
+  jobDescription: "job_description",
   salary: "salary",
   allowance: "allowance",
   bankName: "bank_name",
@@ -566,6 +614,31 @@ const RECORD_COLUMNS: Record<keyof HrRecordInput, string> = {
   noTax: "no_tax",
 };
 const DATE_FIELDS = new Set(["hireDate", "regularizedOn", "birthDate"]);
+/** Fields with a fixed set of answers. */
+const CHOICES: Partial<Record<keyof HrRecordInput, string[]>> = {
+  gender: ["female", "male"],
+  civilStatus: ["single", "married", "widowed", "separated"],
+  workArrangement: ["office", "field", "hybrid", "remote"],
+};
+/** The long ones: what HR may write, at most. */
+const TEXT_LIMIT: Partial<Record<keyof HrRecordInput, number>> = {
+  issuedEquipment: 500,
+  jobDescription: 2000,
+};
+
+/** A position is one of HR's list (Positions): a typo never becomes a new job title. */
+async function refuseUnknownPosition(db: Runner, position: string): Promise<void> {
+  const name = position.toLowerCase();
+  // On the list; or a seat's title in the company tree that HR hasn't archived.
+  const [known] = await rows<{ ok: number }>(
+    db,
+    sql`select 1 as ok where exists (select 1 from hr_position where lower(name) = ${name} and archived_at is null)
+      or (exists (select 1 from seat where lower(title) = ${name})
+        and not exists (select 1 from hr_position where lower(name) = ${name}))`,
+  );
+  if (!known)
+    throw new Refusal(400, "invalid", `"${position}" isn't on HR's list of positions. Add it in Positions first.`, "position");
+}
 
 /** HR changes a record: only the fields sent. */
 export async function updateRecord(
@@ -596,6 +669,13 @@ export async function updateRecord(
     if (key === "classification" && !CLASSES.includes(value as Classification))
       throw new Refusal(400, "invalid", "Pick how they are employed.", key);
     if (key === "hireDate" && !value) throw new Refusal(400, "invalid", "Pick the hire date.", key);
+    const choices = CHOICES[key];
+    if (choices && value !== null && !choices.includes(String(value)))
+      throw new Refusal(400, "invalid", "Pick one from the list.", key);
+    if (TEXT_LIMIT[key] && value !== null && String(value).length > (TEXT_LIMIT[key] as number))
+      throw new Refusal(400, "invalid", `Keep it under ${TEXT_LIMIT[key]} characters.`, key);
+    if (key === "companyPhone" && value !== null && !PHONE.test(String(value)))
+      throw new Refusal(400, "invalid", "Type a mobile number, like 0917 555 0101.", key);
     if (DATE_FIELDS.has(key) && value !== null && !DAY.test(String(value)))
       throw new Refusal(400, "invalid", "Pick a day.", key);
     if (
@@ -636,6 +716,8 @@ export async function updateRecord(
       )} from employee where person_id = ${personId} for update`,
     );
     if (!found) throw new Refusal(404, "not_found", "No such person.");
+    const position = typeof after.position === "string" ? after.position : null;
+    if (position && position !== found.position) await refuseUnknownPosition(tx, position);
     const code = text(input.employeeCode)?.toUpperCase();
     if (code) {
       const [taken] = await rows<{ name: string }>(

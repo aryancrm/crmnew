@@ -54,9 +54,18 @@ One feature per commit, each with its tests; `checks/integrity.ts` and `scale.te
      through `files/store.ts`; a "good until" day, marked expired or within 30 days. HR and the
      Admin add and take off (archived with a reason, never deleted); HR, the CEO, the Admin and the
      person read; never while looking as someone. Both written in HR's trail. Test: `hr/papers.test.ts`.
-   - [ ] Employment history beyond seats (position and pay changes over time).
-   - [ ] A list of positions.
-   - [ ] The fields Automated-Excel has and the CRM lacks.
+   - [x] **Job history** (24 Nov): from HR's trail, on the person's page with the seats held:
+     joined, position, department, employment, company, regularized, pay changed (never how much),
+     left, back. The person sees their own. Test: `hr/events.test.ts`.
+   - [x] **Positions** (24 Nov): migration 0151 `hr_position`, `hr/positions.ts`, HR's *Positions*
+     page. Started from the positions, titles and seat titles the CRM had; a record's position is one
+     of the list (or a seat's title HR hasn't archived), so a typo never becomes a job title. HR and
+     the Admin add and archive (never delete; records keep an archived one). Test: `hr/positions.test.ts`.
+   - [x] **The fields HR's portal kept** (24 Nov, migration 0151): gender, civil status, citizenship,
+     spouse, father, mother, highest education, school, course, work arrangement (office, field,
+     hybrid, remote), company phone, issued equipment, job description. On the record, in the edit
+     form and in the trail. Left out for now (to confirm with HR): nickname, territory (the CRM's
+     area does it), position category, contract status, training date, company rules.
 2. **Attendance (about 1.5 weeks).** The biometric Excel import into a DTR, *Needs review*,
    correction requests, schedules. *Done when* one real cut-off's DTR matches HR's own sheet.
 3. **Leave and forms (about 1.5 weeks).** Credits, the leave rules, the overtime rules, revoke,

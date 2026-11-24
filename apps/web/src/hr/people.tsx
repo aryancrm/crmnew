@@ -3,11 +3,15 @@
 // hands them over; the system sends nothing. Leaving keeps the record.
 
 import type {
+  CivilStatus,
   Classification,
   Company,
+  Gender,
   HrHistory,
   HrPaperKind,
   HrPapers,
+  HrPositions,
+  WorkArrangement,
   HrPeople,
   HrPerson,
   HrPersonRow,
@@ -777,6 +781,10 @@ export function HrPersonPage() {
             ["Reports to", data.seat?.boss ?? null],
             ["Employee ID", r.employeeCode],
             ["Employed as", CLASS[r.classification]],
+            ["Works", r.workArrangement ? ARRANGEMENT[r.workArrangement] : null],
+            ["Company phone", r.companyPhone],
+            ["Equipment", r.issuedEquipment],
+            ["Job description", r.jobDescription],
             ["Started", dayWords(r.hireDate)],
             [
               "Regular since",
@@ -817,6 +825,20 @@ export function HrPersonPage() {
               r.emergencyName
                 ? `${r.emergencyName}${r.emergencyRelation ? ` (${r.emergencyRelation})` : ""}${r.emergencyPhone ? ` · ${r.emergencyPhone}` : ""}`
                 : null,
+            ],
+          ]),
+        )}
+        {box(
+          "Personal",
+          facts([
+            ["Gender", r.gender ? GENDER[r.gender] : null],
+            ["Civil status", r.civilStatus ? CIVIL[r.civilStatus] : null],
+            ["Citizenship", r.citizenship],
+            ["Spouse", r.spouseName],
+            ["Parents", [r.fatherName, r.motherName].filter(Boolean).join(" · ") || null],
+            [
+              "Education",
+              [r.education, r.course, r.school].filter(Boolean).join(" · ") || null,
             ],
           ]),
         )}
@@ -1258,7 +1280,31 @@ const RECORD_TEXT: [keyof HrRecordInput, string, string?][] = [
   ["philhealth", "PhilHealth"],
   ["pagibig", "Pag-IBIG"],
   ["tin", "TIN"],
+  // 15 on: personal and work details (HR's portal kept them).
+  ["citizenship", "Citizenship", "Filipino"],
+  ["spouseName", "Spouse"],
+  ["fatherName", "Father"],
+  ["motherName", "Mother"],
+  ["education", "Highest education", "College"],
+  ["school", "School"],
+  ["course", "Course", "BS Pharmacy"],
+  ["companyPhone", "Company phone", "0917 555 0101"],
+  ["issuedEquipment", "Issued equipment", "Laptop, company phone"],
+  ["jobDescription", "Job description"],
 ];
+const GENDER: Record<Gender, string> = { female: "Female", male: "Male" };
+const CIVIL: Record<CivilStatus, string> = {
+  single: "Single",
+  married: "Married",
+  widowed: "Widowed",
+  separated: "Separated",
+};
+const ARRANGEMENT: Record<WorkArrangement, string> = {
+  office: "Office",
+  field: "Field",
+  hybrid: "Hybrid",
+  remote: "Remote",
+};
 
 function RecordDialog({
   person,
@@ -1291,6 +1337,18 @@ function RecordDialog({
     salary: pesosOf(r.salary),
     allowance: pesosOf(r.allowance),
   });
+  const [choice, setChoice] = useState({
+    gender: r.gender ?? "",
+    civilStatus: r.civilStatus ?? "",
+    workArrangement: r.workArrangement ?? "",
+  });
+  const positions = useQuery({
+    queryKey: ["hr", "positions"],
+    queryFn: () => api<HrPositions>("/api/hr/positions"),
+  });
+  const offered = (positions.data?.positions ?? []).filter(
+    (one) => !one.archived || one.name === r.position,
+  );
   const [exempt, setExempt] = useState(
     r.payExempt ?? {
       sss: false,
@@ -1310,6 +1368,9 @@ function RecordDialog({
       birthDate: days.birthDate || null,
       salary: centavos(pay.salary),
       allowance: centavos(pay.allowance),
+      gender: (choice.gender || null) as Gender | null,
+      civilStatus: (choice.civilStatus || null) as CivilStatus | null,
+      workArrangement: (choice.workArrangement || null) as WorkArrangement | null,
       ...(r.payExempt
         ? {
             noSss: exempt.sss,
@@ -1345,6 +1406,26 @@ function RecordDialog({
     RECORD_TEXT.slice(from, to).map(([key, label, placeholder]) =>
       input(key, label, placeholder),
     );
+  const select = <K extends keyof typeof choice>(
+    key: K,
+    label: string,
+    options: Record<string, string>,
+  ) => (
+    <Label key={key} text={label} error={action.at(key)}>
+      <select
+        value={choice[key]}
+        onChange={(event) => setChoice((now) => ({ ...now, [key]: event.target.value }))}
+        className={FIELD}
+      >
+        <option value="">Not said</option>
+        {Object.entries(options).map(([value, words]) => (
+          <option key={value} value={value}>
+            {words}
+          </option>
+        ))}
+      </select>
+    </Label>
+  );
 
   return (
     <Dialog
@@ -1386,7 +1467,42 @@ function RecordDialog({
             </Label>
             {pick(0, 1)}
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">{pick(1, 3)}</div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Label text="Position" error={action.at("position")}>
+              <select
+                value={text.position ?? ""}
+                onChange={(event) => setText((now) => ({ ...now, position: event.target.value }))}
+                className={FIELD}
+              >
+                <option value="">None</option>
+                {r.position && !offered.some((one) => one.name === r.position) && (
+                  <option value={r.position}>{r.position}</option>
+                )}
+                {offered.map((one) => (
+                  <option key={one.id} value={one.name}>
+                    {one.name}
+                    {one.archived ? " (archived)" : ""}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-slate-500">
+                Not on the list? Add it in <Link to="/hr/positions" className="text-emerald-700 underline">Positions</Link>.
+              </span>
+            </Label>
+            {pick(2, 3)}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {select("workArrangement", "Works", ARRANGEMENT)}
+            {pick(22, 24)}
+          </div>
+          <Label text="Job description" error={action.at("jobDescription")}>
+            <textarea
+              value={text.jobDescription ?? ""}
+              onChange={(event) => setText((now) => ({ ...now, jobDescription: event.target.value }))}
+              className={`${FIELD} min-h-20`}
+              maxLength={2000}
+            />
+          </Label>
           <div className="grid gap-3 sm:grid-cols-2">
             <Label text="Hired on" error={action.at("hireDate")}>
               <input
@@ -1429,6 +1545,15 @@ function RecordDialog({
             {pick(5, 6)}
           </div>
           <div className="grid gap-3 sm:grid-cols-3">{pick(6, 9)}</div>
+        </Section>
+        <Section title="Personal">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {select("gender", "Gender", GENDER)}
+            {select("civilStatus", "Civil status", CIVIL)}
+            {pick(15, 16)}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">{pick(16, 19)}</div>
+          <div className="grid gap-3 sm:grid-cols-3">{pick(19, 22)}</div>
         </Section>
         <Section title="Pay and IDs">
           <div className="grid gap-3 sm:grid-cols-2">
@@ -1495,6 +1620,9 @@ function RecordDialog({
             "birthDate",
             "salary",
             "allowance",
+            "gender",
+            "civilStatus",
+            "workArrangement",
             ...RECORD_TEXT.map(([key]) => key),
           ])}
         />

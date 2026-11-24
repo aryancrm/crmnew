@@ -28,6 +28,19 @@ export const FIELD_LABEL: Record<string, string> = {
   emergencyName: "Emergency contact",
   emergencyPhone: "Emergency contact's phone",
   emergencyRelation: "Emergency contact's relation",
+  gender: "Gender",
+  civilStatus: "Civil status",
+  citizenship: "Citizenship",
+  spouseName: "Spouse",
+  fatherName: "Father",
+  motherName: "Mother",
+  education: "Highest education",
+  school: "School",
+  course: "Course",
+  workArrangement: "Work arrangement",
+  companyPhone: "Company phone",
+  issuedEquipment: "Issued equipment",
+  jobDescription: "Job description",
   salary: "Monthly salary",
   allowance: "Monthly allowance",
   bankName: "Bank",
@@ -66,13 +79,23 @@ const shown = (value: Value): string | null =>
         : "No"
       : String(value);
 
+/** Fields kept as a code, said as the form says them. */
+const VALUE_WORDS: Record<string, Record<string, string>> = {
+  company: { "2mg": "2MG Inc.", gpi: "Getmeds Philippines" },
+  classification: { probationary: "Probationary", regular: "Regular", part_time: "Part-time", intern: "Intern" },
+  gender: { female: "Female", male: "Male" },
+  civilStatus: { single: "Single", married: "Married", widowed: "Widowed", separated: "Separated" },
+  workArrangement: { office: "Office", field: "Field", hybrid: "Hybrid", remote: "Remote" },
+};
+
 /** The fields that really changed between the record before and after, in the form's order. */
 export function changesOf(before: Record<string, Value>, after: Record<string, Value>): HrChange[] {
   const out: HrChange[] = [];
   for (const field of Object.keys(FIELD_LABEL)) {
     if (!(field in after)) continue;
-    const from = shown(before[field]);
-    const to = shown(after[field]);
+    const words = (value: string | null) => (value === null ? null : (VALUE_WORDS[field]?.[value] ?? value));
+    const from = words(shown(before[field]));
+    const to = words(shown(after[field]));
     if (from === to) continue;
     const hidden = HIDDEN_FIELDS.has(field);
     out.push({
@@ -110,14 +133,6 @@ export async function hrEvent(
 
 /** The fields that make someone's working life (the rest of a record is contact and papers). */
 const CAREER_FIELDS = new Set(["position", "department", "classification", "company", "regularizedOn", "salary", "allowance"]);
-const COMPANY_WORDS: Record<string, string> = { "2mg": "2MG Inc.", gpi: "Getmeds Philippines" };
-const CLASS_WORDS: Record<string, string> = {
-  probationary: "Probationary",
-  regular: "Regular",
-  part_time: "Part-time",
-  intern: "Intern",
-};
-
 /** Their working life from HR's trail, newest first: joined, a new position or department,
  *  employment or company, regularized, pay changed (never how much), left, back. */
 export async function careerOf(db: Runner, personId: number): Promise<{ at: string; what: string }[]> {
@@ -138,14 +153,8 @@ export async function careerOf(db: Runner, personId: number): Promise<{ at: stri
       .map((one) => {
         if (one.hidden) return `${one.label} changed`;
         if (one.field === "regularizedOn") return one.to ? `Regular from ${one.to}` : "Regularization taken back";
-        const words = (value: string | null) =>
-          value === null
-            ? "none"
-            : one.field === "company"
-              ? (COMPANY_WORDS[value] ?? value)
-              : one.field === "classification"
-                ? (CLASS_WORDS[value] ?? value)
-                : value;
+        const words = (value: string | null) => value ?? "none";
+
         return `${one.label}: ${words(one.from)} → ${words(one.to)}`;
       });
     if (parts.length) out.push({ at: line.at, what: parts.join("; ") });
