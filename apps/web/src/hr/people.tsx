@@ -5,6 +5,7 @@
 import type {
   Classification,
   Company,
+  HrHistory,
   HrPeople,
   HrPerson,
   HrPersonRow,
@@ -875,6 +876,9 @@ export function HrPersonPage() {
             ))}
           </ul>,
         )}
+      {me && TRAIL_ROLES.includes(me.role) && (
+        <HrTrail personId={data.personId} />
+      )}
       {open === "edit" && (
         <RecordDialog person={data} onClose={() => setOpen(null)} />
       )}
@@ -885,6 +889,97 @@ export function HrPersonPage() {
         <LeftDialog person={data} onClose={() => setOpen(null)} />
       )}
     </div>
+  );
+}
+
+// ------------------------------------------------------------------ HR's trail on a person
+
+/** Who reads a person's trail (the API checks the same). */
+const TRAIL_ROLES = ["hr", "ceo", "admin"];
+const TRAIL_SHOWN = 8;
+const whenFull = (iso: string) =>
+  new Intl.DateTimeFormat("en-PH", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "Asia/Manila",
+  }).format(new Date(iso));
+
+/** Every change to the record, newest first: who, when, what, and each field's before and after
+ *  (pay, bank, government numbers and the birth date only as "changed"). */
+function HrTrail({ personId }: { personId: number }) {
+  const query = useQuery({
+    queryKey: ["hr", "person", String(personId), "history"],
+    queryFn: () => api<HrHistory>(`/api/hr/people/${personId}/history`),
+  });
+  const [all, setAll] = useState(false);
+  const lines = query.data?.lines ?? [];
+  const shownLines = all ? lines : lines.slice(0, TRAIL_SHOWN);
+  return (
+    <section className={`${CARD} overflow-hidden`}>
+      <div className="flex min-h-11 items-center justify-between gap-2 border-b border-slate-100 px-4 py-2">
+        <h2 className="text-sm font-semibold text-slate-900">Changes</h2>
+        <span className="text-xs text-slate-500">Who changed what, kept for good</span>
+      </div>
+      {query.isError ? (
+        <p className="px-4 py-3 text-sm text-red-700">Couldn't load the changes.</p>
+      ) : query.isPending ? (
+        <p className="px-4 py-3 text-sm text-slate-500">Loading…</p>
+      ) : lines.length === 0 ? (
+        <p className="px-4 py-3 text-sm text-slate-500">
+          No changes written down yet. Every change from now on shows here.
+        </p>
+      ) : (
+        <>
+          <ol className="divide-y divide-slate-100 text-sm">
+            {shownLines.map((line, index) => (
+              <li key={`${line.at}-${index}`} className="px-4 py-2.5">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                  <span className="font-medium text-slate-900">{line.what}</span>
+                  <span className="text-xs text-slate-500 tabular-nums">
+                    {line.by} · {whenFull(line.at)}
+                  </span>
+                </div>
+                {line.changes.length > 0 && (
+                  <ul className="mt-1 space-y-0.5 text-xs text-slate-600">
+                    {line.changes.map((change) => (
+                      <li key={change.field}>
+                        <span className="text-slate-500">{change.label}:</span>{" "}
+                        {change.hidden ? (
+                          <span className="italic">changed (not shown)</span>
+                        ) : (
+                          <>
+                            {change.from === null ? (
+                              <span className="text-slate-400">empty</span>
+                            ) : (
+                              <span className="line-through decoration-slate-300">{change.from}</span>
+                            )}{" "}
+                            → <span className="text-slate-900">{change.to ?? "empty"}</span>
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ol>
+          {lines.length > TRAIL_SHOWN && (
+            <div className="border-t border-slate-100 px-4 py-2">
+              <button
+                type="button"
+                onClick={() => setAll(!all)}
+                className="text-xs font-medium text-emerald-700 hover:text-emerald-800"
+              >
+                {all ? "Show fewer" : `Show all ${lines.length}`}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 

@@ -44,6 +44,15 @@ One feature per commit, each with its tests; `checks/integrity.ts` and `scale.te
 1. **People records (about 1 week).** The audit trail first (everything after writes to it), then
    the papers (through `files/store.ts`), employment history, the positions list, the missing fields.
    *Done when* HR opens a person and sees their papers, their jobs over time and who changed what.
+   - [x] **HR's trail** (24 Nov): migration 0149 `hr_event`, `hr/events.ts`; a joiner added, each
+     record change field by field (pay, bank, government numbers and the birth date only as
+     "changed"), a login email changed or a one-time password given, marked as left, back at work.
+     *Changes* on the person's page (HR, the CEO, the Admin; never while looking as someone), and
+     *HR records* in the Audit. Test: `hr/events.test.ts`.
+   - [ ] Each person's papers.
+   - [ ] Employment history beyond seats (position and pay changes over time).
+   - [ ] A list of positions.
+   - [ ] The fields Automated-Excel has and the CRM lacks.
 2. **Attendance (about 1.5 weeks).** The biometric Excel import into a DTR, *Needs review*,
    correction requests, schedules. *Done when* one real cut-off's DTR matches HR's own sheet.
 3. **Leave and forms (about 1.5 weeks).** Credits, the leave rules, the overtime rules, revoke,

@@ -17,6 +17,7 @@ import {
   startDay,
   workCalendar,
 } from "./attendance";
+import { hrHistory } from "./events";
 import { cancelForm, decideForm, formList, myForms, requestForm } from "./forms";
 import {
   cancelLeave,
@@ -214,6 +215,9 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
     c.json(await hrPeople(db, c.get("me"), { q: c.req.query("q"), stage: c.req.query("stage") })),
   );
   app.get("/api/hr/people/:id", async (c) => c.json(await hrPerson(db, c.get("me"), idParam(c))));
+  app.get("/api/hr/people/:id/history", async (c) =>
+    c.json(await hrHistory(db, c.get("me"), idParam(c))),
+  );
   app.patch("/api/hr/people/:id", async (c) => {
     const input = await readBody(
       c,

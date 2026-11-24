@@ -4200,6 +4200,15 @@ export type HrPerson = {
   can: { edit: boolean; login: boolean; leave: boolean; back: boolean };
 };
 
+/** One field of a record as it was and as it is. `hidden`: pay, bank, a government number or the
+ *  birth date: the trail says it changed, never the values (both null). */
+export type HrChange = { field: string; label: string; from: string | null; to: string | null; hidden: boolean };
+export type HrEventKind = "joined" | "record" | "login" | "left" | "back";
+/** A person's HR trail, newest first: who did what to their record, and when. */
+export type HrHistory = {
+  lines: { at: string; by: string; kind: HrEventKind; what: string; changes: HrChange[] }[];
+};
+
 export type HrRecordInput = Partial<{
   company: Company;
   employeeCode: string | null;

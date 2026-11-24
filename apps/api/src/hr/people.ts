@@ -4,6 +4,7 @@
 // records; pay, bank and government IDs are theirs and the person's own.
 
 import { accountEvent } from "../account/events";
+import { changeSentence, changesOf, hrEvent } from "./events";
 import { type SQL, sql } from "drizzle-orm";
 import { hashPassword, passwordProblem } from "../auth/password";
 import { type Database, rows } from "../db/index";
@@ -472,6 +473,7 @@ export async function addJoiner(
         values (${personId}, ${input.company}, ${code}, ${input.classification}, ${position}, ${input.startsOn}::date,
           ${mobile}, ${input.salary ?? null}, ${input.allowance ?? null}, ${me.id})`,
     );
+    await hrEvent(tx, personId, me.id, "joined", `Added as a joiner in "${seat.title}" from ${input.startsOn}`);
     return { personId, loginEmail };
   });
 }
@@ -513,6 +515,10 @@ export async function setLogin(
       );
       email = await checkLoginEmail(tx, input.email, personId, seat?.id ?? null);
       await tx.execute(sql`update person set email = ${email} where id = ${personId}`);
+      if (email !== person.email)
+        await hrEvent(tx, personId, me.id, "login", "Login email changed", [
+          { field: "loginEmail", label: "Login email", from: person.email, to: email, hidden: false },
+        ]);
     }
     if (hash) {
       await tx.execute(
@@ -523,6 +529,7 @@ export async function setLogin(
         sql`delete from session where (person_id = ${personId} and viewed_by is null) or viewed_by = ${personId}`,
       );
       await accountEvent(tx, personId, me.id, "password_given");
+      await hrEvent(tx, personId, me.id, "login", "One-time password given");
     }
     return { loginEmail: email };
   });
@@ -568,6 +575,8 @@ export async function updateRecord(
   allow(me, HR_WRITE_ROLES, "change people's records");
   await ensureRecords(db);
   const sets: SQL[] = [];
+  // What the record becomes, for HR's trail.
+  const after: Record<string, string | number | boolean | null> = {};
   for (const [key, column] of Object.entries(RECORD_COLUMNS) as [keyof HrRecordInput, string][]) {
     if (!(key in input)) continue;
     let value = input[key] as string | number | boolean | null | undefined;
@@ -577,6 +586,7 @@ export async function updateRecord(
       if (typeof value !== "boolean")
         throw new Refusal(400, "invalid", "Tick it or leave it.", key);
       sets.push(sql`${sql.raw(column)} = ${value}`);
+      after[key] = value;
       continue;
     }
     if (key === "company" && !COMPANIES.includes(value as Company))
@@ -602,6 +612,7 @@ export async function updateRecord(
       throw new Refusal(400, "invalid", "Type the monthly amount in pesos.", key);
     if ((key === "employeeCode" || key === "personalEmail") && value !== null)
       value = key === "employeeCode" ? String(value).toUpperCase() : String(value).toLowerCase();
+    after[key] = value;
     sets.push(
       DATE_FIELDS.has(key)
         ? sql`${sql.raw(column)} = ${value}::date`
@@ -610,9 +621,17 @@ export async function updateRecord(
   }
   if (!sets.length) return;
   await change(db, async (tx) => {
-    const [found] = await rows<{ company: Company }>(
+    // The record as it was, each field as the form sends it (dates as YYYY-MM-DD).
+    const [found] = await rows<Record<string, string | number | boolean | null> & { company: Company }>(
       tx,
-      sql`select company from employee where person_id = ${personId}`,
+      sql`select ${sql.join(
+        (Object.entries(RECORD_COLUMNS) as [string, string][]).map(([key, column]) =>
+          DATE_FIELDS.has(key)
+            ? sql`to_char(${sql.raw(column)}, 'YYYY-MM-DD') as ${sql.raw(`"${key}"`)}`
+            : sql`${sql.raw(column)} as ${sql.raw(`"${key}"`)}`,
+        ),
+        sql`, `,
+      )} from employee where person_id = ${personId} for update`,
     );
     if (!found) throw new Refusal(404, "not_found", "No such person.");
     const code = text(input.employeeCode)?.toUpperCase();
@@ -636,6 +655,8 @@ export async function updateRecord(
       await tx.execute(
         sql`update person set title = ${text(input.position)} where id = ${personId}`,
       );
+    const changes = changesOf(found, after);
+    if (changes.length) await hrEvent(tx, personId, me.id, "record", changeSentence(changes), changes);
   });
 }
 
@@ -654,6 +675,7 @@ export async function personBack(db: Database, me: Me, personId: number): Promis
     sql`update employee set status = 'active', left_on = null, left_reason = null, updated_at = now(), updated_by = ${me.id}
       where person_id = ${personId}`,
   );
+  await hrEvent(db, personId, me.id, "back", "Back at work");
 }
 
 export async function markLeft(
@@ -664,5 +686,17 @@ export async function markLeft(
 ): Promise<{ vacant: string[] }> {
   if (!clean(input.reason))
     throw new Refusal(400, "invalid", "Say why they left (resigned, end of contract…).", "reason");
-  return personLeaves(db, me, personId, input, HR_WRITE_ROLES);
+  const done = await personLeaves(db, me, personId, input, HR_WRITE_ROLES);
+  const [left] = await rows<{ lastDay: string | null }>(
+    db,
+    sql`select to_char(left_on, 'YYYY-MM-DD') as "lastDay" from employee where person_id = ${personId}`,
+  );
+  await hrEvent(
+    db,
+    personId,
+    me.id,
+    "left",
+    `Marked as left${left?.lastDay ? ` (last day ${left.lastDay})` : ""}: ${clean(input.reason)}`,
+  );
+  return done;
 }
