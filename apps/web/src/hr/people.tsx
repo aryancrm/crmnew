@@ -6,6 +6,8 @@ import type {
   Classification,
   Company,
   HrHistory,
+  HrPaperKind,
+  HrPapers,
   HrPeople,
   HrPerson,
   HrPersonRow,
@@ -17,6 +19,7 @@ import {
   Check,
   ChevronLeft,
   Copy,
+  FilePlus,
   KeyRound,
   Pencil,
   Search,
@@ -32,6 +35,7 @@ import {
 import { api } from "../api";
 import { useMe } from "../auth";
 import { FIELD } from "../org/dialogs";
+import { smaller } from "../photo";
 import {
   Button,
   CARD,
@@ -876,6 +880,9 @@ export function HrPersonPage() {
             ))}
           </ul>,
         )}
+      {(mine || (me && TRAIL_ROLES.includes(me.role))) && (
+        <HrPaperList personId={data.personId} name={data.name} />
+      )}
       {me && TRAIL_ROLES.includes(me.role) && (
         <HrTrail personId={data.personId} />
       )}
@@ -889,6 +896,241 @@ export function HrPersonPage() {
         <LeftDialog person={data} onClose={() => setOpen(null)} />
       )}
     </div>
+  );
+}
+
+// ------------------------------------------------------------------ A person's papers
+
+const sizeWords = (bytes: number) =>
+  bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+
+/** The contract, IDs, certificates…: kept ones first, taken-off ones folded away below. HR adds and
+ *  takes off; the person reads their own. */
+function HrPaperList({ personId, name }: { personId: number; name: string }) {
+  const query = useQuery({
+    queryKey: ["hr", "person", String(personId), "papers"],
+    queryFn: () => api<HrPapers>(`/api/hr/people/${personId}/papers`),
+  });
+  const [adding, setAdding] = useState(false);
+  const [archiving, setArchiving] = useState<HrPapers["papers"][number] | null>(null);
+  const [showOld, setShowOld] = useState(false);
+  const data = query.data;
+  const kept = data?.papers.filter((one) => !one.archived) ?? [];
+  const old = data?.papers.filter((one) => one.archived) ?? [];
+  const row = (paper: HrPapers["papers"][number]) => (
+    <li key={paper.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
+      <div className="min-w-0">
+        <a
+          href={`/api/hr/papers/${paper.id}/file`}
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium text-slate-900 hover:text-emerald-700 hover:underline"
+        >
+          {paper.title}
+        </a>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
+          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">{paper.kindLabel}</span>
+          {paper.expiresOn && (
+            <span
+              className={
+                paper.expiry === "expired"
+                  ? "font-medium text-rose-700"
+                  : paper.expiry === "soon"
+                    ? "font-medium text-amber-700"
+                    : undefined
+              }
+            >
+              {paper.expiry === "expired" ? "Expired" : "Good until"} {dayWords(paper.expiresOn)}
+            </span>
+          )}
+          <span>
+            {sizeWords(paper.fileSize)} · {paper.addedBy}, {dayWords(paper.addedAt.slice(0, 10))}
+          </span>
+          {paper.archived && (
+            <span>
+              Taken off by {paper.archived.by}: {paper.archived.reason}
+            </span>
+          )}
+        </div>
+      </div>
+      {!paper.archived && data?.can.archive && (
+        <Button small onClick={() => setArchiving(paper)}>
+          Take off
+        </Button>
+      )}
+    </li>
+  );
+  return (
+    <section className={`${CARD} overflow-hidden`}>
+      <div className="flex min-h-11 items-center justify-between gap-2 border-b border-slate-100 px-4 py-2">
+        <h2 className="text-sm font-semibold text-slate-900">Papers</h2>
+        {data?.can.add && (
+          <Button small onClick={() => setAdding(true)}>
+            <FilePlus size={14} /> Add paper
+          </Button>
+        )}
+      </div>
+      {query.isError ? (
+        <p className="px-4 py-3 text-sm text-red-700">Couldn't load the papers.</p>
+      ) : !data ? (
+        <p className="px-4 py-3 text-sm text-slate-500">Loading…</p>
+      ) : (
+        <>
+          {kept.length === 0 ? (
+            <p className="px-4 py-3 text-sm text-slate-500">
+              No papers yet{data.can.add ? ": add the contract, IDs and certificates here." : "."}
+            </p>
+          ) : (
+            <ul className="divide-y divide-slate-100">{kept.map(row)}</ul>
+          )}
+          {old.length > 0 && (
+            <div className="border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowOld(!showOld)}
+                className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900"
+              >
+                {showOld ? "Hide" : "Show"} {old.length} taken off
+              </button>
+              {showOld && <ul className="divide-y divide-slate-100 bg-slate-50/60">{old.map(row)}</ul>}
+            </div>
+          )}
+        </>
+      )}
+      {adding && data && (
+        <AddPaperDialog personId={personId} name={name} kinds={data.kinds} onClose={() => setAdding(false)} />
+      )}
+      {archiving && <ArchivePaperDialog paper={archiving} onClose={() => setArchiving(null)} />}
+    </section>
+  );
+}
+
+function AddPaperDialog({
+  personId,
+  name,
+  kinds,
+  onClose,
+}: {
+  personId: number;
+  name: string;
+  kinds: HrPapers["kinds"];
+  onClose: () => void;
+}) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const [kind, setKind] = useState<HrPaperKind>("contract");
+  const [title, setTitle] = useState("");
+  const [expiresOn, setExpiresOn] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const done = await action.run(async () => {
+      const body = new FormData();
+      body.set("kind", kind);
+      body.set("title", title.trim());
+      if (expiresOn) body.set("expiresOn", expiresOn);
+      if (file) body.set("file", file.type.startsWith("image/") ? await smaller(file) : file);
+      await api(`/api/hr/people/${personId}/papers`, { body });
+    });
+    if (done) {
+      await queries.invalidateQueries({ queryKey: ["hr"] });
+      onClose();
+    }
+  }
+  return (
+    <Dialog title={`Add a paper to ${name}'s record`} sub="A PDF, a photo or a Word file, up to 10 MB." onClose={onClose} busy={action.busy}>
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Label text="Kind *" error={action.at("kind")}>
+            <select value={kind} onChange={(event) => setKind(event.target.value as HrPaperKind)} className={FIELD}>
+              {kinds.map((one) => (
+                <option key={one.key} value={one.key}>
+                  {one.label}
+                </option>
+              ))}
+            </select>
+          </Label>
+          <Label text="Good until (if it expires)" error={action.at("expiresOn")}>
+            <input type="date" value={expiresOn} onChange={(event) => setExpiresOn(event.target.value)} className={FIELD} />
+          </Label>
+        </div>
+        <Label text="Name *" error={action.at("title")}>
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            className={FIELD}
+            placeholder="Employment contract 2026"
+            maxLength={120}
+          />
+        </Label>
+        <Label text="File *" error={action.at("file")}>
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex cursor-pointer items-center gap-1.5 rounded-[10px] border border-line bg-white px-3 py-2 text-[13px] font-semibold text-slate-700 shadow-sm hover:bg-hover">
+              <FilePlus size={15} /> {file ? "Another file" : "Pick the file"}
+              <input
+                type="file"
+                accept="application/pdf,image/*,.docx"
+                className="sr-only"
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              />
+            </span>
+            <span className="truncate text-xs text-slate-600">{file ? file.name : "None"}</span>
+          </span>
+        </Label>
+        <Problem message={action.general(["kind", "title", "expiresOn", "file"])} />
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button onClick={onClose} disabled={action.busy}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" disabled={action.busy}>
+            {action.busy ? "Adding…" : "Add paper"}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+function ArchivePaperDialog({ paper, onClose }: { paper: HrPapers["papers"][number]; onClose: () => void }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const [reason, setReason] = useState("");
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const done = await action.run(() => api(`/api/hr/papers/${paper.id}/archive`, { body: { reason } }));
+    if (done) {
+      await queries.invalidateQueries({ queryKey: ["hr"] });
+      onClose();
+    }
+  }
+  return (
+    <Dialog
+      title={`Take off "${paper.title}"`}
+      sub="It stays on file as taken off, with your reason; nothing is deleted."
+      onClose={onClose}
+      busy={action.busy}
+    >
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <Label text="Why *" error={action.at("reason")}>
+          <input
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            className={FIELD}
+            placeholder="Replaced by the signed one"
+            maxLength={300}
+          />
+        </Label>
+        <Problem message={action.general(["reason"])} />
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button onClick={onClose} disabled={action.busy}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="danger" disabled={action.busy}>
+            {action.busy ? "Saving…" : "Take off"}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 

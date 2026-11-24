@@ -19,6 +19,7 @@ import {
 } from "./attendance";
 import { hrHistory } from "./events";
 import { cancelForm, decideForm, formList, myForms, requestForm } from "./forms";
+import { addPaper, archivePaper, hrPapers, PAPER_MAX_BYTES, type PaperFile, paperFile } from "./papers";
 import {
   cancelLeave,
   decideLeave,
@@ -66,7 +67,7 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   // Looking as someone shows their work, not their private record: pay, bank, government numbers,
   // birth date, contact, a medical certificate. A team lead or a head gets none of it that way; the
   // CEO and the Admin read these on their own login anyway.
-  for (const path of ["/api/hr/people/*", "/api/hr/payslips/*", "/api/hr/payroll/*", "/api/hr/leave/:id/file"])
+  for (const path of ["/api/hr/people/*", "/api/hr/papers/*", "/api/hr/payslips/*", "/api/hr/payroll/*", "/api/hr/leave/:id/file"])
     app.use(path, async (c, next) => {
       const viewer = c.get("me").viewedBy;
       if (viewer && viewer.role !== "ceo" && viewer.role !== "admin")
@@ -218,6 +219,44 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   app.get("/api/hr/people/:id/history", async (c) =>
     c.json(await hrHistory(db, c.get("me"), idParam(c))),
   );
+  app.get("/api/hr/people/:id/papers", async (c) =>
+    c.json(await hrPapers(db, c.get("me"), idParam(c))),
+  );
+  // A paper: a form with kind, title, expiresOn as text and the paper as `file`.
+  app.post("/api/hr/people/:id/papers", async (c) => {
+    if (Number(c.req.header("content-length") ?? 0) > PAPER_MAX_BYTES + 64 * 1024)
+      throw new Refusal(400, "invalid", "That file is over 10 MB.", "file");
+    const body = await c.req.parseBody().catch(() => ({}) as Record<string, unknown>);
+    const text = (key: string) => (typeof body[key] === "string" ? (body[key] as string).trim() : "");
+    const file = body.file;
+    const paper: PaperFile | null =
+      file instanceof File && file.size > 0
+        ? { name: file.name, mime: file.type, bytes: new Uint8Array(await file.arrayBuffer()) }
+        : null;
+    return c.json(
+      await addPaper(
+        db,
+        c.get("me"),
+        idParam(c),
+        { kind: text("kind"), title: text("title"), expiresOn: text("expiresOn") || null },
+        paper,
+      ),
+    );
+  });
+  app.post("/api/hr/papers/:id/archive", async (c) => {
+    const input = await readBody(c, z.object({ reason: words(300) }));
+    await archivePaper(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+  app.get("/api/hr/papers/:id/file", async (c) => {
+    const paper = await paperFile(db, c.get("me"), idParam(c));
+    return c.body(paper.bytes as Uint8Array<ArrayBuffer>, 200, {
+      "content-type": paper.mime,
+      "content-disposition": `inline; filename="${encodeURIComponent(paper.name)}"`,
+      "x-content-type-options": "nosniff",
+      "cache-control": "private, max-age=604800, immutable",
+    });
+  });
   app.patch("/api/hr/people/:id", async (c) => {
     const input = await readBody(
       c,

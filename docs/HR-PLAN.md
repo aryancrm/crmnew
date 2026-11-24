@@ -49,7 +49,11 @@ One feature per commit, each with its tests; `checks/integrity.ts` and `scale.te
      "changed"), a login email changed or a one-time password given, marked as left, back at work.
      *Changes* on the person's page (HR, the CEO, the Admin; never while looking as someone), and
      *HR records* in the Audit. Test: `hr/events.test.ts`.
-   - [ ] Each person's papers.
+   - [x] **Each person's papers** (24 Nov): migration 0150 `hr_paper`, `hr/papers.ts`; contract,
+     government ID, certificate, clearance, medical, other; a PDF, photo or Word file up to 10 MB
+     through `files/store.ts`; a "good until" day, marked expired or within 30 days. HR and the
+     Admin add and take off (archived with a reason, never deleted); HR, the CEO, the Admin and the
+     person read; never while looking as someone. Both written in HR's trail. Test: `hr/papers.test.ts`.
    - [ ] Employment history beyond seats (position and pay changes over time).
    - [ ] A list of positions.
    - [ ] The fields Automated-Excel has and the CRM lacks.

@@ -4203,7 +4203,28 @@ export type HrPerson = {
 /** One field of a record as it was and as it is. `hidden`: pay, bank, a government number or the
  *  birth date: the trail says it changed, never the values (both null). */
 export type HrChange = { field: string; label: string; from: string | null; to: string | null; hidden: boolean };
-export type HrEventKind = "joined" | "record" | "login" | "left" | "back";
+export type HrEventKind = "joined" | "record" | "login" | "left" | "back" | "paper";
+export type HrPaperKind = "contract" | "government_id" | "certificate" | "clearance" | "medical" | "other";
+/** A person's papers on their HR record: the ones kept, then the ones taken off (archived). */
+export type HrPapers = {
+  kinds: { key: HrPaperKind; label: string }[];
+  papers: {
+    id: number;
+    kind: HrPaperKind;
+    kindLabel: string;
+    title: string;
+    expiresOn: string | null;
+    /** Expired, or within 30 days of it. */
+    expiry: "expired" | "soon" | null;
+    fileName: string;
+    fileMime: string;
+    fileSize: number;
+    addedBy: string;
+    addedAt: string;
+    archived: { at: string; by: string; reason: string } | null;
+  }[];
+  can: { add: boolean; archive: boolean };
+};
 /** A person's HR trail, newest first: who did what to their record, and when. */
 export type HrHistory = {
   lines: { at: string; by: string; kind: HrEventKind; what: string; changes: HrChange[] }[];
