@@ -41,6 +41,7 @@ import { api } from "../api";
 import { useMe } from "../auth";
 import { FIELD } from "../org/dialogs";
 import { smaller } from "../photo";
+import { LeaveCreditsBox } from "./credits";
 import { weekdaysWords } from "./schedules";
 import {
   Button,
@@ -930,6 +931,9 @@ export function HrPersonPage() {
         )}
       {(mine || (me && TRAIL_ROLES.includes(me.role))) && (
         <HrPaperList personId={data.personId} name={data.name} />
+      )}
+      {me && TRAIL_ROLES.includes(me.role) && data.role !== "admin" && (
+        <LeaveCreditsBox personId={data.personId} />
       )}
       {me && TRAIL_ROLES.includes(me.role) && (
         <HrTrail personId={data.personId} />

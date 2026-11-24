@@ -65,9 +65,10 @@ beforeAll(async () => {
     ).map((one) => one.day),
   );
   const today = todayManila();
-  // In December the days ahead come from January, so one year holds them all.
+  // In December the days ahead come from January, so one year holds them all. A week ahead at the
+  // earliest: vacation leave needs 7 days' notice (leave-rules.ts).
   const start =
-    today.slice(5) > "11-30" ? `${Number(today.slice(0, 4)) + 1}-01-05` : addDays(today, 1);
+    today.slice(5) > "11-30" ? `${Number(today.slice(0, 4)) + 1}-01-05` : addDays(today, 7);
   const year = start.slice(0, 4);
   for (let at = start; ahead.length < 12 && at.slice(0, 4) === year; at = addDays(at, 1))
     if (isWorkDay(at, DEFAULT_SCHEDULE, holidays)) ahead.push(at);

@@ -110,6 +110,72 @@ One feature per commit, each with its tests; `checks/integrity.ts` and `scale.te
      the 15 minutes is the right tolerance.
 3. **Leave and forms (about 1.5 weeks).** Credits, the leave rules, the overtime rules, revoke,
    printable forms, HR's one queue.
+   - [x] **Credits HR adjusts** (24 Nov): migration 0154 `leave_credit`, `hr/credits.ts`. A person's
+     VL and SL for a year read as a ledger: the opening days by the rule (regular 10 + 10, others
+     none), HR's adjustments (+ or -, half days, a reason each), used (approved) and waiting; what is
+     left never goes below nothing. A line is never changed or deleted: a wrong one is reversed once
+     by another naming it. HR and the Admin adjust, the CEO reads; each line in HR's trail (kind
+     `leave`). *Leave credits* on the person's page (with the year), HR's changes on *My leave &
+     forms*; every balance reads the ledger, and someone on probation can use days HR gave.
+   - [x] **The leave rules** (24 Nov, `hr/leave-rules.ts`, `hr/leave.ts`): vacation leave 7 days
+     ahead (HR recording leave for someone is not held to it, as Automated-Excel's filing on
+     someone's behalf); sick leave of 2 working days or more needs a medical certificate; up to 5
+     proof files a leave (photos or PDFs, 10 MB each, through `files/store.ts`, table `leave_file`;
+     the old single paper still opens, and `/file` is the first paper); a **second approver** HR names
+     on the record (*Leave credits* › Second approver, in the trail) also decides the person's leave
+     and sees it on Leave & forms, the first of the two to decide closes it; **revoke**: the person
+     takes back approved leave until its first day, HR any time, kept as `revoked` with who, when and
+     why, its days back in the credits, the approvers told. **Year-end VL** (`/hr/leave/conversion`,
+     HR, the CEO, the Admin): each person's unused VL, half of it to convert, at monthly × 12 ÷ 313 a
+     day, in pesos; a report only, nothing paid (PLAN 12.16).
+   - [x] **Forms** (24 Nov, `hr/forms.ts`): the **daily accomplishment report** (purpose, activities
+     with time in and out, place, details, deadline, remarks) and the **incident report** (day within
+     30 days and never ahead, time, place, kind: safety, misconduct, property damage, security or
+     other, what happened, who was involved, what was done), both straight to HR; HR takes an
+     incident in (never refuses it). **Overtime**: its type (regular day, rest day, regular holiday,
+     special day, rest day on either, broken time; the day's own kind or broken time), times on the
+     hour or half hour, past midnight allowed; the hours counted by Automated-Excel's rules (on a
+     regular day the person's working hours never count, the first hour whole then half hours, an
+     hour's lunch off from 9 hours, the night part 10 PM to 6 AM kept apart as night differential);
+     refused on a day with official business filed (waiting or approved). Attendance and payroll
+     count overtime by those minutes (rows from before keep from–to). **Head Requisition**: a team
+     lead or manager files overtime for someone under them; it goes straight to HR, the person is
+     told, the lead (not the person) revokes it. **Revoke**: whoever filed a form takes it back until
+     it is decided, kept as `revoked` with who, when, the status it had and the desk it was at.
+     **Returned**: HR sends a waiting or approved form back with what to fix; the person sends it
+     again (checked again) or revokes it; *To decide* shows "Forms returned to you to fix".
+   - [x] **Signatures and printouts** (24 Nov, `hr/print.ts`, table `person_signature`): each person
+     draws their signature on *My leave & forms* (a PNG through `files/store.ts`); drawing again
+     archives the old one, never deletes it. An approved leave or form prints at `/hr/print/leave/:id`
+     and `/hr/print/form/:id` (a clean page; the browser prints or saves a PDF) with what HR's
+     templates carry and the boxes of the employee, the immediate superior and HR, each with the
+     signature in force when that person filed or decided (for Head Requisition the lead signs the
+     employee's and the superior's boxes). Opened by the person, whoever filed it, whom it went to or
+     who decided it, the leads above, HR, the CEO and the Admin; never while looking as someone.
+   - [x] **HR's one queue** (24 Nov, `hr/queue.ts`, `/api/hr/queue`): Leave & forms shows each
+     switch's waiting count and *All waiting* (leave, forms, attendance days together); for HR it
+     says how many came to HR itself. The counts come from the same lists *To decide* reads.
+     Tests: `hr/leave-rules.test.ts`, `hr/leave-credits.test.ts`, `hr/forms-rules.test.ts`,
+     `hr/print.test.ts`.
+   - *Not done:* Automated-Excel's two-stage overtime (the supervisor signs, then HR): overtime here
+     is decided once, like every form (whom the person reports to, else HR); its OB "stops" (several
+     places a day; the CRM's OB keeps one place and from–to); editing a waiting form (revoke and file
+     again); Automated-Excel's revoke of approved leave needing the approver's yes (here it is
+     immediate, before the first day); the leave picker's chosen dates (here from–to and half a day);
+     the offsetting credit (Parts I–III); accrual by month; night differential pay.
+   - *To confirm with HR* (numbers and rules taken from Automated-Excel, not in PLAN.md): the 7
+     days' notice for VL; sick leave after the fact (Automated-Excel 2 days back; PLAN 12.13 says a
+     month back for all leave, and that is kept); a medical certificate from 2 days of sick leave;
+     5 proof files of 10 MB; half of unused VL converted at year-end, at monthly × 12 ÷ 313 a day,
+     rounded down to the half day; whether days HR gives someone on probation are usable at once
+     (Automated-Excel waits for regularization); the second approver named on the record (and only
+     for leave, not forms); the overtime rules (whole first hour, half-hour steps, lunch from 9
+     hours, 10 PM–6 AM night differential, rest day from the person's schedule rather than Sunday
+     only) and how night differential is paid; no overtime on a day with OB; overtime filed a month
+     back here (Automated-Excel: a week after, as an emergency); Head Requisition open to any lead
+     for their own team (Automated-Excel: three named people); the daily report to HR (Automated-
+     Excel also names three reviewers) and filed a month back (Automated-Excel: that day or later);
+     incident reports within 30 days; a signature of at most 1 MB.
 4. **Payroll (about 1.5 weeks).** The decided cadence, holidays by town, the inputs from 2 and 3,
    the compare with HR's register. *Done when* one period matches HR's register to the centavo.
 5. **Joining and leaving (about 1 week).** The checklist with its reminders; resignation, clearance,

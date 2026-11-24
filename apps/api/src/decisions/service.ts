@@ -61,7 +61,7 @@ export async function decisions(db: Database, me: Me): Promise<Decisions> {
   const leave = await ifAllowed(() => leaveList(db, me, { view: "waiting" }));
   if (leave) add(forMe, { key: "leave", label: "Leave to approve", count: leave.counts.waiting, to: "/hr/leave", kind: "people" });
   const forms = await ifAllowed(() => formList(db, me, { view: "waiting" }));
-  if (forms) add(forMe, { key: "forms", label: "Forms to approve (OB, WFH, overtime)", count: forms.counts.waiting, to: "/hr/leave", kind: "people" });
+  if (forms) add(forMe, { key: "forms", label: "Forms to approve (OB, WFH, overtime, reports)", count: forms.counts.waiting, to: "/hr/leave", kind: "people" });
   const fixes = await ifAllowed(() => fixList(db, me, { view: "waiting" }));
   if (fixes) add(forMe, { key: "fixes", label: "Attendance days to put right", count: fixes.counts.waiting, to: "/hr/leave?of=fixes", kind: "people" });
   const expenses = await ifAllowed(() => fieldExpenses(db, me, { waiting: true }));
@@ -140,11 +140,12 @@ export async function decisions(db: Database, me: Me): Promise<Decisions> {
   }
 
   // What this person asked others for, still open.
-  const [own] = await rows<{ leave: number; forms: number; fixes: number; asks: number; returns: number; expenses: number; plans: number; seats: number; samplesAsked: number; samplesComing: number }>(
+  const [own] = await rows<{ leave: number; forms: number; returned: number; fixes: number; asks: number; returns: number; expenses: number; plans: number; seats: number; samplesAsked: number; samplesComing: number }>(
     db,
     sql`select
         (select count(*) from person_leave where person_id = ${me.id} and status = 'asked')::int as leave,
-        (select count(*) from hr_form where person_id = ${me.id} and status = 'asked')::int as forms,
+        (select count(*) from hr_form where (person_id = ${me.id} or head_by = ${me.id}) and status = 'asked')::int as forms,
+        (select count(*) from hr_form where coalesce(head_by, person_id) = ${me.id} and status = 'returned')::int as returned,
         (select count(*) from attendance_fix where person_id = ${me.id} and status = 'asked')::int as fixes,
         (select count(*) from order_ask where asked_by = ${me.id} and answered_at is null and withdrawn_at is null)::int as asks,
         (select count(*) from sales_return where requested_by = ${me.id} and status in ('requested', 'approved', 'checked'))::int as returns,
@@ -158,6 +159,8 @@ export async function decisions(db: Database, me: Me): Promise<Decisions> {
   if (own) {
     add(mine, { key: "my-leave", label: "Your leave waiting for a yes", count: own.leave, to: "/me/leave", kind: "people" });
     add(mine, { key: "my-forms", label: "Your forms waiting for a yes", count: own.forms, to: "/me/leave", kind: "people" });
+    // HR sent a form back to fix: the person sends it again or revokes it.
+    add(forMe, { key: "forms:returned", label: "Forms returned to you to fix", count: own.returned, to: "/me/leave", kind: "people" });
     add(mine, { key: "my-fixes", label: "Your attendance days asked to put right", count: own.fixes, to: "/me/leave", kind: "people" });
     add(mine, { key: "my-asks", label: "Orders you asked a lead about", count: own.asks, to: "/orders/check", kind: "orders" });
     add(mine, { key: "my-returns", label: "Returns you asked for, not done", count: own.returns, to: "/returns", kind: "orders" });

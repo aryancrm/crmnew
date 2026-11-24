@@ -4079,7 +4079,7 @@ export type FixLine = {
   timeIn: string;
   timeOut: string | null;
   reason: string;
-  status: LeaveStatus;
+  status: Exclude<LeaveStatus, "revoked">;
   approver: string | null;
   decidedBy: string | null;
   decisionNote: string | null;
@@ -4382,7 +4382,15 @@ export type HrPositions = {
 /** One field of a record as it was and as it is. `hidden`: pay, bank, a government number or the
  *  birth date: the trail says it changed, never the values (both null). */
 export type HrChange = { field: string; label: string; from: string | null; to: string | null; hidden: boolean };
-export type HrEventKind = "joined" | "record" | "login" | "left" | "back" | "paper" | "attendance";
+export type HrEventKind =
+  | "joined"
+  | "record"
+  | "login"
+  | "left"
+  | "back"
+  | "paper"
+  | "attendance"
+  | "leave";
 export type HrPaperKind = "contract" | "government_id" | "certificate" | "clearance" | "medical" | "other";
 /** A person's papers on their HR record: the ones kept, then the ones taken off (archived). */
 export type HrPapers = {
@@ -4681,11 +4689,15 @@ export type ExpenseInput = {
 
 // ---- HR: leave asked for by people, decided by whom they report to (HR when none). ----
 
-export type LeaveStatus = "asked" | "approved" | "refused" | "cancelled";
+export type LeaveStatus = "asked" | "approved" | "refused" | "cancelled" | "revoked";
 
 export type LeaveBalance = {
-  /** Days a year (regular employees: 10 VL and 10 SL; others none). */
+  /** The year's days: the opening days plus HR's adjustments (never below nothing). */
   allotted: number;
+  /** Days a year by the rule (regular employees: 10 VL and 10 SL; others none). */
+  opening: number;
+  /** HR's adjustments this year, added up (+ or -, half days). */
+  adjusted: number;
   used: number;
   /** Asked for and not decided yet. */
   asked: number;
@@ -4709,10 +4721,70 @@ export type LeaveLine = {
   decisionNote: string | null;
   madeBy: string;
   madeAt: string;
-  /** A paper with it (a medical certificate), opened at /api/hr/leave/:id/file. */
+  /** Its first paper (a medical certificate), opened at /api/hr/leave/:id/file: the one older
+   *  rows kept on the leave, else the first of `files`. */
   file: { name: string; mime: string } | null;
+  /** Proof files (up to five), opened at /api/hr/leave/:id/files/:fileId. */
+  files: { id: number; name: string; mime: string }[];
+  /** A second approver named on the person's record: also decides; the first to decide wins. */
+  secondApprover: string | null;
+  revokedBy: string | null;
+  revokedAt: string | null;
+  revokeReason: string | null;
   canDecide: boolean;
   canCancel: boolean;
+  /** Approved leave the person takes back before it starts (HR any): kept, days come back. */
+  canRevoke: boolean;
+  /** The printout (/hr/print/leave/:id) opens: approved, and this person may read it. */
+  canPrint: boolean;
+};
+
+/** One of HR's adjustments to a person's credits (a ledger line, never changed). */
+export type LeaveCreditLine = {
+  id: number;
+  year: number;
+  kind: "vl" | "sl";
+  /** + adds, - takes off; half days allowed. */
+  days: number;
+  reason: string;
+  by: string;
+  at: string;
+  /** The line this one reverses, and the line that reversed this one. */
+  reverses: number | null;
+  reversedBy: number | null;
+};
+
+/** A person's credits for a year as HR reads them: the ledger for VL and SL and HR's lines. */
+export type LeaveCredits = {
+  personId: number;
+  name: string;
+  year: number;
+  classification: Classification;
+  vl: LeaveBalance;
+  sl: LeaveBalance;
+  lines: LeaveCreditLine[];
+  secondApprover: { id: number; name: string } | null;
+  /** adjust: add or reverse a line, and name the second approver (HR and the Admin). */
+  can: { adjust: boolean };
+  /** Whom HR may name as the second approver (when it may). */
+  approvers: { id: number; name: string }[];
+};
+
+/** Year-end: each person's unused vacation leave and the half of it that converts to pay, at
+ *  their day rate (centavos). A report for HR: the CRM doesn't pay it (PLAN 12.16). */
+export type VlConversion = {
+  year: number;
+  people: {
+    personId: number;
+    name: string;
+    total: number;
+    used: number;
+    unused: number;
+    convertDays: number;
+    perDay: number | null;
+    amount: number | null;
+  }[];
+  totals: { convertDays: number; amount: number };
 };
 
 /** A person's own leave: what is left this year, what they asked for, and whom they ask. */
@@ -4721,13 +4793,25 @@ export type MyLeave = {
   classification: Classification;
   balances: { vl: LeaveBalance; sl: LeaveBalance; lwop: { used: number; asked: number } };
   approver: string;
+  secondApprover: string | null;
+  /** HR's adjustments to this year's credits. */
+  credits: LeaveCreditLine[];
+  /** The rules the ask form keeps (vacation notice, proof for sick leave, files). */
+  rules: { vlNoticeDays: number; earliestVl: string; slProofFromDays: number; filesMax: number };
   lines: LeaveLine[];
 };
 
 /** Leave for HR (everyone), a team lead (the team) and the CEO (everyone, to read). */
 export type LeaveList = {
   lines: LeaveLine[];
-  counts: { waiting: number; asked: number; approved: number; refused: number; cancelled: number };
+  counts: {
+    waiting: number;
+    asked: number;
+    approved: number;
+    refused: number;
+    cancelled: number;
+    revoked: number;
+  };
   /** Lines this person decides (their team's, all for HR). */
   mine: number;
 };
@@ -4778,8 +4862,44 @@ export type LivePeople = {
   }[];
 };
 
-/** Official business, work from home, overtime. */
-export type FormKind = "ob" | "wfh" | "ot";
+/** Official business, work from home, overtime, the daily accomplishment report (eod), the
+ *  incident report. */
+export type FormKind = "ob" | "wfh" | "ot" | "eod" | "incident";
+/** A form may also be returned to the person to fix (they send it again or revoke it). */
+export type FormStatus = LeaveStatus | "returned";
+/** The kinds of day overtime is filed on; broken is broken time. */
+export type OtType =
+  | "regular"
+  | "rest"
+  | "legal"
+  | "special"
+  | "rest_legal"
+  | "rest_special"
+  | "broken";
+export type EodActivity = {
+  timeIn: string;
+  timeOut: string;
+  location: string | null;
+  details: string;
+  deadline: string | null;
+  remarks: string | null;
+};
+export type IncidentType =
+  | "Safety / Accident"
+  | "Misconduct"
+  | "Property Damage"
+  | "Security"
+  | "Other";
+export type IncidentDetails = {
+  time: string;
+  location: string;
+  type: IncidentType;
+  otherText: string | null;
+  persons: string;
+  action: string;
+};
+/** What the daily accomplishment report and the incident report carry. */
+export type FormDetails = { activities: EodActivity[] } | IncidentDetails;
 
 export type FormLine = {
   id: number;
@@ -4789,20 +4909,45 @@ export type FormLine = {
   /** "HH:MM" (official business and overtime). */
   from: string | null;
   to: string | null;
+  /** Overtime: the minutes that count (the overtime rules); else from–to. */
   minutes: number;
+  /** Overtime: its type, and the night differential part of the minutes (10 PM to 6 AM). */
+  otType: OtType | null;
+  nightMinutes: number;
   place: string | null;
+  /** The reason; the daily report's purpose; the incident's description. */
   reason: string;
-  status: LeaveStatus;
+  details: FormDetails | null;
+  status: FormStatus;
   approver: string | null;
+  /** Head Requisition: the lead who filed this overtime for the person (straight to HR). */
+  headBy: string | null;
   decidedBy: string | null;
   decisionNote: string | null;
+  returnNote: string | null;
+  revoked: { by: string; at: string; from: string; stage: "approver" | "hr" } | null;
   canDecide: boolean;
   canCancel: boolean;
+  /** Taken back (kept as revoked) before it is decided, or once returned. */
+  canRevoke: boolean;
+  /** HR sends it back to the person to fix. */
+  canReturn: boolean;
+  /** The person sends a returned form again, fixed. */
+  canResend: boolean;
+  canPrint: boolean;
 };
 
 export type FormList = {
   lines: FormLine[];
-  counts: { waiting: number; asked: number; approved: number; refused: number; cancelled: number };
+  counts: {
+    waiting: number;
+    asked: number;
+    approved: number;
+    refused: number;
+    cancelled: number;
+    returned: number;
+    revoked: number;
+  };
 };
 
 export type FormInput = {
@@ -4812,6 +4957,60 @@ export type FormInput = {
   to?: string | null;
   place?: string | null;
   reason: string;
+  /** Overtime: the kind of day (else the day's own kind). */
+  otType?: OtType | null;
+  /** Head Requisition: overtime a team lead or manager files for someone under them. */
+  forPersonId?: number | null;
+  /** The daily report's activities. */
+  activities?:
+    | (Pick<EodActivity, "timeIn" | "timeOut" | "details"> & {
+        location?: string | null;
+        deadline?: string | null;
+        remarks?: string | null;
+      })[]
+    | null;
+  /** The incident report's fields. */
+  incident?: (Omit<IncidentDetails, "otherText"> & { otherText?: string | null }) | null;
+};
+
+/** Everything waiting for this person's decision under Leave & forms, by kind. */
+export type HrQueue = {
+  leave: number;
+  forms: number;
+  fixes: number;
+  total: number;
+  /** HR, the Admin: of those, the ones routed to HR itself (nobody else decides them first). */
+  atHr: { leave: number; forms: number; fixes: number; total: number } | null;
+};
+
+/** A person's own drawn signature (a PNG data URL), shown on printouts once they sign. */
+export type MySignature = { signature: { id: number; at: string; image: string } | null };
+
+/** A printable leave or form: what the paper form carries, and who signed (each box filled only
+ *  once that person signed or decided). */
+export type Printout = {
+  kind: "leave" | FormKind;
+  title: string;
+  company: string;
+  person: {
+    name: string;
+    employeeCode: string | null;
+    position: string | null;
+    department: string | null;
+  };
+  filedOn: string;
+  status: string;
+  /** Label and value pairs, in the paper form's order. */
+  fields: { label: string; value: string }[];
+  /** A table (the daily report's activities). */
+  table: { head: string[]; rows: string[][] } | null;
+  signers: {
+    box: string;
+    name: string | null;
+    at: string | null;
+    /** The signature as a data URL, or null (not signed yet, or no signature drawn). */
+    image: string | null;
+  }[];
 };
 
 // ------------------------------------------------------------------ payroll

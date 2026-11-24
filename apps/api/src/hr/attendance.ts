@@ -255,7 +255,7 @@ function dayOf(
     : 0;
   const overtimeMinutes = forms
     .filter((one) => one.day === day && one.kind === "ot")
-    .reduce((sum, one) => sum + formSpan(one), 0);
+    .reduce((sum, one) => sum + (one.minutes ?? formSpan(one)), 0);
   if (!row)
     return {
       day,
@@ -330,6 +330,8 @@ type FormRow = {
   day: string;
   from: string | null;
   to: string | null;
+  /** Overtime: the minutes that count by the overtime rules (null on rows from before them). */
+  minutes?: number | null;
 };
 
 /** The minutes from a form's start to its end ("HH:MM"). */
@@ -354,8 +356,8 @@ async function formsOf(
   const found = await rows<FormRow>(
     db,
     sql`select person_id::int as "personId", kind, to_char(day, 'YYYY-MM-DD') as day,
-        to_char(from_time, 'HH24:MI') as "from", to_char(to_time, 'HH24:MI') as "to"
-      from hr_form where status = 'approved' and day between ${from}::date and ${to}::date
+        to_char(from_time, 'HH24:MI') as "from", to_char(to_time, 'HH24:MI') as "to", ot_minutes as minutes
+      from hr_form where status = 'approved' and kind in ('ob', 'wfh', 'ot') and day between ${from}::date and ${to}::date
         and person_id in (${sql.join(
           ids.map((id) => sql`${id}`),
           sql`, `,
