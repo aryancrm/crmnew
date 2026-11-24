@@ -82,6 +82,32 @@ One feature per commit, each with its tests; `checks/integrity.ts` and `scale.te
      nobody is on (never the default, never deleted), and give a person one on their page (Job ›
      Change schedule) or put them back on the company's default; written in HR's trail. Late,
      undertime, rest days and leave days count on the person's own schedule. Test: `hr/schedules.test.ts`.
+   - [x] **Biometric import** (24 Nov): migration 0153 `timekeeping_device`, `timekeeping_import`,
+     `biometric_day`; `hr/timekeeping-sheet.ts` (the sheet, a pure function) and `hr/timekeeping.ts`;
+     HR's *Timekeeping* page. HR picks the workbook (.xlsx, 10 MB) and it is read first, nothing kept:
+     the days it covers (any run, from C3 and the day numbers: 11th–25th, 26th–10th or a month),
+     each row's device ID and name, who it is in the CRM, and each day read (first in, last out, or a
+     code). A row is matched by the device ID HR set before, else by the employee ID; a name that looks
+     like someone's is only a suggestion HR confirms (*This is …*, which keeps the device ID for next
+     time). Rows matched to nobody are listed and left out. The import keeps the file (through
+     `files/store.ts`) and each person's days beside the CRM's attendance, never over it; the same days
+     imported again make the new rows current and keep the old ones. *Needs review*, on the page across
+     everyone and on the person's attendance month (a *Biometrics* column): one punch, an odd number
+     of punches, a mistyped time, TRAINING, LEAVE, LWOP or any code it can't read, and days where the
+     biometrics and the CRM differ by over 15 minutes or only one of them has the day. HR uses the
+     biometric times for a day (set as *biometric*, written in HR's trail) or dismisses the flag with a
+     note (kept, and kept on a re-import of the same cell). HR and the Admin work; the CEO reads; never
+     while looking as someone. Data check: each import's day count is its rows. Test: `hr/timekeeping.test.ts`.
+     *Taken from Automated-Excel:* the sheet's layout and the cell rules of `lib/timekeepingParser.js`
+     (two rows a person, device ID in B or C, the name after "Name:", punches jammed together, the
+     codes OB, OFF, H, VL, SL, ML, HDVL, HDSL, A, the sheet found by "Att. Time" in A3 in older
+     exports, a mistyped end date read from the day columns), and the name rules of
+     `lib/employeeNameMatch.js`, here only as a suggestion. *Not taken:* the totals columns (regular
+     hours, overtime, late; the CRM works them out from the days) and its leave/OB reconcile.
+     *To confirm with HR:* one real cut-off's workbook, to read side by side with HR's own DTR (the
+     answer-key idea of `tests/dtr_compare.mjs`); whether the sheet carries an employee ID anywhere
+     ("Emp No:" on the ID row is read when there); how TRAINING, LEAVE and LWOP days count; whether
+     the 15 minutes is the right tolerance.
 3. **Leave and forms (about 1.5 weeks).** Credits, the leave rules, the overtime rules, revoke,
    printable forms, HR's one queue.
 4. **Payroll (about 1.5 weeks).** The decided cadence, holidays by town, the inputs from 2 and 3,

@@ -8,6 +8,7 @@
 import { peopleUnder } from "../org/scope";
 import { fixesOf, mayAskFix } from "./corrections";
 import { hrEvent } from "./events";
+import { biometricMonth, seesBiometric } from "./timekeeping";
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
@@ -185,14 +186,14 @@ export function checkDay(input: { day: string; timeIn: string; timeOut: string |
     throw new Refusal(400, "invalid", "That day hasn't come yet.", "day");
 }
 
-/** Sets a day's time in and out as it really was: put right by HR, or from a person's request
- *  HR or their lead approved (`request`). */
+/** Sets a day's time in and out as it really was: put right by HR, from a person's request HR or
+ *  their lead approved (`request`), or from the biometric sheet when HR uses its times (`biometric`). */
 export async function setDay(
   db: Runner,
   personId: number,
   by: number,
   input: { day: string; timeIn: string; timeOut: string | null; note: string },
-  source: "hr" | "request",
+  source: "hr" | "request" | "biometric",
 ): Promise<void> {
   const inAt = new Date(manilaMoment(input.day, input.timeIn)).toISOString();
   const outAt = input.timeOut ? new Date(manilaMoment(input.day, input.timeOut)).toISOString() : null;
@@ -635,11 +636,14 @@ export async function attendanceMonth(
         formMap.get(personId),
       ),
     );
+  // HR's view: the biometric sheet's days beside the CRM's.
+  const biometric = seesBiometric(me) ? await biometricMonth(db, personId, first, last, days) : null;
   return {
     month,
     person: { id: person.id, name: person.name, title: person.title },
     schedule: { ...schedule, name: named[0]?.name ?? "Office hours" },
     days,
+    biometric,
     totals: {
       workDays: days.filter((one) => one.kind === "work").length,
       present: days.filter((one) => one.timeIn).length,
@@ -656,6 +660,7 @@ export async function attendanceMonth(
       putRight: ATTENDANCE_WRITE_ROLES.includes(me.role),
       leave: ATTENDANCE_WRITE_ROLES.includes(me.role),
       askFix: me.id === personId && mayAskFix(me),
+      biometric: biometric !== null && ATTENDANCE_WRITE_ROLES.includes(me.role),
     },
   };
 }

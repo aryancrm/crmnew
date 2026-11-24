@@ -1,7 +1,7 @@
 // HR's addresses: attendance today and by month, Start / End my day, HR putting a day right, and
 // HR's people (records, new joiners with the login HR typed, logins, leaving).
 
-import type { Hono, MiddlewareHandler } from "hono";
+import type { Context, Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
 import { type Env, idParam, Refusal, readBody } from "../http";
@@ -23,6 +23,18 @@ import { addSchedule, archiveSchedule, hrSchedules, setPersonSchedule } from "./
 import { cancelForm, decideForm, formList, myForms, requestForm } from "./forms";
 import { addPosition, hrPositions, setPositionArchived } from "./positions";
 import { addPaper, archivePaper, hrPapers, PAPER_MAX_BYTES, type PaperFile, paperFile } from "./papers";
+import {
+  archiveDevice,
+  dismissBiometric,
+  importFile,
+  importTimekeeping,
+  previewTimekeeping,
+  setDevice,
+  TIMEKEEPING_MAX_BYTES,
+  type TimekeepingFile,
+  timekeepingPage,
+  useBiometric,
+} from "./timekeeping";
 import {
   cancelLeave,
   decideLeave,
@@ -70,7 +82,15 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   // Looking as someone shows their work, not their private record: pay, bank, government numbers,
   // birth date, contact, a medical certificate. A team lead or a head gets none of it that way; the
   // CEO and the Admin read these on their own login anyway.
-  for (const path of ["/api/hr/people/*", "/api/hr/papers/*", "/api/hr/payslips/*", "/api/hr/payroll/*", "/api/hr/leave/:id/file"])
+  for (const path of [
+    "/api/hr/people/*",
+    "/api/hr/papers/*",
+    "/api/hr/payslips/*",
+    "/api/hr/payroll/*",
+    "/api/hr/leave/:id/file",
+    "/api/hr/timekeeping",
+    "/api/hr/timekeeping/*",
+  ])
     app.use(path, async (c, next) => {
       const viewer = c.get("me").viewedBy;
       if (viewer && viewer.role !== "ceo" && viewer.role !== "admin")
@@ -278,6 +298,59 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   app.post("/api/hr/people/:id/schedule", async (c) => {
     const input = await readBody(c, z.object({ scheduleId: z.number().int().positive().nullable() }));
     await setPersonSchedule(db, c.get("me"), idParam(c), input.scheduleId);
+    return c.json({ ok: true });
+  });
+  // The biometric timekeeping workbook: HR previews it (nothing kept), confirms who rows are,
+  // imports it, and answers Needs review; the CEO reads.
+  const workbookOf = async (c: Context<Env>): Promise<TimekeepingFile | null> => {
+    if (Number(c.req.header("content-length") ?? 0) > TIMEKEEPING_MAX_BYTES + 64 * 1024)
+      throw new Refusal(400, "invalid", "That file is over 10 MB.", "file");
+    const body = await c.req.parseBody().catch(() => ({}) as Record<string, unknown>);
+    const file = body.file;
+    return file instanceof File && file.size > 0
+      ? { name: file.name, mime: file.type, bytes: new Uint8Array(await file.arrayBuffer()) }
+      : null;
+  };
+  app.get("/api/hr/timekeeping", async (c) =>
+    c.json(await timekeepingPage(db, c.get("me"), { from: c.req.query("from"), to: c.req.query("to") })),
+  );
+  app.post("/api/hr/timekeeping/preview", async (c) =>
+    c.json(await previewTimekeeping(db, c.get("me"), await workbookOf(c))),
+  );
+  app.post("/api/hr/timekeeping/import", async (c) =>
+    c.json(await importTimekeeping(db, c.get("me"), await workbookOf(c))),
+  );
+  app.get("/api/hr/timekeeping/imports/:id/file", async (c) => {
+    const file = await importFile(db, c.get("me"), idParam(c));
+    return c.body(file.bytes as Uint8Array<ArrayBuffer>, 200, {
+      "content-type": file.mime,
+      "content-disposition": `attachment; filename="${encodeURIComponent(file.name)}"`,
+      "x-content-type-options": "nosniff",
+    });
+  });
+  app.post("/api/hr/timekeeping/devices", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        deviceId: z.string().trim().min(1, "The row needs its device ID.").max(40),
+        personId: z.number().int().positive(),
+        nameOnSheet: words(120),
+      }),
+    );
+    return c.json(await setDevice(db, c.get("me"), input));
+  });
+  app.post("/api/hr/timekeeping/devices/:id/archive", async (c) => {
+    await archiveDevice(db, c.get("me"), idParam(c));
+    return c.json({ ok: true });
+  });
+  app.post("/api/hr/timekeeping/days/:id/use", async (c) => {
+    const input = await readBody(c, z.object({ note: words(200) }));
+    await useBiometric(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+  app.post("/api/hr/timekeeping/days/:id/dismiss", async (c) => {
+    const input = await readBody(c, z.object({ note: words(300) }));
+    await dismissBiometric(db, c.get("me"), idParam(c), input);
     return c.json({ ok: true });
   });
   app.get("/api/hr/people/:id/papers", async (c) =>

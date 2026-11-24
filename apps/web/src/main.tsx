@@ -34,6 +34,7 @@ import { Home } from "./home/home";
 import { HrPeoplePage, HrPersonPage } from "./hr/people";
 import { HrPositionsPage } from "./hr/positions";
 import { HrSchedulesPage } from "./hr/schedules";
+import { TimekeepingPage } from "./hr/timekeeping";
 import { InboxPage } from "./online/inbox";
 import { Inventory } from "./inventory/inventory";
 import { InventoryOverview } from "./inventory/overview";
@@ -318,6 +319,7 @@ createRoot(root).render(
             <Route path="hr/schedules" element={<HrSchedulesPage />} />
             <Route path="hr/attendance" element={<AttendancePage />} />
             <Route path="hr/report" element={<AttendanceReportPage />} />
+            <Route path="hr/timekeeping" element={<TimekeepingPage />} />
             <Route path="hr/leave" element={<LeaveListPage />} />
             <Route path="me/leave" element={<MyLeavePage />} />
             <Route path="me/payslips" element={<MyPayslipsPage />} />

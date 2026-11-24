@@ -156,6 +156,15 @@ const CHECKS: Check[] = [
     query: sql`select p.name || ' reports to ' || b.name || ', who has left' as problem
       from person p join person b on b.id = p.reports_to where p.active and not b.active`,
   },
+  {
+    key: "timekeeping_days",
+    label: "Every timekeeping import's day count is the days it kept",
+    query: sql`select 'Import ' || i.id || ' (' || to_char(i.from_day, 'YYYY-MM-DD') || ' to ' || to_char(i.to_day, 'YYYY-MM-DD')
+        || '): says ' || i.days || ' days, kept ' || coalesce(b.days, 0) as problem
+      from timekeeping_import i left join (select import_id, count(*)::int as days from biometric_day group by import_id) b
+        on b.import_id = i.id
+      where i.days <> coalesce(b.days, 0)`,
+  },
 ];
 
 /** Runs every check; each says how many things are wrong and names the first few. */

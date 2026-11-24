@@ -3973,8 +3973,8 @@ export type AttendanceDay = {
   timeIn: string | null;
   timeOut: string | null;
   /** Where time out came from: their button, the last thing they did, HR. */
-  outFrom: "button" | "last_seen" | "field" | "hr" | "request" | null;
-  inFrom: "sign_in" | "button" | "field" | "hr" | "request" | null;
+  outFrom: "button" | "last_seen" | "field" | "hr" | "request" | "biometric" | null;
+  inFrom: "sign_in" | "button" | "field" | "hr" | "request" | "biometric" | null;
   /** Still working (today, not ended). */
   working: boolean;
   workedMinutes: number;
@@ -4061,9 +4061,13 @@ export type AttendanceMonth = {
   leaves: LeaveRow[];
   /** The person's requests to put a day of this month right. */
   fixes: FixLine[];
+  /** The month's days as the biometric timekeeping sheet had them (HR, the CEO and the Admin;
+   *  null for anyone else). */
+  biometric: BiometricDay[] | null;
   /** putRight: change a day's times; leave: record or cancel leave (HR's work); askFix: the
-   *  person asks for one of their own days to be put right. */
-  can: { putRight: boolean; leave: boolean; askFix: boolean };
+   *  person asks for one of their own days to be put right; biometric: use the biometric times
+   *  for a day or dismiss its flag. */
+  can: { putRight: boolean; leave: boolean; askFix: boolean; biometric: boolean };
 };
 
 /** A request to put a day of one's own attendance right (a missed time in or out, a wrong time). */
@@ -4090,6 +4094,98 @@ export type FixList = {
 };
 
 export type FixInput = { day: string; timeIn: string; timeOut?: string | null; reason: string };
+
+// ---- HR: the biometric timekeeping workbook (TIMEKEEPING sheet) beside the CRM's attendance. ----
+
+/** What a day's cell held: punches, a code (OFF, OB, A, TRAINING …), nothing, or what can't be read. */
+export type BiometricKind = "punch" | "code" | "empty" | "unreadable";
+
+/** One day of the sheet as read (in a preview, nothing is kept yet). */
+export type TimekeepingCell = {
+  day: string;
+  /** The sheet's column. */
+  column: string;
+  raw: string;
+  kind: BiometricKind;
+  code: string | null;
+  /** "HH:MM". */
+  firstIn: string | null;
+  lastOut: string | null;
+  punches: number;
+  /** Why HR must look at it (one punch, a mistyped time, TRAINING …), or null. */
+  review: string | null;
+};
+
+/** One kept biometric day, with how it stands against the CRM's day. */
+export type BiometricDay = TimekeepingCell & {
+  id: number;
+  importId: number;
+  /** What the code means ("Rest day"), when it is one. */
+  codeWords: string | null;
+  /** Where it disagrees with the CRM's day (over 15 minutes, or one has the day and the other
+   *  hasn't), or null. */
+  flag: string | null;
+  resolution: { kind: "applied" | "dismissed"; by: string; at: string; note: string | null } | null;
+};
+
+/** A workbook read but not kept: what would be imported. */
+export type TimekeepingPreview = {
+  sheet: string;
+  from: string;
+  to: string;
+  fileName: string;
+  warnings: string[];
+  people: {
+    row: number;
+    deviceId: string;
+    name: string;
+    employeeCode: string | null;
+    /** Who they are in the CRM: by the device ID HR set, or by the employee ID. Only these import. */
+    match: { how: "device" | "employee_id"; personId: number; name: string } | null;
+    /** A name that looks like someone's: HR confirms it ("This is …") before it imports. */
+    suggestion: { personId: number; name: string } | null;
+    /** Why the row can't import even when matched (no device ID, matched twice). */
+    problem: string | null;
+    days: TimekeepingCell[];
+    counts: { punched: number; review: number };
+  }[];
+  counts: { people: number; matched: number; suggested: number; unmatched: number; days: number; review: number };
+  /** Everyone at work, to pick from when the name matches nobody. */
+  choices: { id: number; name: string; employeeCode: string | null }[];
+};
+
+export type TimekeepingImportLine = {
+  id: number;
+  from: string;
+  to: string;
+  sheet: string;
+  fileName: string;
+  people: number;
+  days: number;
+  needsReview: number;
+  skipped: number;
+  madeBy: string;
+  madeAt: string;
+  /** Re-imported since (its days kept, no longer current). */
+  superseded: boolean;
+};
+
+/** A day on HR's Needs review list: what the sheet says, what the CRM has. */
+export type TimekeepingReviewLine = {
+  person: { id: number; name: string };
+  biometric: BiometricDay;
+  crm: { timeIn: string | null; timeOut: string | null; inFrom: AttendanceDay["inFrom"] } | null;
+};
+
+/** HR's Timekeeping page. */
+export type TimekeepingPage = {
+  imports: TimekeepingImportLine[];
+  devices: { id: number; deviceId: string; person: { id: number; name: string }; nameOnSheet: string | null; setBy: string; setAt: string }[];
+  /** The days the review covers (the latest import's, unless asked). */
+  range: { from: string; to: string } | null;
+  review: TimekeepingReviewLine[];
+  can: { upload: boolean };
+};
 
 /** HR's work schedules (shifts): each with how many people at work are on it. */
 export type HrSchedules = {
