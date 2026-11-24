@@ -6,7 +6,7 @@ import { createApp } from "../app";
 import { type Database, openDatabase } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedDemo } from "../seed";
-import type { AuditTrail, HrHistory, HrPeople, Me } from "../types";
+import type { AuditTrail, HrHistory, HrPeople, HrPerson, Me } from "../types";
 import { changeSentence, changesOf } from "./events";
 
 const PASSWORD = "test-password-1";
@@ -119,6 +119,18 @@ describe("HR's trail", () => {
       record: "Ryan",
       link: `/hr/people/${ids.ryan}`,
     });
+  });
+
+  it("makes the job history from the trail: the person sees their own, pay only as changed", async () => {
+    const ryan = ids.ryan as number;
+    for (const who of ["helen", "ryan"]) {
+      const person = await read<HrPerson>(who, `/api/hr/people/${ryan}`);
+      expect(person.career[0]?.what).toMatch(/^Position: .+ → Senior Hospital CHC; Monthly salary changed$/);
+      // The TIN isn't part of a working life.
+      expect(JSON.stringify(person.career)).not.toContain("TIN");
+    }
+    const marco = await read<HrPerson>("helen", `/api/hr/people/${ids.marco}`);
+    expect(marco.career.map((one) => one.what.split(" ")[0])).toEqual(["Back", "Marked"]);
   });
 
   it("is in the people list's records too: nothing else changed", async () => {

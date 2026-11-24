@@ -859,9 +859,23 @@ export function HrPersonPage() {
             ]),
           )}
       </div>
-      {data.history.length > 0 &&
+      {(data.history.length > 0 || data.career.length > 0) &&
         box(
-          "Seats held",
+          "Job history",
+          <>
+          {data.career.length > 0 && (
+            <ol className="divide-y divide-slate-100 border-b border-slate-100 text-sm">
+              {data.career.map((one, index) => (
+                <li key={`${one.at}-${index}`} className="flex flex-wrap justify-between gap-2 px-4 py-2.5">
+                  <span className="text-slate-900">{one.what}</span>
+                  <span className="text-xs text-slate-500 tabular-nums">{whenFull(one.at)}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+          {data.history.length > 0 && (
+          <h3 className="px-4 pt-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500">Seats held</h3>
+          )}
           <ul className="divide-y divide-slate-100 text-sm">
             {data.history.map((one) => (
               <li
@@ -878,7 +892,8 @@ export function HrPersonPage() {
                 </span>
               </li>
             ))}
-          </ul>,
+          </ul>
+          </>,
         )}
       {(mine || (me && TRAIL_ROLES.includes(me.role))) && (
         <HrPaperList personId={data.personId} name={data.name} />

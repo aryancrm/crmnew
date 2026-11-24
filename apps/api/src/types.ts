@@ -4198,6 +4198,9 @@ export type HrPerson = {
   /** edit: the record; login: the login email and password; leave: mark as left. */
   /** back: marked as left, and can be brought back. */
   can: { edit: boolean; login: boolean; leave: boolean; back: boolean };
+  /** Their working life here, newest first: joined, position, department, employment, company,
+   *  regularized, pay changed (never the amount), left, back. From HR's trail (since 24 Nov 2026). */
+  career: { at: string; what: string }[];
 };
 
 /** One field of a record as it was and as it is. `hidden`: pay, bank, a government number or the

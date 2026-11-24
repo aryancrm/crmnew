@@ -108,6 +108,51 @@ export async function hrEvent(
   );
 }
 
+/** The fields that make someone's working life (the rest of a record is contact and papers). */
+const CAREER_FIELDS = new Set(["position", "department", "classification", "company", "regularizedOn", "salary", "allowance"]);
+const COMPANY_WORDS: Record<string, string> = { "2mg": "2MG Inc.", gpi: "Getmeds Philippines" };
+const CLASS_WORDS: Record<string, string> = {
+  probationary: "Probationary",
+  regular: "Regular",
+  part_time: "Part-time",
+  intern: "Intern",
+};
+
+/** Their working life from HR's trail, newest first: joined, a new position or department,
+ *  employment or company, regularized, pay changed (never how much), left, back. */
+export async function careerOf(db: Runner, personId: number): Promise<{ at: string; what: string }[]> {
+  const lines = await rows<{ at: string; kind: HrEventKind; what: string; changes: HrChange[] }>(
+    db,
+    sql`select to_char(at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as at, kind, what, changes
+      from hr_event where person_id = ${personId} and kind in ('joined', 'record', 'left', 'back')
+      order by at desc, id desc limit 200`,
+  );
+  const out: { at: string; what: string }[] = [];
+  for (const line of lines) {
+    if (line.kind !== "record") {
+      out.push({ at: line.at, what: line.what });
+      continue;
+    }
+    const parts = line.changes
+      .filter((one) => CAREER_FIELDS.has(one.field))
+      .map((one) => {
+        if (one.hidden) return `${one.label} changed`;
+        if (one.field === "regularizedOn") return one.to ? `Regular from ${one.to}` : "Regularization taken back";
+        const words = (value: string | null) =>
+          value === null
+            ? "none"
+            : one.field === "company"
+              ? (COMPANY_WORDS[value] ?? value)
+              : one.field === "classification"
+                ? (CLASS_WORDS[value] ?? value)
+                : value;
+        return `${one.label}: ${words(one.from)} → ${words(one.to)}`;
+      });
+    if (parts.length) out.push({ at: line.at, what: parts.join("; ") });
+  }
+  return out;
+}
+
 /** A person's trail, newest first. */
 export async function hrHistory(db: Database, me: Me, personId: number): Promise<HrHistory> {
   allow(me, TRAIL_ROLES, "read people's HR history");

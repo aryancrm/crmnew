@@ -4,7 +4,7 @@
 // records; pay, bank and government IDs are theirs and the person's own.
 
 import { accountEvent } from "../account/events";
-import { changeSentence, changesOf, hrEvent } from "./events";
+import { careerOf, changeSentence, changesOf, hrEvent } from "./events";
 import { type SQL, sql } from "drizzle-orm";
 import { hashPassword, passwordProblem } from "../auth/password";
 import { type Database, rows } from "../db/index";
@@ -238,7 +238,7 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
       where p.id = ${personId}`,
   );
   if (!one) throw new Refusal(404, "not_found", "No such person.");
-  const [history, boss] = await Promise.all([
+  const [history, boss, career] = await Promise.all([
     rows<HrPerson["history"][number]>(
       db,
       sql`select s.title, u.name as team, to_char(h.starts_on, 'YYYY-MM-DD') as "from",
@@ -251,6 +251,7 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
       db,
       sql`select b.name from person p join person b on b.id = p.reports_to and b.active where p.id = ${personId}`,
     ),
+    careerOf(db, personId),
   ]);
   const channel = one.seatId
     ? ((
@@ -315,6 +316,7 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
         : null,
     },
     missing: one.missing,
+    career,
     can: {
       edit: works,
       login: works && one.active && one.role !== "ceo" && one.role !== "admin",
