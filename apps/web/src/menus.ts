@@ -214,7 +214,7 @@ const ordersLink = (label: string): MenuItem => ({
  *  day (Start working, the day report, the tiles), the day's visits (or calls), the tour plan, the
  *  customers as KOLs, hospitals and KBLs, the visit plan by class, the calendar, their phone log,
  *  expenses and samples. */
-const fieldFolder = (label: string, today: string, _plan: string, phone = "My calls"): MenuItem =>
+const fieldFolder = (label: string, today: string, phone = "My calls"): MenuItem =>
   folder(
     label,
     CalendarCheck,
@@ -254,17 +254,42 @@ const teamFieldItems = (calendar = false): MenuItem[] => [
 
 /** A seller's own numbers in one folder: their score and the day's sales performance (and the
  *  Hospital CHC's evening huddle). */
-const numbersFolder = (first: MenuItem[] = []): MenuItem =>
+const numbersFolder = (first: MenuItem[] = [], score = true): MenuItem =>
   folder(
     "My numbers",
     Gauge,
-    [
-      ...first,
-      { to: "/my/score", label: "My score", icon: Gauge },
-      { to: "/sales-performance", label: "Sales performance", icon: TrendingUp },
-    ],
+    [...first, ...(score ? [{ to: "/my/score", label: "My score", icon: Gauge }] : []), salesLink],
     "Numbers",
   );
+
+// The links several sellers' menus share, written once (the medrep branch, 25 Nov).
+const callsLink: MenuItem = { to: "/calls", label: "My calls", icon: PhoneCall };
+const collectionsLink: MenuItem = { to: "/collections", label: "Collections", icon: HandCoins };
+const salesLink: MenuItem = { to: "/sales-performance", label: "Sales performance", icon: TrendingUp };
+const careGroupsLink = (label: string): MenuItem => ({ to: "/care-groups", label, icon: Users });
+/** A tender's road from posting to payment: the bidding coachee's and Government Bidding's. */
+const tendersFolder: MenuItem = folder(
+  "Tenders",
+  FileText,
+  [
+    { to: "/tenders", label: "Tenders", icon: FileText },
+    { to: "/tenders/finder", label: "Tender finder", icon: Search },
+    { to: "/tenders/report", label: "Bid report", icon: FileText },
+    { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
+  ],
+  "Tenders",
+);
+/** The seat's customers to call, in its channel's words ("Accounts to call", "Refills due":
+ *  seat-words.ts), one page for every seller. */
+const toCallLink = (me: Me, short?: string): MenuItem => ({
+  to: "/to-call",
+  label: seatWords(me).toCall,
+  icon: PhoneCall,
+  badge: "refills",
+  ...(short ? { short } : {}),
+});
+/** The seat's own customers, in its channel's words ("My accounts", "My patients"). */
+const myCustomersLink = (me: Me, icon: LucideIcon): MenuItem => ({ to: "/my/area", label: seatWords(me).myCustomers, icon });
 
 /** Inventory, laid out the way Zoho Inventory lays out its own. */
 function inventoryApp(me: Me): Space {
@@ -776,7 +801,7 @@ function ownDesk(me: Me): Space {
             { to: "/inbox", label: "Inbox", icon: MessagesSquare, badge: "inbox" },
             // Their guarantee-letter cases, which the PAP person works (22 Nov).
             { to: "/pap", label: "With PAP", icon: HeartHandshake },
-            { to: "/to-call", label: "Refills due", icon: Pill, badge: "refills", short: "Refills" },
+            { ...toCallLink(me, "Refills"), icon: Pill },
             ordersLink("My orders"),
             { to: "/customers", label: "Patients", icon: Users },
             { to: "/points", label: "Points", icon: Gift },
@@ -799,31 +824,18 @@ function ownDesk(me: Me): Space {
               Building2,
               [
                 { to: "/hospital-board", label: "My hospitals", icon: Building2 },
-                { to: "/to-call", label: "Hospitals to call", icon: PhoneCall, badge: "refills" },
-                { to: "/collections", label: "Collections", icon: HandCoins },
+                toCallLink(me),
+                collectionsLink,
                 // Every customer of the area (hospitals, and their doctors and patients): it said
-                // "Hospital list" (22 Nov).
+                // "Hospital list" (22 Nov). Not seat-words' "My hospitals": that is the board above,
+                // and the list page says "All my customers" too (customers.tsx).
                 { to: "/my/area", label: "All my customers", icon: Building2 },
               ],
               "Hospitals",
             ),
-            fieldFolder("Visits", "Today's visits", "Visit plan"),
+            fieldFolder("Visits", "Today's visits"),
             // The Government Account's bidding coachee works tenders; the CHCs declare the 7 PM huddle.
-            ...(bidding
-              ? [
-                  folder(
-                    "Tenders",
-                    FileText,
-                    [
-                      { to: "/tenders", label: "Tenders", icon: FileText },
-                      { to: "/tenders/finder", label: "Tender finder", icon: Search },
-                      { to: "/tenders/report", label: "Bid report", icon: FileText },
-                      { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
-                    ],
-                    "Tenders",
-                  ),
-                ]
-              : []),
+            ...(bidding ? [tendersFolder] : []),
             numbersFolder(bidding ? [] : [{ to: "/huddle", label: "Tonight's huddle", icon: Megaphone }]),
           ]),
           cta: newOrder,
@@ -844,7 +856,7 @@ function ownDesk(me: Me): Space {
               "Prospects",
             ),
             ordersLink("My orders"),
-            { to: "/calls", label: "My calls", icon: PhoneCall, short: "Calls" },
+            { ...callsLink, short: "Calls" },
             numbersFolder(),
           ]),
           cta: newOrder,
@@ -855,8 +867,8 @@ function ownDesk(me: Me): Space {
         return {
           ...desk([
             home,
-            { to: "/to-call", label: "Accounts to call", icon: PhoneCall, badge: "refills", short: "Call" },
-            { to: "/b2b/accounts", label: "My accounts", icon: Building2, short: "Accounts" },
+            toCallLink(me, "Call"),
+            { to: "/b2b/accounts", label: seatWords(me).myCustomers, icon: Building2, short: "Accounts" },
             folder(
               "My orders",
               ClipboardList,
@@ -866,8 +878,8 @@ function ownDesk(me: Me): Space {
               ],
               "Orders",
             ),
-            { to: "/calls", label: "My calls", icon: PhoneCall },
-            { to: "/collections", label: "Collections", icon: HandCoins },
+            callsLink,
+            collectionsLink,
             numbersFolder(),
           ]),
           cta: newOrder,
@@ -875,24 +887,8 @@ function ownDesk(me: Me): Space {
       // Government Bidding's coachees and CHC (docs/PLAN.md 16.6): tenders from posting to payment.
       if (me.channel?.code === "BID")
         return {
-          ...desk([
-            home,
-            folder(
-              "Tenders",
-              FileText,
-              [
-                { to: "/tenders", label: "Tenders", icon: FileText },
-                { to: "/tenders/finder", label: "Tender finder", icon: Search },
-                { to: "/tenders/report", label: "Bid report", icon: FileText },
-                { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
-              ],
-              "Tenders",
-            ),
-            ordersLink("My orders"),
-            { to: "/collections", label: "Collections", icon: HandCoins },
-            { to: "/calls", label: "My calls", icon: PhoneCall },
-            { to: "/sales-performance", label: "Sales performance", icon: TrendingUp },
-          ]),
+          // Their numbers are their calls and the day's sales (no scorecard yet).
+          ...desk([home, tendersFolder, ordersLink("My orders"), collectionsLink, numbersFolder([callsLink], false)]),
           cta: newOrder,
           cta2: { to: "/tenders", label: "Record a tender" },
         };
@@ -906,17 +902,16 @@ function ownDesk(me: Me): Space {
               Building2,
               [
                 { to: "/clidp/road", label: "Pharmacies and distributors", icon: Building2 },
-                { to: "/my/area", label: "My accounts", icon: Building2 },
-                { to: "/to-call", label: "Accounts to call", icon: PhoneCall, badge: "refills" },
+                myCustomersLink(me, Building2),
+                toCallLink(me),
                 { to: "/clidp/listings", label: "Listings", icon: FileText },
                 // What the accounts owe sits with the accounts (22 Nov: loose links grouped).
-                { to: "/collections", label: "Collections", icon: HandCoins },
+                collectionsLink,
               ],
               "Accounts",
             ),
             ordersLink("My orders"),
-            { to: "/calls", label: "My calls", icon: PhoneCall },
-            { to: "/sales-performance", label: "Sales performance", icon: TrendingUp },
+            numbersFolder([callsLink], false),
           ]),
           cta: newOrder,
         };
@@ -925,18 +920,10 @@ function ownDesk(me: Me): Space {
         return {
           ...desk([
             home,
-            { to: "/to-call", label: "Customers to call", icon: PhoneCall, badge: "refills", short: "Call" },
+            toCallLink(me, "Call"),
             ordersLink("My orders"),
-            folder(
-              "Customers",
-              Building2,
-              [
-                { to: "/my/area", label: "My customers", icon: Building2 },
-                { to: "/collections", label: "Collections", icon: HandCoins },
-              ],
-              "Customers",
-            ),
-            { to: "/calls", label: "My calls", icon: PhoneCall },
+            folder("Customers", Building2, [myCustomersLink(me, Building2), collectionsLink], "Customers"),
+            callsLink,
             numbersFolder(),
           ]),
           cta: newOrder,
@@ -947,18 +934,10 @@ function ownDesk(me: Me): Space {
         return {
           ...desk([
             home,
-            { to: "/to-call", label: "Refills due", icon: Pill, badge: "refills", short: "Refills" },
+            { ...toCallLink(me, "Refills"), icon: Pill },
             ordersLink("My orders"),
-            folder(
-              "Patients",
-              Users,
-              [
-                { to: "/my/area", label: "My patients", icon: Users },
-                { to: "/care-groups", label: "Care groups", icon: Users },
-              ],
-              "Patients",
-            ),
-            { to: "/calls", label: "My calls", icon: PhoneCall },
+            folder("Patients", Users, [myCustomersLink(me, Users), careGroupsLink("Care groups")], "Patients"),
+            callsLink,
             numbersFolder(),
           ]),
           cta: newOrder,
@@ -978,11 +957,11 @@ function ownDesk(me: Me): Space {
               [
                 { to: "/rx/doctors", label: "My doctors", icon: Stethoscope },
                 { to: "/rx/business", label: "My prescriptions", icon: Stethoscope },
-                { to: "/care-groups", label: "Patient care groups", icon: Users },
+                careGroupsLink("Patient care groups"),
               ],
               "Doctors",
             ),
-            fieldFolder("Calls", "Today's calls", "Route plan", "My phone calls"),
+            fieldFolder("Calls", "Today's calls", "My phone calls"),
             numbersFolder(),
           ]),
           cta: newOrder,
@@ -996,16 +975,20 @@ function ownDesk(me: Me): Space {
           home,
           ...(pap ? [{ to: "/pap", label: "PAP cases", icon: HeartHandshake, short: "Cases" }] : []),
           ordersLink("My orders"),
+          // A PAP MedRep in seat-words' words; any other in the plain ones (a Modern Trade MedRep's
+          // seat-words say "Chains", the COO's desk's words, not theirs).
           folder(
             pap ? "Patients" : "Customers",
             pap ? Users : MapPin,
-            [
-              { to: "/my/area", label: pap ? "My patients" : "My area", icon: pap ? Users : MapPin },
-              { to: "/to-call", label: pap ? "Patients to call" : "Customers to call", icon: PhoneCall, badge: "refills" },
-            ],
+            pap
+              ? [myCustomersLink(me, Users), toCallLink(me)]
+              : [
+                  { to: "/my/area", label: "My area", icon: MapPin },
+                  { to: "/to-call", label: "Customers to call", icon: PhoneCall, badge: "refills" },
+                ],
             pap ? "Patients" : "Customers",
           ),
-          fieldFolder("Visits", "Today's visits", "Visit plan"),
+          fieldFolder("Visits", "Today's visits"),
           numbersFolder(),
         ]),
         cta: newOrder,
