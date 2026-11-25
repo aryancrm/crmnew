@@ -59,17 +59,27 @@ function State({ found }: { found: FoundTender }) {
   return found.molecules.length ? <Pill tone="brand">New</Pill> : <Pill>Not ours</Pill>;
 }
 
-/** Connect PS-PhilGEPS from this laptop (the bidding system's pop-up log-in; API tenders/laptop-login.ts):
- *  the page opens the "bishnoi-ps-connect:" link with a one-time code, and on a laptop set up once a Chrome
- *  window opens with the log-in filled in; a person ticks "I'm not a robot" and the session serves everyone.
- *  While it waits (3 minutes at most) the page looks every 3 seconds whether PS-PhilGEPS is connected. */
-function ConnectPs({ connected }: { connected: boolean }) {
+/** PS-PhilGEPS's Fetch now, which connects first when it must (the bidding system's Sync button: "you
+ *  cannot fetch if you do not connect", the developer, 25 Nov). Not connected: the press opens the log-in
+ *  on this laptop (the "bishnoi-ps-connect:" link with a one-time code; API tenders/laptop-login.ts); a
+ *  person ticks "I'm not a robot"; once the session is saved (the page looks every 3 seconds, 3 minutes at
+ *  most) the fetch starts by itself. Connected: the press fetches. A laptop not set up yet gets the
+ *  one-time setup file. */
+function PsFetch({ way, state, connected }: { way: FoundList["robot"]["fetch"]["way"]; state: FoundList["robot"]["fetch"]["ps"]; connected: boolean }) {
   const queries = useQueryClient();
   const action = useAction();
   const [since, setSince] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
-  const waiting = since !== null && !connected && now - since < 180_000;
+  const [after, setAfter] = useState<string | null>(null);
+  const loggingIn = since !== null && !connected && now - since < 180_000;
   const gaveUp = since !== null && !connected && now - since >= 180_000;
+  const running = state.running;
+  const fetching = running !== null && !running.done;
+  const fetchPs = async () => {
+    await api("/api/tenders/found/robot/fetch", { method: "POST", body: { portal: "ps" } });
+    await queries.invalidateQueries({ queryKey: ["tenders", "found"] });
+  };
+  // While the log-in is open: look whether it was saved, and once it is, fetch.
   useEffect(() => {
     if (since === null || connected) return;
     const timer = setInterval(() => {
@@ -78,8 +88,21 @@ function ConnectPs({ connected }: { connected: boolean }) {
     }, 3_000);
     return () => clearInterval(timer);
   }, [since, connected, queries]);
-  const connect = () =>
+  useEffect(() => {
+    if (since === null || !connected) return;
+    setSince(null);
+    if (way === "off") {
+      setAfter("PS-PhilGEPS is connected for everyone. The robot reads it at its next hourly run (Fetch now isn't set up on this server).");
+      return;
+    }
+    setAfter("PS-PhilGEPS is connected for everyone; fetching now.");
+    void action.run(fetchPs);
+    // (once, when the log-in this press opened is saved)
+  }, [connected, since]);
+  const press = () =>
     void action.run(async () => {
+      setAfter(null);
+      if (connected) return fetchPs();
       const { code } = await api<{ code: string }>("/api/tenders/found/ps/connect", { method: "POST", body: { purpose: "login" } });
       setSince(Date.now());
       setNow(Date.now());
@@ -94,43 +117,65 @@ function ConnectPs({ connected }: { connected: boolean }) {
       link.click();
       setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
     });
-  if (connected && since === null) return null;
+  const title = !connected
+    ? "PS-PhilGEPS is not connected: this opens its log-in on this laptop first (tick the captcha), then fetches."
+    : way === "off"
+      ? "The robot can't be started from this server; it still runs by itself every hour."
+      : running?.done
+        ? "Fetched a few minutes ago; it can be pressed again 10 minutes after the last press."
+        : `Reads PS-PhilGEPS now${way === "github" ? " (GitHub runs the robot)" : " (the robot runs on this computer)"}. It takes a few minutes.`;
   return (
     <div className="mt-2 space-y-2">
-      {connected ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12.5px] text-emerald-900">
-          <b>PS-PhilGEPS is connected</b> for everyone. The robot reads it at its next run (or press Fetch now).{" "}
-          <button type="button" className="font-semibold underline" onClick={() => setSince(null)}>
-            Close
-          </button>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center gap-2">
-          <Button small variant="primary" disabled={action.busy || waiting} className="disabled:opacity-50" onClick={connect}>
-            {waiting ? "Waiting for the log-in…" : "Connect PS-PhilGEPS"}
-          </Button>
-          <span className="text-[12px] text-slate-500">From a team laptop with Google Chrome.</span>
-        </div>
-      )}
-      {(waiting || gaveUp) && (
+      <span className="flex flex-wrap items-center gap-2">
+        <Button
+          small
+          variant="primary"
+          title={title}
+          disabled={action.busy || loggingIn || (connected && (way === "off" || running !== null))}
+          className="disabled:opacity-50"
+          onClick={press}
+        >
+          {loggingIn ? "Waiting for the log-in…" : fetching ? "Fetching…" : "Fetch PS-PhilGEPS now"}
+        </Button>
+        {fetching && running && (
+          <span className="text-[12px] text-slate-600">
+            started {running.by ? `by ${running.by} ` : ""}at {when(running.at)}
+          </span>
+        )}
+        {!connected && !loggingIn && <span className="text-[12px] text-slate-500">Logs in first, from a team laptop with Google Chrome.</span>}
+      </span>
+      {(loggingIn || gaveUp) && (
         <div className={`rounded-xl border px-3 py-2 text-[12.5px] ${gaveUp ? "border-amber-200 bg-amber-50 text-amber-900" : "border-sky-200 bg-sky-50 text-sky-900"}`}>
           {gaveUp ? (
             <>No log-in window opened within 3 minutes. </>
           ) : (
             <>
-              A Chrome window opens on this laptop with the PS-PhilGEPS log-in filled in: tick <b>&ldquo;I&rsquo;m not a robot&rdquo;</b>. If the browser asks
-              whether to open the PS-PhilGEPS log-in, allow it.{" "}
+              A Chrome window opens on this laptop with the PS-PhilGEPS log-in filled in: tick <b>&ldquo;I&rsquo;m not a robot&rdquo;</b>. The fetch starts by
+              itself once you are logged in. If the browser asks whether to open the PS-PhilGEPS log-in, allow it.{" "}
             </>
           )}
           Nothing opened? This laptop needs a one-time setup (Windows with Google Chrome, about 5 minutes):{" "}
           <button type="button" disabled={action.busy} className="font-semibold underline disabled:opacity-50" onClick={setUp}>
             Set up this laptop
           </button>
-          , run the file it downloads, then press Connect PS-PhilGEPS again.{" "}
+          , run the file it downloads, then press Fetch PS-PhilGEPS now again.{" "}
           <button type="button" className="font-semibold underline" onClick={() => setSince(null)}>
             {gaveUp ? "Close" : "Cancel"}
           </button>
         </div>
+      )}
+      {after && !loggingIn && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12.5px] text-emerald-900">
+          {after}{" "}
+          <button type="button" className="font-semibold underline" onClick={() => setAfter(null)}>
+            Close
+          </button>
+        </div>
+      )}
+      {state.failed && !fetching && connected && (
+        <span className="block text-[12px] font-semibold text-rose-700">
+          The last Fetch now ({when(state.failed.at)}) did not start{state.failed.note ? `: ${state.failed.note}` : "."}
+        </span>
       )}
       <Problem message={action.problem?.message} />
     </div>
@@ -220,7 +265,7 @@ function Robot({ robot }: { robot: FoundList["robot"] }) {
         <PsCard
           runs={own("ps")}
           ps={robot.ps}
-          fetch={<FetchNow way={robot.fetch.way} portal="ps" state={robot.fetch.ps} blocked={robot.ps.connected ? null : "Connect PS-PhilGEPS first: its log-in has a captcha."} />}
+          fetch={<PsFetch way={robot.fetch.way} state={robot.fetch.ps} connected={robot.ps.connected} />}
         />
       </div>
       {fed[0] && (
@@ -289,9 +334,8 @@ function PsCard({ runs, ps, fetch }: { runs: FindRunRow[]; ps: FoundList["robot"
       <p className={`mt-1 text-[12px] ${ps.connected ? "text-slate-500" : "text-amber-700"}`}>
         {ps.connected
           ? `Connected${ps.connectedAt ? ` since ${when(ps.connectedAt)}` : ""}${ps.status === "failed" && ps.error ? ` · the last Sync stopped: ${ps.error}` : ps.stage ? ` · ${ps.stage}` : ""}.`
-          : "Its log-in has a captcha, so a person connects it from a team laptop; then it serves everyone (the robot reads it every hour) until PS-PhilGEPS ends the log-in."}
+          : "Its log-in has a captcha: Fetch PS-PhilGEPS now logs in first from this laptop (a person ticks it), then the log-in serves everyone (the robot reads it every hour) until PS-PhilGEPS ends it."}
       </p>
-      <ConnectPs connected={ps.connected} />
       {fetch}
     </PortalCard>
   );
