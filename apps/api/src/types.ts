@@ -5736,7 +5736,17 @@ export type FoundTender = {
   /** Still open for bids (no closing date read, or it is not past). */
   open: boolean;
   lines: number;
+  /** Its type as the bidding system shows it: ITB, RFQ, Negotiated, … ("" when none is read). */
+  type: string;
+  /** How many of its papers are kept or named; and what the robot said of them (pick-up, downloaded, …). */
+  files: number;
+  docsStatus: string | null;
 };
+
+/** The bidding system's document chips: all, with papers, pick-up only, none yet. */
+export type FoundDocs = "all" | "with" | "pickup" | "none";
+/** Its sorts: latest published (default), oldest published, closing soonest, highest budget. */
+export type FoundSort = "latest" | "oldest" | "closing" | "budget";
 
 /** opportunities: every tender found that is ours, any state: asking for one of our medicines, or on PS-PhilGEPS's Bid Match. */
 export type FoundView = "opportunities" | "screened" | "tenders" | "all";
@@ -5746,12 +5756,23 @@ export type FindRun = { id: number; source: "philgeps" | "ps"; trigger: string |
 
 export type FoundList = {
   view: FoundView;
-  /** The page shown (from 1) and how many one page holds; the tab's count is the total. */
+  docs: FoundDocs;
+  sort: FoundSort;
+  /** The page shown (from 1), how many one page holds (25, 50 or 100), and how many are listed in all. */
   page: number;
   pageSize: number;
+  total: number;
   rows: FoundTender[];
+  /** Each tab's count and each document chip's, under the same search and filters. */
   counts: Record<FoundView, number>;
-  /** Our molecules among what was found, for the filter. */
+  docCounts: Record<FoundDocs, number>;
+  /** The summary cards over what is listed: how many, of how many of ours (medicines left out excluded);
+   *  our medicines asked for, of how many in the tab; the budgets' total (centavos); papers and of how many tenders. */
+  stats: { listed: number; ours: number; products: number; productsAll: number; abc: number; files: number; withFiles: number };
+  /** Our medicines in the tab, most asked for first (Our product, Exclude products), and the types present. */
+  products: { name: string; n: number }[];
+  types: { code: string; n: number }[];
+  /** Our molecules among what was found, A to Z. */
   molecules: string[];
   /** The robot: whether it has a way in on this server, its last runs, and where its PhilGEPS
    *  log-in for the tender papers stands ("refused" stops it until a person says to try again). */

@@ -3,7 +3,7 @@
 // ones made tenders, and everything found; a notice's own page with what it asks line by line;
 // and the join: Make it a tender, after which the tender's own page takes over (tenders.tsx).
 
-import type { Catalogue, CustomerList, FoundDetail, FoundLine, FoundList, FoundPapers, FoundTender, FoundView, TenderMode } from "@2mg/api/types";
+import type { Catalogue, CustomerList, FoundDetail, FoundDocs, FoundLine, FoundList, FoundPapers, FoundSort, FoundTender, FoundView, TenderMode } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, CircleAlert, CircleCheck, ExternalLink, Loader2, Search, X } from "lucide-react";
 import { createPortal } from "react-dom";
@@ -11,7 +11,7 @@ import { type ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { shortPeso } from "../ceo";
-import { Button, CARD, dayLabel, Dialog, Facts, PageHead, PageState, Pill, Problem, peso, Tabs, useAction } from "../ui";
+import { Button, CARD, dayLabel, Dialog, Facts, PageHead, PageState, Pill, Problem, peso, Tabs, Tile, useAction } from "../ui";
 
 const PORTAL = { philgeps: "PhilGEPS", ps: "PS-PhilGEPS" } as const;
 const MODE: Record<TenderMode, string> = {
@@ -520,6 +520,40 @@ function PhilgepsCard({ runs, login, fetch }: { runs: FindRunRow[]; login: Found
   );
 }
 
+/** The medicines a person leaves out of the list (the bidding system's "Exclude products"): kept in this
+ *  browser, as there, so they stay left out on the next visit. */
+const LEFT_OUT_KEY = "tenderFinder.excludedProducts";
+function readLeftOut(): string[] {
+  try {
+    const kept = JSON.parse(localStorage.getItem(LEFT_OUT_KEY) ?? "[]") as unknown;
+    return Array.isArray(kept) ? kept.filter((one): one is string => typeof one === "string") : [];
+  } catch {
+    return [];
+  }
+}
+function keepLeftOut(names: string[]): void {
+  try {
+    localStorage.setItem(LEFT_OUT_KEY, JSON.stringify(names));
+  } catch {
+    // A browser that keeps nothing: they stay left out for this visit only.
+  }
+}
+
+const SORTS: [FoundSort, string][] = [
+  ["latest", "Latest published"],
+  ["oldest", "Oldest published"],
+  ["closing", "Closing soonest"],
+  ["budget", "Highest budget"],
+];
+const DOC_CHIPS: [FoundDocs, string][] = [
+  ["all", "All"],
+  ["with", "With documents"],
+  ["pickup", "Pick-up only"],
+  ["none", "No documents yet"],
+];
+const isoDay = (date: Date) => date.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+const shortDay = (day: string) => new Date(`${day}T00:00:00`).toLocaleDateString("en-PH", { month: "short", day: "numeric" });
+
 export function TenderFinderPage() {
   const queries = useQueryClient();
   const action = useAction();
@@ -527,11 +561,11 @@ export function TenderFinderPage() {
   const asked = params.get("view");
   const view: FoundView = asked === "screened" || asked === "tenders" || asked === "all" ? asked : "opportunities";
   const q = params.get("q") ?? "";
-  const source = params.get("source") ?? "";
-  const molecule = params.get("molecule") ?? "";
+  const ask = (key: string) => params.get(key) ?? "";
   const page = String(Math.max(1, Number(params.get("page")) || 1));
   const [typed, setTyped] = useState(q);
-  // Another tab, search or filter starts again from page 1.
+  const [leftOut, setLeftOut] = useState<string[]>(readLeftOut);
+  // Another tab, search, filter or chip starts again from page 1.
   const set = (changes: Record<string, string>) => {
     const next = new URLSearchParams(params);
     for (const [key, value] of Object.entries(changes)) value ? next.set(key, value) : next.delete(key);
@@ -542,9 +576,29 @@ export function TenderFinderPage() {
     set({ page: to > 1 ? String(to) : "" });
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
+  const leaveOut = (names: string[]) => {
+    setLeftOut(names);
+    keepLeftOut(names);
+    set({});
+  };
+  const sent = {
+    view,
+    q,
+    source: ask("source"),
+    molecule: ask("molecule"),
+    type: ask("type"),
+    docs: ask("docs"),
+    sort: ask("sort"),
+    dateOn: ask("dateOn"),
+    from: ask("from"),
+    to: ask("to"),
+    size: ask("size"),
+    page,
+    exclude: leftOut.join(","),
+  };
   const query = useQuery({
-    queryKey: ["tenders", "found", view, q, source, molecule, page],
-    queryFn: () => api<FoundList>(`/api/tenders/found?${new URLSearchParams({ view, q, source, molecule, page })}`),
+    queryKey: ["tenders", "found", sent],
+    queryFn: () => api<FoundList>(`/api/tenders/found?${new URLSearchParams(Object.entries(sent).filter(([, value]) => value))}`),
     placeholderData: (before) => before,
     // While Fetch now waits for its run, look again every 15 seconds so the new tenders show by themselves.
     refetchInterval: (current) => {
@@ -560,6 +614,8 @@ export function TenderFinderPage() {
       await api(`/api/tenders/found/${found.id}/screen`, { method: "POST", body: { on } });
       await queries.invalidateQueries({ queryKey: ["tenders", "found"] });
     });
+  const filtering = Boolean(sent.source || sent.molecule || sent.type || sent.from || sent.to);
+  const stats = data.stats;
   return (
     <div className="mx-auto max-w-6xl space-y-3">
       <PageHead
@@ -572,6 +628,21 @@ export function TenderFinderPage() {
         }
       />
       <Robot robot={data.robot} />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Tile label="Total opportunities" value={stats.listed.toLocaleString("en-PH")} sub={`of ${stats.ours.toLocaleString("en-PH")} asking for our products`} />
+        <Tile
+          label="Product matches"
+          tone="good"
+          value={stats.products.toLocaleString("en-PH")}
+          sub={`of our products requested (${stats.productsAll.toLocaleString("en-PH")} in all)`}
+        />
+        <Tile label="Total ABC value" tone="info" value={shortPeso(stats.abc)} sub="approved budgets of the listed tenders" />
+        <Tile
+          label="Documents fetched"
+          value={stats.files.toLocaleString("en-PH")}
+          sub={`files of ${stats.withFiles.toLocaleString("en-PH")} of the ${stats.listed.toLocaleString("en-PH")} listed tenders`}
+        />
+      </div>
       <Tabs
         tabs={[
           { key: "opportunities" as const, label: "Opportunities", count: data.counts.opportunities },
@@ -582,6 +653,21 @@ export function TenderFinderPage() {
         value={data.view}
         onChange={(key) => set({ view: key === "opportunities" ? "" : key })}
       />
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Documents">
+        {DOC_CHIPS.map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={data.docs === key}
+            className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-semibold ${
+              data.docs === key ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+            onClick={() => set({ docs: key === "all" ? "" : key })}
+          >
+            {label} <span className="text-slate-400">{data.docCounts[key].toLocaleString("en-PH")}</span>
+          </button>
+        ))}
+      </div>
       <form
         className="flex flex-wrap items-center gap-2"
         onSubmit={(event) => {
@@ -593,126 +679,328 @@ export function TenderFinderPage() {
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
           <input
             className="field h-10 w-full pl-9"
-            placeholder="Search: what it buys, the agency, the reference, a medicine"
+            placeholder="Search reference no., title, agency name or molecule"
             aria-label="Search the tenders found"
             value={typed}
             onChange={(event) => setTyped(event.target.value)}
             onBlur={() => typed.trim() !== q && set({ q: typed.trim() })}
           />
         </label>
-        <select className="field h-10 w-auto" aria-label="Portal" value={source} onChange={(event) => set({ source: event.target.value })}>
-          <option value="">Both portals</option>
+        <select className="field h-10 w-auto" aria-label="Portal" value={sent.source} onChange={(event) => set({ source: event.target.value })}>
+          <option value="">Portal: Both</option>
           <option value="philgeps">PhilGEPS</option>
           <option value="ps">PS-PhilGEPS</option>
         </select>
-        <select className="field h-10 w-auto max-w-56" aria-label="Our medicine" value={molecule} onChange={(event) => set({ molecule: event.target.value })}>
-          <option value="">Every medicine of ours</option>
-          {data.molecules.map((name) => (
-            <option key={name} value={name}>
-              {name}
+        <select className="field h-10 w-auto max-w-56" aria-label="Our product" value={sent.molecule} onChange={(event) => set({ molecule: event.target.value })}>
+          <option value="">Our product: All</option>
+          {data.products.map((one) => (
+            <option key={one.name} value={one.name}>
+              {one.name} ({one.n})
             </option>
           ))}
         </select>
+        <select className="field h-10 w-auto" aria-label="Type" value={sent.type} onChange={(event) => set({ type: event.target.value })}>
+          <option value="">Type: All</option>
+          {data.types.map((one) => (
+            <option key={one.code} value={one.code}>
+              {one.code} ({one.n})
+            </option>
+          ))}
+        </select>
+        <LeaveOut products={data.products} leftOut={leftOut} onChange={leaveOut} />
+        <select className="field h-10 w-auto" aria-label="Sort" value={data.sort} onChange={(event) => set({ sort: event.target.value === "latest" ? "" : event.target.value })}>
+          {SORTS.map(([key, label]) => (
+            <option key={key} value={key}>
+              Sort: {label}
+            </option>
+          ))}
+        </select>
+        <DateRange on={sent.dateOn === "closing" ? "closing" : "published"} from={sent.from} to={sent.to} onChange={(range) => set(range)} />
+        {filtering && (
+          <button type="button" className="text-[12.5px] font-semibold text-slate-600 underline" onClick={() => set({ source: "", molecule: "", type: "", dateOn: "", from: "", to: "" })}>
+            Clear filters
+          </button>
+        )}
       </form>
+      {leftOut.length > 0 && (
+        <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-slate-600">
+          Leaving out:
+          {leftOut.map((name) => (
+            <button
+              key={name}
+              type="button"
+              className="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-semibold text-slate-700 hover:bg-slate-50"
+              onClick={() => leaveOut(leftOut.filter((one) => one !== name))}
+            >
+              {name} ×
+            </button>
+          ))}
+        </p>
+      )}
       <Problem message={action.problem?.message} />
-      <section className={`${CARD} min-w-0`}>
+      <section className={`${CARD} min-w-0 overflow-x-auto`}>
         {data.rows.length === 0 ? (
           <p className="px-4 py-6 text-center text-[13px] text-slate-500">
-            {data.view === "opportunities"
-              ? "No tender of ours found yet on either portal."
-              : data.view === "screened"
-                ? "Nothing screened and waiting. Add a tender worth bidding on from Opportunities."
-                : data.view === "tenders"
-                  ? "No found tender has been made a tender yet."
-                  : "Nothing found yet."}
+            {filtering || q || data.docs !== "all" || leftOut.length
+              ? "No tender matches the search and filters."
+              : data.view === "opportunities"
+                ? "No tender of ours found yet on either portal."
+                : data.view === "screened"
+                  ? "Nothing screened and waiting. Add a tender worth bidding on from Opportunities."
+                  : data.view === "tenders"
+                    ? "No found tender has been made a tender yet."
+                    : "Nothing found yet."}
           </p>
         ) : (
-          <ul className="divide-y divide-slate-100">
-            {data.rows.map((found) => {
-              const close = closing(found);
-              return (
-                <li key={found.id} className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 px-4 py-3 text-[13px]">
-                  <div className="min-w-0 flex-1 basis-80">
-                    <Link to={`/tenders/finder/${found.id}`} className="font-semibold text-slate-900 hover:underline">
-                      {found.title}
-                    </Link>
-                    <span className="block text-[12px] text-slate-600">
-                      {found.agency ?? "agency not read"}
-                      {found.agency && !found.agencyId ? <span className="text-amber-700"> · not a customer yet</span> : ""}
-                    </span>
-                    <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[11.5px] text-slate-500">
-                      <State found={found} />
-                      {PORTAL[found.source]} {found.refNo}
-                      {found.noticeType ? ` · ${found.noticeType}` : found.procurementMode ? ` · ${found.procurementMode}` : ""}
-                      {found.publishedOn ? ` · published ${dayLabel(found.publishedOn)}` : ""}
-                    </span>
-                    <span className="mt-1.5 block">
+          <table className="w-full min-w-[860px] text-left text-[13px]">
+            <thead className="border-b border-slate-100 text-[11.5px] font-semibold text-slate-500">
+              <tr>
+                <th className="px-3 py-2.5 text-center">#</th>
+                <th className="px-3 py-2.5">Ref No. &amp; Type</th>
+                <th className="px-3 py-2.5">Procuring agency</th>
+                <th className="px-3 py-2.5 text-right">Approved budget (ABC)</th>
+                <th className="px-3 py-2.5">Published</th>
+                <th className="px-3 py-2.5">Matched molecules</th>
+                <th className="px-3 py-2.5 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {data.rows.map((found, at) => {
+                const close = closing(found);
+                const number = (data.page - 1) * data.pageSize + at + 1;
+                return (
+                  <tr key={found.id} className="align-top">
+                    <td className="px-3 py-3 text-center">
+                      <span
+                        className={`inline-flex size-7 items-center justify-center rounded-full text-[11.5px] font-bold ${found.files ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}
+                        title={found.files ? "Its papers are here" : "No papers yet"}
+                      >
+                        {number}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <Link to={`/tenders/finder/${found.id}`} className="font-semibold text-slate-900 hover:underline">
+                        {found.refNo}
+                      </Link>
+                      <span className="mt-1 flex flex-wrap items-center gap-1">
+                        <Pill>{PORTAL[found.source]}</Pill>
+                        {found.type && (
+                          <span title={[found.noticeType, found.procurementMode].filter(Boolean).join(" · ")}>
+                            <Pill tone="info">{found.type}</Pill>
+                          </span>
+                        )}
+                        <State found={found} />
+                      </span>
+                      <span className="mt-1 block text-[11.5px] text-slate-500">
+                        {found.files
+                          ? `${found.files} ${found.files === 1 ? "file" : "files"}`
+                          : found.docsStatus === "pick-up"
+                            ? "Pick-up only"
+                            : "No documents yet"}
+                      </span>
+                    </td>
+                    <td className="max-w-72 px-3 py-3">
+                      <span className="line-clamp-2 font-semibold text-slate-800">{found.agency ?? found.title}</span>
+                      {found.agency && <span className="mt-0.5 line-clamp-2 block text-[12px] text-slate-500">{found.title}</span>}
+                      {found.agency && !found.agencyId && <span className="text-[11.5px] text-amber-700">not a customer yet</span>}
+                    </td>
+                    <td className="px-3 py-3 text-right font-semibold whitespace-nowrap text-slate-900 tabular-nums">{found.abc ? peso(found.abc) : "—"}</td>
+                    <td className="px-3 py-3 text-[12.5px] whitespace-nowrap text-slate-700">
+                      {found.publishedOn ? dayLabel(found.publishedOn) : "—"}
+                      <span className={`mt-0.5 block text-[11.5px] font-semibold ${close.tone}`}>{close.text}</span>
+                    </td>
+                    <td className="px-3 py-3">
                       <Molecules names={found.molecules} />
-                    </span>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-                    <span className="text-[15px] font-bold text-slate-900 tabular-nums">{found.abc ? shortPeso(found.abc) : "ABC not read"}</span>
-                    <span className={`text-[12px] font-semibold ${close.tone}`}>{close.text}</span>
-                    <span className="mt-1">
-                      {found.tenderId ? (
-                        <Link to={`/tenders/${found.tenderId}`} className="text-[12.5px] font-semibold text-emerald-700 hover:underline">
-                          Open {found.tenderCode}
-                        </Link>
-                      ) : found.screenedAt ? (
-                        <Link to={`/tenders/finder/${found.id}`} className="text-[12.5px] font-semibold text-emerald-700 hover:underline">
-                          Make it a tender
-                        </Link>
-                      ) : (
-                        <Button small disabled={action.busy} onClick={() => screen(found, true)}>
-                          Add to screened
-                        </Button>
-                      )}
-                    </span>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                    </td>
+                    <td className="px-3 py-3 text-right whitespace-nowrap">
+                      <Link to={`/tenders/finder/${found.id}`} className="text-[12.5px] font-semibold text-emerald-700 hover:underline">
+                        View details →
+                      </Link>
+                      <span className="mt-1.5 block">
+                        {found.tenderId ? (
+                          <Link to={`/tenders/${found.tenderId}`} className="text-[12px] font-semibold text-slate-600 hover:underline">
+                            Open {found.tenderCode}
+                          </Link>
+                        ) : found.screenedAt ? null : (
+                          <Button small disabled={action.busy} onClick={() => screen(found, true)}>
+                            Add to screened
+                          </Button>
+                        )}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </section>
-      <PageNumbers page={data.page} pageSize={data.pageSize} total={data.counts[data.view]} onPage={goTo} />
+      <PageNumbers page={data.page} pageSize={data.pageSize} total={data.total} onPage={goTo} onSize={(size) => set({ size: size === 25 ? "" : String(size) })} />
     </div>
   );
 }
 
+/** "Exclude products": our medicines, each with how many tenders ask for it; a checked one hides every
+ *  tender asking for it. */
+function LeaveOut({ products, leftOut, onChange }: { products: FoundList["products"]; leftOut: string[]; onChange: (names: string[]) => void }) {
+  const [find, setFind] = useState("");
+  const shown = products.filter((one) => one.name.toLowerCase().includes(find.trim().toLowerCase()));
+  return (
+    <details className="relative">
+      <summary className="field flex h-10 cursor-pointer list-none items-center gap-1 text-[13px]">
+        Exclude products{leftOut.length ? ` (${leftOut.length})` : ""}
+      </summary>
+      <div className={`${CARD} absolute z-30 mt-1 w-72 p-3 shadow-lg`}>
+        <p className="text-[12px] text-slate-500">Checked products are left out: any tender asking for one of them is hidden.</p>
+        <input className="field mt-2 h-9 w-full" placeholder="Find…" aria-label="Find a product" value={find} onChange={(event) => setFind(event.target.value)} />
+        <ul className="mt-2 max-h-64 space-y-0.5 overflow-y-auto">
+          {shown.map((one) => (
+            <li key={one.name}>
+              <label className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-[13px] hover:bg-slate-50">
+                <input
+                  type="checkbox"
+                  checked={leftOut.includes(one.name)}
+                  onChange={(event) => onChange(event.target.checked ? [...leftOut, one.name] : leftOut.filter((name) => name !== one.name))}
+                />
+                <span className="flex-1">{one.name}</span>
+                <span className="text-[12px] text-slate-400">{one.n}</span>
+              </label>
+            </li>
+          ))}
+          {shown.length === 0 && <li className="px-1.5 py-1 text-[12px] text-slate-500">No product found.</li>}
+        </ul>
+        {leftOut.length > 0 && (
+          <button type="button" className="mt-2 text-[12.5px] font-semibold text-slate-600 underline" onClick={() => onChange([])}>
+            Clear
+          </button>
+        )}
+      </div>
+    </details>
+  );
+}
+
+/** "Date range": on the published day or the closing day, from and to (both inclusive), with the bidding
+ *  system's quick picks. */
+function DateRange({ on, from, to, onChange }: { on: "published" | "closing"; from: string; to: string; onChange: (range: { dateOn: string; from: string; to: string }) => void }) {
+  const [draft, setDraft] = useState({ on, from, to });
+  const today = new Date();
+  const ago = (days: number) => isoDay(new Date(today.getTime() - days * 86_400_000));
+  const label = !from && !to ? "Any" : `${on === "closing" ? "Closing" : "Published"}: ${from ? shortDay(from) : "…"} – ${to ? shortDay(to) : "…"}`;
+  const apply = (range: { on: "published" | "closing"; from: string; to: string }) => onChange({ dateOn: range.on === "closing" ? "closing" : "", from: range.from, to: range.to });
+  return (
+    <details className="relative" onToggle={(event) => event.currentTarget.open && setDraft({ on, from, to })}>
+      <summary className="field flex h-10 cursor-pointer list-none items-center gap-1 text-[13px]">Date range: {label}</summary>
+      <div className={`${CARD} absolute right-0 z-30 mt-1 w-80 space-y-2.5 p-3 shadow-lg`}>
+        <div className="flex gap-1">
+          {(["published", "closing"] as const).map((one) => (
+            <button
+              key={one}
+              type="button"
+              className={`h-8 flex-1 rounded-[10px] text-[12.5px] font-semibold ${draft.on === one ? "bg-emerald-600 text-white" : "border border-slate-300 text-slate-700"}`}
+              onClick={() => setDraft({ ...draft, on: one })}
+            >
+              {one === "published" ? "Published" : "Closing"}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {(
+            [
+              ["Last 7 days", ago(6)],
+              ["Last 30 days", ago(29)],
+              ["This month", `${isoDay(today).slice(0, 8)}01`],
+            ] as const
+          ).map(([name, start]) => (
+            <button
+              key={name}
+              type="button"
+              className="rounded-full border border-slate-200 px-2.5 py-1 text-[12px] font-semibold text-slate-700 hover:bg-slate-50"
+              onClick={() => setDraft({ ...draft, from: start, to: isoDay(today) })}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+        <label className="block text-[12px] font-semibold text-slate-600">
+          From
+          <input type="date" className="field mt-1 h-9 w-full" value={draft.from} onChange={(event) => setDraft({ ...draft, from: event.target.value })} />
+        </label>
+        <label className="block text-[12px] font-semibold text-slate-600">
+          To
+          <input type="date" className="field mt-1 h-9 w-full" value={draft.to} onChange={(event) => setDraft({ ...draft, to: event.target.value })} />
+        </label>
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            className="text-[12.5px] font-semibold text-slate-600 underline"
+            onClick={(event) => {
+              apply({ on: "published", from: "", to: "" });
+              event.currentTarget.closest("details")?.removeAttribute("open");
+            }}
+          >
+            Clear all
+          </button>
+          <Button
+            small
+            variant="primary"
+            onClick={(event) => {
+              apply(draft);
+              event.currentTarget.closest("details")?.removeAttribute("open");
+            }}
+          >
+            Done
+          </Button>
+        </div>
+      </div>
+    </details>
+  );
+}
+
 /** The pages of a list by number: first, last, and the two either side of the one shown, with Previous
- *  and Next, and which tenders this page holds. Nothing when it all fits on one page. */
-function PageNumbers({ page, pageSize, total, onPage }: { page: number; pageSize: number; total: number; onPage: (page: number) => void }) {
+ *  and Next, which tenders this page holds, and how many rows a page shows (25, 50 or 100). */
+function PageNumbers({ page, pageSize, total, onPage, onSize }: { page: number; pageSize: number; total: number; onPage: (page: number) => void; onSize: (size: number) => void }) {
   const last = Math.max(1, Math.ceil(total / pageSize));
-  if (last <= 1) return null;
+  if (total === 0) return null;
   const shown = [...new Set([1, page - 2, page - 1, page, page + 1, page + 2, last])].filter((n) => n >= 1 && n <= last).sort((a, b) => a - b);
   const button = "inline-flex h-9 min-w-9 items-center justify-center rounded-[10px] px-2.5 text-[13px] font-semibold disabled:opacity-40";
   return (
     <nav aria-label="Pages" className="flex flex-wrap items-center justify-between gap-2">
-      <span className="text-[12px] text-slate-500">
-        {((page - 1) * pageSize + 1).toLocaleString("en-PH")}–{Math.min(total, page * pageSize).toLocaleString("en-PH")} of {total.toLocaleString("en-PH")}
+      <span className="flex items-center gap-3 text-[12px] text-slate-500">
+        Showing {((page - 1) * pageSize + 1).toLocaleString("en-PH")}–{Math.min(total, page * pageSize).toLocaleString("en-PH")} of {total.toLocaleString("en-PH")}
+        <label className="flex items-center gap-1.5">
+          Rows per page
+          <select className="field h-8 w-auto py-0 text-[12.5px]" value={pageSize} onChange={(event) => onSize(Number(event.target.value))}>
+            {[25, 50, 100].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
       </span>
-      <span className="flex flex-wrap items-center gap-1">
-        <button type="button" className={`${button} border border-slate-300 bg-white text-slate-700 hover:bg-slate-50`} disabled={page <= 1} onClick={() => onPage(page - 1)}>
-          <ChevronLeft className="size-4" aria-hidden="true" /> Previous
-        </button>
-        {shown.map((n, at) => (
-          <span key={n} className="flex items-center gap-1">
-            {at > 0 && n - (shown[at - 1] ?? n) > 1 && <span className="px-1 text-slate-400">…</span>}
-            <button
-              type="button"
-              aria-current={n === page ? "page" : undefined}
-              className={`${button} ${n === page ? "bg-emerald-600 text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`}
-              onClick={() => n !== page && onPage(n)}
-            >
-              {n}
-            </button>
-          </span>
-        ))}
-        <button type="button" className={`${button} border border-slate-300 bg-white text-slate-700 hover:bg-slate-50`} disabled={page >= last} onClick={() => onPage(page + 1)}>
-          Next <ChevronRight className="size-4" aria-hidden="true" />
-        </button>
-      </span>
+      {last > 1 && (
+        <span className="flex flex-wrap items-center gap-1">
+          <button type="button" className={`${button} border border-slate-300 bg-white text-slate-700 hover:bg-slate-50`} disabled={page <= 1} onClick={() => onPage(page - 1)}>
+            <ChevronLeft className="size-4" aria-hidden="true" /> Previous
+          </button>
+          {shown.map((n, at) => (
+            <span key={n} className="flex items-center gap-1">
+              {at > 0 && n - (shown[at - 1] ?? n) > 1 && <span className="px-1 text-slate-400">…</span>}
+              <button
+                type="button"
+                aria-current={n === page ? "page" : undefined}
+                className={`${button} ${n === page ? "bg-emerald-600 text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`}
+                onClick={() => n !== page && onPage(n)}
+              >
+                {n}
+              </button>
+            </span>
+          ))}
+          <button type="button" className={`${button} border border-slate-300 bg-white text-slate-700 hover:bg-slate-50`} disabled={page >= last} onClick={() => onPage(page + 1)}>
+            Next <ChevronRight className="size-4" aria-hidden="true" />
+          </button>
+        </span>
+      )}
     </nav>
   );
 }
