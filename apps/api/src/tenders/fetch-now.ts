@@ -34,7 +34,14 @@ const WORKFLOW = "tender-finder.yml";
 /** The robot's folder in this repository (apps/api/src/tenders → the repository's root). */
 const WORKER = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../workers/tender-finder");
 /** What runs on this computer for each portal. */
-const SCRIPT: Record<Portal, string[]> = { philgeps: ["scraper.js", "--trigger=manual"], ps: ["ps/ps.mjs", "--trigger=manual"] };
+/** Each portal's steps on this computer, as the robot's workflow runs them: PhilGEPS reads its public list,
+ *  then logs in with the company's account for the screened tenders' papers (PHILGEPS_USERNAME and
+ *  PHILGEPS_PASSWORD; without them that step logs in nowhere); PS-PhilGEPS runs its Sync with the saved
+ *  session. The two portals are separate sites and accounts, so both can be logged in at once. */
+const SCRIPT: Record<Portal, string[][]> = {
+  philgeps: [["scraper.js", "--trigger=manual"], ["papers/papers.mjs"]],
+  ps: [["ps/ps.mjs", "--trigger=manual"]],
+};
 
 const repository = () => (process.env.TENDER_FINDER_GITHUB || "aryancrm/crmnew").trim();
 const dispatchToken = () => (process.env.TENDER_FINDER_DISPATCH_TOKEN ?? "").trim();
@@ -72,28 +79,40 @@ let dispatch = async (portal: Portal): Promise<void> => {
 // One robot per portal on this computer: a PS-PhilGEPS fetch never blocks a PhilGEPS one (change log 187).
 const children = new Map<Portal, ChildProcess>();
 
-/** Starts one portal's robot on this computer; it hands in to this API with the key. */
+/** Starts one portal's robot on this computer, its steps one after the other (a step that fails stops the
+ *  rest, as in the workflow); it hands in to this API with the key. */
 let runHere = (portal: Portal, onEnd: (problem: string | null) => void): void => {
   if (!existsSync(join(WORKER, "node_modules"))) throw new Error("The robot is not installed on this computer (in workers/tender-finder run: npm ci)");
-  const robot = spawn(process.execPath, SCRIPT[portal], {
-    cwd: WORKER,
-    env: { ...process.env, CRM_URL: `http://localhost:${process.env.PORT ?? 4100}` },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  children.set(portal, robot);
-  const say = (chunk: Buffer) => {
-    for (const line of chunk.toString().split(/\r?\n/)) if (line.trim()) console.log(`robot (${portal}): ${line}`);
+  const steps = SCRIPT[portal];
+  const step = (at: number): void => {
+    const args = steps[at];
+    if (!args) {
+      children.delete(portal);
+      onEnd(null);
+      return;
+    }
+    const robot = spawn(process.execPath, args, {
+      cwd: WORKER,
+      env: { ...process.env, CRM_URL: `http://localhost:${process.env.PORT ?? 4100}` },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    children.set(portal, robot);
+    const say = (chunk: Buffer) => {
+      for (const line of chunk.toString().split(/\r?\n/)) if (line.trim()) console.log(`robot (${portal}): ${line}`);
+    };
+    robot.stdout?.on("data", say);
+    robot.stderr?.on("data", say);
+    robot.on("error", (error) => {
+      children.delete(portal);
+      onEnd(`The robot could not start: ${error.message}`);
+    });
+    robot.on("exit", (code) => {
+      if (code === 0) return step(at + 1);
+      children.delete(portal);
+      onEnd(`The robot stopped (exit ${code}${steps.length > 1 ? `, at ${args[0]}` : ""}); the API's log says why`);
+    });
   };
-  robot.stdout?.on("data", say);
-  robot.stderr?.on("data", say);
-  robot.on("error", (error) => {
-    children.delete(portal);
-    onEnd(`The robot could not start: ${error.message}`);
-  });
-  robot.on("exit", (code) => {
-    children.delete(portal);
-    onEnd(code === 0 ? null : `The robot stopped (exit ${code}); the API's log says why`);
-  });
+  step(0);
 };
 
 /** For the tests: start the robot some other way. */
