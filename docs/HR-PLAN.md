@@ -272,6 +272,30 @@ One feature per commit, each with its tests; `checks/integrity.ts` and `scale.te
      back; HR and the Admin may too. My team's *Needs you* says how many days it has been empty and,
      past 7 days with nobody covering, to give it out or ask for a person.
    - Test: `org/vacancies.test.ts`.
+   - **Scenarios and how each is checked.** "Auto" = the test in `org/vacancies.test.ts` (run:
+     `pnpm --filter @2mg/api exec vitest run src/org/vacancies.test.ts`); "By hand" = try it in the
+     app (local demo: Daniel leads NCR 1, Ryan is his MedRep, Helen is HR).
+
+     | # | Scenario | Expected | Auto | By hand |
+     |---|---|---|---|---|
+     | 1 | TL1 has 5 areas, 2 vacant: who sees them | The lead sees the vacant seats of their own team; HR, the CEO and the Admin see every one; a MedRep is refused | "are the lead's in their boxes…" | Sign in as the lead → My team → *Vacant seats*; as HR → *Vacant seats* |
+     | 2 | A seat empty 7 days, nobody covering | Flagged to the lead; My team's *Needs you* says "Vacant N days… Give it to one of your people" | "reminds the lead after 7 days…" | — (needs a seat empty 7 days) |
+     | 3 | Empty 14 days, nobody covering | Flagged red: the head and HR told | partly (the flag; the head's view not tested) | — |
+     | 4 | The lead gives a vacant area to one of their MedReps | Allowed for their own people only, until a day; written in the MedRep's HR trail ("Covers … added work") | "the lead gives it to one of their people…" | *Give to one of my people* → pick → *Give it*; open the MedRep in HR → *Changes* |
+     | 5 | The lead tries to give it to someone outside the team, or a MedRep tries to give covers | Refused | same test | — |
+     | 6 | The covering MedRep sells to the vacant area's customer | The sale counts for the vacant seat (the team's), per person for the lead; not the MedRep's own KPI or score | "a sale made covering counts for the vacant seat…" | Place the order as the MedRep; the order shows *Sold as … · covering a vacant area*; their own KPIs don't move |
+     | 7 | The same MedRep sells in their own area | Still their own sale | same test | — |
+     | 8 | Cross-check later: whose sale was it | Each order keeps the email ID it was sold as (`sold_as`) and whether it was covering | same test | The order's *Sold as* line |
+     | 9 | The lead takes the cover back | The cover ends today; written in the trail ("Cover of … ended") | "the lead takes the cover back" | *Take the cover back* |
+     | 10 | HR moves someone (B2C to B2B) as a transfer | Needs a reason; at most 3 months ahead; only HR and the Admin; the trail shows "Transferred to …, from …" with the seat and the email ID before and after; the seat is no longer vacant | "moves someone to a vacant seat as a transfer…" | HR → the person → *Move* → seat, kind, day, why |
+     | 11 | After the move, their old sales | Stay with the old seat, each with the email ID it was sold as | same test | The old seat's page (`/my-team/seat/:id`) still lists them |
+     | 12 | A move planned for a later day | The tree switches that morning by itself | not tested | Plan one for tomorrow; check the next day |
+     | 13 | Someone is marked as left from Teams & people (not HR) | HR's trail still writes it, with the seats now vacant | `hr/events.test.ts` (the HR path) | — |
+
+     Also kept green after this change: `org/org.test.ts`, `hr/events.test.ts`, `team/team.test.ts`,
+     `orders/orders.test.ts`, `sales/sales.test.ts`, `sales/performance.test.ts`, `kpis/kpis.test.ts`,
+     `scores/scores.test.ts`, `checks/scale.test.ts` (the 130-person check). The screens (Move,
+     Vacant seats, *Sold as*) are type-checked but not yet clicked through in a browser.
    - *Not done:* the employee ID made compulsory (HR's *Missing* view already lists who lacks one;
      the IDs are still to be filled in, decision 4 below); moving the credit of past covered sales
      to someone (the data is kept for it; a screen when HR asks).
