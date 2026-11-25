@@ -132,6 +132,32 @@ describe("customers on the field's lists", () => {
     expect(hers.rows.map((one) => one.name)).toEqual(expect.arrayContaining(["Dr. Ana Lim", "Dr. Marco Reyes"]));
   });
 
+  it("is one list of every kind, with each customer's orders and what it owes (medrep branch, 25 Nov)", async () => {
+    const all = await read<ClientList>("ryan", "/api/mr/clients");
+    expect(all.kind).toBe("all");
+    const names = all.rows.map((one) => one.name);
+    // The field's three kinds together…
+    expect(names).toEqual(expect.arrayContaining(["Dr. Ana Lim", "San Juan de Dios Hospital", "MedExpress Drug"]));
+    expect(names).not.toContain("Davao Doctors Hospital");
+    // …and the sales side on each card.
+    const hospital = all.rows.find((one) => one.id === customers.hospital);
+    expect(typeof hospital?.orders).toBe("number");
+    expect(typeof hospital?.owed).toBe("number");
+    expect(hospital?.patient).toBe(false);
+    // Patients: their own tab, never a field card's kind.
+    const added = await ok("ryan", "/api/customers", { kind: "patient", name: "Lito Ramos", city: "Pasay", phone: "0928 314 7781" });
+    const patients = await read<ClientList>("ryan", "/api/mr/clients?kind=patient");
+    const lito = patients.rows.find((one) => one.id === added.id);
+    expect(lito?.patient).toBe(true);
+    expect(lito?.detail).toBe("Patient");
+    expect(patients.rows.every((one) => one.patient)).toBe(true);
+    // Found by the phone, typed any way.
+    const byPhone = await read<ClientList>("ryan", `/api/mr/clients?q=${encodeURIComponent("+63 928-314-7781")}`);
+    expect(byPhone.rows.map((one) => one.id)).toEqual([added.id]);
+    // A tab it doesn't know opens on every kind.
+    expect((await read<ClientList>("ryan", "/api/mr/clients?kind=nonsense")).kind).toBe("all");
+  });
+
   it("keeps the field's profile; the category is the team lead's", async () => {
     await ok("ryan", `/api/mr/clients/${customers.doctor2}/profile`, {
       qualification: "MD, FPCC",

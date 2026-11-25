@@ -7,7 +7,7 @@
 // is "off the field's lists", asked by an MR with why and answered by their team lead.
 
 import { type SQL, sql } from "drizzle-orm";
-import { seen, team } from "../customers/service";
+import { owedOf, seen, team } from "../customers/service";
 import { type Database, rows } from "../db/index";
 import { FIELD_READ_ROLES, LEAD_ROLES, lookedAfterBy } from "../field/visits";
 import { moneyOf } from "../finance/service";
@@ -19,10 +19,30 @@ import { leadOf, mayDecideFor, mustUse, mustWork, textArray, words } from "./acc
 import { clientFrom, clientJson } from "./cards";
 import { customerOrders, lastVisits } from "./visits";
 import { notify } from "../notify/service";
-import { CATEGORIES, CLIENT_KINDS, type ClientKind, type ClientList, type ClientPage, DAYS, type FieldProfile, FIRM_TYPES, townKey } from "./words";
+import {
+  CATEGORIES,
+  CLIENT_KINDS,
+  CLIENT_TABS,
+  type ClientKind,
+  type ClientList,
+  type ClientPage,
+  type ClientTab,
+  DAYS,
+  type FieldProfile,
+  FIRM_TYPES,
+  townKey,
+} from "./words";
 
-const kindsOf = (kind: ClientKind): SQL =>
-  kind === "firm" ? sql`('drugstore', 'distributor')` : kind === "doctor" ? sql`('doctor')` : sql`('hospital')`;
+const kindsOf = (kind: ClientTab): SQL =>
+  kind === "firm"
+    ? sql`('drugstore', 'distributor')`
+    : kind === "doctor"
+      ? sql`('doctor')`
+      : kind === "patient"
+        ? sql`('patient')`
+        : kind === "all"
+          ? sql`('doctor', 'hospital', 'drugstore', 'distributor', 'patient')`
+          : sql`('hospital')`;
 const offList = sql`coalesce(f.off_list, false)`;
 
 /** The customers in a tab: mine (those I look after) or my team's (a lead's; everyone's for the
@@ -34,17 +54,27 @@ export async function clientList(
 ): Promise<ClientList> {
   const access = await mustUse(db, me);
   const today = todayManila();
-  const kind = (CLIENT_KINDS as string[]).includes(asked.kind ?? "") ? (asked.kind as ClientKind) : "doctor";
+  // The list opens on every kind; a tab narrows it.
+  const kind = (CLIENT_TABS as string[]).includes(asked.kind ?? "") ? (asked.kind as ClientTab) : "all";
   const everyone = FIELD_READ_ROLES.includes(me.role);
   const teamOk = LEAD_ROLES.includes(me.role) || everyone;
   const scope = (asked.scope === "team" && teamOk) || access === "viewer" ? "team" : "mine";
   const find = clean(asked.q)?.toLowerCase();
+  // A phone number typed any way (0917 555 0100, +63 917…): its digits, four or more, without the
+  // country's 63 or the leading 0 (the stored number loses them too).
+  const digits = (find ?? "").replace(/[^0-9]/g, "").replace(/^(63|0)/, "");
   const match = find
     ? sql`and (lower(c.name) like ${`%${find}%`} or lower(coalesce(c.city, '')) like ${`%${find}%`}
         or lower(coalesce(c.code, '')) like ${`%${find}%`} or lower(coalesce(c.specialty, '')) like ${`%${find}%`}
+        ${digits.length >= 4 ? sql`or regexp_replace(regexp_replace(coalesce(c.phone, ''), '[^0-9]', '', 'g'), '^(63|0)', '') like ${`%${digits}%`}` : sql``}
         or exists (select 1 from customer h where h.id = c.works_at and lower(h.name) like ${`%${find}%`}))`
     : sql``;
-  const mine = sql`${lookedAfterBy(sql`${me.id}`, today)}`;
+  // A MedRep's own: the field's (added, their area, their seats') and the customer list's (their
+  // PAP cases, their B2B accounts), so the one list leaves nobody out.
+  const mine =
+    me.role === "medrep"
+      ? sql`(${lookedAfterBy(sql`${me.id}`, today)} or ${seen(me)})`
+      : sql`${lookedAfterBy(sql`${me.id}`, today)}`;
   const theirs = everyone ? sql`true` : seen(me);
   const monthStart = `${today.slice(0, 7)}-01`;
   const [found, counts] = await Promise.all([
@@ -53,7 +83,12 @@ export async function clientList(
       sql`${team(me)} select (${clientJson})::jsonb || jsonb_build_object(
           'lastVisit', (select to_char(max(v.day), 'YYYY-MM-DD') from visit v where v.customer_id = c.id and v.status = 'done'),
           'nextVisit', (select to_char(min(v.day), 'YYYY-MM-DD') from visit v where v.customer_id = c.id and v.status = 'planned' and v.day >= ${today}::date),
-          'visitsThisMonth', (select count(*) from visit v where v.customer_id = c.id and v.status = 'done' and v.day >= ${monthStart}::date)) as row
+          'visitsThisMonth', (select count(*) from visit v where v.customer_id = c.id and v.status = 'done' and v.day >= ${monthStart}::date),
+          'patient', c.kind = 'patient',
+          'orders', (select count(*)::int from sales_order o where o.customer_id = c.id and o.status not in ('draft', 'cancelled')),
+          'lastOrderAt', ${iso("(select max(o.created_at) from sales_order o where o.customer_id = c.id and o.status not in ('draft', 'cancelled'))")},
+          'owed', ${owedOf(today)})
+          || case when c.kind = 'patient' then jsonb_build_object('detail', 'Patient', 'assignedTo', null) else '{}'::jsonb end as row
         ${clientFrom} where c.active and c.kind in ${kindsOf(kind)} and not ${offList}
           and ${scope === "mine" ? mine : theirs} ${match}
         order by c.name limit 401`,

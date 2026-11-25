@@ -212,8 +212,9 @@ const ordersLink = (label: string): MenuItem => ({
 
 /** A seller's field work in one folder (SEFMED's work in the MedRep's pages, docs/PLAN.md 22): My
  *  day (Start working, the day report, the tiles), their visits (or calls), the tour plan (the
- *  month: no second calendar, 25 Nov), the customers as KOLs, hospitals and KBLs, expenses and
- *  samples. Their phone log is with their numbers, as every seller's (25 Nov). */
+ *  month: no second calendar, 25 Nov), expenses and samples. Their phone log is with their
+ *  numbers, and their customers (the field's KOLs, hospitals, KBLs too) in their one customer
+ *  list, `customersLink` (25 Nov). */
 const fieldFolder = (label: string, visits: string): MenuItem =>
   folder(
     label,
@@ -225,7 +226,6 @@ const fieldFolder = (label: string, visits: string): MenuItem =>
       // calendar and its view by customer (the visits each class asks for) are the same
       // month's plan, sent to the team lead once: each page opens the other.
       { to: "/field/plan", label: "Tour plan", icon: CalendarRange },
-      { to: "/field/clients", label: "KOLs, hospitals, KBLs", icon: Stethoscope },
       { to: "/visits/expenses", label: "My expenses", icon: Receipt },
       { to: "/me/samples", label: "My samples & gifts", icon: Gift },
     ],
@@ -285,6 +285,13 @@ const toCallLink = (me: Me, short?: string): MenuItem => ({
   icon: PhoneCall,
   badge: "refills",
   ...(short ? { short } : {}),
+});
+/** A field seller's one customer list (`mr/clients.tsx`): every kind, with the orders and the
+ *  visits on each card; `tab` opens it on one kind (a PAP officer's patients). */
+const customersLink = (label: string, icon: LucideIcon, tab?: "patient"): MenuItem => ({
+  to: tab ? `/field/clients?kind=${tab}` : "/field/clients",
+  label,
+  icon,
 });
 /** The seat's own customers, in its channel's words ("My accounts", "My patients"). */
 const myCustomersLink = (me: Me, icon: LucideIcon): MenuItem => ({ to: "/my/area", label: seatWords(me).myCustomers, icon });
@@ -825,9 +832,8 @@ function ownDesk(me: Me): Space {
                 toCallLink(me),
                 collectionsLink,
                 // Every customer of the area (hospitals, and their doctors and patients): it said
-                // "Hospital list" (22 Nov). Not seat-words' "My hospitals": that is the board above,
-                // and the list page says "All my customers" too (customers.tsx).
-                { to: "/my/area", label: "All my customers", icon: Building2 },
+                // "Hospital list" (22 Nov). Not seat-words' "My hospitals": that is the board above.
+                customersLink("All my customers", Building2),
               ],
               "Hospitals",
             ),
@@ -957,6 +963,8 @@ function ownDesk(me: Me): Space {
                 { to: "/rx/doctors", label: "My doctors", icon: Stethoscope },
                 { to: "/rx/business", label: "My prescriptions", icon: Stethoscope },
                 careGroupsLink("Patient care groups"),
+                // The doctors' tiers above plan the route; this is every customer, hospitals and KBLs too.
+                customersLink("All my customers", Building2),
               ],
               "Doctors",
             ),
@@ -980,9 +988,9 @@ function ownDesk(me: Me): Space {
             pap ? "Patients" : "Customers",
             pap ? Users : MapPin,
             pap
-              ? [myCustomersLink(me, Users), toCallLink(me)]
+              ? [customersLink(seatWords(me).myCustomers, Users, "patient"), toCallLink(me)]
               : [
-                  { to: "/my/area", label: "My area", icon: MapPin },
+                  customersLink("My area", MapPin),
                   { to: "/to-call", label: "Customers to call", icon: PhoneCall, badge: "refills" },
                 ],
             pap ? "Patients" : "Customers",

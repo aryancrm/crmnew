@@ -29,7 +29,7 @@ exports[`each MedRep's menu > Any other MedRep sees the same menu 1`] = `
             {
               "icon": "MapPin",
               "label": "My area",
-              "to": "/my/area",
+              "to": "/field/clients",
             },
             {
               "badge": "refills",
@@ -41,7 +41,7 @@ exports[`each MedRep's menu > Any other MedRep sees the same menu 1`] = `
           "icon": "MapPin",
           "label": "Customers",
           "short": "Customers",
-          "to": "/my/area",
+          "to": "/field/clients",
         },
         {
           "children": [
@@ -59,11 +59,6 @@ exports[`each MedRep's menu > Any other MedRep sees the same menu 1`] = `
               "icon": "CalendarRange",
               "label": "Tour plan",
               "to": "/field/plan",
-            },
-            {
-              "icon": "Stethoscope",
-              "label": "KOLs, hospitals, KBLs",
-              "to": "/field/clients",
             },
             {
               "icon": "Receipt",
@@ -836,7 +831,7 @@ exports[`each MedRep's menu > Hospital CHC sees the same menu 1`] = `
             {
               "icon": "BuildingComplex",
               "label": "All my customers",
-              "to": "/my/area",
+              "to": "/field/clients",
             },
           ],
           "icon": "BuildingComplex",
@@ -860,11 +855,6 @@ exports[`each MedRep's menu > Hospital CHC sees the same menu 1`] = `
               "icon": "CalendarRange",
               "label": "Tour plan",
               "to": "/field/plan",
-            },
-            {
-              "icon": "Stethoscope",
-              "label": "KOLs, hospitals, KBLs",
-              "to": "/field/clients",
             },
             {
               "icon": "Receipt",
@@ -1033,7 +1023,7 @@ exports[`each MedRep's menu > Hospital bidding coachee sees the same menu 1`] = 
             {
               "icon": "BuildingComplex",
               "label": "All my customers",
-              "to": "/my/area",
+              "to": "/field/clients",
             },
           ],
           "icon": "BuildingComplex",
@@ -1057,11 +1047,6 @@ exports[`each MedRep's menu > Hospital bidding coachee sees the same menu 1`] = 
               "icon": "CalendarRange",
               "label": "Tour plan",
               "to": "/field/plan",
-            },
-            {
-              "icon": "Stethoscope",
-              "label": "KOLs, hospitals, KBLs",
-              "to": "/field/clients",
             },
             {
               "icon": "Receipt",
@@ -1537,7 +1522,7 @@ exports[`each MedRep's menu > MedRep with no channel sees the same menu 1`] = `
             {
               "icon": "MapPin",
               "label": "My area",
-              "to": "/my/area",
+              "to": "/field/clients",
             },
             {
               "badge": "refills",
@@ -1549,7 +1534,7 @@ exports[`each MedRep's menu > MedRep with no channel sees the same menu 1`] = `
           "icon": "MapPin",
           "label": "Customers",
           "short": "Customers",
-          "to": "/my/area",
+          "to": "/field/clients",
         },
         {
           "children": [
@@ -1567,11 +1552,6 @@ exports[`each MedRep's menu > MedRep with no channel sees the same menu 1`] = `
               "icon": "CalendarRange",
               "label": "Tour plan",
               "to": "/field/plan",
-            },
-            {
-              "icon": "Stethoscope",
-              "label": "KOLs, hospitals, KBLs",
-              "to": "/field/clients",
             },
             {
               "icon": "Receipt",
@@ -1885,7 +1865,7 @@ exports[`each MedRep's menu > PAP MedRep sees the same menu 1`] = `
             {
               "icon": "Users",
               "label": "My patients",
-              "to": "/my/area",
+              "to": "/field/clients?kind=patient",
             },
             {
               "badge": "refills",
@@ -1897,7 +1877,7 @@ exports[`each MedRep's menu > PAP MedRep sees the same menu 1`] = `
           "icon": "Users",
           "label": "Patients",
           "short": "Patients",
-          "to": "/my/area",
+          "to": "/field/clients?kind=patient",
         },
         {
           "children": [
@@ -1915,11 +1895,6 @@ exports[`each MedRep's menu > PAP MedRep sees the same menu 1`] = `
               "icon": "CalendarRange",
               "label": "Tour plan",
               "to": "/field/plan",
-            },
-            {
-              "icon": "Stethoscope",
-              "label": "KOLs, hospitals, KBLs",
-              "to": "/field/clients",
             },
             {
               "icon": "Receipt",
@@ -2082,6 +2057,11 @@ exports[`each MedRep's menu > Rx CHC sees the same menu 1`] = `
               "label": "Patient care groups",
               "to": "/care-groups",
             },
+            {
+              "icon": "BuildingComplex",
+              "label": "All my customers",
+              "to": "/field/clients",
+            },
           ],
           "icon": "Stethoscope",
           "label": "Doctors",
@@ -2104,11 +2084,6 @@ exports[`each MedRep's menu > Rx CHC sees the same menu 1`] = `
               "icon": "CalendarRange",
               "label": "Tour plan",
               "to": "/field/plan",
-            },
-            {
-              "icon": "Stethoscope",
-              "label": "KOLs, hospitals, KBLs",
-              "to": "/field/clients",
             },
             {
               "icon": "Receipt",

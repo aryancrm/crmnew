@@ -42,6 +42,12 @@ export const clientKindOf = (customerKind: string): ClientKind | null =>
 export const CLIENT_KINDS: ClientKind[] = ["doctor", "hospital", "firm"];
 export const KIND_TABS: Record<ClientKind, string> = { doctor: "KOLs", hospital: "Hospitals", firm: "KBLs" };
 export const KIND_ONE: Record<ClientKind, string> = { doctor: "Doctor", hospital: "Hospital", firm: "Firm" };
+/** The tabs of a seller's one customer list (medrep branch, 25 Nov: "All my customers" and the
+ *  field's KOLs, hospitals, KBLs were two lists of the same customers): every kind, the field's
+ *  three, and the patients (a hospital's, a PAP officer's), which the field never visits. */
+export type ClientTab = "all" | ClientKind | "patient";
+export const CLIENT_TABS: ClientTab[] = ["all", "hospital", "doctor", "firm", "patient"];
+export const TAB_WORDS: Record<ClientTab, string> = { all: "All", ...KIND_TABS, patient: "Patients" };
 
 export type FirmType = "super_stockist" | "distributor" | "sub_distributor" | "stockist" | "retailer";
 export const FIRM_TYPES: FirmType[] = ["super_stockist", "distributor", "sub_distributor", "stockist", "retailer"];
@@ -461,10 +467,20 @@ export type DayReport = {
 };
 
 export type ClientList = {
-  kind: ClientKind;
+  kind: ClientTab;
   scope: "mine" | "team";
   counts: { mine: number; team: number };
-  rows: (ClientCard & { lastVisit: string | null; nextVisit: string | null; visitsThisMonth: number })[];
+  rows: (ClientCard & {
+    lastVisit: string | null;
+    nextVisit: string | null;
+    visitsThisMonth: number;
+    /** A patient: the field never visits them (no visit, no field page: the CRM's customer page). */
+    patient: boolean;
+    /** The sales side, as the customer list has it: orders, the last one, what it owes. */
+    orders: number;
+    lastOrderAt: string | null;
+    owed: number;
+  })[];
   more: boolean;
   can: { add: boolean; team: boolean };
 };

@@ -150,7 +150,7 @@ export function seen(me: Me): SQL {
 /** What a customer (alias `c`) owes: every open invoice, cash on delivery once delivered; past
  *  due by its due day (credit counts from delivery). Zoho's unpaid invoices and opening balances
  *  with this CRM's. */
-const owedOf = (today: string) =>
+export const owedOf = (today: string) =>
   sql`(select coalesce(sum(dd.balance), 0)::float8 from ${duesSql(today)} dd where dd.customer_id = c.id and not dd.cod_waiting)`;
 const overdueOf = (today: string) =>
   sql`(select coalesce(sum(dd.balance), 0)::float8 from ${duesSql(today)} dd where dd.customer_id = c.id and not dd.on_delivery and dd.late > 0)`;
