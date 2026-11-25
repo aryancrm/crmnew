@@ -4,6 +4,7 @@
 // records; pay, bank and government IDs are theirs and the person's own.
 
 import { accountEvent } from "../account/events";
+import { COMPANY_CODES } from "../companies";
 import { careerOf, changeSentence, changesOf, hrEvent } from "./events";
 import { placesOf, townOnList } from "./holidays";
 import { type SQL, sql } from "drizzle-orm";
@@ -48,7 +49,7 @@ export const HR_ROLES: Role[] = ["hr", "ceo", "admin"];
 /** Who does HR's work (adds joiners, keeps records, logins, leaving): HR, with the Admin as its
  *  backup. The CEO reads. */
 export const HR_WRITE_ROLES: Role[] = ["hr", "admin"];
-const COMPANIES: Company[] = ["2mg", "gpi"];
+const COMPANIES: readonly Company[] = COMPANY_CODES;
 const CLASSES: Classification[] = ["probationary", "regular", "part_time", "intern"];
 const PHONE = /^\+?[0-9][0-9 -]{6,18}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;

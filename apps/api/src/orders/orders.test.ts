@@ -989,15 +989,15 @@ describe("papers, the billing company, the doctor and order numbers", () => {
       customerId: hospital,
       items: [line()],
       doctorId: doctor,
-      invoiceFrom: "getmeds",
+      invoiceFrom: "gpi",
     });
     const second = await place("ryan", { customerId: hospital, items: [line()] });
     const a = await order("ryan", first.body.id);
     const b = await order("ryan", second.body.id);
     expect(a.order).toMatchObject({
       doctor: "Ana Reyes",
-      invoiceFrom: "getmeds",
-      invoiceFromLabel: "GetMeds Philippines Inc.",
+      invoiceFrom: "gpi",
+      invoiceFromLabel: "Getmeds Philippines Incorporated",
     });
     expect(b.order.invoiceFrom).toBe("2mg");
     expect(Number(b.order.code.slice(4)) - Number(a.order.code.slice(4))).toBe(1);
