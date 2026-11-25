@@ -24,6 +24,8 @@ import type {
 import { attendanceDays } from "./attendance";
 import {
   computeSlip,
+  noOvertime,
+  splitOvertime,
   type PayAdjustment,
   type PayAttendance,
   type PayMonth,
@@ -34,6 +36,8 @@ import {
   shiftMonth,
 } from "./pay-rules";
 import { HR_ROLES, HR_WRITE_ROLES } from "./people";
+import type { DayHoliday } from "./holidays";
+import { dayKindOf } from "./leave-rules";
 import { isWorkDay } from "./work-time";
 
 const MOST = 100_000_000; // ₱1,000,000: one line can't be more.
@@ -146,16 +150,7 @@ async function workOut(
   const noSalary = people.filter((one) => !(one.salary !== null && one.salary > 0));
   if (!paid.length) return { slips: [], noSalary };
   const rules = await rulesOn(db, month.to);
-  const holidayKinds = new Map(
-    (
-      await rows<{ day: string; kind: "regular" | "special" }>(
-        db,
-        sql`select to_char(day, 'YYYY-MM-DD') as day, kind from holiday where active
-          and day between ${month.from}::date and ${month.to}::date`,
-      )
-    ).map((one) => [one.day, one.kind]),
-  );
-  const holidaySet = new Set(holidayKinds.keys());
+  // Each person's days, on their own schedule and their own holidays (national and their town's).
   const worked = await attendanceDays(db, paid, month.from, month.to);
   const adjustments = await rows<PayAdjustment & { personId: number }>(
     db,
@@ -163,7 +158,11 @@ async function workOut(
       from pay_adjustment where month = ${month.key} and removed_at is null order by id`,
   );
   const slips = paid.map((person): Payslip => {
-    const { schedule, days } = worked.get(person.id) ?? { schedule: null, days: [] };
+    const found = worked.get(person.id);
+    const schedule = found?.schedule ?? null;
+    const days = found?.days ?? [];
+    const own = found?.holidays ?? new Map<string, DayHoliday>();
+    const holidaySet = new Set(own.keys());
     const a: PayAttendance = {
       workDays: 0,
       present: 0,
@@ -173,8 +172,10 @@ async function workOut(
       notEmployed: 0,
       lateMinutes: 0,
       undertimeMinutes: 0,
-      overtime: { ordinary: 0, restDay: 0, specialHoliday: 0, regularHoliday: 0 },
+      overtime: noOvertime(),
+      nightMinutes: 0,
       holidaysWorked: { regular: 0, special: 0 },
+      holidays: { regular: 0, special: 0, local: 0 },
     };
     for (const day of days) {
       const work = schedule ? isWorkDay(day.day, schedule, holidaySet) : false;
@@ -193,18 +194,34 @@ async function workOut(
       }
       a.lateMinutes += day.lateMinutes;
       a.undertimeMinutes += day.undertimeMinutes;
-      const holiday = holidayKinds.get(day.day);
-      if (day.overtimeMinutes > 0)
-        a.overtime[
-          holiday === "regular"
-            ? "regularHoliday"
-            : holiday === "special"
-              ? "specialHoliday"
-              : work
-                ? "ordinary"
-                : "restDay"
-        ] += day.overtimeMinutes;
-      if (holiday && day.timeIn) a.holidaysWorked[holiday] += 1;
+      const holiday = own.get(day.day);
+      // A holiday on a day their schedule works: the monthly pay carries it (313 days a year).
+      const scheduled = schedule
+        ? schedule.days.includes(new Date(`${day.day}T00:00:00Z`).getUTCDay())
+        : false;
+      if (holiday && scheduled) {
+        a.holidays = a.holidays ?? { regular: 0, special: 0, local: 0 };
+        a.holidays[holiday.kind] += 1;
+        if (holiday.local) a.holidays.local += 1;
+      }
+      // Approved overtime by its type (rows from before types: the kind of the day).
+      const forms =
+        day.overtime ??
+        (day.overtimeMinutes > 0
+          ? [{ type: null, minutes: day.overtimeMinutes, nightMinutes: 0 }]
+          : []);
+      let holidayForm = false;
+      for (const one of forms) {
+        const type = one.type ?? dayKindOf(day.day, schedule?.days ?? [], holiday?.kind ?? null);
+        const split = splitOvertime(type, one.minutes);
+        a.overtime[type].first8 += split.first8;
+        a.overtime[type].over8 += split.over8;
+        a.nightMinutes += one.nightMinutes;
+        if (type === "legal" || type === "special" || type === "rest_legal" || type === "rest_special")
+          holidayForm = true;
+      }
+      // Came in on their holiday with no overtime form for it: PLAN 12.16's +100% or +30% of the day.
+      if (holiday && scheduled && day.timeIn && !holidayForm) a.holidaysWorked[holiday.kind] += 1;
     }
     const figures = computeSlip({
       rules,
@@ -242,6 +259,7 @@ async function workOut(
       deductions: figures.deductions,
       totalDeductions: figures.totalDeductions,
       net: figures.net,
+      notes: figures.notes,
       employer: {
         sss: figures.sss.employer,
         philhealth: figures.philhealth.employer,
@@ -252,6 +270,18 @@ async function workOut(
     };
   });
   return { slips, noSalary };
+}
+
+/** A month's payslips as the register shows them: released (frozen) or the draft as it stands.
+ *  No role check: the caller has made it. */
+export async function slipsOfMonth(
+  db: Runner,
+  key: string,
+): Promise<{ slips: Payslip[]; status: "released" | "draft" }> {
+  const month = monthOrRefuse(key);
+  const released = await releasedSlips(db, key);
+  if (released) return { slips: released, status: "released" };
+  return { slips: (await workOut(db, month)).slips, status: "draft" };
 }
 
 function totalsOf(slips: Payslip[]): PayrollMonth["totals"] {

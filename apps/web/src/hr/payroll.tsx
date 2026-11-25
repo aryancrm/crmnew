@@ -9,6 +9,7 @@ import { ChevronLeft, ChevronRight, Download, Scale, Search } from "lucide-react
 import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { RegisterCompareBox } from "./pay-register";
 import { longDay, PayslipView } from "./payslip";
 import {
   Button,
@@ -367,6 +368,7 @@ export function PayrollMonthPage() {
           </p>
         )}
       </div>
+      <RegisterCompareBox month={data.key} />
       {releasing && <ReleaseDialog data={data} onClose={() => setReleasing(false)} />}
     </div>
   );
@@ -496,10 +498,16 @@ export function PayRatesPage() {
             </li>
             <li>SSS on what was earned in the month; PhilHealth and Pag-IBIG on the salary</li>
             <li>
-              Approved overtime: 125% on a working day, 130% on a rest day, 169% on a special day,
-              260% on a regular holiday; a holiday worked adds 100% (regular) or 30% (special) of
-              the day
+              Approved overtime by its type, its first 8 hours and past them: a working day or
+              broken time 125%; a rest day 130% (169% past 8); a special day +30% (169% past 8); a
+              regular holiday +100% (260% past 8); a special day on a rest day 150% (195%); a regular
+              holiday on a rest day 260% (338%). The monthly pay already carries a holiday's 100%
             </li>
+            <li>
+              A holiday worked with no overtime form adds 100% (regular) or 30% (special) of the
+              day. Each person's holidays are the national ones and their town's or province's
+            </li>
+            <li>Night differential (10 PM to 6 AM) is shown on the payslip, not paid</li>
             <li>
               Paid on the month's last day; a weekend or holiday moves it to the working day before
             </li>

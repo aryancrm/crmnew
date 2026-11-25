@@ -3,19 +3,29 @@
 // hands them over; the system sends nothing. Leaving keeps the record.
 
 import type {
+  CivilStatus,
   Classification,
   Company,
+  Gender,
+  HrHistory,
+  HrPaperKind,
+  HrPapers,
+  HrPositions,
+  WorkArrangement,
   HrPeople,
   HrPerson,
   HrPersonRow,
   HrRecordInput,
+  HrSchedules,
   JoinerForm,
 } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowRightLeft,
   Check,
   ChevronLeft,
   Copy,
+  FilePlus,
   KeyRound,
   Pencil,
   Search,
@@ -28,9 +38,14 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
+import { Avatar } from "../account/avatar";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { FIELD } from "../org/dialogs";
+import { smaller } from "../photo";
+import { LeaveCreditsBox } from "./credits";
+import { weekdaysWords } from "./schedules";
+import { type WorkTown, WorkTownPicker } from "./work-town";
 import {
   Button,
   CARD,
@@ -676,17 +691,21 @@ export function HrPersonPage() {
     queryKey: ["hr", "person", id],
     queryFn: () => api<HrPerson>(`/api/hr/people/${id}`),
   });
-  const [open, setOpen] = useState<"edit" | "login" | "left" | null>(null);
+  const [open, setOpen] = useState<"edit" | "login" | "left" | "schedule" | "move" | null>(null);
   const data = query.data;
   if (!data) return <PageState query={query} what="the record" />;
   const mine = me?.id === data.personId;
   const r = data.record;
   const facts = (rows: [string, ReactNode][]) => (
-    <dl className="grid grid-cols-[9rem_1fr] gap-x-3 gap-y-2 px-4 py-3 text-sm">
+    <dl className="grid content-start gap-x-8 gap-y-4 text-sm sm:grid-cols-2">
       {rows.map(([label, value]) => (
-        <div key={label} className="contents">
+        <div key={label} className="flex min-w-0 flex-col gap-0.5">
           <dt className="text-slate-500">{label}</dt>
-          <dd className="min-w-0 break-words text-slate-900">{value || "—"}</dd>
+          <dd
+            className={`break-words ${value ? "font-medium text-slate-900" : "text-slate-400"}`}
+          >
+            {value || "—"}
+          </dd>
         </div>
       ))}
     </dl>
@@ -701,6 +720,21 @@ export function HrPersonPage() {
     </section>
   );
   const shown = (value: string | null) => value ?? null;
+  const section = (
+    title: string,
+    about: string,
+    body: ReactNode,
+    action?: ReactNode,
+  ) => (
+    <section className="grid gap-x-10 gap-y-4 py-7 md:grid-cols-[15rem_1fr]">
+      <div className="flex flex-col items-start gap-1">
+        <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+        <p className="text-sm text-pretty text-slate-500">{about}</p>
+        {action && <div className="mt-2">{action}</div>}
+      </div>
+      {body}
+    </section>
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -732,131 +766,227 @@ export function HrPersonPage() {
           {mine ? "My record" : data.name}
         </span>
       </nav>
-      <PageHead
-        title={data.name}
-        tags={<StagePill stage={data.stage} hireDate={r.hireDate} />}
-        sub={[r.position ?? data.roleLabel, data.seat?.team, COMPANY[r.company]]
-          .filter(Boolean)
-          .join(" · ")}
-        actions={
-          <>
-            {data.can.edit && (
-              <Button onClick={() => setOpen("edit")}>
-                <Pencil size={15} /> Edit record
-              </Button>
+      <article className={`${CARD} overflow-hidden`}>
+        <div
+          aria-hidden="true"
+          className="m-2 h-24 rounded-xl bg-gradient-to-br from-emerald-100 via-teal-50 to-sky-100 sm:h-32"
+        />
+        <div className="px-5 pb-6 sm:px-8">
+          <div className="-mt-14 flex flex-wrap items-end justify-between gap-3 sm:-mt-16">
+            <span className="rounded-full bg-white p-1 shadow-[0_2px_8px_rgb(15_23_42/0.08)]">
+              <Avatar person={{ id: data.personId, name: data.name }} size="lg" />
+            </span>
+            {(data.can.edit || data.can.leave || data.can.back) && (
+              <div className="flex flex-wrap items-center gap-2">
+                {data.can.edit && (
+                  <Button onClick={() => setOpen("edit")}>
+                    <Pencil size={15} /> Edit record
+                  </Button>
+                )}
+                {data.can.leave && (
+                  <Button onClick={() => setOpen("move")}>
+                    <ArrowRightLeft size={15} /> Move
+                  </Button>
+                )}
+                {data.can.leave && (
+                  <Button variant="danger" onClick={() => setOpen("left")}>
+                    Mark as left
+                  </Button>
+                )}
+                {data.can.back && <BackAtWork personId={data.personId} />}
+              </div>
             )}
-            {data.can.leave && (
-              <Button variant="danger" onClick={() => setOpen("left")}>
-                Mark as left
-              </Button>
-            )}
-            {data.can.back && <BackAtWork personId={data.personId} />}
-          </>
-        }
-      />
-      {data.missing.length > 0 && data.stage !== "left" && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
-          Missing on the record: {data.missing.join(", ")}.
-        </div>
-      )}
-      <div className="grid gap-4 lg:grid-cols-2">
-        {box(
-          "Job",
-          facts([
-            [
-              "Seat",
-              data.seat ? `${data.seat.title} · ${data.seat.team}` : "No seat",
-            ],
-            ["Channel", data.seat?.channel ?? null],
-            ["Area", data.seat?.area ?? null],
-            ["Reports to", data.seat?.boss ?? null],
-            ["Employee ID", r.employeeCode],
-            ["Employed as", CLASS[r.classification]],
-            ["Started", dayWords(r.hireDate)],
-            [
-              "Regular since",
-              r.regularizedOn ? dayWords(r.regularizedOn) : null,
-            ],
-            ...(data.stage === "left"
-              ? ([
-                  ["Left", dayWords(r.leftOn)],
-                  ["Why", r.leftReason],
-                ] as [string, ReactNode][])
-              : []),
-          ]),
-        )}
-        {box(
-          "Login",
-          facts([
-            ["Signs in with", data.loginId],
-            [
-              "Last signed in",
-              data.login === "off" ? "Switched off" : when(data.lastSignIn),
-            ],
-          ]),
-          data.can.login && (
-            <Button small onClick={() => setOpen("login")}>
-              <KeyRound size={14} /> Change login
-            </Button>
-          ),
-        )}
-        {box(
-          "Contact",
-          facts([
-            ["Mobile", r.mobile],
-            ["Personal email", r.personalEmail],
-            ["Birthday", r.birthDate ? dayWords(r.birthDate) : null],
-            ["Address", r.address],
-            [
-              "Emergency",
-              r.emergencyName
-                ? `${r.emergencyName}${r.emergencyRelation ? ` (${r.emergencyRelation})` : ""}${r.emergencyPhone ? ` · ${r.emergencyPhone}` : ""}`
-                : null,
-            ],
-          ]),
-        )}
-        {(data.can.edit || mine) &&
-          box(
-            "Pay and IDs",
-            facts([
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-2.5">
+            <h1 className="text-[1.75rem] leading-tight font-bold tracking-tight text-balance text-slate-900">
+              {data.name}
+            </h1>
+            <StagePill stage={data.stage} hireDate={r.hireDate} />
+          </div>
+          <p className="mt-1 text-sm text-slate-500">
+            {[r.position ?? data.roleLabel, data.seat?.team, COMPANY[r.company]]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+          <dl className="mt-6 grid grid-cols-2 gap-y-5 border-b border-slate-100 pb-6 sm:grid-cols-4">
+            {(
               [
-                "Salary",
-                r.salary !== null ? `${peso(r.salary)} a month` : null,
-              ],
-              [
-                "Allowance",
-                r.allowance !== null ? `${peso(r.allowance)} a month` : null,
-              ],
-              [
-                "Bank",
-                [r.bankName, r.bankAccount].filter(Boolean).join(" · ") || null,
-              ],
-              ["SSS", shown(r.sss)],
-              ["PhilHealth", shown(r.philhealth)],
-              ["Pag-IBIG", shown(r.pagibig)],
-              ["TIN", shown(r.tin)],
-              [
-                "Not covered",
-                r.payExempt
-                  ? (
-                      [
-                        ["sss", "SSS"],
-                        ["philhealth", "PhilHealth"],
-                        ["pagibig", "Pag-IBIG"],
-                        ["tax", "Tax"],
-                      ] as const
-                    )
-                      .filter(([key]) => r.payExempt?.[key])
-                      .map(([, label]) => label)
-                      .join(", ") || null
-                  : null,
-              ],
-            ]),
+                ["Employee ID", r.employeeCode],
+                ["Login ID", data.loginId],
+                ["Reports to", data.seat?.boss ?? null],
+                ["Started", dayWords(r.hireDate)],
+              ] as [string, string | null][]
+            ).map(([label, value], index) => (
+              <div
+                key={label}
+                className={`flex min-w-0 flex-col gap-1 ${index % 2 ? "border-l border-slate-100 pl-5" : "pr-5"} ${index === 2 ? "sm:border-l sm:pl-5" : ""} ${index === 1 ? "sm:pr-5" : ""}`}
+              >
+                <dt className="text-sm text-slate-500">{label}</dt>
+                <dd
+                  className={`truncate text-lg tabular-nums ${value ? "font-semibold text-slate-900" : "text-amber-700"}`}
+                  title={value ?? undefined}
+                >
+                  {value ?? "Not set"}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          {data.missing.length > 0 && data.stage !== "left" && (
+            <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+              Missing on the record: {data.missing.join(", ")}.
+            </p>
           )}
-      </div>
-      {data.history.length > 0 &&
+          <div className="divide-y divide-slate-100">
+            {section(
+              "Job",
+              "Their seat, schedule and where they work.",
+              facts([
+                [
+                  "Seat",
+                  data.seat ? `${data.seat.title} · ${data.seat.team}` : "No seat",
+                ],
+                ["Channel", data.seat?.channel ?? null],
+                ["Area", data.seat?.area ?? null],
+                [
+                  "Schedule",
+                  `${data.schedule.name}${data.schedule.id === null ? " (company default)" : ""} · ${data.schedule.start}–${data.schedule.end}, ${weekdaysWords(data.schedule.days)}`,
+                ],
+                ["Employed as", CLASS[r.classification]],
+                ["Works", r.workArrangement ? ARRANGEMENT[r.workArrangement] : null],
+                [
+                  "Work town",
+                  r.workTown
+                    ? `${r.workTown}, ${r.workProvince}`
+                    : r.holidayPlace
+                      ? `Not set: local holidays follow ${r.holidayPlace.town ?? r.holidayPlace.province} (the seat's area)`
+                      : null,
+                ],
+                ["Company phone", r.companyPhone],
+                ["Equipment", r.issuedEquipment],
+                ["Job description", r.jobDescription],
+                [
+                  "Regular since",
+                  r.regularizedOn ? dayWords(r.regularizedOn) : null,
+                ],
+                ...(data.stage === "left"
+                  ? ([
+                      ["Left", dayWords(r.leftOn)],
+                      ["Why", r.leftReason],
+                    ] as [string, ReactNode][])
+                  : []),
+              ]),
+              data.can.schedule && (
+                <Button small onClick={() => setOpen("schedule")}>
+                  <Pencil size={14} /> Change schedule
+                </Button>
+              ),
+            )}
+            {section(
+              "Contact",
+              "How to reach them, and who to call in an emergency.",
+              facts([
+                ["Mobile", r.mobile],
+                ["Personal email", r.personalEmail],
+                ["Birthday", r.birthDate ? dayWords(r.birthDate) : null],
+                ["Address", r.address],
+                [
+                  "Emergency",
+                  r.emergencyName
+                    ? `${r.emergencyName}${r.emergencyRelation ? ` (${r.emergencyRelation})` : ""}${r.emergencyPhone ? ` · ${r.emergencyPhone}` : ""}`
+                    : null,
+                ],
+              ]),
+            )}
+            {section(
+              "Personal",
+              "Family and schooling, as on their papers.",
+              facts([
+                ["Gender", r.gender ? GENDER[r.gender] : null],
+                ["Civil status", r.civilStatus ? CIVIL[r.civilStatus] : null],
+                ["Citizenship", r.citizenship],
+                ["Spouse", r.spouseName],
+                ["Parents", [r.fatherName, r.motherName].filter(Boolean).join(" · ") || null],
+                [
+                  "Education",
+                  [r.education, r.course, r.school].filter(Boolean).join(" · ") || null,
+                ],
+              ]),
+            )}
+            {(data.can.edit || mine) &&
+              section(
+                "Pay and IDs",
+                mine ? "Only you and HR see this." : "Only HR and they see this.",
+                facts([
+                  [
+                    "Salary",
+                    r.salary !== null ? `${peso(r.salary)} a month` : null,
+                  ],
+                  [
+                    "Allowance",
+                    r.allowance !== null ? `${peso(r.allowance)} a month` : null,
+                  ],
+                  [
+                    "Bank",
+                    [r.bankName, r.bankAccount].filter(Boolean).join(" · ") || null,
+                  ],
+                  ["SSS", shown(r.sss)],
+                  ["PhilHealth", shown(r.philhealth)],
+                  ["Pag-IBIG", shown(r.pagibig)],
+                  ["TIN", shown(r.tin)],
+                  [
+                    "Not covered",
+                    r.payExempt
+                      ? (
+                          [
+                            ["sss", "SSS"],
+                            ["philhealth", "PhilHealth"],
+                            ["pagibig", "Pag-IBIG"],
+                            ["tax", "Tax"],
+                          ] as const
+                        )
+                          .filter(([key]) => r.payExempt?.[key])
+                          .map(([, label]) => label)
+                          .join(", ") || null
+                      : null,
+                  ],
+                ]),
+              )}
+            {section(
+              "Login",
+              "How they sign in to Bishnoi One.",
+              facts([
+                ["Login ID", data.loginId],
+                [
+                  "Last signed in",
+                  data.login === "off" ? "Switched off" : when(data.lastSignIn),
+                ],
+              ]),
+              data.can.login && (
+                <Button small onClick={() => setOpen("login")}>
+                  <KeyRound size={14} /> Change login
+                </Button>
+              ),
+            )}
+          </div>
+        </div>
+      </article>
+      {(data.history.length > 0 || data.career.length > 0) &&
         box(
-          "Seats held",
+          "Job history",
+          <>
+          {data.career.length > 0 && (
+            <ol className="divide-y divide-slate-100 border-b border-slate-100 text-sm">
+              {data.career.map((one, index) => (
+                <li key={`${one.at}-${index}`} className="flex flex-wrap justify-between gap-2 px-4 py-2.5">
+                  <span className="text-slate-900">{one.what}</span>
+                  <span className="text-xs text-slate-500 tabular-nums">{whenFull(one.at)}</span>
+                </li>
+              ))}
+            </ol>
+          )}
+          {data.history.length > 0 && (
+          <h3 className="px-4 pt-2.5 text-xs font-semibold uppercase tracking-wide text-slate-500">Seats held</h3>
+          )}
           <ul className="divide-y divide-slate-100 text-sm">
             {data.history.map((one) => (
               <li
@@ -873,18 +1003,421 @@ export function HrPersonPage() {
                 </span>
               </li>
             ))}
-          </ul>,
+          </ul>
+          </>,
         )}
+      {(mine || (me && TRAIL_ROLES.includes(me.role))) && (
+        <HrPaperList personId={data.personId} name={data.name} />
+      )}
+      {me && TRAIL_ROLES.includes(me.role) && data.role !== "admin" && (
+        <LeaveCreditsBox personId={data.personId} />
+      )}
+      {me && TRAIL_ROLES.includes(me.role) && (
+        <HrTrail personId={data.personId} />
+      )}
       {open === "edit" && (
         <RecordDialog person={data} onClose={() => setOpen(null)} />
       )}
       {open === "login" && (
         <LoginDialog person={data} onClose={() => setOpen(null)} />
       )}
+      {open === "move" && <MoveDialog person={data} onClose={() => setOpen(null)} />}
       {open === "left" && (
         <LeftDialog person={data} onClose={() => setOpen(null)} />
       )}
+      {open === "schedule" && (
+        <ScheduleDialog person={data} onClose={() => setOpen(null)} />
+      )}
     </div>
+  );
+}
+
+/** HR gives the person a work schedule (a shift), or puts them back on the company's default. */
+function ScheduleDialog({ person, onClose }: { person: HrPerson; onClose: () => void }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const list = useQuery({
+    queryKey: ["hr", "schedules"],
+    queryFn: () => api<HrSchedules>("/api/hr/schedules"),
+  });
+  const [picked, setPicked] = useState<string>(person.schedule.id === null ? "" : String(person.schedule.id));
+  const offered = (list.data?.schedules ?? []).filter((one) => !one.archived && !one.isDefault);
+  const fallback = list.data?.schedules.find((one) => one.isDefault);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const done = await action.run(() =>
+      api(`/api/hr/people/${person.personId}/schedule`, {
+        body: { scheduleId: picked ? Number(picked) : null },
+      }),
+    );
+    if (done) {
+      await Promise.all([
+        queries.invalidateQueries({ queryKey: ["hr"] }),
+        queries.invalidateQueries({ queryKey: ["attendance"] }),
+      ]);
+      onClose();
+    }
+  }
+  return (
+    <Dialog
+      title={`${person.name}'s schedule`}
+      sub="Late and undertime count on it, and which days are rest days. New shifts are added under Schedules."
+      onClose={onClose}
+      busy={action.busy}
+    >
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <Label text="Schedule" error={action.at("scheduleId")}>
+          <select value={picked} onChange={(event) => setPicked(event.target.value)} className={FIELD}>
+            <option value="">
+              {fallback
+                ? `${fallback.name} (company default) · ${fallback.start}–${fallback.end}, ${weekdaysWords(fallback.days)}`
+                : "Company default"}
+            </option>
+            {offered.map((one) => (
+              <option key={one.id} value={one.id}>
+                {one.name} · {one.start}–{one.end}, {weekdaysWords(one.days)}
+              </option>
+            ))}
+          </select>
+        </Label>
+        {list.isError && <Problem message="Couldn't load the schedules." />}
+        <Problem message={action.general(["scheduleId"])} />
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button onClick={onClose} disabled={action.busy}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" disabled={action.busy || !list.data}>
+            {action.busy ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+// ------------------------------------------------------------------ A person's papers
+
+const sizeWords = (bytes: number) =>
+  bytes < 1024 * 1024 ? `${Math.max(1, Math.round(bytes / 1024))} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+
+/** The contract, IDs, certificates…: kept ones first, taken-off ones folded away below. HR adds and
+ *  takes off; the person reads their own. */
+function HrPaperList({ personId, name }: { personId: number; name: string }) {
+  const query = useQuery({
+    queryKey: ["hr", "person", String(personId), "papers"],
+    queryFn: () => api<HrPapers>(`/api/hr/people/${personId}/papers`),
+  });
+  const [adding, setAdding] = useState(false);
+  const [archiving, setArchiving] = useState<HrPapers["papers"][number] | null>(null);
+  const [showOld, setShowOld] = useState(false);
+  const data = query.data;
+  const kept = data?.papers.filter((one) => !one.archived) ?? [];
+  const old = data?.papers.filter((one) => one.archived) ?? [];
+  const row = (paper: HrPapers["papers"][number]) => (
+    <li key={paper.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2.5 text-sm">
+      <div className="min-w-0">
+        <a
+          href={`/api/hr/papers/${paper.id}/file`}
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium text-slate-900 hover:text-emerald-700 hover:underline"
+        >
+          {paper.title}
+        </a>
+        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-slate-500">
+          <span className="rounded bg-slate-100 px-1.5 py-0.5 text-slate-600">{paper.kindLabel}</span>
+          {paper.expiresOn && (
+            <span
+              className={
+                paper.expiry === "expired"
+                  ? "font-medium text-rose-700"
+                  : paper.expiry === "soon"
+                    ? "font-medium text-amber-700"
+                    : undefined
+              }
+            >
+              {paper.expiry === "expired" ? "Expired" : "Good until"} {dayWords(paper.expiresOn)}
+            </span>
+          )}
+          <span>
+            {sizeWords(paper.fileSize)} · {paper.addedBy}, {dayWords(paper.addedAt.slice(0, 10))}
+          </span>
+          {paper.archived && (
+            <span>
+              Taken off by {paper.archived.by}: {paper.archived.reason}
+            </span>
+          )}
+        </div>
+      </div>
+      {!paper.archived && data?.can.archive && (
+        <Button small onClick={() => setArchiving(paper)}>
+          Take off
+        </Button>
+      )}
+    </li>
+  );
+  return (
+    <section className={`${CARD} overflow-hidden`}>
+      <div className="flex min-h-11 items-center justify-between gap-2 border-b border-slate-100 px-4 py-2">
+        <h2 className="text-sm font-semibold text-slate-900">Papers</h2>
+        {data?.can.add && (
+          <Button small onClick={() => setAdding(true)}>
+            <FilePlus size={14} /> Add paper
+          </Button>
+        )}
+      </div>
+      {query.isError ? (
+        <p className="px-4 py-3 text-sm text-red-700">Couldn't load the papers.</p>
+      ) : !data ? (
+        <p className="px-4 py-3 text-sm text-slate-500">Loading…</p>
+      ) : (
+        <>
+          {kept.length === 0 ? (
+            <p className="px-4 py-3 text-sm text-slate-500">
+              No papers yet{data.can.add ? ": add the contract, IDs and certificates here." : "."}
+            </p>
+          ) : (
+            <ul className="divide-y divide-slate-100">{kept.map(row)}</ul>
+          )}
+          {old.length > 0 && (
+            <div className="border-t border-slate-100">
+              <button
+                type="button"
+                onClick={() => setShowOld(!showOld)}
+                className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900"
+              >
+                {showOld ? "Hide" : "Show"} {old.length} taken off
+              </button>
+              {showOld && <ul className="divide-y divide-slate-100 bg-slate-50/60">{old.map(row)}</ul>}
+            </div>
+          )}
+        </>
+      )}
+      {adding && data && (
+        <AddPaperDialog personId={personId} name={name} kinds={data.kinds} onClose={() => setAdding(false)} />
+      )}
+      {archiving && <ArchivePaperDialog paper={archiving} onClose={() => setArchiving(null)} />}
+    </section>
+  );
+}
+
+function AddPaperDialog({
+  personId,
+  name,
+  kinds,
+  onClose,
+}: {
+  personId: number;
+  name: string;
+  kinds: HrPapers["kinds"];
+  onClose: () => void;
+}) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const [kind, setKind] = useState<HrPaperKind>("contract");
+  const [title, setTitle] = useState("");
+  const [expiresOn, setExpiresOn] = useState("");
+  const [file, setFile] = useState<File | null>(null);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const done = await action.run(async () => {
+      const body = new FormData();
+      body.set("kind", kind);
+      body.set("title", title.trim());
+      if (expiresOn) body.set("expiresOn", expiresOn);
+      if (file) body.set("file", file.type.startsWith("image/") ? await smaller(file) : file);
+      await api(`/api/hr/people/${personId}/papers`, { body });
+    });
+    if (done) {
+      await queries.invalidateQueries({ queryKey: ["hr"] });
+      onClose();
+    }
+  }
+  return (
+    <Dialog title={`Add a paper to ${name}'s record`} sub="A PDF, a photo or a Word file, up to 10 MB." onClose={onClose} busy={action.busy}>
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Label text="Kind *" error={action.at("kind")}>
+            <select value={kind} onChange={(event) => setKind(event.target.value as HrPaperKind)} className={FIELD}>
+              {kinds.map((one) => (
+                <option key={one.key} value={one.key}>
+                  {one.label}
+                </option>
+              ))}
+            </select>
+          </Label>
+          <Label text="Good until (if it expires)" error={action.at("expiresOn")}>
+            <input type="date" value={expiresOn} onChange={(event) => setExpiresOn(event.target.value)} className={FIELD} />
+          </Label>
+        </div>
+        <Label text="Name *" error={action.at("title")}>
+          <input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            className={FIELD}
+            placeholder="Employment contract 2026"
+            maxLength={120}
+          />
+        </Label>
+        <Label text="File *" error={action.at("file")}>
+          <span className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex cursor-pointer items-center gap-1.5 rounded-[10px] border border-line bg-white px-3 py-2 text-[13px] font-semibold text-slate-700 shadow-sm hover:bg-hover">
+              <FilePlus size={15} /> {file ? "Another file" : "Pick the file"}
+              <input
+                type="file"
+                accept="application/pdf,image/*,.docx"
+                className="sr-only"
+                onChange={(event) => setFile(event.target.files?.[0] ?? null)}
+              />
+            </span>
+            <span className="truncate text-xs text-slate-600">{file ? file.name : "None"}</span>
+          </span>
+        </Label>
+        <Problem message={action.general(["kind", "title", "expiresOn", "file"])} />
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button onClick={onClose} disabled={action.busy}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" disabled={action.busy}>
+            {action.busy ? "Adding…" : "Add paper"}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+function ArchivePaperDialog({ paper, onClose }: { paper: HrPapers["papers"][number]; onClose: () => void }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const [reason, setReason] = useState("");
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const done = await action.run(() => api(`/api/hr/papers/${paper.id}/archive`, { body: { reason } }));
+    if (done) {
+      await queries.invalidateQueries({ queryKey: ["hr"] });
+      onClose();
+    }
+  }
+  return (
+    <Dialog
+      title={`Take off "${paper.title}"`}
+      sub="It stays on file as taken off, with your reason; nothing is deleted."
+      onClose={onClose}
+      busy={action.busy}
+    >
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <Label text="Why *" error={action.at("reason")}>
+          <input
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            className={FIELD}
+            placeholder="Replaced by the signed one"
+            maxLength={300}
+          />
+        </Label>
+        <Problem message={action.general(["reason"])} />
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button onClick={onClose} disabled={action.busy}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="danger" disabled={action.busy}>
+            {action.busy ? "Saving…" : "Take off"}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+// ------------------------------------------------------------------ HR's trail on a person
+
+/** Who reads a person's trail (the API checks the same). */
+const TRAIL_ROLES = ["hr", "ceo", "admin"];
+const TRAIL_SHOWN = 8;
+const whenFull = (iso: string) =>
+  new Intl.DateTimeFormat("en-PH", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "Asia/Manila",
+  }).format(new Date(iso));
+
+/** Every change to the record, newest first: who, when, what, and each field's before and after
+ *  (pay, bank, government numbers and the birth date only as "changed"). */
+function HrTrail({ personId }: { personId: number }) {
+  const query = useQuery({
+    queryKey: ["hr", "person", String(personId), "history"],
+    queryFn: () => api<HrHistory>(`/api/hr/people/${personId}/history`),
+  });
+  const [all, setAll] = useState(false);
+  const lines = query.data?.lines ?? [];
+  const shownLines = all ? lines : lines.slice(0, TRAIL_SHOWN);
+  return (
+    <section className={`${CARD} overflow-hidden`}>
+      <div className="flex min-h-11 items-center justify-between gap-2 border-b border-slate-100 px-4 py-2">
+        <h2 className="text-sm font-semibold text-slate-900">Changes</h2>
+        <span className="text-xs text-slate-500">Who changed what, kept for good</span>
+      </div>
+      {query.isError ? (
+        <p className="px-4 py-3 text-sm text-red-700">Couldn't load the changes.</p>
+      ) : query.isPending ? (
+        <p className="px-4 py-3 text-sm text-slate-500">Loading…</p>
+      ) : lines.length === 0 ? (
+        <p className="px-4 py-3 text-sm text-slate-500">
+          No changes written down yet. Every change from now on shows here.
+        </p>
+      ) : (
+        <>
+          <ol className="divide-y divide-slate-100 text-sm">
+            {shownLines.map((line, index) => (
+              <li key={`${line.at}-${index}`} className="px-4 py-2.5">
+                <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+                  <span className="font-medium text-slate-900">{line.what}</span>
+                  <span className="text-xs text-slate-500 tabular-nums">
+                    {line.by} · {whenFull(line.at)}
+                  </span>
+                </div>
+                {line.changes.length > 0 && (
+                  <ul className="mt-1 space-y-0.5 text-xs text-slate-600">
+                    {line.changes.map((change) => (
+                      <li key={change.field}>
+                        <span className="text-slate-500">{change.label}:</span>{" "}
+                        {change.hidden ? (
+                          <span className="italic">changed (not shown)</span>
+                        ) : (
+                          <>
+                            {change.from === null ? (
+                              <span className="text-slate-400">empty</span>
+                            ) : (
+                              <span className="line-through decoration-slate-300">{change.from}</span>
+                            )}{" "}
+                            → <span className="text-slate-900">{change.to ?? "empty"}</span>
+                          </>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ol>
+          {lines.length > TRAIL_SHOWN && (
+            <div className="border-t border-slate-100 px-4 py-2">
+              <button
+                type="button"
+                onClick={() => setAll(!all)}
+                className="text-xs font-medium text-emerald-700 hover:text-emerald-800"
+              >
+                {all ? "Show fewer" : `Show all ${lines.length}`}
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 
@@ -906,7 +1439,31 @@ const RECORD_TEXT: [keyof HrRecordInput, string, string?][] = [
   ["philhealth", "PhilHealth"],
   ["pagibig", "Pag-IBIG"],
   ["tin", "TIN"],
+  // 15 on: personal and work details (HR's portal kept them).
+  ["citizenship", "Citizenship", "Filipino"],
+  ["spouseName", "Spouse"],
+  ["fatherName", "Father"],
+  ["motherName", "Mother"],
+  ["education", "Highest education", "College"],
+  ["school", "School"],
+  ["course", "Course", "BS Pharmacy"],
+  ["companyPhone", "Company phone", "0917 555 0101"],
+  ["issuedEquipment", "Issued equipment", "Laptop, company phone"],
+  ["jobDescription", "Job description"],
 ];
+const GENDER: Record<Gender, string> = { female: "Female", male: "Male" };
+const CIVIL: Record<CivilStatus, string> = {
+  single: "Single",
+  married: "Married",
+  widowed: "Widowed",
+  separated: "Separated",
+};
+const ARRANGEMENT: Record<WorkArrangement, string> = {
+  office: "Office",
+  field: "Field",
+  hybrid: "Hybrid",
+  remote: "Remote",
+};
 
 function RecordDialog({
   person,
@@ -939,6 +1496,21 @@ function RecordDialog({
     salary: pesosOf(r.salary),
     allowance: pesosOf(r.allowance),
   });
+  const [choice, setChoice] = useState({
+    gender: r.gender ?? "",
+    civilStatus: r.civilStatus ?? "",
+    workArrangement: r.workArrangement ?? "",
+  });
+  const [workTown, setWorkTown] = useState<WorkTown>(
+    r.workTown && r.workProvince ? { town: r.workTown, province: r.workProvince } : null,
+  );
+  const positions = useQuery({
+    queryKey: ["hr", "positions"],
+    queryFn: () => api<HrPositions>("/api/hr/positions"),
+  });
+  const offered = (positions.data?.positions ?? []).filter(
+    (one) => !one.archived || one.name === r.position,
+  );
   const [exempt, setExempt] = useState(
     r.payExempt ?? {
       sss: false,
@@ -958,6 +1530,11 @@ function RecordDialog({
       birthDate: days.birthDate || null,
       salary: centavos(pay.salary),
       allowance: centavos(pay.allowance),
+      gender: (choice.gender || null) as Gender | null,
+      civilStatus: (choice.civilStatus || null) as CivilStatus | null,
+      workArrangement: (choice.workArrangement || null) as WorkArrangement | null,
+      workTown: workTown?.town ?? null,
+      workProvince: workTown?.province ?? null,
       ...(r.payExempt
         ? {
             noSss: exempt.sss,
@@ -993,6 +1570,26 @@ function RecordDialog({
     RECORD_TEXT.slice(from, to).map(([key, label, placeholder]) =>
       input(key, label, placeholder),
     );
+  const select = <K extends keyof typeof choice>(
+    key: K,
+    label: string,
+    options: Record<string, string>,
+  ) => (
+    <Label key={key} text={label} error={action.at(key)}>
+      <select
+        value={choice[key]}
+        onChange={(event) => setChoice((now) => ({ ...now, [key]: event.target.value }))}
+        className={FIELD}
+      >
+        <option value="">Not said</option>
+        {Object.entries(options).map(([value, words]) => (
+          <option key={value} value={value}>
+            {words}
+          </option>
+        ))}
+      </select>
+    </Label>
+  );
 
   return (
     <Dialog
@@ -1034,7 +1631,54 @@ function RecordDialog({
             </Label>
             {pick(0, 1)}
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">{pick(1, 3)}</div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Label text="Position" error={action.at("position")}>
+              <select
+                value={text.position ?? ""}
+                onChange={(event) => setText((now) => ({ ...now, position: event.target.value }))}
+                className={FIELD}
+              >
+                <option value="">None</option>
+                {r.position && !offered.some((one) => one.name === r.position) && (
+                  <option value={r.position}>{r.position}</option>
+                )}
+                {offered.map((one) => (
+                  <option key={one.id} value={one.name}>
+                    {one.name}
+                    {one.archived ? " (archived)" : ""}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-slate-500">
+                Not on the list? Add it in <Link to="/hr/positions" className="text-emerald-700 underline">Positions</Link>.
+              </span>
+            </Label>
+            {pick(2, 3)}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            {select("workArrangement", "Works", ARRANGEMENT)}
+            {pick(22, 24)}
+          </div>
+          <div className="flex min-w-0 flex-col gap-1">
+            <span className="text-xs font-semibold text-slate-600">Work town (their local holidays follow it)</span>
+            <WorkTownPicker value={workTown} onChange={setWorkTown} />
+            {!workTown && r.holidayPlace?.from === "area" && (
+              <span className="text-xs text-slate-500">
+                Empty: their seat's area's first city counts ({r.holidayPlace.town ?? r.holidayPlace.province}).
+              </span>
+            )}
+            {action.at("workTown") && (
+              <span className="text-xs font-medium text-rose-700">{action.at("workTown")}</span>
+            )}
+          </div>
+          <Label text="Job description" error={action.at("jobDescription")}>
+            <textarea
+              value={text.jobDescription ?? ""}
+              onChange={(event) => setText((now) => ({ ...now, jobDescription: event.target.value }))}
+              className={`${FIELD} min-h-20`}
+              maxLength={2000}
+            />
+          </Label>
           <div className="grid gap-3 sm:grid-cols-2">
             <Label text="Hired on" error={action.at("hireDate")}>
               <input
@@ -1077,6 +1721,15 @@ function RecordDialog({
             {pick(5, 6)}
           </div>
           <div className="grid gap-3 sm:grid-cols-3">{pick(6, 9)}</div>
+        </Section>
+        <Section title="Personal">
+          <div className="grid gap-3 sm:grid-cols-3">
+            {select("gender", "Gender", GENDER)}
+            {select("civilStatus", "Civil status", CIVIL)}
+            {pick(15, 16)}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">{pick(16, 19)}</div>
+          <div className="grid gap-3 sm:grid-cols-3">{pick(19, 22)}</div>
         </Section>
         <Section title="Pay and IDs">
           <div className="grid gap-3 sm:grid-cols-2">
@@ -1143,6 +1796,11 @@ function RecordDialog({
             "birthDate",
             "salary",
             "allowance",
+            "gender",
+            "civilStatus",
+            "workArrangement",
+            "workTown",
+            "workProvince",
             ...RECORD_TEXT.map(([key]) => key),
           ])}
         />
@@ -1242,6 +1900,129 @@ function LoginDialog({
           </Button>
           <Button type="submit" variant="primary" disabled={action.busy}>
             {action.busy ? "Saving…" : "Save login"}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+const MOVE_KINDS: { key: "transfer" | "promotion" | "demotion" | "lateral"; label: string }[] = [
+  { key: "transfer", label: "Transfer" },
+  { key: "promotion", label: "Promotion" },
+  { key: "demotion", label: "Demotion" },
+  { key: "lateral", label: "Lateral move" },
+];
+
+/** HR moves someone to a vacant seat (another division, team, role or area). The seat decides
+ *  their work, boss and email ID from the day picked; what they sold stays with the old seat, each
+ *  order keeping the email ID it was sold as. Written in the Changes and the Job history. */
+function MoveDialog({ person, onClose }: { person: HrPerson; onClose: () => void }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const form = useQuery({
+    queryKey: ["hr", "joiners", "form"],
+    queryFn: () => api<JoinerForm>("/api/hr/joiners/form"),
+  });
+  const [values, setValues] = useState({
+    seatId: "",
+    kind: "transfer" as (typeof MOVE_KINDS)[number]["key"],
+    startsOn: manilaToday(),
+    keepOther: false,
+    reason: "",
+  });
+  const set = (next: Partial<typeof values>) => setValues((now) => ({ ...now, ...next }));
+  const teams = useMemo(() => {
+    const byTeam = new Map<string, JoinerForm["seats"]>();
+    for (const seat of form.data?.seats ?? []) byTeam.set(seat.team, [...(byTeam.get(seat.team) ?? []), seat]);
+    return [...byTeam];
+  }, [form.data]);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const done = await action.run(() =>
+      api(`/api/hr/people/${person.personId}/move`, {
+        body: { ...values, seatId: Number(values.seatId) || 0 },
+      }),
+    );
+    if (done) {
+      await queries.invalidateQueries({ queryKey: ["hr"] });
+      onClose();
+    }
+  }
+  return (
+    <Dialog
+      title={`Move ${person.name}`}
+      sub="To a vacant seat. Their work, team, boss and email ID follow the new seat from the day picked; their past sales stay with the old seat."
+      onClose={onClose}
+      busy={action.busy}
+    >
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <Label text="To the seat *" error={action.at("seatId")}>
+          <select value={values.seatId} onChange={(event) => set({ seatId: event.target.value })} className={FIELD}>
+            <option value="">
+              {form.data && !form.data.seats.length ? "No vacant seat: the Admin makes one first" : "Pick a vacant seat"}
+            </option>
+            {teams.map(([team, seats]) => (
+              <optgroup key={team} label={team}>
+                {seats.map((one) => (
+                  <option key={one.id} value={one.id}>
+                    {[one.title, one.area].filter(Boolean).join(" · ")}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </Label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Label text="Kind of move *" error={action.at("kind")}>
+            <select
+              value={values.kind}
+              onChange={(event) => set({ kind: event.target.value as typeof values.kind })}
+              className={FIELD}
+            >
+              {MOVE_KINDS.map((one) => (
+                <option key={one.key} value={one.key}>
+                  {one.label}
+                </option>
+              ))}
+            </select>
+          </Label>
+          <Label text="From" error={action.at("startsOn")}>
+            <input
+              type="date"
+              value={values.startsOn}
+              onChange={(event) => set({ startsOn: event.target.value })}
+              className={FIELD}
+            />
+          </Label>
+        </div>
+        <Label text="Why *" error={action.at("reason")}>
+          <input
+            value={values.reason}
+            onChange={(event) => set({ reason: event.target.value })}
+            className={FIELD}
+            placeholder="Moved from B2C to B2B"
+          />
+        </Label>
+        <label className="flex items-start gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={values.keepOther}
+            onChange={(event) => set({ keepOther: event.target.checked })}
+            className="mt-0.5 size-4 accent-emerald-600"
+          />
+          <span>
+            Keep their current seat too
+            <span className="block text-xs text-slate-500">They hold both seats (two areas), each with its own quota.</span>
+          </span>
+        </label>
+        <Problem message={action.general(["seatId", "kind", "startsOn", "reason"])} />
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button onClick={onClose} disabled={action.busy}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" disabled={action.busy}>
+            {action.busy ? "Saving…" : "Move"}
           </Button>
         </div>
       </form>

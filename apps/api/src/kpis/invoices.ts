@@ -6,6 +6,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { type SQL, sql } from "drizzle-orm";
 import { type Database, requestMemo, rows } from "../db/index";
+import { soldFor } from "../org/service";
 
 /** Every invoice in the days, with its sales without VAT (line by line, as Sales performance),
  *  its total with VAT, and the person it counts for (the seat's holder on the invoice's day; a
@@ -13,7 +14,7 @@ import { type Database, requestMemo, rows } from "../db/index";
 export function invoicesSql(from: string, to: string): SQL {
   return sql`
     with inv as (
-      select 'crm' as source, i.id, i.code as invoice, i.issued_on as day, o.seat_id, o.medrep_id as fallback, o.raised_by,
+      select 'crm' as source, i.id, i.code as invoice, i.issued_on as day, o.seat_id, ${soldFor("o")} as fallback, o.raised_by,
         o.id as order_id, o.code as order_code, o.customer_id, o.created_at as order_at, i.total::bigint as total,
         -- Less what came back and was credited: the invoice's total is lowered by the same pieces, so
         -- sales with and without VAT stay one figure (22 Nov).

@@ -6,6 +6,7 @@ import { useIdleSignOut } from "./account/idle";
 import { workspaceOf } from "./workspaces";
 import type {
   Decisions,
+  FixList,
   FormList,
   LeaveList,
   Me,
@@ -503,6 +504,12 @@ function MenuList({
     enabled: wantsLeave,
     staleTime: 60_000,
   });
+  const fixes = useQuery({
+    queryKey: ["leave", "fixes", "waiting", null],
+    queryFn: () => api<FixList>("/api/hr/fixes/list?view=waiting"),
+    enabled: wantsLeave,
+    staleTime: 60_000,
+  });
   // Who signed up and waits for the Admin.
   const signUps = useQuery({
     queryKey: ["sign-ups", "count"],
@@ -528,7 +535,10 @@ function MenuList({
           signUps: signUps.data?.waiting ?? 0,
           important: unreadIn(news.data, "important"),
           updates: unreadIn(news.data, "updates"),
-          leave: (leave.data?.counts.waiting ?? 0) + (forms.data?.counts.waiting ?? 0),
+          leave:
+            (leave.data?.counts.waiting ?? 0) +
+            (forms.data?.counts.waiting ?? 0) +
+            (fixes.data?.counts.waiting ?? 0),
           decisions: decisions.data?.total ?? 0,
         }
       : undefined

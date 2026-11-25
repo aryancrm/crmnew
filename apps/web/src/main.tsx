@@ -32,6 +32,11 @@ import { FieldLivePage } from "./field/live";
 import { FieldReportPage } from "./field/report";
 import { Home } from "./home/home";
 import { HrPeoplePage, HrPersonPage } from "./hr/people";
+import { HrPositionsPage } from "./hr/positions";
+import { VacantSeatsPage } from "./org/vacant-seats";
+import { HrSchedulesPage } from "./hr/schedules";
+import { HrHolidaysPage } from "./hr/holidays";
+import { TimekeepingPage } from "./hr/timekeeping";
 import { InboxPage } from "./online/inbox";
 import { Inventory } from "./inventory/inventory";
 import { InventoryOverview } from "./inventory/overview";
@@ -40,6 +45,8 @@ import { LeadPage } from "./online/lead";
 import { WebsiteOrderPage } from "./online/website-order";
 import { LeadsDesk } from "./online/leads";
 import { LeaveListPage } from "./hr/leave-list";
+import { VlConversionPage } from "./hr/credits";
+import { PrintPage } from "./hr/print";
 import { Login } from "./account/login";
 import { Medicine } from "./inventory/medicine";
 import { Medicines } from "./inventory/medicines";
@@ -164,6 +171,9 @@ createRoot(root).render(
           <Route path="/login/:dept?" element={<Login />} />
           <Route path="/signup/:dept?" element={<SignUp />} />
           <Route path="/welcome" element={<Welcome />} />
+          {/* A leave or form as the paper HR files, outside the frame so it prints clean. */}
+          <Route path="/hr/print/leave/:id" element={<PrintPage key="leave" of="leave" />} />
+          <Route path="/hr/print/form/:id" element={<PrintPage key="form" of="form" />} />
           {/* Zoho Inventory's Sales and Purchases, in Zoho's own frame (docs/PLAN.md 17). */}
           <Route path="/books" element={<BooksShell />}>
             <Route index element={<BooksIndex />} />
@@ -312,9 +322,15 @@ createRoot(root).render(
             <Route path="people" element={<OrgPage />} />
             <Route path="hr/people" element={<HrPeoplePage />} />
             <Route path="hr/people/:id" element={<HrPersonPage key="person" />} />
+            <Route path="hr/positions" element={<HrPositionsPage />} />
+            <Route path="vacant-seats" element={<VacantSeatsPage />} />
+            <Route path="hr/schedules" element={<HrSchedulesPage />} />
+            <Route path="hr/holidays" element={<HrHolidaysPage />} />
             <Route path="hr/attendance" element={<AttendancePage />} />
             <Route path="hr/report" element={<AttendanceReportPage />} />
+            <Route path="hr/timekeeping" element={<TimekeepingPage />} />
             <Route path="hr/leave" element={<LeaveListPage />} />
+            <Route path="hr/leave/conversion" element={<VlConversionPage />} />
             <Route path="me/leave" element={<MyLeavePage />} />
             <Route path="me/payslips" element={<MyPayslipsPage />} />
             <Route path="me/payslips/:month" element={<MyPayslipsPage />} />

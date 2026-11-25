@@ -1256,6 +1256,10 @@ export type OrderDetail = {
     approverName: string | null;
     /** Finance's screenshots with the hold it is on now. */
     holdProofs: { id: number; name: string }[];
+    /** The email ID its seller used that day (a seat's login is handed to the next person), and
+     *  whether it was sold covering a vacant area (the seat's sale, not the seller's own KPI). */
+    soldAs: string | null;
+    covered: boolean;
     raisedBy: string;
     channel: string | null;
     area: string | null;
@@ -3973,8 +3977,8 @@ export type AttendanceDay = {
   timeIn: string | null;
   timeOut: string | null;
   /** Where time out came from: their button, the last thing they did, HR. */
-  outFrom: "button" | "last_seen" | "field" | "hr" | null;
-  inFrom: "sign_in" | "button" | "field" | "hr" | null;
+  outFrom: "button" | "last_seen" | "field" | "hr" | "request" | "biometric" | null;
+  inFrom: "sign_in" | "button" | "field" | "hr" | "request" | "biometric" | null;
   /** Still working (today, not ended). */
   working: boolean;
   workedMinutes: number;
@@ -3990,6 +3994,9 @@ export type AttendanceDay = {
   form: "ob" | "wfh" | null;
   /** Approved overtime that day (an overtime form), in minutes. */
   overtimeMinutes: number;
+  /** Each approved overtime form that day: its type (null on rows from before types), minutes
+   *  and the night part of them (10 PM to 6 AM). */
+  overtime?: { type: OtType | null; minutes: number; nightMinutes: number }[];
   note: string | null;
 };
 
@@ -4059,8 +4066,193 @@ export type AttendanceMonth = {
     leaveDays: number;
   };
   leaves: LeaveRow[];
-  /** putRight: change a day's times; leave: record or cancel leave (HR's work). */
-  can: { putRight: boolean; leave: boolean };
+  /** The person's requests to put a day of this month right. */
+  fixes: FixLine[];
+  /** The month's days as the biometric timekeeping sheet had them (HR, the CEO and the Admin;
+   *  null for anyone else). */
+  biometric: BiometricDay[] | null;
+  /** putRight: change a day's times; leave: record or cancel leave (HR's work); askFix: the
+   *  person asks for one of their own days to be put right; biometric: use the biometric times
+   *  for a day or dismiss its flag. */
+  can: { putRight: boolean; leave: boolean; askFix: boolean; biometric: boolean };
+};
+
+/** A request to put a day of one's own attendance right (a missed time in or out, a wrong time). */
+export type FixLine = {
+  id: number;
+  person: { id: number; name: string; team: string | null };
+  day: string;
+  /** "HH:MM", Manila time. */
+  timeIn: string;
+  timeOut: string | null;
+  reason: string;
+  status: Exclude<LeaveStatus, "revoked">;
+  approver: string | null;
+  decidedBy: string | null;
+  decisionNote: string | null;
+  madeAt: string;
+  canDecide: boolean;
+  canCancel: boolean;
+};
+
+export type FixList = {
+  lines: FixLine[];
+  counts: { waiting: number; asked: number; approved: number; refused: number; cancelled: number };
+};
+
+export type FixInput = { day: string; timeIn: string; timeOut?: string | null; reason: string };
+
+// ---- HR: the biometric timekeeping workbook (TIMEKEEPING sheet) beside the CRM's attendance. ----
+
+/** What a day's cell held: punches, a code (OFF, OB, A, TRAINING …), nothing, or what can't be read. */
+export type BiometricKind = "punch" | "code" | "empty" | "unreadable";
+
+/** One day of the sheet as read (in a preview, nothing is kept yet). */
+export type TimekeepingCell = {
+  day: string;
+  /** The sheet's column. */
+  column: string;
+  raw: string;
+  kind: BiometricKind;
+  code: string | null;
+  /** "HH:MM". */
+  firstIn: string | null;
+  lastOut: string | null;
+  punches: number;
+  /** Why HR must look at it (one punch, a mistyped time, TRAINING …), or null. */
+  review: string | null;
+};
+
+/** One kept biometric day, with how it stands against the CRM's day. */
+export type BiometricDay = TimekeepingCell & {
+  id: number;
+  importId: number;
+  /** What the code means ("Rest day"), when it is one. */
+  codeWords: string | null;
+  /** Where it disagrees with the CRM's day (over 15 minutes, or one has the day and the other
+   *  hasn't), or null. */
+  flag: string | null;
+  resolution: { kind: "applied" | "dismissed"; by: string; at: string; note: string | null } | null;
+};
+
+/** A workbook read but not kept: what would be imported. */
+export type TimekeepingPreview = {
+  sheet: string;
+  from: string;
+  to: string;
+  fileName: string;
+  warnings: string[];
+  people: {
+    row: number;
+    deviceId: string;
+    name: string;
+    employeeCode: string | null;
+    /** Who they are in the CRM: by the device ID HR set, or by the employee ID. Only these import. */
+    match: { how: "device" | "employee_id"; personId: number; name: string } | null;
+    /** A name that looks like someone's: HR confirms it ("This is …") before it imports. */
+    suggestion: { personId: number; name: string } | null;
+    /** Why the row can't import even when matched (no device ID, matched twice). */
+    problem: string | null;
+    days: TimekeepingCell[];
+    counts: { punched: number; review: number };
+  }[];
+  counts: { people: number; matched: number; suggested: number; unmatched: number; days: number; review: number };
+  /** Everyone at work, to pick from when the name matches nobody. */
+  choices: { id: number; name: string; employeeCode: string | null }[];
+};
+
+export type TimekeepingImportLine = {
+  id: number;
+  from: string;
+  to: string;
+  sheet: string;
+  fileName: string;
+  people: number;
+  days: number;
+  needsReview: number;
+  skipped: number;
+  madeBy: string;
+  madeAt: string;
+  /** Re-imported since (its days kept, no longer current). */
+  superseded: boolean;
+};
+
+/** A day on HR's Needs review list: what the sheet says, what the CRM has. */
+export type TimekeepingReviewLine = {
+  person: { id: number; name: string };
+  biometric: BiometricDay;
+  crm: { timeIn: string | null; timeOut: string | null; inFrom: AttendanceDay["inFrom"] } | null;
+};
+
+/** HR's Timekeeping page. */
+export type TimekeepingPage = {
+  imports: TimekeepingImportLine[];
+  devices: { id: number; deviceId: string; person: { id: number; name: string }; nameOnSheet: string | null; setBy: string; setAt: string }[];
+  /** The days the review covers (the latest import's, unless asked). */
+  range: { from: string; to: string } | null;
+  review: TimekeepingReviewLine[];
+  can: { upload: boolean };
+};
+
+/** HR's work schedules (shifts): each with how many people at work are on it. */
+export type HrSchedules = {
+  schedules: {
+    id: number;
+    name: string;
+    /** 0 Sunday … 6 Saturday. */
+    days: number[];
+    /** "HH:MM". */
+    start: string;
+    end: string;
+    graceMinutes: number;
+    breakMinutes: number;
+    isDefault: boolean;
+    archived: boolean;
+    people: number;
+  }[];
+  can: { change: boolean };
+};
+
+/** A holiday on HR's Holidays page: national, or local to a province (town null) or one town. */
+export type HolidayRow = {
+  id: number;
+  scope: "national" | "local";
+  day: string;
+  name: string;
+  kind: "regular" | "special";
+  province: string | null;
+  town: string | null;
+  proclamation: string | null;
+  /** Who added it (null: the yearly list or the 2026 proclamations). */
+  madeBy: string | null;
+  archived: { by: string | null; at: string; note: string | null } | null;
+};
+
+export type HolidayYear = {
+  year: number;
+  province: string | null;
+  town: string | null;
+  holidays: HolidayRow[];
+  can: { change: boolean };
+};
+
+export type HolidayInput = {
+  day: string;
+  name: string;
+  kind: "regular" | "special";
+  /** None: a national holiday. */
+  province?: string | null;
+  /** None with a province: the whole province. */
+  town?: string | null;
+};
+
+export type ScheduleInput = {
+  name: string;
+  days: number[];
+  start: string;
+  end: string;
+  graceMinutes?: number | null;
+  breakMinutes?: number | null;
 };
 
 /** The CEO's (and HR's, a team lead's for the team) attendance report over chosen days: who
@@ -4182,6 +4374,24 @@ export type HrPerson = {
     emergencyName: string | null;
     emergencyPhone: string | null;
     emergencyRelation: string | null;
+    gender: Gender | null;
+    civilStatus: CivilStatus | null;
+    citizenship: string | null;
+    spouseName: string | null;
+    fatherName: string | null;
+    motherName: string | null;
+    education: string | null;
+    school: string | null;
+    course: string | null;
+    workArrangement: WorkArrangement | null;
+    /** Where they work (the CRM's town list), for their local holidays, with its province. */
+    workTown: string | null;
+    workProvince: string | null;
+    /** The place their local holidays follow: the record, else their seat area's first city. */
+    holidayPlace: { town: string | null; province: string; from: "record" | "area" } | null;
+    companyPhone: string | null;
+    issuedEquipment: string | null;
+    jobDescription: string | null;
     /** Pay, bank and government IDs: null for anyone but HR, the CEO, the Admin and the person. */
     salary: number | null;
     allowance: number | null;
@@ -4196,8 +4406,61 @@ export type HrPerson = {
   };
   missing: string[];
   /** edit: the record; login: the login email and password; leave: mark as left. */
-  /** back: marked as left, and can be brought back. */
-  can: { edit: boolean; login: boolean; leave: boolean; back: boolean };
+  /** back: marked as left, and can be brought back; schedule: give them another work schedule. */
+  can: { edit: boolean; login: boolean; leave: boolean; back: boolean; schedule: boolean };
+  /** Their work schedule: one HR gave them (id), or the company's default (id null). */
+  schedule: { id: number | null; name: string; start: string; end: string; days: number[] };
+  /** Their working life here, newest first: joined, position, department, employment, company,
+   *  regularized, pay changed (never the amount), left, back. From HR's trail (since 24 Nov 2026). */
+  career: { at: string; what: string }[];
+};
+
+export type Gender = "female" | "male";
+export type CivilStatus = "single" | "married" | "widowed" | "separated";
+export type WorkArrangement = "office" | "field" | "hybrid" | "remote";
+/** The positions a record may say: HR keeps the list (archived ones stay on old records). */
+export type HrPositions = {
+  positions: { id: number; name: string; people: number; archived: boolean }[];
+  can: { change: boolean };
+};
+
+/** One field of a record as it was and as it is. `hidden`: pay, bank, a government number or the
+ *  birth date: the trail says it changed, never the values (both null). */
+export type HrChange = { field: string; label: string; from: string | null; to: string | null; hidden: boolean };
+export type HrEventKind =
+  | "joined"
+  | "record"
+  | "login"
+  | "left"
+  | "back"
+  | "paper"
+  | "attendance"
+  | "leave"
+  | "move";
+export type HrPaperKind = "contract" | "government_id" | "certificate" | "clearance" | "medical" | "other";
+/** A person's papers on their HR record: the ones kept, then the ones taken off (archived). */
+export type HrPapers = {
+  kinds: { key: HrPaperKind; label: string }[];
+  papers: {
+    id: number;
+    kind: HrPaperKind;
+    kindLabel: string;
+    title: string;
+    expiresOn: string | null;
+    /** Expired, or within 30 days of it. */
+    expiry: "expired" | "soon" | null;
+    fileName: string;
+    fileMime: string;
+    fileSize: number;
+    addedBy: string;
+    addedAt: string;
+    archived: { at: string; by: string; reason: string } | null;
+  }[];
+  can: { add: boolean; archive: boolean };
+};
+/** A person's HR trail, newest first: who did what to their record, and when. */
+export type HrHistory = {
+  lines: { at: string; by: string; kind: HrEventKind; what: string; changes: HrChange[] }[];
 };
 
 export type HrRecordInput = Partial<{
@@ -4215,6 +4478,21 @@ export type HrRecordInput = Partial<{
   emergencyName: string | null;
   emergencyPhone: string | null;
   emergencyRelation: string | null;
+  gender: Gender | null;
+  civilStatus: CivilStatus | null;
+  citizenship: string | null;
+  spouseName: string | null;
+  fatherName: string | null;
+  motherName: string | null;
+  education: string | null;
+  school: string | null;
+  course: string | null;
+  workArrangement: WorkArrangement | null;
+  workTown: string | null;
+  workProvince: string | null;
+  companyPhone: string | null;
+  issuedEquipment: string | null;
+  jobDescription: string | null;
   salary: number | null;
   allowance: number | null;
   bankName: string | null;
@@ -4459,11 +4737,15 @@ export type ExpenseInput = {
 
 // ---- HR: leave asked for by people, decided by whom they report to (HR when none). ----
 
-export type LeaveStatus = "asked" | "approved" | "refused" | "cancelled";
+export type LeaveStatus = "asked" | "approved" | "refused" | "cancelled" | "revoked";
 
 export type LeaveBalance = {
-  /** Days a year (regular employees: 10 VL and 10 SL; others none). */
+  /** The year's days: the opening days plus HR's adjustments (never below nothing). */
   allotted: number;
+  /** Days a year by the rule (regular employees: 10 VL and 10 SL; others none). */
+  opening: number;
+  /** HR's adjustments this year, added up (+ or -, half days). */
+  adjusted: number;
   used: number;
   /** Asked for and not decided yet. */
   asked: number;
@@ -4487,10 +4769,70 @@ export type LeaveLine = {
   decisionNote: string | null;
   madeBy: string;
   madeAt: string;
-  /** A paper with it (a medical certificate), opened at /api/hr/leave/:id/file. */
+  /** Its first paper (a medical certificate), opened at /api/hr/leave/:id/file: the one older
+   *  rows kept on the leave, else the first of `files`. */
   file: { name: string; mime: string } | null;
+  /** Proof files (up to five), opened at /api/hr/leave/:id/files/:fileId. */
+  files: { id: number; name: string; mime: string }[];
+  /** A second approver named on the person's record: also decides; the first to decide wins. */
+  secondApprover: string | null;
+  revokedBy: string | null;
+  revokedAt: string | null;
+  revokeReason: string | null;
   canDecide: boolean;
   canCancel: boolean;
+  /** Approved leave the person takes back before it starts (HR any): kept, days come back. */
+  canRevoke: boolean;
+  /** The printout (/hr/print/leave/:id) opens: approved, and this person may read it. */
+  canPrint: boolean;
+};
+
+/** One of HR's adjustments to a person's credits (a ledger line, never changed). */
+export type LeaveCreditLine = {
+  id: number;
+  year: number;
+  kind: "vl" | "sl";
+  /** + adds, - takes off; half days allowed. */
+  days: number;
+  reason: string;
+  by: string;
+  at: string;
+  /** The line this one reverses, and the line that reversed this one. */
+  reverses: number | null;
+  reversedBy: number | null;
+};
+
+/** A person's credits for a year as HR reads them: the ledger for VL and SL and HR's lines. */
+export type LeaveCredits = {
+  personId: number;
+  name: string;
+  year: number;
+  classification: Classification;
+  vl: LeaveBalance;
+  sl: LeaveBalance;
+  lines: LeaveCreditLine[];
+  secondApprover: { id: number; name: string } | null;
+  /** adjust: add or reverse a line, and name the second approver (HR and the Admin). */
+  can: { adjust: boolean };
+  /** Whom HR may name as the second approver (when it may). */
+  approvers: { id: number; name: string }[];
+};
+
+/** Year-end: each person's unused vacation leave and the half of it that converts to pay, at
+ *  their day rate (centavos). A report for HR: the CRM doesn't pay it (PLAN 12.16). */
+export type VlConversion = {
+  year: number;
+  people: {
+    personId: number;
+    name: string;
+    total: number;
+    used: number;
+    unused: number;
+    convertDays: number;
+    perDay: number | null;
+    amount: number | null;
+  }[];
+  totals: { convertDays: number; amount: number };
 };
 
 /** A person's own leave: what is left this year, what they asked for, and whom they ask. */
@@ -4499,13 +4841,25 @@ export type MyLeave = {
   classification: Classification;
   balances: { vl: LeaveBalance; sl: LeaveBalance; lwop: { used: number; asked: number } };
   approver: string;
+  secondApprover: string | null;
+  /** HR's adjustments to this year's credits. */
+  credits: LeaveCreditLine[];
+  /** The rules the ask form keeps (vacation notice, proof for sick leave, files). */
+  rules: { vlNoticeDays: number; earliestVl: string; slProofFromDays: number; filesMax: number };
   lines: LeaveLine[];
 };
 
 /** Leave for HR (everyone), a team lead (the team) and the CEO (everyone, to read). */
 export type LeaveList = {
   lines: LeaveLine[];
-  counts: { waiting: number; asked: number; approved: number; refused: number; cancelled: number };
+  counts: {
+    waiting: number;
+    asked: number;
+    approved: number;
+    refused: number;
+    cancelled: number;
+    revoked: number;
+  };
   /** Lines this person decides (their team's, all for HR). */
   mine: number;
 };
@@ -4556,8 +4910,44 @@ export type LivePeople = {
   }[];
 };
 
-/** Official business, work from home, overtime. */
-export type FormKind = "ob" | "wfh" | "ot";
+/** Official business, work from home, overtime, the daily accomplishment report (eod), the
+ *  incident report. */
+export type FormKind = "ob" | "wfh" | "ot" | "eod" | "incident";
+/** A form may also be returned to the person to fix (they send it again or revoke it). */
+export type FormStatus = LeaveStatus | "returned";
+/** The kinds of day overtime is filed on; broken is broken time. */
+export type OtType =
+  | "regular"
+  | "rest"
+  | "legal"
+  | "special"
+  | "rest_legal"
+  | "rest_special"
+  | "broken";
+export type EodActivity = {
+  timeIn: string;
+  timeOut: string;
+  location: string | null;
+  details: string;
+  deadline: string | null;
+  remarks: string | null;
+};
+export type IncidentType =
+  | "Safety / Accident"
+  | "Misconduct"
+  | "Property Damage"
+  | "Security"
+  | "Other";
+export type IncidentDetails = {
+  time: string;
+  location: string;
+  type: IncidentType;
+  otherText: string | null;
+  persons: string;
+  action: string;
+};
+/** What the daily accomplishment report and the incident report carry. */
+export type FormDetails = { activities: EodActivity[] } | IncidentDetails;
 
 export type FormLine = {
   id: number;
@@ -4567,20 +4957,45 @@ export type FormLine = {
   /** "HH:MM" (official business and overtime). */
   from: string | null;
   to: string | null;
+  /** Overtime: the minutes that count (the overtime rules); else from–to. */
   minutes: number;
+  /** Overtime: its type, and the night differential part of the minutes (10 PM to 6 AM). */
+  otType: OtType | null;
+  nightMinutes: number;
   place: string | null;
+  /** The reason; the daily report's purpose; the incident's description. */
   reason: string;
-  status: LeaveStatus;
+  details: FormDetails | null;
+  status: FormStatus;
   approver: string | null;
+  /** Head Requisition: the lead who filed this overtime for the person (straight to HR). */
+  headBy: string | null;
   decidedBy: string | null;
   decisionNote: string | null;
+  returnNote: string | null;
+  revoked: { by: string; at: string; from: string; stage: "approver" | "hr" } | null;
   canDecide: boolean;
   canCancel: boolean;
+  /** Taken back (kept as revoked) before it is decided, or once returned. */
+  canRevoke: boolean;
+  /** HR sends it back to the person to fix. */
+  canReturn: boolean;
+  /** The person sends a returned form again, fixed. */
+  canResend: boolean;
+  canPrint: boolean;
 };
 
 export type FormList = {
   lines: FormLine[];
-  counts: { waiting: number; asked: number; approved: number; refused: number; cancelled: number };
+  counts: {
+    waiting: number;
+    asked: number;
+    approved: number;
+    refused: number;
+    cancelled: number;
+    returned: number;
+    revoked: number;
+  };
 };
 
 export type FormInput = {
@@ -4590,6 +5005,96 @@ export type FormInput = {
   to?: string | null;
   place?: string | null;
   reason: string;
+  /** Overtime: the kind of day (else the day's own kind). */
+  otType?: OtType | null;
+  /** Head Requisition: overtime a team lead or manager files for someone under them. */
+  forPersonId?: number | null;
+  /** The daily report's activities. */
+  activities?:
+    | (Pick<EodActivity, "timeIn" | "timeOut" | "details"> & {
+        location?: string | null;
+        deadline?: string | null;
+        remarks?: string | null;
+      })[]
+    | null;
+  /** The incident report's fields. */
+  incident?: (Omit<IncidentDetails, "otherText"> & { otherText?: string | null }) | null;
+};
+
+/** Everything waiting for this person's decision under Leave & forms, by kind. */
+/** Vacant seats (HR-PLAN, moves and vacant seats): the lead's in their boxes, everyone's for HR,
+ *  the CEO and the Admin. */
+export type VacantSeats = {
+  today: string;
+  /** Days vacant with nobody covering before the lead is reminded, and before the head and HR. */
+  leadDays: number;
+  upDays: number;
+  seats: {
+    seatId: number;
+    title: string;
+    team: string;
+    area: string | null;
+    /** The seat's email ID (handed to whoever sits there next). */
+    login: string | null;
+    /** The first day it has been empty, and how many days that is. */
+    since: string;
+    days: number;
+    /** The team lead it waits with. */
+    lead: string | null;
+    cover: { holdingId: number; personId: number; name: string; until: string | null } | null;
+    /** A joiner or a move already planned into it. */
+    promised: { name: string; startsOn: string } | null;
+    customers: number;
+    open: number;
+    /** This month: the seat's quota (stays on the seat), sold from it, and of that sold covering. */
+    quota: number | null;
+    sold: number;
+    soldCovering: number;
+    /** "lead": past the lead's days with nobody covering; "up": past the head's and HR's. */
+    alert: "none" | "lead" | "up";
+  }[];
+  /** Whom this person may give a cover to: their own people (a lead), anyone with a seat (HR). */
+  people: { id: number; name: string; seat: string; unitId: number }[];
+  can: { cover: boolean };
+};
+
+export type HrQueue = {
+  leave: number;
+  forms: number;
+  fixes: number;
+  total: number;
+  /** HR, the Admin: of those, the ones routed to HR itself (nobody else decides them first). */
+  atHr: { leave: number; forms: number; fixes: number; total: number } | null;
+};
+
+/** A person's own drawn signature (a PNG data URL), shown on printouts once they sign. */
+export type MySignature = { signature: { id: number; at: string; image: string } | null };
+
+/** A printable leave or form: what the paper form carries, and who signed (each box filled only
+ *  once that person signed or decided). */
+export type Printout = {
+  kind: "leave" | FormKind;
+  title: string;
+  company: string;
+  person: {
+    name: string;
+    employeeCode: string | null;
+    position: string | null;
+    department: string | null;
+  };
+  filedOn: string;
+  status: string;
+  /** Label and value pairs, in the paper form's order. */
+  fields: { label: string; value: string }[];
+  /** A table (the daily report's activities). */
+  table: { head: string[]; rows: string[][] } | null;
+  signers: {
+    box: string;
+    name: string | null;
+    at: string | null;
+    /** The signature as a data URL, or null (not signed yet, or no signature drawn). */
+    image: string | null;
+  }[];
 };
 
 // ------------------------------------------------------------------ payroll
@@ -4627,6 +5132,9 @@ export type Payslip = {
   deductions: PayLine[];
   totalDeductions: number;
   net: number;
+  /** Shown for information, nothing added or taken: night differential (not paid), local
+   *  holidays. Missing on slips released before them. */
+  notes?: { key: string; label: string; detail: string }[];
   /** The company's shares, beside the slip. */
   employer: { sss: number; philhealth: number; pagibig: number; total: number } | null;
   /** Where the pay goes. */
@@ -4666,6 +5174,73 @@ export type PayrollMonth = PayPeriod & {
   whyNotRelease: string | null;
   before: string;
   after: string | null;
+};
+
+/** What a payroll register's column may hold: who (employee ID, name) and the figures compared. */
+export type RegisterField =
+  | "code"
+  | "name"
+  | "basic"
+  | "ot"
+  | "gross"
+  | "deductions"
+  | "sss"
+  | "philhealth"
+  | "pagibig"
+  | "tax"
+  | "net";
+export type RegisterFigure = Exclude<RegisterField, "code" | "name">;
+
+/** Which heading of HR's register holds what: HR maps it once, it is used again. */
+export type RegisterMapping = {
+  sheet: string;
+  /** The row the headings are on (as Excel numbers it). */
+  headerRow: number;
+  columns: Partial<Record<RegisterField, string | null>>;
+};
+
+export type RegisterCompare = {
+  id: number;
+  at: string;
+  by: string;
+  /** What the CRM's side was: the released payslips, or the draft as it stood. */
+  crmStatus: "released" | "draft";
+  /** Figures that differ by ₱0.01 or more, people on one side only and names to confirm. */
+  differences: number;
+  fields: RegisterFigure[];
+  rows: {
+    row: number;
+    personId: number;
+    name: string;
+    hrName: string | null;
+    code: string | null;
+    match: "code" | "name";
+    figures: { field: RegisterFigure; crm: number; hr: number | null; diff: number | null }[];
+    differs: boolean;
+  }[];
+  /** Rows whose name is exactly a person's, waiting for HR to say it is them. */
+  toConfirm: { row: number; hrName: string; code: string | null; personId: number; name: string }[];
+  onlyHr: { row: number; hrName: string | null; code: string | null }[];
+  onlyCrm: { personId: number; name: string; code: string | null }[];
+};
+
+export type PayRegisterPage = {
+  month: string;
+  registers: { id: number; fileName: string; by: string; at: string }[];
+  current: {
+    id: number;
+    fileName: string;
+    by: string;
+    at: string;
+    /** Each sheet's first rows, to pick the headings' row and map them. */
+    sheets: { name: string; rows: { number: number; cells: string[] }[]; guessedRow: number }[];
+    /** The mapping in force (the newest HR made), and whether it fits this file. */
+    mapping: RegisterMapping | null;
+    fits: boolean;
+    compare: RegisterCompare | null;
+  } | null;
+  people: { id: number; name: string; code: string | null }[];
+  can: { upload: boolean };
 };
 
 export type PayAdjustmentInput = {

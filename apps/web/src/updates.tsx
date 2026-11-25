@@ -23,6 +23,8 @@ const NEEDS_YOU = new Set([
   "announcement",
   "leave_request",
   "form_request",
+  // A form HR returned to fix: the person sends it again or revokes it.
+  "form_returned",
   "stock_back",
   // A team's order stopped: the team lead chases it.
   "team_stop",

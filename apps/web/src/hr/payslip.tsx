@@ -162,6 +162,15 @@ export function PayslipView({
         </div>
       </div>
 
+      {(slip.notes ?? []).length > 0 && (
+        <ul className="flex flex-col gap-0.5 text-xs text-slate-600">
+          {(slip.notes ?? []).map((one) => (
+            <li key={one.key}>
+              <span className="font-semibold text-slate-700">{one.label}:</span> {one.detail}
+            </li>
+          ))}
+        </ul>
+      )}
       {forHr && slip.employer && (
         <p className="text-xs text-slate-500">
           The company pays besides: SSS {peso(slip.employer.sss)} · PhilHealth{" "}

@@ -9,7 +9,7 @@ import { MapPin, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { FIELD } from "./parts";
 
-type Town = [name: string, province: string, city: 0 | 1];
+export type Town = [name: string, province: string, city: 0 | 1];
 
 const plain = (text: string) =>
   text
@@ -18,7 +18,7 @@ const plain = (text: string) =>
     .toLowerCase()
     .trim();
 
-function useTowns() {
+export function useTowns() {
   return useQuery({
     queryKey: ["ph-towns"],
     queryFn: async () => {

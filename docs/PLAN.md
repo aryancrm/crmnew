@@ -2394,6 +2394,61 @@ reading is one row (portal + reference). What the team screened there is screene
 name it has there; taking it off there does not take it off here (a person of the CRM does that).
 The CRM matches the lines to its own medicines again, by its own rules (24).
 
+## 26. HR: moves and vacant seats (25 Nov 2026, on the `hr` branch)
+
+Asked by the backend department; the full working is [HR-PLAN.md](HR-PLAN.md) step 4b. Built on
+`hr`, not merged or pushed yet (commits `428b7b4`, `8979d26`).
+
+**The rules.**
+- The **employee ID** is the person's own key: it never changes and is never reused (unique per
+  company, kept after they leave). The **email ID** belongs to the seat (`hos3@…`) and is handed to
+  whoever sits there next; people keep signing in with it.
+- Every sale keeps the email ID its seller used that day (`sales_order.sold_as`, shown on the order
+  as *Sold as*), so a later cross-check can tell whose sale it was and move the credit.
+- A team lead gives a vacant area to one of their own people until a day: **added work, no KPI**.
+  The MedRep is credited only for their own main area; the vacant area's quota stays on its seat and
+  the team handles it. A sale made covering counts for the vacant seat, per person for the lead
+  above it that day (`covered`, `cover_lead_id`; `order_seat` in migration 0156; `soldFor` /
+  `creditedTo` in `org/service.ts`), never the covering MedRep's own KPI or score.
+- A seat empty 7 days with nobody covering is flagged to its lead; 14 days, to the head and HR.
+- HR moves someone (*Move* on HR's person page): to a vacant seat, as a transfer, promotion,
+  demotion or lateral move, from a day up to three months ahead, keeping the old seat or not.
+- Every move goes in HR's trail (`hr_event` kind `move`): seat taken, second seat, cover given and
+  ended, a seat changed under its holder, leaving (from Teams & people too), with the seat and the
+  email ID before and after.
+
+**Where.** `/vacant-seats` (team leads under My team, HR's desk, the Admin panel), `GET
+/api/org/vacant`, `POST /api/org/vacant/:seatId/cover`, `POST /api/org/vacant/covers/:id/end`, `POST
+/api/hr/people/:id/move`; code in `org/vacancies.ts`, `org/service.ts`, `hr/people.ts`.
+
+**Tests: the scenarios and how each is checked.** Auto = `apps/api/src/org/vacancies.test.ts`
+(`pnpm --filter @2mg/api exec vitest run src/org/vacancies.test.ts`). By hand on the local demo:
+Daniel leads NCR 1, Ryan is his MedRep, Helen is HR.
+
+| # | Scenario | Expected | Checked |
+|---|---|---|---|
+| 1 | A lead has 5 areas, 2 vacant: who sees them | The lead their own team's; HR, the CEO, the Admin every one; a MedRep refused | Auto |
+| 2 | Empty 7 days, nobody covering | Flagged to the lead; *Needs you*: "Vacant N days… give it to one of your people" | Auto |
+| 3 | Empty 14 days, nobody covering | Flagged red for the head and HR | Auto (the flag); the head's view not tested |
+| 4 | The lead gives the area to one of their MedReps | Their own people only, until a day; in the MedRep's HR trail | Auto; by hand: *Vacant seats* → *Give to one of my people* |
+| 5 | Given to someone outside the team, or a MedRep handing out covers | Refused | Auto |
+| 6 | The covering MedRep sells to the vacant area's customer | Counts for the vacant seat and the lead; not the MedRep's KPI or score | Auto; by hand: the order says *Sold as … · covering a vacant area* |
+| 7 | The same MedRep sells in their own area | Still their own sale | Auto |
+| 8 | Cross-check later | Each order keeps the email ID it was sold as and whether it was covering | Auto |
+| 9 | The lead takes the cover back | Ends today; in the trail | Auto |
+| 10 | HR moves someone (B2C to B2B) | Reason needed; at most 3 months ahead; HR and the Admin only; trail "Transferred to …, from …" with the seat and email ID before and after | Auto; by hand: HR → person → *Move* |
+| 11 | After the move, their old sales | Stay with the old seat, with the email ID each was sold as | Auto |
+| 12 | A move planned for a later day | The tree switches that morning | Not tested yet |
+| 13 | Marked as left from Teams & people | HR's trail writes it, with the seats now vacant | HR's path in `hr/events.test.ts`; Teams & people's not tested |
+
+Kept green after the change: `org/org.test.ts`, `hr/events.test.ts`, `team/team.test.ts`,
+`orders/orders.test.ts`, `sales/sales.test.ts`, `sales/performance.test.ts`, `kpis/kpis.test.ts`,
+`scores/scores.test.ts`, `checks/scale.test.ts` (130 people), `db/migrate.test.ts`. The screens are
+type-checked, not yet clicked through in a browser.
+
+**Not done.** The employee ID made compulsory (HR's *Missing* view lists who lacks one); a screen to
+move past covered sales' credit to someone (the data is kept for it).
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -3811,3 +3866,4 @@ The CRM matches the lines to its own medicines again, by its own rules (24).
 - 23 Nov (181), recorded by the backend developer: Aryan merged the backend branch to main ("each person has their own password; it replaces the one company password"): 164's own login ID and password is approved, and 172's sign-up, the profile and two-step sign-in (170) went in with it. On live, whoever was there before 0142 signs in only after a one-time password (`pnpm --filter @2mg/api passwords` on the live database, or the Admin's Give a new password); sign-up emails need a connected mailbox and `WEB_URL`. `LOGINS-LIVE.md`, `PEOPLE-2026.md` and `CLAUDE.md` no longer speak of the common password; the user book still does.
 - 24 Nov, Aryan: "I don't know what a pull or a branch is; my team members change the code; pull their changes and push to main what you think is done right." **The team's pull requests, read and landed here.** #1 and #2 were already merged (#2: the API image carries `docs/company-map.units.js` so the accounts can be made on the company's own server). **#3 merged** (jeydweirdough): one-time passwords are 12 characters with no look-alikes (no 0/O, 1/I/l, 5/S, 2/Z, 8/B, U/V), about 65 bits; checked: the API type-check, the org and sign-in tests, the whole API suite (679). **#4 held** (kenshiiir0): it points the tender robot at the company's own server (one.bishnoi.ai, Coolify) instead of Render. That server keeps its own database, separate from the one behind crmnew-psi.vercel.app, so merging it decides which site gets the new tenders: Aryan's to say (the PR itself asks the same).
 - 24 Nov, Aryan, asked which link his people use from now: **"one.bishnoi.ai".** The company's own server (Coolify: web one.bishnoi.ai, API api-one.bishnoi.ai, its own PostgreSQL) is the CRM from now; crmnew-psi.vercel.app (Vercel → Render → Supabase) is the old site, still running, still deployed from main, with its own separate data (the demo company and what the robot found until today). **#4 merged**: the tender robot's two workflows hand in to one.bishnoi.ai; the door checks GitHub's signature for this repository on both servers, so no new secret. What the robot found before stays on the old site; tenders still open are found again on the next runs. `list-logins.ts`, `LOGINS-LIVE.md` and `PEOPLE-2026.md` name the new site (the new server's login IDs were made afresh and can differ from the old list). **Still the team's:** one.bishnoi.ai does not deploy on a push: its API and web are redeployed by hand in Coolify (#3's new one-time passwords reach it only after that; #4 changes only the robot's GitHub workflows, nothing to redeploy), its database has no backups scheduled (20 Nov), and the Messenger and Zoho webhooks, if set, still point at the old site.
+- 25 Nov (182), recorded by the backend developer (on the `hr` branch, not merged): **HR: moves and vacant seats** (section 26; HR-PLAN step 4b). The employee ID is the person's key, the email ID the seat's; every order keeps the email ID it was sold as (`sold_as`); a lead gives a vacant area to one of their people as added work with no KPI (the sale is the seat's and the team's); vacant 7 days → the lead, 14 → the head and HR; HR's *Move* (transfer, promotion, demotion, lateral); every move in HR's trail. Migration 0156; 13 scenarios and how each is tested in section 26.
