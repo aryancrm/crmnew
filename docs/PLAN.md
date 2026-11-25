@@ -2394,6 +2394,61 @@ reading is one row (portal + reference). What the team screened there is screene
 name it has there; taking it off there does not take it off here (a person of the CRM does that).
 The CRM matches the lines to its own medicines again, by its own rules (24).
 
+## 26. HR: moves and vacant seats (25 Nov 2026, on the `hr` branch)
+
+Asked by the backend department; the full working is [HR-PLAN.md](HR-PLAN.md) step 4b. Built on
+`hr`, not merged or pushed yet (commits `428b7b4`, `8979d26`).
+
+**The rules.**
+- The **employee ID** is the person's own key: it never changes and is never reused (unique per
+  company, kept after they leave). The **email ID** belongs to the seat (`hos3@…`) and is handed to
+  whoever sits there next; people keep signing in with it.
+- Every sale keeps the email ID its seller used that day (`sales_order.sold_as`, shown on the order
+  as *Sold as*), so a later cross-check can tell whose sale it was and move the credit.
+- A team lead gives a vacant area to one of their own people until a day: **added work, no KPI**.
+  The MedRep is credited only for their own main area; the vacant area's quota stays on its seat and
+  the team handles it. A sale made covering counts for the vacant seat, per person for the lead
+  above it that day (`covered`, `cover_lead_id`; `order_seat` in migration 0156; `soldFor` /
+  `creditedTo` in `org/service.ts`), never the covering MedRep's own KPI or score.
+- A seat empty 7 days with nobody covering is flagged to its lead; 14 days, to the head and HR.
+- HR moves someone (*Move* on HR's person page): to a vacant seat, as a transfer, promotion,
+  demotion or lateral move, from a day up to three months ahead, keeping the old seat or not.
+- Every move goes in HR's trail (`hr_event` kind `move`): seat taken, second seat, cover given and
+  ended, a seat changed under its holder, leaving (from Teams & people too), with the seat and the
+  email ID before and after.
+
+**Where.** `/vacant-seats` (team leads under My team, HR's desk, the Admin panel), `GET
+/api/org/vacant`, `POST /api/org/vacant/:seatId/cover`, `POST /api/org/vacant/covers/:id/end`, `POST
+/api/hr/people/:id/move`; code in `org/vacancies.ts`, `org/service.ts`, `hr/people.ts`.
+
+**Tests: the scenarios and how each is checked.** Auto = `apps/api/src/org/vacancies.test.ts`
+(`pnpm --filter @2mg/api exec vitest run src/org/vacancies.test.ts`). By hand on the local demo:
+Daniel leads NCR 1, Ryan is his MedRep, Helen is HR.
+
+| # | Scenario | Expected | Checked |
+|---|---|---|---|
+| 1 | A lead has 5 areas, 2 vacant: who sees them | The lead their own team's; HR, the CEO, the Admin every one; a MedRep refused | Auto |
+| 2 | Empty 7 days, nobody covering | Flagged to the lead; *Needs you*: "Vacant N days… give it to one of your people" | Auto |
+| 3 | Empty 14 days, nobody covering | Flagged red for the head and HR | Auto (the flag); the head's view not tested |
+| 4 | The lead gives the area to one of their MedReps | Their own people only, until a day; in the MedRep's HR trail | Auto; by hand: *Vacant seats* → *Give to one of my people* |
+| 5 | Given to someone outside the team, or a MedRep handing out covers | Refused | Auto |
+| 6 | The covering MedRep sells to the vacant area's customer | Counts for the vacant seat and the lead; not the MedRep's KPI or score | Auto; by hand: the order says *Sold as … · covering a vacant area* |
+| 7 | The same MedRep sells in their own area | Still their own sale | Auto |
+| 8 | Cross-check later | Each order keeps the email ID it was sold as and whether it was covering | Auto |
+| 9 | The lead takes the cover back | Ends today; in the trail | Auto |
+| 10 | HR moves someone (B2C to B2B) | Reason needed; at most 3 months ahead; HR and the Admin only; trail "Transferred to …, from …" with the seat and email ID before and after | Auto; by hand: HR → person → *Move* |
+| 11 | After the move, their old sales | Stay with the old seat, with the email ID each was sold as | Auto |
+| 12 | A move planned for a later day | The tree switches that morning | Not tested yet |
+| 13 | Marked as left from Teams & people | HR's trail writes it, with the seats now vacant | HR's path in `hr/events.test.ts`; Teams & people's not tested |
+
+Kept green after the change: `org/org.test.ts`, `hr/events.test.ts`, `team/team.test.ts`,
+`orders/orders.test.ts`, `sales/sales.test.ts`, `sales/performance.test.ts`, `kpis/kpis.test.ts`,
+`scores/scores.test.ts`, `checks/scale.test.ts` (130 people), `db/migrate.test.ts`. The screens are
+type-checked, not yet clicked through in a browser.
+
+**Not done.** The employee ID made compulsory (HR's *Missing* view lists who lacks one); a screen to
+move past covered sales' credit to someone (the data is kept for it).
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -3809,3 +3864,4 @@ The CRM matches the lines to its own medicines again, by its own rules (24).
 - 23 Nov (179), Aryan: "why are you not building it; build it fully. You have its whole code: can you not copy the robot out of it?" Yes. **The CRM's own PS-PhilGEPS robot, copied** (section 25, step 6, brought forward). The bidding team's module is in the worker unchanged (`papers/lib/psSync.mjs`, with `awardNotify`, `awardRouting`, `psAward`): with the session a person made it reads Bid Match, My Opportunities and Award Notices, adds the open medicine notices Bid Match leaves out, reads each notice (lines, dates, papers), then the papers for our medicines; it only reads. `ps/ps.mjs` runs one Sync, gives the papers more reading time than the old host allowed, and puts the tenders on the finder (the bridge's mapping, shared). **Its records live in the CRM** (migration 0148 `tender_robot_row`, `tenders/robot-store.ts`; the door's `store`, `screened`, `papers/list`): the stand-in for its old database (`papers/supabase-shim`) is now a real store: our medicines are its product list, the CRM's screened list its screened list, its runs the CRM's run log, each of its own rows kept as written, a session's cookies sealed, a paper of the new portal kept in the file store at once and not downloaded twice. **Kept alive** every 5 minutes by its own workflow (PS-PhilGEPS ends an idle session in under an hour). **Connect** (`ps/connect`): the team's own tool with one path changed; a person ticks the captcha once on a computer with Chrome and the CRM keeps the session. The finder's page says whether PS-PhilGEPS is connected and how the last Sync went. **Checked:** the whole run against a stand-in PS-PhilGEPS and a stand-in CRM inside one process (3 tests: not connected asks nothing; a Sync reads the lists, the notice and its paper, keeps its records, the paper whole, reads our two medicines and puts the tender on the finder; the keep-alive; an ended session is forgotten and said), 1 API test of the store (rows as handed in, sealed session, other tables refused), the earlier papers and bridge tests on the new stand-in. **By hand** on the demo copy: the robot run against the local CRM over real HTTP (only philgeps.gov.ph a stand-in inside the process): the notice, its two lines read in the papers with quantity and the budget for one piece, and its paper reached the finder's page. That run found a fault the tests had not: a paper was handed to the CRM before its tender was there and was refused; now a paper downloaded in a run is held on disk until its tender is on the finder, and one the reader finds is not ours is let go of first. **Not checked:** the real PS-PhilGEPS (no log-in and no captcha here: its real pages are read as the team's code reads them today on its own host); Connect itself (it needs a person, Chrome and the account); award e-mails stay off (no mail settings are given to the robot).
 - 23 Nov (180), Aryan: "Tender finder, Tenders and Bid report: aren't they three sides of one thing? Then group them." Yes: the tenders found, the tenders we bid, how the bids went. **One "Tenders" folder in the side menu** (All tenders, Tender finder, Bid report) for the Sales and Marketing Mentor (Subir) and the Government Bidding Admin (with Documents, the company's papers, as the coachees already had it); on phones one "Tenders" tab. The pages stay three (each does a different job) and nothing is taken away. The CEO's and the Admin's: the three stay side by side inside their "Reports" folder (a folder inside a folder would show as one link there). Checked in the browser on the demo copy as Sam (Subir's seat), Jimmy and the CEO, on a computer and as a phone.
 - 23 Nov (181), recorded by the backend developer: Aryan merged the backend branch to main ("each person has their own password; it replaces the one company password"): 164's own login ID and password is approved, and 172's sign-up, the profile and two-step sign-in (170) went in with it. On live, whoever was there before 0142 signs in only after a one-time password (`pnpm --filter @2mg/api passwords` on the live database, or the Admin's Give a new password); sign-up emails need a connected mailbox and `WEB_URL`. `LOGINS-LIVE.md`, `PEOPLE-2026.md` and `CLAUDE.md` no longer speak of the common password; the user book still does.
+- 25 Nov (182), recorded by the backend developer (on the `hr` branch, not merged): **HR: moves and vacant seats** (section 26; HR-PLAN step 4b). The employee ID is the person's key, the email ID the seat's; every order keeps the email ID it was sold as (`sold_as`); a lead gives a vacant area to one of their people as added work with no KPI (the sale is the seat's and the team's); vacant 7 days → the lead, 14 → the head and HR; HR's *Move* (transfer, promotion, demotion, lateral); every move in HR's trail. Migration 0156; 13 scenarios and how each is tested in section 26.
