@@ -1753,3 +1753,34 @@ export function spaceFor(me: Me, pathname: string): Space {
     return { ...inventoryApp(me), back: { to: "/", label: `Back to ${me.roleLabel}` } };
   return desk;
 }
+
+/** Whether a page of a folder (or the folder's own) is open: it then shows unfolded. A filtered
+ *  link (/orders?stuck=1) counts only on that list with that filter, not on every order. A link
+ *  open only as a parent path (My day at /field, on /field/clients) doesn't count when a deeper
+ *  link anywhere in the menu is the page (All my customers in another folder: 25 Nov, two
+ *  folders lit at once). */
+export function folderOpen(
+  item: MenuItem,
+  location: { pathname: string; search: string },
+  every: { to: string }[] = [],
+): boolean {
+  const deeperElsewhere = (path: string) =>
+    every.some((other) => {
+      const otherPath = other.to.split("?")[0] ?? "";
+      return (
+        otherPath.startsWith(`${path}/`) &&
+        (location.pathname === otherPath || location.pathname.startsWith(`${otherPath}/`))
+      );
+    });
+  return allItems(item.children ?? [item]).some((one) => {
+    const [path = "", query] = one.to.split("?");
+    if (path === "/") return false;
+    if (query) {
+      if (location.pathname !== path) return false;
+      const now = new URLSearchParams(location.search);
+      return [...new URLSearchParams(query)].every(([key, value]) => now.get(key) === value);
+    }
+    if (location.pathname === path) return true;
+    return location.pathname.startsWith(`${path}/`) && !deeperElsewhere(path);
+  });
+}

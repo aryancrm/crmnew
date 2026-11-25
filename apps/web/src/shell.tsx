@@ -39,7 +39,7 @@ import { DeskPeople } from "./desk/people";
 import { LiveLocationSender } from "./field/live-sender";
 import { UndoConfirmBar } from "./finance/undo";
 import { MyDayButton } from "./hr/parts";
-import { allItems, type Badge, type MenuGroup, type MenuItem, spaceFor } from "./menus";
+import { allItems, type Badge, folderOpen, type MenuGroup, type MenuItem, spaceFor } from "./menus";
 import { Toasts } from "./toast";
 import { unreadIn, useUpdates } from "./updates";
 
@@ -309,7 +309,7 @@ export function Shell() {
               }
               className={({ isActive }) =>
                 `flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] ${
-                  (item.children ? inFolder(item, location) : openOf(item.to, isActive))
+                  (item.children ? folderOpen(item, location, allItems(flat)) : openOf(item.to, isActive))
                     ? "font-semibold text-brand"
                     : "text-slate-500"
                 }`
@@ -447,20 +447,6 @@ function PageBack({ trail }: { trail: string[] }) {
   );
 }
 
-/** Whether a page of a folder (or the folder's own) is open: it then shows unfolded. A filtered
- *  link (/orders?stuck=1) counts only on that list with that filter, not on every order. */
-function inFolder(item: MenuItem, location: { pathname: string; search: string }): boolean {
-  return allItems(item.children ?? [item]).some((one) => {
-    const [path = "", query] = one.to.split("?");
-    if (path === "/") return false;
-    if (query) {
-      if (location.pathname !== path) return false;
-      const now = new URLSearchParams(location.search);
-      return [...new URLSearchParams(query)].every(([key, value]) => now.get(key) === value);
-    }
-    return location.pathname === path || location.pathname.startsWith(`${path}/`);
-  });
-}
 
 const PILL = (badge: Badge) =>
   `rounded-full px-1.5 text-[11px] font-semibold ${badge === "flagged" || badge === "refunds" || badge === "latePayments" ? "bg-rose-100 text-rose-700" : badge === "inbox" ? "bg-sky-100 text-sky-800" : badge === "messages" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`;
@@ -642,7 +628,7 @@ function MenuList({
   };
 
   const folder = (item: MenuItem) => {
-    const here = inFolder(item, location);
+    const here = folderOpen(item, location, every);
     const open = folded[item.label] ?? here;
     const id = `${listId}-${item.label.replace(/\W+/g, "-")}`;
     // Folded, it still says what waits inside.

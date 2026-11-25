@@ -4,7 +4,7 @@
 
 import type { Me } from "@2mg/api/types";
 import { describe, expect, it } from "vitest";
-import { type MenuItem, type Space, spaceFor } from "./menus";
+import { allItems, folderOpen, type MenuItem, type Space, spaceFor } from "./menus";
 
 type Seat = { channel: string | null; title: string; business?: string | null };
 
@@ -65,5 +65,34 @@ describe("each MedRep's menu", () => {
   for (const [kind, seat] of Object.entries(MEDREPS))
     it(`${kind} sees the same menu`, () => {
       expect(plain(spaceFor(medrep(seat), "/"))).toMatchSnapshot();
+    });
+});
+
+/** The folders lit (open, in green) on a page. */
+const litFolders = (space: Space, to: string) => {
+  const [pathname = "", query] = to.split("?");
+  const location = { pathname, search: query ? `?${query}` : "" };
+  const every = allItems(space.groups.flatMap((group) => group.items));
+  return space.groups
+    .flatMap((group) => group.items)
+    .filter((one) => one.children && folderOpen(one, location, every))
+    .map((one) => one.label);
+};
+
+describe("the sidebar lights one folder at a time", () => {
+  it("on All my customers (/field/clients) the Hospital CHC's Hospitals, not Visits (My day is /field)", () => {
+    const space = spaceFor(medrep(MEDREPS["Hospital CHC"] as Seat), "/field/clients");
+    expect(litFolders(space, "/field/clients")).toEqual(["Hospitals"]);
+    expect(litFolders(space, "/field")).toEqual(["Visits"]);
+    expect(litFolders(space, "/field/plan")).toEqual(["Visits"]);
+  });
+
+  for (const [kind, seat] of Object.entries(MEDREPS))
+    it(`${kind}: every link's page lights at most one folder`, () => {
+      const space = spaceFor(medrep(seat), "/");
+      for (const link of allItems(space.groups.flatMap((group) => group.items)).filter((one) => !one.children)) {
+        const lit = litFolders(space, link.to);
+        expect(lit.length, `${link.label} (${link.to}) lights ${lit.join(", ")}`).toBeLessThanOrEqual(1);
+      }
     });
 });
