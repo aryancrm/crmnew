@@ -1,0 +1,2259 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`each MedRep's menu > Any other MedRep sees the same menu 1`] = `
+{
+  "cta": {
+    "label": "Create New Order",
+    "short": "New order",
+    "to": "/orders/new",
+  },
+  "cta2": null,
+  "desk": "Modern Trade · COO",
+  "groups": [
+    {
+      "items": [
+        {
+          "icon": "House",
+          "label": "Home",
+          "to": "/",
+        },
+        {
+          "badge": "sentBack",
+          "icon": "ClipboardList",
+          "label": "My orders",
+          "short": "Orders",
+          "to": "/orders",
+        },
+        {
+          "children": [
+            {
+              "icon": "MapPin",
+              "label": "My area",
+              "to": "/my/area",
+            },
+            {
+              "badge": "refills",
+              "icon": "PhoneCall",
+              "label": "Customers to call",
+              "to": "/to-call",
+            },
+          ],
+          "icon": "MapPin",
+          "label": "Customers",
+          "short": "Customers",
+          "to": "/my/area",
+        },
+        {
+          "children": [
+            {
+              "icon": "Smartphone",
+              "label": "My day",
+              "to": "/field",
+            },
+            {
+              "icon": "CalendarCheck",
+              "label": "Today's visits",
+              "to": "/visits",
+            },
+            {
+              "icon": "CalendarRange",
+              "label": "Tour plan",
+              "to": "/field/plan",
+            },
+            {
+              "icon": "Stethoscope",
+              "label": "KOLs, hospitals, KBLs",
+              "to": "/field/clients",
+            },
+            {
+              "icon": "CalendarDays",
+              "label": "Calendar",
+              "to": "/visits/calendar",
+            },
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "to": "/calls",
+            },
+            {
+              "icon": "Receipt",
+              "label": "My expenses",
+              "to": "/visits/expenses",
+            },
+            {
+              "icon": "Gift",
+              "label": "My samples & gifts",
+              "to": "/me/samples",
+            },
+          ],
+          "icon": "CalendarCheck",
+          "label": "Visits",
+          "short": "Visits",
+          "to": "/field",
+        },
+        {
+          "children": [
+            {
+              "icon": "Gauge",
+              "label": "My score",
+              "to": "/my/score",
+            },
+            {
+              "icon": "TrendingUp",
+              "label": "Sales performance",
+              "to": "/sales-performance",
+            },
+          ],
+          "icon": "Gauge",
+          "label": "My numbers",
+          "short": "Numbers",
+          "to": "/my/score",
+        },
+      ],
+    },
+    {
+      "items": [
+        {
+          "icon": "Pill",
+          "label": "Medicines & stock",
+          "short": "Stock",
+          "to": "/medicines",
+        },
+      ],
+      "title": "Look up",
+    },
+    {
+      "divider": true,
+      "items": [
+        {
+          "children": [
+            {
+              "icon": "CalendarDays",
+              "label": "Leave & forms",
+              "to": "/me/leave",
+            },
+            {
+              "icon": "ReceiptText",
+              "label": "My payslips",
+              "to": "/me/payslips",
+            },
+          ],
+          "icon": "User",
+          "label": "Me",
+          "short": "Me",
+          "to": "/me/leave",
+        },
+        {
+          "children": [
+            {
+              "badge": "decisions",
+              "icon": "ListChecks",
+              "label": "To decide",
+              "to": "/decisions",
+            },
+            {
+              "icon": "ShieldAlert",
+              "label": "Complaints & side-effects",
+              "to": "/complaints",
+            },
+            {
+              "badge": "important",
+              "icon": "BellRing",
+              "label": "Needs you",
+              "to": "/messages?box=important",
+            },
+            {
+              "badge": "updates",
+              "icon": "Inbox",
+              "label": "Updates",
+              "to": "/messages?box=updates",
+            },
+            {
+              "badge": "messages",
+              "icon": "MessageCircle",
+              "label": "Chats",
+              "to": "/messages",
+            },
+          ],
+          "icon": "MessageCircle",
+          "label": "Messages",
+          "short": "Messages",
+          "to": "/decisions",
+        },
+      ],
+    },
+  ],
+  "tabs": null,
+}
+`;
+
+exports[`each MedRep's menu > B2B CRR sees the same menu 1`] = `
+{
+  "cta": {
+    "label": "Create New Order",
+    "short": "New order",
+    "to": "/orders/new",
+  },
+  "cta2": null,
+  "desk": "CRR · Retention & Reorder",
+  "groups": [
+    {
+      "items": [
+        {
+          "icon": "House",
+          "label": "Home",
+          "to": "/",
+        },
+        {
+          "badge": "refills",
+          "icon": "PhoneCall",
+          "label": "Accounts to call",
+          "short": "Call",
+          "to": "/to-call",
+        },
+        {
+          "icon": "BuildingComplex",
+          "label": "My accounts",
+          "short": "Accounts",
+          "to": "/b2b/accounts",
+        },
+        {
+          "children": [
+            {
+              "badge": "sentBack",
+              "icon": "ClipboardList",
+              "label": "All my orders",
+              "to": "/orders",
+            },
+            {
+              "icon": "PackageCheck",
+              "label": "Delivered",
+              "to": "/orders?stage=delivered",
+            },
+          ],
+          "icon": "ClipboardList",
+          "label": "My orders",
+          "short": "Orders",
+          "to": "/orders",
+        },
+        {
+          "icon": "HandCoins",
+          "label": "Collections",
+          "to": "/collections",
+        },
+        {
+          "children": [
+            {
+              "icon": "Gauge",
+              "label": "My score",
+              "to": "/my/score",
+            },
+            {
+              "icon": "TrendingUp",
+              "label": "Sales performance",
+              "to": "/sales-performance",
+            },
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "to": "/calls",
+            },
+          ],
+          "icon": "Gauge",
+          "label": "My numbers",
+          "short": "Numbers",
+          "to": "/my/score",
+        },
+      ],
+    },
+    {
+      "items": [
+        {
+          "icon": "Pill",
+          "label": "Medicines & stock",
+          "short": "Stock",
+          "to": "/medicines",
+        },
+      ],
+      "title": "Look up",
+    },
+    {
+      "divider": true,
+      "items": [
+        {
+          "children": [
+            {
+              "icon": "CalendarDays",
+              "label": "Leave & forms",
+              "to": "/me/leave",
+            },
+            {
+              "icon": "ReceiptText",
+              "label": "My payslips",
+              "to": "/me/payslips",
+            },
+          ],
+          "icon": "User",
+          "label": "Me",
+          "short": "Me",
+          "to": "/me/leave",
+        },
+        {
+          "children": [
+            {
+              "badge": "decisions",
+              "icon": "ListChecks",
+              "label": "To decide",
+              "to": "/decisions",
+            },
+            {
+              "icon": "ShieldAlert",
+              "label": "Complaints & side-effects",
+              "to": "/complaints",
+            },
+            {
+              "badge": "important",
+              "icon": "BellRing",
+              "label": "Needs you",
+              "to": "/messages?box=important",
+            },
+            {
+              "badge": "updates",
+              "icon": "Inbox",
+              "label": "Updates",
+              "to": "/messages?box=updates",
+            },
+            {
+              "badge": "messages",
+              "icon": "MessageCircle",
+              "label": "Chats",
+              "to": "/messages",
+            },
+          ],
+          "icon": "MessageCircle",
+          "label": "Messages",
+          "short": "Messages",
+          "to": "/decisions",
+        },
+      ],
+    },
+  ],
+  "tabs": null,
+}
+`;
+
+exports[`each MedRep's menu > B2B NBD sees the same menu 1`] = `
+{
+  "cta": {
+    "label": "Create New Order",
+    "short": "New order",
+    "to": "/orders/new",
+  },
+  "cta2": null,
+  "desk": "NBD · New Business",
+  "groups": [
+    {
+      "items": [
+        {
+          "icon": "House",
+          "label": "Home",
+          "to": "/",
+        },
+        {
+          "children": [
+            {
+              "icon": "BuildingComplex",
+              "label": "My prospects",
+              "to": "/b2b/prospects",
+            },
+            {
+              "icon": "UserCheck",
+              "label": "Handed over",
+              "to": "/b2b/prospects?view=handed",
+            },
+          ],
+          "icon": "BuildingComplex",
+          "label": "Prospects",
+          "short": "Prospects",
+          "to": "/b2b/prospects",
+        },
+        {
+          "badge": "sentBack",
+          "icon": "ClipboardList",
+          "label": "My orders",
+          "short": "Orders",
+          "to": "/orders",
+        },
+        {
+          "children": [
+            {
+              "icon": "Gauge",
+              "label": "My score",
+              "to": "/my/score",
+            },
+            {
+              "icon": "TrendingUp",
+              "label": "Sales performance",
+              "to": "/sales-performance",
+            },
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "short": "Calls",
+              "to": "/calls",
+            },
+          ],
+          "icon": "Gauge",
+          "label": "My numbers",
+          "short": "Numbers",
+          "to": "/my/score",
+        },
+      ],
+    },
+    {
+      "items": [
+        {
+          "icon": "Pill",
+          "label": "Medicines & stock",
+          "short": "Stock",
+          "to": "/medicines",
+        },
+      ],
+      "title": "Look up",
+    },
+    {
+      "divider": true,
+      "items": [
+        {
+          "children": [
+            {
+              "icon": "CalendarDays",
+              "label": "Leave & forms",
+              "to": "/me/leave",
+            },
+            {
+              "icon": "ReceiptText",
+              "label": "My payslips",
+              "to": "/me/payslips",
+            },
+          ],
+          "icon": "User",
+          "label": "Me",
+          "short": "Me",
+          "to": "/me/leave",
+        },
+        {
+          "children": [
+            {
+              "badge": "decisions",
+              "icon": "ListChecks",
+              "label": "To decide",
+              "to": "/decisions",
+            },
+            {
+              "icon": "ShieldAlert",
+              "label": "Complaints & side-effects",
+              "to": "/complaints",
+            },
+            {
+              "badge": "important",
+              "icon": "BellRing",
+              "label": "Needs you",
+              "to": "/messages?box=important",
+            },
+            {
+              "badge": "updates",
+              "icon": "Inbox",
+              "label": "Updates",
+              "to": "/messages?box=updates",
+            },
+            {
+              "badge": "messages",
+              "icon": "MessageCircle",
+              "label": "Chats",
+              "to": "/messages",
+            },
+          ],
+          "icon": "MessageCircle",
+          "label": "Messages",
+          "short": "Messages",
+          "to": "/decisions",
+        },
+      ],
+    },
+  ],
+  "tabs": null,
+}
+`;
+
+exports[`each MedRep's menu > CLIDP sees the same menu 1`] = `
+{
+  "cta": {
+    "label": "Create New Order",
+    "short": "New order",
+    "to": "/orders/new",
+  },
+  "cta2": null,
+  "desk": "CLIDP Sales Coach",
+  "groups": [
+    {
+      "items": [
+        {
+          "icon": "House",
+          "label": "Home",
+          "to": "/",
+        },
+        {
+          "children": [
+            {
+              "icon": "BuildingComplex",
+              "label": "Pharmacies and distributors",
+              "to": "/clidp/road",
+            },
+            {
+              "icon": "BuildingComplex",
+              "label": "My accounts",
+              "to": "/my/area",
+            },
+            {
+              "badge": "refills",
+              "icon": "PhoneCall",
+              "label": "Accounts to call",
+              "to": "/to-call",
+            },
+            {
+              "icon": "FileText",
+              "label": "Listings",
+              "to": "/clidp/listings",
+            },
+            {
+              "icon": "HandCoins",
+              "label": "Collections",
+              "to": "/collections",
+            },
+          ],
+          "icon": "BuildingComplex",
+          "label": "Accounts",
+          "short": "Accounts",
+          "to": "/clidp/road",
+        },
+        {
+          "badge": "sentBack",
+          "icon": "ClipboardList",
+          "label": "My orders",
+          "short": "Orders",
+          "to": "/orders",
+        },
+        {
+          "children": [
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "to": "/calls",
+            },
+            {
+              "icon": "TrendingUp",
+              "label": "Sales performance",
+              "to": "/sales-performance",
+            },
+          ],
+          "icon": "Gauge",
+          "label": "My numbers",
+          "short": "Numbers",
+          "to": "/calls",
+        },
+      ],
+    },
+    {
+      "items": [
+        {
+          "icon": "Pill",
+          "label": "Medicines & stock",
+          "short": "Stock",
+          "to": "/medicines",
+        },
+      ],
+      "title": "Look up",
+    },
+    {
+      "divider": true,
+      "items": [
+        {
+          "children": [
+            {
+              "icon": "CalendarDays",
+              "label": "Leave & forms",
+              "to": "/me/leave",
+            },
+            {
+              "icon": "ReceiptText",
+              "label": "My payslips",
+              "to": "/me/payslips",
+            },
+          ],
+          "icon": "User",
+          "label": "Me",
+          "short": "Me",
+          "to": "/me/leave",
+        },
+        {
+          "children": [
+            {
+              "badge": "decisions",
+              "icon": "ListChecks",
+              "label": "To decide",
+              "to": "/decisions",
+            },
+            {
+              "icon": "ShieldAlert",
+              "label": "Complaints & side-effects",
+              "to": "/complaints",
+            },
+            {
+              "badge": "important",
+              "icon": "BellRing",
+              "label": "Needs you",
+              "to": "/messages?box=important",
+            },
+            {
+              "badge": "updates",
+              "icon": "Inbox",
+              "label": "Updates",
+              "to": "/messages?box=updates",
+            },
+            {
+              "badge": "messages",
+              "icon": "MessageCircle",
+              "label": "Chats",
+              "to": "/messages",
+            },
+          ],
+          "icon": "MessageCircle",
+          "label": "Messages",
+          "short": "Messages",
+          "to": "/decisions",
+        },
+      ],
+    },
+  ],
+  "tabs": null,
+}
+`;
+
+exports[`each MedRep's menu > Government Bidding sees the same menu 1`] = `
+{
+  "cta": {
+    "label": "Create New Order",
+    "short": "New order",
+    "to": "/orders/new",
+  },
+  "cta2": {
+    "label": "Record a tender",
+    "to": "/tenders",
+  },
+  "desk": "Government Bidding",
+  "groups": [
+    {
+      "items": [
+        {
+          "icon": "House",
+          "label": "Home",
+          "to": "/",
+        },
+        {
+          "children": [
+            {
+              "icon": "FileText",
+              "label": "All tenders",
+              "to": "/tenders",
+            },
+            {
+              "icon": "Search",
+              "label": "Tender finder",
+              "to": "/tenders/finder",
+            },
+            {
+              "icon": "FileText",
+              "label": "Bid report",
+              "to": "/tenders/report",
+            },
+            {
+              "icon": "ClipboardCheck",
+              "label": "Documents",
+              "to": "/company-papers",
+            },
+          ],
+          "icon": "FileText",
+          "label": "Tenders",
+          "short": "Tenders",
+          "to": "/tenders",
+        },
+        {
+          "badge": "sentBack",
+          "icon": "ClipboardList",
+          "label": "My orders",
+          "short": "Orders",
+          "to": "/orders",
+        },
+        {
+          "icon": "HandCoins",
+          "label": "Collections",
+          "to": "/collections",
+        },
+        {
+          "children": [
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "to": "/calls",
+            },
+            {
+              "icon": "TrendingUp",
+              "label": "Sales performance",
+              "to": "/sales-performance",
+            },
+          ],
+          "icon": "Gauge",
+          "label": "My numbers",
+          "short": "Numbers",
+          "to": "/calls",
+        },
+      ],
+    },
+    {
+      "items": [
+        {
+          "icon": "Pill",
+          "label": "Medicines & stock",
+          "short": "Stock",
+          "to": "/medicines",
+        },
+      ],
+      "title": "Look up",
+    },
+    {
+      "divider": true,
+      "items": [
+        {
+          "children": [
+            {
+              "icon": "CalendarDays",
+              "label": "Leave & forms",
+              "to": "/me/leave",
+            },
+            {
+              "icon": "ReceiptText",
+              "label": "My payslips",
+              "to": "/me/payslips",
+            },
+          ],
+          "icon": "User",
+          "label": "Me",
+          "short": "Me",
+          "to": "/me/leave",
+        },
+        {
+          "children": [
+            {
+              "badge": "decisions",
+              "icon": "ListChecks",
+              "label": "To decide",
+              "to": "/decisions",
+            },
+            {
+              "icon": "ShieldAlert",
+              "label": "Complaints & side-effects",
+              "to": "/complaints",
+            },
+            {
+              "badge": "important",
+              "icon": "BellRing",
+              "label": "Needs you",
+              "to": "/messages?box=important",
+            },
+            {
+              "badge": "updates",
+              "icon": "Inbox",
+              "label": "Updates",
+              "to": "/messages?box=updates",
+            },
+            {
+              "badge": "messages",
+              "icon": "MessageCircle",
+              "label": "Chats",
+              "to": "/messages",
+            },
+          ],
+          "icon": "MessageCircle",
+          "label": "Messages",
+          "short": "Messages",
+          "to": "/decisions",
+        },
+      ],
+    },
+  ],
+  "tabs": null,
+}
+`;
+
+exports[`each MedRep's menu > Hospital CHC sees the same menu 1`] = `
+{
+  "cta": {
+    "label": "Create New Order",
+    "short": "New order",
+    "to": "/orders/new",
+  },
+  "cta2": null,
+  "desk": "Hospital CHC",
+  "groups": [
+    {
+      "items": [
+        {
+          "icon": "House",
+          "label": "Home",
+          "to": "/",
+        },
+        {
+          "badge": "sentBack",
+          "icon": "ClipboardList",
+          "label": "My orders",
+          "short": "Orders",
+          "to": "/orders",
+        },
+        {
+          "children": [
+            {
+              "icon": "BuildingComplex",
+              "label": "My hospitals",
+              "to": "/hospital-board",
+            },
+            {
+              "badge": "refills",
+              "icon": "PhoneCall",
+              "label": "Hospitals to call",
+              "to": "/to-call",
+            },
+            {
+              "icon": "HandCoins",
+              "label": "Collections",
+              "to": "/collections",
+            },
+            {
+              "icon": "BuildingComplex",
+              "label": "All my customers",
+              "to": "/my/area",
+            },
+          ],
+          "icon": "BuildingComplex",
+          "label": "Hospitals",
+          "short": "Hospitals",
+          "to": "/hospital-board",
+        },
+        {
+          "children": [
+            {
+              "icon": "Smartphone",
+              "label": "My day",
+              "to": "/field",
+            },
+            {
+              "icon": "CalendarCheck",
+              "label": "Today's visits",
+              "to": "/visits",
+            },
+            {
+              "icon": "CalendarRange",
+              "label": "Tour plan",
+              "to": "/field/plan",
+            },
+            {
+              "icon": "Stethoscope",
+              "label": "KOLs, hospitals, KBLs",
+              "to": "/field/clients",
+            },
+            {
+              "icon": "CalendarDays",
+              "label": "Calendar",
+              "to": "/visits/calendar",
+            },
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "to": "/calls",
+            },
+            {
+              "icon": "Receipt",
+              "label": "My expenses",
+              "to": "/visits/expenses",
+            },
+            {
+              "icon": "Gift",
+              "label": "My samples & gifts",
+              "to": "/me/samples",
+            },
+          ],
+          "icon": "CalendarCheck",
+          "label": "Visits",
+          "short": "Visits",
+          "to": "/field",
+        },
+        {
+          "children": [
+            {
+              "icon": "Megaphone",
+              "label": "Tonight's huddle",
+              "to": "/huddle",
+            },
+            {
+              "icon": "Gauge",
+              "label": "My score",
+              "to": "/my/score",
+            },
+            {
+              "icon": "TrendingUp",
+              "label": "Sales performance",
+              "to": "/sales-performance",
+            },
+          ],
+          "icon": "Gauge",
+          "label": "My numbers",
+          "short": "Numbers",
+          "to": "/huddle",
+        },
+      ],
+    },
+    {
+      "items": [
+        {
+          "icon": "Pill",
+          "label": "Medicines & stock",
+          "short": "Stock",
+          "to": "/medicines",
+        },
+      ],
+      "title": "Look up",
+    },
+    {
+      "divider": true,
+      "items": [
+        {
+          "children": [
+            {
+              "icon": "CalendarDays",
+              "label": "Leave & forms",
+              "to": "/me/leave",
+            },
+            {
+              "icon": "ReceiptText",
+              "label": "My payslips",
+              "to": "/me/payslips",
+            },
+          ],
+          "icon": "User",
+          "label": "Me",
+          "short": "Me",
+          "to": "/me/leave",
+        },
+        {
+          "children": [
+            {
+              "badge": "decisions",
+              "icon": "ListChecks",
+              "label": "To decide",
+              "to": "/decisions",
+            },
+            {
+              "icon": "ShieldAlert",
+              "label": "Complaints & side-effects",
+              "to": "/complaints",
+            },
+            {
+              "badge": "important",
+              "icon": "BellRing",
+              "label": "Needs you",
+              "to": "/messages?box=important",
+            },
+            {
+              "badge": "updates",
+              "icon": "Inbox",
+              "label": "Updates",
+              "to": "/messages?box=updates",
+            },
+            {
+              "badge": "messages",
+              "icon": "MessageCircle",
+              "label": "Chats",
+              "to": "/messages",
+            },
+          ],
+          "icon": "MessageCircle",
+          "label": "Messages",
+          "short": "Messages",
+          "to": "/decisions",
+        },
+      ],
+    },
+  ],
+  "tabs": null,
+}
+`;
+
+exports[`each MedRep's menu > Hospital bidding coachee sees the same menu 1`] = `
+{
+  "cta": {
+    "label": "Create New Order",
+    "short": "New order",
+    "to": "/orders/new",
+  },
+  "cta2": null,
+  "desk": "Government Account",
+  "groups": [
+    {
+      "items": [
+        {
+          "icon": "House",
+          "label": "Home",
+          "to": "/",
+        },
+        {
+          "badge": "sentBack",
+          "icon": "ClipboardList",
+          "label": "My orders",
+          "short": "Orders",
+          "to": "/orders",
+        },
+        {
+          "children": [
+            {
+              "icon": "BuildingComplex",
+              "label": "My hospitals",
+              "to": "/hospital-board",
+            },
+            {
+              "badge": "refills",
+              "icon": "PhoneCall",
+              "label": "Hospitals to call",
+              "to": "/to-call",
+            },
+            {
+              "icon": "HandCoins",
+              "label": "Collections",
+              "to": "/collections",
+            },
+            {
+              "icon": "BuildingComplex",
+              "label": "All my customers",
+              "to": "/my/area",
+            },
+          ],
+          "icon": "BuildingComplex",
+          "label": "Hospitals",
+          "short": "Hospitals",
+          "to": "/hospital-board",
+        },
+        {
+          "children": [
+            {
+              "icon": "Smartphone",
+              "label": "My day",
+              "to": "/field",
+            },
+            {
+              "icon": "CalendarCheck",
+              "label": "Today's visits",
+              "to": "/visits",
+            },
+            {
+              "icon": "CalendarRange",
+              "label": "Tour plan",
+              "to": "/field/plan",
+            },
+            {
+              "icon": "Stethoscope",
+              "label": "KOLs, hospitals, KBLs",
+              "to": "/field/clients",
+            },
+            {
+              "icon": "CalendarDays",
+              "label": "Calendar",
+              "to": "/visits/calendar",
+            },
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "to": "/calls",
+            },
+            {
+              "icon": "Receipt",
+              "label": "My expenses",
+              "to": "/visits/expenses",
+            },
+            {
+              "icon": "Gift",
+              "label": "My samples & gifts",
+              "to": "/me/samples",
+            },
+          ],
+          "icon": "CalendarCheck",
+          "label": "Visits",
+          "short": "Visits",
+          "to": "/field",
+        },
+        {
+          "children": [
+            {
+              "icon": "FileText",
+              "label": "All tenders",
+              "to": "/tenders",
+            },
+            {
+              "icon": "Search",
+              "label": "Tender finder",
+              "to": "/tenders/finder",
+            },
+            {
+              "icon": "FileText",
+              "label": "Bid report",
+              "to": "/tenders/report",
+            },
+            {
+              "icon": "ClipboardCheck",
+              "label": "Documents",
+              "to": "/company-papers",
+            },
+          ],
+          "icon": "FileText",
+          "label": "Tenders",
+          "short": "Tenders",
+          "to": "/tenders",
+        },
+        {
+          "children": [
+            {
+              "icon": "Gauge",
+              "label": "My score",
+              "to": "/my/score",
+            },
+            {
+              "icon": "TrendingUp",
+              "label": "Sales performance",
+              "to": "/sales-performance",
+            },
+          ],
+          "icon": "Gauge",
+          "label": "My numbers",
+          "short": "Numbers",
+          "to": "/my/score",
+        },
+      ],
+    },
+    {
+      "items": [
+        {
+          "icon": "Pill",
+          "label": "Medicines & stock",
+          "short": "Stock",
+          "to": "/medicines",
+        },
+      ],
+      "title": "Look up",
+    },
+    {
+      "divider": true,
+      "items": [
+        {
+          "children": [
+            {
+              "icon": "CalendarDays",
+              "label": "Leave & forms",
+              "to": "/me/leave",
+            },
+            {
+              "icon": "ReceiptText",
+              "label": "My payslips",
+              "to": "/me/payslips",
+            },
+          ],
+          "icon": "User",
+          "label": "Me",
+          "short": "Me",
+          "to": "/me/leave",
+        },
+        {
+          "children": [
+            {
+              "badge": "decisions",
+              "icon": "ListChecks",
+              "label": "To decide",
+              "to": "/decisions",
+            },
+            {
+              "icon": "ShieldAlert",
+              "label": "Complaints & side-effects",
+              "to": "/complaints",
+            },
+            {
+              "badge": "important",
+              "icon": "BellRing",
+              "label": "Needs you",
+              "to": "/messages?box=important",
+            },
+            {
+              "badge": "updates",
+              "icon": "Inbox",
+              "label": "Updates",
+              "to": "/messages?box=updates",
+            },
+            {
+              "badge": "messages",
+              "icon": "MessageCircle",
+              "label": "Chats",
+              "to": "/messages",
+            },
+          ],
+          "icon": "MessageCircle",
+          "label": "Messages",
+          "short": "Messages",
+          "to": "/decisions",
+        },
+      ],
+    },
+  ],
+  "tabs": null,
+}
+`;
+
+exports[`each MedRep's menu > MD Telesales Anesthesia sees the same menu 1`] = `
+{
+  "cta": {
+    "label": "Create New Order",
+    "short": "New order",
+    "to": "/orders/new",
+  },
+  "cta2": null,
+  "desk": "MD Telesales – Anesthesia",
+  "groups": [
+    {
+      "items": [
+        {
+          "icon": "House",
+          "label": "Home",
+          "to": "/",
+        },
+        {
+          "badge": "refills",
+          "icon": "PhoneCall",
+          "label": "Customers to call",
+          "short": "Call",
+          "to": "/to-call",
+        },
+        {
+          "badge": "sentBack",
+          "icon": "ClipboardList",
+          "label": "My orders",
+          "short": "Orders",
+          "to": "/orders",
+        },
+        {
+          "children": [
+            {
+              "icon": "BuildingComplex",
+              "label": "My customers",
+              "to": "/my/area",
+            },
+            {
+              "icon": "HandCoins",
+              "label": "Collections",
+              "to": "/collections",
+            },
+          ],
+          "icon": "BuildingComplex",
+          "label": "Customers",
+          "short": "Customers",
+          "to": "/my/area",
+        },
+        {
+          "children": [
+            {
+              "icon": "Gauge",
+              "label": "My score",
+              "to": "/my/score",
+            },
+            {
+              "icon": "TrendingUp",
+              "label": "Sales performance",
+              "to": "/sales-performance",
+            },
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "to": "/calls",
+            },
+          ],
+          "icon": "Gauge",
+          "label": "My numbers",
+          "short": "Numbers",
+          "to": "/my/score",
+        },
+      ],
+    },
+    {
+      "items": [
+        {
+          "icon": "Pill",
+          "label": "Medicines & stock",
+          "short": "Stock",
+          "to": "/medicines",
+        },
+      ],
+      "title": "Look up",
+    },
+    {
+      "divider": true,
+      "items": [
+        {
+          "children": [
+            {
+              "icon": "CalendarDays",
+              "label": "Leave & forms",
+              "to": "/me/leave",
+            },
+            {
+              "icon": "ReceiptText",
+              "label": "My payslips",
+              "to": "/me/payslips",
+            },
+          ],
+          "icon": "User",
+          "label": "Me",
+          "short": "Me",
+          "to": "/me/leave",
+        },
+        {
+          "children": [
+            {
+              "badge": "decisions",
+              "icon": "ListChecks",
+              "label": "To decide",
+              "to": "/decisions",
+            },
+            {
+              "icon": "ShieldAlert",
+              "label": "Complaints & side-effects",
+              "to": "/complaints",
+            },
+            {
+              "badge": "important",
+              "icon": "BellRing",
+              "label": "Needs you",
+              "to": "/messages?box=important",
+            },
+            {
+              "badge": "updates",
+              "icon": "Inbox",
+              "label": "Updates",
+              "to": "/messages?box=updates",
+            },
+            {
+              "badge": "messages",
+              "icon": "MessageCircle",
+              "label": "Chats",
+              "to": "/messages",
+            },
+          ],
+          "icon": "MessageCircle",
+          "label": "Messages",
+          "short": "Messages",
+          "to": "/decisions",
+        },
+      ],
+    },
+  ],
+  "tabs": null,
+}
+`;
+
+exports[`each MedRep's menu > MD Telesales Oncology sees the same menu 1`] = `
+{
+  "cta": {
+    "label": "Create New Order",
+    "short": "New order",
+    "to": "/orders/new",
+  },
+  "cta2": null,
+  "desk": "MD Telesales",
+  "groups": [
+    {
+      "items": [
+        {
+          "icon": "House",
+          "label": "Home",
+          "to": "/",
+        },
+        {
+          "badge": "refills",
+          "icon": "Pill",
+          "label": "Refills due",
+          "short": "Refills",
+          "to": "/to-call",
+        },
+        {
+          "badge": "sentBack",
+          "icon": "ClipboardList",
+          "label": "My orders",
+          "short": "Orders",
+          "to": "/orders",
+        },
+        {
+          "children": [
+            {
+              "icon": "Users",
+              "label": "My patients",
+              "to": "/my/area",
+            },
+            {
+              "icon": "Users",
+              "label": "Care groups",
+              "to": "/care-groups",
+            },
+          ],
+          "icon": "Users",
+          "label": "Patients",
+          "short": "Patients",
+          "to": "/my/area",
+        },
+        {
+          "children": [
+            {
+              "icon": "Gauge",
+              "label": "My score",
+              "to": "/my/score",
+            },
+            {
+              "icon": "TrendingUp",
+              "label": "Sales performance",
+              "to": "/sales-performance",
+            },
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "to": "/calls",
+            },
+          ],
+          "icon": "Gauge",
+          "label": "My numbers",
+          "short": "Numbers",
+          "to": "/my/score",
+        },
+      ],
+    },
+    {
+      "items": [
+        {
+          "icon": "Pill",
+          "label": "Medicines & stock",
+          "short": "Stock",
+          "to": "/medicines",
+        },
+      ],
+      "title": "Look up",
+    },
+    {
+      "divider": true,
+      "items": [
+        {
+          "children": [
+            {
+              "icon": "CalendarDays",
+              "label": "Leave & forms",
+              "to": "/me/leave",
+            },
+            {
+              "icon": "ReceiptText",
+              "label": "My payslips",
+              "to": "/me/payslips",
+            },
+          ],
+          "icon": "User",
+          "label": "Me",
+          "short": "Me",
+          "to": "/me/leave",
+        },
+        {
+          "children": [
+            {
+              "badge": "decisions",
+              "icon": "ListChecks",
+              "label": "To decide",
+              "to": "/decisions",
+            },
+            {
+              "icon": "ShieldAlert",
+              "label": "Complaints & side-effects",
+              "to": "/complaints",
+            },
+            {
+              "badge": "important",
+              "icon": "BellRing",
+              "label": "Needs you",
+              "to": "/messages?box=important",
+            },
+            {
+              "badge": "updates",
+              "icon": "Inbox",
+              "label": "Updates",
+              "to": "/messages?box=updates",
+            },
+            {
+              "badge": "messages",
+              "icon": "MessageCircle",
+              "label": "Chats",
+              "to": "/messages",
+            },
+          ],
+          "icon": "MessageCircle",
+          "label": "Messages",
+          "short": "Messages",
+          "to": "/decisions",
+        },
+      ],
+    },
+  ],
+  "tabs": null,
+}
+`;
+
+exports[`each MedRep's menu > MedRep with no channel sees the same menu 1`] = `
+{
+  "cta": {
+    "label": "Create New Order",
+    "short": "New order",
+    "to": "/orders/new",
+  },
+  "cta2": null,
+  "desk": "MedRep",
+  "groups": [
+    {
+      "items": [
+        {
+          "icon": "House",
+          "label": "Home",
+          "to": "/",
+        },
+        {
+          "badge": "sentBack",
+          "icon": "ClipboardList",
+          "label": "My orders",
+          "short": "Orders",
+          "to": "/orders",
+        },
+        {
+          "children": [
+            {
+              "icon": "MapPin",
+              "label": "My area",
+              "to": "/my/area",
+            },
+            {
+              "badge": "refills",
+              "icon": "PhoneCall",
+              "label": "Customers to call",
+              "to": "/to-call",
+            },
+          ],
+          "icon": "MapPin",
+          "label": "Customers",
+          "short": "Customers",
+          "to": "/my/area",
+        },
+        {
+          "children": [
+            {
+              "icon": "Smartphone",
+              "label": "My day",
+              "to": "/field",
+            },
+            {
+              "icon": "CalendarCheck",
+              "label": "Today's visits",
+              "to": "/visits",
+            },
+            {
+              "icon": "CalendarRange",
+              "label": "Tour plan",
+              "to": "/field/plan",
+            },
+            {
+              "icon": "Stethoscope",
+              "label": "KOLs, hospitals, KBLs",
+              "to": "/field/clients",
+            },
+            {
+              "icon": "CalendarDays",
+              "label": "Calendar",
+              "to": "/visits/calendar",
+            },
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "to": "/calls",
+            },
+            {
+              "icon": "Receipt",
+              "label": "My expenses",
+              "to": "/visits/expenses",
+            },
+            {
+              "icon": "Gift",
+              "label": "My samples & gifts",
+              "to": "/me/samples",
+            },
+          ],
+          "icon": "CalendarCheck",
+          "label": "Visits",
+          "short": "Visits",
+          "to": "/field",
+        },
+        {
+          "children": [
+            {
+              "icon": "Gauge",
+              "label": "My score",
+              "to": "/my/score",
+            },
+            {
+              "icon": "TrendingUp",
+              "label": "Sales performance",
+              "to": "/sales-performance",
+            },
+          ],
+          "icon": "Gauge",
+          "label": "My numbers",
+          "short": "Numbers",
+          "to": "/my/score",
+        },
+      ],
+    },
+    {
+      "items": [
+        {
+          "icon": "Pill",
+          "label": "Medicines & stock",
+          "short": "Stock",
+          "to": "/medicines",
+        },
+      ],
+      "title": "Look up",
+    },
+    {
+      "divider": true,
+      "items": [
+        {
+          "children": [
+            {
+              "icon": "CalendarDays",
+              "label": "Leave & forms",
+              "to": "/me/leave",
+            },
+            {
+              "icon": "ReceiptText",
+              "label": "My payslips",
+              "to": "/me/payslips",
+            },
+          ],
+          "icon": "User",
+          "label": "Me",
+          "short": "Me",
+          "to": "/me/leave",
+        },
+        {
+          "children": [
+            {
+              "badge": "decisions",
+              "icon": "ListChecks",
+              "label": "To decide",
+              "to": "/decisions",
+            },
+            {
+              "icon": "ShieldAlert",
+              "label": "Complaints & side-effects",
+              "to": "/complaints",
+            },
+            {
+              "badge": "important",
+              "icon": "BellRing",
+              "label": "Needs you",
+              "to": "/messages?box=important",
+            },
+            {
+              "badge": "updates",
+              "icon": "Inbox",
+              "label": "Updates",
+              "to": "/messages?box=updates",
+            },
+            {
+              "badge": "messages",
+              "icon": "MessageCircle",
+              "label": "Chats",
+              "to": "/messages",
+            },
+          ],
+          "icon": "MessageCircle",
+          "label": "Messages",
+          "short": "Messages",
+          "to": "/decisions",
+        },
+      ],
+    },
+  ],
+  "tabs": null,
+}
+`;
+
+exports[`each MedRep's menu > Online B2C sees the same menu 1`] = `
+{
+  "cta": {
+    "label": "New lead",
+    "to": "/leads?new=1",
+  },
+  "cta2": null,
+  "desk": "Online desk",
+  "groups": [
+    {
+      "items": [
+        {
+          "icon": "House",
+          "label": "Home",
+          "to": "/",
+        },
+        {
+          "icon": "Inbox",
+          "label": "Leads & enquiries",
+          "to": "/leads",
+        },
+        {
+          "badge": "inbox",
+          "icon": "MessagesSquare",
+          "label": "Inbox",
+          "to": "/inbox",
+        },
+        {
+          "icon": "HeartHandshake",
+          "label": "With PAP",
+          "to": "/pap",
+        },
+        {
+          "badge": "refills",
+          "icon": "Pill",
+          "label": "Refills due",
+          "short": "Refills",
+          "to": "/to-call",
+        },
+        {
+          "badge": "sentBack",
+          "icon": "ClipboardList",
+          "label": "My orders",
+          "short": "Orders",
+          "to": "/orders",
+        },
+        {
+          "icon": "Users",
+          "label": "Patients",
+          "to": "/customers",
+        },
+        {
+          "icon": "Gift",
+          "label": "Points",
+          "to": "/points",
+        },
+        {
+          "children": [
+            {
+              "icon": "Gauge",
+              "label": "My score",
+              "short": "Score",
+              "to": "/my/score",
+            },
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "to": "/calls",
+            },
+            {
+              "icon": "TrendingUp",
+              "label": "Sales performance",
+              "to": "/sales-performance",
+            },
+          ],
+          "icon": "Gauge",
+          "label": "My numbers",
+          "short": "Numbers",
+          "to": "/my/score",
+        },
+      ],
+    },
+    {
+      "items": [
+        {
+          "icon": "Pill",
+          "label": "Medicines & stock",
+          "short": "Stock",
+          "to": "/medicines",
+        },
+      ],
+      "title": "Look up",
+    },
+    {
+      "divider": true,
+      "items": [
+        {
+          "children": [
+            {
+              "icon": "CalendarDays",
+              "label": "Leave & forms",
+              "to": "/me/leave",
+            },
+            {
+              "icon": "ReceiptText",
+              "label": "My payslips",
+              "to": "/me/payslips",
+            },
+          ],
+          "icon": "User",
+          "label": "Me",
+          "short": "Me",
+          "to": "/me/leave",
+        },
+        {
+          "children": [
+            {
+              "badge": "decisions",
+              "icon": "ListChecks",
+              "label": "To decide",
+              "to": "/decisions",
+            },
+            {
+              "icon": "ShieldAlert",
+              "label": "Complaints & side-effects",
+              "to": "/complaints",
+            },
+            {
+              "badge": "important",
+              "icon": "BellRing",
+              "label": "Needs you",
+              "to": "/messages?box=important",
+            },
+            {
+              "badge": "updates",
+              "icon": "Inbox",
+              "label": "Updates",
+              "to": "/messages?box=updates",
+            },
+            {
+              "badge": "messages",
+              "icon": "MessageCircle",
+              "label": "Chats",
+              "to": "/messages",
+            },
+          ],
+          "icon": "MessageCircle",
+          "label": "Messages",
+          "short": "Messages",
+          "to": "/decisions",
+        },
+      ],
+    },
+  ],
+  "tabs": null,
+}
+`;
+
+exports[`each MedRep's menu > PAP MedRep sees the same menu 1`] = `
+{
+  "cta": {
+    "label": "Create New Order",
+    "short": "New order",
+    "to": "/orders/new",
+  },
+  "cta2": {
+    "label": "New PAP case",
+    "to": "/pap?new=1",
+  },
+  "desk": "Patient Assistance (PAP)",
+  "groups": [
+    {
+      "items": [
+        {
+          "icon": "House",
+          "label": "Home",
+          "to": "/",
+        },
+        {
+          "icon": "HeartHandshake",
+          "label": "PAP cases",
+          "short": "Cases",
+          "to": "/pap",
+        },
+        {
+          "badge": "sentBack",
+          "icon": "ClipboardList",
+          "label": "My orders",
+          "short": "Orders",
+          "to": "/orders",
+        },
+        {
+          "children": [
+            {
+              "icon": "Users",
+              "label": "My patients",
+              "to": "/my/area",
+            },
+            {
+              "badge": "refills",
+              "icon": "PhoneCall",
+              "label": "Patients to call",
+              "to": "/to-call",
+            },
+          ],
+          "icon": "Users",
+          "label": "Patients",
+          "short": "Patients",
+          "to": "/my/area",
+        },
+        {
+          "children": [
+            {
+              "icon": "Smartphone",
+              "label": "My day",
+              "to": "/field",
+            },
+            {
+              "icon": "CalendarCheck",
+              "label": "Today's visits",
+              "to": "/visits",
+            },
+            {
+              "icon": "CalendarRange",
+              "label": "Tour plan",
+              "to": "/field/plan",
+            },
+            {
+              "icon": "Stethoscope",
+              "label": "KOLs, hospitals, KBLs",
+              "to": "/field/clients",
+            },
+            {
+              "icon": "CalendarDays",
+              "label": "Calendar",
+              "to": "/visits/calendar",
+            },
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "to": "/calls",
+            },
+            {
+              "icon": "Receipt",
+              "label": "My expenses",
+              "to": "/visits/expenses",
+            },
+            {
+              "icon": "Gift",
+              "label": "My samples & gifts",
+              "to": "/me/samples",
+            },
+          ],
+          "icon": "CalendarCheck",
+          "label": "Visits",
+          "short": "Visits",
+          "to": "/field",
+        },
+        {
+          "children": [
+            {
+              "icon": "Gauge",
+              "label": "My score",
+              "to": "/my/score",
+            },
+            {
+              "icon": "TrendingUp",
+              "label": "Sales performance",
+              "to": "/sales-performance",
+            },
+          ],
+          "icon": "Gauge",
+          "label": "My numbers",
+          "short": "Numbers",
+          "to": "/my/score",
+        },
+      ],
+    },
+    {
+      "items": [
+        {
+          "icon": "Pill",
+          "label": "Medicines & stock",
+          "short": "Stock",
+          "to": "/medicines",
+        },
+      ],
+      "title": "Look up",
+    },
+    {
+      "divider": true,
+      "items": [
+        {
+          "children": [
+            {
+              "icon": "CalendarDays",
+              "label": "Leave & forms",
+              "to": "/me/leave",
+            },
+            {
+              "icon": "ReceiptText",
+              "label": "My payslips",
+              "to": "/me/payslips",
+            },
+          ],
+          "icon": "User",
+          "label": "Me",
+          "short": "Me",
+          "to": "/me/leave",
+        },
+        {
+          "children": [
+            {
+              "badge": "decisions",
+              "icon": "ListChecks",
+              "label": "To decide",
+              "to": "/decisions",
+            },
+            {
+              "icon": "ShieldAlert",
+              "label": "Complaints & side-effects",
+              "to": "/complaints",
+            },
+            {
+              "badge": "important",
+              "icon": "BellRing",
+              "label": "Needs you",
+              "to": "/messages?box=important",
+            },
+            {
+              "badge": "updates",
+              "icon": "Inbox",
+              "label": "Updates",
+              "to": "/messages?box=updates",
+            },
+            {
+              "badge": "messages",
+              "icon": "MessageCircle",
+              "label": "Chats",
+              "to": "/messages",
+            },
+          ],
+          "icon": "MessageCircle",
+          "label": "Messages",
+          "short": "Messages",
+          "to": "/decisions",
+        },
+      ],
+    },
+  ],
+  "tabs": null,
+}
+`;
+
+exports[`each MedRep's menu > Rx CHC sees the same menu 1`] = `
+{
+  "cta": {
+    "label": "Create New Order",
+    "short": "New order",
+    "to": "/orders/new",
+  },
+  "cta2": {
+    "label": "Log a call",
+    "to": "/field",
+  },
+  "desk": "Rx CHC",
+  "groups": [
+    {
+      "items": [
+        {
+          "icon": "House",
+          "label": "Home",
+          "to": "/",
+        },
+        {
+          "badge": "sentBack",
+          "icon": "ClipboardList",
+          "label": "My orders",
+          "short": "Orders",
+          "to": "/orders",
+        },
+        {
+          "children": [
+            {
+              "icon": "Stethoscope",
+              "label": "My doctors",
+              "to": "/rx/doctors",
+            },
+            {
+              "icon": "Stethoscope",
+              "label": "My prescriptions",
+              "to": "/rx/business",
+            },
+            {
+              "icon": "Users",
+              "label": "Patient care groups",
+              "to": "/care-groups",
+            },
+          ],
+          "icon": "Stethoscope",
+          "label": "Doctors",
+          "short": "Doctors",
+          "to": "/rx/doctors",
+        },
+        {
+          "children": [
+            {
+              "icon": "Smartphone",
+              "label": "My day",
+              "to": "/field",
+            },
+            {
+              "icon": "CalendarCheck",
+              "label": "Today's calls",
+              "to": "/visits",
+            },
+            {
+              "icon": "CalendarRange",
+              "label": "Tour plan",
+              "to": "/field/plan",
+            },
+            {
+              "icon": "Stethoscope",
+              "label": "KOLs, hospitals, KBLs",
+              "to": "/field/clients",
+            },
+            {
+              "icon": "CalendarDays",
+              "label": "Calendar",
+              "to": "/visits/calendar",
+            },
+            {
+              "icon": "PhoneCall",
+              "label": "My phone calls",
+              "to": "/calls",
+            },
+            {
+              "icon": "Receipt",
+              "label": "My expenses",
+              "to": "/visits/expenses",
+            },
+            {
+              "icon": "Gift",
+              "label": "My samples & gifts",
+              "to": "/me/samples",
+            },
+          ],
+          "icon": "CalendarCheck",
+          "label": "Calls",
+          "short": "Calls",
+          "to": "/field",
+        },
+        {
+          "children": [
+            {
+              "icon": "Gauge",
+              "label": "My score",
+              "to": "/my/score",
+            },
+            {
+              "icon": "TrendingUp",
+              "label": "Sales performance",
+              "to": "/sales-performance",
+            },
+          ],
+          "icon": "Gauge",
+          "label": "My numbers",
+          "short": "Numbers",
+          "to": "/my/score",
+        },
+      ],
+    },
+    {
+      "items": [
+        {
+          "icon": "Pill",
+          "label": "Medicines & stock",
+          "short": "Stock",
+          "to": "/medicines",
+        },
+      ],
+      "title": "Look up",
+    },
+    {
+      "divider": true,
+      "items": [
+        {
+          "children": [
+            {
+              "icon": "CalendarDays",
+              "label": "Leave & forms",
+              "to": "/me/leave",
+            },
+            {
+              "icon": "ReceiptText",
+              "label": "My payslips",
+              "to": "/me/payslips",
+            },
+          ],
+          "icon": "User",
+          "label": "Me",
+          "short": "Me",
+          "to": "/me/leave",
+        },
+        {
+          "children": [
+            {
+              "badge": "decisions",
+              "icon": "ListChecks",
+              "label": "To decide",
+              "to": "/decisions",
+            },
+            {
+              "icon": "ShieldAlert",
+              "label": "Complaints & side-effects",
+              "to": "/complaints",
+            },
+            {
+              "badge": "important",
+              "icon": "BellRing",
+              "label": "Needs you",
+              "to": "/messages?box=important",
+            },
+            {
+              "badge": "updates",
+              "icon": "Inbox",
+              "label": "Updates",
+              "to": "/messages?box=updates",
+            },
+            {
+              "badge": "messages",
+              "icon": "MessageCircle",
+              "label": "Chats",
+              "to": "/messages",
+            },
+          ],
+          "icon": "MessageCircle",
+          "label": "Messages",
+          "short": "Messages",
+          "to": "/decisions",
+        },
+      ],
+    },
+  ],
+  "tabs": null,
+}
+`;
