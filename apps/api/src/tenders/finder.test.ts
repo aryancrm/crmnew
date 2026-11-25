@@ -347,11 +347,15 @@ describe("the tender finder: the team's pages", () => {
     expect((await app.request("/api/tenders/found")).status).toBe(401);
   });
 
-  it("New holds the open notices asking for our medicines that nobody took; the rest is under Everything found", async () => {
+  it("Opportunities holds every notice asking for our medicines, closed ones too; Everything found adds the rest", async () => {
     const fresh = await list("hazel", "?q=1245");
-    expect(fresh.rows.map((row) => row.refNo).sort()).toEqual(["12451001", "12451017", "12451033"]);
+    expect(fresh.view).toBe("opportunities");
+    expect(fresh.rows.map((row) => row.refNo).sort()).toEqual(["12450900", "12451001", "12451017", "12451033"]);
+    expect(fresh.counts.opportunities).toBeGreaterThanOrEqual(4);
+    // The old address (?view=new) lands on the Opportunities
+    expect((await list("hazel", "?view=new&q=1245")).view).toBe("opportunities");
     const all = await list("hazel", "?view=all&q=1245");
-    // The closed one and the one that is not ours are found, not new.
+    // The closed one is an opportunity still; the one that is not ours is only under Everything found.
     expect(all.rows.map((row) => row.refNo).sort()).toEqual(["12450900", "12451001", "12451017", "12451033", "12451050"]);
     expect(all.rows.find((row) => row.refNo === "12450900")).toMatchObject({ open: false, molecules: ["Capecitabine"] });
     expect(all.rows.find((row) => row.refNo === "12451050")?.molecules).toEqual([]);
@@ -448,7 +452,8 @@ describe("the tender finder: the team's pages", () => {
     expect((await post("jimmy", `/api/tenders/found/${id}/tender`, body)).status).toBe(409);
     expect((await post("hazel", `/api/tenders/found/${id}/screen`, { on: false })).status).toBe(409);
     expect((await list("hazel", "?view=tenders")).rows.map((row) => row.refNo)).toEqual(["12451001"]);
-    expect((await list("hazel", "?q=12451001")).rows.length).toBe(0);
+    // Made a tender, it stays among the Opportunities (every tender for our medicines), shown as the tender
+    expect((await list("hazel", "?q=12451001")).rows.map((row) => row.tenderId)).toEqual([tenderId]);
 
     // The tender's own road: the Admin approves the price, a complete envelope, submitted, won.
     const step = (who: string, input: unknown) => post(who, `/api/tenders/${tenderId}/step`, input);

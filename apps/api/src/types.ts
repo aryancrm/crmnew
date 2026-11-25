@@ -5738,7 +5738,8 @@ export type FoundTender = {
   lines: number;
 };
 
-export type FoundView = "new" | "screened" | "tenders" | "all";
+/** opportunities: every tender found that asks for one of our medicines (both portals, any state). */
+export type FoundView = "opportunities" | "screened" | "tenders" | "all";
 
 /** One run of the robot, as it reported it. */
 export type FindRun = { id: number; source: "philgeps" | "ps"; trigger: string | null; status: "success" | "failed"; summary: string | null; found: number; matched: number; fresh: number; at: string };

@@ -53,11 +53,28 @@ function Molecules({ names }: { names: string[] }) {
   );
 }
 
+/** Where a found tender stands, and New when the robot first fetched it in the last 24 hours. */
 function State({ found }: { found: FoundTender }) {
-  if (found.tenderId) return <Pill tone="good">Tender {found.tenderCode}</Pill>;
-  if (found.screenedAt) return <Pill tone="info">Screened</Pill>;
-  if (!found.open) return <Pill>Closed</Pill>;
-  return found.molecules.length ? <Pill tone="brand">New</Pill> : <Pill>Not ours</Pill>;
+  const fresh = Date.now() - Date.parse(found.firstSeenAt) < 86_400_000;
+  const state = found.tenderId ? (
+    <Pill tone="good">Tender {found.tenderCode}</Pill>
+  ) : found.screenedAt ? (
+    <Pill tone="info">Screened</Pill>
+  ) : !found.open ? (
+    <Pill>Closed</Pill>
+  ) : !found.molecules.length ? (
+    <Pill>Not ours</Pill>
+  ) : null;
+  return (
+    <>
+      {fresh && (
+        <span title={`First fetched ${when(found.firstSeenAt)}`}>
+          <Pill tone="brand">New</Pill>
+        </span>
+      )}
+      {state}
+    </>
+  );
 }
 
 /** The status box at the bottom right (as the bidding system shows its Sync): what a press of Fetch now
@@ -515,7 +532,8 @@ export function TenderFinderPage() {
   const queries = useQueryClient();
   const action = useAction();
   const [params, setParams] = useSearchParams();
-  const view = (params.get("view") ?? "new") as FoundView;
+  const asked = params.get("view");
+  const view: FoundView = asked === "screened" || asked === "tenders" || asked === "all" ? asked : "opportunities";
   const q = params.get("q") ?? "";
   const source = params.get("source") ?? "";
   const molecule = params.get("molecule") ?? "";
@@ -557,13 +575,13 @@ export function TenderFinderPage() {
       <Robot robot={data.robot} />
       <Tabs
         tabs={[
-          { key: "new" as const, label: "New", count: data.counts.new },
+          { key: "opportunities" as const, label: "Opportunities", count: data.counts.opportunities },
           { key: "screened" as const, label: "Screened", count: data.counts.screened },
           { key: "tenders" as const, label: "Made tenders", count: data.counts.tenders },
           { key: "all" as const, label: "Everything found", count: data.counts.all },
         ]}
         value={data.view}
-        onChange={(key) => set({ view: key === "new" ? "" : key })}
+        onChange={(key) => set({ view: key === "opportunities" ? "" : key })}
       />
       <form
         className="flex flex-wrap items-center gap-2"
@@ -601,8 +619,8 @@ export function TenderFinderPage() {
       <section className={`${CARD} min-w-0`}>
         {data.rows.length === 0 ? (
           <p className="px-4 py-6 text-center text-[13px] text-slate-500">
-            {data.view === "new"
-              ? "Nothing new: every open tender for our medicines is screened, made a tender, or closed."
+            {data.view === "opportunities"
+              ? "No tender for our medicines found yet on either portal."
               : data.view === "screened"
                 ? "Nothing screened and waiting. Add a tender worth bidding on from New."
                 : data.view === "tenders"

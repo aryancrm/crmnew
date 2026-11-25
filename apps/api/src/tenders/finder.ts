@@ -548,14 +548,15 @@ const foundSelect = sql`select f.id::int as id, f.source, f.ref_no as "refNo", f
   from tender_found f left join customer c on c.id = f.agency_id left join person p on p.id = f.screened_by left join tender t on t.id = f.tender_id`;
 
 const VIEW: Record<FoundView, SQL> = {
-  // New: asks for our molecules, still open, nobody has screened it or made it a tender.
-  new: sql`f.tender_id is null and f.screened_at is null and cardinality(f.molecules) > 0 and (f.closing_at is null or f.closing_at >= now())`,
+  // Opportunities: every tender found on either portal that asks for one of our molecules, whatever its
+  // state (open or closed, screened, made a tender); "Everything found" adds the ones that are not ours.
+  opportunities: sql`cardinality(f.molecules) > 0`,
   screened: sql`f.screened_at is not null and f.tender_id is null`,
   tenders: sql`f.tender_id is not null`,
   all: sql`true`,
 };
 const ORDER: Record<FoundView, SQL> = {
-  new: sql`f.first_seen_at desc, f.id desc`,
+  opportunities: sql`f.first_seen_at desc, f.id desc`,
   screened: sql`f.closing_at nulls last, f.id desc`,
   tenders: sql`f.tender_id desc`,
   all: sql`f.published_on desc nulls last, f.id desc`,
@@ -567,7 +568,7 @@ export async function listFound(
   asked: { view?: string | null; q?: string | null; source?: string | null; molecule?: string | null },
 ): Promise<FoundList> {
   await mustFind(db, me);
-  const view: FoundView = asked.view === "screened" || asked.view === "tenders" || asked.view === "all" ? asked.view : "new";
+  const view: FoundView = asked.view === "screened" || asked.view === "tenders" || asked.view === "all" ? asked.view : "opportunities";
   const filters: SQL[] = [];
   const q = (asked.q ?? "").trim().slice(0, 80);
   if (q) {
@@ -581,7 +582,7 @@ export async function listFound(
     rows<FoundTender>(db, sql`${foundSelect} where ${VIEW[view]} and ${where} order by ${ORDER[view]} limit 300`),
     rows<Record<FoundView, number>>(
       db,
-      sql`select count(*) filter (where ${VIEW.new})::int as new, count(*) filter (where ${VIEW.screened})::int as screened,
+      sql`select count(*) filter (where ${VIEW.opportunities})::int as opportunities, count(*) filter (where ${VIEW.screened})::int as screened,
           count(*) filter (where ${VIEW.tenders})::int as tenders, count(*)::int as all
         from tender_found f where ${where}`,
     ),
@@ -594,7 +595,7 @@ export async function listFound(
   return {
     view,
     rows: found,
-    counts: counts ?? { new: 0, screened: 0, tenders: 0, all: 0 },
+    counts: counts ?? { opportunities: 0, screened: 0, tenders: 0, all: 0 },
     molecules: molecules.map((one) => one.name),
     robot: { ready: robotReady(), runs, login, ps, fetch },
   };
@@ -612,10 +613,11 @@ const lastRuns = (db: Database) =>
       ) runs where n <= 6 order by moment desc, id desc`,
   );
 
-/** For the Tenders page's button: whether this seat has the finder, and how many are new. */
+/** For the Tenders page's button: whether this seat has the finder, and how many tenders for our medicines
+ *  the robot first fetched in the last 24 hours (the finder's New pill). */
 export async function foundCount(db: Database, me: Me): Promise<{ allowed: boolean; fresh: number }> {
   if (!(await finds(db, me))) return { allowed: false, fresh: 0 };
-  const [count] = await rows<{ n: number }>(db, sql`select count(*)::int as n from tender_found f where ${VIEW.new}`);
+  const [count] = await rows<{ n: number }>(db, sql`select count(*)::int as n from tender_found f where ${VIEW.opportunities} and f.first_seen_at > now() - interval '24 hours'`);
   return { allowed: true, fresh: count?.n ?? 0 };
 }
 
