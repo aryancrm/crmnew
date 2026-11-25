@@ -16,6 +16,10 @@ export const RENAMED: Record<string, string> = {
   "0133_own_passwords.sql": "0142_own_passwords.sql",
   "0134_profile_and_two_step.sql": "0143_profile_and_two_step.sql",
   "0135_sign_ups.sql": "0144_sign_ups.sql",
+  // 25 Nov 2026: the hr and ai5-migration branches had both used 0149-0150; hr's came first, so the
+  // tender finder's two moved after it.
+  "0149_tender_find_ask.sql": "0157_tender_find_ask.sql",
+  "0150_tender_find_ask_portal.sql": "0158_tender_find_ask_portal.sql",
 };
 
 export async function migrate(db: Database): Promise<string[]> {
