@@ -6,15 +6,73 @@
 // each MedRep's actions (visits, expenses, location on the map, tour plan, attendance, day report).
 
 import type { LeadQueue, TeamToday } from "@2mg/api/mr";
-import { WORK_WORDS } from "@2mg/api/mr";
+import { MEETING_WORDS, WORK_WORDS } from "@2mg/api/mr";
 import { useQuery } from "@tanstack/react-query";
 import { Trophy } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
+import { useMe } from "../auth";
+import { allItems, spaceFor } from "../menus";
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { CARD, PageState, Panel, peso } from "../ui";
 import { ActionSheet, clockOf, dayWords, MrHead, useMrMe } from "./parts";
+
+/** The field on a lead's or head's Home (Aryan, 23 Nov: "how does what the MedReps do reach the
+ *  lead?"): who is at work, the visits closed and what was ordered there, who hasn't started, and
+ *  what waits for the lead, each a press away. Only for a seat whose menu has the team's field day
+ *  (the hospital and Rx lines; a B2B, bidding or TeleSales lead has no field day to watch). */
+export function FieldTodayCard() {
+  const me = useMe().data;
+  const mr = useMrMe();
+  const watches =
+    Boolean(me) &&
+    (mr.data?.access === "lead" || mr.data?.access === "viewer") &&
+    spaceFor(me as NonNullable<typeof me>, "/").groups.some((group) => allItems(group.items).some((item) => item.to === "/field/team"));
+  const query = useQuery({
+    queryKey: ["mr", "team", null],
+    queryFn: () => api<TeamToday>("/api/mr/team"),
+    enabled: watches,
+    refetchInterval: 60_000,
+  });
+  const data = query.data;
+  if (!watches || !data || data.totals.people === 0) return null;
+  const t = data.totals;
+  const w = data.waiting;
+  // Named only when they have visits today and haven't started: a TeleSales or bidding seat under
+  // the same head has no field day to start, and must not read as late.
+  const idle = data.people.filter((one) => !one.started && one.visits > 0);
+  const at = data.people.filter((one) => one.at && !one.ended);
+  return (
+    <section className={`${CARD} flex flex-col gap-3 border-sky-200 p-4`}>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-bold text-slate-900">The field today</h2>
+        <Link to="/field/team" className="text-xs font-semibold text-sky-700 hover:underline">Team today →</Link>
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+        <Figure label="Started the field day" value={t.started} />
+        <Figure label="Visits closed" value={t.planned > 0 ? `${t.done} of ${Math.max(t.planned, t.done)}` : t.done} />
+        <Figure label="Ordered at visits" value={t.bookedAmount ? peso(t.bookedAmount) : "—"} />
+        <Figure label="Waiting for you" value={w.reports + w.judge + w.plans + w.deviations + w.expenses} />
+      </div>
+      {(idle.length > 0 || at.length > 0) && (
+        <p className="text-[13px] text-slate-600">
+          {at.length > 0 && <>Now at a customer: {at.map((one) => `${one.name} (${one.at})`).join(", ")}. </>}
+          {idle.length > 0 && <span className="text-amber-800">Visits today, not started yet: {idle.map((one) => one.name).join(", ")}.</span>}
+        </p>
+      )}
+      {w.reports + w.judge + w.plans + w.deviations + w.expenses > 0 && (
+        <ul className="grid gap-2 sm:grid-cols-3">
+          <Wait n={w.reports} label="Day reports to see" to="/field/reports?view=day-reports" />
+          <Wait n={w.judge} label="Calls to judge" to="/field/reports?view=judge" />
+          <Wait n={w.plans} label="Tour plans to approve" to="/field/plan?view=team" />
+          <Wait n={w.deviations} label="Plan changes (deviations)" to="/field/plan?view=deviations" />
+          <Wait n={w.expenses} label="Expenses to approve" to="/visits/expenses?waiting=1" />
+        </ul>
+      )}
+    </section>
+  );
+}
 
 export function TeamHome() {
   const navigate = useNavigate();
@@ -137,6 +195,12 @@ export function TeamHome() {
                   <Link to={`/visits/${one.visitId}`} className="hover:underline">
                     <b>{one.name}</b> has {one.what === "closed" ? "closed" : "checked in"} the visit of {one.client}
                   </Link>
+                  {one.what === "closed" && one.meeting && (
+                    <span className={`ml-1.5 rounded px-1.5 py-0.5 text-[11px] font-semibold ${one.meeting === "met" ? "bg-emerald-50 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>
+                      {MEETING_WORDS[one.meeting]}
+                      {one.booked > 0 ? ` · ${peso(one.booked)} ordered` : ""}
+                    </span>
+                  )}
                   <span className="ml-1 text-xs text-slate-400">{clockOf(one.at)}</span>
                 </li>
               ))}

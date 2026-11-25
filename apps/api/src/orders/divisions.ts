@@ -35,6 +35,10 @@ export function divisionOf(name: string | null | undefined): string | null {
   );
 }
 
+/** A channel with no Division written on it is read by its code: the doctors' channel (RX) is the
+ *  tracker's RX Business. So an Rx MedRep's order opens on their own Division like everyone's. */
+export const CHANNEL_DIVISION: Record<string, string> = { RX: "RX Business" };
+
 /** The Divisions a person's orders carry (Aryan, 19 Nov: a MedRep comes under one Division): their
  *  seats' own (the database's seat_division, migration 0114), the main seat's first, each once;
  *  with no seat, their channel's. */
@@ -162,6 +166,8 @@ export function divisionRule(
   if (!division) return null;
   if (pap && PAP_DIVISIONS.includes(division)) return { sub: "Telesales", hq: "Telesales" };
   if (division === "RX Business") return { sub: "MD Telesales", hq: "", hqOptions: SUB_DIVISIONS[division] ?? [] };
+  // The hub's B2C (walked on localhost, 23 Nov): MD Telesales / B2C.
+  if (division === "MD Telesales") return { sub: "MD Telesales", hq: "B2C" };
   if (division === "HOSP") return { sub: "Hospital", hq: "N/A" };
   if (division === "CLIDP") return { sub: "CLIDP", hq: "ON SITE" };
   if (division === "B2B") return { subOptions: ["CRR", "NBD"], hq: "ON SITE" };

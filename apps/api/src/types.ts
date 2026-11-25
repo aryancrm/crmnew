@@ -280,6 +280,12 @@ export type MedicineDetail = {
   medicine: MedicineInput & { id: number; code: string; active: boolean; packSize: number };
   status: StockStatus;
   total: number;
+  /** On placed orders not packed yet, and what is left free to sell (never under zero). */
+  promised: number;
+  promisedOrders: number;
+  /** The orders holding it, oldest first (only for the desks that see every order). */
+  promisedTo: { id: number; code: string; customer: string; qty: number; status: OrderStatus; placedOn: string }[];
+  free: number;
   expired: number;
   batches: {
     batchId: number;
@@ -590,7 +596,8 @@ export type CustomerDetail = {
   standing: {
     accreditation: { status: "applied" | "accredited" | "refused"; onDay: string; validUntil: string | null } | null;
     formulary: { approved: number; requested: number };
-    awards: { id: number; code: string; title: string; step: string; deliverBy: string | null }[];
+    /** `lines`: the bid, medicine by medicine (one piece's price in centavos, VAT in). */
+    awards: { id: number; code: string; title: string; step: string; deliverBy: string | null; lines: { medicineId: number; qty: number; unitPrice: number }[] }[];
     clidpRates: { medicineId: number; medicine: string; unitPrice: number; moq: number | null; agreedOn: string }[];
     listed: number;
   };
@@ -1227,6 +1234,10 @@ export type OrderDetail = {
     customerKind: CustomerKind;
     customerCity: string | null;
     customerReview: "ok" | "to_review";
+    /** Who the customer is, shown on Management's check of a new one: phone, who added it, the day. */
+    customerPhone?: string | null;
+    customerAddedBy?: string | null;
+    customerAddedOn?: string | null;
     /** The licence that lets them buy (a hospital's LTO, a doctor's PRC), its expiry and TIN:
      *  what Management checks. */
     licenceNo: string | null;
@@ -1311,6 +1322,9 @@ export type OrderDetail = {
     glNumber: string | null;
     glAmount: number | null;
     glSetBy: string | null;
+    /** A guarantee letter's claim on the agency, which Finance sends after the delivery (22 Nov):
+     *  its case, the agency, the day it went and its reference. Null on any other order. */
+    glClaim: { leadId: number; agency: string | null; sentOn: string | null; ref: string | null } | null;
   };
   items: {
     id: number;
@@ -1529,7 +1543,7 @@ export type PaymentMethod =
   | "credit"
   /** What the customer deducted (a near-expiry return kept, a listing fee…): a settlement, not cash. */
   | "deduction";
-export type DeductionKind = "near_expiry" | "listing_fee" | "promo" | "penalty" | "other";
+export type DeductionKind = "near_expiry" | "listing_fee" | "promo" | "penalty" | "other" | "gl_waived";
 
 /** A customer's credit: Zoho's open credit notes, and money paid beyond a bill kept for the next. */
 export type CustomerCredit = {
@@ -1608,6 +1622,10 @@ export type PaymentRow = {
   proofId: number | null;
   by: string;
   at: string;
+  /** Who paid it: the customer, or a guarantee letter's agency. */
+  payer?: "customer" | "agency";
+  /** Why it was deducted, when it is a deduction. */
+  deductionKind?: DeductionKind | null;
   active: boolean;
   removedReason: string | null;
 };
@@ -1642,6 +1660,10 @@ export type RefundRow = {
 
 export type InvoiceDetail = {
   invoice: InvoiceRow & {
+    /** Taken off the bill by returns Management credited. */
+    credited: number;
+    /** What Finance still gives back as money (a cancelled invoice, or paid beyond the bill). */
+    refundOwed: number;
     vatable: number;
     vat: number;
     exempt: number;
@@ -1764,7 +1786,10 @@ export type ConfirmPaymentInput = {
 };
 
 export type PaymentInput = {
+  /** May be nothing when the whole of it is tax withheld or a deduction (a letter's shortfall let go). */
   amount: number;
+  /** A guarantee letter's order: the agency paid it (the default), or the patient paid the rest. */
+  payer?: "agency" | "patient" | null;
   method: PaymentMethod;
   reference?: string | null;
   paidOn: string;
@@ -1963,6 +1988,11 @@ export type ChannelFigures = {
   code: string;
   name: string;
   head: string | null;
+  /** The business the channel is under on the Company tree (the sheet's channels, 22 Nov). */
+  business?: string | null;
+  /** People in the channel's seats and the customers in their areas (the sheet's channels). */
+  people?: number;
+  customers?: number;
   target: number | null;
   sold: number;
   today: number;
@@ -2169,6 +2199,8 @@ export type LeadCard = {
   sourceLabel: string;
   caseType: CaseType;
   road: LeadRoad;
+  /** Who a PAP case came from, with the channel its sale counts in ("Ryan · HOSP"); null otherwise. */
+  cameFrom?: string | null;
   /** A business buying through the desk (its kind); null: a patient. */
   buyer: BuyerBusiness | null;
   agency: GlAgency | null;
@@ -2271,6 +2303,8 @@ export type LeadCase = {
     canvass: { vendor: string; amount: number }[];
     /** online: the Online desk's; pap: a PAP MedRep's patient-assistance case. */
     desk: "online" | "pap";
+    /** Who the case came to PAP from (an Online agent, a MedRep) and the channel the sale counts in. */
+    cameFrom: { id: number; name: string; channel: string | null } | null;
     state: "open" | "lost";
     lostReason: string | null;
     firstContactAt: string;
@@ -2377,6 +2411,8 @@ export type CaseOrderTrail = {
     reference: string | null;
     paidOn: string;
     by: string;
+    /** On a guarantee letter's order: "The agency", "The patient" or "Let go"; null otherwise. */
+    who?: string | null;
   }[];
 };
 
@@ -2795,6 +2831,10 @@ export type CustomerPrices = {
     seller: string | null;
     medicines: string | null;
   }[];
+  /** The old system's invoices, newest first, with what each still owes (centavos). */
+  invoices: { id: number; number: string; on: string; dueOn: string | null; order: string | null; total: number; balance: number; status: "paid" | "open" | "void" }[];
+  /** The payments the old system took from them, newest first. */
+  payments: { id: number; number: string | null; on: string; mode: string | null; reference: string | null; amount: number }[];
   medicines: MedicinePrices[];
 };
 
@@ -3137,6 +3177,8 @@ export type DispatchCard = {
   cameBackReason: string | null;
   receivedBy: string | null;
   deliveredAt: string | null;
+  /** The day it reached the customer, as Dispatch said it (not the moment it was marked). */
+  deliveredOn: string | null;
   /** Cash the courier or rider collects on delivery (an open cash-on-delivery invoice). */
   collect: number | null;
   /** How it is paid, from its invoice: cash on delivery, paid in advance, or on terms (days or a
@@ -3547,6 +3589,9 @@ export type TeamBoard = {
     leadSeatId: number | null;
     /** The sales tracker's channel the box is part of (RX Business … MT), null outside sales. */
     division: string | null;
+    /** The channel's name as the target sheet writes it, when the box's seats are all on one (B2B
+     *  for the B2B Telesales box, BID for Government Bidding); null otherwise. */
+    sheetName?: string | null;
   }[];
   seats: TeamSeatCard[];
   needs: TeamNeed[];
@@ -3885,6 +3930,17 @@ export type OwedInvoices = {
     invoices: number;
     customers: number;
   };
+};
+
+/** What customers owe, in short, for the Home's card: the same invoices as OwedInvoices, added up
+ *  on the server so the card doesn't download every invoice (22 Nov). */
+export type OwedGlance = {
+  today: string;
+  totals: OwedInvoices["totals"];
+  /** Not due yet, 1–30 days late, 31–60 days, over 60 days: what is owed in each (not cash on delivery to come). */
+  ages: { notDue: number; d30: number; d60: number; older: number };
+  /** Who owes, the most overdue first (at most 100). */
+  customers: { id: number; name: string; medrep: string; team: string | null; total: number; late: number; oldest: number; invoices: number }[];
 };
 
 /** One channel's sales, opened: each of its sellers against their target, its best customers and
@@ -5654,6 +5710,117 @@ export type BidReport = {
   comingUp: Pick<Tender, "id" | "code" | "title" | "agency" | "agencyCity" | "owner" | "abc" | "step" | "deadlineAt" | "prebidOn" | "openingOn">[];
 };
 
+/** A notice the tender finder's robot found on PhilGEPS or PS-PhilGEPS. Money in centavos. */
+export type FoundTender = {
+  id: number;
+  source: "philgeps" | "ps";
+  refNo: string;
+  title: string;
+  /** The procuring entity as the portal writes it, and the CRM customer it is (when known). */
+  agency: string | null;
+  agencyId: number | null;
+  customer: string | null;
+  noticeType: string | null;
+  procurementMode: string | null;
+  abc: number | null;
+  publishedOn: string | null;
+  closingAt: string | null;
+  link: string | null;
+  /** Our molecules it asks for. */
+  molecules: string[];
+  firstSeenAt: string;
+  screenedAt: string | null;
+  screenedBy: string | null;
+  tenderId: number | null;
+  tenderCode: string | null;
+  /** Still open for bids (no closing date read, or it is not past). */
+  open: boolean;
+  lines: number;
+};
+
+export type FoundView = "new" | "screened" | "tenders" | "all";
+
+/** One run of the robot, as it reported it. */
+export type FindRun = { id: number; source: "philgeps" | "ps"; trigger: string | null; status: "success" | "failed"; summary: string | null; found: number; matched: number; fresh: number; at: string };
+
+export type FoundList = {
+  view: FoundView;
+  rows: FoundTender[];
+  counts: Record<FoundView, number>;
+  /** Our molecules among what was found, for the filter. */
+  molecules: string[];
+  /** The robot: whether it has a way in on this server, its last runs, and where its PhilGEPS
+   *  log-in for the tender papers stands ("refused" stops it until a person says to try again). */
+  robot: {
+    ready: boolean;
+    runs: FindRun[];
+    login: { state: "never" | "ok" | "refused" | "busy" | "trouble"; at: string | null; said: string | null };
+    /** The PS-PhilGEPS robot: connected or not (a person's captcha tick makes its session), and its last Sync. */
+    ps: { connected: boolean; connectedAt: string | null; status: string | null; stage: string | null; error: string | null; finishedAt: string | null };
+  };
+};
+
+/** A found notice's papers: the files the robot got from PhilGEPS and what it said of them. */
+export type FoundPapers = {
+  files: { id: number; kind: "paper" | "bulletin"; name: string; size: number }[];
+  /** downloaded | pick-up | closed | needs-payment | none-found | no-order-link | order-flow-changed; null = not looked at yet. */
+  status: string | null;
+  remark: string | null;
+  checkedAt: string | null;
+  readNote: string | null;
+  /** Scanned pages still waiting for their reading. */
+  reading: boolean;
+  /** How well the papers were read, 0 to 100. */
+  accuracy: number | null;
+  /** What the bid data sheet says, as written. */
+  sheet: { label: string; said: string }[];
+};
+
+/** A line a found notice asks for. */
+export type FoundLine = {
+  id: number;
+  origin: "notice" | "papers";
+  itemNo: string | null;
+  description: string;
+  qty: number | null;
+  unit: string | null;
+  /** The budget for one piece and for the line. */
+  abcUnit: number | null;
+  abcTotal: number | null;
+  molecules: string[];
+  /** Our medicine it is (matched, or picked by a person), and the ones it could be. */
+  medicineId: number | null;
+  medicine: string | null;
+  candidates: { id: number; name: string; price: number | null }[];
+};
+
+export type FoundDetail = {
+  found: FoundTender & {
+    itemsText: string | null;
+    details: {
+      solicitationNo: string | null;
+      classification: string | null;
+      areaOfDelivery: string | null;
+      deliveryPeriod: string | null;
+      contactName: string | null;
+      contactInfo: string[];
+      preBid: string | null;
+      bidOpening: string | null;
+      status: string | null;
+      supplements: { no: string; title: string; type: string; published: string | null }[];
+      documents: string[];
+    };
+  };
+  lines: FoundLine[];
+  papers: FoundPapers;
+  events: { what: string; note: string | null; by: string; at: string }[];
+  /** For "Make it a tender": the customers the agency could be, the mode and days read. */
+  agencies: { id: number; name: string; city: string | null }[];
+  mode: TenderMode;
+  prebidOn: string | null;
+  openingOn: string | null;
+};
+
 export type TenderInput = {
   agencyId: number;
   title: string;
@@ -5960,7 +6127,8 @@ export type VendorDetail = VendorRow & {
 /** Purchases' board: what the Inventory and Finance desks act on. Money in centavos of pesos. */
 export type PurchaseBoard = {
   today: string;
-  toReceive: { orders: number; pieces: number; late: number; value: number };
+  /** `old`: how many of them are on the first purchase pages (opened from there). */
+  toReceive: { orders: number; pieces: number; late: number; value: number; old: number };
   toBill: { orders: number; value: number };
   bills: { open: number; owed: number; overdue: number; overdueAmount: number; dueThisWeek: number };
   /** Vendor credits and payments not put on a bill yet. */
@@ -5970,7 +6138,10 @@ export type PurchaseBoard = {
     name: string;
     pack: string | null;
     packSize: number;
+    /** On the shelf less what placed orders are promised (never under zero). */
     free: number;
+    /** What placed orders need beyond the shelf. */
+    short: number;
     reorderLevel: number;
     sold30: number;
     coming: number;
@@ -6403,6 +6574,36 @@ export type TargetSheet = {
   }[];
   /** Sales this month under names on no row of the sheet. */
   apart: { name: string; ach: number; today: number }[];
+};
+
+/** The CEO's custom report (22 Nov): one person, any days, the parts ticked; each part is a table
+ *  with its totals, ready to show and to export. */
+export type PersonReport = {
+  people: { id: number; name: string; title: string | null; role: string; active: boolean }[];
+  parts: { key: string; label: string }[];
+  person: { id: number; name: string; title: string | null; roleLabel: string; active: boolean; reportsTo: string | null } | null;
+  from: string;
+  to: string;
+  sections: {
+    key: string;
+    label: string;
+    totals: { label: string; value: number; money?: boolean }[];
+    columns: { label: string; kind: "text" | "money" | "day" | "time" }[];
+    rows: (string | number | null)[][];
+    /** Where each row opens, when it has a page. */
+    links: (string | null)[];
+    /** More rows than shown: narrow the days. */
+    more: boolean;
+  }[];
+};
+
+/** The Admin's Slow screens: every address whose answer took the server longer than slowMs, in the
+ *  last two weeks, the costliest first. */
+export type SlowScreens = {
+  slowMs: number;
+  times: number;
+  since: string | null;
+  rows: { method: string; path: string; times: number; avgMs: number; worstMs: number; questions: number; roles: string; lastAt: string }[];
 };
 
 // ---- A person's own profile (account/profile.ts)

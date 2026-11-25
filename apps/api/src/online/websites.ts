@@ -1004,7 +1004,7 @@ async function receiveRequest(
     const [existing] = key
       ? await rows<{ id: number }>(
           tx,
-          sql`select id::int as id from lead where phone_key = ${key} and state = 'open' order by id desc limit 1`,
+          sql`select id::int as id from lead where phone_key = ${key} and state = 'open' and desk = 'online' order by id desc limit 1`,
         )
       : [];
     let id = existing?.id;

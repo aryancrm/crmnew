@@ -346,3 +346,24 @@ goods → Management presses Refund → Finance records it) are in the code and 
   Finance the customer's earlier dues (Zoho's too); the hub does not.
 
 (continued below as the walk goes on)
+
+## The order form by Division (walked on localhost, 23 Nov 2026)
+
+Run again locally (mock Zoho), signed in as the MedRep, Create New Order → Myself, each of the 15
+Divisions picked in turn; the Patient Assistance tick tried on HOS and STC.
+
+| Hub Division | Sub-division | Headquarter | What else changes | In crmnew |
+|---|---|---|---|---|
+| B&B | fixed: MD Telesales | pick: CEBU, DAVAO, E. RODRIGUEZ, EAST AVE, NCL, SOUTH LUZON, TAFT | the PAP tick is offered; "No prescription? Say why" is asked; the Zoho Salesperson follows the Headquarter | RX Business: the same (one list of the three's places) |
+| STC, URO | fixed: MD Telesales | pick: CEBU, COMMONWEALTH, DAVAO, KALAW, NCL, SOUTH LUZON, TMC ORTIGAS | as B&B | RX Business |
+| B2C | fixed: MD Telesales | B2C | the PAP tick; the prescription reason | MD Telesales: the same (added 23 Nov) |
+| HOS | fixed: Hospital | N/A | the PAP tick; no prescription reason | HOSP: the same |
+| CLIDP | fixed: CLIDP | ON SITE | nothing more | CLIDP: the same |
+| B2B | pick: CRR or NBD | ON SITE | nothing more | B2B: the same |
+| BID, MSA, PS, MT, TeleSales, TeleSales Anesthesia, MD Telesales | typed | typed | nothing more | BID, MT, TeleSales: typed |
+| PAP tick (B&B, URO, STC, HOS, B2C) | Telesales | Telesales | "Which program?" (DSWD, PCSO, Office of the President, Other); the guarantee letter must be attached | the order type *Guarantee letter*: the same |
+
+The rest of the form is the same for every Division: the customer, delivery address, receiver,
+payment terms, source, doctor, invoicing from, delivery method, remarks, expected day, the
+medicines, the attachments (or why there is no proof of payment). A hospital customer adds *GL
+number* and *Receiver* beside the address. It is one page of small lists, three to a row.

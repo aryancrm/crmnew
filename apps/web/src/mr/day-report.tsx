@@ -7,7 +7,7 @@ import type { DayReport, MissReason } from "@2mg/api/mr";
 import { MISS_REASONS, MISS_WORDS, WORK_WORDS } from "@2mg/api/mr";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { Button, CARD, PageState, Problem, peso, useAction } from "../ui";
 import { clockOf, dayWords, FIELD, Label, minutesWords, MrHead, PlaceLink, StatePill, whereAmI } from "./parts";
@@ -17,6 +17,7 @@ export function MrDayReportPage() {
   const person = params.get("person");
   const day = params.get("day");
   const queries = useQueryClient();
+  const navigate = useNavigate();
   const action = useAction();
   const query = useQuery({
     queryKey: ["mr", "day-report", person, day],
@@ -154,6 +155,8 @@ export function MrDayReportPage() {
                   action.run(async () => {
                     await api("/api/mr/day/report/seen", { body: { person: data.person.id, day: data.day, note: seenNote || null } });
                     await queries.invalidateQueries({ queryKey: ["mr"] });
+                    // Back to the team's day, where what else waits is listed (one job leads to the next).
+                    navigate("/field/team");
                   })
                 }
               >

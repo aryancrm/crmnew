@@ -123,6 +123,18 @@ describe("one road for buying", () => {
     );
     expect(kept?.account).toBe("Inventory Asset");
 
+    // The goods' own bill: a medicine bought is stock, so its line sits in Inventory Asset until it
+    // is sold (22 Nov; it was posted to Cost of Goods Sold, and again on delivery).
+    const goods = await made(
+      await post("irene", `/api/books/purchase_order/${order.id}/bill`, { number: "GOODS-1", date: choices.today, orderLines: [{ lineId: line?.id, qty: 100, rate: 50 }] }),
+    );
+    const posted = await rows<{ account: string; debit: number }>(
+      db,
+      sql`select account, debit::int as debit from book_entry where source = 'books' and doc_id = ${goods.id} and debit > 0`,
+    );
+    expect(posted.some((one) => one.account === "Inventory Asset")).toBe(true);
+    expect(posted.some((one) => one.account === "Cost of Goods Sold")).toBe(false);
+
     // The vendor's invoice goes on the bill (a PDF), and opens again.
     const form = new FormData();
     form.set("file", new File([new TextEncoder().encode("%PDF-1.4 freight invoice")], "freight-invoice.pdf", { type: "application/pdf" }));
@@ -220,5 +232,28 @@ describe("one road for buying", () => {
     expect(await coming()).toBe(true);
     // Fiona (Finance) reads the purchases but doesn't make orders.
     expect((await post("fiona", `/api/books/purchase_order/${order.id}/status`, { to: "closed" })).status).toBe(403);
+  });
+
+  it("a stock move keeps its cost; a later cost change is posted on its own day (22 Nov)", async () => {
+    const [batch] = await rows<{ id: number; medicineId: number; cost: number; warehouseId: number; by: number }>(
+      db,
+      sql`select b.id::int as id, b.medicine_id::int as "medicineId", b.unit_cost::int as cost, s.warehouse_id::int as "warehouseId",
+          (select id::int from person order by id limit 1) as by
+        from batch b join stock s on s.batch_id = b.id where b.batch_no = 'ROAD-1' limit 1`,
+    );
+    expect(batch?.cost).toBeGreaterThan(0);
+    await db.execute(
+      sql`insert into stock_move (medicine_id, batch_id, warehouse_id, qty, kind, ref, by_person)
+        values (${batch?.medicineId}, ${batch?.id}, ${batch?.warehouseId}, -10, 'deliver', 'COST-TEST', ${batch?.by})`,
+    );
+    await db.execute(sql`update batch set unit_cost = unit_cost + 100 where id = ${batch?.id}`);
+    const [kept] = await rows<{ cost: number }>(db, sql`select unit_cost::int as cost from stock_move where ref = 'COST-TEST'`);
+    expect(kept?.cost).toBe(batch?.cost);
+    const posted = await rows<{ account: string; debit: number; credit: number }>(
+      db,
+      sql`select account, debit::int as debit, credit::int as credit from book_entry where number = 'Cost change ROAD-1'`,
+    );
+    expect(posted.find((one) => one.account === "Cost of Goods Sold")?.debit).toBe(1000);
+    expect(posted.find((one) => one.account === "Inventory Asset")?.credit).toBe(1000);
   });
 });

@@ -1,7 +1,7 @@
 // A signed-in browser holds a random token in a cookie its scripts can't read. The database
 // keeps only the token's hash, so a copy of the database signs nobody in.
 
-import { divisionsOf } from "../orders/divisions";
+import { CHANNEL_DIVISION, divisionsOf } from "../orders/divisions";
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq, gt, isNull, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
@@ -158,7 +158,7 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
     role: row.role,
     roleLabel: ROLE_LABEL[row.role],
     business: row.businessCode ?? null,
-    divisions: divisionsOf(row.seatDivisions, row.channelDivision ?? null),
+    divisions: divisionsOf(row.seatDivisions, row.channelDivision ?? CHANNEL_DIVISION[row.channelCode ?? ""] ?? null),
     workspace: row.workspace ?? null,
     photo: row.photo ?? null,
     twoStep: row.viewerId ? undefined : row.twoStep,

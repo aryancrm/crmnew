@@ -5,7 +5,7 @@ import type { OrderDetail, PackPlan } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Camera, Plus, Snowflake, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
-import { api } from "../api";
+import { ApiFailure, api } from "../api";
 import { AmountField, asTyped, centavos, todayManila } from "../finance/parts";
 import { PAPER_ACCEPT, uploadPaper } from "../photo";
 import { Button, count, Dialog, Field, INPUT, inPacks, peso, Problem, useAction } from "../ui";
@@ -162,16 +162,20 @@ export function PackDialog({
   orderId,
   code,
   onClose,
+  onPacked,
 }: {
   orderId: number;
   code: string;
   onClose: () => void;
+  /** What follows a pack that went through (the Ship dialog); left out, the dialog just closes. */
+  onPacked?: () => void;
 }) {
   const plan = useQuery({
     queryKey: ["dispatch", "pack", orderId],
     queryFn: () => api<PackPlan>(`/api/dispatch/orders/${orderId}/pack`),
   });
   const work = useDispatch();
+  const queries = useQueryClient();
   const detail = useQuery({
     queryKey: ["orders", "one", orderId],
     queryFn: () => api<OrderDetail>(`/api/orders/${orderId}`),
@@ -199,7 +203,30 @@ export function PackDialog({
     const body = Object.entries(picks).flatMap(([itemId, rows]) =>
       rows.map((row) => ({ itemId: Number(itemId), batchId: row.batchId, qty: Number(row.qty) })),
     );
-    if (await work.send(`/api/dispatch/orders/${orderId}/pack`, { picks: body })) onClose();
+    if (await work.send(`/api/dispatch/orders/${orderId}/pack`, { picks: body })) (onPacked ?? onClose)();
+  }
+
+  /** The shelf can't fill it: held from here, so the box isn't a dead end (it only had Close). */
+  async function holdShort() {
+    if (!data) return;
+    const why = `Not enough in ${data.warehouse} to pack: ${short
+      .map((line) => `${line.medicine} ${line.qty - line.short} of ${line.qty}`)
+      .join(", ")}. Ship it from another warehouse, or move stock here.`;
+    const done = await work.run(async () => {
+      try {
+        // Short in the whole company: it waits for the stock, and is told when it comes in.
+        await api(`/api/orders/${orderId}/hold`, { body: { stock: true } });
+      } catch (error) {
+        // Another warehouse has it: an ordinary hold saying what is missing here, for Management.
+        if (!(error instanceof ApiFailure) || error.code !== "in_stock") throw error;
+        await api(`/api/orders/${orderId}/hold`, { body: { reason: why } });
+      }
+    });
+    await Promise.all([
+      queries.invalidateQueries({ queryKey: ["orders"] }),
+      queries.invalidateQueries({ queryKey: ["dispatch"] }),
+    ]);
+    if (done) onClose();
   }
 
   return (
@@ -331,12 +358,19 @@ export function PackDialog({
             <Button onClick={onClose} disabled={work.busy}>
               Close
             </Button>
-            <Button type="submit" variant="primary" disabled={work.busy || short.length > 0}>
+            {short.length > 0 && (
+              <Button variant="primary" onClick={holdShort} disabled={work.busy}>
+                Hold it: not enough stock
+              </Button>
+            )}
+            <Button type="submit" variant={short.length > 0 ? undefined : "primary"} disabled={work.busy || short.length > 0}>
               {work.busy ? "Packing…" : "Packed"}
             </Button>
           </div>
           <div className="-mt-1 text-right text-xs text-ink-2">
-            These pieces come off the shelf now.
+            {short.length > 0
+              ? "Held until the stock is in (you and the MedRep are told), or for Management to ship it from another warehouse."
+              : "These pieces come off the shelf now."}
           </div>
         </form>
       )}
@@ -522,7 +556,7 @@ export function ShipDialog({
           </div>
         )}
         {method === "pickup" && (
-          <ReceiptPicker receipt={receipt} error={receipt.problem ?? work.at("proof")} />
+          <ReceiptPicker receipt={receipt} error={receipt.problem ?? (receipt.photo ? undefined : work.at("proof"))} />
         )}
         {method === "pickup" && (
           <div className="flex flex-col gap-3 sm:flex-row">
@@ -653,7 +687,7 @@ export function DeliverDialog({
             )}
           </Field>
         </div>
-        <ReceiptPicker receipt={receipt} error={receipt.problem ?? work.at("proof")} />
+        <ReceiptPicker receipt={receipt} error={receipt.problem ?? (receipt.photo ? undefined : work.at("proof"))} />
         {cod && (
           <fieldset className="rounded-xl border border-amber-200 bg-amber-50/70 px-3.5 py-3">
             <legend className="px-1 text-[13px] font-semibold text-amber-900">
@@ -837,10 +871,18 @@ export type DispatchAsk = {
 } | null;
 
 export function DispatchDialogs({ ask, onClose }: { ask: DispatchAsk; onClose: () => void }) {
+  // One job leads to the next (Aryan, 23 Nov): Packed opens the same order's Ship dialog, where
+  // the courier and tracking go in; closing it leaves the order packed, to ship later.
+  const [shipNext, setShipNext] = useState<number | null>(null);
   if (!ask) return null;
   const { what, orderId, code, collect, carrier } = ask;
-  if (what === "pack") return <PackDialog orderId={orderId} code={code} onClose={onClose} />;
-  if (what === "ship") return <ShipDialog orderId={orderId} code={code} onClose={onClose} />;
+  const closeAll = () => {
+    setShipNext(null);
+    onClose();
+  };
+  if (what === "pack" && shipNext !== orderId)
+    return <PackDialog orderId={orderId} code={code} onClose={onClose} onPacked={() => setShipNext(orderId)} />;
+  if (what === "ship" || what === "pack") return <ShipDialog orderId={orderId} code={code} onClose={closeAll} />;
   if (what === "deliver")
     return <DeliverDialog orderId={orderId} code={code} collect={collect} carrier={carrier} onClose={onClose} />;
   if (what === "cod")

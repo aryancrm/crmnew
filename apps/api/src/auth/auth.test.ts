@@ -132,8 +132,8 @@ describe("nobody in without a password of their own", () => {
   it("marks everyone who was here before the change, and nobody added after it", async () => {
     // The change itself, undone and made again over people who are already here.
     await db.execute(sql`alter table person drop column password_pending`);
-    await db.execute(sql`delete from schema_migration where name = '0133_own_passwords.sql'`);
-    expect(await migrate(db)).toEqual(["0133_own_passwords.sql"]);
+    await db.execute(sql`delete from schema_migration where name = '0142_own_passwords.sql'`);
+    expect(await migrate(db)).toEqual(["0142_own_passwords.sql"]);
     expect(await rows(db, sql`select distinct password_pending as pending from person`)).toEqual([{ pending: true }]);
     expect(await codeOf(await login("admin"))).toBe("password_pending");
     await db.execute(sql`insert into person (name, role, password_hash) values ('New', 'medrep', 'x')`);

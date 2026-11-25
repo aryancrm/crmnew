@@ -6,6 +6,7 @@
 
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -234,8 +235,8 @@ describe("the whole company, 130 people", () => {
     for (const who of ["mgmt2", "fin2", "ceo", "admin"])
       for (const order of ["h11", "h21", "r11"]) expect(await sees(who, order), who).toBe(true);
     for (const who of ["h11", "hlead1", "vanessa", "hr2", "fin2"])
-      expect((await post(who, `/api/orders/${orders.h21}/approve`)).status, who).not.toBe(200);
-    expect((await post("mgmt2", `/api/orders/${orders.h21}/approve`)).status).toBe(200);
+      expect((await post(who, await ticked(db, `/api/orders/${orders.h21}/approve`))).status, who).not.toBe(200);
+    expect((await post("mgmt2", await ticked(db, `/api/orders/${orders.h21}/approve`))).status).toBe(200);
   });
 
   it("HR sees every person and no order", async () => {
@@ -255,7 +256,7 @@ describe("the whole company, 130 people", () => {
         await read<{ order: { status: string; total: number } }>("ceo", `/api/orders/${id}`)
       ).order;
       if (before.status === "pending_approval")
-        expect((await post("mgmt2", `/api/orders/${id}/approve`, { finance: true })).status).toBe(
+        expect((await post("mgmt2", await ticked(db, `/api/orders/${id}/approve`), { finance: true })).status).toBe(
           200,
         );
       const now = (await read<{ order: { status: string } }>("ceo", `/api/orders/${id}`)).order;
@@ -290,10 +291,13 @@ describe("the whole company, 130 people", () => {
     const mine = await sum(sql`o.id = ${orders.h11}`);
     expect(all).toBeGreaterThan(0);
     const ceo = await read<{
-      sales: { achieved: number; channels: { code: string; sold: number }[] };
+      sales: { achieved: number; channels: { business: string | null; sold: number }[] };
     }>("ceo", "/api/ceo/home");
     expect(ceo.sales.achieved).toBe(all);
-    expect(ceo.sales.channels.find((one) => one.code === "HOSP")?.sold).toBe(hosp);
+    // The channels are the Company tree's boxes under each business (22 Nov): the Hospital
+    // Division's add up to its head's figure, and all of them to the company's.
+    expect(ceo.sales.channels.filter((one) => one.business === "Hospital Division").reduce((sum, one) => sum + one.sold, 0)).toBe(hosp);
+    expect(ceo.sales.channels.reduce((sum, one) => sum + one.sold, 0)).toBe(all);
     const vanessa = await read<{ total: { sold: number } }>("vanessa", "/api/team/sales");
     expect(vanessa.total.sold).toBe(hosp);
     const lead = await read<{ total: { sold: number } }>("hlead1", "/api/team/sales");

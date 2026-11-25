@@ -5,6 +5,7 @@
 
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -134,7 +135,7 @@ describe("one order through every desk", () => {
     expect(now.free).toBe(Math.max(0, now.total - now.promised));
 
     // Management approves; a credit customer goes straight to its invoice.
-    await ok("sarla", `/api/orders/${id}/approve`);
+    await ok("sarla", await ticked(db, `/api/orders/${id}/approve`));
     expect((await order("fiona", id)).order.status).toBe("ready_for_invoice");
     await ok("fiona", `/api/finance/orders/${id}/invoice`);
     const invoiced = await order("fiona", id);
@@ -211,7 +212,7 @@ describe("one order through every desk", () => {
   it("cash on delivery: no money before the delivery, all of it after", async () => {
     const customer = await newHospital("Flow COD Hospital", "cod");
     const id = await place(customer, 2);
-    await ok("sarla", `/api/orders/${id}/approve`);
+    await ok("sarla", await ticked(db, `/api/orders/${id}/approve`));
     expect((await order("fiona", id)).order.status).toBe("ready_for_invoice");
     await ok("fiona", `/api/finance/orders/${id}/invoice`);
     const invoice = (await order("fiona", id)).money.invoice;
@@ -243,7 +244,7 @@ describe("one order through every desk", () => {
     await ok("sarla", `/api/orders/${id}/hold`, { reason: "Which ward?" });
     await ok("ryan", `/api/orders/${id}/answer`, { reason: "Oncology" });
     await ok("sarla", `/api/orders/${id}/resume`, { reason: "The MedRep answered: Oncology" });
-    await ok("sarla", `/api/orders/${id}/approve`);
+    await ok("sarla", await ticked(db, `/api/orders/${id}/approve`));
     expect((await order("fiona", id)).order.status).toBe("ready_for_invoice");
   });
 });

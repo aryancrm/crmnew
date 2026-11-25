@@ -19,7 +19,7 @@ import { leadOf, mayDecideFor, mustUse, mustWork, textArray, words } from "./acc
 import { clientFrom, clientJson } from "./cards";
 import { customerOrders, lastVisits } from "./visits";
 import { notify } from "../notify/service";
-import { CATEGORIES, CLIENT_KINDS, type ClientKind, type ClientList, type ClientPage, DAYS, type FieldProfile, FIRM_TYPES } from "./words";
+import { CATEGORIES, CLIENT_KINDS, type ClientKind, type ClientList, type ClientPage, DAYS, type FieldProfile, FIRM_TYPES, townKey } from "./words";
 
 const kindsOf = (kind: ClientKind): SQL =>
   kind === "firm" ? sql`('drugstore', 'distributor')` : kind === "doctor" ? sql`('doctor')` : sql`('hospital')`;
@@ -74,6 +74,9 @@ export async function clientList(
   };
 }
 
+/** townKey (words.ts) in SQL, on a customer's city. */
+const TOWN_KEY = sql`regexp_replace(regexp_replace(regexp_replace(lower(btrim(split_part(coalesce(c.city, ''), ',', 1))), '^city of\\s+', ''), '\\s+city$', ''), '\\s+', ' ', 'g')`;
+
 /** Customers to pick for a day's visits: those the person looks after in the picked cities. */
 export async function clientsIn(
   db: Database,
@@ -82,7 +85,8 @@ export async function clientsIn(
 ): Promise<ClientList["rows"]> {
   await mustUse(db, me);
   const kind = (CLIENT_KINDS as string[]).includes(asked.kind ?? "") ? (asked.kind as ClientKind) : "doctor";
-  const cities = (asked.cities ?? "").split("|").map((one) => one.trim().toLowerCase()).filter(Boolean);
+  // "Makati", "Makati City" and "City of Makati" are one town (the day's town comes from the country's list).
+  const cities = [...new Set((asked.cities ?? "").split("|").map(townKey).filter(Boolean))];
   const find = clean(asked.q)?.toLowerCase();
   const today = todayManila();
   const found = await rows<{ row: ClientList["rows"][number] }>(
@@ -92,7 +96,7 @@ export async function clientsIn(
         'nextVisit', (select to_char(min(v.day), 'YYYY-MM-DD') from visit v where v.customer_id = c.id and v.status = 'planned' and v.day >= ${today}::date),
         'visitsThisMonth', 0) as row
       ${clientFrom} where c.active and c.kind in ${kindsOf(kind)} and not ${offList} and ${seen(me)}
-        ${cities.length ? sql`and lower(coalesce(c.city, '')) in (${sql.join(cities.map((one) => sql`${one}`), sql`, `)})` : sql``}
+        ${cities.length ? sql`and ${TOWN_KEY} in (${sql.join(cities.map((one) => sql`${one}`), sql`, `)})` : sql``}
         ${find ? sql`and (lower(c.name) like ${`%${find}%`} or lower(coalesce(c.code, '')) like ${`%${find}%`})` : sql``}
       order by ${lookedAfterBy(sql`${me.id}`, today)} desc, c.name limit 300`,
   );

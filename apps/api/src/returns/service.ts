@@ -11,6 +11,7 @@
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { DISPATCH_ROLES } from "../dispatch/rules";
+import { creditBack } from "../finance/credit";
 import { vatSplit } from "../finance/rules";
 import { allow, Refusal } from "../http";
 import { clean, iso, logMove, putIn, type Runner } from "../inventory/service";
@@ -82,7 +83,9 @@ export async function returnable(db: Runner, orderId: number) {
         i.qty::int as qty, i.unit_price::int as "unitPrice", i.free,
         (i.qty - coalesce((select sum(l.qty) from sales_return_line l join sales_return r on r.id = l.return_id
           where l.order_item_id = i.id
-            and (r.status in ('requested', 'approved') or (r.status in ('checked', 'received') and l.outcome <> 'missing'))), 0))::int as left
+            and (r.status in ('requested', 'approved') or (r.status in ('checked', 'received') and l.outcome <> 'missing')
+              -- Checked back onto the shelf, then not credited: those pieces are here, not with the customer.
+              or (r.status = 'rejected' and l.outcome = 'restocked'))), 0))::int as left
       from order_item i join medicine m on m.id = i.medicine_id where i.order_id = ${orderId} order by i.id`,
   );
 }
@@ -283,8 +286,21 @@ async function applyCredit(
         where id = ${invoice.id}`,
     );
     const over = invoice.paid - invoice.refunded - (invoice.total - amount);
-    if (over > 0)
-      refundNote = ` ${peso(over)} was already paid beyond the new bill: Finance gives it back.`;
+    if (over > 0) {
+      // Only money is given back as money. What was paid beyond the new bill from the customer's
+      // own credit is their credit again (it was lost before: Refunds owed counts cash only).
+      const [nonCash] = await rows<{ amount: number }>(
+        tx,
+        sql`select coalesce(sum(amount), 0)::int as amount from payment
+          where invoice_id = ${invoice.id} and active and method in ('points', 'withholding', 'credit', 'deduction')`,
+      );
+      const cash = Math.max(0, invoice.paid - invoice.refunded - (nonCash?.amount ?? 0));
+      const back = over > cash ? await creditBack(tx, me, invoice.id, over - cash) : 0;
+      const give = Math.min(over - back, cash);
+      refundNote = `${give > 0 ? ` ${peso(give)} was already paid beyond the new bill: Finance gives it back.` : ""}${
+        back > 0 ? ` ${peso(back)} of what was paid came from the customer's credit: it is their credit again.` : ""
+      }`;
+    }
   }
   await tx.execute(
     sql`update sales_return set status = 'received', credit = ${credit}, credited_by = ${me.id}, credited_at = now() where id = ${found.id}`,
@@ -407,7 +423,8 @@ export async function receiveReturn(
   db: Database,
   me: Me,
   id: number,
-  input: { lines: { lineId: number; outcome: ReturnOutcome }[] },
+  /** One outcome for a whole line, or several with how many each (20 good, 10 damaged). */
+  input: { lines: { lineId: number; outcome: ReturnOutcome; qty?: number | null }[] },
 ): Promise<{ credit: number }> {
   allow(me, DISPATCH_ROLES, "check returned goods");
   return db.transaction(async (tx) => {
@@ -433,21 +450,51 @@ export async function receiveReturn(
           m.name || coalesce(' ' || m.strength, '') as medicine, l.qty::int as qty, l.unit_price::int as "unitPrice"
         from sales_return_line l join medicine m on m.id = l.medicine_id where l.return_id = ${id} order by l.id`,
     );
-    const outcomeOf = new Map(input.lines.map((line) => [line.lineId, line.outcome]));
+    // A line may come back in parts (some good, some crushed, some never sent): each part is a
+    // line of its own from here on, so the shelf, the write-off and the credit each count theirs
+    // (it was one outcome for the whole line: 10 crushed tablets wrote off the 20 good ones too, 23 Nov).
+    const checked: ((typeof lines)[number] & { outcome: ReturnOutcome })[] = [];
     for (const line of lines) {
-      const outcome = outcomeOf.get(line.id);
-      if (!outcome || outcome === "kept")
+      const told = input.lines.filter((one) => one.lineId === line.id && one.outcome !== "kept");
+      if (!told.length)
         throw new Refusal(
           400,
           "invalid",
           `Say what came back of ${line.medicine}: good, damaged or not received.`,
           "lines",
         );
+      const whole = told.length === 1 && told[0]?.qty == null;
+      const parts = new Map<ReturnOutcome, number>();
+      for (const one of told) parts.set(one.outcome, (parts.get(one.outcome) ?? 0) + (whole ? line.qty : Math.max(0, one.qty ?? 0)));
+      const sum = [...parts.values()].reduce((total, qty) => total + qty, 0);
+      if (sum !== line.qty)
+        throw new Refusal(
+          400,
+          "invalid",
+          `${line.medicine}: ${line.qty} are on this return, and the good, damaged and not received add up to ${sum}.`,
+          "lines",
+        );
+      let first = true;
+      for (const [outcome, qty] of parts) {
+        if (qty <= 0) continue;
+        if (first) {
+          if (qty !== line.qty) await tx.execute(sql`update sales_return_line set qty = ${qty} where id = ${line.id}`);
+          checked.push({ ...line, qty, outcome });
+          first = false;
+          continue;
+        }
+        const [made] = await rows<{ id: number }>(
+          tx,
+          sql`insert into sales_return_line (return_id, order_item_id, medicine_id, qty, unit_price)
+            values (${id}, ${line.orderItemId}, ${line.medicineId}, ${qty}, ${line.unitPrice}) returning id::int as id`,
+        );
+        checked.push({ ...line, id: made?.id as number, qty, outcome });
+      }
     }
     let credit = 0;
     const said: string[] = [];
-    for (const line of lines) {
-      const outcome = outcomeOf.get(line.id) as ReturnOutcome;
+    for (const line of checked) {
+      const outcome = line.outcome;
       let batchId: number | null = null;
       let warehouseId: number | null = null;
       if (outcome === "restocked") {
@@ -455,7 +502,7 @@ export async function receiveReturn(
         const [pick] = await rows<{ batchId: number; warehouseId: number }>(
           tx,
           sql`select batch_id::int as "batchId", warehouse_id::int as "warehouseId" from order_pick
-            where order_item_id = ${line.orderItemId} order by qty desc, id limit 1`,
+            where order_item_id = ${line.orderItemId} order by active desc, qty desc, id limit 1`,
         );
         // None on record (an older order): the medicine's latest batch, in the order's warehouse.
         const [fallback] = pick

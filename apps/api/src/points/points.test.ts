@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -80,7 +81,7 @@ async function delivered(leadId: number): Promise<{ orderId: number; invoiceId: 
   expect(placed.status).toBe(200);
   const orderId = ((await placed.json()) as { id: number }).id;
   // Management approves every order (Aryan, 17 Nov).
-  expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(200);
+  expect((await post("sarla", await ticked(db, `/api/orders/${orderId}/approve`))).status).toBe(200);
   const [invoice] = await rows<{ id: number }>(
     db,
     sql`select id::int as id from invoice where order_id = ${orderId}`,
@@ -217,7 +218,7 @@ describe("using points", () => {
     const orderId = ((await placed.json()) as { id: number }).id;
     expect(await balanceOf("9173334444")).toBe(before - 20);
     // Management approves it; its invoice is made then, the points paid on it.
-    expect((await post("sarla", `/api/orders/${orderId}/approve`)).status).toBe(200);
+    expect((await post("sarla", await ticked(db, `/api/orders/${orderId}/approve`))).status).toBe(200);
     const detail = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
     expect(detail.order.pointsUsed).toBe(20);
     const [invoice] = await rows<{ paid: number; total: number }>(

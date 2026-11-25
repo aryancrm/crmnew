@@ -194,7 +194,7 @@ export function LeadPage() {
       key: "pay",
       number: "4",
       label: gl ? "Claim & payment" : "Payment & follow-up",
-      who: gl ? "You send the claim · the agency pays" : "Money in · the refill reminder",
+      who: gl ? "Finance sends the claim · the agency pays" : "Money in · the refill reminder",
     },
   ];
   const roadLock = orderLive
@@ -320,6 +320,11 @@ export function LeadPage() {
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-slate-500">
                 <span className="shrink-0 text-slate-400">Intake {intakeAt}</span>
+                {lead.cameFrom && (
+                  <span className="rounded bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-800" title="The sale counts where the patient came from">
+                    From {[lead.cameFrom.name, lead.cameFrom.channel].filter(Boolean).join(" · ")}
+                  </span>
+                )}
                 <span className="inline-flex items-center gap-1.5">
                   <UserRound className="size-3.5 text-slate-400" />
                   <span className="text-slate-400">{lead.desk === "pap" ? "MedRep" : "Owner"}</span>
@@ -1262,7 +1267,7 @@ const toDraft = (line: QuoteLine): Draft => ({
 });
 const centavos = (text: string) => Math.round(Number(text.replace(/,/g, "")) * 100);
 
-/** PCSO asks for three quotations: ours and two other vendors' totals, each from that
+/** A guarantee letter's agency asks for three quotations (every agency, 22 Nov): ours and two other vendors' totals, each from that
  *  vendor's written quotation. They print after ours, one page each. */
 function Canvass({ data, editable }: { data: LeadCase; editable: boolean }) {
   const { lead } = data;
@@ -1293,7 +1298,7 @@ function Canvass({ data, editable }: { data: LeadCase; editable: boolean }) {
           className={`size-2 rounded-full ${saved ? "bg-emerald-500" : "bg-amber-400"}`}
           aria-hidden="true"
         />
-        PCSO's 3 quotations: ours, and two other vendors'
+        The agency's 3 quotations: ours, and two other vendors'
       </div>
       <div className="grid gap-2">
         {rows.map((row, at) => (
@@ -1785,7 +1790,7 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
           </dl>
         )}
 
-        {quoted && lead.road === "gl" && lead.agency === "pcso" && (
+        {quoted && lead.road === "gl" && (
           <Canvass data={data} editable={editable} />
         )}
         {quoted && <QuotationOut data={data} />}
@@ -2082,7 +2087,7 @@ function orderWord(order: NonNullable<LeadCase["order"]>, pap = false): string {
   if (order.status === "shipped") return "On the way";
   if (order.status === "packing") return "Packed";
   if (order.status === "pending_approval")
-    return pap ? "Waiting for the PAP head" : "Waiting for Management";
+    return "Waiting for Management";
   if (order.status === "on_hold" || order.status === "exception") return "On hold";
   if (order.status === "draft") return "Sent back";
   if (order.status === "finance_check" || order.status === "ready_for_invoice") return "With Finance";
@@ -2364,7 +2369,7 @@ function CaseRoute({
   pay: "cod" | "advance" | "terms" | null;
 }) {
   const steps = [
-    pap ? "The PAP head approves" : "Management approves",
+    "Management approves",
     gl
       ? "Finance checks the agency's bill"
       : pay === "advance"
@@ -2523,7 +2528,8 @@ function OrderStep({ data, onNext }: { data: LeadCase; onNext: () => void }) {
 }
 
 /** The guarantee letter's claim after delivery: 4.1 the pick-up photo, 4.2 sent to the agency
- *  (the day and its reference), 4.3 the agency's money, which Finance records on the invoice. */
+ *  (the day and its reference), 4.3 the agency's money. Finance's from here (Aryan, 22 Nov): the
+ *  PAP person gets the letter in and places the order, then only watches these. */
 function ClaimSteps({ data }: { data: LeadCase }) {
   const { lead } = data;
   const write = useCaseWrite(lead.id);
@@ -2566,7 +2572,7 @@ function ClaimSteps({ data }: { data: LeadCase }) {
                   {...field}
                   type="date"
                   className={INPUT}
-                  disabled={!data.can.work}
+                  disabled
                   value={sentOn}
                   onChange={(event) => setSentOn(event.target.value)}
                 />
@@ -2577,27 +2583,13 @@ function ClaimSteps({ data }: { data: LeadCase }) {
                 <input
                   {...field}
                   className={INPUT}
-                  disabled={!data.can.work}
+                  disabled
                   value={ref}
                   onChange={(event) => setRef(event.target.value)}
                 />
               )}
             </Field>
-            {data.can.work && (
-              <Button
-                small
-                variant={lead.claimSentOn ? "plain" : "primary"}
-                disabled={write.busy || !sentOn}
-                onClick={() =>
-                  write.send(`/api/leads/${lead.id}/claim`, {
-                    sentOn: sentOn || null,
-                    ref: ref.trim() || null,
-                  })
-                }
-              >
-                {write.busy ? "Saving…" : lead.claimSentOn ? "Save" : "Claim sent"}
-              </Button>
-            )}
+            <span className="text-[12px] text-slate-500">Finance sends the claim and writes it here.</span>
           </div>
           <Problem message={write.general(["sentOn", "ref"])} />
         </div>
@@ -2688,7 +2680,8 @@ function PayStep({ data, onBack }: { data: LeadCase; onBack: () => void }) {
                 className="flex flex-wrap items-center justify-between gap-2 px-3 py-2"
               >
                 <span>
-                  <b className="tabular-nums">{peso(payment.amount)}</b> · {payment.methodLabel}
+                  <b className="tabular-nums">{peso(payment.amount)}</b> · {payment.who ? `${payment.who} · ` : ""}
+                  {payment.methodLabel}
                   {payment.reference ? ` · ${payment.reference}` : ""}
                 </span>
                 <span className="text-[12px] text-slate-500">

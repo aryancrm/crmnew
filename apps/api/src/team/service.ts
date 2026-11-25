@@ -271,9 +271,16 @@ export async function teamBoard(
             coalesce(sum(i.total - i.paid) filter (where i.status = 'open' and ${due} and i.due_on < ${today}::date), 0)::float8 as overdue
           from invoice i join sales_order o on o.id = i.order_id where o.seat_id in (${list}) group by o.seat_id
           union all
-          -- Zoho's unpaid invoices of the seat's Zoho salesperson.
-          select i.seat_id::int, sum(i.total - i.paid)::float8, coalesce(sum(i.total - i.paid) filter (where i.due_on < ${today}::date), 0)::float8
-          from sale_invoice i where i.source = 'zoho' and i.status = 'open' and i.seat_id in (${list}) group by i.seat_id`,
+          -- Zoho's unpaid invoices of the seat's Zoho salesperson: the sales view's Zoho half asked
+          -- directly (the same documents, amounts and day: unpaid = a balance, not void, not a
+          -- draft), so the database reads only the invoices with a balance, not every invoice the
+          -- seats ever had (1.2 seconds of the board, 22 Nov).
+          select zs.seat_id::int,
+            sum(round(d.total * d.fx_rate)::bigint - round((d.total - d.balance) * d.fx_rate)::bigint)::float8,
+            coalesce(sum(round(d.total * d.fx_rate)::bigint - round((d.total - d.balance) * d.fx_rate)::bigint) filter (where d.due_date < ${today}::date), 0)::float8
+          from book_doc d join zoho_seller zs on zs.name = coalesce(d.fields->>'Sales Person', d.fields->>'salesperson_name')
+          where d.kind = 'invoice' and d.zoho_id is not null and d.status not in ('draft', 'void') and d.balance > 0
+            and zs.seat_id in (${list}) group by zs.seat_id`,
     ),
     rows<{ seatId: number; day: string; amount: number }>(
       db,
@@ -324,11 +331,18 @@ export async function teamBoard(
       parentId: number | null;
       leadSeatId: number | null;
       division: string | null;
+      sheetName: string | null;
     }>(
       db,
       sql`select u.id::int as id, u.name, u.kind, u.parent_id::int as "parentId",
             (select s.id::int from seat s where s.unit_id = u.id and s.active and s.lead order by s.sort, s.id limit 1) as "leadSeatId",
-            unit_division(u.id) as division
+            unit_division(u.id) as division,
+            -- The one word the latest target sheet gives the rows of the seats in the box and under it
+            -- (B2B for B2B Telesales, BID for Government Bidding); null when none or more than one.
+            (with recursive down as (select u.id union all select k.id from org_unit k join down d on k.parent_id = d.id)
+              select case when count(distinct r.channel) = 1 then min(r.channel) end
+              from down d join seat rs on rs.unit_id = d.id join target_sheet_row r on r.seat_id = rs.id
+                and r.month = (select max(month) from target_sheet_row)) as "sheetName"
           from org_unit u where u.active order by u.sort, u.id`,
     ),
     rows<TeamBoard["topMedicines"][number]>(
@@ -358,12 +372,27 @@ export async function teamBoard(
     ),
   ]);
   const holders = seats.flatMap((seat) => (seat.personId ? [seat.personId] : []));
-  const [targets, needs] = await Promise.all([
+  const [targets, seatTargets, seatedTargets, needs] = await Promise.all([
     rows<{ personId: number; month: string; amount: number }>(
       db,
       sql`select person_id::int as "personId", ${day("month")} as month, amount::float8 as amount from sales_target
         where month between date_trunc('month', ${from}::date) and date_trunc('month', ${to}::date)
           and person_id in (${ids(holders)})`,
+    ),
+    // The targets set on the seats themselves (the target sheet's): a vacant seat's counts too, and
+    // someone holding two seats has each seat's own, so this adds up to the CEO Home's figure.
+    rows<{ seatId: number; month: string; amount: number }>(
+      db,
+      sql`select seat_id::int as "seatId", ${day("month")} as month, amount::float8 as amount from seat_target
+        where month between date_trunc('month', ${from}::date) and date_trunc('month', ${to}::date)
+          and seat_id in (${list})`,
+    ),
+    // Holders whose target sits on a seat of theirs (maybe another one than those shown here).
+    rows<{ personId: number }>(
+      db,
+      sql`select distinct h.person_id::int as "personId" from seat_holder h join seat_target t on t.seat_id = h.seat_id
+        where h.kind = 'holder' and ${inForce("h", today)} and h.person_id in (${ids(holders)})
+          and t.month between date_trunc('month', ${from}::date) and date_trunc('month', ${to}::date)`,
     ),
     teamNeeds(db, seatIds, today),
   ]);
@@ -402,13 +431,21 @@ export async function teamBoard(
           }
         : null,
       acting: seat.actingName ? { name: seat.actingName, until: seat.actingUntil } : null,
-      target: seat.personId
+      // The seat's own target; a month from before seats had targets: its holder's (never when the
+      // holder's target is on another seat of theirs, so one target is not counted on two seats).
+      target: seatTargets.some((row) => row.seatId === seat.seatId)
         ? prorated(
-            targets.filter((row) => row.personId === seat.personId),
+            seatTargets.filter((row) => row.seatId === seat.seatId),
             from,
             to,
           )
-        : null,
+        : seat.personId && !seatedTargets.some((row) => row.personId === seat.personId)
+          ? prorated(
+              targets.filter((row) => row.personId === seat.personId),
+              from,
+              to,
+            )
+          : null,
       sold: sumOf(sold, seat.seatId, (row) => row.amount),
       today: soldDays.get(today) ?? 0,
       collected: sumOf(collected, seat.seatId, (row) => row.amount),
@@ -701,7 +738,9 @@ export async function territories(
         lead: string | null;
       }>(
         db,
-        sql`select s.id::int as "seatId", s.title, a.id::int as "areaId", a.name as area, ch.code as channel, a.cities,
+        sql`select s.id::int as "seatId", s.title, a.id::int as "areaId", a.name as area,
+            -- The target sheet's channel of the seat (CLIDP, MD Telesales…); PAP as PAP.
+            (case when ch.code = 'PAP' then ch.code else coalesce(seat_division(s.id), ch.code) end) as channel, a.cities,
             (select p.name from seat_holder h join person p on p.id = h.person_id
               where h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", todayManila())} order by h.starts_on desc limit 1) as holder,
             -- Their lead: the seat it reports to, else the nearest lead seat up its boxes.
@@ -716,7 +755,7 @@ export async function territories(
                   join person p on p.id = h.person_id order by up.depth limit 1)) as lead
           from seat s join area a on a.id = s.area_id left join channel ch on ch.id = a.channel_id
           where s.active and s.id in (${ids(view.seatIds)})
-          order by ch.code, a.name`,
+          order by 5, a.name`,
       )
     : [];
   return {

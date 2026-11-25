@@ -60,7 +60,7 @@ import type {
   Vat,
 } from "../types";
 import { stuckNow } from "./clock";
-import { divisionOf, divisionRule, divisionsOf, isPatientType, subDivisionOfArea, termsOfLabel } from "./divisions";
+import { DIVISIONS, divisionOf, divisionRule, divisionsOf, isPatientType, subDivisionOfArea, termsOfLabel } from "./divisions";
 import { logEvent, peso } from "./events";
 import {
   DESK_HOME,
@@ -91,7 +91,7 @@ import { FINANCE_ROLES } from "../finance/rules";
 import { asksOf, leadsUp } from "./asks";
 import { duesSql } from "../finance/dues";
 import { activeOffers, withOfferLines } from "./offers";
-import { shortLines, shortWords } from "./stock-wait";
+import { aheadOf, shortLines, shortWords } from "./stock-wait";
 
 const PAGE = 25;
 const list = (values: readonly string[]): SQL =>
@@ -182,6 +182,12 @@ const rowColumns = sql`
   ${iso("o.created_at")} as "createdAt", ${iso("o.updated_at")} as "updatedAt", o.flag_reason as "flagReason",
   o.patient_order as "patientOrder", o.patient_name as "patientName", o.note, o.order_type as "orderType", o.division,
   exists (select 1 from order_version v where v.order_id = o.id and v.kind = 'changed') as changed, ${viaSql} as via`;
+
+/** The channel an order shows (Aryan, 22 Nov: one list of channels, the target sheet's): its
+ *  Division, which is the sheet's channel of the seat it was placed from (CLIDP, MD Telesales, RX
+ *  Business…); a PAP order keeps PAP (the sheet has no PAP row); an older order with no Division
+ *  its first channel's code. Screens are still decided by the seat, never by this word. */
+const SHOWN_CHANNEL = sql`(case when ch.code = 'PAP' then ch.code else coalesce(o.division, ch.code) end)`;
 
 const rowJoins = sql`
   join customer c on c.id = o.customer_id
@@ -380,12 +386,12 @@ const itemsOf = (db: Runner, orderIds: number[]) =>
             i.qty::int as qty, i.price_kind as "priceKind", i.list_price::int as "listPrice",
             i.unit_price::int as "unitPrice", i.price_reason as reason, (i.qty * i.unit_price)::int as amount, i.relief, m.vat, i.free, m.rx,
             i.offer_id::int as "offerId", m.cold_chain as cold, m.cold_box as "coldBox",
-            -- Free for this order: sellable on the shelf, less what orders placed before it are
-            -- promised and not packed yet (first placed, first served).
+            -- Free for this order: sellable on the shelf, less what the orders ahead of it (placed
+            -- before it, or approved already) are promised and not packed yet: first placed, first served.
             greatest(0, coalesce((select sum(s.qty) from stock s join batch b on b.id = s.batch_id
               where b.medicine_id = i.medicine_id and b.expires_on >= (now() at time zone 'Asia/Manila')::date), 0)
               - case when so.status in ('packing', 'shipped', 'completed', 'cancelled', 'draft') then 0 else coalesce((select sum(oi.qty) from order_item oi join sales_order o on o.id = oi.order_id
-                  where oi.medicine_id = i.medicine_id and o.id < i.order_id and ${PROMISED_ORDER}), 0) end)::int as "inStock",
+                  where oi.medicine_id = i.medicine_id and ${aheadOf(sql`i.order_id`)}), 0) end)::int as "inStock",
             (select mp.amount::int from medicine_price mp where mp.medicine_id = i.medicine_id and mp.buyer_type = c.kind) as "ownPrice",
             c.kind as "ownKind",
             (select oi.unit_price::int from order_item oi join sales_order o2 on o2.id = oi.order_id
@@ -533,6 +539,42 @@ function findingsOf(
         decide: `${item.medicine} priced as ${item.priceLabel.toLowerCase()} (${peso(item.unitPrice)}); a ${buyerLabel(item.ownKind).toLowerCase()} pays ${peso(item.ownPrice)}`,
         text: `${item.medicine}: the ${item.priceLabel.toLowerCase()} price (${peso(item.unitPrice)}) given to a ${buyerLabel(item.ownKind).toLowerCase()}, whose price is ${peso(item.ownPrice)} (${peso((item.ownPrice - item.unitPrice) * item.qty)} less in all)`,
       });
+    // Priced as another kind of buyer, dearer than this customer's own (a hospital charged the
+    // patient price): nothing said it, the price being "at list" of the list picked (23 Nov).
+    if (
+      priced &&
+      !item.relief &&
+      item.priceKind !== "promo" &&
+      item.priceKind !== "offer" &&
+      item.priceKind !== item.ownKind &&
+      !(item.ownKind === "government" && item.priceKind === "bidding") &&
+      item.ownPrice != null &&
+      item.unitPrice > item.ownPrice
+    )
+      found.push({
+        kind: "price",
+        short: `${item.priceLabel} price to a ${buyerLabel(item.ownKind).toLowerCase()}`,
+        decide: `${item.medicine} priced as ${item.priceLabel.toLowerCase()} (${peso(item.unitPrice)}); a ${buyerLabel(item.ownKind).toLowerCase()} pays ${peso(item.ownPrice)}`,
+        text: `${item.medicine}: the ${item.priceLabel.toLowerCase()} price (${peso(item.unitPrice)}) charged to a ${buyerLabel(item.ownKind).toLowerCase()}, whose price is ${peso(item.ownPrice)} (${peso((item.unitPrice - item.ownPrice) * item.qty)} more in all)${item.reason ? `. Reason: ${item.reason}` : ""}`,
+      });
+    // Priced as another kind of buyer because Inventory has no price for this customer's own kind
+    // (a drugstore given the hospital price): nothing to compare with, so Management looks (22 Nov).
+    if (
+      priced &&
+      !item.relief &&
+      item.priceKind !== "promo" &&
+      item.priceKind !== "offer" &&
+      item.priceKind !== item.ownKind &&
+      // A government buyer's own price is the bidding price.
+      !(item.ownKind === "government" && item.priceKind === "bidding") &&
+      item.ownPrice == null
+    )
+      found.push({
+        kind: "price",
+        short: `No ${buyerLabel(item.ownKind).toLowerCase()} price set`,
+        decide: `${item.medicine} has no ${buyerLabel(item.ownKind).toLowerCase()} price in Inventory; the ${item.priceLabel.toLowerCase()} price (${peso(item.unitPrice)}) was used`,
+        text: `${item.medicine}: Inventory has no ${buyerLabel(item.ownKind).toLowerCase()} price, so the ${item.priceLabel.toLowerCase()} price (${peso(item.unitPrice)}) was given. Check it is right, or set the price in Inventory.`,
+      });
     const need = wanted.get(item.medicineId) ?? item.qty;
     if (item.inStock < need && !stockSaid.has(item.medicineId)) {
       stockSaid.add(item.medicineId);
@@ -649,13 +691,10 @@ export async function caseOrderChecks(db: Runner, orderId: number): Promise<Orde
 
 /**
  * Sends a just-placed order on along the order line. Every order placed by anyone but Management
- * goes to Management, then Finance (Management may switch Finance off on approving). Management's
- * own order follows the switch at the top of its form: to Management or not, to Finance or not;
- * it is checked anyway when the system finds something wrong on it (a price below the list, over
- * the credit limit, money overdue, a new business customer, an expired licence; a missing proof
- * of payment while Finance is off). An Online case's order goes Management → Finance → Dispatch
- * like every other (Aryan, 18 Nov). Management's own order skips Management. Short stock is never
- * Management's: Dispatch sees it.
+ * goes to Management, then Finance (Management may switch Finance off on approving). The
+ * Admin's own order too (Aryan, 22 Nov: nothing skips Management); its form's switch only says
+ * whether Finance checks it. An Online case's order goes Management → Finance → Dispatch like
+ * every other (Aryan, 18 Nov).
  */
 export async function routeOrder(
   tx: Runner,
@@ -665,19 +704,12 @@ export async function routeOrder(
 ): Promise<"management" | "finance" | "dispatch"> {
   const read = await findingsOfOrder(tx, orderId);
   if (!read) return "management";
-  const { order, found } = read;
+  const { order } = read;
   const fromCase = Boolean(order.leadId);
   const manager = ORDER_MANAGE_ROLES.includes(me.role);
   // Who checks an order is Management's call (Aryan, 17 Nov: MedRep → Management → Finance →
   // Dispatch). Anyone else's switch is not read: the API, not only the form, keeps the line.
   const allowed = manager || fromCase ? choice : undefined;
-  // Management's own order goes on by itself, unless it was placed to wait (a patient's order
-  // waits for its prescription): then it is approved like any other.
-  const [placed] = await rows<{ status: OrderStatus }>(
-    tx,
-    sql`select status from sales_order where id = ${orderId}`,
-  );
-  const manages = manager && placed?.status !== "pending_approval";
   const [kept] = await rows<{ finance: boolean }>(
     tx,
     sql`select finance_check as finance from sales_order where id = ${orderId}`,
@@ -688,54 +720,9 @@ export async function routeOrder(
   await tx.execute(
     sql`update sales_order set finance_check = ${financeStep} where id = ${orderId}`,
   );
-  // Management approves every order that comes in, of every channel: a MedRep's, a Team
-  // Lead's, an Online or PAP case's (Aryan, 17 Nov). Only Management's own order goes on by itself.
-  if (!manages) return "management";
-  const checks = manages
-    ? []
-    : // A proof of payment is Finance's to check while Finance is on; an Online case's order the
-      // same (Aryan, 19 Nov: Online orders go the way every channel's do).
-      found.filter(
-          (finding) => finding.kind !== "stock" && (financeStep ? finding.kind !== "papers" : true),
-        );
-  if (checks.length > 0) {
-    await logEvent(
-      tx,
-      orderId,
-      me,
-      "status",
-      `Management checks it first: ${checks.map((check) => check.short.toLowerCase()).join(", ")}.`,
-    );
-    return "management";
-  }
-  if (!manages && allowed?.management) {
-    await logEvent(tx, orderId, me, "status", `${me.name} sent it to Management to check.`);
-    return "management";
-  }
-  const why = "Nothing for Management to check";
-  if (financeStep) {
-    // Management's own order: its invoice is made as it goes on (it was approved when placed).
-    if (manages) await invoiceOnApproval(tx, me, orderId);
-    if (!manages) {
-      const next = afterApproval(order.terms);
-      const [place] = await rows<{ id: number }>(
-        tx,
-        sql`select id::int as id from warehouse where active order by is_default desc, id limit 1`,
-      );
-      await tx.execute(
-        sql`update sales_order set status = ${next}, approved_at = now(), warehouse_id = coalesce(warehouse_id, ${place?.id ?? null}), updated_at = now() where id = ${orderId}`,
-      );
-      await logEvent(tx, orderId, me, "status", `${why}: it goes to Finance.`, "approved");
-    }
-    return "finance";
-  }
-  await clearCaseOrder(
-    tx,
-    me,
-    orderId,
-    manages ? undefined : `${why}: it goes to Dispatch with its invoice.`,
-  );
-  return "dispatch";
+  // Management approves every order that comes in, of every channel and of every placer, the
+  // Admin's own too (Aryan, 22 Nov: "nothing skips Management").
+  return "management";
 }
 
 /** The orders waiting for Management, the longest wait first, each with what the system found. */
@@ -809,9 +796,11 @@ type CardRow = Omit<OrderCard, "statusLabel" | "lines" | "items" | "findings" | 
 const caseColumns = sql`o.lead_id::int as "leadId", coalesce((select l.road = 'gl' from lead l where l.id = o.lead_id), false) as gl`;
 
 /** Everything a card shows about an order (alias `o`), with `cardFrom`. */
-/** Who decides this order instead of Management: a PAP order's channel head (patient
- *  assistance is approved apart, Aryan). None for every other order. */
-const approverSql = sql`(select ch2.head_id::int from channel ch2 where ch2.id = o.channel_id and ch2.code = 'PAP')`;
+/** Who decides this order instead of Management: nobody (Aryan, 22 Nov: PAP has no head; the PAP
+ *  person gets the papers and the guarantee letter ready on the case, then the order goes to
+ *  Management, which reads the prescription, the letter and its amount, then to Finance). It was
+ *  a PAP order's channel head until then; kept as one place should a desk ever approve apart. */
+const approverSql = sql`(null::int)`;
 
 const cardColumns = sql`${rowColumns}, o.medrep_id::int as "medrepId", ${approverSql} as "approverId",
   (select ap.name from person ap where ap.id = ${approverSql}) as "approverName", ${sentBackColumns},
@@ -823,7 +812,7 @@ const cardColumns = sql`${rowColumns}, o.medrep_id::int as "medrepId", ${approve
   -- Who has it in hand at its desk now: Finance's person while it is with Finance, else Management's.
   (select p.name from person p where p.id = case when o.status in ('finance_check', 'ready_for_invoice') then o.finance_by else o.manage_by end) as "handledBy",
   (case when o.status in ('finance_check', 'ready_for_invoice') then o.finance_by else o.manage_by end)::int as "handledById",
-  o.came_back_count::int as "cameBackCount", o.came_back_reason as "cameBackReason", c.kind as "customerKind", c.city as "customerCity", ch.code as channel, a.name as area,
+  o.came_back_count::int as "cameBackCount", o.came_back_reason as "cameBackReason", c.kind as "customerKind", c.city as "customerCity", ${SHOWN_CHANNEL} as channel, a.name as area,
   o.payment_terms as "paymentTerms", o.payment_days::int as "paymentDays", ${day("o.pay_by")} as "payBy",
   ${iso("coalesce(o.submitted_at, o.created_at)")} as "submittedAt", o.held_from as "heldFrom", c.review,
   to_char(coalesce(o.submitted_at, o.created_at) at time zone 'Asia/Manila', 'YYYY-MM-DD') as "placedOn",
@@ -893,8 +882,7 @@ function nextLine(viewer: Viewer, row: CardRow, findings: OrderFinding[]): strin
     case "draft":
       return `Sent back to you${row.flagReason ? `: ${row.flagReason}` : ""}. Fix it and place it again.`;
     case "pending_approval": {
-      // A PAP order is approved by the PAP head, not Management.
-      const who = row.approverName ? `${row.approverName} (PAP head)` : "Management";
+      const who = row.approverName ?? "Management";
       return findings.length
         ? `${who} is checking it: ${findings.map((finding) => finding.short.toLowerCase()).join(", ")}`
         : `${who} is checking it`;
@@ -1048,7 +1036,8 @@ export async function orderBoard(
     : null;
   const today = sql`(now() at time zone 'Asia/Manila')::date`;
   const narrowed: SQL[] = [seen(me)];
-  if (filter.channel) narrowed.push(sql`ch.code = ${filter.channel}`);
+  // The sheet's channel as the board shows it; an old link's first-channel code still works.
+  if (filter.channel) narrowed.push(sql`(${SHOWN_CHANNEL} = ${filter.channel} or ch.code = ${filter.channel})`);
   if (filter.terms && ["advance", "cod", "days"].includes(filter.terms))
     narrowed.push(sql`o.payment_terms = ${filter.terms}`);
   for (const word of (filter.q ?? "").toLowerCase().split(/\s+/).filter(Boolean).slice(0, 5)) {
@@ -1127,7 +1116,8 @@ export async function orderBoard(
     ),
     rows<BoardRep>(
       db,
-      sql`${team(me)} select rep.id::int as id, rep.name, rch.code as channel, ra.name as area,
+      sql`${team(me)} select rep.id::int as id, rep.name,
+          (case when rch.code = 'PAP' then rch.code else coalesce((${seatDivisionsSql(sql`rep.id`, todayManila())})[1], rch.code) end) as channel, ra.name as area,
           count(*)::int as orders, coalesce(sum(o.total), 0)::float8 as value,
           ${iso("min(coalesce(o.submitted_at, o.created_at))")} as oldest
         ${from} left join channel rch on rch.id = rep.channel_id left join area ra on ra.id = rep.area_id
@@ -1145,9 +1135,8 @@ export async function orderBoard(
     cards: await toCards(db, me, found, desk === "management" ? viewerOf(me) : desk),
     // Every channel, in the company's order (Aryan, 19 Nov: the list showed only the channels with
     // orders, and looked short).
-    channels: (await rows<{ code: string }>(db, sql`select code from channel order by sort, code`)).map(
-      (row) => row.code,
-    ),
+    // The sheet's channels (the Divisions), and PAP, which is on no row of the sheet.
+    channels: [...DIVISIONS, "PAP"],
     medreps: [
       ...new Map(choices.map((row) => [row.id, { id: row.id, name: row.name }])).values(),
     ].sort((x, y) => x.name.localeCompare(y.name)),
@@ -1332,6 +1321,9 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
   >(
     db,
     sql`${team(me)} select ${rowColumns}, ${caseColumns}, c.kind as "customerKind", c.city as "customerCity", c.review as "customerReview",
+        -- Who the customer is, for Management's check of a new one (23 Nov): its phone, who added it and when.
+        c.phone as "customerPhone", (select ap.name from person ap where ap.id = c.added_by) as "customerAddedBy",
+        to_char(c.created_at at time zone 'Asia/Manila', 'YYYY-MM-DD') as "customerAddedOn",
         coalesce(c.licence_expires < (now() at time zone 'Asia/Manila')::date, false) as "licenceExpired",
         c.licence_no as "licenceNo", ${day("c.licence_expires")} as "licenceExpires", c.tin,
         o.no_proof_reason as "noProofReason", o.no_proof_note as "noProofNote", ${approverSql} as "approverId",
@@ -1347,7 +1339,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
             and f.hold_event_id = (select max(g.hold_event_id) from order_file g where g.order_id = o.id and g.active))
           as "holdProofs",
         raiser.name as "raisedBy", o.raised_by::int as "raisedById", o.medrep_id::int as "medrepId",
-        ch.code as channel, a.name as area,
+        ${SHOWN_CHANNEL} as channel, a.name as area,
         o.payment_terms as "paymentTerms", o.payment_days::int as "paymentDays",
         o.delivery_address as "deliveryAddress", o.receiver, o.receiver_phone as "receiverPhone", o.note,
         o.customer_po as "customerPo", o.invoice_from as "invoiceFrom", o.doctor_id::int as "doctorId", doc.name as doctor,
@@ -1363,6 +1355,8 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         case when ${takeBackSql} then ${iso(`(o.approved_at + make_interval(mins => ${TAKE_BACK_MINUTES}))`)} end as "takeBackUntil",
         case when o.relief_kind is not null then json_build_object('kind', o.relief_kind, 'idNo', o.relief_id_no, 'name', o.relief_name) end as relief,
         o.order_type as type, o.headquarter, o.no_rx_reason as "noRxReason",
+        (select json_build_object('leadId', gc.id, 'agency', gc.agency, 'sentOn', to_char(gc.claim_sent_on, 'YYYY-MM-DD'), 'ref', gc.claim_ref)
+          from lead gc where gc.order_id = o.id and gc.road = 'gl' order by gc.id desc limit 1) as "glClaim",
         o.gl_number as "glNumber", o.gl_amount::int as "glAmount", (select gp.name from person gp where gp.id = o.gl_set_by) as "glSetBy",
         ${restorableSql} as restorable, ${paidInSql} as "paidIn", ${iso("o.waiting_stock_at")} as "waitingSince",
         (select wp.name from person wp where wp.id = o.waiting_stock_by) as "waitingBy"
@@ -1610,6 +1604,9 @@ export type PlaceOptions = {
   inside?: (tx: Runner, orderId: number) => Promise<void>;
   /** An Online case's order: the agent asks Management to check it although nothing is wrong. */
   toManagement?: boolean;
+  /** A PAP case's order (Aryan, 22 Nov: PAP is a process, the sale counts where the patient came
+   *  from): the person the case came from is its MedRep; the PAP person only raised it. */
+  creditTo?: number;
 };
 
 type KeptRelief = { unitPrice: number; priceKind: string; listPrice: number; reason: string | null };
@@ -1971,6 +1968,22 @@ export async function placeOrder(
   const type = input.type ?? null;
   if (type && !isPatientType(type) && customer.kind === "patient")
     throw new Refusal(400, "invalid", "A patient's order is Patient, Senior / PWD or Guarantee letter.", "type");
+  // A guarantee letter is PAP's work (Aryan, 22 Nov): a seller hands the patient to PAP, who gets
+  // the quotations and the letter and places the case's order (the sale stays the seller's). The
+  // order form said so; the server refuses it too, so the form isn't the only guard.
+  if (
+    type === "gl" &&
+    !options.leadId &&
+    !options.creditTo &&
+    ["medrep", "team_lead", "manager", "online"].includes(me.role) &&
+    me.channel?.code !== "PAP"
+  )
+    throw new Refusal(
+      403,
+      "forbidden",
+      "A guarantee letter is PAP's work: hand the patient to PAP (Hand to PAP on the order form). The sale stays yours.",
+      "type",
+    );
   if (type === "po" && !clean(input.customerPo))
     throw new Refusal(400, "invalid", "Type their PO number: it goes on the invoice.", "customerPo");
   if (type === "senior_pwd" && !relief)
@@ -1980,11 +1993,20 @@ export async function placeOrder(
   const patientOrder =
     customer.kind !== "patient" && (type ? isPatientType(type) : Boolean(input.patientOrder));
   const patientBuys = customer.kind === "patient" || patientOrder;
-  const manages = orderCan(me).manage && !patientBuys;
+  // Nothing skips Management (Aryan, 22 Nov): the Admin's own order waits for approval too.
+  const manages = false as boolean;
   // Whose order it is: the MedRep who placed it; for one a team lead or Management places, the
   // MedRep they pick (one of the lead's own people), else the MedRep of the customer's area.
   const picked = input.medrepId ? await pickedMedrep(db, me, input.medrepId) : null;
-  const [holder] = picked
+  const [credited] = options.creditTo
+    ? await rows<{ id: number; channelId: number | null }>(
+        db,
+        sql`select id::int as id, channel_id::int as "channelId" from person where id = ${options.creditTo} and active`,
+      )
+    : [];
+  const [holder] = credited
+    ? [credited]
+    : picked
     ? [picked]
     : // A MedRep's and the Online desk's own orders are theirs; the agent is the Online channel's MedRep.
       me.role === "medrep" || me.role === "online" || !customer.areaId
@@ -2226,6 +2248,26 @@ export async function actOnOrder(
             "no_prescription",
             "A patient's order is approved only with the prescription: attach it first (under Documents), or send it back for it.",
           );
+        // Every check is fine or approved before the order is (Aryan, 22 Nov: "approve is blocked
+        // until everything is checked"): Documents by hand always, the others when the system
+        // found something on them.
+        // What isn't on the shelf isn't approved (Aryan, 23 Nov: "not in stock: it stops right
+        // there, on hold"): it went on to Finance and Dispatch with a whole invoice and stopped at
+        // the packing table. Management holds it with Wait for stock, or changes its medicines.
+        const short = await shortLines(tx, id);
+        if (short.length)
+          throw new Refusal(
+            409,
+            "short_stock",
+            `Not in stock: ${shortWords(short)}. It can't be approved: press Wait for stock (it is held until the stock is in, and you are told), or change its medicines.`,
+          );
+        const open = await openChecks(tx, id);
+        if (open.length)
+          throw new Refusal(
+            409,
+            "checks_open",
+            `Check first: ${open.map((key) => CHECK_LABEL[key]).join(", ")}. Open the order and approve each.`,
+          );
         const [place] = input.warehouseId
           ? await rows<{ id: number; name: string }>(
               tx,
@@ -2237,6 +2279,15 @@ export async function actOnOrder(
             );
         if (!place)
           throw new Refusal(400, "invalid", "Pick the warehouse it ships from.", "warehouseId");
+        // Enough in the company but not in the warehouse picked: Dispatch couldn't pack it there.
+        const there = (await warehouseFill(tx, id))?.find((one) => one.id === place.id);
+        if (there?.short.length)
+          throw new Refusal(
+            409,
+            "short_stock",
+            `${place.name} doesn't have enough: ${there.short.map((one) => `${one.medicine} (needs ${one.need.toLocaleString("en-PH")}, ${one.have.toLocaleString("en-PH")} there)`).join("; ")}. Pick another warehouse, or move stock there first.`,
+            "warehouseId",
+          );
         // Management says on approving whether Finance checks it too.
         const financeCheck = input.finance === undefined ? order.financeCheck : input.finance;
         if (financeCheck !== order.financeCheck)
@@ -2289,6 +2340,8 @@ export async function actOnOrder(
           "status",
           `Sent back to the MedRep to fix and place again. Reason: ${reason}`,
         );
+      // No longer offered (Aryan, 23 Nov: "Reject and Put on hold do the same: keep one"); kept
+      // for an old page still open, where it does what it always did: a hold with its reason.
       case "reject":
         await set(
           sql`status = 'on_hold', held_from = 'pending_approval', held_role = 'management', flag_reason = ${reason}`,
@@ -2319,7 +2372,7 @@ export async function actOnOrder(
           );
         }
         await set(
-          sql`status = 'on_hold', held_from = ${order.status}, held_role = ${role}, flag_reason = ${reason}`,
+          sql`status = 'on_hold', held_from = ${order.status}, held_role = ${role}, flag_reason = ${reason}, reply = null`,
         );
         return logEvent(
           tx,
@@ -2358,6 +2411,8 @@ export async function actOnOrder(
           // (the same number) when it is approved.
           await cancelInvoiceOf(tx, me, id, `Back to Management: ${reason ?? "taken off hold"}`);
           await set(sql`approved_at = null, approved_by = null`);
+          // Its checks are looked at afresh, as after a take-back.
+          await clearChecks(tx, id);
         }
         await set(
           sql`status = ${back}, held_from = null, held_role = null, flag_reason = null,
@@ -2380,6 +2435,8 @@ export async function actOnOrder(
             finance_checked_by = null, held_from = null, held_role = null, flag_reason = null,
             waiting_stock_at = null, waiting_stock_by = null, packed_at = null, packed_by = null`,
         );
+        // Its checks are looked at afresh: it is approved again like a new order.
+        await clearChecks(tx, id);
         // Packed before the cancel: its pieces went back on the shelf, so it is packed afresh.
         await tx.execute(
           sql`update order_event set stage = null where order_id = ${id} and stage in ('finance_verified', 'paid', 'packed')`,
@@ -2393,7 +2450,9 @@ export async function actOnOrder(
         );
       }
       case "answer":
-        // Only words on the order's timeline: the hold stays until its desk takes it off.
+        // The hold stays until its desk takes it off; the answer is kept on the order too, so the
+        // desk's card and page show it (it was only a line on the timeline, 23 Nov).
+        await set(sql`reply = ${reason}`);
         return logEvent(tx, id, me, "note", `Answer to the hold, from ${me.name}: ${reason}`);
       case "cancel": {
         await set(sql`status = 'cancelled', flag_reason = ${reason ?? "Cancelled by the MedRep"}`);
@@ -2866,11 +2925,12 @@ async function visibleOrder(db: Runner, me: Me, id: number) {
     medrepId: number;
     code: string;
     heldFrom: OrderStatus | null;
+    heldRole: HoldRole | null;
     leadId: number | null;
     team: boolean;
   }>(
     db,
-    sql`${team(me)} select o.status, o.raised_by::int as "raisedBy", o.medrep_id::int as "medrepId", o.code, o.held_from as "heldFrom",
+    sql`${team(me)} select o.status, o.raised_by::int as "raisedBy", o.medrep_id::int as "medrepId", o.code, o.held_from as "heldFrom", o.held_role as "heldRole",
         o.lead_id::int as "leadId", ${inTeamSql(me)} as team
       from sales_order o where o.id = ${id} and ${seen(me)}`,
   );
@@ -2894,6 +2954,36 @@ const CHECK_LABEL: Record<OrderCheckKey, string> = {
   finance_dues: "Owed from before",
   finance_credit: "Credit limit",
 };
+
+/** Management's checks still to approve on an order: Documents until someone read the papers, and
+ *  each of the others the system found something on. The order's page shows the same (checks.tsx). */
+export async function openChecks(tx: Runner, orderId: number): Promise<OrderCheckKey[]> {
+  const read = await findingsOfOrder(tx, orderId);
+  const kinds = new Set((read?.found ?? []).map((finding) => finding.kind));
+  const [done] = await rows<{ keys: string[]; papers: boolean }>(
+    tx,
+    sql`select coalesce((select array_agg(k.check_key) from order_check k where k.order_id = o.id), '{}') as keys,
+        o.papers_checked_at is not null as papers from sales_order o where o.id = ${orderId}`,
+  );
+  const approved = new Set(done?.keys ?? []);
+  const open: OrderCheckKey[] = [];
+  if (!approved.has("papers") && !done?.papers) open.push("papers");
+  if ((kinds.has("price") || kinds.has("note")) && !approved.has("price")) open.push("price");
+  if (kinds.has("stock") && !approved.has("stock")) open.push("stock");
+  if ((["customer", "licence", "owes", "credit"] as const).some((kind) => kinds.has(kind)) && !approved.has("customer"))
+    open.push("customer");
+  return open;
+}
+
+/** Marks every Management check approved by this person: for the demo seeds and the tests, which
+ *  approve orders without the screen. Never called from an address. */
+export async function tickChecks(tx: Runner, orderId: number, personId: number): Promise<void> {
+  for (const key of CHECK_KEYS)
+    await tx.execute(
+      sql`insert into order_check (order_id, check_key, by_person) values (${orderId}, ${key}, ${personId})
+        on conflict (order_id, check_key) do nothing`,
+    );
+}
 
 /** Clears an order's check approvals (all, or one): it is looked at afresh. */
 export async function clearChecks(tx: Runner, orderId: number, key?: OrderCheckKey): Promise<void> {
@@ -2928,6 +3018,12 @@ export async function approveCheck(db: Database, me: Me, orderId: number, key: s
     if (!decides) throw new Refusal(403, "not_allowed", "Management approves an order's checks.");
     if (row?.status !== "pending_approval")
       throw new Refusal(409, "not_now", `${order.code} isn't waiting for approval now. Reload it.`);
+    // Short stock isn't approved away (23 Nov): the order waits for the stock, or its medicines change.
+    if (check === "stock") {
+      const short = await shortLines(db, orderId);
+      if (short.length)
+        throw new Refusal(409, "short_stock", `Not in stock: ${shortWords(short)}. Press Wait for stock, or change the medicines.`);
+    }
   }
   await db.transaction(async (tx) => {
     await tx.execute(
@@ -3053,7 +3149,9 @@ export async function addPaper(
     if (
       paper.kind === "payment_proof" &&
       order.status === "on_hold" &&
-      order.heldFrom === "finance_check"
+      order.heldFrom === "finance_check" &&
+      // Only Finance's own hold: one Management placed at this step stays until Management lifts it.
+      order.heldRole !== "management"
     ) {
       await tx.execute(
         sql`update sales_order set status = 'finance_check', held_from = null, flag_reason = null, updated_at = now() where id = ${orderId}`,

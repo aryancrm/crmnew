@@ -17,7 +17,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { NewsList } from "./news";
-import { count, inPacks, PageHead, PageState, Panel, Status, Tile, timeLabel } from "../ui";
+import { count, dayLabel, inPacks, PageHead, PageState, Panel, Status, Tile, timeLabel } from "../ui";
 import { MOVE_WORDS } from "../words";
 
 export function InventoryOverview() {
@@ -48,7 +48,7 @@ export function InventoryOverview() {
             <div className="flex flex-wrap gap-3">
               {Boolean(data.toReceive?.late) && (
                 <Attention
-                  to="/purchases/orders?stage=to_receive"
+                  to="/purchases"
                   tone="bad"
                   icon={CalendarClock}
                   value={data.toReceive?.late as number}
@@ -109,7 +109,7 @@ export function InventoryOverview() {
             />
             {data.toReceive && (
               <Tile
-                to="/purchases/orders?stage=to_receive"
+                to="/purchases"
                 label="To be received"
                 value={count(data.toReceive.purchases)}
                 sub={`${count(data.toReceive.pieces)} pieces on order`}
@@ -182,6 +182,7 @@ export function InventoryOverview() {
             </div>
 
             <div className="flex min-w-0 flex-col gap-4">
+              <WaitingPanel />
               <ReorderPanel />
               <Panel title="Top stocked">
                 <ul className="flex flex-col gap-3 px-4 py-3">
@@ -287,6 +288,43 @@ export function Attention({
   );
 }
 
+/** Orders already placed that the shelf can't fill: the medicine, how many orders want it, what
+ *  they need against what is there, and what is coming. Management holds such an order ("Wait
+ *  for stock") and Dispatch can't pack it, so the stock desk sees first what to get in. */
+function WaitingPanel() {
+  const query = useQuery({
+    queryKey: ["inventory", "list"],
+    queryFn: () => api<InventoryList>("/api/inventory"),
+  });
+  const rows = (query.data?.medicines ?? [])
+    .filter((row) => row.promised > row.total)
+    .sort((a, b) => b.promised - b.total - (a.promised - a.total));
+  if (rows.length === 0) return null;
+  return (
+    <Panel title="Orders waiting on stock" count={rows.length}>
+      <ul className="flex flex-col divide-y divide-slate-100 px-4">
+        {rows.map((row) => (
+          <li key={row.id} className="flex items-center justify-between gap-3 py-2.5">
+            <Link to={`/medicines/${row.id}`} className="min-w-0 hover:underline">
+              <span className="block truncate text-[13px] font-semibold text-ink">
+                {[row.name, row.strength].filter(Boolean).join(" ")}
+              </span>
+              <span className="text-[11px] text-ink-2">
+                {count(row.promisedOrders)} {row.promisedOrders === 1 ? "order needs" : "orders need"} {count(row.promised)} ·{" "}
+                {count(row.total)} on the shelf
+                {row.coming ? ` · ${count(row.coming.qty)} coming ${dayLabel(row.coming.on)}` : " · none coming"}
+              </span>
+            </Link>
+            <span className="shrink-0 text-[13px] font-semibold text-bad tabular-nums">
+              {count(row.promised - row.total)} short
+            </span>
+          </li>
+        ))}
+      </ul>
+    </Panel>
+  );
+}
+
 /** What to buy: medicines whose free stock and what is already coming fall short of their
  *  reorder level, the furthest short first, with a way to start the purchase order. */
 function ReorderPanel() {
@@ -294,8 +332,14 @@ function ReorderPanel() {
     queryKey: ["inventory", "list"],
     queryFn: () => api<InventoryList>("/api/inventory"),
   });
+  // What is left once every order's pieces are counted off the shelf: below zero when orders
+  // already need more than is there. "Free" stops at zero, so a medicine 390 short for its orders
+  // read "40 short" (only its reorder level), 23 Nov.
   const rows = (query.data?.medicines ?? [])
-    .map((row) => ({ row, short: row.reorderLevel - (row.free + (row.coming?.qty ?? 0)) }))
+    .map((row) => {
+      const left = row.total - row.promised;
+      return { row, left, short: row.reorderLevel - (left + (row.coming?.qty ?? 0)) };
+    })
     .filter(({ row, short }) => row.reorderLevel > 0 && short > 0)
     .sort((a, b) => b.short / b.row.reorderLevel - a.short / a.row.reorderLevel);
   if (!query.data) return null;
@@ -310,14 +354,14 @@ function ReorderPanel() {
   return (
     <Panel title="To reorder" count={rows.length}>
       <ul className="flex flex-col divide-y divide-slate-100 px-4">
-        {rows.slice(0, 8).map(({ row, short }) => (
+        {rows.slice(0, 8).map(({ row, left, short }) => (
           <li key={row.id} className="flex items-center justify-between gap-3 py-2.5">
             <Link to={`/medicines/${row.id}`} className="min-w-0 hover:underline">
               <span className="block truncate text-[13px] font-semibold text-ink">
                 {[row.name, row.strength].filter(Boolean).join(" ")}
               </span>
               <span className="text-[11px] text-ink-2">
-                Free {count(row.free)}
+                {left < 0 ? `Orders need ${count(-left)} more than the shelf has` : `Free ${count(row.free)}`}
                 {row.coming ? ` · ${count(row.coming.qty)} coming` : ""} · reorder at{" "}
                 {count(row.reorderLevel)}
               </span>

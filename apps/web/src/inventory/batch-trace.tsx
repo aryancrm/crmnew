@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Download, Printer, Search } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { timeLabel } from "../ui";
 
 const CARD = "rounded-xl border border-slate-200 bg-white";
 const TH = "px-3 py-2 text-left text-[11px] font-semibold tracking-wide text-slate-500 uppercase";
@@ -150,7 +151,7 @@ export function BatchTracePage() {
                 <tbody>
                   {data.moves.map((one, n) => (
                     <tr key={`${one.at}-${n}`} className="border-t border-slate-100">
-                      <td className="px-3 py-2 whitespace-nowrap text-slate-600">{one.at.slice(0, 16)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-slate-600">{timeLabel(one.at)}</td>
                       <td className="px-3 py-2 capitalize">{one.kind.replace("_", " ")}</td>
                       <td className={`px-3 py-2 text-right tabular-nums ${one.qty < 0 ? "text-rose-700" : "text-emerald-700"}`}>{one.qty.toLocaleString("en-PH")}</td>
                       <td className="px-3 py-2">{one.warehouse}</td>

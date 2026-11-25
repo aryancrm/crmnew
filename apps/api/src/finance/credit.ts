@@ -138,3 +138,37 @@ export async function releaseCredit(tx: Runner, me: Me, invoiceId: number): Prom
     await tx.execute(sql`update invoice set paid = paid - ${total} where id = ${invoiceId}`);
   return total;
 }
+
+/**
+ * A return lowered a bill below what was paid on it, and part of that was the customer's own
+ * credit: that part is their credit again (it was never cash, so Finance has nothing to give back
+ * for it). Takes the credit used on the invoice off, the newest first; one only partly given back
+ * is replaced by what is still used. Says how much went back.
+ */
+export async function creditBack(tx: Runner, me: Me, invoiceId: number, amount: number): Promise<number> {
+  if (amount <= 0) return 0;
+  const used = await rows<{ id: number; amount: number }>(
+    tx,
+    sql`select id::int as id, amount::int as amount from payment
+      where invoice_id = ${invoiceId} and active and method = 'credit' order by id desc for update`,
+  );
+  let left = amount;
+  for (const one of used) {
+    if (left <= 0) break;
+    const back = Math.min(left, one.amount);
+    if (back < one.amount)
+      await tx.execute(
+        sql`insert into payment (invoice_id, customer_id, amount, method, reference, paid_on, note, by_person, payer, credit_doc_id, credit_refund_id)
+          select invoice_id, customer_id, ${one.amount - back}, method, reference, paid_on, note, by_person, payer, credit_doc_id, credit_refund_id
+          from payment where id = ${one.id}`,
+      );
+    await tx.execute(
+      sql`update payment set active = false, removed_reason = 'A return lowered the bill: the credit goes back to the customer',
+          removed_by = ${me.id}, removed_at = now() where id = ${one.id}`,
+    );
+    left -= back;
+  }
+  const total = amount - left;
+  if (total > 0) await tx.execute(sql`update invoice set paid = paid - ${total} where id = ${invoiceId}`);
+  return total;
+}

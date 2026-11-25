@@ -55,7 +55,7 @@ async function approvesBids(db: Database, me: Me): Promise<boolean> {
   );
   return found?.ok === true;
 }
-const seesAll = (me: Me) =>
+export const seesAll = (me: Me) =>
   ["ceo", "admin"].includes(me.role) || me.channel?.code === "BID" || (me.role === "manager" && me.business === "B2B");
 // Anyone else sees the tenders they run; a head (the Hospital Division's Business Mentor, say)
 // also those run from their own business (the Government Account's).
@@ -107,10 +107,23 @@ export async function tenderDetail(db: Database, me: Me, id: number) {
     ),
     biddersOf(db, [id]),
   ]);
+  // The notice it came from in the tender finder, with what it asked line by line.
+  const [found] = await rows<{ id: number; source: string; refNo: string; link: string | null }>(
+    db,
+    sql`select id::int as id, source, ref_no as "refNo", link from tender_found where tender_id = ${id}`,
+  );
+  const asked = found
+    ? await rows<{ id: number; description: string; qty: number | null; unit: string | null; abcUnit: number | null; medicineId: number | null }>(
+        db,
+        sql`select id::int as id, description, qty::float8 as qty, unit, abc_unit::float8 as "abcUnit", medicine_id::int as "medicineId"
+          from tender_found_line where found_id = ${found.id} and replaced_at is null order by position`,
+      )
+    : [];
   return {
     tender,
     lines,
     events,
+    found: found ? { ...found, asked } : null,
     next: NEXT[tender.step],
     canApprove: await approvesBids(db, me),
     bidders,
@@ -195,20 +208,23 @@ export async function removeBidder(db: Database, me: Me, bidderId: number): Prom
   await db.execute(sql`update tender_bidder set replaced_at = now() where id = ${bidderId}`);
 }
 
+/** Who records tenders (and has the tender finder): the seats that see every tender, and a
+ *  government bidding coachee: by their seat's title, or by another seat they hold on the chart
+ *  (Reynan leads TeleSales beside his Government Bidding Coachee seat). */
+export async function recordsTenders(db: Database, me: Me): Promise<boolean> {
+  if (seesAll(me)) return true;
+  if (me.role === "medrep" && /bidding/i.test(me.title ?? "")) return true;
+  const [found] = await rows<{ ok: boolean }>(
+    db,
+    sql`select exists (select 1 from seat_holder h join seat s on s.id = h.seat_id and s.active
+      where h.person_id = ${me.id} and s.title ~* 'bidding' and h.starts_on <= (now() at time zone 'Asia/Manila')::date
+        and (h.ends_on is null or h.ends_on >= (now() at time zone 'Asia/Manila')::date)) as ok`,
+  );
+  return found?.ok === true;
+}
+
 export async function createTender(db: Database, me: Me, input: TenderInput): Promise<{ id: number }> {
-  // A government bidding coachee records their own: by their seat's title, or by another seat they
-  // hold on the chart (Reynan leads TeleSales beside his Government Bidding Coachee seat).
-  const coachee =
-    (me.role === "medrep" && /bidding/i.test(me.title ?? "")) ||
-    (
-      await rows<{ ok: boolean }>(
-        db,
-        sql`select exists (select 1 from seat_holder h join seat s on s.id = h.seat_id and s.active
-          where h.person_id = ${me.id} and s.title ~* 'bidding' and h.starts_on <= (now() at time zone 'Asia/Manila')::date
-            and (h.ends_on is null or h.ends_on >= (now() at time zone 'Asia/Manila')::date)) as ok`,
-      )
-    )[0]?.ok === true;
-  if (!seesAll(me) && !coachee)
+  if (!(await recordsTenders(db, me)))
     throw new Refusal(403, "not_allowed", "The bidding team (or a government bidding coachee) records tenders.");
   const [agency] = await rows<{ kind: string }>(db, sql`select kind from customer where id = ${input.agencyId} and active`);
   if (!agency || !["government", "hospital"].includes(agency.kind))
@@ -287,6 +303,14 @@ export async function moveTender(
   if (input.step === "price_approved") {
     if (!(await approvesBids(db, me))) throw new Refusal(403, "not_allowed", "Government Bidding's lead approves the bid price.");
     if (!tender.ourBid) throw new Refusal(400, "invalid", "Put the bid price (the medicines and their prices) first.");
+    // A line still at ₱0 has no price yet (a tender made from the finder starts with the price
+    // book's Bidding price, and none where the book has none): the same rule, line by line.
+    const [unpriced] = await rows<{ medicine: string }>(
+      db,
+      sql`select m.name || coalesce(' ' || m.strength, '') as medicine from tender_line l join medicine m on m.id = l.medicine_id
+        where l.tender_id = ${id} and l.replaced_at is null and l.unit_price = 0 order by l.id limit 1`,
+    );
+    if (unpriced) throw new Refusal(400, "invalid", `${unpriced.medicine} has no price yet: put it before the price is approved.`);
     if (tender.abc && tender.ourBid > tender.abc) throw new Refusal(400, "invalid", "Our bid is above the ABC: it would be rejected.");
     set.push(sql`price_approved_by = ${me.id}`);
   }

@@ -36,6 +36,7 @@ import type {
   LeadQueue,
   LeadRoad,
   Me,
+  Role,
   OrderStatus,
   PaymentTerms,
   QuoteInput,
@@ -47,6 +48,7 @@ import {
   type CaseFacts,
   deskStepOf,
   isPapRep,
+  PAP_CHANNEL,
   LEAD_DESK_ROLES,
   LEAD_READ_ROLES,
   LEAD_WORK_ROLES,
@@ -113,6 +115,9 @@ type LeadRow = {
   claimRef: string | null;
   canvass: { vendor: string; amount: number }[];
   desk: "online" | "pap";
+  originPersonId: number | null;
+  originName: string | null;
+  originChannel: string | null;
   state: "open" | "lost";
   lostReason: string | null;
   orderId: number | null;
@@ -160,6 +165,12 @@ const leadColumns = sql`l.id::int as id, l.code, l.source, l.name, l.relation, l
   l.quote_sent_via as "quoteSentVia", ${iso("l.quote_sent_at")} as "quoteSentAt", ${day("l.gl_applied_on")} as "glAppliedOn",
   l.gl_letter_no as "glLetterNo", l.gl_amount::int as "glAmount", ${day("l.gl_letter_on")} as "glLetterOn", ${iso("l.gl_verified_at")} as "glVerifiedAt",
   ${day("l.gl_expires_on")} as "glExpiresOn", ${day("l.claim_sent_on")} as "claimSentOn", l.claim_ref as "claimRef", l.canvass, l.desk,
+  -- Who the case came to PAP from, and the channel their sale counts in (their main seat's, on the target sheet).
+  l.origin_person_id::int as "originPersonId", (select op.name from person op where op.id = l.origin_person_id) as "originName",
+  (select seat_division(oh.seat_id) from seat_holder oh join seat os on os.id = oh.seat_id and os.active
+    where oh.person_id = l.origin_person_id and oh.starts_on <= (now() at time zone 'Asia/Manila')::date
+      and (oh.ends_on is null or oh.ends_on >= (now() at time zone 'Asia/Manila')::date)
+    order by (oh.kind = 'holder') desc, os.lead desc, oh.starts_on, oh.id limit 1) as "originChannel",
   l.state, l.lost_reason as "lostReason", l.order_id::int as "orderId", ${iso("l.first_contact_at")} as "firstContactAt",
   to_char(l.first_contact_at at time zone 'Asia/Manila', 'YYYY-MM-DD') as "firstDay", (l.opened_at is null) as unopened,
   coalesce(maker.name, case l.chat_channel when 'messenger' then 'Messenger' when 'email' then 'Email' else 'System' end) as "createdBy",
@@ -269,6 +280,7 @@ function cardOf(row: LeadRow): LeadCard {
     city: row.city,
     interest: interestOf(row),
     owner: row.assignedName,
+    cameFrom: row.originName ? [row.originName, row.originChannel].filter(Boolean).join(" · ") : null,
     step: words,
     stepIndex: index,
     steps,
@@ -300,7 +312,7 @@ function cardOf(row: LeadRow): LeadCard {
 const agentsOf = (db: Runner) =>
   rows<{ id: number; name: string }>(
     db,
-    sql`select id::int as id, name from person where active and role in ('online', 'admin') order by role = 'admin', name`,
+    sql`select id::int as id, name from person where active and (role in ('online', 'admin') or (role = 'medrep' and channel_id = (select id from channel where code = 'ONLINE'))) order by role = 'admin', name`,
   );
 
 // ---------------------------------------------------------------- the desk
@@ -359,8 +371,10 @@ export async function leadDesk(
   const desk = filter.desk === "pap" ? "pap" : "online";
   // A PAP MedRep reads only their own PAP cases; the CEO and the admin read them all. Management
   // reads a case from its order, never the desks themselves.
+  // Anyone who sells reads the cases they handed to PAP (22 Nov), and only those.
+  const handedOnly = desk === "pap" && !isPapRep(me) && !["admin", "ceo"].includes(me.role);
   if (desk === "pap") {
-    if (!isPapRep(me) && !["admin", "ceo"].includes(me.role))
+    if (handedOnly && !HAND_OVER_ROLES.includes(me.role))
       throw new Refusal(403, "forbidden", "Your role can't see the PAP cases.");
   } else allow(me, LEAD_DESK_ROLES, "see the Online desk");
   const queue: LeadQueue = QUEUES.includes(filter.queue as LeadQueue)
@@ -376,6 +390,7 @@ export async function leadDesk(
   const month = /^\d{4}-\d{2}$/.test(filter.month ?? "") ? (filter.month as string) : null;
   const where: SQL[] = [sql`l.desk = ${desk}`];
   if (desk === "pap" && isPapRep(me)) where.push(sql`l.assigned_to = ${me.id}`);
+  if (handedOnly) where.push(sql`l.origin_person_id = ${me.id}`);
   if (filter.source && filter.source in SOURCE_LABEL) where.push(sql`l.source = ${filter.source}`);
   if (filter.who === "mine") where.push(sql`l.assigned_to = ${me.id}`);
   for (const word of (filter.q ?? "").toLowerCase().split(/\s+/).filter(Boolean).slice(0, 5)) {
@@ -585,6 +600,8 @@ export async function setCasePoints(
 
 /** What happened to a case's order on the order line, for its Order & delivery and Payment steps. */
 async function orderTrail(db: Runner, orderId: number): Promise<CaseOrderTrail> {
+  const [kind] = await rows<{ gl: boolean }>(db, sql`select coalesce(order_type = 'gl', false) as gl from sales_order where id = ${orderId}`);
+  const gl = Boolean(kind?.gl);
   const [order] = await rows<{
     status: OrderStatus;
     approvedAt: string | null;
@@ -721,6 +738,17 @@ async function orderTrail(db: Runner, orderId: number): Promise<CaseOrderTrail> 
         reference: payment.reference,
         paidOn: payment.paidOn,
         by: payment.by,
+        // A guarantee letter is often paid short: who paid each part, and what was let go.
+        who:
+          payment.method === "deduction"
+            ? payment.deductionKind === "gl_waived"
+              ? "Let go"
+              : "Deducted"
+            : payment.payer === "agency"
+              ? "The agency"
+              : gl
+                ? "The patient"
+                : null,
       })),
   };
 }
@@ -842,6 +870,7 @@ export async function leadCase(db: Database, me: Me, id: number): Promise<LeadCa
       claimRef: row.claimRef,
       canvass: row.canvass,
       desk: row.desk,
+      cameFrom: row.originPersonId ? { id: row.originPersonId, name: row.originName ?? "", channel: row.originChannel } : null,
       state: row.state,
       lostReason: row.lostReason,
       firstContactAt: row.firstContactAt,
@@ -916,10 +945,12 @@ export async function leadCase(db: Database, me: Me, id: number): Promise<LeadCa
  *  works any. */
 export function mayOnCase(
   me: Me,
-  lead: { desk: "online" | "pap"; assignedTo: number | null },
+  lead: { desk: "online" | "pap"; assignedTo: number | null; originPersonId?: number | null },
   need: "read" | "work",
 ): boolean {
   if (me.role === "admin") return true;
+  // Whoever the case came to PAP from reads it to the end: the sale is theirs (22 Nov).
+  if (need === "read" && lead.originPersonId && lead.originPersonId === me.id) return true;
   if (lead.desk === "pap") {
     if (isPapRep(me)) return lead.assignedTo === me.id;
     return need === "read" && (me.role === "ceo" || me.role === "management");
@@ -935,12 +966,13 @@ export async function leadGate(
   need: "read" | "work",
   what: string,
 ): Promise<void> {
-  if (!(me.role === "admin" || may(me, LEAD_READ_ROLES) || isPapRep(me)))
-    throw new Refusal(403, "forbidden", `Your role can't ${what}.`);
-  const [lead] = await rows<{ desk: "online" | "pap"; assignedTo: number | null }>(
+  const [lead] = await rows<{ desk: "online" | "pap"; assignedTo: number | null; originPersonId: number | null }>(
     db,
-    sql`select desk, assigned_to::int as "assignedTo" from lead where id = ${id}`,
+    sql`select desk, assigned_to::int as "assignedTo", origin_person_id::int as "originPersonId" from lead where id = ${id}`,
   );
+  const handed = Boolean(lead?.originPersonId && lead.originPersonId === me.id);
+  if (!(me.role === "admin" || may(me, LEAD_READ_ROLES) || isPapRep(me) || handed))
+    throw new Refusal(403, "forbidden", `Your role can't ${what}.`);
   if (!lead) throw new Refusal(404, "not_found", "That enquiry doesn't exist.");
   if (!mayOnCase(me, lead, "read"))
     throw new Refusal(404, "not_found", "That case isn't one of yours.");
@@ -1105,10 +1137,82 @@ async function agentOrNull(tx: Runner, id: number | null | undefined): Promise<n
   if (!id) return null;
   const [agent] = await rows<{ id: number }>(
     tx,
-    sql`select id::int as id from person where id = ${id} and active and role in ('online', 'admin')`,
+    sql`select id::int as id from person where id = ${id} and active and (role in ('online', 'admin') or (role = 'medrep' and channel_id = (select id from channel where code = 'ONLINE')))`,
   );
   if (!agent) throw new Refusal(400, "invalid", "Pick someone on the Online desk.", "assignedTo");
   return agent.id;
+}
+
+/** Who may hand a patient to PAP: anyone who sells. */
+export const HAND_OVER_ROLES: readonly Role[] = ["medrep", "team_lead", "manager", "online"];
+
+/** The PAP person a guarantee-letter case goes to: the PAP MedRep with the fewest open cases. */
+async function papPerson(tx: Runner): Promise<{ id: number; name: string } | null> {
+  const [found] = await rows<{ id: number; name: string }>(
+    tx,
+    sql`select p.id::int as id, p.name from person p
+      where p.active and p.role = 'medrep' and p.channel_id = (select id from channel where code = ${PAP_CHANNEL})
+      order by (select count(*) from lead l where l.assigned_to = p.id and l.desk = 'pap' and l.state = 'open'), p.id limit 1`,
+  );
+  return found ?? null;
+}
+
+/** PAP is a process, not a channel (Aryan, 22 Nov): a guarantee-letter case from anywhere is the
+ *  PAP person's to work, and its sale stays where the patient came from. Moves the case to PAP and
+ *  keeps who it came from; with no PAP person set up it stays where it is, and says so. */
+async function toPap(tx: Runner, id: number, me: Me, originId: number | null): Promise<boolean> {
+  const pap = await papPerson(tx);
+  if (!pap) {
+    await note(tx, id, me, "status", "Guarantee letter: nobody is on PAP yet, so the case stays here.");
+    return false;
+  }
+  await tx.execute(
+    sql`update lead set desk = 'pap', assigned_to = ${pap.id}, origin_person_id = coalesce(origin_person_id, ${originId}) where id = ${id}`,
+  );
+  const [from] = await rows<{ name: string | null }>(
+    tx,
+    sql`select (select p.name from person p where p.id = l.origin_person_id) as name from lead l where l.id = ${id}`,
+  );
+  await note(
+    tx,
+    id,
+    me,
+    "status",
+    `Guarantee letter: ${pap.name} (PAP) works this case from here.${from?.name ? ` The sale stays with ${from.name}.` : ""}`,
+  );
+  return true;
+}
+
+/** A seller hands their patient to PAP (Aryan, 22 Nov: "a guarantee-letter case from any channel,
+ *  PAP looks after it"): a PAP case in the PAP person's name, kept as come from the seller. */
+export async function handToPap(
+  db: Database,
+  me: Me,
+  input: { name: string; phone?: string | null; patientName?: string | null; agency: string; request?: string | null; city?: string | null; address?: string | null },
+): Promise<number> {
+  allow(me, HAND_OVER_ROLES, "hand a patient to PAP");
+  if (isPapRep(me)) throw new Refusal(400, "invalid", "You are PAP: start the PAP case yourself.");
+  const name = input.name.trim();
+  if (!name) throw new Refusal(400, "invalid", "Type the patient's name.", "name");
+  if (!input.agency) throw new Refusal(400, "invalid", "Pick the agency that gives the letter.", "agency");
+  return db.transaction(async (tx) => {
+    const pap = await papPerson(tx);
+    if (!pap) throw new Refusal(409, "not_now", "Nobody is on PAP yet. Ask the Admin to seat the PAP person.");
+    const [made] = await rows<{ id: number }>(
+      tx,
+      sql`insert into lead (desk, source, name, patient_name, phone, phone_key, city, address, road, agency, request, assigned_to, origin_person_id, created_by, opened_at)
+        values ('pap', 'referral', ${name}, ${clean(input.patientName) ?? name}, ${formatPhone(input.phone ?? "")}, ${phoneKey(input.phone ?? "")},
+          ${clean(input.city)}, ${clean(input.address)}, 'gl', ${input.agency}, ${clean(input.request)}, ${pap.id}, ${me.id}, ${me.id}, null)
+        returning id::int as id`,
+    );
+    const id = made?.id as number;
+    await tx.execute(
+      sql`with next as (update counter set value = value + 1 where name = 'lead' returning value)
+        update lead set code = 'ENQ-' || lpad(next.value::text, 5, '0') from next where lead.id = ${id}`,
+    );
+    await note(tx, id, me, "status", `Handed to PAP by ${me.name}: ${pap.name} works it, the sale stays with ${me.name}.`);
+    return id;
+  });
 }
 
 /** A new enquiry, typed in by the agent (a call, a walk-in, a chat until Messenger connects). */
@@ -1131,7 +1235,7 @@ export async function addLead(db: Database, me: Me, input: LeadInput): Promise<n
     const assigned = pap
       ? me.id
       : input.assignedTo === undefined
-        ? me.role === "online"
+        ? onlineDesk(me)
           ? me.id
           : null
         : await agentOrNull(tx, input.assignedTo);
@@ -1158,6 +1262,8 @@ export async function addLead(db: Database, me: Me, input: LeadInput): Promise<n
         ? `PAP case opened by ${me.name} (${SOURCE_LABEL[input.source]}).`
         : `Enquiry from ${SOURCE_LABEL[input.source]} added by ${me.name}.`,
     );
+    // A guarantee letter is PAP's to work, wherever the enquiry came in (22 Nov).
+    if (!pap && input.road === "gl") await toPap(tx, id, me, assigned ?? me.id);
     return id;
   });
 }
@@ -1181,7 +1287,17 @@ export async function saveLead(db: Database, me: Me, id: number, input: LeadInpu
       sql`select desk, assigned_to::int as "assignedTo" from lead where id = ${id}`,
     );
     const pap = kept?.desk === "pap";
-    if (pap && road !== "gl")
+    // A case that came to PAP from the Online desk goes back to its agent when the patient won't
+    // use a guarantee letter after all; any other PAP case is a guarantee letter's.
+    const [back] =
+      pap && road !== "gl"
+        ? await rows<{ id: number; name: string }>(
+            tx,
+            sql`select p.id::int as id, p.name from lead l join person p on p.id = l.origin_person_id and p.active
+              where l.id = ${id} and (p.role in ('online', 'admin') or (p.role = 'medrep' and p.channel_id = (select id from channel where code = 'ONLINE')))`,
+          )
+        : [];
+    if (pap && road !== "gl" && !back)
       throw new Refusal(400, "invalid", "A PAP case is paid by a guarantee letter.", "road");
     const [buyer] = await rows<{ kind: string | null }>(tx, sql`select buyer_kind as kind from lead where id = ${id}`);
     if (buyer?.kind && road !== "regular")
@@ -1216,6 +1332,13 @@ export async function saveLead(db: Database, me: Me, id: number, input: LeadInpu
         ? `Details saved. Pays by: ${roadWords[road]} (was ${roadWords[lead.road]}).`
         : "Details saved.",
     );
+    // A guarantee letter is PAP's to work (22 Nov): an Online case on that road goes to the PAP
+    // person, its agent kept as where the sale counts; off that road it goes back to the agent.
+    if (!pap && road === "gl") await toPap(tx, id, me, kept?.assignedTo ?? me.id);
+    if (back) {
+      await tx.execute(sql`update lead set desk = 'online', assigned_to = ${back.id}, origin_person_id = null where id = ${id}`);
+      await note(tx, id, me, "status", `No guarantee letter after all: the case is back with ${back.name} on the Online desk.`);
+    }
   });
 }
 
@@ -1421,7 +1544,9 @@ export async function saveClaim(
   id: number,
   input: { sentOn?: string | null; ref?: string | null },
 ): Promise<void> {
-  await leadGate(db, me, id, "work", "record the claim");
+  // Finance's from here (Aryan, 22 Nov): the PAP person gets the letter in and places the order,
+  // then only watches; Finance sends the claim and records what the agency pays.
+  allow(me, ["finance", "admin"], "record the claim");
   if (input.sentOn && input.sentOn > todayManila())
     throw new Refusal(400, "invalid", "That day hasn't come yet.", "sentOn");
   await db.transaction(async (tx) => {
@@ -1430,17 +1555,6 @@ export async function saveClaim(
       throw new Refusal(409, "not_now", "This case doesn't pay by a guarantee letter.");
     if (lead.orderStatus !== "completed")
       throw new Refusal(409, "not_now", "The claim goes after the delivery.");
-    const [photo] = await rows<{ n: number }>(
-      tx,
-      sql`select count(*)::int as n from lead_file where lead_id = ${id} and kind = 'pickup_photo' and active`,
-    );
-    if (input.sentOn && !photo?.n)
-      throw new Refusal(
-        400,
-        "invalid",
-        "Add the pick-up photo before sending the claim.",
-        "sentOn",
-      );
     await tx.execute(
       sql`update lead set claim_sent_on = ${input.sentOn ?? null}::date, claim_ref = ${clean(input.ref)} where id = ${id}`,
     );
@@ -1676,13 +1790,25 @@ async function patientOf(
     }
     const patient = lead.patient ?? lead.name;
     const [found] = lead.key
-      ? await rows<{ id: number }>(
+      ? await rows<{ id: number; name: string }>(
           tx,
-          sql`select id::int as id from customer where active and kind = 'patient' and phone_key = ${lead.key}
+          sql`select id::int as id, name from customer where active and kind = 'patient' and phone_key = ${lead.key}
             order by (lower(name) = ${patient.toLowerCase()}) desc, id limit 1`,
         )
       : [];
     let customerId = found?.id;
+    // The number is another name's in the CRM (a family sharing one phone, or a typo): the case is
+    // tied to that customer as before, but it is said on the case, so nobody finds an order under
+    // another patient's name without having been told (found walking a PAP case, 23 Nov; whether
+    // such a patient should be a customer of their own is Aryan's to say).
+    if (found && found.name.trim().toLowerCase() !== patient.trim().toLowerCase())
+      await note(
+        tx,
+        id,
+        me,
+        "status",
+        `This number is ${found.name}'s in the CRM: the case and its order are under that name, not ${patient}. If it is another person, tell Management before the order goes on.`,
+      );
     if (!customerId) {
       const [made] = await rows<{ id: number }>(
         tx,
@@ -1796,6 +1922,8 @@ export async function orderFromLead(
       deliveryFee: website?.deliveryFee ?? 0,
       reliefFromCase: true,
       leadId: pap ? undefined : id,
+      // A case that came to PAP from someone: the sale is theirs (their channel, seat and target).
+      creditTo: pap ? (row.originPersonId ?? undefined) : undefined,
       toManagement,
       inside: async (tx, orderId) => {
         // The points the agent chose come off the medicines (checked again against the balance now).
@@ -1828,7 +1956,7 @@ export async function orderFromLead(
         );
         if (pap) {
           await tx.execute(
-            sql`insert into lead_event (lead_id, kind, message, by_person) values (${id}, 'status', ${`Order ${code?.code} placed: ${pap ? "the PAP head approves it" : "Management checks it"}, then Finance, then Dispatch.`}, ${me.id})`,
+            sql`insert into lead_event (lead_id, kind, message, by_person) values (${id}, 'status', ${`Order ${code?.code} placed: Management checks it, then Finance, then Dispatch.`}, ${me.id})`,
           );
           return;
         }

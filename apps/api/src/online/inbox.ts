@@ -158,7 +158,7 @@ export async function chatThread(db: Database, me: Me, leadId: number): Promise<
 /** Someone on the desk opened the conversation: it isn't unread any more. */
 export async function markSeen(db: Database, me: Me, leadId: number): Promise<void> {
   allow(me, LEAD_WORK_ROLES, "open a conversation");
-  await db.execute(sql`update lead set seen_at = now() where id = ${leadId}`);
+  await db.execute(sql`update lead set seen_at = now() where id = ${leadId} and desk = 'online'`);
 }
 
 /** The reply goes out the way they wrote: Messenger through the page, email from the mailbox. */

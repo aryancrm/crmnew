@@ -3,9 +3,10 @@
 // cancelled order, and the lists: invoices, payments received, customers owe, refunds owed.
 // Every change is one transaction that also writes the order's timeline.
 
+import { assertOpen } from "../books/write";
 import { keepFile } from "../files/store";
 import { releaseCredit } from "./credit";
-import { awaitingPaymentSql, duesSql, notDueSql } from "./dues";
+import { awaitingPaymentSql, duesSql, notDueSql, refundsOwedCountSql } from "./dues";
 import { type SQL, sql } from "drizzle-orm";
 import { customerDetail } from "../customers/service";
 import { type Database, rows } from "../db/index";
@@ -39,6 +40,7 @@ import type {
   OrderPaper,
   OrderStatus,
   CollectedLater,
+  OwedGlance,
   OwedInvoices,
   OwedList,
   OwedRow,
@@ -81,13 +83,16 @@ const ids = (values: number[]) =>
 
 type InvoiceSql = Omit<InvoiceRow, "invoiceFromLabel" | "balance" | "state"> & {
   delivered: boolean;
+  /** Paid first, and Finance hasn't checked the money yet. */
+  awaiting: boolean;
 };
 
 /** An invoice (alias `i`) with its order (`o`) and customer (`c`). */
 const invoiceColumns = sql`i.id::int as id, i.code, i.order_id::int as "orderId", o.code as "orderCode",
   i.customer_id::int as "customerId", c.name as customer, c.kind as "customerKind", i.invoice_from as "invoiceFrom",
   i.terms, ${day("i.issued_on")} as "issuedOn", ${day("i.due_on")} as "dueOn", i.total::int as total,
-  i.paid::int as paid, i.refunded::int as refunded, i.status, (o.status = 'completed') as delivered`;
+  i.paid::int as paid, i.refunded::int as refunded, i.status, (o.status = 'completed') as delivered,
+  ${awaitingPaymentSql} as awaiting`;
 const invoiceFrom = sql`from invoice i join sales_order o on o.id = i.order_id join customer c on c.id = i.customer_id`;
 
 /** Unpaid and past its due day; cash on delivery is never late before the goods arrive, nor
@@ -96,19 +101,20 @@ const overdue = (today: string): SQL =>
   sql`(i.status = 'open' and i.due_on < ${today}::date and not ${notDueSql})`;
 
 const shown = (row: InvoiceSql, today: string): InvoiceRow => {
-  const { delivered, ...rest } = row;
+  const { delivered, awaiting, ...rest } = row;
   return {
     ...rest,
     invoiceFromLabel: INVOICE_FROM_LABEL[row.invoiceFrom],
-    balance: row.status === "cancelled" ? 0 : row.total - row.paid,
-    state: invoiceState({ ...row, delivered }, today),
+    // Money given back is no longer money paid: a refunded overpayment leaves nothing owed either way.
+    balance: row.status === "cancelled" ? 0 : row.total - row.paid + row.refunded,
+    state: invoiceState({ ...row, delivered, awaiting }, today),
   };
 };
 
 const paymentColumns = sql`p.id::int as id, p.invoice_id::int as "invoiceId", i.code as "invoiceCode",
   i.order_id::int as "orderId", o.code as "orderCode", p.customer_id::int as "customerId", c.name as customer,
   p.amount::int as amount, p.method, p.reference, ${day("p.paid_on")} as "paidOn", p.note, p.proof_id::int as "proofId",
-  who.name as by, ${iso("p.at")} as at, p.active, p.removed_reason as "removedReason"`;
+  who.name as by, ${iso("p.at")} as at, p.active, p.removed_reason as "removedReason", p.payer, p.deduction_kind as "deductionKind"`;
 const paymentFrom = sql`from payment p join invoice i on i.id = p.invoice_id join sales_order o on o.id = i.order_id
   join customer c on c.id = p.customer_id join person who on who.id = p.by_person`;
 const withMethod = <T extends { method: PaymentRow["method"] }>(row: T) => ({
@@ -203,7 +209,7 @@ export async function financeCounts(
         -- Due payments past their day (this CRM's: delivered, or advance checked), beside Due payments.
         (select count(*) from invoice i join sales_order o on o.id = i.order_id
           where i.status = 'open' and i.total > i.paid and not ${notDueSql} and i.due_on < ${today}::date)::int as "latePayments",
-        (select count(*) from invoice i join sales_order o on o.id = i.order_id where i.status = 'cancelled' and o.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit', 'deduction')) > i.refunded)::int as refunds`,
+        ${refundsOwedCountSql}::int as refunds`,
   );
   return counted ?? { toConfirm: 0, toInvoice: 0, refunds: 0, latePayments: 0 };
 }
@@ -425,6 +431,16 @@ export async function moneyAccounts(db: Database, me: Me): Promise<MoneyAccounts
   return { accounts };
 }
 
+/** Refuses to take off or move money that is in a finished bank reconciliation (the books'
+ *  documents have the same guard, books/bank.ts). */
+async function guardCleared(tx: Runner, key: string): Promise<void> {
+  const [cleared] = await rows<{ n: number }>(
+    tx,
+    sql`select count(*)::int as n from bank_cleared c join bank_reconciliation r on r.id = c.reconciliation_id and r.status = 'done' where c.entry_key = ${key}`,
+  );
+  if (cleared?.n) throw new Refusal(409, "reconciled", "It is in a bank reconciliation: undo that reconciliation first.");
+}
+
 /** Finance puts a payment (or a refund) on the account it really went through. */
 export async function setMoneyAccount(
   db: Database,
@@ -444,6 +460,8 @@ export async function setMoneyAccount(
     );
     if (!found) throw new Refusal(404, "not_found", `That ${what.kind} isn't here.`);
     if (NOT_CASH_SET.has(found.method)) throw new Refusal(409, "not_now", "It moved no money: it has no account.");
+    // Ticked in a finished bank reconciliation: it stays on its account until that is undone.
+    await guardCleared(tx, `crm:crm_${what.kind}:${what.id}`);
     if (what.kind === "payment") await tx.execute(sql`update payment set money_account = ${account} where id = ${what.id}`);
     else await tx.execute(sql`update refund set money_account = ${account} where id = ${what.id}`);
     await logEvent(
@@ -468,15 +486,19 @@ async function addPayment(
     note?: string | null;
     proofId?: number | null;
     moneyAccount?: string | null;
+    payer?: "agency" | "patient" | null;
   },
 ) {
   const into = NOT_CASH_SET.has(input.method) ? null : await moneyAccountOf(tx, input.moneyAccount);
-  // On a guarantee letter's order the money is the agency's (a patient's top-up is told apart later).
+  // On a guarantee letter's order the money is the agency's, unless Finance says the patient paid
+  // it (the rest of a letter paid short, Aryan 22 Nov). A PAP case's order has no lead_id, so the
+  // order's own type says it is a guarantee letter's.
   const [road] = await rows<{ gl: boolean }>(
     tx,
-    sql`select coalesce(l.road = 'gl', false) as gl from invoice i join sales_order o on o.id = i.order_id left join lead l on l.id = o.lead_id where i.id = ${invoice.id}`,
+    sql`select (o.order_type = 'gl' or coalesce(l.road = 'gl', false)) as gl from invoice i join sales_order o on o.id = i.order_id left join lead l on l.id = o.lead_id where i.id = ${invoice.id}`,
   );
-  const payer = input.method !== "points" && road?.gl ? "agency" : "customer";
+  const payer =
+    input.method !== "points" && input.method !== "deduction" && road?.gl && input.payer !== "patient" ? "agency" : "customer";
   await tx.execute(
     sql`insert into payment (invoice_id, customer_id, amount, method, reference, paid_on, proof_id, note, by_person, payer, money_account)
       values (${invoice.id}, ${invoice.customerId}, ${input.amount}, ${input.method}, ${clean(input.reference)}, ${input.paidOn}::date,
@@ -507,14 +529,14 @@ const how = (input: {
 }) =>
   `${peso(input.amount)} by ${METHOD_LABEL[input.method].toLowerCase()}${clean(input.reference) ? ` (ref ${clean(input.reference)})` : ""} on ${dated(input.paidOn)}`;
 
-/** An advance order: Finance has checked the slip and seen the money, so it records the payment,
- *  makes the invoice and lets the order go to Dispatch, all at once. */
+/** An advance order: Finance has checked the slip and seen the money, so it records the payment
+ *  and, once the whole amount is in, lets the order go to Dispatch. */
 export async function confirmPayment(
   db: Database,
   me: Me,
   orderId: number,
   input: ConfirmPaymentInput,
-): Promise<{ invoiceId: number }> {
+): Promise<{ invoiceId: number; sent: boolean; left: number }> {
   allow(me, FINANCE_ROLES, "confirm a payment");
   if (!input.checked)
     throw new Refusal(
@@ -557,17 +579,36 @@ export async function confirmPayment(
         "There is no proof of payment on the order. Add the slip, or type the bank reference you checked.",
         "reference",
       );
+    const left = due - input.amount;
+    // Paid first means paid whole (Aryan, 23 Nov: "it goes to Dispatch only once the whole money
+    // is in"): a part is put on the invoice and the order stays with Finance for the rest. It used
+    // to go to Dispatch with the rest left in Due payments.
+    if (left > 0) {
+      await addPayment(
+        tx,
+        me,
+        { id: invoice.id, customerId: order.customerId },
+        { ...input, proofId: proof?.id ?? null },
+      );
+      await logEvent(
+        tx,
+        orderId,
+        me,
+        "payment",
+        `Part of the payment received: ${how(input)}${proof ? ", proof of payment on file" : ""}. ${peso(left)} still to come: it stays with Finance until the whole amount is in.${clean(input.note) ? ` ${clean(input.note)}` : ""}`,
+      );
+      return { invoiceId: invoice.id, sent: false, left };
+    }
     await tx.execute(
       sql`update sales_order set status = 'ready_for_dispatch', finance_checked_at = now(), finance_checked_by = ${me.id},
           held_from = null, held_role = null, flag_reason = null, updated_at = now() where id = ${orderId}`,
     );
-    const left = due - input.amount;
     await logEvent(
       tx,
       orderId,
       me,
       "status",
-      `Payment checked: ${input.amount > 0 ? how(input) : `already paid on ${invoice.code}`}${proof ? ", proof of payment on file" : ""}.${left > 0 ? ` ${peso(left)} still to pay.` : ""} It goes to Dispatch.${clean(input.note) ? ` ${clean(input.note)}` : ""}`,
+      `Payment checked: ${input.amount > 0 ? how(input) : `already paid on ${invoice.code}`}${proof ? ", proof of payment on file" : ""}. It goes to Dispatch.${clean(input.note) ? ` ${clean(input.note)}` : ""}`,
       "finance_verified",
     );
     if (input.amount > 0)
@@ -577,9 +618,8 @@ export async function confirmPayment(
         { id: invoice.id, customerId: order.customerId },
         { ...input, proofId: proof?.id ?? null },
       );
-    if (left === 0)
-      await logEvent(tx, orderId, me, "payment", `Paid in full (invoice ${invoice.code}).`, "paid");
-    return { invoiceId: invoice.id };
+    await logEvent(tx, orderId, me, "payment", `Paid in full (invoice ${invoice.code}).`, "paid");
+    return { invoiceId: invoice.id, sent: true, left: 0 };
   });
 }
 
@@ -765,8 +805,15 @@ export async function recordPayment(
   // Finance records the money received, an Online case's order's too (Aryan, 19 Nov: Online
   // orders go the way every channel's do).
   allow(me, FINANCE_ROLES, "record a payment");
-  payable(input);
+  // Nothing in cash is fine when the whole of it is tax withheld or a deduction (a guarantee
+  // letter's shortfall let go after the agency paid short).
+  const noCash = input.amount === 0 && ((input.withheld ?? 0) > 0 || (input.deducted ?? 0) > 0);
+  if (noCash) {
+    if (input.paidOn > todayManila()) throw new Refusal(400, "invalid", "That day hasn't come yet.", "paidOn");
+  } else payable(input);
   await db.transaction(async (tx) => {
+    // A locked period takes no more money (the books' Transaction locking), the CRM's own too.
+    await assertOpen(tx, "customer_payment", input.paidOn);
     const invoice = await lockInvoice(tx, invoiceId);
     if (invoice.status === "cancelled")
       throw new Refusal(
@@ -816,18 +863,18 @@ export async function recordPayment(
       if (!proof)
         throw new Refusal(400, "invalid", "That proof of payment isn't on this order.", "proofId");
     }
-    const first = await addPayment(tx, me, invoice, input);
+    let left = owed;
+    if (!noCash) ({ left } = await addPayment(tx, me, invoice, input));
     // The tax withheld settles the invoice as well (Zoho kept it on the payment).
-    let { left } = withheld
-      ? await addPayment(tx, me, invoice, {
-          amount: withheld,
-          method: "withholding",
-          reference: clean(input.form2307),
-          paidOn: input.paidOn,
-          note: null,
-          proofId: null,
-        })
-      : first;
+    if (withheld)
+      ({ left } = await addPayment(tx, me, invoice, {
+        amount: withheld,
+        method: "withholding",
+        reference: clean(input.form2307),
+        paidOn: input.paidOn,
+        note: null,
+        proofId: null,
+      }));
     // What the customer deducted (a chain's near-expiry return kept, a listing fee…) settles the
     // invoice too, never as cash.
     if (deducted) {
@@ -848,7 +895,14 @@ export async function recordPayment(
       invoice.orderId,
       me,
       "payment",
-      `${how(input)}${withheld ? `, and ${peso(withheld)} tax withheld (Form 2307 ${clean(input.form2307)})` : ""}${deducted ? `, and ${peso(deducted)} deducted by the customer (${DEDUCTION_LABEL[input.deductionKind as DeductionKind].toLowerCase()}${clean(input.deductionRef) ? `, memo ${clean(input.deductionRef)}` : ""})` : ""} received for ${invoice.code}. ${left > 0 ? `${peso(left)} still owed.` : "Paid in full."}`,
+      `${noCash ? "Nothing in cash" : `${how(input)}${input.payer === "patient" ? " (paid by the patient)" : ""}`}${withheld ? `, and ${peso(withheld)} tax withheld (Form 2307 ${clean(input.form2307)})` : ""}${
+        deducted
+          ? input.deductionKind === "gl_waived"
+            ? // The company lets a guarantee letter's shortfall go: nobody deducted it.
+              `, and ${peso(deducted)} let go by the company (the guarantee letter was paid short)`
+            : `, and ${peso(deducted)} deducted by the customer (${DEDUCTION_LABEL[input.deductionKind as DeductionKind].toLowerCase()}${clean(input.deductionRef) ? `, memo ${clean(input.deductionRef)}` : ""})`
+          : ""
+      } ${noCash && !withheld && input.deductionKind === "gl_waived" ? "on" : "received for"} ${invoice.code}. ${left > 0 ? `${peso(left)} still owed.` : "Paid in full."}`,
       left > 0 ? null : "paid",
     );
     if (left === 0) {
@@ -910,6 +964,8 @@ export async function removePayment(
       sql`select invoice_id::int as "invoiceId", amount::int as amount, method, ${day("paid_on")} as "paidOn", active from payment where id = ${paymentId} for update`,
     );
     if (!payment?.active) throw new Refusal(404, "not_found", "That payment isn't there any more.");
+    await assertOpen(tx, "customer_payment", payment.paidOn);
+    await guardCleared(tx, `crm:crm_payment:${paymentId}`);
     if (payment.method === "points")
       throw new Refusal(
         409,
@@ -949,7 +1005,19 @@ export async function recordRefund(
 ): Promise<void> {
   allow(me, FINANCE_ROLES, "record a refund");
   payable({ amount: input.amount, paidOn: input.refundedOn }, "refundedOn");
+  // Money sent back through a bank, an e-wallet or a check has its reference number (Aryan, 23 Nov:
+  // "a refund needs its reference"); cash given by hand has none, nor money kept as credit.
+  if (["bank", "ewallet", "check"].includes(input.method) && !clean(input.reference))
+    throw new Refusal(
+      400,
+      "invalid",
+      input.method === "check"
+        ? "Type the check's number and bank: a refund needs its reference."
+        : "Type the bank or GCash reference of the refund.",
+      "reference",
+    );
   await db.transaction(async (tx) => {
+    await assertOpen(tx, "refund", input.refundedOn);
     const invoice = await lockInvoice(tx, invoiceId);
     // A cancelled order gives back what came in; a return gives back what was paid beyond the
     // bill it left (never the points).
@@ -1037,7 +1105,7 @@ export async function listInvoices(
     rows<{ total: number; balance: number }>(
       db,
       sql`select coalesce(sum(i.total), 0)::float8 as total,
-          coalesce(sum(i.total - i.paid) filter (where i.status <> 'cancelled'), 0)::float8 as balance
+          coalesce(sum(i.total - i.paid + i.refunded) filter (where i.status <> 'cancelled'), 0)::float8 as balance
         ${invoiceFrom} where ${where}`,
     ),
     filter.customer
@@ -1073,7 +1141,7 @@ export async function invoiceDetail(db: Database, me: Me, id: number): Promise<I
   const today = todayManila();
   const [invoice] = await rows<InvoiceSql & Omit<InvoiceDetail["invoice"], keyof InvoiceRow>>(
     db,
-    sql`select ${invoiceColumns}, i.vatable::int as vatable, i.vat::int as vat, i.exempt::int as exempt, i.zero_rated::int as "zeroRated",
+    sql`select ${invoiceColumns}, i.credited::int as credited, i.vatable::int as vatable, i.vat::int as vat, i.exempt::int as exempt, i.zero_rated::int as "zeroRated",
         o.payment_days::int as "paymentDays", ${awaitingPaymentSql} as "awaitingCheck", rep.name as medrep, nullif(concat_ws(', ', c.address, c.city), '') as "customerAddress",
         c.tin as "customerTin", o.customer_po as "customerPo", o.delivery_address as "deliveryAddress",
         who.name as by, ${iso("i.at")} as at, i.cancelled_reason as "cancelledReason", o.delivery_fee::int as "deliveryFee",
@@ -1105,13 +1173,24 @@ export async function invoiceDetail(db: Database, me: Me, id: number): Promise<I
     ),
     companyInfo(db),
   ]);
-  const { delivered, ...rest } = invoice;
+  const { delivered, awaiting: _awaiting, ...rest } = invoice;
   const acts = FINANCE_ROLES.includes(me.role);
+  // What Finance still gives back as money, as Refunds owed counts it: a cancelled invoice's
+  // money, or money paid beyond a bill a return lowered (never points, credit, tax withheld).
+  const notCash = money.payments
+    .filter((payment) => payment.active && NOT_CASH_SET.has(payment.method))
+    .reduce((sum, payment) => sum + payment.amount, 0);
+  const cashKept = invoice.paid - invoice.refunded - notCash;
+  const refundOwed = Math.max(
+    0,
+    invoice.status === "cancelled" ? cashKept : Math.min(cashKept, invoice.paid - invoice.refunded - invoice.total),
+  );
   const source = rest.source;
   return {
     invoice: {
       ...rest,
       ...shown(invoice, today),
+      refundOwed,
       source:
         source && source !== "MedRep order" && source in SOURCE_LABEL
           ? `${SOURCE_LABEL[source as LeadSource]} enquiry`
@@ -1130,7 +1209,7 @@ export async function invoiceDetail(db: Database, me: Me, id: number): Promise<I
         // Paid in advance and not checked yet: Finance confirms it on the order's payment check.
         !(invoice as { awaitingCheck?: boolean }).awaitingCheck,
       removePayment: acts && invoice.status !== "cancelled",
-      refund: acts && invoice.status === "cancelled" && invoice.paid > invoice.refunded,
+      refund: acts && refundOwed > 0,
     },
   };
 }
@@ -1445,6 +1524,37 @@ export async function collectedLater(db: Database, me: Me, days = 30): Promise<C
   };
 }
 
+/** What customers owe, added up for the Home's card from the very list its page shows (the same
+ *  invoices, the same sums the card made in the browser), so the card is a few lines, not every
+ *  invoice. */
+export async function owedGlance(db: Database, me: Me): Promise<OwedGlance> {
+  const all = await owedInvoices(db, me);
+  const owed = all.rows.filter((row) => row.state !== "on_delivery");
+  const byCustomer = new Map<number, OwedGlance["customers"][number]>();
+  for (const row of owed) {
+    const now = byCustomer.get(row.customerId) ?? { id: row.customerId, name: row.customer, medrep: row.medrep, team: row.team, total: 0, late: 0, oldest: 0, invoices: 0 };
+    now.total += row.balance;
+    now.invoices += 1;
+    if (row.state === "late") {
+      now.late += row.balance;
+      now.oldest = Math.max(now.oldest, row.daysLate);
+    }
+    byCustomer.set(row.customerId, now);
+  }
+  const sumOf = (test: (row: (typeof owed)[number]) => boolean) => owed.filter(test).reduce((sum, row) => sum + row.balance, 0);
+  return {
+    today: all.today,
+    totals: all.totals,
+    ages: {
+      notDue: sumOf((row) => row.state === "due"),
+      d30: sumOf((row) => row.state === "late" && row.daysLate <= 30),
+      d60: sumOf((row) => row.state === "late" && row.daysLate > 30 && row.daysLate <= 60),
+      older: sumOf((row) => row.state === "late" && row.daysLate > 60),
+    },
+    customers: [...byCustomer.values()].sort((a, b) => b.late - a.late || b.total - a.total).slice(0, 100),
+  };
+}
+
 export async function owedInvoices(db: Database, me: Me): Promise<OwedInvoices> {
   allow(me, FINANCE_READ_ROLES, "see what customers owe");
   const today = todayManila();
@@ -1568,24 +1678,32 @@ export async function undoConfirm(db: Database, me: Me, orderId: number): Promis
         "too_late",
         `${order.code} was paid partly with points: put it on hold instead.`,
       );
-    const [invoice] = await rows<{ id: number; code: string }>(
+    const [invoice] = await rows<{ id: number; code: string; terms: string }>(
       tx,
-      sql`select id::int as id, code from invoice where order_id = ${orderId} and status <> 'cancelled' for update`,
+      sql`select id::int as id, code, terms from invoice where order_id = ${orderId} and status <> 'cancelled' for update`,
     );
-    // The invoice keeps its number (one invoice an order); the money taken in with the check goes.
-    if (invoice) {
+    // A credit or cash-on-delivery order was only let go: no money came in with the check, so none
+    // is taken off and it goes back to where Finance let it go from.
+    const advance = !invoice || invoice.terms === "advance";
+    // The invoice keeps its number (one invoice an order); the money taken in with the check goes,
+    // and only that: money recorded before the check stays.
+    if (invoice && advance) {
       await tx.execute(
         sql`update payment set active = false, removed_reason = 'Payment check undone', removed_by = ${me.id},
-            removed_at = now() where invoice_id = ${invoice.id} and active`,
+            removed_at = now() where invoice_id = ${invoice.id} and active
+            and at >= (select finance_checked_at from sales_order where id = ${orderId})`,
       );
-      await tx.execute(sql`update invoice set paid = 0, status = 'open' where id = ${invoice.id}`);
+      await tx.execute(
+        sql`update invoice set paid = (select coalesce(sum(p.amount), 0) from payment p where p.invoice_id = ${invoice.id} and p.active), status = 'open'
+          where id = ${invoice.id}`,
+      );
     }
     // The steps the check marked are taken off the order's road.
     await tx.execute(
       sql`update order_event set stage = null where order_id = ${orderId} and stage in ('finance_verified', 'paid')`,
     );
     await tx.execute(
-      sql`update sales_order set status = 'finance_check', finance_checked_at = null, finance_checked_by = null,
+      sql`update sales_order set status = ${advance ? "finance_check" : "ready_for_invoice"}, finance_checked_at = null, finance_checked_by = null,
           updated_at = now() where id = ${orderId}`,
     );
     await logEvent(
@@ -1593,7 +1711,7 @@ export async function undoConfirm(db: Database, me: Me, orderId: number): Promis
       orderId,
       me,
       "status",
-      `${me.name} undid the payment check${invoice ? ` (the payment on invoice ${invoice.code} taken off)` : ""}: it is back with Finance.`,
+      `${me.name} undid the ${advance ? "payment check" : "check"}${invoice && advance ? ` (the payment on invoice ${invoice.code} taken off)` : ""}: it is back with Finance.`,
     );
     await settleOrderPoints(tx, orderId);
   });

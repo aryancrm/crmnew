@@ -24,7 +24,7 @@ import { useMe } from "../auth";
 import { shortPeso } from "../ceo";
 import { avatarTone, dayHeading, initials, PRIMARY_SM } from "../look";
 import { Donut } from "../team/charts";
-import { count, dayLabel, PageState, peso } from "../ui";
+import { count, dayLabel, PageState, peso, manilaDay } from "../ui";
 import { Figure, type Period, PeriodBox, periodWord as periodWordOf } from "../home/figures";
 import { GoHereFirst, HuddleCard, TodaysPulse } from "./hospital-day";
 import { RxHome } from "./rx";
@@ -32,11 +32,12 @@ import { TelesalesDay } from "./telesales";
 import { CrrHome, NbdHome } from "./b2b";
 import { ClidpHome } from "./clidp";
 import { BiddingHome } from "./tenders";
-import { b2bRole } from "../seat-words";
+import { b2bRole, shownChannel } from "../seat-words";
 import { greeting, todayWords } from "../home/home";
 import { OrderCardItem } from "../orders/board";
 import { HospitalsCard } from "./hospitals";
 import { MyKpis as KpiPanel } from "../kpis/my-kpis";
+import { FieldDayCard } from "../mr/home";
 
 const NEWS: Record<StockNews["kind"], { label: string; style: string }> = {
   out: { label: "Out of stock", style: "bg-rose-50 text-rose-700" },
@@ -165,7 +166,7 @@ export function MedrepHome() {
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
             {me.channel && (
               <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-medium tracking-wide text-slate-600 uppercase">
-                {me.channel.code}
+                {shownChannel(me)}
               </span>
             )}
             {me.area && <span>{me.area.name}</span>}
@@ -175,6 +176,9 @@ export function MedrepHome() {
           </div>
         </div>
       </div>
+
+      {/* A field rep's day first: where it stands and the one thing to do next (Aryan, 23 Nov). */}
+      <FieldDayCard />
 
       {/* The hub's My KPIs: sales without VAT against target, the counts, a day's sales (PLAN 23). */}
       <KpiPanel />
@@ -529,7 +533,7 @@ export function MedrepHome() {
                       </span>
                       <span className="block truncate text-[11px] text-slate-500">
                         {row.orders > 0
-                          ? `${count(row.orders)} order${row.orders === 1 ? "" : "s"} · last ${row.lastOrderAt ? dayLabel(row.lastOrderAt.slice(0, 10)) : ""}`
+                          ? `${count(row.orders)} order${row.orders === 1 ? "" : "s"} · last ${row.lastOrderAt ? dayLabel(manilaDay(row.lastOrderAt)) : ""}`
                           : [row.city, row.phone].filter(Boolean).join(" · ") || "No order yet"}
                       </span>
                     </span>

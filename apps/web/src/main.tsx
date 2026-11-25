@@ -14,6 +14,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AdminChannelPage, AdminChannelsPage } from "./admin/channels";
 import { AdminDataChecks } from "./admin/data-checks";
+import { AdminSlowScreens } from "./admin/slow-screens";
 import { AdminCompanyChartPage } from "./admin/company-chart-page";
 import { AdminZohoSellers } from "./admin/zoho-sellers";
 import { AttendanceMonthPage, AttendancePage } from "./hr/attendance";
@@ -78,6 +79,7 @@ import { DocListPage, DocPage, NewBillOrCredit, NewVendorPayment } from "./buyin
 import { NewPurchaseOrder, PurchaseOrderPage, PurchaseOrdersPage } from "./buying/orders";
 import { VendorPage as BuyingVendor, VendorsPage as BuyingVendors } from "./buying/vendors";
 import { ChannelsReport, Reports } from "./company/reports";
+import { CustomReportPage } from "./company/custom-report";
 import { Returns } from "./orders/all-returns";
 import { SalesOrderPage } from "./orders/sales-order";
 import { CustomerPoPage } from "./orders/purchase-order";
@@ -113,6 +115,7 @@ import { BankStatementPage, ReconcilePage } from "./books/bank";
 import { BooksHome } from "./books/home";
 import { LockingPage, NewCreditNotePage, NewDepositPage, NewExpensePage, NewJournalPage, NewTransferPage } from "./books/ledger";
 import { BidReportPage } from "./sellers/bid-report";
+import { FoundTenderPage, TenderFinderPage } from "./sellers/tender-finder";
 import { CompanyPapersPage, TenderPage, TendersPage } from "./sellers/tenders";
 import { ClidpListingsPage, ClidpTeamPage } from "./sellers/clidp";
 import { ClidpRoadPage } from "./sellers/clidp-road";
@@ -291,6 +294,8 @@ createRoot(root).render(
             <Route path="rx/business" element={<RxBusinessPage />} />
             <Route path="tenders" element={<TendersPage />} />
             <Route path="tenders/report" element={<BidReportPage />} />
+            <Route path="tenders/finder" element={<TenderFinderPage />} />
+            <Route path="tenders/finder/:id" element={<FoundTenderPage />} />
             <Route path="tenders/:id" element={<TenderPage />} />
             <Route path="company-papers" element={<CompanyPapersPage />} />
             <Route path="mt/chains" element={<MtChainsPage />} />
@@ -341,6 +346,7 @@ createRoot(root).render(
             <Route path="hr/attendance/:id" element={<AttendanceMonthPage key="month" />} />
             <Route path="admin/channels" element={<AdminChannelsPage />} />
             <Route path="admin/data-checks" element={<AdminDataChecks />} />
+            <Route path="admin/slow-screens" element={<AdminSlowScreens />} />
             <Route path="admin/zoho-sellers" element={<AdminZohoSellers />} />
             <Route path="admin/company-chart" element={<AdminCompanyChartPage />} />
             <Route path="admin/channels/:id" element={<AdminChannelPage />} />
@@ -349,6 +355,7 @@ createRoot(root).render(
             <Route path="speed" element={<SpeedPage />} />
             <Route path="messages/:id" element={<MessagesPage />} />
             <Route path="my-team/seat/:id" element={<TeamSeatPage />} />
+            <Route path="custom-report" element={<CustomReportPage />} />
             <Route path="reports" element={<Reports />} />
             <Route path="reports/channels" element={<ChannelsReport />} />
             <Route path="adjustments" element={<Moves key="adjust" kind="adjust" />} />

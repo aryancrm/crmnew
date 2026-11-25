@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -90,7 +91,7 @@ describe("on duty at Management and Finance", () => {
     // Each approves on their own login, in their own name.
     const kates = (await ownerOf(first))?.manage === "Kate" ? first : second;
     const sarlas = kates === first ? second : first;
-    expect((await post("kate", `/api/orders/${kates}/approve`)).status).toBe(200);
+    expect((await post("kate", await ticked(db, `/api/orders/${kates}/approve`))).status).toBe(200);
     const [approved] = await rows<{ by: string }>(
       db,
       sql`select p.name as by from sales_order o join person p on p.id = o.approved_by where o.id = ${kates}`,
@@ -108,7 +109,7 @@ describe("on duty at Management and Finance", () => {
     // At Finance: Fiona starts, and the approved order is hers there.
     expect((await start("fiona", "Fiona", "finance")).status).toBe(200);
     expect((await ownerOf(kates))?.finance).toBe("Fiona");
-    expect((await post("sarla", `/api/orders/${sarlas}/approve`)).status).toBe(200);
+    expect((await post("sarla", await ticked(db, `/api/orders/${sarlas}/approve`))).status).toBe(200);
     expect((await ownerOf(sarlas))?.finance).toBe("Fiona");
     const timeline = await rows<{ message: string }>(db, sql`select message from order_event where order_id = ${kates} order by at, id`);
     expect(timeline.map((one) => one.message)).toEqual(expect.arrayContaining(["Given to Fiona (Finance)."]));

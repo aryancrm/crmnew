@@ -63,9 +63,11 @@ import {
 import { type FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { AGENCIES } from "../online/parts";
 import { VAT_WORDS } from "../inventory/vat";
 import { MedicineFinder } from "./medicine-finder";
 import { useMe } from "../auth";
+import { shownChannel } from "../seat-words";
 import { shortPeso } from "../ceo";
 import { CustomerDialog } from "../customers/dialog";
 import { NO_PROOF_REASONS } from "../finance/no-proof";
@@ -187,7 +189,7 @@ function Part({
       id={`part-${number}`}
       className="scroll-mt-20 overflow-visible rounded-2xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04),0_12px_28px_-18px_rgba(15,23,42,0.18)]"
     >
-      <div className="flex items-center gap-3 rounded-t-2xl border-b border-slate-100 bg-gradient-to-r from-slate-50/90 to-white px-4 py-3.5 sm:px-5">
+      <div className="flex items-center gap-3 rounded-t-2xl border-b border-slate-100 bg-gradient-to-r from-slate-50/90 to-white px-4 py-2.5 sm:px-5">
         <span
           className={`relative grid size-9 shrink-0 place-items-center rounded-xl ${done ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200" : "bg-brand-tint text-brand ring-1 ring-brand/15"}`}
         >
@@ -200,7 +202,7 @@ function Part({
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="text-[15px] font-semibold tracking-tight text-ink">{title}</h2>
-          {sub && <p className="truncate text-[12px] text-slate-500">{sub}</p>}
+          {sub && <p className="hidden truncate text-[12px] text-slate-500 lg:block">{sub}</p>}
         </div>
         {left.length > 0 && (
           <span
@@ -212,7 +214,7 @@ function Part({
         )}
         {aside}
       </div>
-      <div className="flex flex-col gap-3.5 p-4 sm:p-5">{children}</div>
+      <div className="flex flex-col gap-3 p-4 sm:px-5">{children}</div>
     </section>
   );
 }
@@ -397,6 +399,8 @@ export function OrderNew({
     enabled: Boolean(customerId),
   });
   const picked = customer.data?.customer;
+  // The Documents part lists only the papers the order asks for; "Another paper" opens the rest.
+  const [morePapers, setMorePapers] = useState(false);
   const standing = customer.data?.standing;
 
   const [lines, setLines] = useState<Line[]>([]);
@@ -415,6 +419,8 @@ export function OrderNew({
   const [source, setSource] = useState("");
   // The hub's last step: a Confirm window, and "why are you proceeding?" when a medicine is short.
   const [confirming, setConfirming] = useState(false);
+  // The "Hand to PAP" window (a guarantee-letter patient, 22 Nov).
+  const [handing, setHanding] = useState(false);
   const [stockReason, setStockReason] = useState("");
   const [invoiceFrom, setInvoiceFrom] = useState<InvoiceFrom>("2mg");
   const [doctor, setDoctor] = useState<{ id: number; name: string } | null>(null);
@@ -519,6 +525,15 @@ export function OrderNew({
       api<CustomerList>(`/api/customers?kind=doctor&q=${encodeURIComponent(findDoctor.trim())}`),
     enabled: !doctor && findDoctor.trim().length >= 1,
   });
+
+  // An order placed at a visit to a doctor names that doctor (Aryan, 23 Nov: the order is made
+  // right there on the call): if the buyer is then changed to the doctor's patient, the doctor stays.
+  const doctorFromVisit = useRef(false);
+  useEffect(() => {
+    if (!visitId || doctorFromVisit.current || !picked) return;
+    doctorFromVisit.current = true;
+    if (picked.kind === "doctor") setDoctor((now) => now ?? { id: picked.id, name: picked.name });
+  }, [visitId, picked]);
 
   // A draft saved on this device comes back when the form is opened again.
   // biome-ignore lint/correctness/useExhaustiveDependencies: only once, when the person is known
@@ -864,6 +879,17 @@ export function OrderNew({
   const forPatient = isPatientType(orderType) || picked?.kind === "patient" || patientOrder;
   // What a sent-back order already has on file counts (its prescription stays on the order).
   const onFile = new Set((fixing.data?.papers ?? []).map((paper) => paper.kind));
+  // Whenever a patient buys, the prescription is needed (Aryan, 17 Nov). The type's own papers
+  // are asked for too (19 Nov): Management's Documents check reads them; only the prescription
+  // keeps the order from going.
+  const paperNeeded = (kind: PaperKind) =>
+    (kind === "prescription" && (forPatient || rxDivision)) ||
+    (kind === "senior_id" && orderType === "senior_pwd") ||
+    (kind === "gl" && orderType === "gl") ||
+    (kind === "po" && orderType === "po");
+  // The papers the Documents part lists without being asked: the needed ones, and the proof of
+  // payment (or why there is none), which the field says on every order.
+  const paperAsked = (kind: PaperKind) => paperNeeded(kind) || (kind === "payment_proof" && asksProof);
   const shortLines = lines.filter((line) => {
     const row = byId.get(line.medicineId);
     return row ? line.qty > row.free : false;
@@ -916,10 +942,22 @@ export function OrderNew({
   // quotation, the application, the letter and the claim are tracked.
   const papPatient =
     me?.role === "medrep" && me.channel?.code === "PAP" && picked?.kind === "patient";
+  // PAP is a process one person looks after (Aryan, 22 Nov): a guarantee-letter patient from any
+  // channel is handed to PAP, who gets the quotations and the letter; the sale stays the seller's.
+  const handsToPap =
+    orderType === "gl" &&
+    !fixId &&
+    !management &&
+    !papPatient &&
+    Boolean(me && ["medrep", "team_lead", "manager", "online"].includes(me.role) && me.channel?.code !== "PAP");
   function submit(event: FormEvent) {
     event.preventDefault();
     if (papPatient && !fixId) {
       navigate("/pap?new=1");
+      return;
+    }
+    if (handsToPap) {
+      setHanding(true);
       return;
     }
     if (missing.length) {
@@ -1033,7 +1071,34 @@ export function OrderNew({
   const lineError = (index: number, name: string) => action.at(`items.${index}.${name}`);
 
   return (
+    <>
     <form onSubmit={submit} className="mx-auto flex max-w-4xl flex-col gap-4 pb-4">
+      {handsToPap && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-amber-50 px-4 py-3 text-[13px] text-amber-950 ring-1 ring-amber-200">
+          <span className="flex items-center gap-2">
+            <span className="size-2 rounded-full bg-amber-400" aria-hidden="true" />A guarantee letter
+            is PAP's work: hand the patient over. The sale stays yours.
+          </span>
+          <span className="flex items-center gap-3">
+            <Link to="/pap" className="text-amber-800 hover:underline">
+              My patients with PAP
+            </Link>
+            <button type="button" onClick={() => setHanding(true)} className="font-semibold text-emerald-700 hover:underline">
+              Hand to PAP
+            </button>
+          </span>
+        </div>
+      )}
+      {handing && (
+        <HandToPapDialog
+          name={picked?.name ?? ""}
+          phone={picked?.phone ?? ""}
+          city={picked?.city ?? ""}
+          address={picked?.address ?? ""}
+          onClose={() => setHanding(false)}
+          onDone={(id) => navigate(`/leads/${id}`)}
+        />
+      )}
       {papPatient && !fixId && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-slate-50 px-4 py-3 text-[13px] text-slate-700">
           <span className="flex items-center gap-2">
@@ -1131,186 +1196,44 @@ export function OrderNew({
       {/* 1 · General: whose order, the day, the Division (the hub's first part) */}
       <PartSteps missing={missing} show={!management} />
 
-      <Part number={1} title="General" icon={UserRound} missing={management ? undefined : missing}>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <div className="flex flex-col gap-1">
-            <Label text="Order date" />
-            <div className={FIXED}>
-              {dayLabel(manilaToday())}
-            </div>
-          </div>
-          <div className="flex flex-col gap-1">
-            <Label text="MedRep" />
-            <div className={FIXED}>
-              <MapPin className="size-4 shrink-0 text-ink-2" aria-hidden="true" />
-              <span className="truncate">
-                {changing || sentBack
-                  ? (changing ?? sentBack)?.medrep
-                  : [me?.name, me?.channel?.code, me?.area?.name].filter(Boolean).join(" · ")}
-              </span>
-            </div>
-            {me?.role === "medrep" && !fixId && (
-              <span className={HELP}>Your own account: the order is yours, in your area.</span>
-            )}
-          </div>
-        </div>
+      {/* Short as the hub's (Aryan, 23 Nov: "he went to take an order, not to sit an exam"): the
+          day and the MedRep on the part's header, the Division one small list. */}
+      <Part
+        number={1}
+        title="General"
+        icon={UserRound}
+        missing={management ? undefined : missing}
+        aside={
+          <span className="min-w-0 shrink text-right text-[11px] leading-tight text-slate-500">
+            <span className="block">{dayLabel(manilaToday())}</span>
+            <span className="block truncate font-medium text-slate-700">
+              {changing || sentBack ? (changing ?? sentBack)?.medrep : [me?.name, me?.area?.name].filter(Boolean).join(" · ")}
+            </span>
+          </span>
+        }
+      >
         {/* The order's Division: the sales tracker's eight channels (Aryan, 19 Nov: "we have 8
-            channels"), their own marked, any other one press away; the sub-division, the order
+            channels"), their own marked, any other one pick away; the sub-division, the order
             types, the customer list and the papers follow it. */}
-        <div className="flex flex-col gap-1.5">
-          <Label text="Division" needed />
-          <div className="flex flex-wrap items-center gap-1.5" role="radiogroup" aria-label="Division">
-            {DIVISIONS.map((name) => {
-              const on = pickedDivision === name;
-              const own = ownChips.includes(name);
-              return (
-                <button
-                  key={name}
-                  type="button"
-                  role="radio"
-                  aria-checked={on}
-                  disabled={Boolean(fixId)}
-                  onClick={() => divisionPicked(name)}
-                  className={`inline-flex h-9 items-center gap-1.5 rounded-xl border px-3 text-[13px] font-semibold transition ${
-                    on
-                      ? "border-brand bg-brand text-white shadow-2xs"
-                      : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
-                  } disabled:cursor-not-allowed disabled:opacity-70`}
-                >
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <label className="col-span-2 flex flex-col gap-1 sm:col-span-1">
+            <Label text="Division" needed />
+            <select
+              aria-label="Division"
+              value={pickedDivision}
+              disabled={Boolean(fixId)}
+              onChange={(event) => event.target.value && divisionPicked(event.target.value)}
+              className={FIELD}
+            >
+              {!pickedDivision && <option value="">-- Pick the Division --</option>}
+              {DIVISIONS.map((name) => (
+                <option key={name} value={name}>
                   {name}
-                  {own && (
-                    <span
-                      className={`rounded-md px-1 text-[10px] font-semibold tracking-wide uppercase ${
-                        on ? "bg-white/20 text-white" : "bg-emerald-50 text-emerald-700"
-                      }`}
-                    >
-                      {forRep ? "Theirs" : "Yours"}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-          {pickedDivision && ownChips.length > 0 && (
-            <span className={HELP}>
-              {ownChips.includes(pickedDivision)
-                ? `${forRep ? `${forRep.name}'s` : "Your"} Division: the order goes to ${forRep ? "their" : "your"} own team lead and head, and counts for ${forRep ? "them" : "you"}.`
-                : `Another Division's order: its fields and papers are ${pickedDivision}'s; it still counts for ${forRep ? "them" : "you"} and goes to ${forRep ? "their" : "your"} own team lead and head.`}
-            </span>
-          )}
-          {!pickedDivision && (
-            <span className="text-[12px] text-amber-700">Pick the Division this order counts for.</span>
-          )}
-          {pickedDivision && DIVISION_BUYERS[pickedDivision] && (
-            <span className={HELP}>
-              {pickedDivision} orders are usually for{" "}
-              {(DIVISION_BUYERS[pickedDivision] ?? [])
-                .map((kind) => BUYER_WORDS[kind] ?? kind)
-                .join(" and ")}
-              : the customer list below opens on them.
-            </span>
-          )}
-        </div>
-        {/* The order's type, first (Aryan, 19 Nov): whose order it is; its papers follow. */}
-        <div className="flex flex-col gap-1.5">
-          <Label text="Order type" needed />
-          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Order type">
-            {orderTypesFor(pickedDivision)
-              .filter((key) => key !== "gl" || PAP_DIVISIONS.includes(pickedDivision))
-              .map((key) => {
-              const on = orderType === key;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  role="radio"
-                  aria-checked={on}
-                  disabled={management}
-                  onClick={() => {
-                    setOrderType(key);
-                    // Only a Senior / PWD order has their price.
-                    if (key !== "senior_pwd") setRelief(null);
-                    if ((key === "gl") !== (orderType === "gl")) setHeadquarter(null);
-                    if (key !== "gl") setProgram("");
-                  }}
-                  className={`inline-flex h-9 items-center rounded-xl border px-3 text-[13px] font-semibold transition ${
-                    on
-                      ? "border-brand bg-brand text-white shadow-2xs"
-                      : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
-                  } disabled:cursor-not-allowed disabled:opacity-70`}
-                >
-                  {ORDER_TYPE_LABEL[key]}
-                </button>
-              );
-            })}
-          </div>
-          {orderType ? (
-            <span className={HELP}>
-              {ORDER_TYPE_HINT[orderType]}
-              {isPatientType(orderType)
-                ? ". For a hospital or a doctor, it is an order for one patient."
-                : "."}
-            </span>
-          ) : (
-            <span className="text-[12px] text-amber-700">
-              Pick whose order it is: the papers it needs follow.
-            </span>
-          )}
-        </div>
-        {/* A guarantee letter's order: its programme, as the hub's Patient Assistance Program; it
-            is the order's Source, and the Sub-division and Headquarter become Telesales. */}
-        {pap && (
-          <div className="flex flex-col gap-1.5">
-            <Label text="Programme" needed />
-            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Programme">
-              {PAP_PROGRAMS.map((name) => {
-                const on = program === name;
-                return (
-                  <button
-                    key={name}
-                    type="button"
-                    role="radio"
-                    aria-checked={on}
-                    disabled={management}
-                    onClick={() => {
-                      setProgram(name);
-                      if ((ORDER_SOURCES as readonly string[]).includes(name)) setSource(name);
-                    }}
-                    className={`inline-flex h-9 items-center rounded-xl border px-3 text-[13px] font-semibold transition ${
-                      on
-                        ? "border-brand bg-brand text-white shadow-2xs"
-                        : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
-                    } disabled:cursor-not-allowed disabled:opacity-70`}
-                  >
-                    {name}
-                  </button>
-                );
-              })}
-            </div>
-            <span className={HELP}>
-              Sub-division and Headquarter are Telesales; attach the guarantee letter under Documents.
-            </span>
-            {/* The agency writes on the letter what it pays for our quotation (Aryan, 19 Nov): typed
-                here when the letter is already in, else on the order when it comes. */}
-            <div className="grid gap-3 sm:grid-cols-2">
-              <label className="flex flex-col gap-1">
-                <Label text="Letter number (when it is in)" />
-                <input value={glNumber} onChange={(event) => setGlNumber(event.target.value)} className={FIELD} />
-              </label>
-              <label className="flex flex-col gap-1">
-                <Label text="Amount on the letter, ₱ (when it is in)" />
-                <input
-                  inputMode="decimal"
-                  value={glAmount}
-                  onChange={(event) => setGlAmount(event.target.value)}
-                  className={FIELD}
-                  placeholder="What the agency approves"
-                />
-              </label>
-            </div>
-          </div>
-        )}
-        <div className="grid gap-3 sm:grid-cols-2">
+                  {ownChips.includes(name) ? (forRep ? " · theirs" : " · yours") : ""}
+                </option>
+              ))}
+            </select>
+          </label>
             <label className="flex flex-col gap-1">
               <Label text="Sub-division" />
               {rule?.sub ? (
@@ -1373,7 +1296,108 @@ export function OrderNew({
                 />
               )}
             </label>
+        </div>
+        {!pickedDivision && (
+          <span className="text-[12px] text-amber-700">Pick the Division this order counts for.</span>
+        )}
+        {pickedDivision && ownChips.length > 0 && !ownChips.includes(pickedDivision) && (
+          <span className={HELP}>
+            Another Division's order: its fields and papers are {pickedDivision}'s; it still counts for{" "}
+            {forRep ? "them" : "you"} and goes to {forRep ? "their" : "your"} own team lead and head.
+          </span>
+        )}
+        {/* The order's type, first (Aryan, 19 Nov): whose order it is; its papers follow. */}
+        <div className="flex flex-col gap-1.5">
+          <Label text="Order type" needed />
+          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Order type">
+            {orderTypesFor(pickedDivision)
+              .filter((key) => key !== "gl" || PAP_DIVISIONS.includes(pickedDivision))
+              .map((key) => {
+              const on = orderType === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  role="radio"
+                  aria-checked={on}
+                  disabled={management}
+                  onClick={() => {
+                    setOrderType(key);
+                    // Only a Senior / PWD order has their price.
+                    if (key !== "senior_pwd") setRelief(null);
+                    if ((key === "gl") !== (orderType === "gl")) setHeadquarter(null);
+                    if (key !== "gl") setProgram("");
+                  }}
+                  className={`inline-flex h-9 items-center rounded-xl border px-3 text-[13px] font-semibold transition ${
+                    on
+                      ? "border-brand bg-brand text-white shadow-2xs"
+                      : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                  } disabled:cursor-not-allowed disabled:opacity-70`}
+                >
+                  {ORDER_TYPE_LABEL[key]}
+                </button>
+              );
+            })}
           </div>
+          {orderType ? (
+            <span className={HELP}>{ORDER_TYPE_HINT[orderType]}.</span>
+          ) : (
+            <span className="text-[12px] text-amber-700">Pick whose order it is: the papers it needs follow.</span>
+          )}
+        </div>
+        {/* A guarantee letter's order: its programme, as the hub's Patient Assistance Program; it
+            is the order's Source, and the Sub-division and Headquarter become Telesales. */}
+        {pap && (
+          <div className="flex flex-col gap-1.5">
+            <Label text="Programme" needed />
+            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Programme">
+              {PAP_PROGRAMS.map((name) => {
+                const on = program === name;
+                return (
+                  <button
+                    key={name}
+                    type="button"
+                    role="radio"
+                    aria-checked={on}
+                    disabled={management}
+                    onClick={() => {
+                      setProgram(name);
+                      if ((ORDER_SOURCES as readonly string[]).includes(name)) setSource(name);
+                    }}
+                    className={`inline-flex h-9 items-center rounded-xl border px-3 text-[13px] font-semibold transition ${
+                      on
+                        ? "border-brand bg-brand text-white shadow-2xs"
+                        : "border-slate-300 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50"
+                    } disabled:cursor-not-allowed disabled:opacity-70`}
+                  >
+                    {name}
+                  </button>
+                );
+              })}
+            </div>
+            <span className={HELP}>
+              Sub-division and Headquarter are Telesales; attach the guarantee letter under Documents.
+            </span>
+            {/* The agency writes on the letter what it pays for our quotation (Aryan, 19 Nov): typed
+                here when the letter is already in, else on the order when it comes. */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              <label className="flex flex-col gap-1">
+                <Label text="Letter number (when it is in)" />
+                <input value={glNumber} onChange={(event) => setGlNumber(event.target.value)} className={FIELD} />
+              </label>
+              <label className="flex flex-col gap-1">
+                <Label text="Amount on the letter, ₱ (when it is in)" />
+                <input
+                  inputMode="decimal"
+                  value={glAmount}
+                  onChange={(event) => setGlAmount(event.target.value)}
+                  className={FIELD}
+                  placeholder="What the agency approves"
+                />
+              </label>
+            </div>
+          </div>
+        )}
       </Part>
 
       {/* 2 · Customer details: who buys, where it goes, how they pay (the hub's second part) */}
@@ -1501,6 +1525,40 @@ export function OrderNew({
                   ))}
                 </select>
                 <span className={HELP}>Its tender won, with no order yet: the tender keeps this order as its delivery.</span>
+                {/* A tender's order is placed at the bid that won it (Aryan, 23 Nov): its medicines,
+                    pieces and prices in one press. Each line says it is the bid's price. */}
+                {(() => {
+                  const award = standing.awards.find((one) => one.id === tenderId);
+                  if (!award || award.lines.length === 0) return null;
+                  return (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setLines(
+                          award.lines.flatMap((bid, at) => {
+                            const row = byId.get(bid.medicineId);
+                            const first = row ? pricesOf(row)[0] : undefined;
+                            if (!row || !first) return [];
+                            return [
+                              {
+                                key: at + 1,
+                                medicineId: bid.medicineId,
+                                priceKind: first.kind,
+                                qty: bid.qty,
+                                lower: bid.unitPrice !== first.amount,
+                                given: (bid.unitPrice / 100).toFixed(2),
+                                reason: `Bid price of ${award.code}`,
+                              },
+                            ];
+                          }),
+                        )
+                      }
+                      className="self-start rounded-[10px] border border-emerald-300 bg-emerald-50 px-3 py-2 text-[13px] font-semibold text-emerald-800 hover:bg-emerald-100"
+                    >
+                      Take the bid's {award.lines.length} {award.lines.length === 1 ? "medicine" : "medicines"} and prices
+                    </button>
+                  );
+                })()}
               </label>
             )}
             {standing && standing.clidpRates.length > 0 && (
@@ -1689,8 +1747,8 @@ export function OrderNew({
             </ul>
           </div>
         )}
-        <div className="grid gap-3 border-t border-slate-100 pt-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1 sm:col-span-2">
+        <div className="grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+          <label className="col-span-2 flex flex-col gap-1">
             <Label text="Delivery address" needed />
             <textarea
               rows={2}
@@ -1738,7 +1796,7 @@ export function OrderNew({
               className={FIELD}
             >
               <option value="">
-                {picked ? `The customer's usual: ${terms}` : "-- Not set --"}
+                {picked ? `Usual: ${terms}` : "-- Not set --"}
               </option>
               {PAYMENT_TERMS.map((name) => (
                 <option key={name} value={name}>
@@ -1790,7 +1848,7 @@ export function OrderNew({
               onChange={(event) => setSource(event.target.value)}
               className={FIELD}
             >
-              <option value="">-- Where did the order come from? --</option>
+              <option value="">-- Pick the source --</option>
               {ORDER_SOURCES.map((name) => (
                 <option key={name} value={name}>
                   {name}
@@ -1809,7 +1867,6 @@ export function OrderNew({
               <option value="2mg">2MG Inc.</option>
               <option value="getmeds">GetMeds Philippines Inc.</option>
             </select>
-            <span className={HELP}>The company the invoice is made under.</span>
           </label>
           {/* Their PO number: asked on an order with their PO, never on a patient's own (19 Nov). */}
           {(orderType === "po" || patientOrder || customerPo || (!orderType && picked?.kind !== "patient")) && (
@@ -1841,7 +1898,7 @@ export function OrderNew({
               <span className="text-xs text-rose-700">{action.at("expectedOn")}</span>
             )}
           </label>
-          <div className="flex flex-col gap-1 sm:col-span-2">
+          <div className="col-span-2 flex flex-col gap-1">
             <Label text="Doctor (if any)" />
             {doctor ? (
               <div className="flex items-center justify-between gap-2 rounded-[10px] border border-slate-200 bg-slate-50 px-3 py-2 text-[13px]">
@@ -1903,7 +1960,7 @@ export function OrderNew({
               <span className="text-xs text-rose-700">{action.at("doctorId")}</span>
             )}
           </div>
-          <label className="flex flex-col gap-1 sm:col-span-2">
+          <label className="col-span-2 flex flex-col gap-1">
             <Label text="Customer remarks" needed />
             <textarea
               rows={2}
@@ -1912,7 +1969,6 @@ export function OrderNew({
               className={`${FIELD} h-auto py-2`}
               placeholder="What the customer asked, anything Management should know"
             />
-            <span className={HELP}>Management reads it with the order.</span>
           </label>
         </div>
       </Part>
@@ -2428,7 +2484,12 @@ export function OrderNew({
             />
           </label>
         )}
-        <div className="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {!morePapers && (
+          <button type="button" onClick={() => setMorePapers(true)} className="self-start text-[13px] font-semibold text-emerald-700 hover:underline">
+            + Another paper (their PO, licence, prescription, proof of payment…)
+          </button>
+        )}
+        <div className="flex flex-col rounded-2xl border border-slate-200 bg-white shadow-sm empty:hidden">
           {[...PAPERS]
             .sort((a, b) => paperRank(a.kind, forPatient) - paperRank(b.kind, forPatient))
             .filter((paper) =>
@@ -2443,17 +2504,16 @@ export function OrderNew({
                   // The SC/PWD ID, on any order given their price.
                   (paper.kind === "senior_id" && withRelief),
             )
+            // Only the papers this order asks for, and those already attached; the others one
+            // press away (Aryan, 23 Nov: a short form).
+            .filter((paper) => morePapers || paperAsked(paper.kind) || Boolean(papers[paper.kind]) || onFile.has(paper.kind))
             .map((paper) => {
               const file = papers[paper.kind];
               const already = onFile.has(paper.kind);
               // Whenever a patient buys, the prescription is needed (Aryan, 17 Nov).
               // The type's own papers are asked for too (19 Nov): Management's Documents check
               // reads them; only the prescription keeps the order from going.
-              const needed =
-                (paper.kind === "prescription" && (forPatient || rxDivision)) ||
-                (paper.kind === "senior_id" && orderType === "senior_pwd") ||
-                (paper.kind === "gl" && orderType === "gl") ||
-                (paper.kind === "po" && orderType === "po");
+              const needed = paperNeeded(paper.kind);
               return (
                 <div
                   key={paper.kind}
@@ -2552,7 +2612,7 @@ export function OrderNew({
 
       {/* 5 · Review and place: what is missing, then the hub's Confirm window */}
       <Part number={5} title="Review and place" icon={ClipboardCheck} missing={management ? undefined : missing}>
-      {lines.length > 0 && (
+      {lines.length > 0 && listTotal > total && (
         <div className="flex flex-col gap-1.5 rounded-lg bg-slate-50 px-4 py-3 text-[13px]">
           <div className="flex justify-between">
             <span className="text-slate-500">
@@ -2577,24 +2637,14 @@ export function OrderNew({
         </div>
       )}
 
-      {picked && lines.length > 0 && (
-        <div className="flex flex-col gap-1.5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900">
-          <div className="font-semibold">
-            Your part ends here. Management, Finance and Dispatch do the rest.
-          </div>
-          {warnings.length > 0 ? (
-            warnings.map((warning) => (
-              <div key={warning} className="flex gap-2">
-                <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
-                <span>{warning}. Management sees this.</span>
-              </div>
-            ))
-          ) : (
-            <div className="flex gap-2">
-              <Check className="mt-0.5 size-3.5 shrink-0" />
-              <span>Nothing for Management to question.</span>
+      {picked && lines.length > 0 && warnings.length > 0 && (
+        <div className="flex flex-col gap-1.5 rounded-2xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+          {warnings.map((warning) => (
+            <div key={warning} className="flex gap-2">
+              <TriangleAlert className="mt-0.5 size-3.5 shrink-0" />
+              <span>{warning}. Management sees this.</span>
             </div>
-          )}
+          ))}
         </div>
       )}
 
@@ -2690,7 +2740,9 @@ export function OrderNew({
                 ? "Send to Management"
                 : papPatient
                   ? "Start a PAP case"
-                  : "Place order"}
+                  : handsToPap
+                    ? "Hand to PAP"
+                    : "Place order"}
         </button>
       </div>
 
@@ -2801,6 +2853,9 @@ export function OrderNew({
         </Dialog>
       )}
 
+    </form>
+      {/* Outside the order's own form: a form inside a form sent the page away when "Add doctor"
+          was pressed, and the customer was never saved (found walking TeleSales, 23 Nov). */}
       {adding && customers.data && (
         <CustomerDialog
           can={customers.data.can}
@@ -2812,6 +2867,82 @@ export function OrderNew({
           onPick={(id) => setCustomerId(id)}
         />
       )}
-    </form>
+    </>
+  );
+}
+
+/** A seller's guarantee-letter patient goes to PAP: who, which agency, what they need. PAP sends
+ *  the three quotations and gets the letter; the order it places counts for the seller. */
+function HandToPapDialog({
+  name: firstName,
+  phone: firstPhone,
+  city,
+  address,
+  onClose,
+  onDone,
+}: {
+  name: string;
+  phone: string;
+  city: string;
+  address: string;
+  onClose: () => void;
+  onDone: (id: number) => void;
+}) {
+  const action = useAction();
+  const [name, setName] = useState(firstName);
+  const [phone, setPhone] = useState(firstPhone);
+  const [agency, setAgency] = useState("");
+  const [request, setRequest] = useState("");
+  const field = "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900";
+  const label = "mb-1 block text-xs font-semibold text-slate-600";
+  return (
+    <Dialog title="Hand the patient to PAP" sub="PAP gets the quotations and the guarantee letter. The sale stays yours." onClose={onClose} busy={action.busy}>
+      <div className="flex flex-col gap-3">
+        <label>
+          <span className={label}>Patient *</span>
+          <input className={field} value={name} onChange={(event) => setName(event.target.value)} />
+        </label>
+        <label>
+          <span className={label}>Phone</span>
+          <input className={field} value={phone} onChange={(event) => setPhone(event.target.value)} inputMode="tel" />
+        </label>
+        <label>
+          <span className={label}>Agency that gives the letter *</span>
+          <select className={field} value={agency} onChange={(event) => setAgency(event.target.value)}>
+            <option value="">Pick one</option>
+            {AGENCIES.map((one) => (
+              <option key={one.key} value={one.key}>
+                {one.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span className={label}>Medicines and how many</span>
+          <textarea className={field} rows={3} value={request} onChange={(event) => setRequest(event.target.value)} />
+        </label>
+        {action.problem && <p className="text-sm text-rose-700">{action.problem.message}</p>}
+        <div className="flex justify-end gap-2">
+          <button type="button" onClick={onClose} disabled={action.busy} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-700">
+            Cancel
+          </button>
+          <button
+            type="button"
+            disabled={action.busy || !name.trim() || !agency}
+            onClick={() =>
+              void action.run(async () => {
+                const made = await api<{ id: number }>("/api/leads/hand-to-pap", {
+                  body: { name: name.trim(), phone: phone.trim() || null, agency, request: request.trim() || null, city: city || null, address: address || null },
+                });
+                onDone(made.id);
+              })
+            }
+            className="rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+          >
+            {action.busy ? "Handing over…" : "Hand to PAP"}
+          </button>
+        </div>
+      </div>
+    </Dialog>
   );
 }

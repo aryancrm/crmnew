@@ -1649,6 +1649,9 @@ watched by the Admin.
 | Sales Admin (Prescription, Bidding) | — | Not a CRM seat yet: their work (order → Finance → dispatch) is the order line's Management step | — | Note |
 | Sales & Marketing Mentor | adds Tenders | Bidding pipeline: active, submitted, won / lost this month and win rate, awarded value to deliver, government money owed from acceptance | → Founder (Reports: Tenders) | Done 17 Nov |
 
+Since 23 Nov the seats that record tenders also have the **Tender finder** (section 24): what the
+robot found on PhilGEPS, the team's screened list, and *Make it a tender*.
+
 ### 16.7 Modern Trade (done 17 Nov, partly: deductions and returns wait for Finance)
 
 Read from the chart (Modern Trade box cropped alone, 17 Nov): one person, Ms. Malou Jagonoy, Chief
@@ -1920,6 +1923,12 @@ return, as the people who will do it, before the next)**
   and in Zoho, what they take, what they owe now (Zoho's too), and a link to the whole history.
 - *Guarantee-letter cases go to PAP* (the PAP person), not the Online desk (question 11: today an
   Online case turned GL stays with the Online agent).
+  **Aryan, 22 Nov: PAP is not a department or a channel, it is a process one person looks after.**
+  An order from any channel whose patient wants a guarantee letter is PAP's: we send the patient
+  three quotations; the patient takes them to the agency (PCSO, DSWD, OVP, OP); the agency gives
+  the guarantee letter; the patient gives it to us; then we give the medicine; afterwards it is
+  recorded whether the whole payment came. The three roads are the old code's: guarantee letter,
+  Senior citizen / PWD, Regular. Not built yet as he says it (see the change log of 22 Nov).
 - *Approvals.* Management approves every MedRep order. When something is an exception, the
   approval is taken from the MedRep's Team Lead; when Management itself needs a yes, from its
   Business Mentor. Approval is a button in the CRM (name and time kept on the order), not a
@@ -2125,6 +2134,18 @@ booking are gone.
   signed acknowledgement); the tour plan is the CRM's month plan (`visit_plan`) with days, cities,
   revisions and deviations; expenses are the CRM's field expense lines with SEFMED's heads and the
   day's per diem and TA; *Start working* starts the CRM's attendance day and the day report ends it.
+- **My day asks in order, in one place (23 Nov).** 1 *Start working*: "Where do you work today?"
+  (the work place in plain words, SEFMED's name under it), then "Which town or city?", picked from
+  every city and municipality of the Philippines (1,634, with the province; `public/places/ph-towns.json`
+  from the PSGC; the towns of the rep's own customers and the tour plan's first; a place not on the
+  list is kept as typed), then who works along. Nothing is picked beforehand unless the tour plan
+  said it. 2 *Where are you going now?*: today's visits of every kind in one list; a tap opens the
+  visit (what is the call for → I'm here → what happened → any order → close), *Someone not on this
+  list* adds one and opens it; a closed call comes back to My day, which asks *Where are you going
+  next?* and lists what is done. 3 *Stop working* (the day report). Add a visit asks when, whom
+  (search by name, the town only narrows the list) and, when the rule asks, why. A tour plan's day
+  is one sheet: where, whom, Add visits; three lines over the calendar say how it goes and how many
+  working days are filled.
 - **The company tree is the hierarchy.** A MedRep works their own day; their team lead (whom they
   report to) sees the team, gets the tour plans, changes, expenses, day reports and *not sure yet*
   calls, and decides them; the head above sees everything under them and may stand in; the CEO reads
@@ -2217,6 +2238,162 @@ increment band read the channel's card only. Each card is locked on the 1st as b
 Home shows the month's KPI picture: the company's average, people below 60, the best and the
 lowest, each division's average; Scorecards opens every card.
 
+## 24. The tender finder inside the CRM (23 Nov 2026)
+
+Aryan, 23 Nov: "we keep one CRM, not two; when someone clicks it in our CRM it must open inside our
+CRM; the code is here, you only have to integrate it." The friend's app
+(`github.com/kenshiiir0/Hospital-Bidding-System`, Next.js + Supabase + a robot browser) was read in
+full, not run: it needs its own Supabase and PhilGEPS log-ins, and its robot must never be pointed
+at the live PhilGEPS from a developer's computer.
+
+**What it is.** Three things in one: (1) a robot that reads PhilGEPS (the public notices site, the
+"Drugs and Medicines" category, every hour) and PS-PhilGEPS (the new logged-in portal) and the
+tender papers (PDF, Word, Excel, scans by OCR) into item lines; (2) a matcher that keeps the
+tenders asking for our molecules in our strengths; (3) a dashboard where the team screens them,
+exports the team's Opportunity sheet, keeps hospitals, products, abstracts of bids and who handles
+which hospital.
+
+**The split.** One system for people, two processes behind it:
+
+| Part | Where it lives | Why |
+|---|---|---|
+| Everything a person sees and presses | The CRM: pages under Tenders, the CRM's sign-in, the company tree's seats | One address, one sign-in |
+| Everything kept | The CRM's database (migration 0145: `tender_found`, `tender_found_line`, `tender_found_event`, `tender_find_run`) | One set of data; Supabase goes |
+| The robot (Chrome by Puppeteer; later the paper reader and OCR) | A separate worker, `workers/tender-finder`, run **on GitHub's computers** by `.github/workflows/tender-finder.yml`: every hour from 6 am to 5 pm Manila (Aryan, 23 Nov: "whichever is right, put it there") | A browser cannot run inside the web app or its API; on GitHub no office PC has to stay on, no server has to carry Chrome, it costs nothing for this public repository, and each run's log is kept. The same worker runs on the company's server or the office PC with a key, when wanted |
+| The robot's way in | `/webhooks/tender-finder`. From GitHub: GitHub signs a short-lived token for that workflow, and the API checks the signature and that it is this repository, its main branch, that workflow (`tenders/robot-caller.ts`); no secret exists. Elsewhere: a key (`TENDER_FINDER_KEY`). It asks which molecules are ours, which notices are known, and hands in what it found and each run's result | The robot holds no database password and no person's login, and nobody types a secret anywhere |
+
+**Each of its screens.**
+
+| Its screen | In the CRM | State |
+|---|---|---|
+| Bid Match (`/`): both portals' tenders for our products, filters, View details | **Tender finder** (`/tenders/finder`): New · Screened · Made tenders · Everything found; search, portal, medicine; a notice's page with its lines, budget per piece, dates, contact, the PhilGEPS link | Built |
+| Screened Tenders (`/screened`): the team's pick | The **Screened** tab; Add to screened / Take off (kept with who and when) | Built |
+| (not in it) | **Make it a tender**: the join, below | Built |
+| History, Report log | The finder's **Robot** line and its last runs (`tender_find_run`) | Built (runs); OCR's own report comes with the papers |
+| Product List, Add Molecule | Dropped as a double: **our medicines** (Inventory) are the list the robot looks for | Built (the robot asks the CRM) |
+| Hospital List, contacts, Message Hospitals | Dropped as a double: **Customers** (government, hospital). A notice's agency is matched to a customer by name; one picked by hand is remembered for that agency | Built (matching); mass e-mail not moved |
+| Assigned Persons, the award e-mails | Dropped as a double: the company tree and the customer's owner say who handles a hospital | Not moved; the bell can tell them later |
+| Abstract of Bids (Results, Overall Abstract, All Bids) | Mostly a double: a tender's **bids read at the opening** and the **Bid report**. The team's Overall_Abstract workbook import/export is not moved | Question 34 |
+| Excel export of the screened list (the team's Opportunity sheet) and the papers' ZIP | Not moved yet | Question 34 |
+| Documents viewer, the papers' reading, OCR | A notice's **Its papers**: the files (downloaded from the CRM), what PhilGEPS said, the bid data sheet as written; the lines read are the notice's lines | Built 23 Nov; waits for the PhilGEPS log-in to run for real |
+| PS-PhilGEPS My Opportunities, Award Notices, Accept / Refuse | With the robot's second step (it needs the PS-PhilGEPS log-in and a person's captcha) | Next |
+| Its log-in (Supabase accounts) | Dropped: the CRM's sign-in | Done |
+
+**Who sees it:** the seats that have Tenders today: the Government Bidding coachees, their Admin,
+the mentor above them (B2B, CLIDP and BID), the CEO and the Admin. The API checks it on every call
+(`finds` in `tenders/finder.ts`); a Hospital CHC who runs one tender of their own does not get the
+finder.
+
+**The join (a found notice becomes a CRM tender in one press).** On a notice's page, *Make it a
+tender* opens with: the agency matched to a customer (same name without punctuation, or the name
+with the portal's region / DOH suffix dropped; else the person picks, and the pick is remembered),
+what it buys, the ABC, the closing date as the bid deadline, the PhilGEPS reference, the mode read
+from the notice (Invitation to Bid → competitive bidding, RFQ / small value → small value,
+negotiated → negotiated, else other; the person can change it), and each line matched to our
+medicine **by molecule** (the medicine's generic name, salts and brackets dropped; when we keep
+several strengths, the one whose strength is written on the line; no single fit: the person picks).
+Quantity as read; our price starts from the price book's Bidding price (empty when there is none)
+and is changed on the tender before the price is approved (a line still at ₱0 stops the
+approval). The tender is then the CRM's own:
+price approval, envelope, submitted, won, *Place the delivery order*, *Take the bid's medicines and
+prices*. A notice makes one tender only; the tender's page shows what the notice asked, line by
+line with the budget for one piece.
+
+**Interim choices (mine, until Aryan says):** the robot looks for every active medicine that has a
+generic name (question 33); a line whose molecule is ours but whose strength is not is shown as
+"pick the medicine", never matched by itself and never hidden; a notice needs no screening first to
+become a tender (making it a tender screens it).
+
+**The papers' rules (23 Nov, interim where marked):**
+
+- **Whose papers:** only the notices the team **screened** on PhilGEPS, while they are open (interim,
+  question 36). Getting a notice's papers means "ordering" them on PhilGEPS in the company's name,
+  so a person's screening decides it, not the robot. The friend's app ordered every open notice.
+- **Never pays:** an order goes through only when PhilGEPS's own totals are all 0.00; a notice that
+  asks a payment, has only pick-up, or is closed is said so on its page and left alone. One with
+  nothing to get is not looked at again for a day (no log-in for nothing).
+- **The account:** one log-in a run, always logged out and the log-out confirmed; the friend's guard
+  counts log-ins across runs (kept in the CRM: `tender_find_login`; at most 6 an hour, 20 a day, a
+  minute apart, half an hour after "account in use"); **a refused password is never sent again**
+  until a person, the password put right, presses *let it try again* on the finder's page.
+- **Reading:** the friend's reader and its rules as they are, so a line counts when it names our
+  molecule **in our strength** (stricter than the notice's own lines, question 33). Where the papers
+  give a line for a molecule, it takes the notice's own line's place; the notice's lines stay for
+  the rest.
+- **What is kept:** the files themselves (bucket online), up to 60 MB each through the robot's door.
+
+**Matching on the real medicines (23 Nov):** live keeps strengths as the concentration and the
+vial ("10mg/ml (50 mg/5 ml)"), so a medicine fits a line when an amount of its strength is written
+on it; a concentration alone ("10 mg/mL") settles it only when we keep one medicine of that
+molecule; two brands of one strength are left to the person.
+
+**The first runs** are in the change log (174 to 176).
+
+**What of the bidding system can still come the same way** (read in the friend's code, 23 Nov;
+none of it built): the worker on GitHub can carry all of it, the CRM's door already takes it.
+
+| Piece | How it would come | What it needs first |
+|---|---|---|
+| The tender papers (PDF, Word, Excel; scans by OCR) read into lines with quantity and budget | **Built 23 Nov** (change log 177): `workers/tender-finder/papers`. The friend's own modules, unchanged (`papers/lib`: `philgepsSync.mjs` logs in, orders, downloads, logs out with PhilGEPS's own forms and no browser; `psDocs.mjs` reads; tesseract reads scans), with their Supabase calls landing in the CRM (`papers/supabase-shim`). The files are kept on the notice (`tender_found_file`, through the file store), the lines read become the notice's lines ("read in the papers"), the bid data sheet's words show on its page | Running it for real needs the company's PhilGEPS log-in as two GitHub secrets (`PHILGEPS_USERNAME`, `PHILGEPS_PASSWORD`), typed there by Aryan or the bidding team. Until then the step logs in nowhere |
+| PS-PhilGEPS (the new portal): its Bid Match, My Opportunities, Award Notices | The same worker with the merchant log-in's saved session | The merchant log-in, and a person to tick its captcha when the session ends (his app has a "Connect" step for that) |
+| Award notices told to whoever handles the hospital | The CRM's bell and the customer's owner, in place of his e-mails and Assigned Persons list | PS-PhilGEPS above |
+| Abstract of bids, the team's Excel sheets | No robot: the CRM's own pages (bids read at the opening, Bid report), with an import / export if the team still wants the sheets | Question 34 |
+
+## 25. The whole bidding system moves into the CRM (23 Nov 2026)
+
+Aryan, 23 Nov: "My friend's one works for our own system. I had told him: build the government
+bidding system, later we integrate it into ours. Whatever it does, we need in ours; copy
+everything if you must." So the "Government Bidding System" (section 24's source; live at its own
+address with its own sign-in and database) is the company's, and its whole work comes into the
+CRM. It was opened signed in and read on 23 Nov (nothing pressed that changes anything).
+
+**Where the two stood on 23 Nov (its live against the CRM's live):**
+
+| | The bidding system | The CRM |
+|---|---|---|
+| Tenders asking for our medicines | 450, on both portals | 21 (of 93 notices), on the old PhilGEPS only |
+| PS-PhilGEPS (the new portal, where most new tenders are) | Read every hour | Not read |
+| Tender papers | 852 files of 369 tenders, read (scans by OCR), "Check reading" alerts | Built (24), not live, no log-in |
+| Screened | 116 (53 + 63), Excel export, the papers as a ZIP | 0; no Excel |
+| My Opportunities (bids submitted on PS-PhilGEPS) | 106 | None |
+| Award notices | 8, 3 waiting for our answer, told by e-mail, Accept / Refuse | None |
+| Hospitals | 40 active with contact persons, WhatsApp, e-mail; messages to all | Customers only |
+| Abstract of bids | 13 results (we won none; 59.9% above the winner on average), the Overall Abstract workbook | Bids read at the opening and the Bid report, without its results |
+| Products | 76 molecules, 116 products with their strengths | 278 medicines (208 generic names) |
+| After a tender is found: price approval, envelope, award, order, delivery, bill, payment | None | All of it |
+
+**How it moves, in this order** (each step leaves both working; nothing is switched off before
+its replacement is checked):
+
+| Step | What | Needs first | State |
+|---|---|---|---|
+| 1. The bridge | Every hour the CRM's workflow reads the bidding system's database (read only) and hands its tenders of both portals, what it read in their papers and what the team screened there to the CRM (`workers/tender-finder/feed`). The CRM is then never behind it, without a second log-in to either portal | A key that may read that database, as two GitHub secrets (`BIDDING_SUPABASE_URL`, `BIDDING_SUPABASE_KEY`), typed there by Aryan or the friend | **Built 23 Nov** (change log 178); waits for the two secrets |
+| 2. The team's daily screens | The screened list's Excel sheet (the team's Opportunity sheet) and the papers as a ZIP; the list's own filters (with papers / pick-up only / none yet, type, dates, leave out a medicine); "Check reading"; the papers' files copied into the CRM's file store | The bridge running; room in the file store (the old system holds 852 files) | Next |
+| 3. PS-PhilGEPS's own lists | My Opportunities (what we took up, bid submitted or not) and Award Notices (waiting for our answer) as CRM pages, the award told on the bell to whoever handles the hospital | The bridge | After 2 |
+| 4. Hospitals | The 40 hospitals' contact persons, WhatsApp numbers, e-mails and websites onto the CRM's customers; a message to several at once; who handles which (Assigned Persons) from the customer's owner | Aryan: are these the CRM's customers' contacts, or a list of the bidding team's own? | After 3 |
+| 5. Abstract of bids | Its 13 results and the Overall Abstract workbook (import / export) onto the tenders' bids read and the Bid report | Question 34 | After 4 |
+| 6. The robots | Its PS-PhilGEPS Sync, the papers (section 24), the award's Accept / Refuse, the hospitals' own websites check, all run from the CRM's workflow in place of its own | **PS-PhilGEPS Sync built 23 Nov** (change log 179): its own module unchanged (`papers/lib/psSync.mjs`), run by `ps/ps.mjs` every hour, kept alive every 5 minutes (`tender-finder-keepalive.yml`), its records in the CRM (`tender_robot_row`). It runs once a person has connected (captcha): `ps/connect` on a computer with Chrome, with the merchant log-in and the robot's key (`TENDER_FINDER_KEY`, set on the API server too). Accept / Refuse and the hospitals' websites check: not yet | Brought forward on Aryan's word ("build it fully; you have the code, copy the robot") |
+| 7. Switch-off | The bidding system's own Syncs stop, the bridge is removed, its address and database are closed | Every step above checked, and a day chosen with the team | At the end |
+
+**The robots' own records.** Their code was written against tables of its own (the last Sync's
+lists and notices, each tender's papers' reading, the Sync's status, the saved session). The CRM
+keeps each such row as it is handed in (`tender_robot_row`: the table's name, the row's key, the
+row; a log-in session sealed with the server's key), only for those tables; what people see is
+copied from them onto the finder (the same mapping as the bridge's). So a newer copy of the
+bidding team's modules drops in whole, and nothing of theirs is rewritten.
+
+**One robot for one account.** PS-PhilGEPS allows several sessions for one account, so the CRM's
+own PS-PhilGEPS robot and the bidding system's can both run (each with its own session). The old
+PhilGEPS does not: it lets an account be logged in once. While the bidding
+system still runs its own Sync with the company's account, the CRM's papers step must not be
+given that log-in (the two would turn each other away): until step 6 the CRM's own robot reads
+only the public notices, and the papers come over the bridge.
+
+**What is one thing, kept once:** the same notice from the bidding system and from the CRM's own
+reading is one row (portal + reference). What the team screened there is screened here, by the
+name it has there; taking it off there does not take it off here (a person of the CRM does that).
+The CRM matches the lines to its own medicines again, by its own rules (24).
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -2239,8 +2416,9 @@ lowest, each division's average; Scorecards opens every card.
    screen).
 10. Price kinds (18): keep doctor, distributor and bidding beside patient, hospital and drugstore?
     And "Extra": one more price per medicine set in Inventory (higher), that the MedRep can pick?
-11. A guarantee-letter case (18): when an Online case becomes GL, does it move to the PAP head (who
-    gives it to a PAP MedRep) or straight to one PAP person?
+11. ~~A guarantee-letter case (18): when an Online case becomes GL, does it move to the PAP head (who
+    gives it to a PAP MedRep) or straight to one PAP person?~~ Answered 22 Nov: PAP is a process one
+    person looks after; a guarantee-letter case from anywhere is theirs.
 12. ~~Pharmacy~~ Answered 17 Nov: Management checks prescriptions on approving (no separate
     Pharmacy login); a prescription is required whenever a patient buys (a patient customer, or
     an order for one patient), whatever the channel.
@@ -2314,6 +2492,27 @@ lowest, each division's average; Scorecards opens every card.
 32. **The real KPI cards** (23): the field's, B2B's, CLIDP's, MT's, Bidding's, PAP's and the leads'
     KPIs and weights are interim (section 23). HR or Aryan to give the real ones; they change in
     `scores/recipes.ts` without touching the data.
+33. **Which medicines the tender finder looks for** (24): every active medicine with a generic
+    name (as built), or only a bidding list (the friend's app used the B2B price list and the
+    team's PRODUCT LIST)? And when a tender asks for our molecule in a strength we do not keep:
+    show it to the team (as built: "pick the medicine") or hide it (the friend's app hid it)?
+34. **The bidding team's Excel sheets** (24): the Opportunity sheet exported from the screened
+    list, and the Overall_Abstract workbook (import / export): still needed once the tenders, the
+    bids read and the Bid report are in the CRM, or do the CRM's pages replace them?
+35. ~~Where the robot runs~~ Answered 23 Nov ("whichever is right"): on GitHub's computers
+    (section 24). **Still open: whose PhilGEPS log-in** it uses for the tender papers and the
+    awards (PhilGEPS and PS-PhilGEPS accounts; PS-PhilGEPS needs a person to tick its captcha now
+    and then). Until then it reads the public notices only.
+
+36. **Whose tender papers the robot gets** (24): only the notices the team screened (as built: a
+    person decides what is ordered in the company's name), or every open notice that asks for our
+    medicines, as the friend's app did (more is read, more is ordered)?
+
+37. **A key to read the bidding system's database** (25, step 1): its address and a key that
+    may read (the friend has both), put as two GitHub secrets. Without them the bridge does nothing.
+38. **The hospitals' contacts** (25, step 4): the 40 hospitals' contact persons, numbers and
+    e-mails in the bidding system: are they the CRM customers' own contacts (kept on the customer,
+    seen by whoever sees the customer), or the bidding team's own list?
 
 ## 14. Change log
 
@@ -3054,20 +3253,560 @@ lowest, each division's average; Scorecards opens every card.
 - 20 Nov (157), Aryan: "a MedRep comes, clicks here, the day starts; an order and he is in Create order; the Start up top must be the Start below; don't make two separate pages, Log a call just opens that one." **One way in, one Start** (section 22): *Log a call* opens My day; for a MedRep with My day in their menu the top bar's Start is Start working (field day + attendance in one) and End my day opens the day report while the field day runs; a call opened before the day started offers Start working in step 2. TeleSales, B2B, Bidding and the Online office keep the plain attendance Start. A bigger rework (everything on one Log a call page) was started from a side chat and dropped on Aryan's word: the pages stay as he liked them. Checked: web typecheck; in the browser on a demo copy as Joy (Rx CHC: Log a call → My day, top-bar Start → Start working → "In since" and the circle together, End my day → day report), Carlo (Hospital: a call before the day → Start working in step 2 → I'M HERE) and Ana (TeleSales: Start stays attendance only). Local, not pushed.
 - 20 Nov (158), Aryan: "make KPIs of everything, each person's; the MR app's, the team lead's, the manager's; the KPI data on the CEO's Home; integrate, check, deploy live" (answers: every seller and lead, a lead their own card, the field on interim weights marked). **A KPI card for every seat** (section 23, question 32): new interim cards for B2B NBD and CRR, CLIDP, Modern Trade, Government Bidding (now also the Hospital Division's bidding coachee) and PAP; a lead's own card (team's cards 40, team sales vs target 30, day reports seen 15, joint field days 15) instead of only the team's average; **Field work** (calls a field day 30, coverage 25, frequency by class 20, tour plan kept 15, day reports sent 10) for every MedRep beside their channel's card, from the field's own records (Start working, visits, classes, the tour plan, day reports). Migration 0130 keeps a locked month per card; the 12-month average and the increment read the channel's card only; questions work on either card. Screens: My score shows both cards (interim marked), Scorecards lists each card's kind, its KPI points and the Field score; the CEO's Home has the month's **KPIs** card (sellers' average, below 60, each card kind's average, the field, the leads, best and lowest; Scorecards opens all); My day has a My KPIs tile. The playbook cards are unchanged. Checked: score tests (12), the whole API suite, both type-checks, the web build, and in the browser on a demo copy as the CEO, a MedRep and a team lead.
 - 20 Nov (159), Aryan, with the hub's My Team screenshots and its formula: "what is a KPI? it comes out of some formula in the hub's code". **My KPIs, the hub's way** (section 23): My Own KPI and My Team KPI (sales without VAT line by line against target with the bar, with VAT and VAT, orders invoiced, new customers, orders raised, orders held, waiting for approval not counted, entered for others), Today · Yesterday · Pick a date · This month with the day's sales and invoices; on the MedRep's, lead's, online desk's, PAP desk's and CEO's (company) Home. `apps/api/src/kpis`, `apps/web/src/kpis/my-kpis.tsx`. Checked: 4 new tests (494 in all), the web build, the browser as a MedRep, a lead and the CEO; on a copy of the real data the company's November without VAT equals Sales performance's lines to the centavo (₱20,230,156.48), with VAT equals the CEO Home's sold (₱20,667,621.21) and the target the CEO Home's (₱57,269,136; 35.3%). The scorecards (158) stay beside it.
+- **22 Nov 2026** Audit fixes (problems found reading the code, `docs/system/README.md`): a
+  payment proof lifts only Finance's own hold, not one Management placed at that step; an order
+  packed, unpacked and then changed no longer fails (migration 0131: an unpacked pick lets go of
+  its line); pieces checked back onto the shelf by Dispatch and then not credited can't be returned
+  a second time; a return goes back to the batch still picked; unpack and a restocked return tell
+  orders waiting for stock; a website prescription or enquiry joins an Online desk case only (never
+  a PAP case); the Online channel's MedRep can own a case; "seen" marks Online desk chats only;
+  batch trace shows cost to the cost roles only; Finance's board no longer fails above ₱21.47M in a
+  month; a sample acknowledgement must be a photo or a PDF. No business rule changed.
+- **22 Nov 2026 (Aryan's rules)** Approve is blocked until every check is done: Documents read by
+  hand always, and Medicines & price, Stock, Customer & licence whenever the system found something
+  on them (the API refuses with "Check first: …"; what the system finds fine still ticks itself).
+  Nothing skips Management: the Admin's own order waits for approval like every other. Over the
+  credit limit stays a flag, never a block. A stock count needs no approval. An order stopped as an
+  exception after it shipped can't be cancelled (the parcel is on the road: it comes back through
+  Dispatch or as a return). The desk report's "Rejected" column is named "Cancelled", which is what
+  it counts.
+- **22 Nov 2026 (Books, Aryan's go)** A bill's line for a medicine with no account typed posts to
+  Inventory Asset, not Cost of Goods Sold (migration 0132): the cost is counted once, when the
+  pieces are delivered. Only bills made in the CRM change; Zoho's own bills keep Zoho's lines. Still
+  open in the Books: past cost follows the batch's cost today; period locks don't cover the CRM's
+  own invoices and payments.
+- **22 Nov 2026 (Books, Aryan's go)** What stock cost is kept as it was on the day it moved
+  (migration 0133: `stock_move.unit_cost`, set by the database on every move). When a batch's cost
+  changes later (a landed-cost bill, more received at another cost), the difference on the pieces
+  already gone is posted on the day of the change (`batch_cost_change`), so closed months stay as
+  they were; the ledger and Gross Profit read the kept cost. No figure changed on the day of the
+  migration. Transaction locking now covers the CRM's own money too: a payment or refund dated in a
+  locked period is refused, and a payment of a locked period can't be taken off.
+- **22 Nov 2026 (audit, second pass)** Checks are cleared when an order comes back to Management
+  (resume, restore); Finance's undo takes off only that check's money and sends a credit or COD
+  order back to its own step; the PAP head is told of each new PAP order; a customer's credit
+  already used on a CRM invoice can't be put on a Zoho invoice again; a payment in a finished bank
+  reconciliation can't be taken off or moved; the stock desk no longer reads customers' invoices and
+  payments through the Books lists; an amount beyond what the database holds is refused plainly.
+  Every finding and what became of it: `docs/system/README.md`.
+- **22 Nov 2026 (Aryan: "a custom report on the CEO's page: anything about any person, the old
+  history too")** Custom report, at `/custom-report` (the CEO's sidebar under Reports, and the
+  Reports app): pick a person (those who left are in the list), any days, and tick the parts: orders
+  placed, invoices, money received on their orders, visits, attendance, leave, the old system's
+  invoices on the seats they held, and everything they did (the audit's list). Each part shows its
+  totals and downloads as CSV; "Download all" gives one file. CEO and Admin only
+  (`/api/reports/person`, `reports/person.ts`). Interim choices of mine: sales are the invoices of
+  orders where they are the MedRep, with VAT; a part shows the newest 500 rows.
+- **22 Nov 2026 (the order line run by hand on a demo copy)** One order from the MedRep to delivered
+  and paid; holds by Management, Finance and Dispatch; send-back and fix; unpack; a shipped parcel's
+  exception; cancel after approval; two returns (restocked, damaged on a paid bill) and the refund;
+  the MedRep's day start, a doctor visit and an order from it; what the team lead and the head see.
+  All behaved as the plan says. Two figures were wrong after a return and are put right: My KPIs and
+  Sales performance now leave out pieces that came back and were credited (they showed sales
+  without VAT above sales with VAT, and above By person, the CEO's Home and Finance's board); the
+  Invoices page's balance no longer counts a refunded overpayment as owed to the customer. Known
+  and left: the demo seed's two shipped orders have no picks (Data checks names them; demo only).
+- **22 Nov 2026 (second hand run on the demo copy)** A patient's prepaid order (prescription rule,
+  Finance's hold for proof, the proof bringing it back, confirm, undo, a failed delivery), cash on
+  delivery, an Online desk case to a delivered order, a PAP case, one order from CLIDP, B2B, Rx,
+  MD Telesales, Bidding, Modern Trade and Mindanao, leave and overtime, who sees payroll, and stock
+  received, transferred and counted: all as the plan says. One gap put right: an order priced as
+  another kind of buyer because Inventory has no price for the customer's own kind (a drugstore
+  given the hospital price) is now a price finding for Management ("No drugstore price set"); a
+  government buyer at the bidding price is not. Left for Aryan: Finance can confirm a prepaid
+  order with less than its total (it goes to Dispatch with the rest "still to pay").
+- **22 Nov 2026 (Aryan: "this sheet is the hierarchy; leave the organisational chart; build by
+  the seat, not by the name; no confusion left")** Checked the Company tree against the November
+  target sheet with a new read-only script, `scripts/sheet-check.ts` (the tree as Head → Channel →
+  Manager → Sales person, each seat with its holder and its row; rows with no seat; selling seats
+  on no row). The local data was 17 steps behind the sheet (the HOSP box over the five hospital
+  teams, B2B's sellers in CRR or NBD, Jimmy as a seller of BID): applied with
+  `scripts/align-org-to-sheet.ts` after a backup (`.data/pg.before-sheet-hierarchy-2026-11-22`).
+  The one row with no seat, **RX | YZA** (E. Rodriguez, ₱823,030), is now the Rx seat of NCR 2
+  (held by Eloisa Villanda; the holder is changed on the Company tree if Yza is someone else), so
+  all 57 rows have a seat and the targets add to the sheet's ₱57,642,166. `scripts/a-to-z.ts`
+  approves as the screen does since today (each check, then the order): 43 of 43 and data checks
+  18 of 18 on a copy of the real data. Local only; live on Aryan's word. Open, for Aryan: the
+  sellers on the tree who are on no row (Fhaye, Reynan's Government Account seat, Saurav, Jomari,
+  Mitzi, Emmanuel, Ailyn, Khalygen, Benjie, Arron) keep their seats under their manager with no
+  target; six seats the sheet names are vacant here (Dhon, Pillow, Charle, Mani Mishra, Arlene,
+  Jasper); the sheet's Zamboanga row says VACANT while Maycarl Degamo holds the seat.
+- **22 Nov 2026 (Aryan: "the business's name big, its head or manager smaller; the same thing is
+  repeated in many places, it must be in one")** On the **Company tree** each box is named by what
+  it is: the company, a business (Hospital Division), a channel (RX Business) or a team (NCR 1)
+  big, with who heads or manages it small under it (`face()` in sales-tree.tsx: only how it is
+  written; the tree's data, and the heads' Homes that share it, are as they were). **Divisions**
+  names each business first the same way. The CEO's Company folder no longer lists the Admin
+  panel's Channels or the second Company chart (the tree has "Org chart" and "Every team"; both
+  pages stay at their addresses, Channels in the Admin panel); the Reports app's "By channel"
+  opens the same page as the CEO's "Sales by channel". Found and left for Aryan's word, because
+  it changes figures: the CEO's Home, Sales by channel and the Admin's Channels still count by the
+  first eight channels (HOSP, RX, B2B, BID, PAP, TS, MT, ONLINE: CLIDP inside B2B, both telesales
+  as one), not by the sheet's (RX Business, MD Telesales, B2B, BID, CLIDP, TeleSales, HOSP, MT),
+  which the tree, Divisions and the Target sheet use.
+- **22 Nov 2026 (Aryan: "move them": one list of channels, the sheet's)** The CEO's Home ("Sales
+  this month") and the **Sales by channel** report now count by the target sheet's channels: the
+  box straight under a business on the Company tree (HOSP, TeleSales, RX Business, MD Telesales,
+  CLIDP, B2B Telesales, Government Bidding, Modern Trade's own), each with its manager and its
+  business (`sheetChannelSales` and `SHEET_PLACE` in sales/service.ts; the report in
+  books/insights.ts with Business, Head, Channel, Manager, people, vacant seats, customers, sales
+  and what is owed). They counted by the first eight channels (CLIDP inside B2B, both telesales as
+  one, PAP and ONLINE of their own). Sales by a seller tied to no seat are a last row, so the rows
+  add up to the company's figure: checked on a copy of the real data against the invoices
+  themselves (November ₱20,667,621.21, the year, what is owed and 619 invoices: the same to the
+  centavo). Targets are the seats' (the sheet's, vacant seats too): each channel's equals the
+  sheet's and the Home's headline is their sum, ₱57,642,166 (it read ₱52.8M: its people's targets,
+  without the vacant seats'). The loader takes a target off a seat that is on no row of the sheet
+  (Claire's ₱500,000 sat on her Mindanao coach seat as well as on her B2B seat and made HOSP's
+  target too high). The first eight channels still decide each seat's screens and an order's
+  channel; only these two lists changed. Local only.
+- **22 Nov 2026 (Aryan: "align it, not one thing here and another there"; "did the CEO Home lose
+  data?")** One target everywhere: the Company tree, Divisions and every lead's board now read each
+  seat's own target (the sheet's; a vacant seat's too, and someone on two seats is counted once),
+  so the tree's total is the CEO Home's, ₱57,642,166 (it read ₱53.3M). A month from before seats
+  had targets still reads its holder's. The CEO Home's channel rows had lost "N people · N
+  customers" when they moved to the sheet's channels; they show it again. Local only.
+- **22 Nov 2026 (the first eight channels against the sheet, step 1: a list only)**
+  `apps/api/scripts/box-channels.ts` (reads only) lists every box of the tree with the old channel
+  code it carries beside the sheet's channel of its seats. On the local data: CLIDP carries B2B's
+  code; the Hospital's TeleSales and the Rx side's MD Telesales both carry TS, and MD Telesales'
+  two sheet seats (B2C Sales Coaching) carry ONLINE; URO is on no box and no person; five people
+  with two seats carry the channel of one seat only (Claire, Honey, Malou, Reynan, Subir); no open
+  order's channel differs from its seat's. Nothing changed.
+- **22 Nov 2026 (the first eight channels against the sheet, step 2: the names people see)** An
+  order and a seat already carry the sheet's channel as their Division (19 Nov, migration 0124), so
+  the screens now print that word where they printed the first channel's code: a person's Home
+  ("Channel"), the MedRep Home's chip and the new order's MedRep line (`shownChannel`, each seat's
+  Division, the main seat's first); the order page, the order cards, the board's Channel filter
+  (the sheet's eight and PAP; an old link's code still works) and its MedRep strip; a customer's
+  page and the customer list's MedRep strip; HR's person page. CLIDP's people and orders say CLIDP
+  (not B2B), the Online desk's MD Telesales, both telesales their own. PAP stays PAP (the sheet has
+  no PAP row; its orders' Division says MD Telesales while its box is under the Hospital Division:
+  asked Aryan). An order with no Division (four closed Rx demo orders) keeps its code. Which
+  screens a seat gets is untouched. The five people with two seats carry their leading seat's
+  channel, as `projectOrg` means them to; the other seat is reached by the team switch. Still on
+  the first channels: Sales performance ("HOSP | name", the hub's format), the map, Targets, the
+  Company KPIs' and the sales trend's grouping, the Admin's Channels page. Local only.
+- **22 Nov 2026 (the first eight channels against the sheet, step 3: what the reports group by)**
+  The CEO Home's second list ("Channels: sold against the month's target") reads the same sheet
+  channels as "Sales this month" above it (it still listed the first eight). Sales trend groups the
+  invoices by the seller's seat's box, as Sales by channel does; gross profit by channel and the
+  Company KPIs' by-channel group the orders by their Division (PAP as PAP); the customer list
+  report and the map name the sheet's channel of the seat that has the area. No total moved: on
+  the local data the trend's six months equal the invoices (₱241,139,697.66), the Home's list adds
+  to ₱20,667,621.21 against ₱57,642,166; on the demo copy gross profit by channel equals by
+  medicine. Left as they are: Sales performance (the hub's own words, TELESALES and B2C, from
+  `seat_report_channel`), Targets (no channel on the screen), the Admin's Channels page (step 4).
+  Two words for three channels remain: sales reports name the tree's box (B2B Telesales, Government
+  Bidding, Modern Trade), orders the sheet's Division (B2B, BID, MT): asked Aryan. Local only.
+- **22 Nov 2026 (the first eight channels against the sheet, step 4: the Admin's Channels page)**
+  A channel's page (Admin panel → Channels → a channel) shows its head, teams, team leads and
+  MedReps and no longer changes them: no add, move, rename, close, fill or drag there; one line
+  on top opens the Company tree, where places are changed (Edit positions). The head it names was
+  already the tree's (`projectOrg` writes `channel.head_id` from the lead of the channel's top
+  box, so the PAP approver follows the tree too). What only a channel has stays on the page: Add
+  channel, Name & Division, take out of use, its areas; "Open in Teams & people" stays in its
+  menu. Teams & people itself still changes seats (not touched). Web only; local only.
+- **22 Nov 2026 (Aryan: "the sheet's names" for B2B, BID and MT)** One word for a channel
+  everywhere, the target sheet's: the CEO Home's two lists, Sales by channel, Sales trend, Divisions
+  and the Company tree now write B2B, BID and MT (they wrote the box's name: B2B Telesales,
+  Government Bidding, Modern Trade), as the orders already did. The word is read from the latest
+  sheet's rows on the box's seats (`sheetNameOfBox`; `sheetName` on the board's units); a box on no
+  row (PAP, Government Account) keeps its own name, and the Modern Trade business keeps its name
+  as a business. The boxes themselves are not renamed: `unit_division`, the seeds and the align
+  scripts find them by name. No figure moved (₱20,667,621.21 of ₱57,642,166; trend
+  ₱241,139,697.66). Local only.
+- **22 Nov 2026 (Aryan: what PAP is)** PAP is a process, not a channel: a guarantee-letter case
+  from any channel is the PAP person's (three quotations, the agency's letter from PCSO, DSWD, OVP
+  or OP, then the medicine, then whether the whole payment came). Written into the rules above;
+  question 11 answered. Nothing built on it yet. Where the CRM differs today: (1) an Online case
+  whose road is changed to guarantee letter stays with the Online agent; (2) a MedRep's own
+  guarantee-letter order (RX Business, MD Telesales, HOSP) goes straight to Management, the PAP
+  person never sees it; (3) a PAP case's order is stamped channel PAP and Division MD Telesales,
+  whatever channel the patient came from, and PAP shows as a channel on the CEO Home and Divisions;
+  (4) only PCSO's quotation carries the two other vendors' totals; (5) the order form's agencies
+  are DSWD, PCSO, Office of the President, Other (no OVP), the case's are DSWD, PCSO, OVP, OP.
+  Told Aryan, waiting for his word before changing who works a case.
+- **22 Nov 2026 (Aryan: "the sale counts where it came from; make an app for PAP, or a better
+  plan")** PAP built as a process. (1) A guarantee-letter case goes to the PAP person wherever it
+  starts: an Online case whose road becomes guarantee letter (on adding or on saving) moves to PAP
+  (`lead.desk` pap, the PAP MedRep with the fewest open cases), and goes back to its agent if the
+  road is changed away again; a seller's guarantee-letter patient is handed over from the order
+  form ("Hand to PAP": patient, phone, agency, medicines; `POST /api/leads/hand-to-pap`, the order
+  form no longer places a guarantee-letter order for a MedRep, a lead, a head or the Online desk).
+  (2) The case keeps who it came from (`lead.origin_person_id`, migration 0134): that person reads
+  it to the end ("My patients with PAP" at `/pap`, "With PAP" in the Online desk's menu) and can't
+  work it. (3) The order the PAP person places from such a case is the origin's sale: their name
+  as its MedRep, their channel, seat, Division and target (`creditTo`); the PAP person is who
+  raised it; Management approves it like any order. A case the PAP person opened themselves stays
+  as it was (channel PAP). (4) PAP is off the channel lists (CEO Home, Sales by channel) unless
+  old sales sit on its box; its seat stays on the tree. (5) The PAP app for the CEO and the Admin
+  (Apps → PAP): every guarantee-letter case with its step, agency and "From Ryan · HOSP".
+  (6) Three quotations for every agency, not PCSO only. Hand-run on the demo copy: Ryan hands a
+  patient over from the order form, sees it under My patients with PAP, Paula and the CEO see it
+  with where it came from; in the tests the Online case's order comes out as Jane's, approved by
+  Management. 500 API tests. Open: a case the PAP person opens themselves is still approved by the
+  PAP channel's head, not Management (asked Aryan). Local only.
+- **22 Nov 2026 (Aryan, thinking aloud on PAP; not decided, nothing built)** "Is there a PAP head?
+  I don't know how many work in PAP. Management will get confused, PAP has so much in it: better a
+  separate team handles it. The government's payment comes later: better the PAP person keeps
+  that record." On the local data PAP is one person (Fhaye Norella, Patient Assistance Program
+  Officer, reports to Vanessa Escalderon); its box has no lead, so the PAP channel has no head and
+  a PAP order falls to Management (yet is left out of Management's shared queue). Proposed to him:
+  a guarantee-letter order is checked by whoever leads PAP's box on the tree, else the head above
+  it (Vanessa), not by Management; Finance still bills the agency; the PAP person records the
+  agency's payment with its proof and Finance confirms it against the bank. Waiting for his yes.
+- **22 Nov 2026 (Aryan decides PAP's check)** "Don't read the organisation chart, only the sheet.
+  Vanessa doesn't check PAP's orders, she only sees its sales. PAP has no head for now: the PAP
+  person gets the documents ready herself; when they are in and the guarantee letter has come, the
+  order goes to Management, which reads the prescription, the guarantee letter and every relevant
+  paper, the amount written on the letter against what the medicines cost; then to Finance."
+  Done: a PAP order is no longer its channel head's to approve (`approverSql` is nobody); it waits
+  for Management like every order and is in Management's shared queue; the screens say "Waiting
+  for Management". Already so, checked: a case can't place its order until the papers are filed
+  and the letter is verified, not expired and not less than the quotation; the order page shows
+  the letter's number and amount against the order's total; the customer is emailed at each step
+  of the order (confirmed, on the way, delivered, payment received) when an email is on file, a
+  PAP case's too. Not built: the PAP person recording the agency's payment (Finance records it
+  today); his earlier wish, not repeated here. Proposal of the Hospital head approving: dropped.
+- **22 Nov 2026 (Aryan: "PAP puts the guarantee letter in and leaves it; then it only sees the
+  rest. Finance fills the claim and the payment: how much the letter said, how much came. The
+  agency pays later and often less: the patient pays the rest, or we let it go. Then PAP sees the
+  order complete")** Built. (1) The claim is Finance's: `POST /api/finance/orders/:id/gl-claim`
+  (the day it went and its reference, after the delivery; no pick-up photo needed first); the PAP
+  person is refused and sees the step read-only ("Finance sends the claim"). (2) On a
+  guarantee-letter order Finance says who paid each payment, the agency or the patient
+  (`payment.payer`; it was always the agency, and never on a PAP case's order, whose `lead_id` is
+  empty: the order's own type decides now), and may let the rest go: a deduction of kind
+  `gl_waived` (migration 0135), recordable with nothing in cash. (3) The order's Paid step shows a
+  guarantee letter's money in one box: on the letter, agency paid, patient paid, let go, still
+  owed, with the claim's day and reference; the payment window says the letter's amount and asks
+  who paid. (4) The case shows each payment with who paid it and reads Done when nothing is owed.
+  Hand-run on the demo copy: Ryan's patient handed to PAP, quotation and three quotations, papers,
+  the letter (one for less than the quotation is refused), order as Ryan's sale in HOSP, in
+  Management's queue, approved, invoiced, delivered, claim by Finance (refused before delivery and
+  to PAP), the agency ₱1,500 short, the patient ₱1,000, ₱500 let go: invoice paid, order
+  completed, PAP's case Done. 500 API tests. Local only.
+- **22 Nov 2026 (Aryan: "Finance alone")** Letting go the unpaid rest of a guarantee letter is
+  Finance's own call: no one else's yes is asked. As built; nothing changed.
+- **22 Nov 2026 (Aryan: "every page of every person is slow; the CEO Home shows its data late;
+  don't remove anything for speed, the data must not change")** Speed only, each change checked by
+  saving every screen's answer before and after for nine kinds of seat and comparing them byte for
+  byte. What was slow and why: Zoho's 69,000 invoices find their seat through the salesperson's
+  name, and "this seat's invoices" read all of them each time; "what is owed" read every document
+  to find the few with a balance; one person's scorecard was worked out several times in one
+  request. Done: (1) indexes only (migrations 0136, 0137, 0139): Zoho invoices and old orders by
+  salesperson, documents with a balance, customers with a visit class; (2) Telesales team: the
+  "new customer" test asks the sales view's two halves directly, 30 s → 0.2 s; (3) the customer
+  list: each area's MedRep and each customer's enquiry owner worked out once, not per customer
+  (proved the same for all 91,614 customers), its heaviest question 576 → 69 ms; (4) the team
+  board: Zoho's unpaid invoices per seat asked directly (the same figures for all 56 seats),
+  1.3 s → 0.05 s; (5) scorecards: a person's card is worked out once per reading request
+  (`requestMemo`), the company's page 1,562 → 690 questions and 2.0 → 0.6 s, the team board
+  392 → 334 and 1.6 → 0.5 s; (6) the CEO Home's "Customers owe us" card gets a summary
+  (`/api/finance/owed/glance`, 16 KB) instead of every invoice (800 KB), from the same list; (7)
+  Finance's board 300 → 96 ms, Customers owe 250 → 74 ms. One thing differs, on purpose: on
+  Collections, a customer with two unpaid invoices of the same day showed either as "the oldest",
+  as the database happened to read them; it is now always the lower number (no amount, total or
+  order changed). New: **Admin panel → Slow screens** (migration 0138): the server notes every
+  answer that takes it over 0.8 s, with its address, time, number of questions and seat, so what
+  is slow online can be seen (online the database and server are smaller than here, and only local
+  times could be measured). The CEO Home lost nothing (33 cards); its late cards were these calls.
+  500 API tests, data checks 18/18. Not done yet: his ask to walk every seat's left menu and each
+  page under it (MedRep to CEO); the scorecards still ask about six questions a person.
+- **22 Nov 2026 (speed, the Books home)** Found by opening every link of the CEO's menu (all 125
+  open, no call fails): Open Books took 23 to 37 seconds. Its bank and cash balances read the whole
+  ledger again for each of the 44 money accounts; now the ledger is read once, added up by account
+  and matched (the same answer, byte for byte): 37 s → 3.8 s. Banking and the chart of accounts
+  are a second each (one pass over the ledger, as they must).
+- **22 Nov 2026 (Aryan: "every seat's left menu, from MedRep to CEO: open each link and see")**
+  First pass, by machine, on a copy of the local data: thirteen kinds of seat (CEO; Hospital, Rx,
+  CLIDP and Telesales MedReps; Online desk; team lead; head; Management; Finance; Dispatch;
+  Inventory; HR), every link of each one's menu opened (about 400 in all, the CEO's 125): every
+  page opens, no call is refused or fails. Slow ones met on the way: the Books home (fixed above).
+  One wording fixed: the Calls page said "My calls" to a lead, Management and the CEO on a day
+  with no call; it says "Calls" to anyone who doesn't log calls themselves. Still to do by eye, one
+  seat at a time: whether each menu holds what that seat's work needs and nothing else (noted for
+  Aryan: Dispatch has both "On the road" and "Shipments", which open the same list; the Hospital
+  MedRep has "My hospitals" and "Hospital list", both titled My hospitals; Management's menu has
+  Calls and Sales performance; the Hospital head's has Government tenders and Bid report).
+- **22 Nov 2026 (Aryan: "each seat's side menu: take out what is extra, group what can be
+  grouped")** Each seat's menu read as the code builds it for a real person of that seat, and the
+  loose links grouped; no link was taken off (each menu has the same number of links as before,
+  all opened again). Sellers: the score, calls and sales figures sit together in "My numbers"
+  (CLIDP's and the Online desk's were loose; made where there was none). CLIDP: Collections with
+  its Accounts. Online desk: twelve links in a row are now the day's work, a Patients folder
+  (Patients, Points), My numbers, and Medicines & stock under Look up. Team leads and heads: the
+  loose team links (Targets, Scorecards, Calls, Sales performance) in one "Team numbers" folder;
+  the Hospital head's two tender links in one folder. Management: Calls and Sales performance
+  moved under Look up (its work is the orders). HR: Medicines & stock under Look up. Left for
+  Aryan to say: a field MedRep has two plans in the menu, "Tour plan" (the month's calendar, sent
+  to the team lead to approve) and "Visit plan" / "Route plan" (visits by each customer's class,
+  also "send to my team lead"), and both "My day" and "Today's visits"; Dispatch has "On the road"
+  and "Shipments"; the Hospital MedRep's "Hospital list" lists doctors and patients too. Each
+  seat's Home was opened, not yet read card by card against its work.
+- **22 Nov 2026 (Aryan: "merge what is one thing; no feature may go; then every seat's Home, card
+  by card, against its work")** Merged or renamed: (1) the field MedRep's two plans are one plan
+  (one `visit_plan` a month, sent to the team lead once) seen two ways, so the menu has one "Tour
+  plan"; its calendar has a "By customer" link (the visits each class asks for, Make my plan) and
+  that page a "Calendar" link, titled "My tour plan · by customer". (2) "My day" and "Today's
+  visits" are two things (the day's start, stop and tiles; the list of visits): both stay.
+  (3) Dispatch: "Shipments" is the register of every parcel with its receipt and address slip to
+  print, not the desk's work list, so the page is titled "Shipments" (it said "On the road" like
+  the desk's tab). (4) The Hospital MedRep's "Hospital list" is "All my customers" (doctors and
+  patients are on it), page title too. Homes read so far (the four kinds of MedRep, the Online
+  desk, the Hospital coach): one figure for one thing. A seller's Home said ₱192,272 under My KPIs
+  and ₱0 under "Sales vs target", and a lead was told "three working days without an invoice" of
+  people whose invoices are in Zoho: the scorecard, the pulse and the huddle counted only this
+  CRM's invoices. Now the month's sales, the days with an invoice and the day's sales come from
+  the invoices My KPIs counts (`kpis/invoices.ts`: this CRM's and Zoho's, by the seat's holder,
+  without VAT against the target), counted once per reading request (and once when a month is
+  locked); the tile is named "Sales pace vs target" (it is the month's pace, My KPIs the plain
+  share). The company's scorecards went from all near zero to an average of 17 with a best of 77.
+  The Online desk's Home starts with the greeting, then My KPIs (they were the other way round).
+  Not changed, for Aryan to say: the boards, the tree and the CEO Home count sales with VAT
+  against the target, My KPIs without; and the scorecard's days-to-collect and repeat-customer
+  measures still count only this CRM's invoices. Homes not yet read card by card: the head's,
+  Management's, Finance's, Dispatch's, Inventory's, HR's, the CEO's. 500 API tests. Local only.
+- **23 Nov 2026 (Aryan: "Management: the side menu, every card, every step and its box, every
+  button; take Exception out of Management")** Management walked on the demo copy by its own
+  login. Removed: **Mark exception** (it was a second "Put on hold" under another name; `can.exception`
+  is false for everyone, the button is gone; an order already marked is still taken off hold).
+  Found and fixed: (1) a card with nothing flagged said "Everything checks out: approve it" and its
+  Approve opened a window that could only refuse ("Check first: Documents"): the card now says
+  "Nothing flagged: read the documents, then approve" and Approve opens the order on its Documents
+  until they are read; (2) the customer check of a new customer said only "New customer": it shows
+  who it is (name, phone, city, who added it and when) with a link to the customer. Read and found
+  right: the four checks with their own Approve and Send back, the last approval approving the
+  order with a minute to undo, the warehouse picked on the stock check, the documents listed for a
+  patient (prescription, ID, senior/PWD ID, guarantee letter, medical certificate, other) with
+  "Papers are right" after reading each, Send back / Reject / Put on hold / Cancel each asking a
+  reason, Stopped orders, Returns to approve, Customers to check, Team figures. For Aryan to say:
+  Reject and Put on hold both leave the order on hold. Next: Finance, Dispatch, Inventory.
+- **23 Nov 2026 (Aryan: "every possibility: several medicines on one order, how the stock is
+  decided, how the price list comes, a medicine not there, a price above or below")** Hand-run on
+  the demo copy as a Hospital MedRep, then Management, Finance and Dispatch. Right as it is: a
+  price below or above the list without a reason is refused; the same medicine on two paid lines is
+  refused (a second line only as free goods); a buyer with no price of its kind for a medicine is
+  refused ("pick another price"); one order of six medicines shows Management every thing at once
+  (the MedRep's note, each short medicine with ordered against free, below list, above list, free
+  goods, over the credit limit), and each warehouse's own count per medicine. Found and fixed:
+  (1) a hospital charged from the patient list (dearer than its own) had nothing flagged, the
+  price being "at list" of the list picked: Management now sees "Patient price to a hospital" with
+  both prices and the difference; (2) Dispatch's refusal to pack said "only 0 in Main warehouse" of
+  a medicine with 160 there (it had counted the line's own picks away): it says 160. For Aryan to
+  say (no rule yet): an order with a medicine that is not there (or not enough of it) can be
+  approved and is then invoiced whole, and stops at Dispatch, which can't pack it; nothing ships
+  in part. And the server takes an order with short stock without the MedRep's "why are you
+  proceeding" (only the screen asks). 500 API tests. Local only.
+- **23 Nov 2026 (Aryan: "not in stock: it stops right there, on hold; Reject and Hold do the same,
+  keep one; what does the same work, take out; check where a held or sent-back order shows for the
+  MedRep and where it comes back, and that it is marked")** (1) **What isn't in stock isn't
+  approved.** Approve, and the stock check's own Approve, are refused while a medicine on the order
+  is short ("Not in stock: … needs 5, 0 free"), and also when the warehouse picked hasn't enough
+  though another has ("pick another warehouse, or move stock there"); the stock check shows "Wait
+  for stock" in place of Approve, which holds the order until the stock is in (Management and the
+  MedRep are told then, as built before). Before, such an order was approved, invoiced whole and
+  stopped at the packing table. (2) **Reject is gone** (`can.reject` false, button off the order
+  page; on the cards it is "Hold"): it left the order on hold exactly as Put on hold does. The
+  demo seed holds where it rejected. (3) Walked by hand, MedRep to Management and back. The MedRep's
+  side was right: My orders has a badge, a "Sent back to me" tab, the reason on the card with "Fix
+  and send again", and an "On hold" tab with the question. Management's side lacked the mark:
+  an order sent again now says "Sent again: <the MedRep's answer>" on its card (the order page
+  already said it), and an answer to a hold is kept on the order (`reply`) and shown on the held
+  card ("Answered: …") and on the order page (it was only a line on the timeline). Tests: the
+  approve helper stocks the shelf with exactly what an order is short of (`testing/approve.ts`,
+  `shelfUp` / `shelfBack`). 500 API tests. Not re-run: `scripts/a-to-z.ts`. Local only.
+- **23 Nov 2026 (Aryan: "Finance too: every option opened, every button pressed, every case;
+  refund orders come there, and PAP's")** Finance walked by its own login on the demo copy: Home
+  (Cards, Table, Board, every tab, I'll handle it, Hold with its screenshots, Take off hold), an
+  order's four checks and Paid, Prepaid orders, Due payments, Refunds owed, Invoices and one
+  invoice, Payments received, Customers owe, the statement, Returns, My confirmations, Team figures.
+  Hand-run: a paid-first order (no tick, no slip, too much, part payment, undo, held and answered),
+  credit and cash on delivery, money on an invoice (tax withheld, deducted, taken off), a paid
+  order cancelled (refund in money, and kept as credit), that credit used on the next order, a
+  return after delivery through Management, Dispatch and Finance, and a guarantee letter's order
+  (the agency short, the patient's part, the rest let go) through the screen. **Put right:**
+  (1) *Money lost on a return.* A bill paid partly from the customer's credit and then lowered by
+  a return gave back only the money part; the part paid from credit vanished. It is the customer's
+  credit again (`creditBack`, finance/credit.ts; test in returns.test.ts). (2) *Refunds owed badge*
+  counted only cancelled orders; a return's refund showed no count. One count now for the menu and
+  the board (`refundsOwedCountSql`). (3) *An invoice paid beyond its bill* had no "Give money back"
+  on its own page and printed "Balance Due -1,300" with no line for the return: it has the button,
+  a "Returned goods credited" line, "Given back" and "To give back". (4) *Customer's page:* Paid
+  was the listed payments added up (a cancelled order's money and a used credit counted twice, a
+  refund never taken off) and Bought ignored returns; both now come from the bills (billed less
+  returns; settled less given back), as the statement of account has them. (5) *Payments received:*
+  "Collected" counted credit, deductions and tax withheld as money; it is money only, as Finance's
+  Home counts it, the rest said beside it. (6) *A paid-first invoice waiting for Finance's check*
+  read "Overdue by 1 day" the next morning: it reads "Payment to check". (7) *The customer's
+  credit* was told only under Owed before and Paid: the Payment check now says it with "Use their
+  credit". (8) *Sending a credit order on* from a card or the order page had no Undo (the API
+  allowed it for 90 seconds): the same Undo bar as a confirmed payment; "Send on the N with nothing
+  found" asks once before sending several. (9) *A database with no bank account in Books* (a new
+  one) could record no payment: the form no longer stops there, and never asks for an account when
+  no money moves (a shortfall let go). (10) Words: the invoice is made at Management's approval,
+  so "make the invoice / To invoice / Invoice the N" are "send to Dispatch / Credit check / Send
+  on the N"; Refunds owed says refunds, not cancelled orders; a letter's shortfall reads "let go by
+  the company", not "deducted by the customer"; Due payments opens on the terms that have a late
+  payment; a card names its channel once. **Asked of Aryan, not decided:** a refund by bank, GCash
+  or check is saved without a reference number; a paid-first order confirmed with less than the
+  bill still goes to Dispatch (the rest lands in Due payments).
+- **23 Nov 2026 (Aryan: "yes, do Dispatch")** Dispatch walked by its own login on the demo copy:
+  Home (To pack & ship, On the road, Delivered, the paid-by filters), the Pack, Ship, Delivered,
+  Came back, Hold and Note-the-cash boxes, On hold, Returns to check, Shipments, Team figures and
+  an order's two steps. Hand-run: picks (too few, too many, another medicine's batch, another
+  order's line), unpack, a six-medicine order the shelf can't fill, courier with and without
+  tracking, rider, pick-up at the warehouse, the address slip not ticked, delivery with no receipt
+  photo, a failed delivery shipped again, cash on delivery (short, noted later, after Finance
+  recorded it), Dispatch's hold answered by the MedRep, Management cancelling a packed order (its
+  pieces back on the shelf) and returned goods checked. **Put right:** (1) *A delivery day before
+  the parcel left* was taken ("delivered 1 Jan" on a November order made its invoice "overdue by
+  296 days" and would stop the customer's next order): the day can't be earlier than the day it
+  left the warehouse. (2) *Delivered showed the day before* on Home for anything marked between
+  midnight and 8 in the morning (the UTC day of the moment it was marked): it shows the delivery
+  day Dispatch said (`deliveredOn` on the card). The same cut was on the customer's page, the
+  customer list, a seller's Home, My team, a case's head and a visit's changes: one `manilaDay`
+  now. (3) *The Pack box was a dead end* when the shelf was short (only Close): "Hold it: not
+  enough stock" holds it there, as Wait for stock when the whole company is short (told when it
+  comes in), else as an ordinary hold naming what is missing in that warehouse. (4) *Returned
+  goods were all-or-nothing per line* (ten crushed tablets wrote off the twenty good ones, or put
+  the crushed back on the shelf): a line can be counted in parts, good, damaged and not received,
+  each a line of its own afterwards (`receiveReturn`; test in returns.test.ts). (5) *On hold* for
+  Dispatch opened the old board with To pack, To ship, On the road and Delivered a second time:
+  it is only its holds. (6) Words: a parcel that can't be shipped for unpicked pieces says "Unpack
+  it and pack it again"; "add the photo first" goes once a photo is picked.
+- **23 Nov 2026 (Aryan: "the work left over from the last sessions, do that too, and Inventory")**
+  **Inventory walked** by its own login on the demo copy: Overview, Medicines & prices and a
+  medicine's page, Medicine requests, Stock by warehouse, Stock report, Adjustments, Transfers,
+  Batch trace, Samples to reps and Purchases (vendors, orders, receives, bills, payments, credits,
+  To do & buy again). Hand-run: stock put in (expired, a batch on file with another expiry, no
+  batch number), moved between warehouses, counted up and down with and without a reason, and an
+  order waiting for stock followed from the hold to "stock is in" (Dispatch and the MedRep told),
+  off hold and packed. **Put right:** (1) *To reorder read "40 short"* for a medicine its orders
+  needed 390 more of than the shelf had ("free" stops at zero): it counts what is left after every
+  order, and a new panel, **Orders waiting on stock**, says per medicine how many orders need how
+  many, what is on the shelf and what is coming. (2) *A medicine's page said "Free to sell 375"*
+  with 310 of them promised to orders: On the shelf and Free to sell are two figures there now, as
+  on the stock list (`promised`, `free` on the medicine's detail). (3) The Overview's "to be
+  received" counted orders made on the first purchase pages that the Purchase orders list didn't
+  show: the list links to them. (4) Samples says the month in words.
+  **Left over, done:** Books' own pages pressed (a bank and a cash account made, the expense and
+  journal forms, locking) and the new-bill form; "Send on the N" pressed (asks once, then sends);
+  Dispatch's address slip and delivery receipt opened; `scripts/a-to-z.ts` run on a fresh copy of
+  the real data after the short-stock rule: 43 of 43; **the server refuses a seller's direct
+  guarantee-letter order** (403: hand the patient to PAP), as the form did. The head's, HR's and
+  the CEO's Homes opened card by card: **the CEO's Collected counted credit, deductions and tax
+  withheld as money** (Finance's Home did not): money only now, on both and on the Collected card.
+  **Not done, and why:** the server asking a reason for a short-stock order (Management's stock
+  check stops such an order anyway; the form still asks); the Admin's Teams & people still moves
+  seats (it is the only place for the seats outside sales: asked of Aryan). **Asked of Aryan:**
+  when stock is short for several orders, which is served first (today each order counts every
+  other order's promise, so 20 pieces wait until all 210 are in)?
+- **23 Nov 2026 (Aryan's answers to the four questions, then "check every page's side menu once
+  more, then push")** (1) **Stock short for several orders: the first placed is served first.**
+  An order is short only when the shelf, less what the orders ahead of it are promised (placed
+  before it, or approved already), doesn't cover it (`aheadOf`, orders/stock-wait.ts; the order's
+  own stock finding and the approval's check now count the same way). Before, the approval counted
+  every other order's promise, so 20 pieces with six orders wanting 210 served nobody. The rest are
+  held (Wait for stock) or sent back by Management, as before. (2) **A refund sent through a bank,
+  GCash or a check needs its reference number**; cash by hand and money kept as credit don't.
+  (3) **Paid first means paid whole:** a part payment is put on the invoice and the order stays
+  with Finance ("Record this part"); only the whole amount sends it to Dispatch. It went to
+  Dispatch with the rest left in Due payments. (4) **One place for who is under whom, the Company
+  tree, non-sales seats too:** its "Every team" switch is "Non-sales seats too" and comes on with
+  Edit positions; the Admin's Teams & people no longer drags seats or teams and points there.
+  **Checked again:** every menu link of the 13 seats opened on a copy of the real data (412
+  links): no call failed. 503 tests pass.
+- **23 Nov 2026 (Aryan: "did you look at Inventory? it is joined to everything; make it live")**
+  The part of Inventory left unrun was run by hand on the demo copy: a MedRep's order short of a
+  medicine (held, Wait for stock) → a purchase order (the medicine's "coming" and its day follow)
+  → refused receives (no batch number, expired, more than ordered, by a MedRep) → half received
+  (the order still short, nobody told) → the rest received (Management and the MedRep told) →
+  the goods' bill, billed twice refused, Finance pays part (Inventory can't, more than the bill
+  refused), the vendor's balance → off hold, approved, packed first-expiry-first across the old
+  batch and the new one → delivered → the batch's trace names the customer, and its cost is in
+  the gross profit. Samples: a MedRep asks, the lead approves, Inventory issues (off the shelf by
+  batch), the MedRep receives; on the samples page, the stock report and the trace. **Put right:**
+  (1) *Buy again before it runs out* counted the whole shelf as free, so a medicine its orders had
+  already taken (or wanted more of than there was) never came up to buy: free is the shelf less
+  what placed orders are promised, with "orders need N more" when they need beyond it.
+  (2) *Batch trace* showed each move's time in the database's own clock: Manila time now.
+- **23 Nov 2026 (Aryan: "see that two or three hierarchies aren't being made; by the sheet; the
+  seat is fixed, the person changes; check the Admin, the CEO and the Company tree, on a real
+  case")** Checked on a copy of the real data (35 boxes, 131 seats, 8 vacant, 118 people): nobody
+  without a seat, no seat with two holders, no box with two leads; each person's own record (role,
+  title, channel, area, boss) is exactly what the seat tree gives (`projectOrg`: 0 differences); the
+  November sheet's 57 rows are each tied to a seat and the seats' targets add up to the sheet's
+  ₱57,642,166. Five people hold two seats (Subir, Reynan, Malou, Honey, Claire), as the sheet has
+  them. **Real case run on the copy:** a Hospital CHC leaves (his login stops, his seat shows
+  vacant on his lead's board with its target and sales), another person is put in the seat: he gets
+  the seat's title, area, lead, its 102 customers and its ₱600,000 target, his old seat is vacant,
+  the first person's history is kept; data checks 18 of 18. **Put right:** (1) the Admin's menu
+  listed a second chart, typed by hand from the paper chart on 17 Nov ("Company chart (as built)"):
+  it is off the menu and says on itself that the Company tree is the one place. (2) The Company
+  tree gave a box on no sheet row (Patient Assistance, Government Account) the head above as its
+  "Manager": it now says "no head · not on the target sheet" (PAP is a process with no head).
+  Noted for Aryan: one seat names its own boss (a District Sales Coach seat in Mindanao → the
+  Business Mentor) and nine selling seats are on no sheet row. Zoho Books and Inventory could not
+  be opened this turn (the Chrome extension was not connected; the app's own browser is not signed
+  in to Zoho): the 18 Nov side-by-side in docs/BOOKS-PLAN.md stands.
+- **23 Nov 2026 (Aryan: "build the reports; go through all of Zoho, how its workflow runs; the
+  office opens Zoho's Sales to see a hospital's name, what it was given last, at what price, and
+  whether anything is pending: one place for that here")** Zoho Books and Zoho Inventory were opened
+  in his Chrome, read only. Every section Zoho uses is here; Estimates, Recurring invoices,
+  Projects, Timesheets, Budgets, Composite items, Assemblies, Move orders and Putaways are empty in
+  Zoho itself; its custom module "Sales Person Target Report" holds two test rows from 2023. Zoho
+  Inventory has 13 users, 2 active (the orders reach it from the hub, reference GM-…). A customer's
+  Transactions tab there (invoices with balance, payments, sales orders) is the record the office
+  reads. **Built:** (1) *The customer's page is that one place*: beside Prices given (each
+  medicine's last price and every earlier one) and Earlier orders it now lists the old system's
+  **invoices** with what each still owes and its **payments** (`/api/customers/:id/prices`);
+  checked against Zoho for ACE Medical Center Palawan: the same four invoices (₱372,000; ₱9,000;
+  ₱12,540; ₱39,000) and three payments to the centavo. A customer with no order here yet shows
+  that old record first, not two empty panels. (2) Report **Sales by Salesperson and Medicine**
+  (Zoho's "Sales Person item Sale") and (3) **Sales by City** (Zoho's "City Sale"), both in
+  Reports → Sales, on the same lines as Top Medicines; June 2026 on the real copy: ₱31,840,850.67
+  (Zoho's own dashboard says ₱31,695,681.78 by invoice day; here an order counts on its order day).
+  Most customers have no city written, as in Zoho, where the blank city is the largest row too.
+  (4) The stock report says who each batch was **bought from** (on screen and in the Excel file):
+  362 of 521 batch rows on the real copy. (5) A medicine's page lists the **orders holding** its
+  promised pieces (Zoho's Committed Stock Details), for the desks that see every order.
+- 23 Nov, Aryan: "the MedRep's Log a call → Start working isn't made well; it should go in order in one place: the day starts, then where are you visiting, what did you do; the location comes ready-made and typed, put the Philippines' places; in Today's calls → Add visit I don't know what to do; the Tour plan isn't understandable." **My day asks in order** (section 22). The pages stay (My day, the visit, the tour plan); what changed is how they ask. *Start working* asks the work place in plain words, then the town from the country's own list (1,634 cities and municipalities with their province, read from the PSGC through psgc.gitlab.io; "Makati", "Makati City" and "City of Makati" are one town when customers are matched to it), then who works along; nothing is pre-picked unless the tour plan said it. Once started, My day shows the three steps (Started · Visits n/m · Report) and one card: *Where are you going now?* with today's visits of every kind, *Someone not on this list* (added and opened straight away), the call being worked (*You are here since… Say what happened and close the call*), *Done today*, and *Stop working*. Closing a call returns to My day. The circle, once started, opens three choices (working somewhere else now, take a break, stop for today). *Add a visit* asks When (Today, Tomorrow, another day), Whom (it opens on the kind the rep has most of) and Why with one-tap reasons, only when the rule asks. The tour plan's day opens one sheet (where, whom, Add visits) instead of seven choices, with three lines over the calendar and "n of m working days filled"; the button reads *Send the month to my team lead*. No rule changed: the same starts, visits, reasons and approvals in the API (the home also returns today's visits). Checked: field tests (28), the whole API suite, both type-checks, and by hand on a demo copy as a Hospital MedRep on a phone-sized screen (start → pick a hospital → I'm here → close → next → tour plan day). Local, not pushed.
+- 23 Nov, Aryan: "don't talk in the air: run it for real, be the MedRep, start, see how the order is made, how it goes to Management, then Finance; from the bottom to the top; after signing in I couldn't tell where to click or where the day starts." **Walked by hand on a demo copy, on a phone-sized screen for the MedRep and a desk screen for the desks**: Ryan (Hospital MedRep) signs in → My day → Start working (base town, Pasay) → picks Las Piñas Doctors Hospital → call objective → I'm here → Add order (No PO, Imatinib 400 mg × 30, ₱3,900) → the order comes back onto the visit as 2MG-500020 → closes the call → My day asks the next one; Sarla (Management) approves its two checks → invoice 2MG-SI-000008; Fiona (Finance) Check & send to Dispatch; Marco (Dispatch) Pack → Ship (LBC, tracking) → Delivered with the signed receipt; Ryan's order page shows every step and who did it. The road works end to end. **What the walk found and what changed:** (1) the seller's Home said nothing about the day, and signing in marks attendance by itself, so the top bar already read "In since" before any work: a field rep's Home now opens with a **My day** card (the three steps and the one next thing: Start working, Pick whom to visit, You are at…, Stop working), and the top bar's button stays **Start** (the same Start working) until the field day is started, then shows the field day's own start time; (2) Management's order page stayed on the check just approved: it now opens the next check still waiting; (3) Management's "Customer & licence" read "Licence on file" for a customer with none: it says "No licence on file" (wording only, no new stop); (4) an order placed at a visit now answers "What came of it?" (Business generated, Business) by itself, the MedRep can change it. Seen and left for Aryan: the customer remark is needed on every order and each one is flagged "MedRep's note" for Management, so no new order is ever "nothing flagged" (question for him); the other sellers (TeleSales, Bidding, NBD, CRR, CLIDP) have no field day, their Start stays attendance by sign-in; their own screens were opened but not worked through an order in this walk. Checked: both type-checks, the web build, and the walk above re-run on a fresh login (Mia) for the Home card and the Start. Local, not pushed.
+- 23 Nov, Aryan: "run the rest too, and as one whole: he starts the day, goes to a hospital, records the visit with every detail from the SEFMED screenshots, and makes the order right there, not by going back; start from the MedRep, Log a call, how the day starts." **The other sellers walked by hand on the demo copy (phone-sized screen), each as one road.** *Rx (Joy):* Home's My day card → Log a call → Start working → Dr. Paolo Lim → what is the call for → I'm here → Met → drugs promoted, samples and gifts, the doctor's prescribing list, competitors, feedback all on the call → **Add order on the call** → Create New Order with the doctor and the visit (Letrozole × 30, paid first, the transfer slip and the prescription attached) → back on the call as 2MG-500021 → close → My day; Management's three checks one after another → invoice; Finance **Confirm payment** (the slip shown, the bank reference) → Dispatch shows it *Prepaid · Paid ✓*. *CRR (Fritz):* Home's accounts to call → Order on Rose Pharmacy → placed paid-first with no slip ("payment to follow") → Management → Finance holds it as *No payment proof* (Confirm payment or Hold, no way to Dispatch unpaid). *PAP (Paula):* Start working, New PAP case opened (its own steps: quotation, agency, letter, papers, order, claim); not taken to the order in this walk. *TeleSales, Bidding, NBD, CLIDP:* Home and its own list opened (customers to call, tenders, prospects, the listing road), the order form's Division checked; the demo has no TeleSales customer to call, so no call-to-order there. **What the walks found and what changed:** (1) an order opened from a visit to a doctor now names that doctor in *Doctor (if any)*, so a patient picked as the buyer keeps the referral; (2) an Rx seller whose box has no Division written got no Division on the form: the doctors' channel (RX) reads as RX Business (`CHANNEL_DIVISION`); (3) the PAP MedRep's Home had no My day card: it has it; (4) Start working offers the rep's own area towns first (the company tree's), then their customers'; (5) the order form said "no order yet" for a customer whose orders are the old Zoho invoices, and "Not in your area" on an account given to the seller by name (B2B's NBD/CRR, a PAP case): the last order counts the old invoices too, and the seller's own accounts read as theirs. Still open for Aryan: the "MedRep's note" flag on every order. Checked: the whole API suite (503), both type-checks, the web build. Local, not pushed.
+- 23 Nov, Aryan: "the hub's code is local: run it and look; Create New Order → for myself; pick every Division and see what changes in the Sub-division, the Headquarter and what it asks below; its system is good, take it; and our order form must not be this big: he went to take an order, not to sit an exam." **The hub run again on localhost (mock Zoho) and its form walked Division by Division** (the table is in docs/HUB-WALKTHROUGH.md, "The order form by Division"): every rule was already in `divisionRule` except the hub's B2C, so **MD Telesales now fills Sub-division MD Telesales and Headquarter B2C**. **The order form made short, the same questions:** *General* is one row of three small lists (Division with the seller's own marked, Sub-division, Headquarter) with the day and the MedRep on the part's header, where it was eight Division buttons, two boxed fields and three grey lines; *Customer details* is two columns on a phone too and lost its grey lines; *Documents* lists only the papers the order asks for (the proof of payment or why there is none, the prescription on a prescription order, their PO on a PO order), the others under "+ Another paper"; *Review* shows only what is still missing or what Management will question (the total is on the bar, the summary in the Confirm window). No field and no rule removed. On a phone the form went from about 3,000 px to 2,400 px tall; with the customer already picked a hospital order is five entries (order type, source, date needed, remarks, the medicine). Checked: order tests (59), both type-checks, and by hand on the demo copy as a Hospital MedRep on a phone-sized screen (2MG-500023 placed through the short form, every Division picked in turn on our form and read against the hub's). Local, not pushed.
+- 23 Nov, Aryan: "improve the whole software like this; now go into Inventory: what can be better, what is extra, how the flow can be better, is the system in it or not." **Inventory walked by hand as its officer on the demo copy** (Home, the menu's 24 links, To do & buy again, the purchase orders of both kinds, a receive done through the screen, Stock by warehouse, Adjustments, Transfers, Receives, Medicine requests). The road works: PO-00002 received through its dialog (pieces, batch, expiry) put 6,000 on the shelf, closed the order and moved every count. **What the walk found and what changed:** (1) the Overview said "2 to be received, 24,000 pieces" and the Purchases board "0": the board counted only the purchase orders in Purchases, not the few still open on the first purchase pages; it now counts both (to receive, their worth, and *Coming* per medicine), and both tiles open where those orders are; (2) after the delivery the stock news still read "only 35 boxes left": an *Out of stock* or *Low stock* line now steps aside by itself once the shelf says otherwise (nothing erased, *Take down* stays for the rest); (3) *To do & buy again* is first in the menu's Purchases group, the day's work before the lists; (4) the empty Adjustments and Transfers lists say where to begin and have the button (a count or a move starts on the medicine in Stock by warehouse); (5) Receives (the receive papers) links the shelf's own list of every batch that came in, which also has what came without a paper. Seen, not changed: purchase orders still have two kinds (the first pages' and Purchases'), each received on its own page; folding the old ones into Purchases is a data move for Aryan to decide. Checked: the whole API suite (503), both type-checks, the web build, and the screens again after the changes. Local, not pushed.
+- 23 Nov, Aryan: "look at the team lead's pages and the head's: how does what the MedReps do reach them, properly or not; the leads and heads differ, Subir has B2B, CLIDP and BID." **Walked on the demo copy after the day's own work** (three hospital MedReps and an Rx MedRep started, two visits closed, orders placed, a day report sent, a tour plan sent): Daniel (hospital team lead), Vanessa (hospital head), Sam (the mentor over B2B, CLIDP and BID), Jess (B2B coach), Jimmy (bidding admin), Rosa (Rx head). **What reaches them, as it happened:** the money does (My Team KPI, the team's sales today with each order, the channel boxes and each person's line, B2B's CRR and NBD tables, what accounts owe); the field does on *Team today* (who started where and when, visits closed, what was ordered, the activity list, *Waiting for you*). **What was missing and is added:** (1) a lead's or head's **Home said nothing of the field**: it now opens with **The field today** (how many started, visits closed, ordered at visits, what waits for them: day reports to see, calls to judge, tour plans, plan changes, expenses, each a press away; who is at a customer now; who has visits today and hasn't started), only for a seat whose menu has the team's field day, so a B2B, bidding or TeleSales lead doesn't get an empty one; (2) the activity list said only "closed the visit": it now says **what came of it** (Met / Not met, and what was ordered there). Seen, not changed: a head's *Team today* counts every seller under them, so a TeleSales seat reads as not at work (the new card names only those with visits today); a tour plan sent to the lead makes no message in their *Needs you*, it shows as a count. Checked: the whole API suite (503), both type-checks, the web build, and each Home again. Local, not pushed.
+- 23 Nov, Aryan: "you keep saying 'not done this time': do it; check the wiring and the flow again; in the side menu one thing shows twice, on many pages; and one job should lead to the next by itself, not send me to another section." **The side menu of every seat read by machine** (the menu each of 24 demo logins really gets, from `spaceFor`): the doubles were a link named like its own folder (Tenders under Tenders, Patients under Patients, Team visits under Team visits) and, in the CEO's menu, pages listed in a group above and again inside an Apps folder (Custom report, Sales by channel) or in two apps' folders (Customers to call, Patients, Samples). Now a link carrying its folder's name reads "All tenders", "All patients" (`folder()`), and the CEO's Apps folders don't repeat a page already listed (`withoutRepeats`); the same read finds no double for any seat. A folder still opens on its first page, as before. **One job leads to the next:** Dispatch's *Packed* opens the same order's *Ship* dialog; Management's approved order shows *Next order to approve →*; a team lead who marks a day report seen goes back to *Team today* (where what else waits is listed), and after approving or sending back a tour plan to the team's plans. **Done by hand this time (it was left before):** the lead's *Mark seen* on a day report and *Approve* on a tour plan, both through the screen. **Still not walked by hand:** an order from TeleSales, Bidding, NBD and CLIDP, a PAP case through to its order, and Books' bill and payment pages. Checked: both type-checks, the web build, and each change pressed on the demo copy (Sarla, Marco, Daniel). Local, not pushed.
+- 23 Nov, Aryan: "yes, run the left-over ones now." **The remaining sellers' orders placed by hand through the short form on the demo copy:** CLIDP (Annie → Bansan Pharma, 2MG-500024), NBD (Flor → Medcare Distributors, 2MG-500025), TeleSales (Ana → a new doctor added from the form, 2MG-500026); each landed on Management with its own Division. **Found and fixed:** (1) **a new customer could not be added from the order form**: the Add customer window sat inside the order's own form, so *Add doctor* sent the page away and nothing was saved; it now sits outside the form (added and picked in one go, checked by hand); (2) a tender marked Won or Contract had no way on to its order: its page now has **Place the delivery order**, opening the order form on the agency. Confirmed as right: TeleSales opening another seller's hospital is refused ("not one of yours"). **Not finished:** the Bidding order itself (the demo's government buyer has no price on any medicine and the demo tender has no bid lines, so no line can be added: needs Aryan's word on where a tender order's price comes from), and a PAP case taken through quotation, agency and letter to its order. Checked: both type-checks and the web build. Local, not pushed.
+- 23 Nov, Aryan: a bidding order's price comes **from the tender's bid**. An agency's award (a tender Won or at Contract, with no order yet) now carries its bid lines to the order form; once the award is picked, **Take the bid's medicines and prices** fills the order with the bid's medicines, pieces and one-piece prices, each line marked "Bid price of TND-…" so Management sees why it differs from the list. Walked by hand on the demo copy: TND-DEMO-1 given two bid lines, its price approved by the bidding admin, the envelope completed, Submitted, Won, then *Place the delivery order* → the award picked → the bid taken → 2MG-500027 placed at ₱62,100 (Letrozole 600 × ₱41, Imatinib 300 × ₱125), waiting for Management. The rules held on the way: bid lines can't be set after the price is approved, and a tender can't be submitted with papers missing. Checked: customers, tenders and order tests, both type-checks, the web build. Local, not pushed. Still not walked: a PAP case through to its order.
+- 23 Nov, Aryan: "what is left, do it." **A PAP case walked by hand to its order and through the desks** (demo copy, the PAP MedRep's login): the case opened from a call → quotation (Imatinib 400 mg × 30, ₱4,350) → DSWD application recorded → the guarantee letter (photo, number, amount, dates) saved and marked verified → prescription, valid ID and medical certificate attached → *Place the order* (refused, rightly, until the ID and the certificate were in) → 2MG-500028 → Management's checks → Finance *Check & send to Dispatch* (on credit, 60 days, the agency billed) → Dispatch. Each step opened the next by itself. **Found:** the case was for one patient and its phone number was already another patient's in the CRM, so the case and the order went under that other name without a word (the match is by phone, the same name first, else whoever has the number). **Changed, wording only:** the case now says so in its activity when the number is another name's ("under that name, not …; if it is another person, tell Management"). **Question for Aryan (a rule, not decided here):** when a new patient shares a phone number with an existing patient (a family, a caregiver's phone), should the new patient become a customer of their own, or should the order be stopped until someone confirms who it is? Checked: Online and PAP tests (49), the API type-check. Local, not pushed.
+- 23 Nov, Aryan: "yes, run it" (Books' purchase papers). **The purchase road in Purchases walked by hand on the demo copy:** the Inventory officer made PO-00001 to a vendor billed in USD (the form turned to USD and asked the rate; the line showed what is free, the low level and what is already coming) → its own page is the whole road (Ordered → Received → Billed → Paid): *Receive what came* (batch, expiry) put 2,400 on the shelf and opened *Enter the vendor's bill* → the bill saved (NAT-INV-7781) → it showed in Finance's *Supplier bills to pay* → Finance recorded the payment → the bill is paid and the order's road complete. Each step opened the next by itself. **Found and fixed (money):** a payment to a vendor billed in another currency was kept at a rate of 1 and its form read "Amount paid (₱)": a USD 2,520 payment would have counted as ₱2,520, not ₱147,168. It now keeps the rate of the bill it pays (else the vendor's latest) and the form says the vendor's currency. Payments made here to a foreign-currency vendor before today would carry the rate 1: none on the demo copy; the real data has to be looked at once before go-live. Checked: Books and purchases tests, both type-checks, the web build, and the payment made by hand (USD 2,520 at ₱58.4). Local, not pushed.
 - 21 Nov (155), Aryan: "redesign the department sign-in with Impeccable, just the form hierarchy, by the UX laws" (Jakob, Hick, Fitts, Miller, Proximity, Doherty). The sign-in box on every department page (`account/login.tsx`): left-aligned, "Sign in" with one line under it, visible labels above the fields (Login ID with "e.g. hos1", Password or Company password), no icons inside the fields, the method switch (Shared desk / Select name / Personal login) before the fields it changes, each error under its own field, a Caps Lock notice, one full-width "Sign in" (or "Continue" on the heads' and leads' doors) right under the last field, help below a line. Sign-in logic, the raised box and the rest of the page unchanged.
 - 21 Nov (156), Aryan: "hierarchy and orientation are too clogged and tightly coupled" (the department page). `portal/department-page.tsx`: the department's header across the whole width (where you are), then two parts that don't touch: its information on the left (figures two by two with their labels whole, Key functions beside Team structure at the same height, Workflow), the sign-in alone on the right, kept in view while the left scrolls; on phones the sign-in comes right after the header. The header's floating card (it repeated the first figure) and its drawing are gone; more room between groups. Nothing else changed.
-- 21 Nov (157), Aryan: "the login with those things beside it bombards people with setup; remove the login with password; make the token proper, the source of truth for access"; then picked: sign-in only, and refuse a login on a department it doesn't belong to. **The sign-in page** (`/login?dept=…`) is now only where you are (the department's mark, name and one line) and the sign-in; the figures, Key functions, Team structure and Workflow are gone from it (`portal/department-page.tsx`, `portal/departments.ts` removed; `/api/portal/departments` is no longer read). **The old "Log in with ID and password" page is removed** (`account/login-classic.tsx`, its links on the launcher and in About). **Department-scoped sessions:** `src/auth/workspaces.ts` is the one list of departments and the roles each takes (the web tiles read it as `@2mg/api/workspaces`); `/api/auth/login` takes `workspace`, and after the password is right refuses a login whose role doesn't belong there (403 `wrong_department`: "This login has no access to Finance. Sign in on the MedReps page."; a wrong password still says only wrong, so a page never tells a stranger whose login it is); the session keeps its department (migration 0131 `session.workspace`, `Me.workspace`); the desks' sign-in records its desk; a call without `workspace` (scripts, tests) opens the login's own department. What each call may do is still the role, checked by the API every time. Test: `src/auth/workspace.test.ts`.
+- 21 Nov (157), Aryan: "the login with those things beside it bombards people with setup; remove the login with password; make the token proper, the source of truth for access"; then picked: sign-in only, and refuse a login on a department it doesn't belong to. **The sign-in page** (`/login?dept=…`) is now only where you are (the department's mark, name and one line) and the sign-in; the figures, Key functions, Team structure and Workflow are gone from it (`portal/department-page.tsx`, `portal/departments.ts` removed; `/api/portal/departments` is no longer read). **The old "Log in with ID and password" page is removed** (`account/login-classic.tsx`, its links on the launcher and in About). **Department-scoped sessions:** `src/auth/workspaces.ts` is the one list of departments and the roles each takes (the web tiles read it as `@2mg/api/workspaces`); `/api/auth/login` takes `workspace`, and after the password is right refuses a login whose role doesn't belong there (403 `wrong_department`: "This login has no access to Finance. Sign in on the MedReps page."; a wrong password still says only wrong, so a page never tells a stranger whose login it is); the session keeps its department (migration 0140 `session.workspace`, `Me.workspace`); the desks' sign-in records its desk; a call without `workspace` (scripts, tests) opens the login's own department. What each call may do is still the role, checked by the API every time. Test: `src/auth/workspace.test.ts`.
 - 21 Nov (160), Aryan: "the login form on the right, and on the other side the icon and the information it had". **The sign-in page** (`/login?dept=…`): the sign-in alone on the right; on the left the department's icon (large, as its tile), name and line, then its last 30 days (four figures), Key functions and How work moves as numbered steps, one calm column without cards (`portal/department-side.tsx`; `portal/departments.ts` back; `/api/portal/departments` read again). The team chart stays off the page. Phones: the department and the sign-in first, the rest below.
 - 21 Nov (161), Aryan, with a split sign-in screen he liked: "we can do this". **The sign-in page** is now a split screen: on the left a panel the whole height, tinted in the department's colour, with the Bishnoi One mark, the department's icon large on a soft floor with squares around it as its picture, its name and line, the last 30 days as one row of four figures and its Key functions; on the right, on white, "Wrong department? All departments" at the top and the form with no card around it ("Sign in to Finance", the method switch, the fields, one Sign in). How work moves is off the page now. The box's lift-and-blur on typing is gone (nothing behind it to blur). Phones: the form first, the panel below. `account/login.tsx`, `portal/department-side.tsx`.
-- 21 Nov (162), Aryan: "the auth is confusing" (three ways in: personal login, the desks' shared screen signing in as the lead, the doors' "press a name"; and one secret for everyone, the company's password). Picked my recommendation. **Each person's own PIN** (4 to 6 digits, not all the same or in a row; only a salted hash kept; migration 0132 `person.pin_hash`…): created on their first sign-in, asked after the password on a personal login and after a name is pressed at the Heads' and Team leads' doors (`/api/auth/login` takes `pin` / `newPin`; codes `pin_setup`, `pin_needed`, `wrong_pin`). Five wrong PINs lock the PIN for 15 minutes, never the login. The Admin (org chart, Teams) can **Clear their PIN**; they create a new one at their next sign-in (`POST /api/org/people/:id/pin`). **A desk's shared screen** (Management, Finance, Dispatch) opens with the company's password, lasts to 11 pm Manila and is never kept alive past it; it only reads: anything that changes something asks "Who is doing this?" (name and PIN, kept two idle minutes, "Acting as … Done" at the bottom) and is done in that person's name (`x-desk-person`, `x-desk-pin`; replaces giving an order's action to its person). Each person **starts themselves** with their own PIN; anyone at the desk may stop someone. Wrong passwords lock that desk's screen for 15 minutes, never the lead's own login; a desk with nobody on its lead seat says so. Marking updates read and chats seen need no PIN. On in the server (`PINS=off` turns it off); tests that don't sign in with a PIN leave it off. Test: `src/auth/pins.test.ts`.
+- 21 Nov (162), Aryan: "the auth is confusing" (three ways in: personal login, the desks' shared screen signing in as the lead, the doors' "press a name"; and one secret for everyone, the company's password). Picked my recommendation. **Each person's own PIN** (4 to 6 digits, not all the same or in a row; only a salted hash kept; migration 0141 `person.pin_hash`…): created on their first sign-in, asked after the password on a personal login and after a name is pressed at the Heads' and Team leads' doors (`/api/auth/login` takes `pin` / `newPin`; codes `pin_setup`, `pin_needed`, `wrong_pin`). Five wrong PINs lock the PIN for 15 minutes, never the login. The Admin (org chart, Teams) can **Clear their PIN**; they create a new one at their next sign-in (`POST /api/org/people/:id/pin`). **A desk's shared screen** (Management, Finance, Dispatch) opens with the company's password, lasts to 11 pm Manila and is never kept alive past it; it only reads: anything that changes something asks "Who is doing this?" (name and PIN, kept two idle minutes, "Acting as … Done" at the bottom) and is done in that person's name (`x-desk-person`, `x-desk-pin`; replaces giving an order's action to its person). Each person **starts themselves** with their own PIN; anyone at the desk may stop someone. Wrong passwords lock that desk's screen for 15 minutes, never the lead's own login; a desk with nobody on its lead seat says so. Marking updates read and chats seen need no PIN. On in the server (`PINS=off` turns it off); tests that don't sign in with a PIN leave it off. Test: `src/auth/pins.test.ts`.
 - 21 Nov (163), Aryan: "list the automated checks before pushing to main… add pen tests, rate limiting, SQL injection checks… detect the files first to align which tests to run… do it on the branches, not only main". **CI on every branch** (`.github/workflows/ci.yml`, `docs/CI.md`): on each push to any branch, each pull request, nightly (everything) and by hand. **What changed** first (`scripts/ci/detect.ts`, 13 tests in `scripts/ci/detect.test.ts`): path rules and what the change adds switch on only the groups needed: web (types, build, bundle size), API (types; the related tests, or every test for shared code), database (every migration on a real Postgres 17, twice, demo company, data checks: `apps/api/scripts/ci-database.ts`), dependencies (lockfile, audit), Docker (both images, the stack, smoke test, image scan), security (Semgrep with our rules in `.semgrep/rules.yml`; only what the change adds blocks), scripts; always the secrets scan (gitleaks, `.gitleaks.toml`) and the migrations' rules (`scripts/ci/migrations.ts`). One **CI passed** check for main's protection. Next: the security test suite, API-wide rate limits, headers, ZAP and sqlmap, the scheduled pentest.
-- 22 Nov (164), asked by the backend developer, **waiting for Aryan's approval before main or deploy** (it reverses 17 Nov (70)'s one password for all and 19 Nov (125)'s one screen, one password, and replaces 21 Nov (162)'s PIN): **own login ID, own password, one token.** Removed: the company's password as a way in, the desks' shared sign-in, the Heads' and Team leads' doors, the PIN. Migration 0133 `person.password_pending`: whoever was there before has no way in until given a one-time password (`scripts/give-passwords.ts`, or Give a new password); a one-time password opens only choosing one's own, checked by the API. The desks keep their shared queue, each person starts and acts on their own login; Management, Finance and Dispatch are signed out after 15 idle minutes and at the working day's end. Guessing: each try is counted before it is checked, five then 15 minutes, a known browser counts apart (`auth/guard.ts`). A new password ends the other sessions. Request size limits and security headers on the API. Still to update once approved: the user book, `PEOPLE-2026.md`, `LOGINS-LIVE.md` (they describe what main runs).
+- 22 Nov (164), asked by the backend developer, **approved by Aryan and merged to main on 23 Nov (181)** (it reverses 17 Nov (70)'s one password for all and 19 Nov (125)'s one screen, one password, and replaces 21 Nov (162)'s PIN): **own login ID, own password, one token.** Removed: the company's password as a way in, the desks' shared sign-in, the Heads' and Team leads' doors, the PIN. Migration 0142 `person.password_pending`: whoever was there before has no way in until given a one-time password (`scripts/give-passwords.ts`, or Give a new password); a one-time password opens only choosing one's own, checked by the API. The desks keep their shared queue, each person starts and acts on their own login; Management, Finance and Dispatch are signed out after 15 idle minutes and at the working day's end. Guessing: each try is counted before it is checked, five then 15 minutes, a known browser counts apart (`auth/guard.ts`). A new password ends the other sessions. Request size limits and security headers on the API. `PEOPLE-2026.md` and `LOGINS-LIVE.md` updated on 23 Nov (173); the user book (`docs/user-book`) still describes the common password and the desks' shared screen.
 - 22 Nov (165), asked by the backend developer: **the sign-in pages have paths**: `/login/<key>` (`/login/management`, `/login/finance`…) in place of `/login?dept=<key>`. Old links still open and are rewritten to the path; an unknown key goes to `/login`. Filters and tabs inside the app keep their `?` parameters, and signing in now returns to them too (`/orders?stage=delivered` used to come back as `/orders`).
 - 22 Nov (166), asked by the backend developer: the Bishnoi One logo on a department's sign-in page is a link to all departments (`/login`), on computers and phones; on the portal itself it clears the search and goes back to the top.
 - 22 Nov (167), asked by the backend developer: **a demo-user picker on the sign-in, for development only** (`account/dev-user-picker.tsx`): a small icon by "Sign in to …" lists the demo company's people and fills the form; Sign in still checks the password. It shows only under Vite's dev server on this computer with `VITE_DEV_LOGIN` (the demo password) in the git-ignored `apps/web/.env.development.local`; no build contains it.
 - 22 Nov (168), asked by the backend developer: **the order page's hierarchy**. The top, still short (change log 111), reads: the order with its status, the customer, the amount; then what stops it (sent back, on hold, a PO or letter awaited, remarks; for whoever only follows it, what Management's check found and that it waits); then the facts in a line with More details, and the papers' buttons as the quiet answers. Division is said once, chips are kept for what is exceptional (Online, Senior / PWD, New customer), the "Order ID" label is gone. On phones the open step comes before the timeline and the money. Every action and role rule as before.
 - 22 Nov (169), asked by the backend developer, on 168: **the order page's text levels and content positions**. Five sizes, one job each: 24 the order and its total, 18 the customer, 16 the open step's title, 14 what is read and pressed, 12 a label or note. The order, state and customer at the top left, the total at the top right; Sales order, Purchase order and Send to customer over the card at the right (under it on phones); the two run-on lines are now labelled facts (Payment terms, Deliver to, Invoice, Division, MedRep, Placed, and the rarer ones when there are); the checks in two columns, what is checked and what was found. The price-history strip keeps its own sizes: the order form shares it.
-- 22 Nov (170), asked by the backend developer ("a manageable profile for each, and 2FA as in Bishnoi One"): **My profile** (`/profile`, `/profile/security`, from the account menu): picture (a 320 px square, its file's hidden data dropped; a replaced one archived), first, middle (optional), last name and suffix (optional), which make the shown name ("Juan S. Dela Cruz Jr."), birth date, contact and emergency contact on the employee record's own fields (HR sees the same); work details only read. A name is Latin letters, never an active colleague's, and HR and the Admin are told of a change. **Two-step sign-in**, optional (`auth/two-step.ts`, migration 0134): password, then the authenticator's code or one of ten recovery codes; the key sealed with `SECRETS_KEY` (the server needs it); five wrong codes wait 15 minutes, doubling; a given password doesn't turn it off; the Admin resets it with their own password, and code if theirs is on (from the server: `pnpm --filter @2mg/api two-step-off --only=<login> --apply`). HR records, payslips, payroll and leave papers stay private while looking as someone, except for the CEO and the Admin.
+- 22 Nov (170), asked by the backend developer ("a manageable profile for each, and 2FA as in Bishnoi One"): **My profile** (`/profile`, `/profile/security`, from the account menu): picture (a 320 px square, its file's hidden data dropped; a replaced one archived), first, middle (optional), last name and suffix (optional), which make the shown name ("Juan S. Dela Cruz Jr."), birth date, contact and emergency contact on the employee record's own fields (HR sees the same); work details only read. A name is Latin letters, never an active colleague's, and HR and the Admin are told of a change. **Two-step sign-in**, optional (`auth/two-step.ts`, migration 0143): password, then the authenticator's code or one of ten recovery codes; the key sealed with `SECRETS_KEY` (the server needs it); five wrong codes wait 15 minutes, doubling; a given password doesn't turn it off; the Admin resets it with their own password, and code if theirs is on (from the server: `pnpm --filter @2mg/api two-step-off --only=<login> --apply`). HR records, payslips, payroll and leave papers stay private while looking as someone, except for the CEO and the Admin.
 - 23 Nov (171), asked by the backend developer ("it looks like a dropdown but it redirects to another app"): **⌄ opens, ↗ leaves.** A sidebar folder only opens and closes its list (it used to jump to its first page). Finance's *Books* is one link with ↗ in place of a folder (its pages are Books' own menu). Every menu link that leaves the app open has ↗, worked out from the address (`app-switch.tsx`), in the CRM and in Books. Changing app, by a link or Back / Forward, shows "Opening Books…" until the first figures are in (at least 0.45 s, at most 8).
-- 23 Nov (172), asked by the backend developer ("make the accounts by sign up; the Administration confirms who gets in; email them that they're accepted"), **waiting for Aryan's approval before main or deploy** (it reverses 15 Nov (18)'s "no invite or email system"): **Sign up** (`/signup`, from the sign-in pages): name in parts, email, mobile, department; no password, no account, no email, and the same answer whether the email is known or not (40 an hour, 500 waiting at most, over the whole form). **Admin panel > Sign-ups** (`/admin/sign-ups`, count on the menu, the Admin told once an hour): warns of a known email or a colleague's name; Review and accept needs the confirmation tick and a seat (it decides the role; never CEO or Admin), else Decline (kept). Accepting makes the account with no way in, and emails from the first connected mailbox ("accepted and can be used") a link (`/welcome#…`, once, three days) to set the password; when no email goes, the Admin is told and gets the link to pass on. Migration 0135. Add person and HR's New joiner stay. Teams & people's work list now offers Regulatory and Office staff too.
-- 24 Nov (173), asked by the backend developer: **blue for what you press, again; the app's frame and the public pages redone.** The accent goes from the GetMeds green (19 Nov) back to blue `#2563eb` (`--color-brand` and the emerald, blue and sky scales in `styles.css`): buttons, links, the selected menu item, counts, the focus ring. What is fine, done or paid keeps the pharmacy green (`--color-good`). The frame (`shell.tsx`): white sidebar and page; the sidebar runs the full height with the person's workspace logo and "Bishnoi One / MedReps" at its top, folds to an icon rail with a sliding width, and the desk's name and the top bar's desk label are gone from the top bar; page titles match the home's greeting (28px semibold). Public pages (local only, not yet on main): the home page's hero and navbar, the About page (`/about`), Sign in and Sign up as split screens with card collages. Waits for Aryan's approval before main or deploy.
+- 23 Nov (172), asked by the backend developer ("make the accounts by sign up; the Administration confirms who gets in; email them that they're accepted"), **merged to main by Aryan on 23 Nov (181)** (it reverses 15 Nov (18)'s "no invite or email system"): **Sign up** (`/signup`, from the sign-in pages): name in parts, email, mobile, department; no password, no account, no email, and the same answer whether the email is known or not (40 an hour, 500 waiting at most, over the whole form). **Admin panel > Sign-ups** (`/admin/sign-ups`, count on the menu, the Admin told once an hour): warns of a known email or a colleague's name; Review and accept needs the confirmation tick and a seat (it decides the role; never CEO or Admin), else Decline (kept). Accepting makes the account with no way in, and emails from the first connected mailbox ("accepted and can be used") a link (`/welcome#…`, once, three days) to set the password; when no email goes, the Admin is told and gets the link to pass on. Migration 0144. Add person and HR's New joiner stay. Teams & people's work list now offers Regulatory and Office staff too.
+- 23 Nov, Aryan: "we keep one CRM, not two things; integrate the bidding system my friend built (github kenshiiir0/Hospital-Bidding-System); a button that opens it, by the hierarchy (Government Bidding under Subir)." **Read, not run** (it needs its own Supabase and PhilGEPS login): a Next.js + Supabase app with a robot browser that reads PhilGEPS and PS-PhilGEPS on a schedule, reads the tender papers (PDF, Word, Excel, scans by OCR) into lots and items, matches them to our molecules, screens them, tracks abstracts of bids and award notices. It finds and reads tenders; the CRM's Tenders does what comes after (price approval, envelope, award, order at the bid's prices, delivery, bill, payment). **First join:** the Tenders page has **Find tenders on PhilGEPS ↗** for every seat that has Tenders (the bidding coachees, their admin, the mentor above them, the CEO, the Admin), opening the finder in its own tab; its address is the web deployment's `VITE_TENDER_FINDER_URL` (not set yet: the button says so). **Not built yet:** a screened tender coming into the CRM's Tenders by itself (agency, title, ABC, deadline, PhilGEPS reference, the lines by molecule), and one sign-in for both. Checked: web type-check and build. Local, not pushed.
+- 23 Nov (173), Aryan: "we keep one CRM, not two; when someone clicks it in our CRM it must open inside our CRM; the code is here, you only have to integrate it; make a plan first; build the real integration too." **The tender finder lives inside the CRM** (section 24; the friend's app read in full, not run). **Kept in the CRM** (migration 0145: `tender_found`, `tender_found_line`, `tender_found_event`, `tender_find_run`): each notice the robot finds on PhilGEPS and PS-PhilGEPS with its agency, budget, dates and item lines. **Pages** (`sellers/tender-finder.tsx`): *Tender finder* (`/tenders/finder`: New, Screened, Made tenders, Everything found; search, portal, our medicine; the robot's last run) and a notice's page (what it asks line by line with the budget for one piece, dates, contact, bid bulletins, history); in the menu of the six seats that record tenders and behind the Tenders page's button, which replaces **Find tenders on PhilGEPS ↗** (the `VITE_TENDER_FINDER_URL` setting is gone). **The join:** *Make it a tender* turns a notice into a CRM tender in one press: agency matched to a customer by name (one picked by hand is remembered for that agency), title, ABC, PhilGEPS reference, closing as the deadline, pre-bid and opening days, mode read from the notice, each line matched to our medicine by molecule then strength (no single fit: the person picks), our price starting from the price book's Bidding price; one notice, one tender; the tender's page shows what the notice asked. Then the tender's own road, with one guard added: a bid line still at ₱0 (the price book had no Bidding price) stops the price approval, named ("Imatinib 400 mg has no price yet"), as a missing bid price always did for the whole tender. **Who:** the seats that record tenders (`recordsTenders`: bidding line, the mentor above it, CEO, Admin, a government bidding coachee), checked on every call. **The robot** is a separate worker (`workers/tender-finder`: the friend's PhilGEPS reader, Supabase replaced by the CRM) that comes in through `/webhooks/tender-finder` with its own key (`TENDER_FINDER_KEY`; no key, no door); our medicines are its product list, our customers its hospital list, our sign-in its log-in. **Checked:** 15 API tests (`tenders/finder.test.ts`) in the whole suite (104 files, 670 tests, all passing), both type-checks, the web build, 4 worker tests; walked by hand on a demo copy as Hazel and Jimmy: finder → notice → Make it a tender → preparing → envelope → price approved → submitted → won → Place the delivery order → Take the bid's 3 medicines and prices (₱2,368,000 on the order form); the worker handed a saved list to a local CRM over HTTP. **Not checked:** the robot's browser run against PhilGEPS (never from a developer's computer; no log-in); the order itself was not placed in this walk. **Not moved yet:** the papers' reading and OCR, PS-PhilGEPS's own lists and award answers, the team's Excel sheets (questions 33 to 35). Committed locally, not pushed.
+- 23 Nov (174), Aryan: "whichever is right, the company's server or the office PC, I don't know: put it there, push, make it live." **The robot runs on GitHub's computers**, neither of the two: `.github/workflows/tender-finder.yml` runs `workers/tender-finder` every hour from 6 am to 5 pm Manila (and once when the robot's folder changes: first page only with nothing sent, then the real run). Why: no office PC has to stay on, no server has to carry Chrome, it is free for this public repository, each run's log is kept under Actions; the same worker still runs anywhere else with a key. **No secret anywhere:** GitHub signs a short-lived token for that workflow and the API's door checks the signature against GitHub's published keys and that it is this repository, its main branch and that workflow file (`tenders/robot-caller.ts`; RS256 only, made for this door, not expired; a fork, another branch, another workflow, a pull request, a token signed by anyone else are refused: 1 test, 14 cases). `TENDER_FINDER_KEY` stays as the second way in; `TENDER_FINDER_GITHUB=off` shuts the first. The worker asks GitHub for a fresh token on each call and tries three times when the server is waking up or restarting. **Matching on live's real medicines** (read-only look: 278 medicines, all with a generic name, strengths kept as "10mg/ml (50 mg/5 ml)"): a medicine fits when an amount of its strength is on the line; a concentration alone settles it only with one medicine of that molecule; two brands of one strength are left to the person. The finder page says when the robot has been quiet for 26 hours. **Before the push:** migration 0145 and every finder query were run on live's own Postgres inside one transaction that was rolled back (nothing kept): all passed, a Rocuronium 50mg/5ml line matched RocuGet, a Sugammadex 200mg/2ml line offered its three brands. Seen there: live has test medicines with made-up generic names ("673sdsd", "Adasd"…), which the robot would also look for; they are for whoever keeps the medicines to archive. Live has 15 government and hospital customers, so most agencies will read "not a customer yet" until they are added.
+- 23 Nov (175), **live, and the robot's first real run.** Pushed to main (33e100f7 → 31e6ca03; Vercel and Render carried it, migration 0145 ran on live, the door answers). The first workflow run failed in 9 seconds before reading anything (Node's set-up looked for pnpm's cache; switched off for the robot's folder). The second ran whole in 80 seconds: the first page only with nothing sent, then the real run, let in by GitHub's signature with no secret set anywhere: **93 open "Drugs and Medicines" tenders read from PhilGEPS and kept on live, 21 asking for our medicines, 224 lines of ours, 72 of them matched to one medicine; 27 notices matched to a customer** (East Avenue Medical Center 25, Philippine Children's Medical Center 1, Gov. Celestino Gallares Memorial Medical Center 1). **What the real data showed, fixed the same hour:** a generic written "Salbutamol (as sulfate)", "Clopidogrel (as bisulfate)", "Dapagliflozin (as propanediol monohydrate)" was read as the molecule "Sulfate" / "Bisulfate" / "Propanediol" (now the salt in brackets always goes; only "Iodine (as Iohexol)" is its compound); an item kept under the generic name "Syringe" claimed every "pre-filled syringe" (a generic that is only a form word, or of two or three letters, is not looked for). The run after the fix (b53a4949 live, 91 tenders still open, none new): "Sulfate" and "Syringe" are gone, Salbutamol and Clopidogrel are found, 201 lines of ours, 77 matched to one medicine. **For whoever keeps the medicines on live:** about 25 test medicines have made-up generic names ("673sdsd", "adasd", "test", "hb"…); "test" would still match a tender that says "test". They are to be archived in Inventory; the robot then stops looking for them. **Not checked:** the finder's pages signed in on live (no live login here; the same code was walked on the demo copy); what live holds was read from its database.
+- 23 Nov (176), Aryan: "push everything; I'll test on live; check its integration, that the rest runs right; and see whether the bidding system can be built this way too." Pushed (live = 9a214cd9 before this entry's change). **Checked on live** (read-only, with live's own code against live's data): the finder's list in its four views, all 21 new notices' pages (201 lines) and the Tenders pages answer with no error; the API, the web and the robot's door answer; GitHub's checks on the pushed code all passed (code scan, secrets scan, every migration on a real Postgres, API tests, web build, Docker). **Found there and fixed:** PhilGEPS's notice page now has its own line table (Item No. | Product/Service Name | Description | Quantity | UOM | Budget (PHP)), which the robot's older line reader does not know: of 201 lines only 10 had a quantity and none a budget. The CRM now reads that table itself (`tableLines` in `tenders/finder.ts`): quantity, unit, the line's budget and from it the budget for one piece; the notice's own words above the table are no longer taken as lines. Tried on live's own 93 notices inside a rolled-back transaction before the push: 147 of 187 lines get a quantity and a budget (25 notices carry that table); a table an agency typed its own way into the description ("… 11,100.00 TABLET 600.00") stays as written, for the papers' reading to settle. Live after the push (81a2ca70, the robot's run at 5:48 pm): 187 lines of ours, 149 with a quantity, 147 with a budget. **So that a fix reaches what is already kept:** the API's health answer names the commit it runs (Render's and Coolify's own setting), and the robot's workflow, when set off by a change to the robot or to `tenders/finder.ts`, waits until the CRM runs that change (ten minutes at most) and then reads again. **The rest of the bidding system the same way:** yes; the table is in section 24. It waits for the PhilGEPS log-ins and Aryan's yes to ordering papers in the company's name.
+- 23 Nov (177), Aryan: "yes, build it" (the tender papers, the same way). **The robot gets and reads the papers of screened tenders** (section 24, "The papers' rules"). **Robot** (`workers/tender-finder/papers`): the friend's own modules unchanged in `papers/lib` (log-in, free order, download, log-out by PhilGEPS's own forms; the reader for PDF, Word, Excel; OCR for scans), a stand-in for Supabase that sends their table and storage calls to the CRM (`papers/supabase-shim`, installed as the `@supabase/supabase-js` they import), and `papers.mjs`, which decides one run: read what is kept and unread, then one log-in for what is still to fetch, each file handed to the CRM and read, the log-out confirmed whatever happened. **CRM** (migration 0146: `tender_found_file`, `tender_find_login`; `tenders/papers.ts`): the door gives our medicines as the reader's product list and the screened notices, takes a paper (up to 60 MB on that address only) and gives it back, keeps the robot's log-ins; the notice's page has **Its papers** (files to download, what PhilGEPS said, the bid data sheet as written) and its lines say "read in the papers"; the finder's page says when PhilGEPS refused the log-in and has *let it try again*. The notice's own lines are now kept with it (`matched_items`), so handing in the papers does not lose them. **The workflow** runs the papers after the public reading; the log-in is two GitHub secrets, and with none set it logs in nowhere. **Checked:** the friend's own three checks on the copied code (97 matching, 275 line, 7 log-in safety checks); a real PDF price schedule and its scanned copy (OCR) read to the same lines; the whole run against a stand-in PhilGEPS and a stand-in CRM (orders only what is free, one log-in, logged out; a refused password recorded and not sent again; no log-in set: PhilGEPS never asked); 4 API tests; by hand on the demo copy with the stand-in PhilGEPS over real HTTP: three screened notices' papers ordered, kept, read, shown and downloaded in the browser, the refused-log-in notice and its button. **Not checked:** the real PhilGEPS (no log-in here, and its real pages may differ from the stand-in's in ways only a real run shows); Word and Excel files (the friend's line checks cover their reading, no file of ours was tried); a bid bulletin's download.
+- 23 Nov (178), Aryan: "the friend's one works for our own system; I told him to build the government bidding system and that we would integrate it later. Whatever it does, we need in ours; copy everything if you must." **The whole bidding system moves into the CRM** (section 25: where the two stand, the seven steps, one robot for one account). It was opened signed in on Aryan's browser and read only: 450 tenders for our medicines on both portals against the CRM's 21, 852 papers read, 116 screened, 106 opportunities, 8 awards (3 waiting for our answer), 40 hospitals with contacts, 13 abstract results. **Step 1, the bridge, built** (`workers/tender-finder/feed/feed.mjs`; migration 0147 `tender_found.screened_as`): every hour the workflow reads that system's database (read only) and hands the CRM its PhilGEPS tenders as they are, its PS-PhilGEPS tenders (Bid Match row, the notice's lines and dates, the papers' reading, as a notice of the other portal), and what the team screened there (screened here once, by the name it has there); after the first hand-over only what changed since. The door has `feed-state` and `screened`; a paper can be kept for either portal; the CRM's own papers step reads again only papers the CRM itself keeps. With the two secrets not set it does nothing, and a problem in it never stops the CRM's own reading. **Checked:** the bridge against a stand-in for that database and a stand-in CRM (2 tests: only reads there, both portals, screened marks, nothing twice), 1 API test (a PS-PhilGEPS tender with its lines and papers' reading, screened once, since-when). **Not checked:** the real database (no key here): its PS-PhilGEPS lists are read as its own code writes them, and the first real hand-over is to be looked at in the workflow's log and on the finder's page.
+- 23 Nov (179), Aryan: "why are you not building it; build it fully. You have its whole code: can you not copy the robot out of it?" Yes. **The CRM's own PS-PhilGEPS robot, copied** (section 25, step 6, brought forward). The bidding team's module is in the worker unchanged (`papers/lib/psSync.mjs`, with `awardNotify`, `awardRouting`, `psAward`): with the session a person made it reads Bid Match, My Opportunities and Award Notices, adds the open medicine notices Bid Match leaves out, reads each notice (lines, dates, papers), then the papers for our medicines; it only reads. `ps/ps.mjs` runs one Sync, gives the papers more reading time than the old host allowed, and puts the tenders on the finder (the bridge's mapping, shared). **Its records live in the CRM** (migration 0148 `tender_robot_row`, `tenders/robot-store.ts`; the door's `store`, `screened`, `papers/list`): the stand-in for its old database (`papers/supabase-shim`) is now a real store: our medicines are its product list, the CRM's screened list its screened list, its runs the CRM's run log, each of its own rows kept as written, a session's cookies sealed, a paper of the new portal kept in the file store at once and not downloaded twice. **Kept alive** every 5 minutes by its own workflow (PS-PhilGEPS ends an idle session in under an hour). **Connect** (`ps/connect`): the team's own tool with one path changed; a person ticks the captcha once on a computer with Chrome and the CRM keeps the session. The finder's page says whether PS-PhilGEPS is connected and how the last Sync went. **Checked:** the whole run against a stand-in PS-PhilGEPS and a stand-in CRM inside one process (3 tests: not connected asks nothing; a Sync reads the lists, the notice and its paper, keeps its records, the paper whole, reads our two medicines and puts the tender on the finder; the keep-alive; an ended session is forgotten and said), 1 API test of the store (rows as handed in, sealed session, other tables refused), the earlier papers and bridge tests on the new stand-in. **By hand** on the demo copy: the robot run against the local CRM over real HTTP (only philgeps.gov.ph a stand-in inside the process): the notice, its two lines read in the papers with quantity and the budget for one piece, and its paper reached the finder's page. That run found a fault the tests had not: a paper was handed to the CRM before its tender was there and was refused; now a paper downloaded in a run is held on disk until its tender is on the finder, and one the reader finds is not ours is let go of first. **Not checked:** the real PS-PhilGEPS (no log-in and no captcha here: its real pages are read as the team's code reads them today on its own host); Connect itself (it needs a person, Chrome and the account); award e-mails stay off (no mail settings are given to the robot).
+- 23 Nov (180), Aryan: "Tender finder, Tenders and Bid report: aren't they three sides of one thing? Then group them." Yes: the tenders found, the tenders we bid, how the bids went. **One "Tenders" folder in the side menu** (All tenders, Tender finder, Bid report) for the Sales and Marketing Mentor (Subir) and the Government Bidding Admin (with Documents, the company's papers, as the coachees already had it); on phones one "Tenders" tab. The pages stay three (each does a different job) and nothing is taken away. The CEO's and the Admin's: the three stay side by side inside their "Reports" folder (a folder inside a folder would show as one link there). Checked in the browser on the demo copy as Sam (Subir's seat), Jimmy and the CEO, on a computer and as a phone.
+- 23 Nov (181), recorded by the backend developer: Aryan merged the backend branch to main ("each person has their own password; it replaces the one company password"): 164's own login ID and password is approved, and 172's sign-up, the profile and two-step sign-in (170) went in with it. On live, whoever was there before 0142 signs in only after a one-time password (`pnpm --filter @2mg/api passwords` on the live database, or the Admin's Give a new password); sign-up emails need a connected mailbox and `WEB_URL`. `LOGINS-LIVE.md`, `PEOPLE-2026.md` and `CLAUDE.md` no longer speak of the common password; the user book still does.
+- 24 Nov (182), asked by the backend developer: **blue for what you press, again; the app's frame and the public pages redone.** The accent goes from the GetMeds green (19 Nov) back to blue `#2563eb` (`--color-brand` and the emerald, blue and sky scales in `styles.css`): buttons, links, the selected menu item, counts, the focus ring. What is fine, done or paid keeps the pharmacy green (`--color-good`). The frame (`shell.tsx`): white sidebar and page; the sidebar runs the full height with the person's workspace logo and "Bishnoi One / MedReps" at its top, folds to an icon rail with a sliding width, and the desk's name and the top bar's desk label are gone from the top bar; page titles match the home's greeting (28px semibold). Public pages (local only, not yet on main): the home page's hero and navbar, the About page (`/about`), Sign in and Sign up as split screens with card collages. Waits for Aryan's approval before main or deploy.

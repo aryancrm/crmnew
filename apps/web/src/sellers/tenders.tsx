@@ -257,6 +257,7 @@ function NewTenderDialog({ onClose }: { onClose: () => void }) {
 
 export function TendersPage() {
   const query = useQuery({ queryKey: ["tenders", "list"], queryFn: () => api<Tender[]>("/api/tenders") });
+  const finder = useQuery({ queryKey: ["tenders", "found", "count"], queryFn: () => api<{ allowed: boolean; fresh: number }>("/api/tenders/found/count") });
   const [params, setParams] = useSearchParams();
   const [adding, setAdding] = useState(false);
   const view = (params.get("view") ?? "open") as "open" | "awarded" | "closed";
@@ -273,11 +274,31 @@ export function TendersPage() {
         title="Tenders"
         sub="Found on PhilGEPS → preparing → price approved → submitted → won or lost → contract → delivered → accepted (IAR) → billed → paid"
         actions={
-          <Button variant="primary" onClick={() => setAdding(true)}>
-            <Plus className="size-4" /> Record a tender
-          </Button>
+          <>
+            {/* The tender finder lives inside the CRM (docs/PLAN.md 24; Aryan, 23 Nov: "one CRM, not
+                two"): the button opens its page, for the seats that have it, with how many found
+                tenders are new. */}
+            {finder.data?.allowed && (
+              <Link
+                to="/tenders/finder"
+                className="inline-flex h-10 items-center gap-2 rounded-[10px] border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              >
+                Tender finder
+                {finder.data.fresh > 0 && <span className="rounded-full bg-emerald-600 px-1.5 py-px text-[11px] font-bold text-white">{finder.data.fresh} new</span>}
+              </Link>
+            )}
+            <Button variant="primary" onClick={() => setAdding(true)}>
+              <Plus className="size-4" /> Record a tender
+            </Button>
+          </>
         }
       />
+      {finder.data?.allowed && (
+        <p className="-mt-2 text-[13px] text-slate-500">
+          New tenders are found on PhilGEPS by the robot and listed in the <b>Tender finder</b>; one worth bidding on is made a tender there in
+          one press. <b>Record a tender</b> is for one found another way.
+        </p>
+      )}
       <Tabs
         tabs={[
           { key: "open" as const, label: "Bidding", count: groups.open.length },
@@ -302,6 +323,8 @@ type Detail = {
   bidders: TenderBidder[];
   standing: TenderStanding;
   canBidders: boolean;
+  /** The notice it was made from in the tender finder, with what it asked line by line. */
+  found: { id: number; source: "philgeps" | "ps"; refNo: string; link: string | null; asked: { id: number; description: string; qty: number | null; unit: string | null; abcUnit: number | null; medicineId: number | null }[] } | null;
 };
 
 function StepDialog({ tender, step, onClose }: { tender: Tender; step: TenderStep; onClose: () => void }) {
@@ -445,6 +468,8 @@ export function TenderPage() {
   const queries = useQueryClient();
   const action = useAction();
   const query = useQuery({ queryKey: ["tenders", "one", id], queryFn: () => api<Detail>(`/api/tenders/${id}`) });
+  // Whoever follows the tender without having the finder (a division's head) reads what it asked, with no link.
+  const finder = useQuery({ queryKey: ["tenders", "found", "count"], queryFn: () => api<{ allowed: boolean; fresh: number }>("/api/tenders/found/count") });
   const [moving, setMoving] = useState<TenderStep | null>(null);
   const data = query.data;
   if (!data) return <PageState query={query} what="the tender" />;
@@ -463,6 +488,16 @@ export function TenderPage() {
         tags={<span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-[12px] font-semibold text-emerald-800 ring-1 ring-emerald-200">{STEP[t.step]}</span>}
         actions={
           <div className="flex flex-wrap gap-2">
+            {/* One job leads to the next (Aryan, 23 Nov): a tender won has its delivery to order; the
+                order form opens on the agency and ties the order to the tender. */}
+            {(t.step === "won" || t.step === "contract") && (
+              <Link
+                to={`/orders/new?customer=${t.agencyId}`}
+                className="inline-flex h-8 items-center rounded-[10px] border border-emerald-300 bg-emerald-50 px-2.5 text-[13px] font-semibold text-emerald-800 hover:bg-emerald-100"
+              >
+                Place the delivery order
+              </Link>
+            )}
             {moves.map((step) => (
               <Button key={step} small variant={step === "dropped" || step === "lost" ? undefined : "primary"} onClick={() => setMoving(step)}>
                 {STEP[step]}
@@ -529,6 +564,7 @@ export function TenderPage() {
         </ul>
         <Problem message={action.problem?.message} />
       </section>
+      {data.found && <Asked found={data.found} open={finder.data?.allowed === true} />}
       <LinesEditor key={data.lines.map((l) => l.id).join("-")} detail={data} />
       <BidsRead detail={data} />
       {["won", "contract", "delivered", "accepted", "billed", "paid"].includes(t.step) && <Securities tender={t} />}
@@ -545,6 +581,41 @@ export function TenderPage() {
       </section>
       {moving && <StepDialog tender={t} step={moving} onClose={() => setMoving(null)} />}
     </div>
+  );
+}
+
+/** What the notice asked, as the tender finder read it: beside our bid, so no price goes above
+ *  the budget for one piece. */
+function Asked({ found, open }: { found: NonNullable<Detail["found"]>; open: boolean }) {
+  const notice = `${found.source === "ps" ? "PS-PhilGEPS" : "PhilGEPS"} ${found.refNo}`;
+  return (
+    <section className={`${CARD} p-4`}>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h3 className="text-sm font-bold text-slate-900">What the tender asks for</h3>
+        {open ? (
+          <Link to={`/tenders/finder/${found.id}`} className="text-[12px] font-semibold text-emerald-700 hover:underline">
+            The notice in the tender finder ({notice})
+          </Link>
+        ) : (
+          <span className="text-[12px] text-slate-500">From the tender finder ({notice})</span>
+        )}
+      </div>
+      {found.asked.length === 0 ? (
+        <p className="mt-1 text-[13px] text-slate-500">No line was read on the notice.</p>
+      ) : (
+        <ul className="mt-2 space-y-0.5 text-[13px] text-slate-700">
+          {found.asked.map((line) => (
+            <li key={line.id}>
+              {line.description}
+              <span className="text-slate-500">
+                {line.qty !== null ? ` · ${line.qty.toLocaleString("en-PH")} ${line.unit ?? ""}` : ""}
+                {line.abcUnit !== null ? ` · ABC ${peso(line.abcUnit)} a piece` : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

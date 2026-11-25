@@ -146,7 +146,8 @@ describe("HR's people", () => {
       stage: "active",
       login: "new",
       loginId: "mia.santos@2mginc.com",
-      seat: { team: "Mindanao", channel: "Hospitals" },
+      // The target sheet's channel of the seat (22 Nov).
+      seat: { team: "Mindanao", channel: "HOSP" },
     });
     expect(before.record).toMatchObject({ employeeCode: "E-1001", salary: 2_500_000 });
     expect(before.missing).toContain("address");

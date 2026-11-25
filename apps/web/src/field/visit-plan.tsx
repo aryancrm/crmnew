@@ -99,7 +99,8 @@ export function VisitPlanPage() {
         </nav>
       )}
       <PageHead
-        title={mine ? "My visit plan" : `${data.person.name}'s visit plan`}
+        // The tour plan seen by customer (one plan, two views: the calendar is the other).
+        title={mine ? "My tour plan · by customer" : `${data.person.name}'s tour plan · by customer`}
         tags={
           status && (
             <span
@@ -113,6 +114,12 @@ export function VisitPlanPage() {
         sub={`${data.customers.length} customers · ${workDays} working days${data.person.area ? ` · ${data.person.area}` : ""}`}
         actions={
           <div className="flex flex-wrap items-center gap-1">
+            <Link
+              to={`/field/plan?${new URLSearchParams({ ...(person ? { person } : {}), month: data.month.slice(0, 7) })}`}
+              className="rounded-lg px-2 py-1 text-[13px] font-semibold text-emerald-700 hover:bg-emerald-50"
+            >
+              Calendar
+            </Link>
             {data.can.make && (
               <Button
                 small

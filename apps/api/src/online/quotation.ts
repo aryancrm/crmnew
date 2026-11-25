@@ -104,7 +104,8 @@ export function snapshotOf(data: LeadCase, company: CompanyInfo, me: Me): Quotat
     toPay: Math.max(0, total - points * 100),
     validityDays: 30,
     preparedBy: me.name,
-    canvass: lead.road === "gl" && lead.agency === "pcso" ? lead.canvass : [],
+    // Three quotations for a guarantee letter, whichever agency gives it (Aryan, 22 Nov).
+    canvass: lead.road === "gl" ? lead.canvass : [],
   };
 }
 

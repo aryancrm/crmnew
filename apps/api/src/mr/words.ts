@@ -17,6 +17,22 @@ export const WORK_WORDS: Record<WorkType, string> = {
   transit: "In transit",
   other: "Other",
 };
+/** The same in a MedRep's own words (the question "Where do you work today?"). */
+export const WORK_HINTS: Record<WorkType, string> = {
+  hq: "In my own base town",
+  ex_station: "Another town, back home tonight",
+  out_station: "Away from home, staying the night",
+  transit: "Travelling today, no visits",
+  other: "Something else (office, meeting, training)",
+};
+/** A town as people type it, made one: "City of Makati", "Makati City", "Makati, Metro Manila" → "makati". */
+export const townKey = (name: string) =>
+  (name.split(",")[0] ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/^city of\s+/, "")
+    .replace(/\s+city$/, "")
+    .replace(/\s+/g, " ");
 
 /** SEFMED's three kinds of client, as the CRM's customers: KOLs (doctors), hospitals and KBLs
  *  (firms: drugstores and distributors). */
@@ -274,6 +290,8 @@ export type MrHome = {
     bookedAmount: number;
   };
   next: VisitCard | null;
+  /** Today's visits, every kind together: the one being worked first, then those still to go, then the rest. */
+  visits: VisitCard[];
   tiles: { doctors: number; hospitals: number; firms: number; followUpsDue: number; claimed: number };
   can: { work: boolean };
 };
@@ -534,7 +552,7 @@ export type TeamToday = {
   clients: { doctors: number; hospitals: number; firms: number };
   closed: { today: number; week: number; month: number };
   champions: { id: number; name: string; closed: number }[];
-  feed: { at: string; name: string; what: "checked_in" | "closed"; client: string; visitId: number }[];
+  feed: { at: string; name: string; what: "checked_in" | "closed"; client: string; visitId: number; meeting: Meeting | null; booked: number }[];
 };
 
 export type LeadQueue = {

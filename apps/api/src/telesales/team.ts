@@ -69,7 +69,12 @@ export async function telesalesTeam(db: Database, me: Me): Promise<TelesalesTeam
         (select count(*) from month m where m.seat = s.id
           and not exists (select 1 from sales_order o where o.customer_id = m.customer and o.status not in ('draft', 'cancelled') and ${placed} < ${first}::date)
           and not exists (select 1 from past_order po where po.customer_id = m.customer and po.status <> 'void' and po.ordered_on < ${first}::date)
-          and not exists (select 1 from sale_invoice i where i.customer_id = m.customer and i.status <> 'cancelled' and i.issued_on < ${first}::date))::int as "newCustomers",
+          -- The sales view's two halves asked one by one (this CRM's invoices, Zoho's), each by its
+          -- own index on the customer: the same answer as "no sale_invoice before", which read every
+          -- Zoho invoice for every customer (13 seconds of this screen's 16, 22 Nov).
+          and not exists (select 1 from invoice i where i.customer_id = m.customer and i.status <> 'cancelled' and i.issued_on < ${first}::date)
+          and not exists (select 1 from book_doc d where d.customer_id = m.customer and d.kind = 'invoice' and d.zoho_id is not null
+            and d.status not in ('draft', 'void') and d.doc_date < ${first}::date))::int as "newCustomers",
         coalesce((select sum(i.total) from sale_invoice i where i.seat_id = s.id and i.status <> 'cancelled'
           and i.issued_on between ${first}::date and ${today}::date), 0)::float8 as sold,
         coalesce((select sum(i.total - i.paid) from sale_invoice i where i.seat_id = s.id and i.status = 'open' and i.total > i.paid), 0)::float8 as owed,

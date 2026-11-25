@@ -1,22 +1,28 @@
-// My day in the field (SEFMED's Home, docs/PLAN.md 22): the big circle (Start working → "Since 8:10
-// AM · Head quarter · Angeles City · Stop working"; starting also starts the CRM's attendance day),
-// today's numbers, the next visit and the tiles. For a MedRep, and a team lead or head on their own
-// calls; the CEO, Management and the Admin, who only look, go to the team's page.
+// My day in the field (SEFMED's Home, docs/PLAN.md 22), as one place that asks in order (Aryan,
+// 23 Nov): 1 Start working (where do you work today, which town: picked from the country's list;
+// starting also starts the CRM's attendance day), 2 "Where are you going now?" (today's visits,
+// every kind together; someone not on the list is added right there), at the place I'm here and
+// what happened, then the next one, 3 Stop working (the day report). The tiles stay under it. For
+// a MedRep, and a team lead or head on their own calls; the CEO, Management and the Admin, who
+// only look, go to the team's page.
 
-import type { MrHome, WorkType } from "@2mg/api/mr";
-import { WORK_TYPES, WORK_WORDS } from "@2mg/api/mr";
+import type { MrHome, VisitCard, WorkType } from "@2mg/api/mr";
+import { KIND_ONE, MEETING_WORDS, WORK_HINTS, WORK_TYPES, WORK_WORDS } from "@2mg/api/mr";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   BarChart3,
   Building2,
   CalendarDays,
   CalendarRange,
+  Check,
+  ChevronRight,
   ClipboardList,
   Coffee,
   Gauge,
   ListChecks,
   MapPin,
   PartyPopper,
+  Plus,
   Receipt,
   ShoppingCart,
   Stethoscope,
@@ -27,7 +33,9 @@ import { type ReactNode, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { Button, CARD, Dialog, PageState, Problem, peso, useAction } from "../ui";
-import { Choices, clockOf, FIELD, Label, StatePill, useMrMe, whereAmI } from "./parts";
+import { ActionSheet, Ask, Choices, clockOf, FIELD, Initial, Label, StatePill, useFieldRep, useMrMe, whereAmI } from "./parts";
+import { AddVisitsDialog } from "./plan";
+import { TownPicker } from "./towns";
 
 export function MrHomePage() {
   const mr = useMrMe();
@@ -50,7 +58,16 @@ function NotInField() {
 export function MrDay() {
   const query = useQuery({ queryKey: ["mr", "home"], queryFn: () => api<MrHome>("/api/mr/home") });
   const mr = useMrMe();
-  const [placing, setPlacing] = useState<"start" | "edit" | null>(null);
+  const [placing, setPlacing] = useState<"start" | "menu" | "edit" | null>(null);
+  const navigate = useNavigate();
+  const queries = useQueryClient();
+  const pause = useAction();
+  const takeBreak = () =>
+    pause.run(async () => {
+      const { place } = await whereAmI();
+      await api("/api/mr/day/break", { body: { on: true, place } });
+      await queries.invalidateQueries({ queryKey: ["mr"] });
+    });
   const data = query.data;
   if (!data) return <PageState query={query} what="your day" />;
   const day = data.day;
@@ -71,8 +88,20 @@ export function MrDay() {
             {new Date(`${data.today}T00:00:00Z`).toLocaleDateString("en-PH", { weekday: "short", day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })}
           </div>
         </div>
-        <Circle data={data} onStart={() => setPlacing("start")} onEdit={() => setPlacing("edit")} />
+        <Circle data={data} onStart={() => setPlacing("start")} onEdit={() => setPlacing("menu")} />
       </div>
+
+      <Steps data={data} />
+
+      {!day && data.can.work && (
+        <div className={`${CARD} px-4 py-3 text-sm text-slate-600`}>
+          Tap <b className="text-slate-900">Start working</b>. It asks where you work today, then shows whom to visit, one
+          after another.
+          {data.visits.length > 0 && ` ${data.visits.length} visit${data.visits.length === 1 ? " is" : "s are"} planned for today.`}
+        </div>
+      )}
+
+      {day && !day.endedAt && data.can.work && <Now data={data} />}
 
       {day && (
         <div className="grid grid-cols-4 gap-2 text-center">
@@ -83,21 +112,8 @@ export function MrDay() {
         </div>
       )}
 
-      {data.next && (
-        <Link to={`/visits/${data.next.id}`} className={`${CARD} flex items-center justify-between gap-3 p-4 hover:border-sky-300`}>
-          <div className="min-w-0">
-            <div className="text-xs font-semibold text-slate-500 uppercase">Next visit</div>
-            <div className="truncate font-semibold text-slate-900">{data.next.client.name}</div>
-            <div className="truncate text-xs text-slate-500">
-              {[data.next.client.specialty ?? data.next.client.detail, data.next.client.city].filter(Boolean).join(" · ")}
-            </div>
-          </div>
-          <StatePill visit={data.next} />
-        </Link>
-      )}
-
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Tile to="/visits" icon={MapPin} label="Visits" tone="bg-indigo-50 text-indigo-700" sub={`${c.planned} today`} />
+        <Tile to="/visits" icon={MapPin} label="Visits" tone="bg-indigo-50 text-indigo-700" sub={`${data.visits.length} today`} />
         <Tile to="/field/clients?kind=doctor" icon={Stethoscope} label="KOLs" tone="bg-pink-50 text-pink-700" sub={`${data.tiles.doctors} doctor${data.tiles.doctors === 1 ? "" : "s"}`} />
         <Tile to="/field/clients?kind=firm" icon={Store} label="KBLs" tone="bg-emerald-50 text-emerald-700" sub={`${data.tiles.firms} firm${data.tiles.firms === 1 ? "" : "s"}`} />
         <Tile to="/field/clients?kind=hospital" icon={Building2} label="Hospitals" tone="bg-slate-100 text-slate-700" sub={`${data.tiles.hospitals}`} />
@@ -112,7 +128,20 @@ export function MrDay() {
         <Tile to="/my/score" icon={Gauge} label="My KPIs" tone="bg-rose-50 text-rose-700" />
       </div>
 
-      {placing && (
+      <Problem message={pause.problem?.message} />
+      {placing === "menu" && day && (
+        <ActionSheet
+          title="Your day"
+          sub={`Working since ${clockOf(day.startedAt)} · ${WORK_WORDS[day.workType]}${day.cities.length ? ` · ${day.cities.join(", ")}` : ""}`}
+          onClose={() => setPlacing(null)}
+          actions={[
+            { label: "I'm working somewhere else now", hint: "change the town", onPick: () => setPlacing("edit") },
+            { label: "Take a break", onPick: takeBreak },
+            { label: "Stop working for today", hint: "the day report", danger: true, onPick: () => navigate("/field/day-report") },
+          ]}
+        />
+      )}
+      {(placing === "start" || placing === "edit") && (
         <PlaceDialog home={data} mode={placing} onClose={() => setPlacing(null)} />
       )}
     </div>
@@ -135,6 +164,71 @@ function Tile({ to, icon: Icon, label, tone, sub }: { to: string; icon: typeof U
       <span className="text-sm font-bold tracking-wide uppercase">{label}</span>
       {sub && <span className="text-[11px] font-medium opacity-80">{sub}</span>}
     </Link>
+  );
+}
+
+/** The day on the seller's Home (Aryan, 23 Nov: "after signing in I can't tell where the day
+ *  starts"): where the day stands and the one thing to do next, the same as My day says it. */
+export function FieldDayCard() {
+  return useFieldRep() ? <MyDayCard /> : null;
+}
+
+function MyDayCard() {
+  const query = useQuery({ queryKey: ["mr", "home"], queryFn: () => api<MrHome>("/api/mr/home") });
+  const [starting, setStarting] = useState(false);
+  const data = query.data;
+  if (!data || !data.can.work) return null;
+  const day = data.day;
+  const at = data.visits.find((one) => one.status === "planned" && one.checkedInAt);
+  const open = data.visits.filter((one) => one.status === "planned" && !one.checkedInAt);
+  const over = data.visits.filter((one) => one.status !== "planned");
+  const go = "inline-flex h-11 w-full items-center justify-center gap-2 rounded-[10px] bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-dark sm:w-auto";
+  let line: ReactNode;
+  let next: ReactNode;
+  if (!day) {
+    line = (
+      <>
+        <b className="text-slate-900">Your day hasn't started.</b>{" "}
+        {data.visits.length ? `${data.visits.length} visit${data.visits.length === 1 ? "" : "s"} planned for today.` : "Start, then pick whom you are going to see."}
+      </>
+    );
+    next = (
+      <button type="button" className={go} onClick={() => setStarting(true)}>
+        <MapPin size={16} /> Start working
+      </button>
+    );
+  } else if (day.endedAt) {
+    line = <><b className="text-slate-900">Day closed {clockOf(day.endedAt)}.</b> {over.length} visit{over.length === 1 ? "" : "s"} done, the day report is sent.</>;
+    next = <Link to="/field/day-report" className="text-sm font-semibold text-sky-700 hover:underline">See the day report</Link>;
+  } else if (day.onBreak) {
+    line = <><b className="text-slate-900">On a break since {clockOf(day.breakSince)}.</b></>;
+    next = <Link to="/field" className={go}>Back to work <ChevronRight size={16} /></Link>;
+  } else if (at) {
+    line = <><b className="text-slate-900">You are at {at.client.name}</b> since {clockOf(at.checkedInAt)}.</>;
+    next = <Link to={`/visits/${at.id}`} className={go}>Say what happened and close the call <ChevronRight size={16} /></Link>;
+  } else if (open.length) {
+    line = <><b className="text-slate-900">Where are you going now?</b> {open.length} visit{open.length === 1 ? "" : "s"} left today, next {open[0]?.client.name}.</>;
+    next = <Link to="/field" className={go}>Open my day <ChevronRight size={16} /></Link>;
+  } else if (over.length) {
+    line = <><b className="text-slate-900">Today's visits are done</b> ({over.length}). One more visit, or stop working and send the day report.</>;
+    next = <Link to="/field" className={go}>Open my day <ChevronRight size={16} /></Link>;
+  } else {
+    line = <><b className="text-slate-900">Working since {clockOf(day.startedAt)}{day.cities.length ? ` in ${day.cities.join(", ")}` : ""}.</b> Nothing is planned for today yet.</>;
+    next = <Link to="/field" className={go}>Pick whom to visit <ChevronRight size={16} /></Link>;
+  }
+  return (
+    <section className={`${CARD} flex flex-col gap-3 border-sky-200 p-4`}>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-sm font-bold text-slate-900">My day</h2>
+        <Link to="/field" className="text-xs font-semibold text-sky-700 hover:underline">Open</Link>
+      </div>
+      <Steps data={data} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-slate-600">{line}</p>
+        <div className="shrink-0">{next}</div>
+      </div>
+      {starting && <PlaceDialog home={data} mode="start" onClose={() => setStarting(false)} />}
+    </section>
   );
 }
 
@@ -186,10 +280,10 @@ function Circle({ data, onStart, onEdit }: { data: MrHome; onStart: () => void; 
               <span className="text-base font-semibold">Since {clockOf(day.startedAt)}</span>
               <span className="flex items-center gap-1 text-sm">
                 <MapPin size={13} className="text-sky-500" />
-                {WORK_WORDS[day.workType]}
-                {day.cities.length ? `-${day.cities.join(", ")}` : ""}
+                {day.cities.length ? day.cities.join(", ") : WORK_WORDS[day.workType]}
               </span>
-              <span className="text-base font-bold text-rose-600">Stop working</span>
+              {day.cities.length > 0 && <span className="text-xs text-slate-500">{WORK_WORDS[day.workType]}</span>}
+              <span className="text-xs font-semibold text-sky-700">Tap: change place, break, stop</span>
             </>
           )}
         </span>
@@ -207,31 +301,23 @@ export function StartWorkingDialog({ onClose }: { onClose: () => void }) {
   return <PlaceDialog home={query.data} mode="start" onClose={onClose} />;
 }
 
-/** Start working, or "Edit work location or Stop working for the day". */
+/** Start working (asked in order: where do you work today, which town, with whom), or a change of
+ *  place during the day. Nothing is picked beforehand unless the tour plan said it. */
 function PlaceDialog({ home, mode, onClose }: { home: MrHome; mode: "start" | "edit"; onClose: () => void }) {
   const queries = useQueryClient();
-  const navigate = useNavigate();
   const action = useAction();
   const day = home.day;
-  const [workType, setWorkType] = useState<WorkType>(day?.workType ?? home.plannedWork ?? "hq");
+  const [workType, setWorkType] = useState<WorkType | null>(day?.workType ?? home.plannedWork ?? null);
   const [note, setNote] = useState(day?.workNote ?? "");
   const [cities, setCities] = useState<string[]>(day?.cities.length ? day.cities : home.plannedCities);
-  const [typed, setTyped] = useState("");
   const [partners, setPartners] = useState<number[]>([]);
-  const [stopping, setStopping] = useState(false);
-  const options = [...new Set([...cities, ...home.plannedCities, ...home.cities])];
-  const submit = (path: "/api/mr/day/start" | "/api/mr/day/place") =>
+  const needsTown = workType !== null && workType !== "transit";
+  const ready = workType !== null && (!needsTown || cities.length > 0) && (workType !== "other" || note.trim() !== "");
+  const submit = () =>
     action.run(async () => {
       const at = await whereAmI();
-      await api(path, {
-        body: {
-          workType,
-          workNote: workType === "other" ? note : null,
-          cities: typed.trim() ? [...cities, typed.trim()] : cities,
-          workingWith: partners,
-          place: at.place,
-          accuracy: at.accuracy,
-        },
+      await api(mode === "start" ? "/api/mr/day/start" : "/api/mr/day/place", {
+        body: { workType, workNote: workType === "other" ? note : null, cities, workingWith: partners, place: at.place, accuracy: at.accuracy },
       });
       await queries.invalidateQueries({ queryKey: ["mr"] });
       // Starting the field day starts the CRM's attendance day too (the Start button up top).
@@ -240,93 +326,180 @@ function PlaceDialog({ home, mode, onClose }: { home: MrHome; mode: "start" | "e
     });
   return (
     <Dialog
-      title={mode === "start" ? "Start working" : "Edit work location or stop working for the day"}
-      sub={home.plannedCities.length ? `Your work city for the day is ${home.plannedCities.join(", ")}` : undefined}
+      title={mode === "start" ? "Start working" : "Where are you working now?"}
+      sub={home.plannedCities.length && mode === "start" ? `Your tour plan says ${home.plannedCities.join(", ")} today` : undefined}
       onClose={onClose}
       busy={action.busy}
     >
-      <div className="flex flex-col gap-4">
-        <fieldset className="flex flex-col gap-1.5">
-          {WORK_TYPES.map((one) => (
-            <label key={one} className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5 has-[:checked]:border-sky-500 has-[:checked]:bg-sky-50">
-              <input type="radio" name="work" checked={workType === one} onChange={() => setWorkType(one)} />
-              <span className="font-medium text-slate-800">{one === "hq" && mode === "edit" ? "Return to HQ (Head quarter)" : WORK_WORDS[one]}</span>
-            </label>
-          ))}
-        </fieldset>
+      <div className="flex flex-col gap-5">
+        <Ask n={1} text="Where do you work today?" done={workType !== null}>
+          <fieldset className="flex flex-col gap-1.5">
+            {WORK_TYPES.map((one) => (
+              <label key={one} className="flex items-center gap-3 rounded-xl border border-slate-200 px-3 py-2.5 has-[:checked]:border-sky-500 has-[:checked]:bg-sky-50">
+                <input type="radio" name="work" checked={workType === one} onChange={() => setWorkType(one)} />
+                <span className="min-w-0">
+                  <span className="block font-semibold text-slate-800">{WORK_HINTS[one]}</span>
+                  <span className="block text-xs text-slate-500">{WORK_WORDS[one]}</span>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+          <Problem message={action.at("workType")} />
+        </Ask>
         {workType === "other" && (
-          <Label text="Where *" error={action.at("workNote")}>
-            <input className={FIELD} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Bacoor, Dasmariñas, Trece Martires" />
+          <Label text="What is it? *" error={action.at("workNote")}>
+            <input className={FIELD} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Office meeting, product training…" />
           </Label>
         )}
-        {workType !== "transit" && (
-          <Label text="The day's city *" error={action.at("cities")}>
-            <Choices options={options.map((one) => ({ key: one, label: one }))} value={cities} onChange={setCities} many />
-            <input className={`${FIELD} mt-1.5`} value={typed} onChange={(event) => setTyped(event.target.value)} placeholder="Another city" />
-          </Label>
+        {needsTown && (
+          <Ask n={2} text="Which town or city?" done={cities.length > 0}>
+            <TownPicker value={cities} onChange={setCities} suggested={[...home.plannedCities, ...home.cities]} />
+            <Problem message={action.at("cities")} />
+          </Ask>
         )}
-        {mode === "start" && home.partners.length > 0 && (
-          <Label text="Working with (optional)">
+        {mode === "start" && ready && home.partners.length > 0 && (
+          <Ask n={needsTown ? 3 : 2} text="Is anyone working with you? (skip if alone)" done={partners.length > 0}>
             <Choices
               options={home.partners.map((one) => ({ key: String(one.id), label: one.name }))}
               value={partners.map(String)}
               onChange={(next) => setPartners(next.map(Number))}
               many
             />
-          </Label>
+          </Ask>
         )}
-        <Problem message={action.general(["workNote", "cities"])} />
-        <p className="text-xs text-slate-500">Your phone's place and the time are kept when you press the button.</p>
-        {mode === "start" ? (
-          <Button variant="primary" disabled={action.busy} onClick={() => submit("/api/mr/day/start")}>
-            {action.busy ? "Starting…" : "Start working"}
+        <Problem message={action.general(["workType", "workNote", "cities"])} />
+        <div>
+          <Button variant="primary" className="w-full" disabled={action.busy || !ready} onClick={submit}>
+            {mode === "start" ? (action.busy ? "Starting…" : "Start working") : action.busy ? "Saving…" : "Save"}
           </Button>
-        ) : stopping ? (
-          <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900">
-            The day report opens next: give the reason for any visit not done, add your remarks, and send it. That ends
-            today's work.
-            <div className="mt-3 flex justify-end gap-2">
-              <Button small onClick={() => setStopping(false)}>Cancel</Button>
-              <Button small variant="primary" onClick={() => { onClose(); navigate("/field/day-report"); }}>OK</Button>
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-3 gap-2">
-            <Button onClick={onClose}>Cancel</Button>
-            <Button variant="primary" disabled={action.busy} onClick={() => submit("/api/mr/day/place")}>Update</Button>
-            <Button className="bg-rose-600 text-white hover:bg-rose-700" onClick={() => setStopping(true)}>Stop</Button>
-          </div>
-        )}
-        {mode === "edit" && !stopping && (
-          <BreakButton onDone={onClose} />
-        )}
+          <p className="mt-2 text-center text-xs text-slate-500">
+            {ready ? "Your phone's place and the time are kept when you press the button." : "Answer the questions above first."}
+          </p>
+        </div>
       </div>
     </Dialog>
   );
 }
 
-function BreakButton({ onDone }: { onDone: () => void }) {
-  const queries = useQueryClient();
-  const action = useAction();
+/** Where the day stands: 1 Start working, 2 the visits, 3 the day report. */
+function Steps({ data }: { data: MrHome }) {
+  const day = data.day;
+  const closed = data.visits.filter((one) => one.status !== "planned").length;
+  const at = !day ? 1 : day.endedAt ? 4 : 2;
+  const steps = [
+    { n: 1, label: day ? "Started" : "Start" },
+    { n: 2, label: data.visits.length ? `Visits ${closed}/${data.visits.length}` : "Visits" },
+    { n: 3, label: "Report" },
+  ];
   return (
-    <div>
-      <Button
-        small
-        variant="quiet"
-        disabled={action.busy}
-        onClick={() =>
-          action.run(async () => {
-            const { place } = await whereAmI();
-            await api("/api/mr/day/break", { body: { on: true, place } });
-            await queries.invalidateQueries({ queryKey: ["mr"] });
-            onDone();
-          })
-        }
-      >
-        <Coffee size={14} /> Take a break
-      </Button>
-      <Problem message={action.problem?.message} />
-    </div>
+    <ol className="grid grid-cols-3 gap-1.5">
+      {steps.map((one) => {
+        const done = one.n < at || (one.n === 3 && at === 4);
+        const now = one.n === at;
+        return (
+          <li
+            key={one.n}
+            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-semibold ${done ? "bg-emerald-50 text-emerald-800" : now ? "bg-sky-600 text-white" : "bg-slate-100 text-slate-500"}`}
+          >
+            <span className={`grid size-5 shrink-0 place-items-center rounded-full text-[11px] ${done ? "bg-emerald-600 text-white" : now ? "bg-white text-sky-700" : "bg-slate-300 text-white"}`}>
+              {done ? <Check size={12} /> : one.n}
+            </span>
+            <span className="truncate">{one.label}</span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
+const whoLine = (visit: VisitCard) =>
+  [KIND_ONE[visit.client.kind], visit.client.specialty ?? visit.client.detail, visit.client.city].filter(Boolean).join(" · ");
+
+/** Step 2, the day's middle: the call being worked, else "Where are you going now?" with today's
+ *  visits to pick from (or someone not on the list), then what is done, then Stop working. */
+function Now({ data }: { data: MrHome }) {
+  const navigate = useNavigate();
+  const [adding, setAdding] = useState(false);
+  const day = data.day;
+  const at = data.visits.find((one) => one.status === "planned" && one.checkedInAt);
+  const open = data.visits.filter((one) => one.status === "planned" && !one.checkedInAt);
+  const over = data.visits.filter((one) => one.status !== "planned");
+  return (
+    <section className="flex flex-col gap-3">
+      {day?.onBreak ? (
+        <div className={`${CARD} px-4 py-3 text-sm text-amber-900`}>You are on a break. Tap the circle to get back to work.</div>
+      ) : at ? (
+        <div className="rounded-3xl border-2 border-amber-300 bg-amber-50 p-4">
+          <div className="text-xs font-bold text-amber-800 uppercase">You are here since {clockOf(at.checkedInAt)}</div>
+          <div className="mt-1 text-lg font-bold text-slate-900">{at.client.name}</div>
+          <div className="text-xs text-slate-600">{whoLine(at)}</div>
+          <Button variant="primary" className="mt-3 w-full" onClick={() => navigate(`/visits/${at.id}`)}>
+            Say what happened and close the call <ChevronRight size={16} />
+          </Button>
+        </div>
+      ) : (
+        <div className={`${CARD} overflow-hidden`}>
+          <div className="bg-sky-600 px-4 py-3 text-white">
+            <h2 className="text-base font-bold">{over.length ? "Where are you going next?" : "Where are you going now?"}</h2>
+            <p className="text-xs text-sky-100">
+              {open.length ? "Tap the one you are going to. At the place, press I'm here." : over.length ? "Today's list is done." : "Nothing is planned for today yet. Pick whom you are going to see."}
+            </p>
+          </div>
+          <ul className="divide-y divide-slate-100">
+            {open.map((one) => (
+              <li key={one.id}>
+                <Link to={`/visits/${one.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-sky-50">
+                  <Initial name={one.client.name} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold text-slate-900">{one.client.name}</span>
+                    <span className="block truncate text-xs text-slate-500">{whoLine(one)}</span>
+                  </span>
+                  {one.priority === 1 && <span className="rounded bg-rose-50 px-1.5 text-[11px] font-semibold text-rose-700">High</span>}
+                  <ChevronRight size={18} className="shrink-0 text-slate-400" />
+                </Link>
+              </li>
+            ))}
+            <li>
+              <button type="button" onClick={() => setAdding(true)} className="flex w-full items-center gap-3 px-4 py-3 text-left font-semibold text-sky-700 hover:bg-sky-50">
+                <span className="grid size-10 shrink-0 place-items-center rounded-full border-2 border-dashed border-sky-300"><Plus size={18} /></span>
+                {open.length ? "Someone not on this list" : over.length ? "One more visit" : "Pick whom to visit"}
+              </button>
+            </li>
+          </ul>
+        </div>
+      )}
+
+      {over.length > 0 && (
+        <div className={`${CARD} p-4`}>
+          <h2 className="mb-2 text-sm font-bold text-slate-900">Done today ({over.length})</h2>
+          <ul className="flex flex-col gap-2">
+            {over.map((one) => (
+              <li key={one.id}>
+                <Link to={`/visits/${one.id}`} className="flex items-center justify-between gap-2 text-sm hover:text-sky-700">
+                  <span className="min-w-0">
+                    <span className="block truncate font-medium text-slate-800">
+                      {one.doneAt ? `${clockOf(one.doneAt)} · ` : ""}
+                      {one.client.name}
+                    </span>
+                    <span className="block truncate text-xs text-slate-500">
+                      {[one.meeting ? MEETING_WORDS[one.meeting] : null, one.booked ? `${peso(one.booked)} ordered` : null, one.skipReason].filter(Boolean).join(" · ") || whoLine(one)}
+                    </span>
+                  </span>
+                  <StatePill visit={one} />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {!at && !day?.onBreak && (
+        <Button variant={!open.length && over.length ? "primary" : "plain"} className="w-full" onClick={() => navigate("/field/day-report")}>
+          <ClipboardList size={16} /> {!open.length && over.length ? "Stop working: send the day report" : "Stop working for today (day report)"}
+        </Button>
+      )}
+
+      {adding && <AddVisitsDialog day={data.today} today thenOpen onClose={() => setAdding(false)} />}
+    </section>
+  );
+}

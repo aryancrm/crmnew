@@ -3,7 +3,11 @@
 import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
-import { type Env, readBody } from "../http";
+import { type Env, idParam, readBody } from "../http";
+import { feedSince, foundCount, foundDetail, listFound, makeTender, noteRun, robotKnown, robotMolecules, screenFound, takeFound, takeScreened } from "./finder";
+import { foundFile, keepPaper, noteRobotLogin, paperForRobot, papersKept, papersWanted, robotLoginState, robotLogins, robotProducts, screenedMarks, tryLoginAgain } from "./papers";
+import { robotCaller } from "./robot-caller";
+import { robotRows, writeRobotRows } from "./robot-store";
 import {
   addCompanyPaper,
   bidReport,
@@ -53,6 +57,55 @@ export function tenderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
   app.post("/api/tenders/bidders/:bidder/remove", async (c) => {
     await removeBidder(db, c.get("me"), Number(c.req.param("bidder")));
     return c.json({ ok: true });
+  });
+  // The tender finder (docs/PLAN.md 24): what the robot found, the team's screened list, and the
+  // join that makes a found notice a tender. Before "/api/tenders/:id", which would read "found"
+  // as a tender's number.
+  app.get("/api/tenders/found", async (c) =>
+    c.json(await listFound(db, c.get("me"), { view: c.req.query("view"), q: c.req.query("q"), source: c.req.query("source"), molecule: c.req.query("molecule") })),
+  );
+  app.get("/api/tenders/found/count", async (c) => c.json(await foundCount(db, c.get("me"))));
+  // A paper of a notice, as the robot got it from PhilGEPS: downloaded, never run in the page.
+  app.get("/api/tenders/found/files/:id", async (c) => {
+    const file = await foundFile(db, c.get("me"), idParam(c));
+    return c.body(file.bytes as Uint8Array<ArrayBuffer>, 200, {
+      "content-type": file.mime,
+      "content-disposition": `attachment; filename="${encodeURIComponent(file.name)}"`,
+      "x-content-type-options": "nosniff",
+      "cache-control": "private, max-age=86400",
+    });
+  });
+  // The robot's PhilGEPS log-in was refused: a person, the password put right, lets it try again.
+  app.post("/api/tenders/found/robot/login-again", async (c) => {
+    await tryLoginAgain(db, c.get("me"));
+    return c.json({ ok: true });
+  });
+  app.get("/api/tenders/found/:id", async (c) => c.json(await foundDetail(db, c.get("me"), idParam(c))));
+  app.post("/api/tenders/found/:id/screen", async (c) => {
+    const input = await readBody(c, z.object({ on: z.boolean() }));
+    await screenFound(db, c.get("me"), idParam(c), input.on);
+    return c.json({ ok: true });
+  });
+  app.post("/api/tenders/found/:id/tender", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        agencyId: z.number().int().positive(),
+        mode: z.enum(MODES),
+        title: z.string().trim().min(3, "Type what the tender buys.").max(300).nullish(),
+        lines: z
+          .array(
+            z.object({
+              lineId: z.number().int().positive(),
+              medicineId: z.number().int().positive(),
+              qty: z.number().int("Pieces are whole numbers.").positive("Type how many pieces.").max(100_000_000),
+              unitPrice: z.number().int().min(0).max(2_000_000_000),
+            }),
+          )
+          .max(400),
+      }),
+    );
+    return c.json(await makeTender(db, c.get("me"), idParam(c), input));
   });
   app.get("/api/tenders/:id", async (c) => c.json(await tenderDetail(db, c.get("me"), Number(c.req.param("id")))));
   app.post("/api/tenders", async (c) => {
@@ -125,6 +178,128 @@ export function tenderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
   app.post("/api/company-papers", async (c) => {
     const input = await readBody(c, z.object({ name: z.string().trim().min(2), number: z.string().max(80).nullish(), expiresOn: DAY.nullish(), note: z.string().max(300).nullish() }));
     await addCompanyPaper(db, c.get("me"), input);
+    return c.json({ ok: true });
+  });
+}
+
+/** The robot's own door (docs/PLAN.md 24): the tender finder's worker is no person, so it has no
+ *  sign-in; on every call it shows who it is (tenders/robot-caller.ts: this repository's own
+ *  GitHub workflow, by GitHub's signature, or the key TENDER_FINDER_KEY). It may ask which
+ *  molecules are ours and which notices are already read, and hand in what it found and how its
+ *  run went. Nothing else of the CRM opens that way. */
+export function tenderFinderDoor(app: Hono<Env>, db: Database): void {
+  app.use("/webhooks/tender-finder/*", async (c, next) => {
+    const caller = await robotCaller(c.req.header("authorization"));
+    if (caller === "off") return c.json({ error: { code: "not_set_up", message: "The tender finder's robot has no way in on this server." } }, 503);
+    if (caller === "no") return c.json({ error: { code: "not_allowed", message: "Not the tender finder's robot." } }, 401);
+    await next();
+  });
+  const SOURCE = z.enum(["philgeps", "ps"]);
+  app.get("/webhooks/tender-finder/molecules", async (c) => c.json(await robotMolecules(db)));
+  app.post("/webhooks/tender-finder/known", async (c) => {
+    const input = await readBody(c, z.object({ source: SOURCE.default("philgeps"), refs: z.array(z.string().min(1).max(60)).max(1000) }));
+    return c.json(await robotKnown(db, input.source, input.refs));
+  });
+  app.post("/webhooks/tender-finder/notices", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        notices: z
+          .array(
+            z.object({
+              source: SOURCE.optional(),
+              ref_no: z.string().trim().min(1).max(60),
+              title: z.string().max(4000),
+              procuring_entity: z.string().max(1000).nullish(),
+              publish_date: z.string().max(40).nullish(),
+              closing_date: z.string().max(40).nullish(),
+              abc_amount: z.number().nullish(),
+              detail_link: z.string().max(1000).nullish(),
+              items_text: z.string().max(400_000).nullish(),
+              details: z.record(z.string(), z.unknown()).nullish(),
+            }),
+          )
+          .min(1)
+          .max(50),
+      }),
+    );
+    return c.json(await takeFound(db, input.notices));
+  });
+  // The tender papers (tenders/papers.ts): our medicines as the paper reader's product list, the
+  // notices whose papers it looks after, a paper handed in or asked back, and its PhilGEPS log-ins.
+  app.get("/webhooks/tender-finder/products", async (c) => c.json(await robotProducts(db)));
+  app.get("/webhooks/tender-finder/papers", async (c) => c.json(await papersWanted(db)));
+  app.post("/webhooks/tender-finder/papers/file", async (c) => {
+    const ref = (c.req.query("ref") ?? "").trim();
+    const path = (c.req.query("path") ?? "").trim();
+    const name = (c.req.query("name") ?? "").trim();
+    if (!ref || !path || !name || ref.length > 60 || path.length > 400) return c.json({ error: { code: "invalid", message: "Say the notice, the file's path and its name." } }, 400);
+    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    return c.json(await keepPaper(db, { source: c.req.query("source") === "ps" ? "ps" : "philgeps", ref, path, name, bulletin: c.req.query("kind") === "bulletin", bytes }));
+  });
+  app.get("/webhooks/tender-finder/papers/file", async (c) => {
+    const bytes = await paperForRobot(db, c.req.query("source") === "ps" ? "ps" : "philgeps", (c.req.query("ref") ?? "").trim(), (c.req.query("path") ?? "").trim());
+    if (!bytes) return c.json({ error: { code: "not_found", message: "No such paper." } }, 404);
+    return c.body(bytes as Uint8Array<ArrayBuffer>, 200, { "content-type": "application/octet-stream" });
+  });
+  app.get("/webhooks/tender-finder/login-state", async (c) => c.json(await robotLoginState(db)));
+  app.get("/webhooks/tender-finder/logins", async (c) => c.json(await robotLogins(db, (c.req.query("site") ?? "philgeps").slice(0, 40), c.req.query("since") ?? null)));
+  app.post("/webhooks/tender-finder/logins", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        site: z.string().min(1).max(40),
+        outcome: z.enum(["started", "submitted", "ok", "rejected", "busy", "error", "cancelled", "unset"]),
+        detail: z.string().max(2000).nullish(),
+        source: z.string().max(40).nullish(),
+      }),
+    );
+    await noteRobotLogin(db, input);
+    return c.json({ ok: true });
+  });
+  // The bidding team's own system hands over while it moves in (docs/PLAN.md 25): what it
+  // screened, and since when it has handed over.
+  // The robots' own records (tenders/robot-store.ts): a table's rows, rows handed in or taken away.
+  app.get("/webhooks/tender-finder/store", async (c) => c.json({ rows: await robotRows(db, c.req.query("table") ?? "") }));
+  app.post("/webhooks/tender-finder/store", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        table: z.string().min(3).max(40),
+        upsert: z.array(z.object({ key: z.string().min(1).max(300), value: z.record(z.string(), z.unknown()) })).max(500).optional(),
+        remove: z.array(z.string().min(1).max(300)).max(500).optional(),
+      }),
+    );
+    return c.json(await writeRobotRows(db, input.table, input));
+  });
+  // What is screened in the CRM, and the papers it keeps of one notice: the robot keeps the files
+  // of screened tenders and does not download again what the CRM has.
+  app.get("/webhooks/tender-finder/screened", async (c) => c.json(await screenedMarks(db)));
+  app.get("/webhooks/tender-finder/papers/list", async (c) =>
+    c.json(await papersKept(db, c.req.query("source") === "ps" ? "ps" : "philgeps", (c.req.query("ref") ?? "").trim())),
+  );
+  app.get("/webhooks/tender-finder/feed-state", async (c) => c.json(await feedSince(db)));
+  app.post("/webhooks/tender-finder/screened", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({ marks: z.array(z.object({ source: SOURCE, ref: z.string().trim().min(1).max(60), by: z.string().max(200).nullish(), at: z.string().max(40).nullish() })).max(2000) }),
+    );
+    return c.json(await takeScreened(db, input.marks));
+  });
+  app.post("/webhooks/tender-finder/run", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        source: SOURCE.optional(),
+        trigger: z.string().max(40).nullish(),
+        status: z.enum(["success", "failed"]),
+        summary: z.string().max(2000).nullish(),
+        found: z.number().int().min(0).optional(),
+        matched: z.number().int().min(0).optional(),
+        fresh: z.number().int().min(0).optional(),
+      }),
+    );
+    await noteRun(db, input);
     return c.json({ ok: true });
   });
 }

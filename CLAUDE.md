@@ -17,6 +17,7 @@ to be shut down once this one is live and everything has moved over.
 |---|---|
 | `apps/api` | Hono + Zod + Drizzle API. `src/` code, `migrations/` hand-written SQL applied in order on start, tests beside the code. |
 | `apps/web` | React (Vite) app. Screens only, each area in its own folder (`orders/`, `sellers/`, `hr/`…, see the README); menus are data in `src/menus.ts`. |
+| `workers/tender-finder` | The tender finder's robot (PLAN 24): a browser that reads PhilGEPS and hands in to the CRM through `/webhooks/tender-finder`. Own `package.json`, not in the pnpm workspace (it needs Chrome); run hourly by `.github/workflows/tender-finder.yml`. |
 | `docs/` | The plan, the role audit, the hub's inventory and modules. |
 
 ## Commands
@@ -32,8 +33,8 @@ Local: `.claude/launch.json` (`crmnew-api`, `crmnew-web`). Since 17 Nov the loca
 the real company (the 2026 chart's people, `docs/PEOPLE-2026.md`; the demo people left, their orders,
 customers and desk work closed by `scripts/close-demo.ts`, the Admin login stays): everyone signs in with their seat's login ID (`hos1`…) and their own password,
 first a one-time one (`pnpm --filter @2mg/api passwords`, or the Admin's "Give a new password"), then
-one they choose. This replaces Aryan's 17 Nov rule (`JOIN_PASSWORD` for all, never forced to change)
-and waits for Aryan's approval before it is merged to main or deployed (PLAN, change log 164); keep
+one they choose. This replaces Aryan's 17 Nov rule (`JOIN_PASSWORD` for all, never forced to change);
+Aryan approved it and merged it to main on 23 Nov (PLAN, change log 164 and 181). Keep
 passwords out of code and docs. Tests still seed their own demo company. One process per PGlite folder: check nothing
 listens on :4100 before starting the API.
 

@@ -5,6 +5,7 @@
 
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
+import { ticked } from "../testing/approve";
 import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -225,9 +226,9 @@ describe("a senior citizen's or PWD's order", () => {
     ]);
 
     // A patient buys: Management approves only with the prescription on the order.
-    expect((await post("sarla", `/api/orders/${id}/approve`)).status).toBe(409);
+    expect((await post("sarla", await ticked(db, `/api/orders/${id}/approve`))).status).toBe(409);
     expect(await attachPaper(app, cookies.sarla as string, id, "prescription")).toBe(200);
-    expect((await post("sarla", `/api/orders/${id}/approve`)).status).toBe(200);
+    expect((await post("sarla", await ticked(db, `/api/orders/${id}/approve`))).status).toBe(200);
     const made = await post("fiona", `/api/finance/orders/${id}/invoice`);
     expect(made.status, await made.clone().text()).toBe(200);
     const [invoice] = await rows<{ id: number }>(db, sql`select id::int as id from invoice where order_id = ${id}`);
@@ -257,7 +258,7 @@ describe("what Finance counts as owed", () => {
     expect(row).toMatchObject({ total: 320000, overdue: 320000 });
     expect(row?.older).toBeGreaterThanOrEqual(20000);
     // Finance's board counts it on the order's card.
-    expect((await post("sarla", `/api/orders/${id}/approve`)).status).toBe(200);
+    expect((await post("sarla", await ticked(db, `/api/orders/${id}/approve`))).status).toBe(200);
     const board = await read<FinanceBoard>("fiona", "/api/finance/board");
     const card = [...board.check, ...board.invoice].find((one) => one.id === id);
     expect(card).toMatchObject({ owed: 320000, overdue: 320000 });

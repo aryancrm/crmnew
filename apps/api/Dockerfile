@@ -22,6 +22,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/api/node_modules ./apps/api/node_modules
 COPY package.json pnpm-workspace.yaml ./
 COPY apps/api ./apps/api
+# The 2026 chart, read by scripts/onboard-company.ts (the accounts are made from it on the server).
+COPY docs/company-map.units.js ./docs/company-map.units.js
 USER node
 WORKDIR /app/apps/api
 EXPOSE 4100

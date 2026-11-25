@@ -1,7 +1,9 @@
 // The data checks' address: the Admin and the CEO run them.
 
 import type { Hono, MiddlewareHandler } from "hono";
-import type { Database } from "../db/index";
+import { sql } from "drizzle-orm";
+import { type Database, rows } from "../db/index";
+import type { SlowScreens } from "../types";
 import type { Env } from "../http";
 import { z } from "zod";
 import { allow, readBody } from "../http";
@@ -16,6 +18,23 @@ export function checkRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
   app.get("/api/admin/data-checks", signedIn, async (c) =>
     c.json(await dataChecks(db, c.get("me"))),
   );
+  // Which screens answered slowly in the last two weeks (the server notes every answer over 800 ms).
+  app.get("/api/admin/slow-screens", signedIn, async (c) => {
+    allow(c.get("me"), ["admin", "ceo"], "see which screens are slow");
+    const found = await rows<SlowScreens["rows"][number]>(
+      db,
+      sql`select method, path, count(*)::int as times, round(avg(ms))::int as "avgMs", max(ms)::int as "worstMs",
+          round(avg(queries))::int as questions, string_agg(distinct coalesce(role, '—'), ', ') as roles,
+          to_char(max(at) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "lastAt"
+        from slow_request where at >= now() - interval '14 days' group by 1, 2 order by sum(ms) desc limit 200`,
+    );
+    const [all] = await rows<{ times: number; since: string | null }>(
+      db,
+      sql`select count(*)::int as times, to_char(min(at) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as since from slow_request where at >= now() - interval '14 days'`,
+    );
+    const out: SlowScreens = { slowMs: 800, times: all?.times ?? 0, since: all?.since ?? null, rows: found };
+    return c.json(out);
+  });
   // The old CRM's enquiries, sent in batches by the Admin (dry run unless apply).
   app.post("/api/admin/import/old-leads", signedIn, async (c) => {
     allow(c.get("me"), ["admin"], "bring over the old CRM's enquiries");

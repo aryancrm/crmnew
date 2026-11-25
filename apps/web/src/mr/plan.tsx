@@ -1,14 +1,15 @@
 // SEFMED's Tour Plan Calendar (docs/PLAN.md 22): the month with marks (tour plan, pending leave,
 // cancelled / rejected leave, approved leave, holiday, back-dated visit), a list view; a tap on a
-// day opens "Select action" (your work city for the day; view / reschedule visits; add visits to
-// KOLs, firms, hospitals by city; the day's work place; working with); Create tour plan sends the
-// month to the team lead, who approves or sends it back; revisions and deviations are kept. On the
+// day opens that day's one sheet (where: the kind of day and the town from the country's list;
+// whom: the day's visits and Add visits); three lines over the calendar say how it goes and how
+// many working days are filled; the month is sent to the team lead, who approves or sends it
+// back; revisions and deviations are kept. On the
 // CRM's own visits and customers; the lead's pages follow the company tree (the team switch).
 
 import type { ClientKind, ClientList, DeviationRow, MrHome, PlanMonth, PlanStatus, VisitList, WorkType } from "@2mg/api/mr";
-import { DEVIATION_WORDS, KIND_TABS, PLAN_WORDS, WORK_TYPES, WORK_WORDS } from "@2mg/api/mr";
+import { DEVIATION_WORDS, PLAN_WORDS, WORK_HINTS, WORK_TYPES, WORK_WORDS } from "@2mg/api/mr";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, List, Send } from "lucide-react";
+import { ChevronLeft, ChevronRight, List, Plus, Send } from "lucide-react";
 import { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
@@ -16,7 +17,8 @@ import { useMe } from "../auth";
 import { manilaToday } from "../team/range";
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { Button, CARD, Dialog, PageState, Problem, useAction } from "../ui";
-import { ActionSheet, Choices, dayWords, FIELD, Label, MrHead, monthWords, shiftMonth, StatePill, useMrMe } from "./parts";
+import { Ask, Choices, dayWords, FIELD, Label, MrHead, monthWords, shiftMonth, StatePill, useMrMe } from "./parts";
+import { TownPicker } from "./towns";
 
 const WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -31,7 +33,6 @@ export function MrPlanPage() {
 
 function PlanCalendar({ person, month, onMonth }: { person: string | null; month: string | null; onMonth: (month: string) => void }) {
   const queries = useQueryClient();
-  const navigate = useNavigate();
   const action = useAction();
   const query = useQuery({
     queryKey: ["mr", "plan", person, month],
@@ -39,8 +40,9 @@ function PlanCalendar({ person, month, onMonth }: { person: string | null; month
     placeholderData: (previous) => previous,
   });
   const [list, setList] = useState(false);
-  const [picked, setPicked] = useState<PlanMonth["days"][number] | null>(null);
-  const [open, setOpen] = useState<{ what: "place" | "add" | "view"; day: string; kind?: ClientKind } | null>(null);
+  // The picked day is kept by its date, so its sheet shows the plan as it stands after each change.
+  const [pickedDay, setPickedDay] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
   const [deciding, setDeciding] = useState<"approve" | "back" | null>(null);
   const data = query.data;
   if (!data) return <PageState query={query} what="the tour plan" />;
@@ -53,14 +55,40 @@ function PlanCalendar({ person, month, onMonth }: { person: string | null; month
     });
   const status = data.plan.status;
   const missing = data.days.filter((one) => one.work && !one.leave && !one.plan && one.planned === 0 && one.day >= data.today);
+  const picked = data.days.find((one) => one.day === pickedDay) ?? null;
+  const ahead = data.days.filter((one) => one.work && one.leave !== "approved" && one.day >= data.today);
+  const filled = ahead.length - missing.filter((one) => one.leave !== "approved").length;
   return (
     <div className={`mx-auto flex max-w-3xl flex-col gap-3 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
       <MrHead
         title="Tour plan calendar"
         back="/field"
         sub={`${mine ? "" : `${data.person.name} · `}${status ? `${PLAN_WORDS[status]}${data.plan.revision ? ` · revision ${data.plan.revision}` : ""}` : "Not made yet"}`}
-        actions={<Button small variant="quiet" onClick={() => setList(!list)}><List size={15} /> {list ? "Calendar view" : "List view"}</Button>}
+        actions={
+          <span className="flex items-center gap-1">
+            {/* The same plan seen by customer: how many visits each one's class asks for, and "Make my plan". */}
+            <Link
+              to={`/visits/plan?${new URLSearchParams({ ...(person ? { person } : {}), month: data.month.slice(0, 7) })}`}
+              className="rounded-lg px-2 py-1 text-[13px] font-semibold text-emerald-700 hover:bg-emerald-50"
+            >
+              By customer
+            </Link>
+            <Button small variant="quiet" onClick={() => setList(!list)}><List size={15} /> {list ? "Calendar view" : "List view"}</Button>
+          </span>
+        }
       />
+      {mine && data.can.edit && status !== "approved" && (
+        <ol className={`${CARD} flex flex-col gap-1 px-4 py-3 text-[13px] text-slate-700`}>
+          <li><b className="text-slate-900">1.</b> Tap a day.</li>
+          <li><b className="text-slate-900">2.</b> Say which town you work in that day and add whom you will visit.</li>
+          <li>
+            <b className="text-slate-900">3.</b> When every working day is filled, send the month to your team lead.{" "}
+            <span className={`font-semibold ${filled === ahead.length ? "text-emerald-700" : "text-amber-700"}`}>
+              {filled} of {ahead.length} working days filled.
+            </span>
+          </li>
+        </ol>
+      )}
       {data.plan.note && <div className={`rounded-xl px-3 py-2 text-sm ${status === "sent_back" ? "bg-rose-50 text-rose-800" : "bg-emerald-50 text-emerald-800"}`}>{data.plan.decidedBy}: {data.plan.note}</div>}
       <div className={`${CARD} overflow-hidden`}>
         <div className="flex items-center justify-between bg-sky-200/70 px-3 py-2">
@@ -72,7 +100,7 @@ function PlanCalendar({ person, month, onMonth }: { person: string | null; month
           <ul className="divide-y divide-slate-100">
             {data.days.filter((one) => one.plan || one.planned || one.holiday || one.leave).map((one) => (
               <li key={one.day}>
-                <button type="button" onClick={() => setPicked(one)} className="flex w-full justify-between gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50">
+                <button type="button" onClick={() => setPickedDay(one.day)} className="flex w-full justify-between gap-2 px-4 py-2.5 text-left text-sm hover:bg-slate-50">
                   <span>
                     <b>{dayWords(one.day)}</b>{" "}
                     {one.plan ? `${WORK_WORDS[one.plan.workType]} · ${one.plan.cities.join(", ")}` : ""}
@@ -94,7 +122,7 @@ function PlanCalendar({ person, month, onMonth }: { person: string | null; month
               <button
                 key={one.day}
                 type="button"
-                onClick={() => setPicked(one)}
+                onClick={() => setPickedDay(one.day)}
                 className={`relative min-h-14 border-t border-l border-slate-100 p-1 text-sm hover:bg-sky-50 ${one.day === data.today ? "bg-sky-300/60 font-bold" : ""} ${!one.work ? "text-slate-400" : "text-slate-800"}`}
               >
                 <span className="absolute top-1 left-1 flex gap-0.5">
@@ -122,13 +150,13 @@ function PlanCalendar({ person, month, onMonth }: { person: string | null; month
       </ul>
       {mine && missing.length > 0 && status !== "approved" && (
         <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-900">
-          Working days with no plan yet: {missing.map((one) => Number(one.day.slice(8))).join(", ")}
+          Days still empty: {missing.map((one) => Number(one.day.slice(8))).join(", ")}. Tap one to fill it.
         </div>
       )}
       <Problem message={action.problem?.message} />
       {data.can.send && (
         <Button variant="primary" className="w-full" disabled={action.busy} onClick={send}>
-          <Send size={15} /> CREATE TOUR PLAN (send to my team lead)
+          <Send size={15} /> Send the month to my team lead
         </Button>
       )}
       {data.can.decide && (
@@ -149,37 +177,12 @@ function PlanCalendar({ person, month, onMonth }: { person: string | null; month
       )}
       {data.deviations.length > 0 && <DeviationList rows={data.deviations} />}
 
-      {picked && (
-        <ActionSheet
-          title={dayWords(picked.day)}
-          sub={
-            picked.plan
-              ? `Your work city for the day is ${picked.plan.cities.join(", ") || WORK_WORDS[picked.plan.workType]}`
-              : picked.holiday ?? (picked.leave ? `Leave (${picked.leave})` : "No plan for this day yet")
-          }
-          onClose={() => setPicked(null)}
-          actions={[
-            { label: "View / reschedule visits", hint: `${picked.planned}`, onPick: () => setOpen({ what: "view", day: picked.day }) },
-            { label: "Work place and city for the day", hidden: !data.can.edit || picked.day < data.today, onPick: () => setOpen({ what: "place", day: picked.day }) },
-            { label: "Add new visits to KOLs", hidden: !data.can.edit || picked.day < data.today, onPick: () => setOpen({ what: "add", day: picked.day, kind: "doctor" }) },
-            { label: "Add new visit to firm", hidden: !data.can.edit || picked.day < data.today, onPick: () => setOpen({ what: "add", day: picked.day, kind: "firm" }) },
-            { label: "Add new visit to hospital", hidden: !data.can.edit || picked.day < data.today, onPick: () => setOpen({ what: "add", day: picked.day, kind: "hospital" }) },
-            { label: "Add / update working with", hidden: !data.can.edit || picked.day < data.today, onPick: () => setOpen({ what: "place", day: picked.day }) },
-            { label: "Open the day's visits", onPick: () => navigate(`/visits?day=${picked.day}${person ? `&person=${person}` : ""}`) },
-          ]}
-        />
+      {picked && !adding && (
+        <DaySheet data={data} day={picked} person={person} onAdd={() => setAdding(true)} onClose={() => setPickedDay(null)} />
       )}
-      {open?.what === "place" && <DayPlaceDialog data={data} day={open.day} onClose={() => setOpen(null)} />}
-      {open?.what === "add" && (
-        <AddVisitsDialog
-          day={open.day}
-          kind={open.kind ?? "doctor"}
-          cities={data.days.find((one) => one.day === open.day)?.plan?.cities}
-          approved={status === "approved"}
-          onClose={() => setOpen(null)}
-        />
+      {picked && adding && (
+        <AddVisitsDialog day={picked.day} cities={picked.plan?.cities} approved={status === "approved"} fixedDay onClose={() => setAdding(false)} />
       )}
-      {open?.what === "view" && <DayVisits day={open.day} person={person} onClose={() => setOpen(null)} />}
       {deciding && <DecideDialog data={data} approve={deciding === "approve"} onClose={() => setDeciding(null)} />}
     </div>
   );
@@ -189,160 +192,22 @@ function Dot({ tone }: { tone: string }) {
   return <span className={`inline-block size-1.5 rounded-full ${tone}`} />;
 }
 
-function DayPlaceDialog({ data, day, onClose }: { data: PlanMonth; day: string; onClose: () => void }) {
+/** One day of the tour plan in one sheet (Aryan, 23 Nov): 1 where (the kind of day and the town,
+ *  picked from the country's list), 2 whom (the day's visits, Add visits), then the day's page. */
+function DaySheet({ data, day: one, person, onAdd, onClose }: { data: PlanMonth; day: PlanMonth["days"][number]; person: string | null; onAdd: () => void; onClose: () => void }) {
   const queries = useQueryClient();
   const action = useAction();
-  const mr = useMrMe();
-  const known = data.days.find((one) => one.day === day)?.plan;
-  const [workType, setWorkType] = useState<WorkType>(known?.workType ?? "hq");
+  const day = one.day;
+  const known = one.plan;
+  const may = data.can.edit && day >= data.today;
+  const [changing, setChanging] = useState(!known);
+  const [workType, setWorkType] = useState<WorkType | null>(known?.workType ?? null);
   const [cities, setCities] = useState<string[]>(known?.cities ?? []);
-  const [typed, setTyped] = useState("");
   const [why, setWhy] = useState("");
   // Whom one may work with: their team lead, team-mates and those under them (the company tree).
-  const home = useQuery({ queryKey: ["mr", "home"], queryFn: () => api<MrHome>("/api/mr/home") });
-  const [withWhom, setWithWhom] = useState<number[]>(known?.workingWith.map((one) => one.id) ?? []);
+  const home = useQuery({ queryKey: ["mr", "home"], queryFn: () => api<MrHome>("/api/mr/home"), enabled: may });
+  const [withWhom, setWithWhom] = useState<number[]>(known?.workingWith.map((w) => w.id) ?? []);
   const others = home.data?.partners ?? [];
-  return (
-    <Dialog title={`Plan ${dayWords(day)}`} sub="Please select the city to add visits" onClose={onClose} busy={action.busy}>
-      <div className="flex flex-col gap-3">
-        <Label text="Work place">
-          <Choices options={WORK_TYPES.map((key) => ({ key, label: WORK_WORDS[key] }))} value={[workType]} onChange={(next) => setWorkType(next[0] ?? "hq")} />
-        </Label>
-        <Label text="Cities *" error={action.at("cities")}>
-          <div className="max-h-48 overflow-y-auto rounded-lg border border-slate-200 p-2">
-            {data.cities.map((one) => (
-              <label key={one} className="flex items-center gap-2 py-1 text-sm">
-                <input type="checkbox" checked={cities.includes(one)} onChange={(event) => setCities((all) => (event.target.checked ? [...all, one] : all.filter((c) => c !== one)))} /> {one}
-              </label>
-            ))}
-            {data.cities.length === 0 && <p className="text-xs text-slate-500">No customers with a city yet: type one below.</p>}
-          </div>
-          <input className={`${FIELD} mt-1.5`} value={typed} onChange={(event) => setTyped(event.target.value)} placeholder="Another city" />
-        </Label>
-        {others.length > 0 && (
-          <Label text="Working with">
-            <Choices options={others.map((one) => ({ key: String(one.id), label: one.name }))} value={withWhom.map(String)} onChange={(next) => setWithWhom(next.map(Number))} many />
-          </Label>
-        )}
-        {data.plan.status === "approved" && (
-          <Label text="Why the change (the plan is approved) *" error={action.at("why")}>
-            <input className={FIELD} value={why} onChange={(event) => setWhy(event.target.value)} />
-          </Label>
-        )}
-        <Problem message={action.general(["cities", "why"])} />
-        <Button
-          variant="primary"
-          disabled={action.busy || !mr.data}
-          onClick={() =>
-            action.run(async () => {
-              await api("/api/mr/plan/day", { body: { day, workType, cities: typed.trim() ? [...cities, typed.trim()] : cities, workingWith: withWhom, why: why || null } });
-              await queries.invalidateQueries({ queryKey: ["mr"] });
-              onClose();
-            })
-          }
-        >
-          OK
-        </Button>
-      </div>
-    </Dialog>
-  );
-}
-
-/** Pick clients (by the day's cities) and put them on a day. Exported for the visits and
- *  clients pages; on the day itself, once working, it asks why (added on the day). */
-export function AddVisitsDialog({
-  day: asked,
-  kind: firstKind,
-  cities: dayCities,
-  preset,
-  approved,
-  onTheDay,
-  onClose,
-}: {
-  day: string;
-  kind: ClientKind;
-  cities?: string[];
-  preset?: number[];
-  approved?: boolean;
-  onTheDay?: boolean;
-  onClose: () => void;
-}) {
-  const queries = useQueryClient();
-  const action = useAction();
-  const today = manilaToday();
-  const [day, setDay] = useState(asked < today ? today : asked);
-  const [kind, setKind] = useState<ClientKind>(firstKind);
-  const [cities, setCities] = useState<string[]>(dayCities ?? []);
-  const [q, setQ] = useState("");
-  const [picked, setPicked] = useState<number[]>(preset ?? []);
-  const [why, setWhy] = useState("");
-  const list = useQuery({
-    queryKey: ["mr", "pick", kind, cities.join("|"), q],
-    queryFn: () => api<ClientList["rows"]>(`/api/mr/clients/pick?${new URLSearchParams({ kind, cities: cities.join("|"), ...(q ? { q } : {}) })}`),
-    placeholderData: (previous) => previous,
-  });
-  const allCities = useQuery({ queryKey: ["mr", "cities"], queryFn: () => api<{ cities: string[] }>("/api/mr/cities"), staleTime: 5 * 60_000 });
-  const presetOnly = Boolean(preset?.length);
-  return (
-    <Dialog title={presetOnly ? "Add visit" : `Add new visits to ${KIND_TABS[kind]}`} sub={cities.length ? `Cities: ${cities.join(", ")}` : undefined} onClose={onClose} busy={action.busy}>
-      <div className="flex flex-col gap-3">
-        <Label text="Day" error={action.at("day")}>
-          <input type="date" className={FIELD} min={today} value={day} onChange={(event) => setDay(event.target.value)} />
-        </Label>
-        {!presetOnly && (
-          <>
-            <Choices options={(["doctor", "hospital", "firm"] as ClientKind[]).map((key) => ({ key, label: KIND_TABS[key] }))} value={[kind]} onChange={(next) => setKind(next[0] ?? "doctor")} />
-            <Label text="Please select city to add visits">
-              <div className="flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
-                {(allCities.data?.cities ?? []).map((one) => (
-                  <button key={one} type="button" onClick={() => setCities((all) => (all.includes(one) ? all.filter((c) => c !== one) : [...all, one]))} className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${cities.includes(one) ? "border-sky-600 bg-sky-600 text-white" : "border-slate-300 text-slate-700"}`}>
-                    {one}
-                  </button>
-                ))}
-              </div>
-            </Label>
-            <input className={FIELD} value={q} onChange={(event) => setQ(event.target.value)} placeholder="Search a name or code" />
-            <ul className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
-              {(list.data ?? []).map((one) => (
-                <li key={one.id}>
-                  <label className="flex items-center gap-2 px-3 py-2 text-sm">
-                    <input type="checkbox" checked={picked.includes(one.id)} onChange={(event) => setPicked((all) => (event.target.checked ? [...all, one.id] : all.filter((id) => id !== one.id)))} />
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium">{one.name}</span>
-                      <span className="block truncate text-xs text-slate-500">{[one.code, one.specialty ?? one.detail, one.city, one.assignedTo?.name].filter(Boolean).join(" · ")}</span>
-                    </span>
-                  </label>
-                </li>
-              ))}
-              {list.data?.length === 0 && <li className="px-3 py-4 text-center text-xs text-slate-500">No {KIND_TABS[kind]} in these cities.</li>}
-            </ul>
-          </>
-        )}
-        {(onTheDay || approved || day === today) && (
-          <Label text={`Why isn't it in the plan?${approved || onTheDay ? " *" : " (needed once you've started working)"}`} error={action.at("why")}>
-            <input className={FIELD} value={why} onChange={(event) => setWhy(event.target.value)} placeholder="Doctor called me, met on the way…" />
-          </Label>
-        )}
-        <Problem message={action.general(["day", "why"])} />
-        <Button
-          variant="primary"
-          disabled={action.busy || picked.length === 0}
-          onClick={() =>
-            action.run(async () => {
-              await api("/api/mr/visits", { body: { day, customerIds: picked, why: why || null } });
-              await queries.invalidateQueries({ queryKey: ["mr"] });
-              onClose();
-            })
-          }
-        >
-          Add {picked.length || ""} visit{picked.length === 1 ? "" : "s"}
-        </Button>
-      </div>
-    </Dialog>
-  );
-}
-
-function DayVisits({ day, person, onClose }: { day: string; person: string | null; onClose: () => void }) {
   const visitsOf = (kind: ClientKind) => ({
     queryKey: ["mr", "visits", kind, null, day, person],
     queryFn: () => api<VisitList>(`/api/mr/visits?${new URLSearchParams({ kind, day, ...(person ? { person } : {}) })}`),
@@ -350,29 +215,241 @@ function DayVisits({ day, person, onClose }: { day: string; person: string | nul
   const doctors = useQuery(visitsOf("doctor"));
   const hospitals = useQuery(visitsOf("hospital"));
   const firms = useQuery(visitsOf("firm"));
-  const rows = [doctors, hospitals, firms].flatMap((one) => one.data?.rows ?? []);
+  const visits = [doctors, hospitals, firms].flatMap((q) => q.data?.rows ?? []);
+  const ready = workType !== null && (workType === "transit" || cities.length > 0);
+  const save = () =>
+    action.run(async () => {
+      await api("/api/mr/plan/day", { body: { day, workType, cities, workingWith: withWhom, why: why || null } });
+      await queries.invalidateQueries({ queryKey: ["mr"] });
+      setChanging(false);
+    });
+  const note = one.holiday ?? (one.leave ? `Leave (${one.leave})` : !one.work ? "Not a working day" : null);
   return (
-    <Dialog title={`Visits on ${dayWords(day)}`} onClose={onClose}>
-      <ul className="flex flex-col gap-2">
-        {rows.map((one) => (
-          <li key={one.id}>
-            <Link to={`/visits/${one.id}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm hover:border-sky-300">
-              <span className="min-w-0">
-                <span className="block truncate font-semibold">{one.client.name}</span>
-                <span className="block text-xs text-slate-500">{[one.client.detail ?? one.client.specialty, one.client.city].filter(Boolean).join(", ")}</span>
+    <Dialog title={dayWords(day)} sub={note ?? undefined} onClose={onClose} busy={action.busy}>
+      <div className="flex flex-col gap-5">
+        <Ask n={1} text="Where do you work that day?" done={Boolean(known) && !changing}>
+          {known && !changing ? (
+            <div className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2.5 text-sm">
+              <span>
+                <b>{known.cities.join(", ") || WORK_WORDS[known.workType]}</b>
+                <span className="block text-xs text-slate-500">
+                  {WORK_HINTS[known.workType]}
+                  {known.workingWith.length ? ` · with ${known.workingWith.map((w) => w.name).join(", ")}` : ""}
+                </span>
               </span>
-              <StatePill visit={one} />
-            </Link>
-          </li>
-        ))}
-        {rows.length === 0 && <li className="text-sm text-slate-500">No visits on this day.</li>}
-      </ul>
+              {may && <Button small onClick={() => setChanging(true)}>Change</Button>}
+            </div>
+          ) : may ? (
+            <div className="flex flex-col gap-3">
+              <Choices options={WORK_TYPES.map((key) => ({ key, label: WORK_HINTS[key] }))} value={workType ? [workType] : []} onChange={(next) => setWorkType(next[0] ?? null)} />
+              {workType !== null && workType !== "transit" && (
+                <Label text="Which town or city? *" error={action.at("cities")}>
+                  <TownPicker value={cities} onChange={setCities} suggested={data.cities} />
+                </Label>
+              )}
+              {ready && others.length > 0 && (
+                <Label text="Working with (skip if alone)">
+                  <Choices options={others.map((w) => ({ key: String(w.id), label: w.name }))} value={withWhom.map(String)} onChange={(next) => setWithWhom(next.map(Number))} many />
+                </Label>
+              )}
+              {data.plan.status === "approved" && (
+                <Label text="Why the change? (the plan is approved) *" error={action.at("why")}>
+                  <input className={FIELD} value={why} onChange={(event) => setWhy(event.target.value)} />
+                </Label>
+              )}
+              <Problem message={action.general(["cities", "why"])} />
+              <div className="flex gap-2">
+                <Button variant="primary" className="flex-1" disabled={action.busy || !ready} onClick={save}>{action.busy ? "Saving…" : "Save the day's place"}</Button>
+                {known && <Button onClick={() => setChanging(false)}>Cancel</Button>}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">No place was planned for this day.</p>
+          )}
+        </Ask>
+
+        <Ask n={2} text={`Whom will you visit? (${visits.length})`} done={visits.length > 0}>
+          <ul className="flex flex-col gap-2">
+            {visits.map((v) => (
+              <li key={v.id}>
+                <Link to={`/visits/${v.id}`} className="flex items-center justify-between gap-2 rounded-xl border border-slate-200 px-3 py-2 text-sm hover:border-sky-300">
+                  <span className="min-w-0">
+                    <span className="block truncate font-semibold">{v.client.name}</span>
+                    <span className="block truncate text-xs text-slate-500">{[v.client.detail ?? v.client.specialty, v.client.city].filter(Boolean).join(", ")}</span>
+                  </span>
+                  <StatePill visit={v} />
+                </Link>
+              </li>
+            ))}
+            {visits.length === 0 && <li className="text-sm text-slate-500">No visits on this day yet.</li>}
+          </ul>
+          {may && (
+            <Button variant={known && !changing && visits.length === 0 ? "primary" : "plain"} onClick={onAdd}>
+              <Plus size={15} /> Add visits
+            </Button>
+          )}
+          {visits.length > 0 && (
+            <p className="text-xs text-slate-500">
+              Tap a visit to move it to another day or skip it.{" "}
+              <Link to={`/visits?day=${day}${person ? `&person=${person}` : ""}`} className="font-semibold text-sky-700">Open the day's visits</Link>
+            </p>
+          )}
+        </Ask>
+      </div>
+    </Dialog>
+  );
+}
+
+const KIND_ASK: Record<ClientKind, string> = { doctor: "Doctors (KOLs)", hospital: "Hospitals", firm: "Drugstores, distributors (KBLs)" };
+const WHYS = ["They called me", "I was nearby", "Urgent order", "My team lead asked", "Follow-up due"];
+
+/** Add a visit, asked in order (Aryan, 23 Nov): when, whom (search by name; the town only narrows
+ *  the list), and why when the day has started or the month's plan is approved. From My day it is
+ *  today's, and the visit opens straight after (`thenOpen`); from the tour plan the day is fixed. */
+export function AddVisitsDialog({
+  day: asked,
+  kind: firstKind,
+  cities: dayCities,
+  preset,
+  approved,
+  today: forToday,
+  fixedDay,
+  thenOpen,
+  onClose,
+}: {
+  day: string;
+  /** The list to open on; left out, the kind this person has most of (a hospital rep's hospitals). */
+  kind?: ClientKind;
+  cities?: string[];
+  preset?: number[];
+  approved?: boolean;
+  /** Today's visit, from My day: the day isn't asked. */
+  today?: boolean;
+  /** The tour plan's day: the day isn't asked. */
+  fixedDay?: boolean;
+  thenOpen?: boolean;
+  onClose: () => void;
+}) {
+  const queries = useQueryClient();
+  const navigate = useNavigate();
+  const action = useAction();
+  const today = manilaToday();
+  const tomorrow = new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  const [day, setDay] = useState(asked < today ? today : asked);
+  const [otherDay, setOtherDay] = useState(day !== today && day !== tomorrow);
+  const [kindPicked, setKind] = useState<ClientKind | null>(firstKind ?? null);
+  const [cities, setCities] = useState<string[]>(dayCities ?? []);
+  const [q, setQ] = useState("");
+  const [picked, setPicked] = useState<number[]>(preset ?? []);
+  const [why, setWhy] = useState("");
+  const home = useQuery({ queryKey: ["mr", "home"], queryFn: () => api<MrHome>("/api/mr/home") });
+  const t = home.data?.tiles;
+  const kind: ClientKind = kindPicked ?? (t && t.hospitals > t.doctors && t.hospitals >= t.firms ? "hospital" : t && t.firms > t.doctors ? "firm" : "doctor");
+  const list = useQuery({
+    queryKey: ["mr", "pick", kind, cities.join("|"), q],
+    queryFn: () => api<ClientList["rows"]>(`/api/mr/clients/pick?${new URLSearchParams({ kind, cities: cities.join("|"), ...(q ? { q } : {}) })}`),
+    placeholderData: (previous) => previous,
+  });
+  const allCities = useQuery({ queryKey: ["mr", "cities"], queryFn: () => api<{ cities: string[] }>("/api/mr/cities"), staleTime: 5 * 60_000 });
+  const presetOnly = Boolean(preset?.length);
+  const dayAsked = !forToday && !fixedDay;
+  // Why is asked once today's work has started, or once the month's plan is approved (the API says so too).
+  const needWhy = Boolean(approved) || (day === today && Boolean(home.data?.day)) || Boolean(action.at("why"));
+  const towns = [...new Set([...(dayCities ?? []), ...(allCities.data?.cities ?? [])])];
+  const n = { whom: dayAsked ? 2 : 1, why: (dayAsked ? 2 : 1) + (presetOnly ? 0 : 1) };
+  return (
+    <Dialog
+      title={forToday ? "Whom are you going to see?" : "Add a visit"}
+      sub={dayAsked ? undefined : forToday ? "Added to today's visits" : `For ${dayWords(day)}`}
+      onClose={onClose}
+      busy={action.busy}
+    >
+      <div className="flex flex-col gap-5">
+        {dayAsked && (
+          <Ask n={1} text="When?" done>
+            <Choices
+              options={[{ key: "today", label: "Today" }, { key: "tomorrow", label: "Tomorrow" }, { key: "other", label: "Another day" }]}
+              value={[otherDay ? "other" : day === today ? "today" : "tomorrow"]}
+              onChange={(next) => {
+                setOtherDay(next[0] === "other");
+                if (next[0] === "today") setDay(today);
+                if (next[0] === "tomorrow") setDay(tomorrow);
+              }}
+            />
+            {otherDay && <input type="date" aria-label="The day" className={FIELD} min={today} value={day} onChange={(event) => event.target.value && setDay(event.target.value)} />}
+            <Problem message={action.at("day")} />
+          </Ask>
+        )}
+        {!presetOnly && (
+          <Ask n={n.whom} text="Whom will you visit?" done={picked.length > 0}>
+            <Choices options={(["doctor", "hospital", "firm"] as ClientKind[]).map((key) => ({ key, label: KIND_ASK[key] }))} value={[kind]} onChange={(next) => setKind(next[0] ?? "doctor")} />
+            <input className={FIELD} value={q} onChange={(event) => setQ(event.target.value)} placeholder="Search by name or code" aria-label="Search by name or code" />
+            {towns.length > 1 && (
+              <div className="flex max-h-20 flex-wrap items-center gap-1.5 overflow-y-auto text-xs">
+                <span className="font-semibold text-slate-500">Only in:</span>
+                <button type="button" onClick={() => setCities([])} className={`rounded-full border px-2.5 py-1 font-semibold ${cities.length === 0 ? "border-sky-600 bg-sky-600 text-white" : "border-slate-300 text-slate-700"}`}>
+                  Any town
+                </button>
+                {towns.map((one) => (
+                  <button key={one} type="button" onClick={() => setCities((all) => (all.includes(one) ? all.filter((c) => c !== one) : [...all, one]))} className={`rounded-full border px-2.5 py-1 font-semibold ${cities.includes(one) ? "border-sky-600 bg-sky-600 text-white" : "border-slate-300 text-slate-700"}`}>
+                    {one}
+                  </button>
+                ))}
+              </div>
+            )}
+            <ul className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-xl border border-slate-200">
+              {(list.data ?? []).map((one) => (
+                <li key={one.id}>
+                  <label className="flex items-center gap-3 px-3 py-2.5 text-sm has-[:checked]:bg-sky-50">
+                    <input type="checkbox" className="size-4" checked={picked.includes(one.id)} onChange={(event) => setPicked((all) => (event.target.checked ? [...all, one.id] : all.filter((id) => id !== one.id)))} />
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium">{one.name}</span>
+                      <span className="block truncate text-xs text-slate-500">{[one.code, one.specialty ?? one.detail, one.city, one.assignedTo?.name].filter(Boolean).join(" · ")}</span>
+                    </span>
+                  </label>
+                </li>
+              ))}
+              {list.data?.length === 0 && (
+                <li className="px-3 py-4 text-center text-xs text-slate-500">
+                  {q ? `No one of yours named "${q}" here.` : cities.length ? `None of yours in ${cities.join(", ")}.` : "None of yours here yet."}{" "}
+                  {cities.length > 0 && <button type="button" className="font-semibold text-sky-700" onClick={() => setCities([])}>Look in any town</button>}
+                </li>
+              )}
+            </ul>
+            <Problem message={action.at("customerIds")} />
+          </Ask>
+        )}
+        {needWhy && (
+          <Ask n={n.why} text="Why isn't it in the plan?" done={why.trim() !== ""}>
+            <Choices options={WHYS.map((one) => ({ key: one, label: one }))} value={WHYS.includes(why) ? [why] : []} onChange={(next) => setWhy(next[0] ?? "")} />
+            <input className={FIELD} value={why} onChange={(event) => setWhy(event.target.value)} placeholder="Or say it in your words" aria-label="Why isn't it in the plan" />
+            <Problem message={action.at("why")} />
+          </Ask>
+        )}
+        <Problem message={action.general(["day", "why", "customerIds"])} />
+        <Button
+          variant="primary"
+          disabled={action.busy || picked.length === 0}
+          onClick={() =>
+            action.run(async () => {
+              const made = await api<{ ids: number[] }>("/api/mr/visits", { body: { day, customerIds: picked, why: why || null } });
+              await queries.invalidateQueries({ queryKey: ["mr"] });
+              onClose();
+              // From My day: the one just picked opens, so the next question (the call's objective, I'm here) follows.
+              if (thenOpen && made.ids.length === 1) navigate(`/visits/${made.ids[0]}`);
+            })
+          }
+        >
+          {picked.length === 0 ? "Pick whom to visit" : `Add ${picked.length} visit${picked.length === 1 ? "" : "s"} · ${day === today ? "today" : dayWords(day)}`}
+        </Button>
+      </div>
     </Dialog>
   );
 }
 
 function DecideDialog({ data, approve, onClose }: { data: PlanMonth; approve: boolean; onClose: () => void }) {
   const queries = useQueryClient();
+  const navigate = useNavigate();
   const action = useAction();
   const [note, setNote] = useState("");
   return (
@@ -390,6 +467,8 @@ function DecideDialog({ data, approve, onClose }: { data: PlanMonth; approve: bo
               await api("/api/mr/plan/decide", { body: { person: data.person.id, month: data.month, approve, note: note || null } });
               await queries.invalidateQueries({ queryKey: ["mr"] });
               onClose();
+              // Back to the team's plans: the next one waiting is there.
+              navigate("/field/plan?view=team");
             })
           }
         >

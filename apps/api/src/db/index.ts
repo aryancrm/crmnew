@@ -10,8 +10,9 @@ import { drizzle as drizzlePostgres } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
 
-/** Counts the queries one request makes, so every response can report it. */
-const counter = new AsyncLocalStorage<{ queries: number }>();
+/** Counts the queries one request makes, so every response can report it; and, for a request that
+ *  only reads, remembers answers worked out once in it (requestMemo). */
+const counter = new AsyncLocalStorage<{ queries: number; memo: Map<string, Promise<unknown>> | null }>();
 const logger = {
   logQuery() {
     const store = counter.getStore();
@@ -21,10 +22,29 @@ const logger = {
 
 export async function countQueries<T>(
   work: () => Promise<T>,
+  /** A request that only reads (GET): the same thing asked twice in it is worked out once. */
+  remembers = false,
 ): Promise<{ result: T; queries: number }> {
-  const store = { queries: 0 };
+  const store = { queries: 0, memo: remembers ? new Map<string, Promise<unknown>>() : null };
   const result = await counter.run(store, work);
   return { result, queries: store.queries };
+}
+
+/**
+ * Within one reading request, works a thing out once however many times it is asked (a lead's
+ * scorecard needs each of their people's cards, and so does their head's, and the page lists them
+ * too: one person's card was worked out several times over, 1,562 questions for the company's
+ * page). The answer is the same as asking again: nothing is written in a reading request, and it is
+ * forgotten when the request ends. Outside a request, or in one that writes, it just does the work.
+ */
+export function requestMemo<T>(key: string, work: () => Promise<T>): Promise<T> {
+  const memo = counter.getStore()?.memo;
+  if (!memo) return work();
+  const kept = memo.get(key);
+  if (kept) return kept as Promise<T>;
+  const made = work();
+  memo.set(key, made);
+  return made;
 }
 
 /** Runs bookkeeping a request sets off (attendance's "last seen") outside its query count. */

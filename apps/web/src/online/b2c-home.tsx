@@ -6,7 +6,7 @@
 import type { B2cDay, B2cTeam } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, CircleAlert, Clock, Inbox, MessageCircle, Phone, Pill, ShoppingCart } from "lucide-react";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
@@ -30,7 +30,7 @@ const SOURCE: Record<string, string> = {
 
 const waited = (minutes: number) => (minutes < 60 ? `${minutes} min` : minutes < 1440 ? `${Math.floor(minutes / 60)} h ${minutes % 60} min` : `${Math.floor(minutes / 1440)} days`);
 
-export function B2cHome() {
+export function B2cHome({ top }: { /** Shown right under the greeting (My KPIs), above the day's pulse. */ top?: ReactNode } = {}) {
   const me = useMe().data;
   const query = useQuery({ queryKey: ["b2c", "day"], queryFn: () => api<B2cDay>("/api/b2c/day"), refetchInterval: 60_000 });
   const [checking, setChecking] = useState<B2cDay["day3"][number] | null>(null);
@@ -45,6 +45,7 @@ export function B2cHome() {
         </h1>
         <div className="mt-0.5 text-xs text-slate-500">Online desk · every new enquiry answered within {data?.replyMinutes ?? 15} minutes</div>
       </div>
+      {top}
       {!data ? (
         <div className="p-8 text-center text-slate-500">Loading your day…</div>
       ) : (

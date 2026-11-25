@@ -35,3 +35,15 @@ export const duesSql = (today: string): SQL => sql`(
   select c.id, c.opening_receivables, 366, false, false, 'days', null, null, 'zoho_opening', null::bigint
   from customer c where c.opening_receivables > 0
 )`;
+
+/** What was paid on an invoice (alias `i`) without cash: never given back as money. */
+const notCashOnSql = sql`(select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit', 'deduction'))`;
+
+/** How many refunds Finance owes, as its Refunds owed list counts them: a cancelled order's
+ *  money not given back yet, and money paid beyond a bill a return lowered. One count for the
+ *  menu's badge and the board (the badge counted only the cancelled ones before 23 Nov). */
+export const refundsOwedCountSql = sql`(
+  (select count(*) from invoice i join sales_order o on o.id = i.order_id
+    where i.status = 'cancelled' and o.status = 'cancelled' and i.paid - ${notCashOnSql} > i.refunded)
+  + (select count(*) from invoice i
+    where i.status <> 'cancelled' and least(i.paid - i.refunded - i.total, i.paid - i.refunded - ${notCashOnSql}) > 0))`;

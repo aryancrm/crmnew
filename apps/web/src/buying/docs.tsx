@@ -75,6 +75,13 @@ export function DocListPage({ kind }: { kind: DocKind }) {
     kind === "bill" && may.bill ? "/purchases/bills/new" : kind === "vendor_payment" && may.pay ? "/purchases/payments/new" : kind === "vendor_credit" && may.pay ? "/purchases/credits/new" : null;
   return (
     <div className="mx-auto flex max-w-[88rem] flex-col gap-4">
+      {kind === "purchase_receive" && (
+        // A delivery received on the first purchase pages, or stock added without buying, has no
+        // receive paper here: the shelf's own list has every batch that came in.
+        <Link to="/receives" className="self-start text-[13px] font-semibold text-brand-dark hover:underline">
+          Every batch that came onto the shelf, also without a receive paper →
+        </Link>
+      )}
       <PageHead
         title={word.title}
         sub={word.sub}
@@ -734,6 +741,9 @@ export function NewVendorPayment() {
   const [form, setForm] = useState({ amount: "", date: "", mode: "", paidThrough: "", reference: "", notes: "" });
   const forBill = Number(params.get("bill")) || null;
   const bills = useOpenBills(vendorId);
+  // The vendor's own currency: the amount typed is in it, as their bills are (a USD vendor's
+  // payment read "₱" before).
+  const payIn = bills[0]?.currency ?? choices?.vendors.find((one) => one.id === vendorId)?.currency ?? "PHP";
   const [amounts, setAmounts] = useState<Record<number, string>>({});
   const picked = useMemo(() => {
     const out = { ...amounts };
@@ -753,7 +763,7 @@ export function NewVendorPayment() {
             <VendorField vendors={choices.vendors} value={vendorId} onChange={setVendorId} error={action.at("supplierId")} />
           </div>
           <label className="flex flex-col gap-1">
-            <span className={LABEL}>Amount paid (₱)</span>
+            <span className={LABEL}>Amount paid ({payIn === "PHP" ? "₱" : payIn})</span>
             <input className={FIELD} inputMode="decimal" placeholder={(used / 100).toFixed(2)} value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} />
             {action.at("amount") && <span className="text-[12px] text-rose-700">{action.at("amount")}</span>}
           </label>
@@ -791,15 +801,15 @@ export function NewVendorPayment() {
         <dl className="mt-4 ml-auto w-full max-w-sm space-y-1 text-[13.5px]">
           <div className="flex justify-between">
             <dt className="text-slate-500">Paid</dt>
-            <dd className="font-semibold tabular-nums">{money(paid)}</dd>
+            <dd className="font-semibold tabular-nums">{money(paid, payIn)}</dd>
           </div>
           <div className="flex justify-between">
             <dt className="text-slate-500">On bills</dt>
-            <dd className="tabular-nums">{money(used)}</dd>
+            <dd className="tabular-nums">{money(used, payIn)}</dd>
           </div>
           <div className="flex justify-between border-t border-slate-100 pt-1.5">
             <dt className="text-slate-500">Left as an advance</dt>
-            <dd className={`tabular-nums ${paid - used > 0 ? "font-semibold text-violet-700" : ""}`}>{money(Math.max(0, paid - used))}</dd>
+            <dd className={`tabular-nums ${paid - used > 0 ? "font-semibold text-violet-700" : ""}`}>{money(Math.max(0, paid - used), payIn)}</dd>
           </div>
         </dl>
         <label className="mt-4 flex flex-col gap-1">

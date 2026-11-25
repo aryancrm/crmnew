@@ -28,7 +28,7 @@ import { seedRegulatory } from "./regulatory/seed";
 import { seedRxTeam } from "./rx/seed";
 import { lockDue } from "./scores/service";
 import { seedHospitalBoxes } from "./sellers/seed";
-import { seedBidding } from "./tenders/seed";
+import { seedBidding, seedFound } from "./tenders/seed";
 import { seedDemo } from "./seed";
 import { seedDemoPast } from "./zoho/seed";
 
@@ -74,6 +74,7 @@ if (process.env.SEED_DEMO === "1") {
   if (await seedB2bTeam(db, password)) console.log("database: B2B Telesales' demo people made");
   if (await seedClidp(db, password)) console.log("database: CLIDP's demo made");
   if (await seedBidding(db, password)) console.log("database: Government Bidding's demo made");
+  if (await seedFound(db)) console.log("database: the tender finder's demo notices made");
   if (await seedModernTrade(db, password)) console.log("database: Modern Trade's demo made");
   if (await seedOfficeStaff(db, password)) console.log("database: Digital Marketing's and IT's demo people made");
   if (await seedRegulatory(db, password)) console.log("database: In-licensing & Regulatory's demo made");

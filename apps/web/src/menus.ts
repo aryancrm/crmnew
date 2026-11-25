@@ -32,6 +32,7 @@ import {
   Factory,
   FlaskConical,
   FileText,
+  Search,
   Gauge,
   Gift,
   ShieldAlert,
@@ -126,7 +127,9 @@ const folder = (
   to: children[0]?.to ?? "/",
   label,
   icon,
-  children,
+  // A link named like its own folder read as the same thing twice (Aryan, 23 Nov: Tenders under
+  // Tenders, Patients under Patients): inside the folder it is "All tenders", "All patients".
+  children: children.map((child) => (child.label === label ? { ...child, label: `All ${label.charAt(0).toLowerCase()}${label.slice(1)}` } : child)),
   ...(short ? { short } : {}),
 });
 
@@ -207,16 +210,18 @@ const ordersLink = (label: string): MenuItem => ({
  *  day (Start working, the day report, the tiles), the day's visits (or calls), the tour plan, the
  *  customers as KOLs, hospitals and KBLs, the visit plan by class, the calendar, their phone log,
  *  expenses and samples. */
-const fieldFolder = (label: string, today: string, plan: string, phone = "My calls"): MenuItem =>
+const fieldFolder = (label: string, today: string, _plan: string, phone = "My calls"): MenuItem =>
   folder(
     label,
     CalendarCheck,
     [
       { to: "/field", label: "My day", icon: Smartphone },
       { to: "/visits", label: today, icon: CalendarCheck },
+      // One plan, one link (Aryan, 22 Nov: "two features of one thing: merge them"). The tour plan's
+      // calendar and its view by customer (the visits each class asks for) are the same
+      // month's plan, sent to the team lead once: each page opens the other.
       { to: "/field/plan", label: "Tour plan", icon: CalendarRange },
       { to: "/field/clients", label: "KOLs, hospitals, KBLs", icon: Stethoscope },
-      { to: "/visits/plan", label: plan, icon: CalendarRange },
       { to: "/visits/calendar", label: "Calendar", icon: CalendarDays },
       { to: "/calls", label: phone, icon: PhoneCall },
       { to: "/visits/expenses", label: "My expenses", icon: Receipt },
@@ -301,6 +306,8 @@ function inventoryApp(me: Me): Space {
         items: [
           ...(seesCost
             ? [
+                // The day's purchase work first (to receive, to bill, to pay, buy again), then the lists.
+                { to: "/purchases", label: "To do & buy again", icon: LayoutDashboard },
                 { to: "/purchases/vendors", label: "Vendors", icon: Factory },
                 { to: "/purchases/orders", label: "Purchase orders", icon: ShoppingCart },
               ]
@@ -314,7 +321,6 @@ function inventoryApp(me: Me): Space {
                 { to: "/purchases/bills", label: "Bills", icon: ReceiptText },
                 { to: "/purchases/payments", label: "Payments made", icon: Banknote },
                 { to: "/purchases/credits", label: "Vendor credits", icon: Undo2 },
-                { to: "/purchases", label: "To do & buy again", icon: LayoutDashboard },
                 { to: "/books/purchaseorders", label: "Books view", icon: BookOpen },
               ]
             : []),
@@ -443,17 +449,33 @@ const onlineApp: Space = {
   ],
 };
 
+/** PAP (Aryan, 22 Nov: a process, not a channel): every guarantee-letter case in one place,
+ *  whichever channel the patient came from, with the step it is at and where its sale counts. */
+const papApp: Space = {
+  key: "pap",
+  label: "PAP",
+  icon: HeartHandshake,
+  tone: "bg-rose-600 text-white",
+  groups: [{ items: [{ to: "/pap", label: "Guarantee-letter cases", icon: HeartHandshake }] }],
+};
+
 const reportsApp: Space = {
   key: "reports",
   label: "Reports",
   icon: BarChart3,
   tone: "bg-violet-600 text-white",
   groups: [
-    { items: [{ to: "/reports", label: "All reports", icon: BarChart3 }] },
+    {
+      items: [
+        { to: "/reports", label: "All reports", icon: BarChart3 },
+        { to: "/custom-report", label: "Custom report", icon: FileBarChart },
+      ],
+    },
     {
       title: "Sales",
       items: [
-        { to: "/reports/channels", label: "By channel", icon: Users },
+        // One page for sales by channel, the CEO's report with its print and CSV (22 Nov).
+        { to: "/key-reports/channels", label: "By channel", icon: Users },
         { to: "/team", label: "By person", icon: User },
         { to: "/team-scores", label: "Scorecards", icon: Gauge },
         { to: "/to-call", label: "Customers to call", icon: PhoneCall, badge: "refills" },
@@ -464,7 +486,10 @@ const reportsApp: Space = {
         { to: "/b2b/team", label: "B2B team", icon: Building2 },
         { to: "/clidp/team", label: "CLIDP", icon: FileText },
         { to: "/clidp/road", label: "CLIDP pharmacies", icon: Building2 },
+        // Government tenders, side by side: found, bid, how they went. Not a folder here: this app sits
+        // inside the CEO's and the Admin's "Reports" folder, and a folder inside a folder shows as one link.
         { to: "/tenders", label: "Tenders", icon: FileText },
+        { to: "/tenders/finder", label: "Tender finder", icon: Search },
         { to: "/tenders/report", label: "Bid report", icon: FileText },
         { to: "/targets", label: "Targets", icon: Target },
       ],
@@ -530,6 +555,7 @@ export const appsFor = (me: Me): Space[] =>
     ? [
         ordersApp(me),
         onlineApp,
+        papApp,
         financeApp,
         dispatchApp,
         inventoryApp(me),
@@ -600,11 +626,20 @@ function deskFor(me: Me): Space {
   // team, what they look things up in) so it doesn't read as one long list. Nothing is taken off
   // (Aryan, 17 Nov), and the phone's tab bar keeps the links it had.
   const sorted = LEAD_ROLES.includes(me.role) ? sortLead(first.items) : null;
-  // A seller's look-ups (the stock) sit under Look up too, below their own work (19 Nov).
-  const sellerLookUp = !sorted && me.role === "medrep" ? first.items.filter((item) => SELLER_LOOK_UP.includes(item.to)) : [];
-  const work = sorted ? sorted.work : first.items.filter((item) => !sellerLookUp.includes(item));
-  const found = sorted ? sorted.lookUp : [];
-  const team = sorted?.team ?? [];
+  // A seller's look-ups (the stock) sit under Look up too, below their own work (19 Nov); the
+  // Online desk's as well (22 Nov).
+  const seller = !sorted && (me.role === "medrep" || me.role === "online");
+  // HR's one link into the stock is a look-up too (HR's own work is people, leave and pay).
+  const sellerLookUp = seller || me.role === "hr" ? first.items.filter((item) => SELLER_LOOK_UP.includes(item.to)) : [];
+  // Management approves orders: the calls and the sales figures are what it looks up (22 Nov).
+  const deskLookUp = me.role === "management" ? first.items.filter((item) => !item.children && MANAGEMENT_LOOK_UP.includes(item.to)) : [];
+  const own = first.items.filter((item) => !sellerLookUp.includes(item) && !deskLookUp.includes(item));
+  // Aryan, 22 Nov: "what can be grouped, group": a seller's score, calls and sales figures go in
+  // one "My numbers" folder; a lead's loose team links (targets, scorecards, calls, sales figures)
+  // in one "Team numbers" folder. Every link stays, in its folder.
+  const work = sorted ? sorted.work : seller ? numbersTogether(own) : own;
+  const found = [...(sorted ? sorted.lookUp : []), ...deskLookUp];
+  const team = looseTogether(sorted?.team ?? []);
   const lookUpItems = [...(lookUp?.items ?? []), ...found, ...sellerLookUp, ...speed];
   // Their own leave, payslips and messages at the foot of every menu, under the work (19 Nov: "each
   // one's own things on top").
@@ -626,6 +661,40 @@ function deskFor(me: Me): Space {
 
 /** What a seller only looks things up in. */
 const SELLER_LOOK_UP = ["/medicines"];
+/** What Management only looks things up in, beside the orders it approves. */
+const MANAGEMENT_LOOK_UP = ["/calls", "/sales-performance"];
+/** A seller's own figures: their score, their calls, the day's sales. */
+const NUMBER_LINKS = ["/my/score", "/calls", "/sales-performance"];
+
+/** A seller's loose number links into their "My numbers" folder (made when there is none and two
+ *  or more are loose), where the first of them stood. Nothing is taken off. */
+function numbersTogether(items: MenuItem[]): MenuItem[] {
+  const loose = items.filter((item) => !item.children && NUMBER_LINKS.includes(item.to));
+  if (!loose.length) return items;
+  const kept = items.find((item) => item.children && item.label === "My numbers");
+  if (kept) {
+    const more = loose.filter((one) => !kept.children?.some((kid) => kid.to === one.to));
+    return items
+      .filter((item) => !loose.includes(item))
+      .map((item) => (item === kept ? { ...kept, children: [...(kept.children ?? []), ...more] } : item));
+  }
+  if (loose.length < 2) return items;
+  const before = items.slice(0, items.indexOf(loose[0] as MenuItem)).filter((item) => !loose.includes(item)).length;
+  const rest = items.filter((item) => !loose.includes(item));
+  rest.splice(before, 0, folder("My numbers", Gauge, loose, "Numbers"));
+  return rest;
+}
+
+/** A lead's loose team links (not in a folder) into one "Team numbers" folder, where the first
+ *  of them stood; one alone stays as it is. Nothing is taken off. */
+function looseTogether(items: MenuItem[]): MenuItem[] {
+  const loose = items.filter((item) => !item.children);
+  if (loose.length < 2) return items;
+  const before = items.slice(0, items.indexOf(loose[0] as MenuItem)).filter((item) => item.children).length;
+  const rest = items.filter((item) => item.children);
+  rest.splice(before, 0, folder("Team numbers", Gauge, loose, "Numbers"));
+  return rest;
+}
 
 /** Calls and the daily sales performance on every selling desk and those above them (18 Nov,
  *  the B2B team's Google Form and end-of-day Excel, now here). */
@@ -680,6 +749,8 @@ function ownDesk(me: Me): Space {
             home,
             { to: "/leads", label: "Leads & enquiries", icon: Inbox },
             { to: "/inbox", label: "Inbox", icon: MessagesSquare, badge: "inbox" },
+            // Their guarantee-letter cases, which the PAP person works (22 Nov).
+            { to: "/pap", label: "With PAP", icon: HeartHandshake },
             { to: "/to-call", label: "Refills due", icon: Pill, badge: "refills", short: "Refills" },
             ordersLink("My orders"),
             { to: "/customers", label: "Patients", icon: Users },
@@ -705,7 +776,9 @@ function ownDesk(me: Me): Space {
                 { to: "/hospital-board", label: "My hospitals", icon: Building2 },
                 { to: "/to-call", label: "Hospitals to call", icon: PhoneCall, badge: "refills" },
                 { to: "/collections", label: "Collections", icon: HandCoins },
-                { to: "/my/area", label: "Hospital list", icon: Building2 },
+                // Every customer of the area (hospitals, and their doctors and patients): it said
+                // "Hospital list" (22 Nov).
+                { to: "/my/area", label: "All my customers", icon: Building2 },
               ],
               "Hospitals",
             ),
@@ -718,6 +791,7 @@ function ownDesk(me: Me): Space {
                     FileText,
                     [
                       { to: "/tenders", label: "Tenders", icon: FileText },
+                      { to: "/tenders/finder", label: "Tender finder", icon: Search },
                       { to: "/tenders/report", label: "Bid report", icon: FileText },
                       { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
                     ],
@@ -783,6 +857,7 @@ function ownDesk(me: Me): Space {
               FileText,
               [
                 { to: "/tenders", label: "Tenders", icon: FileText },
+                { to: "/tenders/finder", label: "Tender finder", icon: Search },
                 { to: "/tenders/report", label: "Bid report", icon: FileText },
                 { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
               ],
@@ -809,11 +884,12 @@ function ownDesk(me: Me): Space {
                 { to: "/my/area", label: "My accounts", icon: Building2 },
                 { to: "/to-call", label: "Accounts to call", icon: PhoneCall, badge: "refills" },
                 { to: "/clidp/listings", label: "Listings", icon: FileText },
+                // What the accounts owe sits with the accounts (22 Nov: loose links grouped).
+                { to: "/collections", label: "Collections", icon: HandCoins },
               ],
               "Accounts",
             ),
             ordersLink("My orders"),
-            { to: "/collections", label: "Collections", icon: HandCoins },
             { to: "/calls", label: "My calls", icon: PhoneCall },
             { to: "/sales-performance", label: "Sales performance", icon: TrendingUp },
           ]),
@@ -990,9 +1066,18 @@ function ownDesk(me: Me): Space {
           cta: newOrder,
           ...desk([
             home,
-            { to: "/tenders", label: "Tenders", icon: FileText, short: "Tenders" },
-            { to: "/tenders/report", label: "Bid report", icon: FileText },
-            { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
+            // Found, bid, how they went, the company's papers: one folder, as the coachees have it.
+            folder(
+              "Tenders",
+              FileText,
+              [
+                { to: "/tenders", label: "Tenders", icon: FileText },
+                { to: "/tenders/finder", label: "Tender finder", icon: Search },
+                { to: "/tenders/report", label: "Bid report", icon: FileText },
+                { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
+              ],
+              "Tenders",
+            ),
             ordersLink("Team orders"),
             { to: "/collections", label: "Collections", icon: HandCoins },
             folder(
@@ -1048,8 +1133,16 @@ function ownDesk(me: Me): Space {
           ...desk([
             home,
             { to: "/my-team", label: "Whole business", icon: Users, teams: true },
-            { to: "/tenders", label: "Tenders", icon: FileText },
-            { to: "/tenders/report", label: "Bid report", icon: FileText },
+            folder(
+              "Tenders",
+              FileText,
+              [
+                { to: "/tenders", label: "Tenders", icon: FileText },
+                { to: "/tenders/finder", label: "Tender finder", icon: Search },
+                { to: "/tenders/report", label: "Bid report", icon: FileText },
+              ],
+              "Tenders",
+            ),
             { to: "/clidp/road", label: "CLIDP pharmacies", icon: Building2 },
             { to: "/team-scores", label: "Scorecards", icon: Gauge, short: "Scores" },
             { to: "/targets", label: "Targets", icon: Target },
@@ -1134,6 +1227,7 @@ function ownDesk(me: Me): Space {
               FileText,
               [
                 { to: "/tenders", label: "Tenders", icon: FileText },
+                { to: "/tenders/finder", label: "Tender finder", icon: Search },
                 { to: "/tenders/report", label: "Bid report", icon: FileText },
                 { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
               ],
@@ -1238,8 +1332,17 @@ function ownDesk(me: Me): Space {
             { to: "/collections", label: "Collections", icon: HandCoins },
             { to: "/hospital-board", label: "Hospitals", icon: Building2 },
             { to: "/to-call", label: "Hospitals to call", icon: PhoneCall, badge: "refills" },
-            { to: "/tenders", label: "Government tenders", icon: FileText },
-            { to: "/tenders/report", label: "Bid report", icon: FileText },
+            // The two tender links in one folder (22 Nov: what can be grouped, grouped). No tender
+            // finder here: it is the bidding line's (docs/PLAN.md 24), and the API refuses it.
+            folder(
+              "Government tenders",
+              FileText,
+              [
+                { to: "/tenders", label: "Tenders", icon: FileText },
+                { to: "/tenders/report", label: "Bid report", icon: FileText },
+              ],
+              "Tenders",
+            ),
             ordersLink("Division orders"),
             folder("Visits", CalendarCheck, teamFieldItems(), "Visits"),
             folder(
@@ -1259,12 +1362,12 @@ function ownDesk(me: Me): Space {
       return {
         ...desk([
           home,
-          // The PAP head approves the PAP orders (not Management): one link straight to them.
+          // A lead seated over PAP sees its orders waiting for Management (Management approves them, 22 Nov).
           ...(me.channel?.code === "PAP"
             ? [
                 {
                   to: "/orders?stage=management",
-                  label: "PAP orders to approve",
+                  label: "PAP orders with Management",
                   icon: ClipboardCheck,
                   short: "Approve",
                 },
@@ -1308,10 +1411,20 @@ function ownDesk(me: Me): Space {
             home,
             { to: "/leads", label: "Leads & enquiries", icon: Inbox },
             { to: "/inbox", label: "Inbox", icon: MessagesSquare, badge: "inbox" },
+            // Their guarantee-letter cases, which the PAP person works (22 Nov).
+            { to: "/pap", label: "With PAP", icon: HeartHandshake },
             { to: "/to-call", label: "Refills due", icon: Pill, badge: "refills", short: "Refills" },
             { to: "/orders", label: "My orders", icon: ClipboardList },
-            { to: "/customers", label: "Patients", icon: Users },
-            { to: "/points", label: "Points", icon: Gift },
+            // The patients and their points in one folder (22 Nov: a flat list of twelve links).
+            folder(
+              "Patients",
+              Users,
+              [
+                { to: "/customers", label: "Patients", icon: Users },
+                { to: "/points", label: "Points", icon: Gift },
+              ],
+              "Patients",
+            ),
             { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
           ],
           Inbox,
@@ -1448,7 +1561,7 @@ function ownDesk(me: Me): Space {
       // The Admin login's desk is the Admin panel: setting the company up, apart from the CEO.
       return adminPanel(me);
     case "ceo":
-      return {
+      return withoutRepeats({
         key: "desk",
         label: me.roleLabel,
         icon: LayoutGrid,
@@ -1469,11 +1582,12 @@ function ownDesk(me: Me): Space {
                 Network,
                 [
                   { to: "/my-team", label: "Company view", icon: BarChart3, teams: true },
-                  // The Admin panel's channels, each with its head, managers and sales people
-                  // (Aryan, 19 Nov: "put the Admin panel's Channels in the CEO's too").
-                  { to: "/admin/channels", label: "Channels", icon: Network },
+                  // Who heads and manages what is said in one place, the Company tree above (Aryan,
+                  // 22 Nov: "the same thing is repeated in many places; it must be in one"): the
+                  // Admin panel's Channels and the second chart are no longer listed here. The tree
+                  // has the same chart ("Org chart") and every team ("Every team"); Channels stays
+                  // the Admin's page.
                   { to: "/company/map", label: "Map", icon: MapPin },
-                  { to: "/company", label: "Company chart", icon: Network },
                   { to: "/audit", label: "Audit", icon: ScrollText },
                 ],
                 "Company",
@@ -1485,6 +1599,7 @@ function ownDesk(me: Me): Space {
           {
             title: "Reports",
             items: [
+              { to: "/custom-report", label: "Custom report", icon: FileBarChart },
               { to: "/key-reports/customers", label: "Customers", icon: Users },
               { to: "/key-reports/channels", label: "Sales by channel", icon: Network },
               { to: "/calls", label: "Calls", icon: PhoneCall },
@@ -1514,8 +1629,33 @@ function ownDesk(me: Me): Space {
             ),
           },
         ],
-      };
+      });
   }
+}
+
+/** The CEO's Apps folders hold every app whole; a link already in the groups above them isn't
+ *  said again inside a folder (Aryan, 23 Nov: "one thing shows twice in the side menu"). It stays
+ *  where it was first: nothing is taken away. */
+function withoutRepeats(space: Space): Space {
+  const apps = space.groups.find((group) => group.title === "Apps");
+  if (!apps) return space;
+  const above = new Set(space.groups.filter((group) => group !== apps).flatMap((group) => allItems(group.items).map((item) => item.to)));
+  return {
+    ...space,
+    groups: space.groups.map((group) =>
+      group !== apps
+        ? group
+        : {
+            ...group,
+            items: group.items.map((app) => {
+              // Nor twice across the folders: a page two apps share stays in the first.
+              const kept = (app.children ?? []).filter((child) => !above.has(child.to));
+              for (const child of kept) if (!child.children) above.add(child.to);
+              return kept.length ? { ...app, children: kept, to: kept[0]?.to ?? app.to } : app;
+            }),
+          },
+    ),
+  };
 }
 
 /** The Admin panel, the Admin login's own desk: where the company is set up (its channels, who
@@ -1546,8 +1686,10 @@ function adminPanel(me: Me): Space {
           { to: "/targets", label: "Targets", icon: Target },
           // Once, from the old system's orders: who sold to each old customer, placed in a seat here.
           { to: "/admin/zoho-sellers", label: "Old customers to seats", icon: Link2 },
-          // The 2026 chart as the CRM is built to it: every box, seat, work and desk.
-          { to: "/admin/company-chart", label: "Company chart (as built)", icon: Network },
+          // The 2026 paper chart typed out on 17 Nov ("/admin/company-chart") is no longer listed:
+          // it was a second picture of who is under whom, typed by hand, and the Company tree is
+          // the one place (Aryan, 23 Nov: "no two or three hierarchies"). The page stays at its
+          // address, saying what it is, with a link to the tree.
         ],
       },
       {
@@ -1557,6 +1699,7 @@ function adminPanel(me: Me): Space {
           { to: "/channels", label: "Online pages & mail", icon: Radio },
           // The data checked against itself: every bill, payment, return and shelf adds up.
           { to: "/admin/data-checks", label: "Data checks", icon: ShieldCheck },
+          { to: "/admin/slow-screens", label: "Slow screens", icon: Gauge },
           { to: "/audit", label: "Audit", icon: ScrollText },
           { to: "/calls", label: "Calls", icon: PhoneCall },
         ],

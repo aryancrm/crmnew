@@ -40,6 +40,7 @@ import { api } from "../api";
 import { useMe } from "../auth";
 import { DISPATCH_HOLDS, type DispatchAsk, DispatchDialogs } from "../dispatch/parts";
 import { ConfirmPaymentDialog, useMoney } from "../finance/parts";
+import { rememberConfirm } from "../finance/undo";
 import { avatarTone, dayHeading, initials, PRIMARY_SM, QUIET_SM } from "../look";
 import { Checks, checksOf } from "./checks";
 import { ReasonDialog, useOrderAction, waited } from "./parts";
@@ -106,7 +107,7 @@ const DESK_HOME: Record<Desk, BoardTab> = {
 const STEP_LINE: { status: OrderStatus; label: string }[] = [
   { status: "pending_approval", label: "Waiting" },
   { status: "finance_check", label: "Payment check" },
-  { status: "ready_for_invoice", label: "To invoice" },
+  { status: "ready_for_invoice", label: "Credit check" },
   { status: "ready_for_dispatch", label: "To pack" },
   { status: "packing", label: "Packed" },
   { status: "shipped", label: "On the way" },
@@ -214,7 +215,13 @@ export function OrdersToCheck({
   // Management and Admin say why a held order goes on, on any desk's board (the API asks them).
   const me = useMe().data;
   const manager = ["management", "admin"].includes(me?.role ?? "");
-  const TABS = all ? [{ key: "all" as const, label: "All orders" }, ...ALL_TABS] : DESK_TABS[desk];
+  // Dispatch's On hold page is only its holds: to pack, to ship, on the road and delivered are its
+  // Home's three tabs, so they aren't said a second time here (23 Nov).
+  const TABS = all
+    ? [{ key: "all" as const, label: "All orders" }, ...ALL_TABS]
+    : desk === "dispatch" && defaultTab === "hold"
+      ? DESK_TABS[desk].filter((one) => one.key === "hold")
+      : DESK_TABS[desk];
   const [params, setParams] = useSearchParams();
   // Cards (the usual look), Table or Board, as the Leads desk offers them: picked by whoever
   // uses it and remembered on this device, per desk.
@@ -385,6 +392,12 @@ export function OrdersToCheck({
   const headCount = data.counts[defaultTab] ?? 0;
 
   async function approveClean() {
+    // Several orders at one press: asked once, so a stray click sends nothing.
+    if (
+      finance &&
+      !window.confirm(`Send these ${clean.length} orders to Dispatch? Nothing was found on them: on credit or cash on delivery, the customer owes nothing late.`)
+    )
+      return;
     setApprovingAll(true);
     for (const card of clean) {
       const done = finance
@@ -421,7 +434,16 @@ export function OrdersToCheck({
       manage={finance ? data.can.finance : dispatch ? data.can.dispatch : data.can.manage}
       busy={busy}
       // Approving picks the warehouse, as the hub did: the order opens with its approve window.
-      onApprove={() => navigate(`/orders/${card.id}?step=management&check=approve&approve=1`)}
+      // The documents are read by hand before anything is approved (22 Nov: Approve waits for
+      // every check): until they are, Approve opens the order on its Documents, not on a window
+      // that would only refuse.
+      onApprove={() =>
+        navigate(
+          card.papersCheckedAt
+            ? `/orders/${card.id}?step=management&check=approve&approve=1`
+            : `/orders/${card.id}?step=management&check=papers`,
+        )
+      }
       // Management says why it can go on (the hub's Resume); Finance and Dispatch lift their own.
       onResume={() =>
         manager ? setAsking({ card, what: "resume" }) : order.act(card.id, "resume")
@@ -436,7 +458,10 @@ export function OrdersToCheck({
             : undefined
       }
       onConfirm={() => setConfirming(card)}
-      onInvoice={() => money.send(`/api/finance/orders/${card.id}/invoice`, {})}
+      onInvoice={async () => {
+        // One press sends it on: the same 90-second Undo as a confirmed payment.
+        if (await money.send(`/api/finance/orders/${card.id}/invoice`, {})) rememberConfirm(card.id, card.code, true);
+      }}
       onDispatch={(what) =>
         setDispatching({
           what,
@@ -507,7 +532,7 @@ export function OrdersToCheck({
               disabled={busy || approvingAll}
             >
               <CheckCheck className="size-3.5 text-emerald-600" />
-              {approvingAll ? "Invoicing…" : `Invoice the ${clean.length} with nothing found`}
+              {approvingAll ? "Sending on…" : `Send on the ${clean.length} with nothing found`}
             </button>
           )}
           {!side && data.desk === "management" && (
@@ -823,7 +848,9 @@ function CheckSteps({ card }: { card: OrderCard }) {
       >
         {warns.length
           ? `Look at: ${warns.map((one) => one.label).join(", ")}`
-          : "Everything checks out: approve it"}
+          : card.papersCheckedAt
+            ? "Everything checks out: approve it"
+            : "Nothing flagged: read the documents, then approve"}
       </p>
       <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-slate-500">
         <span className="font-semibold text-slate-700">Management check</span>
@@ -931,7 +958,7 @@ function FinanceSteps({ card }: { card: OrderCard }) {
         <ArrowRight className="size-3.5 transition-transform group-hover:translate-x-0.5" />
       </div>
       <p className="mb-2 line-clamp-2 text-[11px] leading-snug font-medium text-slate-800" title={warns.map((one) => one.note).join("\n") || undefined}>
-        {warns.length ? `Look at: ${warns.map((one) => one.note).join(", ")}` : card.status === "finance_check" ? "Everything checks out: check it and send it on" : "Everything checks out: make the invoice"}
+        {warns.length ? `Look at: ${warns.map((one) => one.note).join(", ")}` : card.status === "finance_check" ? "Everything checks out: check it and send it on" : "Everything checks out: send it to Dispatch"}
       </p>
       <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-slate-500">
         <span className="font-semibold text-slate-700">Finance check</span>
@@ -1179,7 +1206,8 @@ export function OrderCardItem({
             >
               {kind?.label}
             </span>
-            {card.channel && (
+            {/* Only when the Division chip beside the code doesn't say it already. */}
+            {card.channel && card.channel !== card.division && (
               <span className="max-w-[120px] truncate text-[10px] font-semibold text-slate-600">
                 {card.channel}
               </span>
@@ -1342,7 +1370,23 @@ export function OrderCardItem({
               >
                 {card.next}
               </p>
+              {/* The MedRep answered the hold: said on the card, so the desk knows it is its turn (23 Nov). */}
+              {stopped && card.reply && (
+                <p className="mb-2 line-clamp-2 rounded-md bg-emerald-50 px-2 py-1 text-[11px] leading-snug font-medium text-emerald-900" title={card.reply}>
+                  Answered: {card.reply}
+                </p>
+              )}
             </>
+          )}
+          {/* Back from the MedRep after being sent back: marked, with what they answered (23 Nov). */}
+          {card.status === "pending_approval" && card.sentBackCount > 0 && (
+            <p
+              className="mb-2 line-clamp-2 rounded-md bg-amber-50 px-2 py-1 text-[11px] leading-snug font-medium text-amber-900"
+              title={[card.sentBackReason, card.reply].filter(Boolean).join(" → ")}
+            >
+              Sent again{card.sentBackCount > 1 ? ` (${card.sentBackCount}×)` : ""}
+              {card.reply ? `: ${card.reply}` : ""}
+            </p>
           )}
           {/* Every order in Management's (or Finance's) queue stands at the same step: no strip there. */}
           {!checking && !financeChecking && (
@@ -1562,10 +1606,10 @@ export function OrderCardItem({
                   <button
                     type="button"
                     disabled={busy}
-                    onClick={() => onAsk("reject")}
-                    className="h-8 rounded-lg text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                    onClick={() => onAsk("hold")}
+                    className="h-8 rounded-lg text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-50"
                   >
-                    Reject
+                    Hold
                   </button>
                 </>
               ) : (
@@ -2052,7 +2096,7 @@ function OrdersCardTable({
 const LANES: { key: OrderStatus; label: string; also?: OrderStatus[]; dot: string }[] = [
   { key: "pending_approval", label: "Waiting", dot: "bg-violet-500" },
   { key: "finance_check", label: "Payment check", dot: "bg-amber-500" },
-  { key: "ready_for_invoice", label: "To invoice", dot: "bg-amber-500" },
+  { key: "ready_for_invoice", label: "Credit check", dot: "bg-amber-500" },
   { key: "ready_for_dispatch", label: "To pack", dot: "bg-sky-500" },
   { key: "packing", label: "Packed", dot: "bg-sky-500" },
   { key: "shipped", label: "On the way", dot: "bg-teal-500" },

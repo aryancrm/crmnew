@@ -234,9 +234,8 @@ export function nextOf(f: CaseFacts, step: string): string {
     case "payment":
       return "Delivered: Finance records the payment when it comes in";
     case "claim":
-      return f.files.has("pickup_photo")
-        ? `Delivered: send the claim to ${agency}`
-        : `Delivered: add the pick-up photo, then send the claim to ${agency}`;
+      // Finance sends the claim and records what the agency pays (Aryan, 22 Nov).
+      return `Delivered: Finance sends the claim to ${agency}`;
     case "billed":
       return `Claim sent: waiting for ${agency} to pay`;
     case "done":

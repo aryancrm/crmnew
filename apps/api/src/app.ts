@@ -34,7 +34,7 @@ import {
 } from "./auth/sessions";
 import { checkRoutes } from "./checks/routes";
 import { customerRoutes } from "./customers/routes";
-import { countQueries, type Database, rows } from "./db/index";
+import { countQueries, type Database, rows, uncounted } from "./db/index";
 import { person } from "./db/schema";
 import { dispatchRoutes } from "./dispatch/routes";
 import { fieldRoutes } from "./field/routes";
@@ -67,7 +67,7 @@ import { regulatoryRoutes } from "./regulatory/routes";
 import { bookRoutes } from "./books/routes";
 import { hospitalRoutes } from "./hospitals/routes";
 import { telesalesRoutes } from "./telesales/routes";
-import { tenderRoutes } from "./tenders/routes";
+import { tenderFinderDoor, tenderRoutes } from "./tenders/routes";
 import { rxRoutes } from "./rx/routes";
 import { scoreRoutes } from "./scores/routes";
 import { kpiRoutes } from "./kpis/routes";
@@ -97,6 +97,9 @@ const atMost = (maxSize: number) =>
       c.json({ error: { code: "too_large", message: "That is too large to send." } } satisfies ApiError, 413),
   });
 
+/** An answer slower than this (on the server) is noted for the Admin's Slow screens page. */
+const SLOW_MS = 800;
+
 export function createApp(db: Database, options: AppOptions) {
   const app = new Hono<Env>();
   const secure = options.webUrl.startsWith("https://");
@@ -105,16 +108,32 @@ export function createApp(db: Database, options: AppOptions) {
   // Time and query count on every response: how a slow screen is found.
   app.use("*", async (c, next) => {
     const started = performance.now();
-    const { queries } = await countQueries(next);
+    const { queries } = await countQueries(next, c.req.method === "GET");
     const ms = (performance.now() - started).toFixed(1);
     c.header("Server-Timing", `app;dur=${ms}, db;desc="${queries} queries"`);
+    // A slow answer is noted (address by its pattern, never the ids in it), so the Admin's Slow
+    // screens page shows what is slow online, where the database and the server are smaller than a
+    // developer's computer. Never waited for; a failure to note is nothing.
+    if (Number(ms) >= SLOW_MS && c.req.path.startsWith("/api/")) {
+      const path = (c.req.routePath && c.req.routePath !== "/api/*" && c.req.routePath !== "*" ? c.req.routePath : c.req.path.replace(/\/\d+(?=\/|$)/g, "/:id")).slice(0, 200);
+      const role = (c.get("me") as { role?: string } | undefined)?.role ?? null;
+      void uncounted(async () => {
+        await db.execute(sql`insert into slow_request (method, path, ms, queries, role) values (${c.req.method}, ${path}, ${Math.round(Number(ms))}, ${queries}, ${role})`);
+        if (Math.random() < 0.02) await db.execute(sql`delete from slow_request where at < now() - interval '14 days'`);
+      }).catch(() => {});
+    }
   });
 
   app.use("*", secureHeaders());
   app.use("/api/*", cors({ origin: options.webUrl, credentials: true }));
   app.use("/api/auth/*", atMost(16 * 1024));
   app.use("/api/*", atMost(50 * MB));
-  app.use("/webhooks/*", atMost(2 * MB));
+  // A webhook is small, but for the tender papers the robot hands in (bid documents, tens of MB).
+  const small = atMost(2 * MB);
+  const paper = atMost(60 * MB);
+  // (and the robot's own records: one Sync's lists and notices are several MB)
+  const large = new Set(["/webhooks/tender-finder/papers/file", "/webhooks/tender-finder/store"]);
+  app.use("/webhooks/*", (c, next) => (large.has(c.req.path) ? paper(c, next) : small(c, next)));
 
   app.onError((error, c) => {
     if (error instanceof Refusal) {
@@ -155,7 +174,10 @@ export function createApp(db: Database, options: AppOptions) {
     }),
   );
 
-  app.get("/api/health", (c) => c.json({ ok: true }));
+  // Which code is running, where the host says (Render and Coolify name the commit they built):
+  // the tender finder's workflow waits for its own commit before a run that follows a change.
+  const commit = (process.env.RENDER_GIT_COMMIT || process.env.SOURCE_COMMIT || "").slice(0, 40) || null;
+  app.get("/api/health", (c) => c.json({ ok: true, commit }));
   // Management's and Finance's waiting orders, each given to one of the desk's people: after
   // anything that may have moved an order, the new ones are shared out; the team on the screen.
   app.use("/api/*", async (c, next) => {
@@ -466,6 +488,7 @@ export function createApp(db: Database, options: AppOptions) {
   b2bRoutes(app, db, signedIn);
   clidpRoutes(app, db, signedIn);
   tenderRoutes(app, db, signedIn);
+  tenderFinderDoor(app, db);
   hospitalRoutes(app, db, signedIn);
   telesalesRoutes(app, db, signedIn);
   mtRoutes(app, db, signedIn);

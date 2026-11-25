@@ -51,7 +51,7 @@ import { OfficeWork } from "./office-work";
 import { RangePicker, short } from "./range";
 import { TeamChart } from "./tree";
 import { ZoomBox } from "./zoom";
-import { count, PageState } from "../ui";
+import { count, PageState, manilaDay } from "../ui";
 import { TONE, type Tone, toneOf } from "./pace";
 import { OrderCardItem } from "../orders/board";
 
@@ -1080,7 +1080,7 @@ export function TeamSeatPage() {
           ? `${shortPeso(seat.owed)} owed by their customers${seat.overdue ? `, ${shortPeso(seat.overdue)} of it past due` : ""}.`
           : "Their customers owe nothing.",
         // Their last order placed in this CRM (Zoho's history counts in Sold, not here).
-        seat.lastOrderAt ? `Last order placed ${short(seat.lastOrderAt.slice(0, 10))}.` : null,
+        seat.lastOrderAt ? `Last order placed ${short(manilaDay(seat.lastOrderAt))}.` : null,
       ].filter((line): line is string => Boolean(line))
     : [];
 

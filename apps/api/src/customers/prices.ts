@@ -135,7 +135,7 @@ const pastOf = async (db: Database, customerId: number) => {
  *  this CRM. Whoever may see the customer may see it. */
 export async function customerPrices(db: Database, me: Me, id: number): Promise<CustomerPrices> {
   await customerDetail(db, me, id);
-  const [lines, past, under, owes, orders] = await Promise.all([
+  const [lines, past, under, owes, orders, invoices, payments] = await Promise.all([
     linesOf(db, id),
     pastOf(db, id),
     // Whose customer it was in Zoho: the salesperson of the latest order that names one.
@@ -161,6 +161,25 @@ export async function customerPrices(db: Database, me: Me, id: number): Promise<
         from past_order p where p.customer_id = ${id}
         order by p.ordered_on desc, p.id desc limit ${PAST_ORDERS}`,
     ),
+    // The old system's invoices with what each still owes, and the payments it took: the whole
+    // record in one place (Aryan, 23 Nov: "the office opened Zoho's Sales to see what a hospital was
+    // given, at what price, and whether anything is pending"). Payments taken here on an old
+    // invoice have already lowered its balance.
+    rows<CustomerPrices["invoices"][number]>(
+      db,
+      sql`select d.id::int as id, d.number, to_char(d.doc_date, 'YYYY-MM-DD') as "on", to_char(d.due_date, 'YYYY-MM-DD') as "dueOn",
+          d.reference as "order", round(d.total * d.fx_rate)::float8 as total, round(greatest(d.balance, 0) * d.fx_rate)::float8 as balance,
+          case when d.status = 'void' then 'void' when d.balance <= 0 then 'paid' else 'open' end as status
+        from book_doc d where d.customer_id = ${id} and d.kind = 'invoice' and d.zoho_id is not null and d.status <> 'draft'
+        order by d.doc_date desc, d.id desc limit ${PAST_ORDERS}`,
+    ),
+    rows<CustomerPrices["payments"][number]>(
+      db,
+      sql`select d.id::int as id, d.number, to_char(d.doc_date, 'YYYY-MM-DD') as "on",
+          coalesce(d.fields->>'Mode', d.fields->>'Payment Mode') as mode, d.reference, round(d.total * d.fx_rate)::float8 as amount
+        from book_doc d where d.customer_id = ${id} and d.kind = 'customer_payment' and d.status <> 'void' and d.voided_at is null
+        order by d.doc_date desc, d.id desc limit ${PAST_ORDERS}`,
+    ),
   ]);
   return {
     past,
@@ -174,6 +193,8 @@ export async function customerPrices(db: Database, me: Me, id: number): Promise<
       oldestDue: owes[0]?.oldestDue ?? null,
     },
     orders,
+    invoices,
+    payments,
     medicines: byMedicine(lines).slice(0, MEDICINES),
   };
 }

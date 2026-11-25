@@ -61,6 +61,13 @@ function newsQuery(where: SQL): SQL {
     join medicine m on m.id = n.medicine_id
     join person p on p.id = n.by_person
     where n.closed_at is null and ${where}
+      -- "Out of stock" and "Low stock" say what the shelf said that day: once the stock is back
+      -- (received, moved in) the line steps aside by itself, nobody has to take it down (Aryan,
+      -- 23 Nov: 6,000 received and the news still read "only 35 boxes left"). Nothing is erased.
+      and not (n.kind in ('out', 'low') and (
+        select coalesce(sum(s.qty), 0) from stock s join batch b on b.id = s.batch_id
+        where b.medicine_id = n.medicine_id and b.expires_on >= (now() at time zone 'Asia/Manila')::date
+      ) > case n.kind when 'out' then 0 else m.reorder_level end)
     order by n.created_at desc
     limit 30`;
 }
@@ -394,6 +401,19 @@ export async function medicineDetail(db: Database, me: Me, id: number): Promise<
     return { ...batch, unitCost: can.cost ? batch.unitCost : null, state };
   });
 
+  // Pieces on placed orders not packed yet: on the shelf, but sold (as the stock list counts them).
+  // Each order holding some of it (Zoho's Committed Stock Details): the oldest first, as they are served.
+  const holding = await rows<MedicineDetail["promisedTo"][number]>(
+    db,
+    sql`select o.id::int as id, o.code, c.name as customer, sum(i.qty)::int as qty, o.status,
+        to_char(o.created_at at time zone 'Asia/Manila', 'YYYY-MM-DD') as "placedOn"
+      from order_item i join sales_order o on o.id = i.order_id join customer c on c.id = o.customer_id
+      where i.medicine_id = ${id} and ${PROMISED_ORDER}
+      group by o.id, o.code, c.name, o.status, o.created_at order by o.id`,
+  );
+  const held = { qty: holding.reduce((sum, one) => sum + one.qty, 0), orders: holding.length };
+  // Which orders they are is for the desks that see every order; a seller sees the count only.
+  const seesOrders = ["inventory", "dispatch", "management", "finance", "ceo", "admin"].includes(me.role);
   return {
     can,
     today,
@@ -402,6 +422,10 @@ export async function medicineDetail(db: Database, me: Me, id: number): Promise<
     medicine: { ...facts, reorderLevel: reorder },
     status: stockStatus(total, reorder),
     total,
+    promised: held.qty,
+    promisedOrders: held.orders,
+    promisedTo: seesOrders ? holding : [],
+    free: Math.max(0, total - held.qty),
     expired,
     batches: lines,
     cost: can.cost && costed > 0 ? { min, max, average: Math.round(costSum / costed) } : null,

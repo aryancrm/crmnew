@@ -26,6 +26,7 @@ Marks: ✅ built in the MedRep's pages (20 Nov, local) · ◐ partly · ⬜ to b
 
 ### Home
 - ✅ Big circle: *Start working* → *Since 4:55 PM · Head quarter-Angeles City · Stop working*; on a break, *Back to work*; after the report, *Day closed*.
+- ✅ (23 Nov) Asked in order in one place: Start working (work place in plain words, the town from the Philippines' list of 1,634) → *Where are you going now?* (today's visits together, someone not on the list) → the call → back to My day for the next → Stop working.
 - ✅ Tiles: Visits, KOLs, KBLs, Hospitals, Tour plan, My orders (the CRM's), Expenses, Leaves, Holidays, Follow-ups, Day report, Reports. ⬜ Presentation, App tutorial (with e-detailing); Admin is the lead's side.
 - ✅ Today's numbers (planned, closed, left, ordered at visits) and the next visit.
 - ⬜ Synchronize / working offline. Support / chat: not copied (the CRM's Messages).

@@ -26,6 +26,13 @@ const TS: Record<string, string> = {
   team_lead: "Sales Coach",
 };
 
+/** The channel a person's pages name (Aryan, 22 Nov: one list of channels, the target sheet's):
+ *  the sheet's channel of each of their seats (CLIDP, MD Telesales, RX Business…), the main seat's
+ *  first; PAP keeps PAP (on no row of the sheet); with no seat, their first channel's code. Which
+ *  screens they get is still decided by the seat, never by this word. */
+export const shownChannel = (me: Pick<Me, "channel" | "divisions"> | null | undefined): string | null =>
+  !me ? null : me.channel?.code === "PAP" ? "PAP" : me.divisions?.length ? me.divisions.join(" · ") : (me.channel?.code ?? null);
+
 /** NBD or CRR inside B2B Telesales, by the seat's title as the chart names them. */
 export const b2bRole = (me: Pick<Me, "role" | "title" | "channel"> | null | undefined) =>
   me?.role !== "medrep" || me.channel?.code !== "B2B"

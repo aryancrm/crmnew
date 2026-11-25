@@ -9,7 +9,7 @@ import { Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
 import { stuckNow } from "../orders/clock";
 import { STATUS_LABEL } from "../orders/rules";
-import { creditedTo } from "../org/service";
+import { creditedTo, inForce } from "../org/service";
 import { ROLE_LABEL, type Role } from "../people/roles";
 import type {
   CeoAlert,
@@ -296,6 +296,97 @@ export async function channelSales(db: Database, facts: MonthFacts): Promise<Cha
     }));
 }
 
+/** Every box of the Company tree with the business it is in and the channel it counts for, as the
+ *  tree draws it and the target sheet names it (Head → Channel): the box straight under a business
+ *  (HOSP, RX Business, CLIDP); a business's own box for the seats straight under its head (Modern
+ *  Trade's). Closed boxes too, so a seat's past sales still find their place. */
+export const SHEET_PLACE = sql`place as (
+    select b.id, b.id as business, b.id as box, 0 as depth from org_unit b join org_unit c on c.id = b.parent_id and c.kind = 'company'
+    union all
+    select k.id, p.business, case when p.depth = 0 then k.id else p.box end, p.depth + 1 from org_unit k join place p on k.parent_id = p.id)`;
+/** A channel's name as the target sheet writes it (Aryan, 22 Nov: "the sheet's names": B2B, BID,
+ *  MT, not the box's B2B Telesales, Government Bidding, Modern Trade): the word the latest sheet
+ *  gives the rows of the box's seats; a box on no row (PAP, Government Account) keeps its own
+ *  name. The boxes are not renamed (code and scripts find them by name). Needs SHEET_PLACE. */
+export const sheetNameOfBox = (box: SQL): SQL =>
+  sql`coalesce((select r.channel from target_sheet_row r join seat rs on rs.id = r.seat_id join place rp on rp.id = rs.unit_id
+      where rp.box = ${box} and r.month = (select max(month) from target_sheet_row)
+      group by r.channel order by count(*) desc, r.channel limit 1),
+    (select bx.name from org_unit bx where bx.id = ${box}))`;
+/** Who leads a box (alias given) today, by name. */
+export const leadOfBox = (box: SQL, today: string): SQL =>
+  sql`(select p.name from seat ls join seat_holder lh on lh.seat_id = ls.id and lh.kind = 'holder' and ${inForce("lh", today)} join person p on p.id = lh.person_id
+    where ls.unit_id = ${box} and ls.lead and ls.active order by ls.sort, ls.id limit 1)`;
+
+/** Each channel's month as the target sheet has the channels (Aryan, 22 Nov: "one list of channels,
+ *  the sheet's"): what its seats sold (their invoices, Zoho's and ours) against the targets set on
+ *  those seats, with who manages it and the business it is under. Sales by a seller tied to no seat
+ *  come last, so the rows add up to the company's figure. */
+export async function sheetChannelSales(db: Database, facts: MonthFacts): Promise<ChannelFigures[]> {
+  const today = facts.today;
+  const found = await rows<{ id: number; name: string; business: string; own: boolean; manager: string | null; head: string | null; target: number | null; sold: number; today: number; people: number; customers: number }>(
+    db,
+    sql`with recursive ${SHEET_PLACE},
+      sold as (
+        select i.seat_id, sum(i.total) as sold, coalesce(sum(i.total) filter (where i.issued_on = ${today}::date), 0) as today
+        from sale_invoice i where ${soldIn(facts)} group by 1),
+      figures as (
+        select pl.business, pl.box, coalesce(sum(so.sold), 0)::float8 as sold, coalesce(sum(so.today), 0)::float8 as today,
+          nullif(sum((select sum(${targetShare(facts)}) from seat_target t where t.seat_id = st.id)), 0)::float8 as target,
+          -- Someone sells in it: in a business's own box, someone other than its head.
+          bool_or(st.active and box.active and st.module in ('medrep', 'online', 'team_lead', 'manager') and (pl.box <> pl.business or not st.lead)
+            -- PAP is a process, not a channel (22 Nov): its box is listed only while old sales sit on it.
+            and box.channel_id is distinct from (select pc.id from channel pc where pc.code = 'PAP')) as selling
+        from seat st join place pl on pl.id = st.unit_id join org_unit box on box.id = pl.box left join sold so on so.seat_id = st.id
+        group by 1, 2)
+      select box.id::int as id, ${sheetNameOfBox(sql`box.id`)} as name, biz.name as business, box.id = biz.id as own,
+        ${leadOfBox(sql`box.id`, today)} as manager, ${leadOfBox(sql`biz.id`, today)} as head, f.target, f.sold, f.today,
+        (select count(distinct lh.person_id) from seat st join place pl on pl.id = st.unit_id
+            join seat_holder lh on lh.seat_id = st.id and lh.kind = 'holder' and ${inForce("lh", today)}
+          where st.active and pl.box = box.id)::int as people,
+        (select count(*) from customer c where c.active and c.area_id in
+          (select st.area_id from seat st join place pl on pl.id = st.unit_id where pl.box = box.id and st.area_id is not null))::int as customers
+      from figures f join org_unit box on box.id = f.box join org_unit biz on biz.id = f.business
+      where biz.kind = 'business' and (f.sold > 0 or f.target is not null or f.selling)
+      order by biz.sort, biz.id, box.id = biz.id, box.sort, box.id`,
+  );
+  const [all] = await rows<{ sold: number; today: number }>(
+    db,
+    sql`select coalesce(sum(i.total), 0)::float8 as sold, coalesce(sum(i.total) filter (where i.issued_on = ${today}::date), 0)::float8 as today
+      from sale_invoice i where ${soldIn(facts)}`,
+  );
+  const listed: ChannelFigures[] = found.map((row) => ({
+    id: row.id,
+    code: "",
+    name: row.name,
+    // Who manages it (its own lead, else the business's head), then the business it is under.
+    head: [row.manager ?? row.head ?? "No manager named", row.own ? null : row.business].filter(Boolean).join(" · "),
+    business: row.business as string | null,
+    people: row.people,
+    customers: row.customers,
+    target: row.target,
+    sold: row.sold,
+    today: row.today,
+    pct: pctOf(row.sold, row.target),
+    tone: paceTone(row.sold, row.target, facts.pace),
+  }));
+  const rest = (all?.sold ?? 0) - listed.reduce((sum, row) => sum + row.sold, 0);
+  if (Math.abs(rest) >= 1)
+    listed.push({
+      id: 0,
+      code: "",
+      name: "Not tied to a seat yet",
+      head: "Old-system sales by a seller with no seat on the tree",
+      business: null,
+      target: null,
+      sold: rest,
+      today: (all?.today ?? 0) - listed.reduce((sum, row) => sum + row.today, 0),
+      pct: null,
+      tone: paceTone(rest, null, facts.pace),
+    });
+  return listed;
+}
+
 /** The CEO's first screen: the month in four figures, the company in summaries, the channels
  *  against their targets, and what needs the CEO now. */
 export async function ceoHome(
@@ -327,7 +418,7 @@ export async function ceoHome(
       from book_doc where kind = 'bill' and balance > 0 and status not in ('void', 'draft', 'pending_approval')`,
   );
   const [channels, totals, money, orders, dispatch, stock, counts] = await Promise.all([
-    channelSales(db, facts),
+    sheetChannelSales(db, facts),
     rows<{
       achieved: number;
       today: number;
@@ -339,9 +430,14 @@ export async function ceoHome(
       sql`select
           coalesce((select sum(i.total) from sale_invoice i where ${soldIn(facts)}), 0)::float8 as achieved,
           coalesce((select sum(i.total) from sale_invoice i where ${soldIn(facts)} and i.issued_on = ${today}::date), 0)::float8 as today,
-          coalesce((select sum(amount) from payment where active and paid_on >= ${first}::date and paid_on < ${next}::date), 0)::float8 as collected,
-          coalesce((select sum(amount) from payment where active and paid_on >= ${before.from}::date and paid_on <= ${before.to}::date), 0)::float8 as before,
-          (select nullif(sum(${targetShare(facts)}), 0) from sales_target t join person p on p.id = t.person_id where p.active)::float8 as target`,
+          -- Money only, as Finance's Home counts it: a bill settled with the customer's credit, a
+          -- deduction, tax withheld or points brought no money in (the two Homes disagreed, 23 Nov).
+          coalesce((select sum(amount) from payment where active and method not in ('points', 'withholding', 'credit', 'deduction') and paid_on >= ${first}::date and paid_on < ${next}::date), 0)::float8 as collected,
+          coalesce((select sum(amount) from payment where active and method not in ('points', 'withholding', 'credit', 'deduction') and paid_on >= ${before.from}::date and paid_on <= ${before.to}::date), 0)::float8 as before,
+          -- The targets set on the seats (the target sheet's, the vacant seats' too), so the headline is
+          -- the sum of the channels under it; a month from before seats had targets: its people's.
+          coalesce((select nullif(sum(${targetShare(facts)}), 0) from seat_target t),
+            (select nullif(sum(${targetShare(facts)}), 0) from sales_target t join person p on p.id = t.person_id where p.active))::float8 as target`,
     ),
     rows<{
       owed: number;
@@ -449,7 +545,7 @@ export async function ceoHome(
         kind: "channel",
         text: `${channel.name} is far behind: ${Math.round(channel.pct ?? 0)}% of ${peso(channel.target ?? 0)}`,
         note: `${facts.daysLeft} ${facts.daysLeft === 1 ? "day" : "days"} left${channel.head ? ` · ${channel.head}` : ""}`,
-        href: `/reports/channels?month=${facts.month}`,
+        href: "/divisions",
         tone: "bad",
       });
   if (waiting.stuck > 0)

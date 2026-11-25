@@ -9,6 +9,7 @@ import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { allow } from "../http";
 import { COST_ROLES, todayManila } from "../inventory/rules";
+import { PROMISED_ORDER } from "../inventory/service";
 import { companyInfo } from "../settings/service";
 import type { Me, PurchaseBoard, PurchaseOrderExtra, VendorItems } from "../types";
 
@@ -26,11 +27,20 @@ export async function purchaseBoard(db: Database, me: Me): Promise<PurchaseBoard
   const [receive, bill, owed, credits, buyMore, recent] = await Promise.all([
     rows<PurchaseBoard["toReceive"]>(
       db,
-      sql`select count(distinct d.id)::int as orders, coalesce(sum(${LEFT}), 0)::int as pieces,
-          count(distinct d.id) filter (where d.due_date < ${today}::date)::int as late,
-          coalesce(sum(round(${LEFT} * coalesce(l.rate, 0) * d.fx_rate * 100)), 0)::bigint::float8 as value
-        from book_doc d join book_line l on l.doc_id = d.id
-        where ${RUNNING(today)} and ${LEFT} > 0`,
+      // The purchase orders in Purchases, and the few still open on the first purchase pages: the
+      // same count the stock pages give (Aryan, 23 Nov: Overview said 2 to receive, this page 0).
+      sql`select (a.orders + b.orders)::int as orders, (a.pieces + b.pieces)::int as pieces, (a.late + b.late)::int as late,
+          (a.value + b.value)::float8 as value, b.orders::int as old
+        from (
+          select count(distinct d.id) as orders, coalesce(sum(${LEFT}), 0) as pieces,
+            count(distinct d.id) filter (where d.due_date < ${today}::date) as late,
+            coalesce(sum(round(${LEFT} * coalesce(l.rate, 0) * d.fx_rate * 100)), 0)::bigint as value
+          from book_doc d join book_line l on l.doc_id = d.id
+          where ${RUNNING(today)} and ${LEFT} > 0) a,
+          (select count(distinct p.id) as orders, coalesce(sum(l.qty), 0) as pieces,
+            count(distinct p.id) filter (where p.expected_on < ${today}::date) as late,
+            coalesce(sum(round(l.qty * l.unit_cost * p.fx_rate * 100)), 0)::bigint as value
+          from purchase p join purchase_line l on l.purchase_id = p.id where p.state = 'ordered') b`,
     ),
     rows<PurchaseBoard["toBill"]>(
       db,
@@ -57,15 +67,28 @@ export async function purchaseBoard(db: Database, me: Me): Promise<PurchaseBoard
     // what is coming, and where it was bought last and at what price, to order it again.
     rows<PurchaseBoard["buyMore"][number]>(
       db,
-      sql`with free as (
+      sql`with shelf as (
             select s_b.medicine_id, sum(s.qty)::int as qty from stock s join batch s_b on s_b.id = s.batch_id
             where s.qty > 0 and s_b.expires_on >= ${today}::date group by 1),
+          -- Pieces on placed orders not packed yet: on the shelf, but sold. "Free" is what is left
+          -- after them (it was the whole shelf, so a medicine its orders had already taken, or
+          -- wanted more of than there was, never came up to buy; 23 Nov).
+          promised as (
+            select i.medicine_id, sum(i.qty)::int as qty from order_item i join sales_order o on o.id = i.order_id
+            where ${PROMISED_ORDER} group by 1),
+          free as (
+            select m.id as medicine_id, coalesce(sh.qty, 0) - coalesce(pr.qty, 0) as qty
+            from medicine m left join shelf sh on sh.medicine_id = m.id left join promised pr on pr.medicine_id = m.id),
           sold as (
             select medicine_id, sum(-qty)::int as qty from stock_move
             where kind = 'deliver' and at >= now() - interval '30 days' group by 1),
           coming as (
-            select l.medicine_id, sum(${LEFT})::int as qty from book_doc d join book_line l on l.doc_id = d.id
-            where ${RUNNING(today)} and l.medicine_id is not null and ${LEFT} > 0 group by 1),
+            select medicine_id, sum(qty)::int as qty from (
+              select l.medicine_id, ${LEFT} as qty from book_doc d join book_line l on l.doc_id = d.id
+                where ${RUNNING(today)} and l.medicine_id is not null and ${LEFT} > 0
+              union all
+              select l.medicine_id, l.qty from purchase_line l join purchase p on p.id = l.purchase_id where p.state = 'ordered'
+            ) c group by 1),
           last as (
             select distinct on (l.medicine_id) l.medicine_id, d.supplier_id, coalesce(s.name, d.party_name) as vendor, l.rate::float8 as rate,
               d.currency, to_char(d.doc_date, 'YYYY-MM-DD') as on
@@ -73,9 +96,10 @@ export async function purchaseBoard(db: Database, me: Me): Promise<PurchaseBoard
             where d.kind in ('purchase_order', 'bill') and d.status not in ('void', 'cancelled', 'draft') and l.medicine_id is not null and coalesce(l.rate, 0) > 0
             order by l.medicine_id, d.doc_date desc, d.id desc)
         select m.id::int as id, m.name || coalesce(' ' || m.strength, '') as name, m.pack, m.pack_size::int as "packSize",
-          coalesce(f.qty, 0)::int as free, m.reorder_level::int as "reorderLevel", coalesce(so.qty, 0)::int as "sold30",
+          greatest(coalesce(f.qty, 0), 0)::int as free, greatest(-coalesce(f.qty, 0), 0)::int as short,
+          m.reorder_level::int as "reorderLevel", coalesce(so.qty, 0)::int as "sold30",
           coalesce(c.qty, 0)::int as coming,
-          case when coalesce(so.qty, 0) > 0 then floor(coalesce(f.qty, 0) * 30.0 / so.qty)::int end as "daysLeft",
+          case when coalesce(so.qty, 0) > 0 then floor(greatest(coalesce(f.qty, 0), 0) * 30.0 / so.qty)::int end as "daysLeft",
           la.supplier_id::int as "vendorId", la.vendor, la.rate as "lastRate", la.currency as "lastCurrency", la.on as "lastOn"
         from medicine m
           left join free f on f.medicine_id = m.id left join sold so on so.medicine_id = m.id
@@ -95,7 +119,7 @@ export async function purchaseBoard(db: Database, me: Me): Promise<PurchaseBoard
   ]);
   return {
     today,
-    toReceive: receive[0] ?? { orders: 0, pieces: 0, late: 0, value: 0 },
+    toReceive: receive[0] ?? { orders: 0, pieces: 0, late: 0, value: 0, old: 0 },
     toBill: bill[0] ?? { orders: 0, value: 0 },
     bills: owed[0] ?? { open: 0, owed: 0, overdue: 0, overdueAmount: 0, dueThisWeek: 0 },
     unusedCredits: credits[0]?.amount ?? 0,

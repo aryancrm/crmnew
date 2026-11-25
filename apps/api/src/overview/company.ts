@@ -9,6 +9,8 @@ import { type Database, rows } from "../db/index";
 import { allow } from "../http";
 import { attendanceToday } from "../hr/attendance";
 import { addDays, todayManila } from "../inventory/rules";
+import { periodFacts } from "../sales/rules";
+import { sheetChannelSales } from "../sales/service";
 import type { CompanyGlance, Me } from "../types";
 
 export async function companyGlance(db: Database, me: Me): Promise<CompanyGlance> {
@@ -45,12 +47,9 @@ export async function companyGlance(db: Database, me: Me): Promise<CompanyGlance
       sql`select (select count(distinct a.person_id) from attendance a join person p on p.id = a.person_id and p.active where a.day = ${today}::date and a.time_in is not null)::int as in,
           (select count(*) from person where active and role <> 'admin')::int as all`,
     ),
-    rows<{ code: string; name: string; target: number; sold: number }>(
-      db,
-      sql`select ch.code, ch.name,
-          coalesce((select sum(t.amount) from seat_target t where t.month = ${first}::date and seat_channel_id(t.seat_id) = ch.id), 0)::float8 as target,
-          coalesce((select sum(s.total) from sale_invoice s where s.channel_id = ch.id and s.status <> 'cancelled' and s.issued_on between ${first}::date and ${today}::date), 0)::float8 as sold
-        from channel ch where ch.active order by ch.sort, ch.id`,
+    // The target sheet's channels, the same list as "Sales this month" above it (22 Nov).
+    sheetChannelSales(db, periodFacts({})).then((found) =>
+      found.map((one) => ({ code: "", name: one.name, target: one.target ?? 0, sold: one.sold })),
     ),
     rows<{ day: string; amount: number }>(
       db,

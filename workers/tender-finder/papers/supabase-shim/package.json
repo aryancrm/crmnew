@@ -1,0 +1,9 @@
+{
+  "name": "@supabase/supabase-js",
+  "version": "0.0.0-crm",
+  "private": true,
+  "description": "Not Supabase: what the tender finder's vendored modules import in its place. Their tables and files are the CRM's (index.mjs).",
+  "type": "module",
+  "main": "./index.mjs",
+  "exports": "./index.mjs"
+}

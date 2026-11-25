@@ -41,11 +41,13 @@ export function PurchasesBoard() {
         <>
           <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Tile
-              to="/purchases/orders?stage=to_receive"
+              // Orders still open on the first purchase pages are received there: when they are all
+              // that is coming, the tile opens them.
+              to={data.toReceive.old > 0 && data.toReceive.old === data.toReceive.orders ? "/purchases/old" : "/purchases/orders?stage=to_receive"}
               icon={ShoppingCart}
               label="To receive"
               value={count(data.toReceive.orders)}
-              sub={`${count(data.toReceive.pieces)} pieces · ${shortMoney(data.toReceive.value)}${data.toReceive.late ? ` · ${count(data.toReceive.late)} late` : ""}`}
+              sub={`${count(data.toReceive.pieces)} pieces · ${shortMoney(data.toReceive.value)}${data.toReceive.late ? ` · ${count(data.toReceive.late)} late` : ""}${data.toReceive.old > 0 && data.toReceive.old !== data.toReceive.orders ? ` · ${count(data.toReceive.old)} on the first pages` : ""}`}
               tone={data.toReceive.late ? "bad" : "info"}
             />
             <Tile
@@ -111,7 +113,10 @@ export function PurchasesBoard() {
                           </Link>
                           {row.pack && <div className="text-[12px] text-slate-500">{row.pack}</div>}
                         </td>
-                        <td className={`${TD} text-right font-semibold tabular-nums ${row.free === 0 ? "text-rose-700" : "text-amber-700"}`}>{count(row.free)}</td>
+                        <td className={`${TD} text-right font-semibold tabular-nums ${row.free === 0 ? "text-rose-700" : "text-amber-700"}`}>
+                          {count(row.free)}
+                          {row.short > 0 && <div className="text-[11px] font-semibold text-rose-700">orders need {count(row.short)} more</div>}
+                        </td>
                         <td className={`${TD} text-right tabular-nums text-slate-500`}>{count(row.reorderLevel)}</td>
                         <td className={`${TD} text-right tabular-nums`}>{count(row.sold30)}</td>
                         <td className={`${TD} text-right tabular-nums`}>

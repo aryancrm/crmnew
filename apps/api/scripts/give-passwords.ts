@@ -1,4 +1,4 @@
-// Gives people who have none yet a one-time password of their own (after migration 0133). Each
+// Gives people who have none yet a one-time password of their own (after migration 0142). Each
 // chooses their own at the first sign-in. It only lists until --apply is given.
 //
 //   pnpm --filter @2mg/api passwords --role=admin                     who it would be

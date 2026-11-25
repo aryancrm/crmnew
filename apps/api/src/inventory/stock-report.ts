@@ -45,6 +45,8 @@ export type StockReportRow = {
   warehouse: string;
   /** The first day this batch was received into this warehouse (a transfer isn't a receive). */
   receivedOn: string | null;
+  /** Who the batch was bought from, when a purchase says so. */
+  vendor: string | null;
   /** Received into this warehouse: bought, opening stock, stock added. */
   received: number;
   /** Moved in from (+) or out to (−) other warehouses, net. */
@@ -172,6 +174,20 @@ export async function stockReport(
             ${place ? sql`where warehouse_id = ${place}` : sql``}
             group by batch_id, warehouse_id
           ),
+          -- Who each batch was bought from (Zoho's batch report had it): the latest purchase receive,
+          -- bill or order whose line carries the batch, read once over the purchase lines.
+          vend as (
+            select distinct on (medicine_id, batch) medicine_id, batch, vendor from (
+              select l.medicine_id, upper(coalesce(bb.batch_no, x.value->>'Batch Reference#')) as batch,
+                coalesce(sp.name, d.party_name) as vendor, d.doc_date, d.id
+              from book_doc d join book_line l on l.doc_id = d.id left join supplier sp on sp.id = d.supplier_id
+                left join batch bb on bb.id = l.batch_id
+                left join lateral jsonb_array_elements(case when jsonb_typeof(l.batches) = 'array' then l.batches else '[]'::jsonb end) x on true
+              where d.kind in ('purchase_receive', 'bill', 'purchase_order') and d.status not in ('void', 'cancelled', 'draft')
+                and l.medicine_id is not null
+            ) v where batch is not null and vendor is not null
+            order by medicine_id, batch, doc_date desc, id desc
+          ),
           places as (
             select batch_id, warehouse_id from stock ${place ? sql`where warehouse_id = ${place}` : sql``}
             union
@@ -187,13 +203,14 @@ export async function stockReport(
             coalesce(mv.packed, 0)::int as packed, coalesce(mv.samples, 0)::int as samples,
             coalesce(mv.counted, 0)::int as counted,
             coalesce(s.qty, 0)::int as "onShelf",
-            b.unit_cost::int as "unitCost"
+            b.unit_cost::int as "unitCost", vd.vendor
           from places k
           join batch b on b.id = k.batch_id
           join medicine m on m.id = b.medicine_id
           join warehouse w on w.id = k.warehouse_id
           left join stock s on s.batch_id = k.batch_id and s.warehouse_id = k.warehouse_id
           left join moved mv on mv.batch_id = k.batch_id and mv.warehouse_id = k.warehouse_id
+          left join vend vd on vd.medicine_id = b.medicine_id and vd.batch = upper(b.batch_no)
           ${where.length ? sql`where ${sql.join(where, sql` and `)}` : sql``}
           order by lower(m.name), lower(coalesce(m.strength, '')), m.id, b.expires_on, b.batch_no, lower(w.name)`,
     ),
@@ -237,6 +254,7 @@ export async function stockReport(
     warehouseId: row.warehouseId,
     warehouse: row.warehouse,
     receivedOn: row.receivedOn,
+    vendor: row.vendor,
     received: row.received,
     moved: row.moved,
     packed: row.packed,
@@ -357,12 +375,13 @@ export function stockReportSheets(report: StockReport): Sheet[] {
     "Counted ±",
     "On the shelf",
     ...(can.cost ? ["Cost of one (₱)", "Value on the shelf (₱)"] : []),
+    "Bought from",
   ];
   const title = titled(`Stock report · ${dayWords(report.today)} · ${filters.join(" · ")}`, heads.length);
   const batches: Sheet = {
     name: "Stock report",
     merges: [title.merge],
-    widths: [34, 20, 16, 12, 10, 14, 20, 13, 11, 11, 11, 10, 10, 12, ...(can.cost ? [13, 16] : [])],
+    widths: [34, 20, 16, 12, 10, 14, 20, 13, 11, 11, 11, 10, 10, 12, ...(can.cost ? [13, 16] : []), 30],
     rows: [
       title.row,
       heads.map((v) => ({ v, s: "head" as const })),
@@ -383,6 +402,7 @@ export function stockReportSheets(report: StockReport): Sheet[] {
         { v: row.onShelf, s: "int" },
         // The cost of one shows its centavos (the writer's peso style shows whole pesos only).
         ...(can.cost ? [{ v: pesos(row.unitCost), s: "centavos" as const }, { v: pesos(row.value), s: "money" as const }] : []),
+        row.vendor,
       ]),
       [
         { v: `Total · ${totals.batches.toLocaleString("en-PH")} batches`, s: "totalName" },

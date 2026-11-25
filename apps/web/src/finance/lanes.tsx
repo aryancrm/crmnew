@@ -5,6 +5,7 @@
 // Above them the money in today and this month, owed and overdue. Loaded only when someone picks
 // Board (lazy), with its own read. On a phone the three columns are three tabs.
 
+import { rememberConfirm } from "./undo";
 import type { FinanceBoard, FinanceCollect, FinanceOrderCard } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { FileText, ImageOff, StickyNote, TriangleAlert } from "lucide-react";
@@ -133,7 +134,9 @@ export function FinanceLanes() {
                     type="button"
                     className={MAIN}
                     disabled={money.busy}
-                    onClick={() => money.send(`/api/finance/orders/${card.id}/invoice`, {})}
+                    onClick={async () => {
+                      if (await money.send(`/api/finance/orders/${card.id}/invoice`, {})) rememberConfirm(card.id, card.code, true);
+                    }}
                   >
                     Check & send to Dispatch
                   </button>
