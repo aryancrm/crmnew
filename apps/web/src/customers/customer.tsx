@@ -4,7 +4,7 @@
 // doctors, details, activity) with the open one on the right. Everything comes from one read.
 
 import { RefillCard } from "./refill";
-import { ActionBar, useCustomerWork } from "./customer-work";
+import { ActionBar, NextCard, useCustomerWork } from "./customer-work";
 import { FieldPanel } from "../mr/clients";
 import type {
   CustomerCredit,
@@ -335,6 +335,7 @@ export function Customer() {
         />
       </RecordHead>
       <Problem message={action.problem?.message} />
+      {work.seller !== "desk" && <NextCard steps={work.steps} run={work.run} />}
 
       {/* Everything on one page, as the medicine page: their buying on the left, money, details
           and what happened on the right. */}

@@ -1,6 +1,6 @@
 // What a seller does with a customer, drawn on the customer's page (rules in work.ts): the
-// action bar on top and the dialogs it opens (log a call, add a visit) without leaving the page
-// (medrep branch, 25 Nov).
+// action bar on top, What's next under the head, and the dialogs they open (log a call, add a
+// visit) without leaving the page (medrep branch, 25 Nov).
 
 import type { ClientPage } from "@2mg/api/mr";
 import type { CustomerPage, Me } from "@2mg/api/types";
@@ -13,9 +13,9 @@ import { useFieldClient } from "../mr/clients";
 import { AddVisitsDialog } from "../mr/plan";
 import { LogCall } from "../sellers/calls";
 import { manilaToday } from "../team/range";
-import { Dialog } from "../ui";
+import { CARD, Dialog } from "../ui";
 import { placesOrders } from "../auth";
-import { ACTION_WORDS, type ActionKey, actionsFor, sellerKind } from "./work";
+import { ACTION_WORDS, type ActionKey, actionsFor, type NextStep, nextSteps, sellerKind } from "./work";
 
 /** The customer kinds the field visits (doctors, hospitals, firms). */
 const FIELD_KINDS = ["doctor", "hospital", "drugstore", "distributor"];
@@ -63,6 +63,7 @@ export function useCustomerWork(me: Me | undefined, page: CustomerPage | undefin
     run,
     dialogs,
     actions: actionsFor(seller, can),
+    steps: page ? nextSteps(page, field, can, manilaToday()) : [],
   };
 }
 
@@ -129,3 +130,51 @@ export function ActionBar({
     </div>
   );
 }
+
+const TONE: Record<NextStep["tone"], string> = {
+  bad: "bg-rose-500",
+  warn: "bg-amber-500",
+  info: "bg-sky-500",
+};
+
+/** What waits with this customer now, the most urgent first, each with what to press. */
+export function NextCard({ steps, run }: { steps: NextStep[]; run: (key: ActionKey) => void }) {
+  return (
+    <section className={`${CARD} p-4`} aria-labelledby="whats-next">
+      <h2 id="whats-next" className="mb-2 text-sm font-bold text-slate-900">
+        What's next with them
+      </h2>
+      {steps.length === 0 ? (
+        <p className="text-sm text-slate-500">Nothing waiting with them.</p>
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {steps.map((step) => (
+            <li key={step.key} className="flex flex-wrap items-center gap-3 py-2">
+              <span className={`size-2 shrink-0 rounded-full ${TONE[step.tone]}`} aria-hidden="true" />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium text-slate-900">{step.text}</span>
+                {step.sub && <span className="block truncate text-xs text-slate-500">{step.sub}</span>}
+              </span>
+              {step.go &&
+                ("action" in step.go ? (
+                  <button type="button" onClick={() => run((step.go as { action: ActionKey }).action)} className={GO}>
+                    {step.go.label}
+                  </button>
+                ) : "to" in step.go ? (
+                  <Link to={step.go.to} className={GO}>
+                    {step.go.label}
+                  </Link>
+                ) : (
+                  <a href="#papers" className={GO}>
+                    {step.go.label}
+                  </a>
+                ))}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
+const GO = "shrink-0 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:border-emerald-300 hover:text-emerald-800";

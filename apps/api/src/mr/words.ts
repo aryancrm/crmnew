@@ -515,6 +515,7 @@ export type ClientPage = {
       firmName: string | null;
       offList: boolean;
       offAsked: { by: string; at: string; why: string } | null;
+      nextVisit: { id: number; day: string } | null;
     };
   history: VisitPage["history"];
   orders: FieldOrder[];

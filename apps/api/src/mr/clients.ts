@@ -171,6 +171,9 @@ export async function clientPage(db: Database, me: Me, id: number): Promise<Clie
         'address', c.address, 'phone', c.phone, 'email', c.email, 'licenceNo', c.licence_no, 'pin', c.pin, 'active', c.active,
         'worksAtName', (select name from customer where id = c.works_at), 'firmName', (select name from customer where id = f.firm_id),
         'offList', coalesce(f.off_list, false),
+        -- The next planned visit (the customer page's What's next, 25 Nov).
+        'nextVisit', (select json_build_object('id', v.id::int, 'day', to_char(v.day, 'YYYY-MM-DD')) from visit v
+          where v.customer_id = c.id and v.status = 'planned' and v.day >= ${todayManila()}::date order by v.day, v.id limit 1),
         'offAsked', case when f.off_asked_at is null then null else json_build_object('by', (select name from person where id = f.off_asked_by),
           'at', ${iso("f.off_asked_at")}, 'why', f.off_why) end) as row
       ${clientFrom} where c.id = ${id}`,
