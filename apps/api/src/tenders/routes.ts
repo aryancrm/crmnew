@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { Database } from "../db/index";
 import { type Env, idParam, readBody } from "../http";
 import { feedSince, foundCount, foundDetail, listFound, makeTender, noteRun, robotKnown, robotMolecules, screenFound, takeFound, takeScreened } from "./finder";
+import { fetchNow } from "./fetch-now";
 import { foundFile, keepPaper, noteRobotLogin, paperForRobot, papersKept, papersWanted, robotLoginState, robotLogins, robotProducts, screenedMarks, tryLoginAgain } from "./papers";
 import { robotCaller } from "./robot-caller";
 import { robotRows, writeRobotRows } from "./robot-store";
@@ -80,6 +81,8 @@ export function tenderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
     await tryLoginAgain(db, c.get("me"));
     return c.json({ ok: true });
   });
+  // Fetch now: the robot runs at once instead of at the next hour (tenders/fetch-now.ts).
+  app.post("/api/tenders/found/robot/fetch", async (c) => c.json(await fetchNow(db, c.get("me"))));
   app.get("/api/tenders/found/:id", async (c) => c.json(await foundDetail(db, c.get("me"), idParam(c))));
   app.post("/api/tenders/found/:id/screen", async (c) => {
     const input = await readBody(c, z.object({ on: z.boolean() }));

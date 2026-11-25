@@ -5757,7 +5757,19 @@ export type FoundList = {
     login: { state: "never" | "ok" | "refused" | "busy" | "trouble"; at: string | null; said: string | null };
     /** The PS-PhilGEPS robot: connected or not (a person's captcha tick makes its session), and its last Sync. */
     ps: { connected: boolean; connectedAt: string | null; status: string | null; stage: string | null; error: string | null; finishedAt: string | null };
+    /** Fetch now: whether a person can start the robot at once from this server, and how it went. */
+    fetch: FetchState;
   };
+};
+
+/** How Fetch now starts the robot on this server: GitHub's workflow, on this computer, or not at all. */
+export type FetchWay = "github" | "local" | "off";
+export type FetchState = {
+  way: FetchWay;
+  /** A press still waiting for its run, or pressed in the last 10 minutes; done once a run started by a person came in. */
+  running: { by: string | null; at: string; done: boolean } | null;
+  /** The last press that could not start, until a run comes after it. */
+  failed: { at: string; note: string | null } | null;
 };
 
 /** A found notice's papers: the files the robot got from PhilGEPS and what it said of them. */

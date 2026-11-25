@@ -59,6 +59,55 @@ function State({ found }: { found: FoundTender }) {
   return found.molecules.length ? <Pill tone="brand">New</Pill> : <Pill>Not ours</Pill>;
 }
 
+/** Fetch now: the robot runs at once instead of at the next hour (the bidding system's Sync button).
+ *  While a press waits for its run the page looks again every 15 seconds (TenderFinderPage). */
+function FetchNow({ fetch }: { fetch: FoundList["robot"]["fetch"] }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const running = fetch.running;
+  const waiting = running !== null && !running.done;
+  const title =
+    fetch.way === "off"
+      ? "The robot can't be started from this server; it still runs by itself every hour."
+      : running?.done
+        ? "Fetched a few minutes ago; it can be pressed again 10 minutes after the last press."
+        : fetch.way === "github"
+          ? "Asks GitHub to run the robot now: both portals, as the hourly run does. It takes a few minutes."
+          : "Runs the robot on this computer now (the public PhilGEPS list). It takes a few minutes.";
+  return (
+    <span className="flex flex-col items-end">
+      <span className="flex items-center gap-2">
+        {waiting && running && (
+          <span className="text-[12px] text-slate-600">
+            Fetching… started {running.by ? `by ${running.by} ` : ""}at {when(running.at)}
+          </span>
+        )}
+        <Button
+          small
+          variant="primary"
+          title={title}
+          disabled={action.busy || fetch.way === "off" || running !== null}
+          className="disabled:opacity-50"
+          onClick={() =>
+            void action.run(async () => {
+              await api("/api/tenders/found/robot/fetch", { method: "POST", body: {} });
+              await queries.invalidateQueries({ queryKey: ["tenders", "found"] });
+            })
+          }
+        >
+          {waiting ? "Fetching…" : "Fetch now"}
+        </Button>
+      </span>
+      {fetch.failed && !waiting && (
+        <span className="mt-1 text-[12px] font-semibold text-rose-700">
+          The last Fetch now ({when(fetch.failed.at)}) did not start{fetch.failed.note ? `: ${fetch.failed.note}` : "."}
+        </span>
+      )}
+      <Problem message={action.problem?.message} />
+    </span>
+  );
+}
+
 /** The robot's last word: when it last read the portals and what it found; its earlier runs under it. */
 function Robot({ robot }: { robot: FoundList["robot"] }) {
   const queries = useQueryClient();
@@ -80,13 +129,16 @@ function Robot({ robot }: { robot: FoundList["robot"] }) {
         <span className="min-w-0 text-slate-600">
           <b className="text-slate-900">Robot</b> {last ? <>last read {line(last)}</> : "has not handed anything in yet."}
         </span>
-        {!robot.ready ? (
-          <span className="text-[12px] font-semibold text-amber-700" title="The robot has no way in on this server (its GitHub workflow is switched off and no key is set).">
-            Not connected on this server
-          </span>
-        ) : (
-          quiet !== null && <span className="text-[12px] font-semibold text-amber-700">No run for {quiet} hours</span>
-        )}
+        <span className="flex flex-wrap items-center gap-2">
+          {!robot.ready ? (
+            <span className="text-[12px] font-semibold text-amber-700" title="The robot has no way in on this server (its GitHub workflow is switched off and no key is set).">
+              Not connected on this server
+            </span>
+          ) : (
+            quiet !== null && <span className="text-[12px] font-semibold text-amber-700">No run for {quiet} hours</span>
+          )}
+          <FetchNow fetch={robot.fetch} />
+        </span>
       </div>
       <p className={`mt-1 text-[12px] ${robot.ps.connected ? "text-slate-500" : "text-amber-700"}`}>
         <b className="font-semibold">PS-PhilGEPS</b>{" "}
@@ -157,6 +209,8 @@ export function TenderFinderPage() {
     queryKey: ["tenders", "found", view, q, source, molecule],
     queryFn: () => api<FoundList>(`/api/tenders/found?${new URLSearchParams({ view, q, source, molecule })}`),
     placeholderData: (before) => before,
+    // While Fetch now waits for its run, look again every 15 seconds so the new tenders show by themselves.
+    refetchInterval: (current) => (current.state.data?.robot.fetch.running && !current.state.data.robot.fetch.running.done ? 15_000 : false),
   });
   const data = query.data;
   if (!data) return <PageState query={query} what="the tenders found" />;
