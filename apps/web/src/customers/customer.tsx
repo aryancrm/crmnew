@@ -4,6 +4,8 @@
 // doctors, details, activity) with the open one on the right. Everything comes from one read.
 
 import { RefillCard } from "./refill";
+import { useMrMe } from "../mr/parts";
+import { FieldPanel, useFieldClient } from "../mr/clients";
 import type {
   CustomerCredit,
   CustomerFiles,
@@ -101,6 +103,12 @@ export function Customer() {
     queryKey: ["customers", "prices", id],
     queryFn: () => api<CustomerPrices>(`/api/customers/${id}/prices`),
   }).data?.past;
+
+  // The field's side of a doctor, hospital or firm, on this page (medrep branch, 25 Nov: one
+  // page per customer), for those with the field's pages.
+  const mr = useMrMe();
+  const fieldKind = ["doctor", "hospital", "drugstore", "distributor"].includes(query.data?.customer.kind ?? "");
+  const field = useFieldClient(id, Boolean(mr.data?.access) && fieldKind).data;
 
   const data = query.data;
   if (!data) return <PageState query={query} what="this customer" />;
@@ -341,6 +349,7 @@ export function Customer() {
           and what happened on the right. */}
       <div className="flex flex-wrap items-start gap-4">
         <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-4">
+          {field && <FieldPanel data={field} />}
           {/* A customer known only from before this CRM: what they were given, at what price, their
               old orders, invoices and payments come first (Aryan, 23 Nov: the office opened Zoho's
               Sales for exactly this); the two empty "no orders yet" panels would only hide them. */}
