@@ -740,10 +740,12 @@ export async function updateRecord(
     const [found] = await rows<Record<string, string | number | boolean | null> & { company: Company }>(
       tx,
       sql`select ${sql.join(
+        // The column and its key both come from RECORD_COLUMNS, a fixed list in this file, never from
+        // the request (the code scan's raw-SQL rule asks for that to be said).
         (Object.entries(RECORD_COLUMNS) as [string, string][]).map(([key, column]) =>
           DATE_FIELDS.has(key)
-            ? sql`to_char(${sql.raw(column)}, 'YYYY-MM-DD') as ${sql.raw(`"${key}"`)}`
-            : sql`${sql.raw(column)} as ${sql.raw(`"${key}"`)}`,
+            ? sql`to_char(${sql.raw(column)}, 'YYYY-MM-DD') as ${sql.raw(`"${key}"`)}` // nosemgrep
+            : sql`${sql.raw(column)} as ${sql.raw(`"${key}"`)}`, // nosemgrep
         ),
         sql`, `,
       )} from employee where person_id = ${personId} for update`,
