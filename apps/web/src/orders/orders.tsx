@@ -21,7 +21,7 @@ export function Orders() {
   if (!mine && !team && params.get("stuck") === "1")
     return (
       <div className="mx-auto max-w-screen-2xl">
-        <h1 className="text-2xl font-bold tracking-tight text-ink">Stuck over 2 days</h1>
+        <h1 className="text-[28px] font-semibold tracking-tight text-ink">Stuck over 2 days</h1>
         <p className="mt-1 mb-4 text-sm text-ink-2">
           Orders that haven't moved from the step they are at for more than 48 hours, at any desk.
         </p>
@@ -33,7 +33,7 @@ export function Orders() {
   return (
     <div className="mx-auto max-w-screen-2xl">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold tracking-tight text-ink">
+        <h1 className="text-[28px] font-semibold tracking-tight text-ink">
           {mine ? "My orders" : team ? "Team orders" : "All orders"}
         </h1>
         {places && (

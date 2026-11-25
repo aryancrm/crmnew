@@ -1120,7 +1120,7 @@ export function OrderNew({
           <ArrowLeft className="size-5" />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold tracking-tight text-ink">
+          <h1 className="text-[28px] font-semibold tracking-tight text-ink">
             {sentBack
               ? `Fix order ${sentBack.code}`
               : changing

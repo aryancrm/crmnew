@@ -1,0 +1,807 @@
+/* The order line in the hero's orange panel (order-line-demo.tsx): small copies of the app's own
+   screens. Colours and shapes follow the app (white cards, green action buttons, Poppins). */
+
+.hx .ol {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+}
+
+.hx .ol__track {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  transform-origin: 0 0;
+  transition: transform 1.35s cubic-bezier(0.65, 0, 0.25, 1);
+  will-change: transform;
+  font-family: "Poppins", var(--font-body), sans-serif;
+  font-size: 10px;
+  line-height: 1.35;
+  color: #1f2733;
+}
+
+/* --- A screen --------------------------------------------------------- */
+.hx .ol__window {
+  position: relative;
+  overflow: hidden;
+  border-radius: 7px;
+  background: #fff;
+  box-shadow: 0 24px 50px -24px rgba(31, 39, 51, 0.28), 0 0 0 1px #e3e6ec;
+}
+
+.hx .ol__top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 10px;
+  border-bottom: 1px solid #eceef3;
+  font-size: 9px;
+}
+
+.hx .ol__top b {
+  font-weight: 500;
+}
+
+.hx .ol__top img {
+  width: 14px;
+  height: 14px;
+}
+
+.hx .ol__app {
+  padding-left: 7px;
+  border-left: 1px solid #e3e6ec;
+  font-weight: 500;
+}
+
+.hx .ol__search {
+  flex: 1;
+  height: 16px;
+  margin: 0 8px;
+  border-radius: 6px;
+  background: #f1f3f6;
+}
+
+.hx .ol__start {
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: #2563eb;
+  color: #fff;
+  font-size: 8.5px;
+  font-weight: 600;
+}
+
+.hx .ol__body {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+}
+
+.hx .ol__side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 6px;
+  border-right: 1px solid #eceef3;
+  background: #fff;
+}
+
+.hx .ol__side-head {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 5px;
+  font-weight: 600;
+  font-size: 10px;
+}
+
+.hx .ol__side-head img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+
+.hx .ol__cta {
+  margin-bottom: 4px;
+  padding: 5px 6px;
+  border-radius: 4px;
+  background: #2563eb;
+  color: #fff;
+  font-weight: 600;
+  font-size: 8.5px;
+}
+
+.hx .ol__side-item {
+  padding: 4px 6px;
+  border-radius: 4px;
+  color: #5b6472;
+  font-size: 8.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hx .ol__side-item.is-on {
+  background: #e8f0fe;
+  color: #1d4ed8;
+  font-weight: 600;
+}
+
+.hx .ol__main {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  min-width: 0;
+  padding: 10px 12px 12px;
+}
+
+.hx .ol__main h4 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.hx .ol__date {
+  margin: 0 0 -6px;
+  color: #7a8394;
+  font-size: 8px;
+}
+
+/* --- Panels, tiles, stats --------------------------------------------- */
+.hx .ol__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid #eceef3;
+  border-radius: 5px;
+}
+
+.hx .ol__panel > small {
+  color: #5b6472;
+  font-size: 8px;
+  font-weight: 500;
+}
+
+.hx .ol__big {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+/* A desk's three counts: one strip, no gaps, bold blue, yellow and green, each with its icon in a
+   glassy circle on the right. */
+.hx .ol__counts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  margin-top: 3px;
+  border-radius: 5px;
+}
+
+.hx .ol__count {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-width: 0;
+  padding: 6px 7px 6px 8px;
+  background: #2563eb;
+  color: #fff;
+}
+
+.hx .ol__count:nth-child(2) {
+  background: #facc15;
+  color: #1f2733;
+}
+
+.hx .ol__count:nth-child(3) {
+  background: #16a34a;
+}
+
+.hx .ol__count-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.hx .ol__count small {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  overflow: hidden;
+  color: inherit;
+  font-size: 7.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.hx .ol__count small::before {
+  content: "";
+  flex: none;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.hx .ol__count b {
+  color: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.1;
+}
+
+.hx .ol__glass {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.22);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(4px);
+}
+
+.hx .ol__count:nth-child(2) .ol__glass {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.hx .ol__glass svg {
+  width: 10px;
+  height: 10px;
+}
+
+.hx .is-orange {
+  color: #c2410c;
+}
+
+.hx .is-green {
+  color: #15803d;
+}
+
+.hx .ol__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.hx .ol__pills span {
+  padding: 3px 7px;
+  border-radius: 4px;
+  color: #3c4452;
+  font-size: 8px;
+  box-shadow: inset 0 0 0 1px #eceef3;
+}
+
+.hx .ol__pills .is-on {
+  background: #2563eb;
+  color: #fff;
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.hx .ol__empty {
+  margin: 0;
+  padding: 22px 0;
+  border: 1px dashed #e3e6ec;
+  border-radius: 5px;
+  color: #7a8394;
+  text-align: center;
+  font-size: 9px;
+}
+
+/* --- The order: new row, card ----------------------------------------- */
+.hx .ol__new {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid #fed7aa;
+  border-radius: 5px;
+  background: #fff7f2;
+  animation: ol-in 0.4s var(--ease-out) both;
+}
+
+.hx .ol__new-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.hx .ol__new-text small,
+.hx .ol__card-head small {
+  color: #5b6472;
+  font-size: 8px;
+}
+
+.hx .ol__caret {
+  display: inline-block;
+  width: 1px;
+  height: 10px;
+  margin-left: 1px;
+  vertical-align: -1px;
+  background: #1f2733;
+  animation: ol-blink 0.8s steps(1) infinite;
+}
+
+.hx .ol__av {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #2563eb;
+  color: #fff;
+  font-size: 8.5px;
+  font-weight: 700;
+}
+
+.hx .ol__card {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 9px 10px;
+  border: 1px solid #eceef3;
+  border-radius: 5px;
+  transition: border-color 0.4s, background-color 0.4s;
+  animation: ol-in 0.45s var(--ease-out) both;
+}
+
+.hx .ol__card.is-done {
+  border-color: #bbe5c8;
+  background: #f4fbf6;
+}
+
+.hx .ol__card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.hx .ol__card-head > span:nth-child(2) {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.hx .ol__tag {
+  padding: 0 4px;
+  border-radius: 3px;
+  background: #eef0ff;
+  color: #4338ca;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 7px;
+}
+
+.hx .ol__card-head b {
+  font-size: 9.5px;
+  font-weight: 500;
+}
+
+.hx .ol__med {
+  margin: 0;
+  font-size: 8px;
+}
+
+.hx .ol__med b {
+  font-weight: 500;
+}
+
+.hx .ol__check-title {
+  display: flex;
+  justify-content: space-between;
+  font-size: 8px;
+  font-weight: 600;
+}
+
+.hx .ol__check-title span {
+  color: #7a8394;
+  font-weight: 400;
+}
+
+.hx .ol__checks {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.hx .ol__checks span {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  color: #7a8394;
+  font-size: 7.5px;
+}
+
+.hx .ol__checks i {
+  height: 4px;
+  border-radius: 3px;
+  background: #e5e7eb;
+  transition: background-color 0.3s;
+}
+
+.hx .ol__checks .is-ok {
+  color: #1f2733;
+}
+
+.hx .ol__checks .is-ok i {
+  background: #16a34a;
+}
+
+.hx .ol__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.hx .ol__btn {
+  display: inline-grid;
+  place-items: center;
+  padding: 4px 9px;
+  border-radius: 4px;
+  background: #2563eb;
+  color: #fff;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 8.5px;
+  white-space: nowrap;
+  transition: background-color 0.3s, color 0.3s;
+}
+
+.hx .ol__btn--wide {
+  min-width: 46%;
+  padding: 6px 10px;
+}
+
+.hx .ol__btn.is-done {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.hx .ol__ghost {
+  color: #3c4452;
+  font-weight: 500;
+  font-size: 8.5px;
+}
+
+.hx .ol__ghost.is-red {
+  color: #dc2626;
+}
+
+.hx .ol__chip {
+  padding: 2px 6px;
+  border-radius: 5px;
+  font-style: normal;
+  font-weight: 600;
+  font-size: 7.5px;
+  white-space: nowrap;
+  animation: ol-pop 0.35s var(--ease-spring) both;
+}
+
+.hx .ol__chip--green {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.hx .ol__chip--amber {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.hx .ol__chip--blue {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+/* --- Dispatch table ---------------------------------------------------- */
+.hx .ol__table {
+  border: 1px solid #eceef3;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.hx .ol__tr {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) 62px 64px;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 9px;
+  border-top: 1px solid #f0f1f4;
+  font-size: 7.5px;
+  font-weight: 500;
+}
+
+/* The Dispatch table's status tags: bold yellow, red and green, medium and small. */
+.hx .ol__tr .ol__chip {
+  font-size: 7px;
+  font-weight: 500;
+}
+
+.hx .ol__chip--yellow {
+  background: #facc15;
+  color: #1f2733;
+}
+
+.hx .ol__chip--red {
+  background: #dc2626;
+  color: #fff;
+}
+
+.hx .ol__chip--road {
+  background: #16a34a;
+  color: #fff;
+}
+
+.hx .ol__tr b {
+  font-weight: 500;
+}
+
+.hx .ol__tr > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The button cell: the whole button shows, never clipped. */
+.hx .ol__tr > span:last-child {
+  overflow: visible;
+  text-align: right;
+}
+
+.hx .ol__tr--head {
+  border-top: 0;
+  color: #000;
+  font-size: 6.5px;
+  font-weight: 500;
+}
+
+.hx .ol__tr.is-new {
+  background: #eef4ff;
+  animation: ol-in 0.4s var(--ease-out) both;
+}
+
+/* --- CEO --------------------------------------------------------------- */
+.hx .ol__two {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 7px;
+}
+
+.hx .ol__bar-row {
+  display: grid;
+  grid-template-columns: 70px minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 5px;
+  font-size: 7.5px;
+}
+
+.hx .ol__bar-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hx .ol__bar-row b {
+  text-align: right;
+}
+
+.hx .ol__bar {
+  display: block;
+  height: 5px;
+  border-radius: 3px;
+  background: #eef0f3;
+  overflow: hidden;
+}
+
+.hx .ol__bar i {
+  display: block;
+  height: 100%;
+  border-radius: 3px;
+  background: #94a3b8;
+  transition: width 0.2s linear;
+}
+
+.hx .ol__list {
+  display: grid;
+  gap: 3px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 8px;
+}
+
+.hx .ol__list li {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.hx .ol__list li i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.hx .ol__list li b {
+  margin-left: auto;
+}
+
+/* --- The links between desks ------------------------------------------ */
+.hx .ol__link {
+  position: relative;
+  height: 74px;
+}
+
+.hx .ol__link-line {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  border-left: 2px dashed #f3b48a;
+}
+
+.hx .ol__link-dot {
+  position: absolute;
+  top: 0;
+  left: calc(50% - 4px);
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #f36b21;
+  box-shadow: 0 0 0 4px rgba(243, 107, 33, 0.2);
+  opacity: 0;
+}
+
+.hx .ol__link.is-on .ol__link-dot {
+  animation: ol-flow 1.6s linear infinite;
+}
+
+.hx .ol__link-pill {
+  position: absolute;
+  top: 50%;
+  left: calc(50% + 14px);
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: #f4f5f7;
+  color: #6b7280;
+  font-size: 9px;
+  font-weight: 600;
+  white-space: nowrap;
+  transform: translateY(-50%);
+  transition: background-color 0.4s, color 0.4s;
+}
+
+.hx .ol__link.is-on .ol__link-pill {
+  background: #fff7f2;
+  color: #c2410c;
+  box-shadow: inset 0 0 0 1px #f8c9a8;
+}
+
+/* --- Cursors and the toast -------------------------------------------- */
+.hx .ol__cursor {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 5;
+  opacity: 0;
+  transition: transform 0.95s cubic-bezier(0.45, 0.05, 0.25, 1), opacity 0.3s;
+  will-change: transform;
+}
+
+.hx .ol__cursor.is-on {
+  opacity: 1;
+}
+
+.hx .ol__cursor svg {
+  display: block;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.25));
+}
+
+.hx .ol__name {
+  position: absolute;
+  top: 16px;
+  left: 12px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  background: var(--c);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.hx .ol__ripple {
+  position: absolute;
+  top: -11px;
+  left: -11px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 2px solid var(--c);
+  opacity: 0;
+}
+
+.hx .ol__ripple.is-on {
+  animation: ol-ripple 0.55s ease-out;
+}
+
+.hx .ol__toast {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(1rem, 4vh, 2rem);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 2rem);
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: #173f2a;
+  color: #fff;
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: 0 16px 30px -14px rgba(0, 0, 0, 0.5);
+  transform: translateX(-50%);
+  animation: ol-toast 2.6s var(--ease-out) both;
+}
+
+.hx .ol__toast span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4ade80;
+}
+
+@keyframes ol-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes ol-pop {
+  from { transform: scale(0.7); }
+  to { transform: none; }
+}
+
+@keyframes ol-blink {
+  50% { opacity: 0; }
+}
+
+@keyframes ol-flow {
+  0% { top: 0; opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { top: calc(100% - 10px); opacity: 0; }
+}
+
+@keyframes ol-ripple {
+  0% { opacity: 0.8; transform: scale(0.3); }
+  100% { opacity: 0; transform: scale(1.3); }
+}
+
+@keyframes ol-toast {
+  0% { opacity: 0; transform: translate(-50%, 8px); }
+  10%, 85% { opacity: 1; transform: translate(-50%, 0); }
+  100% { opacity: 0; transform: translate(-50%, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hx .ol__track {
+    transition: none;
+  }
+}

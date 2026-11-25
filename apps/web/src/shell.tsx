@@ -3,6 +3,7 @@
 
 import { Avatar } from "./account/avatar";
 import { useIdleSignOut } from "./account/idle";
+import { heroLogo } from "./portal/hero-logos";
 import { workspaceOf } from "./workspaces";
 import type {
   Decisions,
@@ -25,6 +26,8 @@ import {
   KeyRound,
   LogOut,
   Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
   Plus,
   Search,
   ShieldCheck,
@@ -155,19 +158,84 @@ export function Shell() {
     messages: messages.data?.unread ?? 0,
     refills: (refills.data?.soon ?? 0) + (refills.data?.due ?? 0),
   } as Record<Badge, number>;
-  const menu = (onPick?: () => void) => (
+  // The workspace this person signed in to (MedReps, Finance…): its logo and name head the sidebar.
+  const home = workspaceOf(me.data);
+  const menu = (onPick?: () => void, rail = false) => (
     <>
-      <div className="flex items-center gap-2.5 px-4 pt-4 pb-3">
+      {/* The menu button, Bishnoi One's mark and name sit in the sidebar (Aryan, 24 Nov); the top bar
+          shows them only while the sidebar is folded away. */}
+      <div className={`flex items-center gap-1.5 ${rail ? "h-14 justify-center px-0" : "px-3 pt-6 pb-1"}`}>
+        {rail && (
+        <button
+          type="button"
+          aria-label={wide ? (rail ? "Open the menu" : "Fold the menu") : "Close the menu"}
+          title={wide ? (rail ? "Open the menu" : "Fold the menu") : undefined}
+          aria-expanded={wide ? !rail : undefined}
+          onClick={() => (wide ? fold(!rail) : setDrawer(false))}
+          className="flex size-10 shrink-0 items-center justify-center rounded-lg text-slate-600 hover:bg-head"
+        >
+          <PanelLeftOpen size={20} aria-hidden="true" />
+        </button>
+        )}
+        {!rail && (
+          <NavLink
+            to="/"
+            onClick={onPick}
+            aria-label="Bishnoi One home"
+            className="sidebar-fade flex min-w-0 items-center gap-2 rounded-lg px-1 py-1"
+          >
+            <img src={heroLogo(home.key)} alt="" className="size-8 shrink-0 object-contain" />
+            {/* Two lines: "Bishnoi One", then the workspace, "MedReps" (Aryan, 24 Nov). */}
+            <span className="flex min-w-0 flex-col text-[17px] leading-[1.15] font-semibold tracking-tight whitespace-nowrap text-slate-700">
+              <span>Bishnoi One</span>
+              <span className="truncate">{home.label}</span>
+            </span>
+          </NavLink>
+        )}
+      </div>
+      {rail ? (
+        <>
+          {/* The rail: the mark, the desk's first action as a button, then the links' icons. */}
+          <NavLink to="/" aria-label={`Bishnoi One ${home.label}, home`} title={`Bishnoi One ${home.label}`} className="mx-auto mb-2 flex size-10 items-center justify-center">
+            <img src={heroLogo(home.key)} alt="" className="size-8 object-contain" />
+          </NavLink>
+          {space.cta && (
+            <NavLink
+              to={space.cta.to}
+              title={space.cta.label}
+              aria-label={space.cta.label}
+              className="mx-auto mb-2 flex size-10 items-center justify-center rounded-xl bg-[#2563eb] text-white hover:bg-[#1d4ed8]"
+            >
+              <CirclePlus size={19} aria-hidden="true" />
+            </NavLink>
+          )}
+          <MenuList groups={space.groups} badges={menuBadges} rail onExpand={() => fold(false)} />
+        </>
+      ) : (
+      <div className="sidebar-fade">
+      <div className="flex items-center gap-2.5 pt-2 pr-2 pb-3 pl-4">
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold text-slate-900">{space.label}</div>
           <div className="truncate text-[11px] text-slate-500">2MG Inc.</div>
         </div>
+        {/* Folds the sidebar to its rail (on a phone, closes the menu), beside the desk's name. */}
+        <button
+          type="button"
+          aria-label={wide ? "Fold the menu" : "Close the menu"}
+          title={wide ? "Fold the menu" : undefined}
+          aria-expanded={wide ? true : undefined}
+          onClick={() => (wide ? fold(true) : setDrawer(false))}
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg text-slate-600 hover:bg-head"
+        >
+          <PanelLeftClose size={19} aria-hidden="true" />
+        </button>
       </div>
       {space.cta && (
         <NavLink
           to={space.cta.to}
           onClick={onPick}
-          className="mx-3 mb-3 flex h-10 items-center gap-2 rounded-[10px] bg-brand px-3.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-dark"
+          // Blue, the size of the menu's own links, no shadow (Aryan, 24 Nov).
+          className="mx-3 mb-3 flex h-9 items-center gap-2.5 rounded-lg bg-[#2563eb] px-2.5 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
         >
           <CirclePlus size={17} aria-hidden="true" /> {space.cta.label}
         </NavLink>
@@ -193,6 +261,8 @@ export function Shell() {
       {/* The desk's common screen: who is on the desk today, at the top (Aryan, 19 Nov). */}
       {commonDesk && <DeskPeople desk={commonDesk} onPick={onPick} />}
       <MenuList groups={space.groups} onPick={onPick} badges={menuBadges} />
+      </div>
+      )}
     </>
   );
   const viewer = me.data?.viewedBy;
@@ -205,59 +275,57 @@ export function Shell() {
           viewer={viewer.name}
         />
       )}
-      <header className="sticky top-0 z-30 flex h-14 print:hidden shrink-0 items-center gap-2 border-b border-slate-200/80 bg-white px-3 md:gap-3 md:px-4">
-        <button
-          type="button"
-          aria-label={wide ? (folded ? "Show the menu" : "Hide the menu") : "Menu"}
-          title={wide ? (folded ? "Show the menu" : "Hide the menu") : undefined}
-          aria-expanded={wide ? !folded : drawer}
-          onClick={() => (wide ? fold(!folded) : setDrawer(true))}
-          className="flex size-10 items-center justify-center rounded-lg text-slate-600 hover:bg-head"
-        >
-          <Menu size={20} aria-hidden="true" />
-        </button>
-        {/* Bishnoi One's mark, then the desk. */}
-        <NavLink to="/" aria-label="Bishnoi One home" className="hidden shrink-0 items-center gap-2 md:flex">
-          <img src="/brand/bishnoi-one-mark.png" alt="" className="size-8" />
-          <span className="text-[15px] font-semibold tracking-tight text-slate-900">Bishnoi One</span>
-        </NavLink>
-        <span aria-hidden="true" className="hidden h-6 w-px bg-slate-200 md:block" />
-        <NavLink
-          to="/"
-          className="flex max-w-[14rem] shrink-0 items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-slate-50"
-        >
-          {/* The desk's name stays whole; the search box gives way on a narrow screen. */}
-          <span className="truncate text-sm font-semibold text-slate-900">{space.label}</span>
-        </NavLink>
-        <div className="ml-auto flex w-full min-w-0 max-w-xl justify-end">
-          <SearchBox />
-        </div>
-        {/* Back to the portal's workspace board: signs this person out, so the next one signs in. */}
-        <SwitchWorkspace label={workspaceOf(me.data).label} />
-        {/* The person's working day: when it started, Start / End my day. */}
-        <MyDayButton />
-        <LiveLocationSender />
-        {/* Always the person signed in: a desk shares its queue, never a login. */}
-        <Account
-          me={me.data}
-          // Under a seller's or a lead's name, their own job (PH Country Mentor, District Sales Coach,
-          // Hospital CHC), not the role's word: a head and a team lead share one role.
-          role={
-            ["team_lead", "manager", "medrep"].includes(me.data.role) && me.data.title
-              ? me.data.title
-              : me.data.roleLabel
-          }
-        />
-      </header>
 
       <div className="flex min-w-0 flex-1">
         <aside
           aria-label={`${space.label} menu`}
-          className={`sticky top-14 hidden print:!hidden h-[calc(100dvh-3.5rem)] w-60 shrink-0 overflow-y-auto overscroll-contain border-r border-slate-200/80 bg-ground ${folded ? "" : "md:block"}`}
+          // Folded, it narrows to a rail of icons; the width slides between the two (Aryan, 24 Nov).
+          className={`sticky top-0 hidden print:!hidden h-dvh shrink-0 sidebar-scroll overflow-x-hidden overflow-y-auto overscroll-contain border-r border-slate-200/80 bg-white transition-[width] duration-300 ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none md:block ${folded ? "w-[72px]" : "w-60"}`}
         >
-          {menu()}
+          {menu(undefined, wide && folded)}
         </aside>
-        <main className="min-w-0 flex-1 px-4 pt-6 pb-24 md:px-8 md:pb-10 print:p-0">
+        {/* The top bar sits over the page only; the sidebar runs the full height beside it. */}
+        <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 flex h-14 print:hidden shrink-0 items-center gap-2 border-b border-slate-200/80 bg-white px-3 md:gap-3 md:px-4">
+          {/* On a phone the menu button and the mark sit here; on a computer they are in the sidebar. */}
+          {!wide && (
+            <>
+              <button
+                type="button"
+                aria-label="Menu"
+                aria-expanded={drawer}
+                onClick={() => setDrawer(true)}
+                className="flex size-10 shrink-0 items-center justify-center rounded-lg text-slate-600 hover:bg-head"
+              >
+                <Menu size={20} aria-hidden="true" />
+              </button>
+              <NavLink to="/" aria-label="Bishnoi One home" className="flex shrink-0 items-center gap-2">
+                <img src="/brand/bishnoi-one-mark.png" alt="" className="size-8" />
+                <span className="hidden text-[15px] font-semibold tracking-tight text-slate-900 sm:inline">Bishnoi One</span>
+              </NavLink>
+            </>
+          )}
+          <div className="ml-auto flex w-full min-w-0 max-w-xl justify-end">
+            <SearchBox />
+          </div>
+          {/* Back to the portal's workspace board: signs this person out, so the next one signs in. */}
+          <SwitchWorkspace label={workspaceOf(me.data).label} />
+          {/* The person's working day: when it started, Start / End my day. */}
+          <MyDayButton />
+          <LiveLocationSender />
+          {/* Always the person signed in: a desk shares its queue, never a login. */}
+          <Account
+            me={me.data}
+            // Under a seller's or a lead's name, their own job (PH Country Mentor, District Sales Coach,
+            // Hospital CHC), not the role's word: a head and a team lead share one role.
+            role={
+              ["team_lead", "manager", "medrep"].includes(me.data.role) && me.data.title
+                ? me.data.title
+                : me.data.roleLabel
+            }
+          />
+        </header>
+        <main className="min-w-0 flex-1 bg-white px-4 pt-6 pb-24 md:px-8 md:pb-10 print:p-0">
           {/* The way back sits in the page, as on a team's page: a small ‹ and where you are. */}
           {location.pathname !== "/" &&
             !OWN_BACK.some((test) => test.test(location.pathname)) &&
@@ -269,6 +337,7 @@ export function Shell() {
           <UndoConfirmBar />
           <Toasts />
         </main>
+        </div>
       </div>
 
       {drawer && (
@@ -281,7 +350,7 @@ export function Shell() {
           />
           <aside
             aria-label={`${space.label} menu`}
-            className="absolute inset-y-0 left-0 w-[264px] max-w-[85vw] overflow-y-auto overscroll-contain bg-ground shadow-pop"
+            className="absolute inset-y-0 left-0 sidebar-scroll w-[264px] max-w-[85vw] overflow-y-auto overscroll-contain bg-white shadow-pop"
           >
             {menu(() => setDrawer(false))}
           </aside>
@@ -462,17 +531,24 @@ function inFolder(item: MenuItem, location: { pathname: string; search: string }
   });
 }
 
-const PILL = (badge: Badge) =>
-  `rounded-full px-1.5 text-[11px] font-semibold ${badge === "flagged" || badge === "refunds" || badge === "latePayments" ? "bg-rose-100 text-rose-700" : badge === "inbox" ? "bg-sky-100 text-sky-800" : badge === "messages" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"}`;
+/** A count beside a menu link: a blue circle, the number white and centred in it (Aryan, 24 Nov). */
+const COUNT = "inline-grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-[#2563eb] px-1 text-[11px] leading-none font-semibold text-white tabular-nums";
+const PILL = (_badge: Badge) => COUNT;
 
 function MenuList({
   groups,
   onPick,
   badges,
+  rail = false,
+  onExpand,
 }: {
   groups: MenuGroup[];
   onPick?: () => void;
   badges?: Record<Badge, number>;
+  /** Folded on a computer: each link is its icon only, its name on hover. */
+  rail?: boolean;
+  /** Opens the sidebar again (a folder pressed in the rail). */
+  onExpand?: () => void;
 }) {
   const location = useLocation();
   const leavesTo = useLeavesTo();
@@ -566,11 +642,11 @@ function MenuList({
             onClick={onPick}
             className={`relative flex h-7 items-center gap-2 rounded-md pr-2 text-[12px] transition-colors ${
               deep ? "pl-7" : "pl-4"
-            } ${on ? "bg-emerald-50 font-semibold text-emerald-800" : "text-slate-500 hover:bg-white hover:text-slate-900"}`}
+            } ${on ? "bg-[#eaf1ff] font-semibold text-slate-900" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}
           >
             <span
               aria-hidden="true"
-              className={`size-1.5 shrink-0 rounded-full ${on ? "bg-emerald-600" : deep ? "bg-slate-300" : "bg-slate-400"}`}
+              className={`size-1.5 shrink-0 rounded-full ${on ? "bg-[#1d4ed8]" : deep ? "bg-slate-300" : "bg-slate-400"}`}
             />
             <span className="flex-1 truncate">{one.name}</span>
             {one.people > 0 && (
@@ -586,6 +662,27 @@ function MenuList({
     // "Company view" / "Whole team" isn't lit while one of the teams under it is open.
     const lit = (isActive: boolean) => openOf(item.to, isActive) && !(item.teams && unitHere);
     const leaves = leavesTo(item.to);
+    if (rail)
+      return (
+        <NavLink
+          key={item.to}
+          to={item.to}
+          title={item.label}
+          aria-label={item.label}
+          end={item.to === "/" || item.to.includes("?")}
+          onClick={onPick}
+          className={({ isActive }) =>
+            `relative mx-auto flex size-10 items-center justify-center rounded-xl transition-colors ${
+              lit(isActive) ? "bg-[#eaf1ff] text-[#1d4ed8]" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+            }`
+          }
+        >
+          <item.icon size={19} aria-hidden="true" />
+          {item.badge && counts && counts[item.badge] > 0 && (
+            <span aria-hidden="true" className="absolute top-1.5 right-1.5 size-2 rounded-full bg-[#2563eb] ring-2 ring-white" />
+          )}
+        </NavLink>
+      );
     return (
       <NavLink
         key={item.to}
@@ -610,23 +707,17 @@ function MenuList({
             inner ? "h-8 text-[12.5px]" : "h-9 text-[13px]"
           } ${
             lit(isActive)
-              ? "bg-emerald-50 font-semibold text-emerald-800"
-              : "text-slate-600 hover:bg-white hover:text-slate-900"
+              ? "bg-[#eaf1ff] font-semibold text-slate-900"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
           }`
         }
       >
         {({ isActive }) => (
           <>
-            {lit(isActive) && (
-              <span
-                aria-hidden="true"
-                className="absolute inset-y-1.5 left-0 w-[3px] rounded-r bg-emerald-600"
-              />
-            )}
             <item.icon
               size={inner ? 15 : 17}
               className={
-                lit(isActive) ? "text-emerald-700" : "text-slate-400 group-hover:text-slate-600"
+                lit(isActive) ? "text-[#1d4ed8]" : "text-slate-400 group-hover:text-slate-600"
               }
               aria-hidden="true"
             />
@@ -644,6 +735,25 @@ function MenuList({
   const folder = (item: MenuItem) => {
     const here = inFolder(item, location);
     const open = folded[item.label] ?? here;
+    // In the rail a folder is its icon; pressing it opens the sidebar with the folder open.
+    if (rail)
+      return (
+        <button
+          key={`folder-${item.label}`}
+          type="button"
+          title={item.label}
+          aria-label={`${item.label}: open the menu`}
+          onClick={() => {
+            setFolded((now) => ({ ...now, [item.label]: true }));
+            onExpand?.();
+          }}
+          className={`mx-auto flex size-10 items-center justify-center rounded-xl transition-colors ${
+            here ? "bg-[#eaf1ff] text-[#1d4ed8]" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+          }`}
+        >
+          <item.icon size={19} aria-hidden="true" />
+        </button>
+      );
     const id = `${listId}-${item.label.replace(/\W+/g, "-")}`;
     // Folded, it still says what waits inside.
     const waiting = allItems(item.children ?? []).reduce(
@@ -671,14 +781,12 @@ function MenuList({
         >
           <item.icon
             size={17}
-            className={here ? "text-emerald-700" : "text-slate-400 group-hover:text-slate-600"}
+            className={here ? "text-[#1d4ed8]" : "text-slate-400 group-hover:text-slate-600"}
             aria-hidden="true"
           />
           <span className="flex-1 truncate">{item.label}</span>
           {!open && waiting > 0 && (
-            <span className="rounded-full bg-amber-100 px-1.5 text-[11px] font-semibold text-amber-800">
-              {waiting}
-            </span>
+            <span className={COUNT}>{waiting}</span>
           )}
           <ChevronDown
             size={15}
@@ -698,15 +806,17 @@ function MenuList({
   };
 
   return (
-    <div className="flex flex-col gap-0.5 px-3 pb-4">
+    <div className={`flex flex-col gap-0.5 pb-4 ${rail ? "px-2" : "px-3"}`}>
       {groups.map((group, index) => (
-        <div key={group.title ?? index} className="flex flex-col gap-0.5">
-          {group.title && (
+        <div key={group.title ?? index} className={`flex flex-col ${rail ? "gap-1" : "gap-0.5"}`}>
+          {/* In the rail a group's name is a short line between its icons. */}
+          {rail && (group.title || group.divider) && <div className="mx-3 my-2 h-px bg-slate-200" aria-hidden="true" />}
+          {!rail && group.title && (
             <div className="px-2.5 pt-4 pb-1 text-[11px] font-semibold tracking-wide text-slate-400 uppercase">
               {group.title}
             </div>
           )}
-          {group.divider && <div className="mx-2.5 mt-3 mb-1.5 h-px bg-slate-200" aria-hidden="true" />}
+          {!rail && group.divider && <div className="mx-2.5 mt-3 mb-1.5 h-px bg-slate-200" aria-hidden="true" />}
           {group.items.map((item) => (item.children ? folder(item) : link(item)))}
         </div>
       ))}
@@ -1003,9 +1113,9 @@ function SwitchWorkspace({ label }: { label: string }) {
       type="button"
       onClick={leave}
       title="Switch workspace: sign out and choose another"
-      className="hidden h-9 shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white pr-3 pl-1.5 text-[13px] font-medium text-slate-700 hover:border-orange-300 hover:text-slate-900 lg:flex"
+      className="hidden h-9 shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white pr-3 pl-1.5 text-[13px] font-medium text-slate-700 hover:border-blue-300 hover:text-slate-900 lg:flex"
     >
-      <span className="grid size-6 place-items-center rounded-full bg-orange-50 text-orange-600">
+      <span className="grid size-6 place-items-center rounded-full bg-[#eaf1ff] text-[#2563eb]">
         <ArrowLeftRight size={13} aria-hidden="true" />
       </span>
       {label}

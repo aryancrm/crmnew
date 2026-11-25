@@ -8,7 +8,7 @@ import { useMe } from "../auth";
 export function NotBuilt() {
   return (
     <div className="mx-auto flex max-w-xl flex-col items-start gap-3 rounded-2xl bg-white p-6 shadow-card">
-      <h1 className="text-xl font-bold">No such page</h1>
+      <h1 className="text-[28px] font-semibold tracking-tight">No such page</h1>
       <p className="text-ink-2">This address isn't one of your screens.</p>
       <Link to="/" className="font-semibold text-brand">
         Back to Home

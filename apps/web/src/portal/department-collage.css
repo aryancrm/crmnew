@@ -1,0 +1,446 @@
+/* The sign-in page's department collage (department-collage.tsx): tilted white cards on an
+   orange-red sky. The canvas is laid out flat at 820 x 1120 and then scaled, tilted and cropped
+   by the panel. */
+
+.dc {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  height: 100%;
+  min-height: 560px;
+  background: #e8501a url("/loginbg.png") center / cover no-repeat;
+  color: #1f2733;
+}
+
+/* Soft light swirls behind the cards. */
+.dc-sky {
+  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+}
+
+.dc-sky__swirl {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(48px);
+}
+
+.dc-sky__swirl--1 {
+  top: -10%;
+  left: -25%;
+  width: 90%;
+  height: 55%;
+  background: radial-gradient(closest-side, rgba(255, 214, 170, 0.75), transparent);
+  transform: rotate(-30deg);
+}
+
+.dc-sky__swirl--2 {
+  right: -30%;
+  bottom: 10%;
+  width: 95%;
+  height: 40%;
+  background: radial-gradient(closest-side, rgba(255, 236, 220, 0.55), transparent);
+  transform: rotate(-35deg);
+}
+
+.dc-sky__swirl--3 {
+  bottom: -15%;
+  left: -10%;
+  width: 70%;
+  height: 45%;
+  background: radial-gradient(closest-side, rgba(150, 20, 10, 0.55), transparent);
+}
+
+.dc-brand {
+  position: absolute;
+  top: 28px;
+  left: 32px;
+  z-index: 3;
+}
+
+.dc-canvas {
+  position: absolute;
+  /* Centred between the first two columns, as in the picture; the third peeks in at the right. */
+  top: calc(50% + 20px * var(--k, 1));
+  left: calc(50% + 40px * var(--k, 1));
+  width: 1220px;
+  height: 1180px;
+  transform: translate(-50%, -50%) scale(var(--k, 1)) rotate(-12deg);
+  transform-origin: 50% 50%;
+}
+
+/* --- Cards --------------------------------------------------------------- */
+.dc-card {
+  position: absolute;
+  padding: 26px 28px;
+  border-radius: 32px;
+  background: rgba(255, 255, 255, 0.97);
+  box-shadow: 0 40px 70px -30px rgba(90, 15, 0, 0.45);
+}
+
+.dc-card__more {
+  position: absolute;
+  top: 24px;
+  right: 22px;
+  width: 22px;
+  height: 22px;
+  color: #1f2733;
+}
+
+.dc-chartcard {
+  top: 230px;
+  left: 20px;
+  width: 430px;
+  height: 520px;
+}
+
+.dc-stat--a {
+  top: 790px;
+  left: 0;
+  width: 450px;
+  height: 236px;
+}
+
+.dc-handles {
+  top: 1060px;
+  left: -20px;
+  width: 470px;
+  height: 260px;
+}
+
+.dc-tail {
+  top: -60px;
+  left: 490px;
+  width: 380px;
+  height: 170px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.dc-stat--b {
+  top: 150px;
+  left: 490px;
+  width: 380px;
+  height: 236px;
+}
+
+.dc-stat--c {
+  top: 420px;
+  left: 510px;
+  width: 380px;
+  height: 236px;
+}
+
+.dc-stat--d {
+  top: 330px;
+  left: 930px;
+  width: 360px;
+  height: 236px;
+}
+
+/* --- The department's title on the chart card --------------------------- */
+.dc-title {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding-right: 30px;
+}
+
+.dc-title img {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
+}
+
+.dc-title b {
+  display: block;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+}
+
+.dc-title small {
+  display: -webkit-box;
+  margin-top: 2px;
+  overflow: hidden;
+  color: #6b7380;
+  font-size: 11px;
+  line-height: 1.35;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* --- Chart --------------------------------------------------------------- */
+.dc-chart {
+  position: relative;
+  height: 270px;
+  margin-top: 54px;
+}
+
+.dc-chart__links {
+  position: absolute;
+  inset: 0 0 40px;
+  width: 100%;
+  height: 230px;
+}
+
+.dc-chart__block {
+  position: absolute;
+  width: 64px;
+  border-radius: 12px;
+}
+
+.dc-chart__label,
+.dc-chart__month {
+  position: absolute;
+  color: #5b6472;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.dc-chart__month {
+  font-size: 14px;
+}
+
+.dc-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  color: #5b6472;
+  font-size: 14px;
+}
+
+.dc-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dc-legend i {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+}
+
+.dc-tail__month {
+  color: #5b6472;
+  font-size: 14px;
+}
+
+/* --- Count cards ------------------------------------------------------------ */
+.dc-stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.dc-stat__head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-right: 30px;
+  font-size: 16px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.dc-stat__icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--tone);
+  color: #fff;
+  box-shadow: 0 10px 18px -8px color-mix(in srgb, var(--tone) 70%, transparent);
+}
+
+.dc-stat__icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.dc-stat__value {
+  margin-top: 22px;
+  font-size: 39px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  white-space: nowrap;
+}
+
+.dc-stat__foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: auto;
+  color: #6b7380;
+  font-size: 13px;
+}
+
+.dc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #e3f8ec;
+  color: #12a866;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.dc-chip svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* --- What it handles ---------------------------------------------------------- */
+.dc-handles ul {
+  display: grid;
+  gap: 10px;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+  color: #3c4452;
+  font-size: 14px;
+}
+
+.dc-handles li {
+  position: relative;
+  padding-left: 20px;
+}
+
+.dc-handles li::before {
+  content: "";
+  position: absolute;
+  top: 0.5em;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ec5b13;
+}
+
+/* --- Floating logo tiles -------------------------------------------------------- */
+.dc-tile {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 160px;
+  height: 160px;
+  border-radius: 34px;
+  background: #fff;
+  box-shadow: 0 34px 60px -24px rgba(80, 15, 0, 0.5);
+}
+
+.dc-tile img {
+  width: 62%;
+  height: 62%;
+  object-fit: contain;
+}
+
+.dc-tile--a {
+  top: 250px;
+  left: 680px;
+}
+
+.dc-tile--b {
+  top: 880px;
+  left: 300px;
+}
+
+/* Raised cards: bigger, nearer, a deeper shadow (the picture's large card on the left). */
+.dc-card--raised {
+  z-index: 1;
+  transform: scale(1.06);
+  box-shadow: 0 60px 90px -30px rgba(90, 15, 0, 0.6), 0 2px 0 rgba(255, 255, 255, 0.8) inset;
+}
+
+.dc-tail--b {
+  top: 70px;
+  left: 930px;
+  width: 360px;
+  height: 220px;
+}
+
+/* --- How work moves ------------------------------------------------------------ */
+.dc-flow {
+  top: 690px;
+  left: 530px;
+  width: 380px;
+  height: 300px;
+}
+
+.dc-flow ol {
+  display: grid;
+  gap: 12px;
+  margin: 20px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dc-flow li {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.dc-flow li i {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #eef3ff;
+  color: #2563eb;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+}
+
+.dc-flow small {
+  display: block;
+  color: #7a8394;
+  font-size: 11px;
+  font-weight: 400;
+}
+
+/* --- Works with ---------------------------------------------------------------- */
+.dc-with {
+  top: 610px;
+  left: 950px;
+  width: 360px;
+  height: 260px;
+}
+
+.dc-with ul {
+  display: grid;
+  gap: 14px;
+  margin: 22px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.dc-with li {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dc-with img {
+  width: 30px;
+  height: 30px;
+  object-fit: contain;
+}

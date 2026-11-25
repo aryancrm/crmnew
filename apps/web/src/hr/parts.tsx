@@ -123,7 +123,7 @@ export function MyDayButton() {
           onClick={() => (fieldRep ? setStarting(true) : run("/api/hr/day/start"))}
           disabled={action.busy || mr.isPending}
           title={action.problem?.message ?? "Start your working day"}
-          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-brand px-2.5 text-xs font-semibold text-white hover:bg-brand-dark sm:px-3"
+          className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-[#2563eb] px-2.5 text-xs font-semibold text-white hover:bg-[#1d4ed8] sm:px-3"
         >
           <LogIn size={14} aria-hidden="true" /> Start<span className="hidden sm:inline">{fieldRep ? " working" : " my day"}</span>
         </button>
@@ -139,7 +139,7 @@ export function MyDayButton() {
         aria-expanded={open}
         className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold ${
           day.working
-            ? "bg-brand text-white hover:bg-brand-dark"
+            ? "bg-[#2563eb] text-white hover:bg-[#1d4ed8]"
             : "bg-slate-100 text-slate-700 hover:bg-slate-200"
         }`}
       >

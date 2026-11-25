@@ -48,6 +48,8 @@ import { LeaveListPage } from "./hr/leave-list";
 import { VlConversionPage } from "./hr/credits";
 import { PrintPage } from "./hr/print";
 import { Login } from "./account/login";
+import { ChooseSystem } from "./account/choose-system";
+import { AboutRoute } from "./portal/about-page";
 import { Medicine } from "./inventory/medicine";
 import { Medicines } from "./inventory/medicines";
 import { MessagesPage } from "./messages/messages";
@@ -170,6 +172,8 @@ createRoot(root).render(
         <Routes>
           <Route path="/login/:dept?" element={<Login />} />
           <Route path="/signup/:dept?" element={<SignUp />} />
+          <Route path="/about" element={<AboutRoute />} />
+          <Route path="/signin" element={<ChooseSystem />} />
           <Route path="/welcome" element={<Welcome />} />
           {/* A leave or form as the paper HR files, outside the frame so it prints clean. */}
           <Route path="/hr/print/leave/:id" element={<PrintPage key="leave" of="leave" />} />

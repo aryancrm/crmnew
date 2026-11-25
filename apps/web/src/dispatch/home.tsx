@@ -91,7 +91,7 @@ export function DispatchHome() {
       <div className="min-w-0 space-y-4">
         <div>
           <div className="text-xs text-slate-500">{todayWords()}</div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Dispatch desk</h1>
+          <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">Dispatch desk</h1>
           <div className="mt-0.5 text-xs text-slate-500">
             Every order to pack and ship, shared automatically among the people started (left).
           </div>

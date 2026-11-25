@@ -195,7 +195,7 @@ export function PointsAccountPage() {
               {initials(account.name)}
             </span>
             <div>
-              <h1 className="text-xl font-bold tracking-tight text-ink">{account.name}</h1>
+              <h1 className="text-[28px] font-semibold tracking-tight text-ink">{account.name}</h1>
               <div className="text-[13px] text-slate-500">{account.phone}</div>
             </div>
           </div>
