@@ -410,6 +410,8 @@ describe("the tender finder: the team's pages", () => {
     const detail = await one("hazel", await idOf("12451001"));
     expect(detail.found).toMatchObject({ customer: "East Avenue Medical Center", abc: 243700000, noticeType: "Invitation to Bid (ITB)" });
     expect(detail.mode).toBe("competitive_bidding");
+    // The bidding system's "Fetched": first and last read
+    expect(Date.parse(detail.found.seenAt)).toBeGreaterThanOrEqual(Date.parse(detail.found.firstSeenAt));
     expect(detail.prebidOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(detail.openingOn).toBe(detail.found.closingAt?.slice(0, 10));
     expect(detail.lines.map((line) => [line.medicine, line.qty, line.abcUnit])).toEqual([
@@ -636,8 +638,8 @@ describe("the tender papers", () => {
       accuracy: 100,
       reading: false,
       sheet: [
-        { label: "Pre-bid conference", said: "November 27, 2026 at 10:00 AM, BAC Conference Room" },
-        { label: "Bid security", said: "Bid Securing Declaration" },
+        { key: "prebid_conference", label: "Pre-bid conference", said: "November 27, 2026 at 10:00 AM, BAC Conference Room" },
+        { key: "bid_security", label: "Bid security", said: "Bid Securing Declaration" },
       ],
     });
     // The robot gets its own record back (to know what is done), without what is only for checking.

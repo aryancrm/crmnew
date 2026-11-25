@@ -10,6 +10,7 @@ import { createPortal } from "react-dom";
 import { type ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { bidDateText, deliveryText } from "./bid-dates";
 import { shortPeso } from "../ceo";
 import { Button, CARD, dayLabel, Dialog, Facts, PageHead, PageState, Pill, Problem, peso, Tabs, Tile, useAction } from "../ui";
 
@@ -1268,16 +1269,105 @@ function Papers({ found, papers, listed }: { found: FoundTender; papers: FoundPa
       {papers.accuracy !== null && papers.accuracy <= 70 && (
         <p className="mt-2 text-[12px] font-semibold text-amber-800">The reading may be off ({papers.accuracy}%): check the lines against the paper.</p>
       )}
-      {papers.sheet.length > 0 && (
-        <dl className="mt-3 space-y-1.5 border-t border-slate-100 pt-2">
-          {papers.sheet.map((one) => (
-            <div key={one.label}>
-              <dt className="text-[11.5px] font-semibold text-slate-500">{one.label} (as the papers say)</dt>
-              <dd className="text-[12.5px] text-slate-800">{one.said}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
+      <div className="mt-3 border-t border-slate-100 pt-2">
+        <h4 className="text-[12.5px] font-bold text-slate-800">Bid data sheet (from the documents)</h4>
+        {papers.files.length === 0 && listed.length === 0 ? (
+          <p className="mt-1 text-[12px] text-slate-500">No documents downloaded yet; the next reading orders and reads them.</p>
+        ) : (
+          <ul className="mt-1 space-y-1.5">
+            {SHEET_ROWS.map(([key, label]) => {
+              const said = papers.sheet.find((one) => one.key === key)?.said;
+              return (
+                <li key={key} className="text-[12.5px]">
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-slate-600">{label}</span>
+                    {said ? <Pill tone="good">Found</Pill> : <Pill>Not found</Pill>}
+                  </span>
+                  {said && <span className="mt-0.5 block text-slate-800">{said}</span>}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
+const SHEET_ROWS: [string, string][] = [
+  ["prebid_conference", "Pre-bid conference"],
+  ["bid_opening", "Bid opening"],
+  ["bid_submission_deadline", "Submission deadline"],
+  ["delivery_period", "Delivery period"],
+  ["bid_validity", "Bid validity"],
+  ["bid_security", "Bid security"],
+];
+
+/** The bidding system's "Bidding dates": each from the notice, else what its bid data sheet says (marked
+ *  "from documents"), cut down to the date or the number of days as the team writes them. */
+function BiddingDates({ found, papers }: { found: FoundDetail["found"]; papers: FoundPapers }) {
+  const d = found.details;
+  const sheet = (key: string) => papers.sheet.find((one) => one.key === key)?.said ?? null;
+  const fromDocs = (value: string | null) => (value ? { value, docs: true } : null);
+  const fromNotice = (value: string | null) => (value ? { value, docs: false } : null);
+  const hasPapers = papers.files.length > 0 || d.documents.length > 0;
+  const rows: [string, { value: string; docs: boolean } | null][] = [
+    ["Pre-bid conference", fromDocs(bidDateText(sheet("prebid_conference"))) ?? fromNotice(d.preBid)],
+    ["Bid opening", fromDocs(bidDateText(sheet("bid_opening"))) ?? fromNotice(d.bidOpening)],
+    ["Submission deadline", fromDocs(bidDateText(sheet("bid_submission_deadline")))],
+    ["Closing", fromNotice(found.closingAt ? when(found.closingAt) : null)],
+    ["Delivery period", fromDocs(deliveryText(sheet("delivery_period"))) ?? fromNotice(d.deliveryPeriod)],
+    ["Bid validity", fromDocs(sheet("bid_validity"))],
+    ["Bid security", fromDocs(sheet("bid_security"))],
+    ["Last updated", fromNotice(d.lastUpdated)],
+  ];
+  return (
+    <section className={`${CARD} p-4`}>
+      <h3 className="text-sm font-bold text-slate-900">Bidding dates</h3>
+      <dl className="mt-2 divide-y divide-slate-100">
+        {rows.map(([label, said]) => (
+          <div key={label} className="grid grid-cols-[9.5rem_1fr] gap-2 py-1.5 text-[12.5px]">
+            <dt className="text-slate-500">{label}</dt>
+            <dd className="text-slate-800">
+              {said ? (
+                <>
+                  {said.value}
+                  {said.docs && (
+                    <span className="ml-1.5 inline-block align-middle">
+                      <Pill tone="good">from documents</Pill>
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="text-slate-400">{hasPapers ? "Not in the notice or its documents" : "Not on the notice page"}</span>
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+/** The bidding system's "Fetched": when the robot first and last read this tender, and when its papers
+ *  were last looked at. */
+function Fetched({ found, papers }: { found: FoundDetail["found"]; papers: FoundPapers }) {
+  const rows: [string, string | null][] = [
+    ["First fetched", when(found.firstSeenAt)],
+    ["Last fetched", when(found.seenAt)],
+    ["Documents checked", papers.checkedAt ? when(papers.checkedAt) : null],
+  ];
+  return (
+    <section className={`${CARD} p-4`}>
+      <h3 className="text-sm font-bold text-slate-900">Fetched</h3>
+      <dl className="mt-2 divide-y divide-slate-100">
+        {rows.map(([label, value]) => (
+          <div key={label} className="grid grid-cols-[9.5rem_1fr] gap-2 py-1.5 text-[12.5px]">
+            <dt className="text-slate-500">{label}</dt>
+            <dd className={value ? "text-slate-800" : "text-slate-400"}>{value ?? "Not yet"}</dd>
+          </div>
+        ))}
+      </dl>
     </section>
   );
 }
@@ -1352,19 +1442,30 @@ export function FoundTenderPage() {
       )}
       <Facts
         rows={[
+          ["Procuring entity", found.agency],
           ["ABC", found.abc ? peso(found.abc) : "not read"],
-          ["Bids close", <span key="close" className={close.tone}>{close.text}</span>],
           ["Published", found.publishedOn ? dayLabel(found.publishedOn) : null],
-          ["Pre-bid conference", d.preBid],
-          ["Bid opening", d.bidOpening],
-          ["Mode", found.procurementMode],
-          ["Delivery", [d.areaOfDelivery, d.deliveryPeriod].filter(Boolean).join(" · ")],
+          ["Bids close", <span key="close" className={close.tone}>{close.text}</span>],
+          ["Notice type", found.noticeType],
+          ["Mode of procurement", found.procurementMode],
           ["Solicitation no.", d.solicitationNo],
+          ["Classification", d.classification],
+          ["Area of delivery", d.areaOfDelivery],
           ["On the portal", d.status],
           ["Customer", found.customer ?? (found.agency ? "not a customer yet" : null)],
           ["Screened by", found.screenedBy && found.screenedAt ? `${found.screenedBy} · ${when(found.screenedAt)}` : null],
         ]}
       />
+      <section className={`${CARD} p-4`}>
+        <h3 className="text-sm font-bold text-slate-900">
+          Our products <span className="font-normal text-slate-400">· {found.molecules.length}</span>
+        </h3>
+        <div className="mt-2">{found.molecules.length ? <Molecules names={found.molecules} /> : <span className="text-[12.5px] text-slate-500">None named yet{found.source === "ps" ? " (on PS-PhilGEPS's Bid Match; its papers name them once read)" : ""}.</span>}</div>
+      </section>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <BiddingDates found={found} papers={data.papers} />
+        <Fetched found={found} papers={data.papers} />
+      </div>
       <section className={`${CARD} min-w-0 overflow-x-auto`}>
         <h3 className="border-b border-slate-100 px-4 py-3 text-sm font-bold text-slate-900">
           What it asks for <span className="font-normal text-slate-400">· {data.lines.length} {data.lines.length === 1 ? "line" : "lines"} of ours</span>

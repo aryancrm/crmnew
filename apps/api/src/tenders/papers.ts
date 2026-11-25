@@ -144,7 +144,7 @@ export async function papersOf(db: Database, foundId: number, details: Record<st
     accuracy: typeof accuracy === "number" ? Math.round(accuracy) : null,
     sheet: SHEET.flatMap(([label, key]) => {
       const said = text(sheet[key], 400);
-      return said ? [{ label, said }] : [];
+      return said ? [{ key, label, said }] : [];
     }),
   };
 }

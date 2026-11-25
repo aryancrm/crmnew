@@ -706,9 +706,10 @@ export async function foundCount(db: Database, me: Me): Promise<{ allowed: boole
 
 export async function foundDetail(db: Database, me: Me, id: number): Promise<FoundDetail> {
   await mustFind(db, me);
-  const [found] = await rows<FoundTender & { itemsText: string | null; raw: Record<string, unknown>; agencyKey: string | null }>(
+  const [found] = await rows<FoundTender & { itemsText: string | null; raw: Record<string, unknown>; agencyKey: string | null; seenAt: string }>(
     db,
-    sql`select one.*, f.items_text as "itemsText", f.details as raw, f.agency_key as "agencyKey"
+    sql`select one.*, f.items_text as "itemsText", f.details as raw, f.agency_key as "agencyKey",
+        to_char(f.seen_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "seenAt"
       from (${foundSelect} where f.id = ${id}) one join tender_found f on f.id = one.id`,
   );
   if (!found) throw new Refusal(404, "not_found", "No such notice.");
@@ -770,6 +771,7 @@ export async function foundDetail(db: Database, me: Me, id: number): Promise<Fou
         preBid: text("pre_bid"),
         bidOpening: text("bid_opening"),
         status: text("status"),
+        lastUpdated: text("last_updated"),
         supplements: Array.isArray(raw.supplements) ? (raw.supplements as FoundDetail["found"]["details"]["supplements"]) : [],
         documents: Array.isArray(raw.documents) ? (raw.documents as { name: string }[]).map((one) => one.name) : [],
       },

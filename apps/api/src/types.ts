@@ -5820,7 +5820,7 @@ export type FoundPapers = {
   /** How well the papers were read, 0 to 100. */
   accuracy: number | null;
   /** What the bid data sheet says, as written. */
-  sheet: { label: string; said: string }[];
+  sheet: { key: "prebid_conference" | "bid_opening" | "bid_submission_deadline" | "delivery_period" | "bid_validity" | "bid_security" | string; label: string; said: string }[];
 };
 
 /** A line a found notice asks for. */
@@ -5844,6 +5844,8 @@ export type FoundLine = {
 export type FoundDetail = {
   found: FoundTender & {
     itemsText: string | null;
+    /** When the robot last read it (the bidding system's "Last fetched"). */
+    seenAt: string;
     details: {
       solicitationNo: string | null;
       classification: string | null;
@@ -5854,6 +5856,8 @@ export type FoundDetail = {
       preBid: string | null;
       bidOpening: string | null;
       status: string | null;
+      /** When the portal says the notice last changed, as written. */
+      lastUpdated: string | null;
       supplements: { no: string; title: string; type: string; published: string | null }[];
       documents: string[];
     };
