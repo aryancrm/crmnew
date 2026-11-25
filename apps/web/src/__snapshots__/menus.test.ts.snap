@@ -52,7 +52,7 @@ exports[`each MedRep's menu > Any other MedRep sees the same menu 1`] = `
             },
             {
               "icon": "CalendarCheck",
-              "label": "Today's visits",
+              "label": "My visits",
               "to": "/visits",
             },
             {
@@ -64,16 +64,6 @@ exports[`each MedRep's menu > Any other MedRep sees the same menu 1`] = `
               "icon": "Stethoscope",
               "label": "KOLs, hospitals, KBLs",
               "to": "/field/clients",
-            },
-            {
-              "icon": "CalendarDays",
-              "label": "Calendar",
-              "to": "/visits/calendar",
-            },
-            {
-              "icon": "PhoneCall",
-              "label": "My calls",
-              "to": "/calls",
             },
             {
               "icon": "Receipt",
@@ -102,6 +92,11 @@ exports[`each MedRep's menu > Any other MedRep sees the same menu 1`] = `
               "icon": "TrendingUp",
               "label": "Sales performance",
               "to": "/sales-performance",
+            },
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "to": "/calls",
             },
           ],
           "icon": "Gauge",
@@ -547,20 +542,20 @@ exports[`each MedRep's menu > CLIDP sees the same menu 1`] = `
         {
           "children": [
             {
-              "icon": "PhoneCall",
-              "label": "My calls",
-              "to": "/calls",
-            },
-            {
               "icon": "TrendingUp",
               "label": "Sales performance",
               "to": "/sales-performance",
+            },
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "to": "/calls",
             },
           ],
           "icon": "Gauge",
           "label": "My numbers",
           "short": "Numbers",
-          "to": "/calls",
+          "to": "/sales-performance",
         },
       ],
     },
@@ -703,20 +698,20 @@ exports[`each MedRep's menu > Government Bidding sees the same menu 1`] = `
         {
           "children": [
             {
-              "icon": "PhoneCall",
-              "label": "My calls",
-              "to": "/calls",
-            },
-            {
               "icon": "TrendingUp",
               "label": "Sales performance",
               "to": "/sales-performance",
+            },
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "to": "/calls",
             },
           ],
           "icon": "Gauge",
           "label": "My numbers",
           "short": "Numbers",
-          "to": "/calls",
+          "to": "/sales-performance",
         },
       ],
     },
@@ -858,7 +853,7 @@ exports[`each MedRep's menu > Hospital CHC sees the same menu 1`] = `
             },
             {
               "icon": "CalendarCheck",
-              "label": "Today's visits",
+              "label": "My visits",
               "to": "/visits",
             },
             {
@@ -870,16 +865,6 @@ exports[`each MedRep's menu > Hospital CHC sees the same menu 1`] = `
               "icon": "Stethoscope",
               "label": "KOLs, hospitals, KBLs",
               "to": "/field/clients",
-            },
-            {
-              "icon": "CalendarDays",
-              "label": "Calendar",
-              "to": "/visits/calendar",
-            },
-            {
-              "icon": "PhoneCall",
-              "label": "My calls",
-              "to": "/calls",
             },
             {
               "icon": "Receipt",
@@ -898,12 +883,12 @@ exports[`each MedRep's menu > Hospital CHC sees the same menu 1`] = `
           "to": "/field",
         },
         {
+          "icon": "Megaphone",
+          "label": "Tonight's huddle",
+          "to": "/huddle",
+        },
+        {
           "children": [
-            {
-              "icon": "Megaphone",
-              "label": "Tonight's huddle",
-              "to": "/huddle",
-            },
             {
               "icon": "Gauge",
               "label": "My score",
@@ -914,11 +899,16 @@ exports[`each MedRep's menu > Hospital CHC sees the same menu 1`] = `
               "label": "Sales performance",
               "to": "/sales-performance",
             },
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "to": "/calls",
+            },
           ],
           "icon": "Gauge",
           "label": "My numbers",
           "short": "Numbers",
-          "to": "/huddle",
+          "to": "/my/score",
         },
       ],
     },
@@ -1060,7 +1050,7 @@ exports[`each MedRep's menu > Hospital bidding coachee sees the same menu 1`] = 
             },
             {
               "icon": "CalendarCheck",
-              "label": "Today's visits",
+              "label": "My visits",
               "to": "/visits",
             },
             {
@@ -1072,16 +1062,6 @@ exports[`each MedRep's menu > Hospital bidding coachee sees the same menu 1`] = 
               "icon": "Stethoscope",
               "label": "KOLs, hospitals, KBLs",
               "to": "/field/clients",
-            },
-            {
-              "icon": "CalendarDays",
-              "label": "Calendar",
-              "to": "/visits/calendar",
-            },
-            {
-              "icon": "PhoneCall",
-              "label": "My calls",
-              "to": "/calls",
             },
             {
               "icon": "Receipt",
@@ -1138,6 +1118,11 @@ exports[`each MedRep's menu > Hospital bidding coachee sees the same menu 1`] = 
               "icon": "TrendingUp",
               "label": "Sales performance",
               "to": "/sales-performance",
+            },
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "to": "/calls",
             },
           ],
           "icon": "Gauge",
@@ -1575,7 +1560,7 @@ exports[`each MedRep's menu > MedRep with no channel sees the same menu 1`] = `
             },
             {
               "icon": "CalendarCheck",
-              "label": "Today's visits",
+              "label": "My visits",
               "to": "/visits",
             },
             {
@@ -1587,16 +1572,6 @@ exports[`each MedRep's menu > MedRep with no channel sees the same menu 1`] = `
               "icon": "Stethoscope",
               "label": "KOLs, hospitals, KBLs",
               "to": "/field/clients",
-            },
-            {
-              "icon": "CalendarDays",
-              "label": "Calendar",
-              "to": "/visits/calendar",
-            },
-            {
-              "icon": "PhoneCall",
-              "label": "My calls",
-              "to": "/calls",
             },
             {
               "icon": "Receipt",
@@ -1625,6 +1600,11 @@ exports[`each MedRep's menu > MedRep with no channel sees the same menu 1`] = `
               "icon": "TrendingUp",
               "label": "Sales performance",
               "to": "/sales-performance",
+            },
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "to": "/calls",
             },
           ],
           "icon": "Gauge",
@@ -1771,18 +1751,17 @@ exports[`each MedRep's menu > Online B2C sees the same menu 1`] = `
             {
               "icon": "Gauge",
               "label": "My score",
-              "short": "Score",
               "to": "/my/score",
-            },
-            {
-              "icon": "PhoneCall",
-              "label": "My calls",
-              "to": "/calls",
             },
             {
               "icon": "TrendingUp",
               "label": "Sales performance",
               "to": "/sales-performance",
+            },
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "to": "/calls",
             },
           ],
           "icon": "Gauge",
@@ -1929,7 +1908,7 @@ exports[`each MedRep's menu > PAP MedRep sees the same menu 1`] = `
             },
             {
               "icon": "CalendarCheck",
-              "label": "Today's visits",
+              "label": "My visits",
               "to": "/visits",
             },
             {
@@ -1941,16 +1920,6 @@ exports[`each MedRep's menu > PAP MedRep sees the same menu 1`] = `
               "icon": "Stethoscope",
               "label": "KOLs, hospitals, KBLs",
               "to": "/field/clients",
-            },
-            {
-              "icon": "CalendarDays",
-              "label": "Calendar",
-              "to": "/visits/calendar",
-            },
-            {
-              "icon": "PhoneCall",
-              "label": "My calls",
-              "to": "/calls",
             },
             {
               "icon": "Receipt",
@@ -1979,6 +1948,11 @@ exports[`each MedRep's menu > PAP MedRep sees the same menu 1`] = `
               "icon": "TrendingUp",
               "label": "Sales performance",
               "to": "/sales-performance",
+            },
+            {
+              "icon": "PhoneCall",
+              "label": "My calls",
+              "to": "/calls",
             },
           ],
           "icon": "Gauge",
@@ -2123,7 +2097,7 @@ exports[`each MedRep's menu > Rx CHC sees the same menu 1`] = `
             },
             {
               "icon": "CalendarCheck",
-              "label": "Today's calls",
+              "label": "My doctor calls",
               "to": "/visits",
             },
             {
@@ -2135,16 +2109,6 @@ exports[`each MedRep's menu > Rx CHC sees the same menu 1`] = `
               "icon": "Stethoscope",
               "label": "KOLs, hospitals, KBLs",
               "to": "/field/clients",
-            },
-            {
-              "icon": "CalendarDays",
-              "label": "Calendar",
-              "to": "/visits/calendar",
-            },
-            {
-              "icon": "PhoneCall",
-              "label": "My phone calls",
-              "to": "/calls",
             },
             {
               "icon": "Receipt",
@@ -2173,6 +2137,11 @@ exports[`each MedRep's menu > Rx CHC sees the same menu 1`] = `
               "icon": "TrendingUp",
               "label": "Sales performance",
               "to": "/sales-performance",
+            },
+            {
+              "icon": "PhoneCall",
+              "label": "My phone calls",
+              "to": "/calls",
             },
           ],
           "icon": "Gauge",

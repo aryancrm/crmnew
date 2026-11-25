@@ -211,23 +211,21 @@ const ordersLink = (label: string): MenuItem => ({
 });
 
 /** A seller's field work in one folder (SEFMED's work in the MedRep's pages, docs/PLAN.md 22): My
- *  day (Start working, the day report, the tiles), the day's visits (or calls), the tour plan, the
- *  customers as KOLs, hospitals and KBLs, the visit plan by class, the calendar, their phone log,
- *  expenses and samples. */
-const fieldFolder = (label: string, today: string, phone = "My calls"): MenuItem =>
+ *  day (Start working, the day report, the tiles), their visits (or calls), the tour plan (the
+ *  month: no second calendar, 25 Nov), the customers as KOLs, hospitals and KBLs, expenses and
+ *  samples. Their phone log is with their numbers, as every seller's (25 Nov). */
+const fieldFolder = (label: string, visits: string): MenuItem =>
   folder(
     label,
     CalendarCheck,
     [
       { to: "/field", label: "My day", icon: Smartphone },
-      { to: "/visits", label: today, icon: CalendarCheck },
+      { to: "/visits", label: visits, icon: CalendarCheck },
       // One plan, one link (Aryan, 22 Nov: "two features of one thing: merge them"). The tour plan's
       // calendar and its view by customer (the visits each class asks for) are the same
       // month's plan, sent to the team lead once: each page opens the other.
       { to: "/field/plan", label: "Tour plan", icon: CalendarRange },
       { to: "/field/clients", label: "KOLs, hospitals, KBLs", icon: Stethoscope },
-      { to: "/visits/calendar", label: "Calendar", icon: CalendarDays },
-      { to: "/calls", label: phone, icon: PhoneCall },
       { to: "/visits/expenses", label: "My expenses", icon: Receipt },
       { to: "/me/samples", label: "My samples & gifts", icon: Gift },
     ],
@@ -805,7 +803,7 @@ function ownDesk(me: Me): Space {
             ordersLink("My orders"),
             { to: "/customers", label: "Patients", icon: Users },
             { to: "/points", label: "Points", icon: Gift },
-            { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+            numbersFolder(),
           ]),
           cta: { to: "/leads?new=1", label: "New lead" },
         };
@@ -833,10 +831,11 @@ function ownDesk(me: Me): Space {
               ],
               "Hospitals",
             ),
-            fieldFolder("Visits", "Today's visits"),
-            // The Government Account's bidding coachee works tenders; the CHCs declare the 7 PM huddle.
-            ...(bidding ? [tendersFolder] : []),
-            numbersFolder(bidding ? [] : [{ to: "/huddle", label: "Tonight's huddle", icon: Megaphone }]),
+            fieldFolder("Visits", "My visits"),
+            // The Government Account's bidding coachee works tenders; the CHCs declare the 7 PM huddle
+            // (a report of the day, not a number: its own link, 25 Nov).
+            ...(bidding ? [tendersFolder] : [{ to: "/huddle", label: "Tonight's huddle", icon: Megaphone }]),
+            numbersFolder(),
           ]),
           cta: newOrder,
         };
@@ -888,7 +887,7 @@ function ownDesk(me: Me): Space {
       if (me.channel?.code === "BID")
         return {
           // Their numbers are their calls and the day's sales (no scorecard yet).
-          ...desk([home, tendersFolder, ordersLink("My orders"), collectionsLink, numbersFolder([callsLink], false)]),
+          ...desk([home, tendersFolder, ordersLink("My orders"), collectionsLink, numbersFolder([], false)]),
           cta: newOrder,
           cta2: { to: "/tenders", label: "Record a tender" },
         };
@@ -911,7 +910,7 @@ function ownDesk(me: Me): Space {
               "Accounts",
             ),
             ordersLink("My orders"),
-            numbersFolder([callsLink], false),
+            numbersFolder([], false),
           ]),
           cta: newOrder,
         };
@@ -961,7 +960,7 @@ function ownDesk(me: Me): Space {
               ],
               "Doctors",
             ),
-            fieldFolder("Calls", "Today's calls", "My phone calls"),
+            fieldFolder("Calls", "My doctor calls"),
             numbersFolder(),
           ]),
           cta: newOrder,
@@ -988,7 +987,7 @@ function ownDesk(me: Me): Space {
                 ],
             pap ? "Patients" : "Customers",
           ),
-          fieldFolder("Visits", "Today's visits"),
+          fieldFolder("Visits", "My visits"),
           numbersFolder(),
         ]),
         cta: newOrder,
