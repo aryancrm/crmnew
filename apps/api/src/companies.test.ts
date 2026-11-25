@@ -54,7 +54,8 @@ describe("migration 0159 on a database made before it", () => {
     // Migration 0159, statement by statement, as the API runs it on start.
     const file = readFileSync(new URL("../migrations/0159_company_codes.sql", import.meta.url), "utf8");
     for (const statement of file.split("--> statement-breakpoint").map((one) => one.trim()).filter(Boolean))
-      await db.execute(sql.raw(statement));
+      // The repository's own migration file, run as db/migrate.ts runs it (never a value from outside).
+      await db.execute(sql.raw(statement)); // nosemgrep
 
     const [after] = await rows<{ order: string; invoice: string; code: string; counters: string }>(
       db,
