@@ -178,6 +178,69 @@ One feature per commit, each with its tests; `checks/integrity.ts` and `scale.te
      incident reports within 30 days; a signature of at most 1 MB.
 4. **Payroll (about 1.5 weeks).** The decided cadence, holidays by town, the inputs from 2 and 3,
    the compare with HR's register. *Done when* one period matches HR's register to the centavo.
+   - [x] **The cadence** (Aryan, PLAN 12.16): one payroll a month, the 1st to the last day. Not
+     built (parked by Aryan): semi-monthly cut-offs, 13th month, final pay, bank files, remittances.
+   - [x] **Holidays by town** (24 Nov): migration 0155 `local_holiday`, `hr/holidays.ts`, HR's
+     *Holidays* page (`/hr/holidays`, next to Schedules; the CEO's and the Admin's Apps › HR). A
+     holiday is national (`holiday`, the company's calendar: desks' clocks stay on it) or local to a
+     province or one city or municipality, by the names of the CRM's town list (PSGC). Seeded with
+     Automated-Excel's 2026 Lawphil proclamations (354 entries, 390 rows: a region's become its
+     provinces, NCR as Metro Manila, CAR's six, BARMM's; a list of towns one row each; Sawata read as
+     San Isidro, Davao del Norte, Baliwag as Baliuag, Pio V. Corpus as Corpuz; the three that fall
+     on a national holiday left out). HR and the Admin add one (nationwide, a province, a town) and
+     archive one with a note (never deleted); HR, the CEO and the Admin read the year, by province
+     or town. **Whose:** a person's work town on their record (`employee.work_town` +
+     `work_province`, picked from the list in the edit form, in HR's trail), else the first city of
+     their seat's area (their own area with no seat), read against the list (a city before towns of
+     the same name; none when several towns fit); nobody's local holiday when neither gives a town.
+     A person's holidays (national + their province + their town) now drive attendance (working
+     day, absent, late; the person's month, Who's working, the report, *My day*, the day not starting
+     by itself), leave days, the overtime form's kind of day, the printouts and payroll. Test:
+     `hr/holidays.test.ts`.
+   - [x] **The inputs on the payslip** (24 Nov, `hr/pay-rules.ts`, `hr/payroll.ts`), checked one by
+     one in `hr/payroll-inputs.test.ts`: absent and leave without pay at monthly × 12 ÷ 313 a day
+     (PLAN 12.16; was already so); late and undertime by the person's own schedule in 15-minute
+     blocks (was already so); a local holiday not worked is never absent; **approved overtime by its
+     type** (fixed: payroll read the day's kind from the national list only and ignored the form's
+     type and the 8-hour split): its first 8 hours and past them (table below); a holiday worked
+     with no overtime form +100% / +30% of the day (PLAN), only on a working day of their schedule,
+     never on top of a holiday overtime form for the same day (fixed: it was paid twice); **night
+     differential** shown on the payslip with what 10% would come to, **not paid** (HR-PLAN step 3);
+     the local holidays of the month noted on the slip. Released payslips stay frozen (`payslip`),
+     never recomputed.
+   - [x] **HR's register beside the CRM** (24 Nov, migration 0155 `pay_register`,
+     `pay_register_map`, `pay_register_match`, `pay_register_compare`; `hr/pay-register.ts`; on the
+     Payroll month page). HR uploads its register (.xlsx, 10 MB, read by `reports/xlsx-read.ts`, kept
+     through `files/store.ts`); maps once which heading holds the employee ID, the name, basic,
+     overtime, gross, total deductions, SSS, PhilHealth, Pag-IBIG, tax and net (kept; the newest
+     mapping is used for the next files wherever the headings sit); rows matched by employee ID
+     (upper case, no spaces), else an exact name HR confirms (*This is …*), or HR picks who a row is;
+     per person and per figure the CRM's amount, HR's and the difference, any ₱0.01 flagged; people
+     on HR's side only and on the CRM's only. Each file, mapping, confirmation and comparison kept
+     (nothing deleted); *Compare again* after the draft changes. HR and the Admin work; the CEO
+     reads; never while looking as someone (under `/api/hr/payroll/*`). The CRM's "overtime" is its
+     overtime lines (not the holiday-worked premium). Test: `hr/pay-register.test.ts`.
+   - *Overtime rates used* (basis points of the hourly rate = monthly × 12 ÷ 313 ÷ 8; first 8 hours
+     / past 8): working day and broken time 125% / 125%; rest day 130% / 169%; special day +30% /
+     169%; regular holiday +100% / 260%; special day on a rest day 150% / 195%; regular holiday on a
+     rest day 260% / 338%. PLAN 12.16 gives 125, 130, 169 (special) and 260 (regular holiday) and the
+     +100% / +30%; the rest are the Labor Code's (DOLE handbook). A holiday's first 8 hours are a
+     premium because the monthly pay at 313 days already carries the day's 100%. Automated-Excel
+     pays no overtime at all ("rules not settled") and its holiday pay differs (below).
+   - *Not done:* the period that matches HR's register to the centavo: it needs HR's real register
+     for one month (and the DTR of that month in the CRM) to upload and read side by side.
+   - *To confirm with HR:* every overtime rate above not in PLAN (rest day past 8 hours, rest day on
+     a special day or a regular holiday, broken time at 125%); a holiday's first 8 hours paid as
+     +100% / +30% by the hour on an overtime form, and a full day's premium for a holiday worked with
+     no form (even a short day); a rest-day holiday worked with no form paid nothing (approved
+     overtime only); Automated-Excel's holiday pay (a regular holiday worked 200%, unworked 100% if
+     present the day before, a special day 130% or 150% on a rest day, each on top of the cut-off's
+     half salary) against the CRM's monthly premium-only rule; whether a special day not worked is
+     docked ("no work, no pay"; the CRM docks nothing, as the 313-day monthly carries it); night
+     differential's 10% (shown only); a work town falling back to the seat's area's first city;
+     local holidays for province-wide and region-wide proclamations taken as every town of the
+     province; which register columns HR's "OT Amount" and "DEDUCTION" mean (OT with holiday pay or
+     not; all deductions or only HR's own).
 5. **Joining and leaving (about 1 week).** The checklist with its reminders; resignation, clearance,
    exit interview.
 6. **HR's Home (about half a week).** What is due today, the figures, the reports.
@@ -190,7 +253,7 @@ HR moves over once the DTR and the payroll match.
 Step 1 needs none of these; step 2 onward does.
 
 1. **Payroll cadence:** monthly (the CRM, PLAN 12.16) or semi-monthly (15th and month-end, what HR
-   runs today in Automated-Excel)?
+   runs today in Automated-Excel)? *Decided:* monthly (Aryan, PLAN 12.16).
 2. **Attendance source:** the biometric Excel stays the source and signing in is a check, or signing
    in replaces it?
 3. **Who checks the rules:** HR (or Automated-Excel's developer) confirms leave credits, overtime

@@ -79,6 +79,7 @@ import {
   ScanSearch,
   Map as MapIcon,
   Smartphone,
+  CalendarHeart,
 } from "lucide-react";
 import { ZOHO_REPORT_GROUPS } from "./zoho-reports";
 
@@ -519,6 +520,7 @@ const hrApp: Space = {
         { to: "/hr/report", label: "Attendance report", icon: BarChart3 },
         { to: "/hr/leave?view=approved", label: "Leave", icon: CalendarDays },
         { to: "/hr/payroll", label: "Payroll", icon: Wallet },
+        { to: "/hr/holidays", label: "Holidays", icon: CalendarHeart },
         { to: "/hr/people", label: "People", icon: Users },
       ],
     },
@@ -1523,6 +1525,7 @@ function ownDesk(me: Me): Space {
           { to: "/hr/timekeeping", label: "Timekeeping", icon: FileSpreadsheet },
           { to: "/hr/positions", label: "Positions", icon: Briefcase },
           { to: "/hr/schedules", label: "Schedules", icon: Timer },
+          { to: "/hr/holidays", label: "Holidays", icon: CalendarHeart },
         ]),
         icon: Users,
       };

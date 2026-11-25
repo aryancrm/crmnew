@@ -26,6 +26,16 @@ import {
   vlConversionReport,
 } from "./credits";
 import { hrHistory } from "./events";
+import { addHoliday, archiveHoliday, holidayYear } from "./holidays";
+import {
+  compareAgain,
+  confirmRow,
+  mapRegister,
+  REGISTER_MAX_BYTES,
+  registerFile,
+  registerPage,
+  uploadRegister,
+} from "./pay-register";
 import { addSchedule, archiveSchedule, hrSchedules, setPersonSchedule } from "./schedules";
 import {
   cancelForm,
@@ -406,6 +416,37 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
     await setPositionArchived(db, c.get("me"), idParam(c), input.archived);
     return c.json({ ok: true });
   });
+  // Holidays: national, and local to a province or a town (not private: no look-as guard).
+  app.get("/api/hr/holidays", async (c) =>
+    c.json(
+      await holidayYear(db, c.get("me"), {
+        year: c.req.query("year"),
+        province: c.req.query("province"),
+        town: c.req.query("town"),
+      }),
+    ),
+  );
+  app.post("/api/hr/holidays", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        day,
+        name: z.string().max(200),
+        kind: z.enum(["regular", "special"], { message: "Pick a regular holiday or a special day." }),
+        province: words(120),
+        town: words(120),
+      }),
+    );
+    return c.json(await addHoliday(db, c.get("me"), input));
+  });
+  app.post("/api/hr/holidays/:scope/:id/archive", async (c) => {
+    const scope = c.req.param("scope");
+    if (scope !== "national" && scope !== "local")
+      throw new Refusal(404, "not_found", "No such holiday.");
+    const input = await readBody(c, z.object({ note: words(300) }));
+    await archiveHoliday(db, c.get("me"), scope, idParam(c), input.note);
+    return c.json({ ok: true });
+  });
   // Work schedules: HR gives people a shift, or the company's default.
   app.get("/api/hr/schedules", async (c) => c.json(await hrSchedules(db, c.get("me"))));
   app.post("/api/hr/schedules", async (c) => {
@@ -555,6 +596,8 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
           workArrangement: z
             .enum(["office", "field", "hybrid", "remote"], { message: "Pick one from the list." })
             .nullish(),
+          workTown: words(120),
+          workProvince: words(120),
           companyPhone: words(30),
           issuedEquipment: words(500),
           jobDescription: words(2000),
@@ -655,6 +698,73 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   app.post("/api/hr/payroll/:month/release", async (c) =>
     c.json(await releaseMonth(db, c.get("me"), c.req.param("month"))),
   );
+  // HR's own payroll register beside the CRM's month: upload, map the headings, confirm names.
+  app.get("/api/hr/payroll/:month/register", async (c) =>
+    c.json(
+      await registerPage(db, c.get("me"), c.req.param("month"), Number(c.req.query("register")) || null),
+    ),
+  );
+  app.post("/api/hr/payroll/:month/register", async (c) => {
+    if (Number(c.req.header("content-length") ?? 0) > REGISTER_MAX_BYTES + 64 * 1024)
+      throw new Refusal(400, "invalid", "That file is over 10 MB.", "file");
+    const body = await c.req.parseBody().catch(() => ({}) as Record<string, unknown>);
+    const file = body.file;
+    return c.json(
+      await uploadRegister(
+        db,
+        c.get("me"),
+        c.req.param("month"),
+        file instanceof File && file.size > 0
+          ? { name: file.name, mime: file.type, bytes: new Uint8Array(await file.arrayBuffer()) }
+          : null,
+      ),
+    );
+  });
+  app.post("/api/hr/payroll/register/:id/map", async (c) => {
+    const heading = z.string().max(200).nullish();
+    const input = await readBody(
+      c,
+      z.object({
+        sheet: z.string().max(200),
+        headerRow: z.number().int().min(1).max(200),
+        columns: z.object({
+          code: heading,
+          name: heading,
+          basic: heading,
+          ot: heading,
+          gross: heading,
+          deductions: heading,
+          sss: heading,
+          philhealth: heading,
+          pagibig: heading,
+          tax: heading,
+          net: heading,
+        }),
+      }),
+    );
+    await mapRegister(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+  app.post("/api/hr/payroll/register/:id/confirm", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({ row: z.number().int().min(1), personId: z.number().int().positive("Pick the person.") }),
+    );
+    await confirmRow(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+  app.post("/api/hr/payroll/register/:id/compare", async (c) => {
+    await compareAgain(db, c.get("me"), idParam(c));
+    return c.json({ ok: true });
+  });
+  app.get("/api/hr/payroll/register/:id/file", async (c) => {
+    const file = await registerFile(db, c.get("me"), idParam(c));
+    return c.body(file.bytes as Uint8Array<ArrayBuffer>, 200, {
+      "content-type": file.mime,
+      "content-disposition": `attachment; filename="${encodeURIComponent(file.name)}"`,
+      "x-content-type-options": "nosniff",
+    });
+  });
   app.get("/api/hr/payslips/mine", async (c) => c.json(await myPayslips(db, c.get("me"))));
   app.get("/api/hr/payslips/:month", async (c) =>
     c.json(await payslipOf(db, c.get("me"), c.req.param("month"))),

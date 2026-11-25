@@ -37,12 +37,14 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom";
+import { Avatar } from "../account/avatar";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { FIELD } from "../org/dialogs";
 import { smaller } from "../photo";
 import { LeaveCreditsBox } from "./credits";
 import { weekdaysWords } from "./schedules";
+import { type WorkTown, WorkTownPicker } from "./work-town";
 import {
   Button,
   CARD,
@@ -694,11 +696,15 @@ export function HrPersonPage() {
   const mine = me?.id === data.personId;
   const r = data.record;
   const facts = (rows: [string, ReactNode][]) => (
-    <dl className="grid grid-cols-[9rem_1fr] gap-x-3 gap-y-2 px-4 py-3 text-sm">
+    <dl className="grid content-start gap-x-8 gap-y-4 text-sm sm:grid-cols-2">
       {rows.map(([label, value]) => (
-        <div key={label} className="contents">
+        <div key={label} className="flex min-w-0 flex-col gap-0.5">
           <dt className="text-slate-500">{label}</dt>
-          <dd className="min-w-0 break-words text-slate-900">{value || "—"}</dd>
+          <dd
+            className={`break-words ${value ? "font-medium text-slate-900" : "text-slate-400"}`}
+          >
+            {value || "—"}
+          </dd>
         </div>
       ))}
     </dl>
@@ -713,6 +719,21 @@ export function HrPersonPage() {
     </section>
   );
   const shown = (value: string | null) => value ?? null;
+  const section = (
+    title: string,
+    about: string,
+    body: ReactNode,
+    action?: ReactNode,
+  ) => (
+    <section className="grid gap-x-10 gap-y-4 py-7 md:grid-cols-[15rem_1fr]">
+      <div className="flex flex-col items-start gap-1">
+        <h2 className="text-base font-semibold text-slate-900">{title}</h2>
+        <p className="text-sm text-pretty text-slate-500">{about}</p>
+        {action && <div className="mt-2">{action}</div>}
+      </div>
+      {body}
+    </section>
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -744,155 +765,205 @@ export function HrPersonPage() {
           {mine ? "My record" : data.name}
         </span>
       </nav>
-      <PageHead
-        title={data.name}
-        tags={<StagePill stage={data.stage} hireDate={r.hireDate} />}
-        sub={[r.position ?? data.roleLabel, data.seat?.team, COMPANY[r.company]]
-          .filter(Boolean)
-          .join(" · ")}
-        actions={
-          <>
-            {data.can.edit && (
-              <Button onClick={() => setOpen("edit")}>
-                <Pencil size={15} /> Edit record
-              </Button>
+      <article className={`${CARD} overflow-hidden`}>
+        <div
+          aria-hidden="true"
+          className="m-2 h-24 rounded-xl bg-gradient-to-br from-emerald-100 via-teal-50 to-sky-100 sm:h-32"
+        />
+        <div className="px-5 pb-6 sm:px-8">
+          <div className="-mt-14 flex flex-wrap items-end justify-between gap-3 sm:-mt-16">
+            <span className="rounded-full bg-white p-1 shadow-[0_2px_8px_rgb(15_23_42/0.08)]">
+              <Avatar person={{ id: data.personId, name: data.name }} size="lg" />
+            </span>
+            {(data.can.edit || data.can.leave || data.can.back) && (
+              <div className="flex flex-wrap items-center gap-2">
+                {data.can.edit && (
+                  <Button onClick={() => setOpen("edit")}>
+                    <Pencil size={15} /> Edit record
+                  </Button>
+                )}
+                {data.can.leave && (
+                  <Button variant="danger" onClick={() => setOpen("left")}>
+                    Mark as left
+                  </Button>
+                )}
+                {data.can.back && <BackAtWork personId={data.personId} />}
+              </div>
             )}
-            {data.can.leave && (
-              <Button variant="danger" onClick={() => setOpen("left")}>
-                Mark as left
-              </Button>
-            )}
-            {data.can.back && <BackAtWork personId={data.personId} />}
-          </>
-        }
-      />
-      {data.missing.length > 0 && data.stage !== "left" && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
-          Missing on the record: {data.missing.join(", ")}.
-        </div>
-      )}
-      <div className="grid gap-4 lg:grid-cols-2">
-        {box(
-          "Job",
-          facts([
-            [
-              "Seat",
-              data.seat ? `${data.seat.title} · ${data.seat.team}` : "No seat",
-            ],
-            ["Channel", data.seat?.channel ?? null],
-            ["Area", data.seat?.area ?? null],
-            ["Reports to", data.seat?.boss ?? null],
-            [
-              "Schedule",
-              `${data.schedule.name}${data.schedule.id === null ? " (company default)" : ""} · ${data.schedule.start}–${data.schedule.end}, ${weekdaysWords(data.schedule.days)}`,
-            ],
-            ["Employee ID", r.employeeCode],
-            ["Employed as", CLASS[r.classification]],
-            ["Works", r.workArrangement ? ARRANGEMENT[r.workArrangement] : null],
-            ["Company phone", r.companyPhone],
-            ["Equipment", r.issuedEquipment],
-            ["Job description", r.jobDescription],
-            ["Started", dayWords(r.hireDate)],
-            [
-              "Regular since",
-              r.regularizedOn ? dayWords(r.regularizedOn) : null,
-            ],
-            ...(data.stage === "left"
-              ? ([
-                  ["Left", dayWords(r.leftOn)],
-                  ["Why", r.leftReason],
-                ] as [string, ReactNode][])
-              : []),
-          ]),
-          data.can.schedule && (
-            <Button small onClick={() => setOpen("schedule")}>
-              <Pencil size={14} /> Change schedule
-            </Button>
-          ),
-        )}
-        {box(
-          "Login",
-          facts([
-            ["Signs in with", data.loginId],
-            [
-              "Last signed in",
-              data.login === "off" ? "Switched off" : when(data.lastSignIn),
-            ],
-          ]),
-          data.can.login && (
-            <Button small onClick={() => setOpen("login")}>
-              <KeyRound size={14} /> Change login
-            </Button>
-          ),
-        )}
-        {box(
-          "Contact",
-          facts([
-            ["Mobile", r.mobile],
-            ["Personal email", r.personalEmail],
-            ["Birthday", r.birthDate ? dayWords(r.birthDate) : null],
-            ["Address", r.address],
-            [
-              "Emergency",
-              r.emergencyName
-                ? `${r.emergencyName}${r.emergencyRelation ? ` (${r.emergencyRelation})` : ""}${r.emergencyPhone ? ` · ${r.emergencyPhone}` : ""}`
-                : null,
-            ],
-          ]),
-        )}
-        {box(
-          "Personal",
-          facts([
-            ["Gender", r.gender ? GENDER[r.gender] : null],
-            ["Civil status", r.civilStatus ? CIVIL[r.civilStatus] : null],
-            ["Citizenship", r.citizenship],
-            ["Spouse", r.spouseName],
-            ["Parents", [r.fatherName, r.motherName].filter(Boolean).join(" · ") || null],
-            [
-              "Education",
-              [r.education, r.course, r.school].filter(Boolean).join(" · ") || null,
-            ],
-          ]),
-        )}
-        {(data.can.edit || mine) &&
-          box(
-            "Pay and IDs",
-            facts([
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-2.5">
+            <h1 className="text-[1.75rem] leading-tight font-bold tracking-tight text-balance text-slate-900">
+              {data.name}
+            </h1>
+            <StagePill stage={data.stage} hireDate={r.hireDate} />
+          </div>
+          <p className="mt-1 text-sm text-slate-500">
+            {[r.position ?? data.roleLabel, data.seat?.team, COMPANY[r.company]]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+          <dl className="mt-6 grid grid-cols-2 gap-y-5 border-b border-slate-100 pb-6 sm:grid-cols-4">
+            {(
               [
-                "Salary",
-                r.salary !== null ? `${peso(r.salary)} a month` : null,
-              ],
-              [
-                "Allowance",
-                r.allowance !== null ? `${peso(r.allowance)} a month` : null,
-              ],
-              [
-                "Bank",
-                [r.bankName, r.bankAccount].filter(Boolean).join(" · ") || null,
-              ],
-              ["SSS", shown(r.sss)],
-              ["PhilHealth", shown(r.philhealth)],
-              ["Pag-IBIG", shown(r.pagibig)],
-              ["TIN", shown(r.tin)],
-              [
-                "Not covered",
-                r.payExempt
-                  ? (
-                      [
-                        ["sss", "SSS"],
-                        ["philhealth", "PhilHealth"],
-                        ["pagibig", "Pag-IBIG"],
-                        ["tax", "Tax"],
-                      ] as const
-                    )
-                      .filter(([key]) => r.payExempt?.[key])
-                      .map(([, label]) => label)
-                      .join(", ") || null
-                  : null,
-              ],
-            ]),
+                ["Employee ID", r.employeeCode],
+                ["Login ID", data.loginId],
+                ["Reports to", data.seat?.boss ?? null],
+                ["Started", dayWords(r.hireDate)],
+              ] as [string, string | null][]
+            ).map(([label, value], index) => (
+              <div
+                key={label}
+                className={`flex min-w-0 flex-col gap-1 ${index % 2 ? "border-l border-slate-100 pl-5" : "pr-5"} ${index === 2 ? "sm:border-l sm:pl-5" : ""} ${index === 1 ? "sm:pr-5" : ""}`}
+              >
+                <dt className="text-sm text-slate-500">{label}</dt>
+                <dd
+                  className={`truncate text-lg tabular-nums ${value ? "font-semibold text-slate-900" : "text-amber-700"}`}
+                  title={value ?? undefined}
+                >
+                  {value ?? "Not set"}
+                </dd>
+              </div>
+            ))}
+          </dl>
+          {data.missing.length > 0 && data.stage !== "left" && (
+            <p className="mt-5 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900">
+              Missing on the record: {data.missing.join(", ")}.
+            </p>
           )}
-      </div>
+          <div className="divide-y divide-slate-100">
+            {section(
+              "Job",
+              "Their seat, schedule and where they work.",
+              facts([
+                [
+                  "Seat",
+                  data.seat ? `${data.seat.title} · ${data.seat.team}` : "No seat",
+                ],
+                ["Channel", data.seat?.channel ?? null],
+                ["Area", data.seat?.area ?? null],
+                [
+                  "Schedule",
+                  `${data.schedule.name}${data.schedule.id === null ? " (company default)" : ""} · ${data.schedule.start}–${data.schedule.end}, ${weekdaysWords(data.schedule.days)}`,
+                ],
+                ["Employed as", CLASS[r.classification]],
+                ["Works", r.workArrangement ? ARRANGEMENT[r.workArrangement] : null],
+                [
+                  "Work town",
+                  r.workTown
+                    ? `${r.workTown}, ${r.workProvince}`
+                    : r.holidayPlace
+                      ? `Not set: local holidays follow ${r.holidayPlace.town ?? r.holidayPlace.province} (the seat's area)`
+                      : null,
+                ],
+                ["Company phone", r.companyPhone],
+                ["Equipment", r.issuedEquipment],
+                ["Job description", r.jobDescription],
+                [
+                  "Regular since",
+                  r.regularizedOn ? dayWords(r.regularizedOn) : null,
+                ],
+                ...(data.stage === "left"
+                  ? ([
+                      ["Left", dayWords(r.leftOn)],
+                      ["Why", r.leftReason],
+                    ] as [string, ReactNode][])
+                  : []),
+              ]),
+              data.can.schedule && (
+                <Button small onClick={() => setOpen("schedule")}>
+                  <Pencil size={14} /> Change schedule
+                </Button>
+              ),
+            )}
+            {section(
+              "Contact",
+              "How to reach them, and who to call in an emergency.",
+              facts([
+                ["Mobile", r.mobile],
+                ["Personal email", r.personalEmail],
+                ["Birthday", r.birthDate ? dayWords(r.birthDate) : null],
+                ["Address", r.address],
+                [
+                  "Emergency",
+                  r.emergencyName
+                    ? `${r.emergencyName}${r.emergencyRelation ? ` (${r.emergencyRelation})` : ""}${r.emergencyPhone ? ` · ${r.emergencyPhone}` : ""}`
+                    : null,
+                ],
+              ]),
+            )}
+            {section(
+              "Personal",
+              "Family and schooling, as on their papers.",
+              facts([
+                ["Gender", r.gender ? GENDER[r.gender] : null],
+                ["Civil status", r.civilStatus ? CIVIL[r.civilStatus] : null],
+                ["Citizenship", r.citizenship],
+                ["Spouse", r.spouseName],
+                ["Parents", [r.fatherName, r.motherName].filter(Boolean).join(" · ") || null],
+                [
+                  "Education",
+                  [r.education, r.course, r.school].filter(Boolean).join(" · ") || null,
+                ],
+              ]),
+            )}
+            {(data.can.edit || mine) &&
+              section(
+                "Pay and IDs",
+                mine ? "Only you and HR see this." : "Only HR and they see this.",
+                facts([
+                  [
+                    "Salary",
+                    r.salary !== null ? `${peso(r.salary)} a month` : null,
+                  ],
+                  [
+                    "Allowance",
+                    r.allowance !== null ? `${peso(r.allowance)} a month` : null,
+                  ],
+                  [
+                    "Bank",
+                    [r.bankName, r.bankAccount].filter(Boolean).join(" · ") || null,
+                  ],
+                  ["SSS", shown(r.sss)],
+                  ["PhilHealth", shown(r.philhealth)],
+                  ["Pag-IBIG", shown(r.pagibig)],
+                  ["TIN", shown(r.tin)],
+                  [
+                    "Not covered",
+                    r.payExempt
+                      ? (
+                          [
+                            ["sss", "SSS"],
+                            ["philhealth", "PhilHealth"],
+                            ["pagibig", "Pag-IBIG"],
+                            ["tax", "Tax"],
+                          ] as const
+                        )
+                          .filter(([key]) => r.payExempt?.[key])
+                          .map(([, label]) => label)
+                          .join(", ") || null
+                      : null,
+                  ],
+                ]),
+              )}
+            {section(
+              "Login",
+              "How they sign in to Bishnoi One.",
+              facts([
+                ["Login ID", data.loginId],
+                [
+                  "Last signed in",
+                  data.login === "off" ? "Switched off" : when(data.lastSignIn),
+                ],
+              ]),
+              data.can.login && (
+                <Button small onClick={() => setOpen("login")}>
+                  <KeyRound size={14} /> Change login
+                </Button>
+              ),
+            )}
+          </div>
+        </div>
+      </article>
       {(data.history.length > 0 || data.career.length > 0) &&
         box(
           "Job history",
@@ -1423,6 +1494,9 @@ function RecordDialog({
     civilStatus: r.civilStatus ?? "",
     workArrangement: r.workArrangement ?? "",
   });
+  const [workTown, setWorkTown] = useState<WorkTown>(
+    r.workTown && r.workProvince ? { town: r.workTown, province: r.workProvince } : null,
+  );
   const positions = useQuery({
     queryKey: ["hr", "positions"],
     queryFn: () => api<HrPositions>("/api/hr/positions"),
@@ -1452,6 +1526,8 @@ function RecordDialog({
       gender: (choice.gender || null) as Gender | null,
       civilStatus: (choice.civilStatus || null) as CivilStatus | null,
       workArrangement: (choice.workArrangement || null) as WorkArrangement | null,
+      workTown: workTown?.town ?? null,
+      workProvince: workTown?.province ?? null,
       ...(r.payExempt
         ? {
             noSss: exempt.sss,
@@ -1575,6 +1651,18 @@ function RecordDialog({
           <div className="grid gap-3 sm:grid-cols-3">
             {select("workArrangement", "Works", ARRANGEMENT)}
             {pick(22, 24)}
+          </div>
+          <div className="flex min-w-0 flex-col gap-1">
+            <span className="text-xs font-semibold text-slate-600">Work town (their local holidays follow it)</span>
+            <WorkTownPicker value={workTown} onChange={setWorkTown} />
+            {!workTown && r.holidayPlace?.from === "area" && (
+              <span className="text-xs text-slate-500">
+                Empty: their seat's area's first city counts ({r.holidayPlace.town ?? r.holidayPlace.province}).
+              </span>
+            )}
+            {action.at("workTown") && (
+              <span className="text-xs font-medium text-rose-700">{action.at("workTown")}</span>
+            )}
           </div>
           <Label text="Job description" error={action.at("jobDescription")}>
             <textarea
@@ -1704,6 +1792,8 @@ function RecordDialog({
             "gender",
             "civilStatus",
             "workArrangement",
+            "workTown",
+            "workProvince",
             ...RECORD_TEXT.map(([key]) => key),
           ])}
         />

@@ -38,6 +38,8 @@ export const FIELD_LABEL: Record<string, string> = {
   school: "School",
   course: "Course",
   workArrangement: "Work arrangement",
+  workTown: "Work town",
+  workProvince: "Work town's province",
   companyPhone: "Company phone",
   issuedEquipment: "Issued equipment",
   jobDescription: "Job description",

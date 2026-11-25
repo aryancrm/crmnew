@@ -34,6 +34,7 @@ import { ATTENDANCE_ALL_ROLES, ATTENDANCE_WRITE_ROLES, formSpan, schedulesOf } f
 import { approverOf, inTeamOf, LEAD_ROLES } from "./leave";
 import { dayKindOf, OT_TYPES, onHalfHour, otTypesFor, overtimeOf } from "./leave-rules";
 import { DEFAULT_SCHEDULE } from "./work-time";
+import { holidaysOf } from "./holidays";
 
 const KINDS: FormKind[] = ["ob", "wfh", "ot", "eod", "incident"];
 export const FORM_WORDS: Record<FormKind, string> = {
@@ -341,10 +342,8 @@ async function readForm(
     if (!onHalfHour(fromTime) || !onHalfHour(toTime))
       throw new Refusal(400, "invalid", "Overtime starts and ends on the hour or the half hour.", "to");
     const schedule = (await schedulesOf(db, [person.id])).get(person.id) ?? DEFAULT_SCHEDULE;
-    const [holiday] = await rows<{ kind: "regular" | "special" }>(
-      db,
-      sql`select kind from holiday where active and day = ${input.day}::date limit 1`,
-    );
+    // The person's own holiday: a national one, or their town's or province's.
+    const holiday = (await holidaysOf(db, [person.id], input.day, input.day)).get(person.id)?.get(input.day);
     const dayKind = dayKindOf(input.day, schedule.days, holiday?.kind ?? null);
     otType = input.otType ?? dayKind;
     if (!otTypesFor(dayKind).includes(otType))

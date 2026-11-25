@@ -32,10 +32,10 @@ import type {
 import {
   ATTENDANCE_ALL_ROLES,
   ATTENDANCE_WRITE_ROLES,
-  holidaysBetween,
   leaveDays,
   schedulesOf,
 } from "./attendance";
+import { holidaysOf } from "./holidays";
 import {
   earliestVl,
   LEAVE_FILES_MAX,
@@ -134,11 +134,12 @@ async function withDays<T extends { personId: number; from: string; to: string; 
   if (!lines.length) return [];
   const first = lines.reduce((low, one) => (one.from < low ? one.from : low), lines[0]?.from ?? "");
   const last = lines.reduce((high, one) => (one.to > high ? one.to : high), lines[0]?.to ?? "");
+  const people = [...new Set(lines.map((one) => one.personId))];
+  // Each person's own holidays: the national ones and their town's.
   const [schedules, holidays] = await Promise.all([
-    schedulesOf(db, [...new Set(lines.map((one) => one.personId))]),
-    holidaysBetween(db, first, last),
+    schedulesOf(db, people),
+    holidaysOf(db, people, first, last),
   ]);
-  const holidaySet = new Set(holidays.keys());
   return lines.map((one) => ({
     ...one,
     days: leaveDays(
@@ -146,7 +147,7 @@ async function withDays<T extends { personId: number; from: string; to: string; 
       one.to,
       one.halfDay,
       schedules.get(one.personId) ?? DEFAULT_SCHEDULE,
-      holidaySet,
+      new Set((holidays.get(one.personId) ?? new Map()).keys()),
     ),
   }));
 }

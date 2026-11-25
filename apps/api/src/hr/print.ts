@@ -22,7 +22,8 @@ import type {
   OtType,
   Printout,
 } from "../types";
-import { holidaysBetween, leaveDays, schedulesOf } from "./attendance";
+import { leaveDays, schedulesOf } from "./attendance";
+import { holidayNamesOf } from "./holidays";
 import { mayReadForm } from "./forms";
 import { KIND_WORDS, mayReadLeave } from "./leave";
 import { OT_TYPES } from "./leave-rules";
@@ -182,7 +183,7 @@ export async function leavePrintout(db: Database, me: Me, leaveId: number): Prom
     throw new Refusal(409, "invalid", "Only approved leave is printed.");
   const [schedules, holidays] = await Promise.all([
     schedulesOf(db, [line.personId]),
-    holidaysBetween(db, line.from, line.to),
+    holidayNamesOf(db, line.personId, line.from, line.to),
   ]);
   const days = leaveDays(
     line.from,

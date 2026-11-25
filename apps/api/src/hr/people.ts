@@ -5,6 +5,7 @@
 
 import { accountEvent } from "../account/events";
 import { careerOf, changeSentence, changesOf, hrEvent } from "./events";
+import { placesOf, townOnList } from "./holidays";
 import { type SQL, sql } from "drizzle-orm";
 import { hashPassword, passwordProblem } from "../auth/password";
 import { type Database, rows } from "../db/index";
@@ -216,6 +217,8 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
     school: string | null;
     course: string | null;
     workArrangement: WorkArrangement | null;
+    workTown: string | null;
+    workProvince: string | null;
     companyPhone: string | null;
     issuedEquipment: string | null;
     jobDescription: string | null;
@@ -248,7 +251,8 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
         e.emergency_phone as "emergencyPhone", e.emergency_relation as "emergencyRelation",
         e.gender, e.civil_status as "civilStatus", e.citizenship, e.spouse_name as "spouseName",
         e.father_name as "fatherName", e.mother_name as "motherName", e.education, e.school, e.course,
-        e.work_arrangement as "workArrangement", e.company_phone as "companyPhone",
+        e.work_arrangement as "workArrangement", e.work_town as "workTown", e.work_province as "workProvince",
+        e.company_phone as "companyPhone",
         e.issued_equipment as "issuedEquipment", e.job_description as "jobDescription",
         e.salary, e.allowance, e.bank_name as "bankName", e.bank_account as "bankAccount", e.sss, e.philhealth, e.pagibig, e.tin,
         e.no_sss as "noSss", e.no_philhealth as "noPhilhealth", e.no_pagibig as "noPagibig", e.no_tax as "noTax",
@@ -295,6 +299,7 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
       )[0]?.name ?? null)
     : null;
   const pay = hr || me.id === personId;
+  const holidayPlace = (await placesOf(db, [personId])).get(personId) ?? null;
   return {
     personId: one.personId,
     name: one.name,
@@ -342,6 +347,9 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
       school: one.school,
       course: one.course,
       workArrangement: one.workArrangement,
+      workTown: one.workTown,
+      workProvince: one.workProvince,
+      holidayPlace,
       companyPhone: one.companyPhone,
       issuedEquipment: one.issuedEquipment,
       jobDescription: one.jobDescription,
@@ -608,6 +616,8 @@ const RECORD_COLUMNS: Record<keyof HrRecordInput, string> = {
   school: "school",
   course: "course",
   workArrangement: "work_arrangement",
+  workTown: "work_town",
+  workProvince: "work_province",
   companyPhone: "company_phone",
   issuedEquipment: "issued_equipment",
   jobDescription: "job_description",
@@ -660,6 +670,16 @@ export async function updateRecord(
 ): Promise<void> {
   allow(me, HR_WRITE_ROLES, "change people's records");
   await ensureRecords(db);
+  // The work town is one of the CRM's town list, sent with its province (or both cleared).
+  if ("workTown" in input || "workProvince" in input) {
+    const town = text(input.workTown);
+    const province = text(input.workProvince);
+    if (town || province) {
+      const place = town && province ? townOnList(town, province) : null;
+      if (!place) throw new Refusal(400, "invalid", "Pick the work town from the list.", "workTown");
+      input = { ...input, workTown: place.town, workProvince: place.province };
+    } else input = { ...input, workTown: null, workProvince: null };
+  }
   const sets: SQL[] = [];
   // What the record becomes, for HR's trail.
   const after: Record<string, string | number | boolean | null> = {};

@@ -9,6 +9,7 @@ import { peopleUnder } from "../org/scope";
 import { fixesOf, mayAskFix } from "./corrections";
 import { hrEvent } from "./events";
 import { biometricMonth, seesBiometric } from "./timekeeping";
+import { type DayHoliday, holidayNamesOf, holidaysOf } from "./holidays";
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
@@ -25,6 +26,7 @@ import type {
   LeaveRow,
   Me,
   MyDay,
+  OtType,
 } from "../types";
 import {
   DEFAULT_SCHEDULE,
@@ -107,6 +109,8 @@ export async function markSeen(db: Database, me: Me): Promise<void> {
       returning id::int as id`,
   );
   if (moved.length) return;
+  // Their own holiday (a local one of their town too) isn't a working day: nothing starts by itself.
+  if ((await holidayNamesOf(db, me.id, today, today)).has(today)) return;
   await db.execute(
     sql`insert into attendance (person_id, day, time_in, in_source, last_seen)
       select ${me.id}, ${today}::date, now(), 'sign_in', now()
@@ -253,9 +257,14 @@ function dayOf(
       ? dayMinutes(schedule) - schedule.breakMinutes
       : formSpan(covering)
     : 0;
-  const overtimeMinutes = forms
+  const overtime = forms
     .filter((one) => one.day === day && one.kind === "ot")
-    .reduce((sum, one) => sum + (one.minutes ?? formSpan(one)), 0);
+    .map((one) => ({
+      type: one.otType ?? null,
+      minutes: one.minutes ?? formSpan(one),
+      nightMinutes: one.night ?? 0,
+    }));
+  const overtimeMinutes = overtime.reduce((sum, one) => sum + one.minutes, 0);
   if (!row)
     return {
       day,
@@ -274,6 +283,7 @@ function dayOf(
       halfDay,
       form,
       overtimeMinutes,
+      overtime,
       workedMinutes: formMinutes,
       note: null,
     };
@@ -306,6 +316,7 @@ function dayOf(
     halfDay,
     form,
     overtimeMinutes,
+    overtime,
     note: row.note,
   };
 }
@@ -332,6 +343,9 @@ type FormRow = {
   to: string | null;
   /** Overtime: the minutes that count by the overtime rules (null on rows from before them). */
   minutes?: number | null;
+  /** Overtime: its type and its night part (10 PM to 6 AM), null on rows from before them. */
+  otType?: OtType | null;
+  night?: number | null;
 };
 
 /** The minutes from a form's start to its end ("HH:MM"). */
@@ -356,7 +370,8 @@ async function formsOf(
   const found = await rows<FormRow>(
     db,
     sql`select person_id::int as "personId", kind, to_char(day, 'YYYY-MM-DD') as day,
-        to_char(from_time, 'HH24:MI') as "from", to_char(to_time, 'HH24:MI') as "to", ot_minutes as minutes
+        to_char(from_time, 'HH24:MI') as "from", to_char(to_time, 'HH24:MI') as "to", ot_minutes as minutes,
+        ot_type as "otType", ot_night_minutes as night
       from hr_form where status = 'approved' and kind in ('ob', 'wfh', 'ot') and day between ${from}::date and ${to}::date
         and person_id in (${sql.join(
           ids.map((id) => sql`${id}`),
@@ -445,6 +460,8 @@ export async function schedulesOf(db: Runner, ids: number[]): Promise<Map<number
   return new Map(found.map((row) => [row.personId, toSchedule(row)]));
 }
 
+/** The national holidays between two days, by day (the company's calendar; a person's own,
+ *  their town's too, come from holidays.ts holidaysOf). */
 export async function holidaysBetween(db: Runner, from: string, to: string) {
   const found = await rows<{ day: string; name: string }>(
     db,
@@ -461,13 +478,19 @@ export async function attendanceDays(
   people: { id: number; hiredOn: string | null }[],
   from: string,
   to: string,
-): Promise<Map<number, { schedule: WorkSchedule; days: AttendanceDay[] }>> {
-  const out = new Map<number, { schedule: WorkSchedule; days: AttendanceDay[] }>();
+): Promise<
+  Map<number, { schedule: WorkSchedule; days: AttendanceDay[]; holidays: Map<string, DayHoliday> }>
+> {
+  const out = new Map<
+    number,
+    { schedule: WorkSchedule; days: AttendanceDay[]; holidays: Map<string, DayHoliday> }
+  >();
   const ids = people.map((one) => one.id);
   if (!ids.length) return out;
   const today = todayManila();
   const schedules = await schedulesOf(db, ids);
-  const holidays = await holidaysBetween(db, from, to);
+  // Each person's own holidays: the national ones and their town's.
+  const holidayMap = await holidaysOf(db, ids, from, to);
   const leaveMap = await leavesOf(db, ids, from, to);
   const formMap = await formsOf(db, ids, from, to);
   const found = await rows<DayRow>(
@@ -487,6 +510,8 @@ export async function attendanceDays(
   for (const person of people) {
     const schedule = schedules.get(person.id) ?? DEFAULT_SCHEDULE;
     const mine = byPerson.get(person.id);
+    const own = holidayMap.get(person.id) ?? new Map<string, DayHoliday>();
+    const holidays = new Map([...own].map(([day, one]) => [day, one.name]));
     const days: AttendanceDay[] = [];
     for (let at = from; at <= to; at = addDays(at, 1))
       days.push(
@@ -501,7 +526,7 @@ export async function attendanceDays(
           formMap.get(person.id),
         ),
       );
-    out.set(person.id, { schedule, days });
+    out.set(person.id, { schedule, days, holidays: own });
   }
   return out;
 }
@@ -517,9 +542,10 @@ export async function attendanceToday(
   const people = await visiblePeople(db, me);
   const ids = people.map((one) => one.id);
   const first = `${day.slice(0, 7)}-01`;
-  const [schedules, holidays, leaves, forms, found] = await Promise.all([
+  const [schedules, holidays, holidayMap, leaves, forms, found] = await Promise.all([
     schedulesOf(db, ids),
     holidaysBetween(db, first, day),
+    holidaysOf(db, ids, first, day),
     leavesOf(db, ids, first, day),
     formsOf(db, ids, first, day),
     ids.length
@@ -538,12 +564,15 @@ export async function attendanceToday(
   const out = people.map((person) => {
     const schedule = schedules.get(person.id) ?? DEFAULT_SCHEDULE;
     const mine = found.filter((row) => row.personId === person.id);
+    const own = new Map(
+      [...(holidayMap.get(person.id) ?? new Map<string, DayHoliday>())].map(([at, one]) => [at, one.name]),
+    );
     const month = days.map((one) =>
       dayOf(
         one,
         mine.find((row) => row.day === one),
         schedule,
-        holidays,
+        own,
         today,
         leaves.get(person.id),
         person.hiredOn,
@@ -603,7 +632,7 @@ export async function attendanceMonth(
   const last = lastOfMonth < today ? lastOfMonth : today;
   const [schedules, holidays, leaveMap, formMap, found, named, fixes] = await Promise.all([
     schedulesOf(db, [personId]),
-    holidaysBetween(db, first, lastOfMonth),
+    holidayNamesOf(db, personId, first, lastOfMonth),
     leavesOf(db, [personId], first, lastOfMonth),
     formsOf(db, [personId], first, lastOfMonth),
     rows<DayRow>(
@@ -672,7 +701,7 @@ export async function myDay(db: Database, me: Me): Promise<MyDay> {
   const today = todayManila();
   const [schedules, holidays, found] = await Promise.all([
     schedulesOf(db, [me.id]),
-    holidaysBetween(db, today, today),
+    holidayNamesOf(db, me.id, today, today),
     rows<DayRow>(
       db,
       sql`select ${dayColumns} from attendance a where a.person_id = ${me.id} and a.day = ${today}::date`,
@@ -722,7 +751,7 @@ export async function recordLeave(
   if (!person) throw new Refusal(404, "not_found", "No such person.", "personId");
   const [schedules, holidays] = await Promise.all([
     schedulesOf(db, [person.id]),
-    holidaysBetween(db, input.from, to),
+    holidayNamesOf(db, person.id, input.from, to),
   ]);
   const schedule = schedules.get(person.id) ?? DEFAULT_SCHEDULE;
   if (leaveDays(input.from, to, false, schedule, new Set(holidays.keys())) === 0)

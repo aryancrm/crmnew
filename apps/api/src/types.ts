@@ -3990,6 +3990,9 @@ export type AttendanceDay = {
   form: "ob" | "wfh" | null;
   /** Approved overtime that day (an overtime form), in minutes. */
   overtimeMinutes: number;
+  /** Each approved overtime form that day: its type (null on rows from before types), minutes
+   *  and the night part of them (10 PM to 6 AM). */
+  overtime?: { type: OtType | null; minutes: number; nightMinutes: number }[];
   note: string | null;
 };
 
@@ -4206,6 +4209,39 @@ export type HrSchedules = {
   can: { change: boolean };
 };
 
+/** A holiday on HR's Holidays page: national, or local to a province (town null) or one town. */
+export type HolidayRow = {
+  id: number;
+  scope: "national" | "local";
+  day: string;
+  name: string;
+  kind: "regular" | "special";
+  province: string | null;
+  town: string | null;
+  proclamation: string | null;
+  /** Who added it (null: the yearly list or the 2026 proclamations). */
+  madeBy: string | null;
+  archived: { by: string | null; at: string; note: string | null } | null;
+};
+
+export type HolidayYear = {
+  year: number;
+  province: string | null;
+  town: string | null;
+  holidays: HolidayRow[];
+  can: { change: boolean };
+};
+
+export type HolidayInput = {
+  day: string;
+  name: string;
+  kind: "regular" | "special";
+  /** None: a national holiday. */
+  province?: string | null;
+  /** None with a province: the whole province. */
+  town?: string | null;
+};
+
 export type ScheduleInput = {
   name: string;
   days: number[];
@@ -4344,6 +4380,11 @@ export type HrPerson = {
     school: string | null;
     course: string | null;
     workArrangement: WorkArrangement | null;
+    /** Where they work (the CRM's town list), for their local holidays, with its province. */
+    workTown: string | null;
+    workProvince: string | null;
+    /** The place their local holidays follow: the record, else their seat area's first city. */
+    holidayPlace: { town: string | null; province: string; from: "record" | "area" } | null;
     companyPhone: string | null;
     issuedEquipment: string | null;
     jobDescription: string | null;
@@ -4442,6 +4483,8 @@ export type HrRecordInput = Partial<{
   school: string | null;
   course: string | null;
   workArrangement: WorkArrangement | null;
+  workTown: string | null;
+  workProvince: string | null;
   companyPhone: string | null;
   issuedEquipment: string | null;
   jobDescription: string | null;
@@ -5048,6 +5091,9 @@ export type Payslip = {
   deductions: PayLine[];
   totalDeductions: number;
   net: number;
+  /** Shown for information, nothing added or taken: night differential (not paid), local
+   *  holidays. Missing on slips released before them. */
+  notes?: { key: string; label: string; detail: string }[];
   /** The company's shares, beside the slip. */
   employer: { sss: number; philhealth: number; pagibig: number; total: number } | null;
   /** Where the pay goes. */
@@ -5087,6 +5133,73 @@ export type PayrollMonth = PayPeriod & {
   whyNotRelease: string | null;
   before: string;
   after: string | null;
+};
+
+/** What a payroll register's column may hold: who (employee ID, name) and the figures compared. */
+export type RegisterField =
+  | "code"
+  | "name"
+  | "basic"
+  | "ot"
+  | "gross"
+  | "deductions"
+  | "sss"
+  | "philhealth"
+  | "pagibig"
+  | "tax"
+  | "net";
+export type RegisterFigure = Exclude<RegisterField, "code" | "name">;
+
+/** Which heading of HR's register holds what: HR maps it once, it is used again. */
+export type RegisterMapping = {
+  sheet: string;
+  /** The row the headings are on (as Excel numbers it). */
+  headerRow: number;
+  columns: Partial<Record<RegisterField, string | null>>;
+};
+
+export type RegisterCompare = {
+  id: number;
+  at: string;
+  by: string;
+  /** What the CRM's side was: the released payslips, or the draft as it stood. */
+  crmStatus: "released" | "draft";
+  /** Figures that differ by ₱0.01 or more, people on one side only and names to confirm. */
+  differences: number;
+  fields: RegisterFigure[];
+  rows: {
+    row: number;
+    personId: number;
+    name: string;
+    hrName: string | null;
+    code: string | null;
+    match: "code" | "name";
+    figures: { field: RegisterFigure; crm: number; hr: number | null; diff: number | null }[];
+    differs: boolean;
+  }[];
+  /** Rows whose name is exactly a person's, waiting for HR to say it is them. */
+  toConfirm: { row: number; hrName: string; code: string | null; personId: number; name: string }[];
+  onlyHr: { row: number; hrName: string | null; code: string | null }[];
+  onlyCrm: { personId: number; name: string; code: string | null }[];
+};
+
+export type PayRegisterPage = {
+  month: string;
+  registers: { id: number; fileName: string; by: string; at: string }[];
+  current: {
+    id: number;
+    fileName: string;
+    by: string;
+    at: string;
+    /** Each sheet's first rows, to pick the headings' row and map them. */
+    sheets: { name: string; rows: { number: number; cells: string[] }[]; guessedRow: number }[];
+    /** The mapping in force (the newest HR made), and whether it fits this file. */
+    mapping: RegisterMapping | null;
+    fits: boolean;
+    compare: RegisterCompare | null;
+  } | null;
+  people: { id: number; name: string; code: string | null }[];
+  can: { upload: boolean };
 };
 
 export type PayAdjustmentInput = {
