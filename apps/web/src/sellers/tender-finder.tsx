@@ -62,9 +62,13 @@ function State({ found }: { found: FoundTender }) {
     <Pill tone="info">Screened</Pill>
   ) : !found.open ? (
     <Pill>Closed</Pill>
-  ) : !found.molecules.length ? (
+  ) : found.molecules.length ? null : found.source === "ps" ? (
+    <span title="On PS-PhilGEPS's Bid Match (the portal matched it to the company's products); its medicines show once its papers are read.">
+      <Pill tone="info">Bid Match</Pill>
+    </span>
+  ) : (
     <Pill>Not ours</Pill>
-  ) : null;
+  );
   return (
     <>
       {fresh && (
@@ -620,7 +624,7 @@ export function TenderFinderPage() {
         {data.rows.length === 0 ? (
           <p className="px-4 py-6 text-center text-[13px] text-slate-500">
             {data.view === "opportunities"
-              ? "No tender for our medicines found yet on either portal."
+              ? "No tender of ours found yet on either portal."
               : data.view === "screened"
                 ? "Nothing screened and waiting. Add a tender worth bidding on from New."
                 : data.view === "tenders"
@@ -676,7 +680,7 @@ export function TenderFinderPage() {
           </ul>
         )}
       </section>
-      {data.rows.length >= 300 && <p className="text-[12px] text-slate-500">The first 300 are shown: search or pick a medicine to narrow them.</p>}
+      {data.rows.length >= 1000 && <p className="text-[12px] text-slate-500">The first 1,000 are shown: search or pick a medicine to narrow them.</p>}
     </div>
   );
 }

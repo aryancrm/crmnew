@@ -5738,7 +5738,7 @@ export type FoundTender = {
   lines: number;
 };
 
-/** opportunities: every tender found that asks for one of our medicines (both portals, any state). */
+/** opportunities: every tender found that is ours, any state: asking for one of our medicines, or on PS-PhilGEPS's Bid Match. */
 export type FoundView = "opportunities" | "screened" | "tenders" | "all";
 
 /** One run of the robot, as it reported it. */
