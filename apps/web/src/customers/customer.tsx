@@ -31,7 +31,7 @@ import {
   Stethoscope,
   UserRound,
 } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { Fragment, type ReactNode, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import { placesOrders, useMe } from "../auth";
@@ -104,8 +104,8 @@ export function Customer() {
     queryFn: () => api<CustomerPrices>(`/api/customers/${id}/prices`),
   }).data?.past;
 
-  // What this seller does with them, on this page (medrep branch, 25 Nov): the buttons and the
-  // field's side, read before the page draws.
+  // What this seller does with them, on this page (medrep branch, 25 Nov): the buttons, What's
+  // next and the field's side, read before the page draws.
   const work = useCustomerWork(me ?? undefined, query.data, id);
 
   const data = query.data;
@@ -131,6 +131,39 @@ export function Customer() {
   const creditLeft = customer.creditLimit ? Math.max(0, customer.creditLimit - totals.owed) : null;
 
   const missing = !customer.phone || !customer.email || !(customer.address || customer.city);
+
+  // The parts of the page in the order this seller works them (medrep branch, 25 Nov): in the
+  // field, the field's side first; a PAP officer (or anyone on a patient) the cases first; by
+  // phone, when they reorder first. Everyone else as before.
+  const refillCard = (data.refill.lastOn || data.refill.setOn) && (
+    <RefillCard refill={data.refill} post={`/api/customers/${customer.id}/refill`} />
+  );
+  const refillFirst = work.seller === "phone" && Boolean(refillCard);
+  const doctorsFirst = customer.kind === "hospital" && (work.seller === "field" || work.seller === "lead");
+  // A customer known only from before this CRM: what they were given, at what price, their old
+  // orders, invoices and payments come first (Aryan, 23 Nov: the office opened Zoho's Sales for
+  // exactly this); the two empty "no orders yet" panels would only hide them.
+  const buying: [string, ReactNode][] =
+    data.totals.orders === 0
+      ? [
+          ["prices", <PricesGiven key="prices" customerId={customer.id} />],
+          ["orders", <Orders key="orders" data={data} />],
+        ]
+      : [
+          ["orders", <Orders key="orders" data={data} />],
+          ["medicines", <Medicines key="medicines" data={data} />],
+          ["prices", <PricesGiven key="prices" customerId={customer.id} />],
+        ];
+  const fieldPart: [string, ReactNode][] = work.field ? [["field", <FieldPanel key="field" data={work.field} />]] : [];
+  const casesPart: [string, ReactNode][] =
+    data.cases && (patient || data.cases.length > 0) ? [["cases", <Cases key="cases" data={data} />]] : [];
+  const moneyPart: [string, ReactNode][] = [["money", <Money key="money" data={data} />]];
+  const leftParts: [string, ReactNode][] =
+    work.seller === "pap" || patient
+      ? [...casesPart, ...buying, ...moneyPart, ...fieldPart]
+      : work.seller === "phone"
+        ? [...(refillFirst ? ([["refill", refillCard]] as [string, ReactNode][]) : []), ...buying, ...moneyPart, ...casesPart, ...fieldPart]
+        : [...fieldPart, ...buying, ...moneyPart, ...casesPart];
 
   return (
     <div className="mx-auto max-w-screen-2xl space-y-4">
@@ -338,29 +371,15 @@ export function Customer() {
       {work.seller !== "desk" && <NextCard steps={work.steps} run={work.run} />}
 
       {/* Everything on one page, as the medicine page: their buying on the left, money, details
-          and what happened on the right. */}
+          and what happened on the right; the parts in the order this seller works them (25 Nov). */}
       <div className="flex flex-wrap items-start gap-4">
         <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-4">
-          {work.field && <FieldPanel data={work.field} />}
-          {/* A customer known only from before this CRM: what they were given, at what price, their
-              old orders, invoices and payments come first (Aryan, 23 Nov: the office opened Zoho's
-              Sales for exactly this); the two empty "no orders yet" panels would only hide them. */}
-          {data.totals.orders === 0 ? (
-            <>
-              <PricesGiven customerId={customer.id} />
-              <Orders data={data} />
-            </>
-          ) : (
-            <>
-              <Orders data={data} />
-              <Medicines data={data} />
-              <PricesGiven customerId={customer.id} />
-            </>
-          )}
-          <Money data={data} />
-          {data.cases && (patient || data.cases.length > 0) && <Cases data={data} />}
+          {leftParts.map(([key, part]) => (
+            <Fragment key={key}>{part}</Fragment>
+          ))}
         </div>
         <div className="flex min-w-0 flex-[1_1_20rem] flex-col gap-4">
+          {doctorsFirst && <Doctors data={data} />}
           <SideCard title="Money">
             <SideRows
               rows={[
@@ -395,17 +414,18 @@ export function Customer() {
               </button>
             )}
           </SideCard>
-          {(data.refill.lastOn || data.refill.setOn) && (
-            <RefillCard refill={data.refill} post={`/api/customers/${customer.id}/refill`} />
-          )}
+          {!refillFirst && refillCard}
           {me && ["finance", "admin", "ceo", "management"].includes(me.role) && (
             <CreditCard customerId={customer.id} />
           )}
           <Details data={data} />
           {["hospital", "distributor", "drugstore"].includes(customer.kind) && (
-            <LicencePapers data={data} />
+            // What's next's "Papers" scrolls here.
+            <div id="papers" className="scroll-mt-20">
+              <LicencePapers data={data} />
+            </div>
           )}
-          {customer.kind === "hospital" && <Doctors data={data} />}
+          {customer.kind === "hospital" && !doctorsFirst && <Doctors data={data} />}
           <FilesPanel customerId={customer.id} />
           <Activity data={data} />
         </div>
