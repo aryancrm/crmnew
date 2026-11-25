@@ -5,7 +5,7 @@
 // is written from here (projectOrg), so the screens keep working while the tree becomes the
 // source. Only the CEO and the Admin change the tree.
 
-import { randomBytes } from "node:crypto";
+import { randomInt } from "node:crypto";
 import { type SQL, sql } from "drizzle-orm";
 import { accountEvent } from "../account/events";
 import { hrEvent } from "../hr/events";
@@ -122,9 +122,14 @@ export async function personOfSeatLogin(
   return found?.id ?? null;
 }
 
-/** A password a person can read out and type once: 12 letters and digits. */
+/** Letters and digits nobody reads as another: no 0/O/o, 1/I/l/i, 5/S/s, 2/Z/z, 8/B, U/u/V/v. */
+const PLAIN = "ACDEFGHJKLMNPQRTWXYabcdefghjkmnpqrtwxy34679";
+
+/** A password a person can read out and type once: 12 letters and digits, none mistaken for another. */
 export function freshPassword(): string {
-  return randomBytes(9).toString("base64url").replace(/[-_]/g, "x");
+  let password = "";
+  for (let i = 0; i < 12; i++) password += PLAIN[randomInt(PLAIN.length)];
+  return password;
 }
 
 // ---- Writing the tree onto people and channels ----

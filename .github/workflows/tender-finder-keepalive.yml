@@ -27,7 +27,7 @@ jobs:
       run:
         working-directory: workers/tender-finder
     env:
-      CRM_URL: https://crmnew-api.onrender.com
+      CRM_URL: https://one.bishnoi.ai
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5

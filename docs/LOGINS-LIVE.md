@@ -1,6 +1,8 @@
 # Live CRM: who signs in with which ID
 
-Open https://crmnew-psi.vercel.app, pick your department, type the **Login ID** below and your own password. There is no common password any more (Aryan, 23 Nov). The first time, use the one-time password the Admin gives you (Give a new password); it only lets you choose your own, which nobody else knows.
+**From 24 Nov the company's site is https://one.bishnoi.ai** (Aryan). Its accounts were made afresh on that server, so its login IDs can differ from the list below, which is the old site's (crmnew-psi.vercel.app); run `apps/api/scripts/list-logins.ts` against that server's database for its own list.
+
+Open the site, pick your department, type the **Login ID** below and your own password. There is no common password any more (Aryan, 23 Nov). The first time, use the one-time password the Admin gives you (Give a new password); it only lets you choose your own, which nobody else knows.
 
 | Team | Name | Job | Login ID |
 |---|---|---|---|
