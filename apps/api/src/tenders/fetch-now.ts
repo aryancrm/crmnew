@@ -154,6 +154,11 @@ export async function closeLocalAsks(db: Database): Promise<number> {
     sql`update tender_find_ask set status = 'failed', note = 'The CRM restarted while the robot ran on this computer; press Fetch now again.'
       where via = 'local' and status = 'asked' returning id::int as id`,
   );
+  // PS-PhilGEPS's own Sync status said "running" when its robot was cut off: it would skip the next press
+  // for 6 minutes (psSync claimSync) and show the cut-off stage as if still reading.
+  if (closed.length)
+    await db.execute(sql`update tender_robot_row set value = value || jsonb_build_object('status', 'failed', 'error', 'Stopped when the CRM restarted.', 'finished_at', ${new Date().toISOString()}::text)
+      where tbl = 'ps_sync_status' and key = 'latest' and value->>'status' = 'running'`);
   return closed.length;
 }
 

@@ -205,7 +205,11 @@ describe("Fetch now, one on each portal's card", () => {
     expect((await press("jimmy", "ps")).status).toBe(409); // not connected: nothing asked
     expect((await press("jimmy", "philgeps")).status).toBe(200);
     await db.execute(sql`insert into tender_find_ask (by_person, via, portal) select by_person, 'github', 'ps' from tender_find_ask limit 1`);
+    await db.execute(sql`insert into tender_robot_row (tbl, key, value) values ('ps_sync_status', 'latest', ${JSON.stringify({ id: "latest", status: "running", stage: "Reading Bid Match (page 15)" })}::jsonb)
+      on conflict (tbl, key) do update set value = excluded.value`);
     expect(await closeLocalAsks(db)).toBe(1);
+    const [sync] = await rows<{ value: Record<string, unknown> }>(db, sql`select value from tender_robot_row where tbl = 'ps_sync_status' and key = 'latest'`);
+    expect(sync?.value).toMatchObject({ status: "failed", error: "Stopped when the CRM restarted.", stage: "Reading Bid Match (page 15)" });
     expect(await asks()).toEqual([
       { via: "local", portal: "philgeps", status: "failed", note: "The CRM restarted while the robot ran on this computer; press Fetch now again." },
       { via: "github", portal: "ps", status: "asked", note: null },

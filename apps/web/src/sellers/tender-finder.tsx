@@ -109,7 +109,7 @@ function StatusBox({ tone, title, children, onClose }: { tone: Tone; title: stri
 type PortalFetchState = FoundList["robot"]["fetch"]["ps"];
 
 /** A Fetch now this page pressed, followed to its end in the status box: waiting for its run, then that
- *  portal's last run (found, matched, new) or why it did not start. A good end closes by itself. */
+ *  portal's last run (found, matched, new) or why it did not finish. A good end closes by itself. */
 function FetchStatus({ name, state, runs, stage, onClose }: { name: string; state: PortalFetchState; runs: FindRunRow[]; stage?: string | null; onClose: () => void }) {
   const running = state.running;
   const last = runs[0];
@@ -134,7 +134,7 @@ function FetchStatus({ name, state, runs, stage, onClose }: { name: string; stat
     );
   if (state.failed)
     return (
-      <StatusBox tone="bad" title={`${name}: the fetch did not start`} onClose={onClose}>
+      <StatusBox tone="bad" title={`${name}: the fetch did not finish`} onClose={onClose}>
         {state.failed.note ?? "No reason was given."}
       </StatusBox>
     );
@@ -263,7 +263,7 @@ function PsFetch({ way, state, ps, runs }: { way: FoundList["robot"]["fetch"]["w
       </span>
       {state.failed && !fetching && connected && (
         <span className="block text-[12px] font-semibold text-rose-700">
-          The last Fetch now ({when(state.failed.at)}) did not start{state.failed.note ? `: ${state.failed.note}` : "."}
+          The last Fetch now ({when(state.failed.at)}) did not finish{state.failed.note ? `: ${state.failed.note}` : "."}
         </span>
       )}
       <Problem message={action.problem?.message} />
@@ -340,7 +340,7 @@ function FetchNow({ way, portal, state, runs, blocked }: { way: FoundList["robot
       </span>
       {state.failed && !waiting && (
         <span className="mt-1 text-[12px] font-semibold text-rose-700">
-          The last Fetch now ({when(state.failed.at)}) did not start{state.failed.note ? `: ${state.failed.note}` : "."}
+          The last Fetch now ({when(state.failed.at)}) did not finish{state.failed.note ? `: ${state.failed.note}` : "."}
         </span>
       )}
       <Problem message={action.problem?.message} />
