@@ -14,51 +14,52 @@
   --color-field: #cbd5e1;
   --color-ink: #1e293b;
   --color-ink-2: #64748b;
-  --color-hover: #f0faf4;
+  --color-hover: #f3f7ff;
   --color-head: #f1f5f9;
 
-  /* GetMeds green (Aryan, 19 Nov: "make everything green where it is blue"): everything you press
-     or follow. The blue, sky and emerald scales are this green, shade for shade, so every older
-     accent follows it. */
-  --color-brand: #1f9d55;
-  --color-brand-dark: #17824a;
-  --color-brand-tint: #e3f5eb;
+  /* Blue again (Aryan, 24 Nov: the buttons, the selected menu item and the focus ring blue, as
+     Create New Order): everything you press or follow. It was the GetMeds green from 19 Nov. The
+     blue, sky and emerald scales are this blue, shade for shade, so every older accent follows it.
+     What is fine, done or paid keeps the pharmacy green (--color-good). */
+  --color-brand: #2563eb;
+  --color-brand-dark: #1d4ed8;
+  --color-brand-tint: #eaf1ff;
 
-  --color-emerald-50: #f0faf4;
-  --color-emerald-100: #dcf3e5;
-  --color-emerald-200: #bbe7cc;
-  --color-emerald-300: #8dd5aa;
-  --color-emerald-400: #55bc81;
-  --color-emerald-500: #1f9d55;
-  --color-emerald-600: #17824a;
-  --color-emerald-700: #12693c;
-  --color-emerald-800: #0f5431;
-  --color-emerald-900: #0b4227;
-  --color-emerald-950: #062a19;
+  --color-emerald-50: #eff6ff;
+  --color-emerald-100: #dbeafe;
+  --color-emerald-200: #bfdbfe;
+  --color-emerald-300: #93c5fd;
+  --color-emerald-400: #60a5fa;
+  --color-emerald-500: #3b82f6;
+  --color-emerald-600: #2563eb;
+  --color-emerald-700: #1d4ed8;
+  --color-emerald-800: #1e40af;
+  --color-emerald-900: #1e3a8a;
+  --color-emerald-950: #172554;
 
-  --color-blue-50: #f0faf4;
-  --color-blue-100: #dcf3e5;
-  --color-blue-200: #bbe7cc;
-  --color-blue-300: #8dd5aa;
-  --color-blue-400: #55bc81;
-  --color-blue-500: #1f9d55;
-  --color-blue-600: #17824a;
-  --color-blue-700: #12693c;
-  --color-blue-800: #0f5431;
-  --color-blue-900: #0b4227;
-  --color-blue-950: #062a19;
+  --color-blue-50: #eff6ff;
+  --color-blue-100: #dbeafe;
+  --color-blue-200: #bfdbfe;
+  --color-blue-300: #93c5fd;
+  --color-blue-400: #60a5fa;
+  --color-blue-500: #3b82f6;
+  --color-blue-600: #2563eb;
+  --color-blue-700: #1d4ed8;
+  --color-blue-800: #1e40af;
+  --color-blue-900: #1e3a8a;
+  --color-blue-950: #172554;
 
-  --color-sky-50: #f0faf4;
-  --color-sky-100: #dcf3e5;
-  --color-sky-200: #bbe7cc;
-  --color-sky-300: #8dd5aa;
-  --color-sky-400: #55bc81;
-  --color-sky-500: #1f9d55;
-  --color-sky-600: #17824a;
-  --color-sky-700: #12693c;
-  --color-sky-800: #0f5431;
-  --color-sky-900: #0b4227;
-  --color-sky-950: #062a19;
+  --color-sky-50: #eff6ff;
+  --color-sky-100: #dbeafe;
+  --color-sky-200: #bfdbfe;
+  --color-sky-300: #93c5fd;
+  --color-sky-400: #60a5fa;
+  --color-sky-500: #3b82f6;
+  --color-sky-600: #2563eb;
+  --color-sky-700: #1d4ed8;
+  --color-sky-800: #1e40af;
+  --color-sky-900: #1e3a8a;
+  --color-sky-950: #172554;
 
   /* pharmacy-green: what is fine, done, paid */
   --color-good: #3a6729;
@@ -70,12 +71,12 @@
   --color-bad: #b91c1c;
   --color-bad-tint: #fee2e2;
   --color-bad-fill: #ef4444;
-  --color-info: #12693c;
-  --color-info-tint: #e3f5eb;
-  --color-info-fill: #1f9d55;
+  --color-info: #1d4ed8;
+  --color-info-tint: #eaf1ff;
+  --color-info-fill: #2563eb;
 
   /* Zoho Inventory's table and link colours, as the old CRM measured them. */
-  --color-zoho-link: #17824a;
+  --color-zoho-link: #1d4ed8;
   --color-zoho-th: #6c718a;
   --color-zoho-head: #f9f9fb;
   --color-zoho-line: #ebeaf2;
@@ -117,7 +118,7 @@ body {
 
 @layer components {
   /* A text box or select, as the old CRM's Case details draws them: 40px high, a slate-300
-     border, 8px corners, the green ring on focus. */
+     border, 8px corners, the blue ring on focus. */
   .field {
     min-height: 2.5rem;
     width: 100%;
@@ -239,3 +240,71 @@ select.field {
 .org-stem { width: 0; height: 0.75rem; border-left: 2px solid var(--org-line, #cbd5e1); margin: 0 auto; }
 /* The whole team's tree: each part keeps its own width (the pop-up scrolls sideways). */
 .org-tree .org-row > .org-col { flex: 0 0 auto; padding: 0 0.4rem; }
+
+/* The departments launcher on a sign-in page (account/departments-menu.tsx): the panel opens
+   softly from the button, then each department rises in, one after another. */
+@keyframes launcher-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes launcher-item-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The app sidebar's names fade in as it opens from the rail (shell.tsx). */
+@keyframes sidebar-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.sidebar-fade {
+  animation: sidebar-fade-in 260ms ease-out 80ms both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar-fade {
+    animation: none;
+  }
+}
+
+/* The app sidebar's scrollbar: thin and a soft grey, close to white (shell.tsx). */
+.sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: #e3e6ec transparent;
+  scrollbar-gutter: stable;
+}
+
+.sidebar-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #e3e6ec;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: #cfd4dc;
+}

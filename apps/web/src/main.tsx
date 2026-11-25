@@ -40,6 +40,8 @@ import { WebsiteOrderPage } from "./online/website-order";
 import { LeadsDesk } from "./online/leads";
 import { LeaveListPage } from "./hr/leave-list";
 import { Login } from "./account/login";
+import { ChooseSystem } from "./account/choose-system";
+import { AboutRoute } from "./portal/about-page";
 import { Medicine } from "./inventory/medicine";
 import { Medicines } from "./inventory/medicines";
 import { MessagesPage } from "./messages/messages";
@@ -160,6 +162,8 @@ createRoot(root).render(
         <Routes>
           <Route path="/login/:dept?" element={<Login />} />
           <Route path="/signup/:dept?" element={<SignUp />} />
+          <Route path="/about" element={<AboutRoute />} />
+          <Route path="/signin" element={<ChooseSystem />} />
           <Route path="/welcome" element={<Welcome />} />
           {/* Zoho Inventory's Sales and Purchases, in Zoho's own frame (docs/PLAN.md 17). */}
           <Route path="/books" element={<BooksShell />}>

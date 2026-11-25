@@ -159,7 +159,7 @@ export function MedrepHome() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="text-xs text-slate-500">{todayWords()}</div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+          <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
             {greeting()}, {me.name.split(" ")[0]}
           </h1>
           <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-slate-500">
@@ -647,7 +647,7 @@ export function MyOrdersPage() {
     <div className="mx-auto max-w-screen-2xl">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
-          <h1 className="text-2xl font-bold tracking-tight text-ink">
+          <h1 className="text-[28px] font-semibold tracking-tight text-ink">
             {team ? "Team orders" : "My orders"}
           </h1>
           <span className="rounded-full bg-stone-200/75 px-2.5 py-0.5 text-xs font-semibold text-stone-600 tabular-nums">

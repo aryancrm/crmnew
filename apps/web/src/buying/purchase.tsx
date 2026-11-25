@@ -88,7 +88,7 @@ function Frame({ title, children }: { title: string; children: React.ReactNode }
       >
         <ArrowLeft size={15} aria-hidden="true" /> Purchases
       </Link>
-      <h1 className="text-2xl font-bold">{title}</h1>
+      <h1 className="text-[28px] font-semibold tracking-tight">{title}</h1>
       {children}
     </div>
   );

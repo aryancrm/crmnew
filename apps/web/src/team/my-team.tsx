@@ -1138,7 +1138,7 @@ export function TeamSeatPage() {
               {share === null ? "—" : `${Math.round(share * 100)}%`}
             </Ring>
             <div className="min-w-0">
-              <h1 className="flex flex-wrap items-center gap-2 text-xl font-bold tracking-tight text-slate-900">
+              <h1 className="flex flex-wrap items-center gap-2 text-[28px] font-semibold tracking-tight text-slate-900">
                 {seat.person?.name ?? "Nobody sits here yet"}
                 <span
                   className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${TONE[tone].pill}`}

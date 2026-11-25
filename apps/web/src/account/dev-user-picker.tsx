@@ -145,7 +145,7 @@ export function DevUserPicker({
         title="Pick a demo user (development only)"
         aria-expanded={shown}
         aria-controls={shown ? id : undefined}
-        className="grid size-11 shrink-0 place-items-center rounded-full border border-dashed border-[#b9bfcb] text-[#6b7380] transition-colors hover:border-[#f36b21] hover:text-[#c2410c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f36b21] aria-expanded:border-[#f36b21] aria-expanded:text-[#c2410c]"
+        className="grid size-11 shrink-0 place-items-center rounded-full text-[#6b7380] transition-colors hover:bg-[#f1f3f6] hover:text-[#c2410c] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f36b21] aria-expanded:bg-[#f1f3f6] aria-expanded:text-[#c2410c]"
       >
         <UserRoundCog className="size-[18px]" aria-hidden="true" />
       </button>
@@ -155,7 +155,7 @@ export function DevUserPicker({
           role="dialog"
           aria-label="Demo users"
           tabIndex={-1}
-          className="absolute inset-x-0 top-full z-30 mt-2 overflow-hidden rounded-xl border border-[#d5d9e1] bg-white shadow-xl outline-none"
+          className="absolute top-full right-0 z-30 mt-2 w-[min(22rem,calc(100vw-32px))] overflow-hidden rounded-xl border border-[#d5d9e1] bg-white shadow-xl outline-none"
         >
           <label className="flex h-11 items-center gap-2.5 border-b border-[#eceef3] px-3.5 focus-within:border-[#f36b21]">
             <Search className="size-4 shrink-0 text-[#6b7380]" aria-hidden="true" />

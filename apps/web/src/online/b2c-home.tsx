@@ -40,7 +40,7 @@ export function B2cHome() {
     <div className="mx-auto max-w-screen-xl space-y-4">
       <div>
         <div className="text-xs text-slate-500">{todayWords()}</div>
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
+        <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">
           {greeting()}, {me.name.split(" ")[0]}
         </h1>
         <div className="mt-0.5 text-xs text-slate-500">Online desk · every new enquiry answered within {data?.replyMinutes ?? 15} minutes</div>

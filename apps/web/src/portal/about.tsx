@@ -1,11 +1,12 @@
-// Below the portal's first screen (Aryan, 18 Nov): what Bishnoi One is and how it works, as one
-// long page: what each workspace holds, a black hole with every part of the company around one
-// record, one order from start to finish, the field, the books, how it works, questions, the footer. Only words and a look.
+// The About page (/about; on the home page until 24 Nov): what Bishnoi One is and how it works, as one
+// long page: a black hole with every part of the company around one record, one order from start
+// to finish, the field, the books, how it works, questions, the footer. Only words and a look.
+// DETAILS (what each workspace holds) is shown in the home page's workspace showcase (home-export).
 
-import { ArrowRight, Check } from "lucide-react";
-import { useState } from "react";
-import { TILE_GLOW, TILE_ICONS } from "./tiles";
+import { ArrowRight, Check, ChevronDown, Eye, History, ShieldCheck, Stethoscope } from "lucide-react";
+import { Link } from "react-router-dom";
 import { WORKSPACES } from "../workspaces";
+import { heroLogo } from "./hero-logos";
 
 const wrap = "mx-auto w-[min(1140px,calc(100%-32px))]";
 const eyebrow = "text-[11px] font-semibold tracking-[0.24em] uppercase";
@@ -23,7 +24,7 @@ const JOURNEY = [
 ];
 
 /** What each workspace holds, from its own menu (src/menus.ts). */
-const DETAILS: Record<string, { who: string; points: string[] }> = {
+export const DETAILS: Record<string, { who: string; points: string[] }> = {
   leads: {
     who: "Team leads: the managers in the sales tracker (Honey, Jessa, Reynan, Julius, Daniel…)",
     points: ["Your team's orders, held or sent back", "Each of your people against their target", "Your team's customers and collections", "Calls and visits of your people", "Ask your head or Management for an exception"],
@@ -123,7 +124,7 @@ function Stars() {
             className="orbit-twinkle"
             style={{ animationDelay: `${star.delay}s`, animationDuration: `${star.dur + 1}s` }}
             d={`M${star.x} ${star.y - 7}l2 5 5 2-5 2-2 5-2-5-5-2 5-2z`}
-            fill="#ffe2c2"
+            fill="#f8a46a"
           />
         ) : (
           <circle
@@ -132,39 +133,13 @@ function Stars() {
             cx={star.x}
             cy={star.y}
             r={star.r}
-            fill="#fff"
+            fill="#f3b48a"
             opacity={star.twinkle ? undefined : 0.55}
             className={star.twinkle ? "star-twinkle" : undefined}
             style={star.twinkle ? { animationDelay: `${star.delay}s`, animationDuration: `${star.dur}s` } : undefined}
           />
         ),
       )}
-    </svg>
-  );
-}
-
-/** A small drawing beside "One order": a pin, the road, the van, the box, in the portal's colours. */
-function Route() {
-  return (
-    <svg viewBox="0 0 360 120" aria-hidden="true" className="h-auto w-[min(360px,80vw)]">
-      <path d="M30 78C90 20 150 110 205 60S300 30 330 62" fill="none" stroke="#1f2733" strokeOpacity=".18" strokeWidth="2" strokeDasharray="2 7" strokeLinecap="round" />
-      <path d="M30 32c-10 0-17 8-17 17 0 13 17 29 17 29s17-16 17-29c0-9-7-17-17-17z" fill="#34b261" />
-      <circle cx="30" cy="49" r="6" fill="#fff" />
-      <g transform="translate(176 38)">
-        <rect x="0" y="6" width="34" height="24" rx="5" fill="#f36b21" />
-        <path d="M34 13h10l8 9v8H34z" fill="#ff9a5a" />
-        <circle cx="10" cy="32" r="5.5" fill="#1f2733" />
-        <circle cx="42" cy="32" r="5.5" fill="#1f2733" />
-        <circle cx="10" cy="32" r="2" fill="#fff" />
-        <circle cx="42" cy="32" r="2" fill="#fff" />
-      </g>
-      <g transform="translate(310 36)">
-        <path d="M20 0l20 10v22L20 42 0 32V10z" fill="#f5a524" />
-        <path d="M20 0l20 10-20 10L0 10z" fill="#fbbf24" />
-        <path d="M20 20v22L0 32V10z" fill="#d97706" />
-      </g>
-      <path className="orbit-twinkle" d="M120 22l3 8 8 3-8 3-3 8-3-8-8-3 8-3z" fill="#f36b21" fillOpacity=".7" />
-      <path className="orbit-twinkle" style={{ animationDelay: "1.5s" }} d="M262 96l2.5 6 6 2.5-6 2.5-2.5 6-2.5-6-6-2.5 6-2.5z" fill="#1f9d55" fillOpacity=".7" />
     </svg>
   );
 }
@@ -192,126 +167,181 @@ const CLOSE = [
   { title: "Every change kept", text: "Who did it and when, in the audit. Nothing with history is ever deleted." },
 ];
 
+/** The workspaces' three groups, as the navbar's Systems menu has them. */
+const GROUPS = [
+  { id: "selling", label: "Selling", note: "Field, teams and the online desk", color: "#1f9d55" },
+  { id: "operations", label: "Operations", note: "Approvals, money, stock and delivery", color: "#f36b21" },
+  { id: "office", label: "Office", note: "People, compliance and the company", color: "#5a6dff" },
+] as const;
 
-function Seats() {
-  const [open, setOpen] = useState(WORKSPACES[0]?.key ?? "sales");
-  const chosen = WORKSPACES.find((one) => one.key === open) ?? WORKSPACES[0];
-  const Detail = ({ inline }: { inline?: boolean }) => {
-    if (!chosen) return null;
-    const detail = DETAILS[chosen.key];
-    const Icon = TILE_ICONS[chosen.key];
-    return (
-      <div className={`relative overflow-hidden rounded-[2rem] border border-white bg-white/85 shadow-[0_30px_60px_-34px_rgba(20,30,50,0.45)] backdrop-blur-xl ${inline ? "mt-2 p-6" : "p-9"}`}>
-        <span aria-hidden="true" className="absolute -top-24 -right-24 size-72 rounded-full opacity-20 blur-3xl" style={{ background: TILE_GLOW[chosen.key] }} />
-        <div className="relative flex items-center gap-4">
-          {!inline && (
-            <span className="relative grid size-16 shrink-0 place-items-center rounded-[1.25rem] border border-white bg-white shadow-[0_14px_30px_-16px_rgba(20,30,50,0.35)]">
-              <span className="size-9">{Icon && <Icon />}</span>
-            </span>
-          )}
-          <div>
-            {!inline && <h3 className="text-2xl font-semibold tracking-[-0.03em]">{chosen.label}</h3>}
-            <p className="text-[15px] text-[#5b6472]">{detail?.who}</p>
-          </div>
-        </div>
-        <p className={`relative ${inline ? "mt-4" : "mt-7"} text-[11px] font-semibold tracking-[0.2em] text-[#8a93a3] uppercase`}>What you do here</p>
-        <ul className="relative mt-3 grid gap-2.5">
-          {detail?.points.map((point) => (
-            <li key={point} className="flex items-start gap-3 text-[15px] text-[#2b3340]">
-              <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full text-white" style={{ background: TILE_GLOW[chosen.key] }}>
-                <Check className="size-3" strokeWidth={3} aria-hidden="true" />
-              </span>
-              {point}
-            </li>
-          ))}
-        </ul>
-        <p className="relative mt-7 border-t border-black/5 pt-4 text-[13px] text-[#8a93a3]">
-          Everyone also has their own leave, forms, payslips and messages.
-        </p>
-      </div>
-    );
-  };
-  return (
-    <section className="relative isolate">
-      <div className={`${wrap} py-24`}>
-        <div className="flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <p className={`${eyebrow} text-[#c2410c]`}>Built for every seat</p>
-            <h2 className={`${h2} mt-4 max-w-2xl`}>{WORKSPACES.length} workspaces, one company.</h2>
-          </div>
-        </div>
-        <div className="mt-12 grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
-          <ul className="grid gap-2 sm:grid-cols-2">
-            {WORKSPACES.map((one) => {
-              const Icon = TILE_ICONS[one.key];
-              const on = one.key === open;
-              return (
-                <li key={one.key} className={on ? "sm:col-span-2 lg:col-span-1" : undefined}>
-                  <button
-                    type="button"
-                    onClick={() => setOpen(one.key)}
-                    aria-expanded={on}
-                    className={`group flex w-full items-center gap-3 rounded-[1.25rem] border p-3 text-left transition ${on ? "border-white bg-white shadow-[0_18px_36px_-24px_rgba(20,30,50,0.45)]" : "border-transparent hover:border-white hover:bg-white/70"}`}
-                  >
-                    <span className="relative grid size-11 shrink-0 place-items-center rounded-xl bg-[#f6f7fb]">
-                      <span aria-hidden="true" className={`absolute inset-1.5 rounded-lg blur-md transition-opacity ${on ? "opacity-40" : "opacity-15"}`} style={{ background: TILE_GLOW[one.key] }} />
-                      <span className="relative size-6">{Icon && <Icon />}</span>
-                    </span>
-                    <span className="min-w-0 flex-1">
-                      <span className={`block text-[15px] ${on ? "font-semibold" : "font-medium"}`}>{one.label}</span>
-                      <span className="block truncate text-[13px] text-[#7a8394]">{one.about}</span>
-                    </span>
-                    <span aria-hidden="true" className={`h-6 w-1 rounded-full transition ${on ? "bg-[#f36b21]" : "bg-transparent"}`} />
-                  </button>
-                  {on && (
-                    <div className="lg:hidden">
-                      <Detail inline />
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-          <div className="sticky top-6 hidden lg:block">
-            <Detail />
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
+/** What the app holds to, from its own rules (the API checks them, not only the screens). */
+const TRUST = [
+  {
+    icon: ShieldCheck,
+    title: "Your role, checked every time",
+    text: "Every action asks who you are and what your seat allows. A hidden button is never the only guard.",
+  },
+  {
+    icon: History,
+    title: "Nothing with history is deleted",
+    text: "Orders, payments and stock are cancelled, reversed or archived, never wiped, so the past always adds up.",
+  },
+  {
+    icon: Eye,
+    title: "Every change kept",
+    text: "Who did what, and when, is written to the audit, so any step can be looked back at.",
+  },
+  {
+    icon: Stethoscope,
+    title: "The data checks itself",
+    text: "Built-in checks compare the records against each other, so a gap shows up before it becomes a problem.",
+  },
+];
+
+/** Questions people ask before they first sign in. */
+const QUESTIONS = [
+  {
+    q: "Who is Bishnoi One for?",
+    a: "Everyone at 2MG and GetMeds: MedReps and team leads in the field, the people who approve orders, finance, stock, dispatch, HR, regulatory, the office team and the management.",
+  },
+  {
+    q: "How do I get an account?",
+    a: "Use Sign up with your name, email, mobile number and department. An administrator confirms who you are, then an email lets you set your own password.",
+  },
+  {
+    q: "Which workspace do I choose?",
+    a: "Your own department's. Every workspace opens the same sign-in, and your login decides what you see and what you can do inside.",
+  },
+  {
+    q: "Can I use it on my phone?",
+    a: "Yes. The field screens are made for the phone first, so a rep can take an order, check a hospital or log a visit between two calls.",
+  },
+  {
+    q: "I forgot my password. What now?",
+    a: "Ask your administrator for a one-time password. You sign in with it once, then choose a new password of your own.",
+  },
+];
 
 export function About() {
   return (
     <div id="about" className="relative">
-      <Rule />
-      <Seats />
-
-      <Rule />
-
-      {/* The black hole: everything turns around one record. */}
-      <section className="relative isolate overflow-hidden bg-[linear-gradient(to_bottom,rgba(8,7,12,0)_0,#08070c_48px,#08070c_calc(100%-48px),rgba(8,7,12,0)_100%)] text-white">
-        <div className="relative h-[clamp(560px,86vh,820px)]">
-          {/* The sun: its light over the whole sky, the stars twinkling around it. */}
-          <div aria-hidden="true" className="pointer-events-none absolute inset-x-0 top-12 bottom-12 bg-[radial-gradient(ellipse_75%_80%_at_50%_58%,rgba(255,150,70,0.30),rgba(243,107,33,0.12)_40%,rgba(120,60,140,0.08)_65%,transparent_85%)]" />
-          <Stars />
-          <div aria-hidden="true" className="pointer-events-none absolute inset-0">
-            <div className="sun-breathe absolute top-[60%] left-1/2 size-[64rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(255,160,80,0.32),rgba(243,107,33,0.1)_50%,transparent)]" />
-            <div className="absolute top-[60%] left-1/2 size-[16rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(closest-side,rgba(255,220,160,0.85),rgba(255,150,60,0.3)_55%,transparent)]" />
-            <div className="absolute top-[60%] left-1/2 size-28 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle_at_40%_38%,#fffef8_0%,#fff1c9_30%,#ffc06b_68%,#f36b21_100%)] shadow-[0_0_40px_12px_rgba(255,206,140,0.75),0_0_140px_50px_rgba(255,140,60,0.35)]" />
-          </div>
-          <div className={`relative ${wrap} pt-28 text-center`}>
-            <p className="text-[11px] font-medium tracking-[0.42em] text-white/50 uppercase">What is inside</p>
-            <h2 className="mx-auto mt-6 max-w-3xl text-[clamp(34px,5vw,64px)] leading-[1.02] font-medium tracking-[-0.045em] text-white [text-shadow:0_2px_30px_rgba(0,0,0,0.6)]">
-              Every part of the company,
-              <br />
-              around <span className="font-[Iowan_Old_Style,Palatino,Georgia,serif] font-normal tracking-[-0.02em] text-[#ffd9b3] italic">one record.</span>
-            </h2>
-          </div>
-          <p className={`absolute inset-x-0 bottom-20 mx-auto max-w-lg px-4 text-center text-[15px] leading-relaxed text-white/60 [text-shadow:0_2px_20px_rgba(0,0,0,0.8)]`}>
-            An order is entered once. Approval, payment, stock, delivery and the books all read and write the same record, so
-            nobody types it twice and nobody works from an old copy.
+      {/* The page's hero (Aryan, 24 Nov, after a layout he gave): the headline on the left, its line
+          on the right, then one photo the full width of the window. */}
+      <section className="bg-white text-[#16181d]">
+        {/* The title on the left, its line on the right (Aryan, 24 Nov). */}
+        <div className="mx-auto grid w-full max-w-[1440px] items-end px-[clamp(1.25rem,0.6rem+2.4vw,3rem)] gap-x-12 gap-y-6 pt-[clamp(3rem,10vh,7rem)] pb-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <h1 className="text-[clamp(2.4rem,8vw,3.8rem)] leading-[1.02] font-semibold tracking-[-0.045em] lg:text-[clamp(2.6rem,min(4.6vw,9vh),4.8rem)]">
+            One company,
+            <br />
+            in <span className="text-[#f36b21]">one place.</span>
+          </h1>
+          <p className="max-w-[62ch] text-[clamp(0.95rem,0.85rem+0.3vw,1.075rem)] leading-[1.55] text-[#2b2f36] lg:pb-2">
+            The company portal for 2MG and GetMeds. Selling in the field, approving and paying, keeping stock, delivering and
+            looking after people, all on the same records, each person with their own login, so nothing is typed twice.
           </p>
+        </div>
+        {/* The home page's "Connect, Approve, Grow" photo (Aryan, 24 Nov), the full width of the window. */}
+        <img
+          src="/home-export/images/image.JPG"
+          alt="Two team members reviewing work on a laptop in the office"
+          className="block h-[clamp(420px,92vh,980px)] w-full object-cover object-[50%_35%]"
+        />
+      </section>
+
+      {/* What is inside, as one introduction (Aryan, 24 Nov, after a layout he gave): the title, one
+          large statement, then the facts in columns with thin lines between them. */}
+      <section className="bg-white text-[#16181d]">
+        <div className="mx-auto w-full max-w-[1440px] px-[clamp(1.25rem,0.6rem+2.4vw,3rem)] py-[clamp(3.5rem,9vh,6rem)]">
+          <h2 className="text-[clamp(2.2rem,4.4vw,4rem)] leading-none font-semibold tracking-[-0.04em]">
+            What is <span className="text-[#f36b21]">inside</span>
+          </h2>
+          <p className="mt-[clamp(2rem,5vh,3.5rem)] max-w-[60ch] text-[clamp(1.35rem,2.6vw,2.4rem)] leading-[1.32] font-medium tracking-[-0.02em]">
+            Every part of the company, around one record. An order is entered once: approval, payment, stock, delivery and the
+            books all read and write the same record, so nobody types it twice and nobody works from an old copy.
+          </p>
+
+          <dl className="mt-[clamp(2.5rem,7vh,5rem)] grid gap-y-8 sm:grid-cols-2 lg:grid-cols-[1.2fr_0.7fr_1.2fr_2fr]">
+            <div className="lg:pr-10">
+              <dt className="text-[15px] text-[#7a8394]">Project</dt>
+              <dd className="mt-3 text-[clamp(1.05rem,1.4vw,1.3rem)] leading-snug font-medium">Bishnoi One: the company portal</dd>
+            </div>
+            <div className="lg:border-l lg:border-[#e6e8ee] lg:px-10">
+              <dt className="text-[15px] text-[#7a8394]">Year</dt>
+              <dd className="mt-3 text-[clamp(1.05rem,1.4vw,1.3rem)] leading-snug font-medium">2026</dd>
+            </div>
+            <div className="lg:border-l lg:border-[#e6e8ee] lg:px-10">
+              <dt className="text-[15px] text-[#7a8394]">Company</dt>
+              <dd className="mt-3 text-[clamp(1.05rem,1.4vw,1.3rem)] leading-snug font-medium">2MG &amp; GetMeds, medicines</dd>
+            </div>
+            <div className="lg:border-l lg:border-[#e6e8ee] lg:pl-10">
+              <dt className="text-[15px] text-[#7a8394]">Topic</dt>
+              <dd className="mt-3 flex flex-wrap gap-2.5">
+                {/* One colour per topic (Aryan, 25 Nov): blue, yellow, red, green, purple. */}
+                {[
+                  { topic: "Sales & field", color: "bg-[#2563eb]" },
+                  { topic: "Approvals & payments", color: "bg-[#d97706]" },
+                  { topic: "Stock & delivery", color: "bg-[#dc2626]" },
+                  { topic: "People & HR", color: "bg-[#16a34a]" },
+                  { topic: "The books", color: "bg-[#7c3aed]" },
+                ].map(({ topic, color }) => (
+                  <span key={topic} className={`rounded-full px-4 py-2 text-[15px] font-semibold text-white ${color}`}>
+                    {topic}
+                  </span>
+                ))}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      {/* Why Bishnoi One, as a story (Aryan, 25 Nov, after a values layout he gave): two rows that
+          zig-zag. The headline in a grey panel beside a wide photo (public/1.png), then the story in two
+          columns beside a second photo (public/2.png). */}
+      <section className="bg-white text-[#16181d]">
+        <div className="mx-auto grid w-full max-w-[1440px] gap-[clamp(1rem,2vw,1.75rem)] px-[clamp(1.25rem,0.6rem+2.4vw,3rem)] pb-[clamp(3.5rem,9vh,6rem)] lg:grid-cols-12">
+          <div className="flex flex-col justify-between gap-10 rounded-2xl bg-[#f7f8fa] px-[clamp(1.5rem,3.5vw,3.5rem)] py-[clamp(2.25rem,6vh,4rem)] lg:col-span-5">
+            <h2 className="text-[clamp(2rem,3.4vw,3.4rem)] leading-[1.1] font-medium tracking-[-0.035em]">
+              Built inside the company, for the work it does
+            </h2>
+            <span aria-hidden="true" className="block h-0.5 w-14 bg-[#f36b21]" />
+          </div>
+          <img
+            src="/1.png"
+            alt="Three team members working together at a laptop"
+            loading="lazy"
+            className="aspect-[16/10] h-full w-full rounded-2xl object-cover object-[50%_45%] lg:col-span-7 lg:aspect-auto lg:min-h-[420px]"
+          />
+
+          <div className="grid gap-x-[clamp(1.5rem,3vw,3rem)] gap-y-7 py-[clamp(1rem,3vh,2rem)] text-[clamp(1rem,0.9rem+0.35vw,1.15rem)] leading-[1.8] text-[#2b2f36] sm:grid-cols-2 lg:col-span-7 lg:pr-4">
+            <div className="space-y-7">
+              <p>
+                We believe the best tools come from knowing the work up close. Bishnoi One was not bought off a shelf and
+                bent to fit: it was built around how 2MG and GetMeds really sell, approve, pay, stock and deliver medicines.
+              </p>
+              <p>
+                It began with one order and the hands it passes through. As approvals, payments, batches and deliveries
+                joined, then the books, people and attendance, each part came onto the same records instead of growing its
+                own. That is how {WORKSPACES.length} workspaces came to share one portal.
+              </p>
+            </div>
+            <div className="space-y-7">
+              <p>
+                We prefer to build things ourselves rather than stitch other people's tools together. Every rule the
+                business gives goes straight into the system, and every change is kept, so the records stay whole and the
+                past always adds up.
+              </p>
+              <p>
+                2026 marks the move: the old tools step aside as the whole company comes onto Bishnoi One. One company, one
+                place, one login for each person. We are only getting started.
+              </p>
+            </div>
+          </div>
+          <img
+            src="/2.png"
+            alt="Team members following a meeting with their laptops open"
+            loading="lazy"
+            className="aspect-[4/3] h-full w-full rounded-2xl object-cover object-[50%_40%] lg:col-span-5 lg:aspect-auto"
+          />
         </div>
       </section>
 
@@ -325,7 +355,6 @@ export function About() {
               Six hands, <span className="text-[#1f9d55]">one record</span>, no retyping.
             </h2>
           </div>
-          <Route />
         </div>
         <ol className="mt-14 grid gap-6 md:grid-cols-3 lg:grid-cols-6">
           {JOURNEY.map((step, i) => (
@@ -340,6 +369,47 @@ export function About() {
             </li>
           ))}
         </ol>
+      </section>
+
+      <Rule />
+
+      {/* Every workspace, by group, each with its logo and what it is for. */}
+      <section className={`${wrap} py-24`}>
+        <p className={`${eyebrow} text-[#5a6dff]`}>Every workspace</p>
+        <h2 className={`${h2} mt-4 max-w-3xl`}>
+          {WORKSPACES.length} desks, <span className="text-[#5a6dff]">one company.</span>
+        </h2>
+        <p className="mt-5 max-w-2xl text-[15px] leading-relaxed text-[#5b6472]">
+          Each workspace is a department's own screen: its lists, its tasks and its figures. They hand work to each other
+          as it moves, so nobody chases a file by message.
+        </p>
+        <div className="mt-14 grid gap-10 lg:grid-cols-3">
+          {GROUPS.map((group) => (
+            <div key={group.id}>
+              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 border-b border-[#eceef3] pb-3">
+                <span className="size-2.5 rounded-full" style={{ background: group.color }} />
+                <h3 className="text-lg font-semibold tracking-[-0.02em]">{group.label}</h3>
+                <span className="text-[13px] text-[#8a93a3]">{group.note}</span>
+              </div>
+              <ul className="mt-4 grid gap-1">
+                {WORKSPACES.filter((one) => one.group === group.id).map((one) => (
+                  <li key={one.key}>
+                    <Link
+                      to={`/login/${one.key}`}
+                      className="group flex items-center gap-3.5 rounded-xl px-2 py-2.5 transition-colors hover:bg-[#f6f7fb]"
+                    >
+                      <img src={heroLogo(one.key)} alt="" width={36} height={36} className="size-9 shrink-0 object-contain" />
+                      <span className="min-w-0">
+                        <span className="block text-[15px] font-semibold text-[#1f2733] group-hover:text-[#c2410c]">{one.label}</span>
+                        <span className="block text-[13px] text-[#5b6472]">{one.about}</span>
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
       </section>
 
       <Rule />
@@ -367,6 +437,59 @@ export function About() {
 
       <Rule />
 
+      {/* What the app holds to. */}
+      <section className={`${wrap} py-24`}>
+        <div className="grid gap-12 lg:grid-cols-[1fr_1.4fr]">
+          <div>
+            <p className={`${eyebrow} text-[#1f9d55]`}>Built to be trusted</p>
+            <h2 className={`${h2} mt-4`}>
+              Safe records, <span className="text-[#1f9d55]">clear history.</span>
+            </h2>
+            <p className="mt-5 max-w-md text-[15px] leading-relaxed text-[#5b6472]">
+              A company's records are only useful if people can rely on them. Bishnoi One keeps them whole, shows who
+              changed what, and lets each person reach only what their work needs.
+            </p>
+          </div>
+          <ul className="grid gap-4 sm:grid-cols-2">
+            {TRUST.map((one) => (
+              <li key={one.title} className="rounded-2xl border border-[#eceef3] bg-white p-6">
+                <span className="grid size-11 place-items-center rounded-full bg-[#1f9d55] text-white">
+                  <one.icon className="size-5" aria-hidden="true" />
+                </span>
+                <h3 className="mt-4 text-[17px] font-semibold tracking-[-0.02em]">{one.title}</h3>
+                <p className="mt-1.5 text-[14px] leading-relaxed text-[#5b6472]">{one.text}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </section>
+
+      <Rule />
+
+      {/* Questions, each opening its answer. */}
+      <section className={`${wrap} grid gap-12 py-24 lg:grid-cols-[1fr_1.4fr]`}>
+        <div>
+          <p className={`${eyebrow} text-[#c2410c]`}>Questions</p>
+          <h2 className={`${h2} mt-4`}>Before you sign in.</h2>
+          <p className="mt-5 max-w-md text-[15px] leading-relaxed text-[#5b6472]">
+            Something else? Ask HR or your administrator: they set up logins and seats.
+          </p>
+        </div>
+        <div className="divide-y divide-[#eceef3] border-y border-[#eceef3]">
+          {QUESTIONS.map((one) => (
+            <details key={one.q} className="group py-5">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[17px] font-semibold tracking-[-0.01em] [&::-webkit-details-marker]:hidden">
+                {one.q}
+                <ChevronDown className="size-5 shrink-0 text-[#8a93a3] transition-transform group-open:rotate-180" aria-hidden="true" />
+              </summary>
+              <p className="mt-3 max-w-2xl text-[15px] leading-relaxed text-[#5b6472]">{one.a}</p>
+            </details>
+          ))}
+        </div>
+      </section>
+
+      <Rule />
+
       {/* The close: how it works, in three lines, and the way in. */}
       <section className="relative">
         <div className={`relative ${wrap} py-28 text-center`}>
@@ -384,26 +507,16 @@ export function About() {
             ))}
           </ol>
           <div className="mt-16 flex flex-wrap items-center justify-center gap-3">
-            <button
-              type="button"
-              onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+            <Link
+              to="/login#systems"
               className="inline-flex items-center gap-2 rounded-full bg-[#1f2733] px-7 py-3.5 text-sm font-semibold text-white shadow-[0_16px_34px_-14px_rgba(20,30,50,0.6)] transition hover:bg-black"
             >
               Choose your workspace <ArrowRight className="size-4" aria-hidden="true" />
-            </button>
+            </Link>
           </div>
         </div>
       </section>
 
-      <footer className="border-t border-black/5">
-        <div className={`${wrap} flex flex-wrap items-center justify-between gap-3 py-8 text-sm text-[#8a93a3]`}>
-          <span className="flex items-center gap-2.5">
-            <img src="/brand/bishnoi-one-mark.png" alt="" className="size-7" />
-            <span className="font-semibold text-[#1f2733]">Bishnoi One</span>
-          </span>
-          <span>Each person signs in as themselves · No account? Sign up at the top of this page</span>
-        </div>
-      </footer>
       </div>
     </div>
   );

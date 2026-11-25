@@ -1,0 +1,264 @@
+/* Our additions to the export's navbar (site-nav.tsx). The export's own rules still hide the
+   links on narrow screens. */
+
+/* No line under the navbar, scrolled or not (Aryan, 23 Nov). */
+.hx .nav,
+.hx .nav.is-scrolled {
+  border-bottom-color: transparent;
+}
+
+/* Each link its own pill with no outline (Aryan, 24 Nov), orange only on hover. */
+.hx .nav__links--pill {
+  gap: 0.25rem;
+}
+
+.hx .nav__links--pill .nav__trigger,
+.hx .nav.is-scrolled .nav__links--pill .nav__trigger:not(.is-open) {
+  padding: 0.6rem 1.05rem;
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Hovered or open: the Sign in button's orange, white words (Aryan, 24 Nov). */
+.hx .nav__links--pill .nav__trigger:hover,
+.hx .nav.is-scrolled .nav__links--pill .nav__trigger:not(.is-open):hover,
+.hx .nav__links--pill .nav__trigger.is-open {
+  color: #fff;
+  background: var(--grad-brand);
+  box-shadow: none;
+}
+
+/* "Systems": one menu, every workspace in three columns (Selling, Operations, Office). */
+.hx .mega--systems {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: var(--sp-5) var(--sp-6);
+}
+
+.hx .systems-menu {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--sp-5);
+}
+
+.hx .systems-menu__col + .systems-menu__col {
+  padding-left: var(--sp-5);
+  border-left: 1px solid var(--ink-100);
+}
+
+.hx .systems-menu__head {
+  font-family: var(--font-display);
+  font-weight: var(--fw-heading);
+  font-size: 1.05rem;
+  letter-spacing: -0.01em;
+  color: #000;
+}
+
+.hx .systems-menu__note {
+  margin-top: 0.15rem;
+  margin-bottom: var(--sp-3);
+  font-size: var(--fs-sm);
+  color: var(--ink-500);
+}
+
+.hx .systems-menu ul {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hx .systems-menu__app {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: 0.5rem 0.6rem;
+  margin-left: -0.6rem;
+  border-radius: var(--r-lg);
+  transition: background-color var(--dur-fast) var(--ease-out);
+}
+
+.hx .systems-menu__app:hover,
+.hx .systems-menu__app:focus-visible {
+  background: var(--surface-muted);
+}
+
+.hx .systems-menu__app img {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.hx .systems-menu__app > span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.hx .systems-menu__app strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-family: var(--font-display);
+  font-weight: var(--fw-medium);
+  font-size: 0.95rem;
+  color: var(--ink-900);
+}
+
+.hx .systems-menu__app strong svg {
+  opacity: 0;
+  transform: translateX(-4px);
+  transition: opacity var(--dur-base) var(--ease-out), transform var(--dur-base) var(--ease-out);
+  color: #c2410c;
+}
+
+.hx .systems-menu__app:hover strong svg {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.hx .systems-menu__app small {
+  font-size: 0.8rem;
+  line-height: 1.35;
+  color: var(--ink-500);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hx .mega--systems .mega__footer {
+  margin-top: var(--sp-2);
+}
+
+/* The phone drawer's Systems: the three groups, each under its name. */
+.hx .drawer__systems-head {
+  margin: var(--sp-3) 0 var(--sp-2);
+  font-family: var(--font-display);
+  font-weight: var(--fw-heading);
+  font-size: var(--fs-xs);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-400);
+}
+
+/* At the top of the page the navbar is see-through, so the hero's panel runs up behind its right
+   side (search and Sign in). Wide screens only: on narrow ones the panel sits lower. */
+@media (min-width: 1001px) {
+  .hx .nav.is-top,
+  .hx .nav.is-scrolled.is-top {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* Footer columns: more room between the links, the words and logos a size smaller. */
+.hx .footer__col ul {
+  gap: 0.95rem;
+}
+
+.hx .footer__col a {
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.35;
+}
+
+.hx .footer__logo {
+  width: 16px;
+  height: 16px;
+}
+
+.hx .footer__col .footer__glyph {
+  width: 14px;
+  height: 14px;
+}
+
+/* The navbar search's suggestions: a short list right under the bar, shown only while typing,
+   scrolling without a visible bar. */
+.hx .nav__search--suggest {
+  position: relative;
+}
+
+.hx .search-suggest {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 120;
+  min-width: 260px;
+  max-height: 264px;
+  overflow-y: auto;
+  padding: 6px;
+  border-radius: 18px;
+  background: #fff;
+  box-shadow: 0 0 0 1px #eceef3, 0 24px 48px -20px rgba(31, 39, 51, 0.35);
+  scrollbar-width: none;
+  animation: search-suggest-in 180ms var(--ease-out) both;
+}
+
+.hx .search-suggest::-webkit-scrollbar {
+  display: none;
+}
+
+.hx .search-suggest__item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.hx .search-suggest__item.is-active {
+  background: #fff7f2;
+}
+
+.hx .search-suggest__item img {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  object-fit: contain;
+}
+
+.hx .search-suggest__item span {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.hx .search-suggest__item strong {
+  color: var(--ink-900);
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.hx .search-suggest__item small {
+  overflow: hidden;
+  color: var(--ink-500);
+  font-size: 0.75rem;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.hx .search-suggest__none {
+  margin: 0;
+  padding: 12px;
+  color: var(--ink-500);
+  font-size: 0.8125rem;
+}
+
+@keyframes search-suggest-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}

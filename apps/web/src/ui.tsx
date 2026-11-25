@@ -214,7 +214,7 @@ export function PageHead({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex flex-wrap items-center gap-2.5">
-            <h1 className="text-2xl leading-tight font-bold tracking-tight text-slate-900">
+            <h1 className="text-[28px] leading-tight font-semibold tracking-tight text-slate-900">
               {title}
             </h1>
             {tags}

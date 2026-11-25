@@ -61,7 +61,7 @@ export function ManagementHome() {
       <div className="min-w-0 space-y-4">
         <div>
           <div className="text-xs text-slate-500">{todayWords()}</div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900">Management desk</h1>
+          <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">Management desk</h1>
           <div className="mt-0.5 text-xs text-slate-500">
             Every order to approve, shared automatically among the people started (left).
           </div>

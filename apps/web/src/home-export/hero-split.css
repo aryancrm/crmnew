@@ -1,0 +1,174 @@
+/* The two-column hero (hero-split.tsx). It reuses the export's hero__ classes for the words and
+   the button; these rules only lay them out. */
+
+.hx .hero--split {
+  position: relative;
+  display: flex;
+  min-height: 100dvh;
+  padding-top: var(--nav-h);
+  padding-bottom: 0;
+}
+
+.hx .hero-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: clamp(1.5rem, 3.5vw, 3.5rem);
+  width: 100%;
+}
+
+/* --- Left: words, button, featured apps --------------------------------- */
+.hx .hero-split__copy {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: flex-start;
+  gap: clamp(1rem, 2.6vh, 1.6rem);
+  padding: clamp(0.5rem, 3vh, 2rem) 0;
+  animation: orbit-rise 0.8s var(--ease-out) both;
+}
+
+.hx .hero--split .hero__title {
+  font-size: clamp(2.1rem, min(3.7vw, 7.4vh), 3.9rem);
+}
+
+.hx .hero--split .hero__line3 {
+  padding-left: 0;
+}
+
+.hx .hero--split .hero__lead {
+  max-width: 46ch;
+  font-size: clamp(0.95rem, 0.85rem + 0.3vw, 1.075rem);
+}
+
+.hx .hero-split__cta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem 1.1rem;
+}
+
+.hx .hero-split__apps {
+  width: 100%;
+  margin-top: clamp(0.25rem, 2vh, 1.25rem);
+  padding-top: clamp(1rem, 2.5vh, 1.5rem);
+  border-top: 1px solid var(--ink-100);
+}
+
+.hx .hero-split__label {
+  margin-bottom: 0.85rem;
+  font-family: var(--font-display);
+  font-weight: var(--fw-medium);
+  font-size: var(--fs-sm);
+  color: var(--ink-400);
+}
+
+.hx .hero-split__apps ul {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hx .hero-split__app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.1rem;
+  border-radius: var(--r-lg);
+  color: var(--ink-700);
+  text-align: center;
+  transition: transform var(--dur-base) var(--ease-spring), color var(--dur-fast) var(--ease-out);
+}
+
+.hx .hero-split__app img {
+  width: clamp(34px, 2.8vw, 44px);
+  height: clamp(34px, 2.8vw, 44px);
+  object-fit: contain;
+}
+
+.hx .hero-split__app span {
+  font-family: var(--font-display);
+  font-weight: var(--fw-medium);
+  font-size: 0.8rem;
+  line-height: 1.2;
+}
+
+.hx .hero-split__app:hover {
+  transform: translateY(-3px);
+  color: #c2410c;
+}
+
+.hx .hero-split__app:focus-visible {
+  outline: 2px solid #f36b21;
+  outline-offset: 2px;
+}
+
+/* --- Right: the moving dashboards on the portal's orange-to-yellow, edge to edge --------
+   It runs from the top of the page (behind the navbar, which is see-through there) to the
+   section's bottom and the window's right edge, with no gap; only its left corners are rounded.
+   The demo itself starts under the navbar. */
+.hx .hero-split__stage {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 48%;
+  overflow: hidden;
+  border-radius: var(--r-2xl) 0 0 var(--r-2xl);
+  background: #fff;
+  animation: orbit-rise 0.9s var(--ease-out) 0.15s both;
+}
+
+/* The demo starts under the navbar, so the screens never slide under the search and Sign in. */
+.hx .hero-split__stage .ol {
+  top: var(--nav-h);
+}
+
+/* --- Narrow screens: one column, the panel under the words -------------- */
+@media (max-width: 1000px) {
+  .hx .hero--split {
+    min-height: 0;
+  }
+
+  .hx .hero-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .hx .hero--split .hero__title {
+    font-size: clamp(2.1rem, 7vw, 3.4rem);
+  }
+
+  .hx .hero-split__stage .ol {
+    top: 0;
+  }
+
+  .hx .hero-split__stage {
+    position: relative;
+    top: auto;
+    width: auto;
+    margin-inline: calc(-1 * var(--gutter));
+    border-radius: 0;
+  }
+
+  .hx .hero-split__stage {
+    height: clamp(360px, 62vw, 560px);
+  }
+}
+
+@media (max-width: 520px) {
+  .hx .hero-split__apps ul {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    row-gap: 0.75rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hx .hero-split__app,
+  .hx .hero-split__app:hover {
+    transition: none;
+    transform: none;
+  }
+}

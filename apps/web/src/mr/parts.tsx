@@ -129,7 +129,7 @@ export function MrHead({ title, sub, actions }: { title: string; sub?: ReactNode
     <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
       <div className="flex min-w-0 items-start gap-2">
         <div className="min-w-0">
-          <h1 className="text-2xl leading-tight font-bold tracking-tight text-slate-900">{title}</h1>
+          <h1 className="text-[28px] leading-tight font-semibold tracking-tight text-slate-900">{title}</h1>
           {sub && <div className="mt-0.5 text-sm text-slate-500">{sub}</div>}
         </div>
       </div>
