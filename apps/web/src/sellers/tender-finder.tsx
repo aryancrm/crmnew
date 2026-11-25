@@ -467,7 +467,7 @@ function PhilgepsCard({ runs, login, fetch }: { runs: FindRunRow[]; login: Found
     ) : runs[0]?.status === "failed" ? (
       <Pill tone="bad">Last read failed</Pill>
     ) : runs.length ? (
-      <Pill tone="good">Reading</Pill>
+      <Pill tone="good">Last read OK</Pill>
     ) : (
       <Pill>Waiting</Pill>
     );

@@ -69,7 +69,8 @@ let dispatch = async (portal: Portal): Promise<void> => {
   throw new Error(`GitHub answered ${response.status}`);
 };
 
-let child: ChildProcess | null = null;
+// One robot per portal on this computer: a PS-PhilGEPS fetch never blocks a PhilGEPS one (change log 187).
+const children = new Map<Portal, ChildProcess>();
 
 /** Starts one portal's robot on this computer; it hands in to this API with the key. */
 let runHere = (portal: Portal, onEnd: (problem: string | null) => void): void => {
@@ -79,18 +80,18 @@ let runHere = (portal: Portal, onEnd: (problem: string | null) => void): void =>
     env: { ...process.env, CRM_URL: `http://localhost:${process.env.PORT ?? 4100}` },
     stdio: ["ignore", "pipe", "pipe"],
   });
-  child = robot;
+  children.set(portal, robot);
   const say = (chunk: Buffer) => {
     for (const line of chunk.toString().split(/\r?\n/)) if (line.trim()) console.log(`robot (${portal}): ${line}`);
   };
   robot.stdout?.on("data", say);
   robot.stderr?.on("data", say);
   robot.on("error", (error) => {
-    child = null;
+    children.delete(portal);
     onEnd(`The robot could not start: ${error.message}`);
   });
   robot.on("exit", (code) => {
-    child = null;
+    children.delete(portal);
     onEnd(code === 0 ? null : `The robot stopped (exit ${code}); the API's log says why`);
   });
 };
@@ -144,6 +145,18 @@ export async function fetchState(db: Database): Promise<FetchState> {
 const failAsk = (db: Database, id: number, note: string) =>
   db.execute(sql`update tender_find_ask set status = 'failed', note = ${note.slice(0, 300)} where id = ${id}`);
 
+/** On the API's start: a press whose robot ran on this computer cannot still be running (the robot ends
+ *  with the API that started it), so it is closed with a word instead of holding its portal's button on
+ *  "Fetching…" for up to 45 minutes. A run it handed in before the restart still counts. */
+export async function closeLocalAsks(db: Database): Promise<number> {
+  const closed = await rows<{ id: number }>(
+    db,
+    sql`update tender_find_ask set status = 'failed', note = 'The CRM restarted while the robot ran on this computer; press Fetch now again.'
+      where via = 'local' and status = 'asked' returning id::int as id`,
+  );
+  return closed.length;
+}
+
 /** A portal's Fetch now button: that portal's robot runs now. Refused while an earlier press of it runs. */
 export async function fetchNow(db: Database, me: Me, portal: Portal): Promise<{ via: "github" | "local"; portal: Portal }> {
   if (!(await recordsTenders(db, me))) throw new Refusal(403, "not_allowed", "The tender finder is the bidding team's.");
@@ -151,7 +164,8 @@ export async function fetchNow(db: Database, me: Me, portal: Portal): Promise<{ 
   if (way === "off") throw new Refusal(409, "fetch_off", "The robot can't be started from this server; it still runs by itself every hour.");
   if (portal === "ps" && !(await psState(db)).connected)
     throw new Refusal(409, "ps_not_connected", "PS-PhilGEPS is not connected: press Connect PS-PhilGEPS first (its log-in has a captcha).");
-  if (way === "local" && child) throw new Refusal(409, "fetch_running", "The robot is already running on this computer; its result shows here when it ends.");
+  if (way === "local" && children.has(portal))
+    throw new Refusal(409, "fetch_running", `${portal === "ps" ? "PS-PhilGEPS" : "PhilGEPS"}'s robot is already running on this computer; its result shows here when it ends.`);
   // One statement, so two people pressing at once make one press.
   const [ask] = await rows<{ id: number }>(
     db,

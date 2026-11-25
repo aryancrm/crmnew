@@ -28,6 +28,7 @@ import { seedRegulatory } from "./regulatory/seed";
 import { seedRxTeam } from "./rx/seed";
 import { lockDue } from "./scores/service";
 import { seedHospitalBoxes } from "./sellers/seed";
+import { closeLocalAsks } from "./tenders/fetch-now";
 import { seedBidding, seedFound } from "./tenders/seed";
 import { seedDemo } from "./seed";
 import { seedDemoPast } from "./zoho/seed";
@@ -53,6 +54,8 @@ const freshen = () =>
 await freshen();
 
 if (await makeFirstAdmin(db)) console.log("database: the first System admin made");
+const stopped = await closeLocalAsks(db);
+if (stopped) console.log(`tender finder: ${stopped} Fetch now press(es) closed (their robot ended with the last API)`);
 if (await ensureCompanyTree(db)) console.log("database: the company's tree made (one box per channel)");
 
 if (process.env.SEED_DEMO === "1") {

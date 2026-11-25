@@ -6,7 +6,7 @@ import { migrate } from "../db/migrate";
 import { seedDemoInventory } from "../inventory/seed";
 import { seedDemo } from "../seed";
 import type { FoundList } from "../types";
-import { fetchWay, type Portal, useFetchers } from "./fetch-now";
+import { closeLocalAsks, fetchWay, type Portal, useFetchers } from "./fetch-now";
 import { seedBidding } from "./seed";
 
 const PASSWORD = "test-password-1";
@@ -197,5 +197,19 @@ describe("Fetch now, one on each portal's card", () => {
     await new Promise((done) => setTimeout(done, 50));
     expect(await asks()).toEqual([{ via: "local", portal: "philgeps", status: "failed", note: "The robot stopped (exit 1); the API's log says why" }]);
     expect(await state()).toMatchObject({ philgeps: { running: null, failed: { note: "The robot stopped (exit 1); the API's log says why" } } });
+  });
+
+  it("on the API's start, closes a press whose robot ran on this computer (it ended with the API)", async () => {
+    process.env.TENDER_FINDER_FETCH = "local";
+    process.env.TENDER_FINDER_KEY = KEY;
+    expect((await press("jimmy", "ps")).status).toBe(409); // not connected: nothing asked
+    expect((await press("jimmy", "philgeps")).status).toBe(200);
+    await db.execute(sql`insert into tender_find_ask (by_person, via, portal) select by_person, 'github', 'ps' from tender_find_ask limit 1`);
+    expect(await closeLocalAsks(db)).toBe(1);
+    expect(await asks()).toEqual([
+      { via: "local", portal: "philgeps", status: "failed", note: "The CRM restarted while the robot ran on this computer; press Fetch now again." },
+      { via: "github", portal: "ps", status: "asked", note: null },
+    ]);
+    expect(await state()).toMatchObject({ philgeps: { running: null, failed: { note: expect.stringContaining("CRM restarted") } } });
   });
 });
