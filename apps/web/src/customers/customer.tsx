@@ -4,8 +4,8 @@
 // doctors, details, activity) with the open one on the right. Everything comes from one read.
 
 import { RefillCard } from "./refill";
-import { useMrMe } from "../mr/parts";
-import { FieldPanel, useFieldClient } from "../mr/clients";
+import { ActionBar, useCustomerWork } from "./customer-work";
+import { FieldPanel } from "../mr/clients";
 import type {
   CustomerCredit,
   CustomerFiles,
@@ -104,11 +104,9 @@ export function Customer() {
     queryFn: () => api<CustomerPrices>(`/api/customers/${id}/prices`),
   }).data?.past;
 
-  // The field's side of a doctor, hospital or firm, on this page (medrep branch, 25 Nov: one
-  // page per customer), for those with the field's pages.
-  const mr = useMrMe();
-  const fieldKind = ["doctor", "hospital", "drugstore", "distributor"].includes(query.data?.customer.kind ?? "");
-  const field = useFieldClient(id, Boolean(mr.data?.access) && fieldKind).data;
+  // What this seller does with them, on this page (medrep branch, 25 Nov): the buttons and the
+  // field's side, read before the page draws.
+  const work = useCustomerWork(me ?? undefined, query.data, id);
 
   const data = query.data;
   if (!data) return <PageState query={query} what="this customer" />;
@@ -138,14 +136,7 @@ export function Customer() {
     <div className="mx-auto max-w-screen-2xl space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <Crumbs list={listLabel} to={listTo} />
-        {placesOrders(me) && !me?.viewedBy && (
-          <Link
-            to={`/orders/new?customer=${customer.id}`}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-brand px-3.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-dark"
-          >
-            <Plus className="size-4" /> New order for them
-          </Link>
-        )}
+        <ActionBar actions={work.actions} run={work.run} field={work.field} customerId={customer.id} name={customer.name} />
       </div>
 
       <RecordHead
@@ -349,7 +340,7 @@ export function Customer() {
           and what happened on the right. */}
       <div className="flex flex-wrap items-start gap-4">
         <div className="flex min-w-0 flex-[2_1_34rem] flex-col gap-4">
-          {field && <FieldPanel data={field} />}
+          {work.field && <FieldPanel data={work.field} />}
           {/* A customer known only from before this CRM: what they were given, at what price, their
               old orders, invoices and payments come first (Aryan, 23 Nov: the office opened Zoho's
               Sales for exactly this); the two empty "no orders yet" panels would only hide them. */}
@@ -415,9 +406,6 @@ export function Customer() {
           )}
           {customer.kind === "hospital" && <Doctors data={data} />}
           <FilesPanel customerId={customer.id} />
-          <Link to={`/complaints?report=1&customer=${customer.id}`} className="text-sm font-semibold text-brand hover:underline">
-            Report a complaint or side-effect for {customer.name}
-          </Link>
           <Activity data={data} />
         </div>
       </div>
@@ -432,6 +420,7 @@ export function Customer() {
           onClose={() => setTermsOpen(false)}
         />
       )}
+      {work.dialogs}
       {editing && (
         <CustomerDialog
           can={can}

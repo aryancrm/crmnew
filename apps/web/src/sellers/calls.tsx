@@ -24,11 +24,13 @@ const OUTCOMES: { key: SalesCallOutcome; label: string; tone: string }[] = [
 const outcomeLabel = (key: string) => OUTCOMES.find((o) => o.key === key)?.label ?? key;
 const todayIn = () => new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
 
-function LogCall() {
+/** Log a call. On a customer's own page (`customer`) it is that customer's, with no search, and
+ *  closes once saved (25 Nov: what a seller does with a customer, on the customer's page). */
+export function LogCall({ customer, onSaved }: { customer?: { id: number; name: string }; onSaved?: () => void } = {}) {
   const queries = useQueryClient();
   const action = useAction();
-  const [text, setText] = useState("");
-  const [picked, setPicked] = useState<{ id: number; name: string } | null>(null);
+  const [text, setText] = useState(customer?.name ?? "");
+  const [picked, setPicked] = useState<{ id: number; name: string } | null>(customer ?? null);
   const [outcome, setOutcome] = useState<SalesCallOutcome | null>(null);
   const [note, setNote] = useState("");
   const [nextOn, setNextOn] = useState("");
@@ -47,15 +49,18 @@ function LogCall() {
       setNextOn("");
       await queries.invalidateQueries({ queryKey: ["calls"] });
       await queries.invalidateQueries({ queryKey: ["sales-performance"] });
+      onSaved?.();
     });
   return (
-    <section className={`${CARD} mb-4 p-4`}>
-      <h2 className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-slate-900">
-        <PhoneCall className="size-4 text-brand" /> Log a call
-      </h2>
+    <section className={customer ? "" : `${CARD} mb-4 p-4`}>
+      {!customer && (
+        <h2 className="mb-3 flex items-center gap-2 text-[15px] font-semibold text-slate-900">
+          <PhoneCall className="size-4 text-brand" /> Log a call
+        </h2>
+      )}
       <Problem message={action.problem?.message} />
-      <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr]">
-        <div className="relative">
+      <div className={customer ? "grid gap-3" : "grid gap-3 lg:grid-cols-[1.2fr_1fr]"}>
+        <div className={customer ? "hidden" : "relative"}>
           <label className="text-[12px] font-medium text-slate-500" htmlFor="call-customer">
             Customer
           </label>
