@@ -98,9 +98,10 @@ export async function loginWait(db: Database, now = Date.now()): Promise<string 
 }
 
 /** The Connect PS-PhilGEPS button: a one-time log-in code, or the laptop's setup file. */
-export async function laptopCode(db: Database, me: Me, purpose: Purpose, crmUrl: string): Promise<{ code: string } | { script: string }> {
+export async function laptopCode(db: Database, me: Me, purpose: Purpose, crmUrl: string): Promise<{ code: string; at: string } | { script: string }> {
   if (!(await recordsTenders(db, me))) throw new Refusal(403, "not_allowed", "The tender finder is the bidding team's.");
-  if (purpose === "login") return { code: issueCode(me.id, "login") };
+  // "at": the server's time, from which the page follows this log-in's steps (FoundList robot.ps.login)
+  if (purpose === "login") return { code: issueCode(me.id, "login"), at: new Date().toISOString() };
   return { script: setupScript(issueCode(me.id, "setup"), crmUrl) };
 }
 
@@ -127,9 +128,17 @@ export async function laptopStep(db: Database, body: LaptopStep): Promise<{ stat
     const username = process.env.PS_PHILGEPS_USERNAME;
     const password = process.env.PS_PHILGEPS_PASSWORD;
     const known = Boolean(username && password);
-    if (!known && !body.ownAccount) return fail(500, "The PS-PhilGEPS account is not set on Bishnoi One's server yet (PS_PHILGEPS_USERNAME, PS_PHILGEPS_PASSWORD).", "NO_CREDENTIALS");
+    // A refusal here is also kept, so the page that opened this log-in can say why it stopped.
+    if (!known && !body.ownAccount) {
+      const said = "The PS-PhilGEPS account is not set on Bishnoi One's server yet (PS_PHILGEPS_USERNAME, PS_PHILGEPS_PASSWORD).";
+      await noteRobotLogin(db, { site: SITE, outcome: "error", detail: said, source });
+      return fail(500, said, "NO_CREDENTIALS");
+    }
     const wait = await loginWait(db);
-    if (wait) return fail(429, wait, "LOGIN_PAUSED");
+    if (wait) {
+      await noteRobotLogin(db, { site: SITE, outcome: "paused", detail: wait, source });
+      return fail(429, wait, "LOGIN_PAUSED");
+    }
     await noteRobotLogin(db, { site: SITE, outcome: "started", source });
     return { status: 200, body: known ? { ok: true, username, password } : { ok: true } };
   }

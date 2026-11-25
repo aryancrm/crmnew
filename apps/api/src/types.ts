@@ -5756,7 +5756,16 @@ export type FoundList = {
     runs: FindRun[];
     login: { state: "never" | "ok" | "refused" | "busy" | "trouble"; at: string | null; said: string | null };
     /** The PS-PhilGEPS robot: connected or not (a person's captcha tick makes its session), and its last Sync. */
-    ps: { connected: boolean; connectedAt: string | null; status: string | null; stage: string | null; error: string | null; finishedAt: string | null };
+    ps: {
+      connected: boolean;
+      connectedAt: string | null;
+      status: string | null;
+      stage: string | null;
+      error: string | null;
+      finishedAt: string | null;
+      /** The last step of a laptop log-in: started | submitted | rejected | ok | error | cancelled | paused, with what was said. */
+      login: { outcome: string; detail: string | null; source: string | null; at: string } | null;
+    };
     /** Fetch now: whether a person can start the robot at once from this server, and how it went. */
     fetch: FetchState;
   };

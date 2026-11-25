@@ -110,6 +110,8 @@ describe("Connect PS-PhilGEPS from a team laptop", () => {
     const none = await laptop({ action: "begin", code });
     expect(none.status).toBe(500);
     expect(await none.json()).toMatchObject({ ok: false, code: "NO_CREDENTIALS" });
+    // The page that opened the log-in hears why it stopped
+    expect((await psState()).login).toMatchObject({ outcome: "error", detail: expect.stringContaining("PS_PHILGEPS_USERNAME") });
 
     process.env.PS_PHILGEPS_USERNAME = "the-merchant";
     process.env.PS_PHILGEPS_PASSWORD = "its-password";
@@ -133,7 +135,7 @@ describe("Connect PS-PhilGEPS from a team laptop", () => {
     const back = await app.request("/webhooks/tender-finder/store?table=ps_philgeps_session", { headers: { authorization: `Bearer ${process.env.TENDER_FINDER_KEY}` } });
     expect(((await back.json()) as { rows: { cookies: unknown }[] }).rows[0]?.cookies).toEqual(SESSION);
     delete process.env.TENDER_FINDER_KEY;
-    expect((await logins()).map((one) => one.outcome)).toEqual(["started", "submitted", "ok"]);
+    expect((await logins()).map((one) => one.outcome)).toEqual(["error", "started", "submitted", "ok"]);
     expect((await logins())[0]?.source).toBe("team laptop (Jimmy)");
   });
 
@@ -145,6 +147,7 @@ describe("Connect PS-PhilGEPS from a team laptop", () => {
     const soon = await laptop({ action: "begin", code });
     expect(soon.status).toBe(429);
     expect(await soon.json()).toMatchObject({ code: "LOGIN_PAUSED" });
+    expect((await psState()).login).toMatchObject({ outcome: "paused", detail: expect.stringContaining("less than a minute ago") });
 
     await db.execute(sql`update tender_find_login set at = now() - interval '5 minutes'`);
     for (let i = 0; i < 3; i += 1) expect((await laptop({ action: "refused", code, detail: "Invalid username or password" })).status).toBe(200);

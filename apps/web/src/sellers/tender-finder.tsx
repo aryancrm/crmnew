@@ -5,7 +5,8 @@
 
 import type { Catalogue, CustomerList, FoundDetail, FoundLine, FoundList, FoundPapers, FoundTender, FoundView, TenderMode } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Search } from "lucide-react";
+import { CircleAlert, CircleCheck, ExternalLink, Loader2, Search, X } from "lucide-react";
+import { createPortal } from "react-dom";
 import { type ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
@@ -59,52 +60,159 @@ function State({ found }: { found: FoundTender }) {
   return found.molecules.length ? <Pill tone="brand">New</Pill> : <Pill>Not ours</Pill>;
 }
 
+/** The status box at the bottom right (as the bidding system shows its Sync): what a press of Fetch now
+ *  is doing, step by step, and how it ended. One box per portal, stacked. */
+type Tone = "work" | "good" | "bad" | "warn";
+const TONE: Record<Tone, string> = {
+  work: "border-sky-200",
+  good: "border-emerald-300",
+  bad: "border-rose-300",
+  warn: "border-amber-300",
+};
+function dock(): HTMLElement {
+  let element = document.getElementById("fetch-status-dock");
+  if (!element) {
+    element = document.createElement("div");
+    element.id = "fetch-status-dock";
+    element.setAttribute("aria-live", "polite");
+    element.className = "fixed bottom-4 right-4 z-[55] flex w-[22rem] max-w-[calc(100vw-2rem)] flex-col gap-2 print:hidden";
+    document.body.appendChild(element);
+  }
+  return element;
+}
+function StatusBox({ tone, title, children, onClose }: { tone: Tone; title: string; children?: ReactNode; onClose?: () => void }) {
+  const icon =
+    tone === "work" ? (
+      <Loader2 className="size-4 shrink-0 animate-spin text-sky-600" aria-hidden="true" />
+    ) : tone === "good" ? (
+      <CircleCheck className="size-4 shrink-0 text-emerald-600" aria-hidden="true" />
+    ) : (
+      <CircleAlert className={`size-4 shrink-0 ${tone === "bad" ? "text-rose-600" : "text-amber-600"}`} aria-hidden="true" />
+    );
+  return createPortal(
+    <div className={`rounded-xl border bg-white px-3.5 py-3 text-[12.5px] text-slate-700 shadow-lg ${TONE[tone]}`} role="status">
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5">{icon}</span>
+        <b className="min-w-0 flex-1 text-[13px] text-slate-900">{title}</b>
+        {onClose && (
+          <button type="button" aria-label="Close" className="-m-1 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={onClose}>
+            <X className="size-3.5" />
+          </button>
+        )}
+      </div>
+      {children && <div className="mt-1 pl-6">{children}</div>}
+    </div>,
+    dock(),
+  );
+}
+
+type PortalFetchState = FoundList["robot"]["fetch"]["ps"];
+
+/** A Fetch now this page pressed, followed to its end in the status box: waiting for its run, then that
+ *  portal's last run (found, matched, new) or why it did not start. A good end closes by itself. */
+function FetchStatus({ name, state, runs, stage, onClose }: { name: string; state: PortalFetchState; runs: FindRunRow[]; stage?: string | null; onClose: () => void }) {
+  const running = state.running;
+  const last = runs[0];
+  const ended = running?.done ? (last?.status === "failed" ? "bad" : "good") : null;
+  useEffect(() => {
+    if (ended !== "good") return;
+    const timer = setTimeout(onClose, 20_000);
+    return () => clearTimeout(timer);
+  }, [ended]);
+  if (running && !running.done)
+    return (
+      <StatusBox tone="work" title={`Fetching ${name}…`} onClose={onClose}>
+        Started {running.by ? `by ${running.by} ` : ""}at {when(running.at)}. It takes a few minutes; this page looks every 15 seconds.
+        {stage ? <span className="block text-slate-500">{stage}</span> : null}
+      </StatusBox>
+    );
+  if (running?.done && last)
+    return (
+      <StatusBox tone={ended === "bad" ? "bad" : "good"} title={ended === "bad" ? `${name}: the fetch failed` : `${name} fetched`} onClose={onClose}>
+        <RunLine run={last} />
+      </StatusBox>
+    );
+  if (state.failed)
+    return (
+      <StatusBox tone="bad" title={`${name}: the fetch did not start`} onClose={onClose}>
+        {state.failed.note ?? "No reason was given."}
+      </StatusBox>
+    );
+  return null;
+}
+
+/** What a laptop log-in's last step means for the person who opened it. */
+const LOGIN_STEP: Record<string, { tone: Tone; title: string; said?: string; final?: boolean }> = {
+  started: { tone: "work", title: "Chrome is open on this laptop", said: "Tick “I'm not a robot”, then the log-in goes through by itself." },
+  submitted: { tone: "work", title: "Logging in to PS-PhilGEPS…", said: "The password was sent; waiting for PS-PhilGEPS." },
+  rejected: { tone: "warn", title: "PS-PhilGEPS refused the log-in" },
+  ok: { tone: "good", title: "Logged in to PS-PhilGEPS", said: "Saving the session for everyone…" },
+  error: { tone: "bad", title: "The PS-PhilGEPS log-in did not finish", final: true },
+  cancelled: { tone: "bad", title: "The PS-PhilGEPS log-in was closed", said: "The Chrome window was closed before the log-in finished.", final: true },
+  paused: { tone: "bad", title: "PS-PhilGEPS log-ins are paused", final: true },
+};
+
 /** PS-PhilGEPS's Fetch now, which connects first when it must (the bidding system's Sync button: "you
  *  cannot fetch if you do not connect", the developer, 25 Nov). Not connected: the press opens the log-in
  *  on this laptop (the "bishnoi-ps-connect:" link with a one-time code; API tenders/laptop-login.ts); a
- *  person ticks "I'm not a robot"; once the session is saved (the page looks every 3 seconds, 3 minutes at
- *  most) the fetch starts by itself. Connected: the press fetches. A laptop not set up yet gets the
- *  one-time setup file. */
-function PsFetch({ way, state, connected }: { way: FoundList["robot"]["fetch"]["way"]; state: FoundList["robot"]["fetch"]["ps"]; connected: boolean }) {
+ *  person ticks "I'm not a robot"; once the session is saved the fetch starts by itself. Every step the
+ *  laptop reports (robot.ps.login, since the server's time of this press) shows in the status box at the
+ *  bottom right, and a step that ends the log-in (no account on the server, log-ins paused, an error,
+ *  the window closed) stops the waiting at once and says why. Nothing heard in 3 minutes: it says so. A
+ *  laptop not set up yet gets the one-time setup file. */
+function PsFetch({ way, state, ps, runs }: { way: FoundList["robot"]["fetch"]["way"]; state: PortalFetchState; ps: FoundList["robot"]["ps"]; runs: FindRunRow[] }) {
   const queries = useQueryClient();
   const action = useAction();
-  const [since, setSince] = useState<number | null>(null);
+  const connected = ps.connected;
+  // The press that opened a log-in: the server's time of it (its steps come after), and this page's (for the 3 minutes)
+  const [since, setSince] = useState<{ server: string; local: number } | null>(null);
   const [now, setNow] = useState(Date.now());
-  const [after, setAfter] = useState<string | null>(null);
-  const loggingIn = since !== null && !connected && now - since < 180_000;
-  const gaveUp = since !== null && !connected && now - since >= 180_000;
+  const [ended, setEnded] = useState<{ tone: Tone; title: string; said: string } | null>(null);
+  const [watching, setWatching] = useState(false);
+  const step = since && ps.login && Date.parse(ps.login.at) >= Date.parse(since.server) ? ps.login : null;
+  const meaning = step ? LOGIN_STEP[step.outcome] : undefined;
+  const loggingIn = since !== null && !connected;
+  const quiet = since !== null && now - since.local >= 180_000;
   const running = state.running;
   const fetching = running !== null && !running.done;
   const fetchPs = async () => {
+    setWatching(true);
     await api("/api/tenders/found/robot/fetch", { method: "POST", body: { portal: "ps" } });
     await queries.invalidateQueries({ queryKey: ["tenders", "found"] });
   };
-  // While the log-in is open: look whether it was saved, and once it is, fetch.
+  // While the log-in is open: look every 3 seconds for its next step.
   useEffect(() => {
-    if (since === null || connected) return;
+    if (!loggingIn) return;
     const timer = setInterval(() => {
       setNow(Date.now());
       void queries.invalidateQueries({ queryKey: ["tenders", "found"] });
     }, 3_000);
     return () => clearInterval(timer);
-  }, [since, connected, queries]);
+  }, [loggingIn, queries]);
+  // A step that ends the log-in: stop waiting and say why.
+  useEffect(() => {
+    if (!since || connected || !step || !meaning?.final) return;
+    setSince(null);
+    setEnded({ tone: meaning.tone, title: meaning.title, said: step.detail ?? meaning.said ?? "" });
+  }, [step?.at, step?.outcome]);
+  // The log-in this press opened is saved: fetch.
   useEffect(() => {
     if (since === null || !connected) return;
     setSince(null);
     if (way === "off") {
-      setAfter("PS-PhilGEPS is connected for everyone. The robot reads it at its next hourly run (Fetch now isn't set up on this server).");
+      setEnded({ tone: "good", title: "PS-PhilGEPS is connected", said: "For everyone. The robot reads it at its next hourly run (Fetch now isn't set up on this server)." });
       return;
     }
-    setAfter("PS-PhilGEPS is connected for everyone; fetching now.");
     void action.run(fetchPs);
     // (once, when the log-in this press opened is saved)
   }, [connected, since]);
   const press = () =>
     void action.run(async () => {
-      setAfter(null);
+      setEnded(null);
+      setWatching(false);
       if (connected) return fetchPs();
-      const { code } = await api<{ code: string }>("/api/tenders/found/ps/connect", { method: "POST", body: { purpose: "login" } });
-      setSince(Date.now());
+      const { code, at } = await api<{ code: string; at: string }>("/api/tenders/found/ps/connect", { method: "POST", body: { purpose: "login" } });
+      setSince({ server: at, local: Date.now() });
       setNow(Date.now());
       window.location.href = `bishnoi-ps-connect:start?code=${encodeURIComponent(code)}`;
     });
@@ -117,6 +225,15 @@ function PsFetch({ way, state, connected }: { way: FoundList["robot"]["fetch"]["
       link.click();
       setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
     });
+  const setUpLine = (
+    <span className="mt-1 block">
+      Nothing opened? This laptop needs a one-time setup (Windows with Google Chrome, about 5 minutes):{" "}
+      <button type="button" disabled={action.busy} className="font-semibold text-sky-700 underline disabled:opacity-50" onClick={setUp}>
+        Set up this laptop
+      </button>
+      , run the file it downloads, then press Fetch PS-PhilGEPS now again.
+    </span>
+  );
   const title = !connected
     ? "PS-PhilGEPS is not connected: this opens its log-in on this laptop first (tick the captcha), then fetches."
     : way === "off"
@@ -131,11 +248,11 @@ function PsFetch({ way, state, connected }: { way: FoundList["robot"]["fetch"]["
           small
           variant="primary"
           title={title}
-          disabled={action.busy || loggingIn || (connected && (way === "off" || running !== null))}
+          disabled={action.busy || (loggingIn && !quiet) || (connected && (way === "off" || running !== null))}
           className="disabled:opacity-50"
           onClick={press}
         >
-          {loggingIn ? "Waiting for the log-in…" : fetching ? "Fetching…" : "Fetch PS-PhilGEPS now"}
+          {loggingIn && !quiet ? "Waiting for the log-in…" : fetching ? "Fetching…" : "Fetch PS-PhilGEPS now"}
         </Button>
         {fetching && running && (
           <span className="text-[12px] text-slate-600">
@@ -144,50 +261,47 @@ function PsFetch({ way, state, connected }: { way: FoundList["robot"]["fetch"]["
         )}
         {!connected && !loggingIn && <span className="text-[12px] text-slate-500">Logs in first, from a team laptop with Google Chrome.</span>}
       </span>
-      {(loggingIn || gaveUp) && (
-        <div className={`rounded-xl border px-3 py-2 text-[12.5px] ${gaveUp ? "border-amber-200 bg-amber-50 text-amber-900" : "border-sky-200 bg-sky-50 text-sky-900"}`}>
-          {gaveUp ? (
-            <>No log-in window opened within 3 minutes. </>
-          ) : (
-            <>
-              A Chrome window opens on this laptop with the PS-PhilGEPS log-in filled in: tick <b>&ldquo;I&rsquo;m not a robot&rdquo;</b>. The fetch starts by
-              itself once you are logged in. If the browser asks whether to open the PS-PhilGEPS log-in, allow it.{" "}
-            </>
-          )}
-          Nothing opened? This laptop needs a one-time setup (Windows with Google Chrome, about 5 minutes):{" "}
-          <button type="button" disabled={action.busy} className="font-semibold underline disabled:opacity-50" onClick={setUp}>
-            Set up this laptop
-          </button>
-          , run the file it downloads, then press Fetch PS-PhilGEPS now again.{" "}
-          <button type="button" className="font-semibold underline" onClick={() => setSince(null)}>
-            {gaveUp ? "Close" : "Cancel"}
-          </button>
-        </div>
-      )}
-      {after && !loggingIn && (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12.5px] text-emerald-900">
-          {after}{" "}
-          <button type="button" className="font-semibold underline" onClick={() => setAfter(null)}>
-            Close
-          </button>
-        </div>
-      )}
       {state.failed && !fetching && connected && (
         <span className="block text-[12px] font-semibold text-rose-700">
           The last Fetch now ({when(state.failed.at)}) did not start{state.failed.note ? `: ${state.failed.note}` : "."}
         </span>
       )}
       <Problem message={action.problem?.message} />
+      {loggingIn &&
+        (quiet ? (
+          <StatusBox tone="warn" title="No log-in within 3 minutes" onClose={() => setSince(null)}>
+            {meaning && step ? `The last step heard: ${meaning.title.toLowerCase()}${step.detail ? ` (${step.detail})` : ""}. ` : "Nothing was heard from this laptop. "}
+            {setUpLine}
+          </StatusBox>
+        ) : meaning && step ? (
+          <StatusBox tone={meaning.tone} title={meaning.title} onClose={() => setSince(null)}>
+            {step.detail ?? meaning.said}
+            {step.outcome === "rejected" && <span className="block text-slate-500">After 3 refusals the log-in stops so the account isn't locked.</span>}
+          </StatusBox>
+        ) : (
+          <StatusBox tone="work" title="Opening the PS-PhilGEPS log-in on this laptop…" onClose={() => setSince(null)}>
+            A Chrome window opens with the log-in filled in. If the browser asks whether to open the PS-PhilGEPS log-in, allow it.
+            {now - since.local >= 20_000 && setUpLine}
+          </StatusBox>
+        ))}
+      {ended && (
+        <StatusBox tone={ended.tone} title={ended.title} onClose={() => setEnded(null)}>
+          {ended.said}
+          {ended.tone === "bad" && <span className="mt-1 block text-slate-500">Put it right, then press Fetch PS-PhilGEPS now again.</span>}
+        </StatusBox>
+      )}
+      {watching && !loggingIn && !ended && <FetchStatus name="PS-PhilGEPS" state={state} runs={runs} stage={ps.stage} onClose={() => setWatching(false)} />}
     </div>
   );
 }
 
 /** Fetch now on one portal's card: that portal's robot runs at once instead of at the next hour (the
  *  bidding system's Sync button of that portal). While a press waits for its run the page looks again
- *  every 15 seconds (TenderFinderPage). PS-PhilGEPS's waits until a person has connected it. */
-function FetchNow({ way, portal, state, blocked }: { way: FoundList["robot"]["fetch"]["way"]; portal: "philgeps" | "ps"; state: FoundList["robot"]["fetch"]["ps"]; blocked?: string | null }) {
+ *  every 15 seconds (TenderFinderPage), and the status box at the bottom right follows it. */
+function FetchNow({ way, portal, state, runs, blocked }: { way: FoundList["robot"]["fetch"]["way"]; portal: "philgeps" | "ps"; state: PortalFetchState; runs: FindRunRow[]; blocked?: string | null }) {
   const queries = useQueryClient();
   const action = useAction();
+  const [watching, setWatching] = useState(false);
   const running = state.running;
   const waiting = running !== null && !running.done;
   const name = PORTAL[portal];
@@ -199,7 +313,6 @@ function FetchNow({ way, portal, state, blocked }: { way: FoundList["robot"]["fe
         : running?.done
           ? "Fetched a few minutes ago; it can be pressed again 10 minutes after the last press."
           : `Reads ${name} now${way === "github" ? " (GitHub runs the robot)" : " (the robot runs on this computer)"}. It takes a few minutes.`;
-  const fetch = state;
   return (
     <span className="mt-2 flex flex-col items-start">
       <span className="flex flex-wrap items-center gap-2">
@@ -211,6 +324,7 @@ function FetchNow({ way, portal, state, blocked }: { way: FoundList["robot"]["fe
           className="disabled:opacity-50"
           onClick={() =>
             void action.run(async () => {
+              setWatching(true);
               await api("/api/tenders/found/robot/fetch", { method: "POST", body: { portal } });
               await queries.invalidateQueries({ queryKey: ["tenders", "found"] });
             })
@@ -224,12 +338,13 @@ function FetchNow({ way, portal, state, blocked }: { way: FoundList["robot"]["fe
           </span>
         )}
       </span>
-      {fetch.failed && !waiting && (
+      {state.failed && !waiting && (
         <span className="mt-1 text-[12px] font-semibold text-rose-700">
-          The last Fetch now ({when(fetch.failed.at)}) did not start{fetch.failed.note ? `: ${fetch.failed.note}` : "."}
+          The last Fetch now ({when(state.failed.at)}) did not start{state.failed.note ? `: ${state.failed.note}` : "."}
         </span>
       )}
       <Problem message={action.problem?.message} />
+      {watching && <FetchStatus name={name} state={state} runs={runs} onClose={() => setWatching(false)} />}
     </span>
   );
 }
@@ -261,11 +376,11 @@ function Robot({ robot }: { robot: FoundList["robot"] }) {
         </span>
       </div>
       <div className="mt-2.5 grid gap-2.5 md:grid-cols-2">
-        <PhilgepsCard runs={own("philgeps")} login={robot.login} fetch={<FetchNow way={robot.fetch.way} portal="philgeps" state={robot.fetch.philgeps} />} />
+        <PhilgepsCard runs={own("philgeps")} login={robot.login} fetch={<FetchNow way={robot.fetch.way} portal="philgeps" state={robot.fetch.philgeps} runs={own("philgeps")} />} />
         <PsCard
           runs={own("ps")}
           ps={robot.ps}
-          fetch={<PsFetch way={robot.fetch.way} state={robot.fetch.ps} connected={robot.ps.connected} />}
+          fetch={<PsFetch way={robot.fetch.way} state={robot.fetch.ps} ps={robot.ps} runs={own("ps")} />}
         />
       </div>
       {fed[0] && (
