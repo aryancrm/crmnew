@@ -42,7 +42,8 @@ export async function myKpis(
     period === "month"
       ? sql`date_trunc('month', ${placedOn}) = date_trunc('month', ${today}::date)`
       : sql`${placedOn} = ${period === "yesterday" ? addDays(today, -1) : period === "day" ? day : today}::date`;
-  const mine = sql`(o.medrep_id = ${me.id} or o.raised_by = ${me.id}) and o.status <> 'draft'`;
+  // A sale made covering a vacant area is the team's, not their KPI (HR-PLAN, moves and vacant seats).
+  const mine = sql`((o.medrep_id = ${me.id} and not o.covered) or o.raised_by = ${me.id}) and o.status <> 'draft'`;
 
   const [byStatus, orders, added, todayRow, monthRow] = await Promise.all([
     rows<{ status: OrderStatus; n: number; value: number }>(

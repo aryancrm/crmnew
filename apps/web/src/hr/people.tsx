@@ -21,6 +21,7 @@ import type {
 } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowRightLeft,
   Check,
   ChevronLeft,
   Copy,
@@ -690,7 +691,7 @@ export function HrPersonPage() {
     queryKey: ["hr", "person", id],
     queryFn: () => api<HrPerson>(`/api/hr/people/${id}`),
   });
-  const [open, setOpen] = useState<"edit" | "login" | "left" | "schedule" | null>(null);
+  const [open, setOpen] = useState<"edit" | "login" | "left" | "schedule" | "move" | null>(null);
   const data = query.data;
   if (!data) return <PageState query={query} what="the record" />;
   const mine = me?.id === data.personId;
@@ -780,6 +781,11 @@ export function HrPersonPage() {
                 {data.can.edit && (
                   <Button onClick={() => setOpen("edit")}>
                     <Pencil size={15} /> Edit record
+                  </Button>
+                )}
+                {data.can.leave && (
+                  <Button onClick={() => setOpen("move")}>
+                    <ArrowRightLeft size={15} /> Move
                   </Button>
                 )}
                 {data.can.leave && (
@@ -1015,6 +1021,7 @@ export function HrPersonPage() {
       {open === "login" && (
         <LoginDialog person={data} onClose={() => setOpen(null)} />
       )}
+      {open === "move" && <MoveDialog person={data} onClose={() => setOpen(null)} />}
       {open === "left" && (
         <LeftDialog person={data} onClose={() => setOpen(null)} />
       )}
@@ -1893,6 +1900,129 @@ function LoginDialog({
           </Button>
           <Button type="submit" variant="primary" disabled={action.busy}>
             {action.busy ? "Saving…" : "Save login"}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+const MOVE_KINDS: { key: "transfer" | "promotion" | "demotion" | "lateral"; label: string }[] = [
+  { key: "transfer", label: "Transfer" },
+  { key: "promotion", label: "Promotion" },
+  { key: "demotion", label: "Demotion" },
+  { key: "lateral", label: "Lateral move" },
+];
+
+/** HR moves someone to a vacant seat (another division, team, role or area). The seat decides
+ *  their work, boss and email ID from the day picked; what they sold stays with the old seat, each
+ *  order keeping the email ID it was sold as. Written in the Changes and the Job history. */
+function MoveDialog({ person, onClose }: { person: HrPerson; onClose: () => void }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const form = useQuery({
+    queryKey: ["hr", "joiners", "form"],
+    queryFn: () => api<JoinerForm>("/api/hr/joiners/form"),
+  });
+  const [values, setValues] = useState({
+    seatId: "",
+    kind: "transfer" as (typeof MOVE_KINDS)[number]["key"],
+    startsOn: manilaToday(),
+    keepOther: false,
+    reason: "",
+  });
+  const set = (next: Partial<typeof values>) => setValues((now) => ({ ...now, ...next }));
+  const teams = useMemo(() => {
+    const byTeam = new Map<string, JoinerForm["seats"]>();
+    for (const seat of form.data?.seats ?? []) byTeam.set(seat.team, [...(byTeam.get(seat.team) ?? []), seat]);
+    return [...byTeam];
+  }, [form.data]);
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    const done = await action.run(() =>
+      api(`/api/hr/people/${person.personId}/move`, {
+        body: { ...values, seatId: Number(values.seatId) || 0 },
+      }),
+    );
+    if (done) {
+      await queries.invalidateQueries({ queryKey: ["hr"] });
+      onClose();
+    }
+  }
+  return (
+    <Dialog
+      title={`Move ${person.name}`}
+      sub="To a vacant seat. Their work, team, boss and email ID follow the new seat from the day picked; their past sales stay with the old seat."
+      onClose={onClose}
+      busy={action.busy}
+    >
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <Label text="To the seat *" error={action.at("seatId")}>
+          <select value={values.seatId} onChange={(event) => set({ seatId: event.target.value })} className={FIELD}>
+            <option value="">
+              {form.data && !form.data.seats.length ? "No vacant seat: the Admin makes one first" : "Pick a vacant seat"}
+            </option>
+            {teams.map(([team, seats]) => (
+              <optgroup key={team} label={team}>
+                {seats.map((one) => (
+                  <option key={one.id} value={one.id}>
+                    {[one.title, one.area].filter(Boolean).join(" · ")}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+        </Label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Label text="Kind of move *" error={action.at("kind")}>
+            <select
+              value={values.kind}
+              onChange={(event) => set({ kind: event.target.value as typeof values.kind })}
+              className={FIELD}
+            >
+              {MOVE_KINDS.map((one) => (
+                <option key={one.key} value={one.key}>
+                  {one.label}
+                </option>
+              ))}
+            </select>
+          </Label>
+          <Label text="From" error={action.at("startsOn")}>
+            <input
+              type="date"
+              value={values.startsOn}
+              onChange={(event) => set({ startsOn: event.target.value })}
+              className={FIELD}
+            />
+          </Label>
+        </div>
+        <Label text="Why *" error={action.at("reason")}>
+          <input
+            value={values.reason}
+            onChange={(event) => set({ reason: event.target.value })}
+            className={FIELD}
+            placeholder="Moved from B2C to B2B"
+          />
+        </Label>
+        <label className="flex items-start gap-2 text-sm text-slate-700">
+          <input
+            type="checkbox"
+            checked={values.keepOther}
+            onChange={(event) => set({ keepOther: event.target.checked })}
+            className="mt-0.5 size-4 accent-emerald-600"
+          />
+          <span>
+            Keep their current seat too
+            <span className="block text-xs text-slate-500">They hold both seats (two areas), each with its own quota.</span>
+          </span>
+        </label>
+        <Problem message={action.general(["seatId", "kind", "startsOn", "reason"])} />
+        <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+          <Button onClick={onClose} disabled={action.busy}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" disabled={action.busy}>
+            {action.busy ? "Saving…" : "Move"}
           </Button>
         </div>
       </form>

@@ -16,6 +16,7 @@
 // team's pivots did.
 
 import { seatsUnder } from "../org/scope";
+import { soldFor } from "../org/service";
 import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
@@ -35,7 +36,7 @@ const weekKey = (day: string) => `${day.slice(0, 7)}-W${weekOf(day)}`;
 export function linesSql(from: string, to: string): SQL {
   return sql`
     with line as (
-      select i.issued_on as day, o.seat_id, o.medrep_id as fallback, null::text as zoho_name,
+      select i.issued_on as day, o.seat_id, ${soldFor("o")} as fallback, null::text as zoho_name,
         coalesce((select s.sku from medicine_sku s where s.medicine_id = oi.medicine_id order by s.id limit 1), 'M' || oi.medicine_id) as sku,
         'C' || i.customer_id as cust,
         -- Less what came back and was credited, as the invoice's own total (22 Nov).

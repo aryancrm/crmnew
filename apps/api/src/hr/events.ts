@@ -141,7 +141,7 @@ export async function careerOf(db: Runner, personId: number): Promise<{ at: stri
   const lines = await rows<{ at: string; kind: HrEventKind; what: string; changes: HrChange[] }>(
     db,
     sql`select to_char(at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as at, kind, what, changes
-      from hr_event where person_id = ${personId} and kind in ('joined', 'record', 'left', 'back')
+      from hr_event where person_id = ${personId} and kind in ('joined', 'record', 'left', 'back', 'move')
       order by at desc, id desc limit 200`,
   );
   const out: { at: string; what: string }[] = [];

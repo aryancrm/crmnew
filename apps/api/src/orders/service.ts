@@ -22,7 +22,7 @@ import { buyerLabel, todayManila } from "../inventory/rules";
 import { clean, day, iso, PROMISED_ORDER, type Runner, warehouses } from "../inventory/service";
 import { notify } from "../notify/service";
 import { reliefPrice, SOURCE_LABEL } from "../online/rules";
-import { inForce } from "../org/service";
+import { inForce, LOGIN_DOMAIN } from "../org/service";
 import { ROLE_LABEL, type Role } from "../people/roles";
 import { releaseOrderPoints } from "../points/service";
 import { releaseReservationOf } from "../points/website";
@@ -1339,6 +1339,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
             and f.hold_event_id = (select max(g.hold_event_id) from order_file g where g.order_id = o.id and g.active))
           as "holdProofs",
         raiser.name as "raisedBy", o.raised_by::int as "raisedById", o.medrep_id::int as "medrepId",
+        case when o.sold_as like '%@%' then o.sold_as else o.sold_as || '@' || ${LOGIN_DOMAIN} end as "soldAs", o.covered,
         ${SHOWN_CHANNEL} as channel, a.name as area,
         o.payment_terms as "paymentTerms", o.payment_days::int as "paymentDays",
         o.delivery_address as "deliveryAddress", o.receiver, o.receiver_phone as "receiverPhone", o.note,

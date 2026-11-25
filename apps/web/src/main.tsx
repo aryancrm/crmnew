@@ -33,6 +33,7 @@ import { FieldReportPage } from "./field/report";
 import { Home } from "./home/home";
 import { HrPeoplePage, HrPersonPage } from "./hr/people";
 import { HrPositionsPage } from "./hr/positions";
+import { VacantSeatsPage } from "./org/vacant-seats";
 import { HrSchedulesPage } from "./hr/schedules";
 import { HrHolidaysPage } from "./hr/holidays";
 import { TimekeepingPage } from "./hr/timekeeping";
@@ -322,6 +323,7 @@ createRoot(root).render(
             <Route path="hr/people" element={<HrPeoplePage />} />
             <Route path="hr/people/:id" element={<HrPersonPage key="person" />} />
             <Route path="hr/positions" element={<HrPositionsPage />} />
+            <Route path="vacant-seats" element={<VacantSeatsPage />} />
             <Route path="hr/schedules" element={<HrSchedulesPage />} />
             <Route path="hr/holidays" element={<HrHolidaysPage />} />
             <Route path="hr/attendance" element={<AttendancePage />} />

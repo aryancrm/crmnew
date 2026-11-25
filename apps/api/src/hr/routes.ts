@@ -48,6 +48,7 @@ import {
   revokeForm,
 } from "./forms";
 import { formPrintout, leavePrintout, mySignature, SIGNATURE_MAX_BYTES, saveSignature } from "./print";
+import { MOVE_KINDS } from "../org/service";
 import { hrQueue } from "./queue";
 import { addPosition, hrPositions, setPositionArchived } from "./positions";
 import { addPaper, archivePaper, hrPapers, PAPER_MAX_BYTES, type PaperFile, paperFile } from "./papers";
@@ -93,6 +94,7 @@ import {
   hrPerson,
   joinerForm,
   markLeft,
+  movePerson,
   personBack,
   setLogin,
   updateRecord,
@@ -628,6 +630,22 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   });
   app.post("/api/hr/people/:id/back", async (c) => {
     await personBack(db, c.get("me"), idParam(c));
+    return c.json({ ok: true });
+  });
+  // HR moves someone to another seat: a transfer, a promotion, a demotion or a lateral move, from a
+  // day (up to three months ahead), keeping the old seat too or not. Written in HR's trail.
+  app.post("/api/hr/people/:id/move", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        seatId: z.number().int().positive("Pick the seat they move to."),
+        kind: z.enum(MOVE_KINDS, { message: "Pick the kind of move." }),
+        startsOn: day.nullish(),
+        keepOther: z.boolean().optional(),
+        reason: words(300),
+      }),
+    );
+    await movePerson(db, c.get("me"), idParam(c), input);
     return c.json({ ok: true });
   });
   app.post("/api/hr/people/:id/left", async (c) => {

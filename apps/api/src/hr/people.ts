@@ -15,8 +15,10 @@ import { clean, type Runner } from "../inventory/service";
 import {
   change,
   EMAIL,
+  fillSeat,
   fillSeatLogins,
   LOGIN_DOMAIN,
+  type MoveKind,
   personLeaves,
   refuseIfPromised,
   seatLoginOf,
@@ -793,6 +795,33 @@ export async function personBack(db: Database, me: Me, personId: number): Promis
   await hrEvent(db, personId, me.id, "back", "Back at work");
 }
 
+/** HR moves someone to a vacant seat: a transfer, a promotion, a demotion or a lateral move, from
+ *  a day (up to three months ahead), keeping their old seat too or not. The seat decides their
+ *  work, team, boss and email ID from that day; what they sold stays with the seat they sold it
+ *  from (each order keeps the email ID it was sold as). HR's trail writes the move. */
+export async function movePerson(
+  db: Database,
+  me: Me,
+  personId: number,
+  input: { seatId: number; kind: MoveKind; startsOn?: string | null; keepOther?: boolean; reason?: string | null },
+): Promise<void> {
+  allow(me, HR_WRITE_ROLES, "move people");
+  if (!clean(input.reason)) throw new Refusal(400, "invalid", "Say why they move.", "reason");
+  await fillSeat(
+    db,
+    me,
+    input.seatId,
+    { personId, keepOther: input.keepOther, reason: input.reason, startsOn: input.startsOn, moveKind: input.kind },
+    HR_WRITE_ROLES,
+  );
+  // A position HR typed for the old seat would now be wrong: it follows the seat's title again
+  // (the old one stays in the trail).
+  if (!input.keepOther)
+    await db.execute(
+      sql`update employee set position = null, updated_at = now(), updated_by = ${me.id} where person_id = ${personId} and position is not null`,
+    );
+}
+
 export async function markLeft(
   db: Database,
   me: Me,
@@ -801,17 +830,6 @@ export async function markLeft(
 ): Promise<{ vacant: string[] }> {
   if (!clean(input.reason))
     throw new Refusal(400, "invalid", "Say why they left (resigned, end of contract…).", "reason");
-  const done = await personLeaves(db, me, personId, input, HR_WRITE_ROLES);
-  const [left] = await rows<{ lastDay: string | null }>(
-    db,
-    sql`select to_char(left_on, 'YYYY-MM-DD') as "lastDay" from employee where person_id = ${personId}`,
-  );
-  await hrEvent(
-    db,
-    personId,
-    me.id,
-    "left",
-    `Marked as left${left?.lastDay ? ` (last day ${left.lastDay})` : ""}: ${clean(input.reason)}`,
-  );
-  return done;
+  // personLeaves writes HR's trail line (also when the CEO or the Admin marks them in Teams & people).
+  return personLeaves(db, me, personId, input, HR_WRITE_ROLES);
 }

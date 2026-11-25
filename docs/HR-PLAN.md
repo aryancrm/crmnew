@@ -241,6 +241,40 @@ One feature per commit, each with its tests; `checks/integrity.ts` and `scale.te
      local holidays for province-wide and region-wide proclamations taken as every town of the
      province; which register columns HR's "OT Amount" and "DEDUCTION" mean (OT with holiday pay or
      not; all deductions or only HR's own).
+4b. **Moves and vacant seats (25 Nov, asked by the backend department).** Someone moves (B2C to B2B,
+   another role, area, team or division), or a seat stands empty, and every change keeps its trail.
+   *Rules given:* the **employee ID** is the person's own key (never changes, never reused: unique
+   per company, kept after they leave); the **email ID** belongs to the seat and is handed to whoever
+   sits there next, so people keep signing in with it; every move and every sale keeps the email ID
+   used at the time, so a later cross-check can tell whose sale it was and move the credit. A team
+   lead gives a vacant area to one of their own people as **added work with no KPI**: that person is
+   credited only for their own main area, the vacant area's quota stays on its seat and the team
+   handles it. Empty 7 days with nobody covering: the lead is reminded; 14 days: the head and HR.
+   - [x] **The sale made covering** (migration 0156, `order_seat`): an order a MedRep places for a
+     customer of a seat they cover counts for that seat (`covered`), per person for the lead above it
+     that day (`cover_lead_id`), never the MedRep's own seat, KPI or score (`soldFor`, `creditedTo`,
+     My KPIs, scores, KPIs, Sales performance; `sale_invoice` carries both). Every order keeps
+     `sold_as`, its seller's email ID that day (orders already made: the one held when placed), shown
+     on the order as *Sold as*.
+   - [x] **Moves in HR's trail** (kind `move`): a seat taken (with the seat and the email ID before
+     and after), a second seat, a cover given and ended, someone stepping out of a seat, a seat changed
+     under its holder (team, title, work), and leaving (now written whoever marks it, HR or Teams &
+     people, with the seats left vacant). In *Changes* and *Job history*.
+   - [x] **HR's Move** (`POST /api/hr/people/:id/move`, *Move* on the person's page; HR and the
+     Admin): to a vacant seat, as a transfer, promotion, demotion or lateral move, from a day (up to
+     three months ahead: the tree switches by itself that morning), keeping the old seat too or not,
+     and why. A position HR typed follows the new seat's title again.
+   - [x] **Vacant seats** (`/vacant-seats`, `org/vacancies.ts`): the team lead's boxes (in their My
+     team folder), every seat for HR (its desk), the CEO and the Admin (Admin panel). Each seat: days
+     empty, the lead it waits with, who covers it and until when, a joiner or move planned into it,
+     customers, open orders, this month's sales against its quota and how much was sold covering. The
+     lead gives it to one of their own people until a day (*Give to one of my people*) or takes it
+     back; HR and the Admin may too. My team's *Needs you* says how many days it has been empty and,
+     past 7 days with nobody covering, to give it out or ask for a person.
+   - Test: `org/vacancies.test.ts`.
+   - *Not done:* the employee ID made compulsory (HR's *Missing* view already lists who lacks one;
+     the IDs are still to be filled in, decision 4 below); moving the credit of past covered sales
+     to someone (the data is kept for it; a screen when HR asks).
 5. **Joining and leaving (about 1 week).** The checklist with its reminders; resignation, clearance,
    exit interview.
 6. **HR's Home (about half a week).** What is due today, the figures, the reports.

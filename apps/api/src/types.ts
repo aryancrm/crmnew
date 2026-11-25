@@ -1256,6 +1256,10 @@ export type OrderDetail = {
     approverName: string | null;
     /** Finance's screenshots with the hold it is on now. */
     holdProofs: { id: number; name: string }[];
+    /** The email ID its seller used that day (a seat's login is handed to the next person), and
+     *  whether it was sold covering a vacant area (the seat's sale, not the seller's own KPI). */
+    soldAs: string | null;
+    covered: boolean;
     raisedBy: string;
     channel: string | null;
     area: string | null;
@@ -4431,7 +4435,8 @@ export type HrEventKind =
   | "back"
   | "paper"
   | "attendance"
-  | "leave";
+  | "leave"
+  | "move";
 export type HrPaperKind = "contract" | "government_id" | "certificate" | "clearance" | "medical" | "other";
 /** A person's papers on their HR record: the ones kept, then the ones taken off (archived). */
 export type HrPapers = {
@@ -5017,6 +5022,42 @@ export type FormInput = {
 };
 
 /** Everything waiting for this person's decision under Leave & forms, by kind. */
+/** Vacant seats (HR-PLAN, moves and vacant seats): the lead's in their boxes, everyone's for HR,
+ *  the CEO and the Admin. */
+export type VacantSeats = {
+  today: string;
+  /** Days vacant with nobody covering before the lead is reminded, and before the head and HR. */
+  leadDays: number;
+  upDays: number;
+  seats: {
+    seatId: number;
+    title: string;
+    team: string;
+    area: string | null;
+    /** The seat's email ID (handed to whoever sits there next). */
+    login: string | null;
+    /** The first day it has been empty, and how many days that is. */
+    since: string;
+    days: number;
+    /** The team lead it waits with. */
+    lead: string | null;
+    cover: { holdingId: number; personId: number; name: string; until: string | null } | null;
+    /** A joiner or a move already planned into it. */
+    promised: { name: string; startsOn: string } | null;
+    customers: number;
+    open: number;
+    /** This month: the seat's quota (stays on the seat), sold from it, and of that sold covering. */
+    quota: number | null;
+    sold: number;
+    soldCovering: number;
+    /** "lead": past the lead's days with nobody covering; "up": past the head's and HR's. */
+    alert: "none" | "lead" | "up";
+  }[];
+  /** Whom this person may give a cover to: their own people (a lead), anyone with a seat (HR). */
+  people: { id: number; name: string; seat: string; unitId: number }[];
+  can: { cover: boolean };
+};
+
 export type HrQueue = {
   leave: number;
   forms: number;

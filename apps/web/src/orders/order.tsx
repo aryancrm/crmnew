@@ -1135,6 +1135,7 @@ export function Order() {
               {detail("Invoicing from", order.invoiceFromLabel)}
               {detail("Expected", order.expectedOn ? dayLabel(order.expectedOn) : null)}
               {detail("Raised by", order.raisedBy)}
+              {detail("Sold as", order.soldAs ? `${order.soldAs}${order.covered ? " · covering a vacant area (the seat's sale)" : ""}` : null)}
               {detail("Source", order.source)}
               {detail("Customer remarks", order.note)}
               {order.stockReason && detail("Goes on though short", order.stockReason)}

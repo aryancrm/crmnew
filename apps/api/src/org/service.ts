@@ -8,6 +8,7 @@
 import { randomBytes } from "node:crypto";
 import { type SQL, sql } from "drizzle-orm";
 import { accountEvent } from "../account/events";
+import { hrEvent } from "../hr/events";
 import { hashPassword, passwordProblem } from "../auth/password";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
@@ -17,6 +18,7 @@ import { sendMessage } from "../messages/service";
 import { notify } from "../notify/service";
 import { divisionOf } from "../orders/divisions";
 import { isRole, ROLE_LABEL, ROLES, type Role } from "../people/roles";
+import type { HrChange } from "../types";
 import type {
   Me,
   OrgHolder,
@@ -49,7 +51,15 @@ export const inForce = (alias: string, today: string): SQL =>
  */
 export const creditedTo = (today: string): SQL =>
   sql`coalesce((select ch_h.person_id from seat_holder ch_h where ch_h.seat_id = o.seat_id and ch_h.kind = 'holder'
-      and ${inForce("ch_h", today)} order by ch_h.starts_on desc, ch_h.id desc limit 1), o.medrep_id)`;
+      and ${inForce("ch_h", today)} order by ch_h.starts_on desc, ch_h.id desc limit 1), ${soldFor("o")})`;
+
+/**
+ * The person an order (by its alias) counts for when its seat has nobody: its MedRep, except a sale
+ * made while covering a vacant area, which is the team's (the lead above the seat that day), never
+ * the covering MedRep's own KPI (HR-PLAN, "Moves and vacant seats").
+ */
+export const soldFor = (alias: string): SQL =>
+  sql.raw(`coalesce(case when ${alias}.covered then ${alias}.cover_lead_id end, ${alias}.medrep_id)`);
 
 export const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -641,6 +651,16 @@ async function makeSeat(tx: Runner, input: OrgSeatInput): Promise<number> {
   return made?.id as number;
 }
 
+/** A move's first day: today, earlier, or up to three months ahead. */
+function moveDay(asked: string | null | undefined, today: string): string {
+  if (!asked) return today;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(asked))
+    throw new Refusal(400, "invalid", "Pick the day the move starts.", "startsOn");
+  if (asked > addDays(today, 92))
+    throw new Refusal(400, "invalid", "A move can be planned up to three months ahead.", "startsOn");
+  return asked;
+}
+
 function startDay(asked: string | null | undefined, today: string): string {
   if (!asked) return today;
   if (asked > today)
@@ -815,6 +835,17 @@ export async function updateSeat(
     // Whoever lost the area keeps no customers by it.
     if (seat.areaId && seat.areaId !== areaId)
       await tx.execute(sql`update person set area_id = null where area_id = ${seat.areaId}`);
+    // The holder's trail: their seat changed under them (another team, job title or work).
+    if (seat.holderId && (unitId !== seat.unitId || title !== seat.title || module !== seat.module)) {
+      const [was] = await rows<{ unit: string }>(tx, sql`select name as unit from org_unit where id = ${seat.unitId}`);
+      const now = await seatWords(tx, seat.id);
+      const changes: HrChange[] = [
+        { field: "seat", label: "Seat", from: `${seat.title} (${was?.unit ?? "?"})`, to: now.place, hidden: false },
+      ];
+      if (module !== seat.module)
+        changes.push({ field: "work", label: "Work", from: ROLE_LABEL[seat.module], to: ROLE_LABEL[module], hidden: false });
+      await hrEvent(tx, seat.holderId, me.id, "move", `Their seat changed: ${now.place}`, changes);
+    }
   });
 }
 
@@ -848,6 +879,54 @@ export async function closeSeat(db: Database, me: Me, seatId: number): Promise<v
 }
 
 /** A person already here sits in a vacant seat: moving out of their seat, or keeping it too. */
+/** The kinds of move HR names on a move (HR-PLAN, moves and vacant seats). */
+export const MOVE_KINDS = ["transfer", "promotion", "demotion", "lateral"] as const;
+export type MoveKind = (typeof MOVE_KINDS)[number];
+const MOVE_WORD: Record<MoveKind, string> = {
+  transfer: "Transferred",
+  promotion: "Promoted",
+  demotion: "Moved down",
+  lateral: "Moved across",
+};
+
+/** A seat as HR's trail writes it: its job, its team, its email ID. */
+async function seatWords(tx: Runner, seatId: number): Promise<{ place: string; login: string | null }> {
+  const [found] = await rows<{ title: string; unit: string; login: string | null }>(
+    tx,
+    sql`select s.title, u.name as unit, s.login from seat s join org_unit u on u.id = s.unit_id where s.id = ${seatId}`,
+  );
+  return {
+    place: found ? `${found.title} (${found.unit})` : "a seat",
+    login: found?.login ? `${found.login}@${LOGIN_DOMAIN}` : null,
+  };
+}
+
+/** The seat and the email ID before and after, as the trail's changes. */
+function seatChanges(
+  from: { place: string; login: string | null }[],
+  to: { place: string; login: string | null } | null,
+): HrChange[] {
+  const words = (list: (string | null)[]) => list.filter(Boolean).join(", ") || null;
+  const changes: HrChange[] = [
+    { field: "seat", label: "Seat", from: words(from.map((one) => one.place)), to: to?.place ?? null, hidden: false },
+  ];
+  const fromLogin = words(from.map((one) => one.login));
+  const toLogin = to?.login ?? null;
+  if (fromLogin !== toLogin)
+    changes.push({ field: "loginId", label: "Email ID", from: fromLogin, to: toLogin, hidden: false });
+  return changes;
+}
+
+/** The seats a person holds on a day (holders, not covers). */
+async function heldSeats(tx: Runner, personId: number, today: string): Promise<number[]> {
+  const found = await rows<{ id: number }>(
+    tx,
+    sql`select h.seat_id::int as id from seat_holder h where h.person_id = ${personId} and h.kind = 'holder' and ${inForce("h", today)}
+      order by h.starts_on, h.id`,
+  );
+  return found.map((one) => one.id);
+}
+
 export async function fillSeat(
   db: Database,
   me: Me,
@@ -857,9 +936,11 @@ export async function fillSeat(
     keepOther?: boolean;
     reason?: string | null;
     startsOn?: string | null;
+    moveKind?: MoveKind | null;
   },
+  roles: readonly Role[] = ORG_CHANGE_ROLES,
 ): Promise<void> {
-  allow(me, ORG_CHANGE_ROLES, "move people");
+  allow(me, roles, "move people");
   await change(db, async (tx, today) => {
     const seat = await seatRow(tx, seatId, today);
     if (seat.holderId === input.personId)
@@ -873,8 +954,11 @@ export async function fillSeat(
       );
     await refuseIfPromised(tx, seat.id, today);
     const person = await activePerson(tx, input.personId);
-    const starts = startDay(input.startsOn, today);
+    // HR's move may be planned for a later day (up to three months, as a joiner's first day); the
+    // tree switches by itself that morning.
+    const starts = input.moveKind ? moveDay(input.startsOn, today) : startDay(input.startsOn, today);
     const reason = clean(input.reason);
+    const before = input.keepOther ? [] : await heldSeats(tx, person.id, starts);
     if (!input.keepOther)
       await tx.execute(
         sql`update seat_holder set ends_on = greatest(${addDays(starts, -1)}::date, starts_on - 1),
@@ -887,8 +971,22 @@ export async function fillSeat(
         where seat_id = ${seat.id} and kind = 'acting' and person_id = ${person.id} and (ends_on is null or ends_on >= ${starts}::date)`,
     );
     await tx.execute(
-      sql`insert into seat_holder (seat_id, person_id, kind, starts_on, reason, by_person)
-        values (${seat.id}, ${person.id}, 'holder', ${starts}::date, ${reason ?? (input.keepOther ? "Second seat" : "Moved")}, ${me.id})`,
+      sql`insert into seat_holder (seat_id, person_id, kind, starts_on, reason, by_person, move_kind)
+        values (${seat.id}, ${person.id}, 'holder', ${starts}::date, ${reason ?? (input.keepOther ? "Second seat" : "Moved")}, ${me.id},
+          ${input.moveKind ?? null})`,
+    );
+    const to = await seatWords(tx, seat.id);
+    const from = await Promise.all(before.filter((id) => id !== seat.id).map((id) => seatWords(tx, id)));
+    const verb = input.keepOther
+      ? `Took a second seat: ${to.place}`
+      : `${input.moveKind ? MOVE_WORD[input.moveKind] : "Moved"} to ${to.place}`;
+    await hrEvent(
+      tx,
+      person.id,
+      me.id,
+      "move",
+      `${verb}${from.length ? `, from ${from.map((one) => one.place).join(", ")}` : ""}, from ${starts}${reason ? `: ${reason}` : ""}`,
+      input.keepOther ? seatChanges([], to) : seatChanges(from, to),
     );
     // The seat's targets come with it, from the month they start (not over one already theirs).
     await tx.execute(
@@ -906,8 +1004,9 @@ export async function coverSeat(
   me: Me,
   seatId: number,
   input: { personId: number; until: string; reason?: string | null },
+  roles: readonly Role[] = ORG_CHANGE_ROLES,
 ): Promise<void> {
-  allow(me, ORG_CHANGE_ROLES, "arrange cover");
+  allow(me, roles, "arrange cover");
   await change(db, async (tx, today) => {
     const seat = await seatRow(tx, seatId, today);
     const person = await activePerson(tx, input.personId);
@@ -928,6 +1027,16 @@ export async function coverSeat(
       sql`insert into seat_holder (seat_id, person_id, kind, starts_on, ends_on, reason, by_person)
         values (${seat.id}, ${person.id}, 'acting', ${today}::date, ${input.until}::date, ${clean(input.reason) ?? "Cover"}, ${me.id})`,
     );
+    const place = await seatWords(tx, seat.id);
+    await hrEvent(
+      tx,
+      person.id,
+      me.id,
+      "move",
+      `Covers ${place.place} until ${input.until}${seat.holderId ? "" : " (vacant)"}: added work, the seat's quota stays its own${
+        clean(input.reason) ? ` (${clean(input.reason)})` : ""
+      }`,
+    );
   });
 }
 
@@ -937,17 +1046,28 @@ export async function endHolding(
   me: Me,
   holdingId: number,
   reason?: string | null,
+  roles: readonly Role[] = ORG_CHANGE_ROLES,
 ): Promise<void> {
-  allow(me, ORG_CHANGE_ROLES, "end a cover");
+  allow(me, roles, "end a cover");
   await change(db, async (tx, today) => {
-    const [found] = await rows<{ id: number }>(
+    const [found] = await rows<{ id: number; personId: number; seatId: number; kind: "holder" | "acting" }>(
       tx,
-      sql`select id::int as id from seat_holder h where id = ${holdingId} and ${inForce("h", today)}`,
+      sql`select id::int as id, person_id::int as "personId", seat_id::int as "seatId", kind
+        from seat_holder h where id = ${holdingId} and ${inForce("h", today)}`,
     );
     if (!found) throw new Refusal(404, "not_found", "That isn't in force any more.");
     await tx.execute(
       sql`update seat_holder set ends_on = greatest(${addDays(today, -1)}::date, starts_on - 1),
           end_reason = ${clean(reason) ?? "Ended"}, ended_by = ${me.id} where id = ${holdingId}`,
+    );
+    const place = await seatWords(tx, found.seatId);
+    await hrEvent(
+      tx,
+      found.personId,
+      me.id,
+      "move",
+      `${found.kind === "acting" ? "Cover of" : "Stepped out of"} ${place.place} ended${clean(reason) ? `: ${clean(reason)}` : ""}`,
+      found.kind === "acting" ? [] : seatChanges([place], null),
     );
   });
 }
@@ -981,6 +1101,15 @@ export async function personLeaves(
     );
     await tx.execute(sql`update person set active = false where id = ${person.id}`);
     await tx.execute(sql`delete from session where person_id = ${person.id}`);
+    await hrEvent(
+      tx,
+      person.id,
+      me.id,
+      "left",
+      `Marked as left (last day ${lastDay}): ${clean(input.reason) ?? "Left the company"}${
+        vacant.length ? `; vacant now: ${vacant.map((one) => one.title).join(", ")}` : ""
+      }`,
+    );
     // The record stays, marked left with the day and why.
     await tx.execute(
       sql`update employee set status = 'left', left_on = ${lastDay}::date,

@@ -73,6 +73,7 @@ import {
   UserCheck,
   UserPlus,
   Users,
+  UserX,
   Wallet,
   ListChecks,
   ScrollText,
@@ -595,7 +596,7 @@ const messagesLink: MenuItem = folder(
  *  (Aryan, 15 Nov: less clutter). */
 function deskFor(me: Me): Space {
   const desk = ownDesk(me);
-  const space = withSalesLinks(me, desk);
+  const space = withVacantSeats(me, withSalesLinks(me, desk));
   const [first, ...rest] = space.groups;
   if (!first) return space;
   const listed = allItems(space.groups.flatMap((group) => group.items));
@@ -698,6 +699,26 @@ function looseTogether(items: MenuItem[]): MenuItem[] {
   const rest = items.filter((item) => item.children);
   rest.splice(before, 0, folder("Team numbers", Gauge, loose, "Numbers"));
   return rest;
+}
+
+/** A lead's vacant seats (HR-PLAN, moves and vacant seats): under their My team, beside the
+ *  whole team; they give a vacant area to one of their people from there. */
+function withVacantSeats(me: Me, space: Space): Space {
+  if (!LEAD_ROLES.includes(me.role)) return space;
+  const link: MenuItem = { to: "/vacant-seats", label: "Vacant seats", icon: UserX };
+  let added = false;
+  const into = (items: MenuItem[]): MenuItem[] =>
+    items.map((item) => {
+      if (added || !item.children) return item;
+      if (item.children.some((kid) => kid.to === "/my-team")) {
+        added = true;
+        const at = item.children.findIndex((kid) => kid.to === "/my-team") + 1;
+        return { ...item, children: [...item.children.slice(0, at), link, ...item.children.slice(at)] };
+      }
+      return { ...item, children: into(item.children) };
+    });
+  const groups = space.groups.map((group) => ({ ...group, items: into(group.items) }));
+  return { ...space, groups };
 }
 
 /** Calls and the daily sales performance on every selling desk and those above them (18 Nov,
@@ -1524,6 +1545,7 @@ function ownDesk(me: Me): Space {
           { to: "/hr/report", label: "Attendance report", icon: BarChart3 },
           { to: "/hr/timekeeping", label: "Timekeeping", icon: FileSpreadsheet },
           { to: "/hr/positions", label: "Positions", icon: Briefcase },
+          { to: "/vacant-seats", label: "Vacant seats", icon: UserX },
           { to: "/hr/schedules", label: "Schedules", icon: Timer },
           { to: "/hr/holidays", label: "Holidays", icon: CalendarHeart },
         ]),
@@ -1684,6 +1706,7 @@ function adminPanel(me: Me): Space {
           { to: "/admin/sign-ups", label: "Sign-ups", icon: UserPlus, badge: "signUps" },
           { to: "/people", label: "Teams & people", icon: Users },
           { to: "/people?tab=areas", label: "Areas", icon: MapPin },
+          { to: "/vacant-seats", label: "Vacant seats", icon: UserX },
           {
             to: "/people?tab=requests",
             label: "Asks for people",

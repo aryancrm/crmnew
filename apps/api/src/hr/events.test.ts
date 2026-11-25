@@ -98,7 +98,7 @@ describe("HR's trail", () => {
     expect((await send("helen", `/api/hr/people/${marco}/back`)).status).toBe(200);
     const trail = await read<HrHistory>("helen", `/api/hr/people/${marco}/history`);
     expect(trail.lines.map((one) => one.kind)).toEqual(["back", "left", "login"]);
-    expect(trail.lines[1]?.what).toMatch(/^Marked as left \(last day \d{4}-\d{2}-\d{2}\): Resigned$/);
+    expect(trail.lines[1]?.what).toMatch(/^Marked as left \(last day \d{4}-\d{2}-\d{2}\): Resigned(; vacant now: .+)?$/);
     expect(trail.lines[2]?.what).toBe("One-time password given");
     expect(JSON.stringify(trail)).not.toContain("given-by-hr-2");
   });
