@@ -610,11 +610,6 @@ export function TenderFinderPage() {
   });
   const data = query.data;
   if (!data) return <PageState query={query} what="the tenders found" />;
-  const screen = (found: FoundTender, on: boolean) =>
-    void action.run(async () => {
-      await api(`/api/tenders/found/${found.id}/screen`, { method: "POST", body: { on } });
-      await queries.invalidateQueries({ queryKey: ["tenders", "found"] });
-    });
   const filtering = Boolean(sent.source || sent.molecule || sent.type || sent.from || sent.to);
   const stats = data.stats;
   return (
@@ -817,17 +812,11 @@ export function TenderFinderPage() {
                       <Link to={`/tenders/finder/${found.id}`} className="text-[12.5px] font-semibold text-emerald-700 hover:underline">
                         View details →
                       </Link>
-                      <span className="mt-1.5 block">
-                        {found.tenderId ? (
-                          <Link to={`/tenders/${found.tenderId}`} className="text-[12px] font-semibold text-slate-600 hover:underline">
-                            Open {found.tenderCode}
-                          </Link>
-                        ) : found.screenedAt ? null : (
-                          <Button small disabled={action.busy} onClick={() => screen(found, true)}>
-                            Add to screened
-                          </Button>
-                        )}
-                      </span>
+                      {found.tenderId && (
+                        <Link to={`/tenders/${found.tenderId}`} className="mt-1.5 block text-[12px] font-semibold text-slate-600 hover:underline">
+                          Open {found.tenderCode}
+                        </Link>
+                      )}
                     </td>
                   </tr>
                 );
@@ -1425,8 +1414,8 @@ export function FoundTenderPage() {
               </Link>
             ) : (
               <>
-                <Button small disabled={action.busy} onClick={() => screen(!found.screenedAt)}>
-                  {found.screenedAt ? "Take off screened" : "Add to screened"}
+                <Button small variant={found.screenedAt ? undefined : "primary"} disabled={action.busy} onClick={() => screen(!found.screenedAt)}>
+                  {found.screenedAt ? "✓ Screened · Remove" : "+ Add to Screened"}
                 </Button>
                 <Button small variant="primary" disabled={action.busy} onClick={() => setMaking(true)}>
                   Make it a tender

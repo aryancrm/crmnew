@@ -21,6 +21,12 @@ const crm = require('../crm.js');
 
 process.env.SUPABASE_URL ||= 'http://crm.invalid';
 process.env.SUPABASE_KEY ||= 'the-crm-keeps-it';
+// The notices' pages are where the Sync finds our medicines, the dates and the papers. Its old host stopped a
+// request at 300 s, so it read notices for 210 s from the Sync's start; at 606 Bid Match rows the list alone
+// took that, and no notice was read (25 Nov). Here nothing stops it: 25 minutes for the notices (the workflow
+// allows 45 in all, with 12 for the papers' reading after), and a Sync is taken as cut off only after 40.
+process.env.PS_NOTICES_MINUTES ||= '25';
+process.env.PS_STALE_MINUTES ||= '40';
 
 const { createClient, uploads } = await import('../papers/supabase-shim/index.mjs');
 const ps = await import('../papers/lib/psSync.mjs');

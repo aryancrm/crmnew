@@ -30,11 +30,13 @@ const MAX_PAGES = 30;
 const NOTICES_AT_ONCE = 3;
 // From the Sync's start, no new notice is started after this (the host stops the request at 300 s and the
 // result must be saved); notices not reached keep what the last Sync read, and the next Sync reads them
-const NOTICES_UNTIL_MS = 210 * 1000;
+// (The CRM's robot sets PS_NOTICES_MINUTES: it has no host limit, and 210 s went on the list alone at 606 rows.)
+const NOTICES_UNTIL_MS = Number(process.env.PS_NOTICES_MINUTES || 3.5) * 60 * 1000;
 const BUCKET = 'ps-documents';
 export const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36';
 // A Sync "running" for longer than this was cut off (server time limit) and may be started again
-export const STALE_RUN_MS = 6 * 60 * 1000;
+// (PS_STALE_MINUTES: longer when the notices are given longer, so a long Sync is not taken for a cut-off one.)
+export const STALE_RUN_MS = Number(process.env.PS_STALE_MINUTES || 6) * 60 * 1000;
 
 export class PsSyncError extends Error {
   constructor(code, message) {
