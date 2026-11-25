@@ -137,44 +137,47 @@ function ConnectPs({ connected }: { connected: boolean }) {
   );
 }
 
-/** Fetch now: the robot runs at once instead of at the next hour (the bidding system's Sync button).
- *  While a press waits for its run the page looks again every 15 seconds (TenderFinderPage). */
-function FetchNow({ fetch }: { fetch: FoundList["robot"]["fetch"] }) {
+/** Fetch now on one portal's card: that portal's robot runs at once instead of at the next hour (the
+ *  bidding system's Sync button of that portal). While a press waits for its run the page looks again
+ *  every 15 seconds (TenderFinderPage). PS-PhilGEPS's waits until a person has connected it. */
+function FetchNow({ way, portal, state, blocked }: { way: FoundList["robot"]["fetch"]["way"]; portal: "philgeps" | "ps"; state: FoundList["robot"]["fetch"]["ps"]; blocked?: string | null }) {
   const queries = useQueryClient();
   const action = useAction();
-  const running = fetch.running;
+  const running = state.running;
   const waiting = running !== null && !running.done;
+  const name = PORTAL[portal];
   const title =
-    fetch.way === "off"
+    way === "off"
       ? "The robot can't be started from this server; it still runs by itself every hour."
-      : running?.done
-        ? "Fetched a few minutes ago; it can be pressed again 10 minutes after the last press."
-        : fetch.way === "github"
-          ? "Asks GitHub to run the robot now: both portals, as the hourly run does. It takes a few minutes."
-          : "Runs the robot on this computer now (the public PhilGEPS list). It takes a few minutes.";
+      : blocked
+        ? blocked
+        : running?.done
+          ? "Fetched a few minutes ago; it can be pressed again 10 minutes after the last press."
+          : `Reads ${name} now${way === "github" ? " (GitHub runs the robot)" : " (the robot runs on this computer)"}. It takes a few minutes.`;
+  const fetch = state;
   return (
-    <span className="flex flex-col items-end">
-      <span className="flex items-center gap-2">
-        {waiting && running && (
-          <span className="text-[12px] text-slate-600">
-            Fetching… started {running.by ? `by ${running.by} ` : ""}at {when(running.at)}
-          </span>
-        )}
+    <span className="mt-2 flex flex-col items-start">
+      <span className="flex flex-wrap items-center gap-2">
         <Button
           small
           variant="primary"
           title={title}
-          disabled={action.busy || fetch.way === "off" || running !== null}
+          disabled={action.busy || way === "off" || Boolean(blocked) || running !== null}
           className="disabled:opacity-50"
           onClick={() =>
             void action.run(async () => {
-              await api("/api/tenders/found/robot/fetch", { method: "POST", body: {} });
+              await api("/api/tenders/found/robot/fetch", { method: "POST", body: { portal } });
               await queries.invalidateQueries({ queryKey: ["tenders", "found"] });
             })
           }
         >
-          {waiting ? "Fetching…" : "Fetch now"}
+          {waiting ? "Fetching…" : `Fetch ${name} now`}
         </Button>
+        {waiting && running && (
+          <span className="text-[12px] text-slate-600">
+            started {running.by ? `by ${running.by} ` : ""}at {when(running.at)}
+          </span>
+        )}
       </span>
       {fetch.failed && !waiting && (
         <span className="mt-1 text-[12px] font-semibold text-rose-700">
@@ -187,7 +190,7 @@ function FetchNow({ fetch }: { fetch: FoundList["robot"]["fetch"] }) {
 }
 
 /** The robot's last word, one card per portal (the developer, 25 Nov: "a separate connection of PhilGEPS
- *  and PS-PhilGEPS"): each with its own last read and what its log-in needs. Fetch now reads both. The
+ *  and PS-PhilGEPS"): each with its own last read, what its log-in needs and its own Fetch now. The
  *  bridge's hand-overs from the bidding system (both portals) are a line of their own. */
 function Robot({ robot }: { robot: FoundList["robot"] }) {
   const latest = robot.runs[0];
@@ -210,12 +213,15 @@ function Robot({ robot }: { robot: FoundList["robot"] }) {
           ) : (
             quiet !== null && <span className="text-[12px] font-semibold text-amber-700">No run for {quiet} hours</span>
           )}
-          <FetchNow fetch={robot.fetch} />
         </span>
       </div>
       <div className="mt-2.5 grid gap-2.5 md:grid-cols-2">
-        <PhilgepsCard runs={own("philgeps")} login={robot.login} />
-        <PsCard runs={own("ps")} ps={robot.ps} />
+        <PhilgepsCard runs={own("philgeps")} login={robot.login} fetch={<FetchNow way={robot.fetch.way} portal="philgeps" state={robot.fetch.philgeps} />} />
+        <PsCard
+          runs={own("ps")}
+          ps={robot.ps}
+          fetch={<FetchNow way={robot.fetch.way} portal="ps" state={robot.fetch.ps} blocked={robot.ps.connected ? null : "Connect PS-PhilGEPS first: its log-in has a captcha."} />}
+        />
       </div>
       {fed[0] && (
         <p className="mt-2 text-[12px] text-slate-500">
@@ -276,7 +282,7 @@ function PortalCard({ name, pill, runs, children }: { name: string; pill: ReactN
 
 /** PS-PhilGEPS (philgeps.gov.ph): its log-in has a captcha, so a person connects it from a team laptop; the
  *  session then serves everyone until PS-PhilGEPS ends it. */
-function PsCard({ runs, ps }: { runs: FindRunRow[]; ps: FoundList["robot"]["ps"] }) {
+function PsCard({ runs, ps, fetch }: { runs: FindRunRow[]; ps: FoundList["robot"]["ps"]; fetch: ReactNode }) {
   const pill = ps.connected ? <Pill tone="good">Connected</Pill> : <Pill tone="warn">Not connected</Pill>;
   return (
     <PortalCard name="PS-PhilGEPS" pill={pill} runs={runs}>
@@ -286,13 +292,14 @@ function PsCard({ runs, ps }: { runs: FindRunRow[]; ps: FoundList["robot"]["ps"]
           : "Its log-in has a captcha, so a person connects it from a team laptop; then it serves everyone (the robot reads it every hour) until PS-PhilGEPS ends the log-in."}
       </p>
       <ConnectPs connected={ps.connected} />
+      {fetch}
     </PortalCard>
   );
 }
 
 /** The old PhilGEPS (notices.philgeps.gov.ph): its public list needs no log-in; the screened tenders'
  *  papers need the company's log-in (one session per account: the robot logs in once a run, then out). */
-function PhilgepsCard({ runs, login }: { runs: FindRunRow[]; login: FoundList["robot"]["login"] }) {
+function PhilgepsCard({ runs, login, fetch }: { runs: FindRunRow[]; login: FoundList["robot"]["login"]; fetch: ReactNode }) {
   const queries = useQueryClient();
   const action = useAction();
   const pill =
@@ -340,6 +347,7 @@ function PhilgepsCard({ runs, login }: { runs: FindRunRow[]; login: FoundList["r
         <p className="mt-1 text-[12px] text-slate-500">Tender papers: not logged in yet (it needs the company's PhilGEPS log-in); screened tenders' papers wait for it.</p>
       )}
       {login.state === "ok" && login.at && <p className="mt-1 text-[12px] text-slate-500">Tender papers: last logged in and out {when(login.at)}.</p>}
+      {fetch}
     </PortalCard>
   );
 }
@@ -363,7 +371,11 @@ export function TenderFinderPage() {
     queryFn: () => api<FoundList>(`/api/tenders/found?${new URLSearchParams({ view, q, source, molecule })}`),
     placeholderData: (before) => before,
     // While Fetch now waits for its run, look again every 15 seconds so the new tenders show by themselves.
-    refetchInterval: (current) => (current.state.data?.robot.fetch.running && !current.state.data.robot.fetch.running.done ? 15_000 : false),
+    refetchInterval: (current) => {
+      const fetch = current.state.data?.robot.fetch;
+      const busy = [fetch?.philgeps, fetch?.ps].some((one) => one?.running && !one.running.done);
+      return busy ? 15_000 : false;
+    },
   });
   const data = query.data;
   if (!data) return <PageState query={query} what="the tenders found" />;

@@ -16,7 +16,15 @@ name: Tender finder
 on:
   schedule:
     - cron: "7 22,23,0-9 * * *" # every hour from 6:07 am to 5:07 pm Manila
+  # Started by hand, or by a Fetch now button on the Tender finder (apps/api/src/tenders/fetch-now.ts),
+  # one portal at a time: philgeps = its public list and the screened tenders' papers; ps = its Sync.
   workflow_dispatch:
+    inputs:
+      portal:
+        description: "Which portal to read: both, philgeps or ps"
+        type: choice
+        options: [both, philgeps, ps]
+        default: both
   push:
     branches: [main]
     paths:
@@ -44,6 +52,8 @@ jobs:
         working-directory: workers/tender-finder
     env:
       CRM_URL: https://one.bishnoi.ai
+      # Which portal this run reads: both on the schedule and on a change; one when a Fetch now button asked
+      PORTAL: ${{ inputs.portal || 'both' }}
     steps:
       - uses: actions/checkout@v5
       # The repository's root names pnpm for the CRM; the robot is a plain npm folder of its own,
@@ -95,6 +105,7 @@ jobs:
       # (BIDDING_SUPABASE_URL) and let it be read (BIDDING_SUPABASE_KEY); with none set this step
       # does nothing. A problem here never stops the CRM's own reading below.
       - name: The bidding system's own tenders (handed over while it moves in)
+        if: env.PORTAL == 'both'
         continue-on-error: true
         env:
           BIDDING_SUPABASE_URL: ${{ secrets.BIDDING_SUPABASE_URL }}
@@ -102,23 +113,26 @@ jobs:
         run: node feed/feed.mjs
       # Started by hand or by a change to the robot: a look at the first page before the real run.
       - name: First page only, nothing sent
-        if: github.event_name != 'schedule'
+        if: github.event_name != 'schedule' && env.PORTAL != 'ps'
         run: node scraper.js --dry-run
       - name: Read PhilGEPS and hand in to the CRM
+        if: env.PORTAL != 'ps'
         run: node scraper.js --trigger=${{ github.event_name == 'schedule' && 'schedule' || 'manual' }}
       # The new portal (ps/ps.mjs): with the session a person made (its log-in has a captcha), reads
       # Bid Match, My Opportunities and Award Notices, each notice and its papers, and puts the
       # tenders on the CRM's finder. Only reads. With PS-PhilGEPS not connected it does nothing.
       - name: PS-PhilGEPS (the new portal)
+        if: env.PORTAL != 'philgeps'
         continue-on-error: true
         env:
           PAPERS_CACHE_DIR: ${{ runner.temp }}/papers-cache
-        run: node ps/ps.mjs
+        run: node ps/ps.mjs --trigger=${{ github.event_name == 'schedule' && 'schedule' || 'manual' }}
       # The papers of the notices the team screened (papers/papers.mjs): logs in to PhilGEPS with the
       # company's account, orders each one's bid documents at no cost (never pays), downloads, logs
       # out, reads them. The log-in is two repository secrets (Settings > Secrets and variables >
       # Actions): PHILGEPS_USERNAME and PHILGEPS_PASSWORD. With none set this step logs in nowhere.
       - name: The papers of the screened tenders
+        if: env.PORTAL != 'ps'
         env:
           PHILGEPS_USERNAME: ${{ secrets.PHILGEPS_USERNAME }}
           PHILGEPS_PASSWORD: ${{ secrets.PHILGEPS_PASSWORD }}

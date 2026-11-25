@@ -83,7 +83,10 @@ export function tenderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
     return c.json({ ok: true });
   });
   // Fetch now: the robot runs at once instead of at the next hour (tenders/fetch-now.ts).
-  app.post("/api/tenders/found/robot/fetch", async (c) => c.json(await fetchNow(db, c.get("me"))));
+  app.post("/api/tenders/found/robot/fetch", async (c) => {
+    const input = await readBody(c, z.object({ portal: z.enum(["philgeps", "ps"]) }));
+    return c.json(await fetchNow(db, c.get("me"), input.portal));
+  });
   // Connect PS-PhilGEPS from a team laptop (tenders/laptop-login.ts): a one-time log-in code for the
   // page's link, or the laptop's one-time setup file.
   app.post("/api/tenders/found/ps/connect", async (c) => {

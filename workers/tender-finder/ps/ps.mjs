@@ -53,7 +53,11 @@ async function main() {
         say(kept.skipped ? `keep-alive skipped (${kept.skipped})` : kept.connected ? 'the session is alive' : kept.ended ? 'PS-PhilGEPS ended the session: a person connects again (captcha)' : 'not connected');
         return;
     }
-    const claim = await ps.claimSync('schedule');
+    // Who started it: the hourly schedule, or a person's Fetch now on the Tender finder (--trigger=manual).
+    // The bidding system's module logs a Sync not started by the schedule as a person's, which the CRM's
+    // Fetch now waits for (apps/api/src/tenders/fetch-now.ts).
+    const manual = process.argv.includes('--trigger=manual');
+    const claim = await ps.claimSync(manual ? 'Fetch now' : 'schedule');
     if (claim.notConnected) {
         say('PS-PhilGEPS is not connected: a person connects once (captcha), then the Sync runs every hour');
         return;

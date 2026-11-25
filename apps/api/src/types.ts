@@ -5764,13 +5764,14 @@ export type FoundList = {
 
 /** How Fetch now starts the robot on this server: GitHub's workflow, on this computer, or not at all. */
 export type FetchWay = "github" | "local" | "off";
-export type FetchState = {
-  way: FetchWay;
-  /** A press still waiting for its run, or pressed in the last 10 minutes; done once a run started by a person came in. */
+/** Fetch now on one portal's card. */
+export type PortalFetch = {
+  /** A press still waiting for its run, or pressed in the last 10 minutes; done once a run of that portal started by a person came in. */
   running: { by: string | null; at: string; done: boolean } | null;
-  /** The last press that could not start, until a run comes after it. */
+  /** The last press that could not start, until a run of that portal comes after it. */
   failed: { at: string; note: string | null } | null;
 };
+export type FetchState = { way: FetchWay; philgeps: PortalFetch; ps: PortalFetch };
 
 /** A found notice's papers: the files the robot got from PhilGEPS and what it said of them. */
 export type FoundPapers = {
