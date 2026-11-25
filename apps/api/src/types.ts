@@ -6311,18 +6311,43 @@ export type FoundTender = {
   /** Still open for bids (no closing date read, or it is not past). */
   open: boolean;
   lines: number;
+  /** Its type as the bidding system shows it: ITB, RFQ, Negotiated, … ("" when none is read). */
+  type: string;
+  /** How many of its papers are kept or named; and what the robot said of them (pick-up, downloaded, …). */
+  files: number;
+  docsStatus: string | null;
 };
 
-export type FoundView = "new" | "screened" | "tenders" | "all";
+/** The bidding system's document chips: all, with papers, pick-up only, none yet. */
+export type FoundDocs = "all" | "with" | "pickup" | "none";
+/** Its sorts: latest published (default), oldest published, closing soonest, highest budget. */
+export type FoundSort = "latest" | "oldest" | "closing" | "budget";
+
+/** opportunities: every tender found that is ours, any state: asking for one of our medicines, or on PS-PhilGEPS's Bid Match. */
+export type FoundView = "opportunities" | "screened" | "tenders" | "all";
 
 /** One run of the robot, as it reported it. */
 export type FindRun = { id: number; source: "philgeps" | "ps"; trigger: string | null; status: "success" | "failed"; summary: string | null; found: number; matched: number; fresh: number; at: string };
 
 export type FoundList = {
   view: FoundView;
+  docs: FoundDocs;
+  sort: FoundSort;
+  /** The page shown (from 1), how many one page holds (25, 50 or 100), and how many are listed in all. */
+  page: number;
+  pageSize: number;
+  total: number;
   rows: FoundTender[];
+  /** Each tab's count and each document chip's, under the same search and filters. */
   counts: Record<FoundView, number>;
-  /** Our molecules among what was found, for the filter. */
+  docCounts: Record<FoundDocs, number>;
+  /** The summary cards over what is listed: how many, of how many of ours (medicines left out excluded);
+   *  our medicines asked for, of how many in the tab; the budgets' total (centavos); papers and of how many tenders. */
+  stats: { listed: number; ours: number; products: number; productsAll: number; abc: number; files: number; withFiles: number };
+  /** Our medicines in the tab, most asked for first (Our product, Exclude products), and the types present. */
+  products: { name: string; n: number }[];
+  types: { code: string; n: number }[];
+  /** Our molecules among what was found, A to Z. */
   molecules: string[];
   /** The robot: whether it has a way in on this server, its last runs, and where its PhilGEPS
    *  log-in for the tender papers stands ("refused" stops it until a person says to try again). */
@@ -6331,9 +6356,31 @@ export type FoundList = {
     runs: FindRun[];
     login: { state: "never" | "ok" | "refused" | "busy" | "trouble"; at: string | null; said: string | null };
     /** The PS-PhilGEPS robot: connected or not (a person's captcha tick makes its session), and its last Sync. */
-    ps: { connected: boolean; connectedAt: string | null; status: string | null; stage: string | null; error: string | null; finishedAt: string | null };
+    ps: {
+      connected: boolean;
+      connectedAt: string | null;
+      status: string | null;
+      stage: string | null;
+      error: string | null;
+      finishedAt: string | null;
+      /** The last step of a laptop log-in: started | submitted | rejected | ok | error | cancelled | paused, with what was said. */
+      login: { outcome: string; detail: string | null; source: string | null; at: string } | null;
+    };
+    /** Fetch now: whether a person can start the robot at once from this server, and how it went. */
+    fetch: FetchState;
   };
 };
+
+/** How Fetch now starts the robot on this server: GitHub's workflow, on this computer, or not at all. */
+export type FetchWay = "github" | "local" | "off";
+/** Fetch now on one portal's card. */
+export type PortalFetch = {
+  /** A press still waiting for its run, or pressed in the last 10 minutes; done once a run of that portal started by a person came in. */
+  running: { by: string | null; at: string; done: boolean } | null;
+  /** The last press that could not start, until a run of that portal comes after it. */
+  failed: { at: string; note: string | null } | null;
+};
+export type FetchState = { way: FetchWay; philgeps: PortalFetch; ps: PortalFetch };
 
 /** A found notice's papers: the files the robot got from PhilGEPS and what it said of them. */
 export type FoundPapers = {
@@ -6348,7 +6395,7 @@ export type FoundPapers = {
   /** How well the papers were read, 0 to 100. */
   accuracy: number | null;
   /** What the bid data sheet says, as written. */
-  sheet: { label: string; said: string }[];
+  sheet: { key: "prebid_conference" | "bid_opening" | "bid_submission_deadline" | "delivery_period" | "bid_validity" | "bid_security" | string; label: string; said: string }[];
 };
 
 /** A line a found notice asks for. */
@@ -6372,6 +6419,8 @@ export type FoundLine = {
 export type FoundDetail = {
   found: FoundTender & {
     itemsText: string | null;
+    /** When the robot last read it (the bidding system's "Last fetched"). */
+    seenAt: string;
     details: {
       solicitationNo: string | null;
       classification: string | null;
@@ -6382,6 +6431,8 @@ export type FoundDetail = {
       preBid: string | null;
       bidOpening: string | null;
       status: string | null;
+      /** When the portal says the notice last changed, as written. */
+      lastUpdated: string | null;
       supplements: { no: string; title: string; type: string; published: string | null }[];
       documents: string[];
     };

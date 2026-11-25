@@ -53,8 +53,11 @@ each notice's bid documents at no cost (it stops at anything that asks a payment
 and their bid bulletins, logs out, reads them (PDF, Word, Excel; scans by OCR) and hands the
 files and the lines to the CRM.
 
-- `papers/lib/`: the bidding team's own modules, **unchanged**. Do not edit them here; a newer
-  copy from their repository replaces them whole.
+- `papers/lib/`: the bidding team's own modules, **unchanged** but for one thing: in `psSync.mjs` the
+  time it reads notices for and the time after which a Sync counts as cut off are settings
+  (`PS_NOTICES_MINUTES`, `PS_STALE_MINUTES`, its own 3.5 and 6 minutes when unset; `ps/ps.mjs` sets 25
+  and 40). Do not edit them otherwise; a newer copy from their repository replaces them whole (then
+  put those two lines back).
 - `papers/supabase-shim/`: what those modules get when they import `@supabase/supabase-js` (it is
   installed under that name from this folder): their tables and files are the CRM's.
 - `papers/papers.mjs`: one run.

@@ -9,6 +9,7 @@ import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
 import { seal, unseal } from "../online/secrets";
+import type { FoundList } from "../types";
 
 /** The robots' own tables. Anything else is refused: the store is not a way to write anywhere. */
 const TABLES = new Set([
@@ -68,8 +69,22 @@ export async function writeRobotRows(db: Database, table: string, input: { upser
 
 /** Where the PS-PhilGEPS robot stands, for the finder's page: connected or not (a person's
  *  captcha tick makes the session), and how its last Sync went. */
-export async function psState(db: Database): Promise<{ connected: boolean; connectedAt: string | null; status: string | null; stage: string | null; error: string | null; finishedAt: string | null }> {
+export async function psState(db: Database): Promise<FoundList["robot"]["ps"]> {
   const [row] = await rows<{ value: Record<string, unknown> }>(db, sql`select value from tender_robot_row where tbl = 'ps_sync_status' and key = 'latest'`);
   const text = (name: string, max = 400) => (typeof row?.value?.[name] === "string" && row.value[name] ? (row.value[name] as string).slice(0, max) : null);
-  return { connected: Boolean(text("connected_at")), connectedAt: text("connected_at", 40), status: text("status", 40), stage: text("stage"), error: text("error"), finishedAt: text("finished_at", 40) };
+  // The last step of a laptop log-in (tenders/laptop-login.ts), so the page that opened it can follow it
+  const [login] = await rows<{ outcome: string; detail: string | null; source: string | null; at: string }>(
+    db,
+    sql`select outcome, detail, source, to_char(at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as at from tender_find_login
+      where site = 'ps-philgeps' order by at desc, id desc limit 1`,
+  );
+  return {
+    connected: Boolean(text("connected_at")),
+    connectedAt: text("connected_at", 40),
+    status: text("status", 40),
+    stage: text("stage"),
+    error: text("error"),
+    finishedAt: text("finished_at", 40),
+    login: login ?? null,
+  };
 }

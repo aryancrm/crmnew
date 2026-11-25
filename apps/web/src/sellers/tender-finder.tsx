@@ -3,14 +3,16 @@
 // ones made tenders, and everything found; a notice's own page with what it asks line by line;
 // and the join: Make it a tender, after which the tender's own page takes over (tenders.tsx).
 
-import type { Catalogue, CustomerList, FoundDetail, FoundLine, FoundList, FoundPapers, FoundTender, FoundView, TenderMode } from "@2mg/api/types";
+import type { Catalogue, CustomerList, FoundDetail, FoundDocs, FoundLine, FoundList, FoundPapers, FoundSort, FoundTender, FoundView, TenderMode } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Search } from "lucide-react";
-import { useState } from "react";
+import { ChevronLeft, ChevronRight, CircleAlert, CircleCheck, ExternalLink, Loader2, Search, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { type ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { bidDateText, deliveryText } from "./bid-dates";
 import { shortPeso } from "../ceo";
-import { Button, CARD, dayLabel, Dialog, Facts, PageHead, PageState, Pill, Problem, peso, Tabs, useAction } from "../ui";
+import { Button, CARD, dayLabel, Dialog, Facts, PageHead, PageState, Pill, Problem, peso, Tabs, Tile, useAction } from "../ui";
 
 const PORTAL = { philgeps: "PhilGEPS", ps: "PS-PhilGEPS" } as const;
 const MODE: Record<TenderMode, string> = {
@@ -52,53 +54,441 @@ function Molecules({ names }: { names: string[] }) {
   );
 }
 
+/** Where a found tender stands, and New when the robot first fetched it in the last 24 hours. */
 function State({ found }: { found: FoundTender }) {
-  if (found.tenderId) return <Pill tone="good">Tender {found.tenderCode}</Pill>;
-  if (found.screenedAt) return <Pill tone="info">Screened</Pill>;
-  if (!found.open) return <Pill>Closed</Pill>;
-  return found.molecules.length ? <Pill tone="brand">New</Pill> : <Pill>Not ours</Pill>;
+  const fresh = Date.now() - Date.parse(found.firstSeenAt) < 86_400_000;
+  const state = found.tenderId ? (
+    <Pill tone="good">Tender {found.tenderCode}</Pill>
+  ) : found.screenedAt ? (
+    <Pill tone="info">Screened</Pill>
+  ) : !found.open ? (
+    <Pill>Closed</Pill>
+  ) : found.molecules.length ? null : found.source === "ps" ? (
+    <span title="On PS-PhilGEPS's Bid Match (the portal matched it to the company's products); its medicines show once its papers are read.">
+      <Pill tone="info">Bid Match</Pill>
+    </span>
+  ) : (
+    <Pill>Not ours</Pill>
+  );
+  return (
+    <>
+      {fresh && (
+        <span title={`First fetched ${when(found.firstSeenAt)}`}>
+          <Pill tone="brand">New</Pill>
+        </span>
+      )}
+      {state}
+    </>
+  );
 }
 
-/** The robot's last word: when it last read the portals and what it found; its earlier runs under it. */
-function Robot({ robot }: { robot: FoundList["robot"] }) {
+/** The status box at the bottom right (as the bidding system shows its Sync): what a press of Fetch now
+ *  is doing, step by step, and how it ended. One box per portal, stacked. */
+type Tone = "work" | "good" | "bad" | "warn";
+const TONE: Record<Tone, string> = {
+  work: "border-sky-200",
+  good: "border-emerald-300",
+  bad: "border-rose-300",
+  warn: "border-amber-300",
+};
+function dock(): HTMLElement {
+  let element = document.getElementById("fetch-status-dock");
+  if (!element) {
+    element = document.createElement("div");
+    element.id = "fetch-status-dock";
+    element.setAttribute("aria-live", "polite");
+    element.className = "fixed bottom-4 right-4 z-[55] flex w-[22rem] max-w-[calc(100vw-2rem)] flex-col gap-2 print:hidden";
+    document.body.appendChild(element);
+  }
+  return element;
+}
+function StatusBox({ tone, title, children, onClose }: { tone: Tone; title: string; children?: ReactNode; onClose?: () => void }) {
+  const icon =
+    tone === "work" ? (
+      <Loader2 className="size-4 shrink-0 animate-spin text-sky-600" aria-hidden="true" />
+    ) : tone === "good" ? (
+      <CircleCheck className="size-4 shrink-0 text-emerald-600" aria-hidden="true" />
+    ) : (
+      <CircleAlert className={`size-4 shrink-0 ${tone === "bad" ? "text-rose-600" : "text-amber-600"}`} aria-hidden="true" />
+    );
+  return createPortal(
+    <div className={`rounded-xl border bg-white px-3.5 py-3 text-[12.5px] text-slate-700 shadow-lg ${TONE[tone]}`} role="status">
+      <div className="flex items-start gap-2">
+        <span className="mt-0.5">{icon}</span>
+        <b className="min-w-0 flex-1 text-[13px] text-slate-900">{title}</b>
+        {onClose && (
+          <button type="button" aria-label="Close" className="-m-1 rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700" onClick={onClose}>
+            <X className="size-3.5" />
+          </button>
+        )}
+      </div>
+      {children && <div className="mt-1 pl-6">{children}</div>}
+    </div>,
+    dock(),
+  );
+}
+
+type PortalFetchState = FoundList["robot"]["fetch"]["ps"];
+
+/** A Fetch now this page pressed, followed to its end in the status box: waiting for its run, then that
+ *  portal's last run (found, matched, new) or why it did not finish. A good end closes by itself. */
+function FetchStatus({ name, state, runs, stage, onClose }: { name: string; state: PortalFetchState; runs: FindRunRow[]; stage?: string | null; onClose: () => void }) {
+  const running = state.running;
+  const last = runs[0];
+  const ended = running?.done ? (last?.status === "failed" ? "bad" : "good") : null;
+  useEffect(() => {
+    if (ended !== "good") return;
+    const timer = setTimeout(onClose, 20_000);
+    return () => clearTimeout(timer);
+  }, [ended]);
+  if (running && !running.done)
+    return (
+      <StatusBox tone="work" title={`Fetching ${name}…`} onClose={onClose}>
+        Started {running.by ? `by ${running.by} ` : ""}at {when(running.at)}. It takes a few minutes; this page looks every 15 seconds.
+        {stage ? <span className="block text-slate-500">{stage}</span> : null}
+      </StatusBox>
+    );
+  if (running?.done && last)
+    return (
+      <StatusBox tone={ended === "bad" ? "bad" : "good"} title={ended === "bad" ? `${name}: the fetch failed` : `${name} fetched`} onClose={onClose}>
+        <RunLine run={last} />
+      </StatusBox>
+    );
+  if (state.failed)
+    return (
+      <StatusBox tone="bad" title={`${name}: the fetch did not finish`} onClose={onClose}>
+        {state.failed.note ?? "No reason was given."}
+      </StatusBox>
+    );
+  return null;
+}
+
+/** What a laptop log-in's last step means for the person who opened it. */
+const LOGIN_STEP: Record<string, { tone: Tone; title: string; said?: string; final?: boolean }> = {
+  started: { tone: "work", title: "Chrome is open on this laptop", said: "Tick “I'm not a robot”, then the log-in goes through by itself." },
+  submitted: { tone: "work", title: "Logging in to PS-PhilGEPS…", said: "The password was sent; waiting for PS-PhilGEPS." },
+  rejected: { tone: "warn", title: "PS-PhilGEPS refused the log-in" },
+  ok: { tone: "good", title: "Logged in to PS-PhilGEPS", said: "Saving the session for everyone…" },
+  error: { tone: "bad", title: "The PS-PhilGEPS log-in did not finish", final: true },
+  cancelled: { tone: "bad", title: "The PS-PhilGEPS log-in was closed", said: "The Chrome window was closed before the log-in finished.", final: true },
+  paused: { tone: "bad", title: "PS-PhilGEPS log-ins are paused", final: true },
+};
+
+/** PS-PhilGEPS's Fetch now, which connects first when it must (the bidding system's Sync button: "you
+ *  cannot fetch if you do not connect", the developer, 25 Nov). Not connected: the press opens the log-in
+ *  on this laptop (the "bishnoi-ps-connect:" link with a one-time code; API tenders/laptop-login.ts); a
+ *  person ticks "I'm not a robot"; once the session is saved the fetch starts by itself. Every step the
+ *  laptop reports (robot.ps.login, since the server's time of this press) shows in the status box at the
+ *  bottom right, and a step that ends the log-in (no account on the server, log-ins paused, an error,
+ *  the window closed) stops the waiting at once and says why. Nothing heard in 3 minutes: it says so. A
+ *  laptop not set up yet gets the one-time setup file. */
+function PsFetch({ way, state, ps, runs }: { way: FoundList["robot"]["fetch"]["way"]; state: PortalFetchState; ps: FoundList["robot"]["ps"]; runs: FindRunRow[] }) {
   const queries = useQueryClient();
   const action = useAction();
-  const [last, ...earlier] = robot.runs;
+  const connected = ps.connected;
+  // The press that opened a log-in: the server's time of it (its steps come after), and this page's (for the 3 minutes)
+  const [since, setSince] = useState<{ server: string; local: number } | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const [ended, setEnded] = useState<{ tone: Tone; title: string; said: string } | null>(null);
+  const [watching, setWatching] = useState(false);
+  const step = since && ps.login && Date.parse(ps.login.at) >= Date.parse(since.server) ? ps.login : null;
+  const meaning = step ? LOGIN_STEP[step.outcome] : undefined;
+  const loggingIn = since !== null && !connected;
+  const quiet = since !== null && now - since.local >= 180_000;
+  const running = state.running;
+  const fetching = running !== null && !running.done;
+  const fetchPs = async () => {
+    setWatching(true);
+    await api("/api/tenders/found/robot/fetch", { method: "POST", body: { portal: "ps" } });
+    await queries.invalidateQueries({ queryKey: ["tenders", "found"] });
+  };
+  // While the log-in is open: look every 3 seconds for its next step.
+  useEffect(() => {
+    if (!loggingIn) return;
+    const timer = setInterval(() => {
+      setNow(Date.now());
+      void queries.invalidateQueries({ queryKey: ["tenders", "found"] });
+    }, 3_000);
+    return () => clearInterval(timer);
+  }, [loggingIn, queries]);
+  // A step that ends the log-in: stop waiting and say why.
+  useEffect(() => {
+    if (!since || connected || !step || !meaning?.final) return;
+    setSince(null);
+    setEnded({ tone: meaning.tone, title: meaning.title, said: step.detail ?? meaning.said ?? "" });
+  }, [step?.at, step?.outcome]);
+  // The log-in this press opened is saved: fetch.
+  useEffect(() => {
+    if (since === null || !connected) return;
+    setSince(null);
+    if (way === "off") {
+      setEnded({ tone: "good", title: "PS-PhilGEPS is connected", said: "For everyone. The robot reads it at its next hourly run (Fetch now isn't set up on this server)." });
+      return;
+    }
+    void action.run(fetchPs);
+    // (once, when the log-in this press opened is saved)
+  }, [connected, since]);
+  const press = () =>
+    void action.run(async () => {
+      setEnded(null);
+      setWatching(false);
+      if (connected) return fetchPs();
+      const { code, at } = await api<{ code: string; at: string }>("/api/tenders/found/ps/connect", { method: "POST", body: { purpose: "login" } });
+      setSince({ server: at, local: Date.now() });
+      setNow(Date.now());
+      window.location.href = `bishnoi-ps-connect:start?code=${encodeURIComponent(code)}`;
+    });
+  const setUp = () =>
+    void action.run(async () => {
+      const { script } = await api<{ script: string }>("/api/tenders/found/ps/connect", { method: "POST", body: { purpose: "setup" } });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(new Blob([script], { type: "application/octet-stream" }));
+      link.download = "Set up PS-PhilGEPS log-in for Bishnoi One.cmd";
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
+    });
+  const setUpLine = (
+    <span className="mt-1 block">
+      Nothing opened? This laptop needs a one-time setup (Windows with Google Chrome, about 5 minutes):{" "}
+      <button type="button" disabled={action.busy} className="font-semibold text-sky-700 underline disabled:opacity-50" onClick={setUp}>
+        Set up this laptop
+      </button>
+      , run the file it downloads, then press Fetch PS-PhilGEPS now again.
+    </span>
+  );
+  const title = !connected
+    ? "PS-PhilGEPS is not connected: this opens its log-in on this laptop first (tick the captcha), then fetches."
+    : way === "off"
+      ? "The robot can't be started from this server; it still runs by itself every hour."
+      : running?.done
+        ? "Fetched a few minutes ago; it can be pressed again 10 minutes after the last press."
+        : `Reads PS-PhilGEPS now${way === "github" ? " (GitHub runs the robot)" : " (the robot runs on this computer)"}. It takes a few minutes.`;
+  return (
+    <div className="mt-2 space-y-2">
+      <span className="flex flex-wrap items-center gap-2">
+        <Button
+          small
+          variant="primary"
+          title={title}
+          disabled={action.busy || (loggingIn && !quiet) || (connected && (way === "off" || running !== null))}
+          className="disabled:opacity-50"
+          onClick={press}
+        >
+          {loggingIn && !quiet ? "Waiting for the log-in…" : fetching ? "Fetching…" : "Fetch PS-PhilGEPS now"}
+        </Button>
+        {fetching && running && (
+          <span className="text-[12px] text-slate-600">
+            started {running.by ? `by ${running.by} ` : ""}at {when(running.at)}
+          </span>
+        )}
+        {!connected && !loggingIn && <span className="text-[12px] text-slate-500">Logs in first, from a team laptop with Google Chrome.</span>}
+      </span>
+      {state.failed && !fetching && connected && (
+        <span className="block text-[12px] font-semibold text-rose-700">
+          The last Fetch now ({when(state.failed.at)}) did not finish{state.failed.note ? `: ${state.failed.note}` : "."}
+        </span>
+      )}
+      <Problem message={action.problem?.message} />
+      {loggingIn &&
+        (quiet ? (
+          <StatusBox tone="warn" title="No log-in within 3 minutes" onClose={() => setSince(null)}>
+            {meaning && step ? `The last step heard: ${meaning.title.toLowerCase()}${step.detail ? ` (${step.detail})` : ""}. ` : "Nothing was heard from this laptop. "}
+            {setUpLine}
+          </StatusBox>
+        ) : meaning && step ? (
+          <StatusBox tone={meaning.tone} title={meaning.title} onClose={() => setSince(null)}>
+            {step.detail ?? meaning.said}
+            {step.outcome === "rejected" && <span className="block text-slate-500">After 3 refusals the log-in stops so the account isn't locked.</span>}
+          </StatusBox>
+        ) : (
+          <StatusBox tone="work" title="Opening the PS-PhilGEPS log-in on this laptop…" onClose={() => setSince(null)}>
+            A Chrome window opens with the log-in filled in. If the browser asks whether to open the PS-PhilGEPS log-in, allow it.
+            {now - since.local >= 20_000 && setUpLine}
+          </StatusBox>
+        ))}
+      {ended && (
+        <StatusBox tone={ended.tone} title={ended.title} onClose={() => setEnded(null)}>
+          {ended.said}
+          {ended.tone === "bad" && <span className="mt-1 block text-slate-500">Put it right, then press Fetch PS-PhilGEPS now again.</span>}
+        </StatusBox>
+      )}
+      {watching && !loggingIn && !ended && <FetchStatus name="PS-PhilGEPS" state={state} runs={runs} stage={ps.stage} onClose={() => setWatching(false)} />}
+    </div>
+  );
+}
+
+/** Fetch now on one portal's card: that portal's robot runs at once instead of at the next hour (the
+ *  bidding system's Sync button of that portal). While a press waits for its run the page looks again
+ *  every 15 seconds (TenderFinderPage), and the status box at the bottom right follows it. */
+function FetchNow({ way, portal, state, runs, blocked }: { way: FoundList["robot"]["fetch"]["way"]; portal: "philgeps" | "ps"; state: PortalFetchState; runs: FindRunRow[]; blocked?: string | null }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const [watching, setWatching] = useState(false);
+  const running = state.running;
+  const waiting = running !== null && !running.done;
+  const name = PORTAL[portal];
+  const title =
+    way === "off"
+      ? "The robot can't be started from this server; it still runs by itself every hour."
+      : blocked
+        ? blocked
+        : running?.done
+          ? "Fetched a few minutes ago; it can be pressed again 10 minutes after the last press."
+          : `Reads ${name} now${way === "github" ? " (GitHub runs the robot)" : " (the robot runs on this computer)"}. It takes a few minutes.`;
+  return (
+    <span className="mt-2 flex flex-col items-start">
+      <span className="flex flex-wrap items-center gap-2">
+        <Button
+          small
+          variant="primary"
+          title={title}
+          disabled={action.busy || way === "off" || Boolean(blocked) || running !== null}
+          className="disabled:opacity-50"
+          onClick={() =>
+            void action.run(async () => {
+              setWatching(true);
+              await api("/api/tenders/found/robot/fetch", { method: "POST", body: { portal } });
+              await queries.invalidateQueries({ queryKey: ["tenders", "found"] });
+            })
+          }
+        >
+          {waiting ? "Fetching…" : `Fetch ${name} now`}
+        </Button>
+        {waiting && running && (
+          <span className="text-[12px] text-slate-600">
+            started {running.by ? `by ${running.by} ` : ""}at {when(running.at)}
+          </span>
+        )}
+      </span>
+      {state.failed && !waiting && (
+        <span className="mt-1 text-[12px] font-semibold text-rose-700">
+          The last Fetch now ({when(state.failed.at)}) did not finish{state.failed.note ? `: ${state.failed.note}` : "."}
+        </span>
+      )}
+      <Problem message={action.problem?.message} />
+      {watching && <FetchStatus name={name} state={state} runs={runs} onClose={() => setWatching(false)} />}
+    </span>
+  );
+}
+
+/** The robot's last word, one card per portal (the developer, 25 Nov: "a separate connection of PhilGEPS
+ *  and PS-PhilGEPS"): each with its own last read, what its log-in needs and its own Fetch now. The
+ *  bridge's hand-overs from the bidding system (both portals) are a line of their own. */
+function Robot({ robot }: { robot: FoundList["robot"] }) {
+  const latest = robot.runs[0];
   // It runs every hour of the working day: a day with no word from it is worth a look.
-  const hours = last ? Math.floor((Date.now() - Date.parse(last.at)) / 3_600_000) : 0;
+  const hours = latest ? Math.floor((Date.now() - Date.parse(latest.at)) / 3_600_000) : 0;
   const quiet = hours >= 26 ? hours : null;
-  const line = (run: FoundList["robot"]["runs"][number]) => (
+  const fed = robot.runs.filter((run) => run.trigger === "feed");
+  const own = (source: "philgeps" | "ps") => robot.runs.filter((run) => run.source === source && run.trigger !== "feed");
+  return (
+    <section className={`${CARD} px-4 py-3 text-[13px]`}>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="min-w-0 text-slate-600">
+          <b className="text-slate-900">Robot</b> reads both portals every hour from 6 AM to 5 PM.
+        </span>
+        <span className="flex flex-wrap items-center gap-2">
+          {!robot.ready ? (
+            <span className="text-[12px] font-semibold text-amber-700" title="The robot has no way in on this server (its GitHub workflow is switched off and no key is set).">
+              Not connected on this server
+            </span>
+          ) : (
+            quiet !== null && <span className="text-[12px] font-semibold text-amber-700">No run for {quiet} hours</span>
+          )}
+        </span>
+      </div>
+      <div className="mt-2.5 grid gap-2.5 md:grid-cols-2">
+        <PhilgepsCard runs={own("philgeps")} login={robot.login} fetch={<FetchNow way={robot.fetch.way} portal="philgeps" state={robot.fetch.philgeps} runs={own("philgeps")} />} />
+        <PsCard
+          runs={own("ps")}
+          ps={robot.ps}
+          fetch={<PsFetch way={robot.fetch.way} state={robot.fetch.ps} ps={robot.ps} runs={own("ps")} />}
+        />
+      </div>
+      {fed[0] && (
+        <p className="mt-2 text-[12px] text-slate-500">
+          <b className="font-semibold">From the bidding system</b> (both portals, while it moves in): <RunLine run={fed[0]} />
+        </p>
+      )}
+    </section>
+  );
+}
+
+type FindRunRow = FoundList["robot"]["runs"][number];
+
+function RunLine({ run }: { run: FindRunRow }) {
+  return (
     <>
-      {PORTAL[run.source]} {when(run.at)}
+      {when(run.at)}
       {run.status === "failed" ? <span className="font-semibold text-rose-700"> · failed</span> : ""}
       {run.summary ? ` · ${run.summary}` : ""}
     </>
   );
+}
+
+/** One portal's card: its name and a pill for where it stands, its last read and what its log-in needs
+ *  (only the last run: the earlier ones are not shown, the developer, 25 Nov). */
+function PortalCard({ name, pill, runs, children }: { name: string; pill: ReactNode; runs: FindRunRow[]; children?: ReactNode }) {
+  const [last] = runs;
   return (
-    <section className={`${CARD} px-4 py-2.5 text-[13px]`}>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="min-w-0 text-slate-600">
-          <b className="text-slate-900">Robot</b> {last ? <>last read {line(last)}</> : "has not handed anything in yet."}
-        </span>
-        {!robot.ready ? (
-          <span className="text-[12px] font-semibold text-amber-700" title="The robot has no way in on this server (its GitHub workflow is switched off and no key is set).">
-            Not connected on this server
-          </span>
-        ) : (
-          quiet !== null && <span className="text-[12px] font-semibold text-amber-700">No run for {quiet} hours</span>
-        )}
+    <div className="rounded-xl border border-slate-200 px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <b className="text-slate-900">{name}</b>
+        {pill}
       </div>
-      <p className={`mt-1 text-[12px] ${robot.ps.connected ? "text-slate-500" : "text-amber-700"}`}>
-        <b className="font-semibold">PS-PhilGEPS</b>{" "}
-        {robot.ps.connected
-          ? `connected${robot.ps.connectedAt ? ` since ${when(robot.ps.connectedAt)}` : ""}${robot.ps.status === "failed" && robot.ps.error ? ` · the last Sync stopped: ${robot.ps.error}` : robot.ps.stage ? ` · ${robot.ps.stage}` : ""}`
-          : "is not connected: its log-in has a captcha, so a person connects once on a computer with Chrome (the robot then reads it every hour)."}
+      <p className="mt-1 text-[12px] text-slate-600">
+        {last ? (
+          <>
+            Last read <RunLine run={last} />
+          </>
+        ) : (
+          "Not read yet."
+        )}
       </p>
-      {robot.login.state === "refused" && (
+      {children}
+    </div>
+  );
+}
+
+/** PS-PhilGEPS (philgeps.gov.ph): its log-in has a captcha, so a person connects it from a team laptop; the
+ *  session then serves everyone until PS-PhilGEPS ends it. */
+function PsCard({ runs, ps, fetch }: { runs: FindRunRow[]; ps: FoundList["robot"]["ps"]; fetch: ReactNode }) {
+  const pill = ps.connected ? <Pill tone="good">Connected</Pill> : <Pill tone="warn">Not connected</Pill>;
+  return (
+    <PortalCard name="PS-PhilGEPS" pill={pill} runs={runs}>
+      <p className={`mt-1 text-[12px] ${ps.connected ? "text-slate-500" : "text-amber-700"}`}>
+        {ps.connected
+          ? `Connected${ps.connectedAt ? ` since ${when(ps.connectedAt)}` : ""}${ps.status === "failed" && ps.error ? ` · the last Sync stopped: ${ps.error}` : ps.stage ? ` · ${ps.stage}` : ""}.`
+          : "Its log-in has a captcha: Fetch PS-PhilGEPS now logs in first from this laptop (a person ticks it), then the log-in serves everyone (the robot reads it every hour) until PS-PhilGEPS ends it."}
+      </p>
+      {fetch}
+    </PortalCard>
+  );
+}
+
+/** The old PhilGEPS (notices.philgeps.gov.ph): its public list needs no log-in; the screened tenders'
+ *  papers need the company's log-in (one session per account: the robot logs in once a run, then out). */
+function PhilgepsCard({ runs, login, fetch }: { runs: FindRunRow[]; login: FoundList["robot"]["login"]; fetch: ReactNode }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const pill =
+    login.state === "refused" ? (
+      <Pill tone="bad">Log-in refused</Pill>
+    ) : runs[0]?.status === "failed" ? (
+      <Pill tone="bad">Last read failed</Pill>
+    ) : runs.length ? (
+      <Pill tone="good">Last read OK</Pill>
+    ) : (
+      <Pill>Waiting</Pill>
+    );
+  return (
+    <PortalCard name="PhilGEPS" pill={pill} runs={runs}>
+      <p className="mt-1 text-[12px] text-slate-500">The old site: its public list needs no log-in. No new tenders since 1 Nov; its last ones close on 2 Dec.</p>
+      {login.state === "refused" && (
         <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[12.5px] text-rose-900">
           <b>PhilGEPS refused the robot's log-in</b>
-          {robot.login.at ? ` (${when(robot.login.at)})` : ""}
-          {robot.login.said ? `: ${robot.login.said}` : "."} The papers of screened tenders wait. The robot does not send a refused password again by
+          {login.at ? ` (${when(login.at)})` : ""}
+          {login.said ? `: ${login.said}` : "."} The papers of screened tenders wait. The robot does not send a refused password again by
           itself (that locks the account): once the password is put right where the robot keeps it,{" "}
           <button
             type="button"
@@ -117,54 +507,111 @@ function Robot({ robot }: { robot: FoundList["robot"] }) {
           <Problem message={action.problem?.message} />
         </div>
       )}
-      {robot.login.state === "busy" && (
+      {login.state === "busy" && (
         <p className="mt-1 text-[12px] text-amber-700">
-          The PhilGEPS account was in use on another computer{robot.login.at ? ` at ${when(robot.login.at)}` : ""}: the robot tries the papers again later.
+          The account was in use on another computer{login.at ? ` at ${when(login.at)}` : ""}: the robot tries the papers again later.
         </p>
       )}
-      {robot.login.state === "never" && (
-        <p className="mt-1 text-[12px] text-slate-500">Tender papers: the robot has not logged in to PhilGEPS yet (it needs the company's log-in); screened tenders' papers wait for it.</p>
+      {login.state === "never" && (
+        <p className="mt-1 text-[12px] text-slate-500">Tender papers: not logged in yet (it needs the company's PhilGEPS log-in); screened tenders' papers wait for it.</p>
       )}
-      {earlier.length > 0 && (
-        <details className="mt-1">
-          <summary className="cursor-pointer text-[12px] font-semibold text-slate-500">Its earlier runs</summary>
-          <ul className="mt-1 space-y-0.5 text-[12px] text-slate-600">
-            {earlier.map((run) => (
-              <li key={run.id}>{line(run)}</li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </section>
+      {login.state === "ok" && login.at && <p className="mt-1 text-[12px] text-slate-500">Tender papers: last logged in and out {when(login.at)}.</p>}
+      {fetch}
+    </PortalCard>
   );
 }
+
+/** The medicines a person leaves out of the list (the bidding system's "Exclude products"): kept in this
+ *  browser, as there, so they stay left out on the next visit. */
+const LEFT_OUT_KEY = "tenderFinder.excludedProducts";
+function readLeftOut(): string[] {
+  try {
+    const kept = JSON.parse(localStorage.getItem(LEFT_OUT_KEY) ?? "[]") as unknown;
+    return Array.isArray(kept) ? kept.filter((one): one is string => typeof one === "string") : [];
+  } catch {
+    return [];
+  }
+}
+function keepLeftOut(names: string[]): void {
+  try {
+    localStorage.setItem(LEFT_OUT_KEY, JSON.stringify(names));
+  } catch {
+    // A browser that keeps nothing: they stay left out for this visit only.
+  }
+}
+
+const SORTS: [FoundSort, string][] = [
+  ["latest", "Latest published"],
+  ["oldest", "Oldest published"],
+  ["closing", "Closing soonest"],
+  ["budget", "Highest budget"],
+];
+const DOC_CHIPS: [FoundDocs, string][] = [
+  ["all", "All"],
+  ["with", "With documents"],
+  ["pickup", "Pick-up only"],
+  ["none", "No documents yet"],
+];
+const isoDay = (date: Date) => date.toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
+const shortDay = (day: string) => new Date(`${day}T00:00:00`).toLocaleDateString("en-PH", { month: "short", day: "numeric" });
 
 export function TenderFinderPage() {
   const queries = useQueryClient();
   const action = useAction();
   const [params, setParams] = useSearchParams();
-  const view = (params.get("view") ?? "new") as FoundView;
+  const asked = params.get("view");
+  const view: FoundView = asked === "screened" || asked === "tenders" || asked === "all" ? asked : "opportunities";
   const q = params.get("q") ?? "";
-  const source = params.get("source") ?? "";
-  const molecule = params.get("molecule") ?? "";
+  const ask = (key: string) => params.get(key) ?? "";
+  const page = String(Math.max(1, Number(params.get("page")) || 1));
   const [typed, setTyped] = useState(q);
+  const [leftOut, setLeftOut] = useState<string[]>(readLeftOut);
+  // Another tab, search, filter or chip starts again from page 1.
   const set = (changes: Record<string, string>) => {
     const next = new URLSearchParams(params);
     for (const [key, value] of Object.entries(changes)) value ? next.set(key, value) : next.delete(key);
+    if (!("page" in changes)) next.delete("page");
     setParams(next, { replace: true });
   };
+  const goTo = (to: number) => {
+    set({ page: to > 1 ? String(to) : "" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+  const leaveOut = (names: string[]) => {
+    setLeftOut(names);
+    keepLeftOut(names);
+    set({});
+  };
+  const sent = {
+    view,
+    q,
+    source: ask("source"),
+    molecule: ask("molecule"),
+    type: ask("type"),
+    docs: ask("docs"),
+    sort: ask("sort"),
+    dateOn: ask("dateOn"),
+    from: ask("from"),
+    to: ask("to"),
+    size: ask("size"),
+    page,
+    exclude: leftOut.join(","),
+  };
   const query = useQuery({
-    queryKey: ["tenders", "found", view, q, source, molecule],
-    queryFn: () => api<FoundList>(`/api/tenders/found?${new URLSearchParams({ view, q, source, molecule })}`),
+    queryKey: ["tenders", "found", sent],
+    queryFn: () => api<FoundList>(`/api/tenders/found?${new URLSearchParams(Object.entries(sent).filter(([, value]) => value))}`),
     placeholderData: (before) => before,
+    // While Fetch now waits for its run, look again every 15 seconds so the new tenders show by themselves.
+    refetchInterval: (current) => {
+      const fetch = current.state.data?.robot.fetch;
+      const busy = [fetch?.philgeps, fetch?.ps].some((one) => one?.running && !one.running.done);
+      return busy ? 15_000 : false;
+    },
   });
   const data = query.data;
   if (!data) return <PageState query={query} what="the tenders found" />;
-  const screen = (found: FoundTender, on: boolean) =>
-    void action.run(async () => {
-      await api(`/api/tenders/found/${found.id}/screen`, { method: "POST", body: { on } });
-      await queries.invalidateQueries({ queryKey: ["tenders", "found"] });
-    });
+  const filtering = Boolean(sent.source || sent.molecule || sent.type || sent.from || sent.to);
+  const stats = data.stats;
   return (
     <div className="mx-auto max-w-6xl space-y-3">
       <PageHead
@@ -177,16 +624,46 @@ export function TenderFinderPage() {
         }
       />
       <Robot robot={data.robot} />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Tile label="Total opportunities" value={stats.listed.toLocaleString("en-PH")} sub={`of ${stats.ours.toLocaleString("en-PH")} asking for our products`} />
+        <Tile
+          label="Product matches"
+          tone="good"
+          value={stats.products.toLocaleString("en-PH")}
+          sub={`of our products requested (${stats.productsAll.toLocaleString("en-PH")} in all)`}
+        />
+        <Tile label="Total ABC value" tone="info" value={shortPeso(stats.abc)} sub="approved budgets of the listed tenders" />
+        <Tile
+          label="Documents fetched"
+          value={stats.files.toLocaleString("en-PH")}
+          sub={`files of ${stats.withFiles.toLocaleString("en-PH")} of the ${stats.listed.toLocaleString("en-PH")} listed tenders`}
+        />
+      </div>
       <Tabs
         tabs={[
-          { key: "new" as const, label: "New", count: data.counts.new },
+          { key: "opportunities" as const, label: "Opportunities", count: data.counts.opportunities },
           { key: "screened" as const, label: "Screened", count: data.counts.screened },
           { key: "tenders" as const, label: "Made tenders", count: data.counts.tenders },
           { key: "all" as const, label: "Everything found", count: data.counts.all },
         ]}
         value={data.view}
-        onChange={(key) => set({ view: key === "new" ? "" : key })}
+        onChange={(key) => set({ view: key === "opportunities" ? "" : key })}
       />
+      <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Documents">
+        {DOC_CHIPS.map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={data.docs === key}
+            className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-semibold ${
+              data.docs === key ? "border-emerald-300 bg-emerald-50 text-emerald-800" : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            }`}
+            onClick={() => set({ docs: key === "all" ? "" : key })}
+          >
+            {label} <span className="text-slate-400">{data.docCounts[key].toLocaleString("en-PH")}</span>
+          </button>
+        ))}
+      </div>
       <form
         className="flex flex-wrap items-center gap-2"
         onSubmit={(event) => {
@@ -198,90 +675,323 @@ export function TenderFinderPage() {
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" />
           <input
             className="field h-10 w-full pl-9"
-            placeholder="Search: what it buys, the agency, the reference, a medicine"
+            placeholder="Search reference no., title, agency name or molecule"
             aria-label="Search the tenders found"
             value={typed}
             onChange={(event) => setTyped(event.target.value)}
             onBlur={() => typed.trim() !== q && set({ q: typed.trim() })}
           />
         </label>
-        <select className="field h-10 w-auto" aria-label="Portal" value={source} onChange={(event) => set({ source: event.target.value })}>
-          <option value="">Both portals</option>
+        <select className="field h-10 w-auto" aria-label="Portal" value={sent.source} onChange={(event) => set({ source: event.target.value })}>
+          <option value="">Portal: Both</option>
           <option value="philgeps">PhilGEPS</option>
           <option value="ps">PS-PhilGEPS</option>
         </select>
-        <select className="field h-10 w-auto max-w-56" aria-label="Our medicine" value={molecule} onChange={(event) => set({ molecule: event.target.value })}>
-          <option value="">Every medicine of ours</option>
-          {data.molecules.map((name) => (
-            <option key={name} value={name}>
-              {name}
+        <select className="field h-10 w-auto max-w-56" aria-label="Our product" value={sent.molecule} onChange={(event) => set({ molecule: event.target.value })}>
+          <option value="">Our product: All</option>
+          {data.products.map((one) => (
+            <option key={one.name} value={one.name}>
+              {one.name} ({one.n})
             </option>
           ))}
         </select>
+        <select className="field h-10 w-auto" aria-label="Type" value={sent.type} onChange={(event) => set({ type: event.target.value })}>
+          <option value="">Type: All</option>
+          {data.types.map((one) => (
+            <option key={one.code} value={one.code}>
+              {one.code} ({one.n})
+            </option>
+          ))}
+        </select>
+        <LeaveOut products={data.products} leftOut={leftOut} onChange={leaveOut} />
+        <select className="field h-10 w-auto" aria-label="Sort" value={data.sort} onChange={(event) => set({ sort: event.target.value === "latest" ? "" : event.target.value })}>
+          {SORTS.map(([key, label]) => (
+            <option key={key} value={key}>
+              Sort: {label}
+            </option>
+          ))}
+        </select>
+        <DateRange on={sent.dateOn === "closing" ? "closing" : "published"} from={sent.from} to={sent.to} onChange={(range) => set(range)} />
+        {filtering && (
+          <button type="button" className="text-[12.5px] font-semibold text-slate-600 underline" onClick={() => set({ source: "", molecule: "", type: "", dateOn: "", from: "", to: "" })}>
+            Clear filters
+          </button>
+        )}
       </form>
+      {leftOut.length > 0 && (
+        <p className="flex flex-wrap items-center gap-1.5 text-[12px] text-slate-600">
+          Leaving out:
+          {leftOut.map((name) => (
+            <button
+              key={name}
+              type="button"
+              className="rounded-full border border-slate-200 bg-white px-2 py-0.5 font-semibold text-slate-700 hover:bg-slate-50"
+              onClick={() => leaveOut(leftOut.filter((one) => one !== name))}
+            >
+              {name} ×
+            </button>
+          ))}
+        </p>
+      )}
       <Problem message={action.problem?.message} />
-      <section className={`${CARD} min-w-0`}>
+      <section className={`${CARD} min-w-0 overflow-x-auto`}>
         {data.rows.length === 0 ? (
           <p className="px-4 py-6 text-center text-[13px] text-slate-500">
-            {data.view === "new"
-              ? "Nothing new: every open tender for our medicines is screened, made a tender, or closed."
-              : data.view === "screened"
-                ? "Nothing screened and waiting. Add a tender worth bidding on from New."
-                : data.view === "tenders"
-                  ? "No found tender has been made a tender yet."
-                  : "Nothing found yet."}
+            {filtering || q || data.docs !== "all" || leftOut.length
+              ? "No tender matches the search and filters."
+              : data.view === "opportunities"
+                ? "No tender of ours found yet on either portal."
+                : data.view === "screened"
+                  ? "Nothing screened and waiting. Add a tender worth bidding on from Opportunities."
+                  : data.view === "tenders"
+                    ? "No found tender has been made a tender yet."
+                    : "Nothing found yet."}
           </p>
         ) : (
-          <ul className="divide-y divide-slate-100">
-            {data.rows.map((found) => {
-              const close = closing(found);
-              return (
-                <li key={found.id} className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2 px-4 py-3 text-[13px]">
-                  <div className="min-w-0 flex-1 basis-80">
-                    <Link to={`/tenders/finder/${found.id}`} className="font-semibold text-slate-900 hover:underline">
-                      {found.title}
-                    </Link>
-                    <span className="block text-[12px] text-slate-600">
-                      {found.agency ?? "agency not read"}
-                      {found.agency && !found.agencyId ? <span className="text-amber-700"> · not a customer yet</span> : ""}
-                    </span>
-                    <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[11.5px] text-slate-500">
-                      <State found={found} />
-                      {PORTAL[found.source]} {found.refNo}
-                      {found.noticeType ? ` · ${found.noticeType}` : found.procurementMode ? ` · ${found.procurementMode}` : ""}
-                      {found.publishedOn ? ` · published ${dayLabel(found.publishedOn)}` : ""}
-                    </span>
-                    <span className="mt-1.5 block">
+          <table className="w-full min-w-[860px] text-left text-[13px]">
+            <thead className="border-b border-slate-100 text-[11.5px] font-semibold text-slate-500">
+              <tr>
+                <th className="px-3 py-2.5 text-center">#</th>
+                <th className="px-3 py-2.5">Ref No. &amp; Type</th>
+                <th className="px-3 py-2.5">Procuring agency</th>
+                <th className="px-3 py-2.5 text-right">Approved budget (ABC)</th>
+                <th className="px-3 py-2.5">Published</th>
+                <th className="px-3 py-2.5">Matched molecules</th>
+                <th className="px-3 py-2.5 text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {data.rows.map((found, at) => {
+                const close = closing(found);
+                const number = (data.page - 1) * data.pageSize + at + 1;
+                return (
+                  <tr key={found.id} className="align-top">
+                    <td className="px-3 py-3 text-center">
+                      <span
+                        className={`inline-flex size-7 items-center justify-center rounded-full text-[11.5px] font-bold ${found.files ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}
+                        title={found.files ? "Its papers are here" : "No papers yet"}
+                      >
+                        {number}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <Link to={`/tenders/finder/${found.id}`} className="font-semibold text-slate-900 hover:underline">
+                        {found.refNo}
+                      </Link>
+                      <span className="mt-1 flex flex-wrap items-center gap-1">
+                        <Pill>{PORTAL[found.source]}</Pill>
+                        {found.type && (
+                          <span title={[found.noticeType, found.procurementMode].filter(Boolean).join(" · ")}>
+                            <Pill tone="info">{found.type}</Pill>
+                          </span>
+                        )}
+                        <State found={found} />
+                      </span>
+                      <span className="mt-1 block text-[11.5px] text-slate-500">
+                        {found.files
+                          ? `${found.files} ${found.files === 1 ? "file" : "files"}`
+                          : found.docsStatus === "pick-up"
+                            ? "Pick-up only"
+                            : "No documents yet"}
+                      </span>
+                    </td>
+                    <td className="max-w-72 px-3 py-3">
+                      <span className="line-clamp-2 font-semibold text-slate-800">{found.agency ?? found.title}</span>
+                      {found.agency && <span className="mt-0.5 line-clamp-2 block text-[12px] text-slate-500">{found.title}</span>}
+                      {found.agency && !found.agencyId && <span className="text-[11.5px] text-amber-700">not a customer yet</span>}
+                    </td>
+                    <td className="px-3 py-3 text-right font-semibold whitespace-nowrap text-slate-900 tabular-nums">{found.abc ? peso(found.abc) : "—"}</td>
+                    <td className="px-3 py-3 text-[12.5px] whitespace-nowrap text-slate-700">
+                      {found.publishedOn ? dayLabel(found.publishedOn) : "—"}
+                      <span className={`mt-0.5 block text-[11.5px] font-semibold ${close.tone}`}>{close.text}</span>
+                    </td>
+                    <td className="px-3 py-3">
                       <Molecules names={found.molecules} />
-                    </span>
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1 text-right">
-                    <span className="text-[15px] font-bold text-slate-900 tabular-nums">{found.abc ? shortPeso(found.abc) : "ABC not read"}</span>
-                    <span className={`text-[12px] font-semibold ${close.tone}`}>{close.text}</span>
-                    <span className="mt-1">
-                      {found.tenderId ? (
-                        <Link to={`/tenders/${found.tenderId}`} className="text-[12.5px] font-semibold text-emerald-700 hover:underline">
+                    </td>
+                    <td className="px-3 py-3 text-right whitespace-nowrap">
+                      <Link to={`/tenders/finder/${found.id}`} className="text-[12.5px] font-semibold text-emerald-700 hover:underline">
+                        View details →
+                      </Link>
+                      {found.tenderId && (
+                        <Link to={`/tenders/${found.tenderId}`} className="mt-1.5 block text-[12px] font-semibold text-slate-600 hover:underline">
                           Open {found.tenderCode}
                         </Link>
-                      ) : found.screenedAt ? (
-                        <Link to={`/tenders/finder/${found.id}`} className="text-[12.5px] font-semibold text-emerald-700 hover:underline">
-                          Make it a tender
-                        </Link>
-                      ) : (
-                        <Button small disabled={action.busy} onClick={() => screen(found, true)}>
-                          Add to screened
-                        </Button>
                       )}
-                    </span>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         )}
       </section>
-      {data.rows.length >= 300 && <p className="text-[12px] text-slate-500">The first 300 are shown: search or pick a medicine to narrow them.</p>}
+      <PageNumbers page={data.page} pageSize={data.pageSize} total={data.total} onPage={goTo} onSize={(size) => set({ size: size === 25 ? "" : String(size) })} />
     </div>
+  );
+}
+
+/** "Exclude products": our medicines, each with how many tenders ask for it; a checked one hides every
+ *  tender asking for it. */
+function LeaveOut({ products, leftOut, onChange }: { products: FoundList["products"]; leftOut: string[]; onChange: (names: string[]) => void }) {
+  const [find, setFind] = useState("");
+  const shown = products.filter((one) => one.name.toLowerCase().includes(find.trim().toLowerCase()));
+  return (
+    <details className="relative">
+      <summary className="field flex h-10 cursor-pointer list-none items-center gap-1 text-[13px]">
+        Exclude products{leftOut.length ? ` (${leftOut.length})` : ""}
+      </summary>
+      <div className={`${CARD} absolute z-30 mt-1 w-72 p-3 shadow-lg`}>
+        <p className="text-[12px] text-slate-500">Checked products are left out: any tender asking for one of them is hidden.</p>
+        <input className="field mt-2 h-9 w-full" placeholder="Find…" aria-label="Find a product" value={find} onChange={(event) => setFind(event.target.value)} />
+        <ul className="mt-2 max-h-64 space-y-0.5 overflow-y-auto">
+          {shown.map((one) => (
+            <li key={one.name}>
+              <label className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-1 text-[13px] hover:bg-slate-50">
+                <input
+                  type="checkbox"
+                  checked={leftOut.includes(one.name)}
+                  onChange={(event) => onChange(event.target.checked ? [...leftOut, one.name] : leftOut.filter((name) => name !== one.name))}
+                />
+                <span className="flex-1">{one.name}</span>
+                <span className="text-[12px] text-slate-400">{one.n}</span>
+              </label>
+            </li>
+          ))}
+          {shown.length === 0 && <li className="px-1.5 py-1 text-[12px] text-slate-500">No product found.</li>}
+        </ul>
+        {leftOut.length > 0 && (
+          <button type="button" className="mt-2 text-[12.5px] font-semibold text-slate-600 underline" onClick={() => onChange([])}>
+            Clear
+          </button>
+        )}
+      </div>
+    </details>
+  );
+}
+
+/** "Date range": on the published day or the closing day, from and to (both inclusive), with the bidding
+ *  system's quick picks. */
+function DateRange({ on, from, to, onChange }: { on: "published" | "closing"; from: string; to: string; onChange: (range: { dateOn: string; from: string; to: string }) => void }) {
+  const [draft, setDraft] = useState({ on, from, to });
+  const today = new Date();
+  const ago = (days: number) => isoDay(new Date(today.getTime() - days * 86_400_000));
+  const label = !from && !to ? "Any" : `${on === "closing" ? "Closing" : "Published"}: ${from ? shortDay(from) : "…"} – ${to ? shortDay(to) : "…"}`;
+  const apply = (range: { on: "published" | "closing"; from: string; to: string }) => onChange({ dateOn: range.on === "closing" ? "closing" : "", from: range.from, to: range.to });
+  return (
+    <details className="relative" onToggle={(event) => event.currentTarget.open && setDraft({ on, from, to })}>
+      <summary className="field flex h-10 cursor-pointer list-none items-center gap-1 text-[13px]">Date range: {label}</summary>
+      <div className={`${CARD} absolute right-0 z-30 mt-1 w-80 space-y-2.5 p-3 shadow-lg`}>
+        <div className="flex gap-1">
+          {(["published", "closing"] as const).map((one) => (
+            <button
+              key={one}
+              type="button"
+              className={`h-8 flex-1 rounded-[10px] text-[12.5px] font-semibold ${draft.on === one ? "bg-emerald-600 text-white" : "border border-slate-300 text-slate-700"}`}
+              onClick={() => setDraft({ ...draft, on: one })}
+            >
+              {one === "published" ? "Published" : "Closing"}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {(
+            [
+              ["Last 7 days", ago(6)],
+              ["Last 30 days", ago(29)],
+              ["This month", `${isoDay(today).slice(0, 8)}01`],
+            ] as const
+          ).map(([name, start]) => (
+            <button
+              key={name}
+              type="button"
+              className="rounded-full border border-slate-200 px-2.5 py-1 text-[12px] font-semibold text-slate-700 hover:bg-slate-50"
+              onClick={() => setDraft({ ...draft, from: start, to: isoDay(today) })}
+            >
+              {name}
+            </button>
+          ))}
+        </div>
+        <label className="block text-[12px] font-semibold text-slate-600">
+          From
+          <input type="date" className="field mt-1 h-9 w-full" value={draft.from} onChange={(event) => setDraft({ ...draft, from: event.target.value })} />
+        </label>
+        <label className="block text-[12px] font-semibold text-slate-600">
+          To
+          <input type="date" className="field mt-1 h-9 w-full" value={draft.to} onChange={(event) => setDraft({ ...draft, to: event.target.value })} />
+        </label>
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            className="text-[12.5px] font-semibold text-slate-600 underline"
+            onClick={(event) => {
+              apply({ on: "published", from: "", to: "" });
+              event.currentTarget.closest("details")?.removeAttribute("open");
+            }}
+          >
+            Clear all
+          </button>
+          <Button
+            small
+            variant="primary"
+            onClick={(event) => {
+              apply(draft);
+              event.currentTarget.closest("details")?.removeAttribute("open");
+            }}
+          >
+            Done
+          </Button>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+/** The pages of a list by number: first, last, and the two either side of the one shown, with Previous
+ *  and Next, which tenders this page holds, and how many rows a page shows (25, 50 or 100). */
+function PageNumbers({ page, pageSize, total, onPage, onSize }: { page: number; pageSize: number; total: number; onPage: (page: number) => void; onSize: (size: number) => void }) {
+  const last = Math.max(1, Math.ceil(total / pageSize));
+  if (total === 0) return null;
+  const shown = [...new Set([1, page - 2, page - 1, page, page + 1, page + 2, last])].filter((n) => n >= 1 && n <= last).sort((a, b) => a - b);
+  const button = "inline-flex h-9 min-w-9 items-center justify-center rounded-[10px] px-2.5 text-[13px] font-semibold disabled:opacity-40";
+  return (
+    <nav aria-label="Pages" className="flex flex-wrap items-center justify-between gap-2">
+      <span className="flex items-center gap-3 text-[12px] text-slate-500">
+        Showing {((page - 1) * pageSize + 1).toLocaleString("en-PH")}–{Math.min(total, page * pageSize).toLocaleString("en-PH")} of {total.toLocaleString("en-PH")}
+        <label className="flex items-center gap-1.5">
+          Rows per page
+          <select className="field h-8 w-auto py-0 text-[12.5px]" value={pageSize} onChange={(event) => onSize(Number(event.target.value))}>
+            {[25, 50, 100].map((n) => (
+              <option key={n} value={n}>
+                {n}
+              </option>
+            ))}
+          </select>
+        </label>
+      </span>
+      {last > 1 && (
+        <span className="flex flex-wrap items-center gap-1">
+          <button type="button" className={`${button} border border-slate-300 bg-white text-slate-700 hover:bg-slate-50`} disabled={page <= 1} onClick={() => onPage(page - 1)}>
+            <ChevronLeft className="size-4" aria-hidden="true" /> Previous
+          </button>
+          {shown.map((n, at) => (
+            <span key={n} className="flex items-center gap-1">
+              {at > 0 && n - (shown[at - 1] ?? n) > 1 && <span className="px-1 text-slate-400">…</span>}
+              <button
+                type="button"
+                aria-current={n === page ? "page" : undefined}
+                className={`${button} ${n === page ? "bg-emerald-600 text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`}
+                onClick={() => n !== page && onPage(n)}
+              >
+                {n}
+              </button>
+            </span>
+          ))}
+          <button type="button" className={`${button} border border-slate-300 bg-white text-slate-700 hover:bg-slate-50`} disabled={page >= last} onClick={() => onPage(page + 1)}>
+            Next <ChevronRight className="size-4" aria-hidden="true" />
+          </button>
+        </span>
+      )}
+    </nav>
   );
 }
 
@@ -548,16 +1258,105 @@ function Papers({ found, papers, listed }: { found: FoundTender; papers: FoundPa
       {papers.accuracy !== null && papers.accuracy <= 70 && (
         <p className="mt-2 text-[12px] font-semibold text-amber-800">The reading may be off ({papers.accuracy}%): check the lines against the paper.</p>
       )}
-      {papers.sheet.length > 0 && (
-        <dl className="mt-3 space-y-1.5 border-t border-slate-100 pt-2">
-          {papers.sheet.map((one) => (
-            <div key={one.label}>
-              <dt className="text-[11.5px] font-semibold text-slate-500">{one.label} (as the papers say)</dt>
-              <dd className="text-[12.5px] text-slate-800">{one.said}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
+      <div className="mt-3 border-t border-slate-100 pt-2">
+        <h4 className="text-[12.5px] font-bold text-slate-800">Bid data sheet (from the documents)</h4>
+        {papers.files.length === 0 && listed.length === 0 ? (
+          <p className="mt-1 text-[12px] text-slate-500">No documents downloaded yet; the next reading orders and reads them.</p>
+        ) : (
+          <ul className="mt-1 space-y-1.5">
+            {SHEET_ROWS.map(([key, label]) => {
+              const said = papers.sheet.find((one) => one.key === key)?.said;
+              return (
+                <li key={key} className="text-[12.5px]">
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="font-semibold text-slate-600">{label}</span>
+                    {said ? <Pill tone="good">Found</Pill> : <Pill>Not found</Pill>}
+                  </span>
+                  {said && <span className="mt-0.5 block text-slate-800">{said}</span>}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </section>
+  );
+}
+
+const SHEET_ROWS: [string, string][] = [
+  ["prebid_conference", "Pre-bid conference"],
+  ["bid_opening", "Bid opening"],
+  ["bid_submission_deadline", "Submission deadline"],
+  ["delivery_period", "Delivery period"],
+  ["bid_validity", "Bid validity"],
+  ["bid_security", "Bid security"],
+];
+
+/** The bidding system's "Bidding dates": each from the notice, else what its bid data sheet says (marked
+ *  "from documents"), cut down to the date or the number of days as the team writes them. */
+function BiddingDates({ found, papers }: { found: FoundDetail["found"]; papers: FoundPapers }) {
+  const d = found.details;
+  const sheet = (key: string) => papers.sheet.find((one) => one.key === key)?.said ?? null;
+  const fromDocs = (value: string | null) => (value ? { value, docs: true } : null);
+  const fromNotice = (value: string | null) => (value ? { value, docs: false } : null);
+  const hasPapers = papers.files.length > 0 || d.documents.length > 0;
+  const rows: [string, { value: string; docs: boolean } | null][] = [
+    ["Pre-bid conference", fromDocs(bidDateText(sheet("prebid_conference"))) ?? fromNotice(d.preBid)],
+    ["Bid opening", fromDocs(bidDateText(sheet("bid_opening"))) ?? fromNotice(d.bidOpening)],
+    ["Submission deadline", fromDocs(bidDateText(sheet("bid_submission_deadline")))],
+    ["Closing", fromNotice(found.closingAt ? when(found.closingAt) : null)],
+    ["Delivery period", fromDocs(deliveryText(sheet("delivery_period"))) ?? fromNotice(d.deliveryPeriod)],
+    ["Bid validity", fromDocs(sheet("bid_validity"))],
+    ["Bid security", fromDocs(sheet("bid_security"))],
+    ["Last updated", fromNotice(d.lastUpdated)],
+  ];
+  return (
+    <section className={`${CARD} p-4`}>
+      <h3 className="text-sm font-bold text-slate-900">Bidding dates</h3>
+      <dl className="mt-2 divide-y divide-slate-100">
+        {rows.map(([label, said]) => (
+          <div key={label} className="grid grid-cols-[9.5rem_1fr] gap-2 py-1.5 text-[12.5px]">
+            <dt className="text-slate-500">{label}</dt>
+            <dd className="text-slate-800">
+              {said ? (
+                <>
+                  {said.value}
+                  {said.docs && (
+                    <span className="ml-1.5 inline-block align-middle">
+                      <Pill tone="good">from documents</Pill>
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="text-slate-400">{hasPapers ? "Not in the notice or its documents" : "Not on the notice page"}</span>
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </section>
+  );
+}
+
+/** The bidding system's "Fetched": when the robot first and last read this tender, and when its papers
+ *  were last looked at. */
+function Fetched({ found, papers }: { found: FoundDetail["found"]; papers: FoundPapers }) {
+  const rows: [string, string | null][] = [
+    ["First fetched", when(found.firstSeenAt)],
+    ["Last fetched", when(found.seenAt)],
+    ["Documents checked", papers.checkedAt ? when(papers.checkedAt) : null],
+  ];
+  return (
+    <section className={`${CARD} p-4`}>
+      <h3 className="text-sm font-bold text-slate-900">Fetched</h3>
+      <dl className="mt-2 divide-y divide-slate-100">
+        {rows.map(([label, value]) => (
+          <div key={label} className="grid grid-cols-[9.5rem_1fr] gap-2 py-1.5 text-[12.5px]">
+            <dt className="text-slate-500">{label}</dt>
+            <dd className={value ? "text-slate-800" : "text-slate-400"}>{value ?? "Not yet"}</dd>
+          </div>
+        ))}
+      </dl>
     </section>
   );
 }
@@ -615,8 +1414,8 @@ export function FoundTenderPage() {
               </Link>
             ) : (
               <>
-                <Button small disabled={action.busy} onClick={() => screen(!found.screenedAt)}>
-                  {found.screenedAt ? "Take off screened" : "Add to screened"}
+                <Button small variant={found.screenedAt ? undefined : "primary"} disabled={action.busy} onClick={() => screen(!found.screenedAt)}>
+                  {found.screenedAt ? "✓ Screened · Remove" : "+ Add to Screened"}
                 </Button>
                 <Button small variant="primary" disabled={action.busy} onClick={() => setMaking(true)}>
                   Make it a tender
@@ -632,19 +1431,30 @@ export function FoundTenderPage() {
       )}
       <Facts
         rows={[
+          ["Procuring entity", found.agency],
           ["ABC", found.abc ? peso(found.abc) : "not read"],
-          ["Bids close", <span key="close" className={close.tone}>{close.text}</span>],
           ["Published", found.publishedOn ? dayLabel(found.publishedOn) : null],
-          ["Pre-bid conference", d.preBid],
-          ["Bid opening", d.bidOpening],
-          ["Mode", found.procurementMode],
-          ["Delivery", [d.areaOfDelivery, d.deliveryPeriod].filter(Boolean).join(" · ")],
+          ["Bids close", <span key="close" className={close.tone}>{close.text}</span>],
+          ["Notice type", found.noticeType],
+          ["Mode of procurement", found.procurementMode],
           ["Solicitation no.", d.solicitationNo],
+          ["Classification", d.classification],
+          ["Area of delivery", d.areaOfDelivery],
           ["On the portal", d.status],
           ["Customer", found.customer ?? (found.agency ? "not a customer yet" : null)],
           ["Screened by", found.screenedBy && found.screenedAt ? `${found.screenedBy} · ${when(found.screenedAt)}` : null],
         ]}
       />
+      <section className={`${CARD} p-4`}>
+        <h3 className="text-sm font-bold text-slate-900">
+          Our products <span className="font-normal text-slate-400">· {found.molecules.length}</span>
+        </h3>
+        <div className="mt-2">{found.molecules.length ? <Molecules names={found.molecules} /> : <span className="text-[12.5px] text-slate-500">None named yet{found.source === "ps" ? " (on PS-PhilGEPS's Bid Match; its papers name them once read)" : ""}.</span>}</div>
+      </section>
+      <div className="grid gap-3 lg:grid-cols-2">
+        <BiddingDates found={found} papers={data.papers} />
+        <Fetched found={found} papers={data.papers} />
+      </div>
       <section className={`${CARD} min-w-0 overflow-x-auto`}>
         <h3 className="border-b border-slate-100 px-4 py-3 text-sm font-bold text-slate-900">
           What it asks for <span className="font-normal text-slate-400">· {data.lines.length} {data.lines.length === 1 ? "line" : "lines"} of ours</span>

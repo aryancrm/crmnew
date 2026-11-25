@@ -103,19 +103,54 @@ export function psNotice(row, headers, notice, reading) {
     };
 }
 
+// A moment as the bidding system writes it: read_at is milliseconds, first_seen and analyzed_at ISO text
+const msOf = (value) => (typeof value === 'number' ? value : Date.parse(value || '') || 0);
+
+// The snapshot's Bid Match list: asked for alone (bidMatch), or inside the whole lists
+const bidMatchOf = (snapshot) => snapshot?.bidMatch || snapshot?.lists?.bidMatch || { headers: [], rows: [] };
+
+// Which Bid Match notices the Sync read again (or saw first) since: their readings are needed even
+// when the papers were not read again
+export function psRefsSeenSince(snapshot, sinceMs) {
+    const refs = [];
+    for (const row of bidMatchOf(snapshot).rows || []) {
+        const ref = psRef(row);
+        const notice = ref ? snapshot.notices?.[ref] : null;
+        if (ref && (msOf(notice?.read_at) > sinceMs || msOf(notice?.first_seen) > sinceMs)) refs.push(ref);
+    }
+    return refs;
+}
+
 // The Bid Match rows of a Sync as notices for the CRM: all of them, or (sinceMs) only those read again since
 export function psNotices(snapshot, readings, sinceMs = 0) {
-    const list = snapshot?.lists?.bidMatch || { headers: [], rows: [] };
+    const list = bidMatchOf(snapshot);
     const out = [];
     for (const row of list.rows || []) {
         const ref = psRef(row);
         const notice = ref ? snapshot.notices?.[ref] : null;
         const reading = ref ? readings.get(ref) : null;
-        const changed = !sinceMs || (notice?.read_at || 0) > sinceMs || Date.parse(reading?.analyzed_at || 0) > sinceMs || (notice?.first_seen || 0) > sinceMs;
+        const changed = !sinceMs || msOf(notice?.read_at) > sinceMs || msOf(reading?.analyzed_at) > sinceMs || msOf(notice?.first_seen) > sinceMs;
         const one = changed ? psNotice(row, list.headers || [], notice, reading) : null;
         if (one) out.push(one);
     }
     return { notices: out, listed: (list.rows || []).length };
+}
+
+// The papers' readings to hand over. The first time: all of them. After that only the ones read again
+// since, plus (by their numbers) the readings of notices the Sync read again, so that such a notice is
+// never handed over without the lines its papers gave. That system's free plan counts every byte read
+// (docs/PLAN.md 25), so the whole table is never read again every hour.
+const READING_COLUMNS = 'ref,status,result,documents_read,analyzed_at';
+export async function psReadings(base, key, snapshot, since) {
+    if (!since) return new Map((await table(base, key, `ps_tender_analysis?select=${READING_COLUMNS}&order=ref`)).map((r) => [String(r.ref), r]));
+    const changed = await table(base, key, `ps_tender_analysis?select=${READING_COLUMNS}&analyzed_at=gt.${encodeURIComponent(since)}&order=ref`);
+    const readings = new Map(changed.map((r) => [String(r.ref), r]));
+    const missing = psRefsSeenSince(snapshot, Date.parse(since)).filter((ref) => !readings.has(ref) && /^\d+$/.test(ref));
+    for (let i = 0; i < missing.length; i += 100) {
+        const some = await table(base, key, `ps_tender_analysis?select=${READING_COLUMNS}&ref=in.(${missing.slice(i, i + 100).join(',')})&order=ref`);
+        for (const r of some) readings.set(String(r.ref), r);
+    }
+    return readings;
 }
 
 // ---------- one hand-over ----------
@@ -132,8 +167,9 @@ export async function handOver({ base, key, all = false }) {
     say(`PhilGEPS: ${first.taken} tenders handed over (${first.fresh} new to the CRM)`);
 
     // 2. Its PS-PhilGEPS tenders: the last Sync's Bid Match, each notice, the papers' reading
-    const [snapshot] = await table(base, key, 'ps_philgeps_snapshot?id=eq.latest&select=synced_at,lists,notices');
-    const readings = new Map((await table(base, key, 'ps_tender_analysis?select=ref,status,result,documents_read,analyzed_at&order=ref')).map((r) => [String(r.ref), r]));
+    // (only the Bid Match list of the snapshot: its My Opportunities and Award Notices lists are not handed over)
+    const [snapshot] = await table(base, key, 'ps_philgeps_snapshot?id=eq.latest&select=synced_at,bidMatch:lists->bidMatch,notices');
+    const readings = await psReadings(base, key, snapshot, since);
     const { notices: ps, listed } = psNotices(snapshot, readings, sinceMs);
     const second = ps.length ? await crm.send(ps) : { taken: 0, fresh: 0, matched: 0 };
     say(`PS-PhilGEPS: ${second.taken} of ${listed} tenders handed over (${second.fresh} new to the CRM)`);

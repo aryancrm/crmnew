@@ -51,13 +51,21 @@ test('PS-PhilGEPS dates and numbers as the CRM takes them', async () => {
 test('the bridge: reads the bidding system only, hands both portals and the screened list to the CRM, then only what changed', async () => {
     const asked = [];
     const old = await serve((req, url) => {
-        asked.push(`${req.method} ${url.pathname}`);
+        asked.push(`${req.method} ${url.pathname}${url.search}`);
         if (req.headers.apikey !== DB_KEY) return { status: 401, body: { message: 'no' } };
         const name = url.pathname.replace('/rest/v1/', '');
         const offset = Number(url.searchParams.get('offset') || 0);
-        // (its own filter: only rows changed since)
+        // (its own filters, as PostgREST applies them: rows changed since, rows by their numbers)
         const since = /^gt\.(.+)$/.exec(url.searchParams.get('updated_at') || '')?.[1];
-        const rows = name === 'philgeps_opportunities' && since ? [] : tables[name] || [];
+        const readSince = /^gt\.(.+)$/.exec(url.searchParams.get('analyzed_at') || '')?.[1];
+        const refs = /^in\.\((.*)\)$/.exec(url.searchParams.get('ref') || '')?.[1]?.split(',');
+        let rows = name === 'philgeps_opportunities' && since ? [] : tables[name] || [];
+        if (readSince) rows = rows.filter((r) => Date.parse(r.analyzed_at) > Date.parse(readSince));
+        if (refs) rows = rows.filter((r) => refs.includes(String(r.ref)));
+        // (a column asked for under another name: "bidMatch:lists->bidMatch")
+        if (name === 'ps_philgeps_snapshot' && /bidMatch:lists->bidMatch/.test(url.searchParams.get('select') || '')) {
+            rows = rows.map(({ lists, ...rest }) => ({ ...rest, bidMatch: lists.bidMatch }));
+        }
         return { body: rows.slice(offset, offset + 500) };
     });
     const got = { notices: [], marks: [], runs: [] };
@@ -110,12 +118,41 @@ test('the bridge: reads the bidding system only, hands both portals and the scre
         assert.equal(got.runs.at(-1).trigger, 'feed');
         assert.match(got.runs.at(-1).summary, /1 PhilGEPS and 2 PS-PhilGEPS tenders/);
 
-        // An hour later: nothing was read again there, so no tender is handed over again
+        // The first time every reading is read once
+        assert.ok(asked.some((line) => line.startsWith('GET /rest/v1/ps_tender_analysis?') && !line.includes('analyzed_at=gt.') && !line.includes('ref=in.')));
+        // and of the snapshot only the Bid Match list and the notices (not My Opportunities, not the awards)
+        assert.ok(asked.some((line) => line.includes('ps_philgeps_snapshot?') && decodeURIComponent(line).includes('bidMatch:lists->bidMatch')), asked.join('\n'));
+
+        // An hour later: nothing was read again there, so no tender is handed over again, and the
+        // readings are not read again whole (only the ones read since: none)
         got.notices.length = 0;
+        asked.length = 0;
         const again = await handOver({ base: old.url, key: DB_KEY });
         assert.equal(again.philgeps.taken, 0);
         assert.equal(again.ps.taken, 0);
         assert.equal(got.notices.length, 0);
+        const readingAsks = asked.filter((line) => line.includes('/ps_tender_analysis?'));
+        assert.equal(readingAsks.length, 1, readingAsks.join('\n'));
+        assert.match(readingAsks[0], /analyzed_at=gt\./);
+
+        // Later still: the Sync read notice 152987's page again (its papers' reading did not change), and
+        // the papers of 149000 were read for the first time. Both are handed over; the reading of 152987
+        // is asked for by its number alone, so its lines from the papers come along.
+        const notices = tables.ps_philgeps_snapshot[0].notices;
+        notices[152987].read_at = now + 5000;
+        tables.ps_tender_analysis.push({ ref: '149000', status: 'done', analyzed_at: new Date(now + 5000).toISOString(), documents_read: [], result: { items: [] } });
+        got.notices.length = 0;
+        asked.length = 0;
+        const later = await handOver({ base: old.url, key: DB_KEY });
+        assert.equal(later.ps.taken, 2);
+        assert.equal(got.notices.find((one) => one.ref_no === '152987').details.documents_items[0].unit_price, 114.89);
+        assert.ok(asked.some((line) => /ps_tender_analysis\?.*ref=in\.\(152987\)/.test(line)), asked.join('\n'));
+        assert.ok(!asked.some((line) => /ref=in\.\([^)]*149000/.test(line)), 'a reading read since is not asked for twice');
+
+        // A notice seen for the first time (first_seen is ISO text, not milliseconds) counts as changed
+        const { psRefsSeenSince } = await import('./feed.mjs');
+        const seen = { bidMatch, notices: { 152987: { read_at: now - 99999, first_seen: new Date(now + 9000).toISOString() } } };
+        assert.deepEqual(psRefsSeenSince(seen, now), ['152987']);
     } finally {
         await old.close();
         await crm.close();

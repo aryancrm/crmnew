@@ -5,6 +5,8 @@ import { z } from "zod";
 import type { Database } from "../db/index";
 import { type Env, idParam, readBody } from "../http";
 import { feedSince, foundCount, foundDetail, listFound, makeTender, noteRun, robotKnown, robotMolecules, screenFound, takeFound, takeScreened } from "./finder";
+import { fetchNow } from "./fetch-now";
+import { laptopCode, laptopFile, laptopStep } from "./laptop-login";
 import { foundFile, keepPaper, noteRobotLogin, paperForRobot, papersKept, papersWanted, robotLoginState, robotLogins, robotProducts, screenedMarks, tryLoginAgain } from "./papers";
 import { robotCaller } from "./robot-caller";
 import { robotRows, writeRobotRows } from "./robot-store";
@@ -62,7 +64,7 @@ export function tenderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
   // join that makes a found notice a tender. Before "/api/tenders/:id", which would read "found"
   // as a tender's number.
   app.get("/api/tenders/found", async (c) =>
-    c.json(await listFound(db, c.get("me"), { view: c.req.query("view"), q: c.req.query("q"), source: c.req.query("source"), molecule: c.req.query("molecule") })),
+    c.json(await listFound(db, c.get("me"), c.req.query())),
   );
   app.get("/api/tenders/found/count", async (c) => c.json(await foundCount(db, c.get("me"))));
   // A paper of a notice, as the robot got it from PhilGEPS: downloaded, never run in the page.
@@ -79,6 +81,18 @@ export function tenderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
   app.post("/api/tenders/found/robot/login-again", async (c) => {
     await tryLoginAgain(db, c.get("me"));
     return c.json({ ok: true });
+  });
+  // Fetch now: the robot runs at once instead of at the next hour (tenders/fetch-now.ts).
+  app.post("/api/tenders/found/robot/fetch", async (c) => {
+    const input = await readBody(c, z.object({ portal: z.enum(["philgeps", "ps"]) }));
+    return c.json(await fetchNow(db, c.get("me"), input.portal));
+  });
+  // Connect PS-PhilGEPS from a team laptop (tenders/laptop-login.ts): a one-time log-in code for the
+  // page's link, or the laptop's one-time setup file.
+  app.post("/api/tenders/found/ps/connect", async (c) => {
+    const input = await readBody(c, z.object({ purpose: z.enum(["login", "setup"]) }));
+    const crmUrl = process.env.WEB_URL || c.req.header("origin") || "http://localhost:5180";
+    return c.json(await laptopCode(db, c.get("me"), input.purpose, crmUrl));
   });
   app.get("/api/tenders/found/:id", async (c) => c.json(await foundDetail(db, c.get("me"), idParam(c))));
   app.post("/api/tenders/found/:id/screen", async (c) => {
@@ -174,6 +188,16 @@ export function tenderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
     await moveTender(db, c.get("me"), Number(c.req.param("id")), input as Parameters<typeof moveTender>[3]);
     return c.json({ ok: true });
   });
+  // The laptop's side of Connect PS-PhilGEPS: no sign-in on a laptop, a one-time code instead. The same
+  // address the bidding system's log-in module calls (<site>/api/ps-philgeps/laptop), so it runs unchanged.
+  app.post("/api/ps-philgeps/laptop", async (c) => {
+    const body = (await c.req.json().catch(() => ({}))) as Parameters<typeof laptopStep>[1];
+    const answer = await laptopStep(db, body && typeof body === "object" ? body : {});
+    return c.json(answer.body, answer.status);
+  });
+  app.get("/api/ps-philgeps/laptop", (c) =>
+    c.body(laptopFile(c.req.query("code"), c.req.query("file") ?? ""), 200, { "content-type": "text/plain; charset=utf-8", "cache-control": "no-store" }),
+  );
   app.get("/api/company-papers", async (c) => c.json(await companyPapers(db)));
   app.post("/api/company-papers", async (c) => {
     const input = await readBody(c, z.object({ name: z.string().trim().min(2), number: z.string().max(80).nullish(), expiresOn: DAY.nullish(), note: z.string().max(300).nullish() }));
