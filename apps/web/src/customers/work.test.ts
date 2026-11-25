@@ -22,15 +22,15 @@ describe("who the seller is", () => {
 
 describe("the buttons on a customer", () => {
   const all = { order: true, visit: true, call: true, directions: true };
-  it("in the field: order, visit, call, directions", () => {
-    expect(actionsFor("field", all)).toEqual(["order", "visit", "call", "directions"]);
-  });
-  it("by phone: the call first, no visit", () => {
-    expect(actionsFor("phone", all)).toEqual(["call", "order", "directions"]);
+  it("one primary (New order) and at most two of the seller's own; never Directions (it is by the address)", () => {
+    expect(actionsFor("field", all)).toEqual(["order", "visit", "call"]);
+    expect(actionsFor("rx", all)).toEqual(["order", "visit", "call"]);
+    expect(actionsFor("phone", all)).toEqual(["order", "call"]);
+    for (const seller of ["field", "rx", "pap", "phone", "lead", "desk"] as const) expect(actionsFor(seller, all).length).toBeLessThanOrEqual(3);
   });
   it("only what they may do", () => {
     expect(actionsFor("field", { order: true, visit: false, call: false, directions: false })).toEqual(["order"]);
-    expect(actionsFor("desk", { order: false, visit: false, call: false, directions: true })).toEqual(["directions"]);
+    expect(actionsFor("desk", { order: false, visit: false, call: false, directions: true })).toEqual([]);
   });
 });
 
@@ -67,7 +67,8 @@ describe("what's next with them", () => {
       TODAY,
     );
     expect(steps.map((step) => step.key)).toEqual(["overdue", "order-2", "reorder", "visit", "moving"]);
-    expect(steps[0]).toMatchObject({ text: "Overdue ₱7,800", go: { label: "Call them", action: "call" } });
+    // The same name as the button on top.
+    expect(steps[0]).toMatchObject({ text: "Overdue ₱7,800", go: { label: "Log a call", action: "call" } });
     expect(steps[1]).toMatchObject({ text: "Order 2MG-2 is on hold", go: { to: "/orders/2" } });
     expect(steps[3]).toMatchObject({ go: { to: "/visits/9" }, sub: "Best tue · AM" });
   });

@@ -261,6 +261,16 @@ export function Customer() {
                   <span className="truncate">
                     {[customer.address, customer.city].filter(Boolean).join(", ")}
                   </span>
+                  {work.directionsHref && (
+                    <a
+                      href={work.directionsHref}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="ml-1 shrink-0 font-semibold text-emerald-800 hover:underline"
+                    >
+                      Directions
+                    </a>
+                  )}
                 </span>
               )}
               {customer.kind === "doctor" && customer.specialty && (
@@ -331,6 +341,7 @@ export function Customer() {
           />
         }
       >
+        {work.seller !== "desk" && <NextCard flat steps={work.steps} run={work.run} />}
         <Glance
           title={patient ? "Their medicines and money" : "Their buying"}
           tiles={[
@@ -368,7 +379,6 @@ export function Customer() {
         />
       </RecordHead>
       <Problem message={action.problem?.message} />
-      {work.seller !== "desk" && <NextCard steps={work.steps} run={work.run} />}
 
       {/* Everything on one page, as the medicine page: their buying on the left, money, details
           and what happened on the right; the parts in the order this seller works them (25 Nov). */}
@@ -385,7 +395,7 @@ export function Customer() {
               rows={[
                 ["Bought", peso(totals.bought)],
                 ["Paid", peso(totals.paid), "good"],
-                ["Overdue", peso(totals.overdue), totals.overdue > 0 ? "bad" : undefined],
+                // Overdue is said in Their buying and What's next already (26 Nov: once is enough).
                 ["Owed now", peso(totals.owed), "strong"],
                 ...(customer.creditLimit
                   ? ([

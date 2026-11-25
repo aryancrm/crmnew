@@ -32,18 +32,15 @@ export const ACTION_WORDS: Record<ActionKey, string> = {
   directions: "Directions",
 };
 
-/** The buttons on a customer for this seller, the most used first; only those they may use. */
+/** The buttons on top of a customer (26 Nov, the six UX laws): one primary, New order, then at
+ *  most two of the seller's own (Hick: few choices); Directions sits by the address it acts on
+ *  (proximity), the rest under More. Only those they may use. */
 export function actionsFor(
   seller: SellerKind,
   can: { order: boolean; visit: boolean; call: boolean; directions: boolean },
 ): ActionKey[] {
-  const order: ActionKey[] =
-    seller === "phone"
-      ? ["call", "order", "directions"]
-      : seller === "field" || seller === "rx" || seller === "pap" || seller === "lead"
-        ? ["order", "visit", "call", "directions"]
-        : ["order", "call", "directions"];
-  return order.filter((key) => can[key]);
+  const own: ActionKey[] = seller === "field" || seller === "rx" || seller === "pap" || seller === "lead" ? ["visit", "call"] : ["call"];
+  return (["order", ...own] as ActionKey[]).filter((key) => can[key]).slice(0, 3);
 }
 
 export type NextStep = {
@@ -88,7 +85,8 @@ export function nextSteps(
       text: `Overdue ${pesoWords(totals.overdue)}`,
       sub: `${pesoWords(totals.owed)} owed in all`,
       tone: "bad",
-      go: can.call ? { label: "Call them", action: "call" } : { label: "Statement", to: `/customers/${customer.id}/statement` },
+      // The same words as the button on top (one name for one thing).
+      go: can.call ? { label: ACTION_WORDS.call, action: "call" } : { label: "Statement", to: `/customers/${customer.id}/statement` },
     });
   const reorder = page.refill.nextOn;
   if (reorder && daysBetween(today, reorder) <= 7)
@@ -97,7 +95,7 @@ export function nextSteps(
       text: reorder < today ? `Reorder was due ${dayWords(reorder)}` : `Reorder due ${dayWords(reorder)}`,
       sub: page.refill.lastOn ? `Last order ${dayWords(page.refill.lastOn.slice(0, 10))}` : undefined,
       tone: reorder < today ? "warn" : "info",
-      go: can.order ? { label: "New order", action: "order" } : undefined,
+      go: can.order ? { label: ACTION_WORDS.order, action: "order" } : undefined,
     });
   if (customer.licenceState === "expired" || customer.licenceState === "soon")
     steps.push({
@@ -123,7 +121,7 @@ export function nextSteps(
         text: last ? `No visit planned · last one ${daysBetween(last.day, today)} days ago` : "No visit planned · never visited",
         sub: best ? `Best ${best}` : undefined,
         tone: last && daysBetween(last.day, today) <= 30 ? "info" : "warn",
-        go: { label: "Add visit", action: "visit" },
+        go: { label: ACTION_WORDS.visit, action: "visit" },
       });
   }
   const moving = page.orders.filter((one) => MOVING.includes(one.status));

@@ -4,7 +4,7 @@
 
 import type { ClientPage } from "@2mg/api/mr";
 import type { CustomerPage, Me } from "@2mg/api/types";
-import { CalendarPlus, ChevronDown, ClipboardPlus, MapPin, MessageSquareWarning, PhoneCall, Plus, SlidersHorizontal } from "lucide-react";
+import { CalendarPlus, ClipboardPlus, Ellipsis, MapPin, MessageSquareWarning, PhoneCall, Plus, SlidersHorizontal } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { useMrMe } from "../mr/parts";
@@ -61,6 +61,8 @@ export function useCustomerWork(me: Me | undefined, page: CustomerPage | undefin
     field,
     can,
     run,
+    /** Directions to them, shown by their address (proximity), not among the buttons on top. */
+    directionsHref: can.directions && where ? directions(where) : null,
     dialogs,
     actions: actionsFor(seller, can),
     steps: page ? nextSteps(page, field, can, manilaToday()) : [],
@@ -69,8 +71,9 @@ export function useCustomerWork(me: Me | undefined, page: CustomerPage | undefin
 
 const ICON: Record<ActionKey, typeof Plus> = { order: Plus, visit: CalendarPlus, call: PhoneCall, directions: MapPin };
 
-/** The buttons on top: the seller's most used first and in green, the rest beside it, the rarely
- *  used under More. */
+/** The buttons on top: one primary in green (New order), at most two of the seller's own beside it,
+ *  the rarely used under ⋯ More. On a phone the bar stays under the top bar while the page scrolls
+ *  (the bottom is the phone's tabs), so the three are always in reach. */
 export function ActionBar({
   actions,
   run,
@@ -91,7 +94,11 @@ export function ActionBar({
     setParams(next, { replace: true });
   };
   return (
-    <div className="flex flex-wrap items-center gap-2" role="toolbar" aria-label={`What to do with ${name}`}>
+    <div
+      className="sticky top-14 z-20 -mx-4 flex flex-wrap items-center gap-2 border-b border-slate-200/80 bg-white/95 px-4 py-2 backdrop-blur md:static md:mx-0 md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none"
+      role="toolbar"
+      aria-label={`What to do with ${name}`}
+    >
       {actions.map((key, index) => {
         const Icon = ICON[key];
         return (
@@ -105,13 +112,17 @@ export function ActionBar({
                 : "inline-flex h-10 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-700 shadow-2xs hover:bg-slate-50"
             }
           >
-            <Icon className="size-4" aria-hidden="true" /> {key === "order" && index === 0 ? "New order for them" : ACTION_WORDS[key]}
+            <Icon className="size-4" aria-hidden="true" /> {ACTION_WORDS[key]}
           </button>
         );
       })}
       <details className="relative">
-        <summary className="inline-flex h-10 cursor-pointer list-none items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-          More <ChevronDown className="size-4" aria-hidden="true" />
+        <summary
+          aria-label="More actions"
+          title="More actions"
+          className="inline-flex size-10 cursor-pointer list-none items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+        >
+          <Ellipsis className="size-5" aria-hidden="true" />
         </summary>
         <div className="absolute right-0 z-20 mt-1 flex w-60 flex-col rounded-xl border border-slate-200 bg-white p-1 shadow-lg">
           {field?.can.profile && (
@@ -137,10 +148,11 @@ const TONE: Record<NextStep["tone"], string> = {
   info: "bg-sky-500",
 };
 
-/** What waits with this customer now, the most urgent first, each with what to press. */
-export function NextCard({ steps, run }: { steps: NextStep[]; run: (key: ActionKey) => void }) {
+/** What waits with this customer now, the most urgent first, each with what to press. Inside
+ *  the head card, right under the name (`flat`): the first thing read (26 Nov). */
+export function NextCard({ steps, run, flat }: { steps: NextStep[]; run: (key: ActionKey) => void; flat?: boolean }) {
   return (
-    <section className={`${CARD} p-4`} aria-labelledby="whats-next">
+    <section className={flat ? "mt-4 rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3" : `${CARD} p-4`} aria-labelledby="whats-next">
       <h2 id="whats-next" className="mb-2 text-sm font-bold text-slate-900">
         What's next with them
       </h2>
