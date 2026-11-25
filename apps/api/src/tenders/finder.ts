@@ -600,8 +600,17 @@ export async function listFound(
   };
 }
 
+/** The robot's last runs: six of each portal, and six of the bridge's hand-overs from the bidding
+ *  system (trigger "feed", which hands over both portals), so each portal's card has its own. */
 const lastRuns = (db: Database) =>
-  rows<FindRun>(db, sql`select id::int as id, source, trigger, status, summary, found, matched, fresh, to_char(at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as at from tender_find_run order by at desc, id desc limit 6`);
+  rows<FindRun>(
+    db,
+    sql`select id, source, trigger, status, summary, found, matched, fresh, at from (
+        select id::int as id, source, trigger, status, summary, found, matched, fresh, to_char(at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as at, at as moment,
+          row_number() over (partition by source, coalesce(trigger, '') = 'feed' order by at desc, id desc) as n
+        from tender_find_run
+      ) runs where n <= 6 order by moment desc, id desc`,
+  );
 
 /** For the Tenders page's button: whether this seat has the finder, and how many are new. */
 export async function foundCount(db: Database, me: Me): Promise<{ allowed: boolean; fresh: number }> {

@@ -142,6 +142,22 @@ describe("Fetch now", () => {
     expect((await state()).failed).toBeNull();
   });
 
+  it("each portal's card gets its own last runs, and the bridge's hand-overs their own", async () => {
+    for (let i = 0; i < 8; i += 1) {
+      await db.execute(sql`insert into tender_find_run (source, trigger, status, found, at) values ('philgeps', 'schedule', 'success', ${i}, now() - make_interval(mins => ${i}))`);
+      await db.execute(sql`insert into tender_find_run (source, trigger, status, found, at) values ('ps', 'schedule', 'success', ${i}, now() - make_interval(hours => ${i + 1}))`);
+    }
+    for (let i = 0; i < 2; i += 1) await db.execute(sql`insert into tender_find_run (source, trigger, status, at) values ('ps', 'feed', 'success', now() - interval '1 minute')`);
+    const runs = ((await (await app.request("/api/tenders/found", { headers: { cookie: cookies.jimmy as string } })).json()) as FoundList).robot.runs;
+    expect(runs.filter((run) => run.source === "philgeps")).toHaveLength(6);
+    expect(runs.filter((run) => run.source === "ps" && run.trigger !== "feed")).toHaveLength(6);
+    expect(runs.filter((run) => run.trigger === "feed")).toHaveLength(2);
+    // Newest first, and each portal's newest kept (the PhilGEPS runs are all newer than PS's)
+    expect(runs.filter((run) => run.source === "philgeps").map((run) => run.found)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(runs.filter((run) => run.source === "ps" && run.trigger !== "feed").map((run) => run.found)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect([...runs].sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).map((run) => run.id)).toEqual(runs.map((run) => run.id));
+  });
+
   it("runs the robot on this computer when set so, and notes a robot that stopped", async () => {
     process.env.TENDER_FINDER_FETCH = "local";
     process.env.TENDER_FINDER_KEY = KEY;

@@ -6,7 +6,7 @@
 import type { Catalogue, CustomerList, FoundDetail, FoundLine, FoundList, FoundPapers, FoundTender, FoundView, TenderMode } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, Search } from "lucide-react";
-import { useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { shortPeso } from "../ceo";
@@ -59,6 +59,84 @@ function State({ found }: { found: FoundTender }) {
   return found.molecules.length ? <Pill tone="brand">New</Pill> : <Pill>Not ours</Pill>;
 }
 
+/** Connect PS-PhilGEPS from this laptop (the bidding system's pop-up log-in; API tenders/laptop-login.ts):
+ *  the page opens the "bishnoi-ps-connect:" link with a one-time code, and on a laptop set up once a Chrome
+ *  window opens with the log-in filled in; a person ticks "I'm not a robot" and the session serves everyone.
+ *  While it waits (3 minutes at most) the page looks every 3 seconds whether PS-PhilGEPS is connected. */
+function ConnectPs({ connected }: { connected: boolean }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const [since, setSince] = useState<number | null>(null);
+  const [now, setNow] = useState(Date.now());
+  const waiting = since !== null && !connected && now - since < 180_000;
+  const gaveUp = since !== null && !connected && now - since >= 180_000;
+  useEffect(() => {
+    if (since === null || connected) return;
+    const timer = setInterval(() => {
+      setNow(Date.now());
+      void queries.invalidateQueries({ queryKey: ["tenders", "found"] });
+    }, 3_000);
+    return () => clearInterval(timer);
+  }, [since, connected, queries]);
+  const connect = () =>
+    void action.run(async () => {
+      const { code } = await api<{ code: string }>("/api/tenders/found/ps/connect", { method: "POST", body: { purpose: "login" } });
+      setSince(Date.now());
+      setNow(Date.now());
+      window.location.href = `bishnoi-ps-connect:start?code=${encodeURIComponent(code)}`;
+    });
+  const setUp = () =>
+    void action.run(async () => {
+      const { script } = await api<{ script: string }>("/api/tenders/found/ps/connect", { method: "POST", body: { purpose: "setup" } });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(new Blob([script], { type: "application/octet-stream" }));
+      link.download = "Set up PS-PhilGEPS log-in for Bishnoi One.cmd";
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
+    });
+  if (connected && since === null) return null;
+  return (
+    <div className="mt-2 space-y-2">
+      {connected ? (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-[12.5px] text-emerald-900">
+          <b>PS-PhilGEPS is connected</b> for everyone. The robot reads it at its next run (or press Fetch now).{" "}
+          <button type="button" className="font-semibold underline" onClick={() => setSince(null)}>
+            Close
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button small variant="primary" disabled={action.busy || waiting} className="disabled:opacity-50" onClick={connect}>
+            {waiting ? "Waiting for the log-in…" : "Connect PS-PhilGEPS"}
+          </Button>
+          <span className="text-[12px] text-slate-500">From a team laptop with Google Chrome.</span>
+        </div>
+      )}
+      {(waiting || gaveUp) && (
+        <div className={`rounded-xl border px-3 py-2 text-[12.5px] ${gaveUp ? "border-amber-200 bg-amber-50 text-amber-900" : "border-sky-200 bg-sky-50 text-sky-900"}`}>
+          {gaveUp ? (
+            <>No log-in window opened within 3 minutes. </>
+          ) : (
+            <>
+              A Chrome window opens on this laptop with the PS-PhilGEPS log-in filled in: tick <b>&ldquo;I&rsquo;m not a robot&rdquo;</b>. If the browser asks
+              whether to open the PS-PhilGEPS log-in, allow it.{" "}
+            </>
+          )}
+          Nothing opened? This laptop needs a one-time setup (Windows with Google Chrome, about 5 minutes):{" "}
+          <button type="button" disabled={action.busy} className="font-semibold underline disabled:opacity-50" onClick={setUp}>
+            Set up this laptop
+          </button>
+          , run the file it downloads, then press Connect PS-PhilGEPS again.{" "}
+          <button type="button" className="font-semibold underline" onClick={() => setSince(null)}>
+            {gaveUp ? "Close" : "Cancel"}
+          </button>
+        </div>
+      )}
+      <Problem message={action.problem?.message} />
+    </div>
+  );
+}
+
 /** Fetch now: the robot runs at once instead of at the next hour (the bidding system's Sync button).
  *  While a press waits for its run the page looks again every 15 seconds (TenderFinderPage). */
 function FetchNow({ fetch }: { fetch: FoundList["robot"]["fetch"] }) {
@@ -108,26 +186,21 @@ function FetchNow({ fetch }: { fetch: FoundList["robot"]["fetch"] }) {
   );
 }
 
-/** The robot's last word: when it last read the portals and what it found; its earlier runs under it. */
+/** The robot's last word, one card per portal (the developer, 25 Nov: "a separate connection of PhilGEPS
+ *  and PS-PhilGEPS"): each with its own last read and what its log-in needs. Fetch now reads both. The
+ *  bridge's hand-overs from the bidding system (both portals) are a line of their own. */
 function Robot({ robot }: { robot: FoundList["robot"] }) {
-  const queries = useQueryClient();
-  const action = useAction();
-  const [last, ...earlier] = robot.runs;
+  const latest = robot.runs[0];
   // It runs every hour of the working day: a day with no word from it is worth a look.
-  const hours = last ? Math.floor((Date.now() - Date.parse(last.at)) / 3_600_000) : 0;
+  const hours = latest ? Math.floor((Date.now() - Date.parse(latest.at)) / 3_600_000) : 0;
   const quiet = hours >= 26 ? hours : null;
-  const line = (run: FoundList["robot"]["runs"][number]) => (
-    <>
-      {PORTAL[run.source]} {when(run.at)}
-      {run.status === "failed" ? <span className="font-semibold text-rose-700"> · failed</span> : ""}
-      {run.summary ? ` · ${run.summary}` : ""}
-    </>
-  );
+  const fed = robot.runs.filter((run) => run.trigger === "feed");
+  const own = (source: "philgeps" | "ps") => robot.runs.filter((run) => run.source === source && run.trigger !== "feed");
   return (
-    <section className={`${CARD} px-4 py-2.5 text-[13px]`}>
+    <section className={`${CARD} px-4 py-3 text-[13px]`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <span className="min-w-0 text-slate-600">
-          <b className="text-slate-900">Robot</b> {last ? <>last read {line(last)}</> : "has not handed anything in yet."}
+          <b className="text-slate-900">Robot</b> reads both portals every hour from 6 AM to 5 PM.
         </span>
         <span className="flex flex-wrap items-center gap-2">
           {!robot.ready ? (
@@ -140,17 +213,106 @@ function Robot({ robot }: { robot: FoundList["robot"] }) {
           <FetchNow fetch={robot.fetch} />
         </span>
       </div>
-      <p className={`mt-1 text-[12px] ${robot.ps.connected ? "text-slate-500" : "text-amber-700"}`}>
-        <b className="font-semibold">PS-PhilGEPS</b>{" "}
-        {robot.ps.connected
-          ? `connected${robot.ps.connectedAt ? ` since ${when(robot.ps.connectedAt)}` : ""}${robot.ps.status === "failed" && robot.ps.error ? ` · the last Sync stopped: ${robot.ps.error}` : robot.ps.stage ? ` · ${robot.ps.stage}` : ""}`
-          : "is not connected: its log-in has a captcha, so a person connects once on a computer with Chrome (the robot then reads it every hour)."}
+      <div className="mt-2.5 grid gap-2.5 md:grid-cols-2">
+        <PhilgepsCard runs={own("philgeps")} login={robot.login} />
+        <PsCard runs={own("ps")} ps={robot.ps} />
+      </div>
+      {fed[0] && (
+        <p className="mt-2 text-[12px] text-slate-500">
+          <b className="font-semibold">From the bidding system</b> (both portals, while it moves in): <RunLine run={fed[0]} />
+        </p>
+      )}
+    </section>
+  );
+}
+
+type FindRunRow = FoundList["robot"]["runs"][number];
+
+function RunLine({ run }: { run: FindRunRow }) {
+  return (
+    <>
+      {when(run.at)}
+      {run.status === "failed" ? <span className="font-semibold text-rose-700"> · failed</span> : ""}
+      {run.summary ? ` · ${run.summary}` : ""}
+    </>
+  );
+}
+
+/** One portal's card: its name and a pill for where it stands, its last read, what its log-in needs,
+ *  and its earlier runs folded under. */
+function PortalCard({ name, pill, runs, children }: { name: string; pill: ReactNode; runs: FindRunRow[]; children?: ReactNode }) {
+  const [last, ...earlier] = runs;
+  return (
+    <div className="rounded-xl border border-slate-200 px-3 py-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <b className="text-slate-900">{name}</b>
+        {pill}
+      </div>
+      <p className="mt-1 text-[12px] text-slate-600">
+        {last ? (
+          <>
+            Last read <RunLine run={last} />
+          </>
+        ) : (
+          "Not read yet."
+        )}
       </p>
-      {robot.login.state === "refused" && (
+      {children}
+      {earlier.length > 0 && (
+        <details className="mt-1">
+          <summary className="cursor-pointer text-[12px] font-semibold text-slate-500">Earlier runs</summary>
+          <ul className="mt-1 space-y-0.5 text-[12px] text-slate-600">
+            {earlier.map((run) => (
+              <li key={run.id}>
+                <RunLine run={run} />
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+    </div>
+  );
+}
+
+/** PS-PhilGEPS (philgeps.gov.ph): its log-in has a captcha, so a person connects it from a team laptop; the
+ *  session then serves everyone until PS-PhilGEPS ends it. */
+function PsCard({ runs, ps }: { runs: FindRunRow[]; ps: FoundList["robot"]["ps"] }) {
+  const pill = ps.connected ? <Pill tone="good">Connected</Pill> : <Pill tone="warn">Not connected</Pill>;
+  return (
+    <PortalCard name="PS-PhilGEPS" pill={pill} runs={runs}>
+      <p className={`mt-1 text-[12px] ${ps.connected ? "text-slate-500" : "text-amber-700"}`}>
+        {ps.connected
+          ? `Connected${ps.connectedAt ? ` since ${when(ps.connectedAt)}` : ""}${ps.status === "failed" && ps.error ? ` · the last Sync stopped: ${ps.error}` : ps.stage ? ` · ${ps.stage}` : ""}.`
+          : "Its log-in has a captcha, so a person connects it from a team laptop; then it serves everyone (the robot reads it every hour) until PS-PhilGEPS ends the log-in."}
+      </p>
+      <ConnectPs connected={ps.connected} />
+    </PortalCard>
+  );
+}
+
+/** The old PhilGEPS (notices.philgeps.gov.ph): its public list needs no log-in; the screened tenders'
+ *  papers need the company's log-in (one session per account: the robot logs in once a run, then out). */
+function PhilgepsCard({ runs, login }: { runs: FindRunRow[]; login: FoundList["robot"]["login"] }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const pill =
+    login.state === "refused" ? (
+      <Pill tone="bad">Log-in refused</Pill>
+    ) : runs[0]?.status === "failed" ? (
+      <Pill tone="bad">Last read failed</Pill>
+    ) : runs.length ? (
+      <Pill tone="good">Reading</Pill>
+    ) : (
+      <Pill>Waiting</Pill>
+    );
+  return (
+    <PortalCard name="PhilGEPS" pill={pill} runs={runs}>
+      <p className="mt-1 text-[12px] text-slate-500">The old site: its public list needs no log-in. No new tenders since 1 Nov; its last ones close on 2 Dec.</p>
+      {login.state === "refused" && (
         <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-[12.5px] text-rose-900">
           <b>PhilGEPS refused the robot's log-in</b>
-          {robot.login.at ? ` (${when(robot.login.at)})` : ""}
-          {robot.login.said ? `: ${robot.login.said}` : "."} The papers of screened tenders wait. The robot does not send a refused password again by
+          {login.at ? ` (${when(login.at)})` : ""}
+          {login.said ? `: ${login.said}` : "."} The papers of screened tenders wait. The robot does not send a refused password again by
           itself (that locks the account): once the password is put right where the robot keeps it,{" "}
           <button
             type="button"
@@ -169,25 +331,16 @@ function Robot({ robot }: { robot: FoundList["robot"] }) {
           <Problem message={action.problem?.message} />
         </div>
       )}
-      {robot.login.state === "busy" && (
+      {login.state === "busy" && (
         <p className="mt-1 text-[12px] text-amber-700">
-          The PhilGEPS account was in use on another computer{robot.login.at ? ` at ${when(robot.login.at)}` : ""}: the robot tries the papers again later.
+          The account was in use on another computer{login.at ? ` at ${when(login.at)}` : ""}: the robot tries the papers again later.
         </p>
       )}
-      {robot.login.state === "never" && (
-        <p className="mt-1 text-[12px] text-slate-500">Tender papers: the robot has not logged in to PhilGEPS yet (it needs the company's log-in); screened tenders' papers wait for it.</p>
+      {login.state === "never" && (
+        <p className="mt-1 text-[12px] text-slate-500">Tender papers: not logged in yet (it needs the company's PhilGEPS log-in); screened tenders' papers wait for it.</p>
       )}
-      {earlier.length > 0 && (
-        <details className="mt-1">
-          <summary className="cursor-pointer text-[12px] font-semibold text-slate-500">Its earlier runs</summary>
-          <ul className="mt-1 space-y-0.5 text-[12px] text-slate-600">
-            {earlier.map((run) => (
-              <li key={run.id}>{line(run)}</li>
-            ))}
-          </ul>
-        </details>
-      )}
-    </section>
+      {login.state === "ok" && login.at && <p className="mt-1 text-[12px] text-slate-500">Tender papers: last logged in and out {when(login.at)}.</p>}
+    </PortalCard>
   );
 }
 
