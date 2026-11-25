@@ -4,6 +4,7 @@
 // Income and Expense month by month, this month's Top Expenses as a ring, and Bank and Credit Cards
 // with the statement lines still to do. Every figure is the books' own (Zoho's history and the CRM's).
 
+import { allCompanyNames } from "@2mg/api/companies";
 import type { BooksDashboard } from "@2mg/api/types";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { AlertTriangle, ChevronRight, Plus } from "lucide-react";
@@ -260,7 +261,7 @@ export function BooksHome() {
           <img src="/brand/bishnoi-one-mark.png" alt="" className="size-10 rounded-md border border-[#ebeaf2] p-1" />
           <div>
             <h1 className="text-[20px] text-[#212529]">Hello, {me.data?.name ?? ""}</h1>
-            <div className="text-[13px] text-[#6c718a]">2MG Inc. and GetMeds Philippines Inc.</div>
+            <div className="text-[13px] text-[#6c718a]">{allCompanyNames()}</div>
           </div>
         </div>
         <div className="mt-4 flex gap-6 text-[14px]">

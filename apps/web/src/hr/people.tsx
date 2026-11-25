@@ -2,6 +2,7 @@
 // HR adds a joiner into a vacant seat with the login email and password HR made for them and
 // hands them over; the system sends nothing. Leaving keeps the record.
 
+import { allCompanyNames, COMPANIES } from "@2mg/api/companies";
 import type {
   CivilStatus,
   Classification,
@@ -58,10 +59,7 @@ import {
   useAction,
 } from "../ui";
 
-const COMPANY: Record<Company, string> = {
-  "2mg": "2MG Inc.",
-  gpi: "Getmeds Philippines",
-};
+const COMPANY: Record<Company, string> = { "2mg": COMPANIES["2mg"].name, gpi: COMPANIES.gpi.name };
 const CLASS: Record<Classification, string> = {
   probationary: "Probationary",
   regular: "Regular",
@@ -203,7 +201,7 @@ export function HrPeoplePage() {
     >
       <PageHead
         title="People"
-        sub={`${data.counts.active} working · 2MG Inc. and Getmeds Philippines`}
+        sub={`${data.counts.active} working · ${allCompanyNames()}`}
         actions={
           data.can.add && (
             <Button variant="primary" onClick={() => setAdding(true)}>

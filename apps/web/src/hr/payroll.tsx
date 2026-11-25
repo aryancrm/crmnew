@@ -3,6 +3,7 @@
 // payslip and releases the month once it has ended, which freezes the payslips. The CEO reads the same pages
 // and changes nothing. The law's rates are on their own page.
 
+import { COMPANIES } from "@2mg/api/companies";
 import type { PayRuleRow, PayrollList, PayrollMonth, Payslip } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Download, Scale, Search } from "lucide-react";
@@ -230,7 +231,7 @@ export function PayrollMonthPage() {
           sub={
             t.byCompany.length > 1
               ? t.byCompany
-                  .map((one) => `${one.company === "gpi" ? "Getmeds" : "2MG"} ${peso(one.net)}`)
+                  .map((one) => `${COMPANIES[one.company].short} ${peso(one.net)}`)
                   .join(" · ")
               : "what the bank pays out"
           }

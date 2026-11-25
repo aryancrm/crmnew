@@ -2,6 +2,7 @@
 // documents, medicines and price, stock and warehouse, customer and licence, approve), what each
 // found, and Approve, Send back, Reject; the warehouse it ships from; the order's details.
 
+import { COMPANIES, COMPANY_CODES } from "@2mg/api/companies";
 import { DIVISIONS, divisionOf, PAYMENT_TERMS, SUB_DIVISIONS, termsOfLabel } from "@2mg/api/divisions";
 import type { OrderAction, OrderDetail } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
@@ -578,8 +579,11 @@ function CompleteDetails({ data }: { data: OrderDetail }) {
             onChange={(event) => set("invoiceFrom", event.target.value)}
             className={INPUT}
           >
-            <option value="2mg">2MG Inc.</option>
-            <option value="getmeds">GetMeds Philippines Inc.</option>
+            {COMPANY_CODES.map((code) => (
+              <option key={code} value={code}>
+                {COMPANIES[code].name}
+              </option>
+            ))}
           </select>
         </label>
         {input("note", "Customer remarks", { wide: true })}
