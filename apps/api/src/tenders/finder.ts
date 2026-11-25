@@ -565,10 +565,13 @@ const ORDER: Record<FoundView, SQL> = {
   all: sql`f.published_on desc nulls last, f.id desc`,
 };
 
+/** How many found tenders one page of the finder shows. */
+const FOUND_PAGE = 50;
+
 export async function listFound(
   db: Database,
   me: Me,
-  asked: { view?: string | null; q?: string | null; source?: string | null; molecule?: string | null },
+  asked: { view?: string | null; q?: string | null; source?: string | null; molecule?: string | null; page?: string | null },
 ): Promise<FoundList> {
   await mustFind(db, me);
   const view: FoundView = asked.view === "screened" || asked.view === "tenders" || asked.view === "all" ? asked.view : "opportunities";
@@ -581,8 +584,10 @@ export async function listFound(
   if (asked.source === "philgeps" || asked.source === "ps") filters.push(sql`f.source = ${asked.source}`);
   if (asked.molecule?.trim()) filters.push(sql`${asked.molecule.trim()} = any(f.molecules)`);
   const where = filters.length ? sql.join(filters, sql` and `) : sql`true`;
+  // One page of the tab at a time (FOUND_PAGE each); the tab's count (same filters) is its total.
+  const page = Math.max(1, Math.min(10_000, Math.floor(Number(asked.page)) || 1));
   const [found, [counts], molecules, runs, login, ps, fetch] = await Promise.all([
-    rows<FoundTender>(db, sql`${foundSelect} where ${VIEW[view]} and ${where} order by ${ORDER[view]} limit 1000`),
+    rows<FoundTender>(db, sql`${foundSelect} where ${VIEW[view]} and ${where} order by ${ORDER[view]} limit ${FOUND_PAGE} offset ${(page - 1) * FOUND_PAGE}`),
     rows<Record<FoundView, number>>(
       db,
       sql`select count(*) filter (where ${VIEW.opportunities})::int as opportunities, count(*) filter (where ${VIEW.screened})::int as screened,
@@ -597,6 +602,8 @@ export async function listFound(
   ]);
   return {
     view,
+    page,
+    pageSize: FOUND_PAGE,
     rows: found,
     counts: counts ?? { opportunities: 0, screened: 0, tenders: 0, all: 0 },
     molecules: molecules.map((one) => one.name),

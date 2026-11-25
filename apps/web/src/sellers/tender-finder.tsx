@@ -5,7 +5,7 @@
 
 import type { Catalogue, CustomerList, FoundDetail, FoundLine, FoundList, FoundPapers, FoundTender, FoundView, TenderMode } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CircleAlert, CircleCheck, ExternalLink, Loader2, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, CircleAlert, CircleCheck, ExternalLink, Loader2, Search, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { type ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
@@ -541,15 +541,22 @@ export function TenderFinderPage() {
   const q = params.get("q") ?? "";
   const source = params.get("source") ?? "";
   const molecule = params.get("molecule") ?? "";
+  const page = String(Math.max(1, Number(params.get("page")) || 1));
   const [typed, setTyped] = useState(q);
+  // Another tab, search or filter starts again from page 1.
   const set = (changes: Record<string, string>) => {
     const next = new URLSearchParams(params);
     for (const [key, value] of Object.entries(changes)) value ? next.set(key, value) : next.delete(key);
+    if (!("page" in changes)) next.delete("page");
     setParams(next, { replace: true });
   };
+  const goTo = (to: number) => {
+    set({ page: to > 1 ? String(to) : "" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
   const query = useQuery({
-    queryKey: ["tenders", "found", view, q, source, molecule],
-    queryFn: () => api<FoundList>(`/api/tenders/found?${new URLSearchParams({ view, q, source, molecule })}`),
+    queryKey: ["tenders", "found", view, q, source, molecule, page],
+    queryFn: () => api<FoundList>(`/api/tenders/found?${new URLSearchParams({ view, q, source, molecule, page })}`),
     placeholderData: (before) => before,
     // While Fetch now waits for its run, look again every 15 seconds so the new tenders show by themselves.
     refetchInterval: (current) => {
@@ -626,7 +633,7 @@ export function TenderFinderPage() {
             {data.view === "opportunities"
               ? "No tender of ours found yet on either portal."
               : data.view === "screened"
-                ? "Nothing screened and waiting. Add a tender worth bidding on from New."
+                ? "Nothing screened and waiting. Add a tender worth bidding on from Opportunities."
                 : data.view === "tenders"
                   ? "No found tender has been made a tender yet."
                   : "Nothing found yet."}
@@ -680,8 +687,45 @@ export function TenderFinderPage() {
           </ul>
         )}
       </section>
-      {data.rows.length >= 1000 && <p className="text-[12px] text-slate-500">The first 1,000 are shown: search or pick a medicine to narrow them.</p>}
+      <PageNumbers page={data.page} pageSize={data.pageSize} total={data.counts[data.view]} onPage={goTo} />
     </div>
+  );
+}
+
+/** The pages of a list by number: first, last, and the two either side of the one shown, with Previous
+ *  and Next, and which tenders this page holds. Nothing when it all fits on one page. */
+function PageNumbers({ page, pageSize, total, onPage }: { page: number; pageSize: number; total: number; onPage: (page: number) => void }) {
+  const last = Math.max(1, Math.ceil(total / pageSize));
+  if (last <= 1) return null;
+  const shown = [...new Set([1, page - 2, page - 1, page, page + 1, page + 2, last])].filter((n) => n >= 1 && n <= last).sort((a, b) => a - b);
+  const button = "inline-flex h-9 min-w-9 items-center justify-center rounded-[10px] px-2.5 text-[13px] font-semibold disabled:opacity-40";
+  return (
+    <nav aria-label="Pages" className="flex flex-wrap items-center justify-between gap-2">
+      <span className="text-[12px] text-slate-500">
+        {((page - 1) * pageSize + 1).toLocaleString("en-PH")}–{Math.min(total, page * pageSize).toLocaleString("en-PH")} of {total.toLocaleString("en-PH")}
+      </span>
+      <span className="flex flex-wrap items-center gap-1">
+        <button type="button" className={`${button} border border-slate-300 bg-white text-slate-700 hover:bg-slate-50`} disabled={page <= 1} onClick={() => onPage(page - 1)}>
+          <ChevronLeft className="size-4" aria-hidden="true" /> Previous
+        </button>
+        {shown.map((n, at) => (
+          <span key={n} className="flex items-center gap-1">
+            {at > 0 && n - (shown[at - 1] ?? n) > 1 && <span className="px-1 text-slate-400">…</span>}
+            <button
+              type="button"
+              aria-current={n === page ? "page" : undefined}
+              className={`${button} ${n === page ? "bg-emerald-600 text-white" : "border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"}`}
+              onClick={() => n !== page && onPage(n)}
+            >
+              {n}
+            </button>
+          </span>
+        ))}
+        <button type="button" className={`${button} border border-slate-300 bg-white text-slate-700 hover:bg-slate-50`} disabled={page >= last} onClick={() => onPage(page + 1)}>
+          Next <ChevronRight className="size-4" aria-hidden="true" />
+        </button>
+      </span>
+    </nav>
   );
 }
 

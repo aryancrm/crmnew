@@ -352,6 +352,12 @@ describe("the tender finder: the team's pages", () => {
     expect(fresh.view).toBe("opportunities");
     expect(fresh.rows.map((row) => row.refNo).sort()).toEqual(["12450900", "12451001", "12451017", "12451033"]);
     expect(fresh.counts.opportunities).toBeGreaterThanOrEqual(4);
+    // A page of 50 at a time: page 1 by default; a page past the end is empty, the counts stay whole
+    expect(fresh).toMatchObject({ page: 1, pageSize: 50 });
+    const beyond = await list("hazel", "?view=all&page=2");
+    expect(beyond.page).toBe(2);
+    expect(beyond.rows.length).toBe(Math.max(0, Math.min(50, beyond.counts.all - 50)));
+    expect((await list("hazel", "?view=all&page=nonsense")).page).toBe(1);
     // The old address (?view=new) lands on the Opportunities
     expect((await list("hazel", "?view=new&q=1245")).view).toBe("opportunities");
     const all = await list("hazel", "?view=all&q=1245");

@@ -64,7 +64,7 @@ export function tenderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
   // join that makes a found notice a tender. Before "/api/tenders/:id", which would read "found"
   // as a tender's number.
   app.get("/api/tenders/found", async (c) =>
-    c.json(await listFound(db, c.get("me"), { view: c.req.query("view"), q: c.req.query("q"), source: c.req.query("source"), molecule: c.req.query("molecule") })),
+    c.json(await listFound(db, c.get("me"), { view: c.req.query("view"), q: c.req.query("q"), source: c.req.query("source"), molecule: c.req.query("molecule"), page: c.req.query("page") })),
   );
   app.get("/api/tenders/found/count", async (c) => c.json(await foundCount(db, c.get("me"))));
   // A paper of a notice, as the robot got it from PhilGEPS: downloaded, never run in the page.

@@ -5746,6 +5746,9 @@ export type FindRun = { id: number; source: "philgeps" | "ps"; trigger: string |
 
 export type FoundList = {
   view: FoundView;
+  /** The page shown (from 1) and how many one page holds; the tab's count is the total. */
+  page: number;
+  pageSize: number;
   rows: FoundTender[];
   counts: Record<FoundView, number>;
   /** Our molecules among what was found, for the filter. */
