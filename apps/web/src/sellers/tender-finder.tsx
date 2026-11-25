@@ -425,10 +425,10 @@ function RunLine({ run }: { run: FindRunRow }) {
   );
 }
 
-/** One portal's card: its name and a pill for where it stands, its last read, what its log-in needs,
- *  and its earlier runs folded under. */
+/** One portal's card: its name and a pill for where it stands, its last read and what its log-in needs
+ *  (only the last run: the earlier ones are not shown, the developer, 25 Nov). */
 function PortalCard({ name, pill, runs, children }: { name: string; pill: ReactNode; runs: FindRunRow[]; children?: ReactNode }) {
-  const [last, ...earlier] = runs;
+  const [last] = runs;
   return (
     <div className="rounded-xl border border-slate-200 px-3 py-2.5">
       <div className="flex items-center justify-between gap-2">
@@ -445,18 +445,6 @@ function PortalCard({ name, pill, runs, children }: { name: string; pill: ReactN
         )}
       </p>
       {children}
-      {earlier.length > 0 && (
-        <details className="mt-1">
-          <summary className="cursor-pointer text-[12px] font-semibold text-slate-500">Earlier runs</summary>
-          <ul className="mt-1 space-y-0.5 text-[12px] text-slate-600">
-            {earlier.map((run) => (
-              <li key={run.id}>
-                <RunLine run={run} />
-              </li>
-            ))}
-          </ul>
-        </details>
-      )}
     </div>
   );
 }
