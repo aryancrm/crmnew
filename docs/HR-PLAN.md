@@ -247,7 +247,7 @@ One feature per commit, each with its tests; `checks/integrity.ts` and `scale.te
    per company, kept after they leave); the **email ID** belongs to the seat and is handed to whoever
    sits there next, so people keep signing in with it; every move and every sale keeps the email ID
    used at the time, so a later cross-check can tell whose sale it was and move the credit. A team
-   lead gives a vacant area to one of their own people as **added work with no KPI**: that person is
+   lead gives a vacant area to one of their own people as **added work with no KPI** (Aryan agreed, 25 Nov): that person is
    credited only for their own main area, the vacant area's quota stays on its seat and the team
    handles it. Empty 7 days with nobody covering: the lead is reminded; 14 days: the head and HR.
    - [x] **The sale made covering** (migration 0156, `order_seat`): an order a MedRep places for a
