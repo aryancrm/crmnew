@@ -10,7 +10,6 @@ import { type FormEvent, lazy, Suspense, useEffect, useId, useRef, useState } fr
 import { createPortal } from "react-dom";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ApiFailure, api } from "../api";
-import { useCompany } from "../companies";
 import { ME, rememberPerson, returnTo, useMe } from "../auth";
 import { DepartmentsMenu } from "./departments-menu";
 import { DevUserPicker } from "./dev-user-picker";
@@ -178,7 +177,6 @@ export function SignIn({
   const queries = useQueryClient();
   const navigate = useNavigate();
   // With several companies on the server: the one this browser signs in to (companies.ts).
-  const company = useCompany();
   const [email, setEmail] = useState(loginId ?? "");
   const [password, setPassword] = useState("");
   const [shown, setShown] = useState(false);
@@ -281,18 +279,6 @@ export function SignIn({
             pickerSlot,
           )}
       </div>
-      <p className="mt-1.5 text-[14px] text-[#5b6472]">
-        {picked
-          ? "Use your own login ID and password."
-          : "Your company's ID or your own login ID, and the password. Your company's apps open next."}
-        {company && (
-          <>
-            {" "}
-            This signs in to <b className="font-semibold text-slate-700">{company.name}</b>
-            {company.name.endsWith(".") ? "" : "."} Another company? Type your login ID with its @ and email domain.
-          </>
-        )}
-      </p>
       <form onSubmit={submit} className="mt-5 grid gap-3.5" aria-busy={busy}>
         <div className="grid gap-1.5">
           <label htmlFor={`${ids}-id`} className={label}>
@@ -377,15 +363,9 @@ export function SignIn({
           {busy ? "Signing in…" : "Sign in"}
         </button>
       </form>
-      <div className="mt-5 grid gap-1 border-t border-[#eceef3] pt-2 text-[12.5px] text-[#5b6472]">
-        {!["ceo", "admin", "books"].includes(picked?.key ?? "") && (
-          <p>
-            No account yet?{" "}
-            <Link to={picked ? `/signup/${picked.key}` : "/signup"} className="inline-flex min-h-11 items-center font-semibold text-[#c2410c] hover:underline">
-              Sign up
-            </Link>
-          </p>
-        )}
+      {/* No Sign up here (Aryan, 27 Nov: "the Admin adds people"): the Admin gives each new
+          person their login and a one-time password. */}
+      <div className="mt-5 grid gap-1 border-t border-[#eceef3] pt-3 text-[12.5px] text-[#5b6472]">
         <p>Forgot your password? Ask your administrator for a one-time password.</p>
       </div>
     </div>

@@ -1,6 +1,6 @@
 // The exported home page's navbar and footer, filled with this app's own navigation: Systems
 // (the portal's workspaces in three columns, Selling, Operations and Office, each opening its own
-// sign-in, /login/<key>), About Us (/about) and Sign up. The look is the export's (its classes, logo and icons); the icons beside each
+// sign-in, /login/<key>) and About Us (/about); no Sign up (Aryan, 27 Nov: the Admin adds people). The look is the export's (its classes, logo and icons); the icons beside each
 // workspace are the portal's own tile icons.
 
 import { type FormEvent, useEffect, useRef, useState } from "react";
@@ -283,9 +283,6 @@ export function Navbar() {
             <Link className="nav__trigger" to="/about" onClick={closeAll}>
               About Us
             </Link>
-            <Link className="nav__trigger" to="/signup">
-              Sign up
-            </Link>
           </nav>
 
           <SearchBar />
@@ -347,9 +344,6 @@ export function Navbar() {
             </div>
             <Link className="drawer__trigger" to="/about" onClick={() => setMobileOpen(false)}>
               About Us
-            </Link>
-            <Link className="drawer__trigger" to="/signup" onClick={() => setMobileOpen(false)}>
-              Sign up
             </Link>
           </nav>
           <div className="drawer__actions">
@@ -439,12 +433,6 @@ export function Footer() {
                 <Link to="/about">
                   <Icon name="sparkle" size={16} className="footer__glyph" />
                   About Us
-                </Link>
-              </li>
-              <li>
-                <Link to="/signup">
-                  <Icon name="people" size={16} className="footer__glyph" />
-                  Sign up
                 </Link>
               </li>
               <li>

@@ -206,7 +206,7 @@ const QUESTIONS = [
   },
   {
     q: "How do I get an account?",
-    a: "Use Sign up with your name, email, mobile number and department. An administrator confirms who you are, then an email lets you set your own password.",
+    a: "Your administrator adds you and gives you your login ID and a one-time password; you then choose your own password.",
   },
   {
     q: "Which workspace do I choose?",

@@ -4257,4 +4257,15 @@ up right.
   once (the company's ID: Administration and Books); any other opens its own sign-in, where the
   person working there signs in with their own login ID, the company's staying signed in beside it
   (Add another account). Someone with one system still goes straight in.
+- 27 Nov (230), Aryan ("why do Administration and Books open straight away; what is 'Adding another
+  account'; why these extra words, and Sign up? the Admin adds people"): after the company's
+  sign-in the grid is the company's ID's (its Admin's) alone, anyone else goes to their own desk;
+  **every system, Administration and Books too, opens its own sign-in**: pressing it signs the
+  company's ID out first (the browser keeps the company, so a plain "fin1" is this company's). The
+  sign-in pages say only "Sign in to …", Login ID, Password: no "This signs in to …, another
+  company?" line, **no Sign up** there, in the home page's top bar, its menu or its footer (the
+  /signup page stays, unlinked; the About page says the Admin adds people). Aryan also asked for
+  Management, Finance and Dispatch's common password back, as the shared desk screen of 19 Nov
+  (125, 126; removed by 164): being rebuilt, the password typed by the company's Admin in the
+  Admin panel, never in the code.
 

@@ -1,36 +1,21 @@
 // The navbar's Sign in (/signin). Aryan, 26 Nov: "first the company's ID and password, then that
-// company's apps": the sign-in comes first (the company's own ID, info@2mginc.com, or a person's
-// own), then the company's name over the same systems grid as before (Aryan, 27 Nov: "as it was,
-// the screen after signing in to the company"): Selling, Operations, Office. A system this login
-// holds opens at once; any other opens its own sign-in, where the person working there signs in
-// with their own login ID beside the company's (it stays signed in). A person with one system goes
-// straight in. A department's own page (/login/<key>) still signs in there directly.
+// company's apps"; 27 Nov: "as it was, every system asks its own sign-in". The company's ID (its
+// Admin, info@2mginc.com) signs in first; then the company's name over the old systems grid
+// (Selling, Operations, Office). Pressing any system, Administration and Books too, signs the
+// company's ID out and opens that system's own sign-in, where the person working there signs in
+// with their own login ID; the browser keeps the company, so "fin1" is this company's. Anyone
+// else signing in here goes straight to their own desk. A department's own page (/login/<key>)
+// still signs in there directly.
 
 import "@fontsource-variable/inter";
-import type { Me } from "@2mg/api/types";
-import { Link, Navigate, useLocation } from "react-router-dom";
-import { useMe } from "../auth";
+import { useQueryClient } from "@tanstack/react-query";
+import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
+import { api } from "../api";
+import { ME, useMe } from "../auth";
 import { useCompany } from "../companies";
-import { allItems, appsFor } from "../menus";
 import { heroLogo } from "../portal/hero-logos";
-import { type Workspace, WORKSPACES, workspaceOf } from "../workspaces";
+import { WORKSPACES } from "../workspaces";
 import { SignIn } from "./login";
-
-type Choice = { key: string; label: string; about: string; to: string; logo?: string; app?: ReturnType<typeof appsFor>[number] };
-
-/** What this login may open in its company: its own desk, Books for those who keep the books, and
- *  for the company's ID (its Admin) and the CEO, every app of the company. */
-export function choicesOf(me: Me): Choice[] {
-  const own = workspaceOf(me);
-  const out: Choice[] = [{ key: own.key, label: own.label, about: own.about, to: "/", logo: heroLogo(own.key) }];
-  if (["finance", "ceo", "admin"].includes(me.role))
-    out.push({ key: "books", label: "Books", about: "Accounts, banking, reports", to: "/books/home", logo: heroLogo("books") });
-  for (const app of appsFor(me)) {
-    const first = allItems(app.groups.flatMap((group) => group.items)).find((item) => item.to && item.to !== "/");
-    if (first) out.push({ key: app.key, label: app.label, about: "", to: first.to, app });
-  }
-  return out;
-}
 
 const GROUPS = [
   { id: "selling", label: "Selling" },
@@ -38,22 +23,31 @@ const GROUPS = [
   { id: "office", label: "Office" },
 ] as const;
 
-/** Where a tile leads once signed in: a system this login holds opens at once; any other opens its
- *  own sign-in, for the person who works there, kept beside the company's login. */
-export function tileTo(me: { role: string }, one: Pick<Workspace, "key" | "roles">): string {
-  if (one.key === "books" && one.roles.includes(me.role)) return "/books/home";
-  if (one.roles.includes(me.role)) return "/";
-  return `/login/${one.key}?add=1`;
-}
+/** Who sees the systems grid after signing in here: the company's ID (its Admin), once its own
+ *  password is chosen. Anyone else goes straight to their own desk, as before. */
+export const seesGrid = (me: { role: string; mustChangePassword?: boolean }): boolean =>
+  me.role === "admin" && !me.mustChangePassword;
+
+/** Every system opens its own sign-in (Aryan, 27 Nov: Administration and Books too). */
+export const tileTo = (key: string): string => `/login/${key}`;
 
 export function ChooseSystem() {
   const me = useMe();
   const location = useLocation();
+  const navigate = useNavigate();
+  const queries = useQueryClient();
   const company = useCompany();
   const from = (location.state as { from?: string } | null)?.from ?? "/";
-  const choices = me.data ? choicesOf(me.data) : [];
-  // One system, or a one-time password to change first (the home asks for it): straight in.
-  if (me.data && (choices.length <= 1 || me.data.mustChangePassword)) return <Navigate to="/" replace />;
+  if (me.data && !seesGrid(me.data)) return <Navigate to="/" replace />;
+
+  // A system pressed: the company's ID signs out first, then that system's own sign-in opens.
+  async function open(key: string) {
+    await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+    await queries.cancelQueries();
+    queries.setQueryData(ME, null);
+    navigate(tileTo(key), { replace: true });
+    queries.removeQueries({ predicate: (query) => query.queryKey[0] !== ME[0] });
+  }
 
   return (
     <main className="flex min-h-dvh flex-col bg-white font-[Inter_Variable,Inter,sans-serif] text-[#1f2733] lg:h-dvh lg:flex-row lg:overflow-hidden">
@@ -103,7 +97,11 @@ export function ChooseSystem() {
                       {WORKSPACES.filter((one) => one.group === group.id).map((one) => (
                         <li key={one.key}>
                           <Link
-                            to={tileTo(me.data ?? { role: "" }, one)}
+                            to={tileTo(one.key)}
+                            onClick={(event) => {
+                              event.preventDefault();
+                              void open(one.key);
+                            }}
                             className="group flex min-h-14 items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-[#fff7f2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f36b21]"
                           >
                             <img src={heroLogo(one.key)} alt="" width={36} height={36} className="size-9 shrink-0 object-contain" />
