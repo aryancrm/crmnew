@@ -10,6 +10,7 @@ import { type FormEvent, lazy, Suspense, useEffect, useId, useRef, useState } fr
 import { createPortal } from "react-dom";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ApiFailure, api } from "../api";
+import { useCompany } from "../companies";
 import { ME, rememberPerson, returnTo, useMe } from "../auth";
 import { DepartmentsMenu } from "./departments-menu";
 import { DevUserPicker } from "./dev-user-picker";
@@ -153,6 +154,8 @@ function SignIn({
 }: { workspace: Workspace; from: string; loginId?: string; pickerSlot: HTMLElement | null }) {
   const queries = useQueryClient();
   const navigate = useNavigate();
+  // With several companies on the server: the one this browser signs in to (companies.ts).
+  const company = useCompany();
   const [email, setEmail] = useState(loginId ?? "");
   const [password, setPassword] = useState("");
   const [shown, setShown] = useState(false);
@@ -241,7 +244,16 @@ function SignIn({
             pickerSlot,
           )}
       </div>
-      <p className="mt-1.5 text-[14px] text-[#5b6472]">Use your own login ID and password.</p>
+      <p className="mt-1.5 text-[14px] text-[#5b6472]">
+        Use your own login ID and password.
+        {company && (
+          <>
+            {" "}
+            This signs in to <b className="font-semibold text-slate-700">{company.name}</b>
+            {company.name.endsWith(".") ? "" : "."} Another company? Type your login ID with its @ and email domain.
+          </>
+        )}
+      </p>
       <form onSubmit={submit} className="mt-5 grid gap-3.5" aria-busy={busy}>
         <div className="grid gap-1.5">
           <label htmlFor={`${ids}-id`} className={label}>

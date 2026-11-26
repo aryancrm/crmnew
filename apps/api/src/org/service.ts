@@ -8,6 +8,7 @@
 import { randomInt } from "node:crypto";
 import { type SQL, sql } from "drizzle-orm";
 import { accountEvent } from "../account/events";
+import { loginDomain } from "../companies/context";
 import { hrEvent } from "../hr/events";
 import { hashPassword, passwordProblem } from "../auth/password";
 import { type Database, rows } from "../db/index";
@@ -63,8 +64,8 @@ export const soldFor = (alias: string): SQL =>
 
 export const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** Seat login IDs end in the company's domain: "hos1@2mginc.com". */
-export const LOGIN_DOMAIN = (process.env.LOGIN_DOMAIN ?? "2mginc.com").toLowerCase();
+/** Seat login IDs end in the company's domain: "hos1@2mginc.com" (each company its own, 26 Nov). */
+export { loginDomain };
 
 /** The first part of a seat's login ID, by its work and its channel: hos1, rx2, tl1, fin1. */
 const CHANNEL_LOGIN: Record<string, string> = {
@@ -102,7 +103,8 @@ function loginPrefix(module: Role, channelCode: string | null): string {
 export function seatLoginOf(typed: string): string | null {
   const id = typed.trim().toLowerCase();
   if (!id.includes("@")) return id || null;
-  return id.endsWith(`@${LOGIN_DOMAIN}`) ? id.slice(0, -(LOGIN_DOMAIN.length + 1)) : null;
+  const domain = loginDomain();
+  return id.endsWith(`@${domain}`) ? id.slice(0, -(domain.length + 1)) : null;
 }
 
 /** Who signs in with a seat's login ID: whoever holds the seat today. */
@@ -410,7 +412,7 @@ export async function orgTree(db: Database, me: Me): Promise<OrgTree> {
   }
   return {
     today,
-    loginDomain: LOGIN_DOMAIN,
+    loginDomain: loginDomain(),
     units: units.map(({ channelId, code, channelName, ...unit }) => ({
       ...unit,
       channel: channelId ? { id: channelId, code: code ?? "", name: channelName ?? "" } : null,
@@ -777,7 +779,7 @@ export async function addPerson(
       tx,
       sql`select login from seat where id = ${seatId}`,
     );
-    return { personId, seatId, login: login?.login ? `${login.login}@${LOGIN_DOMAIN}` : null };
+    return { personId, seatId, login: login?.login ? `${login.login}@${loginDomain()}` : null };
   });
   return { ...result, email, password: typed ? null : password };
 }
@@ -902,7 +904,7 @@ async function seatWords(tx: Runner, seatId: number): Promise<{ place: string; l
   );
   return {
     place: found ? `${found.title} (${found.unit})` : "a seat",
-    login: found?.login ? `${found.login}@${LOGIN_DOMAIN}` : null,
+    login: found?.login ? `${found.login}@${loginDomain()}` : null,
   };
 }
 
@@ -1147,7 +1149,7 @@ export async function resetPassword(db: Database, me: Me, personId: number): Pro
   return {
     personId: person.id,
     seatId: seat?.id ?? null,
-    login: seat?.login ? `${seat.login}@${LOGIN_DOMAIN}` : person.email,
+    login: seat?.login ? `${seat.login}@${loginDomain()}` : person.email,
     email: person.email,
     password,
   };

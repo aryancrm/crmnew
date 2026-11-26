@@ -915,7 +915,7 @@ it is; its screens are the reference for the same pages here, on the new API.
 |---|---|---|
 | Scope | **Everything is new**: code, database, screens | Aryan's decision, 14 Nov: a complete new project with a free hand on every choice. The old CRM is reference only. |
 | Language | **TypeScript**, frontend and backend | The work is database reads and writes, so the language does not set the speed; the database design and the number of queries do. One language means the frontend and backend share the same types and one person or AI can work on all of it. |
-| Company | **One company** | The old CRM was built to be sold to many businesses, so every table and query carried a company. This one is for 2MG / GetMeds only: simpler tables, faster queries. The two invoicing companies are a field on the order. |
+| Company | **One company per database** (26 Nov: several companies on one server, section 27) | The old CRM was built to be sold to many businesses, so every table and query carried a company. This one keeps each company in a database of its own: the tables stay as simple and fast as for one company, and no query can mix two companies. The two invoicing companies are still a field on the order. |
 | Frontend and backend | **Separate apps, one repository** | The API also serves the two websites, Messenger and later a phone app. Each can be deployed and scaled on its own. Sharing one repository keeps the API contract in one place. |
 | Frontend | **React single-page app (Vite)**, installable on a phone | Everyone is signed in, so nothing needs to be rendered on a server. The browser loads the app once from a CDN and then only asks the API for data: moving between screens is instant. This is how the hub is built. The old CRM renders every page on Vercel, which then calls the API, which then calls the database: three hops per page. |
 | Backend | **Node.js, Hono, Zod, Drizzle** | Small, fast, well understood. Plain routes: one call per screen. |
@@ -2451,6 +2451,71 @@ type-checked, not yet clicked through in a browser.
 **Not done.** The employee ID made compulsory (HR's *Missing* view lists who lacks one); a screen to
 move past covered sales' credit to someone (the data is kept for it).
 
+## 27. Several companies on one server: Bishnoi One's control panel (26 Nov 2026)
+
+Aryan, 26 Nov: "we need to make it multi company … each organisation its own ID and password …
+GetMeds and 2MG, everything of theirs is separate, people separate, revenue separate, so each its
+own cluster." Agreed the same day, with his teammate's points: an Org ID of six digits, the email
+domain tied to the company, the company's Admin adding its people, a one-time password; "just keep
+the inventory" for GetMeds.
+
+**The rules**
+
+- **Each company's data is in a database of its own**: its people, customers, stock, orders and
+  money. Nothing of one company can show in another, by mistake or by a bug: the code under a
+  request is given only its own company's database. One website and one server for all, so one
+  update reaches every company.
+- **The list of companies** is one more small database (`bishnoi_control` on the same Postgres;
+  `apps/api/migrations-control`): each company's **Org ID** (six digits, made at random, never
+  changed: its account number with us), its name, its **short code** for documents (2MG, GM), the
+  **email domain** its people sign in with (2mginc.com, getmeds.ph), and where its data is.
+- **Signing in**: a person's own login ID with their company's domain after the @, and their own
+  password (`hos1@2mginc.com`, `admin@getmeds.ph`). No shared company password. The browser then
+  remembers the company, so a login ID typed without the @ is that company's (else the first's):
+  2MG's people sign in exactly as before. One company at a time in a browser.
+- **The first company is the server's own database**: 2MG Inc., `@2mginc.com`. Webhooks (Meta, the
+  websites), the Facebook pages and mailboxes set up on the server, and the tender robot are its.
+- **Our control panel** (`one.bishnoi.ai/control`; `/admin` is each company's own Admin pages): only
+  for the people who run Bishnoi One, on logins of its own that are no company's: a short login ID
+  (no email), a password of 12 characters or more and, every time, the code from the authenticator
+  app on the phone. Five wrong tries lock it for 15 minutes. The first panel login is made with the
+  setup key the server writes in its log while there is none; after that the key is gone.
+- **Adding a company** (in the panel): its name, short code, email domain and its Admin's login ID.
+  The panel makes its database, its company tree (one box per sales channel), and its Admin with a
+  one-time password, shown once to send to them; their Admin chooses their own password at the
+  first sign-in and adds their people. It can **start with a copy of another company's medicines,
+  prices and stock**: the warehouses, medicines with their SKUs and prices, every batch, and what is
+  on each shelf today as opening stock (one receipt per batch and warehouse by its Admin, so each
+  shelf equals its log). No orders, invoices, money, customers or people come across. From then on
+  each company's stock is its own: a sale in one never takes a piece off the other's.
+- **Changing, pausing, a new Admin password**: name, code and domain can be changed (changing the
+  domain changes every login ID: tell them first); a company can be paused (nobody of it can sign
+  in or work; nothing is deleted) and resumed; its Admin can be given a new one-time password (their
+  phone code, if on, stays on). The first company can't be paused. Every change is kept on the
+  panel's own list of what was done.
+- **What follows the company besides its database**: the domain its login IDs end in, its name
+  until its Company details are saved (Admin panel), its code beside "Bishnoi One" in the frame and
+  its name on the sign-in page, and the answers kept in memory for a while (each company's own).
+
+**As built** (`apps/api/src/companies/`; `apps/web/src/control/`). On by `COMPANIES=on`; without it
+the server runs one company exactly as before (the old site, the tests). Online the database user
+must be able to create databases (Coolify's `postgres` can), and `SECRETS_KEY` must be set (it is:
+the API needs it to start). Tested: 12 tests (two companies side by side, sign-in by domain, a
+session of one company refused in the other, a paused company, the stock copy with every data check
+green, the panel's setup, sign-in, lock and actions); the CI's real-Postgres check makes a second
+company too. Tried on a copy of the local data: GetMeds added in about ten seconds with 282
+medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 data checks fine.
+
+**Not yet (each its own step, on Aryan's word)**
+
+- Putting it live on one.bishnoi.ai (`COMPANIES=on`), making the first panel login, adding GetMeds.
+- Emptying the dummy data Aryan asked to clear (26 Nov: "empty all the data, just keep the inventory
+  … 2MG's too, those were dummy orders … keep the leads and enquiries in 2MG"): what goes is listed
+  for his yes first; nothing is deleted before.
+- In GetMeds's own database an order still offers "Invoice from 2MG / GetMeds"; GetMeds's own
+  Facebook pages, mailboxes and websites, and the tender robot, stay with the first company until
+  set up for it; a person in both companies signs in to one at a time.
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -3888,3 +3953,12 @@ move past covered sales' credit to someone (the data is kept for it).
 - 25 Nov, Aryan, asked whether a MedRep who covers an empty area should get no target credit for the sales made there: **"Yes, keep it."** Section 26's covering rule (the sale counts for the empty seat and its lead, never the covering MedRep's own KPI or score) is his rule now. From now on Aryan is spoken to in plain English only, without git or code words (his word the same day; CLAUDE.md says so).
 - 24 Nov (198), asked by the backend developer: **blue for what you press, again; the app's frame and the public pages redone.** The accent goes from the GetMeds green (19 Nov) back to blue `#2563eb` (`--color-brand` and the emerald, blue and sky scales in `styles.css`): buttons, links, the selected menu item, counts, the focus ring. What is fine, done or paid keeps the pharmacy green (`--color-good`). The frame (`shell.tsx`): white sidebar and page; the sidebar runs the full height with the person's workspace logo and "Bishnoi One / MedReps" at its top, folds to an icon rail with a sliding width, and the desk's name and the top bar's desk label are gone from the top bar; page titles match the home's greeting (28px semibold). Public pages (local only, not yet on main): the home page's hero and navbar, the About page (`/about`), Sign in and Sign up as split screens with card collages. Waits for Aryan's approval before main or deploy.
 - 25 Nov (199), Aryan, after seeing the sign-in pages side by side: "if it doesn't clash and there is no risk, push it"; asked which colour, since (198) undoes his 19 Nov green: **blue (his)**, green only for what is fine, done or paid. The frontend developer's work (198) joined to main. Checked: it joined with no clash but this change log; the web type-check and build pass; no API, database or sign-in change (the sign-in form sends the same login ID and password); the side menu of 12 demo logins (MedRep, team lead, head, CEO, Admin, Management, Finance, Dispatch, Inventory, HR and others) lists exactly the same pages as before, plus the desk's name at its top; all 166 of their menu pages opened with no error; the phone drawer and bottom bar work; the home page's styles and animations stay inside its own pages. Its used pictures were re-encoded at the same pixel size (29 MB to 7.6 MB: the welcome page and the sign-in pages open faster on a phone); a local AI tool's empty database (`.claude/data`) that came with it was left out and is now ignored.
+- 26 Nov (200), Aryan: **several companies on one server, each in its own database** (section 27).
+  Asked first, then "Yes, start": an Org ID of six digits (his teammate's point), people sign in with
+  their company's email domain (`@2mginc.com`, `@getmeds.ph`, his), no shared company password, our
+  own control panel with a short ID, a password and the phone's code. Then, mid-way: "don't stress,
+  empty all the data, just keep the inventory" for GetMeds. Built: the list of companies, each
+  request answered on its own company's database, the control panel (`/control`), adding a company
+  with a copy of another's medicines, prices and stock, pausing, a new Admin password; the company's
+  code in the frame and its name on the sign-in page. All 817 API tests green (12 new); tried on a
+  copy of the local data. Not live yet; emptying the dummy data waits for his yes on the list.

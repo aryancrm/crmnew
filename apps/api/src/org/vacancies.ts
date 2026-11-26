@@ -15,7 +15,7 @@ import { todayManila } from "../inventory/rules";
 import type { Role } from "../people/roles";
 import type { Me, VacantSeats } from "../types";
 import { HR_ROLES, HR_WRITE_ROLES } from "../hr/people";
-import { coverSeat, endHolding, inForce, LOGIN_DOMAIN, ledUnits, ORG_CHANGE_ROLES } from "./service";
+import { coverSeat, endHolding, inForce, loginDomain, ledUnits, ORG_CHANGE_ROLES } from "./service";
 
 /** Days vacant with nobody covering before the lead is reminded, and before the head and HR are. */
 export const VACANT_LEAD_DAYS = 7;
@@ -85,7 +85,7 @@ export async function vacantSeats(db: Database, me: Me): Promise<VacantSeats> {
     upDays: VACANT_UP_DAYS,
     seats: seats.map((seat) => ({
       ...seat,
-      login: seat.login ? `${seat.login}@${LOGIN_DOMAIN}` : null,
+      login: seat.login ? `${seat.login}@${loginDomain()}` : null,
       alert: seat.cover || seat.promised ? "none" : seat.days >= VACANT_UP_DAYS ? "up" : seat.days >= VACANT_LEAD_DAYS ? "lead" : "none",
     })),
     people: people.filter((one) => one.id !== me.id || units === null).sort((a, b) => a.name.localeCompare(b.name)),

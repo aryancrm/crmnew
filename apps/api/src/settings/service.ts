@@ -2,6 +2,7 @@
 // points work. The Admin and the CEO change them; everyone's screens read them.
 
 import { sql } from "drizzle-orm";
+import { companyNow } from "../companies/context";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import type { Runner } from "../inventory/service";
@@ -28,7 +29,9 @@ async function read<T>(db: Runner, key: string, fallback: T): Promise<T> {
   return found ? { ...fallback, ...found.value } : fallback;
 }
 
-export const companyInfo = (db: Runner) => read<CompanyInfo>(db, "company", COMPANY_DEFAULT);
+/** Until its details are saved, a company is named as on Bishnoi One's list (companies/context.ts). */
+export const companyInfo = (db: Runner) =>
+  read<CompanyInfo>(db, "company", { ...COMPANY_DEFAULT, name: companyNow()?.name ?? COMPANY_DEFAULT.name });
 export const pointsProgram = (db: Runner) => read<PointsProgram>(db, "points", POINTS_DEFAULT);
 
 async function write(db: Database, me: Me, key: string, value: unknown) {

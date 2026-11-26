@@ -8,7 +8,7 @@ import { ApiFailure } from "./api";
 import { AppSwitch } from "./app-switch";
 import { placesOrders, readsOnlineDesk } from "./auth";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { StrictMode } from "react";
+import { lazy, StrictMode, Suspense } from "react";
 import { Analytics } from "@vercel/analytics/react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
@@ -148,6 +148,9 @@ import { TeamHome as FieldTeamPage } from "./mr/team";
 import { Shell } from "./shell";
 import "./styles.css";
 
+// Bishnoi One's control panel (the companies on it): its own small page, loaded only when opened.
+const ControlApp = lazy(() => import("./control/control"));
+
 const queries = new QueryClient({
   defaultOptions: {
     queries: {
@@ -170,6 +173,14 @@ createRoot(root).render(
     <QueryClientProvider client={queries}>
       <BrowserRouter>
         <Routes>
+          <Route
+            path="/control/*"
+            element={
+              <Suspense fallback={null}>
+                <ControlApp />
+              </Suspense>
+            }
+          />
           <Route path="/login/:dept?" element={<Login />} />
           <Route path="/signup/:dept?" element={<SignUp />} />
           <Route path="/about" element={<AboutRoute />} />

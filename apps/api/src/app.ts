@@ -1,6 +1,7 @@
 // The API. Every route answers JSON; every refusal is { error: { code, message, field? } }.
 
 import { createMiddleware } from "hono/factory";
+import { companyNow } from "./companies/context";
 import { decisionRoutes } from "./decisions/routes";
 import { sampleRoutes } from "./samples/routes";
 import { complaintRoutes } from "./complaints/routes";
@@ -227,6 +228,15 @@ export function createApp(db: Database, options: AppOptions) {
     const input = await readBody(c, z.object({ release: z.boolean().default(false) }));
     await takeFinanceOrder(db, c.get("me"), idParam(c), input.release);
     return c.json({ ok: true });
+  });
+
+  // The company this browser signs in to, when the server has several (companies/router.ts): its
+  // name for the sign-in page and the frame. Null with one company, as before 26 Nov 2026.
+  app.get("/api/company", (c) => {
+    const company = companyNow();
+    return c.json({
+      company: company ? { orgId: company.orgId, name: company.name, code: company.code, loginDomain: company.loginDomain } : null,
+    });
   });
 
   // A department's page on the portal, before signing in: counts, times and the team's seats only.

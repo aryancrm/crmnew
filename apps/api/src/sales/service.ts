@@ -32,6 +32,7 @@ import {
   periodBefore,
   periodFacts,
 } from "./rules";
+import { companyNow } from "../companies/context";
 
 const SELLERS: readonly Role[] = ["medrep", "team_lead", "manager", "online"];
 const WHOLE: readonly Role[] = ["ceo", "admin"];
@@ -713,7 +714,7 @@ export async function companyTree(db: Database, me: Me, asked?: string): Promise
     month: facts.month,
     today: facts.today,
     asOf: null,
-    company: "2MG Inc.",
+    company: companyNow()?.name ?? "2MG Inc.",
     ceo: ceo?.name ?? null,
     ceoId: ceo ? `p${ceo.id}` : null,
     channels: channels.map((channel) => {
