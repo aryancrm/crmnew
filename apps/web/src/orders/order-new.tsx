@@ -38,6 +38,7 @@ import type {
   OrderForList,
   OrderInput,
   PaperKind,
+  OrderAssignment,
 } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -64,6 +65,7 @@ import {
 import { type FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { AssignmentPicker, assignmentKey } from "./assignment-picker";
 import { AGENCIES } from "../online/parts";
 import { VAT_WORDS } from "../inventory/vat";
 import { MedicineFinder } from "./medicine-finder";
@@ -488,16 +490,33 @@ export function OrderNew({
   // away"): a seller orders in their account's Divisions only; another Division's order is placed
   // from an account of that Division (Add another account, then switch). The API refuses it too.
   const lockedDivisions = !anyDivision && ownDivisions.length > 0;
+  // What the account holds on the company's tree (27 Nov: "each account has its assigned Division and
+  // Sub-division; one may handle several"): one shows as it is, several in a searchable list.
+  const assignments =
+    useQuery({
+      queryKey: ["orders", "assignments", forRep?.id ?? 0],
+      queryFn: () =>
+        api<{ assignments: OrderAssignment[] }>(`/api/orders/assignments${forRep ? `?medrep=${forRep.id}` : ""}`),
+      enabled: Boolean(me) && lockedDivisions && !fixId,
+    }).data?.assignments ?? [];
   const askedDivision = divisionOf(division);
+  const pickedAssignment =
+    lockedDivisions && !fixId && assignments.length
+      ? (assignments.find((one) => one.division === askedDivision && one.subDivision === subDivision) ??
+        assignments.find((one) => one.division === askedDivision) ??
+        assignments[0])
+      : null;
   const pickedDivision =
+    pickedAssignment?.division ??
     // An order being fixed keeps the Division it was placed in.
-    (askedDivision && (!lockedDivisions || fixId || ownDivisions.includes(askedDivision)) ? askedDivision : null) ?? ownDivision;
+    ((askedDivision && (!lockedDivisions || fixId || ownDivisions.includes(askedDivision)) ? askedDivision : null) ?? ownDivision);
   // The account's own Sub-division (its team, CRR or NBD, or its place), when it has one: fixed like
   // the Division (27 Nov, the backend developer: "he is a CRR already, it should be recorded").
   const accountSub =
-    lockedDivisions && !fixId && pickedDivision === ownDivision
+    pickedAssignment?.subDivision ||
+    (lockedDivisions && !fixId && pickedDivision === ownDivision
       ? subDivisionOfArea(ownDivision, forRep ? forRep.area : me?.area?.name, forRep ? null : me?.title)
-      : "";
+      : "");
   const pickedSubDivision =
     accountSub ||
     (subDivision ??
@@ -1239,7 +1258,20 @@ export function OrderNew({
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <label className="col-span-2 flex flex-col gap-1 sm:col-span-1">
             <Label text="Division" needed />
-            {lockedDivisions && ownDivisions.length === 1 ? (
+            {pickedAssignment && assignments.length > 1 ? (
+              // Several held: only those, searchable; the Sub-division follows the pick.
+              <AssignmentPicker
+                options={assignments}
+                value={assignmentKey(pickedAssignment)}
+                className={FIELD}
+                onPick={(one) => {
+                  setDivision(one.division);
+                  setSubDivision(one.subDivision);
+                  setHeadquarter(null);
+                  if (orderType === "gl" && !PAP_DIVISIONS.includes(one.division)) setOrderType(null);
+                }}
+              />
+            ) : lockedDivisions && (assignments.length === 1 || ownDivisions.length === 1) ? (
               // The account's own, as it is: another Division's order comes from that Division's account.
               <div className={FIXED} title="Your account's Division. For another Division, switch to an account of that Division.">
                 {pickedDivision}

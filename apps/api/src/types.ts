@@ -3522,6 +3522,17 @@ export type OrgPersonInput = {
   employeeCode?: string | null;
 };
 
+/** One Division and Sub-division an account orders in, from a seat it holds on the company's tree
+ *  (27 Nov: "each account has its assigned Division and Sub-division, from the tree in the Admin"). */
+export type OrderAssignment = {
+  division: string;
+  subDivision: string;
+  /** The seat's area ("HOS | Pasay"), job title and team, to tell two apart. */
+  area: string | null;
+  seat: string | null;
+  team: string | null;
+};
+
 /** Office: works by phone, Messenger and email. Field: visits doctors and hospitals. */
 export type SeatWorks = "office" | "field";
 

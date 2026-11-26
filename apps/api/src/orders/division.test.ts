@@ -13,7 +13,7 @@ import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { seedDemo } from "../seed";
-import type { CustomerDetail, Me, OrderDetail } from "../types";
+import type { CustomerDetail, Me, OrderAssignment, OrderDetail, OrgTree } from "../types";
 
 const PASSWORD = "test-password-1";
 let db: Database;
@@ -150,6 +150,40 @@ describe("an order's Division", () => {
     const mine = await read<{ total: number; division: string | null }>("ryan", "/api/orders/mine?division=HOS");
     const tracker = await read<{ total: number }>("ryan", "/api/orders/mine?division=HOSP");
     expect(mine).toMatchObject({ division: "HOSP", total: tracker.total });
+  });
+
+  it("offers what the account holds on the tree; with two seats, either, each with its own Sub-division", async () => {
+    const one = await read<{ assignments: OrderAssignment[] }>("ryan", "/api/orders/assignments");
+    expect(one.assignments.map((a) => [a.division, a.subDivision])).toEqual([["HOSP", "Hospital"]]);
+
+    // Ryan is given a second seat: B2B's CRR (an account that handles two).
+    const tree = await read<OrgTree>("admin", "/api/org");
+    const b2b = tree.units.find((unit) => unit.channel?.code === "B2B");
+    const seat = await post("admin", "/api/org/seats", { unitId: b2b?.id, title: "CRR", module: "medrep" });
+    expect(seat.status, await seat.clone().text()).toBe(201);
+    const [made] = await rows<{ id: number }>(db, sql`select max(id)::int as id from seat`);
+    await db.execute(
+      sql`insert into seat_holder (seat_id, person_id, kind, starts_on, reason, by_person)
+        values (${made?.id}, (select id from person where email = 'ryan@2mg.test'), 'holder', '2026-01-01', 'Second seat', (select id from person where email = 'admin@2mg.test'))`,
+    );
+    const two = await read<{ assignments: OrderAssignment[] }>("ryan", "/api/orders/assignments");
+    expect(two.assignments.map((a) => [a.division, a.subDivision])).toEqual([
+      ["HOSP", "Hospital"],
+      ["B2B", "CRR"],
+    ]);
+    // An order in the second: its Sub-division is the seat's, whatever else is sent.
+    const placed = await post("ryan", "/api/orders", {
+      customerId: customer,
+      division: "B2B",
+      subDivision: "NBD",
+      items: [{ medicineId: medicine, qty: 1, priceKind: "hospital" }],
+    });
+    expect(placed.status, await placed.clone().text()).toBe(200);
+    const detail = await read<OrderDetail>("ryan", `/api/orders/${((await placed.json()) as { id: number }).id}`);
+    expect(detail.order).toMatchObject({ division: "B2B", subDivision: "CRR" });
+    // Still nothing outside what he holds.
+    expect((await post("ryan", "/api/orders", { customerId: customer, division: "MT", items: [{ medicineId: medicine, qty: 1, priceKind: "hospital" }] })).status).toBe(400);
+    await db.execute(sql`delete from seat_holder where seat_id = ${made?.id}`);
   });
 
   it("follows the seat's box on the chart where it names a Division", async () => {
