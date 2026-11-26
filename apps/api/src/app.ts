@@ -69,6 +69,7 @@ import { mtRoutes } from "./mt/routes";
 import { workLogRoutes } from "./worklog/routes";
 import { regulatoryRoutes } from "./regulatory/routes";
 import { bookRoutes } from "./books/routes";
+import { birRoutes } from "./bir/routes";
 import { hospitalRoutes } from "./hospitals/routes";
 import { telesalesRoutes } from "./telesales/routes";
 import { tenderFinderDoor, tenderRoutes } from "./tenders/routes";
@@ -747,6 +748,7 @@ export function createApp(db: Database, options: AppOptions) {
   mtRoutes(app, db, signedIn);
   workLogRoutes(app, db, signedIn);
   regulatoryRoutes(app, db, signedIn);
+  birRoutes(app, db, signedIn);
   bookRoutes(app, db, signedIn);
   decisionRoutes(app, db, signedIn);
   sampleRoutes(app, db, signedIn);
