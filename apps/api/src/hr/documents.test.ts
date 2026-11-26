@@ -51,15 +51,17 @@ describe("HR's documents", () => {
     expect((await get("helen", "/api/hr/documents?person=999999")).status).toBe(404);
   });
 
-  it("a certificate of employment: numbered, on its company's letterhead, kept as issued", async () => {
+  it("a certificate of employment: numbered, on the company's own letterhead, kept as issued", async () => {
     expect((await send("helen", "/api/hr/documents", { kind: "coe", personId: ids.ryan })).status).toBe(400);
     const first = (await (await send("helen", "/api/hr/documents", { kind: "coe", personId: ids.ryan, subject: "a bank loan" })).json()) as { id: number; code: string };
     const second = (await (await send("helen", "/api/hr/documents", { kind: "coe_pay", personId: ids.ryan, subject: "a visa" })).json()) as { id: number; code: string };
     expect(first.code).toBe(`COE-${year}-00001`);
     expect(second.code).toBe(`COE-${year}-00002`);
     const paper = await read<HrDocPage>("helen", `/api/hr/documents/${first.id}`);
-    expect(paper.letterhead.name).toBe("Getmeds Philippines Incorporated");
-    expect(paper.paragraphs.join(" ")).toMatch(/Ryan has been employed by Getmeds Philippines Incorporated as Medical Representative since March 1, 2025, and is a regular employee/);
+    // One company per database since the separation (26 Nov night): a record still marked GPI is
+    // the company's own; its name comes from its Company details.
+    expect(paper.letterhead.name).toBe("2MG Inc.");
+    expect(paper.paragraphs.join(" ")).toMatch(/Ryan has been employed by 2MG Inc\. as Medical Representative since March 1, 2025, and is a regular employee/);
     expect(paper.paragraphs.join(" ")).not.toMatch(/₱/);
     expect(paper.paragraphs.join(" ")).toMatch(/for a bank loan/);
     // With the pay; and a later raise doesn't change the paper already issued.
@@ -116,8 +118,11 @@ describe("HR's documents", () => {
     expect(paper.code).toBe(`CLR-${year}-00001`);
   });
 
-  it("leave and form printouts carry a number and the employer's letterhead", async () => {
-    await db.execute(sql`insert into setting (key, value, updated_by) values ('company:gpi', ${JSON.stringify({ address: "Pasig City", tin: "123-456-789-000" })}::jsonb, ${ids.admin})`);
+  it("leave and form printouts carry a number and the company's own letterhead", async () => {
+    // Another company's details kept here before the separation are never printed (26 Nov night).
+    await db.execute(sql`insert into setting (key, value, updated_by) values ('company:gpi', ${JSON.stringify({ address: "Elsewhere", tin: "999-999-999-999" })}::jsonb, ${ids.admin})`);
+    await db.execute(sql`insert into setting (key, value, updated_by) values ('company', ${JSON.stringify({ name: "2MG Incorporated", address: "Pasig City", tin: "123-456-789-000" })}::jsonb, ${ids.admin})
+      on conflict (key) do update set value = excluded.value`);
     const [leave] = await rows<{ id: number }>(
       db,
       sql`insert into person_leave (person_id, kind, from_day, to_day, status, made_by, approver_id, decided_by, decided_at)
@@ -125,6 +130,6 @@ describe("HR's documents", () => {
     );
     const paper = await read<Printout>("helen", `/api/hr/print/leave/${leave?.id}`);
     expect(paper.code).toBe(`LV-${String(leave?.id).padStart(6, "0")}`);
-    expect(paper.letterhead).toMatchObject({ name: "Getmeds Philippines Incorporated", address: "Pasig City", tin: "123-456-789-000" });
+    expect(paper.letterhead).toMatchObject({ name: "2MG Incorporated", address: "Pasig City", tin: "123-456-789-000" });
   });
 });

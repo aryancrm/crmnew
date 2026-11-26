@@ -416,7 +416,7 @@ async function checkLoginEmail(
     throw new Refusal(
       400,
       "invalid",
-      "Type the email they sign in with, like juan@2mginc.com.",
+      `Type the email they sign in with (on @${loginDomain()}).`,
       "loginEmail",
     );
   const [used] = await rows<{ name: string; active: boolean }>(

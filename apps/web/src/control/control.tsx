@@ -225,7 +225,6 @@ function Companies() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold text-slate-900">{one.name}</span>
                     <Pill>{one.code}</Pill>
-                    {one.home && <Pill tone="info">The server's own</Pill>}
                     {one.pausedAt ? <Pill tone="warn">Paused</Pill> : one.running ? <Pill tone="good">Working</Pill> : <Pill tone="bad">Can't be reached</Pill>}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-slate-600">
@@ -258,14 +257,14 @@ function Companies() {
                     <KeyRound size={14} /> New one-time password
                   </Button>
                 )}
-                {!one.home &&
-                  (one.pausedAt ? (
-                    <ResumeButton company={one} />
-                  ) : (
-                    <Button small variant="danger" onClick={() => setPausing(one)}>
-                      <Pause size={14} /> Pause
-                    </Button>
-                  ))}
+                {/* Every company the same, 2MG too (Aryan, 26 Nov: "2MG is normal like the others"). */}
+                {one.pausedAt ? (
+                  <ResumeButton company={one} />
+                ) : (
+                  <Button small variant="danger" onClick={() => setPausing(one)}>
+                    <Pause size={14} /> Pause
+                  </Button>
+                )}
               </div>
             </div>
           </Card>

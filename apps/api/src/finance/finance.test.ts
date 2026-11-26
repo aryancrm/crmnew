@@ -476,18 +476,25 @@ describe("a cancelled order Finance took money for", () => {
 });
 
 describe("numbers and lists", () => {
-  it("numbers each company's invoices in its own series, without gaps", async () => {
+  it("numbers the company's invoices in its own series, without gaps; no other company to bill from", async () => {
+    // One company per database since the separation (Aryan, 26 Nov night): an order that still
+    // asks for Getmeds Philippines is billed by the company itself, in its own series.
     const before = await read<InvoiceList>("fiona", "/api/invoices");
-    const getmeds = await approved(creditHospital, { invoiceFrom: "gpi" });
-    await post("fiona", `/api/finance/orders/${getmeds}/invoice`);
-    const first = (await order("fiona", getmeds)).money.invoice?.code;
-    const again = await approved(creditHospital, { invoiceFrom: "gpi" });
+    const first = await approved(creditHospital, { invoiceFrom: "gpi" });
+    await post("fiona", `/api/finance/orders/${first}/invoice`);
+    const firstCode = (await order("fiona", first)).money.invoice?.code ?? "";
+    const again = await approved(creditHospital);
     await post("fiona", `/api/finance/orders/${again}/invoice`);
-    expect(first).toBe("INV-000001");
-    expect((await order("fiona", again)).money.invoice?.code).toBe("INV-000002");
+    expect(firstCode).toMatch(/^2MG-SI-\d{6}$/);
+    expect((await order("fiona", again)).money.invoice?.code).toBe(`2MG-SI-${String(Number(firstCode.slice(7)) + 1).padStart(6, "0")}`);
     const after = await read<InvoiceList>("fiona", "/api/invoices");
     expect(after.counts.all).toBe(before.counts.all + 2);
-    expect(after.rows[0]?.invoiceFromLabel).toBe("Getmeds Philippines Incorporated");
+    expect(after.rows[0]?.invoiceFromLabel).toBe("2MG Inc.");
+    const [other] = await rows<{ n: number }>(
+      db,
+      sql`select count(*)::int as n from invoice where invoice_from <> '2mg' or code not like '2MG-SI-%'`,
+    );
+    expect(other?.n).toBe(0);
   });
 
   it("lists invoices by tab, payments by month, and keeps them from those who don't keep the books", async () => {

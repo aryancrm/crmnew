@@ -20,7 +20,7 @@ import type {
   SalesOrderDoc,
   Vat,
 } from "../types";
-import { INVOICE_FROM_LABEL } from "./rules";
+import { invoiceFromLabel } from "./rules";
 import { orderDetail } from "./service";
 
 /** Zoho's names for an order's state on the ribbon. */
@@ -145,7 +145,7 @@ export async function salesOrderDoc(db: Database, me: Me, id: number): Promise<S
     ["Headquarter", o.headquarter ?? ""],
     ["Payment Terms", o.agreed ?? ""],
     ["Doctor Name", o.doctor ?? ""],
-    ["Invoicing From", INVOICE_FROM_LABEL[o.invoiceFrom]],
+    ["Invoicing From", invoiceFromLabel(o.invoiceFrom)],
     ["Source", o.leadSource ? `${SOURCE_LABEL[o.leadSource]} enquiry` : "MedRep order"],
   ];
   return {
@@ -178,7 +178,7 @@ export async function salesOrderDoc(db: Database, me: Me, id: number): Promise<S
       deliveryFee: o.deliveryFee,
       total: o.total,
       invoiceFrom: o.invoiceFrom,
-      invoiceFromLabel: INVOICE_FROM_LABEL[o.invoiceFrom],
+      invoiceFromLabel: invoiceFromLabel(o.invoiceFrom),
       invoiceId: o.invoiceId,
       invoiceCode: o.invoiceCode,
     },

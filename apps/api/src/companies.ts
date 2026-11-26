@@ -1,3 +1,7 @@
+// Since the separation (Aryan, 26 Nov night) each company on Bishnoi One has its own database, and
+// inside it there is one company: itself (companies/context.ts ownCompanyName; its papers print its
+// own Company details). Every order, invoice, employee record and document carries OWN; the codes
+// below stay for the rows made before (the database's checks know them). Earlier note:
 // The group's companies, one list for the whole system (26 Nov: the same company was "getmeds" on
 // orders and invoices and "gpi" on HR and payroll; documents must never carry the wrong company).
 // Every order, invoice, employee record and payslip carries one of these codes; screens, prints
@@ -6,6 +10,9 @@
 
 export const COMPANY_CODES = ["2mg", "gpi"] as const;
 export type CompanyCode = (typeof COMPANY_CODES)[number];
+
+/** The code every row carries since the separation: "this company". */
+export const OWN: CompanyCode = "2mg";
 
 export const COMPANIES: Record<
   CompanyCode,

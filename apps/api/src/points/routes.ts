@@ -61,10 +61,11 @@ export function pointsRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
         footer: line(200),
         signatory: line(120),
         signatoryTitle: line(120),
+        invoiceSeries: line(20).optional(),
       }),
     );
-    // ?company=gpi: Getmeds Philippines' own details (its papers' letterhead); else 2MG's.
-    await saveCompany(db, c.get("me"), input as CompanyInfo, c.req.query("company") === "gpi" ? "gpi" : "2mg");
+    // The company's own details: one company per database since the separation (26 Nov night).
+    await saveCompany(db, c.get("me"), { ...input, invoiceSeries: input.invoiceSeries ?? "" } as CompanyInfo);
     return c.json({ ok: true });
   });
   // A case's own steps emailed to the customer by themselves (Aryan, 26 Nov, as the old CRM).

@@ -67,12 +67,13 @@ describe("HR's reports", () => {
     }
   });
 
-  it("the figures say what happened, and a company filter narrows them", async () => {
+  it("the figures say what happened, all of the company's own (no other company to filter by)", async () => {
     const count = await read<HrReport>("helen", "/api/hr/reports/headcount");
-    const gpi = await read<HrReport>("helen", "/api/hr/reports/headcount?company=gpi");
-    expect(gpi.totals?.total).toBe(1);
-    expect(gpi.letterhead.name).toBe("Getmeds Philippines Incorporated");
-    expect(count.letterhead.name).toMatch(/2MG Incorporated and Getmeds Philippines Incorporated/);
+    // One company per database since the separation (26 Nov night): asking for another changes nothing.
+    const other = await read<HrReport>("helen", "/api/hr/reports/headcount?company=gpi");
+    expect(other.totals?.total).toBe(count.totals?.total);
+    expect(count.letterhead.name).toBe("2MG Inc.");
+    expect(count.letterhead.name).not.toMatch(/Getmeds/);
     expect(Number(count.totals?.total)).toBeGreaterThan(5);
 
     const ot = await read<HrReport>("helen", `/api/hr/reports/overtime?from=${today}&to=${today}`);

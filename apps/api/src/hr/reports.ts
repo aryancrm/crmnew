@@ -6,7 +6,8 @@
 // people one company employs.
 
 import { sql } from "drizzle-orm";
-import { allCompanyNames, COMPANIES, COMPANY_CODES, type CompanyCode } from "../companies";
+import type { CompanyCode } from "../companies";
+import { ownCompanyCode } from "../companies/context";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import { addDays, todayManila } from "../inventory/rules";
@@ -41,7 +42,7 @@ type Report = {
 };
 
 const col = (key: string, label: string, type: HrReportColumn["type"] = "text"): HrReportColumn => ({ key, label, type });
-const short = (code: string) => COMPANIES[code as CompanyCode]?.short ?? code;
+const short = (_code: string) => ownCompanyCode();
 const hours = (minutes: number) => Math.round((minutes / 60) * 100) / 100;
 const sum = (list: Record<string, HrReportValue>[], key: string) =>
   list.reduce((total, one) => total + (typeof one[key] === "number" ? (one[key] as number) : 0), 0);
@@ -537,7 +538,8 @@ export async function runReport(
   if (from < addDays(to, -731)) from = addDays(to, -731);
   const year = Number(query.year) > 2000 && Number(query.year) < 2100 ? Number(query.year) : Number(today.slice(0, 4));
   const days = Math.min(Math.max(Number(query.days) || 30, 1), 366);
-  const company = COMPANY_CODES.includes(query.company as CompanyCode) ? (query.company as CompanyCode) : null;
+  // One company per database since the separation (26 Nov night): no company to filter by.
+  const company: CompanyCode | null = null;
   const asked: Asked = { from, to, year, days, company };
   const built = await report.build(db, me, asked);
   const shownFrom = built.from ?? from;
@@ -550,9 +552,7 @@ export async function runReport(
         : report.period === "year"
           ? String(year)
           : `${words(shownFrom)} to ${words(shownTo)} (the next ${days} days)`;
-  const letterhead: Letterhead = company
-    ? await letterheadOf(db, company)
-    : { code: "2mg", name: allCompanyNames(), address: "", phone: "", email: "", tin: "", footer: "" };
+  const letterhead: Letterhead = await letterheadOf(db);
   return {
     key: report.key,
     title: report.title,

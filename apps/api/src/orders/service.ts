@@ -4,6 +4,7 @@
 import { peopleUnder, seatsUnder } from "../org/scope";
 import { bytesOf, keepFile } from "../files/store";
 import { type SQL, sql } from "drizzle-orm";
+import { OWN } from "../companies";
 import { customerDetail, missingOf } from "../customers/service";
 import { type Database, rows } from "../db/index";
 import { dispatchCounts, putBack } from "../dispatch/service";
@@ -69,7 +70,7 @@ import {
   FINANCE_STATUSES,
   afterApproval,
   holder,
-  INVOICE_FROM_LABEL,
+  invoiceFromLabel,
   mayAddPaper,
   NEVER_STUCK,
   NEXT_OF,
@@ -1489,7 +1490,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
       ...(shown.status === "completed" && money.invoice?.status === "paid"
         ? { statusLabel: "Completed" }
         : {}),
-      invoiceFromLabel: INVOICE_FROM_LABEL[order.invoiceFrom],
+      invoiceFromLabel: invoiceFromLabel(order.invoiceFrom),
       customerMissing: missingOf(
         {
           kind: order.customerKind,
@@ -2147,7 +2148,7 @@ export async function placeOrder(
         values (${customer.id}, ${holder?.id ?? me.id}, ${me.id}, ${holder?.channelId ?? own?.channelId ?? null}, ${status},
           ${terms.terms}, ${terms.days}, ${("payBy" in terms ? terms.payBy : null) ?? null},
           ${clean(input.deliveryAddress) ?? withCity(customer.address, customer.city)},
-          ${clean(input.receiver)}, ${clean(input.receiverPhone)}, ${clean(input.note)}, ${input.expectedOn || null}, ${clean(input.customerPo)}, ${input.invoiceFrom ?? "2mg"}, ${input.doctorId ?? null}, ${total}, now(),
+          ${clean(input.receiver)}, ${clean(input.receiverPhone)}, ${clean(input.note)}, ${input.expectedOn || null}, ${clean(input.customerPo)}, ${OWN}, ${input.doctorId ?? null}, ${total}, now(),
           ${manages ? sql`now()` : null}, ${manages ? me.id : null}, ${shipsFrom?.id ?? null}, ${options.leadId ?? null}, ${deliveryFee},
           ${orderDivision}, ${subDivision || null}, ${paymentTerm},
           ${input.noProofReason ?? null}, ${clean(input.noProofNote)}, ${patientOrder},
@@ -2820,7 +2821,7 @@ export async function reviseOrder(
           payment_days = ${terms.days}, pay_by = ${("payBy" in terms ? terms.payBy : null) ?? null},
           expected_on = ${next.expectedOn}, delivery_address = ${next.deliveryAddress},
           receiver = ${next.receiver}, receiver_phone = ${next.receiverPhone}, customer_po = ${next.customerPo}, note = ${next.note},
-          invoice_from = coalesce(${input.invoiceFrom ?? null}, invoice_from), doctor_id = ${input.doctorId ?? null},
+          invoice_from = ${OWN}, doctor_id = ${input.doctorId ?? null},
           division = ${next.division}, sub_division = ${next.subDivision},
           ${
             by === "management"
@@ -2934,7 +2935,8 @@ export async function saveOrderDetails(
       deliveryAddress: clean(input.deliveryAddress),
       expectedOn: input.expectedOn || null,
       customerPo: clean(input.customerPo),
-      invoiceFrom: input.invoiceFrom ?? order.invoiceFrom,
+      // One company per database (26 Nov night): it bills in its own name, never another's.
+      invoiceFrom: OWN as string,
       note: clean(input.note),
     };
     const LABEL: Record<keyof typeof next, string> = {

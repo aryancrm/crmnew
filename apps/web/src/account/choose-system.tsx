@@ -1,23 +1,44 @@
-// The navbar's Sign in (/signin, Aryan 25 Nov): first the choice of system, then that system's
-// sign-in (/login/<key>). The same split screen as a department's sign-in: the orange panel on the
-// left, the systems to pick from on the right, by group. Phones: the systems first.
+// The navbar's Sign in (/signin). Aryan, 26 Nov: "first the company's ID and password, then that
+// company's apps": the sign-in comes first (the company's own ID, info@2mginc.com, or a person's
+// own), then the company's name with the systems this login may open (the company's ID, its
+// Admin, every app; a person with one system goes straight in). The same split screen as a
+// department's sign-in: the orange panel on the left. A department's own page (/login/<key>)
+// still signs in there directly.
 
 import "@fontsource-variable/inter";
+import type { Me } from "@2mg/api/types";
 import { Link, Navigate, useLocation } from "react-router-dom";
 import { useMe } from "../auth";
+import { useCompany } from "../companies";
+import { allItems, appsFor } from "../menus";
 import { heroLogo } from "../portal/hero-logos";
-import { WORKSPACES } from "../workspaces";
+import { workspaceOf } from "../workspaces";
+import { SignIn } from "./login";
 
-const GROUPS = [
-  { id: "selling", label: "Selling" },
-  { id: "operations", label: "Operations" },
-  { id: "office", label: "Office" },
-] as const;
+type Choice = { key: string; label: string; about: string; to: string; logo?: string; app?: ReturnType<typeof appsFor>[number] };
+
+/** What this login may open in its company: its own desk, Books for those who keep the books, and
+ *  for the company's ID (its Admin) and the CEO, every app of the company. */
+export function choicesOf(me: Me): Choice[] {
+  const own = workspaceOf(me);
+  const out: Choice[] = [{ key: own.key, label: own.label, about: own.about, to: "/", logo: heroLogo(own.key) }];
+  if (["finance", "ceo", "admin"].includes(me.role))
+    out.push({ key: "books", label: "Books", about: "Accounts, banking, reports", to: "/books/home", logo: heroLogo("books") });
+  for (const app of appsFor(me)) {
+    const first = allItems(app.groups.flatMap((group) => group.items)).find((item) => item.to && item.to !== "/");
+    if (first) out.push({ key: app.key, label: app.label, about: "", to: first.to, app });
+  }
+  return out;
+}
 
 export function ChooseSystem() {
   const me = useMe();
   const location = useLocation();
-  if (me.data) return <Navigate to="/" replace />;
+  const company = useCompany();
+  const from = (location.state as { from?: string } | null)?.from ?? "/";
+  const choices = me.data ? choicesOf(me.data) : [];
+  // One system, or a one-time password to change first (the home asks for it): straight in.
+  if (me.data && (choices.length <= 1 || me.data.mustChangePassword)) return <Navigate to="/" replace />;
 
   return (
     <main className="flex min-h-dvh flex-col bg-white font-[Inter_Variable,Inter,sans-serif] text-[#1f2733] lg:h-dvh lg:flex-row lg:overflow-hidden">
@@ -34,7 +55,7 @@ export function ChooseSystem() {
             every system.
           </h2>
           <p className="mt-2 max-w-sm text-[14px] leading-relaxed text-white/90 [text-shadow:0_1px_10px_rgba(0,0,0,0.35)]">
-            Pick the system you work in. Your own login ID and password decide what opens inside.
+            Sign in with your company's ID or your own. Your login decides which of your company's systems open.
           </p>
         </div>
       </aside>
@@ -45,41 +66,42 @@ export function ChooseSystem() {
           <span className="text-[17px] font-semibold tracking-[-0.03em]">Bishnoi One</span>
         </Link>
         <div className="mx-auto w-full max-w-[40rem] pt-8 pb-10 lg:my-auto">
-          <h1 id="choose-title" className="text-[clamp(24px,2.4vw,30px)] leading-tight font-semibold tracking-[-0.03em]">
-            Sign in
-          </h1>
-          <p className="mt-1.5 text-[14px] text-[#5b6472]">Choose the system you want to open.</p>
-
-          <div className="mt-7 grid gap-7">
-            {GROUPS.map((group) => (
-              <div key={group.id}>
-                <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-[#16181d]">{group.label}</h2>
-                <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {WORKSPACES.filter((one) => one.group === group.id).map((one) => (
-                    <li key={one.key}>
-                      <Link
-                        to={`/login/${one.key}`}
-                        state={location.state}
-                        className="group flex min-h-14 items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-[#fff7f2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f36b21]"
-                      >
-                        <img src={heroLogo(one.key)} alt="" width={36} height={36} className="size-9 shrink-0 object-contain" />
-                        <span className="min-w-0 flex-1">
-                          <span className="block text-[14.5px] font-semibold group-hover:text-[#c2410c]">{one.label}</span>
-                          <span className="block truncate text-[12.5px] text-[#5b6472]">{one.about}</span>
-                        </span>                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-
-          <p className="mt-8 border-t border-[#eceef3] pt-4 text-[13px] text-[#5b6472]">
-            No account yet?{" "}
-            <Link to="/signup" className="inline-flex min-h-11 items-center font-semibold text-[#c2410c] hover:underline">
-              Sign up
-            </Link>
-          </p>
+          {!me.data ? (
+            <div className="mx-auto max-w-[26rem]">
+              <SignIn workspace={null} from={from} pickerSlot={null} />
+            </div>
+          ) : (
+            <>
+              <h1 id="choose-title" className="text-[clamp(24px,2.4vw,30px)] leading-tight font-semibold tracking-[-0.03em]">
+                {company?.name ?? "Your company"}
+              </h1>
+              <p className="mt-1.5 text-[14px] text-[#5b6472]">
+                Signed in as {me.data.name}. Choose the system you want to open.
+              </p>
+              <ul className="mt-7 grid gap-2 sm:grid-cols-2">
+                {choices.map((one) => (
+                  <li key={one.key}>
+                    <Link
+                      to={one.to}
+                      className="group flex min-h-14 items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-[#fff7f2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f36b21]"
+                    >
+                      {one.logo ? (
+                        <img src={one.logo} alt="" width={36} height={36} className="size-9 shrink-0 object-contain" />
+                      ) : one.app ? (
+                        <span className={`grid size-9 shrink-0 place-items-center rounded-xl ${one.app.tone}`}>
+                          <one.app.icon size={18} aria-hidden="true" />
+                        </span>
+                      ) : null}
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-[14.5px] font-semibold group-hover:text-[#c2410c]">{one.label}</span>
+                        {one.about && <span className="block truncate text-[12.5px] text-[#5b6472]">{one.about}</span>}
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </div>
       </section>
     </main>

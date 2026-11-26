@@ -164,14 +164,17 @@ const HOME_LINK =
 const landing = (role: string, picked: Workspace | null, from: string) =>
   picked?.key === "books" && ["finance", "ceo", "admin"].includes(role) ? "/books/home" : from;
 
-/** The sign-in, the same for every department: login ID and password, as always. */
-function SignIn({
+/** The sign-in, the same for every department: login ID and password, as always. With no
+ *  department (the navbar's Sign in, Aryan 26 Nov: "first the company's ID and password, then its
+ *  apps"), it signs in to the person's company and their own department, and the company's apps
+ *  to choose from come after (choose-system.tsx). */
+export function SignIn({
   workspace,
   from,
   loginId,
   pickerSlot,
   adding = false,
-}: { workspace: Workspace; from: string; loginId?: string; pickerSlot: HTMLElement | null; adding?: boolean }) {
+}: { workspace: Workspace | null; from: string; loginId?: string; pickerSlot: HTMLElement | null; adding?: boolean }) {
   const queries = useQueryClient();
   const navigate = useNavigate();
   // With several companies on the server: the one this browser signs in to (companies.ts).
@@ -187,7 +190,7 @@ function SignIn({
   const submitButton = useRef<HTMLButtonElement>(null);
   // Two-step sign-in: set once the password was right, until the code signs them in.
   const [ticket, setTicket] = useState<string | null>(null);
-  useEffect(() => setTicket(null), [workspace.key]);
+  useEffect(() => setTicket(null), [workspace?.key]);
   const field =
     "h-11 w-full rounded-full border border-[#d5d9e1] bg-white px-5 text-[14px] text-[#1f2733] shadow-none outline-none transition-[border-color,outline-color] placeholder:text-[#6b7380] hover:border-[#b9bfcb] focus:border-[#f36b21] focus:outline-solid! focus:outline-2! focus:outline-offset-2! focus:outline-[#f36b21]! disabled:bg-[#f6f7f9] aria-[invalid=true]:border-rose-500 aria-[invalid=true]:focus:outline-rose-500!";
   const label = "text-[12.5px] font-semibold text-[#1f2733]";
@@ -205,7 +208,8 @@ function SignIn({
     markActive();
     queries.setQueryData(ME, signedIn);
     rememberWorkspace(workspaceOf(signedIn).key);
-    navigate(landing(signedIn.role, workspace, back), { replace: true });
+    // The company's sign-in: the apps this login may open come next, unless a page was waiting.
+    navigate(picked ? landing(signedIn.role, picked, back) : back === "/" ? "/signin" : back, { replace: true });
     rememberPerson(signedIn.id);
   };
   async function submit(event: FormEvent) {
@@ -214,7 +218,7 @@ function SignIn({
     setProblem(null);
     try {
       const answer = await api<SignInAnswer>("/api/auth/login", {
-        body: { email, password, workspace: picked.key, ...(adding ? { add: true } : {}) },
+        body: { email, password, ...(picked ? { workspace: picked.key } : {}), ...(adding ? { add: true } : {}) },
       });
       if (answer.twoStep) {
         // The password has done its part: it isn't kept on the screen.
@@ -255,9 +259,12 @@ function SignIn({
         (Hick, Miller). It stands on the page's white, no card around it. */}
     <div className="w-full text-left">
       <div className="relative flex items-center gap-3">
-        <h1 className="min-w-0 text-[clamp(24px,2.4vw,28px)] leading-tight font-semibold tracking-[-0.03em] text-[#1f2733]">Sign in to {picked.label}</h1>
+        <h1 className="min-w-0 text-[clamp(24px,2.4vw,28px)] leading-tight font-semibold tracking-[-0.03em] text-[#1f2733]">
+          {picked ? `Sign in to ${picked.label}` : "Sign in to your company"}
+        </h1>
         {/* Vite's dev server only: no build has import.meta.hot, so none carries the picker. */}
         {import.meta.hot &&
+          picked &&
           pickerSlot &&
           createPortal(
           <DevUserPicker
@@ -275,7 +282,9 @@ function SignIn({
           )}
       </div>
       <p className="mt-1.5 text-[14px] text-[#5b6472]">
-        Use your own login ID and password.
+        {picked
+          ? "Use your own login ID and password."
+          : "Your company's ID or your own login ID, and the password. Your company's apps open next."}
         {company && (
           <>
             {" "}
@@ -292,7 +301,7 @@ function SignIn({
           <input
             id={`${ids}-id`}
             type="text"
-            placeholder="Enter your login ID (e.g. hos1)"
+            placeholder={picked ? "Enter your login ID (e.g. hos1)" : "Company ID or your login ID"}
             autoCapitalize="none"
             spellCheck={false}
             autoComplete="username"
@@ -369,10 +378,10 @@ function SignIn({
         </button>
       </form>
       <div className="mt-5 grid gap-1 border-t border-[#eceef3] pt-2 text-[12.5px] text-[#5b6472]">
-        {!["ceo", "admin", "books"].includes(picked.key) && (
+        {!["ceo", "admin", "books"].includes(picked?.key ?? "") && (
           <p>
             No account yet?{" "}
-            <Link to={`/signup/${picked.key}`} className="inline-flex min-h-11 items-center font-semibold text-[#c2410c] hover:underline">
+            <Link to={picked ? `/signup/${picked.key}` : "/signup"} className="inline-flex min-h-11 items-center font-semibold text-[#c2410c] hover:underline">
               Sign up
             </Link>
           </p>

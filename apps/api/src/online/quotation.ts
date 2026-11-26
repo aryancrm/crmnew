@@ -18,8 +18,7 @@ import {
 import { companyNow, isHomeCompany } from "../companies/context";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
-import { COMPANIES, COMPANY_CODES } from "../companies";
-import { companyDetailsOf, companyInfo } from "../settings/service";
+import { companyInfo } from "../settings/service";
 import type { CompanyInfo, LeadCase, Me } from "../types";
 import { replyByEmail, sendOnCase, startEmailThread } from "./email";
 import { replyOnMessenger } from "./messenger";
@@ -139,7 +138,7 @@ export function snapshotOf(data: LeadCase, company: CompanyInfo, me: Me): Quotat
   };
 }
 
-/** Plain words of a company's name, to know it on a canvass ("Getmeds Philippines Inc." = GPI). */
+/** Plain words of a company's name ("2MG Inc." = "2mg"). */
 const nameKey = (name: string) =>
   name
     .toLowerCase()
@@ -148,24 +147,35 @@ const nameKey = (name: string) =>
     .replace(/\s+/g, " ")
     .trim();
 
-/** A canvass vendor that is one of the group's companies gets its quotation on its own letterhead
- *  (the old CRM's sister-company quotations); never the issuing company's own. */
-export async function withLetterheads(db: Database, snapshot: QuotationSnapshot): Promise<QuotationSnapshot> {
+/** A canvass vendor whose prices fill its lines gets a quotation page of its own, under its name
+ *  (the old CRM's sister-company quotations). Since the separation (26 Nov night) another
+ *  company's details are never read from here: the page carries the vendor's name alone. */
+export async function withLetterheads(_db: Database, snapshot: QuotationSnapshot): Promise<QuotationSnapshot> {
   if (!snapshot.canvass?.some((quote) => quote.lines?.length)) return snapshot;
   const ours = nameKey(snapshot.company.name);
-  const canvass = [];
-  for (const quote of snapshot.canvass) {
-    const key = nameKey(quote.vendor);
-    const code = COMPANY_CODES.find(
-      (one) => key && (nameKey(COMPANIES[one].name) === key || nameKey(COMPANIES[one].short) === key),
-    );
-    canvass.push(
-      code && quote.lines?.length && nameKey(COMPANIES[code].name) !== ours
-        ? { ...quote, company: await companyDetailsOf(db, code) }
+  return {
+    ...snapshot,
+    canvass: snapshot.canvass.map((quote) =>
+      quote.lines?.length && nameKey(quote.vendor) && nameKey(quote.vendor) !== ours
+        ? {
+            ...quote,
+            company: {
+              name: quote.vendor,
+              address: "",
+              phone: "",
+              email: "",
+              tin: "",
+              vat: snapshot.company.vat,
+              licence: "",
+              footer: "",
+              signatory: "",
+              signatoryTitle: "",
+              invoiceSeries: "",
+            },
+          }
         : quote,
-    );
-  }
-  return { ...snapshot, canvass };
+    ),
+  };
 }
 
 // ---------------------------------------------------------------- drawing

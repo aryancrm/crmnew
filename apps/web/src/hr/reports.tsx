@@ -3,7 +3,6 @@
 // PDF) on the letterhead with who prepared it, remarks and the signatories (remembered on this
 // computer).
 
-import { COMPANIES, COMPANY_CODES } from "@2mg/api/companies";
 import type { HrReport, HrReportColumn, HrReportList, HrReportValue } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, Download, Printer } from "lucide-react";
@@ -157,17 +156,6 @@ export function ReportPage() {
                 </select>
               </label>
             )}
-            <label className="flex flex-col gap-1 font-semibold text-slate-600">
-              Company
-              <select className={`${INPUT} h-9 w-64`} value={report.asked.company ?? ""} onChange={(event) => set("company", event.target.value)}>
-                <option value="">Both companies</option>
-                {COMPANY_CODES.map((code) => (
-                  <option key={code} value={code}>
-                    {COMPANIES[code].name}
-                  </option>
-                ))}
-              </select>
-            </label>
             {query.isFetching && <span className="pb-2 text-slate-500">Updating…</span>}
           </div>
         </PageHead>

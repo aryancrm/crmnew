@@ -197,10 +197,10 @@ const CLASS_WORDS: Record<string, string> = {
   intern: "an intern",
 };
 
-/** The letter of a certificate, from what it kept the day it was issued. */
-function certificate(doc: DocRecord): string[] {
+/** The letter of a certificate, from what it kept the day it was issued, in the name of the company
+ *  that employs them: the company itself (its Company details; one company per database). */
+function certificate(doc: DocRecord, company: string): string[] {
   const c = doc.content;
-  const company = doc.company === "gpi" ? "Getmeds Philippines Incorporated" : "2MG Incorporated";
   const role = c.position ? `as ${c.position}` : "";
   const out = [
     "TO WHOM IT MAY CONCERN:",
@@ -229,7 +229,8 @@ export async function documentPage(db: Database, me: Me, id: number): Promise<Hr
   const fields: HrDocPage["fields"] = [];
   let paragraphs: string[] = [];
   let signers: Signer[] = [issuer];
-  if (doc.kind === "coe" || doc.kind === "coe_pay") paragraphs = certificate(doc);
+  const letterhead = await letterheadOf(db);
+  if (doc.kind === "coe" || doc.kind === "coe_pay") paragraphs = certificate(doc, letterhead.name);
   else if (doc.kind === "memo" || doc.kind === "nte") {
     fields.push(
       { label: "To", value: `${doc.name}${doc.content.position ? `, ${doc.content.position}` : ""}` },
@@ -267,7 +268,7 @@ export async function documentPage(db: Database, me: Me, id: number): Promise<Hr
     title: DOC_TITLES[doc.kind],
     status,
     statusWords: words,
-    letterhead: await letterheadOf(db, doc.company),
+    letterhead,
     person: {
       id: doc.personId,
       name: doc.name,

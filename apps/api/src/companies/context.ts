@@ -40,3 +40,14 @@ export const companyKey = (key: string): string => {
 /** Work that only the first company does (a robot or a mailbox set up on the server, not in a
  *  company's data): true with one company, and for the first of several. */
 export const isHomeCompany = (): boolean => companyNow()?.home ?? true;
+
+// One company per database (Aryan, 26 Nov night: "2MG and GetMeds separate: no 'invoice from 2MG or
+// GetMeds', no 'employer 2MG or GPI'; everything separate"). Inside a company everything is its own.
+/** The company's name for labels: Bishnoi One's list's ("2MG Inc." with one company). Papers print
+ *  the name in its Company details (settings/service.ts companyInfo). */
+export const ownCompanyName = (): string => companyNow()?.name ?? "2MG Inc.";
+/** Its short code (the panel's: 2MG, GM). */
+export const ownCompanyCode = (): string => companyNow()?.code ?? "2MG";
+/** 2MG's invoice series from before the separation (its invoices out keep their numbers); any other
+ *  company types its own in Company details before its first invoice. */
+export const homeInvoiceSeries = (): string | null => (isHomeCompany() ? "2MG-SI-" : null);

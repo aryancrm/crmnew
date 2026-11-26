@@ -17,7 +17,8 @@
 // Who: HR and the Admin import; HR, the CEO and the Admin export.
 
 import { sql } from "drizzle-orm";
-import { COMPANIES, COMPANY_CODES, type CompanyCode } from "../companies";
+import { type CompanyCode, OWN } from "../companies";
+import { ownCompanyCode } from "../companies/context";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
@@ -67,14 +68,9 @@ export function centavosOf(text: string): number | null {
   return Math.round(Number(value) * 100);
 }
 const pesosWords = (centavos: number | null) => (centavos === null ? "" : (centavos / 100).toFixed(2));
-const companyOf = (text: string): CompanyCode | null => {
-  const value = text.trim().toLowerCase();
-  return (
-    COMPANY_CODES.find(
-      (code) => code === value || COMPANIES[code].short.toLowerCase() === value || COMPANIES[code].name.toLowerCase() === value,
-    ) ?? null
-  );
-};
+/** The employer column: the company itself, whatever was typed (one company per database since the
+ *  separation, 26 Nov night). */
+const companyOf = (_text: string): CompanyCode | null => OWN;
 const CLASS_WORDS: Record<string, string> = {
   regular: "Regular",
   probationary: "Probationary",
@@ -149,7 +145,7 @@ function shown(person: PersonNow, key: string): string {
   const value = person[key];
   if (value === null || value === undefined) return "";
   if (MONEY_KEYS.has(key)) return pesosWords(value as number);
-  if (key === "company") return COMPANIES[value as CompanyCode]?.short ?? String(value);
+  if (key === "company") return ownCompanyCode();
   if (key === "classification") return CLASS_WORDS[String(value)] ?? String(value);
   return String(value);
 }
