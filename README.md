@@ -57,6 +57,11 @@ again). `SEED_DEMO=1` makes one demo person per role the first time: naresh (CEO
 (MedRep), jane (Online desk), each `<name>@2mg.test` with the password you gave. In the Claude
 desktop app the same two servers are `new-api` and `new-web` in `../.claude/launch.json`.
 
+**The demo company beside your own** (every desk and every kind of MedRep, to try each screen):
+`SEED_PASSWORD=<your choice> pnpm dev:demo-api` the first time (then `pnpm dev:demo-api`), and
+`pnpm dev:demo-web`. Its own database is `.data/demo`, the API :4101, the web http://localhost:5181;
+your `.data/pg` and :5180 are not touched.
+
 ## Check it
 
 ```bash

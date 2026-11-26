@@ -5,6 +5,8 @@
   "scripts": {
     "dev:api": "pnpm --filter @2mg/api dev",
     "dev:web": "pnpm --filter @2mg/web dev",
+    "dev:demo-api": "pnpm --filter @2mg/api demo",
+    "dev:demo-web": "pnpm --filter @2mg/web dev:demo",
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck"
   }
