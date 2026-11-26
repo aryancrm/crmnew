@@ -2532,8 +2532,15 @@ the inventory" for GetMeds.
   password (`hos1@2mginc.com`, `info@getmeds.ph`). No shared company password. The browser then
   remembers the company, so a login ID typed without the @ is that company's (else the first's):
   2MG's people sign in exactly as before. One company at a time in a browser.
-- **The first company is the server's own database**: 2MG Inc., `@2mginc.com`. Webhooks (Meta, the
-  websites), the Facebook pages and mailboxes set up on the server, and the tender robot are its.
+- **The first company is the server's own database**: 2MG Inc., `@2mginc.com`. The tender robot is
+  its. **Each company has its own Facebook pages, mailboxes and websites** (Aryan, 26 Nov: "2MG and
+  GetMeds each have their own"), connected by its own Admin under Online pages & mail: the server
+  reads every company's on its timer (a paused one's wait); Meta's one webhook goes to the company
+  that connected the page it is for (a page nobody connected waits at the first company's); a
+  website calls `/webhooks/store/<Org ID>` (the first company's keep `/webhooks/store/2mg`), as its
+  Channels page shows; every email it sends by itself goes from its own mailbox. Links a customer
+  or a new person opens without signing in (a quotation, the welcome link) name their company
+  (`?org=`), and a request to join goes by its email's domain.
 - **Our control panel** (`one.bishnoi.ai/control`; `/admin` is each company's own Admin pages): only
   for the people who run Bishnoi One, on logins of its own that are no company's: a short login ID
   (no email), a password of 12 characters or more and, every time, the code from the authenticator
@@ -2575,9 +2582,10 @@ medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 dat
 - Emptying the dummy data Aryan asked to clear (26 Nov: "empty all the data, just keep the inventory
   … 2MG's too, those were dummy orders … keep the leads and enquiries in 2MG"): what goes is listed
   for his yes first; nothing is deleted before.
-- In GetMeds's own database an order still offers "Invoice from 2MG / GetMeds"; GetMeds's own
-  Facebook pages, mailboxes and websites, and the tender robot, stay with the first company until
-  set up for it; a person in both companies signs in to one at a time.
+- In GetMeds's own database an order still offers "Invoice from 2MG / GetMeds"; the tender robot
+  stays with the first company; a person in both companies signs in to one at a time. Which
+  Facebook pages and mailboxes move from 2MG's to GetMeds's is Aryan's to say (each is connected
+  in its company's own Online pages & mail).
 
 ## 13. Questions waiting for Aryan
 
@@ -4053,3 +4061,28 @@ medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 dat
   panel's log). Online: a database backup just before (43 MB); `COMPANIES=on` and
   `HOME_COMPANY_LOGIN=info@2mginc.com` added to the API in Coolify; the live API applied 0160 and made
   the list: 2MG Inc., Org ID 237227, `@2mginc.com`. Signed-in people stayed signed in.
+- 26 Nov (207), Aryan, evening: "the old repository handled the leads, enquiries and GL cases, all
+  automated: check it; 2MG and GetMeds are two companies, each with its own Facebook pages and its
+  own emails, on which the automatic emails go: is it built? If not, build it; any GL case from
+  anywhere, PAP's GL person handles it, the orders go to her; PCSO gets three quotations
+  automatically, the others one." Read the old CRM (`~/Projects/crm`: `frontend/lib/agency-quotes.ts`,
+  `backend/server/src/quotation.ts`, `apps/crm/src/customer-mail.ts`, the GL tracker). **Already so
+  (22 Nov):** a guarantee-letter case from any channel is the PAP person's (Fhaye Norella, Patient
+  Assistance Program Officer, on the local data), a seller's "Hand to PAP", the sale counted where
+  it came from, Management approving, Finance recording the agency's payment, the PAP app as the
+  GL tracker. **Built:** (1) each company's own Facebook pages, mailboxes, websites and links
+  (section 28); one Messenger drain per company. (2) PCSO three quotations, every other agency one
+  (on 22 Nov it was three for every agency): each medicine keeps the two other vendors' price for
+  one piece (the medicine page: PCSO's quotations 2 and 3; migration 0161), a PCSO case's
+  quotations 2 and 3 fill themselves from them (typed ones win, as before), and a vendor that is
+  one of the group's companies gets its whole quotation on its own letterhead; the 2MG logo only
+  on the first company's quotations. (3) Automatic emails on a case, as the old CRM: thank you for
+  contacting us (a new enquiry, an email one too; never one from a mailbox's past), the quotation
+  with its PDF (PCSO's once all three are there; a guarantee letter's says to apply with it), the
+  guarantee letter received, verified; once each, from the case's mailbox. Off until the Admin
+  switches them on (Company details → Automatic emails on a case), as the old CRM's owner decided;
+  the order's own emails unchanged. Not carried: "prescription checked" and "senior / PWD ID
+  checked" (no such step: Management reads them on approving, 19 Nov). **Found, not changed (asked
+  Aryan):** the PAP person can't answer her patients on Messenger or by email; only the Online desk
+  and the Admin can. Also: the two-step sign-in test waits out a code's last seconds (it failed
+  once on GitHub on a busy machine). Local; not live yet.
