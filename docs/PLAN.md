@@ -4284,4 +4284,6 @@ up right.
   screen for 15 minutes, never anyone's own login. A new password, or none, signs out every desk
   screen open. Migration 0166 clears any desk session left from before 23 Nov. No PINs (21 Nov's
   were not asked for again). Tests: `auth/desk.test.ts` (5), `account/desk-sign-in.test.tsx` (3).
+  **Live on 27 Nov** (server and screens at 5839743; both companies' databases took 0166): off
+  until each company's Admin types its desks' password.
 
