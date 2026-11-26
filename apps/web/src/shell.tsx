@@ -31,7 +31,9 @@ import {
   Plus,
   Search,
   ShieldCheck,
+  UserPlus,
   UserRound,
+  X,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -45,6 +47,12 @@ import { UndoConfirmBar } from "./finance/undo";
 import { MyDayButton } from "./hr/parts";
 import { allItems, type Badge, folderOpen, type MenuGroup, type MenuItem, spaceFor } from "./menus";
 import { Toasts } from "./toast";
+
+/** The accounts signed in on this browser (GET /api/auth/accounts), the one in use first. */
+type AccountsOnBrowser = {
+  accounts: { id: number; name: string; email: string | null; title: string | null; roleLabel: string; photo: number | null; current: boolean }[];
+  max: number;
+};
 import { unreadIn, useUpdates } from "./updates";
 
 export function Shell() {
@@ -968,6 +976,36 @@ function Account({ me, role }: { me: Me; role: string }) {
   async function signOut() {
     await leaveNow(queries, navigate);
   }
+  // The accounts on this browser (26 Nov: "like Google: add an account, then switch").
+  const accounts = useQuery({
+    queryKey: ["auth", "accounts"],
+    queryFn: () => api<AccountsOnBrowser>("/api/auth/accounts"),
+    enabled: open && !me.viewedBy,
+  }).data;
+  const others = accounts?.accounts.filter((one) => !one.current) ?? [];
+  const [switching, setSwitching] = useState<number | null>(null);
+  /** Signs one account out of this browser (27 Nov); the one in use: the next one opens. */
+  async function remove(personId: number) {
+    setSwitching(personId);
+    try {
+      const { me: now } = await api<{ me: Me | null }>("/api/auth/accounts/remove", { body: { personId } });
+      if (personId === me.id) window.location.assign(now ? "/" : "/login");
+      else await queries.invalidateQueries({ queryKey: ["auth", "accounts"] });
+    } finally {
+      setSwitching(null);
+    }
+  }
+  async function switchTo(personId: number) {
+    setSwitching(personId);
+    try {
+      const { me: now } = await api<{ me: Me }>("/api/auth/switch", { body: { personId } });
+      // The whole app opens afresh as the other account: nothing of this one's stays on screen.
+      window.location.assign(now ? "/" : "/login");
+    } catch {
+      setSwitching(null);
+      await queries.invalidateQueries({ queryKey: ["auth", "accounts"] });
+    }
+  }
 
   return (
     <div ref={box} className="relative">
@@ -983,67 +1021,151 @@ function Account({ me, role }: { me: Me; role: string }) {
         <ChevronDown size={15} className="hidden text-slate-400 sm:block" aria-hidden="true" />
       </button>
       {open && (
-        <div
-          role="menu"
-          className="absolute right-0 mt-1 w-64 rounded-xl bg-white p-1.5 text-[13px] shadow-pop"
-        >
-          <div className="mb-1 flex items-center gap-3 border-b border-line-soft px-3 pt-1.5 pb-2.5">
-            <Avatar person={me} size="md" />
-            <div className="min-w-0">
-              <div className="font-semibold wrap-break-word">{me.name}</div>
-              <div className="text-xs text-ink-2">{role}</div>
+        // Laid out as Google's account switcher (27 Nov): the account in use on top with its own Sign
+        // out in the same row, the other accounts on this browser below (press to switch, x to
+        // remove), Add another account, and Sign out of all accounts at the foot.
+        <div role="menu" className="absolute right-0 mt-2 w-[21rem] rounded-3xl bg-slate-100 p-2 text-[13px] shadow-pop">
+          <div className="rounded-2xl bg-white p-3">
+            <div className="flex items-center gap-3">
+              <Avatar person={me} size="md" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-semibold">{me.name}</div>
+                <div className="truncate text-xs text-ink-2">{me.email ?? role}</div>
+                {me.email && <div className="truncate text-xs text-ink-2">{role}</div>}
+              </div>
+              {!me.viewedBy && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={switching !== null}
+                  // With other accounts here: this one only, the next opens; alone: signed out.
+                  onClick={() => (others.length ? void remove(me.id) : void signOut())}
+                  title={others.length ? `Sign out of ${me.name} only` : "Sign out"}
+                  className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-line-soft px-3 text-xs font-semibold text-ink-2 hover:bg-hover disabled:opacity-60"
+                >
+                  <LogOut size={14} aria-hidden="true" /> Sign out
+                </button>
+              )}
+            </div>
+            <div className="mt-2 flex flex-col border-t border-line-soft pt-1">
+              {/* Someone looking as them doesn't get their profile. */}
+              {!me.viewedBy && (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setOpen(false);
+                      navigate("/profile");
+                    }}
+                    className="flex h-10 w-full items-center gap-3 rounded-lg px-2 text-left hover:bg-hover"
+                  >
+                    <UserRound size={16} aria-hidden="true" /> My profile
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setOpen(false);
+                      navigate("/profile/security");
+                    }}
+                    className="flex h-10 w-full items-center gap-3 rounded-lg px-2 text-left hover:bg-hover"
+                  >
+                    <ShieldCheck size={16} aria-hidden="true" />
+                    <span className="flex-1">Security</span>
+                    <span className={`text-xs font-semibold ${me.twoStep ? "text-good" : "text-warn"}`}>
+                      {me.twoStep ? "2FA on" : "2FA off"}
+                    </span>
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  navigate("/password");
+                }}
+                className="flex h-10 w-full items-center gap-3 rounded-lg px-2 text-left hover:bg-hover"
+              >
+                <KeyRound size={16} aria-hidden="true" /> Change password
+              </button>
+              {me.viewedBy && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={signOut}
+                  className="flex h-10 w-full items-center gap-3 rounded-lg px-2 text-left hover:bg-hover"
+                >
+                  <LogOut size={16} aria-hidden="true" /> Sign out
+                </button>
+              )}
             </div>
           </div>
-          {/* Someone looking as them doesn't get their profile. */}
+
           {!me.viewedBy && (
-            <>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setOpen(false);
-                  navigate("/profile");
-                }}
-                className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
-              >
-                <UserRound size={17} aria-hidden="true" /> My profile
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setOpen(false);
-                  navigate("/profile/security");
-                }}
-                className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
-              >
-                <ShieldCheck size={17} aria-hidden="true" />
-                <span className="flex-1">Security</span>
-                <span className={`text-xs font-semibold ${me.twoStep ? "text-good" : "text-warn"}`}>
-                  {me.twoStep ? "2FA on" : "2FA off"}
-                </span>
-              </button>
-            </>
+            <div className="mt-1.5 overflow-hidden rounded-2xl bg-white">
+              {others.length > 0 && (
+                <div className="px-4 pt-2.5 pb-1 text-[11px] font-semibold tracking-wide text-ink-2 uppercase">Other accounts</div>
+              )}
+              {others.map((one) => (
+                <div key={one.id} className="group flex items-center hover:bg-hover">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={switching !== null}
+                    onClick={() => void switchTo(one.id)}
+                    title={`Switch to ${one.name}`}
+                    className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-4 py-2 text-left disabled:opacity-60"
+                  >
+                    <Avatar person={one} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{switching === one.id ? "Opening…" : one.name}</span>
+                      <span className="block truncate text-xs text-ink-2">{one.email ?? one.title ?? one.roleLabel}</span>
+                    </span>
+                  </button>
+                  {/* Sign this account out of this browser. */}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={switching !== null}
+                    onClick={() => void remove(one.id)}
+                    aria-label={`Remove ${one.name} from this browser`}
+                    title="Remove from this browser"
+                    className="mr-2 grid size-9 shrink-0 place-items-center rounded-full text-slate-400 hover:bg-white hover:text-rose-600 disabled:opacity-60"
+                  >
+                    <X size={15} aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+              {(accounts?.accounts.length ?? 1) < (accounts?.max ?? 5) && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    navigate(`/login/${workspaceOf(me).key}?add=1`);
+                  }}
+                  className={`flex h-12 w-full items-center gap-3 px-4 text-left hover:bg-hover ${others.length ? "border-t border-line-soft" : ""}`}
+                >
+                  <span className="grid size-9 place-items-center rounded-full bg-slate-100">
+                    <UserPlus size={16} aria-hidden="true" />
+                  </span>
+                  Add another account
+                </button>
+              )}
+              {others.length > 0 && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={signOut}
+                  className="flex h-11 w-full items-center justify-center gap-2 border-t border-line-soft text-left font-medium hover:bg-hover"
+                >
+                  <LogOut size={15} aria-hidden="true" /> Sign out of all accounts
+                </button>
+              )}
+            </div>
           )}
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              navigate("/password");
-            }}
-            className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
-          >
-            <KeyRound size={17} aria-hidden="true" /> Change password
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={signOut}
-            className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
-          >
-            <LogOut size={17} aria-hidden="true" /> Sign out
-          </button>
         </div>
       )}
     </div>

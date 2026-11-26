@@ -30,6 +30,7 @@ import { releaseReservationOf } from "../points/website";
 import type {
   CustomerKind,
   CustomerPaperKind,
+  OrderAssignment,
   BoardRep,
   BoardTab,
   Desk,
@@ -1856,6 +1857,44 @@ function divisionPicked(typed: string | null | undefined): string | null {
 }
 
 /** A person's seats' Divisions (migration 0114), the main seat's first: `who` is their id. */
+/**
+ * The Divisions and Sub-divisions an account orders in (27 Nov: from the tree in the Admin): one per
+ * seat it holds today (its own seats first; a cover of a vacant MedRep seat too, never a lead seat's
+ * cover), each seat's Division with the Division's fixed Sub-division, else the seat's team or place
+ * (a CRR's "CRR", "HOS | Pasay"'s "PASAY"). With no seat: their channel's Division, area and title.
+ */
+export async function assignmentsOf(db: Runner, personId: number, today = todayManila()): Promise<OrderAssignment[]> {
+  let found = await rows<{ division: string | null; area: string | null; seat: string | null; team: string | null }>(
+    db,
+    sql`select seat_division(s.id) as division, a.name as area, s.title as seat, u.name as team
+      from seat_holder h join seat s on s.id = h.seat_id and s.active join org_unit u on u.id = s.unit_id
+      left join area a on a.id = s.area_id
+      where h.person_id = ${personId} and ${inForce("h", today)} and (h.kind = 'holder' or not s.lead)
+      order by (h.kind = 'holder') desc, s.lead desc, h.starts_on, h.id`,
+  );
+  if (!found.length)
+    found = await rows(
+      db,
+      sql`select ch.division, a.name as area, p.title as seat, null::text as team
+        from person p left join channel ch on ch.id = p.channel_id left join area a on a.id = p.area_id where p.id = ${personId}`,
+    );
+  const out: OrderAssignment[] = [];
+  for (const one of found) {
+    const division = divisionOf(one.division);
+    if (!division) continue;
+    const subDivision = divisionRule(division, false)?.sub || subDivisionOfArea(division, one.area, one.seat);
+    if (out.some((had) => had.division === division && had.subDivision === subDivision)) continue;
+    out.push({ division, subDivision, area: one.area, seat: one.seat, team: one.team });
+  }
+  return out;
+}
+
+/** What the order form's General part offers: the account's (or, for a lead, their MedRep's). */
+export async function orderAssignments(db: Database, me: Me, medrepId: number | null): Promise<{ assignments: OrderAssignment[] }> {
+  if (medrepId && medrepId !== me.id) await pickedMedrep(db, me, medrepId);
+  return { assignments: await assignmentsOf(db, medrepId || me.id) };
+}
+
 const seatDivisionsSql = (who: SQL, today: string) => sql`(select array_agg(seat_division(dh.seat_id)
     order by (dh.kind = 'holder') desc, ds.lead desc, dh.starts_on, dh.id)
   from seat_holder dh join seat ds on ds.id = dh.seat_id and ds.active
@@ -2056,16 +2095,45 @@ export async function placeOrder(
   // picks that Division and its fields follow"). Whatever its Division, the order counts for its
   // MedRep: their own lead and head, their channel, their target.
   const ownDivisions = divisionsOf(placer?.seatDivisions ?? null, placer?.division ?? null);
+  // The order counts for the account it is placed from (26 Nov, the backend developer: "the General
+  // part is the account's"; it replaces Aryan's 19 Nov "any other Division a pick away"): a seller,
+  // or a lead for one of their people, orders in that account's Divisions; another Division's order
+  // is placed from an account of that Division (Add another account, then switch). Management, the
+  // Admin and the CEO still pick any.
+  if (division && ownDivisions.length && !["management", "admin", "ceo"].includes(me.role) && !ownDivisions.includes(division))
+    throw new Refusal(
+      400,
+      "invalid",
+      `This account's orders count for ${ownDivisions.join(" or ")}. For ${division}, switch to an account of that Division.`,
+      "division",
+    );
   const orderDivision = division ?? ownDivisions[0] ?? null;
   // The Sub-division and Headquarter as the form sent them (the hub's rule, 19 Nov), else: their
   // own Division's from where they sit, as before; another Division's by the hub's rule (never the
   // person's own place on another Division's order, the hub's slip).
   const rule = divisionRule(orderDivision, type === "gl");
+  // A seller's Sub-division is the account's, like the Division (27 Nov, the backend developer: "he is
+  // a CRR already, it should be recorded"; "an account may handle several"): one of the account's
+  // assignments for the order's Division (assignmentsOf), the one sent when it is among them, else
+  // its first; a guarantee letter's fixed one. A place-less account's pick, and Management's, the
+  // Admin's and the CEO's, stay as sent.
+  const seller = !["management", "admin", "ceo"].includes(me.role) && orderDivision !== null && ownDivisions.includes(orderDivision);
+  const mine = seller ? (await assignmentsOf(db, holder?.id ?? me.id, today)).filter((one) => one.division === orderDivision) : [];
+  const asked = clean(input.subDivision);
+  const accountSub = !seller
+    ? ""
+    : type === "gl" && rule?.sub
+      ? rule.sub
+      : (mine.find((one) => one.subDivision && one.subDivision === asked)?.subDivision ??
+        mine.find((one) => one.subDivision)?.subDivision ??
+        rule?.sub ??
+        "");
   const subDivision =
-    clean(input.subDivision) ??
-    (orderDivision && orderDivision === ownDivisions[0] && (placer?.area || placer?.title)
-      ? subDivisionOfArea(orderDivision, placer?.area, placer?.title)
-      : (rule?.sub ?? null));
+    accountSub ||
+    (clean(input.subDivision) ??
+      (orderDivision && orderDivision === ownDivisions[0] && (placer?.area || placer?.title)
+        ? subDivisionOfArea(orderDivision, placer?.area, placer?.title)
+        : (rule?.sub ?? null)));
   const headquarter = clean(input.headquarter) ?? (rule?.hq || null);
   const status: OrderStatus = manages ? afterApproval(terms.terms) : "pending_approval";
 

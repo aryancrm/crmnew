@@ -127,7 +127,7 @@ export function customerRoutes(
   );
   // What they were given before, medicine by medicine (this CRM's orders and Zoho's).
   app.get("/api/customers/:id/prices", async (c) =>
-    c.json(await customerPrices(db, c.get("me"), idParam(c))),
+    c.json(await customerPrices(db, c.get("me"), idParam(c), c.req.query("month"))),
   );
 
   // Customers from a spreadsheet (ERP phase 4): each row added as if typed by hand, with the same
@@ -198,7 +198,8 @@ export function customerRoutes(
     return c.json({ ok: true });
   });
 
-  // A business customer's papers (BIR 2303, LTO permit, business permit), a photo or PDF each.
+  // A customer's files, a photo or PDF each: a business's papers (BIR 2303, LTO permit, business
+  // permit), a patient's prescription and valid ID, or any other file.
   app.post("/api/customers/:id/papers", async (c) => {
     const length = Number(c.req.header("content-length") ?? 0);
     if (length > 10 * 1024 * 1024 + 64 * 1024)

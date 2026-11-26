@@ -4,6 +4,7 @@
 // doctors, details, activity) with the open one on the right. Everything comes from one read.
 
 import { RefillCard } from "./refill";
+import { RefillFlow, refillFrom, refillsList } from "./refill-flow";
 import { ActionBar, NextCard, useCustomerWork } from "./customer-work";
 import { FieldPanel } from "../mr/clients";
 import type {
@@ -32,7 +33,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { Fragment, type ReactNode, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { placesOrders, useMe } from "../auth";
 import { CustomerDialog } from "./dialog";
@@ -89,6 +90,8 @@ const day = (iso: string) => dayLabel(manilaDay(iso));
 export function Customer() {
   const me = useMe().data;
   const id = Number(useParams().id);
+  // Opened from Refills due: the page leads with the refill call and goes back to that list.
+  const fromRefills = refillFrom(useSearchParams()[0]);
   const queries = useQueryClient();
   const action = useAction();
   const [editing, setEditing] = useState(false);
@@ -168,7 +171,7 @@ export function Customer() {
   return (
     <div className="mx-auto max-w-screen-2xl space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Crumbs list={listLabel} to={listTo} />
+        <Crumbs list={fromRefills ? "Refills due" : listLabel} to={fromRefills ? refillsList(fromRefills) : listTo} />
         <ActionBar actions={work.actions} run={work.run} field={work.field} customerId={customer.id} name={customer.name} />
       </div>
 
@@ -176,7 +179,7 @@ export function Customer() {
         name={customer.name}
         chips={
           <>
-            <CodeChip>{customer.code}</CodeChip>
+            {customer.code && <CodeChip>{customer.code}</CodeChip>}
             <KindBadge tone={KIND_TONE[customer.kind] ?? "slate"}>
               {kind?.label ?? customer.kind}
             </KindBadge>
@@ -224,6 +227,24 @@ export function Customer() {
                   <span className="font-medium text-slate-700">Nobody yet</span>
                 )}
               </span>
+              {/* Both sellers see them (docs/PLAN.md 29): who visits, who calls and takes the orders. */}
+              {(data.sellers.field || data.sellers.office) && (
+                <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5">
+                  {data.sellers.field && (
+                    <>
+                      <span className="text-slate-400">Visits:</span>
+                      <span className="font-medium text-slate-700">{data.sellers.field}</span>
+                    </>
+                  )}
+                  {data.sellers.field && data.sellers.office && <span className="text-slate-300">·</span>}
+                  {data.sellers.office && (
+                    <>
+                      <span className="text-slate-400">Calls and orders:</span>
+                      <span className="font-medium text-slate-700">{data.sellers.office}</span>
+                    </>
+                  )}
+                </span>
+              )}
             </HeadLine>
             <ContactLine>
               {customer.phone && (
@@ -341,25 +362,43 @@ export function Customer() {
           />
         }
       >
-        {work.seller !== "desk" && <NextCard flat steps={work.steps} run={work.run} />}
+        {fromRefills ? (
+          <RefillFlow data={data} state={fromRefills} onCall={() => work.run("call")} canOrder={work.can.order} />
+        ) : (
+          work.seller !== "desk" && <NextCard flat steps={work.steps} run={work.run} />
+        )}
         <Glance
           title={patient ? "Their medicines and money" : "Their buying"}
           tiles={[
+            // The old system's orders count in the big number (26 Nov: "Orders 0 · ₱0" read as a new
+            // customer though they had bought three times); the small line says how many were there.
             {
               label: "Orders",
-              value: count(totals.orders),
+              value: count(totals.orders + (before?.orders ?? 0)),
               sub: before?.orders
-                ? `+ ${count(before.orders)} earlier${before.lastOn ? `, last ${day(before.lastOn)}` : ""}`
+                ? totals.orders
+                  ? `${count(before.orders)} in the old system`
+                  : `all in the old system${before.lastOn ? `, last ${day(before.lastOn)}` : ""}`
                 : totals.lastOrderAt
                   ? `last ${day(totals.lastOrderAt)}`
                   : "none yet",
             },
             {
               label: "Bought",
-              value: peso(totals.bought),
-              sub: before?.bought ? `+ ${peso(before.bought)} earlier` : "all orders",
+              value: peso(totals.bought + (before?.bought ?? 0)),
+              sub: before?.bought
+                ? totals.bought
+                  ? `${peso(before.bought)} in the old system`
+                  : "all in the old system"
+                : "all orders",
             },
-            { label: "Paid", value: peso(totals.paid), tone: "good" },
+            {
+              label: "Paid",
+              value: peso(totals.paid),
+              tone: "good",
+              // What was paid in the old system isn't kept here; said so, not read as nothing paid.
+              sub: before?.orders ? "in this system" : undefined,
+            },
             {
               label: "Owed now",
               value: peso(totals.owed),
@@ -373,7 +412,11 @@ export function Customer() {
             {
               label: "Medicines",
               value: count(data.medicines.length),
-              sub: data.medicines[0] ? `latest ${data.medicines[0].name}` : undefined,
+              sub: data.medicines[0]
+                ? `latest ${data.medicines[0].name}`
+                : before?.orders
+                  ? "old orders: see Prices given"
+                  : undefined,
             },
           ]}
         />
@@ -436,7 +479,7 @@ export function Customer() {
             </div>
           )}
           {customer.kind === "hospital" && !doctorsFirst && <Doctors data={data} />}
-          <FilesPanel customerId={customer.id} />
+          <FilesPanel customerId={customer.id} kind={customer.kind} canAdd={can.add && !me?.viewedBy} />
           <Activity data={data} />
         </div>
       </div>
@@ -1032,14 +1075,76 @@ const FILE_FROM: Record<CustomerFiles["files"][number]["source"], string> = {
 };
 /** Every file about the customer in one list (ERP phase 4): their papers, their orders' papers,
  *  their cases' files, the doctor's acknowledgements of samples; each opens in a new tab. */
-function FilesPanel({ customerId }: { customerId: number }) {
+/** What may be uploaded on a customer's own page (26 Nov: "walang upload files dito?"): a patient's
+ *  prescription and valid ID, a business's papers, and any other file. */
+const UPLOAD_KINDS: Record<string, [CustomerPaperKind, string][]> = {
+  patient: [
+    ["prescription", "Prescription"],
+    ["valid_id", "Valid ID"],
+    ["other", "Other file"],
+  ],
+  business: [
+    ["bir_2303", "BIR 2303"],
+    ["lto_permit", "LTO permit"],
+    ["business_permit", "Business permit"],
+    ["other", "Other file"],
+  ],
+  other: [["other", "Other file"]],
+};
+
+function FilesPanel({ customerId, kind, canAdd }: { customerId: number; kind: string; canAdd: boolean }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const kinds =
+    UPLOAD_KINDS[kind === "patient" ? "patient" : ["hospital", "distributor", "drugstore"].includes(kind) ? "business" : "other"] ?? [];
+  const [what, setWhat] = useState<CustomerPaperKind>(kinds[0]?.[0] ?? "other");
   const query = useQuery({
     queryKey: ["customers", "files", customerId],
     queryFn: () => api<CustomerFiles>(`/api/customers/${customerId}/files`),
   });
   const files = query.data?.files ?? [];
+  async function upload(file: File) {
+    const done = await action.run(async () => {
+      const form = new FormData();
+      form.set("kind", what);
+      form.set("file", file);
+      await api(`/api/customers/${customerId}/papers`, { body: form });
+    });
+    if (done) await queries.invalidateQueries({ queryKey: ["customers"] });
+  }
   return (
     <SectionPanel icon={Paperclip} title={`Files${files.length ? ` (${files.length})` : ""}`}>
+      {canAdd && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <select
+            aria-label="What file"
+            value={what}
+            onChange={(event) => setWhat(event.target.value as CustomerPaperKind)}
+            className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700"
+          >
+            {kinds.map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-brand hover:bg-brand-tint">
+            <Paperclip className="size-3.5" /> {action.busy ? "Uploading…" : "Upload a photo or PDF"}
+            <input
+              type="file"
+              accept={PAPER_ACCEPT}
+              className="sr-only"
+              disabled={action.busy}
+              onChange={(event) => {
+                const chosen = event.target.files?.[0];
+                if (chosen) void upload(chosen);
+                event.target.value = "";
+              }}
+            />
+          </label>
+          <Problem message={action.problem?.message} />
+        </div>
+      )}
       {!files.length && <p className="text-sm text-slate-500">{query.isPending ? "Reading…" : "No file yet."}</p>}
       <ul className="divide-y divide-slate-100">
         {files.slice(0, 50).map((file) => (

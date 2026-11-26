@@ -296,6 +296,15 @@ describe("what the customer was given before", () => {
     // A medicine not listed here yet stands under Zoho's name and SKU.
     const unknown = prices.medicines.find((one) => one.sku === "GM-9999");
     expect(unknown).toMatchObject({ medicineId: null, name: "LetroGet 2.5", times: 1, lastPrice: 8016 });
+    // Month by month (26 Nov): the months they ordered in, void left out, and one month's orders.
+    expect(prices.months.map((one) => one.month)).toEqual(["2026-10", "2026-06"]);
+    expect(prices.month).toBeNull();
+    const october = await read<CustomerPrices>("sarla", `/api/customers/${hospital}/prices?month=2026-10`);
+    expect(october.month).toBe("2026-10");
+    expect(october.orders.map((one) => one.code)).toEqual(["SO-67227"]);
+    const none = await read<CustomerPrices>("sarla", `/api/customers/${hospital}/prices?month=2026-02`);
+    expect(none.orders).toEqual([]);
+    expect((await read<CustomerPrices>("sarla", `/api/customers/${hospital}/prices?month=nonsense`)).month).toBeNull();
   });
 
   it("an order being decided shows, line by line, what this customer paid before", async () => {

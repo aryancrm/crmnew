@@ -9,6 +9,7 @@ import { allow, may, onlineDesk, Refusal } from "../http";
 import { addDays, EXPIRING_DAYS, todayManila } from "../inventory/rules";
 import { clean, day, iso, type Runner } from "../inventory/service";
 import { inForce } from "../org/service";
+import { careGroupDoctors } from "../rx/groups";
 import type { Role } from "../people/roles";
 import { bytesOf, keepFile } from "../files/store";
 import { formatPhone } from "../phone";
@@ -35,13 +36,19 @@ export const CUSTOMER_KINDS: CustomerList["kinds"] = [
   { key: "government", label: "Government buyer", plural: "Government buyers" },
 ];
 
-/** A business customer's papers, as the hub asked for them. */
+/** A customer's files: a business's papers, as the hub asked for them, a patient's prescription and
+ *  valid ID, and any other (26 Nov). */
 export const CUSTOMER_PAPER_LABEL: Record<CustomerPaperKind, string> = {
   bir_2303: "BIR 2303",
   lto_permit: "LTO permit",
   business_permit: "Business permit",
+  prescription: "Prescription",
+  valid_id: "Valid ID",
+  other: "Other file",
 };
 export const CUSTOMER_PAPER_KINDS = Object.keys(CUSTOMER_PAPER_LABEL) as CustomerPaperKind[];
+/** The three a licensed business must have (missingOf). */
+export const BUSINESS_PAPER_KINDS: CustomerPaperKind[] = ["bir_2303", "lto_permit", "business_permit"];
 /** The kinds that buy as a business with a licence to operate: their licence and papers are
  *  asked for (a hospital's before it is added from the field; the others may follow). */
 export const LICENSED_KINDS: readonly CustomerKind[] = ["hospital", "distributor", "drugstore"];
@@ -68,7 +75,7 @@ export function missingOf(
     ...(customer.ltoType ? [] : ["LTO type"]),
     ...(customer.licenceIssued ? [] : ["licence issue date"]),
     ...(customer.licenceExpires ? [] : ["licence expiry"]),
-    ...CUSTOMER_PAPER_KINDS.filter((kind) => !papers.includes(kind)).map(
+    ...BUSINESS_PAPER_KINDS.filter((kind) => !papers.includes(kind)).map(
       (kind) => CUSTOMER_PAPER_LABEL[kind],
     ),
   ];
@@ -133,11 +140,14 @@ export function seen(me: Me): SQL {
     return sql`(c.added_by = ${me.id} ${me.area ? sql`or c.area_id = ${me.area.id}` : sql``}
       or c.area_id in ${seatAreasOf(me)}
       or exists (select 1 from lead l where l.customer_id = c.id and l.desk = 'pap' and l.assigned_to = ${me.id})
-      or exists (select 1 from b2b_account ba where ba.customer_id = c.id and (ba.nbd_id = ${me.id} or ba.crr_id = ${me.id})))`;
+      or exists (select 1 from b2b_account ba where ba.customer_id = c.id and (ba.nbd_id = ${me.id} or ba.crr_id = ${me.id}))
+      ${me.works === "office" ? sql`or exists (select 1 from sales_order so where so.customer_id = c.id and so.medrep_id = ${me.id})` : sql``}
+      ${careGroupDoctors(me) ? sql`or ${careGroupDoctors(me)}` : sql``})`;
   if (me.role === "team_lead" || me.role === "manager")
     return sql`(c.added_by in (select id from team)
       or c.area_id in (select area_id from person where id in (select id from team) and area_id is not null)
-      or c.area_id in ${teamSeatAreas})`;
+      or c.area_id in ${teamSeatAreas}
+      ${careGroupDoctors(me) ? sql`or ${careGroupDoctors(me)}` : sql``})`;
   // The Online desk: patients, and the customers of its own enquiries and orders; not every
   // hospital's money.
   if (onlineDesk(me))
@@ -672,7 +682,7 @@ export async function addCustomer(
           licenceIssued: clean(input.licenceIssued),
           licenceExpires: clean(input.licenceExpires),
         },
-        [...CUSTOMER_PAPER_KINDS],
+        [...BUSINESS_PAPER_KINDS],
       );
       if (lacking.length)
         throw new Refusal(

@@ -2589,6 +2589,59 @@ medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 dat
   Facebook pages and mailboxes move from 2MG's to GetMeds's is Aryan's to say (each is connected
   in its company's own Online pages & mail).
 
+## 29. Office or field: each seller's seat is one or the other (26 Nov 2026, built)
+
+Asked by the backend developer: split the sellers into those who stay in the office and work by
+phone, and those who go out and visit. Agreed and built the same day (on the `medrep` branch).
+
+**The rule.** Every seller's seat (their login ID) is either **Office** or **Field**, never both.
+A person is never both at once: to change, HR moves them to a seat of the other kind (section 26's
+move, with its reason and trail), and the new seat brings its own screens. The CEO or the Admin
+sets a seat's kind in Teams & people (Change the seat → Works); the holder's HR trail says so.
+
+| | **Office** | **Field** |
+|---|---|---|
+| Who today | MD Telesales (Oncology), TeleSales Anesthesia, Online (B2C CHC), B2B CRR, the Sales Admins | Rx CHC (visits doctors), Hospital CHC (visits hospitals), B2B NBD if they go out |
+| Works by | Phone, Messenger, email: patients, doctors and hospitals | Visits, the visit plan, the calendar |
+| Their screens | Calls to make today, refills due, enquiries, orders | Today's route, visits to log, field expenses, orders where the team takes them |
+| Not on their screens | Visits, the route plan, field expenses | The call desk |
+
+**Decided (26 Nov):**
+1. **Who places the order stays as each team works now.** In Rx the field CHC places none (MD
+   Telesales take them); in the Hospital Division the field CHC places their own; Online and B2B
+   place their own.
+2. **The sale counts for whoever takes and processes the order.** In Rx that is the office
+   (MD Telesales), not the field CHC who visited; the field CHC is scored on visits and doctors
+   covered, as today.
+3. **Both see the customer.** The field seller whose area it is and the office seller who calls
+   them each see the customer, its orders and its visits.
+4. **One seat, one kind.** No seat is both; the kind belongs to the seat, so whoever sits in it
+   gets its screens. A person given another seat of the other kind changes screens with it.
+
+**Built (26 Nov).**
+- `seat.works` (migration 0163): office or field, a MedRep seat's only. Every MedRep seat was set
+  as its channel works (`works_of_channel`: HOSP, RX, PAP and MT field; ONLINE, TS, B2B, BID and
+  CLIDP office); a new seat takes its channel's unless the form picks one. `person_works(id)` reads
+  a person's main seat's kind (else their channel's); the sign-in carries it as `me.works`.
+- Teams & people: the seat form has **Works** (As the team works / From the office / In the field);
+  a change writes "Their seat now works from the office" in the holder's trail.
+- Menus (`withWorks` in `menus.ts`): an office seat loses the field folder (My day, visits, tour
+  plan, expenses, samples) and "Log a call"; a field seat in a phone channel gets the folder before
+  My numbers. A seat as its channel works keeps exactly today's menu.
+- The API refuses an office seat its own visits, the field day's work, asking for and giving
+  samples (`refuseOffice`, code `office_seat`): "Your seat works from the office: visits, the tour
+  plan, field expenses and samples are for field seats."
+- Customers: an office seller also sees the customers they took orders for; the customer page's
+  head says "Visits: (the area's field seller) · Calls and orders: (the office seller of the
+  latest order)".
+- Tests: `org/works.test.ts` (4); `menus.test.ts` keeps every MedRep's menu as it was and checks an
+  office Hospital, Rx and PAP seat lose the field's pages and a field NBD gains them.
+
+**Not needed (26 Nov, the backend developer):** an account doesn't change kind; it is handed to
+another person, who carries on. So no office call desk for a field team's account and no Home
+cards by kind: each account keeps its team's screens. The Works box stays for setting an account
+up right.
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -4164,3 +4217,18 @@ medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 dat
   invoices billed under `gpi`, people marked GPI) keep their code and print as the company's own.
   Tests: two companies side by side (names, letterhead, billing name, invoice series, Company
   details each its own).
+- 26 Nov (213), asked by the backend developer: **office or field.** Every seller's seat is either Office (works by phone) or Field (visits doctors or hospitals), never both; HR moves a person to a seat of the other kind to change. Who places the order stays as each team works now; the sale counts for whoever takes and processes the order; the field and the office seller both see the customer (section 29). Plan only, nothing built yet.
+- 26 Nov (214), asked by the backend developer: "proceed". **Office or field built** (section 29): each MedRep seat carries its kind, set as its channel works; the CEO or the Admin changes it in Teams & people; the menu, the field's pages and the customer page follow it.
+- 26 Nov (215), the backend developer: an account isn't switched between office and field; it is handed to the next person, who carries on, and no data is lost. The two "not done" items of section 29 are dropped.
+- 26 Nov (216), asked by the backend developer (Kim's Refills due → a patient's page led nowhere): **a refill call from start to end.** Opened from Refills due, the customer's page says "Refills due › Details" and leads with the refill call: when they need their medicines and what they took last, (1) call them, (2) what they said: ordering now (the order form, then back to the list with "Order placed"), not yet (set the day they run out), no answer or call back (log the call), (3) the next one on the same list (`customers/refill-flow.tsx`).
+- 26 Nov (217), asked by the backend developer (a patient's page read as a new customer): **the customer page counts the old system too, and every customer has its number.** Their buying's Orders and Bought add the old system's ("3 · all in the old system", not "0 · + 3 earlier"); Paid says "in this system"; Medicines points to Prices given. Migration 0164 numbers every customer left without one (`CUS-00017`: only Add customer gave one, so seeds and imports showed a blank chip and an empty "Customer no.") and numbers any added later on the way in.
+- 26 Nov (218), asked by the backend developer: **Earlier orders by month.** The customer page's Earlier orders has a month picker: All months, This month, and every month they ordered in with its orders and total ("Oct 2026 · 1 order · ₱18,500"); a month with none says so (`/api/customers/:id/prices?month=2026-10`, `months`).
+- 26 Nov (219), asked by the backend developer ("walang upload files dito?"): **upload on a customer's Files.** Whoever keeps the customer's details (the sellers, Management, the Admin) uploads a photo or PDF there: a patient's prescription or valid ID, a business's BIR 2303, LTO permit or business permit, or any other file (migration 0165). Only the three papers count toward a business's missing list.
+- 26 Nov (220), the backend developer: **B2B like RX Business, office and field.** NBD and CRR work from the office (calls, referrals) for now; an NBD or CRR account set to In the field visits its accounts like an Rx CHC: its drugstores and distributors can be planned and visited (distributors joined the visit lists), and the customer page names the B2B account's owner (its NBD until handed over, then its CRR) as who visits or who calls. Whether any of them go out is still Aryan's to say (19 Nov: "decide later").
+- 26 Nov (221), the backend developer: **the order's General part is the account's.** A seller (or a lead for one of their people) orders in their account's Division only: the form shows it as it is ("B2B · yours"), the API refuses another ("This account's orders count for HOSP. For CLIDP, switch to an account of that Division."). Management, the Admin and the CEO still pick any; an order being fixed keeps its Division. **This replaces Aryan's 19 Nov rule** ("any other Division a pick away", section 4.2): to be told to him with pull request 8.
+- 26 Nov (222), the backend developer: **more than one account on one browser, like Google.** The avatar menu has *Add another account*: the sign-in page (`?add=1`) asks that account's own login ID and password (and code), and the account in use stays signed in beside it. The other accounts are listed in the menu with *Switch* (no password again; the app opens afresh as that account). Each account is only what its own login opened: the orders, sales and screens are that account's. At most five on one browser; a plain sign-in starts the browser afresh; *Sign out* signs every account out, on the server too (a shared computer keeps nobody's). Kept in an httpOnly cookie read only under `/api/auth` (`sid_more`); not while looking as someone else.
+- 27 Nov (223), the backend developer (the demo's Carlo reported to Daniel, who covered Mindanao's vacant lead seat): **a vacant lead seat goes to the lead above, never to a cover.** "When the team lead is vacant, supervision goes straight to the one above; don't anchor it on someone else, it isn't their task." A team lead's or head's seat can't be covered (the API refuses; Teams & people and Vacant seats offer no cover for it, and say "Its team reports to … meanwhile"); a cover already on one leads nobody (the tree and the teams a lead sees count holders only). Covering a vacant MedRep's area (section 26) is unchanged. The demo no longer has Daniel covering Mindanao: Carlo reports to the Hospital head.
+- 27 Nov (224), the backend developer (Fritz's order form asked for a Sub-division: "he is a CRR already, it should be recorded"): **the Sub-division is the account's too.** A seller's order carries the Division's fixed one (HOSP's "Hospital", the hub's rule) or else the account's own team or place (a CRR's "CRR", an NBD's "NBD"), shown as it is on the form; the API keeps it whatever is sent. An account with none still picks; Management, the Admin and the CEO as before.
+- 27 Nov (225), the backend developer: **remove an account from the browser.** In the avatar menu each other account has an × (signed out of this browser and on the server), and *Sign out of (name) only* signs out the one in use and opens the next one kept here (none left: the sign-in page). *Sign out of all accounts* stays.
+- 27 Nov (226), the backend developer: **the account menu as Google's switcher.** The account in use on top (picture, name, email, role) with its own *Sign out* in the same row (this account only when others are here; alone, signing out); its profile, security and password under it; then *Other accounts* (press a row to switch, x to remove), *Add another account*, and *Sign out of all accounts* at the foot.
+- 27 Nov (227), the backend developer: **the General part offers what the account holds on the tree.** "Each account has its assigned Division and Sub-division from the tree in the Admin; one may handle several Sub-divisions, Divisions or areas: put them in a search dropdown." `GET /api/orders/assignments` (a lead's `?medrep=` for one of their people) lists one per seat held today (a vacant MedRep seat's cover too, never a lead seat's): its Division with the Division's fixed Sub-division, else the seat's team or place, its area and team. One shows as it is; several are a searchable list (`orders/assignment-picker.tsx`: Division, Sub-division, area or team), the Sub-division following the pick. The API takes the Sub-division sent only when it is one of the account's for that Division, else its first.

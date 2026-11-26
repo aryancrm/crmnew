@@ -105,6 +105,9 @@ export type Me = {
   /** The Divisions their orders carry: one per seat (its box where it names one: CLIDP, URO, B&B;
    *  else its channel's), the main seat's first. One seat, one Division (Aryan, 19 Nov). */
   divisions?: string[];
+  /** A MedRep's seat works from the office (by phone) or in the field (visits), never both
+   *  (docs/PLAN.md 29). Null for anyone who isn't a MedRep. */
+  works?: SeatWorks | null;
   /** The CEO or Admin looking as this person (read only), when it is that. */
   viewedBy?: { id: number; name: string; role: string } | null;
   /** The department this session was opened for (the sign-in page it was made on). */
@@ -632,7 +635,8 @@ export type CustomerInput = {
 };
 
 /** A business customer's paper (the hub asked a hospital for all three). */
-export type CustomerPaperKind = "bir_2303" | "lto_permit" | "business_permit";
+/** A business's three papers, a patient's prescription and valid ID, and any other file. */
+export type CustomerPaperKind = "bir_2303" | "lto_permit" | "business_permit" | "prescription" | "valid_id" | "other";
 export type CustomerPaper = {
   id: number;
   kind: CustomerPaperKind;
@@ -2943,6 +2947,10 @@ export type CustomerPrices = {
   /** The payments the old system took from them, newest first. */
   payments: { id: number; number: string | null; on: string; mode: string | null; reference: string | null; amount: number }[];
   medicines: MedicinePrices[];
+  /** Every month they ordered in before this CRM, the latest first: its orders and total (not void). */
+  months: { month: string; orders: number; total: number }[];
+  /** The month `orders` is narrowed to ("2026-10"), or null for all of them. */
+  month: string | null;
 };
 
 /** For an order being decided: the customer in short, and for each of its lines (by the line's
@@ -2981,6 +2989,9 @@ export type OrderPrices = {
 export type CustomerPage = CustomerDetail & {
   /** Who looks after them and the people above: the MedRep (or the desk agent), their manager, the head. */
   line: { name: string; title: string | null; role: string }[];
+  /** Both sellers see the customer (docs/PLAN.md 29): the field seller of their area, and the
+   *  office seller who took their latest order. */
+  sellers: { field: string | null; office: string | null };
   totals: {
     orders: number;
     bought: number;
@@ -3431,6 +3442,8 @@ export type OrgSeat = {
   title: string;
   module: Role;
   moduleLabel: string;
+  /** A MedRep seat's kind: office or field. */
+  works: SeatWorks | null;
   lead: boolean;
   area: { id: number; name: string; cities: string[] } | null;
   reportsToSeatId: number | null;
@@ -3500,6 +3513,8 @@ export type OrgPersonInput = {
   unitId?: number | null;
   title?: string | null;
   module?: Role | null;
+  /** The new seat's kind, when it is a MedRep's: office or field. */
+  works?: SeatWorks | null;
   lead?: boolean;
   reportsToSeatId?: number | null;
   areaId?: number | null;
@@ -3509,10 +3524,26 @@ export type OrgPersonInput = {
   employeeCode?: string | null;
 };
 
+/** One Division and Sub-division an account orders in, from a seat it holds on the company's tree
+ *  (27 Nov: "each account has its assigned Division and Sub-division, from the tree in the Admin"). */
+export type OrderAssignment = {
+  division: string;
+  subDivision: string;
+  /** The seat's area ("HOS | Pasay"), job title and team, to tell two apart. */
+  area: string | null;
+  seat: string | null;
+  team: string | null;
+};
+
+/** Office: works by phone, Messenger and email. Field: visits doctors and hospitals. */
+export type SeatWorks = "office" | "field";
+
 export type OrgSeatInput = {
   unitId: number;
   title: string;
   module: Role;
+  /** A MedRep seat's kind; left out, it follows how its channel works. */
+  works?: SeatWorks | null;
   lead?: boolean;
   reportsToSeatId?: number | null;
   areaId?: number | null;
@@ -5146,6 +5177,8 @@ export type VacantSeats = {
     days: number;
     /** The team lead it waits with. */
     lead: string | null;
+    /** A lead's own seat: never covered by someone else; its people report to the lead above. */
+    leads: boolean;
     cover: { holdingId: number; personId: number; name: string; until: string | null } | null;
     /** A joiner or a move already planned into it. */
     promised: { name: string; startsOn: string } | null;

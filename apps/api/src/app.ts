@@ -24,6 +24,8 @@ import type { Role } from "./people/roles";
 import {
   BACK_COOKIE,
   DAY_SESSION_ROLES,
+  MAX_ACCOUNTS,
+  MORE_COOKIE,
   endOfWorkingDay,
   endOtherSessions,
   endSession,
@@ -254,8 +256,28 @@ export function createApp(db: Database, options: AppOptions) {
       maxAge: 365 * 24 * 60 * 60,
     });
 
-  /** The end of every sign-in, with or without a code. */
-  async function letIn(c: Context<Env>, found: typeof person.$inferSelect, workspace: string | null) {
+  // ---- More than one account on one browser (26 Nov: "like Google: add an account with its own
+  // login, then switch"). The account in use is the session cookie; the others wait in MORE_COOKIE
+  // (httpOnly, read only under /api/auth). Each was opened with its own login ID and password;
+  // signing out signs every one of them out (a shared computer keeps nobody's). ----
+  const TOKEN = /^[A-Za-z0-9_-]{20,100}$/;
+  const moreOf = (c: Context<Env>) =>
+    (getCookie(c, MORE_COOKIE) ?? "").split(",").filter((one) => TOKEN.test(one));
+  const keepMore = (c: Context<Env>, tokens: string[]) =>
+    tokens.length
+      ? setCookie(c, MORE_COOKIE, tokens.join(","), {
+          httpOnly: true,
+          secure,
+          sameSite: "Lax",
+          path: "/api/auth",
+          maxAge: SESSION_DAYS * 24 * 60 * 60,
+        })
+      : deleteCookie(c, MORE_COOKIE, { path: "/api/auth" });
+  const useSession = (c: Context<Env>, token: string) =>
+    setCookie(c, SESSION_COOKIE, token, { httpOnly: true, secure, sameSite: "Lax", path: "/", maxAge: SESSION_DAYS * 24 * 60 * 60 });
+
+  /** The end of every sign-in, with or without a code. `add`: kept beside the account in use. */
+  async function letIn(c: Context<Env>, found: typeof person.$inferSelect, workspace: string | null, add = false) {
     // A password changed or a person switched off while this one was being checked: not signed in.
     const still = await db
       .update(person)
@@ -272,6 +294,17 @@ export function createApp(db: Database, options: AppOptions) {
     if (!still.length) throw new Refusal(401, "wrong_login", "Wrong login ID or password.");
 
     const role = found.role as Role;
+    // The accounts already on this browser: kept beside the new one when it is added (each still
+    // good, never twice), else signed out, so a plain sign-in starts this browser afresh.
+    const current = getCookie(c, SESSION_COOKIE);
+    const earlier = [...(current && TOKEN.test(current) ? [current] : []), ...moreOf(c)];
+    const kept: string[] = [];
+    for (const one of earlier) {
+      const held = add ? await sessionOf(db, one) : null;
+      if (held && !held.viewedBy && held.personId !== found.id && !kept.includes(one) && kept.length < MAX_ACCOUNTS - 1)
+        kept.push(one);
+      else await endSession(db, one);
+    }
     const until = DAY_SESSION_ROLES.includes(role) ? endOfWorkingDay() : undefined;
     const token = await startSession(db, found.id, undefined, workspace ?? ownWorkspace(role)?.key ?? null, until);
     setCookie(c, SESSION_COOKIE, token, {
@@ -283,6 +316,7 @@ export function createApp(db: Database, options: AppOptions) {
     });
     // An earlier "look as" of whoever used this browser before isn't this person's.
     deleteCookie(c, BACK_COOKIE, { path: "/" });
+    keepMore(c, kept);
     rememberDevice(c, found);
     return c.json({ me: await whoIs(db, token) });
   }
@@ -299,9 +333,13 @@ export function createApp(db: Database, options: AppOptions) {
         // The department page signed in at. The web app always sends it; without it the session
         // is opened for the login's own department.
         workspace: z.enum(WORKSPACE_KEYS, { error: "Pick the department." }).optional(),
+        // Add another account: this browser keeps the one in use beside it, to switch between.
+        add: z.boolean().optional(),
       }),
     );
     const wrong = new Refusal(401, "wrong_login", "Wrong login ID or password.");
+    if (input.add && getCookie(c, BACK_COOKIE))
+      throw new Refusal(400, "invalid", "Go back to your own screens before adding an account.");
     // A seat's login ID (hos1, tl2@2mginc.com) signs in whoever holds the seat today.
     const seatHolder = await personOfSeatLogin(db, input.email);
     const [found] = await db
@@ -343,7 +381,7 @@ export function createApp(db: Database, options: AppOptions) {
       c.header("cache-control", "no-store");
       return c.json({ twoStep: true, ticket });
     }
-    return letIn(c, found, workspace ?? null);
+    return letIn(c, found, workspace ?? null, input.add ?? false);
   });
 
   // The second step: the code from their app, or a recovery code, for the ticket the password got.
@@ -353,6 +391,7 @@ export function createApp(db: Database, options: AppOptions) {
       z.object({
         ticket: z.string().min(20).max(100),
         code: z.string().trim().min(6, "Enter the code.").max(24),
+        add: z.boolean().optional(),
       }),
     );
     const waiting = await readTicket(db, input.ticket);
@@ -363,14 +402,95 @@ export function createApp(db: Database, options: AppOptions) {
     // A new password or another role since the password step: start again.
     if (!found || found.passwordHash !== waiting.passwordHash || (workspace && !workspaceAllows(workspace, found.role as Role)))
       throw new Refusal(401, "sign_in_again", "Your account changed meanwhile. Sign in again.");
-    return letIn(c, found, workspace);
+    return letIn(c, found, workspace, input.add ?? false);
   });
 
+  // Signing out signs out every account on this browser.
   app.post("/api/auth/logout", async (c) => {
     const token = getCookie(c, SESSION_COOKIE);
     if (token) await endSession(db, token);
+    for (const one of moreOf(c)) await endSession(db, one);
     deleteCookie(c, SESSION_COOKIE, { path: "/" });
+    deleteCookie(c, MORE_COOKIE, { path: "/api/auth" });
     return c.json({ ok: true });
+  });
+
+  // The accounts on this browser: the one in use first, then the others still signed in.
+  app.get("/api/auth/accounts", signedIn, async (c) => {
+    const me = c.get("me");
+    const others: { token: string; who: Me }[] = [];
+    for (const one of moreOf(c)) {
+      const who = await whoIs(db, one);
+      if (who && !who.viewedBy && who.id !== me.id) others.push({ token: one, who });
+    }
+    keepMore(c, others.map((one) => one.token));
+    const row = (who: Me, current: boolean) => ({
+      id: who.id,
+      name: who.name,
+      email: who.email,
+      title: who.title,
+      roleLabel: who.roleLabel,
+      photo: who.photo ?? null,
+      current,
+    });
+    return c.json({ accounts: [row(me, true), ...others.map((one) => row(one.who, false))], max: MAX_ACCOUNTS });
+  });
+
+  // Remove one account from this browser (27 Nov: "be able to remove them also"): it is signed out
+  // on the server too. Removing the one in use opens the next one kept here, else signs out.
+  app.post("/api/auth/accounts/remove", signedIn, async (c) => {
+    const me = c.get("me");
+    if (me.viewedBy) throw new Refusal(400, "invalid", "Go back to your own screens first.");
+    const { personId } = await readBody(c, z.object({ personId: z.number().int().positive() }));
+    const more = moreOf(c);
+    if (personId === me.id) {
+      await endSession(db, c.get("token"));
+      for (const one of more) {
+        const who = await whoIs(db, one);
+        if (!who || who.viewedBy) {
+          await endSession(db, one);
+          continue;
+        }
+        keepMore(c, more.filter((other) => other !== one));
+        useSession(c, one);
+        return c.json({ me: who });
+      }
+      deleteCookie(c, SESSION_COOKIE, { path: "/" });
+      keepMore(c, []);
+      return c.json({ me: null });
+    }
+    const left: string[] = [];
+    let found = false;
+    for (const one of more) {
+      const held = await sessionOf(db, one);
+      if (held && held.personId === personId) {
+        await endSession(db, one);
+        found = true;
+      } else left.push(one);
+    }
+    if (!found) throw new Refusal(404, "not_found", "That account isn't signed in on this browser.");
+    keepMore(c, left);
+    return c.json({ me });
+  });
+
+  // Switch to another account on this browser; the one in use waits beside it.
+  app.post("/api/auth/switch", signedIn, async (c) => {
+    const me = c.get("me");
+    if (me.viewedBy) throw new Refusal(400, "invalid", "Go back to your own screens first.");
+    const { personId } = await readBody(c, z.object({ personId: z.number().int().positive() }));
+    const more = moreOf(c);
+    let chosen: string | null = null;
+    for (const one of more) {
+      const held = await sessionOf(db, one);
+      if (held && !held.viewedBy && held.personId === personId) {
+        chosen = one;
+        break;
+      }
+    }
+    if (!chosen) throw new Refusal(404, "not_found", "That account isn't signed in on this browser any more. Add it again.");
+    keepMore(c, [c.get("token"), ...more.filter((one) => one !== chosen)]);
+    useSession(c, chosen);
+    return c.json({ me: await whoIs(db, chosen) });
   });
 
   app.get("/api/me", signedIn, (c) => c.json({ me: c.get("me") }));

@@ -67,9 +67,21 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const PLACE = /^-?\d{1,2}\.\d+,-?\d{1,3}\.\d+$/;
 const ahead = (today: string) => addDays(today, 62);
 
+/** An office seat works by phone: visits, the tour plan, field expenses and samples are the field
+ *  seats' (docs/PLAN.md 29). */
+export function refuseOffice(me: Me): void {
+  if (me.role === "medrep" && me.works === "office")
+    throw new Refusal(
+      403,
+      "office_seat",
+      "Your seat works from the office: visits, the tour plan, field expenses and samples are for field seats.",
+    );
+}
+
 function mustVisit(me: Me) {
   if (!FIELD_ROLES.includes(me.role) || me.viewedBy)
     throw new Refusal(403, "not_allowed", "Visits are made by MedReps and their team leads.");
+  refuseOffice(me);
 }
 
 /** Whether `me` leads this person (they are in my team, down the reporting line). */
@@ -109,6 +121,8 @@ export async function fieldDay(
   const today = todayManila();
   const day = asked.day && DAY.test(asked.day) ? asked.day : today;
   const personId = asked.person ?? me.id;
+  // An office seat has no visits of its own (docs/PLAN.md 29).
+  if (personId === me.id) refuseOffice(me);
   if (!(await maySeeField(db, me, personId)))
     throw new Refusal(403, "not_allowed", "That person's visits aren't yours to see.");
   const [person] = await rows<{ id: number; name: string; area: string | null; role: Role }>(
@@ -147,7 +161,7 @@ export async function fieldForm(db: Database, me: Me, q?: string | null): Promis
       sql`${team(me)} select c.id::int as id, c.name, c.kind, c.specialty, c.city,
           (select to_char(max(v.day), 'YYYY-MM-DD') from visit v where v.customer_id = c.id and v.status = 'done') as "lastVisit"
         from customer c
-        where c.active and c.kind in ('doctor', 'hospital', 'drugstore') and ${seen(me)}
+        where c.active and c.kind in ('doctor', 'hospital', 'drugstore', 'distributor') and ${seen(me)}
           ${words ? sql`and (lower(c.name) like ${`%${words}%`} or lower(coalesce(c.city, '')) like ${`%${words}%`} or lower(coalesce(c.specialty, '')) like ${`%${words}%`})` : sql``}
         order by c.kind = 'doctor' desc, c.name limit 200`,
     ),
@@ -189,14 +203,14 @@ async function planOn(
   const [customer] = await rows<{ id: number; name: string }>(
     tx,
     sql`${team(me)} select c.id::int as id, c.name from customer c
-      where c.id = ${input.customerId} and c.active and c.kind in ('doctor', 'hospital', 'drugstore')
+      where c.id = ${input.customerId} and c.active and c.kind in ('doctor', 'hospital', 'drugstore', 'distributor')
         and ${seen(me)}`,
   );
   if (!customer)
     throw new Refusal(
       400,
       "invalid",
-      "Pick a doctor, hospital or drugstore you look after.",
+      "Pick a doctor, hospital, drugstore or distributor you look after.",
       "customerId",
     );
   const [open] = await rows<{ id: number }>(
