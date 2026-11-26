@@ -178,8 +178,10 @@ delivery) and Zoho Inventory's packages and shipments:
 ### 4.6 Money
 
 - **One invoice per order**, made by Finance at its step, under the company the order names, in
-  that company's own series without gaps: 2MG Inc. `2MG-SI-000001`, GetMeds Philippines Inc.
-  `INV-000001`. Its VAT is split from the VAT-inclusive prices (VATable sales, VAT 12%,
+  that company's own series without gaps: 2MG Incorporated (code `2mg`) `2MG-SI-000001`, Getmeds
+  Philippines Incorporated (code `gpi`) `INV-000001`. The companies are one list for the whole
+  system, `apps/api/src/companies.ts`: orders, invoices, employees, payslips and printouts all use
+  its codes and names (26 Nov, change log 200). Its VAT is split from the VAT-inclusive prices (VATable sales, VAT 12%,
   VAT-exempt, zero-rated). Due: credit, its days after the invoice; cash on delivery, on
   delivery (never late before the goods arrive); advance, at once.
 - **Payments**: amount, how (bank transfer, cash, check, GCash / Maya, other), reference, day,
@@ -915,7 +917,7 @@ it is; its screens are the reference for the same pages here, on the new API.
 |---|---|---|
 | Scope | **Everything is new**: code, database, screens | Aryan's decision, 14 Nov: a complete new project with a free hand on every choice. The old CRM is reference only. |
 | Language | **TypeScript**, frontend and backend | The work is database reads and writes, so the language does not set the speed; the database design and the number of queries do. One language means the frontend and backend share the same types and one person or AI can work on all of it. |
-| Company | **One company per database** (26 Nov: several companies on one server, section 27) | The old CRM was built to be sold to many businesses, so every table and query carried a company. This one keeps each company in a database of its own: the tables stay as simple and fast as for one company, and no query can mix two companies. The two invoicing companies are still a field on the order. |
+| Company | **One company per database** (26 Nov: several companies on one server, section 28) | The old CRM was built to be sold to many businesses, so every table and query carried a company. This one keeps each company in a database of its own: the tables stay as simple and fast as for one company, and no query can mix two companies. The two invoicing companies are still a field on the order. |
 | Frontend and backend | **Separate apps, one repository** | The API also serves the two websites, Messenger and later a phone app. Each can be deployed and scaled on its own. Sharing one repository keeps the API contract in one place. |
 | Frontend | **React single-page app (Vite)**, installable on a phone | Everyone is signed in, so nothing needs to be rendered on a server. The browser loads the app once from a CDN and then only asks the API for data: moving between screens is instant. This is how the hub is built. The old CRM renders every page on Vercel, which then calls the API, which then calls the database: three hops per page. |
 | Backend | **Node.js, Hono, Zod, Drizzle** | Small, fast, well understood. Plain routes: one call per screen. |
@@ -2451,7 +2453,7 @@ type-checked, not yet clicked through in a browser.
 **Not done.** The employee ID made compulsory (HR's *Missing* view lists who lacks one); a screen to
 move past covered sales' credit to someone (the data is kept for it).
 
-## 27. Several companies on one server: Bishnoi One's control panel (26 Nov 2026)
+## 28. Several companies on one server: Bishnoi One's control panel (26 Nov 2026)
 
 Aryan, 26 Nov: "we need to make it multi company … each organisation its own ID and password …
 GetMeds and 2MG, everything of theirs is separate, people separate, revenue separate, so each its
@@ -3958,7 +3960,8 @@ medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 dat
 - 25 Nov, Aryan, asked whether a MedRep who covers an empty area should get no target credit for the sales made there: **"Yes, keep it."** Section 26's covering rule (the sale counts for the empty seat and its lead, never the covering MedRep's own KPI or score) is his rule now. From now on Aryan is spoken to in plain English only, without git or code words (his word the same day; CLAUDE.md says so).
 - 24 Nov (198), asked by the backend developer: **blue for what you press, again; the app's frame and the public pages redone.** The accent goes from the GetMeds green (19 Nov) back to blue `#2563eb` (`--color-brand` and the emerald, blue and sky scales in `styles.css`): buttons, links, the selected menu item, counts, the focus ring. What is fine, done or paid keeps the pharmacy green (`--color-good`). The frame (`shell.tsx`): white sidebar and page; the sidebar runs the full height with the person's workspace logo and "Bishnoi One / MedReps" at its top, folds to an icon rail with a sliding width, and the desk's name and the top bar's desk label are gone from the top bar; page titles match the home's greeting (28px semibold). Public pages (local only, not yet on main): the home page's hero and navbar, the About page (`/about`), Sign in and Sign up as split screens with card collages. Waits for Aryan's approval before main or deploy.
 - 25 Nov (199), Aryan, after seeing the sign-in pages side by side: "if it doesn't clash and there is no risk, push it"; asked which colour, since (198) undoes his 19 Nov green: **blue (his)**, green only for what is fine, done or paid. The frontend developer's work (198) joined to main. Checked: it joined with no clash but this change log; the web type-check and build pass; no API, database or sign-in change (the sign-in form sends the same login ID and password); the side menu of 12 demo logins (MedRep, team lead, head, CEO, Admin, Management, Finance, Dispatch, Inventory, HR and others) lists exactly the same pages as before, plus the desk's name at its top; all 166 of their menu pages opened with no error; the phone drawer and bottom bar work; the home page's styles and animations stay inside its own pages. Its used pictures were re-encoded at the same pixel size (29 MB to 7.6 MB: the welcome page and the sign-in pages open faster on a phone); a local AI tool's empty database (`.claude/data`) that came with it was left out and is now ignored.
-- 26 Nov (200), Aryan: **several companies on one server, each in its own database** (section 27).
+- 26 Nov (200), recorded by the backend developer: **one code per company everywhere.** `2mg` = 2MG Incorporated, `gpi` = Getmeds Philippines Incorporated. Orders and invoices called Getmeds Philippines `getmeds` while HR and payroll called it `gpi`, and the names were written five ways (2MG Inc., 2MG Incorporated, GetMeds Philippines Inc., Getmeds Philippines…). Now one list, `apps/api/src/companies.ts` (code, registered name, short name, invoice series), used by orders, invoices, HR, payroll, printouts and the books' headings. Migration 0159 moves the orders and invoices already made from `getmeds` to `gpi` and renames the invoice counter with it, so every invoice keeps its number and the `INV-` series goes on from the last one (tested on a copy made the old way: `companies.test.ts`). The group's own name (the company tree's top box, the settings) is unchanged.
+- 26 Nov (204), Aryan: **several companies on one server, each in its own database** (section 28).
   Asked first, then "Yes, start": an Org ID of six digits (his teammate's point), people sign in with
   their company's email domain (`@2mginc.com`, `@getmeds.ph`, his), no shared company password, our
   own control panel with a short ID, a password and the phone's code. Then, mid-way: "don't stress,
@@ -3967,7 +3970,7 @@ medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 dat
   with a copy of another's medicines, prices and stock, pausing, a new Admin password; the company's
   code in the frame and its name on the sign-in page. All 817 API tests green (12 new); tried on a
   copy of the local data. Not live yet; emptying the dummy data waits for his yes on the list.
-- 26 Nov (201), Aryan, after the panel's picture: "who told you to do 'you'?" (its "you@2mginc.com"
+- 26 Nov (205), Aryan, after the panel's picture: "who told you to do 'you'?" (its "you@2mginc.com"
   was only a label, but read as a made-up ID), and "I give it an ID myself and a one-time password
   they change, that's all". The panel now takes the **login ID he types** (an email on the company's
   own domain): adding a company asks only its name, short code, login ID and what it starts with;

@@ -17,7 +17,7 @@ to be shut down once this one is live and everything has moved over.
 | Path | What |
 |---|---|
 | `apps/api` | Hono + Zod + Drizzle API. `src/` code, `migrations/` hand-written SQL applied in order on start, tests beside the code. |
-| `apps/api/src/companies` | Several companies on one server (PLAN 27, 26 Nov): each company's data in its own database, listed in `bishnoi_control` (`migrations-control/`); each request answered on its own company's database; our control panel `/control` (`apps/web/src/control`). On with `COMPANIES=on`; without it, one company as before. |
+| `apps/api/src/companies` | Several companies on one server (PLAN 28, 26 Nov): each company's data in its own database, listed in `bishnoi_control` (`migrations-control/`); each request answered on its own company's database; our control panel `/control` (`apps/web/src/control`). On with `COMPANIES=on`; without it, one company as before. |
 | `apps/web` | React (Vite) app. Screens only, each area in its own folder (`orders/`, `sellers/`, `hr/`…, see the README); menus are data in `src/menus.ts`. |
 | `workers/tender-finder` | The tender finder's robot (PLAN 24): a browser that reads PhilGEPS and hands in to the CRM through `/webhooks/tender-finder`. Own `package.json`, not in the pnpm workspace (it needs Chrome); run hourly by `.github/workflows/tender-finder.yml`. |
 | `docs/` | The plan, the role audit, the hub's inventory and modules. |
