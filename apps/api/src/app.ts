@@ -2,6 +2,7 @@
 
 import { createMiddleware } from "hono/factory";
 import { companyKey, companyNow } from "./companies/context";
+import { ORG_COOKIE } from "./companies/router";
 import { decisionRoutes } from "./decisions/routes";
 import { sampleRoutes } from "./samples/routes";
 import { complaintRoutes } from "./complaints/routes";
@@ -256,6 +257,10 @@ export function createApp(db: Database, options: AppOptions) {
     const company = companyNow();
     return c.json({
       company: company ? { orgId: company.orgId, name: company.name, code: company.code, loginDomain: company.loginDomain } : null,
+      // This browser is inside this company (Aryan, 27 Nov: "signing out of Management should leave
+      // that app, not the company"): it signed in here, so the company's systems show again after
+      // signing out of one, without the company's sign-in. "Sign out of the company" ends it.
+      inside: company ? getCookie(c, ORG_COOKIE) === company.orgId : true,
     });
   });
 
@@ -484,6 +489,18 @@ export function createApp(db: Database, options: AppOptions) {
     for (const one of moreOf(c)) await endSession(db, one);
     deleteCookie(c, SESSION_COOKIE, { path: "/" });
     deleteCookie(c, MORE_COOKIE, { path: "/api/auth" });
+    return c.json({ ok: true });
+  });
+
+  // Signing out of the company itself (27 Nov): every account on this browser, and the company it
+  // remembers, so the next person starts at "Sign in to your company".
+  app.post("/api/auth/leave-company", async (c) => {
+    const token = getCookie(c, SESSION_COOKIE);
+    if (token) await endSession(db, token);
+    for (const one of moreOf(c)) await endSession(db, one);
+    deleteCookie(c, SESSION_COOKIE, { path: "/" });
+    deleteCookie(c, MORE_COOKIE, { path: "/api/auth" });
+    deleteCookie(c, ORG_COOKIE, { path: "/" });
     return c.json({ ok: true });
   });
 

@@ -25,7 +25,7 @@ import type { CompanyList, Running } from "./registry";
 
 export const ORG_COOKIE = "org";
 const YEAR = 365 * 24 * 60 * 60;
-const SIGN_IN = new Set(["/api/auth/login", "/api/auth/login/code"]);
+const SIGN_IN = new Set(["/api/auth/login", "/api/auth/login/code", "/api/auth/desk"]);
 /** Asked by the email it sends: signing in, and asking to join. */
 const BY_EMAIL = new Set(["/api/auth/login", "/api/auth/sign-up"]);
 /** Opened from a link, without signing in: the link names its company. */

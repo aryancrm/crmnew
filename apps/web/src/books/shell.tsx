@@ -7,6 +7,7 @@
 // Inventory frame with the purchases. One module: the same screens and the same data either way.
 
 import { Avatar } from "../account/avatar";
+import { SignedOut } from "../account/signed-out";
 import { ArrowLeft, BarChart3, BookOpen, BookOpenCheck, ChevronDown, ChevronRight, HandCoins, House, Landmark, PackageOpen, Plus, Search, ShoppingBag, ShoppingBasket, ShoppingCart } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Link, Navigate, NavLink, Outlet, useLocation, useNavigate, useSearchParams } from "react-router-dom";
@@ -137,7 +138,7 @@ export function BooksShell() {
     (segment === "banking" || segment === "bankstatement" || segment === "reconcile" ? "Banking" : segment === "reports" ? "Reports" : !segment || segment === "home" ? "" : "Purchases");
   const [open, setOpen] = useState<Record<string, boolean>>({ [openGroup]: true });
   if (me.isPending) return null;
-  if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  if (!me.data) return <SignedOut />;
   if (!BOOK_ROLES.includes(me.data.role)) return <Navigate to="/" replace />;
   const ledger = LEDGER_ROLES.includes(me.data.role);
   const homeLeaves = leavesTo(ledger ? "/books/home" : "/");

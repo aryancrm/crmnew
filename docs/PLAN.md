@@ -4286,4 +4286,15 @@ up right.
   were not asked for again). Tests: `auth/desk.test.ts` (5), `account/desk-sign-in.test.tsx` (3).
   **Live on 27 Nov** (server and screens at 5839743; both companies' databases took 0166): off
   until each company's Admin types its desks' password.
+- 27 Nov (232), Aryan (desk password set by him: "fine now; but signing out of Management takes me out
+  of the company: it should leave that app, not the company"): **a browser stays inside its
+  company.** Once it has signed in to a company, signing out of a system (its Sign out, the
+  15-minute sign-out, the end of the day, a one-time password's Sign out, the last account taken
+  off) goes back to the company's systems grid (/signin, the company's name over Selling,
+  Operations, Office), not to the home page or the company's sign-in; each system still asks its
+  own sign-in. **"Sign out of the company"** at the grid's foot signs out every account on the
+  browser and forgets the company (`POST /api/auth/leave-company`), so the next person starts at
+  "Sign in to your company". `/api/company` says `inside` (the browser's remembered company is
+  this one); a new browser still lands on the home page. A desk's sign-in now also makes the browser
+  remember its company.
 

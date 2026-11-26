@@ -165,6 +165,24 @@ describe("several companies on one server", () => {
     expect(((await (await send("/api/company", { cookie: "org=999999x" })).json()) as { company: { code: string } }).company.code).toBe("2MG");
   });
 
+  it("keeps a browser inside its company after signing out of a system, until it signs out of the company", async () => {
+    // Aryan, 27 Nov: "signing out of Management should leave that app, not the company".
+    type Answer = { inside: boolean; company: { code: string } };
+    const asked = async (cookie = "") => (await (await send("/api/company", { cookie })).json()) as Answer;
+    // A new browser isn't inside any company yet: the company's sign-in comes first.
+    expect((await asked()).inside).toBe(false);
+    let cookie = jar("", await login("helen@2mg.test", PASSWORD));
+    expect(await asked(cookie)).toMatchObject({ inside: true, company: { code: "2MG" } });
+    // Signed out of a system: still inside the company.
+    cookie = jar(cookie, await send("/api/auth/logout", { method: "POST", cookie }));
+    expect((await send("/api/me", { cookie })).status).toBe(401);
+    expect(await asked(cookie)).toMatchObject({ inside: true, company: { code: "2MG" } });
+    // Signed out of the company: out of it, the next person starts at its sign-in.
+    cookie = jar(cookie, await send("/api/auth/leave-company", { method: "POST", cookie }));
+    expect(cookie).not.toContain("org=");
+    expect((await asked(cookie)).inside).toBe(false);
+  });
+
   it("stops a paused company's people, and lets them in again when it is resumed", async () => {
     const signedIn = jar("", await login("admin@getmeds.test", gmPassword));
     await list.pause(gm.ref.orgId, "Not paid", null);

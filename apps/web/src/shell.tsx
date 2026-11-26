@@ -41,6 +41,7 @@ import { api } from "./api";
 import { useCompany } from "./companies";
 import { LeavesArrow, useLeavesTo } from "./app-switch";
 import { ME, onlineDesk, useMe } from "./auth";
+import { SignedOut } from "./account/signed-out";
 import { DeskPeople } from "./desk/people";
 import { LiveLocationSender } from "./field/live-sender";
 import { UndoConfirmBar } from "./finance/undo";
@@ -139,7 +140,7 @@ export function Shell() {
         </div>
       </Centered>
     );
-  if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  if (!me.data) return <SignedOut />;
   if (me.data.mustChangePassword)
     return location.pathname === "/password" ? (
       <div className="flex min-h-dvh items-center bg-ground p-6">
@@ -989,7 +990,7 @@ function Account({ me, role }: { me: Me; role: string }) {
     setSwitching(personId);
     try {
       const { me: now } = await api<{ me: Me | null }>("/api/auth/accounts/remove", { body: { personId } });
-      if (personId === me.id) window.location.assign(now ? "/" : "/login");
+      if (personId === me.id) window.location.assign(now ? "/" : "/signin");
       else await queries.invalidateQueries({ queryKey: ["auth", "accounts"] });
     } finally {
       setSwitching(null);
@@ -1000,7 +1001,7 @@ function Account({ me, role }: { me: Me; role: string }) {
     try {
       const { me: now } = await api<{ me: Me }>("/api/auth/switch", { body: { personId } });
       // The whole app opens afresh as the other account: nothing of this one's stays on screen.
-      window.location.assign(now ? "/" : "/login");
+      window.location.assign(now ? "/" : "/signin");
     } catch {
       setSwitching(null);
       await queries.invalidateQueries({ queryKey: ["auth", "accounts"] });
@@ -1244,7 +1245,8 @@ async function leaveNow(queries: ReturnType<typeof useQueryClient>, navigate: Re
   const ending = api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
   await queries.cancelQueries();
   queries.setQueryData(ME, null);
-  navigate("/login", { replace: true });
+  // Out of this system, still inside the company: its systems again (Aryan, 27 Nov).
+  navigate("/signin", { replace: true });
   await ending;
   queries.removeQueries({ predicate: (query) => query.queryKey[0] !== ME[0] });
 }
