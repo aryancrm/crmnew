@@ -36,6 +36,10 @@ function Launcher() {
   const { dept } = useParams();
   const [params] = useSearchParams();
   const from = (location.state as { from?: string } | null)?.from ?? "/";
+  // Add another account (26 Nov: "like Google"): signed in already, this browser keeps that account
+  // beside the one signed in here, to switch between from the avatar menu.
+  const adding = params.get("add") === "1";
+  const search = adding ? "?add=1" : "";
   // The tile pressed opens its department's page, the sign-in below it (the login decides what
   // opens inside, as always).
   // Its address is /login/<key>. The older /login?dept=<key> is still read, then rewritten.
@@ -45,7 +49,7 @@ function Launcher() {
   // Where the dev-only demo-user picker shows: in the top bar, after "Wrong department?".
   const [pickerSlot, setPickerSlot] = useState<HTMLSpanElement | null>(null);
   const open = (key: string | null) =>
-    navigate(loginPath(key), { state: location.state });
+    navigate({ pathname: loginPath(key), search }, { state: location.state });
 
   useEffect(() => {
     if (!picked) return;
@@ -56,10 +60,10 @@ function Launcher() {
     // biome-ignore lint/correctness/useExhaustiveDependencies: on the department changing only
   }, [picked?.key]);
 
-  if (me.data) return <Navigate to={landing(me.data.role, picked, returnTo(me.data.id, from))} replace />;
+  if (me.data && !adding) return <Navigate to={landing(me.data.role, picked, returnTo(me.data.id, from))} replace />;
   // An old link, an unknown department or other capitals: the one right address, without a step back to the wrong one.
   if (location.pathname !== address || params.has("dept"))
-    return <Navigate to={{ pathname: address, hash: location.hash }} state={location.state} replace />;
+    return <Navigate to={{ pathname: address, search, hash: location.hash }} state={location.state} replace />;
 
   return (
     <main className="relative isolate overflow-x-hidden bg-[#f6f7fb] font-[Inter_Variable,Inter,sans-serif] text-[#1f2733]">
@@ -113,7 +117,22 @@ function Launcher() {
                 <div className="mb-5 lg:hidden">
                   <DepartmentMark workspace={picked} />
                 </div>
-                <SignIn workspace={picked} from={from} loginId={(location.state as { loginId?: string } | null)?.loginId} pickerSlot={pickerSlot} />
+                {adding && me.data && (
+                  <div className="mb-5 rounded-2xl border border-[#d5d9e1] bg-white px-4 py-3 text-[13px] text-[#4b5260]">
+                    Adding another account. <b className="text-[#1f2733]">{me.data.name}</b> stays signed in: switch between
+                    them from your picture at the top.{" "}
+                    <Link to="/" className="font-semibold text-[#f36b21] hover:underline">
+                      Cancel
+                    </Link>
+                  </div>
+                )}
+                <SignIn
+                  workspace={picked}
+                  from={from}
+                  loginId={(location.state as { loginId?: string } | null)?.loginId}
+                  pickerSlot={pickerSlot}
+                  adding={adding}
+                />
               </div>
             </div>
           </section>
@@ -151,7 +170,8 @@ function SignIn({
   from,
   loginId,
   pickerSlot,
-}: { workspace: Workspace; from: string; loginId?: string; pickerSlot: HTMLElement | null }) {
+  adding = false,
+}: { workspace: Workspace; from: string; loginId?: string; pickerSlot: HTMLElement | null; adding?: boolean }) {
   const queries = useQueryClient();
   const navigate = useNavigate();
   // With several companies on the server: the one this browser signs in to (companies.ts).
@@ -174,6 +194,13 @@ function SignIn({
 
   /** Signed in: the person's own landing, as always. */
   const signedInAs = (signedIn: Me) => {
+    // An account added: the whole app opens afresh as it, nothing of the other account's left on screen.
+    if (adding) {
+      rememberWorkspace(workspaceOf(signedIn).key);
+      rememberPerson(signedIn.id);
+      window.location.assign(landing(signedIn.role, workspace, "/"));
+      return;
+    }
     const back = returnTo(signedIn.id, from);
     markActive();
     queries.setQueryData(ME, signedIn);
@@ -186,7 +213,9 @@ function SignIn({
     setBusy(true);
     setProblem(null);
     try {
-      const answer = await api<SignInAnswer>("/api/auth/login", { body: { email, password, workspace: picked.key } });
+      const answer = await api<SignInAnswer>("/api/auth/login", {
+        body: { email, password, workspace: picked.key, ...(adding ? { add: true } : {}) },
+      });
       if (answer.twoStep) {
         // The password has done its part: it isn't kept on the screen.
         setPassword("");
@@ -212,6 +241,7 @@ function SignIn({
         field={field}
         label={label}
         onDone={signedInAs}
+        adding={adding}
         onBack={(message) => {
           setTicket(null);
           setProblem(message ? { message } : null);
@@ -361,6 +391,8 @@ function CodeStep(props: {
   field: string;
   label: string;
   onDone: (me: Me) => void;
+  /** Adding another account: kept beside the one in use. */
+  adding?: boolean;
   /** Back to the password, with why when it wasn't their choice. */
   onBack: (message?: string) => void;
 }) {
@@ -379,7 +411,9 @@ function CodeStep(props: {
     setBusy(true);
     setProblem(null);
     try {
-      props.onDone((await api<{ me: Me }>("/api/auth/login/code", { body: { ticket: props.ticket, code } })).me);
+      props.onDone(
+        (await api<{ me: Me }>("/api/auth/login/code", { body: { ticket: props.ticket, code, ...(props.adding ? { add: true } : {}) } })).me,
+      );
     } catch (error) {
       if (error instanceof ApiFailure && error.status === 401) return props.onBack(error.message);
       setProblem(error instanceof ApiFailure ? error.message : "Couldn't check the code. Try again.");

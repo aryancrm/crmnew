@@ -13,6 +13,11 @@ import type { Me, SeatWorks } from "../types";
 export const SESSION_COOKIE = "sid";
 /** Holds the CEO's (or Admin's) own session while they look as someone else. */
 export const BACK_COOKIE = "sid_back";
+/** The other accounts signed in on this browser (26 Nov: "like Google, add an account, then switch"):
+ *  their session tokens, comma between, newest first. Each was opened with its own login. */
+export const MORE_COOKIE = "sid_more";
+/** At most this many accounts on one browser, the one in use among them. */
+export const MAX_ACCOUNTS = 5;
 export const SESSION_DAYS = 30;
 const DAY = 24 * 60 * 60 * 1000;
 /** They work on shared computers: their session ends with the working day, never kept alive. */

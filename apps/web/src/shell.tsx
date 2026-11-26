@@ -31,6 +31,7 @@ import {
   Plus,
   Search,
   ShieldCheck,
+  UserPlus,
   UserRound,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
@@ -45,6 +46,12 @@ import { UndoConfirmBar } from "./finance/undo";
 import { MyDayButton } from "./hr/parts";
 import { allItems, type Badge, folderOpen, type MenuGroup, type MenuItem, spaceFor } from "./menus";
 import { Toasts } from "./toast";
+
+/** The accounts signed in on this browser (GET /api/auth/accounts), the one in use first. */
+type AccountsOnBrowser = {
+  accounts: { id: number; name: string; email: string | null; title: string | null; roleLabel: string; photo: number | null; current: boolean }[];
+  max: number;
+};
 import { unreadIn, useUpdates } from "./updates";
 
 export function Shell() {
@@ -968,6 +975,25 @@ function Account({ me, role }: { me: Me; role: string }) {
   async function signOut() {
     await leaveNow(queries, navigate);
   }
+  // The accounts on this browser (26 Nov: "like Google: add an account, then switch").
+  const accounts = useQuery({
+    queryKey: ["auth", "accounts"],
+    queryFn: () => api<AccountsOnBrowser>("/api/auth/accounts"),
+    enabled: open && !me.viewedBy,
+  }).data;
+  const others = accounts?.accounts.filter((one) => !one.current) ?? [];
+  const [switching, setSwitching] = useState<number | null>(null);
+  async function switchTo(personId: number) {
+    setSwitching(personId);
+    try {
+      const { me: now } = await api<{ me: Me }>("/api/auth/switch", { body: { personId } });
+      // The whole app opens afresh as the other account: nothing of this one's stays on screen.
+      window.location.assign(now ? "/" : "/login");
+    } catch {
+      setSwitching(null);
+      await queries.invalidateQueries({ queryKey: ["auth", "accounts"] });
+    }
+  }
 
   return (
     <div ref={box} className="relative">
@@ -994,7 +1020,41 @@ function Account({ me, role }: { me: Me; role: string }) {
               <div className="text-xs text-ink-2">{role}</div>
             </div>
           </div>
-          {/* Someone looking as them doesn't get their profile. */}
+          {/* Someone looking as them doesn't get their profile, nor the accounts. */}
+          {!me.viewedBy && (
+            <div className="mb-1 border-b border-line-soft pb-1">
+              {others.map((one) => (
+                <button
+                  key={one.id}
+                  type="button"
+                  role="menuitem"
+                  disabled={switching !== null}
+                  onClick={() => void switchTo(one.id)}
+                  className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left hover:bg-hover disabled:opacity-60"
+                >
+                  <Avatar person={one} />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{one.name}</span>
+                    <span className="block truncate text-xs text-ink-2">{one.title ?? one.roleLabel}</span>
+                  </span>
+                  <span className="text-xs font-semibold text-brand">{switching === one.id ? "Opening…" : "Switch"}</span>
+                </button>
+              ))}
+              {(accounts?.accounts.length ?? 1) < (accounts?.max ?? 5) && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    navigate(`/login/${workspaceOf(me).key}?add=1`);
+                  }}
+                  className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
+                >
+                  <UserPlus size={17} aria-hidden="true" /> Add another account
+                </button>
+              )}
+            </div>
+          )}
           {!me.viewedBy && (
             <>
               <button
@@ -1042,7 +1102,7 @@ function Account({ me, role }: { me: Me; role: string }) {
             onClick={signOut}
             className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
           >
-            <LogOut size={17} aria-hidden="true" /> Sign out
+            <LogOut size={17} aria-hidden="true" /> {others.length ? "Sign out of all accounts" : "Sign out"}
           </button>
         </div>
       )}
