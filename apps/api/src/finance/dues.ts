@@ -13,9 +13,10 @@ export const notDueSql = sql`((i.terms in ('cod', 'days') and o.status <> 'compl
 /** A guarantee letter's invoice (aliases `i`, `o`) the agency hasn't paid anything on yet: the
  *  agency's money, not the patient's debt (Aryan, 26 Nov: the medicine goes first, the agency pays
  *  months later). The company is still owed it (its totals keep it); a patient's own dues, their
- *  next order's checks and their seller's reminders leave it out (`and not dd.gl_waiting`). */
-export const glWaitingSql = sql`((o.order_type = 'gl' or exists (select 1 from lead gl_case where gl_case.order_id = o.id and gl_case.road = 'gl'))
-  and not exists (select 1 from payment gl_paid where gl_paid.invoice_id = i.id and gl_paid.active and gl_paid.payer = 'agency'))`;
+ *  next order's checks and their seller's reminders leave it out (`and not dd.gl_waiting`). Never
+ *  null (an order with no type would make it so, and hide every other debt): false unless both. */
+export const glWaitingSql = sql`coalesce((o.order_type = 'gl' or exists (select 1 from lead gl_case where gl_case.order_id = o.id and gl_case.road = 'gl'))
+  and not exists (select 1 from payment gl_paid where gl_paid.invoice_id = i.id and gl_paid.active and gl_paid.payer = 'agency'), false)`;
 
 /**
  * Every amount a customer owes, wherever it was billed (Aryan, 17 Nov: Finance checks what the
