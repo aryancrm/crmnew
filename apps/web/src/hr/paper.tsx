@@ -16,7 +16,8 @@ export function LetterheadBlock({
 }: {
   letterhead: Letterhead;
   title: string;
-  code: string;
+  /** Its number; a report has none. */
+  code?: string;
   sub?: string;
 }) {
   const contact = [letterhead.phone, letterhead.email].filter(Boolean).join(" · ");
@@ -34,7 +35,7 @@ export function LetterheadBlock({
       <div className="mt-4 flex items-end justify-between gap-4">
         <h1 className="text-xl font-bold">{title}</h1>
         <div className="text-right text-xs text-slate-600">
-          <div className="font-mono font-semibold text-slate-900">No. {code}</div>
+          {code && <div className="font-mono font-semibold text-slate-900">No. {code}</div>}
           {sub && <div>{sub}</div>}
         </div>
       </div>

@@ -5223,6 +5223,46 @@ export type HrSheets = {
   can: { import: boolean };
 };
 
+// ------------------------------------------------------------------ HR's reports
+
+export type HrReportKey =
+  | "headcount"
+  | "movement"
+  | "attrition"
+  | "attendance"
+  | "leave-balances"
+  | "leave-taken"
+  | "overtime"
+  | "forms"
+  | "due-soon"
+  | "missing";
+/** What a report is asked for: a range of days, one day, a year, or the days ahead. */
+export type HrReportPeriod = "range" | "day" | "year" | "ahead";
+export type HrReportColumn = { key: string; label: string; type: "text" | "number" | "money" | "date" | "percent" | "hours" };
+export type HrReportValue = string | number | null;
+
+export type HrReportList = {
+  reports: { key: HrReportKey; title: string; what: string; period: HrReportPeriod; group: string }[];
+};
+
+export type HrReport = {
+  key: HrReportKey;
+  title: string;
+  what: string;
+  period: HrReportPeriod;
+  /** What it was asked for, in words ("1 Nov 2026 to 26 Nov 2026", "As of 26 Nov 2026", "2026"). */
+  periodWords: string;
+  asked: { from: string; to: string; year: number; days: number; company: Company | null };
+  columns: HrReportColumn[];
+  rows: Record<string, HrReportValue>[];
+  totals: Record<string, HrReportValue> | null;
+  /** The headline figures above the table. */
+  figures: { label: string; value: string }[];
+  letterhead: Letterhead;
+  preparedBy: string;
+  preparedAt: string;
+};
+
 // ------------------------------------------------------------------ payroll
 
 import type { PayAttendance, PayLine } from "./hr/pay-rules";

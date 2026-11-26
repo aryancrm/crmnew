@@ -26,7 +26,7 @@ const send = (who: string, path: string, body: unknown) =>
   });
 const upload = async (who: string, kind: string, name: string, bytes: Uint8Array | string) => {
   const form = new FormData();
-  form.append("file", new File([bytes], name));
+  form.append("file", new File([bytes as BlobPart], name));
   return app.request(`/api/hr/import/${kind}/read`, { method: "POST", headers: { cookie: cookies[who] as string }, body: form });
 };
 /** Reads a file and runs it: a test run, or saved. */

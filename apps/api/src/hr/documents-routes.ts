@@ -16,6 +16,7 @@ import {
   signClearance,
   voidDocument,
 } from "./documents";
+import { reportList, reportWorkbook, runReport } from "./reports";
 import { IMPORT_FILE_MAX, importKinds, readImport, runImport, sheetFile } from "./sheets";
 
 const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -98,5 +99,24 @@ export function documentRoutes(app: Hono<Env>, db: Database): void {
       }),
     );
     return c.json(await runImport(db, c.get("me"), c.req.param("kind"), input));
+  });
+
+  // HR's reports: the list, and one report as JSON or (…/key.xlsx) as Excel.
+  app.get("/api/hr/reports", (c) => c.json(reportList(c.get("me"))));
+  app.get("/api/hr/reports/:key", async (c) => {
+    const key = c.req.param("key");
+    const excel = key.endsWith(".xlsx");
+    const report = await runReport(db, c.get("me"), key.replace(/\.xlsx$/, ""), {
+      from: c.req.query("from"),
+      to: c.req.query("to"),
+      year: c.req.query("year"),
+      days: c.req.query("days"),
+      company: c.req.query("company"),
+    });
+    if (!excel) return c.json(report);
+    return c.body(new Uint8Array(reportWorkbook(report)), 200, {
+      "content-type": XLSX,
+      "content-disposition": `attachment; filename="hr-${report.key}-${report.asked.to}.xlsx"`,
+    });
   });
 }
