@@ -697,7 +697,7 @@ export type SearchResult = {
   customers: { id: number; name: string; kind: CustomerKind; city: string | null }[];
   /** Orders by code or customer PO, among those the person may read. */
   orders: { id: number; code: string; customer: string; status: string }[];
-  /** People by name or seat login: the CEO's anyone, a lead's own team. */
+  /** People by name or seat login: the CEO's anyone, a lead's own team; HR everyone, also by email and employee ID. */
   people: {
     id: number;
     name: string;
@@ -705,6 +705,9 @@ export type SearchResult = {
     login: string | null;
     seatId: number | null;
     team: string | null;
+    /** HR's search only: the employee ID, and whether they have left. */
+    employeeCode?: string | null;
+    left?: boolean;
   }[];
 };
 
@@ -4439,7 +4442,8 @@ export type HrEventKind =
   | "paper"
   | "attendance"
   | "leave"
-  | "move";
+  | "move"
+  | "document";
 export type HrPaperKind = "contract" | "government_id" | "certificate" | "clearance" | "medical" | "other";
 /** A person's papers on their HR record: the ones kept, then the ones taken off (archived). */
 export type HrPapers = {
@@ -5079,6 +5083,10 @@ export type Printout = {
   kind: "leave" | FormKind;
   title: string;
   company: string;
+  /** Its number on paper (LV-000123, OT-000045). */
+  code: string;
+  /** The employer's letterhead: its registered name and details. */
+  letterhead: Letterhead;
   person: {
     name: string;
     employeeCode: string | null;
@@ -5098,6 +5106,163 @@ export type Printout = {
     /** The signature as a data URL, or null (not signed yet, or no signature drawn). */
     image: string | null;
   }[];
+};
+
+/** A company's letterhead on HR's papers: the registered name (companies.ts) and the details the
+ *  Admin keeps in Company details. */
+export type Letterhead = {
+  code: Company;
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  tin: string;
+  footer: string;
+};
+
+// ------------------------------------------------------------------ HR's documents
+
+/** coe: certificate of employment; coe_pay: with the pay; nte: notice to explain. */
+export type HrDocKind = "coe" | "coe_pay" | "clearance" | "memo" | "nte";
+/** A clearance's sign-offs, in order: HR signs last. */
+export type ClearanceDesk = "lead" | "finance" | "inventory" | "admin" | "hr";
+export type HrDocStatus = "issued" | "waiting" | "received" | "answered" | "cleared" | "void";
+
+export type HrDocRow = {
+  id: number;
+  code: string;
+  kind: HrDocKind;
+  title: string;
+  personId: number;
+  name: string;
+  employeeCode: string | null;
+  company: Company;
+  subject: string | null;
+  issuedAt: string;
+  issuedBy: string;
+  status: HrDocStatus;
+  /** In words: "Waiting for Finance, Inventory", "Received 26 Nov". */
+  statusWords: string;
+};
+
+export type HrDocList = {
+  rows: HrDocRow[];
+  /** The person asked for (?person=), even before they have any document. */
+  person: { id: number; name: string; employeeCode: string | null; position: string | null; company: Company; active: boolean } | null;
+  kinds: { key: HrDocKind; label: string }[];
+  can: { issue: boolean };
+};
+
+export type HrDocInput = {
+  kind: HrDocKind;
+  personId: number;
+  subject?: string | null;
+  body?: string | null;
+  replyBy?: string | null;
+};
+
+export type HrDocPage = {
+  id: number;
+  code: string;
+  kind: HrDocKind;
+  title: string;
+  status: HrDocStatus;
+  statusWords: string;
+  letterhead: Letterhead;
+  person: { id: number; name: string; employeeCode: string | null; position: string | null; department: string | null };
+  issuedOn: string;
+  issuedBy: string;
+  /** Label and value lines above the text (a memo's To, From, Date, Subject). */
+  fields: { label: string; value: string }[];
+  /** The letter, paragraph by paragraph. */
+  paragraphs: string[];
+  /** A notice to explain: the day to answer by, and the answer. */
+  replyBy: string | null;
+  reply: { text: string; at: string } | null;
+  /** A clearance's desks. */
+  clearance: { desk: ClearanceDesk; label: string; signer: string | null; at: string | null; note: string | null }[] | null;
+  signers: Printout["signers"];
+  void: { at: string; by: string; reason: string } | null;
+  can: { void: boolean; acknowledge: boolean; reply: boolean; sign: ClearanceDesk[] };
+};
+
+/** A person's own documents, and the clearances waiting for their desk's sign-off. */
+export type MyDocuments = { rows: HrDocRow[]; toSign: HrDocRow[] };
+
+// ------------------------------------------------------------------ HR's sheets in and out
+
+export type HrImportKind = "people" | "leave-balances" | "holidays";
+
+/** An uploaded sheet read (never kept): its headings and rows, and each column matched to a heading. */
+export type HrImportRead = {
+  kind: HrImportKind;
+  headers: string[];
+  rows: string[][];
+  columns: { key: string; label: string; note: string | null }[];
+  /** A column's key → the heading's place (from 0), or null when none matched. */
+  mapping: Record<string, number | null>;
+};
+
+export type HrImportRow = {
+  /** The row's line in the file (the headings are line 1). */
+  line: number;
+  /** new: added; update: changed; same: nothing to change; not_found: no such person. */
+  status: "new" | "update" | "same" | "problem" | "not_found";
+  who: string;
+  changes: string[];
+  problem?: string;
+};
+
+export type HrImportResult = {
+  /** False: a test run, nothing changed. */
+  saved: boolean;
+  rows: HrImportRow[];
+  counts: Record<HrImportRow["status"], number>;
+};
+
+export type HrSheets = {
+  kinds: { key: HrImportKind; title: string; what: string; columns: { label: string; readOnly: boolean; note: string | null }[] }[];
+  can: { import: boolean };
+};
+
+// ------------------------------------------------------------------ HR's reports
+
+export type HrReportKey =
+  | "headcount"
+  | "movement"
+  | "attrition"
+  | "attendance"
+  | "leave-balances"
+  | "leave-taken"
+  | "overtime"
+  | "forms"
+  | "due-soon"
+  | "missing";
+/** What a report is asked for: a range of days, one day, a year, or the days ahead. */
+export type HrReportPeriod = "range" | "day" | "year" | "ahead";
+export type HrReportColumn = { key: string; label: string; type: "text" | "number" | "money" | "date" | "percent" | "hours" };
+export type HrReportValue = string | number | null;
+
+export type HrReportList = {
+  reports: { key: HrReportKey; title: string; what: string; period: HrReportPeriod; group: string }[];
+};
+
+export type HrReport = {
+  key: HrReportKey;
+  title: string;
+  what: string;
+  period: HrReportPeriod;
+  /** What it was asked for, in words ("1 Nov 2026 to 26 Nov 2026", "As of 26 Nov 2026", "2026"). */
+  periodWords: string;
+  asked: { from: string; to: string; year: number; days: number; company: Company | null };
+  columns: HrReportColumn[];
+  rows: Record<string, HrReportValue>[];
+  totals: Record<string, HrReportValue> | null;
+  /** The headline figures above the table. */
+  figures: { label: string; value: string }[];
+  letterhead: Letterhead;
+  preparedBy: string;
+  preparedAt: string;
 };
 
 // ------------------------------------------------------------------ payroll

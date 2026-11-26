@@ -1,5 +1,8 @@
-// The company's details (the Admin and the CEO): what its quotations print at the top and the foot.
+// The companies' details (the Admin and the CEO): what their papers print at the top and the foot.
+// 2MG's are what the quotations print; each company's are the letterhead of HR's papers for the
+// people it employs (26 Nov), its registered name always from the company list.
 
+import { COMPANIES, COMPANY_CODES, type CompanyCode } from "@2mg/api/companies";
 import type { CompanyInfo, PointsProgram } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
@@ -21,18 +24,31 @@ const FIELDS: { key: Exclude<keyof CompanyInfo, "vat">; label: string; wide?: bo
 export function SettingsPage() {
   const query = useQuery({
     queryKey: ["settings"],
-    queryFn: () => api<{ company: CompanyInfo; points: PointsProgram }>("/api/settings"),
+    queryFn: () =>
+      api<{ company: CompanyInfo; companies: Record<CompanyCode, CompanyInfo>; points: PointsProgram }>("/api/settings"),
   });
+  const [code, setCode] = useState<CompanyCode>("2mg");
   if (!query.data) return <PageState query={query} what="the settings" />;
   return (
     <div className="mx-auto max-w-3xl">
-      <PageHead title="Company details" />
-      <CompanyForm start={query.data.company} />
+      <PageHead
+        title="Company details"
+        sub="Each company's address, TIN and foot line: on its quotations and on HR's papers for the people it employs."
+      >
+        <div className="flex gap-2" role="tablist">
+          {COMPANY_CODES.map((one) => (
+            <Button key={one} small variant={one === code ? "primary" : "plain"} role="tab" aria-selected={one === code} onClick={() => setCode(one)}>
+              {COMPANIES[one].name}
+            </Button>
+          ))}
+        </div>
+      </PageHead>
+      <CompanyForm key={code} code={code} start={query.data.companies[code]} />
     </div>
   );
 }
 
-function CompanyForm({ start }: { start: CompanyInfo }) {
+function CompanyForm({ code, start }: { code: CompanyCode; start: CompanyInfo }) {
   const [value, setValue] = useState(start);
   const [saved, setSaved] = useState(false);
   const action = useAction();
@@ -40,7 +56,7 @@ function CompanyForm({ start }: { start: CompanyInfo }) {
   async function submit(event: FormEvent) {
     event.preventDefault();
     setSaved(false);
-    if (await action.run(async () => api("/api/settings/company", { body: value }))) {
+    if (await action.run(async () => api(`/api/settings/company?company=${code}`, { body: value }))) {
       setSaved(true);
       await queries.invalidateQueries({ queryKey: ["settings"] });
     }

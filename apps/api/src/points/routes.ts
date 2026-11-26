@@ -63,7 +63,8 @@ export function pointsRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
         signatoryTitle: line(120),
       }),
     );
-    await saveCompany(db, c.get("me"), input as CompanyInfo);
+    // ?company=gpi: Getmeds Philippines' own details (its papers' letterhead); else 2MG's.
+    await saveCompany(db, c.get("me"), input as CompanyInfo, c.req.query("company") === "gpi" ? "gpi" : "2mg");
     return c.json({ ok: true });
   });
   app.post("/api/settings/points", async (c) => {

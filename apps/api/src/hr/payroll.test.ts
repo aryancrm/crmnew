@@ -2,6 +2,7 @@
 // releases an ended month; released payslips are frozen; each person reads only their own; the CEO
 // reads the register and changes nothing; nobody else sees anyone's pay.
 
+import { readXlsxBytes } from "../reports/xlsx-read";
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../app";
@@ -233,6 +234,12 @@ describe("payroll", () => {
     const text = await csv.text();
     expect(text.split("\n")[0]).toContain("Net pay");
     expect(text).toContain("Ryan");
+    // The same register as Excel: the same headings, the people, and a total row.
+    const xlsx = await get("naresh", `/api/hr/payroll/${past}/register.xlsx`);
+    const [sheet] = readXlsxBytes(new Uint8Array(await xlsx.arrayBuffer()));
+    expect(sheet?.rows[0]?.cells).toContain("Net pay");
+    expect(sheet?.rows.some((row) => row.cells.includes("Ryan"))).toBe(true);
+    expect(sheet?.rows.at(-1)?.cells[0]).toBe("Total");
     expect(
       (await send("helen", `/api/hr/people/${ids.daniel}`, { noPagibig: true }, "PATCH")).status,
     ).toBe(200);

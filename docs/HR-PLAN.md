@@ -299,9 +299,74 @@ One feature per commit, each with its tests; `checks/integrity.ts` and `scale.te
    - *Not done:* the employee ID made compulsory (HR's *Missing* view already lists who lacks one;
      the IDs are still to be filled in, decision 4 below); moving the credit of past covered sales
      to someone (the data is kept for it; a screen when HR asks).
+   - **4c. Documents, imports and reports** (26 Nov, asked by the backend department, modelled on
+     the documents part of the ovio project). Migration 0160; `hr/documents.ts`, `hr/sheets.ts`,
+     `hr/reports.ts` (addresses in `hr/documents-routes.ts`); screens `hr/documents.tsx`,
+     `hr/sheets.tsx`, `hr/reports.tsx`, the shared paper parts in `hr/paper.tsx`.
+   - **Letterhead and numbers.** Each company's address, phone, email, TIN and foot line are kept in
+     Company details (Admin panel; one tab per company, 2MG's are the ones quotations already
+     print); the registered name always comes from `companies.ts`. Every HR paper prints on the
+     letterhead of the company that employs the person, with a number: HR's documents by kind and
+     year (`COE-2026-00001`, `CLR-`, `MEMO-`, `NTE-`, in `counter`), leave and forms by their row
+     (`LV-000123`, `OB-`, `WFH-`, `OT-`, `DAR-`, `IR-`).
+   - **Documents** (`hr_document`, `hr_clearance_sign`): certificate of employment, with or without
+     the pay; clearance (the lead, Finance, Inventory and the Admin each sign their part with a note
+     of anything owed, HR last; each desk is alerted); memo and notice to explain (the person is
+     alerted, acknowledges, and answers a notice in writing by a day, at most 30 days ahead, 5 by
+     default). What a paper says is kept the day it is issued. Never deleted: voided with a reason.
+     HR and the Admin issue and void; HR, the CEO and the Admin read all; the person reads their own
+     (Me → *My documents*); a clearance's signers read it. Every step goes into HR's trail
+     ('document').
+   - **Sheets in and out** (Import & export): People (the masterlist), Leave balances, Holidays,
+     each downloadable as it is now or as a blank template with a "How to fill it" sheet. One list
+     of columns per sheet serves both ways. An import: upload (.xlsx or .csv, 10 MB, 2,000 rows,
+     never kept) → match the columns (guessed from the headings) → a test run that changes nothing →
+     save the rows that pass; every row says what changed or why not, by its line. People are found
+     by employee ID and login email and changed through Edit record's own checks and trail (an empty
+     cell changes nothing; new people still come through New joiner, as they need a seat and a
+     login). The payroll register downloads as Excel too.
+   - **Reports** (one contract, like ovio's): headcount, joiners and leavers, attrition by month,
+     late/absent/hours, leave balances, leave taken, overtime, leave and forms filed, due soon
+     (probation month 3 and 5, regularization at month 6, birthdays, anniversaries), missing
+     details. Each has a company filter, Excel, and a print (save as PDF) on the letterhead with
+     who prepared it, remarks, and *Checked by* / *Approved by* (remembered on that computer). HR,
+     the CEO and the Admin read them.
+   - **Scenarios and how each is checked.** Run: `pnpm --filter @2mg/api exec vitest run
+     src/hr/documents.test.ts src/hr/sheets.test.ts src/hr/reports.test.ts` (on a small PC, one at a
+     time with `--maxWorkers=1`). Local demo: Helen is HR, Ryan a MedRep under Daniel, Fiona
+     Finance, Irene Inventory.
+
+     | # | Scenario | Expected | Auto (test) | By hand |
+     |---|---|---|---|---|
+     | 1 | HR issues a certificate of employment for a GPI employee | Numbered `COE-2026-00001`, on Getmeds Philippines Incorporated's letterhead, "has been employed … as … since …", the purpose they gave | `hr/documents.test.ts` "a certificate of employment…" | HR → Documents & reports → Documents → *New document* |
+     | 2 | A certificate with the pay, then the person gets a raise | The paper keeps the pay of the day it was issued | same | — |
+     | 3 | A paper was made wrong | *Void* with the reason: it stays listed as Void, its number is never reused, HR's trail writes both | same | Open it → *Void* |
+     | 4 | A colleague opens someone's certificate; a seller tries to issue one | Refused | same | — |
+     | 5 | A notice to explain: the person acknowledges, then answers | *Waiting* → *Received* → *Answered*; HR is told; their signature in *Received by* | "a notice to explain…" | Sign in as the person → Me → *My documents* |
+     | 6 | A clearance: each desk signs its part, HR last | The lead, Finance, Inventory and the Admin each sign only their own part, with a note of what is still owed; HR only once the others signed; a second open clearance for the same person refused | "a clearance…" | Finance, Inventory, Admin, the lead open it from their alert |
+     | 7 | A leave or form printout | Its number (`LV-000123`, `OT-000045`) and the employer's letterhead with the address and TIN from Company details | "leave and form printouts…" | Approved leave → *Print* |
+     | 8 | The masterlist downloaded and brought straight back | Every row says *Nothing to change* | `hr/sheets.test.ts` "the exported masterlist…" | Import & export → People → *Download*, then *Import* the same file |
+     | 9 | An import with mistakes | The test run changes nothing; *Save* keeps the rows that pass; each other row says why, by its line (no such person, "someday" isn't a day, the ID is one person's and the email another's) | "an import: a test run changes nothing…" | Import a file with a wrong date |
+     | 10 | Opening leave balances from the old system | One adjustment per kind reaches the days left, with the reason; the same file again: nothing to change; 7.3 days refused (half-day steps) | "leave balances…" | Import & export → Leave balances |
+     | 11 | Holidays from a sheet | Added once; the same day and name again is left as it is | "holidays…" | Import & export → Holidays |
+     | 12 | The payroll register as Excel | The same headings as the CSV, the people, a total row | `hr/payroll.test.ts` | Payroll → a month → *Excel* |
+     | 13 | Every report | Runs on the demo company; the total row adds the rows up; a company filter narrows it (and its letterhead); Excel has the title, the period and the same rows | `hr/reports.test.ts` | Documents & reports → Reports → any → *Excel* / *Print* |
+     | 14 | Due soon | A probationary person's month-3 review and a birthday in the next 30 days are listed | same | Reports → *Due soon* |
+     | 15 | A seller tries the reports, a download or an import | Refused | `hr/reports.test.ts`, `hr/sheets.test.ts` | — |
+
+     Also kept green: `hr/print.test.ts`, `hr/payroll.test.ts`, `hr/people.test.ts`,
+     `hr/leave.test.ts`, `hr/forms.test.ts`, `hr/leave-credits.test.ts`, `hr/holidays.test.ts`,
+     `hr/events.test.ts`, `hr/attendance.test.ts`, `points/points.test.ts` (Company details),
+     `checks/scale.test.ts`, `db/migrate.test.ts`. The screens are type-checked, not yet clicked
+     through in a browser.
+   - *Not done:* a person asking for their own certificate on the CRM (HR issues it when asked);
+     the government reports from payroll (SSS R3, PhilHealth RF-1, Pag-IBIG MCRF, BIR 2316 and the
+     alphalist), to come with the payroll work; Getmeds Philippines' address and TIN are to be typed
+     in Company details by the Admin (until then its papers show the name only).
 5. **Joining and leaving (about 1 week).** The checklist with its reminders; resignation, clearance,
-   exit interview.
-6. **HR's Home (about half a week).** What is due today, the figures, the reports.
+   exit interview. (The clearance itself is built: 4c.)
+6. **HR's Home (about half a week).** What is due today, the figures, the reports. (The reports,
+   *Due soon* among them, are built: 4c; HR's Home page is still to do.)
 
 About seven weeks in all. Then HR and Automated-Excel run side by side for one or two pay periods;
 HR moves over once the DTR and the payroll match.

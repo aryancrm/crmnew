@@ -46,7 +46,10 @@ import { WebsiteOrderPage } from "./online/website-order";
 import { LeadsDesk } from "./online/leads";
 import { LeaveListPage } from "./hr/leave-list";
 import { VlConversionPage } from "./hr/credits";
+import { DocumentPaperPage, DocumentsPage, MyDocumentsPage } from "./hr/documents";
 import { PrintPage } from "./hr/print";
+import { ReportPage as HrReportPage, ReportsPage as HrReportsPage } from "./hr/reports";
+import { ImportPage, SheetsPage } from "./hr/sheets";
 import { Login } from "./account/login";
 import { ChooseSystem } from "./account/choose-system";
 import { AboutRoute } from "./portal/about-page";
@@ -189,6 +192,7 @@ createRoot(root).render(
           {/* A leave or form as the paper HR files, outside the frame so it prints clean. */}
           <Route path="/hr/print/leave/:id" element={<PrintPage key="leave" of="leave" />} />
           <Route path="/hr/print/form/:id" element={<PrintPage key="form" of="form" />} />
+          <Route path="/hr/documents/:id" element={<DocumentPaperPage />} />
           {/* Zoho Inventory's Sales and Purchases, in Zoho's own frame (docs/PLAN.md 17). */}
           <Route path="/books" element={<BooksShell />}>
             <Route index element={<BooksIndex />} />
@@ -346,6 +350,12 @@ createRoot(root).render(
             <Route path="hr/timekeeping" element={<TimekeepingPage />} />
             <Route path="hr/leave" element={<LeaveListPage />} />
             <Route path="hr/leave/conversion" element={<VlConversionPage />} />
+            <Route path="hr/documents" element={<DocumentsPage />} />
+            <Route path="hr/import-export" element={<SheetsPage />} />
+            <Route path="hr/reports" element={<HrReportsPage />} />
+            <Route path="hr/reports/:key" element={<HrReportPage key="hr-report" />} />
+            <Route path="hr/import/:kind" element={<ImportPage key="import" />} />
+            <Route path="me/documents" element={<MyDocumentsPage />} />
             <Route path="me/leave" element={<MyLeavePage />} />
             <Route path="me/payslips" element={<MyPayslipsPage />} />
             <Route path="me/payslips/:month" element={<MyPayslipsPage />} />

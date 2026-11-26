@@ -127,7 +127,7 @@ export async function inTeamOf(db: Runner, leadId: number, personId: number): Pr
 }
 
 /** The working days each line takes, in one go (each person's schedule, the holidays). */
-async function withDays<T extends { personId: number; from: string; to: string; halfDay: boolean }>(
+export async function withDays<T extends { personId: number; from: string; to: string; halfDay: boolean }>(
   db: Runner,
   lines: T[],
 ): Promise<(T & { days: number })[]> {

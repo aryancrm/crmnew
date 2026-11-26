@@ -2453,6 +2453,58 @@ type-checked, not yet clicked through in a browser.
 **Not done.** The employee ID made compulsory (HR's *Missing* view lists who lacks one); a screen to
 move past covered sales' credit to someone (the data is kept for it).
 
+## 27. HR: documents, imports and reports (26 Nov 2026, on the `hr` branch)
+
+Asked by the backend department ("we must have proper document exports… be ready to handle forms in
+and out, import and export, and the generation of reports"), modelled on the documents part of the
+ovio project; the full working is [HR-PLAN.md](HR-PLAN.md) step 4c. Migration 0160.
+
+**What HR has now.**
+- **Letterhead and numbers on every HR paper.** Each company's details (address, phone, email, TIN,
+  foot line) in Company details, one tab per company; the registered name from `companies.ts`. HR's
+  documents are numbered by kind and year (`COE-2026-00001`); leave and form printouts by their row
+  (`LV-000123`, `OT-000045`).
+- **Documents** (Documents & reports → Documents): certificate of employment (with or without the
+  pay), clearance (the lead, Finance, Inventory and the Admin sign their part, HR last), memo, notice
+  to explain (acknowledged and answered by the person). Kept as issued; voided with a reason, never
+  deleted; every step in HR's trail. Everyone has Me → *My documents*.
+- **Import & export**: People (masterlist), Leave balances, Holidays: download as is or a blank
+  template; import with a column match, a test run that changes nothing, then save, each row saying
+  what changed or why not. The payroll register also as Excel.
+- **Reports**: ten (headcount, joiners and leavers, attrition, late/absent/hours, leave balances,
+  leave taken, overtime, leave and forms filed, due soon, missing details), each with a company
+  filter, Excel, and a print on the letterhead with who prepared it, remarks and signatories.
+
+**Scenarios and how each is checked** ("Auto" names the test; run them with
+`pnpm --filter @2mg/api exec vitest run src/hr/documents.test.ts src/hr/sheets.test.ts src/hr/reports.test.ts`):
+
+| # | Scenario | Expected | Auto (test) | By hand |
+|---|---|---|---|---|
+| 1 | HR issues a certificate of employment for a GPI employee | Numbered `COE-2026-00001`, on Getmeds Philippines Incorporated's letterhead, "has been employed … as … since …", the purpose they gave | `hr/documents.test.ts` "a certificate of employment…" | HR → Documents & reports → Documents → *New document* |
+| 2 | A certificate with the pay, then the person gets a raise | The paper keeps the pay of the day it was issued | same | — |
+| 3 | A paper was made wrong | *Void* with the reason: it stays listed as Void, its number is never reused, HR's trail writes both | same | Open it → *Void* |
+| 4 | A colleague opens someone's certificate; a seller tries to issue one | Refused | same | — |
+| 5 | A notice to explain: the person acknowledges, then answers | *Waiting* → *Received* → *Answered*; HR is told; their signature in *Received by* | "a notice to explain…" | Sign in as the person → Me → *My documents* |
+| 6 | A clearance: each desk signs its part, HR last | The lead, Finance, Inventory and the Admin each sign only their own part, with a note of what is still owed; HR only once the others signed; a second open clearance for the same person refused | "a clearance…" | Finance, Inventory, Admin, the lead open it from their alert |
+| 7 | A leave or form printout | Its number (`LV-000123`, `OT-000045`) and the employer's letterhead with the address and TIN from Company details | "leave and form printouts…" | Approved leave → *Print* |
+| 8 | The masterlist downloaded and brought straight back | Every row says *Nothing to change* | `hr/sheets.test.ts` "the exported masterlist…" | Import & export → People → *Download*, then *Import* the same file |
+| 9 | An import with mistakes | The test run changes nothing; *Save* keeps the rows that pass; each other row says why, by its line (no such person, "someday" isn't a day, the ID is one person's and the email another's) | "an import: a test run changes nothing…" | Import a file with a wrong date |
+| 10 | Opening leave balances from the old system | One adjustment per kind reaches the days left, with the reason; the same file again: nothing to change; 7.3 days refused (half-day steps) | "leave balances…" | Import & export → Leave balances |
+| 11 | Holidays from a sheet | Added once; the same day and name again is left as it is | "holidays…" | Import & export → Holidays |
+| 12 | The payroll register as Excel | The same headings as the CSV, the people, a total row | `hr/payroll.test.ts` | Payroll → a month → *Excel* |
+| 13 | Every report | Runs on the demo company; the total row adds the rows up; a company filter narrows it (and its letterhead); Excel has the title, the period and the same rows | `hr/reports.test.ts` | Documents & reports → Reports → any → *Excel* / *Print* |
+| 14 | Due soon | A probationary person's month-3 review and a birthday in the next 30 days are listed | same | Reports → *Due soon* |
+| 15 | A seller tries the reports, a download or an import | Refused | `hr/reports.test.ts`, `hr/sheets.test.ts` | — |
+
+Kept green: `hr/print.test.ts`, `hr/payroll.test.ts`, `hr/people.test.ts`, `hr/leave.test.ts`,
+`hr/forms.test.ts`, `hr/leave-credits.test.ts`, `hr/holidays.test.ts`, `hr/events.test.ts`,
+`hr/attendance.test.ts`, `points/points.test.ts`, `checks/scale.test.ts` (130 people),
+`db/migrate.test.ts`. The screens are type-checked, not yet clicked through in a browser.
+
+**Not done.** A person asking for their own certificate on the CRM; the government reports from
+payroll (SSS R3, PhilHealth RF-1, Pag-IBIG MCRF, BIR 2316, alphalist); Getmeds Philippines' address
+and TIN are for the Admin to type in Company details.
+
 ## 28. Several companies on one server: Bishnoi One's control panel (26 Nov 2026)
 
 Aryan, 26 Nov: "we need to make it multi company … each organisation its own ID and password …
@@ -3961,6 +4013,9 @@ medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 dat
 - 24 Nov (198), asked by the backend developer: **blue for what you press, again; the app's frame and the public pages redone.** The accent goes from the GetMeds green (19 Nov) back to blue `#2563eb` (`--color-brand` and the emerald, blue and sky scales in `styles.css`): buttons, links, the selected menu item, counts, the focus ring. What is fine, done or paid keeps the pharmacy green (`--color-good`). The frame (`shell.tsx`): white sidebar and page; the sidebar runs the full height with the person's workspace logo and "Bishnoi One / MedReps" at its top, folds to an icon rail with a sliding width, and the desk's name and the top bar's desk label are gone from the top bar; page titles match the home's greeting (28px semibold). Public pages (local only, not yet on main): the home page's hero and navbar, the About page (`/about`), Sign in and Sign up as split screens with card collages. Waits for Aryan's approval before main or deploy.
 - 25 Nov (199), Aryan, after seeing the sign-in pages side by side: "if it doesn't clash and there is no risk, push it"; asked which colour, since (198) undoes his 19 Nov green: **blue (his)**, green only for what is fine, done or paid. The frontend developer's work (198) joined to main. Checked: it joined with no clash but this change log; the web type-check and build pass; no API, database or sign-in change (the sign-in form sends the same login ID and password); the side menu of 12 demo logins (MedRep, team lead, head, CEO, Admin, Management, Finance, Dispatch, Inventory, HR and others) lists exactly the same pages as before, plus the desk's name at its top; all 166 of their menu pages opened with no error; the phone drawer and bottom bar work; the home page's styles and animations stay inside its own pages. Its used pictures were re-encoded at the same pixel size (29 MB to 7.6 MB: the welcome page and the sign-in pages open faster on a phone); a local AI tool's empty database (`.claude/data`) that came with it was left out and is now ignored.
 - 26 Nov (200), recorded by the backend developer: **one code per company everywhere.** `2mg` = 2MG Incorporated, `gpi` = Getmeds Philippines Incorporated. Orders and invoices called Getmeds Philippines `getmeds` while HR and payroll called it `gpi`, and the names were written five ways (2MG Inc., 2MG Incorporated, GetMeds Philippines Inc., Getmeds Philippines…). Now one list, `apps/api/src/companies.ts` (code, registered name, short name, invoice series), used by orders, invoices, HR, payroll, printouts and the books' headings. Migration 0159 moves the orders and invoices already made from `getmeds` to `gpi` and renames the invoice counter with it, so every invoice keeps its number and the `INV-` series goes on from the last one (tested on a copy made the old way: `companies.test.ts`). The group's own name (the company tree's top box, the settings) is unchanged.
+- 26 Nov (201), asked by the backend developer: **HR has no business in the stock.** HR's work is people, leave and pay, so HR's menu loses "Medicines & stock" (it sat under Look up), the API refuses HR on everything under `/api/inventory` (the medicines, prices, stock report, medicine requests: `NO_STOCK_ROLES` in `inventory/rules.ts`), and HR's top search finds no medicines. Everyone else is unchanged. Test: `hr/people.test.ts` "HR and the stock".
+- 26 Nov (202), asked by the backend developer after (201): **HR's search bar searches people.** HR's top search finds people only: anyone with an HR record, those who left too (marked "Left"), by name, login ID, email or employee ID, and opens their HR record (`/hr/people/:id`); no medicines, customers or orders. Its hint says so. Other roles' search is unchanged. Test: `hr/people.test.ts` "HR's search".
+- 26 Nov (203), asked by the backend developer: **HR's documents, imports and reports** (section 27, HR-PLAN 4c). Papers on each company's letterhead with numbers (certificates of employment, clearance signed desk by desk, memos and notices to explain acknowledged and answered by the person; leave and form printouts numbered too); the masterlist, leave balances and holidays downloaded and imported back with a test run first; ten HR reports on screen, in Excel and printed with who prepared them. Migration 0160. Tests: `hr/documents.test.ts`, `hr/sheets.test.ts`, `hr/reports.test.ts`.
 - 26 Nov (204), Aryan: **several companies on one server, each in its own database** (section 28).
   Asked first, then "Yes, start": an Org ID of six digits (his teammate's point), people sign in with
   their company's email domain (`@2mginc.com`, `@getmeds.ph`, his), no shared company password, our

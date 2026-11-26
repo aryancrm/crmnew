@@ -7,7 +7,8 @@
 // them, whom it went to or who decided it, the leads above the person, HR, the CEO, the Admin.
 
 import { sql } from "drizzle-orm";
-import { companyName } from "../companies";
+import { companyName, type CompanyCode } from "../companies";
+import { letterheadOf } from "../settings/service";
 import { bytesOf, keepFile } from "../files/store";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
@@ -96,8 +97,9 @@ async function signatureAt(db: Runner, personId: number | null, at: string | nul
   return found ? dataUrl(found.mime, await bytesOf(found)) : null;
 }
 
-type Signer = { box: string; id: number | null; name: string | null; at: string | null };
-async function signed(db: Runner, signers: Signer[]): Promise<Printout["signers"]> {
+export type Signer = { box: string; id: number | null; name: string | null; at: string | null };
+/** Each signer's box with the signature they had when they signed (none until they sign). */
+export async function signed(db: Runner, signers: Signer[]): Promise<Printout["signers"]> {
   return Promise.all(
     signers.map(async (one) => ({
       box: one.box,
@@ -117,7 +119,7 @@ type Person = {
 };
 const personColumns = sql`p.name, e.employee_code as "employeeCode", e.position, e.department, e.company`;
 
-const dayWords = (day: string) =>
+export const dayWords = (day: string) =>
   new Date(`${day}T00:00:00Z`).toLocaleDateString("en-PH", {
     weekday: "short",
     day: "numeric",
@@ -125,7 +127,7 @@ const dayWords = (day: string) =>
     year: "numeric",
     timeZone: "UTC",
   });
-const momentDay = (at: string) =>
+export const momentDay = (at: string) =>
   new Date(at).toLocaleDateString("en-PH", { day: "numeric", month: "long", year: "numeric", timeZone: "Asia/Manila" });
 const clockWords = (clock: string) => {
   const [h, m] = clock.split(":").map(Number) as [number, number];
@@ -202,6 +204,8 @@ export async function leavePrintout(db: Database, me: Me, leaveId: number): Prom
     kind: "leave",
     title: "Application for Leave",
     company: companyName(line.company ?? "2mg"),
+    code: paperCode("LV", leaveId),
+    letterhead: await letterheadOf(db, (line.company ?? "2mg") as CompanyCode),
     person: head(line),
     filedOn: momentDay(line.madeAt),
     status: "Approved",
@@ -235,6 +239,10 @@ export async function leavePrintout(db: Database, me: Me, leaveId: number): Prom
     ]),
   };
 }
+
+/** A leave's or a form's number on paper: its kind and its row, LV-000123 (never reused). */
+const paperCode = (prefix: string, id: number) => `${prefix}-${String(id).padStart(6, "0")}`;
+const FORM_PREFIX: Record<FormKind, string> = { ob: "OB", wfh: "WFH", ot: "OT", eod: "DAR", incident: "IR" };
 
 const FORM_TITLES: Record<FormKind, string> = {
   ob: "Official Business Form",
@@ -346,6 +354,8 @@ export async function formPrintout(db: Database, me: Me, formId: number): Promis
     kind: row.kind,
     title: FORM_TITLES[row.kind],
     company: companyName(row.company ?? "2mg"),
+    code: paperCode(FORM_PREFIX[row.kind], formId),
+    letterhead: await letterheadOf(db, (row.company ?? "2mg") as CompanyCode),
     person: { name: row.name, employeeCode: row.employeeCode, position: row.position, department: row.department },
     filedOn: momentDay(row.madeAt),
     status: row.kind === "incident" ? "Taken in" : "Approved",
