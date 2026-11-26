@@ -26,6 +26,7 @@ import {
   setSecondApprover,
   vlConversionReport,
 } from "./credits";
+import { documentRoutes } from "./documents-routes";
 import { hrHistory } from "./events";
 import { addHoliday, archiveHoliday, holidayYear } from "./holidays";
 import {
@@ -126,6 +127,10 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
     "/api/hr/leave/conversion",
     "/api/hr/credits/*",
     "/api/hr/print/*",
+    "/api/hr/documents/*",
+    "/api/hr/import/*",
+    "/api/hr/export/*",
+    "/api/hr/reports/*",
     "/api/hr/signature",
     "/api/hr/timekeeping",
     "/api/hr/timekeeping/*",
@@ -294,6 +299,7 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
       ),
     );
   });
+  documentRoutes(app, db);
   app.get("/api/hr/print/leave/:id", async (c) => c.json(await leavePrintout(db, c.get("me"), idParam(c))));
   app.get("/api/hr/print/form/:id", async (c) => c.json(await formPrintout(db, c.get("me"), idParam(c))));
   app.get("/api/hr/forms/mine", async (c) => c.json({ lines: await myForms(db, c.get("me")) }));

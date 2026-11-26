@@ -4442,7 +4442,8 @@ export type HrEventKind =
   | "paper"
   | "attendance"
   | "leave"
-  | "move";
+  | "move"
+  | "document";
 export type HrPaperKind = "contract" | "government_id" | "certificate" | "clearance" | "medical" | "other";
 /** A person's papers on their HR record: the ones kept, then the ones taken off (archived). */
 export type HrPapers = {
@@ -5082,6 +5083,10 @@ export type Printout = {
   kind: "leave" | FormKind;
   title: string;
   company: string;
+  /** Its number on paper (LV-000123, OT-000045). */
+  code: string;
+  /** The employer's letterhead: its registered name and details. */
+  letterhead: Letterhead;
   person: {
     name: string;
     employeeCode: string | null;
@@ -5102,6 +5107,85 @@ export type Printout = {
     image: string | null;
   }[];
 };
+
+/** A company's letterhead on HR's papers: the registered name (companies.ts) and the details the
+ *  Admin keeps in Company details. */
+export type Letterhead = {
+  code: Company;
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  tin: string;
+  footer: string;
+};
+
+// ------------------------------------------------------------------ HR's documents
+
+/** coe: certificate of employment; coe_pay: with the pay; nte: notice to explain. */
+export type HrDocKind = "coe" | "coe_pay" | "clearance" | "memo" | "nte";
+/** A clearance's sign-offs, in order: HR signs last. */
+export type ClearanceDesk = "lead" | "finance" | "inventory" | "admin" | "hr";
+export type HrDocStatus = "issued" | "waiting" | "received" | "answered" | "cleared" | "void";
+
+export type HrDocRow = {
+  id: number;
+  code: string;
+  kind: HrDocKind;
+  title: string;
+  personId: number;
+  name: string;
+  employeeCode: string | null;
+  company: Company;
+  subject: string | null;
+  issuedAt: string;
+  issuedBy: string;
+  status: HrDocStatus;
+  /** In words: "Waiting for Finance, Inventory", "Received 26 Nov". */
+  statusWords: string;
+};
+
+export type HrDocList = {
+  rows: HrDocRow[];
+  kinds: { key: HrDocKind; label: string }[];
+  can: { issue: boolean };
+};
+
+export type HrDocInput = {
+  kind: HrDocKind;
+  personId: number;
+  subject?: string | null;
+  body?: string | null;
+  replyBy?: string | null;
+};
+
+export type HrDocPage = {
+  id: number;
+  code: string;
+  kind: HrDocKind;
+  title: string;
+  status: HrDocStatus;
+  statusWords: string;
+  letterhead: Letterhead;
+  person: { id: number; name: string; employeeCode: string | null; position: string | null; department: string | null };
+  issuedOn: string;
+  issuedBy: string;
+  /** Label and value lines above the text (a memo's To, From, Date, Subject). */
+  fields: { label: string; value: string }[];
+  /** The letter, paragraph by paragraph. */
+  paragraphs: string[];
+  /** A notice to explain: the day to answer by, and the answer. */
+  replyBy: string | null;
+  reply: { text: string; at: string } | null;
+  /** A clearance's desks. */
+  clearance: { desk: ClearanceDesk; label: string; signer: string | null; at: string | null; note: string | null }[] | null;
+  signers: Printout["signers"];
+  void: { at: string; by: string; reason: string } | null;
+  can: { void: boolean; acknowledge: boolean; reply: boolean; sign: ClearanceDesk[] };
+};
+
+/** A person's own documents, and the clearances waiting for their desk's sign-off. */
+export type MyDocuments = { rows: HrDocRow[]; toSign: HrDocRow[] };
 
 // ------------------------------------------------------------------ payroll
 

@@ -618,6 +618,7 @@ function deskFor(me: Me): Space {
                 icon: CalendarDays,
               },
               { to: "/me/payslips", label: "My payslips", icon: ReceiptText },
+              { to: "/me/documents", label: "My documents", icon: FileText },
             ],
             "Me",
           ),
@@ -1548,6 +1549,10 @@ function ownDesk(me: Me): Space {
           { to: "/vacant-seats", label: "Vacant seats", icon: UserX },
           { to: "/hr/schedules", label: "Schedules", icon: Timer },
           { to: "/hr/holidays", label: "Holidays", icon: CalendarHeart },
+          // Papers in and out (26 Nov): HR's documents, its reports, and its imports and exports.
+          folder("Documents & reports", FileText, [
+            { to: "/hr/documents", label: "Documents", icon: FileText },
+          ]),
         ]),
         icon: Users,
       };
