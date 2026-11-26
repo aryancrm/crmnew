@@ -4246,3 +4246,6 @@ up right.
   import neither reads nor changes it, and finds a person by employee ID or login email alone. (4)
   The purchase form's sample bank account no longer names GetMeds. Checked again: no screen or paper
   offers or shows the other company (the old 2026 chart page, out of every menu, keeps its title).
+  **Live the same night** (server and screens at 30667b6, with pull request 8): the server's log
+  said "[GPI] company details: 2MG's from the old migration replaced by its own", and both
+  companies' databases took the team's 0163-0165. All 863 server and 41 screen tests passed.
