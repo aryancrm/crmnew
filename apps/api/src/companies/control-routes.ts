@@ -1,8 +1,9 @@
 // Bishnoi One's control panel (/control on the website): the companies on the server, added,
 // changed, paused and resumed, and their Admin given a new one-time password. Only for the people
-// who run Bishnoi One, on logins of its own: a short login ID (no email), their own password and,
-// every time, the code from the authenticator app on their phone (Aryan, 26 Nov 2026). A panel
-// login is not a login of any company: it never clashes with one, and it opens no company's data.
+// who run Bishnoi One, on logins of its own: a short login ID (no email) and their own password of
+// 8 characters or more (Aryan, 26 Nov 2026: no phone code); five wrong tries lock it for 15 minutes.
+// A panel login is not a login of any company: it never clashes with one, and it opens no
+// company's data.
 //
 // The first panel login is made with the setup key the server writes in its log on start while
 // there is none (whoever can read the server's log runs the server); after that, never again.
@@ -14,17 +15,14 @@ import { deleteCookie, getCookie, setCookie } from "hono/cookie";
 import { secureHeaders } from "hono/secure-headers";
 import { z } from "zod";
 import { hashPassword, passwordMatches, passwordProblem } from "../auth/password";
-import { newKey, setupUri, stepOfCode } from "../auth/totp";
 import { type Database, rows } from "../db/index";
 import { readBody, Refusal } from "../http";
-import { seal, unseal } from "../online/secrets";
 import type { CompanyList } from "./registry";
 
 export const CONTROL_COOKIE = "bo_control";
 const SESSION_HOURS = 12;
 const TRIES = 5;
 const LOCK_MINUTES = 15;
-const SETUP_MINUTES = 15;
 const LOGIN_ID = /^[a-z0-9][a-z0-9._-]{1,31}$/;
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
@@ -35,8 +33,6 @@ type PanelPerson = {
   loginId: string;
   name: string;
   passwordHash: string;
-  totpSealed: string;
-  totpStep: number | null;
   active: boolean;
   failedTries: number;
   /** Locked for a while after too many wrong tries (worked out by the database's clock). */
@@ -44,14 +40,7 @@ type PanelPerson = {
 };
 
 const PERSON = sql`id::int as id, login_id as "loginId", name, password_hash as "passwordHash",
-  totp_sealed as "totpSealed", totp_step::int as "totpStep", active, failed_tries as "failedTries",
-  coalesce(locked_until > now(), false) as locked`;
-
-/** A key sealed with the code's own local key would protect nothing on a real server. */
-function canSeal(): void {
-  if (!process.env.SECRETS_KEY && (process.env.NODE_ENV === "production" || process.env.DATABASE_URL))
-    throw new Refusal(409, "not_ready", "The control panel isn't ready on this server yet: SECRETS_KEY needs to be set.");
-}
+  active, failed_tries as "failedTries", coalesce(locked_until > now(), false) as locked`;
 
 export function controlRoutes(control: Database, list: CompanyList, options: { secure: boolean }) {
   const app = new Hono<ControlEnv>();
@@ -60,8 +49,6 @@ export function controlRoutes(control: Database, list: CompanyList, options: { s
   // ---- The first panel login: the setup key from the server's log ----
   let setupKey: string | null = null;
   let setupWrong = { tries: 0, until: 0 };
-  /** Waiting for the first code from the phone: ticket → the new login. */
-  const waiting = new Map<string, { personId: number; until: number }>();
 
   async function anyActive(): Promise<boolean> {
     const [found] = await rows(control, sql`select 1 as one from control_person where active limit 1`);
@@ -97,20 +84,6 @@ export function controlRoutes(control: Database, list: CompanyList, options: { s
       path: "/api/control",
       maxAge: SESSION_HOURS * 60 * 60,
     });
-  }
-
-  /** The code from the phone, right and not used before; the step it was for is kept. */
-  async function codeRight(person: PanelPerson, code: string): Promise<boolean> {
-    let key: string;
-    try {
-      key = unseal(person.totpSealed);
-    } catch {
-      throw new Refusal(409, "unreadable", "This login's phone code can't be read on this server (its SECRETS_KEY changed).");
-    }
-    const step = stepOfCode(key, code.replace(/\s/g, ""));
-    if (step === null || (person.totpStep !== null && step <= person.totpStep)) return false;
-    await control.execute(sql`update control_person set totp_step = ${step} where id = ${person.id}`);
-    return true;
   }
 
   const signedIn = async (c: Context<ControlEnv>, next: () => Promise<void>) => {
@@ -164,7 +137,6 @@ export function controlRoutes(control: Database, list: CompanyList, options: { s
       }),
     );
     if (await anyActive()) throw new Refusal(409, "done", "The control panel is set up already: sign in.");
-    canSeal();
     if (Date.now() < setupWrong.until) throw new Refusal(429, "locked", "Too many wrong setup keys. Try again in 15 minutes.");
     if (!setupKey || input.key !== setupKey) {
       setupWrong = { tries: setupWrong.tries + 1, until: setupWrong.tries + 1 >= TRIES ? Date.now() + LOCK_MINUTES * 60_000 : 0 };
@@ -173,49 +145,31 @@ export function controlRoutes(control: Database, list: CompanyList, options: { s
     }
     const problem = passwordProblem(input.password);
     if (problem) throw new Refusal(400, "invalid", problem, "password");
-    const key = newKey();
-    // An earlier setup that never got its first code is replaced.
+    // An earlier setup that never finished is replaced.
     await control.execute(sql`delete from control_person where not active and login_id = ${input.loginId}`);
     const [made] = await rows<{ id: number }>(
       control,
-      sql`insert into control_person (login_id, name, password_hash, totp_sealed)
-        values (${input.loginId}, ${input.name}, ${await hashPassword(input.password)}, ${seal(key)})
+      sql`insert into control_person (login_id, name, password_hash, active)
+        values (${input.loginId}, ${input.name}, ${await hashPassword(input.password)}, true)
         returning id::int as id`,
     );
-    const ticket = randomBytes(24).toString("base64url");
-    waiting.set(ticket, { personId: made?.id as number, until: Date.now() + SETUP_MINUTES * 60_000 });
-    c.header("cache-control", "no-store");
-    return c.json({ ticket, key, uri: setupUri(input.loginId, key, "Bishnoi One control") });
-  });
-
-  app.post("/api/control/setup/code", async (c) => {
-    const input = await readBody(c, z.object({ ticket: z.string().min(10).max(100), code: z.string().trim().min(6, "Type the 6-digit code.").max(12) }));
-    const wait = waiting.get(input.ticket);
-    if (!wait || wait.until < Date.now()) throw new Refusal(400, "expired", "This setup took too long. Start again.");
-    const [person] = await rows<PanelPerson>(control, sql`select ${PERSON} from control_person where id = ${wait.personId}`);
-    if (!person || person.active) throw new Refusal(400, "expired", "Start again.");
-    if (await anyActive()) throw new Refusal(409, "done", "The control panel is set up already: sign in.");
-    if (!(await codeRight(person, input.code)))
-      throw new Refusal(400, "wrong_code", "That code isn't right. Check the phone's time and type the newest code.", "code");
-    await control.execute(sql`update control_person set active = true where id = ${person.id}`);
-    waiting.delete(input.ticket);
     setupKey = null;
-    await list.event(person.id, null, "panel_login_made", { loginId: person.loginId });
-    await startSession(c, person.id);
-    return c.json({ me: { loginId: person.loginId, name: person.name } });
+    await list.event(made?.id as number, null, "panel_login_made", { loginId: input.loginId });
+    await startSession(c, made?.id as number);
+    c.header("cache-control", "no-store");
+    return c.json({ me: { loginId: input.loginId, name: input.name } });
   });
 
-  // ---- Signing in: login ID, password and the code from the phone, all three every time ----
+  // ---- Signing in: the login ID and the password (no phone code: Aryan, 26 Nov) ----
   app.post("/api/control/login", async (c) => {
     const input = await readBody(
       c,
       z.object({
         loginId: z.string().trim().toLowerCase().min(1, "Type your login ID.").max(40),
         password: z.string().min(1, "Type your password.").max(200),
-        code: z.string().trim().min(6, "Type the 6-digit code from your phone.").max(12),
       }),
     );
-    const wrong = new Refusal(401, "wrong_login", "Wrong login ID, password or code.");
+    const wrong = new Refusal(401, "wrong_login", "Wrong login ID or password.");
     const [person] = await rows<PanelPerson>(control, sql`select ${PERSON} from control_person where login_id = ${input.loginId}`);
     if (!person?.active) {
       // As long as a real check, so a wrong ID can't be told from a wrong password.
@@ -233,7 +187,6 @@ export function controlRoutes(control: Database, list: CompanyList, options: { s
     );
     if ((counted?.tries ?? 0) > TRIES) throw new Refusal(429, "locked", `Too many wrong tries. Try again after ${LOCK_MINUTES} minutes.`);
     if (!(await passwordMatches(input.password, person.passwordHash))) throw wrong;
-    if (!(await codeRight(person, input.code))) throw wrong;
     await startSession(c, person.id);
     await list.event(person.id, null, "signed_in");
     return c.json({ me: { loginId: person.loginId, name: person.name } });

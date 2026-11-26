@@ -2,13 +2,12 @@
 // in its own database; a person signs in to their company by the domain after the @; a session
 // of one company opens nothing in another; a new company starts with its own Admin and, if asked,
 // another company's stock, and nothing else of it; a paused company's people can't work; and the
-// control panel lets in only its own logins, with the phone's code every time.
+// control panel lets in only its own logins (their ID and password; no phone code since 26 Nov).
 
 import { createHmac } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
-import { codeAt, stepAt } from "../auth/totp";
 import { runChecks } from "../checks/integrity";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
@@ -28,7 +27,6 @@ let router: ReturnType<typeof companyRouter>;
 let setupKey: string | null;
 let gm: Running;
 let gmPassword: string;
-let panelKey = "";
 let panelCookie = "";
 
 /** The cookies a response sets, joined onto those a browser had (a later one replaces its name). */
@@ -51,7 +49,6 @@ const send = (path: string, options: { method?: string; body?: unknown; cookie?:
 const login = (email: string, password: string, cookie = "") => send("/api/auth/login", { body: { email, password }, cookie });
 const codeOf = async (response: Response) => ((await response.clone().json()) as { error?: { code: string } }).error?.code;
 const count = async (db: Database, query: ReturnType<typeof sql>) => (await rows<{ n: number }>(db, query))[0]?.n ?? 0;
-const phoneCode = () => codeAt(panelKey, stepAt(Date.now()));
 
 beforeAll(async () => {
   main = openDatabase({ dir: "memory" });
@@ -212,7 +209,7 @@ describe("the first company's login ID on the list's first start", () => {
 });
 
 describe("the control panel", () => {
-  it("is set up once, with the key from the server's log and the code from the phone", async () => {
+  it("is set up once, with the key from the server's log (no phone code: Aryan, 26 Nov)", async () => {
     expect(await (await send("/api/control/me")).json()).toEqual({ me: null, setup: true });
     expect(setupKey).toBeTruthy();
     const wrong = await send("/api/control/setup", { body: { key: "not-it", loginId: "1001", name: "Aryan", password: PANEL_PASSWORD } });
@@ -221,14 +218,10 @@ describe("the control panel", () => {
     // Eight characters are enough (Aryan, 26 Nov); seven aren't.
     expect(await codeOf(await send("/api/control/setup", { body: { key: setupKey, loginId: "1001", name: "Aryan", password: "seven77" } }))).toBe("invalid");
 
-    const started = await send("/api/control/setup", { body: { key: setupKey, loginId: "1001", name: "Aryan", password: PANEL_PASSWORD } });
-    expect(started.status).toBe(200);
-    const { ticket, key, uri } = (await started.json()) as { ticket: string; key: string; uri: string };
-    expect(uri).toContain("otpauth://totp/");
-    panelKey = key;
-    expect(await codeOf(await send("/api/control/setup/code", { body: { ticket, code: "000000" } }))).toBe("wrong_code");
-    const done = await send("/api/control/setup/code", { body: { ticket, code: phoneCode() } });
+    // Made and signed in at once.
+    const done = await send("/api/control/setup", { body: { key: setupKey, loginId: "1001", name: "Aryan", password: PANEL_PASSWORD } });
     expect(done.status).toBe(200);
+    expect(await done.clone().json()).toEqual({ me: { loginId: "1001", name: "Aryan" } });
     panelCookie = jar("", done);
     expect(await (await send("/api/control/me", { cookie: panelCookie })).json()).toEqual({ me: { loginId: "1001", name: "Aryan" }, setup: false });
     expect(await codeOf(await send("/api/control/setup", { body: { key: setupKey, loginId: "1002", name: "X", password: PANEL_PASSWORD } }))).toBe("done");
@@ -236,14 +229,12 @@ describe("the control panel", () => {
     expect((await send("/api/control/companies", { cookie: jar("", await login("naresh@2mg.test", PASSWORD)) })).status).toBe(401);
   });
 
-  it("signs in with the login ID, password and phone code together, and a code works once", async () => {
-    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 60_000 });
-    const code = phoneCode();
-    expect((await send("/api/control/login", { body: { loginId: "1001", password: PANEL_PASSWORD, code: "123456" } })).status).toBe(401);
-    expect((await send("/api/control/login", { body: { loginId: "1001", password: "wrong-password-1", code } })).status).toBe(401);
-    expect((await send("/api/control/login", { body: { loginId: "1001", password: PANEL_PASSWORD, code } })).status).toBe(200);
-    expect((await send("/api/control/login", { body: { loginId: "1001", password: PANEL_PASSWORD, code } })).status).toBe(401);
-    vi.useRealTimers();
+  it("signs in with the login ID and the password", async () => {
+    expect((await send("/api/control/login", { body: { loginId: "1001", password: "wrong-password-1" } })).status).toBe(401);
+    expect((await send("/api/control/login", { body: { loginId: "nobody", password: PANEL_PASSWORD } })).status).toBe(401);
+    const signed = await send("/api/control/login", { body: { loginId: "1001", password: PANEL_PASSWORD } });
+    expect(signed.status).toBe(200);
+    expect((await send("/api/control/companies", { cookie: jar("", signed) })).status).toBe(200);
   });
 
   it("lists and adds companies, and gives a company's Admin a new one-time password", async () => {
@@ -290,9 +281,9 @@ describe("the control panel", () => {
 
   it("locks a panel login after five wrong tries", async () => {
     for (let i = 0; i < 5; i += 1)
-      await send("/api/control/login", { body: { loginId: "1001", password: `wrong-${i}-password`, code: "123456" } });
+      await send("/api/control/login", { body: { loginId: "1001", password: `wrong-${i}-password` } });
     vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 120_000 });
-    const locked = await send("/api/control/login", { body: { loginId: "1001", password: PANEL_PASSWORD, code: phoneCode() } });
+    const locked = await send("/api/control/login", { body: { loginId: "1001", password: PANEL_PASSWORD } });
     expect(locked.status).toBe(429);
     vi.useRealTimers();
   });

@@ -1,12 +1,11 @@
 // Bishnoi One's control panel (/control, Aryan 26 Nov 2026): the companies on Bishnoi One, each with
-// its own data. Only for the people who run Bishnoi One, on logins of their own (a short ID, their
-// password and the code from their phone, every time); no company's people or data are here.
+// its own data. Only for the people who run Bishnoi One, on logins of their own (a short ID and their
+// password; no phone code, Aryan 26 Nov); no company's people or data are here.
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Copy, KeyRound, LogOut, Pause, Pencil, Play, Plus, ShieldCheck } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 import { api } from "../api";
-import { QrCode } from "../account/qr";
 import { Button, Card, Dialog, Field, PageHead, Pill, Problem, useAction } from "../ui";
 
 type PanelMe = { loginId: string; name: string };
@@ -115,7 +114,7 @@ function Narrow({ title, sub, children }: { title: string; sub: ReactNode; child
 function SignIn() {
   const client = useQueryClient();
   const action = useAction();
-  const [form, setForm] = useState({ loginId: "", password: "", code: "" });
+  const [form, setForm] = useState({ loginId: "", password: "" });
   const set = (key: keyof typeof form) => (event: { target: { value: string } }) => setForm({ ...form, [key]: event.target.value });
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -125,7 +124,7 @@ function SignIn() {
     });
   }
   return (
-    <Narrow title="Sign in" sub="Your control panel login, your password, and the code your phone's authenticator app shows now.">
+    <Narrow title="Sign in" sub="Your control panel login ID and password.">
       <form onSubmit={submit} className="flex flex-col gap-3">
         <Field label="Login ID" error={action.at("loginId")}>
           {(props) => <input {...props} className="field" autoComplete="username" value={form.loginId} onChange={set("loginId")} />}
@@ -133,12 +132,7 @@ function SignIn() {
         <Field label="Password" error={action.at("password")}>
           {(props) => <input {...props} className="field" type="password" autoComplete="current-password" value={form.password} onChange={set("password")} />}
         </Field>
-        <Field label="Code from your phone" error={action.at("code")}>
-          {(props) => (
-            <input {...props} className="field tracking-[0.3em]" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={form.code} onChange={set("code")} />
-          )}
-        </Field>
-        <Problem message={action.general(["loginId", "password", "code"])} />
+        <Problem message={action.general(["loginId", "password"])} />
         <Button type="submit" variant="primary" disabled={action.busy}>
           Sign in
         </Button>
@@ -151,50 +145,21 @@ function Setup() {
   const client = useQueryClient();
   const action = useAction();
   const [form, setForm] = useState({ key: "", loginId: "", name: "", password: "", again: "" });
-  const [ticket, setTicket] = useState<{ ticket: string; key: string; uri: string } | null>(null);
-  const [code, setCode] = useState("");
   const [mismatch, setMismatch] = useState(false);
   const set = (key: keyof typeof form) => (event: { target: { value: string } }) => setForm({ ...form, [key]: event.target.value });
 
+  // One step (Aryan, 26 Nov: no phone code): the login is made and signed in at once.
   async function start(event: FormEvent) {
     event.preventDefault();
     setMismatch(form.password !== form.again);
     if (form.password !== form.again) return;
     await action.run(async () => {
-      setTicket(await api("/api/control/setup", { body: { key: form.key, loginId: form.loginId, name: form.name, password: form.password } }));
-    });
-  }
-  async function finish(event: FormEvent) {
-    event.preventDefault();
-    if (!ticket) return;
-    await action.run(async () => {
-      const done = await api<{ me: PanelMe }>("/api/control/setup/code", { body: { ticket: ticket.ticket, code } });
+      const done = await api<{ me: PanelMe }>("/api/control/setup", {
+        body: { key: form.key, loginId: form.loginId, name: form.name, password: form.password },
+      });
       client.setQueryData(ME_KEY, { me: done.me, setup: false });
     });
   }
-
-  if (ticket)
-    return (
-      <Narrow title="Add it to your phone" sub="Scan this with an authenticator app (Google Authenticator, Microsoft Authenticator, 1Password), then type the code it shows.">
-        <form onSubmit={finish} className="flex flex-col items-center gap-4">
-          <QrCode text={ticket.uri} label="The control panel's code for your authenticator app" />
-          <div className="w-full rounded-xl bg-slate-50 px-3 py-2 text-center text-xs text-slate-500">
-            Or type this key in the app: <span className="font-mono text-slate-800 break-all">{ticket.key}</span>
-          </div>
-          <div className="w-full">
-            <Field label="Code from your phone" error={action.at("code")}>
-              {(props) => (
-                <input {...props} className="field tracking-[0.3em]" inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={code} onChange={(event) => setCode(event.target.value)} />
-              )}
-            </Field>
-          </div>
-          <Problem message={action.general(["code"])} />
-          <Button type="submit" variant="primary" className="w-full" disabled={action.busy}>
-            Finish and sign in
-          </Button>
-        </form>
-      </Narrow>
-    );
 
   return (
     <Narrow
@@ -219,7 +184,7 @@ function Setup() {
         </Field>
         <Problem message={action.general(["key", "loginId", "name", "password"])} />
         <Button type="submit" variant="primary" disabled={action.busy}>
-          Next: the phone code
+          Make my login and sign in
         </Button>
       </form>
     </Narrow>

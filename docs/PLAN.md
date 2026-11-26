@@ -2543,9 +2543,10 @@ the inventory" for GetMeds.
   (`?org=`), and a request to join goes by its email's domain.
 - **Our control panel** (`one.bishnoi.ai/control`; `/admin` is each company's own Admin pages): only
   for the people who run Bishnoi One, on logins of its own that are no company's: a short login ID
-  (no email), a password of 8 characters or more (12 until Aryan's word, 26 Nov) and, every time, the code from the authenticator
-  app on the phone. Five wrong tries lock it for 15 minutes. The first panel login is made with the
-  setup key the server writes in its log while there is none; after that the key is gone.
+  (no email) and a password of 8 characters or more; **no phone code** (Aryan, 26 Nov: "remove it";
+  until then 12 characters and the authenticator app's code every time). Five wrong tries lock it
+  for 15 minutes. The first panel login is made with the setup key the server writes in its log
+  while there is none (a new key at every start until then); after that the key is gone.
 - **Adding a company** (in the panel): its name, short code and login ID (an email on its own domain,
   not Gmail or the like). The panel makes its database, its company tree (one box per sales channel),
   and its first System admin on that login ID with a one-time password, shown once for Aryan to give
@@ -4111,3 +4112,10 @@ medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 dat
   commit `21f843c`), a database backup just before; the live API applied 0161 and 0162. The full
   test run had caught one mistake before it went out: the agency-waiting check came out unknown
   for orders with no type and hid their debts from Management's check (fixed: 851 tests green).
+- 26 Nov (209), Aryan, making his control panel login: "make the password the normal 6 or 8, not
+  12; what is this phone code, is it needed?" Told him what the code protects (the panel gives
+  any company's Admin a new password) and that it isn't needed to work; he said **"Remove it"**.
+  The control panel now signs in with its login ID and a password of 8 characters or more; setup
+  is one form (the setup key, the login ID, the name, the password twice) and signs in at once;
+  five wrong tries still lock a login for 15 minutes. Control migration 0002 drops the kept
+  authenticator keys. A company's own people's two-step sign-in is unchanged.
