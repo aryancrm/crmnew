@@ -112,6 +112,9 @@ export type Me = {
   viewedBy?: { id: number; name: string; role: string } | null;
   /** The department this session was opened for (the sign-in page it was made on). */
   workspace?: string | null;
+  /** A desk's shared screen (Management, Finance or Dispatch), opened with the desks' common
+   *  password (Aryan, 27 Nov): nobody's own, so no one person's leave, payslips or messages on it. */
+  deskScreen?: "management" | "finance" | "dispatch" | null;
   /** The box picked on a lead's team switch for this request (?unit=, checked): the page counts the
    *  seats in it and under it (org/scope.ts). */
   unit?: number | null;
@@ -411,6 +414,9 @@ export type GlMarkInput = {
 /** A case's own steps the customer hears of by email (Aryan, 26 Nov, as the old CRM). */
 export type CaseMailEvent = "enquiry" | "quotation" | "gl_received" | "gl_verified";
 /** Automatic emails on a case: off until the Admin switches them on, then each step its own. */
+/** The desks' common password, as the Admin panel shows it: whether it is set, never the password. */
+export type DeskPasswordState = { on: boolean; savedAt: string | null; savedBy: string | null };
+
 export type CaseMailSettings = { enabled: boolean; events: Record<CaseMailEvent, boolean> };
 
 /** Another vendor's price for one piece of a medicine, for PCSO's quotation 2 or 3. Centavos. */

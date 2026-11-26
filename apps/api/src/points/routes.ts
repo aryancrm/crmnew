@@ -4,6 +4,7 @@ import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
 import { type Env, idParam, readBody } from "../http";
+import { saveDeskPassword } from "../auth/desk-password";
 import { saveCaseMail, saveCompany, savePointsProgram, settingsOf } from "../settings/service";
 import type { CompanyInfo } from "../types";
 import { addPointsByPhone, adjustPoints, openAccountFor, pointsAccount, pointsList } from "./service";
@@ -83,6 +84,13 @@ export function pointsRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
       }),
     );
     await saveCaseMail(db, c.get("me"), input);
+    return c.json({ ok: true });
+  });
+  // The desks' common password (Aryan, 27 Nov): typed by the Admin here, kept only as a hash. Null
+  // closes the desk screens.
+  app.post("/api/settings/desk-password", async (c) => {
+    const input = await readBody(c, z.object({ password: z.string().max(200).nullable() }));
+    await saveDeskPassword(db, c.get("me"), input.password);
     return c.json({ ok: true });
   });
   app.post("/api/settings/points", async (c) => {

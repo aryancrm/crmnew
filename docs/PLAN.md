@@ -4268,4 +4268,20 @@ up right.
   Management, Finance and Dispatch's common password back, as the shared desk screen of 19 Nov
   (125, 126; removed by 164): being rebuilt, the password typed by the company's Admin in the
   Admin panel, never in the code.
+- 27 Nov (231), Aryan (asked: "own ID + the common password, or password only on a shared desk
+  screen?" He chose **the shared desk screen**, as 19 Nov (125, 126)): **the desks' common password
+  is back**, reversing 164's "no desk sign-in" for these three desks only. The company's Admin (or
+  the CEO) types it in the Admin panel (Company details → "Desk password: Management, Finance,
+  Dispatch"; typed twice, kept only as a scrypt hash in the company's own database, never shown
+  again, never in the code; "Take it off" closes the desk screens). While it is set, Management's,
+  Finance's and Dispatch's sign-in pages open with **the desk password alone** ("Sign in with my own
+  ID instead" under it): the desk's shared screen, as its lead seat (else whoever works there),
+  named "Finance desk" and so on, until the working day ends. On it: the desk's work only; nobody's
+  own leave, forms, payslips, documents, day, messages, profile, password, two-step or accounts
+  (refused by the API, not only hidden), nobody marked present, nobody started (each starts on their
+  own login); what is done on an order is written in the name of the person it was given to when
+  they started today (18 Nov's rule), else in the desk's. Five wrong passwords close that desk's
+  screen for 15 minutes, never anyone's own login. A new password, or none, signs out every desk
+  screen open. Migration 0166 clears any desk session left from before 23 Nov. No PINs (21 Nov's
+  were not asked for again). Tests: `auth/desk.test.ts` (5), `account/desk-sign-in.test.tsx` (3).
 

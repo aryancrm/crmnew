@@ -1007,6 +1007,21 @@ function Account({ me, role }: { me: Me; role: string }) {
     }
   }
 
+  // A desk's shared screen (the desks' common password): the desk's name and Sign out, nothing of
+  // one person's (no profile, password or other accounts).
+  if (me.deskScreen)
+    return (
+      <button
+        type="button"
+        onClick={() => void signOut()}
+        title={`Sign out of the ${me.name.toLowerCase()} screen`}
+        className="flex h-10 shrink-0 items-center gap-2 rounded-lg px-2 text-[13px] font-medium text-ink-2 hover:bg-head hover:text-ink"
+      >
+        <span className="hidden sm:inline">{me.name}</span>
+        <LogOut size={15} aria-hidden="true" /> Sign out
+      </button>
+    );
+
   return (
     <div ref={box} className="relative">
       <button

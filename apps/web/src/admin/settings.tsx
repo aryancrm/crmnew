@@ -3,7 +3,7 @@
 // the Admin panel showed 2MG's and GetMeds's both"): its quotations, invoices and HR's papers.
 
 import type { CompanyCode } from "@2mg/api/companies";
-import type { CaseMailEvent, CaseMailSettings, CompanyInfo, PointsProgram } from "@2mg/api/types";
+import type { CaseMailEvent, CaseMailSettings, CompanyInfo, DeskPasswordState, PointsProgram } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { api } from "../api";
@@ -33,6 +33,7 @@ export function SettingsPage() {
         companies: Record<CompanyCode, CompanyInfo>;
         points: PointsProgram;
         caseEmails: CaseMailSettings;
+        deskPassword: DeskPasswordState;
       }>("/api/settings"),
   });
   if (!query.data) return <PageState query={query} what="the settings" />;
@@ -44,6 +45,7 @@ export function SettingsPage() {
       />
       <CompanyForm code="2mg" start={query.data.company} />
       <CaseEmails start={query.data.caseEmails} />
+      <DeskPassword state={query.data.deskPassword} />
     </div>
   );
 }
@@ -158,3 +160,96 @@ function CompanyForm({ code, start }: { code: CompanyCode; start: CompanyInfo })
     </form>
   );
 }
+
+/** The desks' common password (Aryan, 19 Nov, back on 27 Nov): it opens Management's, Finance's and
+ *  Dispatch's shared screen; each person's own login stays theirs. Typed here, kept only scrambled:
+ *  nobody, not even here, can read it back. A new one, or none, signs out every desk screen open. */
+function DeskPassword({ state }: { state: DeskPasswordState }) {
+  const [password, setPassword] = useState("");
+  const [again, setAgain] = useState("");
+  const [shown, setShown] = useState(false);
+  const [saved, setSaved] = useState<string | null>(null);
+  const [mismatch, setMismatch] = useState(false);
+  const action = useAction();
+  const queries = useQueryClient();
+  async function save(value: string | null) {
+    setSaved(null);
+    setMismatch(value !== null && value !== again);
+    if (value !== null && value !== again) return;
+    if (await action.run(async () => api("/api/settings/desk-password", { body: { password: value } }))) {
+      setPassword("");
+      setAgain("");
+      setSaved(value === null ? "Desk password taken off." : "Desk password saved.");
+      await queries.invalidateQueries({ queryKey: ["settings"] });
+    }
+  }
+  const when = state.savedAt ? new Date(state.savedAt).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" }) : null;
+  return (
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save(password);
+      }}
+      className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm"
+    >
+      <h2 className="text-sm font-semibold text-slate-900">Desk password: Management, Finance, Dispatch</h2>
+      <p className="mt-1 text-[13px] text-slate-500">
+        One password for the three desks' shared screen: on their sign-in page it opens the desk alone. Each person can still
+        sign in with their own ID.{" "}
+        {state.on ? (
+          <span className="font-medium text-emerald-700">
+            On{state.savedBy ? `, set by ${state.savedBy}` : ""}
+            {when ? ` on ${when}` : ""}.
+          </span>
+        ) : (
+          <span className="font-medium text-slate-700">Off: the desks open with each person's own ID only.</span>
+        )}
+      </p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <Field label={state.on ? "New desk password" : "Desk password"}>
+          {(props) => (
+            <input
+              {...props}
+              type={shown ? "text" : "password"}
+              autoComplete="new-password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className={INPUT}
+            />
+          )}
+        </Field>
+        <Field label="Type it again">
+          {(props) => (
+            <input
+              {...props}
+              type={shown ? "text" : "password"}
+              autoComplete="new-password"
+              value={again}
+              onChange={(event) => setAgain(event.target.value)}
+              className={INPUT}
+            />
+          )}
+        </Field>
+      </div>
+      <label className="mt-2 flex items-center gap-2 text-[13px] text-slate-600">
+        <input type="checkbox" checked={shown} onChange={(event) => setShown(event.target.checked)} />
+        Show what I type
+      </label>
+      <div className="mt-3">
+        <Problem message={mismatch ? "The two passwords aren't the same." : action.problem?.message} />
+      </div>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <Button type="submit" variant="primary" small disabled={action.busy || !password}>
+          {action.busy ? "Saving…" : "Save"}
+        </Button>
+        {state.on && (
+          <Button small disabled={action.busy} onClick={() => void save(null)}>
+            Take it off
+          </Button>
+        )}
+        {saved && <span className="text-[13px] font-medium text-emerald-700">{saved}</span>}
+      </div>
+    </form>
+  );
+}
+

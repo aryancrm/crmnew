@@ -1,7 +1,7 @@
 // The API. Every route answers JSON; every refusal is { error: { code, message, field? } }.
 
 import { createMiddleware } from "hono/factory";
-import { companyNow } from "./companies/context";
+import { companyKey, companyNow } from "./companies/context";
 import { decisionRoutes } from "./decisions/routes";
 import { sampleRoutes } from "./samples/routes";
 import { complaintRoutes } from "./complaints/routes";
@@ -77,7 +77,8 @@ import { kpiRoutes } from "./kpis/routes";
 import { sellerRoutes } from "./sellers/routes";
 import { targetRoutes } from "./targets/routes";
 import { teamRoutes } from "./team/routes";
-import { DUTY_DESKS, type DutyDesk, deskPerson, deskReport, deskTeam, shareOut, shareOutAll, startPerson, takeFinanceOrder } from "./desks/service";
+import { DUTY_DESKS, type DutyDesk, deskPerson, deskReport, deskStandIn, deskTeam, shareOut, shareOutAll, startPerson, takeFinanceOrder } from "./desks/service";
+import { DESK_SCREENS, DESK_WORDS, deskPasswordRight, deskPasswordState } from "./auth/desk-password";
 import { portalDepartment } from "./portal/service";
 import type { ApiError, Me } from "./types";
 
@@ -102,6 +103,12 @@ const atMost = (maxSize: number) =>
 
 /** An answer slower than this (on the server) is noted for the Admin's Slow screens page. */
 const SLOW_MS = 800;
+
+/** What a desk's shared screen may not open (Aryan, 19 Nov: "no Me, no payslips on the common
+ *  screen"): a person's own leave, forms, payslips, documents, day, numbers, messages, profile,
+ *  picture, password, two-step, sessions and accounts, and looking as someone. */
+const DESK_SCREEN_REFUSES =
+  /^\/api\/(?:auth\/(?:password|two-step|sessions|accounts|switch|view)|me\/|messages|hr\/|kpis\/me|mr\/me)/;
 
 export function createApp(db: Database, options: AppOptions) {
   const app = new Hono<Env>();
@@ -166,11 +173,22 @@ export function createApp(db: Database, options: AppOptions) {
   );
 
   // Every signed-in request notes who is working (their day starts with the first one).
-  const signedInOnly = signedInWith(db, (me) => markSeen(db, me));
+  // A desk's shared screen marks nobody present: it is nobody's own day.
+  const signedInOnly = signedInWith(db, (me) => (me.deskScreen ? Promise.resolve() : markSeen(db, me)));
   // A lead's page reading one box of the team switch (?unit=): checked once here, then every
   // service's team is that box and what is under it (org/scope.ts).
   const signedIn = createMiddleware<Env>((c, next) =>
     signedInOnly(c, async () => {
+      // A desk's shared screen (the desks' common password) does the desk's work only: nobody's
+      // own leave, forms, payslips, documents, messages, profile or password on it, and what is
+      // done on an order is written in the name of the person it was given to (desks/service.ts).
+      const me = c.get("me");
+      if (me.deskScreen) {
+        if (DESK_SCREEN_REFUSES.test(c.req.path) && !(c.req.method === "GET" && c.req.path === "/api/auth/accounts"))
+          throw new Refusal(403, "desk_screen", "This is the desk's shared screen. Sign in with your own ID for your own things.");
+        const standIn = await deskStandIn(db, me, c.req.method, c.req.path);
+        if (standIn) c.set("me", standIn);
+      }
       const asked = c.req.method === "GET" ? c.req.query("unit") : undefined;
       if (asked) c.set("me", { ...c.get("me"), unit: await pickedUnit(db, c.get("me"), asked) });
       await next();
@@ -221,7 +239,7 @@ export function createApp(db: Database, options: AppOptions) {
     const desk = deskParam(c.req.param("desk"));
     // A person starts themselves, on their own login (the Admin may start anyone); anyone at the
     // desk may stop someone.
-    if (input.on && c.get("me").role !== "admin" && c.get("me").id !== idParam(c))
+    if (input.on && (c.get("me").deskScreen || (c.get("me").role !== "admin" && c.get("me").id !== idParam(c))))
       throw new Refusal(403, "not_allowed", "Each person starts themselves, on their own login.");
     await startPerson(db, c.get("me"), desk, idParam(c), input.on);
     return c.json(await deskTeam(db, c.get("me"), desk));
@@ -320,6 +338,60 @@ export function createApp(db: Database, options: AppOptions) {
     rememberDevice(c, found);
     return c.json({ me: await whoIs(db, token) });
   }
+
+  // ---- A desk's shared screen (Aryan, 19 Nov; back on 27 Nov: "Management, Finance and Dispatch had
+  // a common password only, bring it back"). The desks' password, set by the company's Admin in the
+  // Admin panel, opens Management's, Finance's or Dispatch's screen alone, as the desk's lead seat;
+  // each person's own login stays theirs. Five wrong passwords close that desk's screen for 15
+  // minutes, never anyone's own login. It lasts until the end of the working day. ----
+  const deskTries = new Map<string, { wrong: number; until: number }>();
+  app.get("/api/auth/desk", async (c) => c.json({ on: (await deskPasswordState(db)).on }));
+  app.post("/api/auth/desk", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        desk: z.enum(DESK_SCREENS, { error: "Pick the desk." }),
+        password: z.string().min(1, "Type the password.").max(200),
+      }),
+    );
+    const words = DESK_WORDS[input.desk];
+    if (!(await deskPasswordState(db)).on)
+      throw new Refusal(409, "desk_off", `${words}'s desk screen isn't open: sign in with your own ID.`, "password");
+    const key = companyKey(`desk:${input.desk}`);
+    const now = Date.now();
+    const before = deskTries.get(key);
+    if (before && before.until > now) {
+      const minutes = Math.ceil((before.until - now) / 60000);
+      throw new Refusal(429, "locked", `Too many wrong passwords on ${words}'s desk screen. Try again in ${minutes} minutes, or sign in with your own ID.`, "password");
+    }
+    // Counted before it is checked, so tries sent together can't slip past the lock.
+    const wrong = (before && before.until === 0 ? before.wrong : 0) + 1;
+    deskTries.set(key, wrong >= 5 ? { wrong: 0, until: now + 15 * 60 * 1000 } : { wrong, until: 0 });
+    if (!(await deskPasswordRight(db, input.password))) throw new Refusal(401, "wrong_login", "Wrong password.", "password");
+    deskTries.delete(key);
+
+    // The desk's lead seat today, else whoever works at the desk: the screen opens as them, in the
+    // desk's name.
+    const [found] = await rows<{ personId: number }>(
+      db,
+      sql`select p.id::int as "personId" from person p
+        left join seat_holder h on h.person_id = p.id and h.kind = 'holder' and h.starts_on <= (now() at time zone 'Asia/Manila')::date
+          and (h.ends_on is null or h.ends_on >= (now() at time zone 'Asia/Manila')::date)
+        left join seat s on s.id = h.seat_id and s.active and s.module = ${input.desk}
+        where p.active and p.role = ${input.desk}
+        order by (s.id is not null) desc, s.lead desc nulls last, s.sort nulls last, s.id nulls last, p.id limit 1`,
+    );
+    if (!found) throw new Refusal(409, "no_seat", `Nobody works at ${words} yet. Ask the administrator.`, "password");
+    // A desk's screen starts this browser afresh, as a plain sign-in does.
+    const current = getCookie(c, SESSION_COOKIE);
+    for (const one of [...(current && TOKEN.test(current) ? [current] : []), ...moreOf(c)]) await endSession(db, one);
+    const until = endOfWorkingDay();
+    const token = await startSession(db, found.personId, undefined, input.desk, until, input.desk);
+    setCookie(c, SESSION_COOKIE, token, { httpOnly: true, secure, sameSite: "Lax", path: "/", expires: until });
+    deleteCookie(c, BACK_COOKIE, { path: "/" });
+    keepMore(c, []);
+    return c.json({ me: await whoIs(db, token) });
+  });
 
   // The one way in: a person's own login ID and their own password (and, for whoever turned on
   // two-step sign-in, their code). It opens one session, theirs, good in every app their role has;

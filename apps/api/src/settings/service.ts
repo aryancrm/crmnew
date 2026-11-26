@@ -7,7 +7,8 @@ import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import type { Runner } from "../inventory/service";
 import { type CompanyCode, OWN } from "../companies";
-import type { CaseMailSettings, CompanyInfo, Letterhead, Me, PointsProgram } from "../types";
+import { deskPasswordState } from "../auth/desk-password";
+import type { CaseMailSettings, CompanyInfo, DeskPasswordState, Letterhead, Me, PointsProgram } from "../types";
 
 export const SETTING_ROLES = ["admin", "ceo"] as const;
 
@@ -97,10 +98,16 @@ export async function settingsOf(
   company: CompanyInfo;
   points: PointsProgram;
   caseEmails: CaseMailSettings;
+  deskPassword: DeskPasswordState;
 }> {
   allow(me, SETTING_ROLES, "see the settings");
-  const [company, points, caseEmails] = await Promise.all([companyInfo(db), pointsProgram(db), caseMailSettings(db)]);
-  return { company, points, caseEmails };
+  const [company, points, caseEmails, deskPassword] = await Promise.all([
+    companyInfo(db),
+    pointsProgram(db),
+    caseMailSettings(db),
+    deskPasswordState(db),
+  ]);
+  return { company, points, caseEmails, deskPassword };
 }
 
 /** The Admin or the CEO saves the company's own details. */

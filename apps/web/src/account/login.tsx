@@ -12,6 +12,7 @@ import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } 
 import { ApiFailure, api } from "../api";
 import { ME, rememberPerson, returnTo, useMe } from "../auth";
 import { DepartmentsMenu } from "./departments-menu";
+import { DESK_KEYS, DeskOrOwn } from "./desk-sign-in";
 import { DevUserPicker } from "./dev-user-picker";
 import { markActive } from "./idle";
 import { DepartmentCollage } from "../portal/department-collage";
@@ -125,13 +126,20 @@ function Launcher() {
                     </Link>
                   </div>
                 )}
-                <SignIn
-                  workspace={picked}
-                  from={from}
-                  loginId={(location.state as { loginId?: string } | null)?.loginId}
-                  pickerSlot={pickerSlot}
-                  adding={adding}
-                />
+                {(() => {
+                  const own = (
+                    <SignIn
+                      workspace={picked}
+                      from={from}
+                      loginId={(location.state as { loginId?: string } | null)?.loginId}
+                      pickerSlot={pickerSlot}
+                      adding={adding}
+                    />
+                  );
+                  // Management, Finance and Dispatch: the desks' common password first, when the
+                  // company's Admin has set one (desk-sign-in.tsx).
+                  return DESK_KEYS.includes(picked.key) && !adding ? <DeskOrOwn workspace={picked} own={own} /> : own;
+                })()}
               </div>
             </div>
           </section>

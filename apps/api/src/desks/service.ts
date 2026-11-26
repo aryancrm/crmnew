@@ -236,6 +236,26 @@ async function evenOut(db: Database, me: Me, desk: DutyDesk): Promise<void> {
   });
 }
 
+/**
+ * On a desk's shared screen (opened with the desks' common password, Aryan 19 Nov, back 27 Nov), what
+ * is done on an order is written in the name of the person it was given to (Aryan, 18 Nov), when they
+ * have started today; else in the desk's name. Taking an order, or letting it go, stays the screen's.
+ * A person's own login always acts as themselves.
+ */
+export async function deskStandIn(db: Database, me: Me, method: string, path: string): Promise<Me | null> {
+  const desk = me.deskScreen;
+  if (method !== "POST" || !desk) return null;
+  const found = path.match(/^\/api\/(?:finance\/|dispatch\/)?orders\/(\d+)\/([a-z-]+)$/);
+  if (!found || ["handle", "take", "release"].includes(found[2] as string)) return null;
+  const [owner] = await rows<{ id: number; name: string; title: string | null; email: string | null }>(
+    db,
+    sql`select p.id::int as id, p.name, p.title, p.email from sales_order o join person p on p.id = o.${OWNER[desk]} and p.active and p.role = ${desk}
+      where o.id = ${Number(found[1])} and ${AT_DESK[desk]} and ${startedSql(desk, sql`p.id`)}`,
+  );
+  if (!owner || owner.id === me.id) return null;
+  return { ...me, id: owner.id, name: owner.name, title: owner.title, email: owner.email };
+}
+
 /** Finance's own "I'll take it" / "Take over" / "Let go" on one order (Management's is handleOrder). */
 export async function takeFinanceOrder(db: Database, me: Me, orderId: number, release: boolean): Promise<void> {
   if (!["finance", "admin"].includes(me.role)) throw new Refusal(403, "not_allowed", "Only Finance takes an order here.");

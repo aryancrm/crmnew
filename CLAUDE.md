@@ -36,7 +36,9 @@ the real company (the 2026 chart's people, `docs/PEOPLE-2026.md`; the demo peopl
 customers and desk work closed by `scripts/close-demo.ts`, the Admin login stays): everyone signs in with their seat's login ID (`hos1`…) and their own password,
 first a one-time one (`pnpm --filter @2mg/api passwords`, or the Admin's "Give a new password"), then
 one they choose. This replaces Aryan's 17 Nov rule (`JOIN_PASSWORD` for all, never forced to change);
-Aryan approved it and merged it to main on 23 Nov (PLAN, change log 164 and 181). Keep
+Aryan approved it and merged it to main on 23 Nov (PLAN, change log 164 and 181). Since 27 Nov
+Management, Finance and Dispatch can also open their desk's shared screen with the desks' common
+password, which the company's Admin types in the Admin panel (PLAN 231). Keep
 passwords out of code and docs. Tests still seed their own demo company. One process per PGlite folder: check nothing
 listens on :4100 before starting the API.
 

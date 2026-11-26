@@ -688,7 +688,9 @@ function deskFor(me: Me): Space {
   // Their own leave, payslips and messages at the foot of every menu, under the work (19 Nov: "each
   // one's own things on top").
   // The CEO's and the Admin's messages (decisions to take) stay at the top with their work.
-  const personal = [...mine, messagesLink];
+  // A desk's shared screen (the desks' common password, 27 Nov) is nobody's own: no "Me", no one
+  // person's messages (Aryan, 19 Nov). Each person's own login keeps them.
+  const personal = me.deskScreen ? [] : [...mine, messagesLink];
   const onTop = me.role === "ceo" || me.role === "admin";
   return {
     ...space,
