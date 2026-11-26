@@ -218,6 +218,8 @@ describe("the control panel", () => {
     const wrong = await send("/api/control/setup", { body: { key: "not-it", loginId: "1001", name: "Aryan", password: PANEL_PASSWORD } });
     expect(await codeOf(wrong)).toBe("wrong_key");
     expect(await codeOf(await send("/api/control/setup", { body: { key: setupKey, loginId: "1001", name: "Aryan", password: "short" } }))).toBe("invalid");
+    // Eight characters are enough (Aryan, 26 Nov); seven aren't.
+    expect(await codeOf(await send("/api/control/setup", { body: { key: setupKey, loginId: "1001", name: "Aryan", password: "seven77" } }))).toBe("invalid");
 
     const started = await send("/api/control/setup", { body: { key: setupKey, loginId: "1001", name: "Aryan", password: PANEL_PASSWORD } });
     expect(started.status).toBe(200);

@@ -211,7 +211,7 @@ function Setup() {
         <Field label="Your name" error={action.at("name")}>
           {(props) => <input {...props} className="field" value={form.name} onChange={set("name")} />}
         </Field>
-        <Field label="Your password (at least 12 characters)" error={action.at("password")}>
+        <Field label="Your password (at least 8 characters)" error={action.at("password")}>
           {(props) => <input {...props} className="field" type="password" autoComplete="new-password" value={form.password} onChange={set("password")} />}
         </Field>
         <Field label="The password again" error={mismatch ? "The two passwords aren't the same." : undefined}>

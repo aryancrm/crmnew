@@ -2543,7 +2543,7 @@ the inventory" for GetMeds.
   (`?org=`), and a request to join goes by its email's domain.
 - **Our control panel** (`one.bishnoi.ai/control`; `/admin` is each company's own Admin pages): only
   for the people who run Bishnoi One, on logins of its own that are no company's: a short login ID
-  (no email), a password of 12 characters or more and, every time, the code from the authenticator
+  (no email), a password of 8 characters or more (12 until Aryan's word, 26 Nov) and, every time, the code from the authenticator
   app on the phone. Five wrong tries lock it for 15 minutes. The first panel login is made with the
   setup key the server writes in its log while there is none; after that the key is gone.
 - **Adding a company** (in the panel): its name, short code and login ID (an email on its own domain,
