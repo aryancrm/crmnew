@@ -4,6 +4,7 @@
 // another company's stock, and nothing else of it; a paused company's people can't work; and the
 // control panel lets in only its own logins, with the phone's code every time.
 
+import { createHmac } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
@@ -12,6 +13,7 @@ import { runChecks } from "../checks/integrity";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedDemoInventory } from "../inventory/seed";
+import { useGraph } from "../online/graph";
 import { seedDemo } from "../seed";
 import { asCompany, loginDomain } from "./context";
 import { controlRoutes } from "./control-routes";
@@ -293,3 +295,97 @@ describe("the control panel", () => {
     vi.useRealTimers();
   });
 });
+
+describe("each company's own Facebook pages, websites and links (Aryan, 26 Nov)", () => {
+  const SECRET = "meta-app-secret";
+  const meta = (page: string, mid: string) => {
+    const text = JSON.stringify({
+      object: "page",
+      entry: [{ id: page, messaging: [{ sender: { id: `psid-${mid}` }, recipient: { id: page }, timestamp: Date.now(), message: { mid, text: "Hello" } }] }],
+    });
+    return router.request("/webhooks/messenger", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-hub-signature-256": `sha256=${createHmac("sha256", SECRET).update(text).digest("hex")}` },
+      body: text,
+    });
+  };
+  const kept = (db: Database, page: string) => count(db, sql`select count(*)::int as n from inbox_event where page_key = ${page}`);
+
+  beforeAll(async () => {
+    vi.stubEnv("MESSENGER_APP_SECRET", SECRET);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    // Meta answers nothing here: only where each message is kept is checked.
+    useGraph({ call: async () => ({ data: null, error: "Not in tests.", code: 1 }), fetchFile: async () => null });
+    await main.execute(sql`insert into channel_account (kind, key, name, secret) values ('messenger', 'page-2mg', '2MG Inc.', 'x')`);
+    await gm.db.execute(sql`insert into channel_account (kind, key, name, secret) values ('messenger', 'page-gm', 'GetMeds', 'x')`);
+  });
+  afterAll(() => {
+    useGraph(null);
+    vi.unstubAllEnvs();
+  });
+
+  it("keeps a Facebook message in the company that connected its page, and nowhere else", async () => {
+    expect((await meta("page-gm", "m-gm-1")).status).toBe(200);
+    expect(await kept(gm.db, "page-gm")).toBe(1);
+    expect(await kept(main, "page-gm")).toBe(0);
+    expect((await meta("page-2mg", "m-2mg-1")).status).toBe(200);
+    expect(await kept(main, "page-2mg")).toBe(1);
+    expect(await kept(gm.db, "page-2mg")).toBe(0);
+  });
+
+  it("keeps a page nobody connected waiting at the first company's, as before", async () => {
+    expect((await meta("page-nobody", "m-x-1")).status).toBe(200);
+    expect(await count(main, sql`select count(*)::int as n from inbox_event where page_key = 'page-nobody' and state = 'unrouted'`)).toBe(1);
+    expect(await kept(gm.db, "page-nobody")).toBe(0);
+  });
+
+  it("refuses a Facebook message Meta didn't sign, in every company", async () => {
+    const response = await router.request("/webhooks/messenger", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-hub-signature-256": "sha256=00" },
+      body: JSON.stringify({ object: "page", entry: [{ id: "page-gm", messaging: [] }] }),
+    });
+    expect(response.status).toBe(401);
+  });
+
+  it("sends a website's call to the company its address names (its Org ID), else the first company", async () => {
+    // Unsigned, so each refuses it: which company answered is what is checked (its own websites).
+    const theirs = await router.request(`/webhooks/store/${gm.ref.orgId}`, { method: "POST", body: "{}" });
+    const ours = await router.request("/webhooks/store/2mg", { method: "POST", body: "{}" });
+    expect(theirs.status).toBe(ours.status);
+    const seen: string[] = [];
+    const spy = vi.spyOn(gm.app, "fetch").mockImplementation(async () => {
+      seen.push("gm");
+      return new Response("{}", { status: 200 });
+    });
+    await router.request(`/webhooks/store/${gm.ref.orgId}/order-progress`, { method: "POST", body: "{}" });
+    await router.request("/webhooks/store/2mg/order-progress", { method: "POST", body: "{}" });
+    spy.mockRestore();
+    expect(seen).toEqual(["gm"]);
+  });
+
+  it("opens a link that names its company (?org=) in that company, without signing in", async () => {
+    const seen: string[] = [];
+    const spy = vi.spyOn(gm.app, "fetch").mockImplementation(async () => {
+      seen.push("gm");
+      return new Response("{}", { status: 404 });
+    });
+    await router.request(`/api/public/quotation/some-token?org=${gm.ref.orgId}`);
+    await router.request(`/api/auth/welcome?org=${gm.ref.orgId}`, { method: "POST", body: "{}" });
+    await router.request("/api/public/quotation/some-token");
+    await router.request("/api/public/quotation/some-token?org=12x456");
+    spy.mockRestore();
+    expect(seen).toEqual(["gm", "gm"]);
+  });
+
+  it("sends a request to join to the company of the email's domain", async () => {
+    const asked = (email: string) =>
+      send("/api/auth/sign-up", { body: { firstName: "Ana", lastName: "Reyes", email, phone: "09171234567", department: "online" } });
+    expect((await asked("ana.reyes@getmeds.test")).status).toBeLessThan(500);
+    expect((await asked("ben.cruz@2mg.test")).status).toBeLessThan(500);
+    expect(await count(gm.db, sql`select count(*)::int as n from sign_up where email = 'ana.reyes@getmeds.test'`)).toBeLessThanOrEqual(1);
+    expect(await count(main, sql`select count(*)::int as n from sign_up where email = 'ana.reyes@getmeds.test'`)).toBe(0);
+    expect(await count(gm.db, sql`select count(*)::int as n from sign_up where email = 'ben.cruz@2mg.test'`)).toBe(0);
+  });
+});
+

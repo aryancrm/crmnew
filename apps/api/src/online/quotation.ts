@@ -15,6 +15,7 @@ import {
   rgb,
   StandardFonts,
 } from "pdf-lib";
+import { companyNow, isHomeCompany } from "../companies/context";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import { companyInfo } from "../settings/service";
@@ -472,7 +473,8 @@ export async function quotationLink(
     sql`insert into quotation_link (lead_id, token_hash, snapshot, expires_at, created_by)
       values (${leadId}, ${hash(token)}, ${JSON.stringify(snapshot)}::jsonb, now() + interval '30 days', ${me.id})`,
   );
-  return { path: `/api/public/quotation/${token}` };
+  // Another company than the first: the link names it, so it opens in that company's data.
+  return { path: `/api/public/quotation/${token}${isHomeCompany() ? "" : `?org=${companyNow()?.orgId}`}` };
 }
 
 /** The customer opens their link (no sign-in): the PDF as it was when it was sent. */
@@ -513,7 +515,7 @@ export async function sendQuotation(
     if (data.lead.chatChannel !== "messenger")
       throw new Refusal(409, "not_now", "This case didn't come through Messenger.");
     const link = input.link?.trim() ?? "";
-    const token = link.split("/api/public/quotation/")[1] ?? "";
+    const token = (link.split("/api/public/quotation/")[1] ?? "").split("?")[0] ?? "";
     const [owned] = token
       ? await rows<{ id: number }>(
           db,

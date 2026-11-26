@@ -7,6 +7,7 @@
 
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { sql } from "drizzle-orm";
+import { isHomeCompany } from "../companies/context";
 import { type Database, rows } from "../db/index";
 import { allow, may, onlineDesk, Refusal } from "../http";
 import type { Me } from "../types";
@@ -80,7 +81,11 @@ export function eventKey(ev: MessengerEvent): string | null {
   return null;
 }
 
-/** Keeps the body's events; answers how many were new. A page nobody connected waits. */
+/**
+ * Keeps the body's events; answers how many were new. A page nobody connected waits, at the first
+ * company's: with several companies, Meta's call reaches each company that connected one of its
+ * pages (companies/router.ts), and another company's page is none of this one's business.
+ */
 export async function keepWebhook(db: Database, body: unknown): Promise<number> {
   const entries =
     (
@@ -97,6 +102,7 @@ export async function keepWebhook(db: Database, body: unknown): Promise<number> 
       db,
       sql`select id::int as id from channel_account where kind = 'messenger' and key = ${pageKey} and active`,
     );
+    if (!account && !isHomeCompany()) continue;
     for (const ev of [...(entry.messaging ?? []), ...(entry.standby ?? [])]) {
       const key = eventKey(ev);
       if (!key) continue;
@@ -124,12 +130,16 @@ async function keepEvent(
 
 // ---------------------------------------------------------------- working the events
 
-let draining: Promise<number> | null = null;
+// One run at a time for each company's database (several companies share this server).
+const draining = new WeakMap<Database, Promise<number>>();
 
 /** Works what is due, oldest first. A conversation whose earlier event failed waits for it. */
 export function drainInbox(db: Database): Promise<number> {
-  if (!draining) draining = drain(db).finally(() => (draining = null));
-  return draining;
+  const running = draining.get(db);
+  if (running) return running;
+  const run = drain(db).finally(() => draining.delete(db));
+  draining.set(db, run);
+  return run;
 }
 
 async function drain(db: Database): Promise<number> {

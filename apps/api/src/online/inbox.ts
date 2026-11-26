@@ -4,6 +4,7 @@
 
 import { pushCatalog, pushCatalogs } from "./catalog";
 import { type SQL, sql } from "drizzle-orm";
+import { companyNow, isHomeCompany } from "../companies/context";
 import { type Database, rows } from "../db/index";
 import { allow, may, Refusal } from "../http";
 import { iso } from "../inventory/service";
@@ -239,7 +240,8 @@ export async function channelsData(db: Database, me: Me): Promise<ChannelsData> 
     unrouted,
     webhook: {
       path: "/webhooks/messenger",
-      websitePath: "/webhooks/store/2mg",
+      // A website of another company than the first calls its own company's address (the Org ID).
+      websitePath: isHomeCompany() ? "/webhooks/store/2mg" : `/webhooks/store/${companyNow()?.orgId}`,
       secretSet: appSecrets().length > 0,
       verifyTokenSet: verifyTokens().length > 0,
     },
@@ -305,12 +307,15 @@ export async function setIntake(
   await db.execute(sql`update channel_account set intake = ${intake} where id = ${id}`);
 }
 
-/** Every page and mailbox read on a timer (the server starts it; tests don't). */
-export function startChannelJobs(db: Database): void {
+/**
+ * Every page and mailbox read on a timer (the server starts it, once for each company; tests
+ * don't). `working` says whether the company works now: a paused one's pages wait.
+ */
+export function startChannelJobs(db: Database, working: () => boolean = () => true): void {
   let busy = false;
   let fullRounds = 0;
   const tick = async (full: boolean) => {
-    if (busy) return;
+    if (busy || !working()) return;
     busy = true;
     try {
       await drainInbox(db);
