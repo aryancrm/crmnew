@@ -522,3 +522,8 @@ html[data-theme="midnight"] .app-sidebar .bg-\[\#e8f6fc\] {
 html[data-theme="midnight"] .app-sidebar .text-\[\#1784b5\] {
   color: #5cc3ee;
 }
+/* Midnight: anything in the sidebar that turns white on hover turns the sidebar's own dark grey
+   instead, never a white block (Aryan, 27 Nov). */
+html[data-theme="midnight"] .app-sidebar .hover\:bg-white:hover {
+  background-color: #1d2740;
+}

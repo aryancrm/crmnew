@@ -53,7 +53,7 @@ export function Returns() {
             >
               {tab.label}
               <span
-                className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${on ? "bg-slate-100 text-slate-700" : "bg-white/70 text-slate-500"}`}
+                className={`inline-grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1 text-[10px] leading-none font-semibold text-slate-900 tabular-nums ${on ? "bg-slate-100" : "bg-white"}`}
               >
                 {count(n)}
               </span>

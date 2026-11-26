@@ -783,7 +783,7 @@ function MenuList({
           className={`group flex h-9 items-center gap-2.5 rounded-lg px-2.5 text-left text-[13px] transition-colors ${
             here
               ? "font-semibold text-slate-900"
-              : "text-slate-600 hover:bg-white hover:text-slate-900"
+              : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
           }`}
         >
           <item.icon

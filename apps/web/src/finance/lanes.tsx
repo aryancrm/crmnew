@@ -291,7 +291,7 @@ export function FinanceLanes() {
             }`}
           >
             {one.number}. {one.title.replace(" payment", "").replace(" invoice", "")}
-            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${lane === one.key ? "bg-slate-100 text-slate-700" : "bg-white/70 text-slate-500"}`}>
+            <span className={`inline-grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1 text-[10px] leading-none font-semibold text-slate-900 tabular-nums ${lane === one.key ? "bg-slate-100" : "bg-white"}`}>
               {count(counts[one.key])}
             </span>
           </button>
