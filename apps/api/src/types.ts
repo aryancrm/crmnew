@@ -2722,6 +2722,8 @@ export type CompanyInfo = {
   footer: string;
   signatory: string;
   signatoryTitle: string;
+  /** Printed before its invoices' six-digit numbers (2MG-SI-000123). Empty: not set yet. */
+  invoiceSeries: string;
 };
 
 export type PointsProgram = { enabled: boolean; rateBps: number };

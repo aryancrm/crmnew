@@ -7,7 +7,6 @@
 // them, whom it went to or who decided it, the leads above the person, HR, the CEO, the Admin.
 
 import { sql } from "drizzle-orm";
-import { companyName, type CompanyCode } from "../companies";
 import { letterheadOf } from "../settings/service";
 import { bytesOf, keepFile } from "../files/store";
 import { type Database, rows } from "../db/index";
@@ -203,9 +202,9 @@ export async function leavePrintout(db: Database, me: Me, leaveId: number): Prom
   return {
     kind: "leave",
     title: "Application for Leave",
-    company: companyName(line.company ?? "2mg"),
+    company: (await letterheadOf(db)).name,
     code: paperCode("LV", leaveId),
-    letterhead: await letterheadOf(db, (line.company ?? "2mg") as CompanyCode),
+    letterhead: await letterheadOf(db),
     person: head(line),
     filedOn: momentDay(line.madeAt),
     status: "Approved",
@@ -353,9 +352,9 @@ export async function formPrintout(db: Database, me: Me, formId: number): Promis
   return {
     kind: row.kind,
     title: FORM_TITLES[row.kind],
-    company: companyName(row.company ?? "2mg"),
+    company: (await letterheadOf(db)).name,
     code: paperCode(FORM_PREFIX[row.kind], formId),
-    letterhead: await letterheadOf(db, (row.company ?? "2mg") as CompanyCode),
+    letterhead: await letterheadOf(db),
     person: { name: row.name, employeeCode: row.employeeCode, position: row.position, department: row.department },
     filedOn: momentDay(row.madeAt),
     status: row.kind === "incident" ? "Taken in" : "Approved",

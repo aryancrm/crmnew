@@ -80,6 +80,21 @@ const withDatabase = (url: string, name: string) => {
   return address.toString();
 };
 
+/** A new company's details before its Admin fills them: its name, nothing of another company's. */
+export const blankDetails = (name: string) => ({
+  name,
+  address: "",
+  phone: "",
+  email: "",
+  tin: "",
+  vat: true,
+  licence: "",
+  footer: "",
+  signatory: "",
+  signatoryTitle: "",
+  invoiceSeries: "",
+});
+
 /** Online: one Postgres server, each company a database on it; the list in "bishnoi_control". */
 export function postgresPlaces(mainUrl: string, controlUrl = process.env.CONTROL_DATABASE_URL): Places {
   const open = cached((name) => openDatabase({ url: name ? withDatabase(mainUrl, name) : mainUrl }));
@@ -311,6 +326,13 @@ export async function openCompanies(options: {
       const database = await places.make(orgId);
       const db = places.open(database);
       await migrate(db);
+      // Its own details from the start: an old migration (0017) writes 2MG's address, phone, email,
+      // licence and foot line into every new database; another company never prints them (Aryan,
+      // 26 Nov night: "everything separate"). Its Admin fills them in Company details.
+      await db.execute(
+        sql`insert into setting (key, value) values ('company', ${JSON.stringify(blankDetails(name))}::jsonb)
+          on conflict (key) do update set value = excluded.value, updated_at = now()`,
+      );
       const ref: CompanyRef = { orgId, name, code, loginDomain, home: false };
       const password = freshPassword();
       let stock: StockCopied | null = null;

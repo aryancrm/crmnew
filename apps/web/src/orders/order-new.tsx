@@ -4,7 +4,6 @@
 // total, and what Management will see. A MedRep's order is always his own; Dispatch decides how
 // it goes out.
 
-import { COMPANIES, COMPANY_CODES } from "@2mg/api/companies";
 import {
   DIVISION_BUYERS,
   DIVISIONS,
@@ -1858,20 +1857,6 @@ export function OrderNew({
             </select>
             {action.at("source") && <span className="text-xs text-rose-700">{action.at("source")}</span>}
           </label>
-          <label className="flex flex-col gap-1">
-            <Label text="Invoicing from" needed />
-            <select
-              value={invoiceFrom}
-              onChange={(event) => setInvoiceFrom(event.target.value as InvoiceFrom)}
-              className={FIELD}
-            >
-              {COMPANY_CODES.map((code) => (
-                <option key={code} value={code}>
-                  {COMPANIES[code].name}
-                </option>
-              ))}
-            </select>
-          </label>
           {/* Their PO number: asked on an order with their PO, never on a patient's own (19 Nov). */}
           {(orderType === "po" || patientOrder || customerPo || (!orderType && picked?.kind !== "patient")) && (
             <label className="flex flex-col gap-1">
@@ -2769,7 +2754,6 @@ export function OrderNew({
                   ["Source", source],
                   ["Date needed", expectedOn ? dayLabel(expectedOn) : ""],
                   ["Deliver to", address],
-                  ["Invoicing from", COMPANIES[invoiceFrom].name],
                   [
                     "Documents",
                     [

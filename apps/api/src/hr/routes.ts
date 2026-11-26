@@ -3,7 +3,7 @@
 
 import type { Context, Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
-import { COMPANY_CODES } from "../companies";
+import { type CompanyCode, OWN } from "../companies";
 import type { Database } from "../db/index";
 import { type Env, idParam, Refusal, readBody } from "../http";
 import type { LeaveKind } from "../types";
@@ -108,7 +108,8 @@ const clock = z.string().regex(/^\d{2}:\d{2}$/, "Type the time as 08:30.");
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick the day.");
 const words = (max: number) => z.string().max(max).nullish();
 const pesos = z.number().int("Type whole centavos.").min(0).nullish();
-const company = z.enum(COMPANY_CODES, { message: "Pick the company." });
+// Employed by the company itself (Aryan, 26 Nov night: "no 'employer 2MG or GPI'; everything separate").
+const company = z.unknown().optional().transform((): CompanyCode => OWN);
 const classification = z.enum(["probationary", "regular", "part_time", "intern"], {
   message: "Pick how they are employed.",
 });

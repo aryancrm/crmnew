@@ -16,3 +16,9 @@ export function useCompany(): CompanyName | null {
   });
   return found.data?.company ?? null;
 }
+
+/** The company's own name on screens: one company per database since the separation (Aryan, 26 Nov
+ *  night: "everything separate"), so never a list of the group's companies ("2MG Inc." with one). */
+export const useOwnCompanyName = (): string => useCompany()?.name ?? "2MG Inc.";
+/** Its short code (2MG, GM). */
+export const useOwnCompanyCode = (): string => useCompany()?.code ?? "2MG";

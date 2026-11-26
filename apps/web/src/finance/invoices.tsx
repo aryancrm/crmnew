@@ -1,13 +1,13 @@
 // Invoices, as Zoho Books lists them: date, number, order, customer, company, status, due
 // date, amount and balance, with tabs; and one invoice as a document with its payments.
 
-import { allCompanyNames } from "@2mg/api/companies";
 import type { DocLine, InvoiceDetail, InvoiceList, InvoiceTab } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { Search, X } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useOwnCompanyName } from "../companies";
 import {
   InvoiceStatus,
   RecordPaymentDialog,
@@ -50,6 +50,7 @@ const TAB_LABEL: Record<InvoiceTab, string> = {
 };
 
 export function Invoices() {
+  const ownName = useOwnCompanyName();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const [typed, setTyped] = useState(params.get("q") ?? "");
@@ -91,7 +92,7 @@ export function Invoices() {
         sub={
           data.customer
             ? `For ${data.customer.name}`
-            : `Every sales invoice, under ${allCompanyNames(" or ")}`
+            : `Every sales invoice, under ${ownName}`
         }
         tags={
           data.customer && (

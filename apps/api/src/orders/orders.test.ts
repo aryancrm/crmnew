@@ -975,7 +975,7 @@ describe("papers, the billing company, the doctor and order numbers", () => {
     expect((await get("sarla", `/api/papers/${paperId}`)).status).toBe(404);
   });
 
-  it("keeps the billing company and the doctor, and numbers orders one after another", async () => {
+  it("bills as the company itself, keeps the doctor, and numbers orders one after another", async () => {
     const doctor = (
       (await (
         await post("sarla", "/api/customers", { kind: "doctor", name: "Ana Reyes", city: "Pasay" })
@@ -994,10 +994,11 @@ describe("papers, the billing company, the doctor and order numbers", () => {
     const second = await place("ryan", { customerId: hospital, items: [line()] });
     const a = await order("ryan", first.body.id);
     const b = await order("ryan", second.body.id);
+    // One company per database since the separation (26 Nov night): asking for another is ignored.
     expect(a.order).toMatchObject({
       doctor: "Ana Reyes",
-      invoiceFrom: "gpi",
-      invoiceFromLabel: "Getmeds Philippines Incorporated",
+      invoiceFrom: "2mg",
+      invoiceFromLabel: "2MG Inc.",
     });
     expect(b.order.invoiceFrom).toBe("2mg");
     expect(Number(b.order.code.slice(4)) - Number(a.order.code.slice(4))).toBe(1);

@@ -2,11 +2,11 @@
 // points work. The Admin and the CEO change them; everyone's screens read them.
 
 import { sql } from "drizzle-orm";
-import { companyNow } from "../companies/context";
+import { companyNow, homeInvoiceSeries } from "../companies/context";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import type { Runner } from "../inventory/service";
-import { COMPANIES, type CompanyCode } from "../companies";
+import { type CompanyCode, OWN } from "../companies";
 import type { CaseMailSettings, CompanyInfo, Letterhead, Me, PointsProgram } from "../types";
 
 export const SETTING_ROLES = ["admin", "ceo"] as const;
@@ -22,6 +22,7 @@ const COMPANY_DEFAULT: CompanyInfo = {
   footer: "",
   signatory: "",
   signatoryTitle: "",
+  invoiceSeries: "",
 };
 const POINTS_DEFAULT: PointsProgram = { enabled: false, rateBps: 1000 };
 /** Off until the Admin switches them on (the old CRM's owner's choice), then every step. */
@@ -35,31 +36,27 @@ async function read<T>(db: Runner, key: string, fallback: T): Promise<T> {
   return found ? { ...fallback, ...found.value } : fallback;
 }
 
-/** Until its details are saved, a company is named as on Bishnoi One's list (companies/context.ts). */
-export const companyInfo = (db: Runner) =>
-  read<CompanyInfo>(db, "company", { ...COMPANY_DEFAULT, name: companyNow()?.name ?? COMPANY_DEFAULT.name });
+/**
+ * The company's own details: what its quotations, invoices, payslips and HR's papers print. One
+ * company per database since the separation (Aryan, 26 Nov night: "everything separate"): until
+ * they are saved, it is named as on Bishnoi One's list, and 2MG's invoices keep their series.
+ */
+export const companyInfo = async (db: Runner): Promise<CompanyInfo> => {
+  const found = await read<CompanyInfo>(db, "company", {
+    ...COMPANY_DEFAULT,
+    name: companyNow()?.name ?? COMPANY_DEFAULT.name,
+    invoiceSeries: homeInvoiceSeries() ?? "",
+  });
+  return { ...found, invoiceSeries: found.invoiceSeries || homeInvoiceSeries() || "" };
+};
 
-/** Where each company's details are kept: 2MG's are the "company" setting the quotations print
- *  (since before Getmeds Philippines had its own); every other company has its own key. */
-const companyKey = (code: CompanyCode) => (code === "2mg" ? "company" : `company:${code}`);
-const detailsOf = (db: Runner, code: CompanyCode) =>
-  read<CompanyInfo>(db, companyKey(code), { ...COMPANY_DEFAULT, name: COMPANIES[code].name });
-
-/** One of the group's companies' details for a paper of theirs (a PCSO quotation on their own
- *  letterhead): what the Admin keeps in Company details, under its registered name. */
-export const companyDetailsOf = async (db: Runner, code: CompanyCode): Promise<CompanyInfo> => ({
-  ...(await detailsOf(db, code)),
-  name: COMPANIES[code].name,
-});
-
-/** A company's letterhead on HR's papers: always its registered name (never a short one typed in
- *  the settings), with the address, phone, email, TIN and foot line the Admin keeps. */
-export async function letterheadOf(db: Runner, code: CompanyCode): Promise<Letterhead> {
-  const known = code in COMPANIES ? code : "2mg";
-  const details = await detailsOf(db, known);
+/** Its letterhead on HR's papers: the name, address, phone, email, TIN and foot line in its own
+ *  Company details (the code a row carries no longer picks another company's: there is none). */
+export async function letterheadOf(db: Runner, _code?: CompanyCode | string | null): Promise<Letterhead> {
+  const details = await companyInfo(db);
   return {
-    code: known,
-    name: COMPANIES[known].name,
+    code: OWN,
+    name: details.name,
     address: details.address,
     phone: details.phone,
     email: details.email,
@@ -98,33 +95,37 @@ export async function settingsOf(
   me: Me,
 ): Promise<{
   company: CompanyInfo;
-  companies: Record<CompanyCode, CompanyInfo>;
   points: PointsProgram;
   caseEmails: CaseMailSettings;
 }> {
   allow(me, SETTING_ROLES, "see the settings");
-  const [company, gpi, points, caseEmails] = await Promise.all([
-    companyInfo(db),
-    detailsOf(db, "gpi"),
-    pointsProgram(db),
-    caseMailSettings(db),
-  ]);
-  return { company, companies: { "2mg": company, gpi }, points, caseEmails };
+  const [company, points, caseEmails] = await Promise.all([companyInfo(db), pointsProgram(db), caseMailSettings(db)]);
+  return { company, points, caseEmails };
 }
 
-/** The Admin or the CEO saves a company's details (2MG's by default). */
-export async function saveCompany(db: Database, me: Me, input: CompanyInfo, code: CompanyCode = "2mg"): Promise<void> {
+/** The Admin or the CEO saves the company's own details. */
+export async function saveCompany(db: Database, me: Me, input: CompanyInfo): Promise<void> {
   allow(me, SETTING_ROLES, "change the company's details");
   if (!input.name.trim()) throw new Refusal(400, "invalid", "Type the company's name.", "name");
   if (input.tin && !/^[0-9-]{9,20}$/.test(input.tin.trim()))
     throw new Refusal(400, "invalid", "Type the TIN as digits, like 123-456-789-000.", "tin");
+  const series = (input.invoiceSeries ?? "").trim();
+  if (series && !/^[A-Za-z0-9][A-Za-z0-9-]{0,19}$/.test(series))
+    throw new Refusal(400, "invalid", "Letters, digits and dashes, up to 20 (like 2MG-SI-).", "invoiceSeries");
+  // A series already printed on invoices stays: their numbers go on from it.
+  const before = await companyInfo(db);
+  if (before.invoiceSeries && series !== before.invoiceSeries) {
+    const [issued] = await rows<{ n: number }>(db, sql`select count(*)::int as n from invoice where code like ${`${before.invoiceSeries}%`}`);
+    if ((issued?.n ?? 0) > 0)
+      throw new Refusal(409, "in_use", `Invoices are out under ${before.invoiceSeries}: it stays.`, "invoiceSeries");
+  }
   const clean = Object.fromEntries(
     Object.entries(input).map(([key, value]) => [
       key,
       typeof value === "string" ? value.trim() : value,
     ]),
   ) as CompanyInfo;
-  await write(db, me, companyKey(code), clean);
+  await write(db, me, "company", { ...clean, invoiceSeries: series });
 }
 
 export async function savePointsProgram(db: Database, me: Me, input: PointsProgram): Promise<void> {

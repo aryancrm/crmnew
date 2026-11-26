@@ -19,6 +19,9 @@ const FIELDS: { key: Exclude<keyof CompanyInfo, "vat">; label: string; wide?: bo
   { key: "footer", label: "Line at the foot of every page", wide: true },
   { key: "signatory", label: "Signs the quotations" },
   { key: "signatoryTitle", label: "Their title" },
+  // Each company its own numbers (26 Nov night): 2MG keeps 2MG-SI-; another company sets its own
+  // before its first invoice (none goes out without it).
+  { key: "invoiceSeries", label: "Invoice series (printed before each invoice's number)" },
 ];
 
 export function SettingsPage() {

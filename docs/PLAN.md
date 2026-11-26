@@ -4141,3 +4141,26 @@ medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 dat
   Aryan:** the same list still offers "Invoice from 2MG / GetMeds" on an order and "employer 2MG /
   GPI" in HR inside each company; with each company separate, each should bill and employ in its
   own name only (GetMeds's when it is added in the panel).
+- 26 Nov (212), Aryan: "yes, separate 2MG and GetMeds: no 'employee of 2MG or GPI', no 'invoice from
+  2MG or GetMeds', everything separate; test well that nothing like the Admin panel's is left
+  anywhere; 2MG is a normal company like GetMeds; each its own mail IDs with the automatic mails, its
+  own Messenger pages, its own websites; then put it live." **One company per database**: inside a
+  company everything is its own. (1) An order bills as the company itself (no "Invoicing from" on
+  the order form or Management's edit; an old screen's choice is ignored); an invoice is numbered in
+  the company's own series, kept in Company details ("Invoice series"): 2MG keeps 2MG-SI- and its
+  counter; another company bills nothing until it sets its own, so none goes out under 2MG's
+  numbers. (2) HR employs in the company's own name (no Employer choice on joining or the person's
+  page; the masterlist import can't move anyone to another company; the reports have no company
+  filter); payslips, leave and form printouts, certificates (the words "employed by …") and the
+  reports print the company's own Company details. (3) The books, the invoice list and HR's pages
+  show the company's own name (they said "2MG Incorporated and Getmeds Philippines Incorporated").
+  (4) A PCSO quotation's other vendors are printed by their name; another company's details are
+  never read. (5) **Found by the new side-by-side test**: migration 0017 writes 2MG's own details
+  (address, phone, info@2mginc.com, FDA licence, foot line) into every new database: a company
+  added in the panel now starts with its own blank details under its own name. Checked as well:
+  the server's memory is kept per company, files are named by their content (one company can't
+  overwrite or open another's), signing out clears what the screen kept, each company's pages,
+  mailboxes, websites and automatic emails are its own (207). The rows made before (orders and
+  invoices billed under `gpi`, people marked GPI) keep their code and print as the company's own.
+  Tests: two companies side by side (names, letterhead, billing name, invoice series, Company
+  details each its own).

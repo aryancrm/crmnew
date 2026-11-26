@@ -14,7 +14,9 @@ import { migrate } from "../db/migrate";
 import { seedDemoInventory } from "../inventory/seed";
 import { useGraph } from "../online/graph";
 import { seedDemo } from "../seed";
-import { asCompany, loginDomain } from "./context";
+import { asCompany, loginDomain, ownCompanyCode } from "./context";
+import { companyInfo, letterheadOf } from "../settings/service";
+import { invoiceFromLabel } from "../orders/rules";
 import { controlRoutes } from "./control-routes";
 import { type CompanyList, memoryPlaces, openCompanies, type Running } from "./registry";
 import { companyRouter } from "./router";
@@ -383,6 +385,50 @@ describe("each company's own Facebook pages, websites and links (Aryan, 26 Nov)"
     expect(await count(gm.db, sql`select count(*)::int as n from sign_up where email = 'ana.reyes@getmeds.test'`)).toBeLessThanOrEqual(1);
     expect(await count(main, sql`select count(*)::int as n from sign_up where email = 'ana.reyes@getmeds.test'`)).toBe(0);
     expect(await count(gm.db, sql`select count(*)::int as n from sign_up where email = 'ben.cruz@2mg.test'`)).toBe(0);
+  });
+});
+
+describe("everything separate inside each company (Aryan, 26 Nov night)", () => {
+  it("names, papers and invoices are each company's own; nothing of one shows in the other", async () => {
+    // GetMeds's own name everywhere inside it; 2MG's inside 2MG.
+    const inGm = await asCompany(gm.ref, async () => ({
+      details: await companyInfo(gm.db),
+      letterhead: await letterheadOf(gm.db),
+      billing: invoiceFromLabel(),
+      code: ownCompanyCode(),
+    }));
+    expect(inGm.details.name).toBe(gm.ref.name);
+    expect(inGm.letterhead.name).toBe(gm.ref.name);
+    expect(inGm.billing).toBe(gm.ref.name);
+    expect(inGm.code).toBe(gm.ref.code);
+    // No invoice series of its own yet: never 2MG's numbers.
+    expect(inGm.details.invoiceSeries).toBe("");
+    const home = list.home();
+    const inHome = await asCompany(home.ref, async () => ({ details: await companyInfo(main), billing: invoiceFromLabel() }));
+    expect(inHome.details.invoiceSeries).toBe("2MG-SI-");
+    expect(inHome.billing).toBe(home.ref.name);
+
+    // Each company's Admin sees and saves its own details alone (no tab of another company).
+    const fresh = await list.newAdminPassword(gm.ref.orgId, null);
+    const gmLogin = fresh.loginId ?? "";
+    expect(gmLogin).toContain("@getmeds.test");
+    let gmAdmin = jar("", await login(gmLogin, fresh.password));
+    const changed = await send("/api/auth/password", { cookie: gmAdmin, body: { current: fresh.password, next: "getmeds-own-pass-1" } });
+    expect(changed.status, await changed.clone().text()).toBe(200);
+    gmAdmin = jar(gmAdmin, changed);
+    gmAdmin = jar("", await login(gmLogin, "getmeds-own-pass-1"));
+    const settings = (await (await send("/api/settings", { cookie: gmAdmin })).json()) as Record<string, unknown> & { company: { name: string } };
+    expect(settings.companies).toBeUndefined();
+    expect(settings.company.name).toBe(gm.ref.name);
+    const saved = await send("/api/settings/company", {
+      cookie: gmAdmin,
+      body: { ...settings.company, address: "GetMeds' own street", invoiceSeries: "GM-SI-" },
+    });
+    expect(saved.status, await saved.clone().text()).toBe(200);
+    expect((await asCompany(gm.ref, () => companyInfo(gm.db))).invoiceSeries).toBe("GM-SI-");
+    const twoMg = await asCompany(home.ref, () => companyInfo(main));
+    expect(twoMg.address).not.toBe("GetMeds' own street");
+    expect(twoMg.invoiceSeries).toBe("2MG-SI-");
   });
 });
 
