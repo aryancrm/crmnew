@@ -234,10 +234,11 @@ export function nextOf(f: CaseFacts, step: string): string {
     case "payment":
       return "Delivered: Finance records the payment when it comes in";
     case "claim":
-      // Finance sends the claim and records what the agency pays (Aryan, 22 Nov).
-      return `Delivered: Finance sends the claim to ${agency}`;
+      // The claim goes after the delivery; the PAP person or Finance marks it sent (26 Nov).
+      return `Delivered: send the claim to ${agency}`;
     case "billed":
-      return `Claim sent: waiting for ${agency} to pay`;
+      // Often months: the PAP person marks what comes in, Finance confirms it (26 Nov).
+      return `Claim sent: waiting for ${agency} to pay (mark it under GL money when it comes)`;
     case "done":
       return "Delivered and paid; refill when due";
     default:

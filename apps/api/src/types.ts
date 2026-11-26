@@ -337,6 +337,74 @@ export type MedicineDetail = {
   canvass: CanvassPrice[];
 };
 
+/** Where a guarantee letter's money stands (Aryan, 26 Nov): the medicine not delivered yet; the
+ *  claim to send; waiting for the agency; the agency paid short (the patient's rest, or let go);
+ *  nothing owed. */
+export type GlStage = "deliver" | "claim" | "agency" | "short" | "done";
+
+/** The PAP person's mark that money came in, for Finance to confirm against the bank. */
+export type GlMark = {
+  id: number;
+  payer: "agency" | "patient";
+  amount: number;
+  paidOn: string;
+  reference: string | null;
+  note: string | null;
+  proofId: number | null;
+  by: string;
+  at: string;
+  state: "waiting" | "confirmed" | "refused";
+  reason: string | null;
+  decidedBy: string | null;
+};
+
+/** One guarantee letter's order and its money. Centavos. */
+export type GlMoneyRow = {
+  orderId: number;
+  orderCode: string;
+  status: OrderStatus;
+  patient: string;
+  /** Whose sale it is (the seller it came from). */
+  seller: string | null;
+  leadId: number | null;
+  caseCode: string | null;
+  agency: GlAgency | null;
+  letterNo: string | null;
+  letterAmount: number | null;
+  /** The PAP person who works it. */
+  papBy: string | null;
+  invoiceId: number | null;
+  invoiceCode: string | null;
+  total: number;
+  owed: number;
+  deliveredOn: string | null;
+  claimSentOn: string | null;
+  claimRef: string | null;
+  /** Days since the claim went (else since the delivery), while the agency hasn't paid. */
+  waitingDays: number | null;
+  agencyPaid: number;
+  patientPaid: number;
+  letGo: number;
+  stage: GlStage;
+  /** Marks waiting for Finance, and those refused in the last month (with why). */
+  marks: GlMark[];
+};
+
+export type GlMoneyList = {
+  rows: GlMoneyRow[];
+  counts: Record<GlStage | "confirm", number>;
+  can: { confirm: boolean; mark: boolean };
+};
+
+export type GlMarkInput = {
+  payer: "agency" | "patient";
+  amount: number;
+  paidOn: string;
+  reference?: string | null;
+  note?: string | null;
+  proofId?: number | null;
+};
+
 /** A case's own steps the customer hears of by email (Aryan, 26 Nov, as the old CRM). */
 export type CaseMailEvent = "enquiry" | "quotation" | "gl_received" | "gl_verified";
 /** Automatic emails on a case: off until the Admin switches them on, then each step its own. */

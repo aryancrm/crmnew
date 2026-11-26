@@ -151,9 +151,9 @@ export function seen(me: Me): SQL {
  *  due by its due day (credit counts from delivery). Zoho's unpaid invoices and opening balances
  *  with this CRM's. */
 export const owedOf = (today: string) =>
-  sql`(select coalesce(sum(dd.balance), 0)::float8 from ${duesSql(today)} dd where dd.customer_id = c.id and not dd.cod_waiting)`;
+  sql`(select coalesce(sum(dd.balance), 0)::float8 from ${duesSql(today)} dd where dd.customer_id = c.id and not dd.cod_waiting and not dd.gl_waiting)`;
 const overdueOf = (today: string) =>
-  sql`(select coalesce(sum(dd.balance), 0)::float8 from ${duesSql(today)} dd where dd.customer_id = c.id and not dd.on_delivery and dd.late > 0)`;
+  sql`(select coalesce(sum(dd.balance), 0)::float8 from ${duesSql(today)} dd where dd.customer_id = c.id and not dd.on_delivery and dd.late > 0 and not dd.gl_waiting)`;
 const lastOrderOf = sql`(select max(o.created_at) from sales_order o where o.customer_id = c.id and o.status not in ('draft', 'cancelled'))`;
 
 /** How a list of customers is ordered: by name, who owes most, the latest order, or the longest
@@ -336,7 +336,7 @@ export async function customerDetail(db: Database, me: Me, id: number): Promise<
             ${me.role === "medrep" ? sql`coalesce((${seen(me)}), false)` : sql`coalesce(c.area_id = ${me.area?.id ?? null}, false)`} as "inMyArea",
             ${owedOf(today)} as owed, ${overdueOf(today)} as overdue,
             coalesce((select max(dd.late)::int from ${duesSql(today)} dd
-              where dd.customer_id = c.id and not dd.on_delivery and dd.late > 0), 0) as "overdueDays"
+              where dd.customer_id = c.id and not dd.on_delivery and dd.late > 0 and not dd.gl_waiting), 0) as "overdueDays"
           from customer c
           left join area a on a.id = c.area_id
           left join channel ch on ch.id = a.channel_id

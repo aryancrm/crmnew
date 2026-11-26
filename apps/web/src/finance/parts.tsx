@@ -135,7 +135,7 @@ export function useMoneyAccount(method: PaymentMethod) {
   };
 }
 
-function HowFields({
+export function HowFields({
   method,
   setMethod,
   reference,

@@ -1459,6 +1459,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
     approverId,
     restorable,
     team: inTeam,
+    gl: order.type === "gl",
   };
   const can = orderActions(me, who);
   const held = order.status === "on_hold" || order.status === "exception";
@@ -1569,7 +1570,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
               coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late > 0), 0)::float8 as overdue,
               coalesce(max(dd.late) filter (where not dd.on_delivery and dd.late > 0), 0)::int as days,
               coalesce(sum(dd.balance) filter (where dd.source <> 'crm' and not dd.cod_waiting), 0)::float8 as zoho
-            from ${duesSql(todayManila())} dd where dd.customer_id = ${order.customerId} and dd.order_id is distinct from ${id}`,
+            from ${duesSql(todayManila())} dd where dd.customer_id = ${order.customerId} and dd.order_id is distinct from ${id} and not dd.gl_waiting`,
         )
       )[0] ?? { owed: 0, overdue: 0, days: 0, zoho: 0 },
       creditLimit,
@@ -2936,10 +2937,11 @@ async function visibleOrder(db: Runner, me: Me, id: number) {
     heldRole: HoldRole | null;
     leadId: number | null;
     team: boolean;
+    gl: boolean;
   }>(
     db,
     sql`${team(me)} select o.status, o.raised_by::int as "raisedBy", o.medrep_id::int as "medrepId", o.code, o.held_from as "heldFrom", o.held_role as "heldRole",
-        o.lead_id::int as "leadId", ${inTeamSql(me)} as team
+        o.lead_id::int as "leadId", ${inTeamSql(me)} as team, o.order_type = 'gl' as gl
       from sales_order o where o.id = ${id} and ${seen(me)}`,
   );
   if (!order)

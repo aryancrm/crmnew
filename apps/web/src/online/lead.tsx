@@ -194,7 +194,7 @@ export function LeadPage() {
       key: "pay",
       number: "4",
       label: gl ? "Claim & payment" : "Payment & follow-up",
-      who: gl ? "Finance sends the claim · the agency pays" : "Money in · the refill reminder",
+      who: gl ? "The claim · the agency pays (PAP marks it, Finance confirms)" : "Money in · the refill reminder",
     },
   ];
   const roadLock = orderLive
@@ -2549,6 +2549,9 @@ function ClaimSteps({ data }: { data: LeadCase }) {
   const photo = data.papers.find((paper) => paper.kind === "pickup_photo");
   const hasPhoto = Boolean(photo?.files.length);
   const agency = AGENCIES.find((item) => item.key === lead.agency)?.short ?? "the agency";
+  // The PAP person marks the claim on her own case once the medicine is delivered (26 Nov).
+  const delivered = data.order?.status === "completed";
+  const canClaim = data.can.work && delivered;
   const dot = (done: boolean) => (
     <span
       className={`grid size-5 shrink-0 place-items-center rounded-full text-[10px] font-bold ${done ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-600"}`}
@@ -2583,7 +2586,7 @@ function ClaimSteps({ data }: { data: LeadCase }) {
                   {...field}
                   type="date"
                   className={INPUT}
-                  disabled
+                  disabled={!canClaim || write.busy}
                   value={sentOn}
                   onChange={(event) => setSentOn(event.target.value)}
                 />
@@ -2594,13 +2597,24 @@ function ClaimSteps({ data }: { data: LeadCase }) {
                 <input
                   {...field}
                   className={INPUT}
-                  disabled
+                  disabled={!canClaim || write.busy}
                   value={ref}
                   onChange={(event) => setRef(event.target.value)}
                 />
               )}
             </Field>
-            <span className="text-[12px] text-slate-500">Finance sends the claim and writes it here.</span>
+            {canClaim ? (
+              <Button
+                small
+                variant={lead.claimSentOn ? "plain" : "primary"}
+                disabled={write.busy || !sentOn}
+                onClick={() => write.send(`/api/leads/${lead.id}/claim`, { sentOn: sentOn || null, ref: ref.trim() || null })}
+              >
+                {lead.claimSentOn ? "Save" : "Claim sent"}
+              </Button>
+            ) : (
+              <span className="text-[12px] text-slate-500">{delivered ? "The PAP person or Finance marks it here." : "After the delivery."}</span>
+            )}
           </div>
           <Problem message={write.general(["sentOn", "ref"])} />
         </div>
@@ -2614,7 +2628,12 @@ function ClaimSteps({ data }: { data: LeadCase }) {
               ? "Paid."
               : data.can.pay
                 ? "Record the agency's money below when it comes."
-                : "Finance records the agency's money on the invoice when it comes."}
+                : "Often months after the claim. When it comes, mark it under GL money (with its proof): Finance confirms it against the bank. If the agency paid less, the patient pays the rest, or Finance lets it go."}
+          </div>
+          <div className="mt-1">
+            <Link to="/finance/gl" className="text-[13px] font-medium text-brand hover:underline">
+              GL money
+            </Link>
           </div>
         </div>
       </div>

@@ -7,8 +7,9 @@ import { type Database, rows } from "../db/index";
 import { type Env, idParam, Refusal, readBody } from "../http";
 import { saveClaim } from "../online/service";
 import { tellCustomer } from "../online/tell";
-import type { ConfirmPaymentInput, PaymentInput, RefundInput } from "../types";
+import type { ConfirmPaymentInput, PaymentInput, PaymentMethod, RefundInput } from "../types";
 import { financeBoard } from "./board";
+import { confirmGlMark, glMoneyList, markGlMoney, refuseGlMark } from "./gl";
 import { readCustomerCredit, useCredit } from "./credit";
 import { STAFF_METHODS } from "./rules";
 import {
@@ -127,7 +128,36 @@ export function financeRoutes(
     return c.json(done);
   });
 
-  // A guarantee letter's claim on the agency: Finance sends it after the delivery (Aryan, 22 Nov).
+  // A guarantee letter's money (Aryan, 26 Nov): one list by where it stands; the PAP person marks
+  // what came in, with its proof; Finance confirms each mark against the bank, or refuses it.
+  app.get("/api/finance/gl", async (c) => c.json(await glMoneyList(db, c.get("me"))));
+  app.post("/api/finance/gl/:id/mark", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        payer: z.enum(["agency", "patient"], { error: "Say who paid it." }),
+        amount: z.number({ error: "Type the amount that came in." }).int().positive("Type the amount that came in.").max(2_147_483_647),
+        paidOn: day,
+        reference: optional(80),
+        note: optional(300),
+        proofId: z.number().int().positive().nullish(),
+      }),
+    );
+    return c.json({ id: await markGlMoney(db, c.get("me"), idParam(c), input) });
+  });
+  app.post("/api/finance/gl/marks/:id/confirm", async (c) => {
+    const input = await readBody(c, z.object({ method, moneyAccount: optional(120), paidOn: day.nullish(), reference: optional(80) }));
+    await confirmGlMark(db, c.get("me"), idParam(c), input as { method: PaymentMethod; moneyAccount?: string | null; paidOn?: string | null; reference?: string | null });
+    return c.json({ ok: true });
+  });
+  app.post("/api/finance/gl/marks/:id/refuse", async (c) => {
+    const input = await readBody(c, z.object({ reason: z.string().trim().min(1, "Say why: the PAP person reads it.").max(300) }));
+    await refuseGlMark(db, c.get("me"), idParam(c), input.reason);
+    return c.json({ ok: true });
+  });
+
+  // A guarantee letter's claim on the agency: Finance sends it after the delivery (Aryan, 22 Nov),
+  // or the PAP person on her own case (26 Nov).
   app.post("/api/finance/orders/:id/gl-claim", async (c) => {
     const input = await readBody(c, z.object({ sentOn: day.nullish(), ref: optional(80) }));
     const [found] = await rows<{ id: number }>(

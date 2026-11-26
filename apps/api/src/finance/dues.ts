@@ -10,6 +10,13 @@ export const awaitingPaymentSql = sql`(i.terms = 'advance' and o.finance_check a
  *  Finance has checked the money. */
 export const notDueSql = sql`((i.terms in ('cod', 'days') and o.status <> 'completed') or ${awaitingPaymentSql})`;
 
+/** A guarantee letter's invoice (aliases `i`, `o`) the agency hasn't paid anything on yet: the
+ *  agency's money, not the patient's debt (Aryan, 26 Nov: the medicine goes first, the agency pays
+ *  months later). The company is still owed it (its totals keep it); a patient's own dues, their
+ *  next order's checks and their seller's reminders leave it out (`and not dd.gl_waiting`). */
+export const glWaitingSql = sql`((o.order_type = 'gl' or exists (select 1 from lead gl_case where gl_case.order_id = o.id and gl_case.road = 'gl'))
+  and not exists (select 1 from payment gl_paid where gl_paid.invoice_id = i.id and gl_paid.active and gl_paid.payer = 'agency'))`;
+
 /**
  * Every amount a customer owes, wherever it was billed (Aryan, 17 Nov: Finance checks what the
  * hospital or patient already owes before the order goes on): this CRM's open invoices, Zoho's
@@ -23,16 +30,17 @@ export const duesSql = (today: string): SQL => sql`(
   select i.customer_id, (i.total - i.paid)::bigint as balance, (${today}::date - i.due_on) as late,
     ${notDueSql} as on_delivery,
     ((i.terms = 'cod' and o.status <> 'completed') or ${awaitingPaymentSql}) as cod_waiting,
-    i.terms, o.payment_days as days, o.medrep_id, 'crm' as source, i.order_id
+    i.terms, o.payment_days as days, o.medrep_id, 'crm' as source, i.order_id,
+    ${glWaitingSql} as gl_waiting
   from invoice i join sales_order o on o.id = i.order_id where i.status = 'open' and i.total > i.paid
   union all
   select d.customer_id, round(d.balance * d.fx_rate)::bigint, (${today}::date - coalesce(d.due_date, d.doc_date)),
-    false, false, 'days', null, null, 'zoho', null::bigint
+    false, false, 'days', null, null, 'zoho', null::bigint, false
   from book_doc d
   where d.kind = 'invoice' and d.zoho_id is not null and d.customer_id is not null and d.balance > 0
     and d.status not in ('void', 'draft') and d.voided_at is null
   union all
-  select c.id, c.opening_receivables, 366, false, false, 'days', null, null, 'zoho_opening', null::bigint
+  select c.id, c.opening_receivables, 366, false, false, 'days', null, null, 'zoho_opening', null::bigint, false
   from customer c where c.opening_receivables > 0
 )`;
 

@@ -1577,9 +1577,15 @@ export async function saveClaim(
   id: number,
   input: { sentOn?: string | null; ref?: string | null },
 ): Promise<void> {
-  // Finance's from here (Aryan, 22 Nov): the PAP person gets the letter in and places the order,
-  // then only watches; Finance sends the claim and records what the agency pays.
-  allow(me, ["finance", "admin"], "record the claim");
+  // Finance's (22 Nov), or the PAP person's on her own case: she follows the money up after the
+  // delivery (Aryan, 26 Nov). What the agency pays Finance still confirms (finance/gl.ts).
+  if (!may(me, ["finance", "admin"])) {
+    const [own] = await rows<{ one: number }>(
+      db,
+      sql`select 1 as one from lead where id = ${id} and desk = 'pap' and assigned_to = ${me.id}`,
+    );
+    if (!isPapRep(me) || !own) allow(me, ["finance", "admin"], "record the claim");
+  }
   if (input.sentOn && input.sentOn > todayManila())
     throw new Refusal(400, "invalid", "That day hasn't come yet.", "sentOn");
   await db.transaction(async (tx) => {
