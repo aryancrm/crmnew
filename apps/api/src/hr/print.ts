@@ -7,6 +7,7 @@
 // them, whom it went to or who decided it, the leads above the person, HR, the CEO, the Admin.
 
 import { sql } from "drizzle-orm";
+import { companyName } from "../companies";
 import { bytesOf, keepFile } from "../files/store";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
@@ -31,7 +32,6 @@ import { DEFAULT_SCHEDULE } from "./work-time";
 
 /** A drawn signature: a PNG, at most 1 MB (Automated-Excel's SIGNATURE_MAX_BYTES). */
 export const SIGNATURE_MAX_BYTES = 1024 * 1024;
-const COMPANY: Record<string, string> = { "2mg": "2MG Inc.", gpi: "Getmeds Philippines" };
 
 const dataUrl = (mime: string, bytes: Uint8Array) =>
   `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`;
@@ -201,7 +201,7 @@ export async function leavePrintout(db: Database, me: Me, leaveId: number): Prom
   return {
     kind: "leave",
     title: "Application for Leave",
-    company: COMPANY[line.company ?? "2mg"] ?? "2MG Inc.",
+    company: companyName(line.company ?? "2mg"),
     person: head(line),
     filedOn: momentDay(line.madeAt),
     status: "Approved",
@@ -345,7 +345,7 @@ export async function formPrintout(db: Database, me: Me, formId: number): Promis
   return {
     kind: row.kind,
     title: FORM_TITLES[row.kind],
-    company: COMPANY[row.company ?? "2mg"] ?? "2MG Inc.",
+    company: companyName(row.company ?? "2mg"),
     person: { name: row.name, employeeCode: row.employeeCode, position: row.position, department: row.department },
     filedOn: momentDay(row.madeAt),
     status: row.kind === "incident" ? "Taken in" : "Approved",
