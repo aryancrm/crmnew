@@ -43,7 +43,7 @@ import { DeskPeople } from "./desk/people";
 import { LiveLocationSender } from "./field/live-sender";
 import { UndoConfirmBar } from "./finance/undo";
 import { MyDayButton } from "./hr/parts";
-import { allItems, type Badge, type MenuGroup, type MenuItem, spaceFor } from "./menus";
+import { allItems, type Badge, folderOpen, type MenuGroup, type MenuItem, spaceFor } from "./menus";
 import { Toasts } from "./toast";
 import { unreadIn, useUpdates } from "./updates";
 
@@ -393,7 +393,7 @@ export function Shell() {
               }
               className={({ isActive }) =>
                 `flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] ${
-                  (item.children ? inFolder(item, location) : openOf(item.to, isActive))
+                  (item.children ? folderOpen(item, location, allItems(flat)) : openOf(item.to, isActive))
                     ? "font-semibold text-brand"
                     : "text-slate-500"
                 }`
@@ -529,21 +529,6 @@ function PageBack({ trail }: { trail: string[] }) {
       ))}
     </nav>
   );
-}
-
-/** Whether a page of a folder (or the folder's own) is open: it then shows unfolded. A filtered
- *  link (/orders?stuck=1) counts only on that list with that filter, not on every order. */
-function inFolder(item: MenuItem, location: { pathname: string; search: string }): boolean {
-  return allItems(item.children ?? [item]).some((one) => {
-    const [path = "", query] = one.to.split("?");
-    if (path === "/") return false;
-    if (query) {
-      if (location.pathname !== path) return false;
-      const now = new URLSearchParams(location.search);
-      return [...new URLSearchParams(query)].every(([key, value]) => now.get(key) === value);
-    }
-    return location.pathname === path || location.pathname.startsWith(`${path}/`);
-  });
 }
 
 /** A count beside a menu link: a blue circle, the number white and centred in it (Aryan, 24 Nov). */
@@ -748,7 +733,7 @@ function MenuList({
   };
 
   const folder = (item: MenuItem) => {
-    const here = inFolder(item, location);
+    const here = folderOpen(item, location, every);
     const open = folded[item.label] ?? here;
     // In the rail a folder is its icon; pressing it opens the sidebar with the folder open.
     if (rail)
