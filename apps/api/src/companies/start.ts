@@ -7,7 +7,8 @@ import { seedB2bTeam } from "../b2b/seed";
 import { seedB2cTeam } from "../b2c/seed";
 import { seedClidp } from "../clidp/seed";
 import { seedDemoCustomers } from "../customers/seed";
-import { type Database, freshenPlanner } from "../db/index";
+import { sql } from "drizzle-orm";
+import { type Database, freshenPlanner, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedDemoDispatch } from "../dispatch/seed";
 import { seedDemoFinance } from "../finance/seed";
@@ -22,6 +23,7 @@ import { alignDemoMoneyDates } from "../orders/seed-times";
 import { fillOrderSeats, projectOrg } from "../org/service";
 import { seedRegulatory } from "../regulatory/seed";
 import { seedRxTeam } from "../rx/seed";
+import { blankDetails, companyNow } from "./context";
 import { lockDue } from "../scores/service";
 import { seedDemo } from "../seed";
 import { seedHospitalBoxes } from "../sellers/seed";
@@ -73,6 +75,9 @@ export async function readyCompany(db: Database, start: CompanyStart): Promise<v
   if (applied.length) say(`database: applied ${applied.join(", ")}`);
   await freshen(db, start);
 
+  // A company added before 26 Nov night got 2MG's details from migration 0017 (address, phone,
+  // email, licence, foot line): untouched, they become its own blank ones (Aryan: "everything separate").
+  if (!start.home && (await ownDetailsIfSeeded(db))) say("company details: 2MG's from the old migration replaced by its own");
   if (start.home && (await makeFirstAdmin(db))) say("database: the first System admin made");
   if (start.home) {
     const stopped = await closeLocalAsks(db);
@@ -123,3 +128,28 @@ export function companyTick(db: Database, start: CompanyStart): void {
   void freshen(db, start);
   void automate(db, start);
 }
+
+/** The details migration 0017 writes into every database: 2MG's, by its name and email. */
+const SEEDED = { name: "2MG Inc.", email: "info@2mginc.com", address: "Unit 301 & 305, 17 Vatican Bldg." };
+
+/**
+ * Another company still holding 2MG's details exactly as the old migration wrote them (nobody has
+ * saved its Company details since): they become its own blank ones under its own name. Answers
+ * whether they did. A company that saved its details is never touched.
+ */
+export async function ownDetailsIfSeeded(db: Database): Promise<boolean> {
+  const company = companyNow();
+  if (!company || company.home) return false;
+  const [found] = await rows<{ value: { name?: string; email?: string; address?: string }; savedBy: number | null }>(
+    db,
+    sql`select value, updated_by::int as "savedBy" from setting where key = 'company'`,
+  );
+  const value = found?.value;
+  if (!found || found.savedBy !== null || value?.name !== SEEDED.name || value?.email !== SEEDED.email || !value?.address?.startsWith(SEEDED.address))
+    return false;
+  await db.execute(
+    sql`update setting set value = ${JSON.stringify(blankDetails(company.name))}::jsonb, updated_at = now() where key = 'company'`,
+  );
+  return true;
+}
+

@@ -15,6 +15,7 @@ import { seedDemoInventory } from "../inventory/seed";
 import { useGraph } from "../online/graph";
 import { seedDemo } from "../seed";
 import { asCompany, loginDomain, ownCompanyCode } from "./context";
+import { ownDetailsIfSeeded } from "./start";
 import { companyInfo, letterheadOf } from "../settings/service";
 import { invoiceFromLabel } from "../orders/rules";
 import { controlRoutes } from "./control-routes";
@@ -407,6 +408,13 @@ describe("everything separate inside each company (Aryan, 26 Nov night)", () => 
     const inHome = await asCompany(home.ref, async () => ({ details: await companyInfo(main), billing: invoiceFromLabel() }));
     expect(inHome.details.invoiceSeries).toBe("2MG-SI-");
     expect(inHome.billing).toBe(home.ref.name);
+    // "2mg" on a row is the company itself in each; an older invoice issued under GetMeds inside
+    // 2MG before the separation keeps GetMeds's name, as it was issued.
+    expect(await asCompany(gm.ref, async () => invoiceFromLabel("2mg"))).toBe(gm.ref.name);
+    expect(await asCompany(home.ref, async () => [invoiceFromLabel("2mg"), invoiceFromLabel("gpi")])).toEqual([
+      home.ref.name,
+      "Getmeds Philippines Incorporated",
+    ]);
 
     // Each company's Admin sees and saves its own details alone (no tab of another company).
     const fresh = await list.newAdminPassword(gm.ref.orgId, null);
@@ -430,5 +438,18 @@ describe("everything separate inside each company (Aryan, 26 Nov night)", () => 
     expect(twoMg.address).not.toBe("GetMeds' own street");
     expect(twoMg.invoiceSeries).toBe("2MG-SI-");
   });
-});
 
+  it("gives a company made before the fix its own details for 2MG's untouched ones, and leaves saved ones", async () => {
+    // GetMeds as it was made before 26 Nov night: 2MG's details from migration 0017, never saved.
+    const seed = await rows<{ value: unknown }>(main, sql`select value from setting where key = 'company'`);
+    expect(JSON.stringify(seed[0]?.value)).toContain("info@2mginc.com");
+    await gm.db.execute(sql`update setting set value = ${JSON.stringify(seed[0]?.value)}::jsonb, updated_by = null where key = 'company'`);
+    expect(await asCompany(gm.ref, () => ownDetailsIfSeeded(gm.db))).toBe(true);
+    const own = await asCompany(gm.ref, () => companyInfo(gm.db));
+    expect(own).toMatchObject({ name: gm.ref.name, email: "", address: "", licence: "", footer: "", invoiceSeries: "" });
+    // Saved by its Admin since: never touched. 2MG's own: never touched.
+    await gm.db.execute(sql`update setting set value = ${JSON.stringify(seed[0]?.value)}::jsonb, updated_by = 1 where key = 'company'`);
+    expect(await asCompany(gm.ref, () => ownDetailsIfSeeded(gm.db))).toBe(false);
+    expect(await asCompany(list.home().ref, () => ownDetailsIfSeeded(main))).toBe(false);
+  });
+});

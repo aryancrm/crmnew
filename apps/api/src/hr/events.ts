@@ -3,6 +3,7 @@
 // are written down only as "changed": the trail is read by more eyes than the record itself.
 
 import { sql } from "drizzle-orm";
+import { companyName } from "../companies";
 import { ownCompanyName } from "../companies/context";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
@@ -84,9 +85,10 @@ const shown = (value: Value): string | null =>
 
 /** Fields kept as a code, said as the form says them. */
 const VALUE_WORDS: Record<string, Record<string, string>> = {
-  // One company per database since the separation (26 Nov night): whichever code, the company itself.
+  // One company per database since the separation (26 Nov night): "2mg" is the company itself; an
+  // older change to the other company's code keeps that company's name, as it was made.
   get company() {
-    return { "2mg": ownCompanyName(), gpi: ownCompanyName() };
+    return { "2mg": ownCompanyName(), gpi: companyName("gpi") };
   },
   classification: { probationary: "Probationary", regular: "Regular", part_time: "Part-time", intern: "Intern" },
   gender: { female: "Female", male: "Male" },

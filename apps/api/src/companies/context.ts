@@ -51,3 +51,18 @@ export const ownCompanyCode = (): string => companyNow()?.code ?? "2MG";
 /** 2MG's invoice series from before the separation (its invoices out keep their numbers); any other
  *  company types its own in Company details before its first invoice. */
 export const homeInvoiceSeries = (): string | null => (isHomeCompany() ? "2MG-SI-" : null);
+
+/** A new company's details before its Admin fills them: its name, nothing of another company's. */
+export const blankDetails = (name: string) => ({
+  name,
+  address: "",
+  phone: "",
+  email: "",
+  tin: "",
+  vat: true,
+  licence: "",
+  footer: "",
+  signatory: "",
+  signatoryTitle: "",
+  invoiceSeries: "",
+});

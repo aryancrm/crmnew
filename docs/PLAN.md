@@ -917,7 +917,7 @@ it is; its screens are the reference for the same pages here, on the new API.
 |---|---|---|
 | Scope | **Everything is new**: code, database, screens | Aryan's decision, 14 Nov: a complete new project with a free hand on every choice. The old CRM is reference only. |
 | Language | **TypeScript**, frontend and backend | The work is database reads and writes, so the language does not set the speed; the database design and the number of queries do. One language means the frontend and backend share the same types and one person or AI can work on all of it. |
-| Company | **One company per database** (26 Nov: several companies on one server, section 28) | The old CRM was built to be sold to many businesses, so every table and query carried a company. This one keeps each company in a database of its own: the tables stay as simple and fast as for one company, and no query can mix two companies. The two invoicing companies are still a field on the order. |
+| Company | **One company per database** (26 Nov: several companies on one server, section 28) | The old CRM was built to be sold to many businesses, so every table and query carried a company. This one keeps each company in a database of its own: the tables stay as simple and fast as for one company, and no query can mix two companies. Inside a company everything is its own (26 Nov night, change log 212): no choice of company on an order, an invoice or a person. |
 | Frontend and backend | **Separate apps, one repository** | The API also serves the two websites, Messenger and later a phone app. Each can be deployed and scaled on its own. Sharing one repository keeps the API contract in one place. |
 | Frontend | **React single-page app (Vite)**, installable on a phone | Everyone is signed in, so nothing needs to be rendered on a server. The browser loads the app once from a CDN and then only asks the API for data: moving between screens is instant. This is how the hub is built. The old CRM renders every page on Vercel, which then calls the API, which then calls the database: three hops per page. |
 | Backend | **Node.js, Hono, Zod, Drizzle** | Small, fast, well understood. Plain routes: one call per screen. |
@@ -2576,16 +2576,19 @@ medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 dat
 
 **Not yet (each its own step, on Aryan's word)**
 
-- Live on one.bishnoi.ai since 26 Nov (change log 206): 2MG Inc. is the first company, Org ID 237227.
-  Waiting for Aryan: the first panel login (with the setup key in the API's log) and adding GetMeds.
+- Live on one.bishnoi.ai since 26 Nov (change log 206): 2MG Inc. is the first company, Org ID 237227;
+  Aryan set up the panel and added Getmeds Philippines Incorporated (GPI, Org ID 749607, @getmeds.ph)
+  the same evening. Its Admin fills its Company details (address, TIN, and the invoice series before
+  its first invoice) and connects its own pages, mailboxes and websites in its Online pages & mail.
 - The daily backup (Coolify, the database's Backups, 18:00 UTC) copies only the first company's
   database (`postgres`): `bishnoi_control` and each new company's `co_<Org ID>` must be added to
   it (Aryan's yes first: it is a server setting).
 - Emptying the dummy data Aryan asked to clear (26 Nov: "empty all the data, just keep the inventory
   … 2MG's too, those were dummy orders … keep the leads and enquiries in 2MG"): what goes is listed
   for his yes first; nothing is deleted before.
-- In GetMeds's own database an order still offers "Invoice from 2MG / GetMeds"; the tender robot
-  stays with the first company; a person in both companies signs in to one at a time. Which
+- Inside each company everything is its own since 26 Nov night (change log 212, 228): no choice of
+  company on an order, an invoice or a person. The tender robot stays with the first company; a
+  person in both companies signs in to one at a time. Which
   Facebook pages and mailboxes move from 2MG's to GetMeds's is Aryan's to say (each is connected
   in its company's own Online pages & mail).
 
@@ -4232,3 +4235,14 @@ up right.
 - 27 Nov (225), the backend developer: **remove an account from the browser.** In the avatar menu each other account has an × (signed out of this browser and on the server), and *Sign out of (name) only* signs out the one in use and opens the next one kept here (none left: the sign-in page). *Sign out of all accounts* stays.
 - 27 Nov (226), the backend developer: **the account menu as Google's switcher.** The account in use on top (picture, name, email, role) with its own *Sign out* in the same row (this account only when others are here; alone, signing out); its profile, security and password under it; then *Other accounts* (press a row to switch, x to remove), *Add another account*, and *Sign out of all accounts* at the foot.
 - 27 Nov (227), the backend developer: **the General part offers what the account holds on the tree.** "Each account has its assigned Division and Sub-division from the tree in the Admin; one may handle several Sub-divisions, Divisions or areas: put them in a search dropdown." `GET /api/orders/assignments` (a lead's `?medrep=` for one of their people) lists one per seat held today (a vacant MedRep seat's cover too, never a lead seat's): its Division with the Division's fixed Sub-division, else the seat's team or place, its area and team. One shows as it is; several are a searchable list (`orders/assignment-picker.tsx`: Division, Sub-division, area or team), the Sub-division following the pick. The API takes the Sub-division sent only when it is one of the account's for that Division, else its first.
+- 27 Nov (228), the separation finished before it goes live: (1) **GetMeds repaired**: it was added
+  in the panel before (212)'s fix, so it held 2MG's details from migration 0017 (address, phone,
+  info@2mginc.com, licence, foot line). On start the server gives any company whose details are
+  still exactly those, never saved by anyone, its own blank ones under its own name; a company that
+  saved its details is never touched (tested). (2) A row from before the separation billed under
+  GetMeds inside 2MG (`gpi`) keeps GetMeds's name, as it was issued (the invoice, its sales order,
+  HR's history line), instead of printing as 2MG's; "2mg" on a row means the company itself in each
+  database. (3) HR's masterlist sheet: the Company column is shown only (the company's own code); an
+  import neither reads nor changes it, and finds a person by employee ID or login email alone. (4)
+  The purchase form's sample bank account no longer names GetMeds. Checked again: no screen or paper
+  offers or shows the other company (the old 2026 chart page, out of every menu, keeps its title).

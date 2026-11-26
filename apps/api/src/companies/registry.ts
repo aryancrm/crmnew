@@ -20,7 +20,7 @@ import { CONTROL_DIR, migrate } from "../db/migrate";
 import { ensureCompanyTree, makeFirstAdmin } from "../first-admin";
 import { Refusal } from "../http";
 import { freshPassword } from "../org/service";
-import { asCompany, type CompanyRef } from "./context";
+import { asCompany, blankDetails, type CompanyRef } from "./context";
 import { copyStock, type StockCopied } from "./copy-stock";
 
 export type CompanyRow = {
@@ -79,21 +79,6 @@ const withDatabase = (url: string, name: string) => {
   address.pathname = `/${name}`;
   return address.toString();
 };
-
-/** A new company's details before its Admin fills them: its name, nothing of another company's. */
-export const blankDetails = (name: string) => ({
-  name,
-  address: "",
-  phone: "",
-  email: "",
-  tin: "",
-  vat: true,
-  licence: "",
-  footer: "",
-  signatory: "",
-  signatoryTitle: "",
-  invoiceSeries: "",
-});
 
 /** Online: one Postgres server, each company a database on it; the list in "bishnoi_control". */
 export function postgresPlaces(mainUrl: string, controlUrl = process.env.CONTROL_DATABASE_URL): Places {

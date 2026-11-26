@@ -17,7 +17,7 @@
 // Who: HR and the Admin import; HR, the CEO and the Admin export.
 
 import { sql } from "drizzle-orm";
-import { type CompanyCode, OWN } from "../companies";
+import type { CompanyCode } from "../companies";
 import { ownCompanyCode } from "../companies/context";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
@@ -68,9 +68,6 @@ export function centavosOf(text: string): number | null {
   return Math.round(Number(value) * 100);
 }
 const pesosWords = (centavos: number | null) => (centavos === null ? "" : (centavos / 100).toFixed(2));
-/** The employer column: the company itself, whatever was typed (one company per database since the
- *  separation, 26 Nov night). */
-const companyOf = (_text: string): CompanyCode | null => OWN;
 const CLASS_WORDS: Record<string, string> = {
   regular: "Regular",
   probationary: "Probationary",
@@ -91,7 +88,8 @@ const PEOPLE: Column[] = [
   { key: "employeeCode", label: "Employee ID", aliases: ["Employee No", "Employee Number", "ID No"], note: "Finds the person (with the login email)" },
   { key: "loginEmail", label: "Login email", aliases: ["Email", "Work email", "Company email"], note: "Finds the person; never changed here" },
   { key: "name", label: "Name", aliases: ["Full name", "Employee name"], readOnly: true },
-  { key: "company", label: "Company", note: "2MG or GPI" },
+  // Shown only: each company's people are in its own CRM since the separation (26 Nov night).
+  { key: "company", label: "Company", readOnly: true },
   { key: "classification", label: "Employment", aliases: ["Classification", "Employment status", "Status of employment"], note: "Regular, Probationary, Part-time or Intern" },
   { key: "position", label: "Position", aliases: ["Job title", "Designation"], note: "As on HR's list of positions" },
   { key: "department", label: "Department" },
@@ -160,10 +158,6 @@ function fieldFrom(key: string, text: string): { value: unknown } | { problem: s
     const centavos = centavosOf(text);
     return centavos === null ? { problem: `"${text}" isn't an amount in pesos` } : { value: centavos };
   }
-  if (key === "company") {
-    const code = companyOf(text);
-    return code ? { value: code } : { problem: `"${text}" isn't 2MG or GPI` };
-  }
   if (key === "classification") {
     const found = classificationFrom(text);
     return found ? { value: found } : { problem: `"${text}" isn't Regular, Probationary, Part-time or Intern` };
@@ -210,13 +204,11 @@ const why = (error: unknown) => {
 function findPerson(people: PersonNow[], cells: Record<string, string>): { person: PersonNow } | { problem: string; status: "problem" | "not_found" } {
   const code = cells.employeeCode?.trim().toUpperCase() || null;
   const email = cells.loginEmail?.trim().toLowerCase() || null;
-  const company = cells.company ? companyOf(cells.company) : null;
   if (!code && !email) return { status: "problem", problem: "No employee ID and no login email: nothing to find the person by" };
-  const byCode = code
-    ? people.filter((one) => String(one.employeeCode ?? "").toUpperCase() === code && (!company || one.company === company))
-    : [];
+  const byCode = code ? people.filter((one) => String(one.employeeCode ?? "").toUpperCase() === code) : [];
   const byEmail = email ? people.filter((one) => one.email === email) : [];
-  if (byCode.length > 1) return { status: "problem", problem: `Employee ID ${code} is in both companies: fill in the Company` };
+  if (byCode.length > 1)
+    return { status: "problem", problem: `Employee ID ${code} is on more than one person: leave it empty and find them by login email` };
   const [a] = byCode;
   const [b] = byEmail;
   if (a && b && a.personId !== b.personId)

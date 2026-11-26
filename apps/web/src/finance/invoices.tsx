@@ -439,7 +439,8 @@ export function Invoice() {
 }
 
 /** The invoice as Zoho prints it: the status ribbon across the corner, the company on the left
- *  (a logo only on GetMeds' papers, and only when there is one to show; 2MG's template has none),
+ *  (its own name, address, TIN and phone from Company details; one issued under the other company
+ *  before the separation, 26 Nov night, shows that company's name as it was issued),
  *  "Invoice" with its number and balance due on the right, Ship To and its dates, the lines under
  *  the dark heading, then Sub Total, Zoho's tax lines, Total, Payment Made and Balance Due. */
 function InvoicePaper({ data }: { data: InvoiceDetail }) {
