@@ -127,7 +127,7 @@ export function customerRoutes(
   );
   // What they were given before, medicine by medicine (this CRM's orders and Zoho's).
   app.get("/api/customers/:id/prices", async (c) =>
-    c.json(await customerPrices(db, c.get("me"), idParam(c))),
+    c.json(await customerPrices(db, c.get("me"), idParam(c), c.req.query("month"))),
   );
 
   // Customers from a spreadsheet (ERP phase 4): each row added as if typed by hand, with the same

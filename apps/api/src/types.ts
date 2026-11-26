@@ -2848,6 +2848,10 @@ export type CustomerPrices = {
   /** The payments the old system took from them, newest first. */
   payments: { id: number; number: string | null; on: string; mode: string | null; reference: string | null; amount: number }[];
   medicines: MedicinePrices[];
+  /** Every month they ordered in before this CRM, the latest first: its orders and total (not void). */
+  months: { month: string; orders: number; total: number }[];
+  /** The month `orders` is narrowed to ("2026-10"), or null for all of them. */
+  month: string | null;
 };
 
 /** For an order being decided: the customer in short, and for each of its lines (by the line's
