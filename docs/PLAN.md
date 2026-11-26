@@ -2567,7 +2567,11 @@ medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 dat
 
 **Not yet (each its own step, on Aryan's word)**
 
-- Putting it live on one.bishnoi.ai (`COMPANIES=on`), making the first panel login, adding GetMeds.
+- Live on one.bishnoi.ai since 26 Nov (change log 206): 2MG Inc. is the first company, Org ID 237227.
+  Waiting for Aryan: the first panel login (with the setup key in the API's log) and adding GetMeds.
+- The daily backup (Coolify, the database's Backups, 18:00 UTC) copies only the first company's
+  database (`postgres`): `bishnoi_control` and each new company's `co_<Org ID>` must be added to
+  it (Aryan's yes first: it is a server setting).
 - Emptying the dummy data Aryan asked to clear (26 Nov: "empty all the data, just keep the inventory
   … 2MG's too, those were dummy orders … keep the leads and enquiries in 2MG"): what goes is listed
   for his yes first; nothing is deleted before.
@@ -4033,3 +4037,19 @@ medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 dat
   (his word), set once by the server when the list is first made (`HOME_COMPANY_LOGIN`); its Admin's
   seat login (`admin`), where it has one, keeps working too. 14 tests for several companies (2 new); tried on a fresh copy
   of the local data. To go live with the team's evening work, after their pull requests are merged.
+- 26 Nov (206), Aryan: "if multicompany architecture is ready and you integrate the other team
+  members work pls deploy". **Joined to main and put live on one.bishnoi.ai** (API and web, commit
+  `40cce8a`): the backend developer's company codes and plain-English CI report (pull request 7, already
+  on main), HR's documents, imports and reports (`hr` branch), the MedRep pages (`medrep` branch: one
+  customer list for field sellers, the customer page, the menus written once) and several companies
+  (204-205). No other branch has work main lacks. Clashes only in this plan's numbers (HR keeps
+  section 27 and 201-203; several companies is section 28 and 204-205) and in the settings code (both
+  kept: the company's name from Bishnoi One's list and HR's letterhead per company). The MedRep menus'
+  test picture gains HR's "My documents" under Me (on purpose, for everyone); nothing else in the 13
+  menus changed. The control panel's setup screen no longer shows example login IDs. Checked: 839 API
+  tests, 35 web tests, the builds, GitHub's checks (a second company on a real Postgres, the Docker
+  smoke test, the security scan); a trial start on a copy of the local data with several companies on
+  (migrations 0145-0160 applied, the Admin's login became info@2mginc.com, the old one kept in the
+  panel's log). Online: a database backup just before (43 MB); `COMPANIES=on` and
+  `HOME_COMPANY_LOGIN=info@2mginc.com` added to the API in Coolify; the live API applied 0160 and made
+  the list: 2MG Inc., Org ID 237227, `@2mginc.com`. Signed-in people stayed signed in.
