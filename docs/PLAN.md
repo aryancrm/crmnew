@@ -4086,3 +4086,25 @@ medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 dat
   Aryan):** the PAP person can't answer her patients on Messenger or by email; only the Online desk
   and the Admin can. Also: the two-step sign-in test waits out a code's last seconds (it failed
   once on GitHub on a busy machine). Local; not live yet.
+- 26 Nov (208), Aryan, night: "put it all live; Fhaye should reply too; after the letter it is the
+  same process, Management, Finance, Dispatch, but write everywhere that it is PAP's; the agency
+  doesn't pay the whole, so who records how much came, Fhaye or Finance? You decide; the patient
+  often pays the rest" and then "the agency's money comes very late, months sometimes; Fhaye marks
+  it when it comes and then Finance approves? But we give the medicine first, we don't make the
+  patient wait: build it that way." Decided and built: (1) **the PAP person reads and answers her
+  own cases on Messenger and by email** (only the Online desk and the Admin could). (2) **"PAP ·
+  GL" on every guarantee letter's order**: the order lists, the Management, Finance and Dispatch
+  boards, the order page (its case and the PAP person on hover); the sale still counts where the
+  patient came from. (3) **A guarantee letter's money**: the order goes Management, Finance,
+  Dispatch on credit to the agency, nothing paid first, so the medicine goes out (as before);
+  after the delivery the PAP person or Finance marks the claim sent; when money comes, often
+  months later, the PAP person marks it (the agency's, or the patient's rest) with its proof, and
+  **Finance confirms it against the bank: only then is it a payment**, or refuses it saying why;
+  Finance may still record a payment itself and alone lets the rest go (22 Nov). While the agency
+  hasn't paid anything, its money is not the patient's debt: the order checks, the customer lists
+  and the late-payment reminders leave it out; the company's totals and the books keep it.
+  **Guarantee letters** (Finance; the PAP person's "GL money"; the CEO's and the Admin's PAP app):
+  every letter by where its money stands, with how many days it has waited for the agency.
+  Migration 0162. (4) Confirmed: each company is its own (people, stock, orders, money, enquiries,
+  its own pages, mailboxes, websites and automatic emails); 2MG today, GetMeds and any other
+  added in the control panel the same way (section 28).
