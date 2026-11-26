@@ -205,7 +205,7 @@ function Setup() {
         <Field label="Setup key from the server's log" error={action.at("key")}>
           {(props) => <input {...props} className="field font-mono" autoComplete="off" value={form.key} onChange={set("key")} />}
         </Field>
-        <Field label="Your login ID (short, no email: 1001 or aryan)" error={action.at("loginId")}>
+        <Field label="Your login ID (short, not an email)" error={action.at("loginId")}>
           {(props) => <input {...props} className="field" autoComplete="username" value={form.loginId} onChange={set("loginId")} />}
         </Field>
         <Field label="Your name" error={action.at("name")}>

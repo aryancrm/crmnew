@@ -157,7 +157,7 @@ export function controlRoutes(control: Database, list: CompanyList, options: { s
       c,
       z.object({
         key: z.string().trim().min(1, "Type the setup key from the server's log.").max(100),
-        loginId: z.string().trim().toLowerCase().regex(LOGIN_ID, "2 to 32 small letters or digits, like 1001 or aryan."),
+        loginId: z.string().trim().toLowerCase().regex(LOGIN_ID, "2 to 32 small letters, digits, dots or dashes, starting with a letter or digit."),
         name: z.string().trim().min(1, "Type your name.").max(80),
         password: z.string().min(12, "Use at least 12 characters.").max(200),
       }),
