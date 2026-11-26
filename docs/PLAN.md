@@ -2501,8 +2501,10 @@ sets a seat's kind in Teams & people (Change the seat → Works); the holder's H
 - Tests: `org/works.test.ts` (4); `menus.test.ts` keeps every MedRep's menu as it was and checks an
   office Hospital, Rx and PAP seat lose the field's pages and a field NBD gains them.
 
-**Not done.** The office seat's own phone desk where its channel has none (it keeps its channel's
-menu otherwise); a field seat's Home cards follow the channel, not the kind.
+**Not needed (26 Nov, the backend developer):** an account doesn't change kind; it is handed to
+another person, who carries on. So no office call desk for a field team's account and no Home
+cards by kind: each account keeps its team's screens. The Works box stays for setting an account
+up right.
 
 ## 13. Questions waiting for Aryan
 
@@ -3944,3 +3946,4 @@ menu otherwise); a field seat's Home cards follow the channel, not the kind.
 - 26 Nov (200), recorded by the backend developer: **one code per company everywhere.** `2mg` = 2MG Incorporated, `gpi` = Getmeds Philippines Incorporated. Orders and invoices called Getmeds Philippines `getmeds` while HR and payroll called it `gpi`, and the names were written five ways (2MG Inc., 2MG Incorporated, GetMeds Philippines Inc., Getmeds Philippines…). Now one list, `apps/api/src/companies.ts` (code, registered name, short name, invoice series), used by orders, invoices, HR, payroll, printouts and the books' headings. Migration 0159 moves the orders and invoices already made from `getmeds` to `gpi` and renames the invoice counter with it, so every invoice keeps its number and the `INV-` series goes on from the last one (tested on a copy made the old way: `companies.test.ts`). The group's own name (the company tree's top box, the settings) is unchanged.
 - 26 Nov (204), asked by the backend developer: **office or field.** Every seller's seat is either Office (works by phone) or Field (visits doctors or hospitals), never both; HR moves a person to a seat of the other kind to change. Who places the order stays as each team works now; the sale counts for whoever takes and processes the order; the field and the office seller both see the customer (section 28). Plan only, nothing built yet.
 - 26 Nov (205), asked by the backend developer: "proceed". **Office or field built** (section 28): each MedRep seat carries its kind, set as its channel works; the CEO or the Admin changes it in Teams & people; the menu, the field's pages and the customer page follow it.
+- 26 Nov (206), the backend developer: an account isn't switched between office and field; it is handed to the next person, who carries on, and no data is lost. The two "not done" items of section 28 are dropped.
