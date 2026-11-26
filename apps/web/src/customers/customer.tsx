@@ -4,6 +4,7 @@
 // doctors, details, activity) with the open one on the right. Everything comes from one read.
 
 import { RefillCard } from "./refill";
+import { RefillFlow, refillFrom, refillsList } from "./refill-flow";
 import { ActionBar, NextCard, useCustomerWork } from "./customer-work";
 import { FieldPanel } from "../mr/clients";
 import type {
@@ -32,7 +33,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { Fragment, type ReactNode, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { placesOrders, useMe } from "../auth";
 import { CustomerDialog } from "./dialog";
@@ -89,6 +90,8 @@ const day = (iso: string) => dayLabel(manilaDay(iso));
 export function Customer() {
   const me = useMe().data;
   const id = Number(useParams().id);
+  // Opened from Refills due: the page leads with the refill call and goes back to that list.
+  const fromRefills = refillFrom(useSearchParams()[0]);
   const queries = useQueryClient();
   const action = useAction();
   const [editing, setEditing] = useState(false);
@@ -168,7 +171,7 @@ export function Customer() {
   return (
     <div className="mx-auto max-w-screen-2xl space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <Crumbs list={listLabel} to={listTo} />
+        <Crumbs list={fromRefills ? "Refills due" : listLabel} to={fromRefills ? refillsList(fromRefills) : listTo} />
         <ActionBar actions={work.actions} run={work.run} field={work.field} customerId={customer.id} name={customer.name} />
       </div>
 
@@ -359,7 +362,11 @@ export function Customer() {
           />
         }
       >
-        {work.seller !== "desk" && <NextCard flat steps={work.steps} run={work.run} />}
+        {fromRefills ? (
+          <RefillFlow data={data} state={fromRefills} onCall={() => work.run("call")} canOrder={work.can.order} />
+        ) : (
+          work.seller !== "desk" && <NextCard flat steps={work.steps} run={work.run} />
+        )}
         <Glance
           title={patient ? "Their medicines and money" : "Their buying"}
           tiles={[

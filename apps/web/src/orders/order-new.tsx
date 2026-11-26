@@ -1049,6 +1049,12 @@ export function OrderNew({
       navigate(`/visits/${visitId}`, { replace: true });
       return;
     }
+    // A refill call's order (refill-flow.tsx): back to the same list, for the next one.
+    const refills = !fixId && params.get("from") === "refills" ? params.get("state") : null;
+    if (refills && !failed.length) {
+      navigate(`/to-call?state=${refills}`, { replace: true, state: { placed: { orderId: id } } });
+      return;
+    }
     navigate(`/orders/${id}`, {
       replace: true,
       state: failed.length
