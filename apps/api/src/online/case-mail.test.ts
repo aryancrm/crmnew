@@ -147,4 +147,16 @@ describe("automatic emails on a case", () => {
     await idOf(await post("jane", "/api/leads", { source: "phone", name: "Pia Lopez", email: "pia.lopez@example.test" }));
     expect(await mailTo("pia.lopez@example.test", 1)).toEqual([]);
   });
+
+  it("lets the PAP person answer her own case by email (Aryan, 26 Nov), and nobody else's", async () => {
+    const [mine] = await rows<{ id: number }>(db, sql`select id::int as id from lead where email = 'lito@example.test'`);
+    const id = mine?.id as number;
+    const thread = await app.request(`/api/leads/${id}/thread`, { headers: { cookie: cookies.paula as string } });
+    expect(thread.status).toBe(200);
+    expect(((await thread.json()) as { can: { reply: boolean } }).can.reply).toBe(true);
+    expect((await post("paula", `/api/leads/${id}/reply`, { text: "Your quotations are attached above." })).status).toBe(200);
+    expect((await mailTo("lito@example.test", 5)).at(-1)?.text).toContain("Your quotations are attached above.");
+    // Not an Online desk case of hers.
+    expect((await post("paula", `/api/leads/${await idOf(await post("jane", "/api/leads", { source: "phone", name: "Ana Cruz", email: "ana.cruz@example.test" }))}/reply`, { text: "Hi" })).status).toBeGreaterThanOrEqual(400);
+  });
 });

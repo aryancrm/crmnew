@@ -11,9 +11,8 @@ import { isHomeCompany } from "../companies/context";
 import { type Database, rows } from "../db/index";
 import { allow, may, onlineDesk, Refusal } from "../http";
 import type { Me } from "../types";
-import { type Account, caseOf, chatOf, type IncomingFile, keepMessage } from "./conversation";
+import { type Account, answerGate, caseOf, chatOf, type IncomingFile, keepMessage } from "./conversation";
 import { graph } from "./graph";
-import { LEAD_WORK_ROLES } from "./rules";
 import { seal, unseal } from "./secrets";
 
 export const CHANNEL_ROLES = ["admin", "ceo"] as const;
@@ -494,7 +493,7 @@ export async function replyOnMessenger(
   leadId: number,
   text: string,
 ): Promise<void> {
-  allow(me, LEAD_WORK_ROLES, "answer a chat");
+  await answerGate(db, me, leadId, "answer a chat");
   const body = text.trim();
   if (!body) throw new Refusal(400, "invalid", "Write something to send.", "text");
   if (body.length > MAX_TEXT)

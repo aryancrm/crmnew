@@ -19,7 +19,7 @@ import type {
   LeadPaperKind,
   Me,
 } from "../types";
-import { chatOf } from "./conversation";
+import { chatOf, mayAnswer } from "./conversation";
 import { mailSink, pullMailbox, replyByEmail } from "./email";
 import {
   appSecrets,
@@ -108,7 +108,9 @@ export async function inboxCount(db: Database, me: Me): Promise<{ needs: number;
 
 /** The whole conversation: every case on it (theirs and ours), with the desk's notes. */
 export async function chatThread(db: Database, me: Me, leadId: number): Promise<ChatThread> {
-  allow(me, LEAD_READ_ROLES, "read a conversation");
+  // The desk reads every conversation; the PAP person their own cases' (26 Nov).
+  if (!may(me, LEAD_READ_ROLES) && !(await mayAnswer(db, me, leadId)))
+    allow(me, LEAD_READ_ROLES, "read a conversation");
   const chat = await chatOf(db, leadId);
   if (!chat) throw new Refusal(404, "not_found", "This case has no conversation.");
   const [messages, notes, [lead]] = await Promise.all([
@@ -133,8 +135,8 @@ export async function chatThread(db: Database, me: Me, leadId: number): Promise<
   const lines = [...messages, ...notes].sort(
     (a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id),
   );
-  const why = !may(me, LEAD_WORK_ROLES)
-    ? "Only the Online desk answers."
+  const why = !(await mayAnswer(db, me, leadId))
+    ? "Only the Online desk answers (and the PAP person, their own cases)."
     : chat.state === "lost"
       ? "Closed as lost: reopen the case to answer. A note for the team still goes."
       : !chat.account.active

@@ -18,7 +18,7 @@ import nodemailer from "nodemailer";
 import { type Database, rows } from "../db/index";
 import { allow, may, onlineDesk, Refusal } from "../http";
 import type { HeldSender, Me } from "../types";
-import { type Account, caseOf, chatOf, type IncomingFile, keepMessage } from "./conversation";
+import { type Account, answerGate, caseOf, chatOf, type IncomingFile, keepMessage } from "./conversation";
 import { CHANNEL_ROLES } from "./messenger";
 import { LEAD_WORK_ROLES } from "./rules";
 import { seal, unseal } from "./secrets";
@@ -682,7 +682,7 @@ export async function replyByEmail(
   text: string,
   extra: { subject?: string; attachments?: MailFile[] } = {},
 ): Promise<void> {
-  allow(me, LEAD_WORK_ROLES, "answer an email");
+  await answerGate(db, me, leadId, "answer an email");
   await sendOnCase(db, leadId, text, extra, me.id);
   if (onlineDesk(me))
     await db.execute(
