@@ -48,6 +48,7 @@ import { LeaveListPage } from "./hr/leave-list";
 import { VlConversionPage } from "./hr/credits";
 import { DocumentPaperPage, DocumentsPage, MyDocumentsPage } from "./hr/documents";
 import { PrintPage } from "./hr/print";
+import { ImportPage, SheetsPage } from "./hr/sheets";
 import { Login } from "./account/login";
 import { ChooseSystem } from "./account/choose-system";
 import { AboutRoute } from "./portal/about-page";
@@ -338,6 +339,8 @@ createRoot(root).render(
             <Route path="hr/leave" element={<LeaveListPage />} />
             <Route path="hr/leave/conversion" element={<VlConversionPage />} />
             <Route path="hr/documents" element={<DocumentsPage />} />
+            <Route path="hr/import-export" element={<SheetsPage />} />
+            <Route path="hr/import/:kind" element={<ImportPage key="import" />} />
             <Route path="me/documents" element={<MyDocumentsPage />} />
             <Route path="me/leave" element={<MyLeavePage />} />
             <Route path="me/payslips" element={<MyPayslipsPage />} />

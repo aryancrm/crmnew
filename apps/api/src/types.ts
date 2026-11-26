@@ -5187,6 +5187,42 @@ export type HrDocPage = {
 /** A person's own documents, and the clearances waiting for their desk's sign-off. */
 export type MyDocuments = { rows: HrDocRow[]; toSign: HrDocRow[] };
 
+// ------------------------------------------------------------------ HR's sheets in and out
+
+export type HrImportKind = "people" | "leave-balances" | "holidays";
+
+/** An uploaded sheet read (never kept): its headings and rows, and each column matched to a heading. */
+export type HrImportRead = {
+  kind: HrImportKind;
+  headers: string[];
+  rows: string[][];
+  columns: { key: string; label: string; note: string | null }[];
+  /** A column's key → the heading's place (from 0), or null when none matched. */
+  mapping: Record<string, number | null>;
+};
+
+export type HrImportRow = {
+  /** The row's line in the file (the headings are line 1). */
+  line: number;
+  /** new: added; update: changed; same: nothing to change; not_found: no such person. */
+  status: "new" | "update" | "same" | "problem" | "not_found";
+  who: string;
+  changes: string[];
+  problem?: string;
+};
+
+export type HrImportResult = {
+  /** False: a test run, nothing changed. */
+  saved: boolean;
+  rows: HrImportRow[];
+  counts: Record<HrImportRow["status"], number>;
+};
+
+export type HrSheets = {
+  kinds: { key: HrImportKind; title: string; what: string; columns: { label: string; readOnly: boolean; note: string | null }[] }[];
+  can: { import: boolean };
+};
+
 // ------------------------------------------------------------------ payroll
 
 import type { PayAttendance, PayLine } from "./hr/pay-rules";

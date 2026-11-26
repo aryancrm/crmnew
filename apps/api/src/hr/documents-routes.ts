@@ -4,7 +4,7 @@
 import type { Hono } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
-import { type Env, idParam, readBody } from "../http";
+import { type Env, idParam, Refusal, readBody } from "../http";
 import {
   acknowledgeDocument,
   DESKS,
@@ -16,6 +16,9 @@ import {
   signClearance,
   voidDocument,
 } from "./documents";
+import { IMPORT_FILE_MAX, importKinds, readImport, runImport, sheetFile } from "./sheets";
+
+const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 const words = (max: number) => z.string().max(max).nullish();
 
@@ -61,5 +64,39 @@ export function documentRoutes(app: Hono<Env>, db: Database): void {
     );
     await signClearance(db, c.get("me"), idParam(c), input as Parameters<typeof signClearance>[3]);
     return c.json({ ok: true });
+  });
+
+  // Sheets in and out: the list, a sheet's current data or blank template, and the import's steps.
+  app.get("/api/hr/import", (c) => c.json(importKinds(c.get("me"))));
+  app.get("/api/hr/export/:file", async (c) => {
+    const file = await sheetFile(db, c.get("me"), c.req.param("file").replace(/\.xlsx$/, ""), {
+      template: c.req.query("template") === "1",
+      year: Number(c.req.query("year")) || null,
+    });
+    return c.body(new Uint8Array(file.bytes), 200, { "content-type": XLSX, "content-disposition": `attachment; filename="${file.name}"` });
+  });
+  app.post("/api/hr/import/:kind/read", async (c) => {
+    if (Number(c.req.header("content-length") ?? 0) > IMPORT_FILE_MAX + 64 * 1024)
+      throw new Refusal(400, "invalid", "That file is over 10 MB.", "file");
+    const body = await c.req.parseBody().catch(() => ({}) as Record<string, unknown>);
+    const file = body.file;
+    return c.json(
+      readImport(
+        c.get("me"),
+        c.req.param("kind"),
+        file instanceof File && file.size > 0 ? { name: file.name, bytes: new Uint8Array(await file.arrayBuffer()) } : null,
+      ),
+    );
+  });
+  app.post("/api/hr/import/:kind", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        mapping: z.record(z.string(), z.number().int().min(0).max(500).nullable()),
+        rows: z.array(z.array(z.string().max(2000)).max(500)).max(2000),
+        save: z.boolean(),
+      }),
+    );
+    return c.json(await runImport(db, c.get("me"), c.req.param("kind"), input));
   });
 }

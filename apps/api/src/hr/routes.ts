@@ -87,6 +87,7 @@ import {
   payrollMonth,
   payslipOf,
   registerCsv,
+  registerXlsx,
   releaseMonth,
   removeAdjustment,
 } from "./payroll";
@@ -687,6 +688,13 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   app.get("/api/hr/payroll/:month", async (c) =>
     c.json(await payrollMonth(db, c.get("me"), c.req.param("month"))),
   );
+  app.get("/api/hr/payroll/:month/register.xlsx", async (c) => {
+    const { name, bytes } = await registerXlsx(db, c.get("me"), c.req.param("month"));
+    return c.body(new Uint8Array(bytes), 200, {
+      "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "content-disposition": `attachment; filename="${name}"`,
+    });
+  });
   app.get("/api/hr/payroll/:month/register.csv", async (c) => {
     const { name, csv } = await registerCsv(db, c.get("me"), c.req.param("month"));
     return c.body(csv, 200, {

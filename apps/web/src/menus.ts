@@ -1552,6 +1552,7 @@ function ownDesk(me: Me): Space {
           // Papers in and out (26 Nov): HR's documents, its reports, and its imports and exports.
           folder("Documents & reports", FileText, [
             { to: "/hr/documents", label: "Documents", icon: FileText },
+            { to: "/hr/import-export", label: "Import & export", icon: FileSpreadsheet },
           ]),
         ]),
         icon: Users,

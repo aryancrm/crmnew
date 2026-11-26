@@ -11,6 +11,7 @@ import { allow, Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
 import { clean, iso, type Runner } from "../inventory/service";
 import { notify } from "../notify/service";
+import { type Cell, workbook } from "../reports/xlsx";
 import type {
   Company,
   Me,
@@ -601,6 +602,33 @@ export async function registerCsv(
   return {
     name: `payroll-${key}${register.status === "released" ? "" : "-draft"}.csv`,
     csv: `${lines.join("\n")}\n`,
+  };
+}
+
+/** The same register as a real Excel workbook (26 Nov): amounts as numbers with commas, a total row. */
+export async function registerXlsx(
+  db: Database,
+  me: Me,
+  key: string,
+): Promise<{ name: string; bytes: Buffer }> {
+  const register = await payrollMonth(db, me, key);
+  const head: Cell[] = CSV_COLUMNS.map(([name]) => ({ v: name, s: "head" }));
+  const body: Cell[][] = register.slips.map((slip) =>
+    CSV_COLUMNS.map(([name, pick]) => {
+      const value = pick(slip);
+      return typeof value === "number" && !/days|absent|min\)/i.test(name) ? { v: value, s: "money" } : value;
+    }),
+  );
+  const total: Cell[] = CSV_COLUMNS.map(([name, pick], at) =>
+    at === 0
+      ? { v: "Total", s: "totalName" }
+      : register.slips.length && typeof pick(register.slips[0] as Payslip) === "number" && !/days|absent|min\)/i.test(name)
+        ? { v: register.slips.reduce((sum, slip) => sum + (pick(slip) as number), 0), s: "totalMoney" }
+        : "",
+  );
+  return {
+    name: `payroll-${key}${register.status === "released" ? "" : "-draft"}.xlsx`,
+    bytes: workbook([{ name: `Payroll ${key}`, rows: [head, ...body, total], widths: CSV_COLUMNS.map(([name]) => Math.max(12, name.length + 2)) }]),
   };
 }
 
