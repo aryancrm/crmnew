@@ -48,6 +48,8 @@ const PEOPLE: [Role, string, string][] = [
   ["medrep", "Hazel", "Government Bidding"],
   ["medrep", "Arron", "Government Bidding, Customer Happiness"],
   ["medrep", "Rey", "Government Bidding"],
+  // In the demo company only (pnpm dev:demo-api, 26 Nov): the chart has no MedRep under Malou.
+  ["medrep", "Marites", "MedRep, Modern Trade"],
   ["regulatory", "Esther", "In-licensing Mentor"],
   ["regulatory", "Dhebbie", "In-licensing Executive"],
   ["regulatory", "Ivy", "Regulatory Affairs Mentor"],
