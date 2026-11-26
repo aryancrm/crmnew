@@ -4249,3 +4249,12 @@ up right.
   **Live the same night** (server and screens at 30667b6, with pull request 8): the server's log
   said "[GPI] company details: 2MG's from the old migration replaced by its own", and both
   companies' databases took the team's 0163-0165. All 863 server and 41 screen tests passed.
+- 27 Nov (229), Aryan (the screen after the company's sign-in listed Administration, Books, Orders,
+  Online, PAP…: "why did you make it like this, make it as it was"): **after the company's
+  sign-in, the old systems grid** under the company's name: Selling (MedReps, Team leads, Heads,
+  Online desk), Operations (Management, Finance, Dispatch, Inventory), Office (HR, Regulatory,
+  Office staff, CEO, Administration, Books), each with its logo. A system the login holds opens at
+  once (the company's ID: Administration and Books); any other opens its own sign-in, where the
+  person working there signs in with their own login ID, the company's staying signed in beside it
+  (Add another account). Someone with one system still goes straight in.
+
