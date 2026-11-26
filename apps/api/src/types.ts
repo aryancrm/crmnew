@@ -697,7 +697,7 @@ export type SearchResult = {
   customers: { id: number; name: string; kind: CustomerKind; city: string | null }[];
   /** Orders by code or customer PO, among those the person may read. */
   orders: { id: number; code: string; customer: string; status: string }[];
-  /** People by name or seat login: the CEO's anyone, a lead's own team. */
+  /** People by name or seat login: the CEO's anyone, a lead's own team; HR everyone, also by email and employee ID. */
   people: {
     id: number;
     name: string;
@@ -705,6 +705,9 @@ export type SearchResult = {
     login: string | null;
     seatId: number | null;
     team: string | null;
+    /** HR's search only: the employee ID, and whether they have left. */
+    employeeCode?: string | null;
+    left?: boolean;
   }[];
 };
 

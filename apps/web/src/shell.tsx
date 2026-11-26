@@ -826,6 +826,9 @@ function MenuList({
 
 /** The top bar's search: medicines and the customers this person may see. */
 function SearchBox() {
+  // HR searches people only, by what HR knows them by (26 Nov).
+  const hr = useMe().data?.role === "hr";
+  const hint = hr ? "Search people by name, login ID, email or employee ID" : "Search medicines, customers, orders, people";
   const [text, setText] = useState("");
   const [asked, setAsked] = useState("");
   const [open, setOpen] = useState(false);
@@ -858,11 +861,19 @@ function SearchBox() {
       label: `${row.code} · ${row.customer}`,
       sub: `Order · ${row.status}`,
     })),
-    ...(found.data?.people ?? []).map((row) => ({
-      to: row.seatId ? `/my-team/seat/${row.seatId}` : `/people?q=${encodeURIComponent(row.name)}`,
-      label: row.name,
-      sub: ["Person", row.title, row.team, row.login].filter(Boolean).join(" · "),
-    })),
+    ...(found.data?.people ?? []).map((row) =>
+      hr
+        ? {
+            to: `/hr/people/${row.id}`,
+            label: row.name,
+            sub: [row.left ? "Left" : "Person", row.title, row.team, row.login, row.employeeCode].filter(Boolean).join(" · "),
+          }
+        : {
+            to: row.seatId ? `/my-team/seat/${row.seatId}` : `/people?q=${encodeURIComponent(row.name)}`,
+            label: row.name,
+            sub: ["Person", row.title, row.team, row.login].filter(Boolean).join(" · "),
+          },
+    ),
     ...(found.data?.medicines ?? []).map((row) => ({
       to: `/medicines/${row.id}`,
       label: [row.name, row.strength].filter(Boolean).join(" "),
@@ -889,8 +900,8 @@ function SearchBox() {
       />
       <input
         type="search"
-        aria-label="Search medicines, customers, orders and people"
-        placeholder="Search medicines, customers, orders, people"
+        aria-label={hint}
+        placeholder={hint}
         value={text}
         onChange={(event) => {
           setText(event.target.value);

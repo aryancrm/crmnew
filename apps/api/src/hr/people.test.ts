@@ -280,3 +280,18 @@ describe("HR and the stock", () => {
     expect((await read<{ medicines: unknown[] }>("admin", `/api/search?q=${encodeURIComponent(word)}`)).medicines.length).toBeGreaterThan(0);
   });
 });
+
+describe("HR's search", () => {
+  it("finds people only: anyone, by name, login ID, email or employee ID, those who left too", async () => {
+    type Found = { medicines: unknown[]; customers: unknown[]; orders: unknown[]; people: { id: number; name: string; employeeCode?: string | null; left?: boolean }[] };
+    const { rows: people } = await read<HrPeople>("helen", "/api/hr/people");
+    const mia = people.find((one) => one.name === "Mia Santos");
+    for (const word of ["Mia San", "mia.santos@2mginc", "1001"]) {
+      const found = await read<Found>("helen", `/api/search?q=${encodeURIComponent(word)}`);
+      expect(found.people.map((one) => one.id)).toContain(mia?.personId);
+      expect([found.medicines, found.customers, found.orders]).toEqual([[], [], []]);
+    }
+    // Someone outside HR's own team: HR still finds them (a seller can't search people at all).
+    expect((await read<Found>("helen", "/api/search?q=Ryan")).people.length).toBeGreaterThan(0);
+  });
+});

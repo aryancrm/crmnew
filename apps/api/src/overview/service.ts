@@ -254,6 +254,9 @@ export async function search(db: Database, me: Me, text: string): Promise<Search
   const like = `%${q.replace(/[%_\\]/g, "\\$&")}%`;
   // People: the CEO and the Admin anyone; a lead their own team; others nobody (by name or the
   // seat's login ID, "hos1").
+  // HR searches people only (26 Nov: its work is people, leave and pay): anyone, those who left
+  // too, by name, login ID, email or employee ID; it opens their HR record.
+  if (me.role === "hr") return { medicines: [], customers: [], orders: [], people: await hrPeople(db, like) };
   const whole = me.role === "ceo" || me.role === "admin";
   const lead = me.role === "team_lead" || me.role === "manager";
   const today = todayManila();
@@ -296,4 +299,23 @@ export async function search(db: Database, me: Me, text: string): Promise<Search
     orders,
     people,
   };
+}
+
+/** HR's search: everyone with an HR record, also those who left, by name, login ID, email or employee ID. */
+function hrPeople(db: Database, like: string) {
+  const today = todayManila();
+  return rows<SearchResult["people"][number]>(
+    db,
+    sql`select distinct on (p.id) p.id::int as id, p.name, coalesce(e.position, p.title) as title, s.login,
+        s.id::int as "seatId", u.name as team, e.employee_code as "employeeCode", not p.active as left
+      from person p
+        join employee e on e.person_id = p.id
+        left join seat_holder h on h.person_id = p.id and h.kind = 'holder'
+          and h.starts_on <= ${today}::date and (h.ends_on is null or h.ends_on >= ${today}::date)
+        left join seat s on s.id = h.seat_id and s.active
+        left join org_unit u on u.id = s.unit_id
+      where p.role <> 'admin' and (p.name ilike ${like} or p.email ilike ${like} or s.login ilike ${like}
+        or e.employee_code ilike ${like})
+      order by p.id, s.lead desc limit 8`,
+  ).then((found) => found.sort((a, b) => Number(a.left) - Number(b.left) || a.name.localeCompare(b.name)));
 }
