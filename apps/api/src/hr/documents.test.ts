@@ -44,6 +44,13 @@ beforeAll(async () => {
 });
 
 describe("HR's documents", () => {
+  it("a person's page knows who they are before they have any document", async () => {
+    const empty = await read<HrDocList>("helen", `/api/hr/documents?person=${ids.daniel}`);
+    expect(empty.rows).toEqual([]);
+    expect(empty.person).toMatchObject({ id: ids.daniel, name: "Daniel", active: true });
+    expect((await get("helen", "/api/hr/documents?person=999999")).status).toBe(404);
+  });
+
   it("a certificate of employment: numbered, on its company's letterhead, kept as issued", async () => {
     expect((await send("helen", "/api/hr/documents", { kind: "coe", personId: ids.ryan })).status).toBe(400);
     const first = (await (await send("helen", "/api/hr/documents", { kind: "coe", personId: ids.ryan, subject: "a bank loan" })).json()) as { id: number; code: string };

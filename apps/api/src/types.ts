@@ -5147,6 +5147,8 @@ export type HrDocRow = {
 
 export type HrDocList = {
   rows: HrDocRow[];
+  /** The person asked for (?person=), even before they have any document. */
+  person: { id: number; name: string; employeeCode: string | null; position: string | null; company: Company; active: boolean } | null;
   kinds: { key: HrDocKind; label: string }[];
   can: { issue: boolean };
 };

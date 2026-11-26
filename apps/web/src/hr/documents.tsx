@@ -84,7 +84,8 @@ export function DocumentsPage() {
   const person = Number(params.get("person")) || null;
   const [kind, setKind] = useState("");
   const [q, setQ] = useState("");
-  const [making, setMaking] = useState(params.get("new") === "1");
+  // The kind of paper being made (null: none open); from a person's page it is made for them.
+  const [making, setMaking] = useState<HrDocKind | null>(params.get("new") === "1" ? "coe" : null);
   const query = useQuery({
     queryKey: ["hr", "documents", person, kind, q],
     queryFn: () =>
@@ -95,22 +96,48 @@ export function DocumentsPage() {
   });
   const data = query.data;
   if (!data) return <PageState query={query} what="the documents" />;
-  const forName = person ? data.rows.find((one) => one.personId === person)?.name : null;
+  const who = data.person;
   return (
     <div className="mx-auto max-w-6xl">
       <PageHead
-        title="Documents"
-        sub="Certificates of employment, clearances, memos and notices to explain: each numbered, on its company's letterhead, never deleted."
+        title={who ? `Documents for ${who.name}` : "Documents"}
+        sub={
+          who ? (
+            <>
+              {[who.employeeCode ? `Employee ID ${who.employeeCode}` : "No employee ID yet", who.position, who.company.toUpperCase(), who.active ? null : "Left"]
+                .filter(Boolean)
+                .join(" · ")}
+              {" · "}
+              <Link to={`/hr/people/${who.id}`} className="font-medium text-brand hover:underline">
+                Open their HR record
+              </Link>
+            </>
+          ) : (
+            "Certificates of employment, clearances, memos and notices to explain: each numbered, on its company's letterhead, never deleted."
+          )
+        }
         actions={
-          data.can.issue && (
-            <Button variant="primary" onClick={() => setMaking(true)}>
+          data.can.issue &&
+          !who && (
+            <Button variant="primary" onClick={() => setMaking("coe")}>
               <FilePlus2 size={15} /> New document
             </Button>
           )
         }
-      />
+      >
+        {who && data.can.issue && (
+          // One button per paper, made for this person straight away (Fitts: the action where the eye is).
+          <div className="flex flex-wrap gap-2" role="group" aria-label={`Issue a document for ${who.name}`}>
+            {data.kinds.map((one, index) => (
+              <Button key={one.key} small variant={index === 0 ? "primary" : "plain"} className={index === 0 ? "" : "border border-slate-200"} onClick={() => setMaking(one.key)}>
+                <FilePlus2 size={14} /> {one.label}
+              </Button>
+            ))}
+          </div>
+        )}
+      </PageHead>
       <Panel
-        title={forName ? `${forName}'s documents` : "Every document"}
+        title={who ? "Issued to them" : "Every document"}
         count={data.rows.length}
         actions={
           <>
@@ -143,7 +170,15 @@ export function DocumentsPage() {
       >
         <DocTable rows={data.rows} />
       </Panel>
-      {making && <NewDocument personId={person} kinds={data.kinds} onClose={() => setMaking(false)} />}
+      {making && (
+        <NewDocument
+          personId={person}
+          person={who}
+          kind={making}
+          kinds={data.kinds}
+          onClose={() => setMaking(null)}
+        />
+      )}
     </div>
   );
 }
@@ -158,20 +193,30 @@ const SUBJECT_LABEL: Record<HrDocKind, string | null> = {
 
 function NewDocument({
   personId,
+  person,
+  kind,
   kinds,
   onClose,
 }: {
   personId: number | null;
+  /** The person the page is for: the form is for them, without picking again. */
+  person: HrDocList["person"];
+  kind: HrDocKind;
   kinds: HrDocList["kinds"];
   onClose: () => void;
 }) {
   const navigate = useNavigate();
   const queries = useQueryClient();
   const action = useAction();
-  const people = useQuery({ queryKey: ["hr", "people", "all"], queryFn: () => api<HrPeople>("/api/hr/people") });
+  const [picking, setPicking] = useState(!person);
+  const people = useQuery({
+    queryKey: ["hr", "people", "all"],
+    queryFn: () => api<HrPeople>("/api/hr/people"),
+    enabled: picking,
+  });
   const today = manilaToday();
   const [value, setValue] = useState({
-    kind: "coe" as HrDocKind,
+    kind,
     personId: personId ? String(personId) : "",
     subject: "",
     body: "",
@@ -197,7 +242,13 @@ function NewDocument({
   }
   const subjectLabel = SUBJECT_LABEL[value.kind];
   return (
-    <Dialog title="New document" sub="It gets its number when you issue it, and stays on record." onClose={onClose} busy={action.busy} wide>
+    <Dialog
+      title={person && !picking ? `New document for ${person.name}` : "New document"}
+      sub="It gets its number when you issue it, and stays on record."
+      onClose={onClose}
+      busy={action.busy}
+      wide
+    >
       <form onSubmit={submit} className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-3">
           <Field label="Document" error={action.at("kind")}>
@@ -211,6 +262,20 @@ function NewDocument({
               </select>
             )}
           </Field>
+          {person && !picking ? (
+            <div className="flex min-w-0 flex-1 flex-col gap-1">
+              <span className="text-xs font-semibold text-slate-600">For</span>
+              <div className="flex h-10 items-center justify-between gap-2 rounded-[10px] border border-slate-200 bg-slate-50 px-3">
+                <span className="truncate font-medium">
+                  {person.name}
+                  {person.employeeCode ? ` · ${person.employeeCode}` : ""}
+                </span>
+                <button type="button" className="text-xs font-semibold text-brand hover:underline" onClick={() => setPicking(true)}>
+                  Someone else
+                </button>
+              </div>
+            </div>
+          ) : (
           <Field label="For" error={action.at("personId")}>
             {(props) => (
               <select {...props} className={INPUT} value={value.personId} onChange={set("personId")}>
@@ -224,6 +289,7 @@ function NewDocument({
               </select>
             )}
           </Field>
+          )}
         </div>
         {value.kind === "coe_pay" && (
           <p className="text-xs text-slate-500">It prints their monthly salary and allowance as on their record today.</p>

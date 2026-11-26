@@ -313,8 +313,17 @@ export async function documentList(
         ${like ? sql`and (p.name ilike ${like} or d.code ilike ${like} or d.subject ilike ${like} or e.employee_code ilike ${like})` : sql``}
       order by d.issued_at desc, d.id desc limit 300`,
   );
+  const [person] = asked.person
+    ? await rows<NonNullable<HrDocList["person"]>>(
+        db,
+        sql`select p.id::int as id, p.name, e.employee_code as "employeeCode", coalesce(e.position, p.title) as position,
+            e.company, p.active from person p join employee e on e.person_id = p.id where p.id = ${asked.person}`,
+      )
+    : [];
+  if (asked.person && !person) throw new Refusal(404, "not_found", "No one with an HR record by that link.");
   return {
     rows: found.map(rowOf),
+    person: person ?? null,
     kinds: DOC_KINDS.map((key) => ({ key, label: DOC_TITLES[key] })),
     can: { issue: HR_WRITE_ROLES.includes(me.role) && !me.viewedBy },
   };
