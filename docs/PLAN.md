@@ -2558,7 +2558,8 @@ the inventory" for GetMeds.
 - **Changing, pausing, a new one-time password**: name, code and login ID can be changed (a login ID
   on another domain changes every person's sign-in domain: tell them first); a company can be paused (nobody of it can sign
   in or work; nothing is deleted) and resumed; its Admin can be given a new one-time password (their
-  phone code, if on, stays on). The first company can't be paused. Every change is kept on the
+  phone code, if on, stays on). 2MG is a company like the others (it pauses the same way; no
+  label of its own: Aryan, 26 Nov). Every change is kept on the
   panel's own list of what was done.
 - **What follows the company besides its database**: the domain its login IDs end in, its name
   until its Company details are saved (Admin panel), its code beside "Bishnoi One" in the frame and
@@ -4127,8 +4128,16 @@ medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 dat
   for whoever uses two-step sign-in); after it, the company's name and the systems this login may
   open: the company's ID (its Admin) and the CEO every app of the company, Finance its desk and
   Books, anyone with one system straight into it, a one-time password changed first. A
-  department's own page (`/login/<department>`) still signs in there directly. The control panel's
-  "The server's own" reads "Main company" (its data is the server's main database; it can't be
-  paused). Checked: the form answers on a demo copy, the server opens the person's own department
+  department's own page (`/login/<department>`) still signs in there directly. Checked: the form answers on a demo copy, the server opens the person's own department
   with none picked, and which systems each login gets (a web test); the page after signing in was
   not clicked through (the demo's password isn't mine to type).
+- 26 Nov (211), Aryan: "why Main company on 2MG? 2MG is normal like the other companies, don't treat
+  it differently" and "my team signed in to the Admin panel and Company details lets them change
+  both, 2MG's and GetMeds's". (1) The control panel shows 2MG like any company: no label of its
+  own, and it pauses and resumes the same way. (2) Company details shows the signed-in company's
+  own details alone (they were two tabs, 2MG Incorporated and Getmeds Philippines Incorporated,
+  from the backend developer's one list of the group's companies, 200); on the local copy of 2MG's
+  data no order is billed and nobody employed under Getmeds Philippines. **Still to decide with
+  Aryan:** the same list still offers "Invoice from 2MG / GetMeds" on an order and "employer 2MG /
+  GPI" in HR inside each company; with each company separate, each should bill and employ in its
+  own name only (GetMeds's when it is added in the panel).

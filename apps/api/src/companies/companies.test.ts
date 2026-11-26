@@ -171,7 +171,11 @@ describe("several companies on one server", () => {
     expect((await send("/api/me", { cookie: signedIn })).status).toBe(403);
     await list.resume(gm.ref.orgId, null);
     expect((await send("/api/me", { cookie: signedIn })).status).toBe(200);
-    await expect(list.pause(list.home().ref.orgId, "", null)).rejects.toThrow(/can't be paused/);
+    // 2MG is a company like the others (Aryan, 26 Nov): it pauses and resumes the same way.
+    await list.pause(list.home().ref.orgId, "A test", null);
+    expect((await login("helen@2mg.test", PASSWORD)).status).toBe(403);
+    await list.resume(list.home().ref.orgId, null);
+    expect((await login("helen@2mg.test", PASSWORD)).status).toBe(200);
   });
 
   it("checks a new company's name, code and domain", async () => {

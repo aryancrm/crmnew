@@ -373,7 +373,6 @@ export async function openCompanies(options: {
     async pause(orgId: string, reason: string, by: number | null) {
       const row = await rowOf(orgId);
       if (!row) throw new Refusal(404, "not_found", "No such company.");
-      if (row.database === null) throw new Refusal(409, "home", "The first company (the server's own) can't be paused.");
       if (!row.pausedAt) {
         await control.execute(sql`update company set paused_at = now(), paused_reason = ${reason.trim() || null} where id = ${row.id}`);
         await event(by, row.id, "paused", { reason: reason.trim() || null });
