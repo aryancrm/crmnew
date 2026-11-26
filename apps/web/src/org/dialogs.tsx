@@ -3,7 +3,7 @@
 // a team added or changed. Every one is a single step on the server, which then writes each
 // person's role, boss and area from the tree.
 
-import type { OrgHolder, OrgLogin, OrgSeat, OrgTree, OrgUnit, Role } from "@2mg/api/types";
+import type { OrgHolder, OrgLogin, OrgSeat, OrgTree, OrgUnit, Role, SeatWorks } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, KeyRound } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
@@ -216,6 +216,8 @@ export function LoginCard({
 
 export type JobState = {
   module: Role;
+  /** A MedRep seat's kind; "" as its channel works (docs/PLAN.md 28). */
+  works: "" | SeatWorks;
   title: string;
   titleTouched: boolean;
   reportsTo: string;
@@ -285,6 +287,22 @@ export function JobFields({
         </Label>
       </div>
       <p className="-mt-1 text-xs text-slate-500">{WORK[job.module].does}</p>
+      {job.module === "medrep" && (
+        <Label text="Works" error={at("works")}>
+          <select
+            value={job.works}
+            onChange={(event) => setJob({ works: event.target.value as JobState["works"] })}
+            className={FIELD}
+          >
+            <option value="">As the team works ({channelWorks(channel?.code)})</option>
+            <option value="office">From the office: calls, messages, email</option>
+            <option value="field">In the field: visits doctors and hospitals</option>
+          </select>
+          <span className="mt-1 block text-xs text-slate-500">
+            One or the other. To change someone's kind, move them to a seat of the other kind.
+          </span>
+        </Label>
+      )}
       {(!hasLead || job.lead) && (
         <label className="flex items-center gap-2 text-sm text-slate-700">
           <input
@@ -361,6 +379,7 @@ export function JobFields({
 
 export const jobBody = (job: JobState) => ({
   module: job.module,
+  ...(job.module === "medrep" && job.works ? { works: job.works } : {}),
   title: job.title,
   lead: job.lead,
   reportsToSeatId: job.reportsTo ? Number(job.reportsTo) : null,
@@ -377,8 +396,14 @@ export const jobBody = (job: JobState) => ({
       : null,
 });
 
+/** How a channel works when its seat says nothing (the API's works_of_channel). */
+const FIELD_CHANNELS = ["HOSP", "RX", "PAP", "MT"];
+const channelWorks = (code: string | null | undefined) =>
+  !code ? "in the field" : FIELD_CHANNELS.includes(code) ? "in the field" : "from the office";
+
 export const freshJob = (module: Role, lead = false): JobState => ({
   module,
+  works: "",
   title: WORK[module].title,
   titleTouched: false,
   reportsTo: "",
@@ -655,6 +680,7 @@ export function SeatDialog({
     seat
       ? {
           module: seat.module,
+          works: seat.works ?? "",
           title: seat.title,
           titleTouched: true,
           reportsTo: seat.reportsToSeatId ? String(seat.reportsToSeatId) : "",

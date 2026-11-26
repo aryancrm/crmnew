@@ -68,6 +68,36 @@ describe("each MedRep's menu", () => {
     });
 });
 
+/** Every page a menu links to, folders opened. */
+const pages = (space: Space) => allItems(space.groups.flatMap((group) => group.items)).map((one) => one.to);
+
+describe("office or field (docs/PLAN.md 28)", () => {
+  const as = (seat: Seat, works: "office" | "field") => spaceFor({ ...medrep(seat), works } as Me, "/");
+
+  it("a seat that works as its channel does keeps the same menu", () => {
+    expect(plain(as(MEDREPS["Hospital CHC"] as Seat, "field"))).toEqual(plain(spaceFor(medrep(MEDREPS["Hospital CHC"] as Seat), "/")));
+    expect(plain(as(MEDREPS["B2B CRR"] as Seat, "office"))).toEqual(plain(spaceFor(medrep(MEDREPS["B2B CRR"] as Seat), "/")));
+  });
+
+  it("an office seat has no visits, tour plan, field expenses or samples, and no Log a call", () => {
+    for (const kind of ["Hospital CHC", "Rx CHC", "PAP MedRep"]) {
+      const space = as(MEDREPS[kind] as Seat, "office");
+      for (const page of ["/field", "/visits", "/field/plan", "/visits/expenses", "/me/samples"])
+        expect(pages(space), `${kind} ${page}`).not.toContain(page);
+      expect(space.cta2?.to, kind).not.toBe("/field");
+      // Their own work stays: the orders, the customers.
+      expect(pages(space), kind).toContain("/orders");
+    }
+  });
+
+  it("a field seat in a channel that sells by phone gets the visits folder", () => {
+    const space = as(MEDREPS["B2B NBD"] as Seat, "field");
+    expect(pages(space)).toEqual(expect.arrayContaining(["/visits", "/field/plan", "/visits/expenses"]));
+    const labels = space.groups[0]?.items.map((one) => one.label) ?? [];
+    expect(labels.indexOf("Visits")).toBe(labels.indexOf("My numbers") - 1);
+  });
+});
+
 /** The folders lit (open, in green) on a page. */
 const litFolders = (space: Space, to: string) => {
   const [pathname = "", query] = to.split("?");

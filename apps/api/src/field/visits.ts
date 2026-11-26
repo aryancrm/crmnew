@@ -67,9 +67,21 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const PLACE = /^-?\d{1,2}\.\d+,-?\d{1,3}\.\d+$/;
 const ahead = (today: string) => addDays(today, 62);
 
+/** An office seat works by phone: visits, the tour plan, field expenses and samples are the field
+ *  seats' (docs/PLAN.md 28). */
+export function refuseOffice(me: Me): void {
+  if (me.role === "medrep" && me.works === "office")
+    throw new Refusal(
+      403,
+      "office_seat",
+      "Your seat works from the office: visits, the tour plan, field expenses and samples are for field seats.",
+    );
+}
+
 function mustVisit(me: Me) {
   if (!FIELD_ROLES.includes(me.role) || me.viewedBy)
     throw new Refusal(403, "not_allowed", "Visits are made by MedReps and their team leads.");
+  refuseOffice(me);
 }
 
 /** Whether `me` leads this person (they are in my team, down the reporting line). */
@@ -109,6 +121,8 @@ export async function fieldDay(
   const today = todayManila();
   const day = asked.day && DAY.test(asked.day) ? asked.day : today;
   const personId = asked.person ?? me.id;
+  // An office seat has no visits of its own (docs/PLAN.md 28).
+  if (personId === me.id) refuseOffice(me);
   if (!(await maySeeField(db, me, personId)))
     throw new Refusal(403, "not_allowed", "That person's visits aren't yours to see.");
   const [person] = await rows<{ id: number; name: string; area: string | null; role: Role }>(

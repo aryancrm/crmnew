@@ -625,7 +625,7 @@ const messagesLink: MenuItem = folder(
  *  of its work, and Speed with what they look things up in: few links, folders for the rest
  *  (Aryan, 15 Nov: less clutter). */
 function deskFor(me: Me): Space {
-  const desk = ownDesk(me);
+  const desk = withWorks(me, ownDesk(me));
   const space = withVacantSeats(me, withSalesLinks(me, desk));
   const [first, ...rest] = space.groups;
   if (!first) return space;
@@ -787,6 +787,36 @@ function sortLead(items: MenuItem[]): { work: MenuItem[]; team: MenuItem[]; look
 }
 
 /** Each role's own desk: only that person's work, and one link into the shared stock. */
+/** The field folder: the one with My visits (or My doctor calls) in it. */
+const isFieldFolder = (item: MenuItem) => Boolean(item.children?.some((child) => child.to === "/visits"));
+
+/** Office or field (docs/PLAN.md 28): the seat's kind decides the field's pages. An office seat
+ *  loses the field folder (My day, visits, tour plan, expenses, samples) and "Log a call"; a field
+ *  seat whose channel sells by phone gets the folder, before their numbers. */
+export function withWorks(me: Me, space: Space): Space {
+  if (me.role !== "medrep" || !me.works) return space;
+  const items = space.groups.flatMap((group) => group.items);
+  const has = items.some(isFieldFolder);
+  if (me.works === "office") {
+    if (!has && space.cta2?.to !== "/field") return space;
+    const { cta2, ...rest } = space;
+    return {
+      ...rest,
+      ...(cta2 && cta2.to !== "/field" ? { cta2 } : {}),
+      groups: space.groups.map((group) => ({ ...group, items: group.items.filter((one) => !isFieldFolder(one)) })),
+      ...(space.tabs ? { tabs: space.tabs.filter((one) => !isFieldFolder(one) && one.to !== "/field") } : {}),
+    };
+  }
+  if (has) return space;
+  const [first, ...others] = space.groups;
+  if (!first) return space;
+  const numbers = first.items.findIndex((one) => one.label === "My numbers");
+  const stock = first.items.findIndex((one) => one.to === stockLink.to);
+  const at = numbers >= 0 ? numbers : stock >= 0 ? stock : first.items.length;
+  const visits = fieldFolder("Visits", "My visits");
+  return { ...space, groups: [{ ...first, items: [...first.items.slice(0, at), visits, ...first.items.slice(at)] }, ...others] };
+}
+
 function ownDesk(me: Me): Space {
   const desk = (items: MenuItem[], icon: LucideIcon = House): Space => ({
     key: "desk",

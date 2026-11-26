@@ -105,6 +105,9 @@ export type Me = {
   /** The Divisions their orders carry: one per seat (its box where it names one: CLIDP, URO, B&B;
    *  else its channel's), the main seat's first. One seat, one Division (Aryan, 19 Nov). */
   divisions?: string[];
+  /** A MedRep's seat works from the office (by phone) or in the field (visits), never both
+   *  (docs/PLAN.md 28). Null for anyone who isn't a MedRep. */
+  works?: SeatWorks | null;
   /** The CEO or Admin looking as this person (read only), when it is that. */
   viewedBy?: { id: number; name: string; role: string } | null;
   /** The department this session was opened for (the sign-in page it was made on). */
@@ -2880,6 +2883,9 @@ export type OrderPrices = {
 export type CustomerPage = CustomerDetail & {
   /** Who looks after them and the people above: the MedRep (or the desk agent), their manager, the head. */
   line: { name: string; title: string | null; role: string }[];
+  /** Both sellers see the customer (docs/PLAN.md 28): the field seller of their area, and the
+   *  office seller who took their latest order. */
+  sellers: { field: string | null; office: string | null };
   totals: {
     orders: number;
     bought: number;
@@ -3330,6 +3336,8 @@ export type OrgSeat = {
   title: string;
   module: Role;
   moduleLabel: string;
+  /** A MedRep seat's kind: office or field. */
+  works: SeatWorks | null;
   lead: boolean;
   area: { id: number; name: string; cities: string[] } | null;
   reportsToSeatId: number | null;
@@ -3399,6 +3407,8 @@ export type OrgPersonInput = {
   unitId?: number | null;
   title?: string | null;
   module?: Role | null;
+  /** The new seat's kind, when it is a MedRep's: office or field. */
+  works?: SeatWorks | null;
   lead?: boolean;
   reportsToSeatId?: number | null;
   areaId?: number | null;
@@ -3408,10 +3418,15 @@ export type OrgPersonInput = {
   employeeCode?: string | null;
 };
 
+/** Office: works by phone, Messenger and email. Field: visits doctors and hospitals. */
+export type SeatWorks = "office" | "field";
+
 export type OrgSeatInput = {
   unitId: number;
   title: string;
   module: Role;
+  /** A MedRep seat's kind; left out, it follows how its channel works. */
+  works?: SeatWorks | null;
   lead?: boolean;
   reportsToSeatId?: number | null;
   areaId?: number | null;

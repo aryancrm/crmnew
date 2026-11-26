@@ -224,6 +224,24 @@ export function Customer() {
                   <span className="font-medium text-slate-700">Nobody yet</span>
                 )}
               </span>
+              {/* Both sellers see them (docs/PLAN.md 28): who visits, who calls and takes the orders. */}
+              {(data.sellers.field || data.sellers.office) && (
+                <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5">
+                  {data.sellers.field && (
+                    <>
+                      <span className="text-slate-400">Visits:</span>
+                      <span className="font-medium text-slate-700">{data.sellers.field}</span>
+                    </>
+                  )}
+                  {data.sellers.field && data.sellers.office && <span className="text-slate-300">·</span>}
+                  {data.sellers.office && (
+                    <>
+                      <span className="text-slate-400">Calls and orders:</span>
+                      <span className="font-medium text-slate-700">{data.sellers.office}</span>
+                    </>
+                  )}
+                </span>
+              )}
             </HeadLine>
             <ContactLine>
               {customer.phone && (

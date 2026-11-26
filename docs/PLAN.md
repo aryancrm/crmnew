@@ -2453,14 +2453,15 @@ type-checked, not yet clicked through in a browser.
 **Not done.** The employee ID made compulsory (HR's *Missing* view lists who lacks one); a screen to
 move past covered sales' credit to someone (the data is kept for it).
 
-## 28. Office or field: each seller's seat is one or the other (26 Nov 2026, plan only)
+## 28. Office or field: each seller's seat is one or the other (26 Nov 2026, built)
 
 Asked by the backend developer: split the sellers into those who stay in the office and work by
-phone, and those who go out and visit. Agreed the same day, nothing built yet.
+phone, and those who go out and visit. Agreed and built the same day (on the `medrep` branch).
 
 **The rule.** Every seller's seat (their login ID) is either **Office** or **Field**, never both.
 A person is never both at once: to change, HR moves them to a seat of the other kind (section 26's
-move, with its reason and trail), and the new seat brings its own screens.
+move, with its reason and trail), and the new seat brings its own screens. The CEO or the Admin
+sets a seat's kind in Teams & people (Change the seat → Works); the holder's HR trail says so.
 
 | | **Office** | **Field** |
 |---|---|---|
@@ -2481,11 +2482,27 @@ move, with its reason and trail), and the new seat brings its own screens.
 4. **One seat, one kind.** No seat is both; the kind belongs to the seat, so whoever sits in it
    gets its screens. A person given another seat of the other kind changes screens with it.
 
-**To build (when asked):** the seat's kind (Office or Field) set by HR or the Admin on the seat;
-the menus and Home read from it instead of from the channel alone; the visit pages refuse an
-Office seat ("Visits are for field seats"); the customer page shows both the field and the office
-seller; a test that a seat's kind decides its menu, and that the sale's credit follows the order's
-taker.
+**Built (26 Nov).**
+- `seat.works` (migration 0161): office or field, a MedRep seat's only. Every MedRep seat was set
+  as its channel works (`works_of_channel`: HOSP, RX, PAP and MT field; ONLINE, TS, B2B, BID and
+  CLIDP office); a new seat takes its channel's unless the form picks one. `person_works(id)` reads
+  a person's main seat's kind (else their channel's); the sign-in carries it as `me.works`.
+- Teams & people: the seat form has **Works** (As the team works / From the office / In the field);
+  a change writes "Their seat now works from the office" in the holder's trail.
+- Menus (`withWorks` in `menus.ts`): an office seat loses the field folder (My day, visits, tour
+  plan, expenses, samples) and "Log a call"; a field seat in a phone channel gets the folder before
+  My numbers. A seat as its channel works keeps exactly today's menu.
+- The API refuses an office seat its own visits, the field day's work, asking for and giving
+  samples (`refuseOffice`, code `office_seat`): "Your seat works from the office: visits, the tour
+  plan, field expenses and samples are for field seats."
+- Customers: an office seller also sees the customers they took orders for; the customer page's
+  head says "Visits: (the area's field seller) · Calls and orders: (the office seller of the
+  latest order)".
+- Tests: `org/works.test.ts` (4); `menus.test.ts` keeps every MedRep's menu as it was and checks an
+  office Hospital, Rx and PAP seat lose the field's pages and a field NBD gains them.
+
+**Not done.** The office seat's own phone desk where its channel has none (it keeps its channel's
+menu otherwise); a field seat's Home cards follow the channel, not the kind.
 
 ## 13. Questions waiting for Aryan
 
@@ -3926,3 +3943,4 @@ taker.
 - 25 Nov (199), Aryan, after seeing the sign-in pages side by side: "if it doesn't clash and there is no risk, push it"; asked which colour, since (198) undoes his 19 Nov green: **blue (his)**, green only for what is fine, done or paid. The frontend developer's work (198) joined to main. Checked: it joined with no clash but this change log; the web type-check and build pass; no API, database or sign-in change (the sign-in form sends the same login ID and password); the side menu of 12 demo logins (MedRep, team lead, head, CEO, Admin, Management, Finance, Dispatch, Inventory, HR and others) lists exactly the same pages as before, plus the desk's name at its top; all 166 of their menu pages opened with no error; the phone drawer and bottom bar work; the home page's styles and animations stay inside its own pages. Its used pictures were re-encoded at the same pixel size (29 MB to 7.6 MB: the welcome page and the sign-in pages open faster on a phone); a local AI tool's empty database (`.claude/data`) that came with it was left out and is now ignored.
 - 26 Nov (200), recorded by the backend developer: **one code per company everywhere.** `2mg` = 2MG Incorporated, `gpi` = Getmeds Philippines Incorporated. Orders and invoices called Getmeds Philippines `getmeds` while HR and payroll called it `gpi`, and the names were written five ways (2MG Inc., 2MG Incorporated, GetMeds Philippines Inc., Getmeds Philippines…). Now one list, `apps/api/src/companies.ts` (code, registered name, short name, invoice series), used by orders, invoices, HR, payroll, printouts and the books' headings. Migration 0159 moves the orders and invoices already made from `getmeds` to `gpi` and renames the invoice counter with it, so every invoice keeps its number and the `INV-` series goes on from the last one (tested on a copy made the old way: `companies.test.ts`). The group's own name (the company tree's top box, the settings) is unchanged.
 - 26 Nov (204), asked by the backend developer: **office or field.** Every seller's seat is either Office (works by phone) or Field (visits doctors or hospitals), never both; HR moves a person to a seat of the other kind to change. Who places the order stays as each team works now; the sale counts for whoever takes and processes the order; the field and the office seller both see the customer (section 28). Plan only, nothing built yet.
+- 26 Nov (205), asked by the backend developer: "proceed". **Office or field built** (section 28): each MedRep seat carries its kind, set as its channel works; the CEO or the Admin changes it in Teams & people; the menu, the field's pages and the customer page follow it.

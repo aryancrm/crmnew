@@ -18,7 +18,7 @@ import { sendMessage } from "../messages/service";
 import { notify } from "../notify/service";
 import { divisionOf } from "../orders/divisions";
 import { isRole, ROLE_LABEL, ROLES, type Role } from "../people/roles";
-import type { HrChange } from "../types";
+import type { HrChange, SeatWorks } from "../types";
 import type {
   Me,
   OrgHolder,
@@ -38,6 +38,8 @@ import type {
 } from "../types";
 
 export const ORG_CHANGE_ROLES: Role[] = ["ceo", "admin"];
+/** Office or field in words (docs/PLAN.md 28). */
+export const WORKS_WORDS: Record<SeatWorks, string> = { office: "From the office", field: "In the field" };
 
 /** A holding (by its alias) in force on the day. */
 export const inForce = (alias: string, today: string): SQL =>
@@ -351,7 +353,8 @@ export async function orgTree(db: Database, me: Me): Promise<OrgTree> {
       }
     >(
       db,
-      sql`select s.id::int as id, s.unit_id::int as "unitId", s.login, s.title, s.module, s.lead, s.reports_to_seat_id::int as "reportsToSeatId",
+      sql`select s.id::int as id, s.unit_id::int as "unitId", s.login, s.title, s.module,
+          case when s.module = 'medrep' then coalesce(s.works, works_of_channel(seat_channel(s.id)), 'field') end as works, s.lead, s.reports_to_seat_id::int as "reportsToSeatId",
           b.name as boss, s.area_id::int as "areaId", a.name as "areaName", a.cities,
           (select count(*) from customer c where s.area_id is not null and c.area_id = s.area_id)::int as customers,
           (select count(*) from sales_order o where o.seat_id = s.id
@@ -500,12 +503,14 @@ export async function seatRow(tx: Runner, seatId: number, today: string) {
     title: string;
     module: Role;
     lead: boolean;
+    works: SeatWorks | null;
     areaId: number | null;
     holderId: number | null;
     holder: string | null;
   }>(
     tx,
-    sql`select s.id::int as id, s.unit_id::int as "unitId", s.title, s.module, s.lead, s.area_id::int as "areaId",
+    sql`select s.id::int as id, s.unit_id::int as "unitId", s.title, s.module, s.lead,
+        case when s.module = 'medrep' then coalesce(s.works, works_of_channel(seat_channel(s.id)), 'field') end as works, s.area_id::int as "areaId",
         p.id::int as "holderId", p.name as holder
       from seat s left join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)}
         and exists (select 1 from person q where q.id = h.person_id and q.active)
@@ -653,7 +658,13 @@ async function makeSeat(tx: Runner, input: OrgSeatInput): Promise<number> {
         (select coalesce(max(sort), 0) + 1 from seat where unit_id = ${unit.id}))
       returning id::int as id`,
   );
-  return made?.id as number;
+  const seatId = made?.id as number;
+  // Office or field: as asked, else as its channel works (docs/PLAN.md 28).
+  if (input.module === "medrep")
+    await tx.execute(
+      sql`update seat set works = coalesce(${input.works ?? null}::text, works_of_channel(seat_channel(id)), 'field') where id = ${seatId}`,
+    );
+  return seatId;
 }
 
 /** A move's first day: today, earlier, or up to three months ahead. */
@@ -738,6 +749,7 @@ export async function addPerson(
         unitId: input.unitId,
         title: input.title ?? "",
         module: input.module,
+        works: input.works ?? null,
         lead: input.lead,
         reportsToSeatId: input.reportsToSeatId,
         areaId: input.areaId,
@@ -832,11 +844,23 @@ export async function updateSeat(
       input.areaId === undefined && input.newArea === undefined
         ? seat.areaId
         : await seatArea(tx, unitId, input, seat.id);
+    // Office or field belongs to a MedRep seat only; a seat becoming one takes its channel's way
+    // unless it is asked (docs/PLAN.md 28).
+    const works =
+      module !== "medrep"
+        ? null
+        : (input.works ?? (seat.module === "medrep" && seat.works ? seat.works : null));
     await tx.execute(
-      sql`update seat set unit_id = ${unitId}, title = ${title}, module = ${module}, lead = ${lead}, area_id = ${areaId}
+      sql`update seat set unit_id = ${unitId}, title = ${title}, module = ${module}, lead = ${lead}, area_id = ${areaId},
+        works = ${module === "medrep" ? sql`coalesce(${works}::text, works_of_channel(seat_channel(id)), 'field')` : sql`null`}
         ${reportsTo === undefined ? sql`` : sql`, reports_to_seat_id = ${reportsTo}`}
         where id = ${seat.id}`,
     );
+    const [after] = await rows<{ works: SeatWorks | null }>(tx, sql`select works from seat where id = ${seat.id}`);
+    if (seat.holderId && seat.module === "medrep" && module === "medrep" && seat.works && after?.works && after.works !== seat.works)
+      await hrEvent(tx, seat.holderId, me.id, "move", `Their seat now works ${WORKS_WORDS[after.works].toLowerCase()}`, [
+        { field: "works", label: "Works", from: WORKS_WORDS[seat.works], to: WORKS_WORDS[after.works], hidden: false },
+      ]);
     // Whoever lost the area keeps no customers by it.
     if (seat.areaId && seat.areaId !== areaId)
       await tx.execute(sql`update person set area_id = null where area_id = ${seat.areaId}`);
