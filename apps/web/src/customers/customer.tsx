@@ -179,7 +179,7 @@ export function Customer() {
         name={customer.name}
         chips={
           <>
-            <CodeChip>{customer.code}</CodeChip>
+            {customer.code && <CodeChip>{customer.code}</CodeChip>}
             <KindBadge tone={KIND_TONE[customer.kind] ?? "slate"}>
               {kind?.label ?? customer.kind}
             </KindBadge>
@@ -370,21 +370,35 @@ export function Customer() {
         <Glance
           title={patient ? "Their medicines and money" : "Their buying"}
           tiles={[
+            // The old system's orders count in the big number (26 Nov: "Orders 0 · ₱0" read as a new
+            // customer though they had bought three times); the small line says how many were there.
             {
               label: "Orders",
-              value: count(totals.orders),
+              value: count(totals.orders + (before?.orders ?? 0)),
               sub: before?.orders
-                ? `+ ${count(before.orders)} earlier${before.lastOn ? `, last ${day(before.lastOn)}` : ""}`
+                ? totals.orders
+                  ? `${count(before.orders)} in the old system`
+                  : `all in the old system${before.lastOn ? `, last ${day(before.lastOn)}` : ""}`
                 : totals.lastOrderAt
                   ? `last ${day(totals.lastOrderAt)}`
                   : "none yet",
             },
             {
               label: "Bought",
-              value: peso(totals.bought),
-              sub: before?.bought ? `+ ${peso(before.bought)} earlier` : "all orders",
+              value: peso(totals.bought + (before?.bought ?? 0)),
+              sub: before?.bought
+                ? totals.bought
+                  ? `${peso(before.bought)} in the old system`
+                  : "all in the old system"
+                : "all orders",
             },
-            { label: "Paid", value: peso(totals.paid), tone: "good" },
+            {
+              label: "Paid",
+              value: peso(totals.paid),
+              tone: "good",
+              // What was paid in the old system isn't kept here; said so, not read as nothing paid.
+              sub: before?.orders ? "in this system" : undefined,
+            },
             {
               label: "Owed now",
               value: peso(totals.owed),
@@ -398,7 +412,11 @@ export function Customer() {
             {
               label: "Medicines",
               value: count(data.medicines.length),
-              sub: data.medicines[0] ? `latest ${data.medicines[0].name}` : undefined,
+              sub: data.medicines[0]
+                ? `latest ${data.medicines[0].name}`
+                : before?.orders
+                  ? "old orders: see Prices given"
+                  : undefined,
             },
           ]}
         />

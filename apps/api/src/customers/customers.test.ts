@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../app";
-import { type Database, openDatabase } from "../db/index";
+import { sql } from "drizzle-orm";
+import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedDemo } from "../seed";
 import type { CustomerDetail, CustomerList, CustomerMatch, Me, MyArea } from "../types";
@@ -62,6 +63,20 @@ beforeAll(async () => {
     name: "Rosario Santos",
     phone: "0917 555 0142",
     city: "Las Piñas",
+  });
+});
+
+describe("customer numbers", () => {
+  it("every customer has one, however it was added (26 Nov: the page showed a blank one)", async () => {
+    const [made] = await rows<{ id: number; code: string | null }>(
+      db,
+      sql`insert into customer (name, kind, added_by) values ('Walk-in Test', 'patient', (select id from person limit 1)) returning id::int as id, code`,
+    );
+    expect(made?.code).toBe(`CUS-${String(made?.id).padStart(5, "0")}`);
+    const [empty] = await rows<{ n: number }>(db, sql`select count(*)::int as n from customer where code is null or code = ''`);
+    expect(empty?.n).toBe(0);
+    // Only this test's row (the lists below count the demo's customers).
+    await db.execute(sql`delete from customer where id = ${made?.id}`);
   });
 });
 
