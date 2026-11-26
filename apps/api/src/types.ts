@@ -333,6 +333,19 @@ export type MedicineDetail = {
     by: string;
   }[];
   news: StockNews[];
+  /** PCSO's quotations 2 and 3: the other vendors' price for one piece (empty: not set). */
+  canvass: CanvassPrice[];
+};
+
+/** Another vendor's price for one piece of a medicine, for PCSO's quotation 2 or 3. Centavos. */
+export type CanvassPrice = { slot: 2 | 3; vendor: string; amount: number };
+
+/** One of PCSO's other quotations, filled from the medicines' canvass prices: the vendor, its total
+ *  and its lines (each medicine at that vendor's price). Centavos. */
+export type CanvassQuote = {
+  vendor: string;
+  amount: number;
+  lines: { medicine: string; qty: number; price: number; total: number }[];
 };
 
 /** Stock on an open purchase, on its way. */
@@ -2308,7 +2321,8 @@ export type LeadCase = {
     /** The claim after delivery (guarantee letter). */
     claimSentOn: string | null;
     claimRef: string | null;
-    /** PCSO's other two quotations: each vendor's name and total, from their written quote. */
+    /** PCSO's other two quotations typed by hand: each vendor's name and total, from their written
+     *  quote. Empty: they fill themselves from the medicines' prices (`canvassAuto`). */
     canvass: { vendor: string; amount: number }[];
     /** online: the Online desk's; pap: a PAP MedRep's patient-assistance case. */
     desk: "online" | "pap";
@@ -2345,6 +2359,12 @@ export type LeadCase = {
     stale: boolean;
     savedAt: string | null;
   };
+  /** How many quotations the agency asks for: PCSO three (ours and two other vendors'), every
+   *  other one ours alone (Aryan, 26 Nov, as the old CRM). */
+  quotesNeeded: number;
+  /** PCSO's quotations 2 and 3 filled from the medicines' canvass prices; null when a quoted
+   *  medicine has none, or the medicines name different vendors (then they are typed). */
+  canvassAuto: CanvassQuote[] | null;
   order: {
     id: number;
     code: string;

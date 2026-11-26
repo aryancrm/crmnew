@@ -288,3 +288,11 @@ export function queuesOf(step: string): LeadQueue[] {
   if (step === "done") out.push("done");
   return out;
 }
+
+/** How many quotations a guarantee letter's agency asks for (Aryan, 26 Nov, as the old CRM's
+ *  AGENCY_QUOTES): PCSO three, ours and two other vendors' (it settles the lowest, ours); DSWD,
+ *  OVP and OP ours alone. */
+export const AGENCY_QUOTES: Record<string, number> = { dswd: 1, pcso: 3, ovp: 1, op: 1 };
+export const quotesNeeded = (road: string | null | undefined, agency: string | null | undefined): number =>
+  road === "gl" ? (AGENCY_QUOTES[agency ?? ""] ?? 1) : 1;
+

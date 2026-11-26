@@ -18,7 +18,8 @@ import {
 import { companyNow, isHomeCompany } from "../companies/context";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
-import { companyInfo } from "../settings/service";
+import { COMPANIES, COMPANY_CODES } from "../companies";
+import { companyDetailsOf, companyInfo } from "../settings/service";
 import type { CompanyInfo, LeadCase, Me } from "../types";
 import { replyByEmail } from "./email";
 import { replyOnMessenger } from "./messenger";
@@ -46,8 +47,19 @@ export type QuotationSnapshot = {
   toPay: number;
   validityDays: number;
   preparedBy: string;
-  /** PCSO's price canvass: the two other vendors' totals, printed one page each after ours. */
-  canvass?: { vendor: string; amount: number }[];
+  /** PCSO's other two quotations, printed after ours (Aryan, 26 Nov: PCSO three, the others one).
+   *  Typed by hand: the vendor's total on a canvass page. Filled from the medicines' prices: the
+   *  lines too, and a vendor that is one of the group's companies gets a whole quotation on its
+   *  own letterhead (`company`). */
+  canvass?: {
+    vendor: string;
+    amount: number;
+    lines?: { no: number; description: string; qty: number; price: number; total: number }[];
+    company?: CompanyInfo;
+  }[];
+  /** The first company's logo on the letterhead (2MG's); another company's quotation has none yet.
+   *  Absent on links made before 26 Nov: they had it. */
+  logo?: boolean;
 };
 
 const AGENCY: Record<string, string> = {
@@ -105,9 +117,55 @@ export function snapshotOf(data: LeadCase, company: CompanyInfo, me: Me): Quotat
     toPay: Math.max(0, total - points * 100),
     validityDays: 30,
     preparedBy: me.name,
-    // Three quotations for a guarantee letter, whichever agency gives it (Aryan, 22 Nov).
-    canvass: lead.road === "gl" ? lead.canvass : [],
+    // PCSO three quotations, every other agency ours alone (Aryan, 26 Nov, as the old CRM; on 22
+    // Nov it was three for every agency). Typed ones win over those filled from the medicines.
+    canvass:
+      data.quotesNeeded > 1
+        ? lead.canvass.length === 2
+          ? lead.canvass
+          : (data.canvassAuto ?? []).map((quote) => ({
+              vendor: quote.vendor,
+              amount: quote.amount,
+              lines: quote.lines.map((line, index) => ({
+                no: index + 1,
+                description: line.medicine,
+                qty: line.qty,
+                price: line.price,
+                total: line.total,
+              })),
+            }))
+        : [],
+    logo: isHomeCompany(),
   };
+}
+
+/** Plain words of a company's name, to know it on a canvass ("Getmeds Philippines Inc." = GPI). */
+const nameKey = (name: string) =>
+  name
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, " ")
+    .replace(/\b(incorporated|inc|corporation|corp|co|company|the)\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+/** A canvass vendor that is one of the group's companies gets its quotation on its own letterhead
+ *  (the old CRM's sister-company quotations); never the issuing company's own. */
+export async function withLetterheads(db: Database, snapshot: QuotationSnapshot): Promise<QuotationSnapshot> {
+  if (!snapshot.canvass?.some((quote) => quote.lines?.length)) return snapshot;
+  const ours = nameKey(snapshot.company.name);
+  const canvass = [];
+  for (const quote of snapshot.canvass) {
+    const key = nameKey(quote.vendor);
+    const code = COMPANY_CODES.find(
+      (one) => key && (nameKey(COMPANIES[one].name) === key || nameKey(COMPANIES[one].short) === key),
+    );
+    canvass.push(
+      code && quote.lines?.length && nameKey(COMPANIES[code].name) !== ours
+        ? { ...quote, company: await companyDetailsOf(db, code) }
+        : quote,
+    );
+  }
+  return { ...snapshot, canvass };
 }
 
 // ---------------------------------------------------------------- drawing
@@ -166,7 +224,7 @@ export async function drawQuotation(s: QuotationSnapshot): Promise<Uint8Array> {
   doc.setAuthor(plain(s.company.name));
   const body = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
-  const bytes = await logo();
+  const bytes = s.logo === false ? null : await logo();
   const image: PDFImage | null = bytes ? await doc.embedPng(bytes).catch(() => null) : null;
   const pages: PDFPage[] = [];
   let page = doc.addPage([PAGE.w, PAGE.h]);
@@ -383,9 +441,31 @@ export async function drawQuotation(s: QuotationSnapshot): Promise<Uint8Array> {
     align: "right",
   });
 
-  // PCSO's price canvass: one page for each other vendor's quotation (ours is the first).
+  // PCSO's price canvass: one page for each other vendor's quotation (ours is the first). One of
+  // the group's companies: its whole quotation on its own letterhead, at its prices, drawn after
+  // the rest so this document's page count stays its own.
   const canvass = s.canvass ?? [];
+  const ourPages = pages.length;
+  const lettered = new Map<number, QuotationSnapshot>();
   for (const [index, other] of canvass.entries()) {
+    if (other.company && other.lines?.length) {
+      lettered.set(index, {
+        ...s,
+        company: other.company,
+        reference: `${s.reference}-${index + 2}`,
+        lines: other.lines,
+        subtotal: other.amount,
+        relief: null,
+        deliveryFee: 0,
+        points: 0,
+        total: other.amount,
+        toPay: other.amount,
+        preparedBy: other.company.signatory || other.company.name,
+        canvass: [],
+        logo: false,
+      });
+      continue;
+    }
     page = doc.addPage([PAGE.w, PAGE.h]);
     pages.push(page);
     text("PRICE CANVASS", LEFT, 70, { font: bold, size: 16, color: BRAND });
@@ -439,6 +519,17 @@ export async function drawQuotation(s: QuotationSnapshot): Promise<Uint8Array> {
         color: SOFT,
       });
   }
+  // The group's companies' own quotations, each in its place among the canvass pages.
+  let at = ourPages;
+  for (const index of canvass.keys()) {
+    const theirs = lettered.get(index);
+    if (!theirs) {
+      at += 1;
+      continue;
+    }
+    const drawn = await PDFDocument.load(await drawQuotation(theirs));
+    for (const copied of await doc.copyPages(drawn, drawn.getPageIndices())) doc.insertPage(at++, copied);
+  }
   return doc.save();
 }
 
@@ -454,7 +545,7 @@ export async function quotationPdf(
   leadId: number,
 ): Promise<{ bytes: Uint8Array; name: string }> {
   await leadGate(db, me, leadId, "read", "see a quotation");
-  const snapshot = snapshotOf(await leadCase(db, me, leadId), await companyInfo(db), me);
+  const snapshot = await withLetterheads(db, snapshotOf(await leadCase(db, me, leadId), await companyInfo(db), me));
   return { bytes: await drawQuotation(snapshot), name: fileName(snapshot) };
 }
 
@@ -467,7 +558,7 @@ export async function quotationLink(
   leadId: number,
 ): Promise<{ path: string }> {
   await leadGate(db, me, leadId, "work", "make a quotation link");
-  const snapshot = snapshotOf(await leadCase(db, me, leadId), await companyInfo(db), me);
+  const snapshot = await withLetterheads(db, snapshotOf(await leadCase(db, me, leadId), await companyInfo(db), me));
   const token = randomBytes(24).toString("base64url");
   await db.execute(
     sql`insert into quotation_link (lead_id, token_hash, snapshot, expires_at, created_by)
@@ -509,7 +600,7 @@ export async function sendQuotation(
   await leadGate(db, me, leadId, "work", "send a quotation");
   const data = await leadCase(db, me, leadId);
   const company = await companyInfo(db);
-  const snapshot = snapshotOf(data, company, me);
+  const snapshot = await withLetterheads(db, snapshotOf(data, company, me));
   const name = (data.lead.name.split(/\s+/)[0] ?? "").trim();
   if (input.via === "messenger") {
     if (data.lead.chatChannel !== "messenger")

@@ -23,6 +23,7 @@ import { useWebsiteReservation } from "../points/website";
 import { pointsProgram } from "../settings/service";
 import type {
   BuyerBusiness,
+  CanvassQuote,
   CaseOrderTrail,
   DeskStep,
   GlInput,
@@ -58,6 +59,7 @@ import {
   discountRoad,
   papersFor,
   queuesOf,
+  quotesNeeded,
   quoteTotals,
   roadStepOf,
   SOURCE_LABEL,
@@ -753,6 +755,35 @@ async function orderTrail(db: Runner, orderId: number): Promise<CaseOrderTrail> 
   };
 }
 
+/**
+ * PCSO's quotations 2 and 3 from the medicines' canvass prices (the old CRM's
+ * vendorQuoteFromMedicines): each the same vendor on every quoted medicine, every line at its price
+ * for one piece. Null when a medicine has none, or they name different vendors: then they are typed.
+ */
+export async function canvassFromMedicines(db: Runner, lines: QuoteLine[]): Promise<CanvassQuote[] | null> {
+  if (!lines.length) return null;
+  const ids = [...new Set(lines.map((line) => line.medicineId))];
+  const prices = await rows<{ medicineId: number; slot: 2 | 3; vendor: string; amount: number }>(
+    db,
+    sql`select medicine_id::int as "medicineId", slot::int as slot, vendor, amount::int as amount
+      from medicine_canvass where medicine_id in (${sql.join(ids.map((one) => sql`${one}`), sql`, `)})`,
+  );
+  const quotes: CanvassQuote[] = [];
+  for (const slot of [2, 3] as const) {
+    const quote: CanvassQuote = { vendor: "", amount: 0, lines: [] };
+    for (const line of lines) {
+      const price = prices.find((one) => one.medicineId === line.medicineId && one.slot === slot);
+      if (!price || !(line.qty > 0)) return null;
+      if (quote.vendor && quote.vendor.toLowerCase() !== price.vendor.toLowerCase()) return null;
+      quote.vendor ||= price.vendor;
+      quote.lines.push({ medicine: line.medicine, qty: line.qty, price: price.amount, total: line.qty * price.amount });
+      quote.amount += line.qty * price.amount;
+    }
+    quotes.push(quote);
+  }
+  return quotes;
+}
+
 export async function leadCase(db: Database, me: Me, id: number): Promise<LeadCase> {
   await leadGate(db, me, id, "read", "see a case");
   const row = await readLead(db, id);
@@ -904,6 +935,8 @@ export async function leadCase(db: Database, me: Me, id: number): Promise<LeadCa
       stale: row.quoteLines.length > 0 && !quoted,
       savedAt: row.quoteSavedAt,
     },
+    quotesNeeded: quotesNeeded(row.road, row.agency),
+    canvassAuto: quotesNeeded(row.road, row.agency) > 1 ? await canvassFromMedicines(db, row.quoteLines) : null,
     order:
       row.orderId && row.orderCode && row.orderStatus
         ? {
@@ -1594,6 +1627,10 @@ export async function saveCanvass(
       throw new Refusal(409, "not_now", "This case doesn't pay by a guarantee letter.");
     if (lead.ordered)
       throw new Refusal(409, "not_now", "The order is placed with these quotations.");
+    // PCSO alone asks for the other vendors' quotations (Aryan, 26 Nov, as the old CRM).
+    const [agency] = await rows<{ agency: string | null }>(tx, sql`select agency from lead where id = ${id}`);
+    if (clean2.length && quotesNeeded("gl", agency?.agency) < 2)
+      throw new Refusal(409, "not_now", `${(agency?.agency ?? "This agency").toUpperCase()} asks for one quotation: ours. Only PCSO asks for three.`, "lines");
     await tx.execute(
       sql`update lead set canvass = ${JSON.stringify(clean2)}::jsonb where id = ${id}`,
     );

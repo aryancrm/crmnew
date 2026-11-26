@@ -1267,20 +1267,24 @@ const toDraft = (line: QuoteLine): Draft => ({
 });
 const centavos = (text: string) => Math.round(Number(text.replace(/,/g, "")) * 100);
 
-/** A guarantee letter's agency asks for three quotations (every agency, 22 Nov): ours and two other vendors' totals, each from that
- *  vendor's written quotation. They print after ours, one page each. */
+/** PCSO asks for three quotations (Aryan, 26 Nov, as the old CRM; the other agencies ours alone): ours
+ *  and two other vendors'. They fill themselves from each medicine's PCSO prices (Inventory), a
+ *  sister company's on its own letterhead; else, or to change them, each vendor's total is typed
+ *  from their written quotation. They print after ours. */
 function Canvass({ data, editable }: { data: LeadCase; editable: boolean }) {
   const { lead } = data;
   const write = useCaseWrite(lead.id);
+  const auto = lead.canvass.length === 0 ? data.canvassAuto : null;
+  const shown = lead.canvass.length ? lead.canvass : (data.canvassAuto ?? []);
   const [rows, setRows] = useState(() =>
     [0, 1].map((at) => ({
-      vendor: lead.canvass[at]?.vendor ?? "",
-      amount: lead.canvass[at] ? (lead.canvass[at].amount / 100).toFixed(2) : "",
+      vendor: shown[at]?.vendor ?? "",
+      amount: shown[at] ? (shown[at].amount / 100).toFixed(2) : "",
     })),
   );
   const change = (at: number, changes: Partial<{ vendor: string; amount: string }>) =>
     setRows((all) => all.map((row, index) => (index === at ? { ...row, ...changes } : row)));
-  const saved = lead.canvass.length === 2;
+  const saved = lead.canvass.length === 2 || Boolean(auto);
   async function save() {
     await write.send(`/api/leads/${lead.id}/canvass`, {
       lines: rows
@@ -1298,8 +1302,13 @@ function Canvass({ data, editable }: { data: LeadCase; editable: boolean }) {
           className={`size-2 rounded-full ${saved ? "bg-emerald-500" : "bg-amber-400"}`}
           aria-hidden="true"
         />
-        The agency's 3 quotations: ours, and two other vendors'
+        PCSO's 3 quotations: ours, and two other vendors'
       </div>
+      {auto && (
+        <div className="mb-2 text-[11px] text-slate-500">
+          Filled by themselves from each medicine's PCSO prices (Inventory). Type to change them.
+        </div>
+      )}
       <div className="grid gap-2">
         {rows.map((row, at) => (
           <div key={`vendor-${at + 2}`} className="grid gap-2 sm:grid-cols-[1fr_10rem]">
@@ -1327,7 +1336,9 @@ function Canvass({ data, editable }: { data: LeadCase; editable: boolean }) {
       {editable && (
         <div className="mt-2 flex items-center justify-between gap-2">
           <span className="text-[11px] text-slate-500">
-            From each vendor's written quotation. The PDF prints all 3.
+            {lead.canvass.length && data.canvassAuto
+              ? "Typed by hand. Empty both and save to use the medicines' prices."
+              : "The PDF prints all 3."}
           </span>
           <Button small disabled={write.busy} onClick={save}>
             {write.busy ? "Saving…" : "Save"}
@@ -1790,7 +1801,7 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
           </dl>
         )}
 
-        {quoted && lead.road === "gl" && (
+        {quoted && data.quotesNeeded > 1 && (
           <Canvass data={data} editable={editable} />
         )}
         {quoted && <QuotationOut data={data} />}

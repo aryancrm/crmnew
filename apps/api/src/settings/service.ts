@@ -40,6 +40,13 @@ const companyKey = (code: CompanyCode) => (code === "2mg" ? "company" : `company
 const detailsOf = (db: Runner, code: CompanyCode) =>
   read<CompanyInfo>(db, companyKey(code), { ...COMPANY_DEFAULT, name: COMPANIES[code].name });
 
+/** One of the group's companies' details for a paper of theirs (a PCSO quotation on their own
+ *  letterhead): what the Admin keeps in Company details, under its registered name. */
+export const companyDetailsOf = async (db: Runner, code: CompanyCode): Promise<CompanyInfo> => ({
+  ...(await detailsOf(db, code)),
+  name: COMPANIES[code].name,
+});
+
 /** A company's letterhead on HR's papers: always its registered name (never a short one typed in
  *  the settings), with the address, phone, email, TIN and foot line the Admin keeps. */
 export async function letterheadOf(db: Runner, code: CompanyCode): Promise<Letterhead> {

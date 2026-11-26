@@ -95,8 +95,9 @@ describe("one medicine", () => {
   it("shows its batches, every price, the running promo and its history", async () => {
     const { medicine } = await named("Anastrozole");
     const response = await get("sarla", `/api/inventory/medicines/${medicine.id}`);
-    // With one for its offers, and one for what placed orders have promised (Free to sell).
-    expect(queries(response)).toBe(12);
+    // With one for its offers, one for what placed orders have promised (Free to sell), and one
+    // for PCSO's other two vendors' prices (26 Nov).
+    expect(queries(response)).toBe(13);
     const page = (await response.json()) as MedicineDetail;
     expect(page.free).toBe(Math.max(0, page.total - page.promised));
     expect(page.batches).toMatchObject([

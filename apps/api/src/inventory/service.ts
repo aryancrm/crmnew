@@ -8,6 +8,7 @@ import { Refusal } from "../http";
 import { offersOf, runningOffers } from "./offers";
 import type {
   BuyerType,
+  CanvassPrice,
   Catalogue,
   CatalogueRow,
   ComingRow,
@@ -442,7 +443,57 @@ export async function medicineDetail(db: Database, me: Me, id: number): Promise<
     moves,
     priceChanges: changes,
     news,
+    canvass: await canvassOf(db, id),
   };
+}
+
+/** PCSO's quotations 2 and 3: the other vendors' price for one piece of this medicine. */
+export const canvassOf = (db: Runner, medicineId: number) =>
+  rows<CanvassPrice>(
+    db,
+    sql`select slot::int as slot, vendor, amount::int as amount from medicine_canvass
+      where medicine_id = ${medicineId} order by slot`,
+  );
+
+/**
+ * Sets (or, with null, takes off) the other vendors' price for one piece, for PCSO's quotations 2
+ * and 3 (Aryan, 26 Nov, as the old CRM). Each change is in the medicine's price log.
+ */
+export async function setCanvass(
+  db: Database,
+  me: Me,
+  medicineId: number,
+  input: Partial<Record<2 | 3, { vendor: string; amount: number } | null>>,
+): Promise<void> {
+  await db.transaction(async (tx) => {
+    await activeMedicine(tx, medicineId);
+    const now = new Map((await canvassOf(tx, medicineId)).map((row) => [row.slot, row]));
+    for (const slot of [2, 3] as const) {
+      if (!(slot in input)) continue;
+      const next = input[slot] ?? null;
+      const vendor = next?.vendor.trim().replace(/\s+/g, " ") ?? "";
+      if (next && !vendor)
+        throw new Refusal(400, "invalid", `Type quotation ${slot}'s vendor.`, `vendor${slot}`);
+      if (next && (!Number.isInteger(next.amount) || next.amount <= 0))
+        throw new Refusal(400, "invalid", `Type quotation ${slot}'s price for one piece.`, `amount${slot}`);
+      const old = now.get(slot) ?? null;
+      if (!next) {
+        if (!old) continue;
+        await tx.execute(sql`delete from medicine_canvass where medicine_id = ${medicineId} and slot = ${slot}`);
+      } else if (!old || old.vendor !== vendor || old.amount !== next.amount) {
+        await tx.execute(
+          sql`insert into medicine_canvass (medicine_id, slot, vendor, amount, updated_by)
+            values (${medicineId}, ${slot}, ${vendor}, ${next.amount}, ${me.id})
+            on conflict (medicine_id, slot) do update set vendor = excluded.vendor, amount = excluded.amount,
+              updated_by = excluded.updated_by, updated_at = now()`,
+        );
+      } else continue;
+      await tx.execute(
+        sql`insert into price_change (medicine_id, what, old_amount, new_amount, by_person)
+          values (${medicineId}, ${`PCSO quotation ${slot}${next ? ` (${vendor})` : ""}`}, ${old?.amount ?? null}, ${next?.amount ?? null}, ${me.id})`,
+      );
+    }
+  });
 }
 
 export async function activeMedicine(

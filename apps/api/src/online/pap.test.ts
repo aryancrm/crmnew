@@ -259,6 +259,44 @@ describe("PAP cases", () => {
     expect(now.order?.trail.payments.map((payment) => payment.who)).toEqual(expect.arrayContaining(["The agency", "The patient", "Let go"]));
   });
 
+  it("PCSO gets three quotations, filled from each medicine's other vendors' prices; a sister company's on its own letterhead", async () => {
+    // Whoever sets prices types the two other vendors' price for one piece, once (Aryan, 26 Nov, as the old CRM).
+    expect((await post("ryan", `/api/inventory/medicines/${medicine.id}/canvass`, { 2: { vendor: "X", amount: 1 } })).status).toBe(403);
+    const priced = await post("sarla", `/api/inventory/medicines/${medicine.id}/canvass`, {
+      2: { vendor: "Getmeds Philippines Inc.", amount: medicine.price + 1500 },
+      3: { vendor: "Rose Pharmacy", amount: medicine.price + 2500 },
+    });
+    expect(priced.status, await priced.clone().text()).toBe(200);
+    const page = await read<{ canvass: { slot: number; vendor: string; amount: number }[]; priceChanges: { what: string }[] }>(
+      "sarla",
+      `/api/inventory/medicines/${medicine.id}`,
+    );
+    expect(page.canvass.map((one) => one.vendor)).toEqual(["Getmeds Philippines Inc.", "Rose Pharmacy"]);
+    expect(page.priceChanges.map((one) => one.what)).toEqual(expect.arrayContaining(["PCSO quotation 2 (Getmeds Philippines Inc.)"]));
+
+    const made = await post("paula", "/api/leads", { source: "referral", name: "Nena Ramos", phone: "0917 333 4455", city: "Manila", road: "gl", agency: "pcso" });
+    const id = ((await made.json()) as { id: number }).id;
+    await post("paula", `/api/leads/${id}/quote`, { lines: [{ medicineId: medicine.id, qty: 3 }] });
+    const pcso = await lead("paula", id);
+    expect(pcso.quotesNeeded).toBe(3);
+    expect(pcso.canvassAuto?.map((one) => [one.vendor, one.amount])).toEqual([
+      ["Getmeds Philippines Inc.", (medicine.price + 1500) * 3],
+      ["Rose Pharmacy", (medicine.price + 2500) * 3],
+    ]);
+    // Ours, Getmeds Philippines' on its own letterhead, Rose Pharmacy's canvass page.
+    const pdf = await PDFDocument.load(new Uint8Array(await (await get("paula", `/api/leads/${id}/quotation.pdf`)).arrayBuffer()));
+    expect(pdf.getPageCount()).toBe(3);
+
+    // A medicine without the other vendors' prices: they are typed by hand.
+    await post("sarla", `/api/inventory/medicines/${medicine.id}/canvass`, { 3: null });
+    expect((await lead("paula", id)).canvassAuto).toBeNull();
+    expect(
+      (await post("paula", `/api/leads/${id}/canvass`, { lines: [{ vendor: "MedExpress", amount: 900000 }, { vendor: "Rose Pharmacy", amount: 950000 }] })).status,
+    ).toBe(200);
+    const typed = await PDFDocument.load(new Uint8Array(await (await get("paula", `/api/leads/${id}/quotation.pdf`)).arrayBuffer()));
+    expect(typed.getPageCount()).toBe(3);
+  });
+
   it("keeps a PAP MedRep to their own cases", async () => {
     const [other] = await rows<{ id: number }>(
       db,
@@ -295,9 +333,11 @@ describe("PAP cases", () => {
     expect(hers.cards.find((card) => card.id === id)?.cameFrom).toContain("Jane");
     expect((await lead("paula", id)).can.work).toBe(true);
 
-    // Three quotations for DSWD too, then the letter and the papers.
+    // DSWD asks for one quotation, ours (PCSO alone asks for three: Aryan, 26 Nov, as the old
+    // CRM); then the letter and the papers.
     await post("paula", `/api/leads/${id}/quote`, { lines: [{ medicineId: medicine.id, qty: 2 }] });
     const total = medicine.price * 2;
+    expect((await lead("paula", id)).quotesNeeded).toBe(1);
     expect(
       (
         await post("paula", `/api/leads/${id}/canvass`, {
@@ -307,9 +347,9 @@ describe("PAP cases", () => {
           ],
         })
       ).status,
-    ).toBe(200);
+    ).toBe(409);
     const pdf = await get("paula", `/api/leads/${id}/quotation.pdf`);
-    expect((await PDFDocument.load(new Uint8Array(await pdf.arrayBuffer()))).getPageCount()).toBe(3);
+    expect((await PDFDocument.load(new Uint8Array(await pdf.arrayBuffer()))).getPageCount()).toBe(1);
     await file("paula", id, "gl_letter");
     await file("paula", id, "rx");
     await file("paula", id, "valid_id");

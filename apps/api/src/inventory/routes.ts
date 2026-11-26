@@ -22,6 +22,7 @@ import {
   postNews,
   receiveStock,
   saveMedicine,
+  setCanvass,
   setPrices,
 } from "./service";
 
@@ -156,6 +157,18 @@ export function inventoryRoutes(
       z.object({ prices: z.object(shape), packPrices: z.object(shape).optional() }),
     );
     await setPrices(db, c.get("me"), idParam(c), input.prices, input.packPrices ?? {});
+    return c.json({ ok: true });
+  });
+
+  // PCSO's quotations 2 and 3: the other vendors' price for one piece (Aryan, 26 Nov).
+  app.post("/api/inventory/medicines/:id/canvass", async (c) => {
+    allow(c.get("me"), PRICE_ROLES, "change prices");
+    const quote = z
+      .object({ vendor: z.string().max(120), amount: centavos })
+      .nullable()
+      .optional();
+    const input = await readBody(c, z.object({ 2: quote, 3: quote }));
+    await setCanvass(db, c.get("me"), idParam(c), input);
     return c.json({ ok: true });
   });
 
