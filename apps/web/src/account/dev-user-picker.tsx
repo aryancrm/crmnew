@@ -15,7 +15,8 @@ import { type Workspace, WORKSPACES, workspaceOf } from "../workspaces";
 
 type Role = Me["role"];
 
-// The demo seeds' people; each one's email is <name>@2mg.test.
+// The demo seeds' people; each one's email is <name>@2mg.test. A MedRep's line says whether their
+// seat works from the office or in the field (docs/PLAN.md 28).
 const PEOPLE: [Role, string, string][] = [
   ["admin", "Admin", "System admin"],
   ["ceo", "Naresh", "CEO"],
@@ -35,21 +36,21 @@ const PEOPLE: [Role, string, string][] = [
   ["team_lead", "Lara", "Sales Coach, MD Telesales"],
   ["team_lead", "Jess", "B2B Sales Coach"],
   ["team_lead", "Jimmy", "Government Bidding Admin"],
-  ["medrep", "Ryan", "MedRep"],
-  ["medrep", "Mia", "MedRep"],
-  ["medrep", "Carlo", "MedRep"],
-  ["medrep", "Joy", "MedRep"],
-  ["medrep", "Paula", "PAP MedRep"],
-  ["medrep", "Kim", "MD Telesales, Oncology"],
-  ["medrep", "Ana", "MD Telesales, Anesthesia"],
-  ["medrep", "Fritz", "CRR"],
-  ["medrep", "Flor", "NBD"],
-  ["medrep", "Annie", "CLIDP Sales Coach"],
-  ["medrep", "Hazel", "Government Bidding"],
-  ["medrep", "Arron", "Government Bidding, Customer Happiness"],
-  ["medrep", "Rey", "Government Bidding"],
+  ["medrep", "Ryan", "Hospital CHC · Field"],
+  ["medrep", "Mia", "Hospital CHC · Field"],
+  ["medrep", "Carlo", "Hospital CHC, Mindanao · Field"],
+  ["medrep", "Joy", "Rx CHC · Field"],
+  ["medrep", "Paula", "PAP MedRep · Field"],
+  ["medrep", "Kim", "MD Telesales, Oncology · Office"],
+  ["medrep", "Ana", "MD Telesales, Anesthesia · Office"],
+  ["medrep", "Fritz", "CRR · Office"],
+  ["medrep", "Flor", "NBD · Office"],
+  ["medrep", "Annie", "CLIDP Sales Coach · Office"],
+  ["medrep", "Hazel", "Government Bidding · Office"],
+  ["medrep", "Arron", "Government Bidding, Customer Happiness · Office"],
+  ["medrep", "Rey", "Hospital, Government Account · Field"],
   // In the demo company only (pnpm dev:demo-api, 26 Nov): the chart has no MedRep under Malou.
-  ["medrep", "Marites", "MedRep, Modern Trade"],
+  ["medrep", "Marites", "MedRep, Modern Trade · Field"],
   ["regulatory", "Esther", "In-licensing Mentor"],
   ["regulatory", "Dhebbie", "In-licensing Executive"],
   ["regulatory", "Ivy", "Regulatory Affairs Mentor"],
