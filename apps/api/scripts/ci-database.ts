@@ -39,7 +39,7 @@ const list = await openCompanies({
   ready: async () => ({ fetch: () => new Response(null, { status: 204 }) }),
 });
 const made = await list.add(
-  { name: "CI Pharma Inc.", code: "CI", loginDomain: "ci.test", adminLogin: "admin", copyStockFrom: list.home().ref.orgId },
+  { name: "CI Pharma Inc.", code: "CI", loginId: "info@ci.test", copyStockFrom: list.home().ref.orgId },
   null,
 );
 console.log(`✓ A second company made on Postgres (${made.company.row.database}), ${made.stock?.pieces ?? 0} pieces copied.`);

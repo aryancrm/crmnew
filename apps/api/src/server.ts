@@ -48,6 +48,8 @@ if (process.env.COMPANIES !== "on") {
       name: process.env.HOME_COMPANY_NAME ?? "2MG Inc.",
       code: process.env.HOME_COMPANY_CODE ?? "2MG",
       loginDomain: process.env.LOGIN_DOMAIN ?? "2mginc.com",
+      // Its login ID, set once on the list's first start (Aryan, 26 Nov: info@2mginc.com).
+      loginId: process.env.HOME_COMPANY_LOGIN || undefined,
     },
     ready: (db, ref) =>
       asCompany(ref, async () => {

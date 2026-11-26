@@ -96,14 +96,14 @@ describe("several companies on one server", () => {
     expect(pieces).toBeGreaterThan(0);
 
     const made = await list.add(
-      { name: "GetMeds Philippines Inc.", code: "gm", loginDomain: "GetMeds.test", adminLogin: "admin", copyStockFrom: list.home().ref.orgId },
+      { name: "GetMeds Philippines Inc.", code: "gm", loginId: "Admin@GetMeds.test", copyStockFrom: list.home().ref.orgId },
       null,
     );
     gm = made.company;
     gmPassword = made.password;
     expect(gm.ref).toMatchObject({ name: "GetMeds Philippines Inc.", code: "GM", loginDomain: "getmeds.test", home: false });
     expect(gm.ref.orgId).not.toBe(list.home().ref.orgId);
-    expect(made.adminLogin).toBe("admin@getmeds.test");
+    expect(made.loginId).toBe("admin@getmeds.test");
     expect(made.stock).toMatchObject({ medicines, pieces });
 
     // Its own: one Admin, no orders, customers, invoices or money.
@@ -176,12 +176,36 @@ describe("several companies on one server", () => {
   });
 
   it("checks a new company's name, code and domain", async () => {
-    const base = { name: "Another", code: "AN", loginDomain: "another.test", adminLogin: "admin" };
-    await expect(list.add({ ...base, loginDomain: "getmeds.test" }, null)).rejects.toMatchObject({ field: "loginDomain" });
+    const base = { name: "Another", code: "AN", loginId: "info@another.test" };
+    await expect(list.add({ ...base, loginId: "info@getmeds.test" }, null)).rejects.toMatchObject({ field: "loginId" });
+    await expect(list.add({ ...base, loginId: "someone@gmail.com" }, null)).rejects.toMatchObject({ field: "loginId" });
     await expect(list.add({ ...base, code: "2MG" }, null)).rejects.toMatchObject({ field: "code" });
     await expect(list.add({ ...base, code: "A" }, null)).rejects.toMatchObject({ field: "code" });
-    await expect(list.add({ ...base, loginDomain: "not a domain" }, null)).rejects.toMatchObject({ field: "loginDomain" });
+    await expect(list.add({ ...base, loginId: "not an email" }, null)).rejects.toMatchObject({ field: "loginId" });
     expect(list.all()).toHaveLength(2);
+  });
+});
+
+describe("the first company's login ID on the list's first start", () => {
+  it("becomes the one given (HOME_COMPANY_LOGIN), once, and its Admin signs in with it", async () => {
+    const own = openDatabase({ dir: "memory" });
+    await migrate(own);
+    await seedDemo(own, PASSWORD);
+    const places = memoryPlaces(own);
+    const open = (loginId: string) =>
+      openCompanies({
+        control: placesControl,
+        places,
+        home: { name: "2MG Inc.", code: "2MG", loginDomain: "2mg.test", loginId },
+        ready: async (db) => createApp(db, { webUrl: "http://localhost:5180" }),
+      });
+    const placesControl = await places.control();
+    const first = await open("Info@2mg.test");
+    expect((await first.adminOf(first.home()))?.login).toBe("info@2mg.test");
+    // A later start leaves a login ID changed since as it is.
+    await first.change(first.home().ref.orgId, { loginId: "office@2mg.test" }, null);
+    const again = await open("info@2mg.test");
+    expect((await again.adminOf(again.home()))?.login).toBe("office@2mg.test");
   });
 });
 
@@ -224,25 +248,40 @@ describe("the control panel", () => {
       companies: { orgId: string; code: string; people: number; home: boolean; admin: string | null }[];
     };
     expect(listed.companies.map((one) => [one.code, one.home])).toEqual([["2MG", true], ["GM", false]]);
-    expect(listed.companies[1]).toMatchObject({ people: 1, admin: "admin@getmeds.test" });
+    expect(listed.companies[1]).toMatchObject({ people: 1, loginId: "admin@getmeds.test" });
 
     const added = await send("/api/control/companies", {
       cookie: panelCookie,
-      body: { name: "Third Pharma Inc.", code: "tp", loginDomain: "third.test", adminLogin: "boss", adminName: "Rosa" },
+      body: { name: "Third Pharma Inc.", code: "tp", loginId: "boss@third.test" },
     });
     expect(added.status).toBe(200);
-    const third = (await added.json()) as { orgId: string; adminLogin: string; password: string };
-    expect(third.adminLogin).toBe("boss@third.test");
+    const third = (await added.json()) as { orgId: string; loginId: string; password: string };
+    expect(third.loginId).toBe("boss@third.test");
     expect((await login("boss@third.test", third.password)).status).toBe(200);
 
     const given = await send(`/api/control/companies/${gm.ref.orgId}/admin-password`, { cookie: panelCookie, body: {} });
-    const fresh = (await given.json()) as { adminLogin: string; password: string };
-    expect(fresh.adminLogin).toBe("admin@getmeds.test");
+    const fresh = (await given.json()) as { loginId: string; password: string };
+    expect(fresh.loginId).toBe("admin@getmeds.test");
     expect((await login("admin@getmeds.test", gmPassword)).status).toBe(401);
     expect((await login("admin@getmeds.test", fresh.password)).status).toBe(200);
 
     const events = (await (await send("/api/control/events", { cookie: panelCookie })).json()) as { events: { what: string }[] };
     expect(events.events.map((one) => one.what)).toEqual(expect.arrayContaining(["added", "admin_password", "paused", "resumed", "panel_login_made"]));
+  });
+
+  it("changes a company's login ID: the first company's becomes info@, and signs in with it", async () => {
+    const home = list.home().ref.orgId;
+    const taken = await send(`/api/control/companies/${home}`, { method: "PATCH", cookie: panelCookie, body: { loginId: "helen@2mg.test" } });
+    expect(taken.status).toBe(409);
+    const changed = await send(`/api/control/companies/${home}`, { method: "PATCH", cookie: panelCookie, body: { loginId: "Info@2MG.test" } });
+    expect(changed.status).toBe(200);
+    expect(((await changed.json()) as { loginId: string }).loginId).toBe("info@2mg.test");
+    // The Admin signs in with it (their own password unchanged); nobody else's login moved.
+    expect((await login("info@2mg.test", PASSWORD)).status).toBe(200);
+    expect((await login("helen@2mg.test", PASSWORD)).status).toBe(200);
+    expect(list.home().ref.loginDomain).toBe("2mg.test");
+    const listed = (await (await send("/api/control/companies", { cookie: panelCookie })).json()) as { companies: { code: string; loginId: string }[] };
+    expect(listed.companies.find((one) => one.code === "2MG")?.loginId).toBe("info@2mg.test");
   });
 
   it("locks a panel login after five wrong tries", async () => {

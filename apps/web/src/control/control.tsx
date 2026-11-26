@@ -22,7 +22,8 @@ type Company = {
   running: boolean;
   problem: string | null;
   people: number | null;
-  admin: string | null;
+  /** Its login ID (its first System admin's): info@2mginc.com. */
+  loginId: string | null;
 };
 type Event = { id: number; at: string; what: string; detail: Record<string, unknown>; by: string | null; company: string | null };
 
@@ -35,7 +36,7 @@ const WHAT: Record<string, string> = {
   changed: "Changed",
   paused: "Paused",
   resumed: "Resumed",
-  admin_password: "New one-time password for the Admin",
+  admin_password: "New one-time password",
   panel_login_made: "Control panel login made",
   signed_in: "Signed in to the control panel",
 };
@@ -239,7 +240,7 @@ function Companies() {
     <>
       <PageHead
         title="Companies"
-        sub="Each company's people, stock, orders and money are in a database of its own. Its people sign in with their login ID and the company's domain after the @."
+        sub="Each company's people, stock, orders and money are in a database of its own."
         actions={
           <Button variant="primary" onClick={() => setAdding(true)}>
             <Plus size={16} /> Add a company
@@ -266,11 +267,12 @@ function Companies() {
                     <span>
                       Org ID <span className="font-mono font-semibold text-slate-900">{one.orgId}</span>
                     </span>
-                    <span>
-                      Sign-in: <span className="font-semibold text-slate-900">you@{one.loginDomain}</span>
-                    </span>
+                    {one.loginId && (
+                      <span>
+                        Login ID <span className="font-semibold text-slate-900">{one.loginId}</span>
+                      </span>
+                    )}
                     {one.people !== null && <span>{one.people} people</span>}
-                    {one.admin && <span>Admin: {one.admin}</span>}
                     <span>Added {when(one.createdAt)}</span>
                   </div>
                   {one.pausedAt && (
@@ -286,9 +288,9 @@ function Companies() {
                 <Button small onClick={() => setEditing(one)}>
                   <Pencil size={14} /> Change
                 </Button>
-                {one.admin && (
+                {one.loginId && (
                   <Button small onClick={() => setResetting(one)}>
-                    <KeyRound size={14} /> New Admin password
+                    <KeyRound size={14} /> New one-time password
                   </Button>
                 )}
                 {!one.home &&
@@ -344,25 +346,25 @@ type ShownProps = { title: string; rows: [string, string][]; note: string };
 function AddCompany({ companies, onClose, onDone }: { companies: Company[]; onClose: () => void; onDone: (shown: ShownProps) => void }) {
   const refresh = useRefresh();
   const action = useAction();
-  const [form, setForm] = useState({ name: "", code: "", loginDomain: "", adminLogin: "admin", adminName: "", copyStockFrom: "" });
+  const [form, setForm] = useState({ name: "", code: "", loginId: "", copyStockFrom: "" });
   const set = (key: keyof typeof form) => (event: { target: { value: string } }) => setForm({ ...form, [key]: event.target.value });
   async function submit(event: FormEvent) {
     event.preventDefault();
     await action.run(async () => {
-      const made = await api<{ orgId: string; name: string; adminLogin: string; password: string; stock: { medicines: number; pieces: number } | null }>(
+      const made = await api<{ orgId: string; name: string; loginId: string; password: string; stock: { medicines: number; pieces: number } | null }>(
         "/api/control/companies",
-        { body: { ...form, adminName: form.adminName || undefined, copyStockFrom: form.copyStockFrom || null } },
+        { body: { ...form, copyStockFrom: form.copyStockFrom || null } },
       );
       refresh();
       onDone({
         title: `${made.name} is on Bishnoi One`,
         rows: [
           ["Org ID", made.orgId],
-          ["Their Admin signs in as", made.adminLogin],
+          ["Login ID", made.loginId],
           ["One-time password", made.password],
           ...(made.stock ? ([["Stock copied", `${made.stock.medicines} medicines, ${made.stock.pieces.toLocaleString("en-PH")} pieces`]] as [string, string][]) : []),
         ],
-        note: "Send the login and the one-time password to their Admin now: the password is shown only this once. They choose their own password when they first sign in, then add their people.",
+        note: "Give them the login ID and the one-time password now: the password is shown only this once. They choose their own password when they first sign in, then add their people.",
       });
     });
   }
@@ -376,16 +378,8 @@ function AddCompany({ companies, onClose, onDone }: { companies: Company[]; onCl
           <Field label="Short code, for documents" error={action.at("code")}>
             {(props) => <input {...props} className="field uppercase" placeholder="GM" maxLength={8} value={form.code} onChange={set("code")} />}
           </Field>
-          <Field label="Email domain its people sign in with" error={action.at("loginDomain")}>
-            {(props) => <input {...props} className="field lowercase" placeholder="getmeds.ph" value={form.loginDomain} onChange={set("loginDomain")} />}
-          </Field>
-        </div>
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <Field label="Their Admin's login ID, before the @" error={action.at("adminLogin")}>
-            {(props) => <input {...props} className="field lowercase" value={form.adminLogin} onChange={set("adminLogin")} />}
-          </Field>
-          <Field label="Their Admin's name (if known)" error={action.at("adminName")}>
-            {(props) => <input {...props} className="field" placeholder="Admin" value={form.adminName} onChange={set("adminName")} />}
+          <Field label="Login ID (an email on its own domain)" error={action.at("loginId")}>
+            {(props) => <input {...props} className="field lowercase" placeholder="info@getmeds.ph" autoComplete="off" value={form.loginId} onChange={set("loginId")} />}
           </Field>
         </div>
         <Field label="Start with" error={action.at("copyStockFrom")}>
@@ -402,12 +396,10 @@ function AddCompany({ companies, onClose, onDone }: { companies: Company[]; onCl
             </select>
           )}
         </Field>
-        {form.loginDomain && (
-          <div className="rounded-xl bg-slate-50 px-3 py-2 text-[13px] text-slate-600">
-            Their Admin will sign in as <b>{(form.adminLogin || "admin").toLowerCase()}@{form.loginDomain.toLowerCase()}</b>; their people as <b>their-id@{form.loginDomain.toLowerCase()}</b>.
-          </div>
-        )}
-        <Problem message={action.general(["name", "code", "loginDomain", "adminLogin", "adminName", "copyStockFrom"])} />
+        <div className="rounded-xl bg-slate-50 px-3 py-2 text-[13px] text-slate-600">
+          This login ID opens all the company's apps with a one-time password, shown once; they change it at their first sign-in.
+        </div>
+        <Problem message={action.general(["name", "code", "loginId", "copyStockFrom"])} />
         <div className="flex justify-end gap-2">
           <Button onClick={onClose} disabled={action.busy}>
             Cancel
@@ -424,19 +416,20 @@ function AddCompany({ companies, onClose, onDone }: { companies: Company[]; onCl
 function EditCompany({ company, onClose }: { company: Company; onClose: () => void }) {
   const refresh = useRefresh();
   const action = useAction();
-  const [form, setForm] = useState({ name: company.name, code: company.code, loginDomain: company.loginDomain });
+  const [form, setForm] = useState({ name: company.name, code: company.code, loginId: company.loginId ?? "" });
   const set = (key: keyof typeof form) => (event: { target: { value: string } }) => setForm({ ...form, [key]: event.target.value });
   async function submit(event: FormEvent) {
     event.preventDefault();
     const ok = await action.run(async () => {
-      await api(`/api/control/companies/${company.orgId}`, { method: "PATCH", body: form });
+      await api(`/api/control/companies/${company.orgId}`, { method: "PATCH", body: { ...form, loginId: typed || undefined } });
     });
     if (ok) {
       refresh();
       onClose();
     }
   }
-  const domainChanged = form.loginDomain.trim().toLowerCase() !== company.loginDomain;
+  const typed = form.loginId.trim().toLowerCase();
+  const domainChanged = typed.includes("@") && typed.slice(typed.lastIndexOf("@") + 1) !== company.loginDomain;
   return (
     <Dialog title={`Change ${company.name}`} sub={`Org ID ${company.orgId} never changes.`} onClose={onClose} busy={action.busy}>
       <form onSubmit={submit} className="flex flex-col gap-3">
@@ -446,15 +439,15 @@ function EditCompany({ company, onClose }: { company: Company; onClose: () => vo
         <Field label="Short code, for documents" error={action.at("code")}>
           {(props) => <input {...props} className="field uppercase" maxLength={8} value={form.code} onChange={set("code")} />}
         </Field>
-        <Field label="Email domain its people sign in with" error={action.at("loginDomain")}>
-          {(props) => <input {...props} className="field lowercase" value={form.loginDomain} onChange={set("loginDomain")} />}
+        <Field label="Login ID" error={action.at("loginId")}>
+          {(props) => <input {...props} className="field lowercase" autoComplete="off" value={form.loginId} onChange={set("loginId")} />}
         </Field>
         {domainChanged && (
           <div className="rounded-xl bg-amber-50 px-3 py-2 text-[13px] text-amber-800">
-            Everyone at {company.name} will sign in with @{form.loginDomain.trim().toLowerCase() || "…"} instead of @{company.loginDomain}. Tell them first.
+            Everyone at {company.name} will sign in with @{typed.slice(typed.lastIndexOf("@") + 1)} instead of @{company.loginDomain}. Tell them first.
           </div>
         )}
-        <Problem message={action.general(["name", "code", "loginDomain"])} />
+        <Problem message={action.general(["name", "code", "loginId"])} />
         <div className="flex justify-end gap-2">
           <Button onClick={onClose} disabled={action.busy}>
             Cancel
@@ -529,8 +522,8 @@ function NewAdminPassword({ company, onClose, onDone }: { company: Company; onCl
   const action = useAction();
   return (
     <Dialog
-      title={`A new one-time password for ${company.name}'s Admin?`}
-      sub={`${company.admin} is signed out everywhere, and chooses their own password at their next sign-in. Their phone code, if they use one, stays on.`}
+      title={`A new one-time password for ${company.name}?`}
+      sub={`${company.loginId} is signed out everywhere and chooses their own password at the next sign-in. Their phone code, if they use one, stays on.`}
       onClose={onClose}
       busy={action.busy}
     >
@@ -545,20 +538,20 @@ function NewAdminPassword({ company, onClose, onDone }: { company: Company; onCl
             disabled={action.busy}
             onClick={() =>
               action.run(async () => {
-                const given = await api<{ adminLogin: string; password: string }>(`/api/control/companies/${company.orgId}/admin-password`, { body: {} });
+                const given = await api<{ loginId: string; password: string }>(`/api/control/companies/${company.orgId}/admin-password`, { body: {} });
                 refresh();
                 onDone({
-                  title: `${company.name}'s Admin`,
+                  title: company.name,
                   rows: [
-                    ["Signs in as", given.adminLogin],
+                    ["Login ID", given.loginId],
                     ["One-time password", given.password],
                   ],
-                  note: "Shown only this once: send it to their Admin now.",
+                  note: "Shown only this once: give it to them now.",
                 });
               })
             }
           >
-            Give a new password
+            Give a new one-time password
           </Button>
         </div>
       </div>

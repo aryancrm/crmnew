@@ -253,11 +253,11 @@ export function controlRoutes(control: Database, list: CompanyList, options: { s
     for (const row of all) {
       const one = list.byOrgId(row.orgId);
       let people: number | null = null;
-      let admin: string | null = null;
+      let loginId: string | null = null;
       if (one) {
         const [counted] = await rows<{ n: number }>(one.db, sql`select count(*)::int as n from person where active`);
         people = counted?.n ?? 0;
-        admin = (await list.adminOf(one))?.login ?? null;
+        loginId = (await list.adminOf(one))?.login ?? null;
       }
       out.push({
         orgId: row.orgId,
@@ -271,7 +271,7 @@ export function controlRoutes(control: Database, list: CompanyList, options: { s
         running: !!one,
         problem: list.brokenWhy(row.orgId),
         people,
-        admin,
+        loginId,
       });
     }
     return c.json({ companies: out });
@@ -283,9 +283,7 @@ export function controlRoutes(control: Database, list: CompanyList, options: { s
       z.object({
         name: z.string().trim().min(1, "Give the company's name.").max(120),
         code: z.string().trim().toUpperCase().min(2, "2 to 8 capital letters or digits, like GM.").max(8, "2 to 8 capital letters or digits, like GM."),
-        loginDomain: z.string().trim().toLowerCase().min(3, "An email domain, like getmeds.ph.").max(100),
-        adminLogin: z.string().trim().toLowerCase().min(1, "Like admin.").max(32).default("admin"),
-        adminName: z.string().trim().max(80).optional(),
+        loginId: z.string().trim().toLowerCase().min(3, "Type its login ID, like info@getmeds.ph.").max(120),
         copyStockFrom: z.string().trim().regex(/^[1-9][0-9]{5}$/).nullable().optional(),
       }),
     );
@@ -294,7 +292,7 @@ export function controlRoutes(control: Database, list: CompanyList, options: { s
     return c.json({
       orgId: made.company.ref.orgId,
       name: made.company.ref.name,
-      adminLogin: made.adminLogin,
+      loginId: made.loginId,
       password: made.password,
       stock: made.stock,
     });
@@ -306,11 +304,11 @@ export function controlRoutes(control: Database, list: CompanyList, options: { s
       z.object({
         name: z.string().trim().min(1).max(120).optional(),
         code: z.string().trim().toUpperCase().optional(),
-        loginDomain: z.string().trim().toLowerCase().optional(),
+        loginId: z.string().trim().toLowerCase().max(120).optional(),
       }),
     );
     const one = await list.change((c.req.param("orgId") ?? ""), input, c.get("controlId"));
-    return c.json({ orgId: one.ref.orgId, name: one.ref.name, code: one.ref.code, loginDomain: one.ref.loginDomain });
+    return c.json({ orgId: one.ref.orgId, name: one.ref.name, code: one.ref.code, loginId: (await list.adminOf(one))?.login ?? null });
   });
 
   app.post("/api/control/companies/:orgId/pause", signedIn, async (c) => {

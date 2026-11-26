@@ -2469,8 +2469,13 @@ the inventory" for GetMeds.
   `apps/api/migrations-control`): each company's **Org ID** (six digits, made at random, never
   changed: its account number with us), its name, its **short code** for documents (2MG, GM), the
   **email domain** its people sign in with (2mginc.com, getmeds.ph), and where its data is.
+- **The company's login ID**: the one Aryan types for it in the panel (26 Nov: "I give it an ID myself
+  and a one-time password they change"), an email on its own domain: **2MG's is `info@2mginc.com`**
+  (his word, 26 Nov), set once by the server when the list is first made (`HOME_COMPANY_LOGIN`).
+  It is its first System admin's login and opens all its apps; the domain after the @ is the one all
+  its people sign in with. Never made up: an ID, email or password is never chosen by the code.
 - **Signing in**: a person's own login ID with their company's domain after the @, and their own
-  password (`hos1@2mginc.com`, `admin@getmeds.ph`). No shared company password. The browser then
+  password (`hos1@2mginc.com`, `info@getmeds.ph`). No shared company password. The browser then
   remembers the company, so a login ID typed without the @ is that company's (else the first's):
   2MG's people sign in exactly as before. One company at a time in a browser.
 - **The first company is the server's own database**: 2MG Inc., `@2mginc.com`. Webhooks (Meta, the
@@ -2480,16 +2485,16 @@ the inventory" for GetMeds.
   (no email), a password of 12 characters or more and, every time, the code from the authenticator
   app on the phone. Five wrong tries lock it for 15 minutes. The first panel login is made with the
   setup key the server writes in its log while there is none; after that the key is gone.
-- **Adding a company** (in the panel): its name, short code, email domain and its Admin's login ID.
-  The panel makes its database, its company tree (one box per sales channel), and its Admin with a
-  one-time password, shown once to send to them; their Admin chooses their own password at the
-  first sign-in and adds their people. It can **start with a copy of another company's medicines,
+- **Adding a company** (in the panel): its name, short code and login ID (an email on its own domain,
+  not Gmail or the like). The panel makes its database, its company tree (one box per sales channel),
+  and its first System admin on that login ID with a one-time password, shown once for Aryan to give
+  them; they choose their own password at the first sign-in and add their people. It can **start with a copy of another company's medicines,
   prices and stock**: the warehouses, medicines with their SKUs and prices, every batch, and what is
   on each shelf today as opening stock (one receipt per batch and warehouse by its Admin, so each
   shelf equals its log). No orders, invoices, money, customers or people come across. From then on
   each company's stock is its own: a sale in one never takes a piece off the other's.
-- **Changing, pausing, a new Admin password**: name, code and domain can be changed (changing the
-  domain changes every login ID: tell them first); a company can be paused (nobody of it can sign
+- **Changing, pausing, a new one-time password**: name, code and login ID can be changed (a login ID
+  on another domain changes every person's sign-in domain: tell them first); a company can be paused (nobody of it can sign
   in or work; nothing is deleted) and resumed; its Admin can be given a new one-time password (their
   phone code, if on, stays on). The first company can't be paused. Every change is kept on the
   panel's own list of what was done.
@@ -3962,3 +3967,11 @@ medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 dat
   with a copy of another's medicines, prices and stock, pausing, a new Admin password; the company's
   code in the frame and its name on the sign-in page. All 817 API tests green (12 new); tried on a
   copy of the local data. Not live yet; emptying the dummy data waits for his yes on the list.
+- 26 Nov (201), Aryan, after the panel's picture: "who told you to do 'you'?" (its "you@2mginc.com"
+  was only a label, but read as a made-up ID), and "I give it an ID myself and a one-time password
+  they change, that's all". The panel now takes the **login ID he types** (an email on the company's
+  own domain): adding a company asks only its name, short code, login ID and what it starts with;
+  each company shows its Login ID; "New one-time password". **2MG's login ID is `info@2mginc.com`**
+  (his word), set once by the server when the list is first made (`HOME_COMPANY_LOGIN`); its Admin's
+  seat login (`admin`), where it has one, keeps working too. 14 tests for several companies (2 new); tried on a fresh copy
+  of the local data. To go live with the team's evening work, after their pull requests are merged.
