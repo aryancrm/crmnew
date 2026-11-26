@@ -161,7 +161,7 @@ export async function fieldForm(db: Database, me: Me, q?: string | null): Promis
       sql`${team(me)} select c.id::int as id, c.name, c.kind, c.specialty, c.city,
           (select to_char(max(v.day), 'YYYY-MM-DD') from visit v where v.customer_id = c.id and v.status = 'done') as "lastVisit"
         from customer c
-        where c.active and c.kind in ('doctor', 'hospital', 'drugstore') and ${seen(me)}
+        where c.active and c.kind in ('doctor', 'hospital', 'drugstore', 'distributor') and ${seen(me)}
           ${words ? sql`and (lower(c.name) like ${`%${words}%`} or lower(coalesce(c.city, '')) like ${`%${words}%`} or lower(coalesce(c.specialty, '')) like ${`%${words}%`})` : sql``}
         order by c.kind = 'doctor' desc, c.name limit 200`,
     ),
@@ -203,14 +203,14 @@ async function planOn(
   const [customer] = await rows<{ id: number; name: string }>(
     tx,
     sql`${team(me)} select c.id::int as id, c.name from customer c
-      where c.id = ${input.customerId} and c.active and c.kind in ('doctor', 'hospital', 'drugstore')
+      where c.id = ${input.customerId} and c.active and c.kind in ('doctor', 'hospital', 'drugstore', 'distributor')
         and ${seen(me)}`,
   );
   if (!customer)
     throw new Refusal(
       400,
       "invalid",
-      "Pick a doctor, hospital or drugstore you look after.",
+      "Pick a doctor, hospital, drugstore or distributor you look after.",
       "customerId",
     );
   const [open] = await rows<{ id: number }>(

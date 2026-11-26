@@ -208,17 +208,22 @@ export async function customerPage(db: Database, me: Me, id: number): Promise<Cu
   const overdue =
     invoiceRows.reduce((sum, invoice) => sum + (invoice.state.overdueDays > 0 ? invoice.balance : 0), 0) +
     (zoho?.overdue ?? 0);
-  // Both sellers (docs/PLAN.md 29): the field seller of their area, and the office seller who took
-  // their latest order.
+  // Both sellers (docs/PLAN.md 29): who visits (the field seller of their area, or of the B2B
+  // account), and who calls and takes the orders (the office seller of their latest order, else of
+  // the B2B account: its NBD until handed over, then its CRR).
+  const b2bOwner = sql`(select case when ba.handed_over_at is null then ba.nbd_id else ba.crr_id end
+    from b2b_account ba where ba.customer_id = ${id} and ba.dropped_at is null)`;
   const [sellers] = await rows<{ field: string | null; office: string | null }>(
     db,
     sql`select
         (select string_agg(p.name, ', ' order by p.name) from person p
-          where ${base?.areaId ?? null}::bigint is not null and p.area_id = ${base?.areaId ?? null} and p.role = 'medrep' and p.active
-            and person_works(p.id) = 'field') as field,
-        (select p.name from sales_order o join person p on p.id = o.medrep_id
-          where o.customer_id = ${id} and o.status not in ('draft', 'cancelled') and person_works(p.id) = 'office'
-          order by o.created_at desc, o.id desc limit 1) as office`,
+          where p.role = 'medrep' and p.active and person_works(p.id) = 'field'
+            and ((${base?.areaId ?? null}::bigint is not null and p.area_id = ${base?.areaId ?? null}) or p.id = ${b2bOwner})) as field,
+        coalesce(
+          (select p.name from sales_order o join person p on p.id = o.medrep_id
+            where o.customer_id = ${id} and o.status not in ('draft', 'cancelled') and person_works(p.id) = 'office'
+            order by o.created_at desc, o.id desc limit 1),
+          (select p.name from person p where p.id = ${b2bOwner} and p.active and person_works(p.id) = 'office')) as office`,
   );
   const [points, refill] = await Promise.all([
     detail.customer.kind === "patient" ? pointsByPhone(db, phone) : null,

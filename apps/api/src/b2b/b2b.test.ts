@@ -6,7 +6,7 @@ import { migrate } from "../db/migrate";
 import { addDays, todayManila } from "../inventory/rules";
 import { seedDemoTeam } from "../orders/seed-team";
 import { seedDemo } from "../seed";
-import type { B2bTeam, CrrDay, NbdDay } from "../types";
+import type { B2bTeam, CrrDay, CustomerPage, Me, NbdDay, OrgTree } from "../types";
 import { seedB2bTeam } from "./seed";
 
 const PASSWORD = "test-password-1";
@@ -28,7 +28,7 @@ beforeAll(async () => {
   await seedDemoTeam(db, PASSWORD);
   expect(await seedB2bTeam(db, PASSWORD)).toBe(true);
   app = createApp(db, { webUrl: "http://localhost:5180" });
-  for (const name of ["flor", "fritz", "jess", "sam", "ryan"]) {
+  for (const name of ["flor", "fritz", "jess", "sam", "ryan", "admin"]) {
     const response = await app.request("/api/auth/login", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -135,5 +135,30 @@ describe("B2B Telesales", () => {
     expect(age(after.owedByAge, "31–60")?.amount).toBe((age(before.owedByAge, "31–60")?.amount ?? 0) + 5000);
     expect(age(after.owedByAge, "not due")?.amount).toBe((age(before.owedByAge, "not due")?.amount ?? 0) + 3000);
     expect(after.owedByAge.map((one) => one.age)).toEqual(["not due", "1–30", "31–60", "61–90", "over 90"]);
+  });
+});
+
+describe("B2B, office or field (docs/PLAN.md 29)", () => {
+  it("NBD and CRR work from the office; an account made Field visits its drugstores and distributors", async () => {
+    const me = async (who: string) => ((await (await get(who, "/api/me")).json()) as { me: Me }).me;
+    expect((await me("flor")).works).toBe("office");
+    expect((await me("fritz")).works).toBe("office");
+    const [medcare] = await rows<{ id: number }>(db, sql`select id::int as id from customer where name = 'Medcare Distributors Inc.'`);
+    const visit = () => post("flor", "/api/field/visits", { customerId: medcare?.id, day: todayManila() });
+    expect((await visit()).status).toBe(403);
+    // Who calls them: the account's NBD, from the office.
+    expect((await (await (await get("jess", `/api/customers/${medcare?.id}/page`)).json()) as CustomerPage).sellers).toEqual({ field: null, office: "Flor" });
+
+    const tree = (await (await get("admin", "/api/org")).json()) as OrgTree;
+    const seat = tree.units.flatMap((unit) => unit.seats).find((one) => one.holder?.name === "Flor");
+    const made = await app.request(`/api/org/seats/${seat?.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json", cookie: cookies.admin as string },
+      body: JSON.stringify({ works: "field" }),
+    });
+    expect(made.status).toBe(200);
+    expect((await me("flor")).works).toBe("field");
+    expect((await visit()).status).toBe(200);
+    expect((await (await (await get("jess", `/api/customers/${medcare?.id}/page`)).json()) as CustomerPage).sellers).toEqual({ field: "Flor", office: null });
   });
 });
