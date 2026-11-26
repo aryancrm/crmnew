@@ -86,7 +86,7 @@ export function MessagesPage() {
         className={`flex w-full flex-col border-r border-slate-200 bg-white md:w-80 md:shrink-0 lg:w-96 ${id ? "hidden md:flex" : "flex"}`}
       >
         <div className="flex items-center justify-between gap-2 px-4 pt-4">
-          <h1 className="text-xl font-bold tracking-tight text-slate-900">Messages</h1>
+          <h1 className="text-[28px] font-semibold tracking-tight text-slate-900">Messages</h1>
           <Button small variant="primary" onClick={() => setWriting(true)}>
             <PenSquare className="size-4" /> New
           </Button>

@@ -1,5 +1,6 @@
 // What the API sends and takes. The web app imports these types, so the two can't drift.
 
+import type { CompanyCode } from "./companies";
 import type { Role } from "./people/roles";
 
 export type { Role } from "./people/roles";
@@ -1174,7 +1175,8 @@ export type OrderDetailsInput = {
 
 export type OrderChecks = { management: boolean; finance: boolean };
 
-export type InvoiceFrom = "2mg" | "getmeds";
+/** The company that bills an order: one of the group's companies (src/companies.ts). */
+export type InvoiceFrom = CompanyCode;
 export type PaperKind =
   | "po"
   | "hospital_doc"
@@ -4305,7 +4307,8 @@ export type MyDay = {
 
 // ---- HR: people and joining. Money is whole centavos (monthly); days "YYYY-MM-DD". ----
 
-export type Company = "2mg" | "gpi";
+/** The company a person works for: one of the group's companies (src/companies.ts). */
+export type Company = CompanyCode;
 export type Classification = "probationary" | "regular" | "part_time" | "intern";
 /** Where a person stands: joining (starts on a later day), working, or left. */
 export type PersonStage = "joining" | "active" | "left";

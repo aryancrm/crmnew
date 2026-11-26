@@ -6,6 +6,7 @@
 // check, customers owe, refunds owed…) opening inside it. Inventory and Management keep the
 // Inventory frame with the purchases. One module: the same screens and the same data either way.
 
+import { COMPANIES } from "@2mg/api/companies";
 import { Avatar } from "../account/avatar";
 import { ArrowLeft, BarChart3, BookOpen, BookOpenCheck, ChevronDown, ChevronRight, HandCoins, House, Landmark, PackageOpen, Plus, Search, ShoppingBag, ShoppingBasket, ShoppingCart } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -202,7 +203,7 @@ export function BooksShell() {
         <header className="flex h-[52px] shrink-0 items-center gap-3 border-b border-[#f0f0f0] bg-[#f7f7fe] px-4 print:hidden">
           <TopSearch listName={listName} />
           <div className="ml-auto flex items-center gap-3 text-[13px] text-[#222536]">
-            <span className="hidden sm:inline">2MG Inc. / GetMeds</span>
+            <span className="hidden sm:inline">{COMPANIES["2mg"].short} / {COMPANIES.gpi.short}</span>
             {ledger && <QuickCreate />}
             <Link to="/profile" className="flex items-center gap-1.5" title={me.data.name} aria-label={`${me.data.name}: my profile`}>
               <Avatar person={me.data} size="xs" />

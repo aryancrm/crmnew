@@ -3,6 +3,7 @@
 // are written down only as "changed": the trail is read by more eyes than the record itself.
 
 import { sql } from "drizzle-orm";
+import { COMPANIES } from "../companies";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import type { Runner } from "../inventory/service";
@@ -83,7 +84,7 @@ const shown = (value: Value): string | null =>
 
 /** Fields kept as a code, said as the form says them. */
 const VALUE_WORDS: Record<string, Record<string, string>> = {
-  company: { "2mg": "2MG Inc.", gpi: "Getmeds Philippines" },
+  company: { "2mg": COMPANIES["2mg"].name, gpi: COMPANIES.gpi.name },
   classification: { probationary: "Probationary", regular: "Regular", part_time: "Part-time", intern: "Intern" },
   gender: { female: "Female", male: "Male" },
   civilStatus: { single: "Single", married: "Married", widowed: "Widowed", separated: "Separated" },

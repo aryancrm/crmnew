@@ -41,7 +41,7 @@ const SQUARES: { at: CSSProperties; size: number; alpha: string }[] = [
 
 function Picture({ workspace, color }: { workspace: Workspace; color: string }) {
   return (
-    <div className="relative mx-auto grid h-64 w-full max-w-sm place-items-center" aria-hidden="true">
+    <div className="relative mx-auto grid h-64 w-full max-w-sm place-items-center lg:[@media(max-height:820px)]:h-44 lg:[@media(max-height:820px)]:[&>*]:scale-[.78]" aria-hidden="true">
       {/* The floor the icon stands on. */}
       <span className="absolute bottom-6 h-24 w-72 rotate-[-8deg] skew-x-[-30deg] rounded-3xl opacity-60" style={{ background: `${color}1a` }} />
       <span className="absolute bottom-10 h-16 w-52 rotate-[-8deg] skew-x-[-30deg] rounded-2xl" style={{ background: `${color}24` }} />
@@ -98,7 +98,7 @@ export function DepartmentPanel({ workspace }: { workspace: Workspace }) {
       </div>
 
       {/* The last 30 days, counted. */}
-      <dl aria-label="Last 30 days" className="mt-7 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-white/70 sm:grid-cols-4">
+      <dl aria-label="Last 30 days" className="mt-7 lg:[@media(max-height:820px)]:mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-white/70 sm:grid-cols-4">
         {(stats.length ? stats : [null, null, null, null]).map((one, index) =>
           one ? (
             <div key={one.label} className="flex flex-col bg-white/80 px-3 py-3 text-center">
@@ -114,7 +114,7 @@ export function DepartmentPanel({ workspace }: { workspace: Workspace }) {
       <p className="mt-2 text-center text-[11px] text-[#7a8394]">Last 30 days</p>
 
       {info && (
-        <ul aria-label="Key functions" className="mt-6 grid gap-x-6 gap-y-2 sm:grid-cols-2">
+        <ul aria-label="Key functions" className="mt-6 lg:[@media(max-height:740px)]:hidden grid gap-x-6 gap-y-2 sm:grid-cols-2">
           {info.handles.map((line) => (
             <li key={line} className="flex items-start gap-2 text-[13px] text-[#3c4452]">
               <CheckCircle2 className="mt-0.5 size-4 shrink-0" style={{ color }} aria-hidden="true" />

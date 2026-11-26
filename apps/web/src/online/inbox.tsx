@@ -85,7 +85,7 @@ export function InboxPage() {
         className={`mb-3 flex flex-wrap items-center justify-between gap-2 ${open ? "hidden lg:flex" : ""}`}
       >
         <div className="flex items-center gap-2.5">
-          <h1 className="text-2xl font-bold tracking-tight text-ink">Inbox</h1>
+          <h1 className="text-[28px] font-semibold tracking-tight text-ink">Inbox</h1>
           <span className="rounded-full bg-stone-200/75 px-2.5 py-0.5 text-xs font-semibold text-stone-600 tabular-nums">
             {count(data.counts.needs)}
           </span>

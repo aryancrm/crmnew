@@ -828,7 +828,7 @@ export function Order() {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <h1 className="text-2xl leading-8 font-bold tracking-tight text-ink">
+                <h1 className="text-[28px] leading-tight font-semibold tracking-tight text-ink">
                   <span className="sr-only">Order </span>
                   {order.code}
                 </h1>

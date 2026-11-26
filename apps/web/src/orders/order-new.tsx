@@ -4,6 +4,7 @@
 // total, and what Management will see. A MedRep's order is always his own; Dispatch decides how
 // it goes out.
 
+import { COMPANIES, COMPANY_CODES } from "@2mg/api/companies";
 import {
   DIVISION_BUYERS,
   DIVISIONS,
@@ -1120,7 +1121,7 @@ export function OrderNew({
           <ArrowLeft className="size-5" />
         </button>
         <div className="min-w-0 flex-1">
-          <h1 className="text-2xl font-bold tracking-tight text-ink">
+          <h1 className="text-[28px] font-semibold tracking-tight text-ink">
             {sentBack
               ? `Fix order ${sentBack.code}`
               : changing
@@ -1864,8 +1865,11 @@ export function OrderNew({
               onChange={(event) => setInvoiceFrom(event.target.value as InvoiceFrom)}
               className={FIELD}
             >
-              <option value="2mg">2MG Inc.</option>
-              <option value="getmeds">GetMeds Philippines Inc.</option>
+              {COMPANY_CODES.map((code) => (
+                <option key={code} value={code}>
+                  {COMPANIES[code].name}
+                </option>
+              ))}
             </select>
           </label>
           {/* Their PO number: asked on an order with their PO, never on a patient's own (19 Nov). */}
@@ -2765,7 +2769,7 @@ export function OrderNew({
                   ["Source", source],
                   ["Date needed", expectedOn ? dayLabel(expectedOn) : ""],
                   ["Deliver to", address],
-                  ["Invoicing from", invoiceFrom === "2mg" ? "2MG Inc." : "GetMeds Philippines Inc."],
+                  ["Invoicing from", COMPANIES[invoiceFrom].name],
                   [
                     "Documents",
                     [

@@ -48,7 +48,7 @@ export function MrHomePage() {
 function NotInField() {
   return (
     <div className={`${CARD} mx-auto mt-10 max-w-md px-6 py-10 text-center`}>
-      <h1 className="text-lg font-bold text-slate-900">The field</h1>
+      <h1 className="text-[28px] font-semibold text-slate-900 tracking-tight">The field</h1>
       <p className="mt-2 text-sm text-slate-600">The field's day is the MedReps' and their team leads'.</p>
     </div>
   );

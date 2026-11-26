@@ -4,6 +4,7 @@
 import { ORDER_TYPES } from "./divisions";
 import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
+import { COMPANY_CODES } from "../companies";
 import type { Database } from "../db/index";
 import { allow, type Env, idParam, Refusal, readBody } from "../http";
 import { answerAsk, askUp } from "./asks";
@@ -89,7 +90,7 @@ const orderInput = z.object({
   note: optional(500),
   expectedOn: date.nullish().or(z.literal("")),
   customerPo: optional(60),
-  invoiceFrom: z.enum(["2mg", "getmeds"], { error: "Pick the company that bills it." }).optional(),
+  invoiceFrom: z.enum(COMPANY_CODES, { error: "Pick the company that bills it." }).optional(),
   doctorId: z.number().int().positive().nullish(),
   tenderId: z.number().int().positive().nullish(),
   checks: z.object({ management: z.boolean(), finance: z.boolean() }).optional(),
@@ -130,7 +131,7 @@ const detailsInput = z.object({
   deliveryAddress: optional(300),
   expectedOn: date.nullish().or(z.literal("")),
   customerPo: optional(60),
-  invoiceFrom: z.enum(["2mg", "getmeds"], { error: "Pick the company that bills it." }).optional(),
+  invoiceFrom: z.enum(COMPANY_CODES, { error: "Pick the company that bills it." }).optional(),
   note: optional(500),
 });
 

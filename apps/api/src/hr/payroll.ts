@@ -5,6 +5,7 @@
 // the Admin read the register; nobody else sees anyone's pay. The arithmetic is src/hr/pay-rules.ts.
 
 import { sql } from "drizzle-orm";
+import { companyName } from "../companies";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
@@ -555,7 +556,7 @@ const CSV_COLUMNS: [string, (slip: Payslip) => string | number][] = [
   ["Name", (s) => s.person.name],
   [
     "Company",
-    (s) => (s.person.company === "gpi" ? "Getmeds Philippines Inc." : "2MG Incorporated"),
+    (s) => companyName(s.person.company),
   ],
   ["Department", (s) => s.person.department ?? ""],
   ["Days worked", (s) => s.attendance.present],

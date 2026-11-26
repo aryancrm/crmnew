@@ -1,16 +1,19 @@
 # The checks on every branch (Aryan, 21 Nov: "not only main, in the branches too"): on each push to
-# any branch, on each pull request, nightly and by hand. The first job reads what changed
-# (scripts/ci/detect.ts) and switches on only the groups it needs; "CI passed" at the end is the one
-# check a branch's protection asks for (a group skipped on purpose doesn't block it).
+# any branch, weekly and by hand. The first job reads what changed (scripts/ci/detect.ts) and
+# switches on only the groups it needs; "CI passed" at the end is the one check a branch's
+# protection asks for (a group skipped on purpose doesn't block it). The Branch report says in plain
+# English what the branch changes, what could break main and what other branches are doing.
+#
+# Fewer runs (26 Nov): no second run for a pull request (the push already checked that commit, and
+# its result shows on the pull request), and the whole code is checked weekly instead of nightly.
 
 name: CI
 
 on:
   push:
     branches: ["**"]
-  pull_request:
   schedule:
-    - cron: "0 18 * * *" # 2 am Manila: everything, against the whole code
+    - cron: "0 18 * * 6" # Sunday 2 am Manila: everything, against the whole code
   workflow_dispatch:
 
 concurrency:
@@ -70,6 +73,23 @@ jobs:
         run: node --test "scripts/ci/*.test.ts"
       - name: Migrations in order, none already in main edited
         run: node scripts/ci/migrations.ts "${{ steps.base.outputs.base != 'all' && steps.base.outputs.base || '' }}"
+
+  report:
+    name: Branch report (plain English)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # It only reports: it never fails the run.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # every branch, to compare them with main and each other
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          package-manager-cache: false
+      - name: What this branch changes, what could break main, other branches
+        run: node scripts/ci/branch-report.ts
 
   secrets:
     name: Secrets scan
@@ -284,12 +304,30 @@ jobs:
     needs: [detect, secrets, web, api, database, deps, docker, security, scripts]
     if: always()
     steps:
-      - name: Every group that ran passed
+      - name: Every group that ran passed (said in plain English)
         run: |
           echo '${{ toJSON(needs) }}' | node -e '
+            const WHAT = {
+              detect: "Reading what changed, and migration numbers",
+              secrets: "No passwords or keys in the code",
+              web: "The screens type-check and build",
+              api: "The API type-checks and its tests pass (sign-in, rate limits, who sees what, the 130-person check)",
+              database: "Every migration runs twice on a real database; data checks green",
+              deps: "Libraries match the lockfile; known holes listed",
+              docker: "The system builds, starts and answers (smoke test); image scan",
+              security: "Security scan of what this change adds (injection, XSS, secrets)",
+              scripts: "One-off scripts type-check",
+            };
+            const WORD = { success: "✅ passed", skipped: "➖ not needed for this change", failure: "❌ FAILED", cancelled: "⛔ stopped" };
             let s = ""; process.stdin.on("data", (d) => (s += d)).on("end", () => {
               const needs = JSON.parse(s);
               const bad = Object.entries(needs).filter(([, job]) => ["failure", "cancelled"].includes(job.result));
-              for (const [name, job] of Object.entries(needs)) console.log(`${job.result.padEnd(9)} ${name}`);
-              if (bad.length) { console.error(`Failed: ${bad.map(([name]) => name).join(", ")}`); process.exit(1); }
+              const rows = Object.entries(needs).map(([name, job]) => `| ${WHAT[name] ?? name} | ${WORD[job.result] ?? job.result} |`);
+              const head = bad.length
+                ? `### ❌ Not ready: ${bad.map(([name]) => WHAT[name] ?? name).join("; ")}\n\nOpen the failed step above to see why.`
+                : "### ✅ Every check this change needs passed";
+              const text = `${head}\n\n| Check | Result |\n|---|---|\n${rows.join("\n")}\n`;
+              console.log(text);
+              if (process.env.GITHUB_STEP_SUMMARY) require("node:fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY, text);
+              if (bad.length) process.exit(1);
             });'
