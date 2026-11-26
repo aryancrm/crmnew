@@ -67,7 +67,18 @@ describe("an order's Division", () => {
     const placed = await post("ryan", "/api/orders", { customerId: customer, items: [{ medicineId: medicine, qty: 1, priceKind: "hospital" }] });
     expect(placed.status, await placed.clone().text()).toBe(200);
     const id = ((await placed.json()) as { id: number }).id;
-    expect((await read<OrderDetail>("ryan", `/api/orders/${id}`)).order.division).toBe("HOSP");
+    const own = (await read<OrderDetail>("ryan", `/api/orders/${id}`)).order;
+    expect(own.division).toBe("HOSP");
+    // His Sub-division is his account's too (27 Nov): another one sent is not taken.
+    const sent = await post("ryan", "/api/orders", {
+      customerId: customer,
+      subDivision: "GENSAN",
+      items: [{ medicineId: medicine, qty: 1, priceKind: "hospital" }],
+    });
+    expect(sent.status, await sent.clone().text()).toBe(200);
+    const kept = (await read<OrderDetail>("ryan", `/api/orders/${((await sent.json()) as { id: number }).id}`)).order;
+    expect(own.subDivision).toBeTruthy();
+    expect(kept.subDivision).toBe(own.subDivision);
 
     // Another Division (26 Nov: "the General part is the account's"): refused, saying to switch
     // to an account of that Division; nothing placed.

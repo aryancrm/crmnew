@@ -145,7 +145,7 @@ describe("who checks an order", () => {
 });
 
 describe("what a field order carries", () => {
-  it("takes the Division, Sub-division and the Payment Terms agreed; the terms set how it is paid", async () => {
+  it("takes the Division and the Payment Terms agreed, the Sub-division as the account's; the terms set how it is paid", async () => {
     const placed = await post("ryan", "/api/orders", {
       customerId: hospital,
       items: [{ medicineId: medicine.id, qty: 5, priceKind: "hospital" }],
@@ -156,9 +156,11 @@ describe("what a field order carries", () => {
     expect(placed.status, await placed.clone().text()).toBe(200);
     const id = ((await placed.json()) as { id: number }).id;
     const detail = await read<OrderDetail>("sarla", `/api/orders/${id}`);
+    // A seller's Sub-division is the account's (27 Nov): HOSP's is the hub's fixed "Hospital",
+    // whatever was sent.
     expect(detail.order).toMatchObject({
       division: "HOSP",
-      subDivision: "ILOILO",
+      subDivision: "Hospital",
       paymentTerm: "PDC 30",
       paymentTerms: "days",
       paymentDays: 30,
@@ -178,7 +180,7 @@ describe("what a field order carries", () => {
     const order = await ryanOrders(undefined);
     const detail = await read<OrderDetail>("sarla", `/api/orders/${order.id}`);
     expect(detail.order.division).toBe("HOSP");
-    expect(detail.order.subDivision).toBe("PASAY");
+    expect(detail.order.subDivision).toBe("Hospital");
   });
 
   it("takes the same medicine again as a free line, and Management sees the free goods", async () => {

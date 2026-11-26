@@ -492,11 +492,18 @@ export function OrderNew({
   const pickedDivision =
     // An order being fixed keeps the Division it was placed in.
     (askedDivision && (!lockedDivisions || fixId || ownDivisions.includes(askedDivision)) ? askedDivision : null) ?? ownDivision;
+  // The account's own Sub-division (its team, CRR or NBD, or its place), when it has one: fixed like
+  // the Division (27 Nov, the backend developer: "he is a CRR already, it should be recorded").
+  const accountSub =
+    lockedDivisions && !fixId && pickedDivision === ownDivision
+      ? subDivisionOfArea(ownDivision, forRep ? forRep.area : me?.area?.name, forRep ? null : me?.title)
+      : "";
   const pickedSubDivision =
-    subDivision ??
-    (pickedDivision
-      ? subDivisionOfArea(pickedDivision, forRep ? forRep.area : me?.area?.name, forRep ? null : me?.title)
-      : "");
+    accountSub ||
+    (subDivision ??
+      (pickedDivision
+        ? subDivisionOfArea(pickedDivision, forRep ? forRep.area : me?.area?.name, forRep ? null : me?.title)
+        : ""));
   // The hub's rule for the Division (and a guarantee letter's order in its five Divisions): a fixed
   // Sub-division shows as it is, B2B's is CRR or NBD; the Headquarter starts as the Division's.
   const pap = orderType === "gl" && PAP_DIVISIONS.includes(pickedDivision);
@@ -1261,6 +1268,11 @@ export function OrderNew({
               {rule?.sub ? (
                 // Fixed by the Division (the hub's rule).
                 <div className={FIXED}>{rule.sub}</div>
+              ) : accountSub ? (
+                // The account's own.
+                <div className={FIXED} title="Your account's Sub-division.">
+                  {accountSub}
+                </div>
               ) : rule?.subOptions ? (
                 <select value={sentSub} onChange={(event) => setSubDivision(event.target.value)} className={FIELD}>
                   <option value="">-- Not set --</option>

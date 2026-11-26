@@ -2072,11 +2072,21 @@ export async function placeOrder(
   // own Division's from where they sit, as before; another Division's by the hub's rule (never the
   // person's own place on another Division's order, the hub's slip).
   const rule = divisionRule(orderDivision, type === "gl");
+  // A seller's Sub-division is the account's, like the Division (27 Nov, the backend developer: "he is
+  // a CRR already, it should be recorded"), whatever the form sent: the Division's fixed one (HOSP's
+  // "Hospital"), else their own team or place (a CRR's "CRR"). A place-less account's pick, and
+  // Management's, the Admin's and the CEO's, stay as sent.
+  const seller = !["management", "admin", "ceo"].includes(me.role) && orderDivision !== null && orderDivision === ownDivisions[0];
+  const accountSub = seller
+    ? rule?.sub ||
+      (placer?.area || placer?.title ? subDivisionOfArea(orderDivision as string, placer?.area, placer?.title) : "")
+    : "";
   const subDivision =
-    clean(input.subDivision) ??
-    (orderDivision && orderDivision === ownDivisions[0] && (placer?.area || placer?.title)
-      ? subDivisionOfArea(orderDivision, placer?.area, placer?.title)
-      : (rule?.sub ?? null));
+    accountSub ||
+    (clean(input.subDivision) ??
+      (orderDivision && orderDivision === ownDivisions[0] && (placer?.area || placer?.title)
+        ? subDivisionOfArea(orderDivision, placer?.area, placer?.title)
+        : (rule?.sub ?? null)));
   const headquarter = clean(input.headquarter) ?? (rule?.hq || null);
   const status: OrderStatus = manages ? afterApproval(terms.terms) : "pending_approval";
 
