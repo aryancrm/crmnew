@@ -479,7 +479,7 @@ export function Customer() {
             </div>
           )}
           {customer.kind === "hospital" && !doctorsFirst && <Doctors data={data} />}
-          <FilesPanel customerId={customer.id} />
+          <FilesPanel customerId={customer.id} kind={customer.kind} canAdd={can.add && !me?.viewedBy} />
           <Activity data={data} />
         </div>
       </div>
@@ -1075,14 +1075,76 @@ const FILE_FROM: Record<CustomerFiles["files"][number]["source"], string> = {
 };
 /** Every file about the customer in one list (ERP phase 4): their papers, their orders' papers,
  *  their cases' files, the doctor's acknowledgements of samples; each opens in a new tab. */
-function FilesPanel({ customerId }: { customerId: number }) {
+/** What may be uploaded on a customer's own page (26 Nov: "walang upload files dito?"): a patient's
+ *  prescription and valid ID, a business's papers, and any other file. */
+const UPLOAD_KINDS: Record<string, [CustomerPaperKind, string][]> = {
+  patient: [
+    ["prescription", "Prescription"],
+    ["valid_id", "Valid ID"],
+    ["other", "Other file"],
+  ],
+  business: [
+    ["bir_2303", "BIR 2303"],
+    ["lto_permit", "LTO permit"],
+    ["business_permit", "Business permit"],
+    ["other", "Other file"],
+  ],
+  other: [["other", "Other file"]],
+};
+
+function FilesPanel({ customerId, kind, canAdd }: { customerId: number; kind: string; canAdd: boolean }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const kinds =
+    UPLOAD_KINDS[kind === "patient" ? "patient" : ["hospital", "distributor", "drugstore"].includes(kind) ? "business" : "other"] ?? [];
+  const [what, setWhat] = useState<CustomerPaperKind>(kinds[0]?.[0] ?? "other");
   const query = useQuery({
     queryKey: ["customers", "files", customerId],
     queryFn: () => api<CustomerFiles>(`/api/customers/${customerId}/files`),
   });
   const files = query.data?.files ?? [];
+  async function upload(file: File) {
+    const done = await action.run(async () => {
+      const form = new FormData();
+      form.set("kind", what);
+      form.set("file", file);
+      await api(`/api/customers/${customerId}/papers`, { body: form });
+    });
+    if (done) await queries.invalidateQueries({ queryKey: ["customers"] });
+  }
   return (
     <SectionPanel icon={Paperclip} title={`Files${files.length ? ` (${files.length})` : ""}`}>
+      {canAdd && (
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <select
+            aria-label="What file"
+            value={what}
+            onChange={(event) => setWhat(event.target.value as CustomerPaperKind)}
+            className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700"
+          >
+            {kinds.map(([key, label]) => (
+              <option key={key} value={key}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <label className="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-brand hover:bg-brand-tint">
+            <Paperclip className="size-3.5" /> {action.busy ? "Uploading…" : "Upload a photo or PDF"}
+            <input
+              type="file"
+              accept={PAPER_ACCEPT}
+              className="sr-only"
+              disabled={action.busy}
+              onChange={(event) => {
+                const chosen = event.target.files?.[0];
+                if (chosen) void upload(chosen);
+                event.target.value = "";
+              }}
+            />
+          </label>
+          <Problem message={action.problem?.message} />
+        </div>
+      )}
       {!files.length && <p className="text-sm text-slate-500">{query.isPending ? "Reading…" : "No file yet."}</p>}
       <ul className="divide-y divide-slate-100">
         {files.slice(0, 50).map((file) => (

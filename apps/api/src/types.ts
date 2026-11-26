@@ -549,7 +549,8 @@ export type CustomerInput = {
 };
 
 /** A business customer's paper (the hub asked a hospital for all three). */
-export type CustomerPaperKind = "bir_2303" | "lto_permit" | "business_permit";
+/** A business's three papers, a patient's prescription and valid ID, and any other file. */
+export type CustomerPaperKind = "bir_2303" | "lto_permit" | "business_permit" | "prescription" | "valid_id" | "other";
 export type CustomerPaper = {
   id: number;
   kind: CustomerPaperKind;

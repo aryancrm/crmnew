@@ -198,7 +198,8 @@ export function customerRoutes(
     return c.json({ ok: true });
   });
 
-  // A business customer's papers (BIR 2303, LTO permit, business permit), a photo or PDF each.
+  // A customer's files, a photo or PDF each: a business's papers (BIR 2303, LTO permit, business
+  // permit), a patient's prescription and valid ID, or any other file.
   app.post("/api/customers/:id/papers", async (c) => {
     const length = Number(c.req.header("content-length") ?? 0);
     if (length > 10 * 1024 * 1024 + 64 * 1024)

@@ -36,13 +36,19 @@ export const CUSTOMER_KINDS: CustomerList["kinds"] = [
   { key: "government", label: "Government buyer", plural: "Government buyers" },
 ];
 
-/** A business customer's papers, as the hub asked for them. */
+/** A customer's files: a business's papers, as the hub asked for them, a patient's prescription and
+ *  valid ID, and any other (26 Nov). */
 export const CUSTOMER_PAPER_LABEL: Record<CustomerPaperKind, string> = {
   bir_2303: "BIR 2303",
   lto_permit: "LTO permit",
   business_permit: "Business permit",
+  prescription: "Prescription",
+  valid_id: "Valid ID",
+  other: "Other file",
 };
 export const CUSTOMER_PAPER_KINDS = Object.keys(CUSTOMER_PAPER_LABEL) as CustomerPaperKind[];
+/** The three a licensed business must have (missingOf). */
+export const BUSINESS_PAPER_KINDS: CustomerPaperKind[] = ["bir_2303", "lto_permit", "business_permit"];
 /** The kinds that buy as a business with a licence to operate: their licence and papers are
  *  asked for (a hospital's before it is added from the field; the others may follow). */
 export const LICENSED_KINDS: readonly CustomerKind[] = ["hospital", "distributor", "drugstore"];
@@ -69,7 +75,7 @@ export function missingOf(
     ...(customer.ltoType ? [] : ["LTO type"]),
     ...(customer.licenceIssued ? [] : ["licence issue date"]),
     ...(customer.licenceExpires ? [] : ["licence expiry"]),
-    ...CUSTOMER_PAPER_KINDS.filter((kind) => !papers.includes(kind)).map(
+    ...BUSINESS_PAPER_KINDS.filter((kind) => !papers.includes(kind)).map(
       (kind) => CUSTOMER_PAPER_LABEL[kind],
     ),
   ];
@@ -676,7 +682,7 @@ export async function addCustomer(
           licenceIssued: clean(input.licenceIssued),
           licenceExpires: clean(input.licenceExpires),
         },
-        [...CUSTOMER_PAPER_KINDS],
+        [...BUSINESS_PAPER_KINDS],
       );
       if (lacking.length)
         throw new Refusal(

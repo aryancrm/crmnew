@@ -221,6 +221,15 @@ describe("adding a customer", () => {
     const done = await page("sarla", id);
     expect(done.missing).toEqual([]);
     expect(done.papers.map((paper) => paper.kindLabel)).toEqual(["BIR 2303", "LTO permit", "Business permit"]);
+    // Any other file too (26 Nov), without counting as one of the three papers; a made-up kind is refused.
+    for (const [kind, status] of [["other", 200], ["passport_photo", 400]] as const) {
+      const form = new FormData();
+      form.set("kind", kind);
+      form.set("file", new File([new Uint8Array([37, 80, 68, 70, 45, 49])], "letter.pdf", { type: "application/pdf" }));
+      const sent = await app.request(`/api/customers/${id}/papers`, { method: "POST", headers: { cookie: cookies.ryan as string }, body: form });
+      expect(sent.status, kind).toBe(status);
+    }
+    expect((await page("sarla", id)).missing).toEqual([]);
     const paper = await get("sarla", `/api/customer-papers/${done.papers[0]?.id}`);
     expect(paper.status).toBe(200);
     expect(paper.headers.get("content-type")).toBe("application/pdf");
