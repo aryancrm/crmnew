@@ -9,6 +9,7 @@ import { api } from "../api";
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { CARD, PageState } from "../ui";
 import { clockOf, dayWords, MrHead, mapLink } from "./parts";
+import { EmptyState } from "../no-results";
 
 type MapPeople = {
   day: string;
@@ -70,7 +71,11 @@ export function MrMapPage() {
           </section>
         );
       })}
-      {data.people.length === 0 && <div className={`${CARD} px-4 py-8 text-center text-sm text-slate-500`}>Nobody in the field today.</div>}
+      {data.people.length === 0 && (
+        <div className={CARD}>
+          <EmptyState title="Nobody in the field today.">Each field person's places today show here once they start working.</EmptyState>
+        </div>
+      )}
     </div>
   );
 }

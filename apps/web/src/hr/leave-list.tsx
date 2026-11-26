@@ -12,6 +12,7 @@ import { manilaToday } from "../team/range";
 import { Button, CARD, PageHead, PageState, Problem, Tabs, useAction } from "../ui";
 import { LEAVE_WORDS } from "./attendance-report";
 import { daysWords, FormLineRow, LEAVE_STATUS, spanWords } from "./my-leave";
+import { EmptyState } from "../no-results";
 
 type View = "waiting" | "asked" | "approved" | "refused" | "cancelled";
 const shiftMonth = (month: string, by: number) => {
@@ -127,8 +128,12 @@ export function LeaveListPage() {
               ))
             : data.lines.map((line) => <Line key={line.id} line={line} />)}
           {(forms ? (formsQuery.data?.lines.length ?? 0) : data.lines.length) === 0 && (
-            <li className="px-4 py-8 text-center text-sm text-slate-500">
-              {view === "waiting" ? "Nothing waiting for you." : "Nothing here."}
+            <li>
+              {view === "waiting" ? (
+                <EmptyState title="Nothing waiting for you.">Requests that need your decision show here.</EmptyState>
+              ) : (
+                <EmptyState title="Nothing here.">Requests in this tab show here. Try another tab or month.</EmptyState>
+              )}
             </li>
           )}
         </ul>

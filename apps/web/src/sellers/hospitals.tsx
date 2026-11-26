@@ -14,6 +14,8 @@ import { useMe } from "../auth";
 import { exactPeso, shortPeso } from "../ceo";
 import { withUnit } from "../team/switch";
 import { Button, CARD, Dialog, PageHead, PageState, Problem, useAction } from "../ui";
+import { NoResults } from "../no-results";
+import { STRIP } from "../home/figures";
 
 type Row = HospitalBoard["rows"][number];
 type Filter = "all" | "papers" | "ending" | "formulary" | "due" | "late" | "stopped" | "owing" | "open";
@@ -61,19 +63,20 @@ export function HospitalsPage() {
         title={me?.role === "medrep" ? "My hospitals" : "Hospitals"}
         sub="Accreditation, formulary, buying, orders, money owed and visits, hospital by hospital"
       />
-      <Board data={query.data} />
+      {/* The Home's look here too (Aryan, 26 Nov): the coloured strip, the tabs above the table. */}
+      <Board data={query.data} colours />
     </div>
   );
 }
 
 /** The board on a Home (a CHC's, or a head's HOSP channel for one box). */
-export function HospitalsCard({ unit = null, first = "all" }: { unit?: number | null; first?: Filter }) {
+export function HospitalsCard({ unit = null, first = "all", colours = false }: { unit?: number | null; first?: Filter; colours?: boolean }) {
   const query = useHospitals(unit);
   if (!query.data || query.data.rows.length === 0) return null;
-  return <Board data={query.data} limit={12} first={first} />;
+  return <Board data={query.data} limit={12} first={first} colours={colours} />;
 }
 
-function Board({ data, limit, first = "all" }: { data: HospitalBoard; limit?: number; first?: Filter }) {
+function Board({ data, limit, first = "all", colours = false }: { data: HospitalBoard; limit?: number; first?: Filter; colours?: boolean }) {
   const [filter, setFilter] = useState<Filter>(first);
   const [all, setAll] = useState(!limit);
   const [papers, setPapers] = useState<Row | null>(null);
@@ -108,7 +111,7 @@ function Board({ data, limit, first = "all" }: { data: HospitalBoard; limit?: nu
   ];
   return (
     <div className="space-y-3">
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+      <section className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 ${colours ? "" : "gap-3"}`}>
         {(
           [
             ["Hospitals", String(s.hospitals), `${s.due} due · ${s.late} late · ${s.stopped} stopped`],
@@ -118,138 +121,279 @@ function Board({ data, limit, first = "all" }: { data: HospitalBoard; limit?: nu
             ["Open orders", String(s.openOrders), shortPeso(s.openValue)],
             ["Visits this month", `${s.visitsDone}`, `of ${s.visitsPlanned} planned`],
           ] as const
-        ).map(([label, value, hint]) => (
-          <div key={label} className={`${CARD} p-3`}>
-            <p className="text-[12px] text-slate-500">{label}</p>
-            <p className="mt-1 text-xl font-semibold text-slate-900 tabular-nums">{value}</p>
-            <p className="truncate text-[11.5px] text-slate-500" title={hint}>
-              {hint}
-            </p>
-          </div>
-        ))}
+        ).map(([label, value, hint], n) =>
+          colours ? (
+            <div key={label} className={`p-3 ${STRIP[n % STRIP.length]}`}>
+              <p className="text-[12px] opacity-85">{label}</p>
+              <p className="mt-1 text-xl font-semibold tabular-nums">{value}</p>
+              <p className="truncate text-[11.5px] opacity-85" title={hint}>
+                {hint}
+              </p>
+            </div>
+          ) : (
+            <div key={label} className={`${CARD} p-3`}>
+              <p className="text-[12px] text-slate-500">{label}</p>
+              <p className="mt-1 text-xl font-semibold text-slate-900 tabular-nums">{value}</p>
+              <p className="truncate text-[11.5px] text-slate-500" title={hint}>
+                {hint}
+              </p>
+            </div>
+          ),
+        )}
       </section>
 
-      <section className={`${CARD} min-w-0`}>
-        <div className="flex flex-wrap gap-1 border-b border-slate-100 bg-slate-50/60 px-3 py-1.5 sm:px-4" role="tablist" aria-label="Which hospitals">
-          {tabs
-            .filter(([key, , n]) => key === "all" || n > 0)
-            .map(([key, label, n]) => (
-              <button
-                key={key}
-                type="button"
-                role="tab"
-                aria-selected={filter === key}
-                onClick={() => {
-                  setFilter(key);
-                  setAll(!limit);
-                }}
-                className={`rounded-lg px-2.5 py-1 text-[12px] font-semibold ${filter === key ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:text-slate-800"}`}
-              >
-                {label} <span className="tabular-nums opacity-70">{n}</span>
-              </button>
-            ))}
-          {limit && (
-            <Link to="/hospital-board" className="ml-auto self-center text-[12.5px] font-semibold text-emerald-700 hover:underline">
-              Every hospital
-            </Link>
-          )}
-        </div>
-        {shown.length === 0 ? (
-          <p className="px-4 py-3 text-[13px] text-slate-500">None here.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-[12.5px]">
-              <thead>
-                <tr className="text-left text-[10.5px] font-semibold tracking-wide text-slate-400 uppercase">
-                  <th className="px-4 py-2">Hospital</th>
-                  <th className="px-3 py-2">Accreditation</th>
-                  <th className="px-3 py-2">Formulary</th>
-                  <th className="px-3 py-2">Buying</th>
-                  <th className="px-3 py-2 text-right">12 months</th>
-                  <th className="px-3 py-2 text-right">Owed</th>
-                  <th className="px-3 py-2">Visits and calls</th>
-                  {data.canEdit && <th className="px-3 py-2" />}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {page.map((row) => (
-                  <tr key={row.customerId} className="align-top">
-                    <td className="max-w-60 px-4 py-2">
-                      <Link to={`/customers/${row.customerId}`} className="block truncate font-semibold text-slate-900 hover:underline">
-                        {row.name}
-                      </Link>
-                      <span className="block truncate text-[11px] text-slate-500">
-                        {[row.kind === "government" ? "government" : "private", row.city, row.seller].filter(Boolean).join(" · ")}
-                      </span>
-                      {row.openOrders > 0 && (
-                        <span className="block text-[11px] text-sky-700">
-                          {row.openOrders} open {row.openOrders === 1 ? "order" : "orders"} · {shortPeso(row.openValue)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      <span className={`font-semibold ${ACCREDITATION[row.accreditation.state].tone}`}>{ACCREDITATION[row.accreditation.state].word}</span>
-                      {row.accreditation.validUntil && <span className="block text-[11px] text-slate-500">to {day(row.accreditation.validUntil)}</span>}
-                    </td>
-                    <td className="max-w-56 px-3 py-2 text-[12px]">
-                      {row.formulary.items.length === 0 ? (
-                        <span className="text-slate-400">—</span>
-                      ) : (
-                        row.formulary.items.map((item) => (
-                          <span key={item.medicine} className="block">
-                            {item.medicine}{" "}
-                            <span className={item.status === "approved" ? "text-emerald-700" : item.status === "requested" ? "text-amber-700" : "text-rose-700"}>
-                              {FORMULARY[item.status]}
-                            </span>
-                            {item.doctor && <span className="text-slate-400"> · {item.doctor}</span>}
-                          </span>
-                        ))
-                      )}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      <span className={`font-semibold ${REORDER[row.reorder].tone}`}>{REORDER[row.reorder].word}</span>
-                      <span className="block text-[11px] text-slate-500">
-                        {row.lastOrderOn ? `last ${ago(row.since)}${row.usual ? ` · every ~${row.usual} days` : ""}` : "no order yet"}
-                      </span>
-                      {row.soldMonth > 0 && <span className="block text-[11px] text-slate-500">{shortPeso(row.soldMonth)} this month</span>}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums" title={exactPeso(row.soldYear)}>
-                      {row.soldYear ? shortPeso(row.soldYear) : "—"}
-                    </td>
-                    <td className={`px-3 py-2 text-right tabular-nums ${row.overdue ? "text-rose-700" : ""}`} title={`Overdue ${exactPeso(row.overdue)}`}>
-                      {row.owed ? shortPeso(row.owed) : "—"}
-                    </td>
-                    <td className="px-3 py-2 text-[12px] whitespace-nowrap">
-                      <span className="block">last visit {day(row.lastVisitOn)}</span>
-                      <span className="block text-slate-500">next {day(row.nextVisitOn)}</span>
-                      {row.lastCallOn && <span className="block text-slate-500">called {day(row.lastCallOn)}</span>}
-                    </td>
-                    {data.canEdit && (
-                      <td className="px-3 py-2 text-right whitespace-nowrap">
-                        <button type="button" onClick={() => setPapers(row)} className="text-[12px] font-semibold text-emerald-700 hover:underline">
-                          Accreditation
-                        </button>
-                        <button type="button" onClick={() => setFormulary(row)} className="ml-3 text-[12px] font-semibold text-emerald-700 hover:underline">
-                          Formulary
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+      {colours ? (
+        // The Home (Aryan, 26 Nov): the tabs on their own above the table, as My KPIs' periods (a soft
+        // grey track, the picked one a white chip); the table as the day's invoices (a plain
+        // light-grey header, small corners). The same tabs, the same rows.
+        <section className="min-w-0 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="inline-flex flex-wrap gap-0.5 rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Which hospitals">
+            {tabs
+              .filter(([key, , n]) => key === "all" || n > 0)
+              .map(([key, label, n]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={filter === key}
+                  onClick={() => {
+                    setFilter(key);
+                    setAll(!limit);
+                  }}
+                  className={`rounded-md px-3.5 py-1.5 text-[13px] transition-colors ${filter === key ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]" : "text-slate-500 hover:text-slate-800"}`}
+                >
+                  {label} <span className="tabular-nums opacity-70">{n}</span>
+                </button>
+              ))}
+            </div>
+            {limit && (
+              <Link to="/hospital-board" className="text-[13px] font-semibold text-brand hover:underline">
+                Every hospital
+              </Link>
+            )}
           </div>
-        )}
-        {shown.length > page.length && (
-          <button
-            type="button"
-            onClick={() => setAll(true)}
-            className="w-full border-t border-slate-100 px-4 py-2.5 text-[12.5px] font-semibold text-emerald-700 hover:bg-slate-50"
-          >
-            Show all {shown.length}
-          </button>
-        )}
-      </section>
+          <div className="overflow-hidden rounded-md border border-slate-200 bg-white">
+            {shown.length === 0 ? (
+              <NoResults title="No hospitals here">Try another tab, or open Every hospital.</NoResults>
+            ) : (
+              <div className="overflow-x-auto [scrollbar-color:#cbd5e1_#f8fafc]">
+                <table className="w-full text-[12.5px]">
+                  <thead>
+                    <tr className="border-b border-slate-200 bg-slate-50 text-left text-[12px] text-slate-400 [&>th]:font-medium [&>th]:whitespace-nowrap">
+                      <th className="px-4 py-2">Hospital</th>
+                      <th className="px-3 py-2">Accreditation</th>
+                      <th className="px-3 py-2">Formulary</th>
+                      <th className="px-3 py-2">Buying</th>
+                      <th className="px-3 py-2 text-right">12 months</th>
+                      <th className="px-3 py-2 text-right">Owed</th>
+                      <th className="px-3 py-2">Visits and calls</th>
+                      {data.canEdit && <th className="px-3 py-2" />}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {page.map((row) => (
+                      <tr key={row.customerId} className="align-top">
+                        <td className="max-w-60 px-4 py-2">
+                          <Link to={`/customers/${row.customerId}`} className="block truncate font-semibold text-slate-900 hover:underline">
+                            {row.name}
+                          </Link>
+                          <span className="block truncate text-[11px] text-slate-500">
+                            {[row.kind === "government" ? "government" : "private", row.city, row.seller].filter(Boolean).join(" · ")}
+                          </span>
+                          {row.openOrders > 0 && (
+                            <span className="block text-[11px] text-sky-700">
+                              {row.openOrders} open {row.openOrders === 1 ? "order" : "orders"} · {shortPeso(row.openValue)}
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <span className={`font-semibold ${ACCREDITATION[row.accreditation.state].tone}`}>{ACCREDITATION[row.accreditation.state].word}</span>
+                          {row.accreditation.validUntil && <span className="block text-[11px] text-slate-500">to {day(row.accreditation.validUntil)}</span>}
+                        </td>
+                        <td className="max-w-56 px-3 py-2 text-[12px]">
+                          {row.formulary.items.length === 0 ? (
+                            <span className="text-slate-400">—</span>
+                          ) : (
+                            row.formulary.items.map((item) => (
+                              <span key={item.medicine} className="block">
+                                {item.medicine}{" "}
+                                <span className={item.status === "approved" ? "text-emerald-700" : item.status === "requested" ? "text-amber-700" : "text-rose-700"}>
+                                  {FORMULARY[item.status]}
+                                </span>
+                                {item.doctor && <span className="text-slate-400"> · {item.doctor}</span>}
+                              </span>
+                            ))
+                          )}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap">
+                          <span className={`font-semibold ${REORDER[row.reorder].tone}`}>{REORDER[row.reorder].word}</span>
+                          <span className="block text-[11px] text-slate-500">
+                            {row.lastOrderOn ? `last ${ago(row.since)}${row.usual ? ` · every ~${row.usual} days` : ""}` : "no order yet"}
+                          </span>
+                          {row.soldMonth > 0 && <span className="block text-[11px] text-slate-500">{shortPeso(row.soldMonth)} this month</span>}
+                        </td>
+                        <td className="px-3 py-2 text-right tabular-nums" title={exactPeso(row.soldYear)}>
+                          {row.soldYear ? shortPeso(row.soldYear) : "—"}
+                        </td>
+                        <td className={`px-3 py-2 text-right tabular-nums ${row.overdue ? "text-rose-700" : ""}`} title={`Overdue ${exactPeso(row.overdue)}`}>
+                          {row.owed ? shortPeso(row.owed) : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-[12px] whitespace-nowrap">
+                          <span className="block">last visit {day(row.lastVisitOn)}</span>
+                          <span className="block text-slate-500">next {day(row.nextVisitOn)}</span>
+                          {row.lastCallOn && <span className="block text-slate-500">called {day(row.lastCallOn)}</span>}
+                        </td>
+                        {data.canEdit && (
+                          <td className="px-3 py-2 text-right whitespace-nowrap">
+                            <button type="button" onClick={() => setPapers(row)} className="rounded px-2.5 py-1 text-[12px] font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">
+                              Accreditation
+                            </button>
+                            <button type="button" onClick={() => setFormulary(row)} className="ml-1.5 rounded px-2.5 py-1 text-[12px] font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">
+                              Formulary
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+            {shown.length > page.length && (
+              <button
+                type="button"
+                onClick={() => setAll(true)}
+                className="w-full border-t border-slate-100 px-4 py-2.5 text-[12.5px] font-semibold text-emerald-700 hover:bg-slate-50"
+              >
+                Show all {shown.length}
+              </button>
+            )}
+          </div>
+        </section>
+      ) : (
+        <section className={`${CARD} min-w-0`}>
+          <div className="m-3 flex flex-wrap gap-0.5 rounded-lg bg-slate-100 p-1" role="tablist" aria-label="Which hospitals">
+            {tabs
+              .filter(([key, , n]) => key === "all" || n > 0)
+              .map(([key, label, n]) => (
+                <button
+                  key={key}
+                  type="button"
+                  role="tab"
+                  aria-selected={filter === key}
+                  onClick={() => {
+                    setFilter(key);
+                    setAll(!limit);
+                  }}
+                  className={`shrink-0 rounded-md px-3.5 py-1.5 text-[13px] whitespace-nowrap transition-colors ${filter === key ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]" : "text-slate-500 hover:text-slate-800"}`}
+                >
+                  {label} <span className="tabular-nums opacity-70">{n}</span>
+                </button>
+              ))}
+            {limit && (
+              <Link to="/hospital-board" className="ml-auto self-center px-2 text-[12.5px] font-semibold text-emerald-700 hover:underline">
+                Every hospital
+              </Link>
+            )}
+          </div>
+          {shown.length === 0 ? (
+            <NoResults title="None here.">Try another tab, or open Every hospital.</NoResults>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-[12.5px]">
+                <thead>
+                  <tr className="text-left text-[10.5px] font-semibold tracking-wide text-slate-400 uppercase">
+                    <th className="px-4 py-2">Hospital</th>
+                    <th className="px-3 py-2">Accreditation</th>
+                    <th className="px-3 py-2">Formulary</th>
+                    <th className="px-3 py-2">Buying</th>
+                    <th className="px-3 py-2 text-right">12 months</th>
+                    <th className="px-3 py-2 text-right">Owed</th>
+                    <th className="px-3 py-2">Visits and calls</th>
+                    {data.canEdit && <th className="px-3 py-2" />}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {page.map((row) => (
+                    <tr key={row.customerId} className="align-top">
+                      <td className="max-w-60 px-4 py-2">
+                        <Link to={`/customers/${row.customerId}`} className="block truncate font-semibold text-slate-900 hover:underline">
+                          {row.name}
+                        </Link>
+                        <span className="block truncate text-[11px] text-slate-500">
+                          {[row.kind === "government" ? "government" : "private", row.city, row.seller].filter(Boolean).join(" · ")}
+                        </span>
+                        {row.openOrders > 0 && (
+                          <span className="block text-[11px] text-sky-700">
+                            {row.openOrders} open {row.openOrders === 1 ? "order" : "orders"} · {shortPeso(row.openValue)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <span className={`font-semibold ${ACCREDITATION[row.accreditation.state].tone}`}>{ACCREDITATION[row.accreditation.state].word}</span>
+                        {row.accreditation.validUntil && <span className="block text-[11px] text-slate-500">to {day(row.accreditation.validUntil)}</span>}
+                      </td>
+                      <td className="max-w-56 px-3 py-2 text-[12px]">
+                        {row.formulary.items.length === 0 ? (
+                          <span className="text-slate-400">—</span>
+                        ) : (
+                          row.formulary.items.map((item) => (
+                            <span key={item.medicine} className="block">
+                              {item.medicine}{" "}
+                              <span className={item.status === "approved" ? "text-emerald-700" : item.status === "requested" ? "text-amber-700" : "text-rose-700"}>
+                                {FORMULARY[item.status]}
+                              </span>
+                              {item.doctor && <span className="text-slate-400"> · {item.doctor}</span>}
+                            </span>
+                          ))
+                        )}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap">
+                        <span className={`font-semibold ${REORDER[row.reorder].tone}`}>{REORDER[row.reorder].word}</span>
+                        <span className="block text-[11px] text-slate-500">
+                          {row.lastOrderOn ? `last ${ago(row.since)}${row.usual ? ` · every ~${row.usual} days` : ""}` : "no order yet"}
+                        </span>
+                        {row.soldMonth > 0 && <span className="block text-[11px] text-slate-500">{shortPeso(row.soldMonth)} this month</span>}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums" title={exactPeso(row.soldYear)}>
+                        {row.soldYear ? shortPeso(row.soldYear) : "—"}
+                      </td>
+                      <td className={`px-3 py-2 text-right tabular-nums ${row.overdue ? "text-rose-700" : ""}`} title={`Overdue ${exactPeso(row.overdue)}`}>
+                        {row.owed ? shortPeso(row.owed) : "—"}
+                      </td>
+                      <td className="px-3 py-2 text-[12px] whitespace-nowrap">
+                        <span className="block">last visit {day(row.lastVisitOn)}</span>
+                        <span className="block text-slate-500">next {day(row.nextVisitOn)}</span>
+                        {row.lastCallOn && <span className="block text-slate-500">called {day(row.lastCallOn)}</span>}
+                      </td>
+                      {data.canEdit && (
+                        <td className="px-3 py-2 text-right whitespace-nowrap">
+                          <button type="button" onClick={() => setPapers(row)} className="text-[12px] font-semibold text-emerald-700 hover:underline">
+                            Accreditation
+                          </button>
+                          <button type="button" onClick={() => setFormulary(row)} className="ml-3 text-[12px] font-semibold text-emerald-700 hover:underline">
+                            Formulary
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          {shown.length > page.length && (
+            <button
+              type="button"
+              onClick={() => setAll(true)}
+              className="w-full border-t border-slate-100 px-4 py-2.5 text-[12.5px] font-semibold text-emerald-700 hover:bg-slate-50"
+            >
+              Show all {shown.length}
+            </button>
+          )}
+        </section>
+      )}
       {papers && <AccreditationDialog row={papers} onClose={() => setPapers(null)} />}
       {formulary && <FormularyDialog row={formulary} onClose={() => setFormulary(null)} />}
     </div>

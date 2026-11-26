@@ -7,6 +7,7 @@ import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
 import { longDay, PayslipView } from "./payslip";
 import { CARD, PageHead, PageState, peso } from "../ui";
+import { EmptyState } from "../no-results";
 
 export function MyPayslipsPage() {
   const { month } = useParams();
@@ -29,10 +30,12 @@ export function MyPayslipsPage() {
         sub={data.slips.length ? `${data.slips.length} released` : "None released yet"}
       />
       {data.slips.length === 0 ? (
-        <p className={`${CARD} px-4 py-8 text-center text-sm text-slate-500`}>
-          Your payslip shows here once HR releases the month: the 1st to the month's last day, paid
-          on the last day.
-        </p>
+        <div className={CARD}>
+          <EmptyState title="None released yet">
+            Your payslip shows here once HR releases the month: the 1st to the month's last day, paid
+            on the last day.
+          </EmptyState>
+        </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
           <nav className={`${CARD} self-start overflow-hidden print:hidden`} aria-label="Payslips">

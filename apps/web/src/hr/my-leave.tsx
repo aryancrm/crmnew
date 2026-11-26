@@ -15,6 +15,7 @@ import { Ring } from "../team/charts";
 import { manilaToday } from "../team/range";
 import { Button, CARD, Dialog, PageHead, PageState, Problem, useAction } from "../ui";
 import { LEAVE_WORDS } from "./attendance-report";
+import { EmptyState } from "../no-results";
 
 export const LEAVE_STATUS: Record<LeaveLine["status"], { word: string; tone: string }> = {
   asked: { word: "Waiting", tone: "bg-amber-50 text-amber-800 ring-amber-200" },
@@ -114,8 +115,8 @@ export function MyLeavePage() {
             <MyLine key={line.id} line={line} />
           ))}
           {data.lines.length === 0 && (
-            <li className="px-4 py-8 text-center text-sm text-slate-500">
-              No leave asked for this year.
+            <li>
+              <EmptyState title="No leave asked for this year.">Leave you ask for with Ask for leave shows here with where it stands.</EmptyState>
             </li>
           )}
         </ul>
@@ -129,8 +130,8 @@ export function MyLeavePage() {
             <FormLineRow key={line.id} line={line} />
           ))}
           {forms.data && forms.data.lines.length === 0 && (
-            <li className="px-4 py-6 text-center text-sm text-slate-500">
-              No forms filed this year.
+            <li>
+              <EmptyState title="No forms filed this year.">Forms you file with File a form show here.</EmptyState>
             </li>
           )}
         </ul>

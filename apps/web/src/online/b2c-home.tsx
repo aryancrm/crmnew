@@ -14,6 +14,7 @@ import { shortPeso } from "../ceo";
 import { Button, CARD, dayLabel, Dialog, Problem, useAction } from "../ui";
 import { greeting, todayWords } from "../home/home";
 import { withUnit } from "../team/switch";
+import { EmptyState } from "../no-results";
 
 const SOURCE: Record<string, string> = {
   messenger: "Messenger",
@@ -75,7 +76,7 @@ export function B2cHome({ top }: { /** Shown right under the greeting (My KPIs),
               <span className="text-[11px] text-slate-500">Oldest first · new prospects are marked · reply within {data.replyMinutes} minutes</span>
             </header>
             {data.waiting.length === 0 ? (
-              <p className="px-4 py-3 text-[13px] text-slate-500">Every enquiry is answered.</p>
+              <EmptyState title="Every enquiry is answered.">Enquiries waiting for a reply show here, the oldest first.</EmptyState>
             ) : (
               <ul className="divide-y divide-slate-100">
                 {data.waiting.map((row) => (
@@ -111,7 +112,7 @@ export function B2cHome({ top }: { /** Shown right under the greeting (My KPIs),
                 <span className="text-[11px] text-slate-500">Call or message every one before 12:00 noon</span>
               </header>
               {data.refills.length === 0 ? (
-                <p className="px-4 py-3 text-[13px] text-slate-500">No refill due today or in the next two days.</p>
+                <EmptyState title="No refill due today or in the next two days.">Customers whose refill is due soon show here to call or message.</EmptyState>
               ) : (
                 <ul className="divide-y divide-slate-100">
                   {data.refills.map((row) => (

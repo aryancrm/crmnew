@@ -16,6 +16,7 @@ import { manilaToday } from "../team/range";
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { Button, CARD, Dialog, PageState, Problem, peso, useAction } from "../ui";
 import { dayWords, FIELD, Label, MrHead, monthWords, shiftMonth } from "./parts";
+import { EmptyState } from "../no-results";
 
 const pesosOf = (centavos: number) => String(centavos / 100);
 
@@ -129,8 +130,12 @@ export function MrExpensesPage() {
             </li>
           ))}
           {rows.length === 0 && (
-            <li className="px-3 py-8 text-center text-sm text-slate-500">
-              {waiting ? "Nothing waits for approval." : "No expenses this month. Per diem and TA appear for each day you start working."}
+            <li>
+              {waiting ? (
+                <EmptyState title="Nothing waits for approval.">Expenses your team claims show here for you to approve.</EmptyState>
+              ) : (
+                <EmptyState title="No expenses this month.">Per diem and TA appear for each day you start working.</EmptyState>
+              )}
             </li>
           )}
         </ul>

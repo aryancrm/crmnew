@@ -23,6 +23,7 @@ import {
   type Tone,
   useAction,
 } from "../ui";
+import { EmptyState, NoResults } from "../no-results";
 
 /** The Manila calendar day of a moment the API sent (UTC). */
 const manilaDayOf = (iso: string) =>
@@ -337,10 +338,12 @@ export function PayrollMonthPage() {
                 })}
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-4 py-6 text-center text-sm text-slate-500">
-                      {data.slips.length
-                        ? "Nobody by that name."
-                        : "Nobody has a salary on record."}
+                    <td colSpan={10}>
+                      {data.slips.length ? (
+                        <NoResults title="Nobody by that name.">Check the spelling, or clear the search.</NoResults>
+                      ) : (
+                        <EmptyState title="Nobody has a salary on record.">People's pay slips show here once they have a salary on record.</EmptyState>
+                      )}
                     </td>
                   </tr>
                 )}

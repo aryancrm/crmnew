@@ -9,6 +9,7 @@ import { Check, ChevronLeft, ChevronRight, Send, Sparkles, Undo2 } from "lucide-
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState } from "../no-results";
 import { FIELD } from "../org/dialogs";
 import { Ring } from "../team/charts";
 import { Button, CARD, Dialog, PageHead, PageState, Problem, useAction } from "../ui";
@@ -332,8 +333,10 @@ export function VisitPlanPage() {
               })}
               {data.customers.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-sm text-slate-500">
-                    No doctors, hospitals or drugstores in this area yet.
+                  <td colSpan={6}>
+                    <EmptyState title="No doctors, hospitals or drugstores in this area yet.">
+                      Each customer looked after here shows with the visits its class asks for.
+                    </EmptyState>
                   </td>
                 </tr>
               )}

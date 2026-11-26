@@ -10,6 +10,7 @@ import { Fragment, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { Card, count, dayLabel, inPacks, PageHead, PageState, Pill, peso, Tile } from "../ui";
+import { EmptyState, NoResults } from "../no-results";
 
 // The API's answer (StockReport in apps/api/src/inventory/stock-report.ts), written out here: the
 // web reads the API's types only through @2mg/api/types.
@@ -395,8 +396,12 @@ export function StockReportPage() {
           )}
         </table>
         {data.rows.length === 0 && (
-          <div className="p-8 text-center text-ink-2">
-            {filtered ? "No batch matches." : "Nothing on the shelf yet."}
+          <div>
+            {filtered ? (
+              <NoResults title="No batch matches.">Try another filter, or clear the search.</NoResults>
+            ) : (
+              <EmptyState title="Nothing on the shelf yet.">Batches show here once stock is received.</EmptyState>
+            )}
           </div>
         )}
       </Card>

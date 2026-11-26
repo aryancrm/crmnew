@@ -11,6 +11,7 @@ import { type ReactNode, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 import { useAction } from "../ui";
 import { zDate, zMoney, zQty } from "./kinds";
 
@@ -753,8 +754,16 @@ function BillsTable({ bills, amounts, setAmounts, error, sales }: { bills: BookL
         ))}
         {!bills.length && (
           <tr>
-            <td colSpan={6} className="px-3 py-6 text-center text-[#6c718a]">
-              {sales ? "There are no earlier unpaid invoices for this customer." : "There are no bills for this vendor."}
+            <td colSpan={6}>
+              {sales ? (
+                <EmptyState art={<NoInvoicesArt size={72} />} title="There are no earlier unpaid invoices for this customer.">
+                  Their invoices with money still owed show here, oldest first.
+                </EmptyState>
+              ) : (
+                <EmptyState art={<NoInvoicesArt size={72} />} title="There are no bills for this vendor.">
+                  Their bills with money still owed show here, oldest first.
+                </EmptyState>
+              )}
             </td>
           </tr>
         )}

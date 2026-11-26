@@ -6,7 +6,7 @@ import "@fontsource-variable/inter";
 import { Link, Navigate, useLocation } from "react-router-dom";
 import { useMe } from "../auth";
 import { heroLogo } from "../portal/hero-logos";
-import { WORKSPACES } from "../workspaces";
+import { ALL_SYSTEMS } from "../workspaces";
 
 const GROUPS = [
   { id: "selling", label: "Selling" },
@@ -55,10 +55,12 @@ export function ChooseSystem() {
               <div key={group.id}>
                 <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-[#16181d]">{group.label}</h2>
                 <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                  {WORKSPACES.filter((one) => one.group === group.id).map((one) => (
+                  {ALL_SYSTEMS.filter((one) => one.group === group.id).map((one) => (
                     <li key={one.key}>
                       <Link
-                        to={`/login/${one.key}`}
+                        // A system on the way: an empty link for now.
+                        to={one.soon ? "#" : `/login/${one.key}`}
+                        onClick={one.soon ? (event) => event.preventDefault() : undefined}
                         state={location.state}
                         className="group flex min-h-14 items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-[#fff7f2] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#f36b21]"
                       >

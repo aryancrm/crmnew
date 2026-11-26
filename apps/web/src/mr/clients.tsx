@@ -19,6 +19,7 @@ import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { Button, CARD, Dialog, PageState, Problem, peso, useAction } from "../ui";
 import { AddVisitsDialog } from "./plan";
 import { ActionSheet, Choices, clientLine, clockOf, dayWords, directions, FIELD, Initial, Label, MrHead, useMrMe } from "./parts";
+import { EmptyState, NoInvoicesArt, NoResults } from "../no-results";
 
 /** The CRM kind a new customer starts as, from the field's tab. */
 const NEW_KIND: Record<ClientKind, CustomerKind> = { doctor: "doctor", hospital: "hospital", firm: "drugstore" };
@@ -114,7 +115,15 @@ export function MrClientsPage() {
           </li>
         ))}
       </ul>
-      {data.rows.length === 0 && <div className={`${CARD} px-4 py-8 text-center text-sm text-slate-500`}>No {KIND_TABS[kind]} here yet.</div>}
+      {data.rows.length === 0 && (
+        <div className={CARD}>
+          {q ? (
+            <NoResults title={<>No {KIND_TABS[kind]} here yet.</>}>Check the spelling, or clear the search.</NoResults>
+          ) : (
+            <EmptyState title={<>No {KIND_TABS[kind]} here yet.</>}>The CRM's customers you look after show here, for the field.</EmptyState>
+          )}
+        </div>
+      )}
 
       {picked && (
         <ActionSheet
@@ -164,7 +173,9 @@ function LastFive({ clientId, onClose }: { clientId: number; onClose: () => void
       {!query.data ? (
         <PageState query={query} what="the visits" />
       ) : query.data.history.length === 0 ? (
-        <p className="text-sm text-slate-500">Never visited yet.</p>
+        <EmptyState art={<NoInvoicesArt size={72} />} title="Never visited yet.">
+          The last five visits to this customer show here.
+        </EmptyState>
       ) : (
         <VisitLines rows={query.data.history} />
       )}
@@ -257,7 +268,11 @@ function OffRequests() {
           </div>
         </div>
       ))}
-      {query.data.rows.length === 0 && <div className={`${CARD} px-4 py-8 text-center text-sm text-slate-500`}>No requests waiting.</div>}
+      {query.data.rows.length === 0 && (
+        <div className={CARD}>
+          <EmptyState title="No requests waiting.">Requests to take a customer off the field's lists show here.</EmptyState>
+        </div>
+      )}
       <Problem message={action.problem?.message} />
     </div>
   );
@@ -447,7 +462,11 @@ export function MrClientPage() {
           <Link to={showCalls ? `/field/clients/${id}` : `/field/clients/${id}?view=calls`} className="text-xs font-semibold text-sky-700">{showCalls ? "Last five" : "Call history"}</Link>
         </div>
         {showCalls ? (calls.data ? <VisitLines rows={calls.data.rows} /> : <PageState query={calls} what="the calls" />) : <VisitLines rows={data.history} />}
-        {!showCalls && data.history.length === 0 && <p className="text-sm text-slate-500">Never visited yet.</p>}
+        {!showCalls && data.history.length === 0 && (
+          <EmptyState art={<NoInvoicesArt size={72} />} title="Never visited yet.">
+            The last five visits to this customer show here.
+          </EmptyState>
+        )}
       </section>
       {data.orders.length > 0 && (
         <section className={`${CARD} p-4`}>

@@ -7,7 +7,15 @@
 import type { Me } from "@2mg/api/types";
 import { WORKSPACE_ACCESS } from "@2mg/api/workspaces";
 
-export type Workspace = { key: string; label: string; about: string; roles: string[]; group?: "selling" | "operations" | "office" };
+export type Workspace = {
+  key: string;
+  label: string;
+  about: string;
+  roles: string[];
+  group?: "selling" | "operations" | "office";
+  /** Shown in the lists but not built yet: its link goes nowhere (no sign-in behind it). */
+  soon?: boolean;
+};
 
 const LOOK: Record<string, Pick<Workspace, "about" | "group">> = {
   sales: { group: "selling", about: "Visits, orders, your customers" },
@@ -34,6 +42,16 @@ export const WORKSPACES: Workspace[] = WORKSPACE_ACCESS.map((one) => ({
   about: LOOK[one.key]?.about ?? "",
   group: LOOK[one.key]?.group,
 }));
+
+/** Systems on the way (Aryan, 25 Nov): listed with the others, their links empty for now. No
+ *  sign-in exists for them, so they stay out of WORKSPACES (the login, the counts, sign-up). */
+export const SOON_SYSTEMS: Workspace[] = [
+  { key: "marketing", label: "Digital Marketing", about: "Campaigns, ads, social media", roles: [], group: "selling", soon: true },
+  { key: "workdrive", label: "WorkDrive", about: "The company's shared files", roles: [], group: "office", soon: true },
+];
+
+/** Every system to show in a list: the live workspaces, then the ones on the way. */
+export const ALL_SYSTEMS: Workspace[] = [...WORKSPACES, ...SOON_SYSTEMS];
 
 /** The workspace a person's own login opens (their role decides, not the tile pressed). */
 export const workspaceOf = (me: Pick<Me, "role">): Workspace =>

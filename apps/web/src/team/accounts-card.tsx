@@ -88,7 +88,7 @@ export function TeamAccountsCard({ unit = null, division }: { unit?: number | nu
         </div>
       )}
 
-      <div className="flex flex-wrap gap-1 border-y border-slate-100 bg-slate-50/60 px-3 py-1.5 sm:px-4" role="tablist" aria-label="Which accounts">
+      <div className="mx-4 mb-2 flex flex-wrap gap-0.5 rounded-lg bg-slate-100 p-1 sm:mx-5" role="tablist" aria-label="Which accounts">
         {TABS.map((one) => {
           const n = countOf(one.key);
           if (one.key !== "all" && n === 0) return null;
@@ -102,7 +102,7 @@ export function TeamAccountsCard({ unit = null, division }: { unit?: number | nu
                 setTab(one.key);
                 setAll(false);
               }}
-              className={`rounded-lg px-2.5 py-1 text-[12px] font-semibold ${tab === one.key ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200" : "text-slate-500 hover:text-slate-800"}`}
+              className={`shrink-0 rounded-md px-3.5 py-1.5 text-[13px] whitespace-nowrap transition-colors ${tab === one.key ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]" : "text-slate-500 hover:text-slate-800"}`}
             >
               {one.label} <span className="tabular-nums opacity-70">{n}</span>
             </button>

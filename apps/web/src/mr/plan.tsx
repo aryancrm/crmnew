@@ -19,6 +19,7 @@ import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { Button, CARD, Dialog, PageState, Problem, useAction } from "../ui";
 import { Ask, Choices, dayWords, FIELD, Label, MrHead, monthWords, shiftMonth, StatePill, useMrMe } from "./parts";
 import { TownPicker } from "./towns";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 const WEEK = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -281,7 +282,13 @@ function DaySheet({ data, day: one, person, onAdd, onClose }: { data: PlanMonth;
                 </Link>
               </li>
             ))}
-            {visits.length === 0 && <li className="text-sm text-slate-500">No visits on this day yet.</li>}
+            {visits.length === 0 && (
+              <li>
+                <EmptyState art={<NoInvoicesArt size={72} />} title="No visits on this day yet.">
+                  The customers planned for this day show here.
+                </EmptyState>
+              </li>
+            )}
           </ul>
           {may && (
             <Button variant={known && !changing && visits.length === 0 ? "primary" : "plain"} onClick={onAdd}>
@@ -535,7 +542,11 @@ function Deviations() {
       <MrHead title="Tour plan changes (deviations)" sub={`${query.data.rows.filter((one) => one.status === "waiting").length} waiting`} />
       {mr.data?.access !== "mr" && <TeamSwitch />}
       <DeviationList rows={query.data.rows} decide={mr.data?.access === "lead" || role === "admin" || role === "management"} />
-      {query.data.rows.length === 0 && <div className={`${CARD} px-4 py-8 text-center text-sm text-slate-500`}>No deviations.</div>}
+      {query.data.rows.length === 0 && (
+        <div className={CARD}>
+          <EmptyState title="No deviations.">Changes to the tour plan show here for the team lead to decide.</EmptyState>
+        </div>
+      )}
     </div>
   );
 }
@@ -583,7 +594,11 @@ function TeamPlans() {
             </Link>
           </li>
         ))}
-        {query.data.people.length === 0 && <li className={`${CARD} px-4 py-8 text-center text-sm text-slate-500`}>No MedReps under you.</li>}
+        {query.data.people.length === 0 && (
+          <li className={CARD}>
+            <EmptyState title="No MedReps under you.">Each MedRep's tour plan for the month shows here to approve.</EmptyState>
+          </li>
+        )}
       </ul>
     </div>
   );

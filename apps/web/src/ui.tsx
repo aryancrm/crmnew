@@ -246,9 +246,11 @@ export function Tabs<T extends string>({
   onChange: (key: T) => void;
 }) {
   return (
+    // Our tabs (Aryan, 26 Nov): a soft grey track, the picked one a raised white chip, the count in
+    // a small round badge.
     <div
       role="tablist"
-      className="flex gap-1 overflow-x-auto rounded-2xl border border-slate-200 bg-white p-3 shadow-sm [scrollbar-width:none]"
+      className="flex gap-0.5 overflow-x-auto rounded-lg bg-slate-100 p-1 [scrollbar-width:none]"
     >
       {tabs.map((tab) => {
         const picked = tab.key === value;
@@ -259,16 +261,16 @@ export function Tabs<T extends string>({
             role="tab"
             aria-selected={picked}
             onClick={() => onChange(tab.key)}
-            className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
+            className={`flex shrink-0 items-center gap-1.5 rounded-md px-3.5 py-1.5 text-[13px] whitespace-nowrap transition-colors ${
               picked
-                ? "bg-brand text-white shadow-sm"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]"
+                : "text-slate-500 hover:text-slate-800"
             }`}
           >
             {tab.label}
             {tab.count !== undefined && (
               <span
-                className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${picked ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${picked ? "bg-slate-100 text-slate-700" : "bg-white/70 text-slate-500"}`}
               >
                 {count(tab.count)}
               </span>

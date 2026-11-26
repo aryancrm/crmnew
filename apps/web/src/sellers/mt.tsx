@@ -11,6 +11,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { shortPeso } from "../ceo";
 import { Button, CARD, dayLabel, Dialog, PageHead, PageState, Problem, useAction } from "../ui";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 const useMt = () => useQuery({ queryKey: ["mt", "day"], queryFn: () => api<MtDay>("/api/mt/day") });
 const STATE: Record<string, string> = { ok: "On track", due: "Due to reorder", late: "Late", stopped: "Stopped 90 days", lost: "Lost" };
@@ -87,7 +88,7 @@ function Listings({ data, onChange }: { data: MtDay; onChange: () => void }) {
         </Button>
       </header>
       {data.listings.length === 0 ? (
-        <p className="px-4 py-3 text-[13px] text-slate-500">No listing recorded yet.</p>
+        <EmptyState art={<NoInvoicesArt size={72} />} title="No listing recorded yet.">Which of our medicines each chain carries, in how many branches, shows here.</EmptyState>
       ) : (
         <ul className="divide-y divide-slate-100">
           {data.listings.map((l) => (
@@ -176,7 +177,7 @@ export function MtHome() {
           The chains <span className="font-normal text-slate-400">· with Modern Trade, here and in Zoho</span>
         </h3>
         {shown.length === 0 ? (
-          <p className="px-4 py-3 text-[13px] text-slate-500">No chain with orders yet.</p>
+          <EmptyState title="No chain with orders yet.">Each pharmacy chain shows here with what it bought, owes and sent back.</EmptyState>
         ) : (
           <table className="w-full text-[12.5px]">
             <thead>
@@ -255,10 +256,10 @@ export function MtHome() {
             Deductions and returns <span className="font-normal text-slate-400">· the last 12 months</span>
           </h3>
           {data.deductions.length === 0 && data.returns.length === 0 ? (
-            <p className="px-4 py-3 text-[13px] text-slate-500">
-              None in 12 months. Finance records a chain's deduction with its payment (near-expiry goods kept, listing fee, promo,
+            <EmptyState art={<NoInvoicesArt size={72} />} title="None in 12 months.">
+              Finance records a chain's deduction with its payment (near-expiry goods kept, listing fee, promo,
               penalty), and each return is asked for on its order.
-            </p>
+            </EmptyState>
           ) : (
             <ul className="divide-y divide-slate-100">
               {data.deductions.map((d) => (

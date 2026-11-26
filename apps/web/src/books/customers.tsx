@@ -11,6 +11,7 @@ import { ArrowDown, ArrowUp, Plus, X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 import { kindInfo, statusClass, statusText, zDate, zMoney } from "./kinds";
 import { Pager, ViewMenu } from "./list";
 
@@ -296,7 +297,13 @@ function Customer({ id, onClose }: { id: number; onClose: () => void }) {
                     <span>{zMoney(n.total)}</span>
                   </li>
                 ))}
-                {!c.counts.length && <li className="px-4 py-2 text-[#6c718a]">Nothing yet.</li>}
+                {!c.counts.length && (
+                  <li>
+                    <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing yet.">
+                      Sales orders, invoices, payments, returns and credit notes with this customer show here.
+                    </EmptyState>
+                  </li>
+                )}
               </ul>
             </div>
           </div>

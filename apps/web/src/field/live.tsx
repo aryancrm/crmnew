@@ -8,6 +8,7 @@ import { MapPin, Search } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState, NoResults } from "../no-results";
 import { CARD, PageHead, PageState } from "../ui";
 
 const ago = (iso: string | null) => {
@@ -103,10 +104,12 @@ export function FieldLivePage() {
           </article>
         ))}
         {rows.length === 0 && (
-          <div
-            className={`${CARD} px-4 py-8 text-center text-sm text-slate-500 md:col-span-2 xl:col-span-3`}
-          >
-            Nobody here.
+          <div className={`${CARD} md:col-span-2 xl:col-span-3`}>
+            {words ? (
+              <NoResults title="Nobody here.">No one by that name or team. Try other words.</NoResults>
+            ) : (
+              <EmptyState title="Nobody here.">Each field person shows here with their last place while their day runs.</EmptyState>
+            )}
           </div>
         )}
       </div>

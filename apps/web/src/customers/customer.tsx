@@ -32,6 +32,7 @@ import {
 import { type ReactNode, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 import { placesOrders, useMe } from "../auth";
 import { CustomerDialog } from "./dialog";
 import { PricesGiven } from "./prices";
@@ -46,7 +47,6 @@ import {
   HeadButton,
   HeadLine,
   KindBadge,
-  Nothing,
   PlacePill,
   RecordHead,
   SectionPanel,
@@ -458,7 +458,9 @@ function Orders({ data }: { data: CustomerPage }) {
     <SectionPanel icon={ShoppingBag} title={`Orders · ${count(data.totals.orders)}`} flush>
       {data.orders.length === 0 ? (
         <div className="p-4 sm:p-5">
-          <Nothing>No orders yet.</Nothing>
+          <div className="rounded-xl border border-dashed border-slate-200">
+            <EmptyState title="No orders yet.">Their orders show here once one is placed.</EmptyState>
+          </div>
         </div>
       ) : (
         <ul className="divide-y divide-slate-100">
@@ -506,7 +508,9 @@ function Medicines({ data }: { data: CustomerPage }) {
     >
       {data.medicines.length === 0 ? (
         <div className="p-4 sm:p-5">
-          <Nothing>Nothing bought yet.</Nothing>
+          <div className="rounded-xl border border-dashed border-slate-200">
+            <EmptyState title="Nothing bought yet.">The medicines they buy show here.</EmptyState>
+          </div>
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -568,7 +572,9 @@ function Money({ data }: { data: CustomerPage }) {
       <SectionPanel icon={FileText} title={`Invoices · ${count(data.invoices.length)}`} flush>
         {data.invoices.length === 0 ? (
           <div className="p-4 sm:p-5">
-            <Nothing>No invoices yet.</Nothing>
+            <div className="rounded-xl border border-dashed border-slate-200">
+            <EmptyState title="No invoices yet.">Their invoices show here as soon as there are any.</EmptyState>
+          </div>
           </div>
         ) : (
           <ul className="divide-y divide-slate-100">
@@ -611,7 +617,9 @@ function Money({ data }: { data: CustomerPage }) {
       >
         {data.payments.length === 0 ? (
           <div className="p-4 sm:p-5">
-            <Nothing>No payments yet.</Nothing>
+            <div className="rounded-xl border border-dashed border-slate-200">
+            <EmptyState title="No payments yet.">Payments received from them show here.</EmptyState>
+          </div>
           </div>
         ) : (
           <ul className="divide-y divide-slate-100">
@@ -650,7 +658,9 @@ function Cases({ data }: { data: CustomerPage }) {
     <SectionPanel icon={Inbox} title={`Enquiries · ${count(cases.length)}`} flush>
       {cases.length === 0 ? (
         <div className="p-4 sm:p-5">
-          <Nothing>No enquiries on their number.</Nothing>
+          <div className="rounded-xl border border-dashed border-slate-200">
+            <EmptyState title="No enquiries on their number.">Enquiries from their phone number show here.</EmptyState>
+          </div>
         </div>
       ) : (
         <ul className="divide-y divide-slate-100">
@@ -690,7 +700,9 @@ function Doctors({ data }: { data: CustomerPage }) {
     <SectionPanel icon={Stethoscope} title={`Doctors here · ${count(data.doctors.length)}`} flush>
       {data.doctors.length === 0 ? (
         <div className="p-4 sm:p-5">
-          <Nothing>No doctors linked to this hospital yet.</Nothing>
+          <div className="rounded-xl border border-dashed border-slate-200">
+            <EmptyState art={<NoInvoicesArt size={72} />} title="No doctors linked to this hospital yet.">Doctors linked to this hospital show here.</EmptyState>
+          </div>
         </div>
       ) : (
         <ul className="divide-y divide-slate-100">
@@ -844,7 +856,9 @@ function Activity({ data }: { data: CustomerPage }) {
   return (
     <SectionPanel icon={ActivityIcon} title="Activity on their orders">
       {data.events.length === 0 ? (
-        <Nothing>Nothing yet.</Nothing>
+        <div className="rounded-xl border border-dashed border-slate-200">
+            <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing yet.">What happens on their orders shows here.</EmptyState>
+          </div>
       ) : (
         <ol className="flex flex-col gap-3">
           {data.events.map((event) => (
@@ -1011,7 +1025,14 @@ function FilesPanel({ customerId }: { customerId: number }) {
   const files = query.data?.files ?? [];
   return (
     <SectionPanel icon={Paperclip} title={`Files${files.length ? ` (${files.length})` : ""}`}>
-      {!files.length && <p className="text-sm text-slate-500">{query.isPending ? "Reading…" : "No file yet."}</p>}
+      {!files.length &&
+        (query.isPending ? (
+          <p className="text-sm text-slate-500">Reading…</p>
+        ) : (
+          <EmptyState art={<NoInvoicesArt size={72} />} title="No file yet.">
+            Their papers, their orders' and cases' files and sample acknowledgements show here.
+          </EmptyState>
+        ))}
       <ul className="divide-y divide-slate-100">
         {files.slice(0, 50).map((file) => (
           <li key={file.url} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-2 text-sm">

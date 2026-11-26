@@ -17,6 +17,15 @@ export function avatarTone(name: string): string {
   return AVATARS[h % AVATARS.length] ?? AVATARS[0] ?? "";
 }
 
+/** A bold avatar colour with white initials (Aryan, 26 Nov: the Home's My customers), chosen
+ *  from the name the same way, so a customer keeps its colour. */
+const SOLID = ["bg-[#1d9fda]", "bg-[#e8505b]", "bg-[#22b378]", "bg-[#7c5cff]", "bg-[#f59e0b]", "bg-[#0ea5e9]", "bg-[#3f8f8b]", "bg-[#ec4899]"];
+export function avatarSolid(name: string): string {
+  let h = 0;
+  for (const c of name) h = (h * 31 + c.charCodeAt(0)) % 997;
+  return `${SOLID[h % SOLID.length] ?? SOLID[0]} text-white`;
+}
+
 export function initials(name: string): string {
   return (
     name

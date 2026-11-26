@@ -8,6 +8,7 @@ import { type FormEvent, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { Dialog, PageState, useAction } from "../ui";
+import { EmptyState } from "../no-results";
 
 const BTN = "h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40";
 const PRIMARY = "h-9 rounded-lg bg-brand px-3 text-sm font-semibold text-white disabled:opacity-40";
@@ -240,7 +241,9 @@ export function ComplaintsPage() {
             {data.can.handle && row.status !== "closed" && <Handle row={row} />}
           </details>
         ))}
-        {!data.rows.length && <p className="text-sm text-slate-500">None here.</p>}
+        {!data.rows.length && (
+          <EmptyState title="None here.">Complaints and side-effects customers reported show here. Try another view.</EmptyState>
+        )}
       </div>
       {reporting && <ReportDialog customerId={Number(params.get("customer")) || null} onClose={() => setReporting(false)} />}
     </div>

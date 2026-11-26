@@ -7,6 +7,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Download } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 import { dayLabel, PageState, peso } from "../ui";
 
 const INPUT = "h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm";
@@ -140,7 +141,9 @@ export function CustomReportPage() {
                 )}
               </div>
               {section.rows.length === 0 ? (
-                <p className="px-4 py-5 text-sm text-slate-500">Nothing in these days.</p>
+                <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing in these days.">
+                  Pick other days to see this part for them.
+                </EmptyState>
               ) : (
                 <div className="max-h-[28rem] overflow-auto">
                   <table className="w-full text-sm">

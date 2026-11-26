@@ -14,6 +14,7 @@ import { useMe } from "../auth";
 import { clock, hourOf, hours, IN_FROM, OUT_FROM } from "./parts";
 import { Button, CARD, Dialog, Field, INPUT, PageHead, PageState, Problem, useAction } from "../ui";
 import { LEAVE_WORDS } from "./attendance-report";
+import { EmptyState, NoResults } from "../no-results";
 
 const LEAVE_SHORT: Record<LeaveKind, string> = { vl: "VL", sl: "SL", lwop: "LWOP", other: "Other" };
 const leaveWord = (day: AttendanceDay) =>
@@ -264,8 +265,12 @@ export function AttendancePage() {
               })}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-sm text-slate-500">
-                    Nobody here.
+                  <td colSpan={7}>
+                    {words || filter !== "all" ? (
+                      <NoResults title="Nobody here.">Try another tile, or clear the search.</NoResults>
+                    ) : (
+                      <EmptyState title="Nobody here.">The day's people show here with when they came in and left.</EmptyState>
+                    )}
                   </td>
                 </tr>
               )}

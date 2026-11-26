@@ -18,6 +18,7 @@ import {
   timeLabel,
   useAction,
 } from "../ui";
+import { EmptyState } from "../no-results";
 
 const PRESETS: { key: string; label: string; imapHost: string; smtpHost: string }[] = [
   {
@@ -60,8 +61,10 @@ export function ChannelsPage() {
       )}
       <div className="flex flex-col gap-3">
         {active.length === 0 && (
-          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-6 text-center text-sm text-slate-500">
-            No page or mailbox connected yet.
+          <div className="rounded-2xl border border-slate-200 bg-white">
+            <EmptyState title="No page or mailbox connected yet.">
+              The Facebook pages and mailboxes the Online desk reads show here once connected.
+            </EmptyState>
           </div>
         )}
         {active.map((channel) => (

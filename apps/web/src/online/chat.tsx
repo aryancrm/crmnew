@@ -9,6 +9,7 @@ import { FileText, Mail, MessageCircle, Send, StickyNote } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import { Problem, timeLabel, useAction } from "../ui";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 export function useThread(leadId: number) {
   return useQuery({
@@ -77,7 +78,9 @@ export function ChatPanel({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         {data.lines.length === 0 && (
-          <div className="p-6 text-center text-sm text-slate-500">No message yet.</div>
+          <EmptyState art={<NoInvoicesArt size={72} />} title="No message yet.">
+            Their messages and ours show here as they come in.
+          </EmptyState>
         )}
         <ol className="flex flex-col gap-2">
           {data.lines.map((line) => (

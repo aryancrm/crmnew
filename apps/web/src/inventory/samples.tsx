@@ -12,6 +12,7 @@ import { type FormEvent, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { Dialog, PageState, useAction } from "../ui";
+import { EmptyState } from "../no-results";
 
 const CARD = "rounded-xl border border-slate-200 bg-white";
 const BTN = "h-8 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-700 hover:bg-slate-50 disabled:opacity-40";
@@ -238,7 +239,7 @@ export function MySamplesPage() {
             ))}
           </div>
         ))}
-        {!held.length && <p className="px-4 py-4 text-sm text-slate-500">Nothing held.</p>}
+        {!held.length && <EmptyState title="Nothing held.">What is issued to you shows here, by medicine and batch.</EmptyState>}
       </section>
       <section className={CARD}>
         <h2 className="border-b border-slate-100 px-4 py-3 text-sm font-semibold">Requests</h2>
@@ -258,7 +259,7 @@ export function MySamplesPage() {
             </span>
           </div>
         ))}
-        {!requests.length && <p className="px-4 py-4 text-sm text-slate-500">No requests this month.</p>}
+        {!requests.length && <EmptyState title="No requests this month.">What you ask for shows here with where it stands.</EmptyState>}
       </section>
       {run.problem && <p className="text-sm text-rose-700">{run.problem.message}</p>}
       <p className="text-xs text-slate-500">Give samples and gifts from a doctor's visit (Today's visits), with the doctor's signed acknowledgement. They are never sold.</p>
@@ -329,7 +330,7 @@ export function TeamSamplesPage() {
             </span>
           </div>
         ))}
-        {!data.requests.length && <p className="px-4 py-4 text-sm text-slate-500">No request open.</p>}
+        {!data.requests.length && <EmptyState title="No request open.">Requests from reps to approve or issue show here.</EmptyState>}
       </section>
       {run.problem && <p className="text-sm text-rose-700">{run.problem.message}</p>}
       <section className={CARD}>
@@ -367,7 +368,7 @@ export function TeamSamplesPage() {
               ))}
             </tbody>
           </table>
-          {!data.reps.length && <p className="px-4 py-4 text-sm text-slate-500">No rep holds or has asked for samples.</p>}
+          {!data.reps.length && <EmptyState title="No rep holds or has asked for samples.">Each rep's holdings and month show here once they hold or ask for some.</EmptyState>}
         </div>
       </section>
       <div className="grid gap-4 lg:grid-cols-2">
@@ -384,7 +385,7 @@ export function TeamSamplesPage() {
               </span>
             </div>
           ))}
-          {!data.counts.length && <p className="px-4 py-4 text-sm text-slate-500">No difference this month.</p>}
+          {!data.counts.length && <EmptyState title="No difference this month.">Counts that found more or fewer pieces show here with their reasons.</EmptyState>}
         </section>
         <section className={CARD}>
           <h2 className="border-b border-slate-100 px-4 py-3 text-sm font-semibold">Given by doctor</h2>
@@ -401,7 +402,7 @@ export function TeamSamplesPage() {
               </span>
             </div>
           ))}
-          {!data.doctors.length && <p className="px-4 py-4 text-sm text-slate-500">Nothing given this month.</p>}
+          {!data.doctors.length && <EmptyState title="Nothing given this month.">What each doctor got at a visit this month shows here.</EmptyState>}
         </section>
       </div>
       {refusing !== null && (

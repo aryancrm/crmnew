@@ -10,6 +10,7 @@ import { api } from "../api";
 import { shortPeso } from "../ceo";
 import { CARD, dayLabel } from "../ui";
 import { WaitingGroups } from "./care-groups";
+import { EmptyState } from "../no-results";
 
 export function TelesalesDay() {
   const groups = useQuery({ queryKey: ["care-groups"], queryFn: () => api<CareGroups>("/api/care-groups"), refetchInterval: 30_000 });
@@ -29,7 +30,7 @@ export function TelesalesDay() {
           </Link>
         </header>
         {refills.length === 0 ? (
-          <p className="px-4 py-3 text-[13px] text-slate-500">No refill due today or in the next two days.</p>
+          <EmptyState title="No refill due today or in the next two days.">Customers whose refill is due soon show here to call.</EmptyState>
         ) : (
           <ul className="divide-y divide-slate-100">
             {refills.map((row) => (

@@ -54,6 +54,7 @@ import { ZoomBox } from "./zoom";
 import { count, PageState, manilaDay } from "../ui";
 import { TONE, type Tone, toneOf } from "./pace";
 import { OrderCardItem } from "../orders/board";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 const CARD = "rounded-2xl border border-slate-200/90 bg-white shadow-sm";
 
@@ -329,7 +330,11 @@ const NEED: Record<TeamNeed["kind"], { icon: ReactNode; tone: string }> = {
 
 function Needs({ needs, seatHref }: { needs: TeamNeed[]; seatHref: (seatId: number) => string }) {
   if (needs.length === 0)
-    return <p className="text-sm text-slate-500">Nothing stuck. Every order is moving.</p>;
+    return (
+      <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing stuck.">
+        Every order is moving.
+      </EmptyState>
+    );
   return (
     <ul className="-mx-2 max-h-[26rem] overflow-y-auto">
       {needs.map((need) => (
@@ -393,7 +398,12 @@ function PerformanceTable({
   const rows = seats
     .filter((seat) => seat.person)
     .sort((a, b) => b.sold - a.sold || b.today - a.today);
-  if (!rows.length) return <p className="text-sm text-slate-500">No one in these seats yet.</p>;
+  if (!rows.length)
+    return (
+      <EmptyState title="No one in these seats yet.">
+        Each person's month shows here: what they sold, what waits and what is owed.
+      </EmptyState>
+    );
   return (
     <div className="-mx-4 overflow-x-auto sm:-mx-5">
       <table className="t">
@@ -866,7 +876,7 @@ export function MyTeamPage() {
             {leaders.length ? (
               <Bars rows={leaders} />
             ) : (
-              <p className="text-sm text-slate-500">Nobody sold yet.</p>
+              <EmptyState art={<NoInvoicesArt size={72} />} title="Nobody sold yet.">Who sold most shows here, against each target.</EmptyState>
             )}
           </Panel>
           <Panel
@@ -939,7 +949,7 @@ export function MyTeamPage() {
                 color="bg-sky-500"
               />
             ) : (
-              <p className="text-sm text-slate-500">No order in these days.</p>
+              <EmptyState art={<NoInvoicesArt size={72} />} title="No order in these days.">The medicines sold show here, by value.</EmptyState>
             )}
           </Panel>
           <Panel title="Customers" note="By kind, with their orders">
@@ -970,7 +980,7 @@ export function MyTeamPage() {
                 color="bg-amber-500"
               />
             ) : (
-              <p className="text-sm text-slate-500">No order moved on in these days.</p>
+              <EmptyState art={<NoInvoicesArt size={72} />} title="No order moved on in these days.">The average time at each step shows here.</EmptyState>
             )}
           </Panel>
         </div>
@@ -1304,8 +1314,8 @@ export function TeamSeatPage() {
               })}
             </div>
             {data.cards.length === 0 ? (
-              <div className={`${CARD} px-5 py-8 text-center text-sm text-slate-500`}>
-                No order here.
+              <div className={CARD}>
+                <EmptyState title="No order here.">Orders in this tab show here. Try another tab.</EmptyState>
               </div>
             ) : (
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -1353,9 +1363,7 @@ export function TeamSeatPage() {
       ) : (
         <section className={`${CARD} overflow-hidden`}>
           {customers.data.rows.length === 0 ? (
-            <p className="px-5 py-8 text-center text-sm text-slate-500">
-              No customer in this area yet.
-            </p>
+            <EmptyState title="No customer in this area yet.">The customers of this seat's area show here.</EmptyState>
           ) : (
             <ul className="divide-y divide-slate-100">
               {customers.data.rows.map((row) => (

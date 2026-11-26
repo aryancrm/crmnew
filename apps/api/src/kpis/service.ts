@@ -64,7 +64,7 @@ async function figures(db: Database, scope: Scope, month: string, upTo: string, 
   const first = `${month}-01`;
   const t = tests(scope, today);
   const placed = sql`(coalesce(o.submitted_at, o.created_at) at time zone 'Asia/Manila')::date`;
-  const [sold, counts] = await Promise.all([
+  const [sold, counts, perDay] = await Promise.all([
     rows<{ withVat: number; sales: number; invoices: number; newCustomers: number }>(
       db,
       sql`select coalesce(sum(x.total), 0)::float8 as "withVat", coalesce(sum(x.net), 0)::float8 as sales, count(*)::int as invoices,
@@ -94,7 +94,15 @@ async function figures(db: Database, scope: Scope, month: string, upTo: string, 
               and ${placed} >= (${today}::date - 90)
               and not exists (select 1 from invoice i where i.order_id = o.id and i.status <> 'cancelled')), 0)::float8 as "waitingSales"`,
     ),
+    // The same sales, day by day (the KPI card's bars).
+    rows<{ day: number; sales: number }>(
+      db,
+      sql`select extract(day from x.day)::int as day, coalesce(sum(x.net), 0)::float8 as sales
+        from (${invoicesSql(first, upTo)}) x where ${t.invoice} group by 1`,
+    ),
   ]);
+  const daily = Array.from({ length: Number(lastOf(month).slice(8, 10)) }, () => 0);
+  for (const one of perDay) if (one.day >= 1 && one.day <= daily.length) daily[one.day - 1] = one.sales;
   // Targets: the person's; a team's, everyone's plus the empty seats' under the lead.
   let target = 0;
   let vacantTarget = 0;
@@ -145,6 +153,7 @@ async function figures(db: Database, scope: Scope, month: string, upTo: string, 
     ordersHeld: c.held,
     waitingOrders: c.waiting,
     waitingSales: c.waitingSales,
+    daily,
   };
 }
 

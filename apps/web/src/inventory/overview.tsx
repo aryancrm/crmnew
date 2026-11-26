@@ -19,6 +19,7 @@ import { useMe } from "../auth";
 import { NewsList } from "./news";
 import { count, dayLabel, inPacks, PageHead, PageState, Panel, Status, Tile, timeLabel } from "../ui";
 import { MOVE_WORDS } from "../words";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 export function InventoryOverview() {
   const me = useMe().data;
@@ -216,7 +217,9 @@ export function InventoryOverview() {
               </Panel>
               <Panel title="Recent stock activity">
                 {data.activity.length === 0 ? (
-                  <div className="px-4 py-6 text-ink-2">Nothing has moved yet.</div>
+                  <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing has moved yet.">
+                    Stock received, moved, counted or packed shows here, the latest first.
+                  </EmptyState>
                 ) : (
                   <ul className="flex flex-col px-4">
                     {data.activity.map((move) => (
@@ -346,9 +349,9 @@ function ReorderPanel() {
   if (rows.length === 0)
     return (
       <Panel title="To reorder">
-        <p className="px-4 py-3 text-[13px] text-ink-2">
-          Nothing to reorder: what is free and what is coming covers every reorder level.
-        </p>
+        <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing to reorder">
+          What is free and what is coming covers every reorder level.
+        </EmptyState>
       </Panel>
     );
   return (

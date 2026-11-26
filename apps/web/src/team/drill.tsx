@@ -29,6 +29,7 @@ import { TeamAccountsCard } from "./accounts-card";
 import { DistrictNow } from "./district";
 import { divisionOf, TeamTree } from "./hierarchy";
 import { HospitalTeams, RxFieldBlock, TelesalesCoachHome } from "./mentor";
+import { EmptyState } from "../no-results";
 
 const CARD = "rounded-xl border border-slate-200 bg-white";
 
@@ -110,7 +111,7 @@ export function TeamDrill({ top, pace, running, me }: { top: Node; pace: number;
             press to open
           </p>
         </div>
-        <div className={`${CARD} flex p-0.5`} role="tablist" aria-label="Look">
+        <div className="flex gap-0.5 overflow-x-auto rounded-lg bg-slate-100 p-1 [scrollbar-width:none]" role="tablist" aria-label="Look">
           {(
             [
               ["tiles", "Channels", Rows3],
@@ -123,7 +124,7 @@ export function TeamDrill({ top, pace, running, me }: { top: Node; pace: number;
               role="tab"
               aria-selected={look === key}
               onClick={() => setLook(key)}
-              className={`inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12px] font-semibold ${look === key ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-md px-3.5 py-1.5 text-[13px] whitespace-nowrap transition-colors ${look === key ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]" : "text-slate-500 hover:text-slate-800"}`}
             >
               <Icon className="size-3.5" /> {label}
             </button>
@@ -347,7 +348,7 @@ function Opened({
 
         {/* Each person: their month, their orders, the money owed by their customers. */}
         {people.length === 0 ? (
-          <p className="px-4 py-4 text-sm text-slate-500 sm:px-5">Nobody sells here this month.</p>
+          <EmptyState title="Nobody sells here this month.">Each person's month, orders and money owed by their customers show here.</EmptyState>
         ) : (
           <ul className="divide-y divide-slate-100">
             {[...people]

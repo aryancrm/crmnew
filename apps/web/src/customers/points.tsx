@@ -7,6 +7,7 @@ import { Search, X } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState, NoResults } from "../no-results";
 import { avatarTone, initials } from "../look";
 import {
   Button,
@@ -63,9 +64,11 @@ export function PointsPage() {
           </div>
         </div>
         {data.accounts.length === 0 ? (
-          <div className="p-6 text-center text-sm text-slate-500">
-            {q ? "No customer matches." : "No one has points yet."}
-          </div>
+          q ? (
+            <NoResults title="No customer matches.">Try another name or phone number.</NoResults>
+          ) : (
+            <EmptyState title="No one has points yet.">Each customer's points balance shows here, by their phone number.</EmptyState>
+          )
         ) : (
           <ul className="divide-y divide-slate-100">
             {data.accounts.map((account) => (
@@ -215,7 +218,9 @@ export function PointsAccountPage() {
         <h2 className="border-b border-slate-100 px-4 py-2.5 text-[13px] font-semibold">History</h2>
         <ul className="divide-y divide-slate-100">
           {data.entries.length === 0 && (
-            <li className="p-4 text-sm text-slate-500">Nothing yet.</li>
+            <li>
+              <EmptyState title="Nothing yet.">Points earned, used and adjusted for this customer show here.</EmptyState>
+            </li>
           )}
           {data.entries.map((entry) => (
             <li

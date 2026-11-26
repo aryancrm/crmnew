@@ -11,6 +11,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { shortPeso } from "../ceo";
 import { dayLabel, PageHead, PageState, peso } from "../ui";
+import { EmptyState, NoResults } from "../no-results";
 
 type Row = OwedInvoices["rows"][number];
 type By = "customer" | "medrep" | "team";
@@ -223,9 +224,13 @@ export function OwedReport() {
 
       <section className="space-y-2">
         {groups.length === 0 && (
-          <p className="rounded-2xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
-            Nothing owed here.
-          </p>
+          <div className="rounded-2xl border border-slate-200 bg-white">
+            {words ? (
+              <NoResults title="Nothing owed here.">Check the spelling, or clear the search.</NoResults>
+            ) : (
+              <EmptyState title="Nothing owed here.">Every unpaid invoice shows here, grouped by whose it is.</EmptyState>
+            )}
+          </div>
         )}
         {groups.map((group) => (
           <Group key={keyOf(group.rows[0] as Row)} by={by} {...group} />

@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
+import { EmptyState, NoResults } from "../no-results";
 import { type DispatchAsk, DispatchDialogs } from "./parts";
 import { StatusPill, waited } from "../orders/parts";
 import {
@@ -123,9 +124,17 @@ export function Shipments() {
           </div>
         </div>
         {data.rows.length === 0 ? (
-          <div className="p-8 text-center text-ink-2">
-            {data.tab === "road" ? "Nothing is on the way." : "No shipment here."}
-          </div>
+          params.get("q") ? (
+            <NoResults title={data.tab === "road" ? "Nothing is on the way." : "No shipment here."}>
+              Nothing matches that search. Try another order, customer, courier, tracking or rider.
+            </NoResults>
+          ) : data.tab === "road" ? (
+            <EmptyState title="Nothing is on the way.">Parcels that have left show here until they are delivered.</EmptyState>
+          ) : (
+            <EmptyState title="No shipment here.">
+              {data.tab === "delivered" ? "Parcels show here once they are delivered." : "Every parcel that left shows here, with its courier or rider."}
+            </EmptyState>
+          )
         ) : (
           <table className="t">
             <thead>

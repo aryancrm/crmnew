@@ -9,6 +9,7 @@ import { ChevronLeft, ChevronRight, Landmark, Plus, Wallet, CreditCard } from "l
 import { useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState, NoResults } from "../no-results";
 import { kindInfo, zDate, zMoney } from "./kinds";
 import { AccountActiveButton, NewAccountBox, useMayLedger } from "./ledger";
 
@@ -116,7 +117,7 @@ function ChartOfAccounts() {
             ))}
           </tbody>
         </table>
-        {data && !data.rows.length && <p className="px-6 py-10 text-center text-[#6c718a]">No accounts in this view.</p>}
+        {data && !data.rows.length && <NoResults title="No accounts in this view.">Pick another view to see the other accounts.</NoResults>}
         {query.isError && <p className="px-6 py-10 text-center text-[#f76831]">{query.error.message}</p>}
         {query.isPending && <p className="px-6 py-10 text-center text-[#6c718a]">Adding up every account…</p>}
         <p className="px-5 py-4 text-[12px] text-[#6c718a]">
@@ -239,7 +240,11 @@ function AccountPage({ id }: { id: number }) {
               })}
             </tbody>
           </table>
-          {!a.entries.length && <p className="px-4 py-6 text-center text-[#6c718a]">Nothing has moved on this account.</p>}
+          {!a.entries.length && (
+            <EmptyState title="Nothing has moved on this account.">
+              Payments, journals, bills, invoices and other documents that use it show here.
+            </EmptyState>
+          )}
           {a.total > a.perPage && (
             <div className="flex items-center justify-end gap-2 border-t border-[#ebeaf2] px-4 py-2 text-[12px] text-[#6c718a]">
               {(page - 1) * a.perPage + 1} – {Math.min(page * a.perPage, a.total)} of {a.total.toLocaleString("en-US")}

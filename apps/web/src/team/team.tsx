@@ -24,6 +24,7 @@ import { channelsIn, useTeamTree } from "./hierarchy";
 import { toneOf } from "./pace";
 import { HeadRisks } from "./mentor";
 import { greeting, todayWords } from "../home/home";
+import { EmptyState } from "../no-results";
 
 const CARD = "rounded-xl border border-slate-200 bg-white";
 
@@ -225,7 +226,7 @@ export function TeamSalesPage() {
           </span>
         </header>
         {data.people.length === 0 ? (
-          <p className="px-4 pb-4 text-sm text-slate-500 sm:px-5">Nobody sells under you yet.</p>
+          <EmptyState title="Nobody sells under you yet.">The people who sell under you show here with their month against the pace.</EmptyState>
         ) : (
           <ul className="pb-2">
             {data.people.map((person) => (

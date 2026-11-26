@@ -46,6 +46,7 @@ import { Checks, checksOf } from "./checks";
 import { ReasonDialog, useOrderAction, waited } from "./parts";
 import { count, Dialog, dayLabel, PageState, peso } from "../ui";
 import { useWorkClock } from "../work-clock";
+import { EmptyState, NoInvoicesArt, NoResults } from "../no-results";
 
 /** All orders' tabs: every stage of the line, for whoever looks an order up. */
 const ALL_TABS: { key: BoardTab; label: string; dot?: string }[] = [
@@ -133,6 +134,17 @@ const STRIP = ["Placed", "Management", "Finance", "Packed", "Shipped", "Delivere
 const STRIP_SHORT = ["Placed", "Mgmt", "Finance", "Packed", "On way", "Delivered"];
 
 /** The customer's kind as the Leads card shows its type pill. */
+/** The order card's kind pill in a bold colour with white words (Aryan, 26 Nov); KIND_BADGE stays
+ *  the soft one the customers page uses. */
+const KIND_SOLID: Record<string, string> = {
+  hospital: "bg-[#1d9fda]",
+  doctor: "bg-indigo-600",
+  patient: "bg-teal-600",
+  drugstore: "bg-amber-600",
+  distributor: "bg-violet-600",
+  government: "bg-rose-600",
+};
+
 export const KIND_BADGE: Record<string, { label: string; style: string }> = {
   hospital: { label: "Hospital", style: "border-sky-200 bg-sky-50 text-sky-800" },
   doctor: { label: "Doctor", style: "border-indigo-200 bg-indigo-50 text-indigo-800" },
@@ -557,7 +569,7 @@ export function OrdersToCheck({
             <div
               role="tablist"
               aria-label="Orders"
-              className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none]"
+              className="flex gap-0.5 overflow-x-auto rounded-lg bg-slate-100 p-1 [scrollbar-width:none]"
             >
               {TABS.flatMap((item) => [item, ...(item.key === "needs" && looks ? looks.map((one) => ({ ...one, look: true })) : [])]).map((item) => {
                 const isLook = "look" in item;
@@ -572,17 +584,17 @@ export function OrdersToCheck({
                       role="tab"
                       aria-selected={selected}
                       onClick={() => set({ tab: "", status: "", shown: "", look: selected ? "" : item.key })}
-                      className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none ${
+                      className={`flex shrink-0 items-center gap-1.5 rounded-md px-3.5 py-1.5 text-[13px] whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none ${
                         selected
-                          ? "bg-brand text-white shadow-sm"
-                          : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                          ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]"
+                          : "text-slate-500 hover:text-slate-800"
                       }`}
                     >
                       <span aria-hidden="true" className="size-1.5 rounded-full bg-amber-400" />
                       <span>{item.label}</span>
                       {onNeeds && (
                         <span
-                          className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${selected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}
+                          className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${selected ? "bg-slate-100 text-slate-700" : "bg-white/70 text-slate-500"}`}
                         >
                           {count(base.cards.filter((card) => warnsOf(card).includes(item.key)).length)}
                         </span>
@@ -598,10 +610,10 @@ export function OrdersToCheck({
                     onClick={() =>
                       set({ tab: item.key === defaultTab ? "" : item.key, status: "", shown: "", look: "" })
                     }
-                    className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none ${
+                    className={`flex shrink-0 items-center gap-1.5 rounded-md px-3.5 py-1.5 text-[13px] whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none ${
                       selected
-                        ? "bg-brand text-white shadow-sm"
-                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                        ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]"
+                        : "text-slate-500 hover:text-slate-800"
                     }`}
                   >
                     {item.dot && (
@@ -610,12 +622,12 @@ export function OrdersToCheck({
                     {(item.key === "done" || item.key === "passed") && (
                       <CheckCheck
                         aria-hidden="true"
-                        className={`size-3.5 ${selected ? "text-emerald-300" : "text-emerald-600"}`}
+                        className="size-3.5 text-emerald-600"
                       />
                     )}
                     <span>{item.label}</span>
                     <span
-                      className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${selected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}
+                      className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${selected ? "bg-slate-100 text-slate-700" : "bg-white/70 text-slate-500"}`}
                     >
                       {count(data.counts[item.key] ?? 0)}
                     </span>
@@ -720,16 +732,22 @@ export function OrdersToCheck({
               onMore={(key) => set({ status: key, view: "cards" })}
             />
           ) : data.cards.length === 0 ? (
-            <div className="rounded-2xl border border-slate-200 bg-white px-5 py-8 text-center text-sm text-slate-500">
-              {data.tab === DESK_HOME[data.desk] && !narrowed
-                ? finance
-                  ? "No payment is waiting for you."
-                  : dispatch
-                    ? "Nothing to pack, ship or deliver."
-                    : "No order is waiting for you."
-                : data.tab === "sent"
-                  ? "No order is waiting for a MedRep's fix."
-                  : "No order here."}
+            <div className="rounded-2xl border border-slate-200 bg-white">
+              {data.tab === DESK_HOME[data.desk] && !narrowed ? (
+                finance ? (
+                  <EmptyState title="No payment is waiting for you.">Orders waiting on Finance show here.</EmptyState>
+                ) : dispatch ? (
+                  <EmptyState title="Nothing to pack, ship or deliver.">Orders sent to Dispatch show here to pack, ship and deliver.</EmptyState>
+                ) : (
+                  <EmptyState title="No order is waiting for you.">Orders that wait on your desk show here.</EmptyState>
+                )
+              ) : data.tab === "sent" ? (
+                <EmptyState title="No order is waiting for a MedRep's fix.">Orders sent back to a MedRep to fix show here.</EmptyState>
+              ) : narrowed ? (
+                <NoResults title="No order here.">Try other filters, or clear the search.</NoResults>
+              ) : (
+                <EmptyState title="No order here.">Orders in this tab show here. Try another tab.</EmptyState>
+              )}
             </div>
           ) : (
             <div className={`space-y-5 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
@@ -1088,68 +1106,75 @@ export function OrderCardItem({
           <div className="flex items-start justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
               <span
-                className={`flex size-9 shrink-0 items-center justify-center rounded-xl text-xs font-bold shadow-2xs ${avatarTone(card.customer)}`}
+                className="flex size-10 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[13px] font-bold text-white"
               >
                 {initials(card.customer)}
               </span>
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-1.5">
                   <h3
-                    className="line-clamp-2 text-sm leading-snug font-semibold tracking-tight text-slate-900 transition-colors group-hover:text-emerald-800"
+                    className="line-clamp-2 text-[15px] leading-snug font-semibold tracking-tight text-slate-900 transition-colors group-hover:text-emerald-800"
                     title={card.customer}
                   >
                     {card.customer}
                   </h3>
                 </div>
+                {/* Wraps instead of cutting, so the Division chip shows whole (Aryan, 26 Nov). */}
                 <div
-                  className="truncate text-[11px] font-medium text-slate-500"
+                  className="flex flex-wrap items-center gap-x-1 gap-y-0.5 text-[12.5px] font-medium text-slate-500"
                   title={card.customerPhone ? `Phone ${card.customerPhone}` : undefined}
                 >
                   <span className="font-semibold text-slate-700">{peso(card.total)}</span> ·{" "}
                   {card.code}
                   {/* Its Division, which says the papers it carries (19 Nov). */}
                   {card.division && (
-                    <span className="ml-1.5 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-bold text-indigo-700">
+                    <span className="ml-0.5 shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-[11.5px] font-bold text-indigo-700">
                       {card.division}
                     </span>
                   )}
                 </div>
+                {/* Where it stands, under the name, so a pill never squeezes the name (Aryan, 26 Nov:
+                    "Delivered" covered it). Only the time stays in the corner. */}
+                {(finished || flagged || card.changed || late || isNew) && (
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                      {finished && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[11.5px] font-semibold text-white">
+                          <CheckCheck className="size-3" /> Delivered
+                        </span>
+                      )}
+                      {flagged && (
+                        <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[11.5px] font-semibold text-white">
+                          {card.statusLabel}
+                        </span>
+                      )}
+                      {card.changed && (
+                        <span
+                          className="inline-flex items-center rounded-full bg-sky-600 px-2 py-0.5 text-[11.5px] font-semibold text-white"
+                          title="Management changed its medicines or prices before approving: open it to see what"
+                        >
+                          Changed by Mgmt
+                        </span>
+                      )}
+                      {late && (
+                        <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[11.5px] font-semibold text-white">
+                          Late
+                        </span>
+                      )}
+                      {isNew && !late && (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[11.5px] font-semibold text-white shadow-2xs">
+                          <span className="size-1.5 rounded-full bg-white" />
+                          New
+                        </span>
+                      )}
+                  </div>
+                )}
               </div>
             </div>
 
-            <div className="flex shrink-0 flex-col items-end gap-1 text-[11px]">
+            <div className="flex shrink-0 flex-col items-end gap-1 text-[12.5px]">
               <span className="flex items-center gap-1.5">
-                {finished && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-                    <CheckCheck className="size-3" /> Delivered
-                  </span>
-                )}
-                {flagged && (
-                  <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-                    {card.statusLabel}
-                  </span>
-                )}
-                {card.changed && (
-                  <span
-                    className="inline-flex items-center rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-semibold text-white"
-                    title="Management changed its medicines or prices before approving: open it to see what"
-                  >
-                    Changed by Mgmt
-                  </span>
-                )}
-                {late && (
-                  <span className="inline-flex items-center rounded-full bg-rose-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-                    Late
-                  </span>
-                )}
-                {isNew && !late && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-semibold text-white shadow-2xs">
-                    <span className="size-1.5 rounded-full bg-white" />
-                    New
-                  </span>
-                )}
                 <span
-                  className={`text-[10px] font-medium tabular-nums ${late ? "text-rose-700" : "text-slate-400"}`}
+                  className={`text-[11.5px] font-medium tabular-nums ${late ? "text-rose-700" : "text-slate-400"}`}
                   title={`${card.statusLabel} since ${new Date(card.stepSince).toLocaleString("en-PH", { timeZone: "Asia/Manila" })} · placed ${new Date(card.submittedAt).toLocaleString("en-PH", { timeZone: "Asia/Manila" })}`}
                 >
                   {waited(card.stepSince)}
@@ -1202,30 +1227,30 @@ export function OrderCardItem({
 
           <div className="mt-3 flex flex-wrap items-center gap-1.5">
             <span
-              className={`inline-flex shrink-0 items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${kind?.style}`}
+              className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-[11.5px] font-medium text-white ${KIND_SOLID[card.customerKind] ?? KIND_SOLID.hospital}`}
             >
               {kind?.label}
             </span>
             {/* Only when the Division chip beside the code doesn't say it already. */}
             {card.channel && card.channel !== card.division && (
-              <span className="max-w-[120px] truncate text-[10px] font-semibold text-slate-600">
+              <span className="max-w-[120px] truncate text-[11.5px] font-semibold text-slate-600">
                 {card.channel}
               </span>
             )}
             {card.via && (
               <span
-                className="inline-flex shrink-0 items-center rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-semibold text-white"
+                className="inline-flex shrink-0 items-center rounded-full bg-violet-600 px-2 py-0.5 text-[11.5px] font-semibold text-white"
                 title={`Came in through the Online desk: case ${card.via.code}`}
               >
                 Online · {card.via.source}
               </span>
             )}
-            <span className="inline-flex items-center rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+            <span className="inline-flex items-center rounded-full bg-slate-700 px-2.5 py-0.5 text-[11.5px] font-medium text-white">
               {termsOf(card)}
             </span>
             {card.customerCity && (
               <span
-                className="inline-flex max-w-[140px] items-center gap-0.5 truncate text-[10px] text-slate-500"
+                className="inline-flex max-w-[140px] items-center gap-0.5 truncate text-[11.5px] text-slate-500"
                 title={card.customerCity}
               >
                 <MapPin className="size-2.5 shrink-0 text-slate-400" />
@@ -1234,32 +1259,32 @@ export function OrderCardItem({
             )}
           </div>
 
-          <p className="mt-2 truncate text-[11px] text-slate-600" title={card.lines}>
+          <p className="mt-2 truncate text-[12.5px] text-slate-600" title={card.lines}>
             <span className="font-semibold text-slate-700">Medicine:</span> {card.lines}
           </p>
           {warehouse ? (
             // The warehouse's facts: where it goes, to whom, how many pieces, by when.
-            <div className="mt-1.5 space-y-1.5 text-[11px] text-slate-600">
+            <div className="mt-1.5 space-y-1.5 text-[12.5px] text-slate-600">
               <p className="truncate" title={card.deliveryAddress ?? undefined}>
                 <span className="font-semibold text-slate-700">Deliver to:</span>{" "}
                 {[card.receiver, card.deliveryAddress].filter(Boolean).join(" · ") || "—"}
               </p>
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-700 tabular-nums">
+                <span className="rounded bg-slate-100 px-1.5 py-0.5 text-[11.5px] font-semibold text-slate-700 tabular-nums">
                   {count(card.pieces)} pcs
                 </span>
                 {card.receiverPhone && (
                   <a
                     href={`tel:${card.receiverPhone.replace(/[^\d+]/g, "")}`}
                     onClick={(event) => event.stopPropagation()}
-                    className="rounded px-1 py-0.5 text-[10px] font-medium text-slate-600 tabular-nums hover:bg-slate-100"
+                    className="rounded px-1 py-0.5 text-[11.5px] font-medium text-slate-600 tabular-nums hover:bg-slate-100"
                   >
                     {card.receiverPhone}
                   </a>
                 )}
                 {card.expectedOn && inWarehouse && (
                   <span
-                    className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                    className={`rounded px-1.5 py-0.5 text-[11.5px] font-semibold ${
                       card.expectedOn < today
                         ? "bg-rose-50 text-rose-800 ring-1 ring-rose-200"
                         : card.expectedOn === today
@@ -1277,7 +1302,7 @@ export function OrderCardItem({
               </div>
             </div>
           ) : (
-            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
+            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-slate-500">
               {showRep && (
                 <span className="inline-flex min-w-0 items-center gap-1">
                   <UserRound className="size-3 shrink-0 text-slate-400" />
@@ -1288,7 +1313,7 @@ export function OrderCardItem({
             </div>
           )}
           {warehouse && atDispatch && card.items.some((item) => item.cold) && (
-            <div className="mt-2 inline-flex w-fit items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-semibold text-sky-800">
+            <div className="mt-2 inline-flex w-fit items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[11.5px] font-semibold text-sky-800">
               <Snowflake className="size-3" aria-hidden="true" /> Keep cold
             </div>
           )}
@@ -1296,7 +1321,7 @@ export function OrderCardItem({
             card.status === "packing" &&
             card.cameBackCount > 0 &&
             card.cameBackReason && (
-              <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] leading-snug text-rose-900">
+              <div className="mt-2 rounded-lg border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[12.5px] leading-snug text-rose-900">
                 <span className="font-semibold">
                   Came back{card.cameBackCount > 1 ? ` ${card.cameBackCount} times` : ""}:
                 </span>{" "}
@@ -1304,7 +1329,7 @@ export function OrderCardItem({
               </div>
             )}
           {warehouse && inWarehouse && onTake && (
-            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-slate-500">
+            <div className="mt-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-slate-500">
               {
                 // Who has it in hand, so two people don't pack the same order.
                 <span className="inline-flex items-center gap-1">
@@ -1356,7 +1381,7 @@ export function OrderCardItem({
           {financeChecking && <FinanceSteps card={card} />}
           {!checking && !financeChecking && (
             <>
-              <div className="mb-1 flex items-center justify-between gap-2 text-[10px] font-medium text-slate-400">
+              <div className="mb-1 flex items-center justify-between gap-2 text-[11.5px] font-medium text-slate-400">
                 <span>{finished ? "Completed" : "Next action"}</span>
                 {finished ? (
                   <CheckCheck className="size-3.5 text-emerald-600" />
@@ -1365,14 +1390,14 @@ export function OrderCardItem({
                 )}
               </div>
               <p
-                className={`mb-2 line-clamp-2 text-[11px] leading-snug font-medium ${stopped ? "text-rose-700" : "text-slate-800"}`}
+                className={`mb-2 line-clamp-2 text-[12.5px] leading-snug font-medium ${stopped ? "text-rose-700" : "text-slate-800"}`}
                 title={card.next}
               >
                 {card.next}
               </p>
               {/* The MedRep answered the hold: said on the card, so the desk knows it is its turn (23 Nov). */}
               {stopped && card.reply && (
-                <p className="mb-2 line-clamp-2 rounded-md bg-emerald-50 px-2 py-1 text-[11px] leading-snug font-medium text-emerald-900" title={card.reply}>
+                <p className="mb-2 line-clamp-2 rounded-md bg-emerald-50 px-2 py-1 text-[12.5px] leading-snug font-medium text-emerald-900" title={card.reply}>
                   Answered: {card.reply}
                 </p>
               )}
@@ -1381,7 +1406,7 @@ export function OrderCardItem({
           {/* Back from the MedRep after being sent back: marked, with what they answered (23 Nov). */}
           {card.status === "pending_approval" && card.sentBackCount > 0 && (
             <p
-              className="mb-2 line-clamp-2 rounded-md bg-amber-50 px-2 py-1 text-[11px] leading-snug font-medium text-amber-900"
+              className="mb-2 line-clamp-2 rounded-md bg-amber-50 px-2 py-1 text-[12.5px] leading-snug font-medium text-amber-900"
               title={[card.sentBackReason, card.reply].filter(Boolean).join(" → ")}
             >
               Sent again{card.sentBackCount > 1 ? ` (${card.sentBackCount}×)` : ""}
@@ -1391,7 +1416,7 @@ export function OrderCardItem({
           {/* Every order in Management's (or Finance's) queue stands at the same step: no strip there. */}
           {!checking && !financeChecking && (
             <>
-              <div className="mb-1.5 flex items-center justify-between text-[10px] font-medium text-slate-500">
+              <div className="mb-1.5 flex items-center justify-between text-[11.5px] font-medium text-slate-500">
                 <span
                   className={`max-w-[170px] truncate font-semibold ${stopped ? "text-rose-700" : "text-slate-700"}`}
                 >
@@ -1401,7 +1426,7 @@ export function OrderCardItem({
                       ? "Delivered"
                       : STRIP[stepIdx]}
                 </span>
-                <span className="shrink-0 text-[9px] text-slate-400">
+                <span className="shrink-0 text-[10.5px] text-slate-400">
                   {finished ? "Complete" : `${stepIdx + 1} of ${STRIP.length}`}
                 </span>
               </div>
@@ -1426,7 +1451,7 @@ export function OrderCardItem({
                           }`}
                         />
                         <span
-                          className={`truncate text-[9px] font-semibold ${current ? (stopped ? "text-rose-700" : "text-blue-700") : done ? "text-slate-600" : "text-slate-400"}`}
+                          className={`truncate text-[10.5px] font-semibold ${current ? (stopped ? "text-rose-700" : "text-blue-700") : done ? "text-slate-600" : "text-slate-400"}`}
                         >
                           {STRIP_SHORT[index]}
                         </span>
@@ -1462,12 +1487,12 @@ export function OrderCardItem({
           {(card.warehouse || (warehouse && card.papers.length > 0)) && (
             <div className="mt-2.5 flex flex-wrap gap-1">
               {card.warehouse && (
-                <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-800">
+                <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-emerald-800">
                   Ships from · {card.warehouse}
                 </span>
               )}
               {card.status === "shipped" && (card.courier || card.rider) && (
-                <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[9px] font-semibold text-sky-800">
+                <span className="rounded bg-sky-50 px-1.5 py-0.5 text-[10.5px] font-semibold text-sky-800">
                   {card.courier
                     ? `${card.courier}${card.tracking ? ` · ${card.tracking}` : ""}`
                     : `Rider · ${card.rider}`}
@@ -1475,7 +1500,7 @@ export function OrderCardItem({
               )}
               {warehouse && card.papers.length > 0 && (
                 <span
-                  className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-semibold text-slate-700"
+                  className="inline-flex items-center gap-1 rounded bg-slate-100 px-1.5 py-0.5 text-[10.5px] font-semibold text-slate-700"
                   title="Papers on file"
                 >
                   <FileCheck2 className="size-3" />{" "}
@@ -1498,7 +1523,7 @@ export function OrderCardItem({
                     type="button"
                     disabled={busy}
                     onClick={card.status === "finance_check" ? onConfirm : onInvoice}
-                    className="h-8 rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
+                    className="h-8 rounded-lg bg-brand text-[13px] font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
                   >
                     {card.status === "finance_check" ? "Confirm payment" : "Check & send to Dispatch"}
                   </button>
@@ -1506,7 +1531,7 @@ export function OrderCardItem({
                     type="button"
                     disabled={busy}
                     onClick={() => onAsk("hold")}
-                    className="h-8 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                    className="h-8 rounded-lg text-[13px] font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                   >
                     Hold
                   </button>
@@ -1516,7 +1541,7 @@ export function OrderCardItem({
                   type="button"
                   disabled={busy}
                   onClick={onResume}
-                  className="col-span-2 h-8 rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
+                  className="col-span-2 h-8 rounded-lg bg-brand text-[13px] font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
                 >
                   Take off hold
                 </button>
@@ -1545,7 +1570,7 @@ export function OrderCardItem({
                             : "deliver",
                       )
                     }
-                    className="h-8 rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
+                    className="h-8 rounded-lg bg-brand text-[13px] font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
                   >
                     {card.status === "ready_for_dispatch"
                       ? "Pack"
@@ -1559,7 +1584,7 @@ export function OrderCardItem({
                     onClick={() =>
                       card.status === "shipped" ? onDispatch("failed") : onAsk("hold")
                     }
-                    className="h-8 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                    className="h-8 rounded-lg text-[13px] font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                   >
                     {card.status === "shipped" ? "Came back" : "Hold"}
                   </button>
@@ -1569,7 +1594,7 @@ export function OrderCardItem({
                   type="button"
                   disabled={busy}
                   onClick={onResume}
-                  className="col-span-2 h-8 rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
+                  className="col-span-2 h-8 rounded-lg bg-brand text-[13px] font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
                 >
                   Take off hold
                 </button>
@@ -1590,7 +1615,7 @@ export function OrderCardItem({
                     type="button"
                     disabled={busy}
                     onClick={onApprove}
-                    className="h-8 rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
+                    className="h-8 rounded-lg bg-brand text-[13px] font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
                   >
                     Approve
                   </button>
@@ -1599,7 +1624,7 @@ export function OrderCardItem({
                     type="button"
                     disabled={busy}
                     onClick={() => onAsk("send_back")}
-                    className="h-8 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
+                    className="h-8 rounded-lg text-[13px] font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50"
                   >
                     Send back
                   </button>
@@ -1607,7 +1632,7 @@ export function OrderCardItem({
                     type="button"
                     disabled={busy}
                     onClick={() => onAsk("hold")}
-                    className="h-8 rounded-lg text-xs font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-50"
+                    className="h-8 rounded-lg text-[13px] font-semibold text-amber-700 hover:bg-amber-50 disabled:opacity-50"
                   >
                     Hold
                   </button>
@@ -1617,7 +1642,7 @@ export function OrderCardItem({
                   type="button"
                   disabled={busy}
                   onClick={onResume}
-                  className="col-span-3 h-8 rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
+                  className="col-span-3 h-8 rounded-lg bg-brand text-[13px] font-semibold text-white shadow-sm hover:bg-brand-dark disabled:opacity-50"
                 >
                   Take off hold
                 </button>
@@ -1633,7 +1658,7 @@ export function OrderCardItem({
                 event.stopPropagation();
                 onAsk("take_back");
               }}
-              className="mt-3 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 text-xs font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-50"
+              className="mt-3 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 text-[13px] font-semibold text-amber-900 hover:bg-amber-100 disabled:opacity-50"
             >
               <Undo2 className="size-3.5" /> Take back approval ·{" "}
               {Math.max(
@@ -1648,7 +1673,7 @@ export function OrderCardItem({
             <Link
               to={`/orders/${card.id}/fix`}
               onClick={(event) => event.stopPropagation()}
-              className="mt-3 flex h-8 items-center justify-center rounded-lg bg-brand text-xs font-semibold text-white shadow-sm hover:bg-brand-dark"
+              className="mt-3 flex h-8 items-center justify-center rounded-lg bg-brand text-[13px] font-semibold text-white shadow-sm hover:bg-brand-dark"
             >
               Fix and send again
             </Link>
@@ -1836,7 +1861,9 @@ function StockWatch() {
       ) : overview.isError ? (
         <div className="text-xs text-rose-700">Couldn't read the stock.</div>
       ) : rows.length === 0 ? (
-        <div className="text-xs text-slate-500">Nothing is low or out of stock.</div>
+        <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing is low or out of stock.">
+          Medicines running low or out show here.
+        </EmptyState>
       ) : (
         <ul className="flex flex-col">
           {rows.map((row) => (
@@ -1912,7 +1939,9 @@ function MoneyGlance() {
               </div>
             </div>
             {late.length === 0 ? (
-              <div className="text-xs text-slate-500">Nobody is late.</div>
+              <EmptyState art={<NoInvoicesArt size={72} />} title="Nobody is late.">
+                Customers with overdue invoices show here.
+              </EmptyState>
             ) : (
               <ul className="flex flex-col">
                 {late.map((row) => (
@@ -2139,7 +2168,9 @@ function OrdersLanes({
             </div>
             <div className="mt-2.5 space-y-2">
               {inLane.length === 0 && (
-                <p className="px-1.5 py-3 text-center text-[11px] text-stone-400">Nothing here</p>
+                <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing here">
+                  Orders at this step show here.
+                </EmptyState>
               )}
               {inLane.slice(0, LANE_SHOWN).map((card) => (
                 <Link

@@ -4,20 +4,16 @@
 
 import type { DecisionLine, Decisions } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
-import { CheckCircle2, ChevronRight } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { PageState } from "../ui";
+import { EmptyState } from "../no-results";
 
 const CARD = "rounded-xl border border-slate-200 bg-white";
 
-function Lines({ lines, empty }: { lines: DecisionLine[]; empty: string }) {
-  if (!lines.length)
-    return (
-      <p className="flex items-center gap-2 px-4 py-4 text-sm text-slate-500">
-        <CheckCircle2 className="size-4 text-emerald-600" aria-hidden="true" /> {empty}
-      </p>
-    );
+function Lines({ lines, empty, emptySub }: { lines: DecisionLine[]; empty: string; emptySub: string }) {
+  if (!lines.length) return <EmptyState title={empty}>{emptySub}</EmptyState>;
   return (
     <ul className="divide-y divide-slate-100">
       {lines.map((line) => (
@@ -58,13 +54,21 @@ export function DecisionsPage() {
         <h2 id="for-me" className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900">
           Waiting on you
         </h2>
-        <Lines lines={data.forMe} empty="Nothing waits on you now." />
+        <Lines
+          lines={data.forMe}
+          empty="Nothing waits on you now."
+          emptySub="Decisions waiting on you, from every desk you work on, show here."
+        />
       </section>
       <section aria-labelledby="mine" className={CARD}>
         <h2 id="mine" className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900">
           What you asked for, still open
         </h2>
-        <Lines lines={data.mine} empty="Nothing you asked for is waiting." />
+        <Lines
+          lines={data.mine}
+          empty="Nothing you asked for is waiting."
+          emptySub="What you asked others for shows here while it is still open."
+        />
       </section>
     </div>
   );

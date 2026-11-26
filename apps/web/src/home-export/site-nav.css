@@ -262,3 +262,9 @@
     transform: none;
   }
 }
+
+/* The About page: the footer sits right under the closing banner, with no line above it. */
+.hx.hx--flush .footer {
+  border-top: 0;
+  padding-top: clamp(1.5rem, 1rem + 2vw, 2.5rem);
+}

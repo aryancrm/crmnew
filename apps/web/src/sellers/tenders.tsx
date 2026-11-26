@@ -26,6 +26,7 @@ import { Button, CARD, dayLabel, Dialog, PageHead, PageState, Problem, peso, Tab
 import { withUnit } from "../team/switch";
 import { BidReportCard } from "./bid-report";
 import { REASON } from "./tender-words";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 const STEP: Record<TenderStep, string> = {
   found: "Found",
@@ -76,14 +77,30 @@ function TenderRow({ t, extra }: { t: Tender; extra?: string }) {
   );
 }
 
-function List({ title, tenders, empty, extra }: { title: string; tenders: Tender[]; empty: string; extra?: (t: Tender) => string }) {
+function List({
+  title,
+  tenders,
+  empty,
+  emptySub,
+  wide,
+  extra,
+}: {
+  title: string;
+  tenders: Tender[];
+  empty: string;
+  emptySub: string;
+  wide?: boolean;
+  extra?: (t: Tender) => string;
+}) {
   return (
     <section className={`${CARD} min-w-0`}>
       <h3 className="border-b border-slate-100 px-4 py-3 text-sm font-bold text-slate-900">
         {title} <span className="font-normal text-slate-400">· {tenders.length}</span>
       </h3>
       {tenders.length === 0 ? (
-        <p className="px-4 py-3 text-[13px] text-slate-500">{empty}</p>
+        <EmptyState art={wide ? undefined : <NoInvoicesArt size={72} />} title={empty}>
+          {emptySub}
+        </EmptyState>
       ) : (
         <ul className="divide-y divide-slate-100">
           {tenders.map((t) => (
@@ -119,33 +136,36 @@ export function BiddingHome() {
           </div>
         ))}
       </section>
-      <List title="Deadlines this week" tenders={data.deadlines} empty="No bid due this week." extra={deadline} />
-      {data.canApprove && <List title="Bid prices to approve" tenders={data.toApprove} empty="No price waiting for you." />}
+      <List title="Deadlines this week" tenders={data.deadlines} empty="No bid due this week." emptySub="Bids due this week show here." wide extra={deadline} />
+      {data.canApprove && <List title="Bid prices to approve" tenders={data.toApprove} empty="No price waiting for you." emptySub="Bid prices waiting for your approval show here." />}
       <div className="grid gap-4 lg:grid-cols-2">
-        <List title="Awaiting award" tenders={data.awaiting} empty="No bid waiting for its result." />
+        <List title="Awaiting award" tenders={data.awaiting} empty="No bid waiting for its result." emptySub="Bids waiting for their award show here." />
         <List
           title="Won: to deliver"
           tenders={data.toDeliver}
           empty="Nothing to deliver."
+          emptySub="Won tenders show here until they are delivered."
           extra={(t) => (t.deliverBy ? `by ${dayLabel(t.deliverBy)}` : "no delivery date")}
         />
         <List
           title="Delivered: waiting for acceptance (IAR)"
           tenders={data.toAccept}
           empty="Nothing waiting for acceptance."
+          emptySub="Delivered tenders show here until they are accepted (IAR)."
           extra={(t) => `${sinceDays(t.deliveredOn, data.today)} days since delivery`}
         />
-        <List title="Accepted: to bill" tenders={data.toBill} empty="Nothing to bill." extra={(t) => `accepted ${t.acceptedOn ? dayLabel(t.acceptedOn) : ""}`} />
+        <List title="Accepted: to bill" tenders={data.toBill} empty="Nothing to bill." emptySub="Accepted tenders show here until they are billed." extra={(t) => `accepted ${t.acceptedOn ? dayLabel(t.acceptedOn) : ""}`} />
         <List
           title="Billed: to collect"
           tenders={data.toCollect}
           empty="Nothing to collect."
+          emptySub="Billed tenders show here until the money is collected."
           extra={(t) => `${sinceDays(t.acceptedOn, data.today)} days since acceptance`}
         />
         <section className={`${CARD} min-w-0`}>
           <h3 className="border-b border-slate-100 px-4 py-3 text-sm font-bold text-slate-900">Company papers ending</h3>
           {data.papersEnding.length === 0 ? (
-            <p className="px-4 py-3 text-[13px] text-slate-500">Every paper is valid for 60 days or more.</p>
+            <EmptyState art={<NoInvoicesArt size={72} />} title="Every paper is valid for 60 days or more.">Company papers ending within 60 days show here.</EmptyState>
           ) : (
             <ul className="divide-y divide-slate-100">
               {data.papersEnding.map((p) => (
@@ -308,7 +328,7 @@ export function TendersPage() {
         value={view}
         onChange={(key) => setParams({ view: key }, { replace: true })}
       />
-      <List title={view === "open" ? "Bidding" : view === "awarded" ? "Awarded" : "Closed"} tenders={groups[view]} empty="None here." extra={view === "open" ? deadline : undefined} />
+      <List title={view === "open" ? "Bidding" : view === "awarded" ? "Awarded" : "Closed"} tenders={groups[view]} empty="None here." emptySub="Tenders in this tab show here. Try another tab." wide extra={view === "open" ? deadline : undefined} />
       {adding && <NewTenderDialog onClose={() => setAdding(false)} />}
     </div>
   );
@@ -601,7 +621,9 @@ function Asked({ found, open }: { found: NonNullable<Detail["found"]>; open: boo
         )}
       </div>
       {found.asked.length === 0 ? (
-        <p className="mt-1 text-[13px] text-slate-500">No line was read on the notice.</p>
+        <EmptyState art={<NoInvoicesArt size={72} />} title="No line was read on the notice.">
+          What the tender asks for, line by line, shows here.
+        </EmptyState>
       ) : (
         <ul className="mt-2 space-y-0.5 text-[13px] text-slate-700">
           {found.asked.map((line) => (
@@ -681,7 +703,7 @@ function ProductCprs() {
         Product registrations (CPRs) <span className="font-normal text-slate-500">· kept by Regulatory Affairs</span>
       </h3>
       {cprs.length === 0 ? (
-        <p className="px-4 py-3 text-[13px] text-slate-500">No CPR recorded yet.</p>
+        <EmptyState title="No CPR recorded yet.">Approved product registrations kept by Regulatory Affairs show here.</EmptyState>
       ) : (
         <ul className="divide-y divide-slate-100">
           {cprs.map((r) => (

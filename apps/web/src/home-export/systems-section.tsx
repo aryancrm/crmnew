@@ -7,7 +7,7 @@ import { Link } from "react-router-dom";
 import { DETAILS } from "../portal/about";
 import { heroLogo } from "../portal/hero-logos";
 import { TILE_GLOW } from "../portal/tiles";
-import { WORKSPACES } from "../workspaces";
+import { SOON_SYSTEMS, type Workspace, WORKSPACES } from "../workspaces";
 import { Icon, useInView } from "./HomePage.jsx";
 import { WorkspaceDemo } from "./workspace-demos";
 
@@ -21,9 +21,11 @@ type Entry = {
   description: string;
   bullets: string[];
   colour: string;
+  /** On the way (WorkDrive, Digital Marketing): a card in the rail, its links empty for now. */
+  soon?: boolean;
 };
 
-const ENTRIES: Entry[] = WORKSPACES.map((one) => {
+const entryOf = (one: Workspace): Entry => {
   const detail = DETAILS[one.key];
   return {
     id: `ws-${one.key}`,
@@ -34,8 +36,19 @@ const ENTRIES: Entry[] = WORKSPACES.map((one) => {
     description: `Sign in to ${one.label} with your own login; your role decides what you see and do.`,
     bullets: (detail?.points ?? []).slice(0, 4),
     colour: TILE_GLOW[one.key] ?? "#f36b21",
+    soon: one.soon,
   };
-});
+};
+
+/** The showcase: the live workspaces, each with its board. */
+const ENTRIES: Entry[] = WORKSPACES.map(entryOf);
+/** The rail: those, then the systems on the way (no board yet, so not in the showcase). */
+const RAIL: Entry[] = [...ENTRIES, ...SOON_SYSTEMS.map(entryOf)];
+/** An empty link for a system on the way. */
+const linkOf = (entry: Entry) => (entry.soon ? "#" : `#showcase-${entry.id}`);
+const stayIfSoon = (entry: Entry) => (event: { preventDefault: () => void }) => {
+  if (entry.soon) event.preventDefault();
+};
 
 /** A workspace's logo, the same image as on the portal's first screen. */
 function TileIcon({ workspaceKey, size }: { workspaceKey: string; size: number }) {
@@ -68,7 +81,7 @@ export function SystemsRail() {
       const card = track.firstElementChild;
       if (!card) return;
       const step = card.getBoundingClientRect().width + 16;
-      setIndex(Math.min(ENTRIES.length - 1, Math.round(track.scrollLeft / step)));
+      setIndex(Math.min(RAIL.length - 1, Math.round(track.scrollLeft / step)));
     };
     track.addEventListener("scroll", onScroll, { passive: true });
     return () => track.removeEventListener("scroll", onScroll);
@@ -99,7 +112,7 @@ export function SystemsRail() {
           </p>
           <div className="rail__controls">
             <div className="rail__dots" role="tablist" aria-label="Choose a workspace">
-              {ENTRIES.map((entry, i) => (
+              {RAIL.map((entry, i) => (
                 <button
                   key={entry.id}
                   type="button"
@@ -119,8 +132,8 @@ export function SystemsRail() {
                 type="button"
                 className="rail__arrow rail__arrow--next"
                 aria-label="Next workspace"
-                disabled={index === ENTRIES.length - 1}
-                onClick={() => go(Math.min(ENTRIES.length - 1, index + 1))}
+                disabled={index === RAIL.length - 1}
+                onClick={() => go(Math.min(RAIL.length - 1, index + 1))}
               >
                 <Icon name="arrowRight" size={18} />
               </button>
@@ -130,7 +143,7 @@ export function SystemsRail() {
       </div>
 
       <ul className="rail__track" ref={trackRef}>
-        {ENTRIES.map((entry, i) => (
+        {RAIL.map((entry, i) => (
           <li key={entry.id} className={`rail__card rail__card--${STYLES[i % STYLES.length]}`} style={{ "--i": i } as CSSProperties}>
             <div className="rail__card-top">
               <span className="rail__logo">
@@ -142,10 +155,10 @@ export function SystemsRail() {
             <div className="rail__card-bottom">
               <p>{entry.blurb.replace(/\.?$/, ".")}</p>
               <div className="rail__card-foot">
-                <a className="rail__go" href={`#showcase-${entry.id}`} aria-label={`Open ${entry.name}`}>
+                <a className="rail__go" href={linkOf(entry)} onClick={stayIfSoon(entry)} aria-label={`Open ${entry.name}`}>
                   <Icon name="arrowUpRight" size={16} />
                 </a>
-                <a className="rail__more" href={`#showcase-${entry.id}`}>
+                <a className="rail__more" href={linkOf(entry)} onClick={stayIfSoon(entry)}>
                   Learn more
                 </a>
               </div>

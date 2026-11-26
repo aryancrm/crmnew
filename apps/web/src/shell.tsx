@@ -23,6 +23,7 @@ import {
   ChevronRight,
   CirclePlus,
   KeyRound,
+  Palette,
   LogOut,
   Menu,
   PanelLeftClose,
@@ -42,6 +43,8 @@ import { LiveLocationSender } from "./field/live-sender";
 import { UndoConfirmBar } from "./finance/undo";
 import { MyDayButton } from "./hr/parts";
 import { allItems, type Badge, type MenuGroup, type MenuItem, spaceFor } from "./menus";
+import { NoResults } from "./no-results";
+import { THEMES, useAppliedTheme, useTheme } from "./theme";
 import { Toasts } from "./toast";
 import { unreadIn, useUpdates } from "./updates";
 
@@ -55,6 +58,9 @@ export function Shell() {
   const location = useLocation();
   const leavesTo = useLeavesTo();
   const [drawer, setDrawer] = useState(false);
+  // The theme picked in the account menu, on <html> while the app is shown (theme.ts).
+  const [theme] = useTheme();
+  useAppliedTheme(theme);
   // On a computer the menu button hides the sidebar for more room, and the choice is kept.
   const wide = useWide();
   const [folded, setFolded] = useState(() => {
@@ -203,7 +209,7 @@ export function Shell() {
               to={space.cta.to}
               title={space.cta.label}
               aria-label={space.cta.label}
-              className="mx-auto mb-2 flex size-10 items-center justify-center rounded-xl bg-[#2563eb] text-white hover:bg-[#1d4ed8]"
+              className="mx-auto mb-2 flex size-10 items-center justify-center rounded-xl bg-[#1d9fda] text-white hover:bg-[#1784b5]"
             >
               <CirclePlus size={19} aria-hidden="true" />
             </NavLink>
@@ -234,7 +240,7 @@ export function Shell() {
           to={space.cta.to}
           onClick={onPick}
           // Blue, the size of the menu's own links, no shadow (Aryan, 24 Nov).
-          className="mx-3 mb-3 flex h-9 items-center gap-2.5 rounded-lg bg-[#2563eb] px-2.5 text-[13px] font-semibold text-white hover:bg-[#1d4ed8]"
+          className="mx-3 mb-3 flex h-9 items-center gap-2.5 rounded-lg bg-[#1d9fda] px-2.5 text-[13px] font-semibold text-white hover:bg-[#1784b5]"
         >
           <CirclePlus size={17} aria-hidden="true" /> {space.cta.label}
         </NavLink>
@@ -279,7 +285,7 @@ export function Shell() {
         <aside
           aria-label={`${space.label} menu`}
           // Folded, it narrows to a rail of icons; the width slides between the two (Aryan, 24 Nov).
-          className={`sticky top-0 hidden print:!hidden h-dvh shrink-0 sidebar-scroll overflow-x-hidden overflow-y-auto overscroll-contain border-r border-slate-200/80 bg-white transition-[width] duration-300 ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none md:block ${folded ? "w-[72px]" : "w-60"}`}
+          className={`app-sidebar sticky top-0 hidden print:!hidden h-dvh shrink-0 sidebar-scroll overflow-x-hidden overflow-y-auto overscroll-contain border-r border-slate-200/80 bg-white transition-[width] duration-300 ease-[cubic-bezier(.2,.8,.2,1)] motion-reduce:transition-none md:block ${folded ? "w-[72px]" : "w-60"}`}
         >
           {menu(undefined, wide && folded)}
         </aside>
@@ -324,7 +330,7 @@ export function Shell() {
             }
           />
         </header>
-        <main className="min-w-0 flex-1 bg-white px-4 pt-6 pb-24 md:px-8 md:pb-10 print:p-0">
+        <main className="app-content min-w-0 flex-1 bg-white px-4 pt-6 pb-24 md:px-8 md:pb-10 print:p-0">
           {/* The way back sits in the page, as on a team's page: a small ‹ and where you are. */}
           {location.pathname !== "/" &&
             !OWN_BACK.some((test) => test.test(location.pathname)) &&
@@ -349,7 +355,7 @@ export function Shell() {
           />
           <aside
             aria-label={`${space.label} menu`}
-            className="absolute inset-y-0 left-0 sidebar-scroll w-[264px] max-w-[85vw] overflow-y-auto overscroll-contain bg-white shadow-pop"
+            className="app-sidebar absolute inset-y-0 left-0 sidebar-scroll w-[264px] max-w-[85vw] overflow-y-auto overscroll-contain bg-white shadow-pop"
           >
             {menu(() => setDrawer(false))}
           </aside>
@@ -499,9 +505,9 @@ function PageBack({ trail }: { trail: string[] }) {
         }
         aria-label="Back"
         title="Back to the page before"
-        className="mr-1 grid size-6 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:border-emerald-300 hover:text-emerald-700"
+        className="mr-1 grid size-8 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 hover:border-emerald-300 hover:text-emerald-700"
       >
-        <ChevronLeft className="size-3.5" />
+        <ChevronLeft className="size-4" />
       </button>
       {trail.map((part, n) => (
         <span key={part} className="flex items-center gap-1">
@@ -530,8 +536,9 @@ function inFolder(item: MenuItem, location: { pathname: string; search: string }
   });
 }
 
-/** A count beside a menu link: a blue circle, the number white and centred in it (Aryan, 24 Nov). */
-const COUNT = "inline-grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-[#2563eb] px-1 text-[11px] leading-none font-semibold text-white tabular-nums";
+/** A count beside a menu link: a small filled blue circle, the number white and centred in it
+ *  (Aryan, 24 Nov; smaller since 26 Nov). Two digits widen it a little. */
+const COUNT = "inline-grid h-4 min-w-4 shrink-0 place-items-center rounded-full bg-[#1d9fda] px-[3px] text-[9.5px] leading-none font-semibold text-white tabular-nums";
 const PILL = (_badge: Badge) => COUNT;
 
 function MenuList({
@@ -632,11 +639,11 @@ function MenuList({
             onClick={onPick}
             className={`relative flex h-7 items-center gap-2 rounded-md pr-2 text-[12px] transition-colors ${
               deep ? "pl-7" : "pl-4"
-            } ${on ? "bg-[#eaf1ff] font-semibold text-slate-900" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}
+            } ${on ? "bg-[#e8f6fc] font-semibold text-slate-900" : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"}`}
           >
             <span
               aria-hidden="true"
-              className={`size-1.5 shrink-0 rounded-full ${on ? "bg-[#1d4ed8]" : deep ? "bg-slate-300" : "bg-slate-400"}`}
+              className={`size-1.5 shrink-0 rounded-full ${on ? "bg-[#1784b5]" : deep ? "bg-slate-300" : "bg-slate-400"}`}
             />
             <span className="flex-1 truncate">{one.name}</span>
             {one.people > 0 && (
@@ -663,13 +670,13 @@ function MenuList({
           onClick={onPick}
           className={({ isActive }) =>
             `relative mx-auto flex size-10 items-center justify-center rounded-xl transition-colors ${
-              lit(isActive) ? "bg-[#eaf1ff] text-[#1d4ed8]" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+              lit(isActive) ? "bg-[#e8f6fc] text-[#1784b5]" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
             }`
           }
         >
           <item.icon size={19} aria-hidden="true" />
           {item.badge && counts && counts[item.badge] > 0 && (
-            <span aria-hidden="true" className="absolute top-1.5 right-1.5 size-2 rounded-full bg-[#2563eb] ring-2 ring-white" />
+            <span aria-hidden="true" className="absolute top-1.5 right-1.5 size-2 rounded-full bg-[#1d9fda] ring-2 ring-white" />
           )}
         </NavLink>
       );
@@ -697,7 +704,7 @@ function MenuList({
             inner ? "h-8 text-[12.5px]" : "h-9 text-[13px]"
           } ${
             lit(isActive)
-              ? "bg-[#eaf1ff] font-semibold text-slate-900"
+              ? "bg-[#e8f6fc] font-medium text-slate-900"
               : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
           }`
         }
@@ -707,7 +714,7 @@ function MenuList({
             <item.icon
               size={inner ? 15 : 17}
               className={
-                lit(isActive) ? "text-[#1d4ed8]" : "text-slate-400 group-hover:text-slate-600"
+                lit(isActive) ? "text-[#1784b5]" : "text-slate-400 group-hover:text-slate-600"
               }
               aria-hidden="true"
             />
@@ -738,7 +745,7 @@ function MenuList({
             onExpand?.();
           }}
           className={`mx-auto flex size-10 items-center justify-center rounded-xl transition-colors ${
-            here ? "bg-[#eaf1ff] text-[#1d4ed8]" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+            here ? "bg-[#e8f6fc] text-[#1784b5]" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
           }`}
         >
           <item.icon size={19} aria-hidden="true" />
@@ -771,7 +778,7 @@ function MenuList({
         >
           <item.icon
             size={17}
-            className={here ? "text-[#1d4ed8]" : "text-slate-400 group-hover:text-slate-600"}
+            className={here ? "text-[#1784b5]" : "text-slate-400 group-hover:text-slate-600"}
             aria-hidden="true"
           />
           <span className="flex-1 truncate">{item.label}</span>
@@ -900,7 +907,9 @@ function SearchBox() {
           ) : found.isError ? (
             <div className="px-3 py-2.5 text-bad">Search didn't work. Try again.</div>
           ) : results.length === 0 ? (
-            <div className="px-3 py-2.5 text-ink-2">Nothing found for "{asked}".</div>
+            <NoResults title={<>No results for &ldquo;{asked}&rdquo;</>} size={104}>
+              Check the spelling, or search by a medicine, a customer, an order number or a person's name.
+            </NoResults>
           ) : (
             results.map((row) => (
               <button
@@ -922,6 +931,7 @@ function SearchBox() {
 
 function Account({ me, role }: { me: Me; role: string }) {
   const [open, setOpen] = useState(false);
+  const [theme, setTheme] = useTheme();
   const box = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const queries = useQueryClient();
@@ -1004,6 +1014,27 @@ function Account({ me, role }: { me: Me; role: string }) {
               </button>
             </>
           )}
+          {/* The theme (Aryan, 26 Nov): Light, Dark, or Midnight (only the sidebar dark). */}
+          <div className="flex items-center gap-3 px-3 py-2">
+            <Palette size={17} aria-hidden="true" />
+            <span className="flex-1">Theme</span>
+          </div>
+          <div role="radiogroup" aria-label="Theme" className="mx-3 mb-1.5 flex gap-0.5 rounded-lg bg-slate-100 p-1">
+            {THEMES.map((one) => (
+              <button
+                key={one.key}
+                type="button"
+                role="radio"
+                aria-checked={theme === one.key}
+                onClick={() => setTheme(one.key)}
+                className={`flex-1 rounded-md px-2 py-1.5 text-[12px] transition-colors ${
+                  theme === one.key ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]" : "text-slate-500 hover:text-slate-800"
+                }`}
+              >
+                {one.label}
+              </button>
+            ))}
+          </div>
           <button
             type="button"
             role="menuitem"
@@ -1105,7 +1136,7 @@ function SwitchWorkspace({ label }: { label: string }) {
       title="Switch workspace: sign out and choose another"
       className="hidden h-9 shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-white pr-3 pl-1.5 text-[13px] font-medium text-slate-700 hover:border-blue-300 hover:text-slate-900 lg:flex"
     >
-      <span className="grid size-6 place-items-center rounded-full bg-[#eaf1ff] text-[#2563eb]">
+      <span className="grid size-6 place-items-center rounded-full bg-[#e8f6fc] text-[#1d9fda]">
         <ArrowLeftRight size={13} aria-hidden="true" />
       </span>
       {label}

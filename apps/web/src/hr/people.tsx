@@ -42,6 +42,7 @@ import {
   Tabs,
   useAction,
 } from "../ui";
+import { EmptyState, NoResults } from "../no-results";
 
 const COMPANY: Record<Company, string> = {
   "2mg": "2MG Inc.",
@@ -304,11 +305,12 @@ export function HrPeoplePage() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={6}
-                    className="px-4 py-6 text-center text-sm text-slate-500"
-                  >
-                    Nobody here.
+                  <td colSpan={6}>
+                    {words ? (
+                      <NoResults title="Nobody here.">Check the spelling, or clear the search.</NoResults>
+                    ) : (
+                      <EmptyState title="Nobody here.">People in this tab show here. Try another tab.</EmptyState>
+                    )}
                   </td>
                 </tr>
               )}

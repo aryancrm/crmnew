@@ -727,7 +727,7 @@ export function Order() {
     (desk === "finance" && (["finance_check", "ready_for_invoice"].includes(order.status) || order.heldRole === "finance"));
   const tabsBox = (
       <section className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div role="tablist" aria-label="About this order" className="flex gap-1 overflow-x-auto border-b border-slate-200 px-3">
+        <div role="tablist" aria-label="About this order" className="mx-3 mt-3 flex gap-0.5 overflow-x-auto rounded-lg bg-slate-100 p-1 [scrollbar-width:none]">
           {tabs.map(([key, label]) => (
             <button
               key={key}
@@ -735,7 +735,7 @@ export function Order() {
               role="tab"
               aria-selected={tab === key}
               onClick={() => pickTab(key)}
-              className={`-mb-px border-b-2 px-3 py-3 text-sm font-medium whitespace-nowrap ${tab === key ? "border-brand text-brand" : "border-transparent text-ink-2 hover:text-ink"}`}
+              className={`shrink-0 rounded-md px-3.5 py-1.5 text-[13px] whitespace-nowrap transition-colors ${tab === key ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]" : "text-slate-500 hover:text-slate-800"}`}
             >
               {label}
             </button>

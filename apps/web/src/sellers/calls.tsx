@@ -12,6 +12,7 @@ import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { Button, CARD, PageHead, PageState, Problem, useAction } from "../ui";
+import { EmptyState } from "../no-results";
 
 const OUTCOMES: { key: SalesCallOutcome; label: string; tone: string }[] = [
   { key: "reached", label: "Talked", tone: "bg-emerald-50 text-emerald-800 border-emerald-200" },
@@ -221,7 +222,9 @@ export function Calls() {
               </li>
             ))}
           </ul>
-          {!data.rows.length && <p className="px-4 py-8 text-center text-sm text-slate-500">No calls in these days.</p>}
+          {!data.rows.length && (
+            <EmptyState title="No calls in these days.">Calls logged show here with what came of them. Try other days.</EmptyState>
+          )}
         </section>
       )}
     </div>

@@ -24,6 +24,7 @@ import {
 } from "../ui";
 import { Figure } from "../home/figures";
 import { StatusPill } from "./inventory";
+import { NoResults } from "../no-results";
 
 const VAT = { exempt: "Exempt", vat12: "12%", zero: "Zero-rated" };
 
@@ -339,7 +340,7 @@ export function Medicines() {
           </tbody>
         </table>
         {shown.length === 0 && (
-          <div className="p-8 text-center text-ink-2">No medicine matches.</div>
+          <NoResults title="No medicine matches.">Try another filter, or check the spelling of the search.</NoResults>
         )}
       </div>
 
@@ -348,7 +349,9 @@ export function Medicines() {
           <MedicineCard key={row.id} row={row} data={data} />
         ))}
         {shown.length === 0 && (
-          <Card className="p-8 text-center text-ink-2">No medicine matches.</Card>
+          <Card>
+            <NoResults title="No medicine matches.">Try another filter, or check the spelling of the search.</NoResults>
+          </Card>
         )}
       </div>
 

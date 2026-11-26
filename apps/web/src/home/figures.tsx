@@ -64,6 +64,17 @@ export function Figure({
   );
 }
 
+/** Figures as one strip of touching, square, coloured tiles (Aryan, 26 Nov: the MedRep's Home);
+ *  white text, dark on the yellow. Shared by My orders and the hospitals' figures. */
+export const STRIP = [
+  "bg-[#1d9fda] text-white",
+  "bg-[#f5c400] text-[#3b2f00]",
+  "bg-[#e8505b] text-white",
+  "bg-[#22b378] text-white",
+  "bg-[#7c5cff] text-white",
+  "bg-[#3f8f8b] text-white",
+];
+
 export type PeriodCell = {
   label: string;
   /** A count, or a figure already in words ("1h"). */
@@ -84,6 +95,7 @@ export function PeriodBox({
   faded,
   error,
   onPick,
+  colours = false,
 }: {
   title: string;
   /** A shorter title for a phone. */
@@ -98,6 +110,8 @@ export function PeriodBox({
   faded?: boolean;
   error?: string | null;
   onPick: (period: Period, day: string) => void;
+  /** The MedRep's Home: the periods as My KPIs' tabs, the figures as the coloured strip. */
+  colours?: boolean;
 }) {
   return (
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -114,7 +128,11 @@ export function PeriodBox({
           <span className="hidden sm:inline"> · {periodWord(period, shownDay ?? null)}</span>
         </h2>
         <div className="flex shrink-0 items-center gap-1.5">
-          <fieldset className="inline-flex rounded-lg bg-slate-100 p-0.5 text-[11px] font-semibold">
+          <fieldset
+            className={
+              colours ? "inline-flex gap-0.5 rounded-lg bg-slate-100 p-1 text-[13px]" : "inline-flex rounded-lg bg-slate-100 p-0.5 text-[11px] font-semibold"
+            }
+          >
             <legend className="sr-only">Period</legend>
             {PERIODS.map((item) => (
               <button
@@ -122,11 +140,17 @@ export function PeriodBox({
                 type="button"
                 aria-pressed={period === item.key}
                 onClick={() => onPick(item.key, "")}
-                className={`rounded-md px-2 py-1 whitespace-nowrap transition-colors sm:px-2.5 ${
-                  period === item.key
-                    ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
-                    : "text-slate-500 hover:text-slate-900"
-                }`}
+                className={
+                  colours
+                    ? `rounded-md px-2.5 py-1.5 whitespace-nowrap transition-colors sm:px-3.5 ${
+                        period === item.key ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]" : "text-slate-500 hover:text-slate-800"
+                      }`
+                    : `rounded-md px-2 py-1 whitespace-nowrap transition-colors sm:px-2.5 ${
+                        period === item.key
+                          ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+                          : "text-slate-500 hover:text-slate-900"
+                      }`
+                }
               >
                 {item.short ? (
                   <>
@@ -142,7 +166,9 @@ export function PeriodBox({
           {/* A day of their choosing: the calendar opens from the icon. */}
           <label
             title={period === "day" && shownDay ? dayLabel(shownDay) : "Pick a day"}
-            className={`relative grid h-7 shrink-0 cursor-pointer place-items-center rounded-lg px-2 ring-1 transition-colors ${
+            className={`relative grid shrink-0 cursor-pointer place-items-center ring-1 transition-colors ${
+              colours ? "h-[38px] rounded-lg px-3" : "h-7 rounded-lg px-2"
+            } ${
               period === "day"
                 ? "bg-white text-slate-900 shadow-sm ring-slate-300"
                 : "bg-slate-100 text-slate-500 ring-transparent hover:text-slate-900"
@@ -166,9 +192,31 @@ export function PeriodBox({
         </div>
       </div>
       <dl
-        className={`grid grid-cols-2 border-t border-slate-100 sm:grid-cols-3 lg:grid-cols-6 ${faded ? "opacity-60" : ""}`}
+        className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 ${colours ? "mx-4 mb-4" : "border-t border-slate-100"} ${faded ? "opacity-60" : ""}`}
       >
-        {cells.map((cell) => {
+        {cells.map((cell, n) => {
+          if (colours) {
+            // The coloured strip: touching, square tiles, the words in the tile's own colour.
+            const inner = (
+              <>
+                <dt className="truncate text-[11px] opacity-85">{cell.label}</dt>
+                <dd className="mt-0.5 text-xl font-semibold tracking-tight tabular-nums">
+                  {cell.value === undefined ? "—" : typeof cell.value === "string" ? cell.value : count(cell.value)}
+                </dd>
+                {cell.sub && <div className="truncate text-[11px] opacity-85">{cell.sub}</div>}
+              </>
+            );
+            const tile = `min-w-0 px-4 py-3 ${STRIP[n % STRIP.length]}`;
+            return cell.to ? (
+              <Link key={cell.label} to={cell.to} className={`${tile} transition-[filter] hover:brightness-110`}>
+                {inner}
+              </Link>
+            ) : (
+              <div key={cell.label} className={tile}>
+                {inner}
+              </div>
+            );
+          }
           const body = (
             <>
               <dt className="truncate text-[11px] font-semibold text-slate-500">{cell.label}</dt>

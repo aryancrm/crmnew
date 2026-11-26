@@ -23,6 +23,7 @@ import {
   timeLabel,
   useAction,
 } from "../ui";
+import { EmptyState, NoResults } from "../no-results";
 
 export const STATUS_TONE: Record<OrderStatus, Tone> = {
   draft: "plain",
@@ -452,8 +453,12 @@ export function OrdersTable({ title }: { title: string }) {
         )}
       </div>
       {data.rows.length === 0 ? (
-        <div className="px-5 py-10 text-center text-ink-2">
-          {narrowed ? "No order matches." : "No orders yet."}
+        <div>
+          {narrowed ? (
+            <NoResults title="No order matches.">Try other filters, or press Clear filters.</NoResults>
+          ) : (
+            <EmptyState title="No orders yet.">Orders show here as soon as they are placed.</EmptyState>
+          )}
         </div>
       ) : (
         <div className={`overflow-x-auto ${query.isPlaceholderData ? "opacity-60" : ""}`}>

@@ -7,6 +7,7 @@ import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { ReturnCard } from "./returns";
 import { count, PageHead, PageState } from "../ui";
+import { EmptyState } from "../no-results";
 
 const TABS: { key: "" | ReturnRow["status"]; label: string }[] = [
   { key: "", label: "All" },
@@ -32,7 +33,8 @@ export function Returns() {
         title="Returns & refunds"
         sub="Asked on an order with where the goods are: Management decides, Dispatch checks what comes back"
       />
-      <div className="mb-4 flex flex-wrap gap-1">
+      {/* Our tabs (Aryan, 26 Nov): a soft grey track, the picked one a raised white chip. */}
+      <div role="tablist" aria-label="Returns" className="mb-4 flex gap-0.5 overflow-x-auto rounded-lg bg-slate-100 p-1 [scrollbar-width:none]">
         {TABS.map((tab) => {
           const on = status === tab.key;
           const n = tab.key
@@ -42,10 +44,19 @@ export function Returns() {
             <button
               key={tab.key || "all"}
               type="button"
+              role="tab"
+              aria-selected={on}
               onClick={() => setParams(tab.key ? { status: tab.key } : {}, { replace: true })}
-              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${on ? "bg-brand text-white" : "text-slate-600 hover:bg-slate-100"}`}
+              className={`flex shrink-0 items-center gap-1.5 rounded-md px-3.5 py-1.5 text-[13px] transition-colors ${
+                on ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]" : "text-slate-500 hover:text-slate-800"
+              }`}
             >
-              {tab.label} <span className="ml-1 tabular-nums opacity-80">{count(n)}</span>
+              {tab.label}
+              <span
+                className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${on ? "bg-slate-100 text-slate-700" : "bg-white/70 text-slate-500"}`}
+              >
+                {count(n)}
+              </span>
             </button>
           );
         })}
@@ -53,8 +64,12 @@ export function Returns() {
       {!data ? (
         <PageState query={query} what="the returns" />
       ) : data.rows.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white px-5 py-8 text-center text-sm text-slate-500">
-          No return here.
+        // The same words, with the receipt drawn above them (Aryan, 26 Nov).
+        <div className="rounded-2xl border border-slate-200 bg-white">
+          <EmptyState title="No return here.">
+            A return is asked on its order's page. It shows here while Management decides and Dispatch checks the goods
+            that come back.
+          </EmptyState>
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">

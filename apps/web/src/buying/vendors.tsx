@@ -9,6 +9,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMay } from "../books/forms";
+import { EmptyState, NoResults } from "../no-results";
 import { Button, count, Dialog, PageHead, PageState, Problem, Tabs, useAction } from "../ui";
 import { Box, docPath, docState, Fact, FIELD, KIND_WORD, LABEL, money, orderStage, Pager, qty, SearchBox, StatePill, TABLE, TD, TH, useBookList, when, ZohoLink } from "./shared";
 
@@ -93,8 +94,8 @@ export function VendorsPage() {
                 ))}
                 {data.rows.length === 0 && (
                   <tr>
-                    <td colSpan={4} className="px-4 py-10 text-center text-slate-500">
-                      No vendor matches.
+                    <td colSpan={4}>
+                      <NoResults title="No vendor matches.">Try another name, company, email or phone, or another tab.</NoResults>
                     </td>
                   </tr>
                 )}
@@ -204,7 +205,11 @@ export function VendorPage() {
         <div className="flex min-w-0 flex-col gap-4">
           <Box title="What we buy from them" aside={<span className="text-[12px] text-slate-500">The price last time, to compare before ordering</span>}>
             {(items.data?.items ?? []).length === 0 ? (
-              <p className="px-4 py-6 text-center text-[13px] text-slate-500">{items.isPending ? "Loading…" : "Nothing bought from them yet."}</p>
+              items.isPending ? (
+                <p className="px-4 py-6 text-center text-[13px] text-slate-500">Loading…</p>
+              ) : (
+                <EmptyState title="Nothing bought from them yet.">What we buy from them shows here, with the price last time.</EmptyState>
+              )
             ) : (
               <div className="max-h-[22rem] overflow-auto">
                 <table className={TABLE}>

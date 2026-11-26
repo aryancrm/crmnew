@@ -10,6 +10,7 @@ import { type FormEvent, useState } from "react";
 import { api } from "../api";
 import { Button, CARD, Dialog, PageState, Problem, useAction } from "../ui";
 import { FIELD, LoginCard } from "./dialogs";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 /** The first word of a new area's name by its channel, as Zoho's salespeople are named. */
 const AREA_PREFIX: Record<string, string> = { HOSP: "HOS", ONLINE: "B2C", TS: "TeleSales", PAP: "MD Telesales" };
@@ -120,7 +121,9 @@ export function AreasTab({ tree }: { tree: OrgTree }) {
                 </Button>
               </div>
               {areas.length === 0 ? (
-                <p className="px-4 py-3 text-xs text-slate-400">No area yet.</p>
+                <EmptyState art={<NoInvoicesArt size={72} />} title="No area yet.">
+                  Areas added with Add area show here.
+                </EmptyState>
               ) : (
                 <ul className="divide-y divide-slate-100">
                   {areas.map((area) => {
@@ -259,8 +262,10 @@ export function RequestsTab({ tree }: { tree: OrgTree }) {
   const [login, setLogin] = useState<{ name: string; login: OrgLogin } | null>(null);
   if (!tree.requests.length)
     return (
-      <div className={`${CARD} px-5 py-8 text-center text-sm text-slate-500`}>
-        No team lead has asked for anyone yet.
+      <div className={CARD}>
+        <EmptyState title="No team lead has asked for anyone yet.">
+          Team leads' asks for new people show here, open ones first, to approve or decline.
+        </EmptyState>
       </div>
     );
   return (

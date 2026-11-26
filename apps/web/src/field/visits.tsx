@@ -11,6 +11,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { GiveSamplesDialog } from "../inventory/samples";
 import { api } from "../api";
 import { useMe } from "../auth";
+import { EmptyState } from "../no-results";
 import { clock } from "../hr/parts";
 import { FIELD } from "../org/dialogs";
 import { Button, CARD, Dialog, PageHead, PageState, Problem, Tabs, useAction } from "../ui";
@@ -192,14 +193,20 @@ export function VisitsPage() {
         ))}
       </div>
       {shown.length === 0 && (
-        <div className={`${CARD} px-4 py-8 text-center text-sm text-slate-500`}>
-          {view === "planned"
-            ? mine
-              ? "Nothing planned this day. Plan a visit to a doctor, hospital or drugstore you look after."
-              : "Nothing planned this day."
-            : view === "done"
-              ? "No visits done this day."
-              : "Nothing skipped this day."}
+        <div className={CARD}>
+          {view === "planned" ? (
+            mine ? (
+              <EmptyState title="Nothing planned this day. Plan a visit to a doctor, hospital or drugstore you look after.">
+                Planned visits show here, ready to check in on the spot.
+              </EmptyState>
+            ) : (
+              <EmptyState title="Nothing planned this day.">Visits planned for this day show here.</EmptyState>
+            )
+          ) : view === "done" ? (
+            <EmptyState title="No visits done this day.">Visits show here once their call is reported.</EmptyState>
+          ) : (
+            <EmptyState title="Nothing skipped this day.">Visits skipped with a reason show here.</EmptyState>
+          )}
         </div>
       )}
       {planning && (

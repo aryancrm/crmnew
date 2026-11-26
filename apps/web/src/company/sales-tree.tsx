@@ -269,7 +269,7 @@ export function SalesTreePage() {
           <Toggle on={everyone} onClick={() => setEveryone(!everyone)} title="The teams that don't sell too (Finance, Dispatch, Inventory, HR, IT…)">
             Non-sales seats too
           </Toggle>
-          <div className="flex rounded-xl border border-slate-200 bg-slate-50 p-0.5" role="tablist" aria-label="Look">
+          <div className="flex gap-0.5 overflow-x-auto rounded-lg bg-slate-100 p-1 [scrollbar-width:none]" role="tablist" aria-label="Look">
             {(
               [
                 ["tree", "Tree"],
@@ -282,7 +282,7 @@ export function SalesTreePage() {
                 role="tab"
                 aria-selected={look === key}
                 onClick={() => setLook(key)}
-                className={`h-9 rounded-lg px-3 text-sm font-semibold ${look === key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+                className={`shrink-0 rounded-md px-3.5 py-1.5 text-[13px] whitespace-nowrap transition-colors ${look === key ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]" : "text-slate-500 hover:text-slate-800"}`}
               >
                 {label}
               </button>

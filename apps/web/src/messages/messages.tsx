@@ -18,6 +18,7 @@ import { api } from "../api";
 import { useMe } from "../auth";
 import { Button, Dialog, PageState, Problem, useAction } from "../ui";
 import { type UpdatesBox, UpdatesList, unreadIn, useUpdates } from "../updates";
+import { EmptyState, NoInvoicesArt, NoResults } from "../no-results";
 
 const FIELD =
   "h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 focus:outline-none";
@@ -150,10 +151,14 @@ export function MessagesPage() {
             </div>
             <ul className="min-h-0 flex-1 overflow-y-auto pb-24 md:pb-4">
               {threads.length === 0 && (
-                <li className="px-4 py-10 text-center text-sm text-slate-500">
-                  {list.data.threads.length
-                    ? "Nothing here."
-                    : "No message yet. Write the first one with New."}
+                <li>
+                  {list.data.threads.length ? (
+                    <NoResults size={72} title="Nothing here.">Try another filter, or clear the search.</NoResults>
+                  ) : (
+                    <EmptyState art={<NoInvoicesArt size={72} />} title="No message yet.">
+                      Write the first one with New.
+                    </EmptyState>
+                  )}
                 </li>
               )}
               {threads.map((thread) => (

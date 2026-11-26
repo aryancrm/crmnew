@@ -13,6 +13,7 @@ import { shortPeso } from "../ceo";
 import { Button, CARD, dayLabel, Dialog, PageHead, PageState, Problem, useAction } from "../ui";
 import { withUnit } from "../team/switch";
 import { ClidpRoadCard } from "./clidp-road";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 const useClidp = () => useQuery({ queryKey: ["clidp", "day"], queryFn: () => api<ClidpDay>("/api/clidp/day") });
 
@@ -146,7 +147,7 @@ export function ClidpHome() {
       <section className={`${CARD} min-w-0`}>
         <h3 className="border-b border-slate-100 px-4 py-3 text-sm font-bold text-slate-900">Accounts to call (bulk reorders)</h3>
         {toCall.length === 0 ? (
-          <p className="px-4 py-3 text-[13px] text-slate-500">No account due or late.</p>
+          <EmptyState title="No account due or late.">Accounts due to reorder in bulk, or late, show here to call.</EmptyState>
         ) : (
           <ul className="divide-y divide-slate-100">
             {toCall.map((a) => (
@@ -171,7 +172,7 @@ export function ClidpHome() {
         <section className={`${CARD} min-w-0`}>
           <h3 className="border-b border-slate-100 px-4 py-3 text-sm font-bold text-slate-900">Money owed, biggest first</h3>
           {data.owed.rows.length === 0 ? (
-            <p className="px-4 py-3 text-[13px] text-slate-500">Nothing owed.</p>
+            <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing owed.">Money owed by the accounts shows here, the biggest first.</EmptyState>
           ) : (
             <ul className="divide-y divide-slate-100">
               {data.owed.rows.map((row) => (
@@ -192,7 +193,11 @@ export function ClidpHome() {
               <Plus className="size-3.5" /> Add
             </Button>
           </header>
-          {ending.length === 0 ? <p className="px-4 py-3 text-[13px] text-slate-500">No listing ends within 60 days.</p> : <ListingRows listings={ending} />}
+          {ending.length === 0 ? (
+            <EmptyState art={<NoInvoicesArt size={72} />} title="No listing ends within 60 days.">Listings coming to the end of their validity show here.</EmptyState>
+          ) : (
+            <ListingRows listings={ending} />
+          )}
         </section>
       </div>
       {adding && <ListingDialog accounts={live} onClose={() => setAdding(false)} />}
@@ -216,7 +221,13 @@ export function ClidpListingsPage() {
           </Button>
         }
       />
-      <section className={CARD}>{data.listings.length === 0 ? <p className="px-4 py-4 text-[13px] text-slate-500">No listing yet.</p> : <ListingRows listings={data.listings} />}</section>
+      <section className={CARD}>
+        {data.listings.length === 0 ? (
+          <EmptyState title="No listing yet.">Each distributor's own brand of our medicine and its certificate shows here.</EmptyState>
+        ) : (
+          <ListingRows listings={data.listings} />
+        )}
+      </section>
       {adding && <ListingDialog accounts={data.accounts.filter((a) => a.state !== "lost")} onClose={() => setAdding(false)} />}
     </div>
   );

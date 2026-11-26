@@ -11,6 +11,7 @@ import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { api } from "../api";
 import { shortPeso } from "../ceo";
 import { Button, CARD, dayLabel, Dialog, Facts, PageHead, PageState, Pill, Problem, peso, Tabs, useAction } from "../ui";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 const PORTAL = { philgeps: "PhilGEPS", ps: "PS-PhilGEPS" } as const;
 const MODE: Record<TenderMode, string> = {
@@ -222,15 +223,15 @@ export function TenderFinderPage() {
       <Problem message={action.problem?.message} />
       <section className={`${CARD} min-w-0`}>
         {data.rows.length === 0 ? (
-          <p className="px-4 py-6 text-center text-[13px] text-slate-500">
-            {data.view === "new"
-              ? "Nothing new: every open tender for our medicines is screened, made a tender, or closed."
-              : data.view === "screened"
-                ? "Nothing screened and waiting. Add a tender worth bidding on from New."
-                : data.view === "tenders"
-                  ? "No found tender has been made a tender yet."
-                  : "Nothing found yet."}
-          </p>
+          data.view === "new" ? (
+            <EmptyState title="Nothing new">Every open tender for our medicines is screened, made a tender, or closed.</EmptyState>
+          ) : data.view === "screened" ? (
+            <EmptyState title="Nothing screened and waiting.">Add a tender worth bidding on from New.</EmptyState>
+          ) : data.view === "tenders" ? (
+            <EmptyState title="No found tender has been made a tender yet.">Found tenders show here once they are made tenders.</EmptyState>
+          ) : (
+            <EmptyState title="Nothing found yet.">What the robot finds on PhilGEPS and PS-PhilGEPS for our medicines shows here.</EmptyState>
+          )
         ) : (
           <ul className="divide-y divide-slate-100">
             {data.rows.map((found) => {
@@ -387,7 +388,9 @@ function MakeTenderDialog({ detail, onClose }: { detail: FoundDetail; onClose: (
       </p>
       <h4 className="mt-4 text-[12.5px] font-bold text-slate-900">Our bid, medicine by medicine</h4>
       {detail.lines.length === 0 ? (
-        <p className="mt-1 text-[12.5px] text-slate-500">No line was read on this notice: add the medicines on the tender's page.</p>
+        <EmptyState art={<NoInvoicesArt size={72} />} title="No line was read on this notice">
+          Add the medicines on the tender's page.
+        </EmptyState>
       ) : (
         <ul className="mt-1 divide-y divide-slate-100 rounded-xl border border-slate-200">
           {detail.lines.map((line) => {
@@ -650,7 +653,9 @@ export function FoundTenderPage() {
           What it asks for <span className="font-normal text-slate-400">· {data.lines.length} {data.lines.length === 1 ? "line" : "lines"} of ours</span>
         </h3>
         {data.lines.length === 0 ? (
-          <p className="px-4 py-3 text-[13px] text-slate-500">No line of ours was read on this notice{found.molecules.length ? " yet (its papers may hold them)" : ""}.</p>
+          <EmptyState title={<>No line of ours was read on this notice{found.molecules.length ? " yet (its papers may hold them)" : ""}.</>}>
+            What the notice asks for, line by line, shows here.
+          </EmptyState>
         ) : (
           <table className="w-full min-w-[40rem] text-[13px]">
             <thead>

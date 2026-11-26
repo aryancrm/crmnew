@@ -18,6 +18,7 @@ import { ReasonDialog, waited } from "../orders/parts";
 import { count, dayLabel, PageState, peso } from "../ui";
 import { useWorkClock } from "../work-clock";
 import { Figure } from "../home/figures";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 type Lane = "check" | "invoice" | "collect";
 
@@ -93,12 +94,20 @@ export function FinanceLanes() {
           </div>
         </header>
         {empty ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 px-4 py-8 text-center text-xs text-slate-500">
-            {key === "check"
-              ? "No payment to check."
-              : key === "invoice"
-                ? "No invoice to make."
-                : "Nothing to collect."}
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60">
+            {key === "check" ? (
+              <EmptyState art={<NoInvoicesArt size={72} />} title="No payment to check.">
+                Advance orders waiting for their payment to be checked show here.
+              </EmptyState>
+            ) : key === "invoice" ? (
+              <EmptyState art={<NoInvoicesArt size={72} />} title="No invoice to make.">
+                Credit and COD orders show here, to check what they owe before sending them on.
+              </EmptyState>
+            ) : (
+              <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing to collect.">
+                Open invoices show here, the latest past due first.
+              </EmptyState>
+            )}
           </div>
         ) : key === "check" ? (
           data.check.map((card) => (
@@ -258,7 +267,7 @@ export function FinanceLanes() {
       )}
 
       {/* A phone: the three steps as tabs. */}
-      <div className="flex gap-1 rounded-xl bg-slate-100 p-1 xl:hidden">
+      <div className="flex gap-0.5 rounded-lg bg-slate-100 p-1 xl:hidden">
         {LANES.map((one) => (
           <button
             key={one.key}
@@ -275,14 +284,14 @@ export function FinanceLanes() {
                 { replace: true },
               )
             }
-            className={`flex flex-1 items-center justify-center gap-1 rounded-lg py-2 text-[11px] font-semibold ${
+            className={`flex min-w-0 flex-1 items-center justify-center gap-1 rounded-md px-2 py-1.5 text-[13px] transition-colors ${
               lane === one.key
-                ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
-                : "text-slate-600"
+                ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]"
+                : "text-slate-500 hover:text-slate-800"
             }`}
           >
             {one.number}. {one.title.replace(" payment", "").replace(" invoice", "")}
-            <span className="rounded-full bg-slate-200/70 px-1.5 text-[10px] tabular-nums">
+            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${lane === one.key ? "bg-slate-100 text-slate-700" : "bg-white/70 text-slate-500"}`}>
               {count(counts[one.key])}
             </span>
           </button>

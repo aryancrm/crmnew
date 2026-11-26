@@ -9,6 +9,7 @@ import { Download, Printer } from "lucide-react";
 import { Fragment } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState } from "../no-results";
 import { Button, PageHead, PageState } from "../ui";
 
 type Row = TargetSheet["rows"][number];
@@ -111,7 +112,13 @@ export function TargetSheetPage() {
         }
       />
       <PageState query={query} what="the target sheet" />
-      {data && data.rows.length === 0 && <p className="rounded-2xl border border-slate-200 bg-white p-6 text-slate-600">No target sheet for {data.month} yet.</p>}
+      {data && data.rows.length === 0 && (
+        <div className="rounded-2xl border border-slate-200 bg-white">
+          <EmptyState title={`No target sheet for ${data.month} yet.`}>
+            Once targets are set for the month, each person shows here with their target and what they achieved.
+          </EmptyState>
+        </div>
+      )}
       {data && grand && data.rows.length > 0 && (
         <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-2xs">
           <table className="w-full border-collapse text-[12.5px]">

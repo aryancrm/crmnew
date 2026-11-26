@@ -12,6 +12,7 @@ import { Printer, Snowflake } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState } from "../no-results";
 import { Figure } from "../home/figures";
 import { todayWords } from "../home/home";
 import { ReasonDialog } from "../orders/parts";
@@ -172,14 +173,24 @@ export function DispatchHome() {
               <span className="text-right">&nbsp;</span>
             </div>
             {shown.length === 0 ? (
-              <p className="px-4 py-10 text-center text-sm text-slate-500">
+              <EmptyState
+                title={
+                  <>
+                    {stage === "pending"
+                      ? "Nothing to pack or ship."
+                      : stage === "road"
+                        ? "Nothing on the road."
+                        : `Nothing delivered in the last ${data.doneDays} days.`}
+                    {paying !== "all" && " (with this payment)"}
+                  </>
+                }
+              >
                 {stage === "pending"
-                  ? "Nothing to pack or ship."
+                  ? "Orders that come for dispatch show here, to pack and send."
                   : stage === "road"
-                    ? "Nothing on the road."
-                    : `Nothing delivered in the last ${data.doneDays} days.`}
-                {paying !== "all" && " (with this payment)"}
-              </p>
+                    ? "Orders sent with a courier or rider show here until they are delivered."
+                    : "Orders show here once they are marked delivered."}
+              </EmptyState>
             ) : (
               <ul className="divide-y divide-slate-100">
                 {shown.map((card) => (

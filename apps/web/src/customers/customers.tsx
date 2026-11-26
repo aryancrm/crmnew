@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
+import { EmptyState, NoResults } from "../no-results";
 import { shortPeso } from "../ceo";
 import { CustomerDialog } from "./dialog";
 import { RepStrip } from "../rep-strip";
@@ -304,12 +305,16 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
       </div>
 
       {data.rows.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500 shadow-2xs">
-          {review && !q && !medrep
-            ? "Nothing to check: every customer a MedRep added has been checked. A new one waits here until Management looks at its details (name, address, licence) and marks it checked."
-            : q || review || picked || medrep
-              ? "No customer matches."
-              : "No customers yet."}
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-2xs">
+          {review && !q && !medrep ? (
+            <EmptyState title="Nothing to check: every customer a MedRep added has been checked. A new one waits here until Management looks at its details (name, address, licence) and marks it checked.">
+              The next customer a MedRep adds shows here.
+            </EmptyState>
+          ) : q || review || picked || medrep ? (
+            <NoResults title="No customer matches.">Try other words, or clear the filters.</NoResults>
+          ) : (
+            <EmptyState title="No customers yet.">Customers show here once one is added.</EmptyState>
+          )}
         </div>
       ) : view === "table" ? (
         <div

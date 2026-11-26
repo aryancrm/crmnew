@@ -9,6 +9,7 @@ import { ArrowLeft, PackageCheck, Pencil, Plus, Trash2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 import {
   Button,
   Card,
@@ -731,7 +732,9 @@ function PurchaseView({ data, onEdit }: { data: PurchaseDetail; onEdit: () => vo
       <Card className="p-4">
         <h2 className="mb-2 text-base font-bold">Other costs</h2>
         {costs.length === 0 ? (
-          <div className="text-ink-2">None recorded.</div>
+          <EmptyState art={<NoInvoicesArt size={72} />} title="None recorded.">
+            Freight, packaging, customs, insurance or transport paid on top of the goods shows here.
+          </EmptyState>
         ) : (
           <ul className="flex flex-col">
             {costs.map((cost, index) => (

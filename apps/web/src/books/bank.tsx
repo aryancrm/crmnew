@@ -8,6 +8,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState } from "../no-results";
 import { useAction } from "../ui";
 import { Plain, Primary, ZIN } from "./forms";
 import { kindInfo, zDate, zMoney } from "./kinds";
@@ -190,7 +191,7 @@ export function BankStatementPage() {
             ))}
           </tbody>
         </table>
-        {s && !s.lines.length && <p className="py-10 text-center text-[#6c718a]">Nothing in this view.</p>}
+        {s && !s.lines.length && <EmptyState title="Nothing in this view.">Lines from an imported bank statement show here, under the tab they belong to.</EmptyState>}
         {data.isPending && <p className="py-10 text-center text-[#6c718a]">Loading…</p>}
       </div>
     </div>

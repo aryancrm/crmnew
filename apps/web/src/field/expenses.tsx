@@ -9,6 +9,7 @@ import { Camera, Check, ChevronLeft, FileText, Pencil, Plus, Undo2 } from "lucid
 import { type FormEvent, type ReactNode, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState } from "../no-results";
 import { FIELD } from "../org/dialogs";
 import { smaller } from "../photo";
 import { manilaToday, RangePicker, short } from "../team/range";
@@ -172,12 +173,16 @@ export function FieldExpensesPage() {
             />
           ))}
           {data.rows.length === 0 && (
-            <li className="px-4 py-8 text-center text-sm text-slate-500">
-              {waiting
-                ? "Nothing waiting for you."
-                : mine
-                  ? "Nothing added in these days. Add what you spent with its bill."
-                  : "Nothing spent in these days."}
+            <li>
+              {waiting ? (
+                <EmptyState title="Nothing waiting for you.">Lines your team adds show here for you to approve or send back.</EmptyState>
+              ) : mine ? (
+                <EmptyState title="Nothing added in these days. Add what you spent with its bill.">
+                  Petrol, fares, parking, tolls, food, lodging and other costs show here once added.
+                </EmptyState>
+              ) : (
+                <EmptyState title="Nothing spent in these days.">What they spend shows here once they add it. Try other days.</EmptyState>
+              )}
             </li>
           )}
         </ul>

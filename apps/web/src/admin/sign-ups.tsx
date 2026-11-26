@@ -3,10 +3,11 @@
 
 import type { OrgTree, OrgUnit, Role, SignUpList, SignUpRow, SignUpSent } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, MailCheck, MailX, TriangleAlert, UserPlus } from "lucide-react";
+import { Check, Copy, MailCheck, MailX, TriangleAlert } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState } from "../no-results";
 import { FIELD, freshJob, JobFields, jobBody } from "../org/dialogs";
 import { Button, Dialog, Field, PageHead, PageState, Pill, Problem, Tabs, timeLabel, useAction } from "../ui";
 
@@ -97,13 +98,16 @@ export function AdminSignUps() {
           ))}
         </ul>
       ) : (
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-10 text-center text-sm text-ink-2">
-          <UserPlus className="mx-auto mb-2 size-6" aria-hidden="true" />
-          {status === "pending"
-            ? "No one is waiting. New sign-ups from the sign-in page show here."
-            : status === "accepted"
-              ? "No one was accepted yet."
-              : "No one was declined."}
+        <div className="rounded-xl border border-slate-200 bg-white">
+          {status === "pending" ? (
+            <EmptyState title="No one is waiting. New sign-ups from the sign-in page show here.">
+              Each one waits here until it is accepted or declined.
+            </EmptyState>
+          ) : status === "accepted" ? (
+            <EmptyState title="No one was accepted yet.">Sign-ups show here once they are accepted.</EmptyState>
+          ) : (
+            <EmptyState title="No one was declined.">Sign-ups show here once they are declined.</EmptyState>
+          )}
         </div>
       )}
 

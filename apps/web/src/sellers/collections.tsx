@@ -12,6 +12,7 @@ import { useMe } from "../auth";
 import { shortPeso } from "../ceo";
 import { seatWords } from "../seat-words";
 import { CARD, count, dayLabel, PageHead, PageState } from "../ui";
+import { EmptyState } from "../no-results";
 
 /** The desks that open the books (Zoho's documents). */
 const BOOK_READERS = ["inventory", "management", "finance", "ceo", "admin"];
@@ -76,8 +77,8 @@ export function CollectionsPage() {
           <tbody className="divide-y divide-slate-100">
             {data.rows.length === 0 && (
               <tr>
-                <td colSpan={4} className="px-4 py-6 text-center text-slate-500">
-                  Nothing owed. Every invoice is paid.
+                <td colSpan={4}>
+                  <EmptyState title="Nothing owed.">Every invoice is paid.</EmptyState>
                 </td>
               </tr>
             )}

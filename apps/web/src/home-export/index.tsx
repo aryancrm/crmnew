@@ -89,7 +89,8 @@ export function AboutPage({ children }: { children: ReactNode }) {
         <Navbar />
       </div>
       <div className="pt-[66px]">{children}</div>
-      <div className="hx">
+      {/* hx--flush: no line above the footer and less room, straight under the closing banner. */}
+      <div className="hx hx--flush">
         <Footer />
       </div>
     </>

@@ -13,6 +13,7 @@ import { api } from "../api";
 import { useMe } from "../auth";
 import { shortPeso } from "../ceo";
 import { Button, CARD, dayLabel, PageHead, PageState, Problem, useAction } from "../ui";
+import { EmptyState } from "../no-results";
 
 const LEADS = ["team_lead", "manager", "ceo", "admin"];
 
@@ -186,8 +187,8 @@ function TeamHuddlePage() {
           <tbody className="divide-y divide-slate-100">
             {data.rows.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-slate-500">
-                  No sellers under you.
+                <td colSpan={6}>
+                  <EmptyState title="No sellers under you.">Your team's evening numbers show here once your sellers declare them.</EmptyState>
                 </td>
               </tr>
             )}

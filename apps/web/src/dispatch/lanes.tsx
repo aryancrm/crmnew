@@ -12,6 +12,7 @@ import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 import { type DispatchAsk, DispatchDialogs } from "./parts";
 import { ReasonDialog, waited } from "../orders/parts";
 import { count, dayLabel, inPacks, PageState, peso, useAction } from "../ui";
@@ -96,12 +97,20 @@ export function DispatchLanes() {
           </div>
         </header>
         {list.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60 px-4 py-8 text-center text-xs text-slate-500">
-            {key === "pack"
-              ? "Nothing to pack."
-              : key === "ship"
-                ? "Nothing packed and waiting."
-                : "Nothing on the road."}
+          <div className="rounded-2xl border border-dashed border-slate-200 bg-white/60">
+            {key === "pack" ? (
+              <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing to pack.">
+                Orders that come for dispatch show here, to pick and pack.
+              </EmptyState>
+            ) : key === "ship" ? (
+              <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing packed and waiting.">
+                Packed orders show here until they are handed to a courier or rider.
+              </EmptyState>
+            ) : (
+              <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing on the road.">
+                Orders sent out show here until the customer has them.
+              </EmptyState>
+            )}
           </div>
         ) : (
           list.map((card) => (
@@ -215,7 +224,7 @@ export function DispatchLanes() {
       )}
 
       {/* A phone: the three steps as tabs. */}
-      <div className="flex gap-1 rounded-xl bg-slate-100 p-1 xl:hidden">
+      <div className="flex gap-0.5 rounded-lg bg-slate-100 p-1 xl:hidden">
         {LANES.map((one) => (
           <button
             key={one.key}
@@ -232,14 +241,14 @@ export function DispatchLanes() {
                 { replace: true },
               )
             }
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold ${
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-[13px] whitespace-nowrap transition-colors ${
               lane === one.key
-                ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
-                : "text-slate-600"
+                ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]"
+                : "text-slate-500 hover:text-slate-800"
             }`}
           >
             {one.number}. {one.title}
-            <span className="rounded-full bg-slate-200/70 px-1.5 text-[10px] tabular-nums">
+            <span className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums ${lane === one.key ? "bg-slate-100 text-slate-700" : "bg-white/70 text-slate-500"}`}>
               {count(counts[one.key])}
             </span>
           </button>
@@ -259,7 +268,9 @@ export function DispatchLanes() {
           </span>
         </h2>
         {data.delivered.length === 0 ? (
-          <p className="text-xs text-slate-500">Nothing delivered yet today.</p>
+          <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing delivered yet today.">
+            Each order delivered today shows here.
+          </EmptyState>
         ) : (
           <ul className="grid gap-x-6 gap-y-1.5 text-[13px] sm:grid-cols-2 lg:grid-cols-3">
             {data.delivered.map((card) => (

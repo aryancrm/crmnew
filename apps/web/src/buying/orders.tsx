@@ -10,6 +10,7 @@ import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useChoices, useMay } from "../books/forms";
+import { EmptyState, NoResults } from "../no-results";
 import { Button, count, PageHead, PageState, Pill, Problem, Tabs, useAction } from "../ui";
 import { NewVendorDialog } from "./vendors";
 import {
@@ -153,8 +154,12 @@ export function PurchaseOrdersPage() {
                 ))}
                 {data.rows.length === 0 && (
                   <tr>
-                    <td colSpan={6} className="px-4 py-10 text-center text-slate-500">
-                      No purchase order here.
+                    <td colSpan={6}>
+                      {q ? (
+                        <NoResults title="No purchase order here.">No order matches that PO number, reference or vendor. Try other words.</NoResults>
+                      ) : (
+                        <EmptyState title="No purchase order here.">Purchase orders show here by where each one stands, once there are any.</EmptyState>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -659,7 +664,11 @@ function ReceivedPanel({
       )}
       <Box title="What came in" aside={<span className="text-[12px] text-slate-500">Cost of one piece: at the order's price, and now (with freight, customs…)</span>}>
         {batches.length === 0 ? (
-          <p className="px-4 py-6 text-center text-[13px] text-slate-500">{order.fromZoho ? "Received in the old system before the switch: its receives are in the Books view." : "Nothing came yet."}</p>
+          order.fromZoho ? (
+            <p className="px-4 py-6 text-center text-[13px] text-slate-500">Received in the old system before the switch: its receives are in the Books view.</p>
+          ) : (
+            <EmptyState title="Nothing came yet.">Each delivery put on the shelf for this order shows here, batch by batch.</EmptyState>
+          )
         ) : (
           <div className="overflow-x-auto">
             <table className={TABLE}>
@@ -718,7 +727,7 @@ function BilledPanel({ order, extra, canBill, today, onDone }: { order: BookDoc;
     <>
       <Box title="The vendor's bills for this order">
         {bills.length === 0 ? (
-          <p className="px-4 py-6 text-center text-[13px] text-slate-500">No bill yet.</p>
+          <EmptyState title="No bill yet.">The vendor's bills for this order show here once they are entered.</EmptyState>
         ) : (
           <ul className="divide-y divide-slate-100">
             {bills.map((bill) => (
@@ -876,7 +885,7 @@ function PaidPanel({ order, canPay, today }: { order: BookDoc; canPay: boolean; 
   return (
     <Box title="Paying the vendor" aside={<span className="text-[12px] text-slate-500">Finance records each payment</span>}>
       {bills.length === 0 ? (
-        <p className="px-4 py-6 text-center text-[13px] text-slate-500">Nothing to pay before the vendor's bill is entered (step 3).</p>
+        <EmptyState title="Nothing to pay before the vendor's bill is entered (step 3).">Each bill shows here with what is still to pay on it.</EmptyState>
       ) : (
         <ul className="divide-y divide-slate-100">
           {bills.map((bill) => (

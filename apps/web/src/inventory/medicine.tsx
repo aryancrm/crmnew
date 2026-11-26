@@ -35,6 +35,7 @@ import {
   timeLabel,
 } from "../ui";
 import { StatusPill } from "./inventory";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 type Line = MedicineDetail["batches"][number];
 type Open =
@@ -74,7 +75,7 @@ function EditTabs({
   ];
   return (
     <div className="-mt-1 flex flex-col gap-1.5">
-      <div role="tablist" className="flex flex-wrap gap-1 rounded-xl bg-slate-100 p-1">
+      <div role="tablist" className="flex flex-wrap gap-0.5 rounded-lg bg-slate-100 p-1">
         {tabs.map((tab) => (
           <button
             key={tab.kind}
@@ -83,11 +84,11 @@ function EditTabs({
             aria-selected={tab.kind === now}
             disabled={!tab.allowed}
             onClick={() => onPick(tab.kind)}
-            className={`flex-1 rounded-lg px-3 py-1.5 text-[13px] font-semibold whitespace-nowrap ${
+            className={`flex-1 rounded-md px-3.5 py-1.5 text-[13px] whitespace-nowrap transition-colors ${
               tab.kind === now
-                ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
+                ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]"
                 : tab.allowed
-                  ? "text-slate-600 hover:bg-white/70"
+                  ? "text-slate-500 hover:text-slate-800"
                   : "cursor-not-allowed text-slate-400"
             }`}
           >
@@ -272,7 +273,7 @@ export function Medicine() {
               )}
             </div>
             {data.batches.length === 0 ? (
-              <div className="py-6 text-center text-slate-500">Nothing on the shelf.</div>
+              <EmptyState title="Nothing on the shelf.">This medicine's batches show here once stock is received.</EmptyState>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
@@ -353,7 +354,7 @@ export function Medicine() {
               What moved
             </h2>
             {data.moves.length === 0 ? (
-              <div className="py-6 text-center text-slate-500">No movement yet.</div>
+              <EmptyState title="No movement yet.">Stock received, moved, counted, packed for an order or back from one shows here.</EmptyState>
             ) : (
               <ul className="flex flex-col">
                 {data.moves.map((move) => (
@@ -469,7 +470,11 @@ export function Medicine() {
                   </button>
                 )}
               </div>
-              {data.promos.length === 0 && <div className="text-slate-500">No promo.</div>}
+              {data.promos.length === 0 && (
+                <EmptyState art={<NoInvoicesArt size={72} />} title="No promo.">
+                  Promos on this medicine show here.
+                </EmptyState>
+              )}
               {data.promos.map((promo) => (
                 <div
                   key={promo.id}
@@ -517,7 +522,11 @@ export function Medicine() {
                   </button>
                 )}
               </div>
-              {data.offers.length === 0 && <div className="text-slate-500">No offer.</div>}
+              {data.offers.length === 0 && (
+                <EmptyState art={<NoInvoicesArt size={72} />} title="No offer.">
+                  Offers on this medicine show here.
+                </EmptyState>
+              )}
               {data.offers.map((offer) => (
                 <div key={offer.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
                   <span>
