@@ -853,10 +853,15 @@ export function SeatRow({
         <Menu
           busy={act.busy}
           items={[
-            {
-              label: holder ? "Someone covers (leave)" : "Someone covers it meanwhile",
-              onClick: () => open({ kind: "cover", seat }),
-            },
+            // A lead's seat isn't covered by someone else (26 Nov): vacant, its people go to the lead above.
+            ...(seat.lead
+              ? []
+              : [
+                  {
+                    label: holder ? "Someone covers (leave)" : "Someone covers it meanwhile",
+                    onClick: () => open({ kind: "cover", seat }),
+                  },
+                ]),
             ...(seat.acting
               ? [
                   {

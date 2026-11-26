@@ -7,7 +7,7 @@
 import { sql } from "drizzle-orm";
 import { addCustomer } from "../customers/service";
 import { type Database, rows } from "../db/index";
-import { addPerson, addSeat, coverSeat, projectOrg } from "../org/service";
+import { addPerson, addSeat, projectOrg } from "../org/service";
 import type { BuyerType, Me, OrderItemInput } from "../types";
 import { alignDemoMoneyDates, spreadDemoStepTimes } from "./seed-times";
 import { actOnOrder,
@@ -71,17 +71,8 @@ export async function seedDemoTeam(db: Database, password: string): Promise<bool
     name: "HOS | Makati",
     cities: ["Makati", "Taguig", "Pateros"],
   });
-  // Mindanao's team lead seat is vacant: Daniel covers it, so Carlo reports to him meanwhile.
-  const mindanaoLead = await rows<{ id: number }>(
-    db,
-    sql`select s.id::int as id from seat s join org_unit u on u.id = s.unit_id where u.name = 'Mindanao' and s.lead and s.active`,
-  );
-  if (mindanaoLead[0])
-    await coverSeat(db, ceo, mindanaoLead[0].id, {
-      personId: daniel.id,
-      until: "2027-12-31",
-      reason: "Until Mindanao's team lead joins",
-    });
+  // Mindanao's team lead seat is vacant: Carlo reports to the lead above it, the Hospital head
+  // (26 Nov: a lead's seat isn't covered by someone else).
   const carlo = await rep("Carlo", "Mindanao", {
     name: "HOS | Davao",
     cities: ["Davao City", "Tagum", "Panabo"],

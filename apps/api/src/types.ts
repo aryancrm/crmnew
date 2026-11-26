@@ -5068,6 +5068,8 @@ export type VacantSeats = {
     days: number;
     /** The team lead it waits with. */
     lead: string | null;
+    /** A lead's own seat: never covered by someone else; its people report to the lead above. */
+    leads: boolean;
     cover: { holdingId: number; personId: number; name: string; until: string | null } | null;
     /** A joiner or a move already planned into it. */
     promised: { name: string; startsOn: string } | null;

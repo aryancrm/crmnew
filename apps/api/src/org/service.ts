@@ -165,7 +165,9 @@ type PersonRow = {
  * first one they were given), and each
  * channel's head is whoever leads its top unit. A seat's boss is the lead of its unit (a lead's:
  * of the unit above), else the seat it names; a vacant boss seat is skipped upwards and an acting
- * cover counts as its occupant. People with no seat are left as they are. Writes only what changed.
+ * cover counts as its occupant, except on a lead seat (26 Nov, the backend developer: "when the team
+ * lead is vacant, supervision goes straight to the one above; don't anchor it on someone else, it
+ * isn't their task"). People with no seat are left as they are. Writes only what changed.
  */
 export async function projectOrg(db: Runner, today = todayManila()): Promise<void> {
   const units = await rows<UnitRow>(
@@ -212,7 +214,8 @@ export async function projectOrg(db: Runner, today = todayManila()): Promise<voi
       if (seat && (!known || (seat.lead && !known.lead))) firstSeatOf.set(hold.personId, seat);
     } else actingOf.set(hold.seatId, hold.personId);
   }
-  const occupant = (seat: SeatRow) => actingOf.get(seat.id) ?? holderOf.get(seat.id) ?? null;
+  // A lead seat is led by its holder only: vacant, its people go to the lead above (26 Nov).
+  const occupant = (seat: SeatRow) => (seat.lead ? null : actingOf.get(seat.id)) ?? holderOf.get(seat.id) ?? null;
   const parentOf = (unitId: number) => unitById.get(unitId)?.parentId ?? null;
 
   const nextUp = (seat: SeatRow): SeatRow | null => {
@@ -227,7 +230,7 @@ export async function projectOrg(db: Runner, today = todayManila()): Promise<voi
     return null;
   };
   const bossOf = (seat: SeatRow): number | null => {
-    const own = new Set([holderOf.get(seat.id), actingOf.get(seat.id)]);
+    const own = new Set([holderOf.get(seat.id), seat.lead ? undefined : actingOf.get(seat.id)]);
     const seen = new Set([seat.id]);
     let up = nextUp(seat);
     while (up && !seen.has(up.id)) {
@@ -1040,6 +1043,15 @@ export async function coverSeat(
   allow(me, roles, "arrange cover");
   await change(db, async (tx, today) => {
     const seat = await seatRow(tx, seatId, today);
+    // A lead's seat isn't covered by someone else (26 Nov, the backend developer: "it isn't their
+    // task"): while it is vacant, its people report to the lead above it.
+    if (seat.lead)
+      throw new Refusal(
+        400,
+        "invalid",
+        "A team lead's or head's seat isn't covered by someone else: while it is vacant, its people report to the lead above it.",
+        "seatId",
+      );
     const person = await activePerson(tx, input.personId);
     if (seat.holderId === person.id)
       throw new Refusal(
@@ -1513,7 +1525,8 @@ export async function ledUnits(db: Runner, me: Me): Promise<number[]> {
     db,
     sql`with recursive down as (
         select s.unit_id as id from seat_holder h join seat s on s.id = h.seat_id and s.active and s.lead
-        where h.person_id = ${me.id} and ${inForce("h", todayManila())}
+        -- Led by its holder only: a cover never leads a team (26 Nov).
+        where h.person_id = ${me.id} and h.kind = 'holder' and ${inForce("h", todayManila())}
         union all select u.id from org_unit u join down on u.parent_id = down.id where u.active)
       select distinct id::int as id from down`,
   );

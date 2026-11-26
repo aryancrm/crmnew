@@ -6,6 +6,7 @@ import { migrate } from "../db/migrate";
 import { seedFixture } from "../inventory/fixture";
 import { addDays, todayManila } from "../inventory/rules";
 import { seedDemo } from "../seed";
+import { projectOrg } from "./service";
 import type {
   CustomerList,
   Me,
@@ -245,31 +246,28 @@ describe("the company's tree", () => {
     const daniel = (await tree()).units
       .flatMap((unit) => unit.seats)
       .find((seat) => seat.holder?.name === "Daniel");
+    // A lead's seat isn't covered by someone else (26 Nov: "when the team lead is vacant, supervision
+    // goes straight to the one above; it isn't their task"): refused, and Joy stays with Naresh.
     const cover = await send("naresh", `/api/org/seats/${headSeat?.id}/cover`, {
       personId: daniel?.holder?.personId,
       until: addDays(todayManila(), 10),
       reason: "Until the RX head joins",
     });
-    expect(cover.status).toBe(200);
-    expect((await me("joy")).reportsTo?.name).toBe("Daniel");
-    // Daniel keeps his own seat and role while covering.
+    expect(cover.status).toBe(400);
+    expect((await me("joy")).reportsTo?.name).toBe("Naresh");
     expect((await me("daniel")).role).toBe("team_lead");
-    const covered = (await unitNamed("Prescription Business"))?.seats.find((seat) => seat.lead);
-    expect(covered?.acting?.name).toBe("Daniel");
+    // An acting holder already on a lead seat (from before this rule) leads nobody: the tree skips it.
+    await db.execute(
+      sql`insert into seat_holder (seat_id, person_id, kind, starts_on, ends_on, reason, by_person)
+        values (${headSeat?.id}, ${daniel?.holder?.personId}, 'acting', ${todayManila()}::date, ${addDays(todayManila(), 10)}::date, 'Old cover', ${daniel?.holder?.personId})`,
+    );
+    await projectOrg(db);
+    expect((await me("joy")).reportsTo?.name).toBe("Naresh");
     const [channel] = await rows<{ head: string | null }>(
       db,
       sql`select p.name as head from channel ch left join person p on p.id = ch.head_id where ch.code = 'RX'`,
     );
-    expect(channel?.head).toBe("Daniel");
-    // A cover must end today or later.
-    const past = await send("naresh", `/api/org/seats/${headSeat?.id}/cover`, {
-      personId: daniel?.holder?.personId,
-      until: addDays(todayManila(), -1),
-    });
-    expect(past.status).toBe(400);
-    expect((await send("naresh", `/api/org/holdings/${covered?.acting?.id}/end`, {})).status).toBe(
-      200,
-    );
+    expect(channel?.head ?? null).not.toBe("Daniel");
     expect((await me("joy")).reportsTo?.name).toBe("Naresh");
   });
 
