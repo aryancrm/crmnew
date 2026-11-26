@@ -4085,7 +4085,7 @@ medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 dat
   checked" (no such step: Management reads them on approving, 19 Nov). **Found, not changed (asked
   Aryan):** the PAP person can't answer her patients on Messenger or by email; only the Online desk
   and the Admin can. Also: the two-step sign-in test waits out a code's last seconds (it failed
-  once on GitHub on a busy machine). Local; not live yet.
+  once on GitHub on a busy machine). Live on one.bishnoi.ai the same night, with (208).
 - 26 Nov (208), Aryan, night: "put it all live; Fhaye should reply too; after the letter it is the
   same process, Management, Finance, Dispatch, but write everywhere that it is PAP's; the agency
   doesn't pay the whole, so who records how much came, Fhaye or Finance? You decide; the patient
@@ -4107,4 +4107,7 @@ medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 dat
   every letter by where its money stands, with how many days it has waited for the agency.
   Migration 0162. (4) Confirmed: each company is its own (people, stock, orders, money, enquiries,
   its own pages, mailboxes, websites and automatic emails); 2MG today, GetMeds and any other
-  added in the control panel the same way (section 28).
+  added in the control panel the same way (section 28). **Live on one.bishnoi.ai** (API and web,
+  commit `21f843c`), a database backup just before; the live API applied 0161 and 0162. The full
+  test run had caught one mistake before it went out: the agency-waiting check came out unknown
+  for orders with no type and hid their debts from Management's check (fixed: 851 tests green).
