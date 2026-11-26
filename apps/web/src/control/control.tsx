@@ -225,7 +225,7 @@ function Companies() {
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-semibold text-slate-900">{one.name}</span>
                     <Pill>{one.code}</Pill>
-                    {one.home && <Pill tone="info">The server's own</Pill>}
+                    {one.home && <span title="Its data is the server's main database (what was there before several companies); it can't be paused."><Pill tone="info">Main company</Pill></span>}
                     {one.pausedAt ? <Pill tone="warn">Paused</Pill> : one.running ? <Pill tone="good">Working</Pill> : <Pill tone="bad">Can't be reached</Pill>}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-slate-600">

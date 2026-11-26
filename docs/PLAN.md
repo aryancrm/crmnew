@@ -4119,3 +4119,16 @@ medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 dat
   is one form (the setup key, the login ID, the name, the password twice) and signs in at once;
   five wrong tries still lock a login for 15 minutes. Control migration 0002 drops the kept
   authenticator keys. A company's own people's two-step sign-in is unchanged.
+- 26 Nov (210), Aryan, in an incognito window: "Sign in opens the systems straight away, nothing
+  about the company; I want Sign in to open a popup for the company's ID and password, then that
+  company's apps; /control is the super admin's". Asked which way; he chose **one sign-in, then the
+  company's apps**. The navbar's Sign in (`/signin`) now shows "Sign in to your company" (the
+  company's ID, like info@2mginc.com, or a person's own login ID, and the password; the phone code
+  for whoever uses two-step sign-in); after it, the company's name and the systems this login may
+  open: the company's ID (its Admin) and the CEO every app of the company, Finance its desk and
+  Books, anyone with one system straight into it, a one-time password changed first. A
+  department's own page (`/login/<department>`) still signs in there directly. The control panel's
+  "The server's own" reads "Main company" (its data is the server's main database; it can't be
+  paused). Checked: the form answers on a demo copy, the server opens the person's own department
+  with none picked, and which systems each login gets (a web test); the page after signing in was
+  not clicked through (the demo's password isn't mine to type).
