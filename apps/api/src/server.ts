@@ -40,6 +40,8 @@ if (process.env.COMPANIES !== "on") {
 } else {
   const places = mainUrl ? postgresPlaces(mainUrl) : folderPlaces(mainDir);
   const control = await places.control();
+  // Read by each company's channel jobs once the list is made: a paused company's pages wait.
+  let paused = (_orgId: string): boolean => false;
   const list = await openCompanies({
     control,
     places,
@@ -54,11 +56,13 @@ if (process.env.COMPANIES !== "on") {
     ready: (db, ref) =>
       asCompany(ref, async () => {
         await readyCompany(db, { home: ref.home, embedded, label: ref.code });
-        // The pages and mailboxes set up on the server are the first company's.
-        if (ref.home && process.env.CHANNEL_JOBS !== "off") startChannelJobs(db);
+        // Each company reads its own Facebook pages, mailboxes and websites (Aryan, 26 Nov: 2MG and
+        // GetMeds each have their own), under its own name: the timers keep this company's context.
+        if (process.env.CHANNEL_JOBS !== "off") startChannelJobs(db, () => !paused(ref.orgId));
         return createApp(db, { webUrl });
       }),
   });
+  paused = (orgId) => Boolean(list.byOrgId(orgId)?.row.pausedAt);
   for (const one of list.all()) console.log(`company: ${one.ref.name} (${one.ref.code}, Org ID ${one.ref.orgId}, @${one.ref.loginDomain})`);
   setInterval(() => {
     for (const one of list.all())

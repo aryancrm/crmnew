@@ -229,7 +229,11 @@ function GlSettlement({
             </Button>
           )}
           {!delivered && <span className="text-[12px] text-slate-600 sm:col-span-3">The claim goes after the delivery.</span>}
-          {!finance && delivered && <span className="text-[12px] text-slate-600 sm:col-span-3">Finance sends the claim and records what the agency pays.</span>}
+          {!finance && delivered && (
+            <span className="text-[12px] text-slate-600 sm:col-span-3">
+              PAP marks the claim and what comes in (Guarantee letters); Finance confirms the money.
+            </span>
+          )}
         </div>
       )}
       <Problem message={money.problem?.message} />

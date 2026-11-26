@@ -176,12 +176,19 @@ const viaSql = sql.raw(`(select jsonb_build_object('code', l.code, 'source', coa
   .join(" ")} else l.source end))
   from lead l left join channel_account site on site.id = l.site_account_id where l.id = o.lead_id)`);
 
+/** A guarantee letter's order is PAP's (alias `o`; Aryan, 26 Nov: "write everywhere that it is
+ *  PAP's", as an order says its channel): its PAP case and who works it, when it has one. */
+const papSql = sql`(case when o.order_type = 'gl' or exists (select 1 from lead g where g.order_id = o.id and g.road = 'gl')
+  then coalesce((select jsonb_build_object('code', l.code, 'leadId', l.id::int, 'by', p.name)
+    from lead l left join person p on p.id = l.assigned_to where l.order_id = o.id and l.road = 'gl' order by l.id desc limit 1),
+    jsonb_build_object('code', null, 'leadId', null, 'by', null)) end)`;
+
 const rowColumns = sql`
   o.id::int as id, o.code, o.customer_id::int as "customerId", c.name as customer, rep.name as medrep,
   o.status, (o.payment_terms = 'days') as credit, o.total::int as total, o.delivery_fee::int as "deliveryFee", o.points_used::int as "pointsUsed",
   ${iso("o.created_at")} as "createdAt", ${iso("o.updated_at")} as "updatedAt", o.flag_reason as "flagReason",
   o.patient_order as "patientOrder", o.patient_name as "patientName", o.note, o.order_type as "orderType", o.division,
-  exists (select 1 from order_version v where v.order_id = o.id and v.kind = 'changed') as changed, ${viaSql} as via`;
+  exists (select 1 from order_version v where v.order_id = o.id and v.kind = 'changed') as changed, ${viaSql} as via, ${papSql} as pap`;
 
 /** The channel an order shows (Aryan, 22 Nov: one list of channels, the target sheet's): its
  *  Division, which is the sheet's channel of the seat it was placed from (CLIDP, MD Telesales, RX
@@ -1452,6 +1459,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
     approverId,
     restorable,
     team: inTeam,
+    gl: order.type === "gl",
   };
   const can = orderActions(me, who);
   const held = order.status === "on_hold" || order.status === "exception";
@@ -1562,7 +1570,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
               coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late > 0), 0)::float8 as overdue,
               coalesce(max(dd.late) filter (where not dd.on_delivery and dd.late > 0), 0)::int as days,
               coalesce(sum(dd.balance) filter (where dd.source <> 'crm' and not dd.cod_waiting), 0)::float8 as zoho
-            from ${duesSql(todayManila())} dd where dd.customer_id = ${order.customerId} and dd.order_id is distinct from ${id}`,
+            from ${duesSql(todayManila())} dd where dd.customer_id = ${order.customerId} and dd.order_id is distinct from ${id} and not dd.gl_waiting`,
         )
       )[0] ?? { owed: 0, overdue: 0, days: 0, zoho: 0 },
       creditLimit,
@@ -2941,10 +2949,11 @@ async function visibleOrder(db: Runner, me: Me, id: number) {
     heldRole: HoldRole | null;
     leadId: number | null;
     team: boolean;
+    gl: boolean;
   }>(
     db,
     sql`${team(me)} select o.status, o.raised_by::int as "raisedBy", o.medrep_id::int as "medrepId", o.code, o.held_from as "heldFrom", o.held_role as "heldRole",
-        o.lead_id::int as "leadId", ${inTeamSql(me)} as team
+        o.lead_id::int as "leadId", ${inTeamSql(me)} as team, o.order_type = 'gl' as gl
       from sales_order o where o.id = ${id} and ${seen(me)}`,
   );
   if (!order)

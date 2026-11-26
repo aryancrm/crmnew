@@ -73,6 +73,7 @@ import { Orders } from "./orders/orders";
 import { OrdersToCheck } from "./orders/board";
 import { OrgPage } from "./org/teams";
 import { OrgChartPage } from "./org/chart-page";
+import { GlMoneyPage } from "./finance/gl";
 import { OwedReport } from "./finance/owed";
 import { CollectPage } from "./finance/collect";
 import { DeskPersonPage } from "./desk/person";
@@ -288,6 +289,7 @@ createRoot(root).render(
             <Route path="desk/team" element={<DeskReportPage />} />
             <Route path="desk/person/:id" element={<DeskPersonPage />} />
             <Route path="finance/prepaid" element={<OrdersToCheck key="prepaid" desk="finance" terms="advance" title="Prepaid orders" />} />
+            <Route path="finance/gl" element={<GlMoneyPage />} />
             <Route path="refunds" element={<Refunds />} />
             <Route path="finance/mine" element={<MyConfirmations />} />
             <Route path="returns" element={<Returns />} />

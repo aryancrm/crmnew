@@ -2532,13 +2532,21 @@ the inventory" for GetMeds.
   password (`hos1@2mginc.com`, `info@getmeds.ph`). No shared company password. The browser then
   remembers the company, so a login ID typed without the @ is that company's (else the first's):
   2MG's people sign in exactly as before. One company at a time in a browser.
-- **The first company is the server's own database**: 2MG Inc., `@2mginc.com`. Webhooks (Meta, the
-  websites), the Facebook pages and mailboxes set up on the server, and the tender robot are its.
+- **The first company is the server's own database**: 2MG Inc., `@2mginc.com`. The tender robot is
+  its. **Each company has its own Facebook pages, mailboxes and websites** (Aryan, 26 Nov: "2MG and
+  GetMeds each have their own"), connected by its own Admin under Online pages & mail: the server
+  reads every company's on its timer (a paused one's wait); Meta's one webhook goes to the company
+  that connected the page it is for (a page nobody connected waits at the first company's); a
+  website calls `/webhooks/store/<Org ID>` (the first company's keep `/webhooks/store/2mg`), as its
+  Channels page shows; every email it sends by itself goes from its own mailbox. Links a customer
+  or a new person opens without signing in (a quotation, the welcome link) name their company
+  (`?org=`), and a request to join goes by its email's domain.
 - **Our control panel** (`one.bishnoi.ai/control`; `/admin` is each company's own Admin pages): only
   for the people who run Bishnoi One, on logins of its own that are no company's: a short login ID
-  (no email), a password of 12 characters or more and, every time, the code from the authenticator
-  app on the phone. Five wrong tries lock it for 15 minutes. The first panel login is made with the
-  setup key the server writes in its log while there is none; after that the key is gone.
+  (no email) and a password of 8 characters or more; **no phone code** (Aryan, 26 Nov: "remove it";
+  until then 12 characters and the authenticator app's code every time). Five wrong tries lock it
+  for 15 minutes. The first panel login is made with the setup key the server writes in its log
+  while there is none (a new key at every start until then); after that the key is gone.
 - **Adding a company** (in the panel): its name, short code and login ID (an email on its own domain,
   not Gmail or the like). The panel makes its database, its company tree (one box per sales channel),
   and its first System admin on that login ID with a one-time password, shown once for Aryan to give
@@ -2575,9 +2583,11 @@ medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 dat
 - Emptying the dummy data Aryan asked to clear (26 Nov: "empty all the data, just keep the inventory
   … 2MG's too, those were dummy orders … keep the leads and enquiries in 2MG"): what goes is listed
   for his yes first; nothing is deleted before.
-- In GetMeds's own database an order still offers "Invoice from 2MG / GetMeds"; GetMeds's own
-  Facebook pages, mailboxes and websites, and the tender robot, stay with the first company until
-  set up for it; a person in both companies signs in to one at a time.
+- In GetMeds's own database an order still offers "Invoice from 2MG / GetMeds"; the tender robot
+  stays with the first company; a person in both companies signs in to one at a time. Which
+  Facebook pages and mailboxes move from 2MG's to GetMeds's is Aryan's to say (each is connected
+  in its company's own Online pages & mail).
+
 ## 29. Office or field: each seller's seat is one or the other (26 Nov 2026, built)
 
 Asked by the backend developer: split the sellers into those who stay in the office and work by
@@ -2608,7 +2618,7 @@ sets a seat's kind in Teams & people (Change the seat → Works); the holder's H
    gets its screens. A person given another seat of the other kind changes screens with it.
 
 **Built (26 Nov).**
-- `seat.works` (migration 0161): office or field, a MedRep seat's only. Every MedRep seat was set
+- `seat.works` (migration 0163): office or field, a MedRep seat's only. Every MedRep seat was set
   as its channel works (`works_of_channel`: HOSP, RX, PAP and MT field; ONLINE, TS, B2B, BID and
   CLIDP office); a new seat takes its channel's unless the form picks one. `person_works(id)` reads
   a person's main seat's kind (else their channel's); the sign-in carries it as `me.works`.
@@ -4105,14 +4115,71 @@ up right.
   panel's log). Online: a database backup just before (43 MB); `COMPANIES=on` and
   `HOME_COMPANY_LOGIN=info@2mginc.com` added to the API in Coolify; the live API applied 0160 and made
   the list: 2MG Inc., Org ID 237227, `@2mginc.com`. Signed-in people stayed signed in.
-- 26 Nov (207), asked by the backend developer: **office or field.** Every seller's seat is either Office (works by phone) or Field (visits doctors or hospitals), never both; HR moves a person to a seat of the other kind to change. Who places the order stays as each team works now; the sale counts for whoever takes and processes the order; the field and the office seller both see the customer (section 29). Plan only, nothing built yet.
-- 26 Nov (208), asked by the backend developer: "proceed". **Office or field built** (section 29): each MedRep seat carries its kind, set as its channel works; the CEO or the Admin changes it in Teams & people; the menu, the field's pages and the customer page follow it.
-- 26 Nov (209), the backend developer: an account isn't switched between office and field; it is handed to the next person, who carries on, and no data is lost. The two "not done" items of section 29 are dropped.
-- 26 Nov (210), asked by the backend developer (Kim's Refills due → a patient's page led nowhere): **a refill call from start to end.** Opened from Refills due, the customer's page says "Refills due › Details" and leads with the refill call: when they need their medicines and what they took last, (1) call them, (2) what they said: ordering now (the order form, then back to the list with "Order placed"), not yet (set the day they run out), no answer or call back (log the call), (3) the next one on the same list (`customers/refill-flow.tsx`).
-- 26 Nov (211), asked by the backend developer (a patient's page read as a new customer): **the customer page counts the old system too, and every customer has its number.** Their buying's Orders and Bought add the old system's ("3 · all in the old system", not "0 · + 3 earlier"); Paid says "in this system"; Medicines points to Prices given. Migration 0162 numbers every customer left without one (`CUS-00017`: only Add customer gave one, so seeds and imports showed a blank chip and an empty "Customer no.") and numbers any added later on the way in.
-- 26 Nov (212), asked by the backend developer: **Earlier orders by month.** The customer page's Earlier orders has a month picker: All months, This month, and every month they ordered in with its orders and total ("Oct 2026 · 1 order · ₱18,500"); a month with none says so (`/api/customers/:id/prices?month=2026-10`, `months`).
-- 26 Nov (213), asked by the backend developer ("walang upload files dito?"): **upload on a customer's Files.** Whoever keeps the customer's details (the sellers, Management, the Admin) uploads a photo or PDF there: a patient's prescription or valid ID, a business's BIR 2303, LTO permit or business permit, or any other file (migration 0163). Only the three papers count toward a business's missing list.
-- 26 Nov (214), the backend developer: **B2B like RX Business, office and field.** NBD and CRR work from the office (calls, referrals) for now; an NBD or CRR account set to In the field visits its accounts like an Rx CHC: its drugstores and distributors can be planned and visited (distributors joined the visit lists), and the customer page names the B2B account's owner (its NBD until handed over, then its CRR) as who visits or who calls. Whether any of them go out is still Aryan's to say (19 Nov: "decide later").
-- 26 Nov (215), the backend developer: **the order's General part is the account's.** A seller (or a lead for one of their people) orders in their account's Division only: the form shows it as it is ("B2B · yours"), the API refuses another ("This account's orders count for HOSP. For CLIDP, switch to an account of that Division."). Management, the Admin and the CEO still pick any; an order being fixed keeps its Division. **This replaces Aryan's 19 Nov rule** ("any other Division a pick away", section 4.2): to be told to him with pull request 8.
-- 26 Nov (216), the backend developer: **more than one account on one browser, like Google.** The avatar menu has *Add another account*: the sign-in page (`?add=1`) asks that account's own login ID and password (and code), and the account in use stays signed in beside it. The other accounts are listed in the menu with *Switch* (no password again; the app opens afresh as that account). Each account is only what its own login opened: the orders, sales and screens are that account's. At most five on one browser; a plain sign-in starts the browser afresh; *Sign out* signs every account out, on the server too (a shared computer keeps nobody's). Kept in an httpOnly cookie read only under `/api/auth` (`sid_more`); not while looking as someone else.
-- 27 Nov (217), the backend developer (the demo's Carlo reported to Daniel, who covered Mindanao's vacant lead seat): **a vacant lead seat goes to the lead above, never to a cover.** "When the team lead is vacant, supervision goes straight to the one above; don't anchor it on someone else, it isn't their task." A team lead's or head's seat can't be covered (the API refuses; Teams & people and Vacant seats offer no cover for it, and say "Its team reports to … meanwhile"); a cover already on one leads nobody (the tree and the teams a lead sees count holders only). Covering a vacant MedRep's area (section 26) is unchanged. The demo no longer has Daniel covering Mindanao: Carlo reports to the Hospital head.
+- 26 Nov (207), Aryan, evening: "the old repository handled the leads, enquiries and GL cases, all
+  automated: check it; 2MG and GetMeds are two companies, each with its own Facebook pages and its
+  own emails, on which the automatic emails go: is it built? If not, build it; any GL case from
+  anywhere, PAP's GL person handles it, the orders go to her; PCSO gets three quotations
+  automatically, the others one." Read the old CRM (`~/Projects/crm`: `frontend/lib/agency-quotes.ts`,
+  `backend/server/src/quotation.ts`, `apps/crm/src/customer-mail.ts`, the GL tracker). **Already so
+  (22 Nov):** a guarantee-letter case from any channel is the PAP person's (Fhaye Norella, Patient
+  Assistance Program Officer, on the local data), a seller's "Hand to PAP", the sale counted where
+  it came from, Management approving, Finance recording the agency's payment, the PAP app as the
+  GL tracker. **Built:** (1) each company's own Facebook pages, mailboxes, websites and links
+  (section 28); one Messenger drain per company. (2) PCSO three quotations, every other agency one
+  (on 22 Nov it was three for every agency): each medicine keeps the two other vendors' price for
+  one piece (the medicine page: PCSO's quotations 2 and 3; migration 0161), a PCSO case's
+  quotations 2 and 3 fill themselves from them (typed ones win, as before), and a vendor that is
+  one of the group's companies gets its whole quotation on its own letterhead; the 2MG logo only
+  on the first company's quotations. (3) Automatic emails on a case, as the old CRM: thank you for
+  contacting us (a new enquiry, an email one too; never one from a mailbox's past), the quotation
+  with its PDF (PCSO's once all three are there; a guarantee letter's says to apply with it), the
+  guarantee letter received, verified; once each, from the case's mailbox. Off until the Admin
+  switches them on (Company details → Automatic emails on a case), as the old CRM's owner decided;
+  the order's own emails unchanged. Not carried: "prescription checked" and "senior / PWD ID
+  checked" (no such step: Management reads them on approving, 19 Nov). **Found, not changed (asked
+  Aryan):** the PAP person can't answer her patients on Messenger or by email; only the Online desk
+  and the Admin can. Also: the two-step sign-in test waits out a code's last seconds (it failed
+  once on GitHub on a busy machine). Live on one.bishnoi.ai the same night, with (208).
+- 26 Nov (208), Aryan, night: "put it all live; Fhaye should reply too; after the letter it is the
+  same process, Management, Finance, Dispatch, but write everywhere that it is PAP's; the agency
+  doesn't pay the whole, so who records how much came, Fhaye or Finance? You decide; the patient
+  often pays the rest" and then "the agency's money comes very late, months sometimes; Fhaye marks
+  it when it comes and then Finance approves? But we give the medicine first, we don't make the
+  patient wait: build it that way." Decided and built: (1) **the PAP person reads and answers her
+  own cases on Messenger and by email** (only the Online desk and the Admin could). (2) **"PAP ·
+  GL" on every guarantee letter's order**: the order lists, the Management, Finance and Dispatch
+  boards, the order page (its case and the PAP person on hover); the sale still counts where the
+  patient came from. (3) **A guarantee letter's money**: the order goes Management, Finance,
+  Dispatch on credit to the agency, nothing paid first, so the medicine goes out (as before);
+  after the delivery the PAP person or Finance marks the claim sent; when money comes, often
+  months later, the PAP person marks it (the agency's, or the patient's rest) with its proof, and
+  **Finance confirms it against the bank: only then is it a payment**, or refuses it saying why;
+  Finance may still record a payment itself and alone lets the rest go (22 Nov). While the agency
+  hasn't paid anything, its money is not the patient's debt: the order checks, the customer lists
+  and the late-payment reminders leave it out; the company's totals and the books keep it.
+  **Guarantee letters** (Finance; the PAP person's "GL money"; the CEO's and the Admin's PAP app):
+  every letter by where its money stands, with how many days it has waited for the agency.
+  Migration 0162. (4) Confirmed: each company is its own (people, stock, orders, money, enquiries,
+  its own pages, mailboxes, websites and automatic emails); 2MG today, GetMeds and any other
+  added in the control panel the same way (section 28). **Live on one.bishnoi.ai** (API and web,
+  commit `21f843c`), a database backup just before; the live API applied 0161 and 0162. The full
+  test run had caught one mistake before it went out: the agency-waiting check came out unknown
+  for orders with no type and hid their debts from Management's check (fixed: 851 tests green).
+- 26 Nov (209), Aryan, making his control panel login: "make the password the normal 6 or 8, not
+  12; what is this phone code, is it needed?" Told him what the code protects (the panel gives
+  any company's Admin a new password) and that it isn't needed to work; he said **"Remove it"**.
+  The control panel now signs in with its login ID and a password of 8 characters or more; setup
+  is one form (the setup key, the login ID, the name, the password twice) and signs in at once;
+  five wrong tries still lock a login for 15 minutes. Control migration 0002 drops the kept
+  authenticator keys. A company's own people's two-step sign-in is unchanged.
+- 26 Nov (210), asked by the backend developer: **office or field.** Every seller's seat is either Office (works by phone) or Field (visits doctors or hospitals), never both; HR moves a person to a seat of the other kind to change. Who places the order stays as each team works now; the sale counts for whoever takes and processes the order; the field and the office seller both see the customer (section 29). Plan only, nothing built yet.
+- 26 Nov (211), asked by the backend developer: "proceed". **Office or field built** (section 29): each MedRep seat carries its kind, set as its channel works; the CEO or the Admin changes it in Teams & people; the menu, the field's pages and the customer page follow it.
+- 26 Nov (212), the backend developer: an account isn't switched between office and field; it is handed to the next person, who carries on, and no data is lost. The two "not done" items of section 29 are dropped.
+- 26 Nov (213), asked by the backend developer (Kim's Refills due → a patient's page led nowhere): **a refill call from start to end.** Opened from Refills due, the customer's page says "Refills due › Details" and leads with the refill call: when they need their medicines and what they took last, (1) call them, (2) what they said: ordering now (the order form, then back to the list with "Order placed"), not yet (set the day they run out), no answer or call back (log the call), (3) the next one on the same list (`customers/refill-flow.tsx`).
+- 26 Nov (214), asked by the backend developer (a patient's page read as a new customer): **the customer page counts the old system too, and every customer has its number.** Their buying's Orders and Bought add the old system's ("3 · all in the old system", not "0 · + 3 earlier"); Paid says "in this system"; Medicines points to Prices given. Migration 0164 numbers every customer left without one (`CUS-00017`: only Add customer gave one, so seeds and imports showed a blank chip and an empty "Customer no.") and numbers any added later on the way in.
+- 26 Nov (215), asked by the backend developer: **Earlier orders by month.** The customer page's Earlier orders has a month picker: All months, This month, and every month they ordered in with its orders and total ("Oct 2026 · 1 order · ₱18,500"); a month with none says so (`/api/customers/:id/prices?month=2026-10`, `months`).
+- 26 Nov (216), asked by the backend developer ("walang upload files dito?"): **upload on a customer's Files.** Whoever keeps the customer's details (the sellers, Management, the Admin) uploads a photo or PDF there: a patient's prescription or valid ID, a business's BIR 2303, LTO permit or business permit, or any other file (migration 0165). Only the three papers count toward a business's missing list.
+- 26 Nov (217), the backend developer: **B2B like RX Business, office and field.** NBD and CRR work from the office (calls, referrals) for now; an NBD or CRR account set to In the field visits its accounts like an Rx CHC: its drugstores and distributors can be planned and visited (distributors joined the visit lists), and the customer page names the B2B account's owner (its NBD until handed over, then its CRR) as who visits or who calls. Whether any of them go out is still Aryan's to say (19 Nov: "decide later").
+- 26 Nov (218), the backend developer: **the order's General part is the account's.** A seller (or a lead for one of their people) orders in their account's Division only: the form shows it as it is ("B2B · yours"), the API refuses another ("This account's orders count for HOSP. For CLIDP, switch to an account of that Division."). Management, the Admin and the CEO still pick any; an order being fixed keeps its Division. **This replaces Aryan's 19 Nov rule** ("any other Division a pick away", section 4.2): to be told to him with pull request 8.
+- 26 Nov (219), the backend developer: **more than one account on one browser, like Google.** The avatar menu has *Add another account*: the sign-in page (`?add=1`) asks that account's own login ID and password (and code), and the account in use stays signed in beside it. The other accounts are listed in the menu with *Switch* (no password again; the app opens afresh as that account). Each account is only what its own login opened: the orders, sales and screens are that account's. At most five on one browser; a plain sign-in starts the browser afresh; *Sign out* signs every account out, on the server too (a shared computer keeps nobody's). Kept in an httpOnly cookie read only under `/api/auth` (`sid_more`); not while looking as someone else.
+- 27 Nov (220), the backend developer (the demo's Carlo reported to Daniel, who covered Mindanao's vacant lead seat): **a vacant lead seat goes to the lead above, never to a cover.** "When the team lead is vacant, supervision goes straight to the one above; don't anchor it on someone else, it isn't their task." A team lead's or head's seat can't be covered (the API refuses; Teams & people and Vacant seats offer no cover for it, and say "Its team reports to … meanwhile"); a cover already on one leads nobody (the tree and the teams a lead sees count holders only). Covering a vacant MedRep's area (section 26) is unchanged. The demo no longer has Daniel covering Mindanao: Carlo reports to the Hospital head.

@@ -233,7 +233,7 @@ export async function orderPrices(db: Database, me: Me, id: number): Promise<Ord
           coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late > 0), 0)::float8 as overdue,
           coalesce(max(dd.late) filter (where not dd.on_delivery and dd.late > 0), 0)::int as days,
           coalesce(sum(dd.balance) filter (where dd.source <> 'crm'), 0)::float8 as zoho
-        from ${duesSql(today)} dd where dd.customer_id = ${customerId}`,
+        from ${duesSql(today)} dd where dd.customer_id = ${customerId} and not dd.gl_waiting`,
     ),
   ]);
   const medicines = byMedicine(lines);

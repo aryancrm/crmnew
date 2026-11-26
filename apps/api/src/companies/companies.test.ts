@@ -2,16 +2,17 @@
 // in its own database; a person signs in to their company by the domain after the @; a session
 // of one company opens nothing in another; a new company starts with its own Admin and, if asked,
 // another company's stock, and nothing else of it; a paused company's people can't work; and the
-// control panel lets in only its own logins, with the phone's code every time.
+// control panel lets in only its own logins (their ID and password; no phone code since 26 Nov).
 
+import { createHmac } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
-import { codeAt, stepAt } from "../auth/totp";
 import { runChecks } from "../checks/integrity";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedDemoInventory } from "../inventory/seed";
+import { useGraph } from "../online/graph";
 import { seedDemo } from "../seed";
 import { asCompany, loginDomain } from "./context";
 import { controlRoutes } from "./control-routes";
@@ -26,7 +27,6 @@ let router: ReturnType<typeof companyRouter>;
 let setupKey: string | null;
 let gm: Running;
 let gmPassword: string;
-let panelKey = "";
 let panelCookie = "";
 
 /** The cookies a response sets, joined onto those a browser had (a later one replaces its name). */
@@ -49,7 +49,6 @@ const send = (path: string, options: { method?: string; body?: unknown; cookie?:
 const login = (email: string, password: string, cookie = "") => send("/api/auth/login", { body: { email, password }, cookie });
 const codeOf = async (response: Response) => ((await response.clone().json()) as { error?: { code: string } }).error?.code;
 const count = async (db: Database, query: ReturnType<typeof sql>) => (await rows<{ n: number }>(db, query))[0]?.n ?? 0;
-const phoneCode = () => codeAt(panelKey, stepAt(Date.now()));
 
 beforeAll(async () => {
   main = openDatabase({ dir: "memory" });
@@ -210,21 +209,19 @@ describe("the first company's login ID on the list's first start", () => {
 });
 
 describe("the control panel", () => {
-  it("is set up once, with the key from the server's log and the code from the phone", async () => {
+  it("is set up once, with the key from the server's log (no phone code: Aryan, 26 Nov)", async () => {
     expect(await (await send("/api/control/me")).json()).toEqual({ me: null, setup: true });
     expect(setupKey).toBeTruthy();
     const wrong = await send("/api/control/setup", { body: { key: "not-it", loginId: "1001", name: "Aryan", password: PANEL_PASSWORD } });
     expect(await codeOf(wrong)).toBe("wrong_key");
     expect(await codeOf(await send("/api/control/setup", { body: { key: setupKey, loginId: "1001", name: "Aryan", password: "short" } }))).toBe("invalid");
+    // Eight characters are enough (Aryan, 26 Nov); seven aren't.
+    expect(await codeOf(await send("/api/control/setup", { body: { key: setupKey, loginId: "1001", name: "Aryan", password: "seven77" } }))).toBe("invalid");
 
-    const started = await send("/api/control/setup", { body: { key: setupKey, loginId: "1001", name: "Aryan", password: PANEL_PASSWORD } });
-    expect(started.status).toBe(200);
-    const { ticket, key, uri } = (await started.json()) as { ticket: string; key: string; uri: string };
-    expect(uri).toContain("otpauth://totp/");
-    panelKey = key;
-    expect(await codeOf(await send("/api/control/setup/code", { body: { ticket, code: "000000" } }))).toBe("wrong_code");
-    const done = await send("/api/control/setup/code", { body: { ticket, code: phoneCode() } });
+    // Made and signed in at once.
+    const done = await send("/api/control/setup", { body: { key: setupKey, loginId: "1001", name: "Aryan", password: PANEL_PASSWORD } });
     expect(done.status).toBe(200);
+    expect(await done.clone().json()).toEqual({ me: { loginId: "1001", name: "Aryan" } });
     panelCookie = jar("", done);
     expect(await (await send("/api/control/me", { cookie: panelCookie })).json()).toEqual({ me: { loginId: "1001", name: "Aryan" }, setup: false });
     expect(await codeOf(await send("/api/control/setup", { body: { key: setupKey, loginId: "1002", name: "X", password: PANEL_PASSWORD } }))).toBe("done");
@@ -232,14 +229,12 @@ describe("the control panel", () => {
     expect((await send("/api/control/companies", { cookie: jar("", await login("naresh@2mg.test", PASSWORD)) })).status).toBe(401);
   });
 
-  it("signs in with the login ID, password and phone code together, and a code works once", async () => {
-    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 60_000 });
-    const code = phoneCode();
-    expect((await send("/api/control/login", { body: { loginId: "1001", password: PANEL_PASSWORD, code: "123456" } })).status).toBe(401);
-    expect((await send("/api/control/login", { body: { loginId: "1001", password: "wrong-password-1", code } })).status).toBe(401);
-    expect((await send("/api/control/login", { body: { loginId: "1001", password: PANEL_PASSWORD, code } })).status).toBe(200);
-    expect((await send("/api/control/login", { body: { loginId: "1001", password: PANEL_PASSWORD, code } })).status).toBe(401);
-    vi.useRealTimers();
+  it("signs in with the login ID and the password", async () => {
+    expect((await send("/api/control/login", { body: { loginId: "1001", password: "wrong-password-1" } })).status).toBe(401);
+    expect((await send("/api/control/login", { body: { loginId: "nobody", password: PANEL_PASSWORD } })).status).toBe(401);
+    const signed = await send("/api/control/login", { body: { loginId: "1001", password: PANEL_PASSWORD } });
+    expect(signed.status).toBe(200);
+    expect((await send("/api/control/companies", { cookie: jar("", signed) })).status).toBe(200);
   });
 
   it("lists and adds companies, and gives a company's Admin a new one-time password", async () => {
@@ -286,10 +281,104 @@ describe("the control panel", () => {
 
   it("locks a panel login after five wrong tries", async () => {
     for (let i = 0; i < 5; i += 1)
-      await send("/api/control/login", { body: { loginId: "1001", password: `wrong-${i}-password`, code: "123456" } });
+      await send("/api/control/login", { body: { loginId: "1001", password: `wrong-${i}-password` } });
     vi.useFakeTimers({ toFake: ["Date"], now: Date.now() + 120_000 });
-    const locked = await send("/api/control/login", { body: { loginId: "1001", password: PANEL_PASSWORD, code: phoneCode() } });
+    const locked = await send("/api/control/login", { body: { loginId: "1001", password: PANEL_PASSWORD } });
     expect(locked.status).toBe(429);
     vi.useRealTimers();
   });
 });
+
+describe("each company's own Facebook pages, websites and links (Aryan, 26 Nov)", () => {
+  const SECRET = "meta-app-secret";
+  const meta = (page: string, mid: string) => {
+    const text = JSON.stringify({
+      object: "page",
+      entry: [{ id: page, messaging: [{ sender: { id: `psid-${mid}` }, recipient: { id: page }, timestamp: Date.now(), message: { mid, text: "Hello" } }] }],
+    });
+    return router.request("/webhooks/messenger", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-hub-signature-256": `sha256=${createHmac("sha256", SECRET).update(text).digest("hex")}` },
+      body: text,
+    });
+  };
+  const kept = (db: Database, page: string) => count(db, sql`select count(*)::int as n from inbox_event where page_key = ${page}`);
+
+  beforeAll(async () => {
+    vi.stubEnv("MESSENGER_APP_SECRET", SECRET);
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    // Meta answers nothing here: only where each message is kept is checked.
+    useGraph({ call: async () => ({ data: null, error: "Not in tests.", code: 1 }), fetchFile: async () => null });
+    await main.execute(sql`insert into channel_account (kind, key, name, secret) values ('messenger', 'page-2mg', '2MG Inc.', 'x')`);
+    await gm.db.execute(sql`insert into channel_account (kind, key, name, secret) values ('messenger', 'page-gm', 'GetMeds', 'x')`);
+  });
+  afterAll(() => {
+    useGraph(null);
+    vi.unstubAllEnvs();
+  });
+
+  it("keeps a Facebook message in the company that connected its page, and nowhere else", async () => {
+    expect((await meta("page-gm", "m-gm-1")).status).toBe(200);
+    expect(await kept(gm.db, "page-gm")).toBe(1);
+    expect(await kept(main, "page-gm")).toBe(0);
+    expect((await meta("page-2mg", "m-2mg-1")).status).toBe(200);
+    expect(await kept(main, "page-2mg")).toBe(1);
+    expect(await kept(gm.db, "page-2mg")).toBe(0);
+  });
+
+  it("keeps a page nobody connected waiting at the first company's, as before", async () => {
+    expect((await meta("page-nobody", "m-x-1")).status).toBe(200);
+    expect(await count(main, sql`select count(*)::int as n from inbox_event where page_key = 'page-nobody' and state = 'unrouted'`)).toBe(1);
+    expect(await kept(gm.db, "page-nobody")).toBe(0);
+  });
+
+  it("refuses a Facebook message Meta didn't sign, in every company", async () => {
+    const response = await router.request("/webhooks/messenger", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-hub-signature-256": "sha256=00" },
+      body: JSON.stringify({ object: "page", entry: [{ id: "page-gm", messaging: [] }] }),
+    });
+    expect(response.status).toBe(401);
+  });
+
+  it("sends a website's call to the company its address names (its Org ID), else the first company", async () => {
+    // Unsigned, so each refuses it: which company answered is what is checked (its own websites).
+    const theirs = await router.request(`/webhooks/store/${gm.ref.orgId}`, { method: "POST", body: "{}" });
+    const ours = await router.request("/webhooks/store/2mg", { method: "POST", body: "{}" });
+    expect(theirs.status).toBe(ours.status);
+    const seen: string[] = [];
+    const spy = vi.spyOn(gm.app, "fetch").mockImplementation(async () => {
+      seen.push("gm");
+      return new Response("{}", { status: 200 });
+    });
+    await router.request(`/webhooks/store/${gm.ref.orgId}/order-progress`, { method: "POST", body: "{}" });
+    await router.request("/webhooks/store/2mg/order-progress", { method: "POST", body: "{}" });
+    spy.mockRestore();
+    expect(seen).toEqual(["gm"]);
+  });
+
+  it("opens a link that names its company (?org=) in that company, without signing in", async () => {
+    const seen: string[] = [];
+    const spy = vi.spyOn(gm.app, "fetch").mockImplementation(async () => {
+      seen.push("gm");
+      return new Response("{}", { status: 404 });
+    });
+    await router.request(`/api/public/quotation/some-token?org=${gm.ref.orgId}`);
+    await router.request(`/api/auth/welcome?org=${gm.ref.orgId}`, { method: "POST", body: "{}" });
+    await router.request("/api/public/quotation/some-token");
+    await router.request("/api/public/quotation/some-token?org=12x456");
+    spy.mockRestore();
+    expect(seen).toEqual(["gm", "gm"]);
+  });
+
+  it("sends a request to join to the company of the email's domain", async () => {
+    const asked = (email: string) =>
+      send("/api/auth/sign-up", { body: { firstName: "Ana", lastName: "Reyes", email, phone: "09171234567", department: "online" } });
+    expect((await asked("ana.reyes@getmeds.test")).status).toBeLessThan(500);
+    expect((await asked("ben.cruz@2mg.test")).status).toBeLessThan(500);
+    expect(await count(gm.db, sql`select count(*)::int as n from sign_up where email = 'ana.reyes@getmeds.test'`)).toBeLessThanOrEqual(1);
+    expect(await count(main, sql`select count(*)::int as n from sign_up where email = 'ana.reyes@getmeds.test'`)).toBe(0);
+    expect(await count(gm.db, sql`select count(*)::int as n from sign_up where email = 'ben.cruz@2mg.test'`)).toBe(0);
+  });
+});
+

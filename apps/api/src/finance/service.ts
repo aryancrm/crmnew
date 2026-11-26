@@ -142,7 +142,7 @@ export async function moneyOf(
         coalesce(sum(dd.balance) filter (where not dd.cod_waiting), 0)::float8 as owed,
         coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late > 0), 0)::float8 as overdue,
         coalesce(max(dd.late) filter (where not dd.on_delivery and dd.late > 0), 0)::int as days
-      from ${duesSql(today)} dd where dd.customer_id in (${ids([...new Set(customerIds)])})
+      from ${duesSql(today)} dd where dd.customer_id in (${ids([...new Set(customerIds)])}) and not dd.gl_waiting
         ${leaveOut ? sql`and dd.order_id is distinct from ${leaveOut}` : sql``}
       group by dd.customer_id
       having coalesce(sum(dd.balance) filter (where not dd.cod_waiting), 0) > 0`,
@@ -162,7 +162,7 @@ export async function ownDues(
     sql`select dd.order_id::int as "orderId",
         coalesce(sum(dd.balance) filter (where not dd.cod_waiting), 0)::float8 as owed,
         coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late > 0), 0)::float8 as overdue
-      from ${duesSql(todayManila())} dd where dd.order_id in (${ids(orderIds)}) group by dd.order_id`,
+      from ${duesSql(todayManila())} dd where dd.order_id in (${ids(orderIds)}) and not dd.gl_waiting group by dd.order_id`,
   );
   return new Map(found.map(({ orderId, ...money }) => [orderId, money]));
 }

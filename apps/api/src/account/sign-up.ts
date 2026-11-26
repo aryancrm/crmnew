@@ -8,6 +8,7 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import { type SQL, sql } from "drizzle-orm";
+import { companyNow, isHomeCompany } from "../companies/context";
 import { hashPassword, passwordProblem } from "../auth/password";
 import { ownWorkspace, workspaceByKey } from "../auth/workspaces";
 import { type Database, rows } from "../db/index";
@@ -178,7 +179,8 @@ async function sendAccepted(db: Database, webUrl: string, signUpId: number, toke
   );
   if (!to) throw new Refusal(404, "not_found", "No such sign-up.");
   // After #, so it stays out of the servers' logs. The address is the server's own setting, never the request's.
-  const link = `${webUrl.replace(/\/+$/, "")}/welcome#${token}`;
+  // Another company than the first: the link names it (its Org ID), so it opens in that company.
+  const link = `${webUrl.replace(/\/+$/, "")}/welcome${isHomeCompany() ? "" : `?org=${companyNow()?.orgId}`}#${token}`;
   let problem: string | null = null;
   try {
     const sent = await sendFromMailbox(db, {

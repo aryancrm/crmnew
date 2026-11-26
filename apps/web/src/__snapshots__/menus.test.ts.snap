@@ -1909,6 +1909,12 @@ exports[`each MedRep's menu > PAP MedRep sees the same menu 1`] = `
           "to": "/pap",
         },
         {
+          "icon": "Banknote",
+          "label": "GL money",
+          "short": "Money",
+          "to": "/finance/gl",
+        },
+        {
           "badge": "sentBack",
           "icon": "ClipboardList",
           "label": "My orders",

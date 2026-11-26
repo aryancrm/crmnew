@@ -59,12 +59,23 @@ const wrongFor = (key: string) => {
   return ["111111", "222222", "333333", "444444", "555555", "666666"].find((one) => !good.includes(one)) as string;
 };
 
+/**
+ * A step's last seconds waited out: the previous step's code (turnOn's) is good only while this
+ * step lasts, and a busy machine took longer than that between making it and sending it once
+ * (GitHub, 26 Nov: 400 instead of 200).
+ */
+async function clearOfTheStepsEnd() {
+  const left = 30_000 - (Date.now() % 30_000);
+  if (left < 3_000) await new Promise((done) => setTimeout(done, left + 100));
+}
+
 /** Two-step sign-in on: the browser it was done on, the key, the recovery codes. */
 async function turnOn(who: string) {
   const cookie = await signIn(who);
   const started = await post("/api/auth/two-step/start", { password: PASSWORD }, cookie);
   expect(started.status).toBe(200);
   const { key } = (await started.json()) as { key: string };
+  await clearOfTheStepsEnd();
   const confirmed = await post("/api/auth/two-step/confirm", { code: codeNow(key, -1) }, cookie);
   expect(confirmed.status).toBe(200);
   return { cookie, key, codes: ((await confirmed.json()) as { codes: string[] }).codes };

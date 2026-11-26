@@ -10,7 +10,8 @@ import { todayManila } from "../inventory/rules";
 import { seedPapRep } from "../orders/seed-team";
 import { seedDemo } from "../seed";
 import { attachReceipt } from "../testing/receipt";
-import type { Catalogue, LeadCase, LeadDesk, OrderDetail } from "../types";
+import { duesSql } from "../finance/dues";
+import type { Catalogue, GlMoneyList, LeadCase, LeadDesk, OrderDetail } from "../types";
 
 const PASSWORD = "test-password-1";
 let db: Database;
@@ -217,46 +218,131 @@ describe("PAP cases", () => {
       ).status,
     ).toBe(200);
 
-    // From here the PAP person only watches (Aryan, 22 Nov): Finance sends the claim and records
-    // the money. The agency often pays less than its letter: the patient pays the rest, or it is let go.
+    // After the delivery (Aryan, 26 Nov): the PAP person or Finance marks the claim; the agency pays
+    // months later and often less; the PAP person marks what comes in, Finance confirms it.
     now = await lead("paula", id);
     expect(now.step.value).toBe("claim");
-    expect(now.next).toBe("Delivered: Finance sends the claim to PCSO");
-    expect((await post("paula", `/api/leads/${id}/claim`, { sentOn: todayManila(), ref: "CL-1" })).status).toBe(403);
-    expect((await post("paula", `/api/finance/orders/${orderId}/gl-claim`, { sentOn: todayManila(), ref: "CL-1" })).status).toBe(403);
+    expect(now.next).toBe("Delivered: send the claim to PCSO");
+    expect((await post("ryan", `/api/leads/${id}/claim`, { sentOn: todayManila(), ref: "CL-0" })).status).toBe(403);
+    expect((await post("paula", `/api/leads/${id}/claim`, { sentOn: todayManila(), ref: "CL-0" })).status).toBe(200);
     expect((await post("fiona", `/api/finance/orders/${orderId}/gl-claim`, { sentOn: todayManila(), ref: "CL-1" })).status).toBe(200);
     now = await lead("paula", id);
     expect(now.step.value).toBe("billed");
-    expect(now.next).toBe("Claim sent: waiting for PCSO to pay");
+    expect(now.next).toContain("Claim sent: waiting for PCSO to pay");
     expect(now.lead).toMatchObject({ claimSentOn: todayManila(), claimRef: "CL-1" });
     expect(now.can).toMatchObject({ pay: false, deliver: false });
     order = await read<OrderDetail>("fiona", `/api/orders/${orderId}`);
     expect(order.order.glClaim).toMatchObject({ sentOn: todayManila(), ref: "CL-1", agency: "pcso" });
     const invoiceId = order.money.invoice?.id as number;
     expect(order.money.invoice?.balance).toBe(total);
-    // PCSO pays 1,000 less than its letter; the patient pays 600 of it; the last 400 is let go.
-    const pay = (body: Record<string, unknown>) =>
-      post("fiona", `/api/invoices/${invoiceId}/payments`, { method: "bank", moneyAccount: null, paidOn: todayManila(), ...body });
-    const first = await pay({ amount: total - 100000, reference: "PCSO-CHK-1" });
-    expect(first.status, await first.clone().text()).toBe(200);
-    expect((await pay({ amount: 60000, payer: "patient", method: "cash" })).status).toBe(200);
-    expect((await lead("paula", id)).step.value).toBe("billed");
-    // Nothing in cash, the rest let go: the invoice closes, and the case is done.
-    const gone = await pay({ amount: 0, deducted: 40000, deductionKind: "gl_waived" });
+    // Waiting for the agency: its money, not the patient's debt (it doesn't hold their next order).
+    const waitingFor = async () =>
+      (await rows<{ waiting: boolean }>(db, sql`select dd.gl_waiting as waiting from ${duesSql(todayManila())} dd where dd.order_id = ${orderId}`))[0]?.waiting;
+    expect(await waitingFor()).toBe(true);
+    // Finance's Guarantee letters: the claim sent, waiting for PCSO; the PAP person sees hers.
+    const gl = async (who: string) => read<GlMoneyList>(who, "/api/finance/gl");
+    expect((await gl("fiona")).rows.find((row) => row.orderId === orderId)).toMatchObject({ stage: "agency", letterAmount: total, owed: total, waitingDays: 0 });
+    expect((await gl("paula")).rows.map((row) => row.orderId)).toContain(orderId);
+    expect((await get("ryan", "/api/finance/gl")).status).toBe(403);
+
+    // PCSO pays 1,000 less than its letter: the PAP person marks it with its proof.
+    const proof = new FormData();
+    proof.set("kind", "payment_proof");
+    proof.set("file", new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 9])], "check.png", { type: "image/png" }));
+    const filed = await app.request(`/api/orders/${orderId}/papers`, { method: "POST", headers: { cookie: cookies.paula as string }, body: proof });
+    expect(filed.status, await filed.clone().text()).toBe(200);
+    const proofId = ((await filed.json()) as { id: number }).id;
+    const mark = (who: string, body: Record<string, unknown>) => post(who, `/api/finance/gl/${orderId}/mark`, { paidOn: todayManila(), ...body });
+    expect((await mark("fiona", { payer: "agency", amount: 100 })).status).toBe(403);
+    expect((await mark("paula", { payer: "agency", amount: total + 1 })).status).toBe(400);
+    const agencyMark = await mark("paula", { payer: "agency", amount: total - 100000, reference: "PCSO-CHK-1", proofId });
+    expect(agencyMark.status, await agencyMark.clone().text()).toBe(200);
+    const agencyMarkId = ((await agencyMark.json()) as { id: number }).id;
+    let list = await gl("fiona");
+    expect(list.counts.confirm).toBeGreaterThanOrEqual(1);
+    expect(list.can.confirm).toBe(true);
+    // Not paid until Finance confirms it against the bank; the PAP person can't.
+    expect((await read<OrderDetail>("fiona", `/api/orders/${orderId}`)).money.invoice?.balance).toBe(total);
+    expect((await post("paula", `/api/finance/gl/marks/${agencyMarkId}/confirm`, { method: "check" })).status).toBe(403);
+    const confirmed = await post("fiona", `/api/finance/gl/marks/${agencyMarkId}/confirm`, { method: "check", moneyAccount: null });
+    expect(confirmed.status, await confirmed.clone().text()).toBe(200);
+    expect(await waitingFor()).toBe(false);
+    expect((await gl("fiona")).rows.find((row) => row.orderId === orderId)).toMatchObject({ stage: "short", agencyPaid: total - 100000, owed: 100000 });
+
+    // The patient pays 600 of the rest: a first mark Finance doesn't find in the bank, then the right one.
+    const wrong = await mark("paula", { payer: "patient", amount: 60000, reference: "GCASH-1" });
+    const wrongId = ((await wrong.json()) as { id: number }).id;
+    expect((await post("fiona", `/api/finance/gl/marks/${wrongId}/refuse`, { reason: "" })).status).toBe(400);
+    expect((await post("fiona", `/api/finance/gl/marks/${wrongId}/refuse`, { reason: "Not in GCash yet" })).status).toBe(200);
+    list = await gl("paula");
+    expect(list.rows.find((row) => row.orderId === orderId)?.marks).toEqual(
+      expect.arrayContaining([expect.objectContaining({ state: "refused", reason: "Not in GCash yet", decidedBy: "Fiona" })]),
+    );
+    const right = await mark("paula", { payer: "patient", amount: 60000, reference: "GCASH-2" });
+    const rightId = ((await right.json()) as { id: number }).id;
+    expect((await post("fiona", `/api/finance/gl/marks/${rightId}/confirm`, { method: "ewallet", moneyAccount: null })).status).toBe(200);
+    // The last 400 let go: Finance's alone (22 Nov), nothing in cash.
+    const gone = await post("fiona", `/api/invoices/${invoiceId}/payments`, {
+      method: "bank",
+      moneyAccount: null,
+      paidOn: todayManila(),
+      amount: 0,
+      deducted: 40000,
+      deductionKind: "gl_waived",
+    });
     expect(gone.status, await gone.clone().text()).toBe(200);
     order = await read<OrderDetail>("fiona", `/api/orders/${orderId}`);
     expect(order.money.invoice).toMatchObject({ balance: 0, status: "paid" });
     const paid = order.money.payments.filter((payment) => payment.active);
     expect(paid.map((payment) => [payment.amount, payment.payer, payment.method, payment.deductionKind ?? null])).toEqual(
       expect.arrayContaining([
-        [total - 100000, "agency", "bank", null],
-        [60000, "customer", "cash", null],
+        [total - 100000, "agency", "check", null],
+        [60000, "customer", "ewallet", null],
         [40000, "customer", "deduction", "gl_waived"],
       ]),
     );
+    expect((await gl("fiona")).rows.find((row) => row.orderId === orderId)).toMatchObject({ stage: "done", owed: 0, agencyPaid: total - 100000, patientPaid: 60000, letGo: 40000 });
     now = await lead("paula", id);
     expect(now.step.value).toBe("done");
     expect(now.order?.trail.payments.map((payment) => payment.who)).toEqual(expect.arrayContaining(["The agency", "The patient", "Let go"]));
+  });
+
+  it("PCSO gets three quotations, filled from each medicine's other vendors' prices; a sister company's on its own letterhead", async () => {
+    // Whoever sets prices types the two other vendors' price for one piece, once (Aryan, 26 Nov, as the old CRM).
+    expect((await post("ryan", `/api/inventory/medicines/${medicine.id}/canvass`, { 2: { vendor: "X", amount: 1 } })).status).toBe(403);
+    const priced = await post("sarla", `/api/inventory/medicines/${medicine.id}/canvass`, {
+      2: { vendor: "Getmeds Philippines Inc.", amount: medicine.price + 1500 },
+      3: { vendor: "Rose Pharmacy", amount: medicine.price + 2500 },
+    });
+    expect(priced.status, await priced.clone().text()).toBe(200);
+    const page = await read<{ canvass: { slot: number; vendor: string; amount: number }[]; priceChanges: { what: string }[] }>(
+      "sarla",
+      `/api/inventory/medicines/${medicine.id}`,
+    );
+    expect(page.canvass.map((one) => one.vendor)).toEqual(["Getmeds Philippines Inc.", "Rose Pharmacy"]);
+    expect(page.priceChanges.map((one) => one.what)).toEqual(expect.arrayContaining(["PCSO quotation 2 (Getmeds Philippines Inc.)"]));
+
+    const made = await post("paula", "/api/leads", { source: "referral", name: "Nena Ramos", phone: "0917 333 4455", city: "Manila", road: "gl", agency: "pcso" });
+    const id = ((await made.json()) as { id: number }).id;
+    await post("paula", `/api/leads/${id}/quote`, { lines: [{ medicineId: medicine.id, qty: 3 }] });
+    const pcso = await lead("paula", id);
+    expect(pcso.quotesNeeded).toBe(3);
+    expect(pcso.canvassAuto?.map((one) => [one.vendor, one.amount])).toEqual([
+      ["Getmeds Philippines Inc.", (medicine.price + 1500) * 3],
+      ["Rose Pharmacy", (medicine.price + 2500) * 3],
+    ]);
+    // Ours, Getmeds Philippines' on its own letterhead, Rose Pharmacy's canvass page.
+    const pdf = await PDFDocument.load(new Uint8Array(await (await get("paula", `/api/leads/${id}/quotation.pdf`)).arrayBuffer()));
+    expect(pdf.getPageCount()).toBe(3);
+
+    // A medicine without the other vendors' prices: they are typed by hand.
+    await post("sarla", `/api/inventory/medicines/${medicine.id}/canvass`, { 3: null });
+    expect((await lead("paula", id)).canvassAuto).toBeNull();
+    expect(
+      (await post("paula", `/api/leads/${id}/canvass`, { lines: [{ vendor: "MedExpress", amount: 900000 }, { vendor: "Rose Pharmacy", amount: 950000 }] })).status,
+    ).toBe(200);
+    const typed = await PDFDocument.load(new Uint8Array(await (await get("paula", `/api/leads/${id}/quotation.pdf`)).arrayBuffer()));
+    expect(typed.getPageCount()).toBe(3);
   });
 
   it("keeps a PAP MedRep to their own cases", async () => {
@@ -295,9 +381,11 @@ describe("PAP cases", () => {
     expect(hers.cards.find((card) => card.id === id)?.cameFrom).toContain("Jane");
     expect((await lead("paula", id)).can.work).toBe(true);
 
-    // Three quotations for DSWD too, then the letter and the papers.
+    // DSWD asks for one quotation, ours (PCSO alone asks for three: Aryan, 26 Nov, as the old
+    // CRM); then the letter and the papers.
     await post("paula", `/api/leads/${id}/quote`, { lines: [{ medicineId: medicine.id, qty: 2 }] });
     const total = medicine.price * 2;
+    expect((await lead("paula", id)).quotesNeeded).toBe(1);
     expect(
       (
         await post("paula", `/api/leads/${id}/canvass`, {
@@ -307,9 +395,9 @@ describe("PAP cases", () => {
           ],
         })
       ).status,
-    ).toBe(200);
+    ).toBe(409);
     const pdf = await get("paula", `/api/leads/${id}/quotation.pdf`);
-    expect((await PDFDocument.load(new Uint8Array(await pdf.arrayBuffer()))).getPageCount()).toBe(3);
+    expect((await PDFDocument.load(new Uint8Array(await pdf.arrayBuffer()))).getPageCount()).toBe(1);
     await file("paula", id, "gl_letter");
     await file("paula", id, "rx");
     await file("paula", id, "valid_id");
@@ -328,6 +416,10 @@ describe("PAP cases", () => {
     const orderId = ((await placed.json()) as { id: number }).id;
     // The order is Jane's sale (her channel, not PAP), raised by Paula; Management approves it.
     const order = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
+    // Said to be PAP's wherever it shows (26 Nov), with its case and who works it.
+    expect(order.order.pap).toMatchObject({ code: expect.stringMatching(/^ENQ-/), leadId: id, by: expect.stringContaining("Paula") });
+    const list = await read<{ rows: { id: number; pap?: unknown }[] }>("sarla", "/api/orders");
+    expect(list.rows.find((row) => row.id === orderId)?.pap).toBeTruthy();
     expect(order.order).toMatchObject({ status: "pending_approval", medrep: "Jane", raisedBy: "Paula" });
     expect(order.order.channel).not.toBe("PAP");
     expect(order.can.approve).toBe(true);

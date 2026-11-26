@@ -436,6 +436,7 @@ const financeApp: Space = {
         { to: "/finance", label: "Orders to check", icon: ClipboardCheck, badge: "finance" },
         { to: "/finance/prepaid", label: "Prepaid orders", icon: CreditCard },
         { to: "/collect", label: "Due payments", icon: Wallet },
+        { to: "/finance/gl", label: "Guarantee letters", icon: HeartHandshake },
         { to: "/purchases/bills?view=open", label: "Supplier bills to pay", icon: Receipt },
         { to: "/desk/team?desk=finance", label: "Finance team figures", icon: BarChart3 },
         ...moneyLinks,
@@ -490,7 +491,15 @@ const papApp: Space = {
   label: "PAP",
   icon: HeartHandshake,
   tone: "bg-rose-600 text-white",
-  groups: [{ items: [{ to: "/pap", label: "Guarantee-letter cases", icon: HeartHandshake }] }],
+  groups: [
+    {
+      items: [
+        { to: "/pap", label: "Guarantee-letter cases", icon: HeartHandshake },
+        // Their money, months after the delivery: marked by PAP, confirmed by Finance (26 Nov).
+        { to: "/finance/gl", label: "Guarantee letters' money", icon: Banknote },
+      ],
+    },
+  ],
 };
 
 const reportsApp: Space = {
@@ -1011,7 +1020,13 @@ function ownDesk(me: Me): Space {
       return {
         ...desk([
           home,
-          ...(pap ? [{ to: "/pap", label: "PAP cases", icon: HeartHandshake, short: "Cases" }] : []),
+          ...(pap
+            ? [
+                { to: "/pap", label: "PAP cases", icon: HeartHandshake, short: "Cases" },
+                // The letters' money after the delivery: she marks what came in (26 Nov).
+                { to: "/finance/gl", label: "GL money", icon: Banknote, short: "Money" },
+              ]
+            : []),
           ordersLink("My orders"),
           // A PAP MedRep in seat-words' words; any other in the plain ones (a Modern Trade MedRep's
           // seat-words say "Chains", the COO's desk's words, not theirs).
@@ -1495,6 +1510,8 @@ function ownDesk(me: Me): Space {
               { to: "/finance/prepaid", label: "Prepaid orders", icon: CreditCard, short: "Prepaid" },
               // Its count: the payments past their day (cash on delivery once delivered, credit's days).
               { to: "/collect", label: "Due payments", icon: Wallet, short: "Due", badge: "latePayments" },
+              // Guarantee letters: the agency pays months after the delivery; PAP marks it, Finance confirms (26 Nov).
+              { to: "/finance/gl", label: "Guarantee letters", icon: HeartHandshake, short: "GL" },
               // Money going out, every day: refunds owed to customers and suppliers' bills to pay.
               { to: "/refunds", label: "Refunds owed", icon: Undo2, badge: "refunds", short: "Refunds" },
               { to: "/purchases/bills?view=open", label: "Supplier bills to pay", icon: Receipt, short: "Bills" },

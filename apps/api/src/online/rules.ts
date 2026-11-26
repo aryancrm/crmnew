@@ -234,10 +234,11 @@ export function nextOf(f: CaseFacts, step: string): string {
     case "payment":
       return "Delivered: Finance records the payment when it comes in";
     case "claim":
-      // Finance sends the claim and records what the agency pays (Aryan, 22 Nov).
-      return `Delivered: Finance sends the claim to ${agency}`;
+      // The claim goes after the delivery; the PAP person or Finance marks it sent (26 Nov).
+      return `Delivered: send the claim to ${agency}`;
     case "billed":
-      return `Claim sent: waiting for ${agency} to pay`;
+      // Often months: the PAP person marks what comes in, Finance confirms it (26 Nov).
+      return `Claim sent: waiting for ${agency} to pay (mark it under GL money when it comes)`;
     case "done":
       return "Delivered and paid; refill when due";
     default:
@@ -288,3 +289,11 @@ export function queuesOf(step: string): LeadQueue[] {
   if (step === "done") out.push("done");
   return out;
 }
+
+/** How many quotations a guarantee letter's agency asks for (Aryan, 26 Nov, as the old CRM's
+ *  AGENCY_QUOTES): PCSO three, ours and two other vendors' (it settles the lowest, ours); DSWD,
+ *  OVP and OP ours alone. */
+export const AGENCY_QUOTES: Record<string, number> = { dswd: 1, pcso: 3, ovp: 1, op: 1 };
+export const quotesNeeded = (road: string | null | undefined, agency: string | null | undefined): number =>
+  road === "gl" ? (AGENCY_QUOTES[agency ?? ""] ?? 1) : 1;
+

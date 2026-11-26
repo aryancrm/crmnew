@@ -4,6 +4,7 @@
 
 import { pushCatalog, pushCatalogs } from "./catalog";
 import { type SQL, sql } from "drizzle-orm";
+import { companyNow, isHomeCompany } from "../companies/context";
 import { type Database, rows } from "../db/index";
 import { allow, may, Refusal } from "../http";
 import { iso } from "../inventory/service";
@@ -18,7 +19,7 @@ import type {
   LeadPaperKind,
   Me,
 } from "../types";
-import { chatOf } from "./conversation";
+import { chatOf, mayAnswer } from "./conversation";
 import { mailSink, pullMailbox, replyByEmail } from "./email";
 import {
   appSecrets,
@@ -107,7 +108,9 @@ export async function inboxCount(db: Database, me: Me): Promise<{ needs: number;
 
 /** The whole conversation: every case on it (theirs and ours), with the desk's notes. */
 export async function chatThread(db: Database, me: Me, leadId: number): Promise<ChatThread> {
-  allow(me, LEAD_READ_ROLES, "read a conversation");
+  // The desk reads every conversation; the PAP person their own cases' (26 Nov).
+  if (!may(me, LEAD_READ_ROLES) && !(await mayAnswer(db, me, leadId)))
+    allow(me, LEAD_READ_ROLES, "read a conversation");
   const chat = await chatOf(db, leadId);
   if (!chat) throw new Refusal(404, "not_found", "This case has no conversation.");
   const [messages, notes, [lead]] = await Promise.all([
@@ -132,8 +135,8 @@ export async function chatThread(db: Database, me: Me, leadId: number): Promise<
   const lines = [...messages, ...notes].sort(
     (a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id),
   );
-  const why = !may(me, LEAD_WORK_ROLES)
-    ? "Only the Online desk answers."
+  const why = !(await mayAnswer(db, me, leadId))
+    ? "Only the Online desk answers (and the PAP person, their own cases)."
     : chat.state === "lost"
       ? "Closed as lost: reopen the case to answer. A note for the team still goes."
       : !chat.account.active
@@ -239,7 +242,8 @@ export async function channelsData(db: Database, me: Me): Promise<ChannelsData> 
     unrouted,
     webhook: {
       path: "/webhooks/messenger",
-      websitePath: "/webhooks/store/2mg",
+      // A website of another company than the first calls its own company's address (the Org ID).
+      websitePath: isHomeCompany() ? "/webhooks/store/2mg" : `/webhooks/store/${companyNow()?.orgId}`,
       secretSet: appSecrets().length > 0,
       verifyTokenSet: verifyTokens().length > 0,
     },
@@ -305,12 +309,15 @@ export async function setIntake(
   await db.execute(sql`update channel_account set intake = ${intake} where id = ${id}`);
 }
 
-/** Every page and mailbox read on a timer (the server starts it; tests don't). */
-export function startChannelJobs(db: Database): void {
+/**
+ * Every page and mailbox read on a timer (the server starts it, once for each company; tests
+ * don't). `working` says whether the company works now: a paused one's pages wait.
+ */
+export function startChannelJobs(db: Database, working: () => boolean = () => true): void {
   let busy = false;
   let fullRounds = 0;
   const tick = async (full: boolean) => {
-    if (busy) return;
+    if (busy || !working()) return;
     busy = true;
     try {
       await drainInbox(db);

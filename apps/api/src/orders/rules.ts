@@ -442,12 +442,17 @@ export function mayAddPaper(
     leadId?: number | null;
     /** One of the team's, for its lead. */
     team?: boolean;
+    /** A guarantee letter's order. */
+    gl?: boolean;
   },
   kind?: PaperKind,
 ): boolean {
   if (order.status === "cancelled") return false;
   if (FINANCE_ROLES.includes(me.role) && (kind === undefined || kind === "payment_proof"))
     return true;
+  // The PAP person who placed a guarantee letter's order files the proof of the money that came in,
+  // months after the delivery sometimes, for Finance to confirm (Aryan, 26 Nov).
+  if (order.gl && kind === "payment_proof" && order.raisedBy === me.id) return true;
   if (DISPATCH_ROLES.includes(me.role) && (kind === undefined || kind === "dr")) return true;
   if (order.status === "completed") return false;
   return (

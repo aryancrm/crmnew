@@ -1,7 +1,8 @@
 -- Office or field (docs/PLAN.md 29, 26 Nov): every seller's seat is one or the other, never both.
 -- Office seats work by phone, Messenger and email; field seats visit doctors and hospitals. The
 -- CEO or the Admin sets it on the seat; whoever sits in it gets its screens. A person changes kind
--- only by moving to a seat of the other kind.
+-- only by moving to a seat of the other kind. Safe to run again (it was 0161 before main's 0161 and
+-- 0162 came in: a database that ran it under that name runs it once more, changing nothing).
 
 -- How a channel works today: the Hospital Division, the Rx field, PAP and Modern Trade go out;
 -- Online, telesales, B2B, Bidding and CLIDP work from the office.
@@ -28,10 +29,12 @@ language sql stable as $$
 $$;
 --> statement-breakpoint
 
-alter table seat add column works text check (works in ('office', 'field'));
+alter table seat add column if not exists works text check (works in ('office', 'field'));
 --> statement-breakpoint
 
 -- Only a MedRep's seat is office or field (a lead's follows the team they lead).
+alter table seat drop constraint if exists seat_works_medrep;
+--> statement-breakpoint
 alter table seat add constraint seat_works_medrep check (works is null or module = 'medrep');
 --> statement-breakpoint
 
@@ -40,7 +43,7 @@ update seat s set works = coalesce(
     works_of_channel(seat_channel(s.id)),
     works_of_channel((select c.code from seat_holder h join person p on p.id = h.person_id
       join channel c on c.id = p.channel_id where h.seat_id = s.id order by h.starts_on desc, h.id desc limit 1)))
-  where s.module = 'medrep';
+  where s.module = 'medrep' and s.works is null;
 --> statement-breakpoint
 
 -- How a person works today: their main seat's kind (the one that decides their screens), else
