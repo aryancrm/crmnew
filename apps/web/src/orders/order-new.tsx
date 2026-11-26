@@ -484,7 +484,14 @@ export function OrderNew({
   // Their own marked; every channel one press away.
   const ownChips: readonly string[] = anyDivision ? [] : ownDivisions;
   const ownDivision = ownDivisions[0] ?? "";
-  const pickedDivision = divisionOf(division) ?? ownDivision;
+  // The General part is the account's (26 Nov, the backend developer; it replaces "any other a pick
+  // away"): a seller orders in their account's Divisions only; another Division's order is placed
+  // from an account of that Division (Add another account, then switch). The API refuses it too.
+  const lockedDivisions = !anyDivision && ownDivisions.length > 0;
+  const askedDivision = divisionOf(division);
+  const pickedDivision =
+    // An order being fixed keeps the Division it was placed in.
+    (askedDivision && (!lockedDivisions || fixId || ownDivisions.includes(askedDivision)) ? askedDivision : null) ?? ownDivision;
   const pickedSubDivision =
     subDivision ??
     (pickedDivision
@@ -1225,21 +1232,29 @@ export function OrderNew({
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <label className="col-span-2 flex flex-col gap-1 sm:col-span-1">
             <Label text="Division" needed />
-            <select
-              aria-label="Division"
-              value={pickedDivision}
-              disabled={Boolean(fixId)}
-              onChange={(event) => event.target.value && divisionPicked(event.target.value)}
-              className={FIELD}
-            >
-              {!pickedDivision && <option value="">-- Pick the Division --</option>}
-              {DIVISIONS.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                  {ownChips.includes(name) ? (forRep ? " · theirs" : " · yours") : ""}
-                </option>
-              ))}
-            </select>
+            {lockedDivisions && ownDivisions.length === 1 ? (
+              // The account's own, as it is: another Division's order comes from that Division's account.
+              <div className={FIXED} title="Your account's Division. For another Division, switch to an account of that Division.">
+                {pickedDivision}
+                {fixId ? "" : forRep ? " · theirs" : " · yours"}
+              </div>
+            ) : (
+              <select
+                aria-label="Division"
+                value={pickedDivision}
+                disabled={Boolean(fixId)}
+                onChange={(event) => event.target.value && divisionPicked(event.target.value)}
+                className={FIELD}
+              >
+                {!pickedDivision && <option value="">-- Pick the Division --</option>}
+                {(lockedDivisions ? ownDivisions : DIVISIONS).map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                    {ownChips.includes(name) ? (forRep ? " · theirs" : " · yours") : ""}
+                  </option>
+                ))}
+              </select>
+            )}
           </label>
             <label className="flex flex-col gap-1">
               <Label text="Sub-division" />

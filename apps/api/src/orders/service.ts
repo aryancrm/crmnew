@@ -2047,6 +2047,18 @@ export async function placeOrder(
   // picks that Division and its fields follow"). Whatever its Division, the order counts for its
   // MedRep: their own lead and head, their channel, their target.
   const ownDivisions = divisionsOf(placer?.seatDivisions ?? null, placer?.division ?? null);
+  // The order counts for the account it is placed from (26 Nov, the backend developer: "the General
+  // part is the account's"; it replaces Aryan's 19 Nov "any other Division a pick away"): a seller,
+  // or a lead for one of their people, orders in that account's Divisions; another Division's order
+  // is placed from an account of that Division (Add another account, then switch). Management, the
+  // Admin and the CEO still pick any.
+  if (division && ownDivisions.length && !["management", "admin", "ceo"].includes(me.role) && !ownDivisions.includes(division))
+    throw new Refusal(
+      400,
+      "invalid",
+      `This account's orders count for ${ownDivisions.join(" or ")}. For ${division}, switch to an account of that Division.`,
+      "division",
+    );
   const orderDivision = division ?? ownDivisions[0] ?? null;
   // The Sub-division and Headquarter as the form sent them (the hub's rule, 19 Nov), else: their
   // own Division's from where they sit, as before; another Division's by the hub's rule (never the

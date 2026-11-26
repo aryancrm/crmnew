@@ -1,8 +1,10 @@
 // One seat, one Division (Aryan, 19 Nov: "a MedRep comes under one Division; if a Hospital MedRep
 // brings another Division's order, under which head does it go?"): an order carries the Division of
 // the person whose order it is (their seat's: CLIDP, RX Business and its lines, MD Telesales, else
-// the channel's), another may be picked, and the Admin may set any (Management places none). The
-// Divisions are the sales tracker's eight channels (19 Nov); a hub word is read as its channel.
+// the channel's). Since 26 Nov the order counts for the account it is placed from: a seller orders in
+// their account's Divisions only (another Division's order comes from an account of that Division,
+// switched to); the Admin may set any (Management places none). The Divisions are the sales
+// tracker's eight channels (19 Nov); a hub word is read as its channel.
 
 import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -57,7 +59,7 @@ beforeAll(async () => {
 });
 
 describe("an order's Division", () => {
-  it("starts as the MedRep's own; another may be picked and still counts for him; the Admin may set any", async () => {
+  it("is the MedRep's account's own; another is refused (switch account); the Admin may set any", async () => {
     const me = (await read<{ me: Me }>("ryan", "/api/me")).me;
     expect(me.divisions?.[0]).toBe("HOSP");
 
@@ -67,18 +69,17 @@ describe("an order's Division", () => {
     const id = ((await placed.json()) as { id: number }).id;
     expect((await read<OrderDetail>("ryan", `/api/orders/${id}`)).order.division).toBe("HOSP");
 
-    // Another Division (19 Nov, evening: the screen universal, as the hub's): taken, carried on
-    // the order, and still his (his channel, his lead and head).
+    // Another Division (26 Nov: "the General part is the account's"): refused, saying to switch
+    // to an account of that Division; nothing placed.
     const other = await post("ryan", "/api/orders", {
       customerId: customer,
       division: "CLIDP",
       items: [{ medicineId: medicine, qty: 1, priceKind: "hospital" }],
     });
-    expect(other.status, await other.clone().text()).toBe(200);
-    const otherId = ((await other.json()) as { id: number }).id;
-    const otherDetail = await read<OrderDetail>("ryan", `/api/orders/${otherId}`);
-    expect(otherDetail.order.division).toBe("CLIDP");
-    expect(otherDetail.order.medrep).toBe(me.name);
+    expect(other.status).toBe(400);
+    expect(((await other.json()) as { error: { message: string } }).error.message).toBe(
+      "This account's orders count for HOSP. For CLIDP, switch to an account of that Division.",
+    );
 
     // The Admin, ordering for nobody in particular, may set any; Management places no orders (19 Nov).
     const admin = await post("admin", "/api/orders", {
@@ -99,7 +100,7 @@ describe("an order's Division", () => {
   });
 
   it("brings the hub's Sub-division and Headquarter with another Division, and a prescription Division asks why there is none", async () => {
-    const placed = await post("ryan", "/api/orders", {
+    const placed = await post("admin", "/api/orders", {
       customerId: customer,
       division: "RX Business",
       type: "no_po",
@@ -108,7 +109,7 @@ describe("an order's Division", () => {
       items: [{ medicineId: medicine, qty: 1, priceKind: "hospital" }],
     });
     expect(placed.status, await placed.clone().text()).toBe(200);
-    const detail = await read<OrderDetail>("ryan", `/api/orders/${((await placed.json()) as { id: number }).id}`);
+    const detail = await read<OrderDetail>("admin", `/api/orders/${((await placed.json()) as { id: number }).id}`);
     expect(detail.order).toMatchObject({ division: "RX Business", subDivision: "MD Telesales", headquarter: "TAFT" });
     const rx = detail.paperList.find((row) => row.kind === "prescription");
     expect(rx?.needed).toBe(true);
@@ -117,7 +118,7 @@ describe("an order's Division", () => {
 
   it("takes only the sales tracker's eight channels, reading a hub word as its channel", async () => {
     // A page still open from before sends the hub's word: it is booked under its channel.
-    const old = await post("ryan", "/api/orders", {
+    const old = await post("admin", "/api/orders", {
       customerId: customer,
       division: "URO",
       type: "no_po",
@@ -125,10 +126,10 @@ describe("an order's Division", () => {
       items: [{ medicineId: medicine, qty: 1, priceKind: "hospital" }],
     });
     expect(old.status, await old.clone().text()).toBe(200);
-    const oldDetail = await read<OrderDetail>("ryan", `/api/orders/${((await old.json()) as { id: number }).id}`);
+    const oldDetail = await read<OrderDetail>("admin", `/api/orders/${((await old.json()) as { id: number }).id}`);
     expect(oldDetail.order.division).toBe("RX Business");
     // The hub's MSA had nobody: no such Division now.
-    const none = await post("ryan", "/api/orders", {
+    const none = await post("admin", "/api/orders", {
       customerId: customer,
       division: "MSA",
       items: [{ medicineId: medicine, qty: 1, priceKind: "hospital" }],
