@@ -9,6 +9,7 @@ import { allow, may, onlineDesk, Refusal } from "../http";
 import { addDays, EXPIRING_DAYS, todayManila } from "../inventory/rules";
 import { clean, day, iso, type Runner } from "../inventory/service";
 import { inForce } from "../org/service";
+import { careGroupDoctors } from "../rx/groups";
 import type { Role } from "../people/roles";
 import { bytesOf, keepFile } from "../files/store";
 import { formatPhone } from "../phone";
@@ -134,11 +135,13 @@ export function seen(me: Me): SQL {
       or c.area_id in ${seatAreasOf(me)}
       or exists (select 1 from lead l where l.customer_id = c.id and l.desk = 'pap' and l.assigned_to = ${me.id})
       or exists (select 1 from b2b_account ba where ba.customer_id = c.id and (ba.nbd_id = ${me.id} or ba.crr_id = ${me.id}))
-      ${me.works === "office" ? sql`or exists (select 1 from sales_order so where so.customer_id = c.id and so.medrep_id = ${me.id})` : sql``})`;
+      ${me.works === "office" ? sql`or exists (select 1 from sales_order so where so.customer_id = c.id and so.medrep_id = ${me.id})` : sql``}
+      ${careGroupDoctors(me) ? sql`or ${careGroupDoctors(me)}` : sql``})`;
   if (me.role === "team_lead" || me.role === "manager")
     return sql`(c.added_by in (select id from team)
       or c.area_id in (select area_id from person where id in (select id from team) and area_id is not null)
-      or c.area_id in ${teamSeatAreas})`;
+      or c.area_id in ${teamSeatAreas}
+      ${careGroupDoctors(me) ? sql`or ${careGroupDoctors(me)}` : sql``})`;
   // The Online desk: patients, and the customers of its own enquiries and orders; not every
   // hospital's money.
   if (onlineDesk(me))
