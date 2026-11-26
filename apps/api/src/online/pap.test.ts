@@ -368,6 +368,10 @@ describe("PAP cases", () => {
     const orderId = ((await placed.json()) as { id: number }).id;
     // The order is Jane's sale (her channel, not PAP), raised by Paula; Management approves it.
     const order = await read<OrderDetail>("sarla", `/api/orders/${orderId}`);
+    // Said to be PAP's wherever it shows (26 Nov), with its case and who works it.
+    expect(order.order.pap).toMatchObject({ code: expect.stringMatching(/^ENQ-/), leadId: id, by: expect.stringContaining("Paula") });
+    const list = await read<{ rows: { id: number; pap?: unknown }[] }>("sarla", "/api/orders");
+    expect(list.rows.find((row) => row.id === orderId)?.pap).toBeTruthy();
     expect(order.order).toMatchObject({ status: "pending_approval", medrep: "Jane", raisedBy: "Paula" });
     expect(order.order.channel).not.toBe("PAP");
     expect(order.can.approve).toBe(true);

@@ -1006,6 +1006,9 @@ export type OrderRow = {
   changed?: boolean;
   /** It came through the Online desk: the case's code and where it came in ("Messenger"). */
   via?: { code: string; source: string } | null;
+  /** A guarantee letter's order: PAP's (Aryan, 26 Nov: "write everywhere that it is PAP's"), with
+   *  its case and who works it; null on every other order. */
+  pap?: { code: string | null; leadId: number | null; by: string | null } | null;
 };
 
 export type OrderList = {
