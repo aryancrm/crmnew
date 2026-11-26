@@ -598,6 +598,12 @@ async function land(db: Database, account: MailAccount, mail: Email): Promise<bo
     missingFiles: mail.missingFiles,
     opens: { name, email: mail.from.address, source: "email" },
   });
+  // A new enquiry by email is thanked by itself, when the company switched it on; never one
+  // read from the mailbox's past (a mailbox just connected).
+  if (kept.opened && kept.leadId && Date.now() - mail.at.getTime() < 24 * 60 * 60 * 1000) {
+    const { tellCase } = await import("./case-mail");
+    void tellCase(db, null, kept.leadId, "enquiry");
+  }
   return kept.kept;
 }
 

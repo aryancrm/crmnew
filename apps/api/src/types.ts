@@ -337,6 +337,11 @@ export type MedicineDetail = {
   canvass: CanvassPrice[];
 };
 
+/** A case's own steps the customer hears of by email (Aryan, 26 Nov, as the old CRM). */
+export type CaseMailEvent = "enquiry" | "quotation" | "gl_received" | "gl_verified";
+/** Automatic emails on a case: off until the Admin switches them on, then each step its own. */
+export type CaseMailSettings = { enabled: boolean; events: Record<CaseMailEvent, boolean> };
+
 /** Another vendor's price for one piece of a medicine, for PCSO's quotation 2 or 3. Centavos. */
 export type CanvassPrice = { slot: 2 | 3; vendor: string; amount: number };
 

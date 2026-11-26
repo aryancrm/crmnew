@@ -3,7 +3,7 @@
 // people it employs (26 Nov), its registered name always from the company list.
 
 import { COMPANIES, COMPANY_CODES, type CompanyCode } from "@2mg/api/companies";
-import type { CompanyInfo, PointsProgram } from "@2mg/api/types";
+import type { CaseMailEvent, CaseMailSettings, CompanyInfo, PointsProgram } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { api } from "../api";
@@ -25,7 +25,12 @@ export function SettingsPage() {
   const query = useQuery({
     queryKey: ["settings"],
     queryFn: () =>
-      api<{ company: CompanyInfo; companies: Record<CompanyCode, CompanyInfo>; points: PointsProgram }>("/api/settings"),
+      api<{
+        company: CompanyInfo;
+        companies: Record<CompanyCode, CompanyInfo>;
+        points: PointsProgram;
+        caseEmails: CaseMailSettings;
+      }>("/api/settings"),
   });
   const [code, setCode] = useState<CompanyCode>("2mg");
   if (!query.data) return <PageState query={query} what="the settings" />;
@@ -44,7 +49,67 @@ export function SettingsPage() {
         </div>
       </PageHead>
       <CompanyForm key={code} code={code} start={query.data.companies[code]} />
+      <CaseEmails start={query.data.caseEmails} />
     </div>
+  );
+}
+
+const CASE_EMAILS: { key: CaseMailEvent; label: string }[] = [
+  { key: "enquiry", label: "Thank you for contacting us (a new enquiry)" },
+  { key: "quotation", label: "The quotation, its PDF attached (PCSO's three once all are there)" },
+  { key: "gl_received", label: "Guarantee letter received" },
+  { key: "gl_verified", label: "Guarantee letter verified" },
+];
+
+/** A case's own steps emailed to the customer by themselves (Aryan, 26 Nov, as the old CRM): off until
+ *  switched on here. The order's steps (confirmed, on the way, delivered, paid) go as before. */
+function CaseEmails({ start }: { start: CaseMailSettings }) {
+  const [value, setValue] = useState(start);
+  const [saved, setSaved] = useState(false);
+  const action = useAction();
+  const queries = useQueryClient();
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setSaved(false);
+    if (await action.run(async () => api("/api/settings/case-emails", { body: value }))) {
+      setSaved(true);
+      await queries.invalidateQueries({ queryKey: ["settings"] });
+    }
+  }
+  return (
+    <form onSubmit={submit} className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-900">Automatic emails on a case</h2>
+      <p className="mt-1 text-[13px] text-slate-500">
+        From the mailbox the case talks on, else this company's first one, to a customer whose email is on the case. Once
+        each. The order's own steps (confirmed, on the way, delivered, paid) are emailed as before.
+      </p>
+      <label className="mt-3 flex items-center gap-2 text-sm font-medium">
+        <input type="checkbox" checked={value.enabled} onChange={(event) => setValue({ ...value, enabled: event.target.checked })} />
+        Send them
+      </label>
+      <div className="mt-2 grid gap-1.5 pl-6">
+        {CASE_EMAILS.map((one) => (
+          <label key={one.key} className={`flex items-center gap-2 text-sm ${value.enabled ? "" : "text-slate-400"}`}>
+            <input
+              type="checkbox"
+              disabled={!value.enabled}
+              checked={value.events[one.key]}
+              onChange={(event) => setValue({ ...value, events: { ...value.events, [one.key]: event.target.checked } })}
+            />
+            {one.label}
+          </label>
+        ))}
+      </div>
+      <div className="mt-3">
+        <Problem message={action.problem?.message} />
+      </div>
+      <div className="mt-3 flex items-center gap-3">
+        <Button type="submit" variant="primary" small disabled={action.busy}>
+          {action.busy ? "Saving…" : "Save"}
+        </Button>
+        {saved && <span className="text-[13px] font-medium text-emerald-700">Saved.</span>}
+      </div>
+    </form>
   );
 }
 

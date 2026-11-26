@@ -7,7 +7,7 @@ import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import type { Runner } from "../inventory/service";
 import { COMPANIES, type CompanyCode } from "../companies";
-import type { CompanyInfo, Letterhead, Me, PointsProgram } from "../types";
+import type { CaseMailSettings, CompanyInfo, Letterhead, Me, PointsProgram } from "../types";
 
 export const SETTING_ROLES = ["admin", "ceo"] as const;
 
@@ -24,6 +24,11 @@ const COMPANY_DEFAULT: CompanyInfo = {
   signatoryTitle: "",
 };
 const POINTS_DEFAULT: PointsProgram = { enabled: false, rateBps: 1000 };
+/** Off until the Admin switches them on (the old CRM's owner's choice), then every step. */
+const CASE_MAIL_DEFAULT: CaseMailSettings = {
+  enabled: false,
+  events: { enquiry: true, quotation: true, gl_received: true, gl_verified: true },
+};
 
 async function read<T>(db: Runner, key: string, fallback: T): Promise<T> {
   const [found] = await rows<{ value: T }>(db, sql`select value from setting where key = ${key}`);
@@ -65,6 +70,22 @@ export async function letterheadOf(db: Runner, code: CompanyCode): Promise<Lette
 
 export const pointsProgram = (db: Runner) => read<PointsProgram>(db, "points", POINTS_DEFAULT);
 
+/** Which of a case's own steps email the customer by themselves (online/case-mail.ts). */
+export async function caseMailSettings(db: Runner): Promise<CaseMailSettings> {
+  const saved = await read<CaseMailSettings>(db, "case_emails", CASE_MAIL_DEFAULT);
+  return { enabled: saved.enabled, events: { ...CASE_MAIL_DEFAULT.events, ...saved.events } };
+}
+
+export async function saveCaseMail(db: Database, me: Me, input: CaseMailSettings): Promise<void> {
+  allow(me, SETTING_ROLES, "change the automatic emails");
+  await write(db, me, "case_emails", {
+    enabled: input.enabled,
+    events: Object.fromEntries(
+      Object.keys(CASE_MAIL_DEFAULT.events).map((key) => [key, input.events[key as keyof CaseMailSettings["events"]] !== false]),
+    ),
+  });
+}
+
 async function write(db: Database, me: Me, key: string, value: unknown) {
   await db.execute(
     sql`insert into setting (key, value, updated_by) values (${key}, ${JSON.stringify(value)}::jsonb, ${me.id})
@@ -75,10 +96,20 @@ async function write(db: Database, me: Me, key: string, value: unknown) {
 export async function settingsOf(
   db: Database,
   me: Me,
-): Promise<{ company: CompanyInfo; companies: Record<CompanyCode, CompanyInfo>; points: PointsProgram }> {
+): Promise<{
+  company: CompanyInfo;
+  companies: Record<CompanyCode, CompanyInfo>;
+  points: PointsProgram;
+  caseEmails: CaseMailSettings;
+}> {
   allow(me, SETTING_ROLES, "see the settings");
-  const [company, gpi, points] = await Promise.all([companyInfo(db), detailsOf(db, "gpi"), pointsProgram(db)]);
-  return { company, companies: { "2mg": company, gpi }, points };
+  const [company, gpi, points, caseEmails] = await Promise.all([
+    companyInfo(db),
+    detailsOf(db, "gpi"),
+    pointsProgram(db),
+    caseMailSettings(db),
+  ]);
+  return { company, companies: { "2mg": company, gpi }, points, caseEmails };
 }
 
 /** The Admin or the CEO saves a company's details (2MG's by default). */

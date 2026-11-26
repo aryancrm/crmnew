@@ -4,7 +4,7 @@ import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
 import { type Env, idParam, readBody } from "../http";
-import { saveCompany, savePointsProgram, settingsOf } from "../settings/service";
+import { saveCaseMail, saveCompany, savePointsProgram, settingsOf } from "../settings/service";
 import type { CompanyInfo } from "../types";
 import { addPointsByPhone, adjustPoints, openAccountFor, pointsAccount, pointsList } from "./service";
 
@@ -65,6 +65,23 @@ export function pointsRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
     );
     // ?company=gpi: Getmeds Philippines' own details (its papers' letterhead); else 2MG's.
     await saveCompany(db, c.get("me"), input as CompanyInfo, c.req.query("company") === "gpi" ? "gpi" : "2mg");
+    return c.json({ ok: true });
+  });
+  // A case's own steps emailed to the customer by themselves (Aryan, 26 Nov, as the old CRM).
+  app.post("/api/settings/case-emails", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        enabled: z.boolean(),
+        events: z.object({
+          enquiry: z.boolean(),
+          quotation: z.boolean(),
+          gl_received: z.boolean(),
+          gl_verified: z.boolean(),
+        }),
+      }),
+    );
+    await saveCaseMail(db, c.get("me"), input);
     return c.json({ ok: true });
   });
   app.post("/api/settings/points", async (c) => {

@@ -21,7 +21,7 @@ import { allow, Refusal } from "../http";
 import { COMPANIES, COMPANY_CODES } from "../companies";
 import { companyDetailsOf, companyInfo } from "../settings/service";
 import type { CompanyInfo, LeadCase, Me } from "../types";
-import { replyByEmail } from "./email";
+import { replyByEmail, sendOnCase, startEmailThread } from "./email";
 import { replyOnMessenger } from "./messenger";
 import { LEAD_READ_ROLES, LEAD_WORK_ROLES } from "./rules";
 import { leadCase, leadGate, quoteSent } from "./service";
@@ -638,13 +638,14 @@ export async function sendQuotation(
         sql`update lead set chat_channel = 'email', chat_account_id = ${mailbox.id}, chat_key = ${data.lead.email.toLowerCase()} where id = ${leadId} and chat_key is null`,
       );
     }
+    const words = quotationEmail(snapshot, company, name);
     await replyByEmail(
       db,
       me,
       leadId,
-      `Hello${name ? ` ${name}` : ""},\n\nPlease find attached our quotation ${snapshot.reference} for ${snapshot.patient}: ${money(snapshot.toPay)} in all, valid for ${snapshot.validityDays} days.\n\nReply to this email or call ${company.phone || "us"} to order.\n\n${company.name}`,
+      words.text,
       {
-        subject: `Your quotation from ${company.name} · ${snapshot.patient}`,
+        subject: words.subject,
         attachments: [
           { filename: fileName(snapshot), content: pdf, contentType: "application/pdf" },
         ],
@@ -652,4 +653,34 @@ export async function sendQuotation(
     );
   }
   await quoteSent(db, me, leadId, input.via);
+}
+
+/** The quotation's email: its words and subject (a guarantee letter's says where to apply). */
+function quotationEmail(snapshot: QuotationSnapshot, company: CompanyInfo, name: string): { subject: string; text: string } {
+  return {
+    text:
+      snapshot.road === "gl"
+        ? `Hello${name ? ` ${name}` : ""},\n\nPlease find attached ${(snapshot.canvass?.length ?? 0) > 0 ? `the ${snapshot.canvass!.length + 1} quotations ${AGENCY[snapshot.agency ?? ""] ?? "the agency"} asks for (ours and the other vendors')` : "our quotation"} ${snapshot.reference} for ${snapshot.patient}, to apply with ${AGENCY[snapshot.agency ?? ""] ?? "the agency"} for your guarantee letter. It is valid for ${snapshot.validityDays} days.\n\nWhen you have the guarantee letter, reply to this email with a photo of it, or call ${company.phone || "us"}.\n\n${company.name}`
+        : `Hello${name ? ` ${name}` : ""},\n\nPlease find attached our quotation ${snapshot.reference} for ${snapshot.patient}: ${money(snapshot.toPay)} in all, valid for ${snapshot.validityDays} days.\n\nReply to this email or call ${company.phone || "us"} to order.\n\n${company.name}`,
+    subject: `Your quotation from ${company.name} · ${snapshot.patient}`,
+  };
+}
+
+/**
+ * The quotation emailed by itself (case-mail.ts), by the server rather than a person: on the
+ * case's email conversation (started on the company's first mailbox when the case has an email
+ * and talks nowhere yet), its PDF attached; then marked sent. A case on Messenger gets none.
+ */
+export async function emailQuotation(db: Database, me: Me, leadId: number): Promise<boolean> {
+  const data = await leadCase(db, me, leadId);
+  if (!(await startEmailThread(db, leadId))) return false;
+  const company = await companyInfo(db);
+  const snapshot = await withLetterheads(db, snapshotOf(data, company, me));
+  const words = quotationEmail(snapshot, company, (data.lead.name.split(/\s+/)[0] ?? "").trim());
+  await sendOnCase(db, leadId, words.text, {
+    subject: words.subject,
+    attachments: [{ filename: fileName(snapshot), content: await drawQuotation(snapshot), contentType: "application/pdf" }],
+  }, me.id);
+  await quoteSent(db, me, leadId, "email");
+  return true;
 }
