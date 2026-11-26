@@ -2451,6 +2451,40 @@ type-checked, not yet clicked through in a browser.
 **Not done.** The employee ID made compulsory (HR's *Missing* view lists who lacks one); a screen to
 move past covered sales' credit to someone (the data is kept for it).
 
+## 28. Office or field: each seller's seat is one or the other (26 Nov 2026, plan only)
+
+Asked by the backend developer: split the sellers into those who stay in the office and work by
+phone, and those who go out and visit. Agreed the same day, nothing built yet.
+
+**The rule.** Every seller's seat (their login ID) is either **Office** or **Field**, never both.
+A person is never both at once: to change, HR moves them to a seat of the other kind (section 26's
+move, with its reason and trail), and the new seat brings its own screens.
+
+| | **Office** | **Field** |
+|---|---|---|
+| Who today | MD Telesales (Oncology), TeleSales Anesthesia, Online (B2C CHC), B2B CRR, the Sales Admins | Rx CHC (visits doctors), Hospital CHC (visits hospitals), B2B NBD if they go out |
+| Works by | Phone, Messenger, email: patients, doctors and hospitals | Visits, the visit plan, the calendar |
+| Their screens | Calls to make today, refills due, enquiries, orders | Today's route, visits to log, field expenses, orders where the team takes them |
+| Not on their screens | Visits, the route plan, field expenses | The call desk |
+
+**Decided (26 Nov):**
+1. **Who places the order stays as each team works now.** In Rx the field CHC places none (MD
+   Telesales take them); in the Hospital Division the field CHC places their own; Online and B2B
+   place their own.
+2. **The sale counts for whoever takes and processes the order.** In Rx that is the office
+   (MD Telesales), not the field CHC who visited; the field CHC is scored on visits and doctors
+   covered, as today.
+3. **Both see the customer.** The field seller whose area it is and the office seller who calls
+   them each see the customer, its orders and its visits.
+4. **One seat, one kind.** No seat is both; the kind belongs to the seat, so whoever sits in it
+   gets its screens. A person given another seat of the other kind changes screens with it.
+
+**To build (when asked):** the seat's kind (Office or Field) set by HR or the Admin on the seat;
+the menus and Home read from it instead of from the channel alone; the visit pages refuse an
+Office seat ("Visits are for field seats"); the customer page shows both the field and the office
+seller; a test that a seat's kind decides its menu, and that the sale's credit follows the order's
+taker.
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -3886,3 +3920,4 @@ move past covered sales' credit to someone (the data is kept for it).
 - 25 Nov (197), recorded by the backend developer (on the `hr` branch, not merged): **HR: moves and vacant seats** (section 26; HR-PLAN step 4b). The employee ID is the person's key, the email ID the seat's; every order keeps the email ID it was sold as (`sold_as`); a lead gives a vacant area to one of their people as added work with no KPI (the sale is the seat's and the team's); vacant 7 days → the lead, 14 → the head and HR; HR's *Move* (transfer, promotion, demotion, lateral); every move in HR's trail. Migration 0156; 13 scenarios and how each is tested in section 26.
 - 25 Nov, Aryan: "my team made changes: pull, review, and if they are correct push to main." **Two pull requests landed.** **#6 (hr, backend developer):** HR's desk (the trail of every change to a person's record, papers, job history, positions, attendance corrections, work schedules, the biometric workbook import, leave and forms rules, signatures and printouts, holidays by town, overtime by type, HR's register compared with the CRM's) and moves and vacant seats (section 26). Reviewed: migrations 0149-0156 only add; 0156 fills *Sold as* on existing orders and marks none of them covered, so past figures stay as they were; `order_seat` keeps main's three steps after the new covering one; `sale_invoice` keeps main's definition plus two columns. Its one CI failure (the code scan) was two `sql.raw` uses reading `RECORD_COLUMNS`, a fixed list: said so in a comment, as the rule asks. **The covering rule is the team's, not yet Aryan's word:** a sale a MedRep makes while covering a vacant area counts for that seat and its lead, never for the MedRep's own KPI or score (HR-PLAN 4b, "asked by the backend department"). **#5 (ai5-migration, the bidding-side developer):** the Tender finder's two portal cards, Fetch now, PS-PhilGEPS log-in from a team laptop, Opportunities, the Bid Match list and the notice's page. Reviewed: the new routes check the bidding team; the laptop codes are signed with the server's key and expire; the laptop's link carries only the code, its characters checked; the robot is started with a token from the server's settings. **Both had used migrations 0149-0150:** hr's came first, so the tender finder's became 0157 and 0158 (`RENAMED` in `db/migrate.ts`, so a database that ran them under the old names does not run them twice); the change log keeps both sides (hr's line is 197). Not merged: the `backend` branch's new home page (frontend department, about 30,000 lines, no pull request yet).
 - 25 Nov, Aryan, asked whether a MedRep who covers an empty area should get no target credit for the sales made there: **"Yes, keep it."** Section 26's covering rule (the sale counts for the empty seat and its lead, never the covering MedRep's own KPI or score) is his rule now. From now on Aryan is spoken to in plain English only, without git or code words (his word the same day; CLAUDE.md says so).
+- 26 Nov (204), asked by the backend developer: **office or field.** Every seller's seat is either Office (works by phone) or Field (visits doctors or hospitals), never both; HR moves a person to a seat of the other kind to change. Who places the order stays as each team works now; the sale counts for whoever takes and processes the order; the field and the office seller both see the customer (section 28). Plan only, nothing built yet.
