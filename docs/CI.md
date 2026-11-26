@@ -1,7 +1,31 @@
 # CI: the checks on every branch
 
-`.github/workflows/ci.yml` runs on every push to any branch, every pull request, nightly at 2 am
-Manila (everything) and by hand (Actions → CI → Run workflow).
+`.github/workflows/ci.yml` runs on every push to any branch, weekly on Sunday at 2 am Manila
+(everything) and by hand (Actions → CI → Run workflow). A pull request has no run of its own: the
+push already checked that commit, and its result shows on the pull request (26 Nov, fewer runs).
+
+## In plain English, for everyone
+
+Each run's summary page (Actions → the run) has two plain-English parts:
+
+- **Branch report** (`scripts/ci/branch-report.ts`): what the branch changes compared with main, by
+  part of the system (Orders, Finance, HR, Database changes…), its last changes; **what could break
+  main** if it were merged (⚠️ a conflict with main, main moved on and the branch hasn't caught up,
+  a migration number main already uses or out of order; 👀 the database, sign-in, money, libraries,
+  deployment or the checks touched, files deleted); and **the other branches at work**: what each
+  changes, whether it conflicts with main, and whether it changes the same files as this branch or
+  adds the same migration number. It only reports; it never fails the run. Run it locally:
+  `node scripts/ci/branch-report.ts` (or `--head origin/hr` for another branch).
+- **CI passed**: one line per check in words ("The API type-checks and its tests pass", "Every
+  migration runs twice on a real database"…) with ✅ passed, ➖ not needed for this change, or ❌
+  FAILED, and at the top whether the change is ready.
+
+## The other workflows
+
+`tender-finder.yml` (hourly in the working day) and `tender-finder-keepalive.yml` (every 5 minutes)
+are not checks: they are the live Tender finder's robot (PLAN 24-25). The keep-alive stays every 5
+minutes all day: if the PS-PhilGEPS log-in sits idle it ends, and a new one needs a person to tick
+its captcha.
 
 ## What changed decides what runs
 

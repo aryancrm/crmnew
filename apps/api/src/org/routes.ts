@@ -6,6 +6,7 @@ import type { Database } from "../db/index";
 import { type Env, idParam, readBody } from "../http";
 import { ROLES } from "../people/roles";
 import { approvers, setApproves } from "./approvers";
+import { giveCover, takeCoverBack, vacantSeats } from "./vacancies";
 import {
   addArea,
   addChannel,
@@ -158,6 +159,26 @@ export function orgRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHand
       }),
     );
     await coverSeat(db, c.get("me"), idParam(c), body);
+    return c.json({ ok: true });
+  });
+  // Vacant seats: the team lead's in their boxes (they give one to their own people as a cover,
+  // added work with no KPI), everyone's for HR, the CEO and the Admin.
+  app.get("/api/org/vacant", async (c) => c.json(await vacantSeats(db, c.get("me"))));
+  app.post("/api/org/vacant/:id/cover", async (c) => {
+    const body = await readBody(
+      c,
+      z.object({
+        personId: id("Pick who takes it."),
+        until: dayText,
+        reason: text(200).nullable().optional(),
+      }),
+    );
+    await giveCover(db, c.get("me"), idParam(c), body);
+    return c.json({ ok: true });
+  });
+  app.post("/api/org/vacant/covers/:id/end", async (c) => {
+    const body = await readBody(c, z.object({ reason: text(200).nullable().optional() }));
+    await takeCoverBack(db, c.get("me"), idParam(c), body.reason);
     return c.json({ ok: true });
   });
   app.post("/api/org/holdings/:id/end", async (c) => {

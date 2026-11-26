@@ -9,9 +9,10 @@ import { createHash } from "node:crypto";
 import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
-import type { FindRun, FoundDetail, FoundLine, FoundList, FoundTender, FoundView, Me, TenderMode } from "../types";
+import type { FindRun, FoundDetail, FoundDocs, FoundLine, FoundList, FoundSort, FoundTender, FoundView, Me, TenderMode } from "../types";
 import { papersOf, robotLoginState } from "./papers";
 import { robotReady } from "./robot-caller";
+import { fetchState } from "./fetch-now";
 import { psState } from "./robot-store";
 import { createTender, recordsTenders, setLines } from "./service";
 
@@ -538,81 +539,177 @@ async function mustFind(db: Database, me: Me): Promise<void> {
   if (!(await finds(db, me))) throw new Refusal(403, "not_allowed", "The tender finder is the bidding team's.");
 }
 
+/** A found tender's type as the bidding system shows it (its tenderType.js): on PhilGEPS the short form at
+ *  the end of the notice type ("Invitation to Bid (ITB)" → ITB), on PS-PhilGEPS from the mode
+ *  (competitive/public bidding → ITB, small value/shopping → RFQ, negotiated → Negotiated), else as written. */
+const TYPE = sql`(case when f.source = 'ps' then (case
+      when f.procurement_mode ~* 'public bidding|competitive bidding' then 'ITB'
+      when f.procurement_mode ~* 'small value|shopping' then 'RFQ'
+      when f.procurement_mode ~* 'negotiated' then 'Negotiated'
+      else coalesce(f.procurement_mode, '') end)
+    else coalesce(substring(f.notice_type from '\\(([A-Za-z0-9]+)\\)\\s*$'), case when f.notice_type ~* 'negotiated' then 'Negotiated' end, f.notice_type, '') end)`;
+/** Its papers: the files kept here, or (from the bidding system's hand-over) the ones its reading names. */
+const FILES = sql`greatest((select count(*) from tender_found_file x where x.found_id = f.id),
+    case when jsonb_typeof(f.details->'documents') = 'array' then jsonb_array_length(f.details->'documents') else 0 end)`;
+/** The bidding system's document chips: with papers, pick-up only (the papers are only given at the office), none yet. */
+const DOCS = {
+  with: sql`${FILES} > 0`,
+  pickup: sql`${FILES} = 0 and f.details->>'documents_status' = 'pick-up'`,
+  none: sql`${FILES} = 0 and coalesce(f.details->>'documents_status', '') <> 'pick-up'`,
+} as const;
+
 const foundSelect = sql`select f.id::int as id, f.source, f.ref_no as "refNo", f.title, f.agency_name as agency, f.agency_id::int as "agencyId", c.name as customer,
     f.notice_type as "noticeType", f.procurement_mode as "procurementMode", f.abc::float8 as abc, to_char(f.published_on, 'YYYY-MM-DD') as "publishedOn",
     to_char(f.closing_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "closingAt", f.link, f.molecules,
     to_char(f.first_seen_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "firstSeenAt", to_char(f.screened_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "screenedAt", coalesce(p.name, f.screened_as) as "screenedBy",
     f.tender_id::int as "tenderId", t.code as "tenderCode", (f.closing_at is null or f.closing_at >= now()) as open,
-    (select count(*) from tender_found_line l where l.found_id = f.id and l.replaced_at is null)::int as lines
+    (select count(*) from tender_found_line l where l.found_id = f.id and l.replaced_at is null)::int as lines,
+    ${TYPE} as type, ${FILES}::int as files, f.details->>'documents_status' as "docsStatus"
   from tender_found f left join customer c on c.id = f.agency_id left join person p on p.id = f.screened_by left join tender t on t.id = f.tender_id`;
 
 const VIEW: Record<FoundView, SQL> = {
-  // New: asks for our molecules, still open, nobody has screened it or made it a tender.
-  new: sql`f.tender_id is null and f.screened_at is null and cardinality(f.molecules) > 0 and (f.closing_at is null or f.closing_at >= now())`,
+  // Opportunities: every tender found that is ours, whatever its state (open or closed, screened, made a
+  // tender): one asking for one of our molecules, or any PS-PhilGEPS tender (the robot reads PS-PhilGEPS's
+  // Bid Match, which the portal itself matched to the company's registered products, as the bidding
+  // system's Bid Match page shows them; most have no lines yet until their papers are read).
+  // "Everything found" adds PhilGEPS's medicine notices that ask for none of ours.
+  opportunities: sql`(cardinality(f.molecules) > 0 or f.source = 'ps')`,
   screened: sql`f.screened_at is not null and f.tender_id is null`,
   tenders: sql`f.tender_id is not null`,
   all: sql`true`,
 };
-const ORDER: Record<FoundView, SQL> = {
-  new: sql`f.first_seen_at desc, f.id desc`,
-  screened: sql`f.closing_at nulls last, f.id desc`,
-  tenders: sql`f.tender_id desc`,
-  all: sql`f.published_on desc nulls last, f.id desc`,
+/** The bidding system's sorts. Tenders first fetched in the last 24 hours (the New pill) come first in each. */
+const SORT: Record<FoundSort, SQL> = {
+  latest: sql`f.published_on desc nulls last, f.id desc`,
+  oldest: sql`f.published_on asc nulls last, f.ref_no`,
+  closing: sql`f.closing_at asc nulls last, f.published_on desc nulls last, f.id desc`,
+  budget: sql`f.abc desc nulls last, f.published_on desc nulls last, f.id desc`,
+};
+const FRESH = sql`(f.first_seen_at > now() - interval '24 hours')`;
+const PAGE_SIZES = [25, 50, 100] as const;
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+
+export type FoundAsk = {
+  view?: string | null;
+  q?: string | null;
+  source?: string | null;
+  molecule?: string | null;
+  type?: string | null;
+  /** Our medicines to leave out, comma-separated: a tender asking for any of them is hidden. */
+  exclude?: string | null;
+  docs?: string | null;
+  sort?: string | null;
+  /** The date range: on the published day or the closing day, from and to (YYYY-MM-DD, both inclusive). */
+  dateOn?: string | null;
+  from?: string | null;
+  to?: string | null;
+  page?: string | null;
+  size?: string | null;
 };
 
-export async function listFound(
-  db: Database,
-  me: Me,
-  asked: { view?: string | null; q?: string | null; source?: string | null; molecule?: string | null },
-): Promise<FoundList> {
+/** The finder's list, as the bidding system's Bid Match page: the tab, then search (every word), portal,
+ *  our medicine, type, medicines left out and a date range; the document chips on top of those; the
+ *  summary cards over what is listed; one page at a time. */
+export async function listFound(db: Database, me: Me, asked: FoundAsk): Promise<FoundList> {
   await mustFind(db, me);
-  const view: FoundView = asked.view === "screened" || asked.view === "tenders" || asked.view === "all" ? asked.view : "new";
+  const view: FoundView = asked.view === "screened" || asked.view === "tenders" || asked.view === "all" ? asked.view : "opportunities";
+  const docs: FoundDocs = asked.docs === "with" || asked.docs === "pickup" || asked.docs === "none" ? asked.docs : "all";
+  const sort: FoundSort = asked.sort === "oldest" || asked.sort === "closing" || asked.sort === "budget" ? asked.sort : "latest";
+  const size = PAGE_SIZES.find((one) => String(one) === asked.size) ?? 25;
+  const page = Math.max(1, Math.min(10_000, Math.floor(Number(asked.page)) || 1));
+
+  // The filters the tabs, chips and cards all follow (the bidding system: search, dates, portal, product, type, left out).
   const filters: SQL[] = [];
-  const q = (asked.q ?? "").trim().slice(0, 80);
-  if (q) {
-    const like = `%${q.replace(/[\\%_]/g, "\\$&")}%`;
+  for (const word of (asked.q ?? "").trim().slice(0, 120).split(/\s+/).filter(Boolean).slice(0, 8)) {
+    const like = `%${word.replace(/[\\%_]/g, "\\$&")}%`;
     filters.push(sql`(f.title ilike ${like} or f.agency_name ilike ${like} or f.ref_no ilike ${like} or array_to_string(f.molecules, ' ') ilike ${like})`);
   }
   if (asked.source === "philgeps" || asked.source === "ps") filters.push(sql`f.source = ${asked.source}`);
   if (asked.molecule?.trim()) filters.push(sql`${asked.molecule.trim()} = any(f.molecules)`);
+  if (asked.type?.trim()) filters.push(sql`${TYPE} = ${asked.type.trim().slice(0, 80)}`);
+  const leftOut = (asked.exclude ?? "").split(",").map((one) => one.trim()).filter(Boolean).slice(0, 200);
+  if (leftOut.length) filters.push(sql`not (f.molecules && ${`{${leftOut.map((name) => JSON.stringify(name)).join(",")}}`}::text[])`);
+  const day = asked.dateOn === "closing" ? sql`(f.closing_at at time zone 'Asia/Manila')::date` : sql`f.published_on`;
+  if (asked.from && DAY.test(asked.from)) filters.push(sql`${day} >= ${asked.from}::date`);
+  if (asked.to && DAY.test(asked.to)) filters.push(sql`${day} <= ${asked.to}::date`);
   const where = filters.length ? sql.join(filters, sql` and `) : sql`true`;
-  const [found, [counts], molecules, runs, login, ps] = await Promise.all([
-    rows<FoundTender>(db, sql`${foundSelect} where ${VIEW[view]} and ${where} order by ${ORDER[view]} limit 300`),
+  const listed = sql`${VIEW[view]} and ${where} and ${docs === "all" ? sql`true` : DOCS[docs]}`;
+
+  const [found, [counts], [docCounts], [stats], products, types, runs, login, ps, fetch] = await Promise.all([
+    rows<FoundTender>(db, sql`${foundSelect} where ${listed} order by ${FRESH} desc, ${SORT[sort]} limit ${size} offset ${(page - 1) * size}`),
     rows<Record<FoundView, number>>(
       db,
-      sql`select count(*) filter (where ${VIEW.new})::int as new, count(*) filter (where ${VIEW.screened})::int as screened,
+      sql`select count(*) filter (where ${VIEW.opportunities})::int as opportunities, count(*) filter (where ${VIEW.screened})::int as screened,
           count(*) filter (where ${VIEW.tenders})::int as tenders, count(*)::int as all
-        from tender_found f where ${where}`,
+        from tender_found f where ${where} and ${docs === "all" ? sql`true` : DOCS[docs]}`,
     ),
-    rows<{ name: string }>(db, sql`select distinct unnest(molecules) as name from tender_found order by 1`),
+    rows<Record<FoundDocs, number>>(
+      db,
+      sql`select count(*)::int as all, count(*) filter (where ${DOCS.with})::int as with, count(*) filter (where ${DOCS.pickup})::int as pickup,
+          count(*) filter (where ${DOCS.none})::int as none
+        from tender_found f where ${VIEW[view]} and ${where}`,
+    ),
+    rows<FoundList["stats"]>(
+      db,
+      sql`select count(*)::int as listed, coalesce(sum(f.abc), 0)::float8 as abc, coalesce(sum(${FILES}), 0)::int as files,
+          count(*) filter (where ${FILES} > 0)::int as "withFiles",
+          (select count(distinct m) from tender_found f, unnest(f.molecules) m where ${listed})::int as products,
+          (select count(*) from tender_found f where ${VIEW.opportunities} and not (f.molecules && ${`{${leftOut.map((name) => JSON.stringify(name)).join(",")}}`}::text[]))::int as ours,
+          (select count(distinct m) from tender_found f, unnest(f.molecules) m where ${VIEW[view]})::int as "productsAll"
+        from tender_found f where ${listed}`,
+    ),
+    // Our medicines in this tab, most asked for first, for "Our product" and "Exclude products".
+    rows<{ name: string; n: number }>(db, sql`select m as name, count(*)::int as n from tender_found f, unnest(f.molecules) m where ${VIEW[view]} group by m order by n desc, m`),
+    rows<{ code: string; n: number }>(db, sql`select ${TYPE} as code, count(*)::int as n from tender_found f where ${VIEW[view]} and ${where} group by 1 having ${TYPE} <> '' order by n desc, 1`),
     lastRuns(db),
     robotLoginState(db),
     psState(db),
+    fetchState(db),
   ]);
   return {
     view,
+    docs,
+    sort,
+    page,
+    pageSize: size,
+    total: docCounts?.[docs] ?? 0,
     rows: found,
-    counts: counts ?? { new: 0, screened: 0, tenders: 0, all: 0 },
-    molecules: molecules.map((one) => one.name),
-    robot: { ready: robotReady(), runs, login, ps },
+    counts: counts ?? { opportunities: 0, screened: 0, tenders: 0, all: 0 },
+    docCounts: docCounts ?? { all: 0, with: 0, pickup: 0, none: 0 },
+    stats: stats ?? { listed: 0, ours: 0, products: 0, productsAll: 0, abc: 0, files: 0, withFiles: 0 },
+    products,
+    types,
+    molecules: products.map((one) => one.name).sort((a, b) => a.localeCompare(b)),
+    robot: { ready: robotReady(), runs, login, ps, fetch },
   };
 }
 
+/** The robot's last runs: six of each portal, and six of the bridge's hand-overs from the bidding
+ *  system (trigger "feed", which hands over both portals), so each portal's card has its own. */
 const lastRuns = (db: Database) =>
-  rows<FindRun>(db, sql`select id::int as id, source, trigger, status, summary, found, matched, fresh, to_char(at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as at from tender_find_run order by at desc, id desc limit 6`);
+  rows<FindRun>(
+    db,
+    sql`select id, source, trigger, status, summary, found, matched, fresh, at from (
+        select id::int as id, source, trigger, status, summary, found, matched, fresh, to_char(at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as at, at as moment,
+          row_number() over (partition by source, coalesce(trigger, '') = 'feed' order by at desc, id desc) as n
+        from tender_find_run
+      ) runs where n <= 6 order by moment desc, id desc`,
+  );
 
-/** For the Tenders page's button: whether this seat has the finder, and how many are new. */
+/** For the Tenders page's button: whether this seat has the finder, and how many Opportunities the robot
+ *  first fetched in the last 24 hours (the finder's New pill). */
 export async function foundCount(db: Database, me: Me): Promise<{ allowed: boolean; fresh: number }> {
   if (!(await finds(db, me))) return { allowed: false, fresh: 0 };
-  const [count] = await rows<{ n: number }>(db, sql`select count(*)::int as n from tender_found f where ${VIEW.new}`);
+  const [count] = await rows<{ n: number }>(db, sql`select count(*)::int as n from tender_found f where ${VIEW.opportunities} and f.first_seen_at > now() - interval '24 hours'`);
   return { allowed: true, fresh: count?.n ?? 0 };
 }
 
 export async function foundDetail(db: Database, me: Me, id: number): Promise<FoundDetail> {
   await mustFind(db, me);
-  const [found] = await rows<FoundTender & { itemsText: string | null; raw: Record<string, unknown>; agencyKey: string | null }>(
+  const [found] = await rows<FoundTender & { itemsText: string | null; raw: Record<string, unknown>; agencyKey: string | null; seenAt: string }>(
     db,
-    sql`select one.*, f.items_text as "itemsText", f.details as raw, f.agency_key as "agencyKey"
+    sql`select one.*, f.items_text as "itemsText", f.details as raw, f.agency_key as "agencyKey",
+        to_char(f.seen_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS"Z"') as "seenAt"
       from (${foundSelect} where f.id = ${id}) one join tender_found f on f.id = one.id`,
   );
   if (!found) throw new Refusal(404, "not_found", "No such notice.");
@@ -674,6 +771,7 @@ export async function foundDetail(db: Database, me: Me, id: number): Promise<Fou
         preBid: text("pre_bid"),
         bidOpening: text("bid_opening"),
         status: text("status"),
+        lastUpdated: text("last_updated"),
         supplements: Array.isArray(raw.supplements) ? (raw.supplements as FoundDetail["found"]["details"]["supplements"]) : [],
         documents: Array.isArray(raw.documents) ? (raw.documents as { name: string }[]).map((one) => one.name) : [],
       },

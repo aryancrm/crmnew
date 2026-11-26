@@ -13,6 +13,7 @@ import { day, iso } from "../inventory/service";
 import { lateNow } from "../orders/clock";
 import { STATUS_LABEL } from "../orders/rules";
 import { inForce, ledUnits } from "../org/service";
+import { VACANT_LEAD_DAYS, vacantSince } from "../org/vacancies";
 import { ROLE_LABEL, type Role } from "../people/roles";
 import { mapAreasOf, readPlaces } from "../places/psgc";
 import type {
@@ -633,9 +634,12 @@ async function teamNeeds(db: Database, seatIds: number[], today: string): Promis
       customers: number;
       open: number;
       acting: string | null;
+      since: string;
+      days: number;
     }>(
       db,
       sql`select s.id::int as "seatId", s.title, a.name as area,
+          to_char(${vacantSince(today)}, 'YYYY-MM-DD') as since, (${today}::date - ${vacantSince(today)})::int as days,
           (select count(*) from customer c where c.active and s.area_id is not null and c.area_id = s.area_id)::int as customers,
           (select count(*) from sales_order o where o.seat_id = s.id and o.status not in ('completed', 'cancelled', 'draft'))::int as open,
           (select q.name from seat_holder h join person q on q.id = h.person_id and q.active
@@ -687,8 +691,10 @@ async function teamNeeds(db: Database, seatIds: number[], today: string): Promis
       since: `${row.dueOn}T00:00:00+08:00`,
       amount: row.balance,
     });
+  // An empty seat: when customers or orders wait, or (HR-PLAN, vacant seats) once it has been empty
+  // 7 days with nobody covering it.
   for (const row of empty)
-    if (row.customers > 0 || row.open > 0)
+    if (row.customers > 0 || row.open > 0 || (!row.acting && row.days >= VACANT_LEAD_DAYS))
       needs.push({
         kind: "vacant",
         orderId: null,
@@ -699,8 +705,10 @@ async function teamNeeds(db: Database, seatIds: number[], today: string): Promis
         seatId: row.seatId,
         why: row.acting
           ? `Nobody sits here; ${row.acting} covers it. ${row.customers} customer${row.customers === 1 ? "" : "s"}, ${row.open} open order${row.open === 1 ? "" : "s"}.`
-          : `Nobody sits here: ${row.customers} customer${row.customers === 1 ? "" : "s"} and ${row.open} open order${row.open === 1 ? "" : "s"} wait with you.`,
-        since: null,
+          : `Vacant ${row.days} day${row.days === 1 ? "" : "s"}: ${row.customers} customer${row.customers === 1 ? "" : "s"} and ${row.open} open order${row.open === 1 ? "" : "s"} wait with you.${
+              row.days >= VACANT_LEAD_DAYS ? " Give it to one of your people, or ask for a person." : ""
+            }`,
+        since: `${row.since}T00:00:00+08:00`,
         amount: null,
       });
   // The scorecards: below 60 this month, a coverage gate failing, an improvement plan due.

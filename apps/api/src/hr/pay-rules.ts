@@ -7,24 +7,64 @@
 // portal's engine: the monthly salary and allowance; a day = monthly × 12 ÷ 313, an hour = a day
 // ÷ 8; absent, leave without pay, late and undertime come off at those rates; SSS on what was
 // earned in the month; PhilHealth 5% of the salary (₱10,000 to ₱100,000), half each; Pag-IBIG ₱200;
-// BIR's monthly withholding table on the month's taxable pay. Approved overtime (125% on a working
-// day, 130% on a rest day, 169% on a special day, 260% on a regular holiday) and a holiday worked (a
-// regular holiday +100% of the day, a special day +30%) are paid. The law-set rates are dated rows
-// in pay_rule, passed in here.
+// BIR's monthly withholding table on the month's taxable pay. Approved overtime is paid by its type
+// (OVERTIME_RATES) and a holiday worked without an overtime form adds a regular holiday's 100% or
+// a special day's 30% of the day. Night differential is shown, not paid (PLAN 12.16, HR-PLAN step
+// 3). The law-set rates are dated rows in pay_rule, passed in here.
+
+import type { OtType } from "./leave-rules";
 
 export const DAYS_PER_YEAR = 313;
 export const HOURS_PER_DAY = 8;
+/** An overtime form's first 8 hours are the day's own; past them the Labor Code's overtime rate. */
+export const FIRST_MINUTES = 8 * 60;
 
-/** Overtime's rate by the day it was worked, in basis points of the hourly rate. */
-export const OVERTIME_BPS = {
-  ordinary: 12_500,
-  restDay: 13_000,
-  specialHoliday: 16_900,
-  regularHoliday: 26_000,
-} as const;
-export type OvertimeKind = keyof typeof OVERTIME_BPS;
-/** A holiday worked, on top of the monthly pay: basis points of the daily rate. */
+/**
+ * Approved overtime by its type, in basis points of the hourly rate: its first 8 hours and past
+ * them. PLAN 12.16: 125% on a working day, 130% on a rest day, 169% on a special day, 260% on a
+ * regular holiday, and a holiday worked +100% (regular) or +30% (special) of the day. An overtime
+ * form on a holiday counts every hour of it (HR-PLAN step 3), so its first 8 hours are the holiday
+ * worked (the monthly pay at 313 days a year already carries the day's 100%: +100% or +30%) and
+ * the hours past 8 are PLAN's overtime rates. The rest, from the Labor Code (DOLE's handbook), to
+ * confirm with HR: a rest day past 8 hours 169%; a special day on a rest day 150% (195% past 8); a
+ * regular holiday on a rest day 260% (338% past 8); broken time as a working day's 125%.
+ */
+export const OVERTIME_RATES: Record<OtType, { first8: number; over8: number }> = {
+  regular: { first8: 12_500, over8: 12_500 },
+  broken: { first8: 12_500, over8: 12_500 },
+  rest: { first8: 13_000, over8: 16_900 },
+  special: { first8: 3_000, over8: 16_900 },
+  legal: { first8: 10_000, over8: 26_000 },
+  rest_special: { first8: 15_000, over8: 19_500 },
+  rest_legal: { first8: 26_000, over8: 33_800 },
+};
+export const OT_ORDER: OtType[] = [
+  "regular",
+  "broken",
+  "rest",
+  "special",
+  "legal",
+  "rest_special",
+  "rest_legal",
+];
+/** A holiday worked with no overtime form for it, on top of the monthly pay: basis points of the
+ *  daily rate (PLAN 12.16). */
 export const HOLIDAY_WORKED_BPS = { regular: 10_000, special: 3_000 } as const;
+/** Night differential's rate (Labor Code: 10% of the hourly rate), shown for HR, not paid. */
+export const NIGHT_BPS = 1_000;
+
+export type OvertimeSplit = { first8: number; over8: number };
+export const noOvertime = (): Record<OtType, OvertimeSplit> =>
+  Object.fromEntries(OT_ORDER.map((type) => [type, { first8: 0, over8: 0 }])) as Record<
+    OtType,
+    OvertimeSplit
+  >;
+/** One overtime form's minutes split at 8 hours (a working day's all count alike). */
+export function splitOvertime(type: OtType, minutes: number): OvertimeSplit {
+  if (type === "regular" || type === "broken") return { first8: minutes, over8: 0 };
+  const first8 = Math.min(minutes, FIRST_MINUTES);
+  return { first8, over8: minutes - first8 };
+}
 
 export type SssRule = {
   /** The monthly salary credit's bounds and step, centavos. */
@@ -158,8 +198,15 @@ export type PayAttendance = {
   notEmployed: number;
   lateMinutes: number;
   undertimeMinutes: number;
-  overtime: Record<OvertimeKind, number>;
+  /** Approved overtime minutes by type, split at the form's first 8 hours. */
+  overtime: Record<OtType, OvertimeSplit>;
+  /** The night part (10 PM to 6 AM) of approved overtime: shown, not paid. */
+  nightMinutes: number;
+  /** Holidays worked (on a working day of their schedule) with no overtime form for that day. */
   holidaysWorked: { regular: number; special: number };
+  /** Their own holidays in the month on working days of their schedule (national and their
+   *  town's or province's); local: of them, their town's or province's. */
+  holidays?: { regular: number; special: number; local: number };
 };
 
 export type PayAdjustment = {
@@ -197,6 +244,8 @@ export type SlipFigures = {
   philhealth: { employee: number; employer: number };
   pagibig: { employee: number; employer: number };
   tax: number;
+  /** Shown on the slip for information: nothing added or taken. */
+  notes: { key: string; label: string; detail: string }[];
 };
 
 const money = (centavos: number) =>
@@ -207,12 +256,16 @@ const hoursAndMinutes = (minutes: number) => {
   const m = minutes % 60;
   return [h ? `${h} h` : "", m ? `${m} min` : ""].filter(Boolean).join(" ") || "0 min";
 };
-const OVERTIME_WORDS: Record<OvertimeKind, string> = {
-  ordinary: "Overtime",
-  restDay: "Rest day worked",
-  specialHoliday: "Overtime on a special day",
-  regularHoliday: "Overtime on a regular holiday",
+const OVERTIME_WORDS: Record<OtType, string> = {
+  regular: "Overtime",
+  broken: "Broken time",
+  rest: "Rest day worked",
+  special: "Special day worked",
+  legal: "Regular holiday worked",
+  rest_special: "Rest day on a special day worked",
+  rest_legal: "Rest day on a regular holiday worked",
 };
+const pct = (bps: number) => `${bps / 100}%`;
 
 export function computeSlip(input: {
   rules: PayRules;
@@ -240,14 +293,25 @@ export function computeSlip(input: {
       detail: null,
       amount: input.monthlyAllowance,
     });
-  for (const kind of Object.keys(OVERTIME_BPS) as OvertimeKind[]) {
-    const minutes = a.overtime[kind];
-    if (minutes > 0)
+  for (const type of OT_ORDER) {
+    const split = a.overtime?.[type] ?? { first8: 0, over8: 0 };
+    const rate = OVERTIME_RATES[type];
+    const premium = type === "special" || type === "legal";
+    if (split.first8 > 0)
       earnings.push({
-        key: `ot_${kind}`,
-        label: OVERTIME_WORDS[kind],
-        detail: `${hoursAndMinutes(minutes)} at ${OVERTIME_BPS[kind] / 100}%`,
-        amount: round(ratio((hourly * minutes) / 60, OVERTIME_BPS[kind])),
+        key: `ot_${type}`,
+        label: OVERTIME_WORDS[type],
+        detail: premium
+          ? `${hoursAndMinutes(split.first8)}, +${pct(rate.first8)} (the monthly pay carries the day)`
+          : `${hoursAndMinutes(split.first8)} at ${pct(rate.first8)}`,
+        amount: round(ratio((hourly * split.first8) / 60, rate.first8)),
+      });
+    if (split.over8 > 0)
+      earnings.push({
+        key: `ot_${type}_over8`,
+        label: `${OVERTIME_WORDS[type]}, past 8 hours`,
+        detail: `${hoursAndMinutes(split.over8)} at ${pct(rate.over8)}`,
+        amount: round(ratio((hourly * split.over8) / 60, rate.over8)),
       });
   }
   for (const kind of ["regular", "special"] as const)
@@ -352,6 +416,19 @@ export function computeSlip(input: {
     });
   }
   const totalDeductions = deductions.reduce((sum, one) => sum + one.amount, 0);
+  const notes: SlipFigures["notes"] = [];
+  if ((a.nightMinutes ?? 0) > 0)
+    notes.push({
+      key: "night",
+      label: "Night differential",
+      detail: `${hoursAndMinutes(a.nightMinutes)} of the overtime fell between 10 PM and 6 AM: shown, not paid (${money(round(ratio((hourly * a.nightMinutes) / 60, NIGHT_BPS)))} at 10%)`,
+    });
+  if (a.holidays && a.holidays.local > 0)
+    notes.push({
+      key: "local_holidays",
+      label: "Local holidays",
+      detail: `${days(a.holidays.local)} of their town or province this month, not working days`,
+    });
 
   return {
     dailyRate: round(daily),
@@ -368,5 +445,6 @@ export function computeSlip(input: {
     philhealth: { employee: philhealthTaken, employer: philhealth.employer },
     pagibig: { employee: pagibigTaken, employer: pagibig.employer },
     tax,
+    notes,
   };
 }

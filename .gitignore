@@ -15,3 +15,5 @@ docs/user-book/.chrome*
 .DS_Store
 # The tender finder's Connect tool keeps a live log-in here (workers/tender-finder/ps/connect)
 .ps-philgeps/
+# A local AI tool's own data, not the CRM's (came in by mistake on 25 Nov).
+.claude/data/

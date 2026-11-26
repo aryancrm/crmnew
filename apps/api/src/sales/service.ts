@@ -49,7 +49,7 @@ const list = (values: readonly string[]) =>
 
 /** Invoices (alias `i`) that count as sold in a month. */
 /** Every sale (the CRM's and Zoho's invoices) with its order's seat, MedRep, channel and id as "o". */
-const saleAs = sql`sale_invoice i cross join lateral (select i.seat_id, i.medrep_id, i.channel_id, coalesce(i.order_id, -i.id) as id) o`;
+const saleAs = sql`sale_invoice i cross join lateral (select i.seat_id, i.medrep_id, i.covered, i.cover_lead_id, i.channel_id, coalesce(i.order_id, -i.id) as id) o`;
 
 const soldIn = (facts: MonthFacts): SQL => {
   const { first, next } = boundsOf(facts);
@@ -90,7 +90,7 @@ async function figuresOf(
       db,
       sql`select ${whose}::int as id, sum(i.total)::float8 as sold,
           coalesce(sum(i.total) filter (where i.issued_on = ${facts.today}::date), 0)::float8 as today
-        from sale_invoice i cross join lateral (select i.seat_id, i.medrep_id) o
+        from sale_invoice i cross join lateral (select i.seat_id, i.medrep_id, i.covered, i.cover_lead_id) o
         where ${soldIn(facts)} and ${whose} in (${ids(personIds)}) group by 1`,
     ),
     rows<{ id: number; placed: number; value: number }>(

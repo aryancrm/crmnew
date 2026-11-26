@@ -347,11 +347,23 @@ describe("the tender finder: the team's pages", () => {
     expect((await app.request("/api/tenders/found")).status).toBe(401);
   });
 
-  it("New holds the open notices asking for our medicines that nobody took; the rest is under Everything found", async () => {
+  it("Opportunities holds every notice asking for our medicines, closed ones too; Everything found adds the rest", async () => {
     const fresh = await list("hazel", "?q=1245");
-    expect(fresh.rows.map((row) => row.refNo).sort()).toEqual(["12451001", "12451017", "12451033"]);
+    expect(fresh.view).toBe("opportunities");
+    expect(fresh.rows.map((row) => row.refNo).sort()).toEqual(["12450900", "12451001", "12451017", "12451033"]);
+    expect(fresh.counts.opportunities).toBeGreaterThanOrEqual(4);
+    // A page at a time, 25 by default (25, 50 or 100 asked); a page past the end is empty, the counts stay whole
+    expect(fresh).toMatchObject({ page: 1, pageSize: 25, total: 4 });
+    expect((await list("hazel", "?size=50")).pageSize).toBe(50);
+    expect((await list("hazel", "?size=7")).pageSize).toBe(25);
+    const beyond = await list("hazel", "?view=all&page=2");
+    expect(beyond.page).toBe(2);
+    expect(beyond.rows.length).toBe(Math.max(0, Math.min(25, beyond.counts.all - 25)));
+    expect((await list("hazel", "?view=all&page=nonsense")).page).toBe(1);
+    // The old address (?view=new) lands on the Opportunities
+    expect((await list("hazel", "?view=new&q=1245")).view).toBe("opportunities");
     const all = await list("hazel", "?view=all&q=1245");
-    // The closed one and the one that is not ours are found, not new.
+    // The closed one is an opportunity still; the one that is not ours is only under Everything found.
     expect(all.rows.map((row) => row.refNo).sort()).toEqual(["12450900", "12451001", "12451017", "12451033", "12451050"]);
     expect(all.rows.find((row) => row.refNo === "12450900")).toMatchObject({ open: false, molecules: ["Capecitabine"] });
     expect(all.rows.find((row) => row.refNo === "12451050")?.molecules).toEqual([]);
@@ -362,10 +374,44 @@ describe("the tender finder: the team's pages", () => {
     expect(fresh.molecules).toContain("Bortezomib");
   });
 
+  it("the bidding system's list: summary cards, document chips, type, products left out, sorts and dates", async () => {
+    const fresh = await list("hazel", "?q=1245");
+    // The cards are over what is listed
+    expect(fresh.stats.listed).toBe(4);
+    expect(fresh.stats.abc).toBe(fresh.rows.reduce((sum, row) => sum + (row.abc ?? 0), 0));
+    expect(fresh.stats.products).toBe(new Set(fresh.rows.flatMap((row) => row.molecules)).size);
+    expect(fresh.stats.ours).toBeGreaterThanOrEqual(4);
+    // Document chips: each tender is in exactly one of with / pick-up / none
+    expect(fresh.docCounts.all).toBe(fresh.docCounts.with + fresh.docCounts.pickup + fresh.docCounts.none);
+    expect((await list("hazel", "?q=1245&docs=none")).total).toBe(fresh.docCounts.none);
+    // The type as the bidding system shows it: "Invitation to Bid (ITB)" is ITB, and the filter keeps only those
+    expect(fresh.rows.find((row) => row.refNo === "12451001")?.type).toBe("ITB");
+    expect(fresh.types.map((one) => one.code)).toContain("ITB");
+    expect((await list("hazel", "?q=1245&type=ITB")).rows.every((row) => row.type === "ITB")).toBe(true);
+    expect((await list("hazel", "?q=1245&type=Nothing")).total).toBe(0);
+    // A product left out hides every tender asking for it
+    const without = await list("hazel", "?q=1245&exclude=Capecitabine");
+    expect(without.rows.map((row) => row.refNo)).not.toContain("12450900");
+    expect(without.total).toBe(fresh.rows.filter((row) => !row.molecules.includes("Capecitabine")).length);
+    expect(without.rows.every((row) => !row.molecules.includes("Capecitabine"))).toBe(true);
+    // Every word of the search must be found
+    expect((await list("hazel", "?q=1245 vicente")).rows.map((row) => row.refNo)).toEqual(["12451033"]);
+    expect((await list("hazel", "?q=1245 nowhere")).total).toBe(0);
+    // Highest budget first
+    const budgets = (await list("hazel", "?q=1245&sort=budget")).rows.map((row) => row.abc ?? -1);
+    expect(budgets).toEqual([...budgets].sort((a, b) => b - a));
+    // A date range on the published day or the closing day
+    expect((await list("hazel", "?q=1245&from=2999-01-01")).total).toBe(0);
+    expect((await list("hazel", "?q=1245&dateOn=closing&to=1999-12-31")).total).toBe(0);
+    expect((await list("hazel", "?q=1245&from=bad-day")).total).toBe(4);
+  });
+
   it("a notice's page: its lines matched to our medicines, the agency to a customer, the mode and days read", async () => {
     const detail = await one("hazel", await idOf("12451001"));
     expect(detail.found).toMatchObject({ customer: "East Avenue Medical Center", abc: 243700000, noticeType: "Invitation to Bid (ITB)" });
     expect(detail.mode).toBe("competitive_bidding");
+    // The bidding system's "Fetched": first and last read
+    expect(Date.parse(detail.found.seenAt)).toBeGreaterThanOrEqual(Date.parse(detail.found.firstSeenAt));
     expect(detail.prebidOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     expect(detail.openingOn).toBe(detail.found.closingAt?.slice(0, 10));
     expect(detail.lines.map((line) => [line.medicine, line.qty, line.abcUnit])).toEqual([
@@ -448,7 +494,8 @@ describe("the tender finder: the team's pages", () => {
     expect((await post("jimmy", `/api/tenders/found/${id}/tender`, body)).status).toBe(409);
     expect((await post("hazel", `/api/tenders/found/${id}/screen`, { on: false })).status).toBe(409);
     expect((await list("hazel", "?view=tenders")).rows.map((row) => row.refNo)).toEqual(["12451001"]);
-    expect((await list("hazel", "?q=12451001")).rows.length).toBe(0);
+    // Made a tender, it stays among the Opportunities (every tender for our medicines), shown as the tender
+    expect((await list("hazel", "?q=12451001")).rows.map((row) => row.tenderId)).toEqual([tenderId]);
 
     // The tender's own road: the Admin approves the price, a complete envelope, submitted, won.
     const step = (who: string, input: unknown) => post(who, `/api/tenders/${tenderId}/step`, input);
@@ -591,8 +638,8 @@ describe("the tender papers", () => {
       accuracy: 100,
       reading: false,
       sheet: [
-        { label: "Pre-bid conference", said: "November 27, 2026 at 10:00 AM, BAC Conference Room" },
-        { label: "Bid security", said: "Bid Securing Declaration" },
+        { key: "prebid_conference", label: "Pre-bid conference", said: "November 27, 2026 at 10:00 AM, BAC Conference Room" },
+        { key: "bid_security", label: "Bid security", said: "Bid Securing Declaration" },
       ],
     });
     // The robot gets its own record back (to know what is done), without what is only for checking.

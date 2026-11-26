@@ -478,16 +478,16 @@ describe("a cancelled order Finance took money for", () => {
 describe("numbers and lists", () => {
   it("numbers each company's invoices in its own series, without gaps", async () => {
     const before = await read<InvoiceList>("fiona", "/api/invoices");
-    const getmeds = await approved(creditHospital, { invoiceFrom: "getmeds" });
+    const getmeds = await approved(creditHospital, { invoiceFrom: "gpi" });
     await post("fiona", `/api/finance/orders/${getmeds}/invoice`);
     const first = (await order("fiona", getmeds)).money.invoice?.code;
-    const again = await approved(creditHospital, { invoiceFrom: "getmeds" });
+    const again = await approved(creditHospital, { invoiceFrom: "gpi" });
     await post("fiona", `/api/finance/orders/${again}/invoice`);
     expect(first).toBe("INV-000001");
     expect((await order("fiona", again)).money.invoice?.code).toBe("INV-000002");
     const after = await read<InvoiceList>("fiona", "/api/invoices");
     expect(after.counts.all).toBe(before.counts.all + 2);
-    expect(after.rows[0]?.invoiceFromLabel).toBe("GetMeds Philippines Inc.");
+    expect(after.rows[0]?.invoiceFromLabel).toBe("Getmeds Philippines Incorporated");
   });
 
   it("lists invoices by tab, payments by month, and keeps them from those who don't keep the books", async () => {

@@ -1,12 +1,14 @@
 // Attendance, the HR app's first page. "Who's working": a day's people with when they came in and
 // left, their hours and lateness, and their month so far (HR, the CEO and the Admin everyone; a
 // team lead their team; anyone else goes to their own month). A person's month is their DTR, day
-// by day, where HR puts a day right with a note.
+// by day, where HR puts a day right with a note, and the person asks for one of their days to be
+// put right (their lead or HR decides). HR, the CEO and the Admin see the biometric sheet's times
+// beside each day, flagged where they disagree; HR uses them for the day or dismisses the flag.
 
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
-import type { AttendanceDay, AttendanceMonth, AttendanceToday, LeaveKind } from "@2mg/api/types";
+import type { AttendanceDay, AttendanceMonth, AttendanceToday, BiometricDay, LeaveKind } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BarChart3, CalendarPlus, ChevronLeft, ChevronRight, Pencil, Search } from "lucide-react";
+import { BarChart3, CalendarPlus, ChevronLeft, ChevronRight, Clock, Pencil, Search } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
@@ -14,6 +16,8 @@ import { useMe } from "../auth";
 import { clock, hourOf, hours, IN_FROM, OUT_FROM } from "./parts";
 import { Button, CARD, Dialog, Field, INPUT, PageHead, PageState, Problem, useAction } from "../ui";
 import { LEAVE_WORDS } from "./attendance-report";
+import { FixDialog, FixLineRow, fixable } from "./corrections";
+import { BiometricDialog, sheetWords } from "./timekeeping";
 import { EmptyState, NoResults } from "../no-results";
 
 const LEAVE_SHORT: Record<LeaveKind, string> = { vl: "VL", sl: "SL", lwop: "LWOP", other: "Other" };
@@ -313,6 +317,9 @@ export function AttendanceMonthPage() {
   });
   const [fixing, setFixing] = useState<AttendanceDay | null>(null);
   const [addingLeave, setAddingLeave] = useState(false);
+  // A day the person asks to be put right (an empty day: any day they pick).
+  const [asking, setAsking] = useState<AttendanceDay | "any" | null>(null);
+  const [reviewing, setReviewing] = useState<BiometricDay | null>(null);
   const data = query.data;
   if (!data) return <PageState query={query} what="the attendance" />;
   const mine = me?.id === data.person.id;
@@ -323,6 +330,7 @@ export function AttendanceMonthPage() {
     setParams(out, { replace: true });
   };
   const days = [...data.days].reverse();
+  const biometric = data.biometric ? new Map(data.biometric.map((one) => [one.day, one])) : null;
   const totals: [string, string, string?][] = [
     ["Came in", `${data.totals.present} of ${data.totals.workDays} days`],
     ["Hours worked", hours(data.totals.workedMinutes)],
@@ -374,6 +382,11 @@ export function AttendanceMonthPage() {
         sub={`${data.schedule.name}: ${hourOf(data.schedule.start)} – ${hourOf(data.schedule.end)}, ${data.schedule.days.length === 6 ? "Monday to Saturday" : `${data.schedule.days.length} days a week`}`}
         actions={
           <div className="flex items-center gap-1">
+            {data.can.askFix && (
+              <Button small className="mr-2" onClick={() => setAsking("any")}>
+                <Clock size={15} /> Ask to fix a day
+              </Button>
+            )}
             {data.can.leave && (
               <Button small className="mr-2" onClick={() => setAddingLeave(true)}>
                 <CalendarPlus size={15} /> Record leave
@@ -420,12 +433,13 @@ export function AttendanceMonthPage() {
                 <th className="px-4 py-2">Day</th>
                 <th className="px-3 py-2">In</th>
                 <th className="px-3 py-2">Out</th>
+                {biometric && <th className="px-3 py-2">Biometrics</th>}
                 <th className="px-3 py-2 text-right">Hours</th>
                 <th className="px-3 py-2 text-right">Late</th>
                 <th className="px-3 py-2 text-right">Undertime</th>
                 <th className="px-3 py-2 text-right">After hours</th>
                 <th className="px-3 py-2">Note</th>
-                {data.can.putRight && <th className="px-3 py-2" />}
+                {(data.can.putRight || data.can.askFix) && <th className="px-3 py-2" />}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -482,6 +496,7 @@ export function AttendanceMonthPage() {
                     >
                       {one.working ? "Working" : clock(one.timeOut)}
                     </td>
+                    {biometric && <BiometricCell day={biometric.get(one.day)} onOpen={setReviewing} />}
                     <td className="px-3 py-2 text-right tabular-nums">
                       {hours(one.workedMinutes)}
                     </td>
@@ -504,7 +519,7 @@ export function AttendanceMonthPage() {
                     >
                       {one.note}
                     </td>
-                    {data.can.putRight && (
+                    {data.can.putRight ? (
                       <td className="px-3 py-2 text-right">
                         <Button
                           small
@@ -515,6 +530,22 @@ export function AttendanceMonthPage() {
                           <Pencil size={14} />
                         </Button>
                       </td>
+                    ) : (
+                      data.can.askFix && (
+                        <td className="px-3 py-2 text-right">
+                          {fixable(one.day) && one.kind !== "before" && !one.working && (
+                            <Button
+                              small
+                              variant="quiet"
+                              aria-label={`Ask to fix ${one.day}`}
+                              title="Ask to fix this day"
+                              onClick={() => setAsking(one)}
+                            >
+                              <Pencil size={14} />
+                            </Button>
+                          )}
+                        </td>
+                      )
                     )}
                   </tr>
                 );
@@ -535,12 +566,35 @@ export function AttendanceMonthPage() {
           </ul>
         </section>
       )}
+      {data.fixes.length > 0 && (
+        <section className={`${CARD} overflow-hidden`}>
+          <h2 className="border-b border-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-900">
+            Days asked to put right
+          </h2>
+          <ul className="divide-y divide-slate-100 text-sm">
+            {data.fixes.map((one) => (
+              <FixLineRow key={one.id} line={one} />
+            ))}
+          </ul>
+        </section>
+      )}
+      {asking && (
+        <FixDialog
+          day={asking === "any" ? undefined : asking.day}
+          timeIn={asking === "any" ? undefined : timeOf(asking.timeIn) || undefined}
+          timeOut={asking === "any" ? undefined : timeOf(asking.timeOut) || undefined}
+          onClose={() => setAsking(null)}
+        />
+      )}
       {addingLeave && (
         <LeaveDialog
           personId={data.person.id}
           name={data.person.name}
           onClose={() => setAddingLeave(false)}
         />
+      )}
+      {reviewing && (
+        <BiometricDialog name={data.person.name} day={reviewing} onClose={() => setReviewing(null)} />
       )}
       {fixing && (
         <PutRightDialog
@@ -551,6 +605,32 @@ export function AttendanceMonthPage() {
         />
       )}
     </div>
+  );
+}
+
+/** The biometric sheet's day beside the CRM's: its times or code, amber where it needs a look
+ *  (HR opens it to use the times or dismiss the flag; answered flags show as answered). */
+function BiometricCell({ day, onOpen }: { day: BiometricDay | undefined; onOpen: (day: BiometricDay) => void }) {
+  if (!day) return <td className="px-3 py-2 text-slate-300">—</td>;
+  const open = !day.resolution && Boolean(day.review || day.flag);
+  const why = [day.review, day.flag].filter(Boolean).join(" · ");
+  const answered = day.resolution
+    ? `${day.resolution.kind === "applied" ? "Used" : "Dismissed"} by ${day.resolution.by}${day.resolution.note ? `: ${day.resolution.note}` : ""}`
+    : "";
+  return (
+    <td className="px-3 py-2 whitespace-nowrap tabular-nums">
+      <button
+        type="button"
+        onClick={() => onOpen(day)}
+        title={[`Cell ${day.column}: ${day.raw || "empty"}`, day.codeWords, why, answered].filter(Boolean).join(" · ")}
+        className={`rounded px-1 text-xs ${
+          open ? "bg-amber-50 font-semibold text-amber-900 ring-1 ring-amber-200" : "text-slate-600 hover:bg-slate-50"
+        }`}
+      >
+        {sheetWords(day)}
+        {open && " ⚑"}
+      </button>
+    </td>
   );
 }
 

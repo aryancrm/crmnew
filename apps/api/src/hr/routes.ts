@@ -1,8 +1,9 @@
 // HR's addresses: attendance today and by month, Start / End my day, HR putting a day right, and
 // HR's people (records, new joiners with the login HR typed, logins, leaving).
 
-import type { Hono, MiddlewareHandler } from "hono";
+import type { Context, Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
+import { COMPANY_CODES } from "../companies";
 import type { Database } from "../db/index";
 import { type Env, idParam, Refusal, readBody } from "../http";
 import type { LeaveKind } from "../types";
@@ -17,7 +18,53 @@ import {
   startDay,
   workCalendar,
 } from "./attendance";
-import { cancelForm, decideForm, formList, myForms, requestForm } from "./forms";
+import { cancelFix, decideFix, fixList, myFixes, requestFix } from "./corrections";
+import {
+  addCredit,
+  leaveCredits,
+  reverseCredit,
+  setSecondApprover,
+  vlConversionReport,
+} from "./credits";
+import { hrHistory } from "./events";
+import { addHoliday, archiveHoliday, holidayYear } from "./holidays";
+import {
+  compareAgain,
+  confirmRow,
+  mapRegister,
+  REGISTER_MAX_BYTES,
+  registerFile,
+  registerPage,
+  uploadRegister,
+} from "./pay-register";
+import { addSchedule, archiveSchedule, hrSchedules, setPersonSchedule } from "./schedules";
+import {
+  cancelForm,
+  decideForm,
+  formList,
+  myForms,
+  requestForm,
+  resendForm,
+  returnForm,
+  revokeForm,
+} from "./forms";
+import { formPrintout, leavePrintout, mySignature, SIGNATURE_MAX_BYTES, saveSignature } from "./print";
+import { MOVE_KINDS } from "../org/service";
+import { hrQueue } from "./queue";
+import { addPosition, hrPositions, setPositionArchived } from "./positions";
+import { addPaper, archivePaper, hrPapers, PAPER_MAX_BYTES, type PaperFile, paperFile } from "./papers";
+import {
+  archiveDevice,
+  dismissBiometric,
+  importFile,
+  importTimekeeping,
+  previewTimekeeping,
+  setDevice,
+  TIMEKEEPING_MAX_BYTES,
+  type TimekeepingFile,
+  timekeepingPage,
+  useBiometric,
+} from "./timekeeping";
 import {
   cancelLeave,
   decideLeave,
@@ -25,9 +72,12 @@ import {
   type LeaveFile,
   leaveFile,
   leaveList,
+  leaveProof,
   myLeave,
   requestLeave,
+  revokeLeave,
 } from "./leave";
+import { LEAVE_FILES_MAX } from "./leave-rules";
 import {
   addAdjustment,
   myPayslips,
@@ -45,6 +95,7 @@ import {
   hrPerson,
   joinerForm,
   markLeft,
+  movePerson,
   personBack,
   setLogin,
   updateRecord,
@@ -55,7 +106,7 @@ const clock = z.string().regex(/^\d{2}:\d{2}$/, "Type the time as 08:30.");
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick the day.");
 const words = (max: number) => z.string().max(max).nullish();
 const pesos = z.number().int("Type whole centavos.").min(0).nullish();
-const company = z.enum(["2mg", "gpi"], { message: "Pick the company." });
+const company = z.enum(COMPANY_CODES, { message: "Pick the company." });
 const classification = z.enum(["probationary", "regular", "part_time", "intern"], {
   message: "Pick how they are employed.",
 });
@@ -65,7 +116,20 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   // Looking as someone shows their work, not their private record: pay, bank, government numbers,
   // birth date, contact, a medical certificate. A team lead or a head gets none of it that way; the
   // CEO and the Admin read these on their own login anyway.
-  for (const path of ["/api/hr/people/*", "/api/hr/payslips/*", "/api/hr/payroll/*", "/api/hr/leave/:id/file"])
+  for (const path of [
+    "/api/hr/people/*",
+    "/api/hr/papers/*",
+    "/api/hr/payslips/*",
+    "/api/hr/payroll/*",
+    "/api/hr/leave/:id/file",
+    "/api/hr/leave/:id/files/*",
+    "/api/hr/leave/conversion",
+    "/api/hr/credits/*",
+    "/api/hr/print/*",
+    "/api/hr/signature",
+    "/api/hr/timekeeping",
+    "/api/hr/timekeeping/*",
+  ])
     app.use(path, async (c, next) => {
       const viewer = c.get("me").viewedBy;
       if (viewer && viewer.role !== "ceo" && viewer.role !== "admin")
@@ -125,18 +189,20 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
       await leaveList(db, c.get("me"), { view: c.req.query("view"), month: c.req.query("month") }),
     ),
   );
-  // A request with an optional paper: a form with its fields as text and the paper as `file`.
+  // A request with up to five papers: a form with its fields as text and each paper as `file`.
   app.post("/api/hr/leave/request", async (c) => {
-    if (Number(c.req.header("content-length") ?? 0) > LEAVE_FILE_MAX_BYTES + 64 * 1024)
-      throw new Refusal(400, "invalid", "That file is over 10 MB. Take the photo again.", "file");
-    const body = await c.req.parseBody().catch(() => ({}) as Record<string, unknown>);
+    if (Number(c.req.header("content-length") ?? 0) > LEAVE_FILES_MAX * LEAVE_FILE_MAX_BYTES + 64 * 1024)
+      throw new Refusal(400, "invalid", "The files are over 10 MB each. Take the photos again.", "file");
+    const body = await c.req
+      .parseBody({ all: true })
+      .catch(() => ({}) as Record<string, unknown>);
     const text = (key: string) =>
       typeof body[key] === "string" ? (body[key] as string).trim() : "";
-    const file = body.file;
-    const paper: LeaveFile | null =
-      file instanceof File && file.size > 0
-        ? { name: file.name, mime: file.type, bytes: new Uint8Array(await file.arrayBuffer()) }
-        : null;
+    const sent = body.file;
+    const paper: LeaveFile[] = [];
+    for (const file of Array.isArray(sent) ? sent : [sent])
+      if (file instanceof File && file.size > 0)
+        paper.push({ name: file.name, mime: file.type, bytes: new Uint8Array(await file.arrayBuffer()) });
     return c.json(
       await requestLeave(
         db,
@@ -166,24 +232,113 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
       "cache-control": "private, max-age=604800, immutable",
     });
   });
+  app.get("/api/hr/leave/:id/files/:fileId", async (c) => {
+    const paper = await leaveProof(db, c.get("me"), idParam(c), idParam(c, "fileId"));
+    return c.body(paper.bytes as Uint8Array<ArrayBuffer>, 200, {
+      "content-type": paper.mime,
+      "content-disposition": `inline; filename="${encodeURIComponent(paper.name)}"`,
+      "x-content-type-options": "nosniff",
+      "cache-control": "private, max-age=604800, immutable",
+    });
+  });
+  app.post("/api/hr/leave/:id/revoke", async (c) => {
+    const input = await readBody(c, z.object({ reason: words(300) }));
+    await revokeLeave(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+  // Year-end: unused vacation leave and the half that converts to pay (a report, nothing paid).
+  app.get("/api/hr/leave/conversion", async (c) =>
+    c.json(await vlConversionReport(db, c.get("me"), Number(c.req.query("year")) || null)),
+  );
+  // A person's credits: the ledger, HR's adjustments (never changed: reversed), the second approver.
+  app.get("/api/hr/people/:id/credits", async (c) =>
+    c.json(await leaveCredits(db, c.get("me"), idParam(c), Number(c.req.query("year")) || null)),
+  );
+  app.post("/api/hr/people/:id/credits", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        year: z.number().int().nullish(),
+        kind: z.enum(["vl", "sl"], { message: "Pick vacation or sick leave." }),
+        days: z.number({ message: "Type the days." }),
+        reason: words(300),
+      }),
+    );
+    return c.json(await addCredit(db, c.get("me"), idParam(c), input));
+  });
+  app.post("/api/hr/credits/:id/reverse", async (c) => {
+    const input = await readBody(c, z.object({ reason: words(300) }));
+    return c.json(await reverseCredit(db, c.get("me"), idParam(c), input));
+  });
+  app.post("/api/hr/people/:id/second-approver", async (c) => {
+    const input = await readBody(c, z.object({ personId: z.number().int().positive().nullable() }));
+    await setSecondApprover(db, c.get("me"), idParam(c), input.personId);
+    return c.json({ ok: true });
+  });
+  // Everything waiting on this decider under Leave & forms, by kind.
+  app.get("/api/hr/queue", async (c) => c.json(await hrQueue(db, c.get("me"))));
+  // Each person's drawn signature, and the printouts that carry the signers' signatures.
+  app.get("/api/hr/signature", async (c) => c.json(await mySignature(db, c.get("me"))));
+  app.post("/api/hr/signature", async (c) => {
+    if (Number(c.req.header("content-length") ?? 0) > SIGNATURE_MAX_BYTES + 64 * 1024)
+      throw new Refusal(400, "invalid", "The signature image is over 1 MB.", "file");
+    const body = await c.req.parseBody().catch(() => ({}) as Record<string, unknown>);
+    const file = body.file;
+    return c.json(
+      await saveSignature(
+        db,
+        c.get("me"),
+        file instanceof File && file.size > 0
+          ? { name: file.name, mime: file.type, bytes: new Uint8Array(await file.arrayBuffer()) }
+          : null,
+      ),
+    );
+  });
+  app.get("/api/hr/print/leave/:id", async (c) => c.json(await leavePrintout(db, c.get("me"), idParam(c))));
+  app.get("/api/hr/print/form/:id", async (c) => c.json(await formPrintout(db, c.get("me"), idParam(c))));
   app.get("/api/hr/forms/mine", async (c) => c.json({ lines: await myForms(db, c.get("me")) }));
   app.get("/api/hr/forms/list", async (c) =>
     c.json(
       await formList(db, c.get("me"), { view: c.req.query("view"), month: c.req.query("month") }),
     ),
   );
+  const activity = z.object({
+    timeIn: z.string().max(5),
+    timeOut: z.string().max(5),
+    location: words(200),
+    details: z.string().max(2000),
+    deadline: words(200),
+    remarks: words(500),
+  });
+  const formBody = z.object({
+    kind: z.enum(["ob", "wfh", "ot", "eod", "incident"], { message: "Pick the form." }),
+    day,
+    from: z.string().max(5).nullish(),
+    to: z.string().max(5).nullish(),
+    place: words(200),
+    reason: z.string().max(5000),
+    otType: z
+      .enum(["regular", "rest", "legal", "special", "rest_legal", "rest_special", "broken"], {
+        message: "Pick the type of overtime.",
+      })
+      .nullish(),
+    forPersonId: z.number().int().positive().nullish(),
+    activities: z.array(activity).max(31).nullish(),
+    incident: z
+      .object({
+        time: z.string().max(5),
+        location: z.string().max(200),
+        type: z.enum(["Safety / Accident", "Misconduct", "Property Damage", "Security", "Other"], {
+          message: "Pick the kind of incident.",
+        }),
+        otherText: words(120),
+        persons: z.string().max(5000),
+        action: z.string().max(5000),
+      })
+      .nullish(),
+  });
   app.post("/api/hr/forms", async (c) => {
-    const input = await readBody(
-      c,
-      z.object({
-        kind: z.enum(["ob", "wfh", "ot"], { message: "Pick the form." }),
-        day,
-        from: z.string().max(5).nullish(),
-        to: z.string().max(5).nullish(),
-        place: words(200),
-        reason: z.string().max(300),
-      }),
-    );
+    const input = await readBody(c, formBody);
     return c.json(await requestForm(db, c.get("me"), input));
   });
   app.post("/api/hr/forms/:id/decide", async (c) => {
@@ -193,6 +348,43 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   });
   app.post("/api/hr/forms/:id/cancel", async (c) => {
     await cancelForm(db, c.get("me"), idParam(c));
+    return c.json({ ok: true });
+  });
+  app.post("/api/hr/forms/:id/revoke", async (c) => {
+    await revokeForm(db, c.get("me"), idParam(c));
+    return c.json({ ok: true });
+  });
+  app.post("/api/hr/forms/:id/return", async (c) => {
+    const input = await readBody(c, z.object({ note: words(300) }));
+    await returnForm(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+  app.post("/api/hr/forms/:id/resend", async (c) => {
+    const input = await readBody(c, formBody);
+    await resendForm(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+  // Asking for a day of one's own attendance to be put right; whom they report to (or HR) decides.
+  app.get("/api/hr/fixes/mine", async (c) => c.json({ lines: await myFixes(db, c.get("me")) }));
+  app.get("/api/hr/fixes/list", async (c) =>
+    c.json(
+      await fixList(db, c.get("me"), { view: c.req.query("view"), month: c.req.query("month") }),
+    ),
+  );
+  app.post("/api/hr/fixes", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({ day, timeIn: clock, timeOut: clock.nullish(), reason: z.string().max(300) }),
+    );
+    return c.json(await requestFix(db, c.get("me"), input));
+  });
+  app.post("/api/hr/fixes/:id/decide", async (c) => {
+    const input = await readBody(c, z.object({ approve: z.boolean(), note: words(300) }));
+    await decideFix(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+  app.post("/api/hr/fixes/:id/cancel", async (c) => {
+    await cancelFix(db, c.get("me"), idParam(c));
     return c.json({ ok: true });
   });
   app.post("/api/hr/leave/:id/cancel", async (c) => {
@@ -214,6 +406,166 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
     c.json(await hrPeople(db, c.get("me"), { q: c.req.query("q"), stage: c.req.query("stage") })),
   );
   app.get("/api/hr/people/:id", async (c) => c.json(await hrPerson(db, c.get("me"), idParam(c))));
+  app.get("/api/hr/people/:id/history", async (c) =>
+    c.json(await hrHistory(db, c.get("me"), idParam(c))),
+  );
+  app.get("/api/hr/positions", async (c) => c.json(await hrPositions(db, c.get("me"))));
+  app.post("/api/hr/positions", async (c) => {
+    const input = await readBody(c, z.object({ name: z.string().max(200) }));
+    return c.json(await addPosition(db, c.get("me"), input));
+  });
+  app.post("/api/hr/positions/:id", async (c) => {
+    const input = await readBody(c, z.object({ archived: z.boolean() }));
+    await setPositionArchived(db, c.get("me"), idParam(c), input.archived);
+    return c.json({ ok: true });
+  });
+  // Holidays: national, and local to a province or a town (not private: no look-as guard).
+  app.get("/api/hr/holidays", async (c) =>
+    c.json(
+      await holidayYear(db, c.get("me"), {
+        year: c.req.query("year"),
+        province: c.req.query("province"),
+        town: c.req.query("town"),
+      }),
+    ),
+  );
+  app.post("/api/hr/holidays", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        day,
+        name: z.string().max(200),
+        kind: z.enum(["regular", "special"], { message: "Pick a regular holiday or a special day." }),
+        province: words(120),
+        town: words(120),
+      }),
+    );
+    return c.json(await addHoliday(db, c.get("me"), input));
+  });
+  app.post("/api/hr/holidays/:scope/:id/archive", async (c) => {
+    const scope = c.req.param("scope");
+    if (scope !== "national" && scope !== "local")
+      throw new Refusal(404, "not_found", "No such holiday.");
+    const input = await readBody(c, z.object({ note: words(300) }));
+    await archiveHoliday(db, c.get("me"), scope, idParam(c), input.note);
+    return c.json({ ok: true });
+  });
+  // Work schedules: HR gives people a shift, or the company's default.
+  app.get("/api/hr/schedules", async (c) => c.json(await hrSchedules(db, c.get("me"))));
+  app.post("/api/hr/schedules", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        name: z.string().max(200),
+        days: z.array(z.number().int().min(0).max(6)).max(7),
+        start: clock,
+        end: clock,
+        graceMinutes: z.number().int().nullish(),
+        breakMinutes: z.number().int().nullish(),
+      }),
+    );
+    return c.json(await addSchedule(db, c.get("me"), input));
+  });
+  app.post("/api/hr/schedules/:id/archive", async (c) => {
+    await archiveSchedule(db, c.get("me"), idParam(c));
+    return c.json({ ok: true });
+  });
+  app.post("/api/hr/people/:id/schedule", async (c) => {
+    const input = await readBody(c, z.object({ scheduleId: z.number().int().positive().nullable() }));
+    await setPersonSchedule(db, c.get("me"), idParam(c), input.scheduleId);
+    return c.json({ ok: true });
+  });
+  // The biometric timekeeping workbook: HR previews it (nothing kept), confirms who rows are,
+  // imports it, and answers Needs review; the CEO reads.
+  const workbookOf = async (c: Context<Env>): Promise<TimekeepingFile | null> => {
+    if (Number(c.req.header("content-length") ?? 0) > TIMEKEEPING_MAX_BYTES + 64 * 1024)
+      throw new Refusal(400, "invalid", "That file is over 10 MB.", "file");
+    const body = await c.req.parseBody().catch(() => ({}) as Record<string, unknown>);
+    const file = body.file;
+    return file instanceof File && file.size > 0
+      ? { name: file.name, mime: file.type, bytes: new Uint8Array(await file.arrayBuffer()) }
+      : null;
+  };
+  app.get("/api/hr/timekeeping", async (c) =>
+    c.json(await timekeepingPage(db, c.get("me"), { from: c.req.query("from"), to: c.req.query("to") })),
+  );
+  app.post("/api/hr/timekeeping/preview", async (c) =>
+    c.json(await previewTimekeeping(db, c.get("me"), await workbookOf(c))),
+  );
+  app.post("/api/hr/timekeeping/import", async (c) =>
+    c.json(await importTimekeeping(db, c.get("me"), await workbookOf(c))),
+  );
+  app.get("/api/hr/timekeeping/imports/:id/file", async (c) => {
+    const file = await importFile(db, c.get("me"), idParam(c));
+    return c.body(file.bytes as Uint8Array<ArrayBuffer>, 200, {
+      "content-type": file.mime,
+      "content-disposition": `attachment; filename="${encodeURIComponent(file.name)}"`,
+      "x-content-type-options": "nosniff",
+    });
+  });
+  app.post("/api/hr/timekeeping/devices", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        deviceId: z.string().trim().min(1, "The row needs its device ID.").max(40),
+        personId: z.number().int().positive(),
+        nameOnSheet: words(120),
+      }),
+    );
+    return c.json(await setDevice(db, c.get("me"), input));
+  });
+  app.post("/api/hr/timekeeping/devices/:id/archive", async (c) => {
+    await archiveDevice(db, c.get("me"), idParam(c));
+    return c.json({ ok: true });
+  });
+  app.post("/api/hr/timekeeping/days/:id/use", async (c) => {
+    const input = await readBody(c, z.object({ note: words(200) }));
+    await useBiometric(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+  app.post("/api/hr/timekeeping/days/:id/dismiss", async (c) => {
+    const input = await readBody(c, z.object({ note: words(300) }));
+    await dismissBiometric(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+  app.get("/api/hr/people/:id/papers", async (c) =>
+    c.json(await hrPapers(db, c.get("me"), idParam(c))),
+  );
+  // A paper: a form with kind, title, expiresOn as text and the paper as `file`.
+  app.post("/api/hr/people/:id/papers", async (c) => {
+    if (Number(c.req.header("content-length") ?? 0) > PAPER_MAX_BYTES + 64 * 1024)
+      throw new Refusal(400, "invalid", "That file is over 10 MB.", "file");
+    const body = await c.req.parseBody().catch(() => ({}) as Record<string, unknown>);
+    const text = (key: string) => (typeof body[key] === "string" ? (body[key] as string).trim() : "");
+    const file = body.file;
+    const paper: PaperFile | null =
+      file instanceof File && file.size > 0
+        ? { name: file.name, mime: file.type, bytes: new Uint8Array(await file.arrayBuffer()) }
+        : null;
+    return c.json(
+      await addPaper(
+        db,
+        c.get("me"),
+        idParam(c),
+        { kind: text("kind"), title: text("title"), expiresOn: text("expiresOn") || null },
+        paper,
+      ),
+    );
+  });
+  app.post("/api/hr/papers/:id/archive", async (c) => {
+    const input = await readBody(c, z.object({ reason: words(300) }));
+    await archivePaper(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+  app.get("/api/hr/papers/:id/file", async (c) => {
+    const paper = await paperFile(db, c.get("me"), idParam(c));
+    return c.body(paper.bytes as Uint8Array<ArrayBuffer>, 200, {
+      "content-type": paper.mime,
+      "content-disposition": `inline; filename="${encodeURIComponent(paper.name)}"`,
+      "x-content-type-options": "nosniff",
+      "cache-control": "private, max-age=604800, immutable",
+    });
+  });
   app.patch("/api/hr/people/:id", async (c) => {
     const input = await readBody(
       c,
@@ -233,6 +585,25 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
           emergencyName: words(120),
           emergencyPhone: words(30),
           emergencyRelation: words(60),
+          gender: z.enum(["female", "male"], { message: "Pick one from the list." }).nullish(),
+          civilStatus: z
+            .enum(["single", "married", "widowed", "separated"], { message: "Pick one from the list." })
+            .nullish(),
+          citizenship: words(60),
+          spouseName: words(120),
+          fatherName: words(120),
+          motherName: words(120),
+          education: words(120),
+          school: words(160),
+          course: words(160),
+          workArrangement: z
+            .enum(["office", "field", "hybrid", "remote"], { message: "Pick one from the list." })
+            .nullish(),
+          workTown: words(120),
+          workProvince: words(120),
+          companyPhone: words(30),
+          issuedEquipment: words(500),
+          jobDescription: words(2000),
           salary: pesos,
           allowance: pesos,
           bankName: words(120),
@@ -260,6 +631,22 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   });
   app.post("/api/hr/people/:id/back", async (c) => {
     await personBack(db, c.get("me"), idParam(c));
+    return c.json({ ok: true });
+  });
+  // HR moves someone to another seat: a transfer, a promotion, a demotion or a lateral move, from a
+  // day (up to three months ahead), keeping the old seat too or not. Written in HR's trail.
+  app.post("/api/hr/people/:id/move", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        seatId: z.number().int().positive("Pick the seat they move to."),
+        kind: z.enum(MOVE_KINDS, { message: "Pick the kind of move." }),
+        startsOn: day.nullish(),
+        keepOther: z.boolean().optional(),
+        reason: words(300),
+      }),
+    );
+    await movePerson(db, c.get("me"), idParam(c), input);
     return c.json({ ok: true });
   });
   app.post("/api/hr/people/:id/left", async (c) => {
@@ -330,6 +717,73 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   app.post("/api/hr/payroll/:month/release", async (c) =>
     c.json(await releaseMonth(db, c.get("me"), c.req.param("month"))),
   );
+  // HR's own payroll register beside the CRM's month: upload, map the headings, confirm names.
+  app.get("/api/hr/payroll/:month/register", async (c) =>
+    c.json(
+      await registerPage(db, c.get("me"), c.req.param("month"), Number(c.req.query("register")) || null),
+    ),
+  );
+  app.post("/api/hr/payroll/:month/register", async (c) => {
+    if (Number(c.req.header("content-length") ?? 0) > REGISTER_MAX_BYTES + 64 * 1024)
+      throw new Refusal(400, "invalid", "That file is over 10 MB.", "file");
+    const body = await c.req.parseBody().catch(() => ({}) as Record<string, unknown>);
+    const file = body.file;
+    return c.json(
+      await uploadRegister(
+        db,
+        c.get("me"),
+        c.req.param("month"),
+        file instanceof File && file.size > 0
+          ? { name: file.name, mime: file.type, bytes: new Uint8Array(await file.arrayBuffer()) }
+          : null,
+      ),
+    );
+  });
+  app.post("/api/hr/payroll/register/:id/map", async (c) => {
+    const heading = z.string().max(200).nullish();
+    const input = await readBody(
+      c,
+      z.object({
+        sheet: z.string().max(200),
+        headerRow: z.number().int().min(1).max(200),
+        columns: z.object({
+          code: heading,
+          name: heading,
+          basic: heading,
+          ot: heading,
+          gross: heading,
+          deductions: heading,
+          sss: heading,
+          philhealth: heading,
+          pagibig: heading,
+          tax: heading,
+          net: heading,
+        }),
+      }),
+    );
+    await mapRegister(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+  app.post("/api/hr/payroll/register/:id/confirm", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({ row: z.number().int().min(1), personId: z.number().int().positive("Pick the person.") }),
+    );
+    await confirmRow(db, c.get("me"), idParam(c), input);
+    return c.json({ ok: true });
+  });
+  app.post("/api/hr/payroll/register/:id/compare", async (c) => {
+    await compareAgain(db, c.get("me"), idParam(c));
+    return c.json({ ok: true });
+  });
+  app.get("/api/hr/payroll/register/:id/file", async (c) => {
+    const file = await registerFile(db, c.get("me"), idParam(c));
+    return c.body(file.bytes as Uint8Array<ArrayBuffer>, 200, {
+      "content-type": file.mime,
+      "content-disposition": `attachment; filename="${encodeURIComponent(file.name)}"`,
+      "x-content-type-options": "nosniff",
+    });
+  });
   app.get("/api/hr/payslips/mine", async (c) => c.json(await myPayslips(db, c.get("me"))));
   app.get("/api/hr/payslips/:month", async (c) =>
     c.json(await payslipOf(db, c.get("me"), c.req.param("month"))),

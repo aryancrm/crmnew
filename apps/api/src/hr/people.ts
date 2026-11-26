@@ -4,6 +4,9 @@
 // records; pay, bank and government IDs are theirs and the person's own.
 
 import { accountEvent } from "../account/events";
+import { COMPANY_CODES } from "../companies";
+import { careerOf, changeSentence, changesOf, hrEvent } from "./events";
+import { placesOf, townOnList } from "./holidays";
 import { type SQL, sql } from "drizzle-orm";
 import { hashPassword, passwordProblem } from "../auth/password";
 import { type Database, rows } from "../db/index";
@@ -13,8 +16,10 @@ import { clean, type Runner } from "../inventory/service";
 import {
   change,
   EMAIL,
+  fillSeat,
   fillSeatLogins,
   LOGIN_DOMAIN,
+  type MoveKind,
   personLeaves,
   refuseIfPromised,
   seatLoginOf,
@@ -22,8 +27,11 @@ import {
 } from "../org/service";
 import { ROLE_LABEL, type Role } from "../people/roles";
 import type {
+  CivilStatus,
   Classification,
   Company,
+  Gender,
+  WorkArrangement,
   HrLoginInput,
   HrPeople,
   HrPerson,
@@ -41,7 +49,7 @@ export const HR_ROLES: Role[] = ["hr", "ceo", "admin"];
 /** Who does HR's work (adds joiners, keeps records, logins, leaving): HR, with the Admin as its
  *  backup. The CEO reads. */
 export const HR_WRITE_ROLES: Role[] = ["hr", "admin"];
-const COMPANIES: Company[] = ["2mg", "gpi"];
+const COMPANIES: readonly Company[] = COMPANY_CODES;
 const CLASSES: Classification[] = ["probationary", "regular", "part_time", "intern"];
 const PHONE = /^\+?[0-9][0-9 -]{6,18}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -202,6 +210,21 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
     emergencyName: string | null;
     emergencyPhone: string | null;
     emergencyRelation: string | null;
+    gender: Gender | null;
+    civilStatus: CivilStatus | null;
+    citizenship: string | null;
+    spouseName: string | null;
+    fatherName: string | null;
+    motherName: string | null;
+    education: string | null;
+    school: string | null;
+    course: string | null;
+    workArrangement: WorkArrangement | null;
+    workTown: string | null;
+    workProvince: string | null;
+    companyPhone: string | null;
+    issuedEquipment: string | null;
+    jobDescription: string | null;
     salary: number | null;
     allowance: number | null;
     bankName: string | null;
@@ -229,6 +252,11 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
         to_char(e.left_on, 'YYYY-MM-DD') as "leftOn", e.left_reason as "leftReason", e.mobile, e.personal_email as "personalEmail",
         to_char(e.birth_date, 'YYYY-MM-DD') as "birthDate", e.address, e.emergency_name as "emergencyName",
         e.emergency_phone as "emergencyPhone", e.emergency_relation as "emergencyRelation",
+        e.gender, e.civil_status as "civilStatus", e.citizenship, e.spouse_name as "spouseName",
+        e.father_name as "fatherName", e.mother_name as "motherName", e.education, e.school, e.course,
+        e.work_arrangement as "workArrangement", e.work_town as "workTown", e.work_province as "workProvince",
+        e.company_phone as "companyPhone",
+        e.issued_equipment as "issuedEquipment", e.job_description as "jobDescription",
         e.salary, e.allowance, e.bank_name as "bankName", e.bank_account as "bankAccount", e.sss, e.philhealth, e.pagibig, e.tin,
         e.no_sss as "noSss", e.no_philhealth as "noPhilhealth", e.no_pagibig as "noPagibig", e.no_tax as "noTax",
         seat.id as "seatId", seat.title as "seatTitle", seat.login as "seatLogin", seat.team, seat.area,
@@ -237,7 +265,7 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
       where p.id = ${personId}`,
   );
   if (!one) throw new Refusal(404, "not_found", "No such person.");
-  const [history, boss] = await Promise.all([
+  const [history, boss, career, schedule] = await Promise.all([
     rows<HrPerson["history"][number]>(
       db,
       sql`select s.title, u.name as team, to_char(h.starts_on, 'YYYY-MM-DD') as "from",
@@ -249,6 +277,16 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
     rows<{ name: string }>(
       db,
       sql`select b.name from person p join person b on b.id = p.reports_to and b.active where p.id = ${personId}`,
+    ),
+    careerOf(db, personId),
+    // Their work schedule: the one HR gave them, else the company's default.
+    rows<{ id: number | null; name: string; start: string; end: string; days: number[] }>(
+      db,
+      sql`select p.schedule_id::int as id, w.name, to_char(w.starts, 'HH24:MI') as start,
+          to_char(w.ends, 'HH24:MI') as "end", w.days
+        from person p join work_schedule w on w.id = coalesce(p.schedule_id,
+          (select id from work_schedule where is_default and active limit 1))
+        where p.id = ${personId}`,
     ),
   ]);
   const channel = one.seatId
@@ -264,6 +302,7 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
       )[0]?.name ?? null)
     : null;
   const pay = hr || me.id === personId;
+  const holidayPlace = (await placesOf(db, [personId])).get(personId) ?? null;
   return {
     personId: one.personId,
     name: one.name,
@@ -301,6 +340,22 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
       emergencyName: one.emergencyName,
       emergencyPhone: one.emergencyPhone,
       emergencyRelation: one.emergencyRelation,
+      gender: one.gender,
+      civilStatus: one.civilStatus,
+      citizenship: one.citizenship,
+      spouseName: one.spouseName,
+      fatherName: one.fatherName,
+      motherName: one.motherName,
+      education: one.education,
+      school: one.school,
+      course: one.course,
+      workArrangement: one.workArrangement,
+      workTown: one.workTown,
+      workProvince: one.workProvince,
+      holidayPlace,
+      companyPhone: one.companyPhone,
+      issuedEquipment: one.issuedEquipment,
+      jobDescription: one.jobDescription,
       salary: pay ? one.salary : null,
       allowance: pay ? one.allowance : null,
       bankName: pay ? one.bankName : null,
@@ -314,13 +369,16 @@ export async function hrPerson(db: Database, me: Me, personId: number): Promise<
         : null,
     },
     missing: one.missing,
+    career,
     can: {
       edit: works,
       login: works && one.active && one.role !== "ceo" && one.role !== "admin",
       leave: works && one.active && me.id !== one.personId && one.role !== "ceo",
       // Marked as left by mistake, or back after leaving (the hub couldn't reactivate anyone).
       back: works && !one.active,
+      schedule: works && one.active && one.role !== "admin",
     },
+    schedule: schedule[0] ?? { id: null, name: "Office hours", start: "07:00", end: "16:00", days: [1, 2, 3, 4, 5, 6] },
   };
 }
 
@@ -453,6 +511,8 @@ export async function addJoiner(
       if (taken)
         throw new Refusal(409, "taken", `Employee ID ${code} is ${taken.name}'s.`, "employeeCode");
     }
+    // A position typed for them is one of HR's list; none typed, the seat's title.
+    if (text(input.position)) await refuseUnknownPosition(tx, text(input.position) as string);
     const position = text(input.position) ?? seat.title;
     const [person] = await rows<{ id: number }>(
       tx,
@@ -472,6 +532,7 @@ export async function addJoiner(
         values (${personId}, ${input.company}, ${code}, ${input.classification}, ${position}, ${input.startsOn}::date,
           ${mobile}, ${input.salary ?? null}, ${input.allowance ?? null}, ${me.id})`,
     );
+    await hrEvent(tx, personId, me.id, "joined", `Added as a joiner in "${seat.title}" from ${input.startsOn}`);
     return { personId, loginEmail };
   });
 }
@@ -513,6 +574,10 @@ export async function setLogin(
       );
       email = await checkLoginEmail(tx, input.email, personId, seat?.id ?? null);
       await tx.execute(sql`update person set email = ${email} where id = ${personId}`);
+      if (email !== person.email)
+        await hrEvent(tx, personId, me.id, "login", "Login email changed", [
+          { field: "loginEmail", label: "Login email", from: person.email, to: email, hidden: false },
+        ]);
     }
     if (hash) {
       await tx.execute(
@@ -523,6 +588,7 @@ export async function setLogin(
         sql`delete from session where (person_id = ${personId} and viewed_by is null) or viewed_by = ${personId}`,
       );
       await accountEvent(tx, personId, me.id, "password_given");
+      await hrEvent(tx, personId, me.id, "login", "One-time password given");
     }
     return { loginEmail: email };
   });
@@ -543,6 +609,21 @@ const RECORD_COLUMNS: Record<keyof HrRecordInput, string> = {
   emergencyName: "emergency_name",
   emergencyPhone: "emergency_phone",
   emergencyRelation: "emergency_relation",
+  gender: "gender",
+  civilStatus: "civil_status",
+  citizenship: "citizenship",
+  spouseName: "spouse_name",
+  fatherName: "father_name",
+  motherName: "mother_name",
+  education: "education",
+  school: "school",
+  course: "course",
+  workArrangement: "work_arrangement",
+  workTown: "work_town",
+  workProvince: "work_province",
+  companyPhone: "company_phone",
+  issuedEquipment: "issued_equipment",
+  jobDescription: "job_description",
   salary: "salary",
   allowance: "allowance",
   bankName: "bank_name",
@@ -557,6 +638,31 @@ const RECORD_COLUMNS: Record<keyof HrRecordInput, string> = {
   noTax: "no_tax",
 };
 const DATE_FIELDS = new Set(["hireDate", "regularizedOn", "birthDate"]);
+/** Fields with a fixed set of answers. */
+const CHOICES: Partial<Record<keyof HrRecordInput, string[]>> = {
+  gender: ["female", "male"],
+  civilStatus: ["single", "married", "widowed", "separated"],
+  workArrangement: ["office", "field", "hybrid", "remote"],
+};
+/** The long ones: what HR may write, at most. */
+const TEXT_LIMIT: Partial<Record<keyof HrRecordInput, number>> = {
+  issuedEquipment: 500,
+  jobDescription: 2000,
+};
+
+/** A position is one of HR's list (Positions): a typo never becomes a new job title. */
+async function refuseUnknownPosition(db: Runner, position: string): Promise<void> {
+  const name = position.toLowerCase();
+  // On the list; or a seat's title in the company tree that HR hasn't archived.
+  const [known] = await rows<{ ok: number }>(
+    db,
+    sql`select 1 as ok where exists (select 1 from hr_position where lower(name) = ${name} and archived_at is null)
+      or (exists (select 1 from seat where lower(title) = ${name})
+        and not exists (select 1 from hr_position where lower(name) = ${name}))`,
+  );
+  if (!known)
+    throw new Refusal(400, "invalid", `"${position}" isn't on HR's list of positions. Add it in Positions first.`, "position");
+}
 
 /** HR changes a record: only the fields sent. */
 export async function updateRecord(
@@ -567,7 +673,19 @@ export async function updateRecord(
 ): Promise<void> {
   allow(me, HR_WRITE_ROLES, "change people's records");
   await ensureRecords(db);
+  // The work town is one of the CRM's town list, sent with its province (or both cleared).
+  if ("workTown" in input || "workProvince" in input) {
+    const town = text(input.workTown);
+    const province = text(input.workProvince);
+    if (town || province) {
+      const place = town && province ? townOnList(town, province) : null;
+      if (!place) throw new Refusal(400, "invalid", "Pick the work town from the list.", "workTown");
+      input = { ...input, workTown: place.town, workProvince: place.province };
+    } else input = { ...input, workTown: null, workProvince: null };
+  }
   const sets: SQL[] = [];
+  // What the record becomes, for HR's trail.
+  const after: Record<string, string | number | boolean | null> = {};
   for (const [key, column] of Object.entries(RECORD_COLUMNS) as [keyof HrRecordInput, string][]) {
     if (!(key in input)) continue;
     let value = input[key] as string | number | boolean | null | undefined;
@@ -577,6 +695,7 @@ export async function updateRecord(
       if (typeof value !== "boolean")
         throw new Refusal(400, "invalid", "Tick it or leave it.", key);
       sets.push(sql`${sql.raw(column)} = ${value}`);
+      after[key] = value;
       continue;
     }
     if (key === "company" && !COMPANIES.includes(value as Company))
@@ -584,6 +703,13 @@ export async function updateRecord(
     if (key === "classification" && !CLASSES.includes(value as Classification))
       throw new Refusal(400, "invalid", "Pick how they are employed.", key);
     if (key === "hireDate" && !value) throw new Refusal(400, "invalid", "Pick the hire date.", key);
+    const choices = CHOICES[key];
+    if (choices && value !== null && !choices.includes(String(value)))
+      throw new Refusal(400, "invalid", "Pick one from the list.", key);
+    if (TEXT_LIMIT[key] && value !== null && String(value).length > (TEXT_LIMIT[key] as number))
+      throw new Refusal(400, "invalid", `Keep it under ${TEXT_LIMIT[key]} characters.`, key);
+    if (key === "companyPhone" && value !== null && !PHONE.test(String(value)))
+      throw new Refusal(400, "invalid", "Type a mobile number, like 0917 555 0101.", key);
     if (DATE_FIELDS.has(key) && value !== null && !DAY.test(String(value)))
       throw new Refusal(400, "invalid", "Pick a day.", key);
     if (
@@ -602,6 +728,7 @@ export async function updateRecord(
       throw new Refusal(400, "invalid", "Type the monthly amount in pesos.", key);
     if ((key === "employeeCode" || key === "personalEmail") && value !== null)
       value = key === "employeeCode" ? String(value).toUpperCase() : String(value).toLowerCase();
+    after[key] = value;
     sets.push(
       DATE_FIELDS.has(key)
         ? sql`${sql.raw(column)} = ${value}::date`
@@ -610,11 +737,23 @@ export async function updateRecord(
   }
   if (!sets.length) return;
   await change(db, async (tx) => {
-    const [found] = await rows<{ company: Company }>(
+    // The record as it was, each field as the form sends it (dates as YYYY-MM-DD).
+    const [found] = await rows<Record<string, string | number | boolean | null> & { company: Company }>(
       tx,
-      sql`select company from employee where person_id = ${personId}`,
+      sql`select ${sql.join(
+        // The column and its key both come from RECORD_COLUMNS, a fixed list in this file, never from
+        // the request (the code scan's raw-SQL rule asks for that to be said).
+        (Object.entries(RECORD_COLUMNS) as [string, string][]).map(([key, column]) =>
+          DATE_FIELDS.has(key)
+            ? sql`to_char(${sql.raw(column)}, 'YYYY-MM-DD') as ${sql.raw(`"${key}"`)}` // nosemgrep
+            : sql`${sql.raw(column)} as ${sql.raw(`"${key}"`)}`, // nosemgrep
+        ),
+        sql`, `,
+      )} from employee where person_id = ${personId} for update`,
     );
     if (!found) throw new Refusal(404, "not_found", "No such person.");
+    const position = typeof after.position === "string" ? after.position : null;
+    if (position && position !== found.position) await refuseUnknownPosition(tx, position);
     const code = text(input.employeeCode)?.toUpperCase();
     if (code) {
       const [taken] = await rows<{ name: string }>(
@@ -636,6 +775,8 @@ export async function updateRecord(
       await tx.execute(
         sql`update person set title = ${text(input.position)} where id = ${personId}`,
       );
+    const changes = changesOf(found, after);
+    if (changes.length) await hrEvent(tx, personId, me.id, "record", changeSentence(changes), changes);
   });
 }
 
@@ -654,6 +795,34 @@ export async function personBack(db: Database, me: Me, personId: number): Promis
     sql`update employee set status = 'active', left_on = null, left_reason = null, updated_at = now(), updated_by = ${me.id}
       where person_id = ${personId}`,
   );
+  await hrEvent(db, personId, me.id, "back", "Back at work");
+}
+
+/** HR moves someone to a vacant seat: a transfer, a promotion, a demotion or a lateral move, from
+ *  a day (up to three months ahead), keeping their old seat too or not. The seat decides their
+ *  work, team, boss and email ID from that day; what they sold stays with the seat they sold it
+ *  from (each order keeps the email ID it was sold as). HR's trail writes the move. */
+export async function movePerson(
+  db: Database,
+  me: Me,
+  personId: number,
+  input: { seatId: number; kind: MoveKind; startsOn?: string | null; keepOther?: boolean; reason?: string | null },
+): Promise<void> {
+  allow(me, HR_WRITE_ROLES, "move people");
+  if (!clean(input.reason)) throw new Refusal(400, "invalid", "Say why they move.", "reason");
+  await fillSeat(
+    db,
+    me,
+    input.seatId,
+    { personId, keepOther: input.keepOther, reason: input.reason, startsOn: input.startsOn, moveKind: input.kind },
+    HR_WRITE_ROLES,
+  );
+  // A position HR typed for the old seat would now be wrong: it follows the seat's title again
+  // (the old one stays in the trail).
+  if (!input.keepOther)
+    await db.execute(
+      sql`update employee set position = null, updated_at = now(), updated_by = ${me.id} where person_id = ${personId} and position is not null`,
+    );
 }
 
 export async function markLeft(
@@ -664,5 +833,6 @@ export async function markLeft(
 ): Promise<{ vacant: string[] }> {
   if (!clean(input.reason))
     throw new Refusal(400, "invalid", "Say why they left (resigned, end of contract…).", "reason");
+  // personLeaves writes HR's trail line (also when the CEO or the Admin marks them in Teams & people).
   return personLeaves(db, me, personId, input, HR_WRITE_ROLES);
 }

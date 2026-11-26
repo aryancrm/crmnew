@@ -1,6 +1,7 @@
 // The order line's words and rules, with no database: the statuses, what each is called,
 // which the dashboard's tiles count, and who may do what. After the hub's own state machine.
 
+import { COMPANIES } from "../companies";
 import { DISPATCH_ROLES } from "../dispatch/rules";
 import { poExpected, RX_DIVISIONS } from "./divisions";
 import { FINANCE_ROLES } from "../finance/rules";
@@ -309,9 +310,10 @@ export const PAPER_LABEL: Record<PaperKind, string> = {
 };
 export const PAPER_KINDS = Object.keys(PAPER_LABEL) as PaperKind[];
 
+/** The company billing an order, by its registered name (src/companies.ts). */
 export const INVOICE_FROM_LABEL: Record<InvoiceFrom, string> = {
-  "2mg": "2MG Inc.",
-  getmeds: "GetMeds Philippines Inc.",
+  "2mg": COMPANIES["2mg"].name,
+  gpi: COMPANIES.gpi.name,
 };
 
 /** The papers an order is expected to carry. Only a proof of payment is needed before it can

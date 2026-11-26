@@ -6,6 +6,10 @@
 // the report (who worked how long, who less, late, absent, on leave), with nothing to change.
 
 import { peopleUnder } from "../org/scope";
+import { fixesOf, mayAskFix } from "./corrections";
+import { hrEvent } from "./events";
+import { biometricMonth, seesBiometric } from "./timekeeping";
+import { type DayHoliday, holidayNamesOf, holidaysOf } from "./holidays";
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
@@ -22,6 +26,7 @@ import type {
   LeaveRow,
   Me,
   MyDay,
+  OtType,
 } from "../types";
 import {
   DEFAULT_SCHEDULE,
@@ -104,6 +109,8 @@ export async function markSeen(db: Database, me: Me): Promise<void> {
       returning id::int as id`,
   );
   if (moved.length) return;
+  // Their own holiday (a local one of their town too) isn't a working day: nothing starts by itself.
+  if ((await holidayNamesOf(db, me.id, today, today)).has(today)) return;
   await db.execute(
     sql`insert into attendance (person_id, day, time_in, in_source, last_seen)
       select ${me.id}, ${today}::date, now(), 'sign_in', now()
@@ -144,7 +151,7 @@ export async function endDay(db: Database, me: Me, place?: string | null): Promi
     throw new Refusal(409, "not_started", "Your day hasn't started yet: press Start my day first.");
 }
 
-/** HR (for now the CEO and the Admin) puts a day right: its time in and out, with why. */
+/** HR (with the Admin as its backup) puts a day right: its time in and out, with why. */
 export async function putDayRight(
   db: Database,
   me: Me,
@@ -154,24 +161,51 @@ export async function putDayRight(
   allow(me, ATTENDANCE_WRITE_ROLES, "put attendance right");
   const note = input.note.trim();
   if (!note) throw new Refusal(400, "invalid", "Say why the day is changed.", "note");
+  checkDay(input);
+  const [found] = await rows<{ id: number }>(
+    db,
+    sql`select id::int as id from person where id = ${personId}`,
+  );
+  if (!found) throw new Refusal(404, "not_found", "No such person.");
+  await db.transaction(async (tx) => {
+    await setDay(tx, personId, me.id, { ...input, note }, "hr");
+    // HR's trail: every change to someone's HR record, a day of attendance too.
+    await hrEvent(
+      tx,
+      personId,
+      me.id,
+      "attendance",
+      `Attendance of ${input.day} put right: ${input.timeIn}–${input.timeOut ?? "no time out"}: ${note}`,
+    );
+  });
+}
+
+/** A day's times make sense: time out after time in, and the day has come. */
+export function checkDay(input: { day: string; timeIn: string; timeOut: string | null }): void {
   const timeIn = manilaMoment(input.day, input.timeIn);
   const timeOut = input.timeOut ? manilaMoment(input.day, input.timeOut) : null;
   if (timeOut !== null && timeOut < timeIn)
     throw new Refusal(400, "invalid", "Time out comes after time in.", "timeOut");
   if (input.day > todayManila())
     throw new Refusal(400, "invalid", "That day hasn't come yet.", "day");
-  const [found] = await rows<{ id: number }>(
-    db,
-    sql`select id::int as id from person where id = ${personId}`,
-  );
-  if (!found) throw new Refusal(404, "not_found", "No such person.");
-  const inAt = new Date(timeIn).toISOString();
-  const outAt = timeOut === null ? null : new Date(timeOut).toISOString();
+}
+
+/** Sets a day's time in and out as it really was: put right by HR, from a person's request HR or
+ *  their lead approved (`request`), or from the biometric sheet when HR uses its times (`biometric`). */
+export async function setDay(
+  db: Runner,
+  personId: number,
+  by: number,
+  input: { day: string; timeIn: string; timeOut: string | null; note: string },
+  source: "hr" | "request" | "biometric",
+): Promise<void> {
+  const inAt = new Date(manilaMoment(input.day, input.timeIn)).toISOString();
+  const outAt = input.timeOut ? new Date(manilaMoment(input.day, input.timeOut)).toISOString() : null;
   await db.execute(
     sql`insert into attendance (person_id, day, time_in, in_source, time_out, out_source, last_seen, note, changed_by)
-      values (${personId}, ${input.day}::date, ${inAt}::timestamptz, 'hr', ${outAt}::timestamptz,
-        ${outAt ? "hr" : null}, coalesce(${outAt}::timestamptz, ${inAt}::timestamptz), ${note}, ${me.id})
-      on conflict (person_id, day) do update set time_in = excluded.time_in, in_source = 'hr',
+      values (${personId}, ${input.day}::date, ${inAt}::timestamptz, ${source}, ${outAt}::timestamptz,
+        ${outAt ? source : null}, coalesce(${outAt}::timestamptz, ${inAt}::timestamptz), ${input.note}, ${by})
+      on conflict (person_id, day) do update set time_in = excluded.time_in, in_source = excluded.in_source,
         time_out = excluded.time_out, out_source = excluded.out_source, note = excluded.note,
         changed_by = excluded.changed_by`,
   );
@@ -223,9 +257,14 @@ function dayOf(
       ? dayMinutes(schedule) - schedule.breakMinutes
       : formSpan(covering)
     : 0;
-  const overtimeMinutes = forms
+  const overtime = forms
     .filter((one) => one.day === day && one.kind === "ot")
-    .reduce((sum, one) => sum + formSpan(one), 0);
+    .map((one) => ({
+      type: one.otType ?? null,
+      minutes: one.minutes ?? formSpan(one),
+      nightMinutes: one.night ?? 0,
+    }));
+  const overtimeMinutes = overtime.reduce((sum, one) => sum + one.minutes, 0);
   if (!row)
     return {
       day,
@@ -244,6 +283,7 @@ function dayOf(
       halfDay,
       form,
       overtimeMinutes,
+      overtime,
       workedMinutes: formMinutes,
       note: null,
     };
@@ -276,6 +316,7 @@ function dayOf(
     halfDay,
     form,
     overtimeMinutes,
+    overtime,
     note: row.note,
   };
 }
@@ -300,6 +341,11 @@ type FormRow = {
   day: string;
   from: string | null;
   to: string | null;
+  /** Overtime: the minutes that count by the overtime rules (null on rows from before them). */
+  minutes?: number | null;
+  /** Overtime: its type and its night part (10 PM to 6 AM), null on rows from before them. */
+  otType?: OtType | null;
+  night?: number | null;
 };
 
 /** The minutes from a form's start to its end ("HH:MM"). */
@@ -324,8 +370,9 @@ async function formsOf(
   const found = await rows<FormRow>(
     db,
     sql`select person_id::int as "personId", kind, to_char(day, 'YYYY-MM-DD') as day,
-        to_char(from_time, 'HH24:MI') as "from", to_char(to_time, 'HH24:MI') as "to"
-      from hr_form where status = 'approved' and day between ${from}::date and ${to}::date
+        to_char(from_time, 'HH24:MI') as "from", to_char(to_time, 'HH24:MI') as "to", ot_minutes as minutes,
+        ot_type as "otType", ot_night_minutes as night
+      from hr_form where status = 'approved' and kind in ('ob', 'wfh', 'ot') and day between ${from}::date and ${to}::date
         and person_id in (${sql.join(
           ids.map((id) => sql`${id}`),
           sql`, `,
@@ -413,6 +460,8 @@ export async function schedulesOf(db: Runner, ids: number[]): Promise<Map<number
   return new Map(found.map((row) => [row.personId, toSchedule(row)]));
 }
 
+/** The national holidays between two days, by day (the company's calendar; a person's own,
+ *  their town's too, come from holidays.ts holidaysOf). */
 export async function holidaysBetween(db: Runner, from: string, to: string) {
   const found = await rows<{ day: string; name: string }>(
     db,
@@ -429,13 +478,19 @@ export async function attendanceDays(
   people: { id: number; hiredOn: string | null }[],
   from: string,
   to: string,
-): Promise<Map<number, { schedule: WorkSchedule; days: AttendanceDay[] }>> {
-  const out = new Map<number, { schedule: WorkSchedule; days: AttendanceDay[] }>();
+): Promise<
+  Map<number, { schedule: WorkSchedule; days: AttendanceDay[]; holidays: Map<string, DayHoliday> }>
+> {
+  const out = new Map<
+    number,
+    { schedule: WorkSchedule; days: AttendanceDay[]; holidays: Map<string, DayHoliday> }
+  >();
   const ids = people.map((one) => one.id);
   if (!ids.length) return out;
   const today = todayManila();
   const schedules = await schedulesOf(db, ids);
-  const holidays = await holidaysBetween(db, from, to);
+  // Each person's own holidays: the national ones and their town's.
+  const holidayMap = await holidaysOf(db, ids, from, to);
   const leaveMap = await leavesOf(db, ids, from, to);
   const formMap = await formsOf(db, ids, from, to);
   const found = await rows<DayRow>(
@@ -455,6 +510,8 @@ export async function attendanceDays(
   for (const person of people) {
     const schedule = schedules.get(person.id) ?? DEFAULT_SCHEDULE;
     const mine = byPerson.get(person.id);
+    const own = holidayMap.get(person.id) ?? new Map<string, DayHoliday>();
+    const holidays = new Map([...own].map(([day, one]) => [day, one.name]));
     const days: AttendanceDay[] = [];
     for (let at = from; at <= to; at = addDays(at, 1))
       days.push(
@@ -469,7 +526,7 @@ export async function attendanceDays(
           formMap.get(person.id),
         ),
       );
-    out.set(person.id, { schedule, days });
+    out.set(person.id, { schedule, days, holidays: own });
   }
   return out;
 }
@@ -485,9 +542,10 @@ export async function attendanceToday(
   const people = await visiblePeople(db, me);
   const ids = people.map((one) => one.id);
   const first = `${day.slice(0, 7)}-01`;
-  const [schedules, holidays, leaves, forms, found] = await Promise.all([
+  const [schedules, holidays, holidayMap, leaves, forms, found] = await Promise.all([
     schedulesOf(db, ids),
     holidaysBetween(db, first, day),
+    holidaysOf(db, ids, first, day),
     leavesOf(db, ids, first, day),
     formsOf(db, ids, first, day),
     ids.length
@@ -506,12 +564,15 @@ export async function attendanceToday(
   const out = people.map((person) => {
     const schedule = schedules.get(person.id) ?? DEFAULT_SCHEDULE;
     const mine = found.filter((row) => row.personId === person.id);
+    const own = new Map(
+      [...(holidayMap.get(person.id) ?? new Map<string, DayHoliday>())].map(([at, one]) => [at, one.name]),
+    );
     const month = days.map((one) =>
       dayOf(
         one,
         mine.find((row) => row.day === one),
         schedule,
-        holidays,
+        own,
         today,
         leaves.get(person.id),
         person.hiredOn,
@@ -569,9 +630,9 @@ export async function attendanceMonth(
   const first = `${month}-01`;
   const lastOfMonth = addDays(`${nextMonth(month)}-01`, -1);
   const last = lastOfMonth < today ? lastOfMonth : today;
-  const [schedules, holidays, leaveMap, formMap, found, named] = await Promise.all([
+  const [schedules, holidays, leaveMap, formMap, found, named, fixes] = await Promise.all([
     schedulesOf(db, [personId]),
-    holidaysBetween(db, first, lastOfMonth),
+    holidayNamesOf(db, personId, first, lastOfMonth),
     leavesOf(db, [personId], first, lastOfMonth),
     formsOf(db, [personId], first, lastOfMonth),
     rows<DayRow>(
@@ -584,6 +645,7 @@ export async function attendanceMonth(
       sql`select w.name from person p join work_schedule w on w.id = coalesce(p.schedule_id,
           (select id from work_schedule where is_default and active limit 1)) where p.id = ${personId}`,
     ),
+    fixesOf(db, me, personId, month),
   ]);
   const schedule = schedules.get(personId) ?? DEFAULT_SCHEDULE;
   const holidaySet = new Set(holidays.keys());
@@ -605,11 +667,14 @@ export async function attendanceMonth(
         formMap.get(personId),
       ),
     );
+  // HR's view: the biometric sheet's days beside the CRM's.
+  const biometric = seesBiometric(me) ? await biometricMonth(db, personId, first, last, days) : null;
   return {
     month,
     person: { id: person.id, name: person.name, title: person.title },
     schedule: { ...schedule, name: named[0]?.name ?? "Office hours" },
     days,
+    biometric,
     totals: {
       workDays: days.filter((one) => one.kind === "work").length,
       present: days.filter((one) => one.timeIn).length,
@@ -621,9 +686,12 @@ export async function attendanceMonth(
       leaveDays: days.reduce((sum, one) => sum + (one.leave ? (one.halfDay ? 0.5 : 1) : 0), 0),
     },
     leaves,
+    fixes,
     can: {
       putRight: ATTENDANCE_WRITE_ROLES.includes(me.role),
       leave: ATTENDANCE_WRITE_ROLES.includes(me.role),
+      askFix: me.id === personId && mayAskFix(me),
+      biometric: biometric !== null && ATTENDANCE_WRITE_ROLES.includes(me.role),
     },
   };
 }
@@ -633,7 +701,7 @@ export async function myDay(db: Database, me: Me): Promise<MyDay> {
   const today = todayManila();
   const [schedules, holidays, found] = await Promise.all([
     schedulesOf(db, [me.id]),
-    holidaysBetween(db, today, today),
+    holidayNamesOf(db, me.id, today, today),
     rows<DayRow>(
       db,
       sql`select ${dayColumns} from attendance a where a.person_id = ${me.id} and a.day = ${today}::date`,
@@ -683,7 +751,7 @@ export async function recordLeave(
   if (!person) throw new Refusal(404, "not_found", "No such person.", "personId");
   const [schedules, holidays] = await Promise.all([
     schedulesOf(db, [person.id]),
-    holidaysBetween(db, input.from, to),
+    holidayNamesOf(db, person.id, input.from, to),
   ]);
   const schedule = schedules.get(person.id) ?? DEFAULT_SCHEDULE;
   if (leaveDays(input.from, to, false, schedule, new Set(holidays.keys())) === 0)

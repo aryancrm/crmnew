@@ -122,7 +122,8 @@ export async function measure(
   const first = firstOf(month);
   const last = lastOf(month);
   const prevFirst = firstOf(shiftMonth(month, -1));
-  const mine: SQL = sql`(o.medrep_id = ${personId} or o.raised_by = ${personId})`;
+  // A sale made covering a vacant area is the team's, not their own score.
+  const mine: SQL = sql`((o.medrep_id = ${personId} and not o.covered) or o.raised_by = ${personId})`;
   const [row] = await rows<{
     sales: number;
     target: number | null;

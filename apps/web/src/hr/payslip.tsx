@@ -2,6 +2,7 @@
 // deductions and the net pay, with the attendance it came from. HR sees the company's shares and,
 // while the month is a draft, adds or takes off its own lines here.
 
+import { COMPANIES } from "@2mg/api/companies";
 import type { Company, PayLine, Payslip } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Printer, X } from "lucide-react";
@@ -10,10 +11,8 @@ import { api } from "../api";
 import { Button, CARD, Dialog, Field, Problem, peso, useAction } from "../ui";
 import { hours } from "./parts";
 
-export const COMPANY_NAME: Record<Company, string> = {
-  "2mg": "2MG Incorporated",
-  gpi: "Getmeds Philippines Inc.",
-};
+/** Each company's registered name (one list for the system: @2mg/api/companies). */
+export const COMPANY_NAME: Record<Company, string> = { "2mg": COMPANIES["2mg"].name, gpi: COMPANIES.gpi.name };
 export const longDay = (day: string) =>
   new Date(`${day}T00:00:00Z`).toLocaleDateString("en-PH", {
     day: "numeric",
@@ -162,6 +161,15 @@ export function PayslipView({
         </div>
       </div>
 
+      {(slip.notes ?? []).length > 0 && (
+        <ul className="flex flex-col gap-0.5 text-xs text-slate-600">
+          {(slip.notes ?? []).map((one) => (
+            <li key={one.key}>
+              <span className="font-semibold text-slate-700">{one.label}:</span> {one.detail}
+            </li>
+          ))}
+        </ul>
+      )}
       {forHr && slip.employer && (
         <p className="text-xs text-slate-500">
           The company pays besides: SSS {peso(slip.employer.sss)} · PhilHealth{" "}

@@ -3,6 +3,8 @@
 import { describe, expect, it } from "vitest";
 import {
   computeSlip,
+  noOvertime,
+  OVERTIME_RATES,
   type PayAttendance,
   type PayMonth,
   type PayRules,
@@ -12,6 +14,7 @@ import {
   payMonthOf,
   philhealthMonth,
   shiftMonth,
+  splitOvertime,
   sssMonth,
   withholdingTax,
 } from "./pay-rules";
@@ -51,7 +54,8 @@ const NOTHING: PayAttendance = {
   notEmployed: 0,
   lateMinutes: 0,
   undertimeMinutes: 0,
-  overtime: { ordinary: 0, restDay: 0, specialHoliday: 0, regularHoliday: 0 },
+  overtime: noOvertime(),
+  nightMinutes: 0,
   holidaysWorked: { regular: 0, special: 0 },
 };
 const NONE = { sss: false, philhealth: false, pagibig: false, tax: false };
@@ -134,7 +138,7 @@ describe("one payslip", () => {
         absent: 1,
         present: 25,
         lateMinutes: 30,
-        overtime: { ...NOTHING.overtime, ordinary: 120 },
+        overtime: { ...noOvertime(), regular: { first8: 120, over8: 0 } },
       },
       adjustments: [
         {
@@ -162,7 +166,7 @@ describe("one payslip", () => {
     expect(slip.earnings.map((one) => [one.key, one.amount])).toEqual([
       ["basic", peso(30000)],
       ["allowance", peso(2000)],
-      ["ot_ordinary", peso(359.42)],
+      ["ot_regular", peso(359.42)],
       ["adj_2", peso(500)],
     ]);
     expect(slip.less.map((one) => [one.key, one.amount])).toEqual([
@@ -225,13 +229,16 @@ describe("one payslip", () => {
   });
 
   it("pays a holiday worked and overtime on holidays and rest days at their rates", () => {
+    const overtime = noOvertime();
+    overtime.rest = splitOvertime("rest", 480);
+    overtime.legal = splitOvertime("legal", 540);
     const slip = computeSlip({
       rules: RULES,
       monthlySalary: peso(31300),
       monthlyAllowance: 0,
       attendance: {
         ...NOTHING,
-        overtime: { ordinary: 0, restDay: 480, specialHoliday: 0, regularHoliday: 60 },
+        overtime,
         holidaysWorked: { regular: 1, special: 1 },
       },
       adjustments: [],
@@ -239,9 +246,66 @@ describe("one payslip", () => {
     });
     // Daily ₱1,200, hourly ₱150.
     const lines = Object.fromEntries(slip.earnings.map((one) => [one.key, one.amount]));
-    expect(lines.ot_restDay).toBe(peso(150 * 8 * 1.3));
-    expect(lines.ot_regularHoliday).toBe(peso(150 * 2.6));
+    expect(lines.ot_rest).toBe(peso(150 * 8 * 1.3));
+    // A regular holiday's form: its first 8 hours +100% (the month carries the day), the 9th at 260%.
+    expect(lines.ot_legal).toBe(peso(150 * 8));
+    expect(lines.ot_legal_over8).toBe(peso(150 * 2.6));
     expect(lines.holiday_regular).toBe(peso(1200));
     expect(lines.holiday_special).toBe(peso(360));
+  });
+
+  it("pays each overtime type at PLAN's and the Labor Code's rates", () => {
+    // Hourly ₱150: each type for 10 hours (8 + 2 past 8; a working day's all at one rate).
+    const expected: Record<string, [number, number]> = {
+      regular: [1.25 * 10, 0],
+      broken: [1.25 * 10, 0],
+      rest: [1.3 * 8, 1.69 * 2],
+      special: [0.3 * 8, 1.69 * 2],
+      legal: [1.0 * 8, 2.6 * 2],
+      rest_special: [1.5 * 8, 1.95 * 2],
+      rest_legal: [2.6 * 8, 3.38 * 2],
+    };
+    for (const [type, [first, over]] of Object.entries(expected)) {
+      const overtime = noOvertime();
+      overtime[type as keyof typeof OVERTIME_RATES] = splitOvertime(
+        type as keyof typeof OVERTIME_RATES,
+        600,
+      );
+      const slip = computeSlip({
+        rules: RULES,
+        monthlySalary: peso(31300),
+        monthlyAllowance: 0,
+        attendance: { ...NOTHING, overtime },
+        adjustments: [],
+        exempt: NONE,
+      });
+      const lines = Object.fromEntries(slip.earnings.map((one) => [one.key, one.amount]));
+      expect(lines[`ot_${type}`]).toBe(peso(150 * first));
+      expect(lines[`ot_${type}_over8`] ?? 0).toBe(peso(150 * over));
+    }
+  });
+
+  it("shows night differential and pays nothing for it", () => {
+    const overtime = noOvertime();
+    overtime.regular = splitOvertime("regular", 120);
+    const plain = computeSlip({
+      rules: RULES,
+      monthlySalary: peso(31300),
+      monthlyAllowance: 0,
+      attendance: { ...NOTHING, overtime },
+      adjustments: [],
+      exempt: NONE,
+    });
+    const night = computeSlip({
+      rules: RULES,
+      monthlySalary: peso(31300),
+      monthlyAllowance: 0,
+      attendance: { ...NOTHING, overtime, nightMinutes: 120 },
+      adjustments: [],
+      exempt: NONE,
+    });
+    expect(night.net).toBe(plain.net);
+    expect(night.notes.find((one) => one.key === "night")?.detail).toContain("not paid");
+    expect(plain.notes).toEqual([]);
   });
 });

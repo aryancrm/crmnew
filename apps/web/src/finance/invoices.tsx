@@ -1,6 +1,7 @@
 // Invoices, as Zoho Books lists them: date, number, order, customer, company, status, due
 // date, amount and balance, with tabs; and one invoice as a document with its payments.
 
+import { allCompanyNames } from "@2mg/api/companies";
 import type { DocLine, InvoiceDetail, InvoiceList, InvoiceTab } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { Search, X } from "lucide-react";
@@ -91,7 +92,7 @@ export function Invoices() {
         sub={
           data.customer
             ? `For ${data.customer.name}`
-            : "Every sales invoice, under 2MG Inc. or GetMeds Philippines Inc."
+            : `Every sales invoice, under ${allCompanyNames(" or ")}`
         }
         tags={
           data.customer && (

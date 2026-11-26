@@ -7,7 +7,8 @@ to be shut down once this one is live and everything has moved over.
 - **The plan is [docs/PLAN.md](docs/PLAN.md)**: business rules, roles, the order line, what is
   built, the questions still open and the change log. Keep it current whenever Aryan gives a
   new rule (edit the section, add a change-log line).
-- Talk to Aryan in Hinglish (Hindi in Latin script), short. Code, comments and docs in plain English.
+- Talk to Aryan in plain, simple English only, short (his words, 25 Nov: "talk to me in english only"); no git or code
+  words, say what changed for his people and where it is live. Code, comments and docs in plain English.
 - Commit messages end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`. Commit
   locally; push or deploy only when Aryan says.
 
