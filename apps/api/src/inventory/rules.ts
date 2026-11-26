@@ -25,6 +25,8 @@ export const PURCHASE_ROLES: readonly Role[] = ["inventory", "admin"];
 export const COST_ROLES: readonly Role[] = ["inventory", "management", "finance", "ceo", "admin"];
 /** Who changes prices and promos. */
 export const PRICE_ROLES: readonly Role[] = ["management", "ceo", "admin"];
+/** Who never looks at the stock (26 Nov): HR's work is people, leave and pay, not medicines. */
+export const NO_STOCK_ROLES: readonly Role[] = ["hr"];
 
 export function inventoryCan(me: Me): InventoryCan {
   return {

@@ -4,7 +4,7 @@ import { type SQL, sql } from "drizzle-orm";
 import { listCustomers } from "../customers/service";
 import { type Database, rows } from "../db/index";
 import { may } from "../http";
-import { COST_ROLES, inventoryCan, todayManila } from "../inventory/rules";
+import { COST_ROLES, inventoryCan, NO_STOCK_ROLES, todayManila } from "../inventory/rules";
 import { day, iso, listInventory } from "../inventory/service";
 import { findOrders } from "../orders/service";
 import { ROLE_LABEL, type Role } from "../people/roles";
@@ -277,12 +277,15 @@ export async function search(db: Database, me: Me, text: string): Promise<Search
       : Promise.resolve([] as SearchResult["people"]),
   ]);
   const [medicines, customers] = await Promise.all([
-    rows<SearchResult["medicines"][number]>(
-      db,
-      sql`select id::int as id, name, strength, sku from medicine
-        where active and (name ilike ${like} or generic ilike ${like} or sku ilike ${like} or code ilike ${like})
-        order by name limit 6`,
-    ),
+    // HR never looks at the stock (NO_STOCK_ROLES), so its search finds no medicines.
+    NO_STOCK_ROLES.includes(me.role)
+      ? Promise.resolve([] as SearchResult["medicines"])
+      : rows<SearchResult["medicines"][number]>(
+          db,
+          sql`select id::int as id, name, strength, sku from medicine
+            where active and (name ilike ${like} or generic ilike ${like} or sku ilike ${like} or code ilike ${like})
+            order by name limit 6`,
+        ),
     listCustomers(db, me, { q, page: 1 }),
   ]);
   return {

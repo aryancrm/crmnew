@@ -634,8 +634,7 @@ function deskFor(me: Me): Space {
   // A seller's look-ups (the stock) sit under Look up too, below their own work (19 Nov); the
   // Online desk's as well (22 Nov).
   const seller = !sorted && (me.role === "medrep" || me.role === "online");
-  // HR's one link into the stock is a look-up too (HR's own work is people, leave and pay).
-  const sellerLookUp = seller || me.role === "hr" ? first.items.filter((item) => SELLER_LOOK_UP.includes(item.to)) : [];
+  const sellerLookUp = seller ? first.items.filter((item) => SELLER_LOOK_UP.includes(item.to)) : [];
   // Management approves orders: the calls and the sales figures are what it looks up (22 Nov).
   const deskLookUp = me.role === "management" ? first.items.filter((item) => !item.children && MANAGEMENT_LOOK_UP.includes(item.to)) : [];
   const own = first.items.filter((item) => !sellerLookUp.includes(item) && !deskLookUp.includes(item));
@@ -756,14 +755,15 @@ function sortLead(items: MenuItem[]): { work: MenuItem[]; team: MenuItem[]; look
   return { work: rest.filter((item) => !TEAM_LINKS.includes(item.to)), team, lookUp };
 }
 
-/** Each role's own desk: only that person's work, and one link into the shared stock. */
+/** Each role's own desk: only that person's work, and one link into the shared stock (not HR's). */
 function ownDesk(me: Me): Space {
   const desk = (items: MenuItem[], icon: LucideIcon = House): Space => ({
     key: "desk",
     label: seatWords(me).desk,
     icon,
     tone: "bg-brand text-white",
-    groups: [{ items: [...items, stockLink] }],
+    // HR's work is people, leave and pay: no stock (26 Nov; the API refuses it too).
+    groups: [{ items: me.role === "hr" ? items : [...items, stockLink] }],
   });
   switch (me.role) {
     case "medrep": {
