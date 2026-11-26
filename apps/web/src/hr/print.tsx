@@ -8,14 +8,7 @@ import { Printer } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { api } from "../api";
 import { Button, PageState } from "../ui";
-
-const when = (at: string) =>
-  new Date(at).toLocaleDateString("en-PH", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-    timeZone: "Asia/Manila",
-  });
+import { LetterheadBlock, PaperFoot, SignerBoxes } from "./paper";
 
 export function PrintPage({ of }: { of: "leave" | "form" }) {
   const { id } = useParams();
@@ -39,13 +32,12 @@ export function PrintPage({ of }: { of: "leave" | "form" }) {
         </Button>
       </div>
       <article className="mx-auto flex max-w-[48rem] flex-col gap-5 bg-white p-10 text-[13px] text-slate-900 shadow-sm print:max-w-none print:p-0 print:shadow-none">
-        <header className="border-b-2 border-slate-900 pb-3 text-center">
-          <div className="text-sm font-semibold tracking-wide uppercase">{paper.company}</div>
-          <h1 className="mt-1 text-xl font-bold">{paper.title}</h1>
-          <div className="mt-1 text-xs text-slate-600">
-            Filed {paper.filedOn} · {paper.status}
-          </div>
-        </header>
+        <LetterheadBlock
+          letterhead={paper.letterhead}
+          title={paper.title}
+          code={paper.code}
+          sub={`Filed ${paper.filedOn} · ${paper.status}`}
+        />
         <dl className="grid grid-cols-[10rem_1fr] gap-x-4 gap-y-1.5">
           {[
             ["Name", paper.person.name],
@@ -93,22 +85,8 @@ export function PrintPage({ of }: { of: "leave" | "form" }) {
             </tbody>
           </table>
         )}
-        <section className="mt-6 grid gap-6 sm:grid-cols-3 print:grid-cols-3">
-          {paper.signers.map((signer) => (
-            <div key={signer.box} className="flex flex-col items-center text-center">
-              <div className="flex h-16 w-full items-end justify-center">
-                {signer.image && (
-                  <img src={signer.image} alt={`${signer.name ?? signer.box}'s signature`} className="max-h-16 max-w-full object-contain" />
-                )}
-              </div>
-              <div className="w-full border-t border-slate-900 pt-1 font-semibold">
-                {signer.name ?? " "}
-              </div>
-              <div className="text-xs text-slate-600">{signer.box}</div>
-              <div className="text-xs text-slate-500">{signer.at ? when(signer.at) : "Date: __________"}</div>
-            </div>
-          ))}
-        </section>
+        <SignerBoxes signers={paper.signers} />
+        <PaperFoot letterhead={paper.letterhead} />
       </article>
     </div>
   );

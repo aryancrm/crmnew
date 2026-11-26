@@ -2,10 +2,12 @@
 // points work. The Admin and the CEO change them; everyone's screens read them.
 
 import { sql } from "drizzle-orm";
+import { companyNow } from "../companies/context";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import type { Runner } from "../inventory/service";
-import type { CompanyInfo, Me, PointsProgram } from "../types";
+import { COMPANIES, type CompanyCode } from "../companies";
+import type { CompanyInfo, Letterhead, Me, PointsProgram } from "../types";
 
 export const SETTING_ROLES = ["admin", "ceo"] as const;
 
@@ -28,7 +30,32 @@ async function read<T>(db: Runner, key: string, fallback: T): Promise<T> {
   return found ? { ...fallback, ...found.value } : fallback;
 }
 
-export const companyInfo = (db: Runner) => read<CompanyInfo>(db, "company", COMPANY_DEFAULT);
+/** Until its details are saved, a company is named as on Bishnoi One's list (companies/context.ts). */
+export const companyInfo = (db: Runner) =>
+  read<CompanyInfo>(db, "company", { ...COMPANY_DEFAULT, name: companyNow()?.name ?? COMPANY_DEFAULT.name });
+
+/** Where each company's details are kept: 2MG's are the "company" setting the quotations print
+ *  (since before Getmeds Philippines had its own); every other company has its own key. */
+const companyKey = (code: CompanyCode) => (code === "2mg" ? "company" : `company:${code}`);
+const detailsOf = (db: Runner, code: CompanyCode) =>
+  read<CompanyInfo>(db, companyKey(code), { ...COMPANY_DEFAULT, name: COMPANIES[code].name });
+
+/** A company's letterhead on HR's papers: always its registered name (never a short one typed in
+ *  the settings), with the address, phone, email, TIN and foot line the Admin keeps. */
+export async function letterheadOf(db: Runner, code: CompanyCode): Promise<Letterhead> {
+  const known = code in COMPANIES ? code : "2mg";
+  const details = await detailsOf(db, known);
+  return {
+    code: known,
+    name: COMPANIES[known].name,
+    address: details.address,
+    phone: details.phone,
+    email: details.email,
+    tin: details.tin,
+    footer: details.footer,
+  };
+}
+
 export const pointsProgram = (db: Runner) => read<PointsProgram>(db, "points", POINTS_DEFAULT);
 
 async function write(db: Database, me: Me, key: string, value: unknown) {
@@ -41,12 +68,14 @@ async function write(db: Database, me: Me, key: string, value: unknown) {
 export async function settingsOf(
   db: Database,
   me: Me,
-): Promise<{ company: CompanyInfo; points: PointsProgram }> {
+): Promise<{ company: CompanyInfo; companies: Record<CompanyCode, CompanyInfo>; points: PointsProgram }> {
   allow(me, SETTING_ROLES, "see the settings");
-  return { company: await companyInfo(db), points: await pointsProgram(db) };
+  const [company, gpi, points] = await Promise.all([companyInfo(db), detailsOf(db, "gpi"), pointsProgram(db)]);
+  return { company, companies: { "2mg": company, gpi }, points };
 }
 
-export async function saveCompany(db: Database, me: Me, input: CompanyInfo): Promise<void> {
+/** The Admin or the CEO saves a company's details (2MG's by default). */
+export async function saveCompany(db: Database, me: Me, input: CompanyInfo, code: CompanyCode = "2mg"): Promise<void> {
   allow(me, SETTING_ROLES, "change the company's details");
   if (!input.name.trim()) throw new Refusal(400, "invalid", "Type the company's name.", "name");
   if (input.tin && !/^[0-9-]{9,20}$/.test(input.tin.trim()))
@@ -57,7 +86,7 @@ export async function saveCompany(db: Database, me: Me, input: CompanyInfo): Pro
       typeof value === "string" ? value.trim() : value,
     ]),
   ) as CompanyInfo;
-  await write(db, me, "company", clean);
+  await write(db, me, companyKey(code), clean);
 }
 
 export async function savePointsProgram(db: Database, me: Me, input: PointsProgram): Promise<void> {

@@ -216,7 +216,7 @@ export function LoginCard({
 
 export type JobState = {
   module: Role;
-  /** A MedRep seat's kind; "" as its channel works (docs/PLAN.md 28). */
+  /** A MedRep seat's kind; "" as its channel works (docs/PLAN.md 29). */
   works: "" | SeatWorks;
   title: string;
   titleTouched: boolean;

@@ -1,4 +1,5 @@
 // Applies the SQL files in ../../migrations in name order, each once, each in one transaction.
+// Bishnoi One's own list of companies (companies/registry.ts) has its own: ../../migrations-control.
 
 import { readdirSync, readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -6,6 +7,7 @@ import { sql } from "drizzle-orm";
 import { type Database, rows } from "./index";
 
 const DIR = fileURLToPath(new URL("../../migrations", import.meta.url));
+export const CONTROL_DIR = fileURLToPath(new URL("../../migrations-control", import.meta.url));
 const BREAK = "--> statement-breakpoint";
 
 /** Renumbered on 23 Nov 2026: main and backend had both used 0131-0135. A database that already ran
@@ -22,11 +24,11 @@ export const RENAMED: Record<string, string> = {
   "0150_tender_find_ask_portal.sql": "0158_tender_find_ask_portal.sql",
 };
 
-export async function migrate(db: Database): Promise<string[]> {
+export async function migrate(db: Database, dir = DIR): Promise<string[]> {
   await db.execute(
     sql`create table if not exists schema_migration (name text primary key, applied_at timestamptz not null default now())`,
   );
-  for (const [before, now] of Object.entries(RENAMED))
+  for (const [before, now] of Object.entries(dir === DIR ? RENAMED : {}))
     await db.execute(
       sql`update schema_migration set name = ${now}
         where name = ${before} and not exists (select 1 from schema_migration where name = ${now})`,
@@ -36,13 +38,13 @@ export async function migrate(db: Database): Promise<string[]> {
       (row) => row.name,
     ),
   );
-  const files = readdirSync(DIR)
+  const files = readdirSync(dir)
     .filter((name) => name.endsWith(".sql"))
     .sort();
   const applied: string[] = [];
   for (const name of files) {
     if (done.has(name)) continue;
-    const statements = readFileSync(`${DIR}/${name}`, "utf8")
+    const statements = readFileSync(`${dir}/${name}`, "utf8")
       .split(BREAK)
       .map((part) => part.trim())
       .filter((part) => part.replace(/^--.*$/gm, "").trim() !== "");

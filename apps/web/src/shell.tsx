@@ -36,6 +36,7 @@ import {
 import { useEffect, useId, useRef, useState } from "react";
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
+import { useCompany } from "./companies";
 import { LeavesArrow, useLeavesTo } from "./app-switch";
 import { ME, onlineDesk, useMe } from "./auth";
 import { DeskPeople } from "./desk/people";
@@ -49,6 +50,8 @@ import { unreadIn, useUpdates } from "./updates";
 export function Shell() {
   const me = useMe();
   const queries = useQueryClient();
+  // The company, when the server has several: its code beside Bishnoi One's name.
+  const company = useCompany();
   const navigate = useNavigate();
   // Nothing else is asked for until they have chosen their own password.
   const ready = Boolean(me.data && !me.data.mustChangePassword);
@@ -187,7 +190,14 @@ export function Shell() {
             <img src={heroLogo(home.key)} alt="" className="size-8 shrink-0 object-contain" />
             {/* Two lines: "Bishnoi One", then the workspace, "MedReps" (Aryan, 24 Nov). */}
             <span className="flex min-w-0 flex-col text-[17px] leading-[1.15] font-semibold tracking-tight whitespace-nowrap text-slate-700">
-              <span>Bishnoi One</span>
+              <span className="flex items-center gap-1.5">
+                Bishnoi One
+                {company && (
+                  <span title={company.name} className="rounded-md bg-brand-tint px-1.5 py-0.5 text-[11px] leading-none font-semibold text-brand">
+                    {company.code}
+                  </span>
+                )}
+              </span>
               <span className="truncate">{home.label}</span>
             </span>
           </NavLink>
@@ -216,7 +226,7 @@ export function Shell() {
       <div className="flex items-center gap-2.5 pt-2 pr-2 pb-3 pl-4">
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold text-slate-900">{space.label}</div>
-          <div className="truncate text-[11px] text-slate-500">2MG Inc.</div>
+          <div className="truncate text-[11px] text-slate-500">{company?.name ?? "2MG Inc."}</div>
         </div>
         {/* Folds the sidebar to its rail (on a phone, closes the menu), beside the desk's name. */}
         <button
@@ -302,6 +312,11 @@ export function Shell() {
               <NavLink to="/" aria-label="Bishnoi One home" className="flex shrink-0 items-center gap-2">
                 <img src="/brand/bishnoi-one-mark.png" alt="" className="size-8" />
                 <span className="hidden text-[15px] font-semibold tracking-tight text-slate-900 sm:inline">Bishnoi One</span>
+                {company && (
+                  <span title={company.name} className="rounded-md bg-brand-tint px-1.5 py-0.5 text-[11px] leading-none font-semibold text-brand">
+                    {company.code}
+                  </span>
+                )}
               </NavLink>
             </>
           )}
@@ -515,7 +530,6 @@ function PageBack({ trail }: { trail: string[] }) {
     </nav>
   );
 }
-
 
 /** A count beside a menu link: a blue circle, the number white and centred in it (Aryan, 24 Nov). */
 const COUNT = "inline-grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-[#2563eb] px-1 text-[11px] leading-none font-semibold text-white tabular-nums";
@@ -812,6 +826,9 @@ function MenuList({
 
 /** The top bar's search: medicines and the customers this person may see. */
 function SearchBox() {
+  // HR searches people only, by what HR knows them by (26 Nov).
+  const hr = useMe().data?.role === "hr";
+  const hint = hr ? "Search people by name, login ID, email or employee ID" : "Search medicines, customers, orders, people";
   const [text, setText] = useState("");
   const [asked, setAsked] = useState("");
   const [open, setOpen] = useState(false);
@@ -844,11 +861,19 @@ function SearchBox() {
       label: `${row.code} · ${row.customer}`,
       sub: `Order · ${row.status}`,
     })),
-    ...(found.data?.people ?? []).map((row) => ({
-      to: row.seatId ? `/my-team/seat/${row.seatId}` : `/people?q=${encodeURIComponent(row.name)}`,
-      label: row.name,
-      sub: ["Person", row.title, row.team, row.login].filter(Boolean).join(" · "),
-    })),
+    ...(found.data?.people ?? []).map((row) =>
+      hr
+        ? {
+            to: `/hr/people/${row.id}`,
+            label: row.name,
+            sub: [row.left ? "Left" : "Person", row.title, row.team, row.login, row.employeeCode].filter(Boolean).join(" · "),
+          }
+        : {
+            to: row.seatId ? `/my-team/seat/${row.seatId}` : `/people?q=${encodeURIComponent(row.name)}`,
+            label: row.name,
+            sub: ["Person", row.title, row.team, row.login].filter(Boolean).join(" · "),
+          },
+    ),
     ...(found.data?.medicines ?? []).map((row) => ({
       to: `/medicines/${row.id}`,
       label: [row.name, row.strength].filter(Boolean).join(" "),
@@ -875,8 +900,8 @@ function SearchBox() {
       />
       <input
         type="search"
-        aria-label="Search medicines, customers, orders and people"
-        placeholder="Search medicines, customers, orders, people"
+        aria-label={hint}
+        placeholder={hint}
         value={text}
         onChange={(event) => {
           setText(event.target.value);

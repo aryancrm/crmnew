@@ -71,7 +71,7 @@ describe("each MedRep's menu", () => {
 /** Every page a menu links to, folders opened. */
 const pages = (space: Space) => allItems(space.groups.flatMap((group) => group.items)).map((one) => one.to);
 
-describe("office or field (docs/PLAN.md 28)", () => {
+describe("office or field (docs/PLAN.md 29)", () => {
   const as = (seat: Seat, works: "office" | "field") => spaceFor({ ...medrep(seat), works } as Me, "/");
 
   it("a seat that works as its channel does keeps the same menu", () => {

@@ -116,7 +116,7 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
       businessCode: sql<string | null>`(select seat_business_channel(h.seat_id) from seat_holder h join seat s on s.id = h.seat_id and s.active
         where h.person_id = ${person.id} and h.starts_on <= (now() at time zone 'Asia/Manila')::date and (h.ends_on is null or h.ends_on >= (now() at time zone 'Asia/Manila')::date)
         order by (h.kind = 'holder') desc, s.lead desc, h.starts_on, h.id limit 1)`,
-      // Office or field (docs/PLAN.md 28): their main seat's, else their channel's.
+      // Office or field (docs/PLAN.md 29): their main seat's, else their channel's.
       works: sql<SeatWorks | null>`person_works(${person.id})`,
       // The Divisions their orders carry: their seats' own (migration 0114), the main seat's first.
       seatDivisions: sql<string[] | null>`(select array_agg(seat_division(h.seat_id) order by (h.kind = 'holder') desc, s.lead desc, h.starts_on, h.id)

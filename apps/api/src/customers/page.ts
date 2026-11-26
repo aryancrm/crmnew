@@ -208,7 +208,7 @@ export async function customerPage(db: Database, me: Me, id: number): Promise<Cu
   const overdue =
     invoiceRows.reduce((sum, invoice) => sum + (invoice.state.overdueDays > 0 ? invoice.balance : 0), 0) +
     (zoho?.overdue ?? 0);
-  // Both sellers (docs/PLAN.md 28): the field seller of their area, and the office seller who took
+  // Both sellers (docs/PLAN.md 29): the field seller of their area, and the office seller who took
   // their latest order.
   const [sellers] = await rows<{ field: string | null; office: string | null }>(
     db,

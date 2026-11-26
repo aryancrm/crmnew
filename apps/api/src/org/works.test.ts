@@ -1,4 +1,4 @@
-// Office or field (docs/PLAN.md 28): every MedRep's seat is one or the other. The seat's kind is
+// Office or field (docs/PLAN.md 29): every MedRep's seat is one or the other. The seat's kind is
 // on the sign-in, the CEO or Admin changes it on the seat (in the holder's trail), an office seat
 // is refused the field's pages, an office seller sees the customers they took orders for, and the
 // customer page names both sellers.

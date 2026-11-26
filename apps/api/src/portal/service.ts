@@ -6,6 +6,7 @@ import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
 import type { PortalDepartment, PortalTeamNode } from "../types";
+import { companyKey } from "../companies/context";
 
 export const PORTAL_DEPARTMENTS = [
   "sales",
@@ -225,14 +226,15 @@ async function teamOf(db: Database, key: PortalKey): Promise<{ tree: PortalTeamN
   return { tree: node(company.id), people: people?.n ?? 0 };
 }
 
-const kept = new Map<PortalKey, { at: number; data: PortalDepartment }>();
+// Per company: one company's department page is never another's (companies/context.ts).
+const kept = new Map<string, { at: number; data: PortalDepartment }>();
 const FRESH_MS = 5 * 60_000;
 
 export async function portalDepartment(db: Database, key: string): Promise<PortalDepartment> {
   if (!PORTAL_DEPARTMENTS.includes(key as PortalKey))
     throw new Refusal(404, "not_found", "No such department.");
   const one = key as PortalKey;
-  const cached = kept.get(one);
+  const cached = kept.get(companyKey(one));
   if (cached && Date.now() - cached.at < FRESH_MS) return cached.data;
   const wanted = statsOf(one);
   const [values] = await rows<Record<string, number | null>>(
@@ -259,6 +261,6 @@ export async function portalDepartment(db: Database, key: string): Promise<Porta
     people: team.people,
     at: new Date().toISOString(),
   };
-  kept.set(one, { at: Date.now(), data });
+  kept.set(companyKey(one), { at: Date.now(), data });
   return data;
 }

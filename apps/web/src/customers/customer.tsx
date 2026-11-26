@@ -227,7 +227,7 @@ export function Customer() {
                   <span className="font-medium text-slate-700">Nobody yet</span>
                 )}
               </span>
-              {/* Both sellers see them (docs/PLAN.md 28): who visits, who calls and takes the orders. */}
+              {/* Both sellers see them (docs/PLAN.md 29): who visits, who calls and takes the orders. */}
               {(data.sellers.field || data.sellers.office) && (
                 <span className="inline-flex min-w-0 flex-wrap items-center gap-1.5">
                   {data.sellers.field && (

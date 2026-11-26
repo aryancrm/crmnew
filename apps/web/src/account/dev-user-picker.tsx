@@ -16,7 +16,7 @@ import { type Workspace, WORKSPACES, workspaceOf } from "../workspaces";
 type Role = Me["role"];
 
 // The demo seeds' people; each one's email is <name>@2mg.test. A MedRep's line says whether their
-// seat works from the office or in the field (docs/PLAN.md 28).
+// seat works from the office or in the field (docs/PLAN.md 29).
 const PEOPLE: [Role, string, string][] = [
   ["admin", "Admin", "System admin"],
   ["ceo", "Naresh", "CEO"],

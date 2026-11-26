@@ -771,7 +771,7 @@ function Place({ node, all, change }: { node: Node; all: Node[]; change: { tree:
     ...(seat?.lead && node.unit ? ([["Leads", node.unit.name]] as [string, string][]) : []),
     ...(seat && !seat.lead && box ? ([["Team", box.unit?.name ?? box.name]] as [string, string][]) : []),
     ...(seat ? ([["Their screens", seat.moduleLabel]] as [string, string][]) : []),
-    // Office or field (docs/PLAN.md 28).
+    // Office or field (docs/PLAN.md 29).
     ...(orgSeat?.works ? ([["Works", orgSeat.works === "office" ? "From the office" : "In the field"]] as [string, string][]) : []),
   ];
   // Not editing: the panel is its figures, as before; only a seat whose screens don't match its

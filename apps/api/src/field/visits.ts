@@ -68,7 +68,7 @@ const PLACE = /^-?\d{1,2}\.\d+,-?\d{1,3}\.\d+$/;
 const ahead = (today: string) => addDays(today, 62);
 
 /** An office seat works by phone: visits, the tour plan, field expenses and samples are the field
- *  seats' (docs/PLAN.md 28). */
+ *  seats' (docs/PLAN.md 29). */
 export function refuseOffice(me: Me): void {
   if (me.role === "medrep" && me.works === "office")
     throw new Refusal(
@@ -121,7 +121,7 @@ export async function fieldDay(
   const today = todayManila();
   const day = asked.day && DAY.test(asked.day) ? asked.day : today;
   const personId = asked.person ?? me.id;
-  // An office seat has no visits of its own (docs/PLAN.md 28).
+  // An office seat has no visits of its own (docs/PLAN.md 29).
   if (personId === me.id) refuseOffice(me);
   if (!(await maySeeField(db, me, personId)))
     throw new Refusal(403, "not_allowed", "That person's visits aren't yours to see.");

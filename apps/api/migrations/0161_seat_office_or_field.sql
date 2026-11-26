@@ -1,4 +1,4 @@
--- Office or field (docs/PLAN.md 28, 26 Nov): every seller's seat is one or the other, never both.
+-- Office or field (docs/PLAN.md 29, 26 Nov): every seller's seat is one or the other, never both.
 -- Office seats work by phone, Messenger and email; field seats visit doctors and hospitals. The
 -- CEO or the Admin sets it on the seat; whoever sits in it gets its screens. A person changes kind
 -- only by moving to a seat of the other kind.

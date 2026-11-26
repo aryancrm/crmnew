@@ -194,11 +194,18 @@ export function PayrollMonthPage() {
               </Button>
             </span>
             {data.slips.length > 0 && (
-              <a href={`/api/hr/payroll/${data.key}/register.csv`} download>
-                <Button small>
-                  <Download size={14} /> Sheet
-                </Button>
-              </a>
+              <>
+                <a href={`/api/hr/payroll/${data.key}/register.xlsx`} download>
+                  <Button small>
+                    <Download size={14} /> Excel
+                  </Button>
+                </a>
+                <a href={`/api/hr/payroll/${data.key}/register.csv`} download>
+                  <Button small>
+                    <Download size={14} /> CSV
+                  </Button>
+                </a>
+              </>
             )}
             {data.can.release && (
               <Button small variant="primary" onClick={() => setReleasing(true)}>

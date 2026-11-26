@@ -15,7 +15,7 @@ import { allow, Refusal } from "../http";
 import type { Runner } from "../inventory/service";
 import { notify, peopleIn } from "../notify/service";
 import { sendFromMailbox } from "../online/email";
-import { addPerson, LOGIN_DOMAIN, seatLoginOf } from "../org/service";
+import { addPerson, loginDomain, seatLoginOf } from "../org/service";
 import type { Role } from "../people/roles";
 import type { Me, OrgPersonInput, SignUpInput, SignUpList, SignUpRow, SignUpSent, WelcomeInfo } from "../types";
 import { accountEvent } from "./events";
@@ -323,7 +323,7 @@ export async function welcomeInfo(db: Database, token: string): Promise<WelcomeI
   return {
     firstName: who.first,
     email: who.email,
-    seatLogin: seat ? `${seat.login}@${LOGIN_DOMAIN}` : null,
+    seatLogin: seat ? `${seat.login}@${loginDomain()}` : null,
     department: ownWorkspace(who.role)?.key ?? null,
   };
 }

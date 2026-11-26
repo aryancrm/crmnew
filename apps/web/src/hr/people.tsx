@@ -27,6 +27,7 @@ import {
   ChevronLeft,
   Copy,
   FilePlus,
+  FileText,
   KeyRound,
   Pencil,
   Search,
@@ -780,6 +781,14 @@ export function HrPersonPage() {
                   <Button onClick={() => setOpen("edit")}>
                     <Pencil size={15} /> Edit record
                   </Button>
+                )}
+                {data.can.edit && (
+                  <Link
+                    to={`/hr/documents?person=${data.personId}`}
+                    className="inline-flex h-10 items-center gap-2 rounded-[10px] px-4 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    <FileText size={15} /> Documents
+                  </Link>
                 )}
                 {data.can.leave && (
                   <Button onClick={() => setOpen("move")}>

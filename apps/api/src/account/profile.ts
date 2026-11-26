@@ -13,7 +13,7 @@ import { ensureRecords } from "../hr/people";
 import { Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
 import { notify, peopleIn } from "../notify/service";
-import { LOGIN_DOMAIN } from "../org/service";
+import { loginDomain } from "../org/service";
 import type { Me, Profile, ProfileContact, ProfilePersonal } from "../types";
 import { ACCOUNT_EVENT, type AccountEventKind, accountEvent } from "./events";
 
@@ -120,7 +120,7 @@ export async function profileOf(db: Database, me: Me, token: string): Promise<Pr
       emergencyRelation: one.emergencyRelation,
     },
     work: {
-      loginId: one.seatLogin ? `${one.seatLogin}@${LOGIN_DOMAIN}` : one.email,
+      loginId: one.seatLogin ? `${one.seatLogin}@${loginDomain()}` : one.email,
       position: one.position,
       team: one.team,
       reportsTo: me.reportsTo?.name ?? null,
