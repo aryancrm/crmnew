@@ -86,6 +86,30 @@ describe("more than one account on one browser", () => {
     expect((await one.post("/api/auth/switch", { personId: naresh?.id })).status).toBe(404);
   });
 
+  it("removes one account from the browser; removing the one in use opens the next", async () => {
+    const one = browser();
+    await signIn(one, "ryan");
+    await signIn(one, "daniel", true);
+    await signIn(one, "sarla", true);
+    const ids = Object.fromEntries((await accountsOf(one)).accounts.map((a) => [a.name, a.id]));
+    // Ryan, not in use: removed, and his session is over on the server.
+    const ryanToken = (one.jar.get("sid_more") ?? "").split(",");
+    expect((await one.post("/api/auth/accounts/remove", { personId: ids.Ryan })).status).toBe(200);
+    expect((await accountsOf(one)).accounts.map((a) => a.name)).toEqual(["Sarla", "Daniel"]);
+    for (const token of ryanToken) {
+      const who = await app.request("/api/me", { headers: { cookie: `sid=${token}` } });
+      if (who.status === 200) expect(((await who.json()) as { me: Me }).me.name).not.toBe("Ryan");
+    }
+    // Sarla, in use: signed out, and Daniel opens.
+    const out = await one.post("/api/auth/accounts/remove", { personId: ids.Sarla });
+    expect(((await out.json()) as { me: Me }).me.name).toBe("Daniel");
+    expect((await meOf(one)).name).toBe("Daniel");
+    expect((await accountsOf(one)).accounts.map((a) => a.name)).toEqual(["Daniel"]);
+    // The last one: signed out, nobody left.
+    await one.post("/api/auth/accounts/remove", { personId: ids.Daniel });
+    expect((await one.get("/api/me")).status).toBe(401);
+  });
+
   it("a plain sign-in starts the browser afresh; signing out signs every account out", async () => {
     const one = browser();
     await signIn(one, "ryan");

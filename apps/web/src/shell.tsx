@@ -33,6 +33,7 @@ import {
   ShieldCheck,
   UserPlus,
   UserRound,
+  X,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
@@ -983,6 +984,17 @@ function Account({ me, role }: { me: Me; role: string }) {
   }).data;
   const others = accounts?.accounts.filter((one) => !one.current) ?? [];
   const [switching, setSwitching] = useState<number | null>(null);
+  /** Signs one account out of this browser (27 Nov); the one in use: the next one opens. */
+  async function remove(personId: number) {
+    setSwitching(personId);
+    try {
+      const { me: now } = await api<{ me: Me | null }>("/api/auth/accounts/remove", { body: { personId } });
+      if (personId === me.id) window.location.assign(now ? "/" : "/login");
+      else await queries.invalidateQueries({ queryKey: ["auth", "accounts"] });
+    } finally {
+      setSwitching(null);
+    }
+  }
   async function switchTo(personId: number) {
     setSwitching(personId);
     try {
@@ -1024,22 +1036,46 @@ function Account({ me, role }: { me: Me; role: string }) {
           {!me.viewedBy && (
             <div className="mb-1 border-b border-line-soft pb-1">
               {others.map((one) => (
+                <div key={one.id} className="flex items-center gap-1 rounded-lg hover:bg-hover">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={switching !== null}
+                    onClick={() => void switchTo(one.id)}
+                    className="flex min-h-11 min-w-0 flex-1 items-center gap-3 px-3 py-1.5 text-left disabled:opacity-60"
+                  >
+                    <Avatar person={one} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{one.name}</span>
+                      <span className="block truncate text-xs text-ink-2">{one.title ?? one.roleLabel}</span>
+                    </span>
+                    <span className="text-xs font-semibold text-brand">{switching === one.id ? "…" : "Switch"}</span>
+                  </button>
+                  {/* Sign this account out of this browser. */}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={switching !== null}
+                    onClick={() => void remove(one.id)}
+                    aria-label={`Remove ${one.name} from this browser`}
+                    title="Remove from this browser"
+                    className="mr-1 grid size-9 shrink-0 place-items-center rounded-lg text-slate-400 hover:bg-white hover:text-rose-600 disabled:opacity-60"
+                  >
+                    <X size={15} aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+              {others.length > 0 && (
                 <button
-                  key={one.id}
                   type="button"
                   role="menuitem"
                   disabled={switching !== null}
-                  onClick={() => void switchTo(one.id)}
-                  className="flex min-h-11 w-full items-center gap-3 rounded-lg px-3 py-1.5 text-left hover:bg-hover disabled:opacity-60"
+                  onClick={() => void remove(me.id)}
+                  className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover disabled:opacity-60"
                 >
-                  <Avatar person={one} />
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-medium">{one.name}</span>
-                    <span className="block truncate text-xs text-ink-2">{one.title ?? one.roleLabel}</span>
-                  </span>
-                  <span className="text-xs font-semibold text-brand">{switching === one.id ? "Opening…" : "Switch"}</span>
+                  <LogOut size={17} aria-hidden="true" /> Sign out of {me.name} only
                 </button>
-              ))}
+              )}
               {(accounts?.accounts.length ?? 1) < (accounts?.max ?? 5) && (
                 <button
                   type="button"

@@ -436,6 +436,43 @@ export function createApp(db: Database, options: AppOptions) {
     return c.json({ accounts: [row(me, true), ...others.map((one) => row(one.who, false))], max: MAX_ACCOUNTS });
   });
 
+  // Remove one account from this browser (27 Nov: "be able to remove them also"): it is signed out
+  // on the server too. Removing the one in use opens the next one kept here, else signs out.
+  app.post("/api/auth/accounts/remove", signedIn, async (c) => {
+    const me = c.get("me");
+    if (me.viewedBy) throw new Refusal(400, "invalid", "Go back to your own screens first.");
+    const { personId } = await readBody(c, z.object({ personId: z.number().int().positive() }));
+    const more = moreOf(c);
+    if (personId === me.id) {
+      await endSession(db, c.get("token"));
+      for (const one of more) {
+        const who = await whoIs(db, one);
+        if (!who || who.viewedBy) {
+          await endSession(db, one);
+          continue;
+        }
+        keepMore(c, more.filter((other) => other !== one));
+        useSession(c, one);
+        return c.json({ me: who });
+      }
+      deleteCookie(c, SESSION_COOKIE, { path: "/" });
+      keepMore(c, []);
+      return c.json({ me: null });
+    }
+    const left: string[] = [];
+    let found = false;
+    for (const one of more) {
+      const held = await sessionOf(db, one);
+      if (held && held.personId === personId) {
+        await endSession(db, one);
+        found = true;
+      } else left.push(one);
+    }
+    if (!found) throw new Refusal(404, "not_found", "That account isn't signed in on this browser.");
+    keepMore(c, left);
+    return c.json({ me });
+  });
+
   // Switch to another account on this browser; the one in use waits beside it.
   app.post("/api/auth/switch", signedIn, async (c) => {
     const me = c.get("me");
