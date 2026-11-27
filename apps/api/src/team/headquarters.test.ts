@@ -1,9 +1,11 @@
 // Headquarters (27 Nov, PLAN 257): a lead sees each HQ of their team, who works it and what it sold;
 // an HQ in a word is its territory's last part that isn't the person's own name.
 
+import { sql } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
 import { createApp } from "../app";
-import { type Database, openDatabase } from "../db/index";
+import { type Database, openDatabase, rows } from "../db/index";
+import { todayManila } from "../inventory/rules";
 import { migrate } from "../db/migrate";
 import { seedDemoTeam } from "../orders/seed-team";
 import { seedRxTeam } from "../rx/seed";
@@ -59,5 +61,35 @@ describe("headquarters", () => {
       expect(data.sold).toBe(data.channels.reduce((sum, channel) => sum + channel.sold, 0));
     }
     expect((await get("joy", "/api/headquarters")).status).toBe(403);
+  });
+
+  it("counts an HQ's doctors by their way: one who bought (dispense), one who sent a patient (referral)", async () => {
+    const [joy] = await rows<{ id: number; seat: number }>(
+      db,
+      sql`select p.id::int as id, h.seat_id::int as seat from person p join seat_holder h on h.person_id = p.id and h.kind = 'holder'
+        where p.email = 'joy@2mg.test' limit 1`,
+    );
+    await db.execute(sql`insert into zoho_seller (name, seat_id) values ('RX | HQ TEST', ${joy?.seat})`);
+    const add = async (name: string, kind: string) =>
+      (await rows<{ id: number }>(db, sql`insert into customer (name, kind, added_by) values (${name}, ${kind}, ${joy?.id}) returning id::int as id`))[0]
+        ?.id as number;
+    const doctor = await add("Dr. Hq Buyer", "doctor");
+    const patient = await add("Hq Patient", "patient");
+    const today = todayManila();
+    for (const [code, buyer, source, named, total] of [
+      ["SO-HQ1", doctor, "Doctor order", null, 300000],
+      ["SO-HQ2", patient, "Patient order referred by doctor", "Dr. Hq Sender", 120000],
+    ] as const)
+      await db.execute(
+        sql`insert into past_order (zoho_id, code, customer_id, ordered_on, status, total, seller, source, doctor)
+          values (${code}, ${code}, ${buyer}, ${today}::date, 'confirmed', ${total}, 'RX | HQ TEST', ${source}, ${named})`,
+      );
+    const data = (await (await get("rosa", "/api/headquarters")).json()) as Headquarters;
+    const hq = data.channels.flatMap((channel) => channel.hqs).find((one) => one.seatId === joy?.seat);
+    expect(hq?.dispense).toMatchObject({ doctors: 1, month: { doctors: 1, value: 300000 } });
+    expect(hq?.dispense.top[0]?.name).toBe("Dr. Hq Buyer");
+    expect(hq?.referral).toMatchObject({ doctors: 1, month: { doctors: 1, patients: 1, value: 120000 } });
+    expect(hq?.referral.top[0]?.name).toBe("Dr. Hq Sender");
+    expect(hq?.doctors).toBeGreaterThanOrEqual(2);
   });
 });

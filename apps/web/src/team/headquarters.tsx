@@ -2,7 +2,9 @@
 // NCL, who works in it, its data, in this hierarchy"; PLAN 257). Laid out as his sheet photo: each
 // channel with its manager, then each HQ: who works it, its Zoho name, what it sold this month and
 // today, the channel's total and the whole. A press on an HQ opens who worked it before and its
-// customers. Targets come in once it is decided where they are set.
+// customers. Targets come in once it is decided where they are set. Each HQ's hospitals and its
+// doctors by the way they work with us, dispense (they buy) and referral (they send patients), over
+// the last 12 months, with the month's value of each (Phase 3, PLAN 258).
 
 import type { Headquarters } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
@@ -61,7 +63,7 @@ export function HeadquartersPage() {
         <section className={`${CARD} px-5 py-8 text-center text-sm text-slate-500`}>No headquarters in your team yet.</section>
       ) : (
         <section className={`${CARD} min-w-0 overflow-x-auto`}>
-          <table className="w-full min-w-[720px] text-[13px]">
+          <table className="w-full min-w-[860px] text-[13px]">
             <thead>
               <tr className="border-b border-slate-100 text-left">
                 <th className={`${TH} pl-4`}>HQ</th>
@@ -69,13 +71,21 @@ export function HeadquartersPage() {
                 <th className={TH}>Zoho name</th>
                 <th className={`${TH} text-right`}>Sold this month</th>
                 <th className={`${TH} text-right`}>Today</th>
-                <th className={`${TH} pr-4 text-right`}>Customers</th>
+                <th className={`${TH} text-right`} title="Hospitals in the HQ, or where its doctors work">
+                  Hospitals
+                </th>
+                <th className={`${TH} text-right`} title="Doctors who bought from us in the last 12 months">
+                  Dispense
+                </th>
+                <th className={`${TH} pr-4 text-right`} title="Doctors who sent patients to us in the last 12 months">
+                  Referral
+                </th>
               </tr>
             </thead>
             {data.channels.map((channel) => (
               <tbody key={channel.unitId} className="divide-y divide-slate-100 border-b border-slate-200">
                 <tr className="bg-slate-50/80">
-                  <th colSpan={6} className="px-4 py-2 text-left text-[13px] font-semibold text-slate-900">
+                  <th colSpan={8} className="px-4 py-2 text-left text-[13px] font-semibold text-slate-900">
                     {channel.name}
                     {channel.manager && <span className="font-normal text-slate-500"> · Manager: {channel.manager}</span>}
                   </th>
@@ -109,11 +119,19 @@ export function HeadquartersPage() {
                         <td className="px-3 py-2.5 text-right tabular-nums" title={exactPeso(hq.today)}>
                           {hq.today ? shortPeso(hq.today) : "—"}
                         </td>
-                        <td className="px-3 py-2.5 pr-4 text-right tabular-nums">{hq.customers.toLocaleString("en-PH")}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">{hq.hospitals || "—"}</td>
+                        <td className="px-3 py-2.5 text-right tabular-nums">
+                          <span className="font-semibold text-slate-900">{hq.dispense.doctors || "—"}</span>
+                          {hq.dispense.month.doctors > 0 && <span className="block text-[11px] text-slate-500">{hq.dispense.month.doctors} this month</span>}
+                        </td>
+                        <td className="px-3 py-2.5 pr-4 text-right tabular-nums">
+                          <span className="font-semibold text-slate-900">{hq.referral.doctors || "—"}</span>
+                          {hq.referral.month.doctors > 0 && <span className="block text-[11px] text-slate-500">{hq.referral.month.doctors} this month</span>}
+                        </td>
                       </tr>
                       {shown && (
                         <tr className="bg-slate-50/50">
-                          <td colSpan={6} className="px-4 pt-1 pb-3">
+                          <td colSpan={8} className="px-4 pt-1 pb-3">
                             <div className="grid gap-3 pl-5 text-[12.5px] text-slate-600 sm:grid-cols-3">
                               <div>
                                 <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">Works it now</p>
@@ -149,6 +167,27 @@ export function HeadquartersPage() {
                                 <p className="text-slate-500">{hq.customers.toLocaleString("en-PH")} customers in this HQ</p>
                               </div>
                             </div>
+                            <div className="mt-3 grid gap-3 pl-5 text-[12.5px] text-slate-600 sm:grid-cols-3">
+                              <div>
+                                <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">Hospitals and doctors</p>
+                                <p className="mt-0.5 text-slate-900">
+                                  {hq.hospitals} hospital{hq.hospitals === 1 ? "" : "s"} · {hq.doctors} doctor{hq.doctors === 1 ? "" : "s"}
+                                </p>
+                                <p className="text-slate-500">
+                                  In the last 12 months: {hq.dispense.doctors} bought from us, {hq.referral.doctors} sent patients
+                                </p>
+                              </div>
+                              <Way
+                                title="Dispense · doctors who buy"
+                                line={`This month ${hq.dispense.month.doctors} doctor${hq.dispense.month.doctors === 1 ? "" : "s"} bought ${shortPeso(hq.dispense.month.value)}`}
+                                top={hq.dispense.top}
+                              />
+                              <Way
+                                title="Referral · doctors who send patients"
+                                line={`This month ${hq.referral.month.doctors} doctor${hq.referral.month.doctors === 1 ? "" : "s"} sent ${hq.referral.month.patients} patient${hq.referral.month.patients === 1 ? "" : "s"}: ${shortPeso(hq.referral.month.value)}`}
+                                top={hq.referral.top}
+                              />
+                            </div>
                           </td>
                         </tr>
                       )}
@@ -165,7 +204,9 @@ export function HeadquartersPage() {
                   <td className="px-3 py-2 text-right tabular-nums" title={exactPeso(channel.today)}>
                     {shortPeso(channel.today)}
                   </td>
-                  <td className="px-3 py-2 pr-4 text-right tabular-nums">{channel.hqs.length} HQs</td>
+                  <td colSpan={3} className="px-3 py-2 pr-4 text-right tabular-nums">
+                    {channel.hqs.length} HQs
+                  </td>
                 </tr>
               </tbody>
             ))}
@@ -180,11 +221,36 @@ export function HeadquartersPage() {
                 <td className="px-3 py-2.5 text-right tabular-nums" title={exactPeso(data.today)}>
                   {shortPeso(data.today)}
                 </td>
-                <td className="px-3 py-2.5 pr-4 text-right tabular-nums">{count} HQs</td>
+                <td colSpan={3} className="px-3 py-2.5 pr-4 text-right tabular-nums">
+                  {count} HQs
+                </td>
               </tr>
             </tfoot>
           </table>
         </section>
+      )}
+    </div>
+  );
+}
+
+/** One of a doctor's two ways in an HQ: the month's line, then the five doctors bringing the most
+ *  over the last 12 months. */
+function Way({ title, line, top }: { title: string; line: string; top: { name: string; value: number }[] }) {
+  return (
+    <div>
+      <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">{title}</p>
+      <p className="mt-0.5 text-slate-900">{line}</p>
+      {top.length > 0 ? (
+        <ol className="mt-1 space-y-0.5">
+          {top.map((one) => (
+            <li key={one.name} className="flex justify-between gap-3">
+              <span className="truncate text-slate-700">{one.name}</span>
+              <span className="shrink-0 tabular-nums text-slate-500">{shortPeso(one.value)}</span>
+            </li>
+          ))}
+        </ol>
+      ) : (
+        <p className="text-slate-500">None in the last 12 months</p>
       )}
     </div>
   );

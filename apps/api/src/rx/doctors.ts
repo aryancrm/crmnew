@@ -15,19 +15,22 @@ import { type Database, requestMemo, rows } from "../db/index";
 export const GL_SOURCES = ["DSWD", "PCSO", "Office of the President", "IAPF", "Malasakit"] as const;
 
 /** Every order that came through a doctor (only those on `seats`, when given): seat, the doctor
- *  and their key, the day, the total (centavos), the CRM's doctor (when known) and the Source. */
+ *  and their key, the day, the total (centavos), the CRM's doctor (when known), the Source and the
+ *  buyer (the doctor dispensing, or the patient a doctor sent). */
 export function doctorOrders(seats?: SQL): SQL {
   const crmSeats = seats ? sql`and o.seat_id in (${seats})` : sql``;
   const zohoSeats = seats ? sql`and zs.seat_id in (${seats})` : sql``;
   const placed = sql`(coalesce(o.submitted_at, o.created_at) at time zone 'Asia/Manila')::date`;
   return sql`(
       select o.seat_id as seat, coalesce(d.name, c.name) as doctor, lower(trim(coalesce(d.name, c.name))) as dkey, ${placed} as day,
-        o.total::float8 as total, coalesce(o.doctor_id, case when c.kind = 'doctor' then c.id end) as doctor_id, o.source as way
+        o.total::float8 as total, coalesce(o.doctor_id, case when c.kind = 'doctor' then c.id end) as doctor_id, o.source as way,
+        o.customer_id as buyer
       from sales_order o join customer c on c.id = o.customer_id left join customer d on d.id = o.doctor_id
       where o.status not in ('draft', 'cancelled') and (o.doctor_id is not null or c.kind = 'doctor') ${crmSeats}
       union all
       select zs.seat_id, coalesce(nullif(trim(p.doctor), ''), c.name), lower(trim(coalesce(nullif(trim(p.doctor), ''), c.name))), p.ordered_on,
-        p.total::float8, case when nullif(trim(p.doctor), '') is null and c.kind = 'doctor' then c.id end, p.source
+        p.total::float8, case when nullif(trim(p.doctor), '') is null and c.kind = 'doctor' then c.id end, p.source,
+        p.customer_id
       from past_order p join zoho_seller zs on zs.name = p.seller left join customer c on c.id = p.customer_id
       where p.status <> 'void' and (nullif(trim(p.doctor), '') is not null or c.kind = 'doctor') ${zohoSeats}
     )`;

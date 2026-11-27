@@ -4,12 +4,19 @@
 // this month · today. An HQ is a selling seat with its territory: it stays, the person in it changes,
 // and its sales are the HQ's (this CRM's invoices from the seat and Zoho's under its name, without
 // VAT, as My KPIs counts them). Targets are left out until it is decided where they come from.
+//
+// Each HQ's hospitals and doctors (Phase 3, PLAN 258): its hospitals are those in its territory and
+// those its doctors work at; its doctors, over the last 12 months, are counted by the way they work
+// with us, from the order's own Source (as How the orders came): **dispense**, a doctor who bought
+// ("Doctor order"), and **referral**, a doctor who sent a patient ("Patient order referred by
+// doctor"); the month's value of each, and the doctors bringing the most. A doctor is one by name.
 
 import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
-import { todayManila } from "../inventory/rules";
+import { addDays, todayManila } from "../inventory/rules";
 import { invoicesSql } from "../kpis/invoices";
+import { doctorOrders } from "../rx/doctors";
 import { sheetName } from "../sales/target-sheet";
 import type { Headquarters, Me } from "../types";
 import { teamSeats } from "./service";
@@ -94,6 +101,85 @@ export async function headquarters(db: Database, me: Me, asked: { month?: string
     ),
   ]);
   const soldBy = new Map(sold.map((one) => [one.seatId, one]));
+
+  // The doctors' orders of the last 12 months, by the two ways; the HQ's hospitals and its doctors.
+  const yearAgo = addDays(day, -364);
+  const [doctorRows, areaHospitals, areaDoctors] = await Promise.all([
+    rows<{ seatId: number; way: string; dkey: string; doctor: string; buyer: number | null; day: string; total: number; doctorId: number | null }>(
+      db,
+      sql`select x.seat::int as "seatId", x.way, x.dkey, x.doctor, x.buyer::int as buyer, to_char(x.day, 'YYYY-MM-DD') as day,
+          x.total::float8 as total, x.doctor_id::int as "doctorId"
+        from ${doctorOrders(hqSeats)} x
+        where x.day between ${yearAgo}::date and ${day}::date and x.way in ('Doctor order', 'Patient order referred by doctor')`,
+    ),
+    rows<{ seatId: number; hospitalId: number }>(
+      db,
+      sql`select s.id::int as "seatId", h.id::int as "hospitalId" from seat s
+        join lateral (select c.id from customer c where c.kind = 'hospital' and c.active and c.area_id = s.area_id
+          union select d.works_at from customer d where d.kind = 'doctor' and d.active and d.works_at is not null and d.area_id = s.area_id) h(id) on true
+        where s.id in (${hqSeats})`,
+    ),
+    rows<{ seatId: number; dkey: string }>(
+      db,
+      sql`select s.id::int as "seatId", lower(trim(c.name)) as dkey from seat s join customer c on c.area_id = s.area_id
+        where s.id in (${hqSeats}) and c.kind = 'doctor' and c.active`,
+    ),
+  ]);
+  // Where the doctors on the orders work: their hospitals are the HQ's too.
+  const doctorIds = [...new Set(doctorRows.map((one) => one.doctorId).filter((id): id is number => id !== null))];
+  const worksAt = doctorIds.length
+    ? new Map(
+        (
+          await rows<{ id: number; hospitalId: number }>(
+            db,
+            sql`select id::int as id, works_at::int as "hospitalId" from customer
+              where id in (${sql.join(doctorIds.map((id) => sql`${id}`), sql`, `)}) and works_at is not null`,
+          )
+        ).map((one) => [one.id, one.hospitalId]),
+      )
+    : new Map<number, number>();
+  const top = (picked: typeof doctorRows) => {
+    const byDoctor = new Map<string, { name: string; value: number }>();
+    for (const one of picked) {
+      const known = byDoctor.get(one.dkey) ?? { name: one.doctor, value: 0 };
+      known.value += one.total;
+      byDoctor.set(one.dkey, known);
+    }
+    return [...byDoctor.values()].sort((a, b) => b.value - a.value).slice(0, 5);
+  };
+  const doctorsOf = (seatId: number) => {
+    const mine = doctorRows.filter((one) => one.seatId === seatId);
+    const dispense = mine.filter((one) => one.way === "Doctor order");
+    const referral = mine.filter((one) => one.way === "Patient order referred by doctor");
+    const month = (list: typeof mine) => list.filter((one) => one.day >= first);
+    const hospitals = new Set(areaHospitals.filter((one) => one.seatId === seatId).map((one) => one.hospitalId));
+    for (const one of mine) {
+      const at = one.doctorId ? worksAt.get(one.doctorId) : undefined;
+      if (at) hospitals.add(at);
+    }
+    const everyone = new Set([...mine.map((one) => one.dkey), ...areaDoctors.filter((one) => one.seatId === seatId).map((one) => one.dkey)]);
+    return {
+      hospitals: hospitals.size,
+      doctors: everyone.size,
+      dispense: {
+        doctors: new Set(dispense.map((one) => one.dkey)).size,
+        month: {
+          doctors: new Set(month(dispense).map((one) => one.dkey)).size,
+          value: month(dispense).reduce((sum, one) => sum + one.total, 0),
+        },
+        top: top(dispense),
+      },
+      referral: {
+        doctors: new Set(referral.map((one) => one.dkey)).size,
+        month: {
+          doctors: new Set(month(referral).map((one) => one.dkey)).size,
+          patients: new Set(month(referral).map((one) => one.buyer).filter((id) => id !== null)).size,
+          value: month(referral).reduce((sum, one) => sum + one.total, 0),
+        },
+        top: top(referral),
+      },
+    };
+  };
   const rank = new Map<string, number>();
   for (const row of order) for (const name of row.zoho) if (!rank.has(sheetName(name))) rank.set(sheetName(name), row.sort);
   const rankOf = (area: string) => rank.get(sheetName(area)) ?? Number.MAX_SAFE_INTEGER;
@@ -114,6 +200,7 @@ export async function headquarters(db: Database, me: Me, asked: { month?: string
       sold: figures?.sold ?? 0,
       today: figures?.today ?? 0,
       before: before.filter((row) => row.seatId === one.seatId).map(({ name, from, to }) => ({ name, from, to })),
+      ...doctorsOf(one.seatId),
     });
     channel.sold += figures?.sold ?? 0;
     channel.today += figures?.today ?? 0;

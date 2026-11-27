@@ -599,7 +599,9 @@ async function hospitalOrNull(
 
 /** The area a new customer falls in: the adder's own, else the one area that names its city. */
 async function areaFor(tx: Runner, me: Me, city: string | null): Promise<number | null> {
-  if (me.role === "medrep" && me.area) return me.area.id;
+  // A new customer joins the HQ of whoever adds it (Aryan, 27 Nov, PLAN 258): a MedRep's, and the
+  // online desk's (its people's HQ is ON SITE).
+  if ((me.role === "medrep" || me.role === "online") && me.area) return me.area.id;
   if (!city) return null;
   const found = await rows<{ id: number }>(
     tx,

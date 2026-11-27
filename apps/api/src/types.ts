@@ -6159,6 +6159,17 @@ export type Headquarters = {
       today: number;
       /** Who worked it before, latest first. */
       before: { name: string; from: string; to: string }[];
+      /** Its hospitals (in its territory, or where its doctors work) and its doctors (Phase 3). */
+      hospitals: number;
+      doctors: number;
+      /** Over the last 12 months: doctors who bought from us (dispense) and who sent patients
+       *  (referral); the month's of each (centavos, the orders' value) and the five bringing most. */
+      dispense: { doctors: number; month: { doctors: number; value: number }; top: { name: string; value: number }[] };
+      referral: {
+        doctors: number;
+        month: { doctors: number; patients: number; value: number };
+        top: { name: string; value: number }[];
+      };
     }[];
     sold: number;
     today: number;
