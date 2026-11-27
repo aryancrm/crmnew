@@ -6133,6 +6133,40 @@ export type RxField = {
   }[];
 };
 
+/** A team's Headquarters (27 Nov, PLAN 257): each channel's HQs, as the sheet photo lays them out. */
+export type Headquarters = {
+  month: string;
+  /** The day "today" is counted for (the month's last day for a month gone by). */
+  day: string;
+  channels: {
+    unitId: number;
+    name: string;
+    manager: string | null;
+    hqs: {
+      seatId: number;
+      /** The HQ in a word (NCL, SL NORTH, ON SITE). */
+      hq: string;
+      /** Its territory's full name: the Zoho name its sales came under (RX | NCL). */
+      zoho: string;
+      title: string;
+      personId: number | null;
+      /** Who works it now; null when it is empty. */
+      person: string | null;
+      since: string | null;
+      customers: number;
+      /** Centavos, without VAT: the month to the day, and the day. */
+      sold: number;
+      today: number;
+      /** Who worked it before, latest first. */
+      before: { name: string; from: string; to: string }[];
+    }[];
+    sold: number;
+    today: number;
+  }[];
+  sold: number;
+  today: number;
+};
+
 /** How a team's orders came in a month (27 Nov): each order's Source, the doctor's two first
  *  ("Doctor order": the doctor dispensing; "Patient order referred by doctor": the referral). */
 export type OrderWays = {

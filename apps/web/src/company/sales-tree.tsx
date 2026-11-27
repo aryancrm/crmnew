@@ -67,6 +67,11 @@ const HUES = ["#0f766e", "#4f46e5", "#9333ea", "#b45309", "#be123c", "#0369a1", 
  *  written: the tree's data (and the pages that share it) is as it was. */
 export function face(node: Node): { big: string; small: string } {
   const unit = node.unit;
+  // A selling seat is its Headquarter: the HQ big, who works it small (Aryan, 27 Nov: "the HQ is the
+  // main thing; Javed sees HQ NCL and who works in it"; PLAN 257). A seat with no territory (office
+  // staff, shown when asked) keeps the person's name.
+  if (node.level === "person" && node.seat?.area)
+    return { big: node.sub === "On site" ? "ON SITE" : node.sub, small: node.seat.person ? node.name : "Vacant" };
   if (!unit || node.level === "person") return { big: node.name, small: node.sub };
   const parts = node.sub.split(" · ").filter(Boolean);
   if (node.level === "root" || node.level === "head")

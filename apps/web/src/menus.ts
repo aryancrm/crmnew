@@ -1231,6 +1231,8 @@ function ownDesk(me: Me): Space {
           cta: newOrder,
           ...desk([
             home,
+            // Her HQs (both channels are hers on the sheet photo, 27 Nov, PLAN 257).
+            { to: "/headquarters", label: "Headquarters", icon: MapPin, short: "HQs" },
             folder(
               "My team",
               Users,
@@ -1314,6 +1316,8 @@ function ownDesk(me: Me): Space {
           cta: newOrder,
           ...desk([
             home,
+            // The HQs, the main thing (Aryan, 27 Nov, PLAN 257): each, who works it, what it sold.
+            { to: "/headquarters", label: "Headquarters", icon: MapPin, short: "HQs" },
             // No "Field team" (Aryan, 27 Nov: "what is it showing? things repeat"): its visits and
             // coverage are the Visits report's (Field visits), its new doctors and letters
             // Prescription sales' and the Scorecards', its groups Care groups'; and it counted the
