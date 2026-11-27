@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, CheckCircle2, Info, ShieldAlert } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../../api";
@@ -52,9 +52,23 @@ export function BirReadinessPage() {
     });
   };
 
+  const queries = useQueryClient();
   const query = useQuery({
     queryKey: ["books", "bir", "readiness", company, from, to],
     queryFn: () => api<ReadinessResponse>(`/api/books/bir/readiness?company=${company}&from=${from}&to=${to}`),
+  });
+
+  const seedCoa = useMutation({
+    mutationFn: () => api("/api/books/bir/settings/seed-coa", { method: "POST", body: {} }),
+    onSuccess: () => {
+      void queries.invalidateQueries({ queryKey: ["books"] });
+      void queries.invalidateQueries({ queryKey: ["finance", "money-accounts"] });
+    },
+  });
+
+  const tagCompany = useMutation({
+    mutationFn: () => api(`/api/books/bir/readiness/tag-company?company=${company}`, { method: "POST", body: {} }),
+    onSuccess: () => void queries.invalidateQueries({ queryKey: ["books", "bir"] }),
   });
 
   return (
@@ -100,6 +114,26 @@ export function BirReadinessPage() {
                         {a.title} {a.count > 0 && <span className="ml-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold">{a.count}</span>}
                       </div>
                       <div className="mt-0.5 text-[12px] text-[#555b70]">{a.detail}</div>
+                      {a.key === "empty_chart" && (
+                        <button
+                          type="button"
+                          onClick={() => seedCoa.mutate()}
+                          disabled={seedCoa.isPending}
+                          className="mt-2 rounded bg-[#408dfb] px-3 py-1 text-[12px] font-medium text-white hover:bg-[#2f7ef0]"
+                        >
+                          {seedCoa.isPending ? "Seeding…" : "Seed Starter Chart of Accounts"}
+                        </button>
+                      )}
+                      {a.key === "untagged_company" && (
+                        <button
+                          type="button"
+                          onClick={() => tagCompany.mutate()}
+                          disabled={tagCompany.isPending}
+                          className="mt-2 rounded bg-[#408dfb] px-3 py-1 text-[12px] font-medium text-white hover:bg-[#2f7ef0]"
+                        >
+                          {tagCompany.isPending ? "Tagging…" : "Tag Untagged Documents"}
+                        </button>
+                      )}
                     </div>
                   </li>
                 ))}

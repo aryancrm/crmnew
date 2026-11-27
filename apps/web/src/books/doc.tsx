@@ -6,12 +6,13 @@
 
 import type { BookDoc, BookKind, BookLine, BookLinked } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Printer, X } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, Printer, X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ApplyToBills, Plain, useMay, VoidBox } from "./forms";
 import { PublishButton, RecurringPanel, RefundBox, useMayLedger } from "./ledger";
 import { api } from "../api";
+import { downloadBirAsset } from "./bir/shared";
 import { type KindInfo, kindInfo, statusClass, statusText, zDate, zMoney, zQty } from "./kinds";
 
 const TITLE: Partial<Record<BookKind, string>> = {
@@ -389,6 +390,23 @@ export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onC
         <button type="button" onClick={() => window.print()} className="flex items-center gap-1.5 rounded px-2.5 py-1 hover:bg-white">
           <Printer size={14} aria-hidden="true" /> PDF/Print
         </button>
+        {(doc.kind === "bill" || doc.kind === "expense") && doc.status !== "void" && ((doc.withheld ?? 0) > 0 || Boolean(doc.fields?.["CF.ATC"])) && (
+          <button
+            type="button"
+            onClick={async () => {
+              const y = Number(doc.date.slice(0, 4)) || 2026;
+              const q = Math.floor(((Number(doc.date.slice(5, 7)) || 1) - 1) / 3) + 1;
+              const err = await downloadBirAsset(
+                `/api/books/bir/2307/pdf?company=2mg&year=${y}&q=${q}&docId=${doc.id}`,
+                `2307-${doc.number}.pdf`,
+              );
+              if (err) window.alert(err);
+            }}
+            className="flex items-center gap-1.5 rounded px-2.5 py-1 font-medium text-[#1c5bd9] hover:bg-white"
+          >
+            <FileText size={14} aria-hidden="true" /> Form 2307 PDF
+          </button>
+        )}
         {doc.crm && (
           <Link to={doc.crm.href} className="ml-auto rounded px-2.5 py-1 text-[#1c5bd9] hover:bg-white">
             Open on the order line ↗
@@ -512,6 +530,12 @@ export function DocView({ info, id, onClose }: { info: KindInfo; id: number; onC
               <span>Total</span>
               <span>{zMoney(doc.total, doc.currency)}</span>
             </div>
+            {(doc.kind === "bill" || doc.kind === "expense") && (doc.withheld ?? 0) > 0 && (
+              <div className="flex justify-between px-2 text-emerald-800">
+                <span>Less EWT Withheld{doc.fields?.["CF.ATC"] ? ` (${String(doc.fields["CF.ATC"])})` : ""}</span>
+                <span>-{zMoney(doc.withheld ?? 0, doc.currency)}</span>
+              </div>
+            )}
             {(doc.kind === "bill" || doc.kind === "invoice" || doc.kind === "vendor_credit" || doc.kind === "credit_note") && (
               <div className="flex justify-between px-2">
                 <span>{doc.kind === "bill" || doc.kind === "invoice" ? "Balance Due" : "Credits Remaining"}</span>

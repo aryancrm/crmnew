@@ -14,7 +14,8 @@ import { allow, Refusal } from "../http";
 import { logMove, putIn, type Runner } from "../inventory/service";
 import { todayManila } from "../inventory/rules";
 import type { Role } from "../people/roles";
-import type { BookChoices, Me } from "../types";
+import type { BirTaxInput, BookChoices, Me } from "../types";
+import { saveDocBirTaxMeta } from "../bir/doc-tax";
 import { LEDGER_ROLES } from "./accounts";
 import { keepFile } from "../files/store";
 import { landedCosts } from "../purchases/landed";
@@ -467,6 +468,7 @@ export type BillInput = {
   /** Landed cost: this bill (freight, customs, insurance…) is part of what the goods on this
    *  purchase order cost. */
   landedOn?: number | null;
+  birTax?: BirTaxInput | null;
 };
 
 async function billNumberFree(tx: Runner, supplierId: number, number: string) {
@@ -536,6 +538,7 @@ export async function billOrder(db: Database, me: Me, id: number, input: BillInp
       by: me.id,
     });
     await insertLines(tx, billId, made);
+    await saveDocBirTaxMeta(tx, me, billId, { kind: "bill", totalCentavos: total, subTotalCentavos: subTotal, fxRate: order.fxRate, partyName: vendor.name }, input.birTax);
     await link(tx, billId, id, null, date);
     if (input.receiveId) {
       const [receive] = await rows<{ id: number }>(tx, sql`select k.from_doc::int as id from book_link k join book_doc r on r.id = k.from_doc and r.kind = 'purchase_receive' where k.to_doc = ${id} and k.from_doc = ${input.receiveId}`);
@@ -587,6 +590,7 @@ export async function createBill(db: Database, me: Me, input: BillInput): Promis
       by: me.id,
     });
     await insertLines(tx, id, lines);
+    await saveDocBirTaxMeta(tx, me, id, { kind: "bill", totalCentavos: total, subTotalCentavos: subTotal, fxRate, partyName: vendor.name }, input.birTax);
     return { id };
   });
 }
@@ -852,9 +856,9 @@ export async function voidDoc(db: Database, me: Me, id: number, reason: string):
   const why = reason.trim();
   if (!why) throw new Refusal(400, "invalid", "Say why it is voided.", "reason");
   await db.transaction(async (tx) => {
-    const [doc] = await rows<{ kind: string; status: string; total: number; balance: number; date: string }>(
+    const [doc] = await rows<{ kind: string; status: string; total: number; balance: number; withheld: number; date: string }>(
       tx,
-      sql`select kind, status, total::bigint::float8 as total, balance::bigint::float8 as balance, to_char(doc_date, 'YYYY-MM-DD') as date from book_doc where id = ${id} for update`,
+      sql`select kind, status, total::bigint::float8 as total, balance::bigint::float8 as balance, coalesce(withheld, 0)::bigint::float8 as withheld, to_char(doc_date, 'YYYY-MM-DD') as date from book_doc where id = ${id} for update`,
     );
     const ledgerKinds = ["expense", "journal", "transfer_fund", "deposit", "refund"];
     if (!doc || ![...["bill", "vendor_payment", "vendor_credit", "customer_payment", "credit_note"], ...ledgerKinds].includes(doc.kind))
@@ -884,7 +888,7 @@ export async function voidDoc(db: Database, me: Me, id: number, reason: string):
     } else if (ledgerKinds.includes(doc.kind)) {
       // Nothing else hangs on an expense, transfer or deposit.
     } else if (doc.kind === "bill") {
-      if (doc.balance !== doc.total) throw new Refusal(409, "paid", "Money was put on this bill: void its payments or credits first.");
+      if (doc.balance !== doc.total - doc.withheld) throw new Refusal(409, "paid", "Money was put on this bill: void its payments or credits first.");
       // A landed-cost bill: what it added to each batch's cost comes off again.
       const [landed] = await rows<{ batches: { batchId: number; add: number }[] | null }>(tx, sql`select fields->'_landed' as batches from book_doc where id = ${id}`);
       for (const one of landed?.batches ?? [])
@@ -907,7 +911,8 @@ export async function voidDoc(db: Database, me: Me, id: number, reason: string):
       );
       for (const entry of on)
         await tx.execute(
-          sql`update book_doc set balance = least(total, balance + ${entry.amount}), status = case when least(total, balance + ${entry.amount}) >= total then 'open' else 'partially_paid' end
+          sql`update book_doc set balance = least(total - coalesce(withheld, 0), balance + ${entry.amount}),
+                status = case when least(total - coalesce(withheld, 0), balance + ${entry.amount}) >= total - coalesce(withheld, 0) then 'open' else 'partially_paid' end
             where id = ${entry.billId} and status <> 'void'`,
         );
     }

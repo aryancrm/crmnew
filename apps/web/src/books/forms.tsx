@@ -14,6 +14,7 @@ import { useMe } from "../auth";
 import { EmptyState, NoInvoicesArt } from "../no-results";
 import { useAction } from "../ui";
 import { zDate, zMoney, zQty } from "./kinds";
+import { BirBillTaxSection, useBirTaxDraft } from "./bir/tax-fields";
 
 export const BOOK_ROLES = {
   order: ["inventory", "admin"],
@@ -487,12 +488,14 @@ export function BillFromOrderPage() {
   const receive = useQuery({ queryKey: ["books", "purchase_receive", "doc", receiveId], enabled: Boolean(receiveId), queryFn: () => api<BookDoc>(`/api/books/purchase_receive/${receiveId}`) }).data;
   const [form, setForm] = useState({ number: "", date: "", dueDate: "", notes: "" });
   const [entries, setEntries] = useState<Record<number, { qty: string; rate: string }>>({});
+  const birTax = useBirTaxDraft("other_goods", order?.party ?? null);
   if (!order || !choices || (receiveId && !receive)) return <p className="p-6 text-[#6c718a]">Loading…</p>;
   const left = (line: BookDoc["lines"][number]) => (line.qty ?? 0) - (line.qtyDone.cancelled ?? 0) - (line.qtyDone.billed ?? 0);
   // From a receive, what came in that receive; otherwise all that is still to be billed.
   const fromReceive = (line: BookDoc["lines"][number]) => receive?.lines.filter((r) => r.fromLine === line.id).reduce((sum, r) => sum + (r.qty ?? 0), 0) ?? null;
   const entry = (line: BookDoc["lines"][number]) =>
     entries[line.id] ?? { qty: String(Math.max(0, Math.min(left(line), fromReceive(line) ?? left(line)))), rate: String(line.rate ?? 0) };
+  const subTotal = order.lines.reduce((sum, line) => sum + Math.round((Number(entry(line).qty) || 0) * (Number(entry(line).rate) || 0) * 100), 0);
   const total = order.lines.reduce((sum, line) => sum + Math.round((Number(entry(line).qty) || 0) * (Number(entry(line).rate) || 0) * 100) * (1 + (line.taxPct ?? 0) / 100), 0);
   const close = () => navigate(`/books/purchaseorders/${id}`);
   return (
@@ -505,6 +508,7 @@ export function BillFromOrderPage() {
             disabled={action.busy}
             onClick={() =>
               void action.run(async () => {
+                const fx = order.fxRate || 1;
                 const made = await api<{ id: number }>(`/api/books/purchase_order/${id}/bill`, {
                   body: {
                     number: form.number,
@@ -513,6 +517,7 @@ export function BillFromOrderPage() {
                     notes: form.notes || null,
                     receiveId,
                     orderLines: order.lines.map((line) => ({ lineId: line.id, qty: Number(entry(line).qty) || 0, rate: Number(entry(line).rate) || 0 })),
+                    birTax: birTax.toPayload(Math.round(subTotal * fx), Math.round(total * fx)),
                   },
                 });
                 await queries.invalidateQueries({ queryKey: ["books"] });
@@ -582,6 +587,12 @@ export function BillFromOrderPage() {
           </div>
         </div>
       </div>
+      <BirBillTaxSection
+        draft={birTax.draft}
+        setDraft={birTax.setDraft}
+        subTotalCentavos={Math.round(subTotal * (order.fxRate || 1))}
+        totalCentavos={Math.round(total * (order.fxRate || 1))}
+      />
     </ZPage>
   );
 }
@@ -598,9 +609,14 @@ function StandalonePage({ kind }: { kind: "bill" | "vendor_credit" }) {
   const [landedOn, setLandedOn] = useState("");
   const bill = kind === "bill";
   const list = bill ? "bills" : "vendorcredits";
+  const pickedVendor = choices?.vendors.find((v) => v.id === vendorId);
+  const birTax = useBirTaxDraft("services", pickedVendor?.name ?? null);
   if (!choices) return <p className="p-6 text-[#6c718a]">Loading…</p>;
-  const vendor = choices.vendors.find((v) => v.id === vendorId);
+  const vendor = pickedVendor;
   const currency = vendor?.currency ?? "PHP";
+  const fxNum = currency === "PHP" ? 1 : Number(form.fxRate) || 1;
+  const subTotalCents = rows.reduce((sum, r) => sum + rowAmount(r), 0);
+  const taxCents = rows.reduce((sum, r) => sum + Math.round((rowAmount(r) * (Number(r.taxPct) || 0)) / 100), 0);
   return (
     <ZPage
       title={bill ? "New Bill" : "New Vendor Credits"}
@@ -614,7 +630,14 @@ function StandalonePage({ kind }: { kind: "bill" | "vendor_credit" }) {
                 const made = await api<{ id: number }>(`/api/books/${kind}/new`, {
                   body: {
                     supplierId: vendorId ?? 0,
-                    ...(bill ? { number: form.number, dueDate: form.dueDate || null, paymentTerms: form.paymentTerms || null } : {}),
+                    ...(bill
+                      ? {
+                          number: form.number,
+                          dueDate: form.dueDate || null,
+                          paymentTerms: form.paymentTerms || null,
+                          birTax: birTax.toPayload(Math.round(subTotalCents * fxNum), Math.round((subTotalCents + taxCents) * fxNum)),
+                        }
+                      : {}),
                     reference: form.reference || null,
                     date: form.date || choices.today,
                     fxRate: form.fxRate ? Number(form.fxRate) : null,
@@ -692,6 +715,14 @@ function StandalonePage({ kind }: { kind: "bill" | "vendor_credit" }) {
         )}
       </div>
       <ItemTable rows={rows} setRows={setRows} choices={choices} currency={currency} />
+      {bill && (
+        <BirBillTaxSection
+          draft={birTax.draft}
+          setDraft={birTax.setDraft}
+          subTotalCentavos={Math.round(subTotalCents * fxNum)}
+          totalCentavos={Math.round((subTotalCents + taxCents) * fxNum)}
+        />
+      )}
       <div className="px-5 pb-6">
         <label className="block max-w-xl">
           <span>Notes</span>

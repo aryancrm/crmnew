@@ -137,9 +137,9 @@ export async function birReadiness(db: Database, me: Me, company: CompanyCode, s
     alerts.push({
       key: "untagged_company",
       severity: "warn",
-      title: "Books documents without a 2MG / GPI company tag",
+      title: "Books documents missing a company tag",
       count: untaggedDocs.length,
-      detail: "These Books bills, expenses, or invoices have no company tag yet, so they are excluded from company-specific BIR filings until tagged.",
+      detail: "Older Books bills, expenses, or invoices created before company stamping are excluded from BIR filings until tagged.",
     });
   }
   if (sls.missingTin > 0) {

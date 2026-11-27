@@ -6,7 +6,7 @@ import { buildListDat, buildQapDat, buildSawtDat, buildSlpDat, buildSlsDat, clea
 import { originByName, sawtFormForAtc, withholdingDecision, workOutPayable } from "./ewt";
 import { calendarQuarter, monthEnd, monthsOf, quarter } from "./periods";
 
-describe("BIR migration 0160 foundation", () => {
+describe("BIR migration 0167 foundation", () => {
   it("applies cleanly on fresh PGlite, seeds profiles/ATCs/account maps, and backfills book_doc.company", async () => {
     const db = openDatabase({ dir: "memory" });
     await migrate(db);

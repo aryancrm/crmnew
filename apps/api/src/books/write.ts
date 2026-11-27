@@ -26,6 +26,7 @@ import type {
   TransferInput,
 } from "../types";
 import { LEDGER_ROLES } from "./accounts";
+import { saveDocBirTaxMeta } from "../bir/doc-tax";
 import { day, insertLines, link, linesOf, nextNumber } from "./actions";
 
 const clean = (text?: string | null) => text?.trim() || null;
@@ -248,6 +249,7 @@ export async function createExpense(db: Database, me: Me, input: BookExpenseInpu
     });
     for (const [n, line] of lines.entries())
       await plainLine(tx, id, n + 1, { account: line.account, description: line.description, amount: line.amount, taxName: line.tax?.name, taxPct: line.tax?.pct, taxAmount: line.taxAmount });
+    await saveDocBirTaxMeta(tx, me, id, { kind: "expense", totalCentavos: total, subTotalCentavos: subTotal, fxRate: 1, partyName: supplier?.name ?? null }, input.birTax);
     return { id };
   });
 }

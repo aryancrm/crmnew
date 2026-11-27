@@ -4,6 +4,7 @@
 
 import type {
   CustomerCredit,
+  InvoiceDetail,
   MoneyAccounts,
   InvoiceState,
   OrderDetail,
@@ -230,6 +231,11 @@ export function HowFields({
         <p className="-mt-2 text-xs text-slate-500">
           Books has no bank, cash or e-wallet account yet (Books → Chart of accounts): it is recorded
           without one.
+        </p>
+      )}
+      {/^advances to /i.test(account.value) && (
+        <p className="-mt-2 rounded-lg border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs text-sky-900">
+          <b>Cross-company collection:</b> Money entered the sister company&apos;s account and is tracked under <b>{account.value}</b> until settled.
         </p>
       )}
       <Field
@@ -491,6 +497,13 @@ export function RecordPaymentDialog({
   // Tax the customer withheld (EWT) with its BIR Form 2307: it settles the invoice too.
   const [withheld, setWithheld] = useState("");
   const [form2307, setForm2307] = useState("");
+  const [taxAtc, setTaxAtc] = useState("");
+  // 1% hospital / government retention security deposit (Retention Receivable).
+  const [retention, setRetention] = useState("");
+  const [retentionRef, setRetentionRef] = useState("");
+  // Bank fee deducted from deposit + shared slip batch ID for multi-invoice transfers.
+  const [bankCharges, setBankCharges] = useState("");
+  const [paymentGroupId, setPaymentGroupId] = useState("");
   // What the customer deducted (a chain's near-expiry return kept, a listing fee…), why, and their memo.
   const [deducted, setDeducted] = useState("");
   const [deductionKind, setDeductionKind] = useState("");
@@ -501,12 +514,43 @@ export function RecordPaymentDialog({
     queryKey: ["orders", "kind", orderId],
     queryFn: () => api<{ order: { type: string | null; glAmount: number | null; glNumber: string | null } }>(`/api/orders/${orderId}`),
   });
+  const invDetail = useQuery({
+    queryKey: ["finance", "invoice-tax-base", invoiceId],
+    queryFn: () => api<InvoiceDetail>(`/api/invoices/${invoiceId}`),
+  });
+  const inv = invDetail.data?.invoice;
+  const deliveryNet = inv ? inv.deliveryFee - Math.round((inv.deliveryFee * 12) / 112) : 0;
+  const goodsNetBase = inv ? Math.max(0, inv.total - inv.vat - deliveryNet) : Math.round(balance / 1.12);
+  const serviceNetBase = inv ? Math.max(0, inv.total - inv.vat) : Math.round(balance / 1.12);
+  const grossInv = inv?.total ?? balance;
+
   const gl = about.data?.order.type === "gl";
   const letter = about.data?.order.glAmount ?? null;
   const [payer, setPayer] = useState<"agency" | "patient">("agency");
   const typed = amount.trim() ? centavos(amount) : 0;
   const withheldTyped = withheld.trim() ? centavos(withheld) : 0;
+  const retentionTyped = retention.trim() ? centavos(retention) : 0;
   const deductedTyped = deducted.trim() ? centavos(deducted) : 0;
+  const bankChargesTyped = bankCharges.trim() ? centavos(bankCharges) : 0;
+
+  function applyQuickSettlement(nextWithheld: number, nextRetention: number) {
+    const ded = Number.isFinite(deductedTyped) ? deductedTyped : 0;
+    const cashLeft = Math.max(0, balance - nextWithheld - nextRetention - ded);
+    setAmount(asTyped(cashLeft));
+  }
+
+  function pickAtc(codeKey: string, bp: number, baseCents: number) {
+    if (taxAtc === codeKey) {
+      setTaxAtc("");
+      setWithheld("");
+      applyQuickSettlement(0, Number.isFinite(retentionTyped) ? retentionTyped : 0);
+      return;
+    }
+    const computed = Math.floor((baseCents * bp + 5_000) / 10_000);
+    setTaxAtc(codeKey);
+    setWithheld(asTyped(computed));
+    applyQuickSettlement(computed, Number.isFinite(retentionTyped) ? retentionTyped : 0);
+  }
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -523,6 +567,11 @@ export function RecordPaymentDialog({
       proofId: proofId ? Number(proofId) : null,
       withheld: Number.isFinite(withheldTyped) && withheldTyped > 0 ? withheldTyped : null,
       form2307: form2307.trim() || null,
+      taxAtc: taxAtc || null,
+      retention: Number.isFinite(retentionTyped) && retentionTyped > 0 ? retentionTyped : null,
+      retentionRef: retentionRef.trim() || null,
+      bankCharges: Number.isFinite(bankChargesTyped) && bankChargesTyped > 0 ? bankChargesTyped : null,
+      paymentGroupId: paymentGroupId.trim() || null,
       deducted: Number.isFinite(deductedTyped) && deductedTyped > 0 ? deductedTyped : null,
       deductionKind: deductionKind || null,
       deductionRef: deductionRef.trim() || null,
@@ -560,27 +609,92 @@ export function RecordPaymentDialog({
           onChange={setAmount}
           error={money.at("amount")}
         />
+        <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-3">
+          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-1 text-xs text-slate-600">
+            <span className="font-semibold text-slate-700">Applicable BIR Tax Code (ATC — Form 2307)</span>
+            <span>Goods base (net of VAT &amp; delivery): {peso(goodsNetBase)}</span>
+          </div>
+          <div className="mb-2.5 flex flex-wrap gap-1.5">
+            {[
+              { code: "WC158", label: "WC158 · 1% Goods", bp: 100, base: goodsNetBase },
+              { code: "WC160", label: "WC160 · 2% Services", bp: 200, base: serviceNetBase },
+              { code: "WC640", label: "WC640 · 1% Gov't Goods", bp: 100, base: goodsNetBase },
+              { code: "WV010", label: "WV010 · 5% Gov't VAT (2550Q)", bp: 500, base: goodsNetBase },
+            ].map((opt) => (
+              <button
+                key={opt.code}
+                type="button"
+                onClick={() => pickAtc(opt.code, opt.bp, opt.base)}
+                className={`rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                  taxAtc === opt.code
+                    ? "border-emerald-600 bg-emerald-600 text-white"
+                    : "border-slate-300 bg-white text-slate-700 hover:bg-emerald-50"
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Tax withheld, 2307 (optional)" error={money.at("withheld")}>
+              {(field) => (
+                <input
+                  {...field}
+                  className={INPUT}
+                  inputMode="decimal"
+                  placeholder="₱0.00"
+                  value={withheld}
+                  onChange={(event) => setWithheld(event.target.value)}
+                />
+              )}
+            </Field>
+            <Field label="Form 2307 number" error={money.at("form2307")}>
+              {(field) => (
+                <input
+                  {...field}
+                  className={INPUT}
+                  disabled={!withheld.trim()}
+                  value={form2307}
+                  onChange={(event) => setForm2307(event.target.value)}
+                />
+              )}
+            </Field>
+          </div>
+        </div>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Tax withheld, 2307 (optional)" error={money.at("withheld")}>
+          <Field label="Contract retention held (optional — Retention Receivable)" error={money.at("retention")}>
             {(field) => (
-              <input
-                {...field}
-                className={INPUT}
-                inputMode="decimal"
-                placeholder="₱0.00"
-                value={withheld}
-                onChange={(event) => setWithheld(event.target.value)}
-              />
+              <div className="flex gap-2">
+                <input
+                  {...field}
+                  className={`${INPUT} flex-1`}
+                  inputMode="decimal"
+                  placeholder="₱0.00"
+                  value={retention}
+                  onChange={(event) => setRetention(event.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const onePct = Math.round(grossInv * 0.01);
+                    setRetention(asTyped(onePct));
+                    applyQuickSettlement(Number.isFinite(withheldTyped) ? withheldTyped : 0, onePct);
+                  }}
+                  className="shrink-0 rounded-[10px] border border-slate-300 bg-white px-2.5 text-xs font-semibold text-slate-700 hover:bg-slate-50"
+                >
+                  1% Gross
+                </button>
+              </div>
             )}
           </Field>
-          <Field label="Form 2307 number" error={money.at("form2307")}>
+          <Field label="Retention memo / voucher #" error={money.at("retentionRef")}>
             {(field) => (
               <input
                 {...field}
                 className={INPUT}
-                disabled={!withheld.trim()}
-                value={form2307}
-                onChange={(event) => setForm2307(event.target.value)}
+                disabled={!retention.trim()}
+                value={retentionRef}
+                onChange={(event) => setRetentionRef(event.target.value)}
               />
             )}
           </Field>
@@ -603,10 +717,10 @@ export function RecordPaymentDialog({
               <select {...field} className={INPUT} disabled={!deducted.trim()} value={deductionKind} onChange={(event) => setDeductionKind(event.target.value)}>
                 <option value="">Pick…</option>
                 {gl && <option value="gl_waived">Guarantee letter shortfall let go</option>}
+                <option value="penalty">Penalty (late delivery, etc.)</option>
                 <option value="near_expiry">Near-expiry goods kept</option>
                 <option value="listing_fee">Listing fee</option>
                 <option value="promo">Promo / rebate</option>
-                <option value="penalty">Penalty</option>
                 <option value="other">Other</option>
               </select>
             )}
@@ -617,13 +731,18 @@ export function RecordPaymentDialog({
             )}
           </Field>
         </div>
-        {(withheldTyped > 0 || deductedTyped > 0) && Number.isFinite(withheldTyped) && Number.isFinite(deductedTyped) && Number.isFinite(typed) && (
-          <div className="-mt-2 text-[13px] text-ink-2">
-            Settles {peso(typed + withheldTyped + deductedTyped)} of the {peso(balance)} owed (money
-            {withheldTyped > 0 ? ", the tax withheld" : ""}
-            {deductedTyped > 0 ? ", what they deducted" : ""}).
-          </div>
-        )}
+        {(withheldTyped > 0 || retentionTyped > 0 || deductedTyped > 0) &&
+          Number.isFinite(withheldTyped) &&
+          Number.isFinite(retentionTyped) &&
+          Number.isFinite(deductedTyped) &&
+          Number.isFinite(typed) && (
+            <div className="-mt-2 text-[13px] text-ink-2">
+              Settles {peso(typed + withheldTyped + retentionTyped + deductedTyped)} of the {peso(balance)} owed (money
+              {withheldTyped > 0 ? ", Form 2307 tax withheld" : ""}
+              {retentionTyped > 0 ? ", 1% retention receivable" : ""}
+              {deductedTyped > 0 ? ", customer deduction/penalty" : ""}).
+            </div>
+          )}
         <HowFields
           method={method}
           setMethod={setMethod}
@@ -635,6 +754,33 @@ export function RecordPaymentDialog({
           at={money.at}
           account={account}
         />
+        <div className="grid gap-3 sm:grid-cols-2">
+          {(method === "bank" || method === "ewallet") && (
+            <Field label="Bank fee deducted from deposit (optional)" error={money.at("bankCharges")}>
+              {(field) => (
+                <input
+                  {...field}
+                  className={INPUT}
+                  inputMode="decimal"
+                  placeholder="₱0.00 (net hits bank)"
+                  value={bankCharges}
+                  onChange={(event) => setBankCharges(event.target.value)}
+                />
+              )}
+            </Field>
+          )}
+          <Field label="Shared slip / batch ID (bulk transfer, optional)" error={money.at("paymentGroupId")}>
+            {(field) => (
+              <input
+                {...field}
+                className={INPUT}
+                placeholder="e.g. BDO-BATCH-1127"
+                value={paymentGroupId}
+                onChange={(event) => setPaymentGroupId(event.target.value)}
+              />
+            )}
+          </Field>
+        </div>
         <Field label="Slip (optional)" error={money.at("proofId")}>
           {(field) => (
             <div className="flex flex-wrap items-center gap-2">
@@ -702,7 +848,25 @@ export function RecordPaymentDialog({
           )}
         </Field>
         <Problem
-          message={money.general(["amount", "method", "reference", "paidOn", "note", "moneyAccount", "proofId", "deducted", "deductionKind", "deductionRef"])}
+          message={money.general([
+            "amount",
+            "method",
+            "reference",
+            "paidOn",
+            "note",
+            "moneyAccount",
+            "proofId",
+            "withheld",
+            "form2307",
+            "taxAtc",
+            "retention",
+            "retentionRef",
+            "bankCharges",
+            "paymentGroupId",
+            "deducted",
+            "deductionKind",
+            "deductionRef",
+          ])}
         />
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-slate-100 pt-4">
           <Button onClick={onClose} disabled={money.busy}>

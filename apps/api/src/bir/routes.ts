@@ -28,10 +28,12 @@ import {
   saveAccountMap,
   saveFilingLog,
   saveTaxpayerProfile,
+  seedStarterChart,
   sawtReport,
   sliReport,
   slpReport,
   slsReport,
+  tagUntaggedDocs,
   taxpayerProfile,
   vatReturn2550q,
   withheldSuppliers,
@@ -102,10 +104,19 @@ export function birRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHand
     return c.json({ ok: true });
   });
 
+  app.post("/api/books/bir/settings/seed-coa", async (c) => {
+    return c.json(await seedStarterChart(db, c.get("me")));
+  });
+
   app.get("/api/books/bir/readiness", async (c) => {
     const company = parseCompany(c.req.query("company"));
     const { from, to } = dayRange(c.req.query("from"), c.req.query("to"));
     return c.json(await birReadiness(db, c.get("me"), company, from, to));
+  });
+
+  app.post("/api/books/bir/readiness/tag-company", async (c) => {
+    const company = parseCompany(c.req.query("company"));
+    return c.json(await tagUntaggedDocs(db, c.get("me"), company));
   });
 
   app.get("/api/books/bir/books/:book", async (c) => {

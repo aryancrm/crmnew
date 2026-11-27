@@ -46,6 +46,15 @@ export function BirSettingsPage() {
     },
   });
 
+  const seedCoa = useMutation({
+    mutationFn: () => api<{ added: number; totalActive: number; totalInactive: number }>("/api/books/bir/settings/seed-coa", { method: "POST", body: {} }),
+    onSuccess: (res) => {
+      setSavedMsg(`Starter chart ready: ${res.added} missing accounts added (${res.totalActive} active, ${res.totalInactive} inactive).`);
+      void queries.invalidateQueries({ queryKey: ["books"] });
+      void queries.invalidateQueries({ queryKey: ["finance", "money-accounts"] });
+    },
+  });
+
   const companyMaps = (query.data?.accountMap ?? []).filter((m) => m.company === company);
 
   return (
@@ -91,9 +100,21 @@ export function BirSettingsPage() {
           </BirCard>
         )}
 
-        <BirCard title="Company GL & Intercompany Account Mapping">
+        <BirCard
+          title="Company GL & Intercompany Account Mapping"
+          right={
+            <button
+              type="button"
+              onClick={() => seedCoa.mutate()}
+              disabled={seedCoa.isPending}
+              className="h-8 rounded border border-[#d7d5e2] bg-white px-3 text-[12px] font-medium text-[#1c5bd9] hover:bg-[#f1f1fa]"
+            >
+              {seedCoa.isPending ? "Seeding…" : "Seed Starter Chart of Accounts"}
+            </button>
+          }
+        >
           <p className="mb-3 text-[12px] text-[#6c718a]">
-            Includes Sir Rommel&apos;s <strong>Advances to GPI</strong> / <strong>Advances to 2MG</strong> clearing accounts.
+            Includes <strong>Advances to GPI</strong> clearing, <strong>Retention Receivable</strong>, <strong>Bank Fees and Charges</strong>, and active/inactive segregation in Chart of Accounts.
           </p>
           <table className="w-full text-[13px]">
             <thead>

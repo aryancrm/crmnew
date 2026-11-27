@@ -182,9 +182,9 @@ export async function bookDoc(db: Database, me: Me, kind: BookKind, id: number):
   mayRead(me, kind);
   const today = todayManila();
   if (id < 0) return crmDoc(db, kind, -id, today);
-  const [row] = await rows<BookRow & { kind: BookKind; fxRate: number; subTotal: number | null; paymentTerms: string | null; notes: string | null; fields: Record<string, unknown>; fromZoho: boolean; zohoCreated: string | null; supplierId: number | null }>(
+  const [row] = await rows<BookRow & { kind: BookKind; fxRate: number; subTotal: number | null; withheld: number; paymentTerms: string | null; notes: string | null; fields: Record<string, unknown>; fromZoho: boolean; zohoCreated: string | null; supplierId: number | null }>(
     db,
-    sql`select r.*, d.kind, d.fx_rate::float8 as "fxRate", d.sub_total::bigint::float8 as "subTotal", d.payment_terms as "paymentTerms", d.notes, d.fields,
+    sql`select r.*, d.kind, d.fx_rate::float8 as "fxRate", d.sub_total::bigint::float8 as "subTotal", coalesce(d.withheld, 0)::bigint::float8 as withheld, d.payment_terms as "paymentTerms", d.notes, d.fields,
         d.zoho_id is not null as "fromZoho", to_char(d.zoho_created at time zone 'Asia/Manila', 'YYYY-MM-DD HH24:MI') as "zohoCreated", d.supplier_id::int as "supplierId"
       from (${rowSelect(today)} where d.id = ${id} and d.kind = ${kind}) r join book_doc d on d.id = r.id`,
   );

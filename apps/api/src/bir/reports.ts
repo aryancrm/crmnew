@@ -170,6 +170,91 @@ export async function saveAccountMap(
   });
 }
 
+const STARTER_2MG_ACCOUNTS: { code: string; name: string; type: string; description: string; active?: boolean }[] = [
+  { code: "1010", name: "Cash in Bank - BDO", type: "bank", description: "Primary 2MG operating bank account" },
+  { code: "1015", name: "Cash in Bank - Metrobank", type: "bank", description: "Secondary 2MG operating bank account" },
+  { code: "1020", name: "GCash", type: "bank", description: "Digital wallet collection account" },
+  { code: "1030", name: "Petty Cash", type: "cash", description: "Office petty cash fund" },
+  { code: "1040", name: "Undeposited Funds", type: "cash", description: "Collections awaiting deposit" },
+  { code: "1050", name: "Advances to GPI", type: "payment_clearing", description: "Cross-company collection / disbursement clearing with sister company" },
+  { code: "1100", name: "Accounts Receivable", type: "accounts_receivable", description: "Trade receivables from customers, hospitals, and agencies" },
+  { code: "1120", name: "Retention Receivable", type: "other_current_asset", description: "1% hospital / government contract retention held until clearance" },
+  { code: "1150", name: "Advance Tax", type: "other_current_asset", description: "Creditable withholding tax (BIR Form 2307) from customers" },
+  { code: "1200", name: "Inventory Asset", type: "stock", description: "Pharmaceutical and medical stock on hand" },
+  { code: "2000", name: "Accounts Payable", type: "accounts_payable", description: "Trade payables to local and foreign suppliers" },
+  { code: "2100", name: "Tax Payable", type: "other_current_liability", description: "Output VAT less Input VAT control account" },
+  { code: "2110", name: "Withholding Tax Payable", type: "other_current_liability", description: "Expanded withholding tax (0619-E / 1601-EQ) owed to BIR" },
+  { code: "2120", name: "Employee Reimbursements", type: "other_current_liability", description: "Staff expense reimbursements payable" },
+  { code: "3000", name: "Retained Earnings", type: "equity", description: "Accumulated earnings" },
+  { code: "4000", name: "Sales", type: "income", description: "Sales of pharmaceutical products" },
+  { code: "4010", name: "Shipping Charge", type: "income", description: "Delivery fees billed on customer invoices" },
+  { code: "4020", name: "Discount", type: "expense", description: "Customer rebates, penalties, promo deductions, and points" },
+  { code: "5000", name: "Cost of Goods Sold", type: "cost_of_goods_sold", description: "Cost of medicines delivered to customers" },
+  { code: "6010", name: "Bank Fees and Charges", type: "expense", description: "Interbank transfer and deposit fees deducted by banks" },
+  { code: "6020", name: "Utilities Expense", type: "expense", description: "Electricity (Meralco), water, and internet" },
+  { code: "6030", name: "Rent Expense", type: "expense", description: "Office and warehouse lease" },
+  { code: "6040", name: "Professional and Brokerage Fees", type: "expense", description: "Legal, audit, and customs brokerage services" },
+  { code: "6050", name: "Product Samples to clients", type: "expense", description: "Samples issued to medical representatives" },
+  { code: "6060", name: "Promotional Materials", type: "expense", description: "Promotional gifts and marketing items" },
+  { code: "9990", name: "Legacy Clearing (Inactive)", type: "other_current_asset", description: "Sample inactive legacy account for active/inactive chart review", active: false },
+];
+
+/** Opt-in starter 2MG Chart of Accounts seeder: inserts missing core accounts without overwriting existing rows. */
+export async function seedStarterChart(db: Database, me: Me): Promise<{ added: number; totalActive: number; totalInactive: number }> {
+  assertBirEnabled();
+  mayReadLedger(me);
+  let added = 0;
+  await db.transaction(async (tx) => {
+    for (const acc of STARTER_2MG_ACCOUNTS) {
+      const [exists] = await rows<{ id: number }>(tx, sql`select id::int as id from book_account where lower(name) = lower(${acc.name})`);
+      if (exists) continue;
+      await tx.execute(
+        sql`insert into book_account (name, code, type, description, active, owner_company, created_by, created_at)
+            values (${acc.name}, ${acc.code}, ${acc.type}, ${acc.description}, ${acc.active ?? true}, '2mg', ${me.id}, now())`,
+      );
+      added += 1;
+    }
+    const [taxCount] = await rows<{ n: number }>(tx, sql`select count(*)::int as n from book_tax where active`);
+    if ((taxCount?.n ?? 0) === 0) {
+      await tx.execute(
+        sql`insert into book_tax (name, pct, kind, active) values
+            ('VAT 12%', 12, 'tax', true),
+            ('Zero Rated 0%', 0, 'tax', true)`,
+      );
+    }
+    const [optCount] = await rows<{ n: number }>(tx, sql`select count(*)::int as n from book_option where active`);
+    if ((optCount?.n ?? 0) === 0) {
+      await tx.execute(
+        sql`insert into book_option (field, value, sort, active) values
+            ('Cost Centre', 'Head Office', 1, true),
+            ('Cost Centre', 'Warehouse', 2, true),
+            ('Type', 'Operating', 1, true),
+            ('Type', 'Administrative', 2, true),
+            ('Department', 'Finance', 1, true),
+            ('Department', 'Operations', 2, true),
+            ('Department', 'Sales', 3, true),
+            ('Company', '2MG', 1, true)`,
+      );
+    }
+  });
+  const [counts] = await rows<{ activeCount: number; inactiveCount: number }>(
+    db,
+    sql`select count(*) filter (where active)::int as "activeCount", count(*) filter (where not active)::int as "inactiveCount" from book_account`,
+  );
+  return { added, totalActive: counts?.activeCount ?? 0, totalInactive: counts?.inactiveCount ?? 0 };
+}
+
+/** Tags untagged Books documents in this company's database with OWN ('2mg'). */
+export async function tagUntaggedDocs(db: Database, me: Me, company: CompanyCode = "2mg"): Promise<{ tagged: number }> {
+  assertBirEnabled();
+  mayReadLedger(me);
+  const updated = await rows<{ id: number }>(
+    db,
+    sql`update book_doc set company = ${company} where company is null returning id::int as id`,
+  );
+  return { tagged: updated.length };
+}
+
 // ------------------------------------------------------------------ Sales & Output VAT (SLS / Sales Journal)
 
 export type SalesRow = {
@@ -608,6 +693,8 @@ export async function purchasesBetween(
     withheld: number;
     metaOrigin: "local" | "foreign" | null;
     metaVatKind: "vat" | "zero" | "exempt" | "none" | null;
+    hasManualVat: boolean;
+    manualVat: number;
     metaPurchaseType: PurchaseType | null;
     metaAtc: string | null;
     metaAtcBp: number | null;
@@ -629,7 +716,10 @@ export async function purchasesBetween(
         round(d.total * d.fx_rate)::bigint::float8 as total,
         d.fx_rate::float8 as "fxRate",
         round(coalesce(d.withheld, 0) * d.fx_rate)::bigint::float8 as withheld,
-        m.supplier_origin as "metaOrigin", m.vat_kind as "metaVatKind", m.purchase_type as "metaPurchaseType",
+        m.supplier_origin as "metaOrigin", m.vat_kind as "metaVatKind",
+        (m.manual_vat_centavos is not null) as "hasManualVat",
+        coalesce(m.manual_vat_centavos, 0)::bigint::float8 as "manualVat",
+        m.purchase_type as "metaPurchaseType",
         m.atc_code as "metaAtc", r.rate_bps as "metaAtcBp",
         coalesce(m.ewt_base_centavos, 0)::bigint::float8 as "metaEwtBase",
         coalesce(m.ewt_centavos, 0)::bigint::float8 as "metaEwt",
@@ -684,8 +774,9 @@ export async function purchasesBetween(
     const lineSum = Math.round(docLines.reduce((s, l) => s + l.amount * d.fxRate, 0));
     const lineTax = Math.round(docLines.reduce((s, l) => s + l.taxAmount * d.fxRate, 0));
     const extraTax = hasLines ? Math.max(0, Math.round(d.total) - lineSum) : 0;
-    const totalVat =
-      d.metaPurchaseType === "importation" && d.importVat > 0
+    const totalVat = d.hasManualVat
+      ? Math.min(Math.round(d.total), Math.max(0, Math.round(d.manualVat)))
+      : d.metaPurchaseType === "importation" && d.importVat > 0
         ? Math.round(d.importVat)
         : hasLines
           ? Math.max(lineTax, extraTax)

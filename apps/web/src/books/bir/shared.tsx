@@ -1,21 +1,13 @@
-import { COMPANIES, COMPANY_CODES, type CompanyCode } from "@2mg/api/companies";
+import { OWN, type CompanyCode } from "@2mg/api/companies";
 import type { ReactNode } from "react";
-import { Navigate, useSearchParams } from "react-router-dom";
+import { Navigate } from "react-router-dom";
 import { useMe } from "../../auth";
+import { useOwnCompanyName } from "../../companies";
 import { LEDGER_ROLES } from "../kinds";
 
+/** One company per database since the separation: every row in this database carries OWN ('2mg'). */
 export function useBirCompany(): [CompanyCode, (next: CompanyCode) => void] {
-  const [params, setParams] = useSearchParams();
-  const raw = (params.get("company") ?? "2mg").toLowerCase();
-  const company: CompanyCode = (COMPANY_CODES as readonly string[]).includes(raw) ? (raw as CompanyCode) : "2mg";
-  const setCompany = (next: CompanyCode) => {
-    setParams((now) => {
-      const out = new URLSearchParams(now);
-      out.set("company", next);
-      return out;
-    });
-  };
-  return [company, setCompany];
+  return [OWN, () => {}];
 }
 
 export function BirGuard({ children }: { children: ReactNode }) {
@@ -28,42 +20,25 @@ export function BirGuard({ children }: { children: ReactNode }) {
 export function BirHeader({
   title,
   subtitle,
-  company,
-  onCompanyChange,
   right,
 }: {
   title: string;
   subtitle: string;
-  company: CompanyCode;
-  onCompanyChange: (next: CompanyCode) => void;
+  company?: CompanyCode;
+  onCompanyChange?: (next: CompanyCode) => void;
   right?: ReactNode;
 }) {
+  const ownName = useOwnCompanyName();
   return (
     <div className="mb-5 flex flex-wrap items-start justify-between gap-4 border-b border-[#ebeaf2] pb-4">
       <div>
         <div className="text-[11px] font-semibold tracking-wide text-[#6c718a] uppercase">
-          BIR Compliance · {COMPANIES[company].name}
+          BIR Compliance · {ownName}
         </div>
         <h1 className="mt-0.5 text-[20px] font-medium text-[#212529]">{title}</h1>
         <p className="mt-0.5 text-[13px] text-[#6c718a]">{subtitle}</p>
       </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="flex overflow-hidden rounded-md border border-[#d7d5e2] bg-[#f9f9fb]" role="group" aria-label="BIR filing company">
-          {COMPANY_CODES.map((code) => (
-            <button
-              key={code}
-              type="button"
-              onClick={() => onCompanyChange(code)}
-              className={`px-3 py-1.5 text-[12px] font-medium transition-colors ${
-                company === code ? "bg-[#408dfb] text-white" : "text-[#212529] hover:bg-white"
-              }`}
-            >
-              {COMPANIES[code].short}
-            </button>
-          ))}
-        </div>
-        {right}
-      </div>
+      {right && <div className="flex flex-wrap items-center gap-2">{right}</div>}
     </div>
   );
 }
