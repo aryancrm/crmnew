@@ -2690,8 +2690,9 @@ the questions on 27 Nov. Nothing is live until Aryan merges it; UAT runs on a te
    receipt's Deposit To must be accounts the chart has (any spelling; the chart's is kept), as
    expenses and journals already were. The forms suggest the chart's accounts, the most used
    first, so a new company's forms are never empty. A landed-cost bill's lines go to Inventory
-   Asset as before. **Bigger amounts** (money columns past ₱21.47 million) come next, on their
-   own.
+   Asset as before. **Bigger amounts** (money columns past ₱21.47 million) widened to `bigint` in
+   migration `0171_bigint_money.sql` on branch `feat/bigint-money` (with `::float8` casts and
+   `100_000_000_000_00` Zod cap).
 9. These lines in the plan: written by the finance developer.
 10. A **BIR & Tax** shortcut on the Finance desk's menu (after Books), opening Readiness.
 
@@ -4438,3 +4439,4 @@ are not in the books; Books has no second person approving (held off on purpose)
   - **Attendance, leave, Speed, customers, doctors, medicines**: each person after their HQ; "1 day", "1 person"; a customer shows its HQ and is under whoever holds that HQ's seat today; doctors are found by their PRC number, shown on their cards; the Money card keeps Statement and Change terms without repeating Their buying's figures; Promos running counts the medicines with a running offer.
   Checked: all 916 API tests and 51 web tests pass; every page in Javed's menu and the pages they lead to (18) open on the local copy with no error and no failed call. The questions the reviewers found are 43–51 in section 13.
 - 28 Nov (279): **A head's page titles say what his menu says**: Javed's Whole business (it said "My team") and Doctors & patients (it said "Customers"), as Business orders already did; each other head's the same way (B2B's Accounts, Hospital's Whole division and Division orders).
+- 28 Nov (280), on branch `feat/bigint-money`: **Bigger amounts (item 8b).** Migration `0171_bigint_money.sql` drops and recreates `book_entry`, `crm_entry`, and `sale_invoice` (preserving `net` from `0170`) around altering 34 `integer` centavo money columns to `bigint` (past ₱21.47M); `apps/api/src/finance/` & `points/service.ts` money `::int` casts updated to `::float8` and Zod caps widened to `100_000_000_000_00` (₱100B). Test: `bir/uat-sprint.test.ts` (₱30,000,000 invoice + payment + ₱22,000,000 bank_charges round-trips without overflow).

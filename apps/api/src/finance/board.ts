@@ -32,9 +32,9 @@ export async function financeBoard(db: Database, me: Me): Promise<FinanceBoard> 
       where dd.customer_id = c.id and dd.order_id is distinct from o.id
         and ${late ? sql`not dd.on_delivery and dd.late > 0` : sql`not dd.cod_waiting`})`;
   const orderColumns = sql`o.id::int as id, o.code, o.customer_id::int as "customerId", c.name as customer, c.kind as "customerKind",
-    rep.name as medrep, o.total::int as total, (o.total - o.points_used * ${POINT_CENTAVOS})::int as due,
+    rep.name as medrep, o.total::float8 as total, (o.total - o.points_used * ${POINT_CENTAVOS})::float8 as due,
     o.payment_terms as terms, o.payment_days::int as "paymentDays", o.payment_term as "paymentTerm",
-    c.credit_limit::int as "creditLimit", ${owedBy(false)} as owed, ${owedBy(true)} as overdue,
+    c.credit_limit::float8 as "creditLimit", ${owedBy(false)} as owed, ${owedBy(true)} as overdue,
     ${iso("o.status_since")} as "stepSince", o.note, o.customer_po as "customerPo",
     (select f.id::int from order_file f where f.order_id = o.id and f.active and f.kind = 'payment_proof'
       order by f.at desc, f.id desc limit 1) as "proofId",
@@ -54,7 +54,7 @@ export async function financeBoard(db: Database, me: Me): Promise<FinanceBoard> 
     rows<FinanceCollect>(
       db,
       sql`select i.id::int as "invoiceId", i.code, i.order_id::int as "orderId", o.code as "orderCode",
-          c.id::int as "customerId", c.name as customer, rep.name as medrep, i.terms, i.total::int as total, ${balance}::int as balance,
+          c.id::int as "customerId", c.name as customer, rep.name as medrep, i.terms, i.total::float8 as total, ${balance}::float8 as balance,
           ${day("i.due_on")} as "dueOn", (${today}::date - i.due_on)::int as "daysLate",
           (o.status = 'completed') as delivered, o.delivery_method as "deliveryMethod", o.courier, o.rider,
           (select max(p.paid_on) from payment p where p.invoice_id = i.id and p.active)::text as "lastPaidOn"

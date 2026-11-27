@@ -43,13 +43,13 @@ const amount = z
   .number({ error: "Type the amount." })
   .int("Type the amount in pesos and centavos.")
   .positive("Type the amount.")
-  // What the amount columns hold (about 21.4 million pesos): beyond it a plain "too large".
-  .max(2_147_483_647, "That amount is too large.");
+  // Cap at 100 billion pesos (stored as centavos in bigint).
+  .max(100_000_000_000_00, "That amount is too large.");
 const method = z.enum(STAFF_METHODS as [string, ...string[]], { error: "Pick how it was paid." });
 
 const paymentInput = z.object({
   // Nothing in cash is allowed when tax was withheld or something deducted (a letter's shortfall let go).
-  amount: z.number({ error: "Type the amount." }).int("Type the amount in pesos and centavos.").min(0, "Type the amount.").max(2_147_483_647, "That amount is too large."),
+  amount: z.number({ error: "Type the amount." }).int("Type the amount in pesos and centavos.").min(0, "Type the amount.").max(100_000_000_000_00, "That amount is too large."),
   // A guarantee letter's order: who paid this, the agency or the patient (the rest of a short letter).
   payer: z.enum(["agency", "patient"]).nullish(),
   method,
@@ -143,7 +143,7 @@ export function financeRoutes(
       c,
       z.object({
         payer: z.enum(["agency", "patient"], { error: "Say who paid it." }),
-        amount: z.number({ error: "Type the amount that came in." }).int().positive("Type the amount that came in.").max(2_147_483_647),
+        amount: z.number({ error: "Type the amount that came in." }).int().positive("Type the amount that came in.").max(100_000_000_000_00),
         paidOn: day,
         reference: optional(80),
         note: optional(300),

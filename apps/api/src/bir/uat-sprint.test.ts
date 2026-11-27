@@ -416,4 +416,57 @@ describe("Step 2A Finance UAT Sprint workflows", () => {
     expect(stmtAfter.lines.length).toBe(1);
     expect(stmtAfter.booksBalance).toBe(3975_00);
   });
+
+  it("handles amounts above 32-bit int max (₱21.47M) without overflow via bigint money columns", async () => {
+    const [cust] = await rows<{ id: number }>(db, sql`select id::int as id from customer limit 1`);
+    const [rep] = await rows<{ id: number }>(db, sql`select id::int as id from person where role = 'medrep' limit 1`);
+    const [fiona] = await rows<{ id: number }>(db, sql`select id::int as id from person where email = 'fiona@2mg.test'`);
+    const fionaId = fiona!.id;
+    const ryanId = rep?.id ?? fionaId;
+
+    // ₱30,000,000.00 = 3_000_000_000 centavos (> 2_147_483_647 int32 max)
+    const bigTotal = 3_000_000_000;
+    const bigVatable = 2_678_571_429;
+    const bigVat = 321_428_571;
+    const bigCharge = 2_200_000_000; // > int32 max on bank_charges too
+    const bigPaid = 3_000_000_000;
+
+    const [ord] = await rows<{ id: number }>(
+      db,
+      sql`insert into sales_order (customer_id, medrep_id, raised_by, status, payment_terms, total)
+          values (${cust!.id}, ${ryanId}, ${fionaId}, 'completed', 'days', ${bigTotal})
+          returning id::int as id`,
+    );
+    const [inv] = await rows<{ id: number }>(
+      db,
+      sql`insert into invoice (code, order_id, customer_id, invoice_from, terms, issued_on, due_on, total, vatable, vat, exempt, zero_rated, credited, status, by_person)
+          values ('2MG-SI-900999', ${ord!.id}, ${cust!.id}, '2mg', 'days', '2026-02-28', '2026-03-30', ${bigTotal}, ${bigVatable}, ${bigVat}, 0, 0, 0, 'open', ${fionaId})
+          returning id::int as id`,
+    );
+
+    const payRes = await postJson("fiona", `/api/invoices/${inv!.id}/payments`, {
+      amount: bigPaid,
+      bankCharges: bigCharge,
+      method: "bank",
+      moneyAccount: "Cash in Bank - Metrobank",
+      reference: "BIGINT-30M",
+      paidOn: "2026-02-28",
+    });
+    expect(payRes.status).toBe(200);
+
+    const detail = await (await req("fiona", `/api/invoices/${inv!.id}`)).json();
+    expect(detail.invoice.total).toBe(bigTotal);
+    expect(detail.invoice.paid).toBe(bigPaid);
+    expect(detail.payments[0].amount).toBe(bigPaid);
+
+    const entries = await rows<{ kind: string; account: string; debit: number; credit: number }>(
+      db,
+      sql`select kind, account, debit::float8 as debit, credit::float8 as credit
+          from book_entry where source = 'crm' and (doc_id = ${inv!.id} or (kind = 'crm_payment' and debit = ${bigCharge}))`,
+    );
+    const invEntries = entries.filter((e) => e.kind === "crm_invoice");
+    expect(invEntries.reduce((s, e) => s + e.debit, 0)).toBe(invEntries.reduce((s, e) => s + e.credit, 0));
+    expect(invEntries.some((e) => e.debit === bigTotal)).toBe(true);
+    expect(entries.some((e) => e.kind === "crm_payment" && e.debit === bigCharge)).toBe(true);
+  });
 });

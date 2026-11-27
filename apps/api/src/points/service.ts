@@ -112,7 +112,7 @@ export async function settleOrderPoints(tx: Runner, orderId: number): Promise<vo
     gl: boolean;
   }>(
     tx,
-    sql`select o.code, o.status, o.total::int as total, o.delivery_fee::int as fee, o.points_used::int as "pointsUsed", c.kind,
+    sql`select o.code, o.status, o.total::float8 as total, o.delivery_fee::float8 as fee, o.points_used::float8 as "pointsUsed", c.kind,
         c.phone_key as "phoneKey", c.id::int as "customerId", c.name, coalesce(l.road = 'gl', false) as gl
       from sales_order o join customer c on c.id = o.customer_id left join lead l on l.id = o.lead_id where o.id = ${orderId}`,
   );
@@ -143,10 +143,10 @@ export async function settleOrderPoints(tx: Runner, orderId: number): Promise<vo
 
   const [money] = await rows<{ invoiceTotal: number | null; received: number; refunded: number }>(
     tx,
-    sql`select i.total::int as "invoiceTotal",
+    sql`select i.total::float8 as "invoiceTotal",
         coalesce((select sum(p.amount) from payment p where p.invoice_id = i.id and p.active and p.method <> 'points'
-          and p.payer = ${order.gl ? "agency" : "customer"}), 0)::int as received,
-        coalesce((select sum(r.amount) from refund r where r.invoice_id = i.id), 0)::int as refunded
+          and p.payer = ${order.gl ? "agency" : "customer"}), 0)::float8 as received,
+        coalesce((select sum(r.amount) from refund r where r.invoice_id = i.id), 0)::float8 as refunded
       from invoice i where i.order_id = ${orderId} and i.status <> 'cancelled'`,
   );
   const fee = order.gl ? 0 : order.fee;
@@ -204,7 +204,7 @@ export async function spendOnOrder(
     kind: string;
   }>(
     tx,
-    sql`select o.code, o.total::int as total, o.delivery_fee::int as fee, c.phone_key as "phoneKey", c.id::int as "customerId", c.name, c.kind
+    sql`select o.code, o.total::float8 as total, o.delivery_fee::float8 as fee, c.phone_key as "phoneKey", c.id::int as "customerId", c.name, c.kind
       from sales_order o join customer c on c.id = o.customer_id where o.id = ${orderId}`,
   );
   if (!order?.phoneKey || order.kind !== "patient")

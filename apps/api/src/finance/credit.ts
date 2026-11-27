@@ -19,14 +19,14 @@ import { FINANCE_READ_ROLES, FINANCE_ROLES } from "./rules";
 /** Every credit's source with what is left, for some customers (aliases: none outside). */
 const sourcesSql = (customers: SQL) => sql`
   select d.customer_id::int as "customerId", 'zoho' as kind, d.id::int as id, d.number, to_char(d.doc_date, 'YYYY-MM-DD') as day,
-    round(d.balance * d.fx_rate)::int as amount,
-    (round(d.balance * d.fx_rate) - coalesce((select sum(p.amount) from payment p where p.active and p.credit_doc_id = d.id), 0))::int as left
+    round(d.balance * d.fx_rate)::float8 as amount,
+    (round(d.balance * d.fx_rate) - coalesce((select sum(p.amount) from payment p where p.active and p.credit_doc_id = d.id), 0))::float8 as left
   from book_doc d
   where d.kind in ('credit_note', 'customer_payment') and d.balance > 0 and d.status not in ('void', 'draft')
     and d.voided_at is null and d.customer_id in (${customers})
   union all
-  select i.customer_id::int, 'kept', r.id::int, i.code, to_char(r.refunded_on, 'YYYY-MM-DD'), r.amount::int,
-    (r.amount - coalesce((select sum(p.amount) from payment p where p.active and p.credit_refund_id = r.id), 0))::int
+  select i.customer_id::int, 'kept', r.id::int, i.code, to_char(r.refunded_on, 'YYYY-MM-DD'), r.amount::float8,
+    (r.amount - coalesce((select sum(p.amount) from payment p where p.active and p.credit_refund_id = r.id), 0))::float8
   from refund r join invoice i on i.id = r.invoice_id
   where r.method = 'credit' and i.customer_id in (${customers})`;
 
@@ -72,7 +72,7 @@ export async function useCredit(
     }>(
       tx,
       sql`select id::int as id, code, order_id::int as "orderId", customer_id::int as "customerId",
-          (total - paid)::int as owed, status from invoice where id = ${invoiceId} for update`,
+          (total - paid)::float8 as owed, status from invoice where id = ${invoiceId} for update`,
     );
     if (!invoice) throw new Refusal(404, "not_found", "That invoice doesn't exist.");
     if (invoice.status !== "open" || invoice.owed <= 0)
@@ -102,7 +102,7 @@ export async function useCredit(
     const [after] = await rows<{ left: number }>(
       tx,
       sql`update invoice set paid = paid + ${input.amount}, status = case when paid + ${input.amount} >= total then 'paid' else 'open' end
-        where id = ${invoice.id} returning (total - paid)::int as left`,
+        where id = ${invoice.id} returning (total - paid)::float8 as left`,
     );
     const left = after?.left ?? 0;
     await logEvent(
@@ -131,7 +131,7 @@ export async function releaseCredit(tx: Runner, me: Me, invoiceId: number): Prom
     tx,
     sql`update payment set active = false, removed_reason = 'The invoice was cancelled: the credit goes back to the customer',
         removed_by = ${me.id}, removed_at = now()
-      where invoice_id = ${invoiceId} and active and method = 'credit' returning amount::int as amount`,
+      where invoice_id = ${invoiceId} and active and method = 'credit' returning amount::float8 as amount`,
   );
   const total = back.reduce((sum, one) => sum + one.amount, 0);
   if (total > 0)
@@ -149,7 +149,7 @@ export async function creditBack(tx: Runner, me: Me, invoiceId: number, amount: 
   if (amount <= 0) return 0;
   const used = await rows<{ id: number; amount: number }>(
     tx,
-    sql`select id::int as id, amount::int as amount from payment
+    sql`select id::int as id, amount::float8 as amount from payment
       where invoice_id = ${invoiceId} and active and method = 'credit' order by id desc for update`,
   );
   let left = amount;

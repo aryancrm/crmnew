@@ -92,8 +92,8 @@ type InvoiceSql = Omit<InvoiceRow, "invoiceFromLabel" | "balance" | "state"> & {
 /** An invoice (alias `i`) with its order (`o`) and customer (`c`). */
 const invoiceColumns = sql`i.id::int as id, i.code, i.order_id::int as "orderId", o.code as "orderCode",
   i.customer_id::int as "customerId", c.name as customer, c.kind as "customerKind", i.invoice_from as "invoiceFrom",
-  i.terms, ${day("i.issued_on")} as "issuedOn", ${day("i.due_on")} as "dueOn", i.total::int as total,
-  i.paid::int as paid, i.refunded::int as refunded, i.status, (o.status = 'completed') as delivered,
+  i.terms, ${day("i.issued_on")} as "issuedOn", ${day("i.due_on")} as "dueOn", i.total::float8 as total,
+  i.paid::float8 as paid, i.refunded::float8 as refunded, i.status, (o.status = 'completed') as delivered,
   ${awaitingPaymentSql} as awaiting`;
 const invoiceFrom = sql`from invoice i join sales_order o on o.id = i.order_id join customer c on c.id = i.customer_id`;
 
@@ -115,7 +115,7 @@ const shown = (row: InvoiceSql, today: string): InvoiceRow => {
 
 const paymentColumns = sql`p.id::int as id, p.invoice_id::int as "invoiceId", i.code as "invoiceCode",
   i.order_id::int as "orderId", o.code as "orderCode", p.customer_id::int as "customerId", c.name as customer,
-  p.amount::int as amount, p.method, p.reference, ${day("p.paid_on")} as "paidOn", p.note, p.proof_id::int as "proofId",
+  p.amount::float8 as amount, p.method, p.reference, ${day("p.paid_on")} as "paidOn", p.note, p.proof_id::int as "proofId",
   who.name as by, ${iso("p.at")} as at, p.active, p.removed_reason as "removedReason", p.payer, p.deduction_kind as "deductionKind"`;
 const paymentFrom = sql`from payment p join invoice i on i.id = p.invoice_id join sales_order o on o.id = i.order_id
   join customer c on c.id = p.customer_id join person who on who.id = p.by_person`;
@@ -124,7 +124,7 @@ const withMethod = <T extends { method: PaymentRow["method"] }>(row: T) => ({
   methodLabel: METHOD_LABEL[row.method],
 });
 
-const refundColumns = sql`r.id::int as id, r.invoice_id::int as "invoiceId", r.amount::int as amount, r.method, r.reference,
+const refundColumns = sql`r.id::int as id, r.invoice_id::int as "invoiceId", r.amount::float8 as amount, r.method, r.reference,
   ${day("r.refunded_on")} as "refundedOn", r.note, who.name as by, ${iso("r.at")} as at`;
 
 /** What some customers owe on open invoices: in all, overdue, and the oldest's days late. */
@@ -239,7 +239,7 @@ async function lockOrder(tx: Runner, id: number): Promise<LockedOrder> {
   const [order] = await rows<LockedOrder>(
     tx,
     sql`select id::int as id, code, status, raised_by::int as "raisedBy", medrep_id::int as "medrepId", held_from as "heldFrom",
-        payment_terms as terms, payment_days::int as days, total::int as total, customer_id::int as "customerId",
+        payment_terms as terms, payment_days::int as days, total::float8 as total, customer_id::int as "customerId",
         invoice_from as "invoiceFrom", ${day("expected_on")} as "expectedOn", ${day("pay_by")} as "payBy"
       from sales_order where id = ${id} for update`,
   );
@@ -273,13 +273,13 @@ async function invoiceFigures(tx: Runner, orderId: number) {
   const lines = await rows<{ amount: number; vat: Vat }>(
     tx,
     // A senior's or PWD's line is sold VAT-exempt (the law), whatever the medicine's own VAT.
-    sql`select (i.qty * i.unit_price)::int as amount, i.vat_then as vat
+    sql`select (i.qty * i.unit_price)::float8 as amount, i.vat_then as vat
       from order_item i where i.order_id = ${orderId}`,
   );
   // Delivery is a service the company sells: VAT-able, on the same invoice.
   const [fee] = await rows<{ fee: number }>(
     tx,
-    sql`select delivery_fee::int as fee from sales_order where id = ${orderId}`,
+    sql`select delivery_fee::float8 as fee from sales_order where id = ${orderId}`,
   );
   if (fee?.fee) lines.push({ amount: fee.fee, vat: "vat12" });
   return vatSplit(lines);
@@ -524,7 +524,7 @@ async function addPayment(
   const [after] = await rows<{ paid: number; total: number }>(
     tx,
     sql`update invoice set paid = paid + ${input.amount}, status = case when paid + ${input.amount} >= total then 'paid' else 'open' end
-      where id = ${invoice.id} returning paid::int as paid, total::int as total`,
+      where id = ${invoice.id} returning paid::float8 as paid, total::float8 as total`,
   );
   return { left: (after?.total ?? 0) - (after?.paid ?? 0) };
 }
@@ -572,7 +572,7 @@ export async function confirmPayment(
     const invoice = await invoiceOnApproval(tx, me, orderId);
     const [bill] = await rows<{ total: number; paid: number }>(
       tx,
-      sql`select total::int as total, paid::int as paid from invoice where id = ${invoice.id}`,
+      sql`select total::float8 as total, paid::float8 as paid from invoice where id = ${invoice.id}`,
     );
     const due = Math.max(0, (bill?.total ?? order.total) - (bill?.paid ?? 0));
     if (due > 0 || input.amount > 0) payable(input);
@@ -656,7 +656,7 @@ export async function invoiceOnApproval(
   const order = await lockOrder(tx, orderId);
   const [voided] = await rows<{ id: number; code: string; invoiceFrom: string; paid: number; refunded: number }>(
     tx,
-    sql`select id::int as id, code, invoice_from as "invoiceFrom", paid::int as paid, refunded::int as refunded
+    sql`select id::int as id, code, invoice_from as "invoiceFrom", paid::float8 as paid, refunded::float8 as refunded
       from invoice where order_id = ${orderId} and status = 'cancelled' for update`,
   );
   return voided
@@ -766,7 +766,7 @@ export async function cancelInvoiceOf(
     status: string;
   }>(
     tx,
-    sql`select id::int as id, code, paid::int as paid, refunded::int as refunded, status from invoice where order_id = ${orderId} for update`,
+    sql`select id::int as id, code, paid::float8 as paid, refunded::float8 as refunded, status from invoice where order_id = ${orderId} for update`,
   );
   if (!invoice || invoice.status === "cancelled") return;
   await tx.execute(
@@ -799,8 +799,8 @@ async function lockInvoice(tx: Runner, id: number) {
     status: "open" | "paid" | "cancelled";
   }>(
     tx,
-    sql`select id::int as id, code, order_id::int as "orderId", customer_id::int as "customerId", total::int as total,
-        paid::int as paid, refunded::int as refunded, status from invoice where id = ${id} for update`,
+    sql`select id::int as id, code, order_id::int as "orderId", customer_id::int as "customerId", total::float8 as total,
+        paid::float8 as paid, refunded::float8 as refunded, status from invoice where id = ${id} for update`,
   );
   if (!invoice) throw new Refusal(404, "not_found", "That invoice doesn't exist.");
   return invoice;
@@ -960,7 +960,7 @@ export async function recordPayment(
 async function notCashPaid(tx: Runner, invoiceId: number): Promise<number> {
   const [found] = await rows<{ amount: number }>(
     tx,
-    sql`select coalesce(sum(amount), 0)::int as amount from payment where invoice_id = ${invoiceId} and active and method in ('points', 'withholding', 'credit', 'deduction')`,
+    sql`select coalesce(sum(amount), 0)::float8 as amount from payment where invoice_id = ${invoiceId} and active and method in ('points', 'withholding', 'credit', 'deduction')`,
   );
   return found?.amount ?? 0;
 }
@@ -968,7 +968,7 @@ async function notCashPaid(tx: Runner, invoiceId: number): Promise<number> {
 async function pointsPaid(tx: Runner, invoiceId: number): Promise<number> {
   const [found] = await rows<{ amount: number }>(
     tx,
-    sql`select coalesce(sum(amount), 0)::int as amount from payment where invoice_id = ${invoiceId} and active and method = 'points'`,
+    sql`select coalesce(sum(amount), 0)::float8 as amount from payment where invoice_id = ${invoiceId} and active and method = 'points'`,
   );
   return found?.amount ?? 0;
 }
@@ -992,7 +992,7 @@ export async function removePayment(
       active: boolean;
     }>(
       tx,
-      sql`select invoice_id::int as "invoiceId", amount::int as amount, method, ${day("paid_on")} as "paidOn", active from payment where id = ${paymentId} for update`,
+      sql`select invoice_id::int as "invoiceId", amount::float8 as amount, method, ${day("paid_on")} as "paidOn", active from payment where id = ${paymentId} for update`,
     );
     if (!payment?.active) throw new Refusal(404, "not_found", "That payment isn't there any more.");
     await assertOpen(tx, "customer_payment", payment.paidOn);
@@ -1172,10 +1172,10 @@ export async function invoiceDetail(db: Database, me: Me, id: number): Promise<I
   const today = todayManila();
   const [invoice] = await rows<InvoiceSql & Omit<InvoiceDetail["invoice"], keyof InvoiceRow>>(
     db,
-    sql`select ${invoiceColumns}, i.credited::int as credited, i.vatable::int as vatable, i.vat::int as vat, i.exempt::int as exempt, i.zero_rated::int as "zeroRated",
+    sql`select ${invoiceColumns}, i.credited::float8 as credited, i.vatable::float8 as vatable, i.vat::float8 as vat, i.exempt::float8 as exempt, i.zero_rated::float8 as "zeroRated",
         o.payment_days::int as "paymentDays", ${awaitingPaymentSql} as "awaitingCheck", rep.name as medrep, nullif(concat_ws(', ', c.address, c.city), '') as "customerAddress",
         c.tin as "customerTin", o.customer_po as "customerPo", o.delivery_address as "deliveryAddress",
-        who.name as by, ${iso("i.at")} as at, i.cancelled_reason as "cancelledReason", o.delivery_fee::int as "deliveryFee",
+        who.name as by, ${iso("i.at")} as at, i.cancelled_reason as "cancelledReason", o.delivery_fee::float8 as "deliveryFee",
         c.phone as "customerPhone", o.receiver, doc.name as doctor,
         concat_ws(' | ', coalesce(ch.code, '—'), rep.name) as salesperson, o.payment_term as "paymentTerm",
         case when o.relief_kind is not null then json_build_object('kind', o.relief_kind, 'idNo', o.relief_id_no, 'name', o.relief_name) end as relief,
@@ -1190,7 +1190,7 @@ export async function invoiceDetail(db: Database, me: Me, id: number): Promise<I
     rows<InvoiceDetail["items"][number]>(
       db,
       sql`select i.id::int as id, coalesce(i.name_then, m.name) || coalesce(' ' || coalesce(i.strength_then, m.strength), '') as medicine,
-          i.qty::int as qty, m.unit, i.unit_price::int as "unitPrice", (i.qty * i.unit_price)::int as amount,
+          i.qty::int as qty, m.unit, i.unit_price::float8 as "unitPrice", (i.qty * i.unit_price)::float8 as amount,
           coalesce(i.vat_then, m.vat) as vat, i.free, coalesce(i.strength_then, m.strength) as strength,
           coalesce(i.form_then, m.form) as form, i.relief
         from order_item i join medicine m on m.id = i.medicine_id where i.order_id = ${invoice.orderId} order by i.id`,
@@ -1328,7 +1328,7 @@ export async function customersOwe(
     sql`select c.id::int as "customerId", c.name as customer, c.kind, c.city,
         case when count(distinct dd.terms) = 1 then min(dd.terms) else 'mixed' end as "paymentTerms",
         case when count(distinct dd.days) = 1 then min(dd.days)::int end as "paymentDays",
-        c.credit_limit::int as "creditLimit",
+        c.credit_limit::float8 as "creditLimit",
         (select string_agg(distinct p.name, ', ') from person p where p.id in (select dd2.medrep_id from ${duesSql(today)} dd2 where dd2.customer_id = c.id)) as medrep,
         count(*)::int as invoices,
         coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late <= 0), 0)::float8 as current,
@@ -1387,7 +1387,7 @@ export async function refundsOwed(db: Database, me: Me): Promise<RefundList> {
     rows<Omit<RefundOwed, "days" | "owed"> & { cancelledDay: string | null }>(
       db,
       sql`select i.id::int as "invoiceId", i.code as "invoiceCode", i.order_id::int as "orderId", o.code as "orderCode",
-          i.customer_id::int as "customerId", c.name as customer, (i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit', 'deduction')))::int as received, i.refunded::int as refunded,
+          i.customer_id::int as "customerId", c.name as customer, (i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit', 'deduction')))::float8 as received, i.refunded::float8 as refunded,
           i.cancelled_reason as reason, ${iso("i.cancelled_at")} as "cancelledAt",
           to_char(i.cancelled_at at time zone 'Asia/Manila', 'YYYY-MM-DD') as "cancelledDay"
         ${invoiceFrom} where i.status = 'cancelled' and o.status = 'cancelled' and i.paid - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit', 'deduction')) > i.refunded order by i.cancelled_at, i.id`,
@@ -1397,9 +1397,9 @@ export async function refundsOwed(db: Database, me: Me): Promise<RefundList> {
     rows<Omit<RefundOwed, "days"> & { cancelledDay: string | null }>(
       db,
       sql`select i.id::int as "invoiceId", i.code as "invoiceCode", i.order_id::int as "orderId", o.code as "orderCode",
-          i.customer_id::int as "customerId", c.name as customer, i.paid::int as received, i.refunded::int as refunded,
+          i.customer_id::int as "customerId", c.name as customer, i.paid::float8 as received, i.refunded::float8 as refunded,
           least(i.paid - i.refunded - i.total,
-            i.paid - i.refunded - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit', 'deduction')))::int as owed,
+            i.paid - i.refunded - (select coalesce(sum(pp.amount), 0) from payment pp where pp.invoice_id = i.id and pp.active and pp.method in ('points', 'withholding', 'credit', 'deduction')))::float8 as owed,
           case when i.credited > 0
             then 'Goods returned: ' || coalesce((select string_agg(r.code, ', ') from sales_return r where r.order_id = i.order_id and r.status = 'received'), 'credit')
             else 'Paid more than the bill' end as reason,
@@ -1471,15 +1471,15 @@ export async function customerStatement(
   }>(
     db,
     sql`select * from (
-        select ${day("i.issued_on")} as day, 'invoice' as kind, i.code as ref, o.code as note, i.total::int as debit, 0 as credit, i.id as sort
+        select ${day("i.issued_on")} as day, 'invoice' as kind, i.code as ref, o.code as note, i.total::float8 as debit, 0 as credit, i.id as sort
           from invoice i join sales_order o on o.id = i.order_id
           where i.customer_id = ${customerId} and i.status <> 'cancelled'
         union all
-        select ${day("p.paid_on")}, 'payment', i.code, concat_ws(' · ', initcap(p.method), p.reference), 0, p.amount::int, p.id
+        select ${day("p.paid_on")}, 'payment', i.code, concat_ws(' · ', initcap(p.method), p.reference), 0, p.amount::float8, p.id
           from payment p join invoice i on i.id = p.invoice_id
           where i.customer_id = ${customerId} and p.active and i.status <> 'cancelled'
         union all
-        select ${day("r.refunded_on")}, 'refund', i.code, concat_ws(' · ', initcap(r.method), r.reference), r.amount::int, 0, r.id
+        select ${day("r.refunded_on")}, 'refund', i.code, concat_ws(' · ', initcap(r.method), r.reference), r.amount::float8, 0, r.id
           from refund r join invoice i on i.id = r.invoice_id
           where i.customer_id = ${customerId} and i.status <> 'cancelled'
       ) m where m.day <= ${to} order by m.day, case m.kind when 'invoice' then 0 when 'payment' then 1 else 2 end, m.sort`,
@@ -1535,7 +1535,7 @@ export async function collectedLater(db: Database, me: Me, days = 30): Promise<C
   const found = await rows<CollectedLater["rows"][number] & { termsKey: string; payDays: number | null }>(
     db,
     sql`select i.id::int as "invoiceId", i.code as "invoiceCode", o.id::int as "orderId", o.code as "orderCode",
-        c.name as customer, rep.name as medrep, i.terms as "termsKey", o.payment_days::int as "payDays", i.total::int as total,
+        c.name as customer, rep.name as medrep, i.terms as "termsKey", o.payment_days::int as "payDays", i.total::float8 as total,
         ${day("max(p.paid_on)")} as "paidOn", (array_agg(who.name order by p.at desc))[1] as by,
         (o.status = 'completed') as delivered
       from invoice i join sales_order o on o.id = i.order_id join customer c on c.id = i.customer_id
@@ -1600,7 +1600,7 @@ export async function owedInvoices(db: Database, me: Me): Promise<OwedInvoices> 
         ${day("i.issued_on")} as "issuedOn",
         case when i.terms = 'days' and o.status <> 'completed' and o.pay_by is null then null else ${day("i.due_on")} end as "dueOn",
         ${day("o.delivered_on")} as "deliveredOn", case when o.pay_by is not null then 'by_date' else i.terms end as "termsKey", o.payment_days::int as days,
-        i.total::int as total, i.paid::int as paid, (i.total - i.paid)::int as balance,
+        i.total::float8 as total, i.paid::float8 as paid, (i.total - i.paid)::float8 as balance,
         case when i.terms = 'cod' and o.status <> 'completed' then 'on_delivery'
              when i.terms = 'days' and o.status <> 'completed' then 'due'
              when i.due_on < ${today}::date then 'late' else 'due' end as state,
@@ -1626,7 +1626,7 @@ export async function owedInvoices(db: Database, me: Me): Promise<OwedInvoices> 
         c.id::int as "customerId", c.name as customer, c.kind, c.city, h.person_id::int as "medrepId",
         coalesce(p.name, d.fields->>'salesperson_name', d.fields->>'Sales Person', 'Zoho') as medrep, u.name as team,
         ${day("d.doc_date")} as "issuedOn", ${day("d.due_date")} as "dueOn", null as "deliveredOn", 'zoho' as "termsKey", null::int as days,
-        round(d.total * d.fx_rate)::int as total, round((d.total - d.balance) * d.fx_rate)::int as paid, round(d.balance * d.fx_rate)::int as balance,
+        round(d.total * d.fx_rate)::float8 as total, round((d.total - d.balance) * d.fx_rate)::float8 as paid, round(d.balance * d.fx_rate)::float8 as balance,
         case when d.due_date < ${today}::date then 'late' else 'due' end as state,
         case when d.due_date < ${today}::date then (${today}::date - d.due_date)::int else 0 end as "daysLate",
         null as "codCash"
@@ -1810,7 +1810,7 @@ export async function myConfirmations(
   const from = asked.from && DAY.test(asked.from) && asked.from <= to ? asked.from : to;
   const found = await rows<MyConfirmations["rows"][number]>(
     db,
-    sql`select o.id::int as id, o.code, c.name as customer, o.total::int as total, o.status,
+    sql`select o.id::int as id, o.code, c.name as customer, o.total::float8 as total, o.status,
         ${iso("o.finance_checked_at")} as at
       from sales_order o join customer c on c.id = o.customer_id
       where o.finance_checked_by = ${me.id}
