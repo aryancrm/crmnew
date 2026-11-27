@@ -275,13 +275,13 @@ function Letters({ data, compact }: { data: RxBusiness; compact?: boolean }) {
               const count = stages.reduce((sum, stage) => sum + stage.count, 0);
               const value = stages.reduce((sum, stage) => sum + stage.amount, 0);
               const waiting = one.received.amount + one.serving.amount + one.billed.amount;
-              // Where this CRM's letters stand; Zoho's older ones only as served.
+              // Where this CRM's letters stand (the older ones are counted in Letters; no "Zoho" on a
+              // screen, Aryan 28 Nov: "we are ending Zoho").
               const where = [
                 one.received.count ? `${one.received.count} received` : null,
                 one.serving.count ? `${one.serving.count} being delivered` : null,
                 one.billed.count ? `${one.billed.count} billed` : null,
                 one.paid.count ? `${one.paid.count} paid` : null,
-                one.zoho.count ? `${one.zoho.count} from Zoho` : null,
               ].filter(Boolean);
               return (
                 <tr key={one.programme}>

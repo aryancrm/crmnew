@@ -20,7 +20,7 @@ import { PageState } from "../ui";
 import { PACE_TEXT, PaceBar } from "../company/ceo-home";
 import { seatWords } from "../seat-words";
 import { TeamDrill } from "./drill";
-import { OrderWaysCard } from "./ways-card";
+import { OrdersByPerson, OrderWaysCard } from "./ways-card";
 import { channelsIn, useTeamTree } from "./hierarchy";
 import { toneOf } from "./pace";
 import { HeadRisks } from "./mentor";
@@ -149,6 +149,14 @@ export function TeamSalesPage() {
         </nav>
       </header>
 
+      {/* First, as his plan's Home has them (Aryan, 28 Nov, PLAN 259): how the month's orders came
+          (doctor referral, doctor dispense, guarantee letters, others), then the team's tree (each
+          HQ and who works it; the channels' tiles a press away). */}
+      {!whole && <OrderWaysCard month={asked} />}
+      {/* The orders each person placed (Aryan, 28 Nov: "on Javed's screen, like the Orders tab"). */}
+      {!whole && <OrdersByPerson month={asked} board={board.data} />}
+      {!whole && top && <TeamDrill top={top} pace={data.pace} running={data.running} me={me} range={span} />}
+
       {/* The hub's My KPIs: their own and their team's (Aryan, 20 Nov; PLAN 23). */}
       {/* What the MedReps are doing in the field today, and what of it waits for this lead. */}
       {!whole && <FieldTodayCard />}
@@ -204,12 +212,6 @@ export function TeamSalesPage() {
         </section>
       )}
 
-      {/* How the month's orders came: the doctor's referral and dispensing first (Aryan, 27 Nov). */}
-      {!whole && <OrderWaysCard month={asked} />}
-
-      {/* The team as the tracker draws it (Aryan, 19 Nov): each channel big, hover for its details,
-          a press opens its manager, each person and the channel's own work. */}
-      {!whole && top && <TeamDrill top={top} pace={data.pace} running={data.running} me={me} range={span} />}
 
       {!whole && me.role === "manager" && <HeadRisks />}
 

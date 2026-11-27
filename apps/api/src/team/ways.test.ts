@@ -73,16 +73,22 @@ describe("how the team's orders came", () => {
           values (${code}, ${code}, ${buyer}, ${day}::date, 'confirmed', ${total}, 'RX | WAYS JOY', ${source}, ${doctor})`,
       );
     const ways = (await (await get("rosa", "/api/team/ways")).json()) as OrderWays;
-    const of = (source: string) => ways.ways.find((one) => one.source === source);
     // The doctor dispensing: three orders, two doctors bought.
-    expect(of("Doctor order")).toMatchObject({ orders: 3, value: 600000, buyers: 2 });
-    // The referral: three orders, two patients, sent by two doctors.
-    expect(of("Patient order referred by doctor")).toMatchObject({ orders: 3, value: 120000, buyers: 2, doctors: 2 });
-    expect(of("DSWD")).toMatchObject({ orders: 1, value: 20000 });
+    expect(ways.dispense).toMatchObject({ orders: 3, value: 600000, doctors: 2 });
+    // The referral: the patients' orders, the guarantee letter's among them (a patient's order an
+    // agency pays, 28 Nov): four orders, two patients, sent by two doctors.
+    expect(ways.referral).toMatchObject({ orders: 4, value: 140000, patients: 2, doctors: 2 });
+    expect(ways.referral.roads).toMatchObject({ regular: { orders: 3, value: 120000 }, senior: { orders: 0 }, gl: { orders: 1, value: 20000 } });
+    // Zoho's orders kept no terms: the buyer's own (here paid first) stand for them.
+    expect(ways.referral.pay.prepaid.orders + ways.referral.pay.unknown.orders).toBe(4);
+    expect(ways.others.orders).toBe(0);
     expect(ways.lastOrderOn).toBe(today);
+    // Joy's line: her HQ's seven orders this month, by way.
+    const joyLine = ways.people.find((one) => one.person === "Joy");
+    expect(joyLine).toMatchObject({ orders: 7, referral: { orders: 4 }, dispense: { orders: 3 } });
     // Last month's own figures when asked for it.
     const last = (await (await get("rosa", `/api/team/ways?month=${before.slice(0, 7)}`)).json()) as OrderWays;
-    expect(last.ways.find((one) => one.source === "Doctor order")).toMatchObject({ orders: 1, value: 999900 });
+    expect(last.dispense).toMatchObject({ orders: 1, value: 999900 });
     // A seller doesn't read the team's.
     expect((await get("joy", "/api/team/ways")).status).toBe(403);
   });

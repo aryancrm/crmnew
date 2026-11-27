@@ -6178,8 +6178,18 @@ export type Headquarters = {
   today: number;
 };
 
-/** How a team's orders came in a month (27 Nov): each order's Source, the doctor's two first
- *  ("Doctor order": the doctor dispensing; "Patient order referred by doctor": the referral). */
+/** How a team's orders came in a month (27-28 Nov, PLAN 252 and 260): the doctor's two ways (a
+ *  guarantee letter's orders are a referral's: a patient's order an agency pays), how the patients
+ *  bought and how each way pays, the rest, and each person's orders. Values in centavos. */
+export type OrderWaysPart = { orders: number; value: number };
+export type OrderWaysPay = {
+  prepaid: OrderWaysPart;
+  cod: OrderWaysPart;
+  /** On credit, by the number of days. */
+  terms: OrderWaysPart & { byDays: { days: number; orders: number; value: number }[] };
+  /** No terms known (an older order whose buyer has none). */
+  unknown: OrderWaysPart;
+};
 export type OrderWays = {
   month: string;
   from: string;
@@ -6188,17 +6198,26 @@ export type OrderWays = {
   lastOrderOn: string | null;
   orders: number;
   value: number;
-  ways: {
-    source: string;
-    orders: number;
-    /** Centavos. */
-    value: number;
-    /** Customers who bought (for a doctor's dispensing: the doctors). */
-    buyers: number;
-    /** Doctors named on the orders (for a referral: the doctors who sent them). */
+  /** The patient buys: sent by a doctor, or paid by an agency's guarantee letter. */
+  referral: OrderWaysPart & {
+    patients: number;
     doctors: number;
-    lastOn: string | null;
-  }[];
+    roads: { regular: OrderWaysPart; senior: OrderWaysPart; gl: OrderWaysPart };
+    pay: OrderWaysPay;
+  };
+  /** The doctor buys. */
+  dispense: OrderWaysPart & { doctors: number; pay: OrderWaysPay };
+  others: OrderWaysPart & { list: { source: string; orders: number; value: number }[] };
+  /** Each HQ's person: their orders this month, by way. */
+  people: (OrderWaysPart & {
+    seatId: number;
+    hq: string;
+    person: string | null;
+    personId: number | null;
+    referral: OrderWaysPart;
+    dispense: OrderWaysPart;
+    others: OrderWaysPart;
+  })[];
 };
 
 /** The prescription business at a glance (19 Nov): each person's day and month, the doctors

@@ -123,7 +123,7 @@ export function TeamDrill({
           </h2>
           <p className="text-[12px] text-slate-500">
             {look === "chart"
-              ? "Who is under whom, each person's area, and what each sold against target · press a box for its details"
+              ? "Each HQ and who works it, under its channel and manager · press a box for its details"
               : `Sold against target${running ? ` on the month's pace (${Math.round(pace * 100)}%)` : ""} · hover for the details, press to open`}
           </p>
         </div>
