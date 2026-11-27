@@ -9,8 +9,9 @@
 //  - % of target = sales without VAT ÷ target × 100, one decimal; no target, no %.
 //  - Orders invoiced: the invoices in the month (one per order here; each of Zoho's). New
 //    customers: invoiced orders that are their customer's first ever (an earlier order here, a
-//    Zoho order or invoice before it means not new). Orders raised: orders placed in the month (not
-//    drafts, not cancelled). Orders held: orders put on hold or flagged in the month. Waiting:
+//    Zoho order or invoice before it means not new; a Zoho invoice, its customer's first invoice
+//    ever). Orders raised: orders placed in the month (not drafts, not cancelled), here and in
+//    Zoho (not void). Orders held: orders put on hold or flagged in the month. Waiting:
 //    orders placed (last 90 days) still waiting for Management's approval, or held, with no
 //    invoice: shown, never counted (here the invoice is made when Management approves).
 //  - Whose sale: the person holding the order's seat on the day of the invoice (the territory's
@@ -64,24 +65,44 @@ async function figures(db: Database, scope: Scope, month: string, upTo: string, 
   const first = `${month}-01`;
   const t = tests(scope, today);
   const placed = sql`(coalesce(o.submitted_at, o.created_at) at time zone 'Asia/Manila')::date`;
+  // Zoho's orders in the days, each with its seat and the person it counts for (the seat's holder
+  // on the order's day, else its first holder after), as Zoho's invoices are credited: the company
+  // still orders in Zoho, so "Orders raised" counts them too, as the Home's "How the orders came"
+  // and Whole business do (28 Nov, PLAN 275: it said 0 beside 328).
+  const zohoOrders = sql`select zs.seat_id,
+      coalesce((select h.person_id from seat_holder h where h.seat_id = zs.seat_id and h.kind = 'holder' and h.starts_on <= p.ordered_on
+          and (h.ends_on is null or h.ends_on >= p.ordered_on) order by h.starts_on desc limit 1),
+        (select h.person_id from seat_holder h where h.seat_id = zs.seat_id and h.kind = 'holder' and h.starts_on > p.ordered_on
+          order by h.starts_on, h.id limit 1)) as person_id
+    from past_order p left join zoho_seller zs on zs.name = p.seller
+    where p.status <> 'void' and p.ordered_on between ${first}::date and ${upTo}::date`;
   const [sold, counts, perDay] = await Promise.all([
     rows<{ withVat: number; sales: number; invoices: number; newCustomers: number }>(
       db,
+      // New customers: an invoice here that is its customer's first ever order (as before), or a
+      // Zoho invoice that is its customer's first ever invoice, with no order here before it (28 Nov,
+      // PLAN 275: Zoho's invoices were left out, so the Home said 0 new customers).
       sql`select coalesce(sum(x.total), 0)::float8 as "withVat", coalesce(sum(x.net), 0)::float8 as sales, count(*)::int as invoices,
-          count(distinct x.customer_id) filter (where x.source = 'crm'
+          count(distinct x.customer_id) filter (where (x.source = 'crm'
             and not exists (select 1 from sales_order e where e.customer_id = x.customer_id and e.id <> x.order_id
               and e.status not in ('draft', 'cancelled') and (e.created_at < x.order_at or (e.created_at = x.order_at and e.id < x.order_id)))
             and not exists (select 1 from past_order p where p.customer_id = x.customer_id and p.status <> 'void'
               and p.ordered_on < (x.order_at at time zone 'Asia/Manila')::date)
             and not exists (select 1 from book_doc b where b.customer_id = x.customer_id and b.kind = 'invoice' and b.zoho_id is not null
-              and b.status not in ('draft', 'void') and b.doc_date < (x.order_at at time zone 'Asia/Manila')::date))::int as "newCustomers"
+              and b.status not in ('draft', 'void') and b.doc_date < (x.order_at at time zone 'Asia/Manila')::date))
+          or (x.source = 'zoho'
+            and not exists (select 1 from book_doc b where b.customer_id = x.customer_id and b.kind = 'invoice' and b.zoho_id is not null
+              and b.status not in ('draft', 'void') and b.voided_at is null and (b.doc_date < x.day or (b.doc_date = x.day and b.id < x.id)))
+            and not exists (select 1 from sales_order e where e.customer_id = x.customer_id and e.status not in ('draft', 'cancelled')
+              and (e.created_at at time zone 'Asia/Manila')::date < x.day)))::int as "newCustomers"
         from (${invoicesSql(first, upTo)}) x where ${t.invoice}`,
     ),
     rows<{ raised: number; held: number; waiting: number; waitingSales: number }>(
       db,
       sql`select
-          (select count(*) from sales_order o where ${t.order} and o.status not in ('draft', 'cancelled')
-            and ${placed} between ${first}::date and ${upTo}::date)::int as raised,
+          ((select count(*) from sales_order o where ${t.order} and o.status not in ('draft', 'cancelled')
+            and ${placed} between ${first}::date and ${upTo}::date)
+          + (select count(*) from (${zohoOrders}) x where ${t.invoice}))::int as raised,
           (select count(distinct st.order_id) from order_step st join sales_order o on o.id = st.order_id
             where ${t.order} and st.status in ('on_hold', 'exception')
               and (st.entered_at at time zone 'Asia/Manila')::date between ${first}::date and ${upTo}::date)::int as held,

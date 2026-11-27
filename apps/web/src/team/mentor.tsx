@@ -134,13 +134,18 @@ export const whereOf = (row: TeamScores["rows"][number]) => {
 function AtRisk({ data }: { data: TeamScores }) {
   const me = useMe().data;
   // The people under them, not themselves (27 Nov: Javed was listed at risk on his own Home).
-  const risky = data.rows.filter(
+  const flagged = data.rows.filter(
     (row) =>
       row.card?.recipe !== "team" &&
       row.personId &&
       row.personId !== me?.id &&
       (row.pip || (row.card && row.card.max > 0 && row.card.percent < 60)),
   );
+  // Once a person, with every team they lead (28 Nov, PLAN 275: Honey, who coaches both RX Business
+  // and MD Telesales, was listed twice, once as "Sales Coach – RX Business").
+  const units = new Map<number, string[]>();
+  for (const row of flagged) units.set(row.personId as number, [...(units.get(row.personId as number) ?? []), row.unit]);
+  const risky = flagged.filter((row, at) => flagged.findIndex((one) => one.personId === row.personId) === at);
   return (
     <section className={`${CARD} min-w-0 p-4`}>
       <div className="flex items-baseline justify-between gap-2">
@@ -163,7 +168,7 @@ function AtRisk({ data }: { data: TeamScores }) {
                 </Link>
                 <span className="text-[11.5px] text-slate-500">
                   {" "}
-                  · {[...new Set([whereOf(row), row.unit].filter(Boolean))].join(" · ")}
+                  · {[...new Set([whereOf(row)?.replace(/\s*–.*$/, ""), ...(units.get(row.personId as number) ?? [row.unit])].filter(Boolean))].join(" · ")}
                 </span>
               </span>
               <span className="shrink-0 text-right text-[12px]">
