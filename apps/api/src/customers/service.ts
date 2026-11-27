@@ -44,6 +44,7 @@ export const CUSTOMER_PAPER_LABEL: Record<CustomerPaperKind, string> = {
   business_permit: "Business permit",
   prescription: "Prescription",
   valid_id: "Valid ID",
+  senior_id: "Senior citizen / PWD ID",
   other: "Other file",
 };
 export const CUSTOMER_PAPER_KINDS = Object.keys(CUSTOMER_PAPER_LABEL) as CustomerPaperKind[];

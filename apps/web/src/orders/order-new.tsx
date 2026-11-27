@@ -308,7 +308,10 @@ const PAPERS: { kind: PaperKind; label: string; patient?: boolean; business?: bo
   { kind: "senior_id", label: "Senior citizen / PWD ID", patient: true },
   { kind: "gl", label: "Guarantee letter", patient: true },
   { kind: "po", label: "Customer's PO", business: true },
-  { kind: "hospital_doc", label: "Their papers (LTO, accreditation…)", business: true },
+  // A business's three papers, picked one by one (27 Nov): each goes on their file too.
+  { kind: "bir_2303", label: "BIR 2303", business: true },
+  { kind: "lto_permit", label: "LTO permit", business: true },
+  { kind: "business_permit", label: "Business permit", business: true },
   { kind: "payment_proof", label: "Proof of payment" },
 ];
 
@@ -316,7 +319,7 @@ const PAPERS: { kind: PaperKind; label: string; patient?: boolean; business?: bo
 const paperRank = (kind: PaperKind, patient: boolean) =>
   (patient
     ? ["prescription", "valid_id", "senior_id", "gl", "po", "payment_proof"]
-    : ["po", "hospital_doc", "prescription", "payment_proof"]
+    : ["po", "bir_2303", "lto_permit", "business_permit", "prescription", "payment_proof"]
   ).indexOf(kind);
 
 /** Today's date in Manila, as the API counts days. */
@@ -913,6 +916,20 @@ export function OrderNew({
   const forPatient = isPatientType(orderType) || picked?.kind === "patient" || patientOrder;
   // What a sent-back order already has on file counts (its prescription stays on the order).
   const onFile = new Set((fixing.data?.papers ?? []).map((paper) => paper.kind));
+  // What the customer has on their own file and lasts (27 Nov): an ID, a business's papers. A
+  // prescription is for one order's medicines, so it is asked each time.
+  const lasting: PaperKind[] =
+    picked?.kind === "patient"
+      ? ["valid_id", "senior_id", "bir_2303", "lto_permit", "business_permit"]
+      : ["bir_2303", "lto_permit", "business_permit"];
+  const onTheirFile = new Set(
+    (customer.data?.papers ?? [])
+      .map((paper) => paper.kind as string as PaperKind)
+      .filter((kind) => lasting.includes(kind)),
+  );
+  // A business's paper still missing from their file (the hub's list): offered on the order.
+  const theyLack = (paper: { kind: PaperKind; label: string; business?: boolean }) =>
+    Boolean(paper.business) && paper.kind !== "po" && Boolean(customer.data?.missing.includes(paper.label));
   // Whenever a patient buys, the prescription is needed (Aryan, 17 Nov). The type's own papers
   // are asked for too (19 Nov): Management's Documents check reads them; only the prescription
   // keeps the order from going.
@@ -2566,10 +2583,18 @@ export function OrderNew({
             )
             // Only the papers this order asks for, and those already attached; the others one
             // press away (Aryan, 23 Nov: a short form).
-            .filter((paper) => morePapers || paperAsked(paper.kind) || Boolean(papers[paper.kind]) || onFile.has(paper.kind))
+            .filter(
+              (paper) =>
+                morePapers ||
+                paperAsked(paper.kind) ||
+                theyLack(paper) ||
+                Boolean(papers[paper.kind]) ||
+                onFile.has(paper.kind),
+            )
             .map((paper) => {
               const file = papers[paper.kind];
-              const already = onFile.has(paper.kind);
+              const theirs = !onFile.has(paper.kind) && onTheirFile.has(paper.kind);
+              const already = onFile.has(paper.kind) || theirs;
               // Whenever a patient buys, the prescription is needed (Aryan, 17 Nov).
               // The type's own papers are asked for too (19 Nov): Management's Documents check
               // reads them; only the prescription keeps the order from going.
@@ -2588,7 +2613,12 @@ export function OrderNew({
                         </span>
                       )}
                       {already && !file && (
-                        <span className="ml-2 text-[11px] text-good">On the order already</span>
+                        <span className="ml-2 text-[11px] text-good">
+                          {theirs ? "On their file already" : "On the order already"}
+                        </span>
+                      )}
+                      {theyLack(paper) && !file && (
+                        <span className="ml-2 text-[11px] text-ink-2">Missing from their file</span>
                       )}
                     </div>
                     {paper.kind === "payment_proof" && asksProof && !file && !already && (

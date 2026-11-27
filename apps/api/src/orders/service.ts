@@ -82,6 +82,8 @@ import {
   orderCan,
   PAPER_KINDS,
   PAPER_LABEL,
+  customerPaperOf,
+  lastingPapersOf,
   paperList,
   STAGES,
   STATUS_GROUPS,
@@ -1578,6 +1580,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
         noRxReason: order.noRxReason,
       },
       onFile,
+      lastingPapersOf(order.customerKind, customerPapers),
     ),
     findings: found,
     // "Paid" counts only while the invoice is paid: a payment taken off un-pays it.
@@ -3057,10 +3060,13 @@ async function visibleOrder(db: Runner, me: Me, id: number) {
     leadId: number | null;
     team: boolean;
     gl: boolean;
+    customerId: number;
+    customerKind: string;
   }>(
     db,
     sql`${team(me)} select o.status, o.raised_by::int as "raisedBy", o.medrep_id::int as "medrepId", o.code, o.held_from as "heldFrom", o.held_role as "heldRole",
-        o.lead_id::int as "leadId", ${inTeamSql(me)} as team, o.order_type = 'gl' as gl
+        o.lead_id::int as "leadId", ${inTeamSql(me)} as team, o.order_type = 'gl' as gl,
+        o.customer_id::int as "customerId", (select c.kind from customer c where c.id = o.customer_id) as "customerKind"
       from sales_order o where o.id = ${id} and ${seen(me)}`,
   );
   if (!order)
@@ -3269,6 +3275,14 @@ export async function addPaper(
       "paper",
       `${PAPER_LABEL[paper.kind as PaperKind]} attached (${name}).`,
     );
+    // The customer's own paper (an ID, a business's permit…) goes on their file too, as the same
+    // file (27 Nov), so their page has it and the next order finds it.
+    const theirs = customerPaperOf(paper.kind as PaperKind, order.customerKind);
+    if (theirs)
+      await tx.execute(
+        sql`insert into customer_file (customer_id, kind, name, mime, size, data, store_key, by_person, order_file_id)
+          values (${order.customerId}, ${theirs}, ${name}, ${kept.mime}, ${kept.size}, ${kept.data}, ${kept.key}, ${me.id}, ${made?.id})`,
+      );
     // A new paper (not Finance's proof, not Dispatch's receipt) is Management's to look at again.
     if (paper.kind !== "payment_proof" && paper.kind !== "dr") {
       await tx.execute(sql`update sales_order set papers_checked_by = null, papers_checked_at = null where id = ${orderId} and papers_checked_at is not null`);
@@ -3330,6 +3344,8 @@ export async function removePaper(db: Database, me: Me, paperId: number): Promis
     throw new Refusal(403, "not_allowed", `Papers on ${order.code} can't be changed now.`);
   await db.transaction(async (tx) => {
     await tx.execute(sql`update order_file set active = false where id = ${paperId}`);
+    // Taken off as the wrong file: off the customer's file too, where it went with it.
+    await tx.execute(sql`update customer_file set active = false where order_file_id = ${paperId}`);
     await logEvent(
       tx,
       paper.orderId,
