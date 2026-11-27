@@ -90,7 +90,14 @@ export function CollectionsPage() {
                     {row.customer}
                   </Link>
                   <div className="flex flex-wrap items-center gap-x-2 text-[11.5px] text-slate-500">
-                    {data.scope !== "My customers" && row.seller && <span>{row.seller}</span>}
+                    {/* The HQ it was sold from, then who sold it (Aryan's phase 5, PLAN 266). */}
+                    {data.scope !== "My customers" && (row.hq || row.seller) && (
+                      <span>
+                        {row.hq && <b className="font-semibold text-slate-700">{row.hq}</b>}
+                        {row.hq && row.seller ? " · " : ""}
+                        {row.seller}
+                      </span>
+                    )}
                     {row.phone && row.phone.replace(/\D/g, "").length >= 7 && (
                       <a href={`tel:${row.phone.replace(/\s/g, "")}`} className="inline-flex items-center gap-1 text-emerald-700 hover:underline">
                         <Phone className="size-3" /> {row.phone}

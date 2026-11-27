@@ -16,6 +16,7 @@ import { careGroups } from "../rx/groups";
 import { salesByPerson } from "../kpis/invoices";
 import { HOSPITAL } from "../scores/recipes";
 import { measure } from "../scores/service";
+import { hqOf } from "../team/hq-name";
 import { teamSeats } from "../team/service";
 import type { Collections, Huddle, HuddleInput, Me, Pulse, TeamHuddle } from "../types";
 
@@ -168,18 +169,23 @@ export async function collections(db: Database, me: Me): Promise<Collections> {
     ? sql`(with recursive t as (select id from person where id = ${me.id} union all select p.id from person p join t on p.reports_to = t.id) select id from t)`
     : sql`(select ${me.id}::bigint)`;
   // Unpaid invoices: the CRM's own, and Zoho's still open when Zoho was closed (the books), whose
-  // seller is whoever holds the seat of the customer's area now.
-  const found = await rows<Collections["rows"][number]>(
+  // seller is whoever holds the seat of the customer's area now. Each with the HQ it was sold from
+  // (Aryan's phase 5, PLAN 266): the order's seat's territory; a Zoho invoice's, its customer's; a
+  // lead's own seat is no HQ (a lead shows by name, as on the team's pages).
+  const found = await rows<Omit<Collections["rows"][number], "flag" | "hq"> & { area: string | null }>(
     db,
     sql`with inv as (
         select i.customer_id, i.code, '/orders/' || o.id as href, o.id::int as order_id, i.issued_on, i.due_on, (i.total - i.paid)::bigint as owed,
-          (select p.name from person p where p.id = o.medrep_id) as seller
+          (select p.name from person p where p.id = o.medrep_id) as seller,
+          (select a.name from seat s join area a on a.id = s.area_id where s.id = o.seat_id and not s.lead) as area
         from invoice i join sales_order o on o.id = i.order_id
         where i.status = 'open' and i.total > i.paid and not (i.terms = 'cod' and o.status <> 'completed') and ${whose}
         union all
         select d.customer_id, d.number, '/books/invoices/' || d.id, null::int, d.doc_date, d.due_date, round(d.balance * d.fx_rate)::bigint,
           coalesce((select p.name from seat s join seat_holder h on h.seat_id = s.id and h.ends_on is null and h.kind = 'holder' join person p on p.id = h.person_id
-            where s.area_id = c.area_id order by h.starts_on desc limit 1), d.fields->>'salesperson_name', d.fields->>'Sales Person')
+            where s.area_id = c.area_id order by h.starts_on desc limit 1), d.fields->>'salesperson_name', d.fields->>'Sales Person'),
+          (select a.name from area a where a.id = c.area_id
+            and not exists (select 1 from seat s where s.area_id = a.id and s.active and s.lead))
         from book_doc d join customer c on c.id = d.customer_id
         where d.kind = 'invoice' and d.zoho_id is not null and d.balance > 0 and d.status not in ('void', 'draft')
           and ${
@@ -200,13 +206,14 @@ export async function collections(db: Database, me: Me): Promise<Collections> {
         to_char(min(inv.issued_on), 'YYYY-MM-DD') as "oldestOn",
         (${today}::date - min(inv.issued_on))::int as age,
         coalesce(max(${today}::date - inv.due_on) filter (where inv.due_on < ${today}::date), 0)::int as "daysLate",
-        (array_agg(inv.seller order by inv.issued_on, inv.code))[1] as seller
+        (array_agg(inv.seller order by inv.issued_on, inv.code))[1] as seller,
+        (array_agg(inv.area order by inv.issued_on, inv.code))[1] as area
       from inv join customer c on c.id = inv.customer_id
       group by c.id, c.name, c.kind, c.phone
       order by min(inv.issued_on), sum(inv.owed) desc limit 300`,
   );
   const flag = (age: number): Collections["rows"][number]["flag"] => (age >= 90 ? "d90" : age >= 75 ? "d75" : age >= 60 ? "d60" : "ok");
-  const withFlags = found.map((row) => ({ ...row, flag: flag(row.age) }));
+  const withFlags = found.map(({ area, ...row }) => ({ ...row, hq: area ? hqOf(area, row.seller) : null, flag: flag(row.age) }));
   const sum = (key: Collections["rows"][number]["flag"]) => withFlags.filter((row) => row.flag === key).reduce((total, row) => total + row.owed, 0);
   return {
     today,

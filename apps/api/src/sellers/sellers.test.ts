@@ -51,6 +51,24 @@ describe("a Hospital CHC's day", () => {
     for (const row of mine.rows) expect(row.flag).toBe(row.age >= 90 ? "d90" : row.age >= 75 ? "d75" : row.age >= 60 ? "d60" : "ok");
     expect(mine.buckets.reduce((sum, one) => sum + one.amount, 0)).toBe(mine.total);
     expect((await get("sarla", "/api/my/collections")).status).toBe(403);
+    // A lead sees each customer's HQ, then who sold it (Aryan's phase 5, PLAN 266): Ryan's is Pasay
+    // (his territory "HOS | Pasay"), never the territory's whole name.
+    // A customer of Ryan's territory still owes on an invoice from Zoho's time.
+    const [owing] = await rows<{ id: number }>(
+      db,
+      sql`insert into customer (name, kind, area_id, added_by)
+        select 'Hq Test Clinic', 'hospital', s.area_id, p.id from seat s join seat_holder h on h.seat_id = s.id and h.ends_on is null
+          join person p on p.id = h.person_id where p.email = 'ryan@2mg.test' limit 1
+        returning id::int as id`,
+    );
+    await db.execute(
+      sql`insert into book_doc (kind, zoho_id, number, doc_date, due_date, status, customer_id, total, balance)
+        values ('invoice', 'z-hq-test', 'INV-HQ-TEST', current_date - 20, current_date - 5, 'overdue', ${owing?.id}, 500000, 500000)`,
+    );
+    const team = (await (await get("daniel", "/api/my/collections")).json()) as Collections;
+    const ryans = team.rows.filter((one) => one.seller === "Ryan");
+    expect(ryans.length).toBeGreaterThan(0);
+    for (const row of ryans) expect(row.hq).toBe("Pasay");
   });
 
   it("the 7 PM huddle: prefilled, a blocker when no invoice, and the coach reads it", async () => {

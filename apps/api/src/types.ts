@@ -5968,6 +5968,9 @@ export type Collections = {
     /** Days past the latest due date passed. */
     daysLate: number;
     seller: string | null;
+    /** The HQ it was sold from (TAFT, ON SITE): the order's seat's; a Zoho invoice's, its
+     *  customer's (PLAN 266). None for a lead's own sale. */
+    hq: string | null;
     flag: "ok" | "d60" | "d75" | "d90";
   }[];
   scope: string;
