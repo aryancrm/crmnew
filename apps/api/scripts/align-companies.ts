@@ -10,8 +10,9 @@
 // - A GPI employee in 2MG's tree gets the same team and seat in Getmeds (its boxes made there as 2MG
 //   has them), and leaves 2MG's (the seat stays, vacant; their history stays in 2MG).
 // - Everyone of the sheet not in the tree: added in their company's top box, "To be placed (HR)".
-// - Each signs in with the work email HR has for them, whatever its domain (sign-in finds the
-//   company that has it), until it is changed; an email two people share stays the first one's.
+// - Each signs in with their Zoho email as HR lists it (else the company email), whatever its domain
+//   (sign-in finds the company that has it), until it is changed; an email two people share stays
+//   the first one's.
 // - With ALL_PASSWORD: every active person of both companies gets that password, not asked to change
 //   it (27 Nov: "the same password for all for now; we change them later"). Never written here.
 // - The data checks (Admin panel → Data checks) of each company, before, and after when applied.
@@ -108,7 +109,8 @@ for (const one of list.all()) {
 }
 
 // ---- HR's master data ----
-type SheetPerson = { id: string; employer: "2mg" | "gpi"; first: string; last: string; name: string; full: string; emails: string[] };
+/** `emails`: the Zoho email first (27 Nov: "use their Zoho emails, not the company email"), then the company email. */
+type SheetPerson = { id: string; employer: "2mg" | "gpi"; first: string; last: string; name: string; full: string; emails: string[]; zoho: string[] };
 /** A CSV line's cells (quotes as Excel writes them). */
 const csvCells = (line: string) => {
   const out: string[] = [];
@@ -146,11 +148,14 @@ const people: SheetPerson[] = cells
     const full = row[col("COMPLETE NAME OF EMPLOYEE")] ?? "";
     // "Last, First M.": its first name too (the FIRST NAME column has "EM" for Melanie).
     const fromFull = full.split(",")[1]?.replace(/\s[A-Z]\.\s*$/, "").trim() ?? "";
-    const emails = [row[col("COMPANY EMAIL")], row[col("ZOHO EMAIL")]]
-      .flatMap((one) => (one ?? "").split(/[/,;]| or /))
-      .map((one) => one.trim().toLowerCase())
-      .filter((one) => /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/.test(one));
-    return { id, employer: id.startsWith("GPI") ? "gpi" : "2mg", first: `${first} ${fromFull}`, last, name: `${first} ${last}`, full, emails: [...new Set(emails)] };
+    const listed = (cell: string | undefined) =>
+      (cell ?? "")
+        .split(/[/,;]| or /)
+        .map((one) => one.trim().toLowerCase())
+        .filter((one) => /^[^\s@]+@[^\s@]+\.[a-z]{2,}$/.test(one));
+    const zoho = listed(row[col("ZOHO EMAIL")]);
+    const emails = [...new Set([...zoho, ...listed(row[col("COMPANY EMAIL")])])];
+    return { id, employer: id.startsWith("GPI") ? "gpi" : "2mg", first: `${first} ${fromFull}`, last, name: `${first} ${last}`, full, emails, zoho };
   });
 console.log(`\nHR's sheet: ${people.length} people (${people.filter((one) => one.employer === "2mg").length} 2MG, ${people.filter((one) => one.employer === "gpi").length} GPI)`);
 
@@ -256,10 +261,12 @@ for (const one of list.all())
   ))
     used.set(row.email, row.code ?? "admin");
 
-/** The work email HR has for them, kept as it is whatever its domain: the one on their company's
- *  domain when HR lists two, else the first; none when it is someone else's already. */
+/** Their Zoho email as HR lists it (27 Nov: "use their Zoho emails, not the company email"), kept as
+ *  it is whatever its domain: of two, the one on their company's domain; with no Zoho email, the
+ *  company email; none when it is someone else's already. */
 function workEmail(person: SheetPerson, domain: string, current: string | null): string | null {
-  const email = person.emails.find((one) => one.endsWith(`@${domain}`)) ?? person.emails[0] ?? null;
+  const from = person.zoho.length ? person.zoho : person.emails;
+  const email = from.find((one) => one.endsWith(`@${domain}`)) ?? from[0] ?? null;
   if (!email || email === current) return null;
   const owner = used.get(email);
   if (owner && owner !== person.id) {
