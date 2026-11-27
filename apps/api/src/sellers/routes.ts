@@ -16,7 +16,8 @@ export function sellerRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
   app.get("/api/team/district", async (c) => c.json(await district(db, c.get("me"))));
 
   app.get("/api/my/pulse", async (c) => c.json(await pulse(db, c.get("me"))));
-  app.get("/api/my/collections", async (c) => c.json(await collections(db, c.get("me"))));
+  // The oldest 300 listed, every one with ?all=1; the total and the boxes always count them all.
+  app.get("/api/my/collections", async (c) => c.json(await collections(db, c.get("me"), { all: c.req.query("all") === "1" })));
   app.get("/api/huddle", async (c) => c.json(await myHuddle(db, c.get("me"))));
   app.get("/api/huddle/team", async (c) => c.json(await teamHuddle(db, c.get("me"), { day: c.req.query("day") })));
   app.post("/api/huddle", async (c) => {

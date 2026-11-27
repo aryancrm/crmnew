@@ -5948,7 +5948,9 @@ export type Pulse = {
 /** Money to collect, customer by customer, by the age of the oldest unpaid invoice. */
 export type Collections = {
   today: string;
+  /** Every owing customer's: the total, how many owe (the list may show only the oldest 300). */
   total: number;
+  customers: number;
   buckets: { key: "ok" | "d60" | "d75" | "d90"; label: string; amount: number }[];
   rows: {
     customerId: number;

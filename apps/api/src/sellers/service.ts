@@ -153,7 +153,12 @@ export async function pulse(db: Database, me: Me): Promise<Pulse> {
 
 /** Money to collect, hospital by hospital: what each owes, its oldest unpaid invoice and its age
  *  from the invoice day, flagged at 60, 75 and 90 days. A lead sees the team's. */
-export async function collections(db: Database, me: Me): Promise<Collections> {
+/** How many owing customers the list shows unless all are asked: the oldest, the most urgent. The
+ *  total, the age boxes and the count are always every customer's (Aryan, 28 Nov: "Yes, fix it": the
+ *  list stopped at 300 and the total with it, leaving the newest unpaid invoices out; PLAN 267). */
+const LISTED = 300;
+
+export async function collections(db: Database, me: Me, asked: { all?: boolean } = {}): Promise<Collections> {
   if (![...SELLERS, ...LEADS, "ceo", "admin", "finance"].includes(me.role))
     throw new Refusal(403, "not_allowed", "Collections is the sellers' and their heads' list.");
   const today = todayManila();
@@ -210,7 +215,7 @@ export async function collections(db: Database, me: Me): Promise<Collections> {
         (array_agg(inv.area order by inv.issued_on, inv.code))[1] as area
       from inv join customer c on c.id = inv.customer_id
       group by c.id, c.name, c.kind, c.phone
-      order by min(inv.issued_on), sum(inv.owed) desc limit 300`,
+      order by min(inv.issued_on), sum(inv.owed) desc`,
   );
   const flag = (age: number): Collections["rows"][number]["flag"] => (age >= 90 ? "d90" : age >= 75 ? "d75" : age >= 60 ? "d60" : "ok");
   const withFlags = found.map(({ area, ...row }) => ({ ...row, hq: area ? hqOf(area, row.seller) : null, flag: flag(row.age) }));
@@ -218,13 +223,14 @@ export async function collections(db: Database, me: Me): Promise<Collections> {
   return {
     today,
     total: withFlags.reduce((total, row) => total + row.owed, 0),
+    customers: withFlags.length,
     buckets: [
       { key: "ok", label: "Under 60 days", amount: sum("ok") },
       { key: "d60", label: "60–74 days", amount: sum("d60") },
       { key: "d75", label: "75–89 days", amount: sum("d75") },
       { key: "d90", label: "90 days and over", amount: sum("d90") },
     ],
-    rows: withFlags,
+    rows: asked.all ? withFlags : withFlags.slice(0, LISTED),
     scope: me.unit
       ? `${(await rows<{ name: string }>(db, sql`select name from org_unit where id = ${me.unit}`))[0]?.name ?? "The team"}'s customers`
       : LEADS.includes(me.role)

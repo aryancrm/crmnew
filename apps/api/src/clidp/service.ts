@@ -80,7 +80,8 @@ export async function clidpDay(db: Database, me: Me): Promise<ClidpDay> {
   const [accounts, volume, owed] = await Promise.all([
     seatAreas(db, me.id, today).then((areas) => accountsOf(db, [me.id], areas, today)),
     volumeOf(db, me.id, today),
-    collections(db, me),
+    // Every owing account, so the biggest are found among them all (PLAN 267).
+    collections(db, me, { all: true }),
   ]);
   const listings = await listingsOf(db, accounts.map((one) => one.customerId), today);
   return {

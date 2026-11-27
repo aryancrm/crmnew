@@ -5,6 +5,7 @@
 import type { Collections } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { Phone } from "lucide-react";
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
@@ -28,7 +29,14 @@ export function CollectionsPage() {
   const me = useMe().data;
   const words = seatWords(me);
   const unit = useTeamUnit();
-  const query = useQuery({ queryKey: ["my", "collections", unit], queryFn: () => api<Collections>(withUnit("/api/my/collections", unit)) });
+  // The oldest 300 listed; every one on "Show all". The total and the boxes always count them all
+  // (Aryan, 28 Nov: "Yes, fix it", PLAN 267).
+  const [all, setAll] = useState(false);
+  const query = useQuery({
+    queryKey: ["my", "collections", unit, all],
+    queryFn: () => api<Collections>(withUnit(`/api/my/collections${all ? "?all=1" : ""}`, unit)),
+    placeholderData: (previous) => previous,
+  });
   const data = query.data;
   if (!data) return <PageState query={query} what="the money to collect" />;
   return (
@@ -40,7 +48,7 @@ export function CollectionsPage() {
             {data.scope === "My customers" ? words.myCustomers : data.scope}
           </span>
         }
-        sub={`${shortPeso(data.total)} owed by ${count(data.rows.length)} ${words.customers} · age counted from the oldest unpaid invoice`}
+        sub={`${shortPeso(data.total)} owed by ${count(data.customers)} customer${data.customers === 1 ? "" : "s"} · age counted from the oldest unpaid invoice`}
       />
       <div className="mb-4">
         <TeamSwitch />
@@ -136,6 +144,16 @@ export function CollectionsPage() {
             ))}
           </tbody>
         </table>
+        {data.rows.length < data.customers && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 px-4 py-3 text-[12.5px] text-slate-500">
+            <span>
+              The {count(data.rows.length)} oldest of {count(data.customers)} are listed; the total and the boxes above count every one.
+            </span>
+            <button type="button" onClick={() => setAll(true)} disabled={query.isFetching} className="font-semibold text-emerald-700 hover:underline disabled:opacity-50">
+              {query.isFetching ? "Reading…" : `Show all ${count(data.customers)}`}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

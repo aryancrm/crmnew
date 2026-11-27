@@ -128,3 +128,27 @@ describe("a Hospital CHC's day", () => {
     expect(evening.rows.map((row) => row.name)).not.toContain("Rey");
   });
 });
+
+// Run last: it adds 301 owing customers to Ryan's territory.
+describe("collections counts every customer who owes (28 Nov, PLAN 267)", () => {
+  it("lists the 300 oldest, every one when asked, and the total and the boxes always count them all", async () => {
+    await db.execute(
+      sql`with ryan as (select p.id, s.area_id from person p join seat_holder h on h.person_id = p.id and h.ends_on is null
+            join seat s on s.id = h.seat_id where p.email = 'ryan@2mg.test' limit 1),
+        made as (insert into customer (name, kind, area_id, added_by)
+          select 'Owing Patient ' || n, 'patient', ryan.area_id, ryan.id from ryan, generate_series(1, 301) n returning id)
+        insert into book_doc (kind, zoho_id, number, doc_date, due_date, status, customer_id, total, balance)
+        select 'invoice', 'z-owing-' || id, 'INV-OWING-' || id, current_date - 3, current_date + 27, 'sent', id, 10000, 10000 from made`,
+    );
+    const listed = (await (await get("ryan", "/api/my/collections")).json()) as Collections;
+    expect(listed.customers).toBeGreaterThan(300);
+    expect(listed.rows.length).toBe(300);
+    const every = (await (await get("ryan", "/api/my/collections?all=1")).json()) as Collections;
+    expect(every.rows.length).toBe(every.customers);
+    expect(every.total).toBe(listed.total);
+    expect(every.rows.reduce((sum, one) => sum + one.owed, 0)).toBe(listed.total);
+    expect(listed.buckets.reduce((sum, one) => sum + one.amount, 0)).toBe(listed.total);
+    // The newest are in the total even when the list stops before them.
+    expect(listed.buckets.find((one) => one.key === "ok")?.amount).toBeGreaterThanOrEqual(301 * 10000);
+  });
+});
