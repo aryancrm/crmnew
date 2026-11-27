@@ -72,7 +72,7 @@ export function TeamScoresPage() {
                   ) : (
                     <span className="font-semibold text-slate-400">Empty seat</span>
                   )}
-                  {/* The area as the Home says it, once (27 Nov): "NCR 1 · Uro & Onco Care". */}
+                  {/* The area as the Home says it, once (27 Nov): "NCL · RX Business". */}
                   <div className="text-[11.5px] text-slate-500">{[...new Set([whereOf(row), row.unit].filter(Boolean))].join(" · ")}</div>
                 </td>
                 <td className="px-3 py-2.5 text-right">
