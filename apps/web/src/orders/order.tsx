@@ -771,6 +771,15 @@ export function Order() {
                   {order.customer}
                 </Link>
                 <span className="text-sm">{order.customerKind[0]?.toUpperCase() + order.customerKind.slice(1)}</span>
+                {/* A business's own number, as a patient's phone tells them apart (27 Nov). */}
+                {order.customerKind !== "patient" && order.customerCode && (
+                  <span
+                    className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 text-xs font-semibold text-slate-600 tabular-nums"
+                    title="The customer's own number: no other customer has it"
+                  >
+                    {order.customerCode}
+                  </span>
+                )}
                 {order.via && (
                   <Link
                     to={`/leads/${order.leadId}`}

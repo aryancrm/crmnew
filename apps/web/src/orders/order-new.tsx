@@ -1482,6 +1482,8 @@ export function OrderNew({
                 </div>
                 <div className="text-[11px] text-slate-500">
                   {[
+                    // A business's own number tells two of the same name apart (27 Nov).
+                    picked.kind !== "patient" ? picked.code : null,
                     kindLabel,
                     picked.city,
                     picked.lastOrderOn
@@ -1777,6 +1779,7 @@ export function OrderNew({
                       </span>
                       <span className="block truncate text-[11px] text-slate-500">
                         {[
+                          row.kind !== "patient" ? row.code : null,
                           customers.data?.kinds.find((kind) => kind.key === row.kind)?.label,
                           row.city,
                           row.phone,

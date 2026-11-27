@@ -497,11 +497,14 @@ export function CustomerOrders({ orderId }: { orderId: number }) {
           <ChevronDown
             className={`size-4 shrink-0 text-slate-400 transition-transform ${shown ? "rotate-180" : ""}`}
           />
+          {/* Who they are: a patient by their mobile number, a business by its own number
+              (CUS-00012, Aryan 27 Nov: "give hospitals and drugstores a unique number too"). */}
           <span className="shrink-0 font-semibold text-slate-900">
-            {number ? `Orders on ${number}` : `Orders of ${history.customer}`}
+            {number ? `Orders on ${number}` : history.code ? `Orders on ${history.code}` : `Orders of ${history.customer}`}
           </span>
           <span className="min-w-0 truncate text-xs text-slate-500">
             {[
+              !number && history.code ? history.customer : "",
               `${history.ordersTotal} ${history.ordersTotal === 1 ? "order" : "orders"}`,
               latest && !shown ? `latest ${latest.code} · ${peso(latest.total)} · ${latest.statusLabel}` : "",
             ]

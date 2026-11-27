@@ -3,12 +3,25 @@
 import type { OrderDetail } from "@2mg/api/types";
 import { useState } from "react";
 import { count, peso, timeLabel } from "../../ui";
+import { type MoneyLine, MoneySummary } from "../money";
+
+/** An order's lines as the Money card adds them up: a line with no list price (a cold box,
+ *  priced by hand) counts at its own price, so it is never read as given above the list. */
+export const moneyLinesOf = (data: OrderDetail): MoneyLine[] =>
+  data.items.map((item) => ({
+    qty: item.qty,
+    listPrice: item.listPrice > 0 ? item.listPrice : item.unitPrice,
+    amount: item.amount,
+    free: item.free,
+    relief: item.relief,
+  }));
 
 // ---------------------------------------------------------------- side
 
 /** The order's money, plainly (Aryan, 19 Nov: "show the money section properly"): each medicine
- *  whole (its name, pieces × price, free goods marked), the total, then the bill: its number, when
- *  it is due, what came in and what is still owed. */
+ *  whole (its name, pieces × price, free goods marked); then, as the old CRM's card (27 Nov), what
+ *  it comes to at the list price, what came off (below the list, senior / PWD, free goods), the
+ *  total; then the bill: its number, when it is due, what came in and what is still owed. */
 export function MoneyCard({ data }: { data: OrderDetail }) {
   const { order } = data;
   const invoice = data.money.invoice;
@@ -43,22 +56,14 @@ export function MoneyCard({ data }: { data: OrderDetail }) {
         ))}
       </ul>
       <dl className="flex flex-col gap-1 border-t border-slate-100 bg-slate-50/60 px-3.5 py-2.5 text-sm">
-        {order.deliveryFee > 0 && (
+        <MoneySummary lines={moneyLinesOf(data)} deliveryFee={order.deliveryFee} totalLabel="Order total" />
+        {order.glAmount !== null && (
+          // What the guarantee letter grants: the agency pays it (often later, often less).
           <div className={row}>
-            <dt className="text-slate-600">Medicines</dt>
-            <dd className="tabular-nums">{peso(goods)}</dd>
+            <dt className="text-slate-600">Letter covers</dt>
+            <dd className="tabular-nums text-violet-800">{peso(order.glAmount)}</dd>
           </div>
         )}
-        {order.deliveryFee > 0 && (
-          <div className={row}>
-            <dt className="text-slate-600">Delivery fee</dt>
-            <dd className="tabular-nums">{peso(order.deliveryFee)}</dd>
-          </div>
-        )}
-        <div className={`${row} text-sm font-semibold text-slate-900`}>
-          <dt>Order total</dt>
-          <dd className="tabular-nums">{peso(goods + order.deliveryFee)}</dd>
-        </div>
         {order.pointsUsed > 0 && (
           <div className={`${row} text-emerald-700`}>
             <dt>{order.pointsUsed.toLocaleString("en-PH")} points</dt>

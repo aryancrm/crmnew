@@ -1336,6 +1336,9 @@ export type OrderAction =
 export type OrderDetail = {
   order: OrderRow & {
     customerKind: CustomerKind;
+    /** The customer's own number (CUS-00012): what tells a hospital, a drugstore or a pharmacy
+     *  apart, as the mobile number tells a patient (every customer has one since 26 Nov). */
+    customerCode: string | null;
     customerCity: string | null;
     customerReview: "ok" | "to_review";
     /** Who the customer is, shown on Management's check of a new one: phone, who added it, the day. */
@@ -2898,6 +2901,8 @@ export type OrderHistory = {
   number: string | null;
   customerId: number;
   customer: string;
+  /** The customer's own number (CUS-00012), which tells a business apart as the phone does a patient. */
+  code: string | null;
   orders: CaseHistory["orders"];
   ordersTotal: number;
 };

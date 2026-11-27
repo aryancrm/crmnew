@@ -70,6 +70,8 @@ describe("the customer's orders on an order's page", () => {
     const his = await history("ryan", second);
     expect(his.number).toBeNull();
     expect(his.customer).toBe("History Test Hospital");
+    // A business is told apart by its own number, as a patient by the phone.
+    expect(his.code).toMatch(/^CUS-\d{5}$/);
     expect(his.orders.map((one) => one.id)).toEqual([second, first]);
     expect(his.ordersTotal).toBe(2);
     expect(his.orders[0]?.statusLabel).toBeTruthy();

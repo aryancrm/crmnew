@@ -103,11 +103,11 @@ export function roadStepLabel(lead: {
 }
 
 /**
- * Where a saved `road_step` sits on the screens: the case's rail (1 Enquiry &
- * quotation, 2 Rx & documents, 3 Order & delivery, 4 Payment / Claim &
- * payment; -1 lost) and the journey chart's stop. "verification" is the fork
- * stop the journey resolves by road (Rx, ID and papers, or the agency
- * application). `ordered` stands at "pickup" (Delivered); the journey puts
+ * Where a saved `road_step` sits on the screens: the case's rail (1 Rx &
+ * documents, 2 Enquiry & quotation, 3 Order & delivery, 4 Payment / Claim &
+ * payment; -1 lost: the papers first, Aryan 27 Nov) and the journey chart's
+ * stop. "verification" is the papers stop the journey resolves by road (the
+ * Rx, or the senior / PWD ID and Rx), or the stop after it once they are in. `ordered` stands at "pickup" (Delivered); the journey puts
  * it at "packed" while the order isn't packed (nor shipped) yet. After
  * delivery the GL road walks Photo sent → Claim → Paid:
  * `claim` stands at "photo" (the journey moves it to "claim" once the photo
@@ -117,19 +117,19 @@ export function roadStepLabel(lead: {
 export type RoadStepPosition = { tab: 0 | 1 | 2 | 3 | 4 | -1; stop: string | null };
 
 const POSITIONS: Record<string, RoadStepPosition> = {
-  new: { tab: 2, stop: "enquiry" },
+  new: { tab: 1, stop: "enquiry" },
   replied: { tab: 2, stop: "quote" },
   // The prescription check is the active payment road's verification stop:
   // Senior / PWD also needs its ID here, not the Regular road's Rx-only stop.
-  rx_wait: { tab: 2, stop: "verification" },
-  rx_check: { tab: 2, stop: "verification" },
-  rx_ok: { tab: 1, stop: "quote" },
+  rx_wait: { tab: 1, stop: "verification" },
+  rx_check: { tab: 1, stop: "verification" },
+  rx_ok: { tab: 2, stop: "quote" },
   quoted: { tab: 2, stop: "verification" },
-  docs: { tab: 2, stop: "verification" },
-  papers: { tab: 2, stop: "verification" },
-  apply: { tab: 1, stop: "apply" },
-  waiting: { tab: 1, stop: "verified" },
-  verify: { tab: 1, stop: "verified" },
+  docs: { tab: 1, stop: "verification" },
+  papers: { tab: 1, stop: "verification" },
+  apply: { tab: 2, stop: "apply" },
+  waiting: { tab: 2, stop: "verified" },
+  verify: { tab: 2, stop: "verified" },
   ready: { tab: 3, stop: "order" },
   ordered: { tab: 3, stop: "pickup" },
   invoice: { tab: 4, stop: "paid" },
@@ -306,6 +306,10 @@ const CLAIMED = ["billed", "paid", "disputed", "closed"];
  * The case's journey: every stop the chart draws, in the order it draws them,
  * done or not from the saved records, and the one current stop from the saved
  * `road_step` (never guessed from what exists). A lost case has none current.
+ * The papers come first (Aryan, 27 Nov: "the documents are checked first of
+ * all"): the enquiry, then the prescription (and the senior / PWD ID on that
+ * road), then the quotation; a guarantee letter's application and letter after
+ * the quotation, which rides with the application.
  */
 export function journeyStops({ lead, rx, gl, order, approved }: JourneyFacts): JourneyStop[] {
   const kinds = new Set(approved);
@@ -346,17 +350,18 @@ export function journeyStops({ lead, rx, gl, order, approved }: JourneyFacts): J
   });
   const stops: JourneyStop[] = [
     stop("enquiry", START_LABEL[caseType] ?? "Inquiry", talked),
-    stop("talk", "Quotation in progress", talked),
-    stop("quote", quoteSent ? "Quotation sent" : quoted ? "Quotation saved" : "Quotation", quoted),
-    // "Applied" once the application is on record; until then, still to do.
-    stop("apply", gl ? "Applied" : "Application", road === "gl" && Boolean(gl), road === "gl"),
+    // The prescription on the regular road and a guarantee letter's (the agency asks for it too).
+    stop("rx", "Rx verification", rxDone, road !== "discount"),
     stop(
       "docs",
       `Senior / PWD ID${rxNotNeeded ? "" : " & Rx"}`,
       road === "discount" && docsApproved && rxDone,
       road === "discount",
     ),
-    stop("rx", "Rx verification", rxDone, road === "regular"),
+    stop("talk", "Quotation in progress", talked),
+    stop("quote", quoteSent ? "Quotation sent" : quoted ? "Quotation saved" : "Quotation", quoted),
+    // "Applied" once the application is on record; until then, still to do.
+    stop("apply", gl ? "Applied" : "Application", road === "gl" && Boolean(gl), road === "gl"),
     stop("verified", "Letter approved", glDone, road === "gl"),
     stop("order", "Order", Boolean(order) && oState !== "cancelled"),
     stop("packed", "Packed", packed),
@@ -370,8 +375,16 @@ export function journeyStops({ lead, rx, gl, order, approved }: JourneyFacts): J
 
   // The current stop: the one the saved road step stands at, on this road.
   const roadStep = String(lead.road_step || s);
-  const verification = road === "discount" ? "docs" : road === "gl" ? "apply" : "rx";
   const at = (key: string) => stops.find((x) => x.key === key);
+  // The papers stop on this road; once its papers are in, the stop after the quotation the case
+  // waits at (a letter's application or the letter, else the order).
+  const papersStop = road === "discount" ? "docs" : "rx";
+  const verification =
+    at(papersStop)?.state !== "done"
+      ? papersStop
+      : road === "gl"
+        ? (["apply", "verified"].find((k) => at(k)?.state !== "done") ?? "order")
+        : "order";
   const { stop: position } = roadStepPosition(roadStep, s);
   const current =
     // The claim step: the photo first, the claim once the photo went to the agency.
@@ -386,11 +399,7 @@ export function journeyStops({ lead, rx, gl, order, approved }: JourneyFacts): J
           : "packed"
         : position !== "verification"
           ? position
-          : // The GL road has no Rx stop of its own: a GL case still waiting on its
-            // prescription stands at the first agency stop it hasn't finished.
-            road === "gl" && (roadStep === "rx_wait" || roadStep === "rx_check")
-            ? (["apply", "verified"].find((k) => at(k)?.state !== "done") ?? "verified")
-            : verification;
+          : verification;
   const now = current ? at(current) : undefined;
   if (now && now.state !== "done") now.state = "current";
   return stops;

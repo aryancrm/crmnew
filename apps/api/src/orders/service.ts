@@ -160,9 +160,9 @@ export async function mayReadOrder(db: Database, me: Me, orderId: number): Promi
  *  page; names are never matched). Newest first, and only the orders this person may open. */
 export async function orderHistory(db: Database, me: Me, id: number): Promise<OrderHistory> {
   await visibleOrder(db, me, id);
-  const [base] = await rows<{ customerId: number; customer: string; number: string | null }>(
+  const [base] = await rows<{ customerId: number; customer: string; code: string | null; number: string | null }>(
     db,
-    sql`select o.customer_id::int as "customerId", c.name as customer,
+    sql`select o.customer_id::int as "customerId", c.name as customer, c.code,
         coalesce(l.phone_key, case when c.kind = 'patient' then c.phone_key end) as number
       from sales_order o join customer c on c.id = o.customer_id left join lead l on l.id = o.lead_id
       where o.id = ${id}`,
@@ -196,6 +196,7 @@ export async function orderHistory(db: Database, me: Me, id: number): Promise<Or
     number: base.number,
     customerId: base.customerId,
     customer: base.customer,
+    code: base.code,
     orders: orders.map((order) => ({ ...order, statusLabel: STATUS_LABEL[order.status] })),
     ordersTotal: totals[0]?.n ?? 0,
   };
@@ -1377,7 +1378,7 @@ export async function orderDetail(db: Database, me: Me, id: number): Promise<Ord
     }
   >(
     db,
-    sql`${team(me)} select ${rowColumns}, ${caseColumns}, c.kind as "customerKind", c.city as "customerCity", c.review as "customerReview",
+    sql`${team(me)} select ${rowColumns}, ${caseColumns}, c.kind as "customerKind", c.code as "customerCode", c.city as "customerCity", c.review as "customerReview",
         -- Who the customer is, for Management's check of a new one (23 Nov): its phone, who added it and when.
         c.phone as "customerPhone", (select ap.name from person ap where ap.id = c.added_by) as "customerAddedBy",
         to_char(c.created_at at time zone 'Asia/Manila', 'YYYY-MM-DD') as "customerAddedOn",
