@@ -3,6 +3,7 @@
 // by class, check-ins away from the clinic, and what they spent. A team lead's for the team (with
 // the plans and expenses waiting for them), the CEO's for everyone. A person opens their day.
 
+import { useHqNames } from "../team/hq-name";
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import type { FieldReport } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
@@ -34,6 +35,8 @@ export function FieldReportPage() {
   const to = params.get("to") ?? today;
   const sort = (params.get("sort") as Sort | null) ?? "done";
   const unit = useTeamUnit();
+  // Each person after their HQ (Aryan's phase 5, PLAN 269); found by it too.
+  const { named } = useHqNames();
   const query = useQuery({
     queryKey: ["field", "report", from, to, unit],
     queryFn: () => api<FieldReport>(withUnit(`/api/field/report?from=${from}&to=${to}`, unit)),
@@ -47,7 +50,7 @@ export function FieldReportPage() {
   const order = SORTS.find((one) => one.key === sort) ?? (SORTS[0] as (typeof SORTS)[number]);
   const words = q.trim().toLowerCase();
   const rows = data.people
-    .filter((one) => !words || `${one.name} ${one.team ?? ""}`.toLowerCase().includes(words))
+    .filter((one) => !words || `${named(one.personId, one.name)} ${one.team ?? ""}`.toLowerCase().includes(words))
     .sort(order.by);
   const setSort = (next: Sort) => {
     const out = new URLSearchParams(params);
@@ -88,7 +91,7 @@ export function FieldReportPage() {
                 to={`/visits/plan?person=${one.personId}&month=${data.month}`}
                 className="font-semibold underline-offset-2 hover:underline"
               >
-                {one.name}
+                {named(one.personId, one.name)}
               </Link>
             </span>
           ))}
@@ -193,7 +196,7 @@ export function FieldReportPage() {
                       to={`/visits?person=${one.personId}&day=${data.to}`}
                       className="font-semibold text-slate-900 hover:text-emerald-700"
                     >
-                      {one.name}
+                      {named(one.personId, one.name)}
                     </Link>
                     <div className="text-xs text-slate-500">
                       {[one.title, one.team].filter(Boolean).join(" · ")}

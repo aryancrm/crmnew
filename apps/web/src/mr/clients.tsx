@@ -33,6 +33,7 @@ import { api } from "../api";
 import { CustomerDialog } from "../customers/dialog";
 import { initials } from "../look";
 import { manilaToday } from "../team/range";
+import { useHqNames } from "../team/hq-name";
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { Button, CARD, Dialog, PageState, Problem, peso, useAction } from "../ui";
 import { AddVisitsDialog } from "./plan";
@@ -54,6 +55,8 @@ export function MrClientsPage() {
   const navigate = useNavigate();
   const mr = useMrMe();
   const unit = useTeamUnit();
+  // Whose customer, after their HQ (Aryan's phase 5, PLAN 269).
+  const { named } = useHqNames();
   const kind: ClientTab = (CLIENT_TABS as string[]).includes(params.get("kind") ?? "") ? (params.get("kind") as ClientTab) : "all";
   const scope = params.get("scope") ?? (mr.data?.access === "mr" ? "mine" : "team");
   const view = params.get("view");
@@ -205,7 +208,7 @@ export function MrClientsPage() {
                     <span className="block border-t border-slate-100 pt-2.5 text-[12px] text-slate-600">
                       {!one.patient && (
                         <span className="block">
-                          {one.assignedTo ? `${one.assignedTo.name} · ` : ""}
+                          {one.assignedTo ? `${named(one.assignedTo.id, one.assignedTo.name)} · ` : ""}
                           {one.lastVisit ? `last visit ${dayWords(one.lastVisit)}` : "never visited"}
                           {one.nextVisit ? ` · next ${dayWords(one.nextVisit)}` : ""}
                         </span>

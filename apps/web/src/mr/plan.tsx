@@ -15,6 +15,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { manilaToday } from "../team/range";
+import { useHqNames } from "../team/hq-name";
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { Button, CARD, Dialog, PageState, Problem, useAction } from "../ui";
 import { Ask, Choices, dayWords, FIELD, Label, MrHead, monthWords, shiftMonth, StatePill, useMrMe } from "./parts";
@@ -35,6 +36,8 @@ export function MrPlanPage() {
 function PlanCalendar({ person, month, onMonth }: { person: string | null; month: string | null; onMonth: (month: string) => void }) {
   const queries = useQueryClient();
   const action = useAction();
+  // Whose plan, after their HQ (Aryan's phase 5, PLAN 269).
+  const { named } = useHqNames();
   const query = useQuery({
     queryKey: ["mr", "plan", person, month],
     queryFn: () => api<PlanMonth>(`/api/mr/plan?${new URLSearchParams({ ...(person ? { person } : {}), ...(month ? { month } : {}) })}`),
@@ -64,7 +67,7 @@ function PlanCalendar({ person, month, onMonth }: { person: string | null; month
       <MrHead
         title="Tour plan calendar"
         back="/field"
-        sub={`${mine ? "" : `${data.person.name} · `}${status ? `${PLAN_WORDS[status]}${data.plan.revision ? ` · revision ${data.plan.revision}` : ""}` : "Not made yet"}`}
+        sub={`${mine ? "" : `${named(data.person.id, data.person.name)} · `}${status ? `${PLAN_WORDS[status]}${data.plan.revision ? ` · revision ${data.plan.revision}` : ""}` : "Not made yet"}`}
         actions={
           <span className="flex items-center gap-1">
             {/* The same plan seen by customer: how many visits each one's class asks for, and "Make my plan". */}
@@ -459,8 +462,9 @@ function DecideDialog({ data, approve, onClose }: { data: PlanMonth; approve: bo
   const navigate = useNavigate();
   const action = useAction();
   const [note, setNote] = useState("");
+  const { named } = useHqNames();
   return (
-    <Dialog title={approve ? "Approve the tour plan" : "Send the tour plan back"} sub={`${data.person.name} · ${monthWords(data.month)}`} onClose={onClose} busy={action.busy}>
+    <Dialog title={approve ? "Approve the tour plan" : "Send the tour plan back"} sub={`${named(data.person.id, data.person.name)} · ${monthWords(data.month)}`} onClose={onClose} busy={action.busy}>
       <div className="flex flex-col gap-3">
         <Label text={approve ? "A word (optional)" : "What to change *"} error={action.at("note")}>
           <input className={FIELD} value={note} onChange={(event) => setNote(event.target.value)} />
@@ -560,6 +564,8 @@ type TeamPlans = {
  *  the working days still missing); the team switch narrows it to a box. */
 function TeamPlans() {
   const unit = useTeamUnit();
+  // Each MedRep after their HQ (Aryan's phase 5, PLAN 269).
+  const { named } = useHqNames();
   const [month, setMonth] = useState(manilaToday().slice(0, 7));
   const query = useQuery({
     queryKey: ["mr", "plan", "team", month, unit],
@@ -581,7 +587,7 @@ function TeamPlans() {
           <li key={one.id}>
             <Link to={`/field/plan?person=${one.id}&month=${month}`} className={`${CARD} flex flex-wrap items-center justify-between gap-2 p-4 hover:border-sky-300`}>
               <span className="min-w-0">
-                <b>{one.name}</b>
+                <b>{named(one.id, one.name)}</b>
                 <span className="block text-xs text-slate-500">
                   Whole month tour plan: {one.missing.length ? "No" : "Yes"}
                   {one.missing.length ? ` · missing ${one.missing.map((day) => Number(day.slice(8))).join(", ")}` : ""}

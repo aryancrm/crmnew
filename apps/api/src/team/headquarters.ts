@@ -20,11 +20,11 @@ import { Refusal } from "../http";
 import { addDays, todayManila } from "../inventory/rules";
 import type { Runner } from "../inventory/service";
 import { invoicesSql } from "../kpis/invoices";
-import { ledUnits } from "../org/service";
+import { inForce, ledUnits } from "../org/service";
 import { doctorOrders } from "../rx/doctors";
 import { sheetName } from "../sales/target-sheet";
 import { STATUS_LABEL } from "../orders/rules";
-import type { DoctorHistory, Headquarters, HqDoctors, Me, OrderStatus } from "../types";
+import type { DoctorHistory, Headquarters, HqDoctors, Me, OrderStatus, TeamHqs } from "../types";
 import { hqOf } from "./hq-name";
 import { teamSeats } from "./service";
 
@@ -39,6 +39,32 @@ export async function hqBoxes(db: Runner, me: Me): Promise<number[] | null> {
   if (me.role === "ceo" || me.role === "admin") return null;
   if (me.role !== "manager") return [];
   return ledUnits(db, me);
+}
+
+/** Each person's HQ in the team in view (Aryan's phase 5, PLAN 269): the field pages put it before
+ *  the person's name. A lead's team (a head's; the CEO's and the Admin's whole company); anyone else
+ *  their own. A person in two selling seats: the first. */
+export async function teamHqs(db: Database, me: Me): Promise<TeamHqs> {
+  const today = todayManila();
+  const seats = LEADS.includes(me.role)
+    ? (await teamSeats(db, me, null)).seatIds
+    : (
+        await rows<{ id: number }>(
+          db,
+          sql`select h.seat_id::int as id from seat_holder h where h.person_id = ${me.id} and h.kind = 'holder' and ${inForce("h", today)}`,
+        )
+      ).map((one) => one.id);
+  if (!seats.length) return { people: [] };
+  const found = await rows<{ personId: number; area: string; person: string }>(
+    db,
+    sql`select distinct on (h.person_id) h.person_id::int as "personId", a.name as area, p.name as person
+      from seat s join area a on a.id = s.area_id
+        join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)}
+        join person p on p.id = h.person_id and p.active
+      where s.id in (${sql.join(seats.map((id) => sql`${id}`), sql`, `)}) and s.active and not s.lead
+      order by h.person_id, h.starts_on, h.id`,
+  );
+  return { people: found.map((one) => ({ personId: one.personId, hq: hqOf(one.area, one.person) })) };
 }
 
 export async function headquarters(db: Database, me: Me, asked: { month?: string | null }): Promise<Headquarters> {

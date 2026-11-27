@@ -14,6 +14,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { allItems, spaceFor } from "../menus";
+import { useHqNames } from "../team/hq-name";
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { CARD, PageState, Panel, peso } from "../ui";
 import { ActionSheet, clockOf, dayWords, MrHead, useMrMe } from "./parts";
@@ -92,6 +93,8 @@ export function TeamHome() {
     enabled: mr.data?.access === "lead" || mr.data?.access === "viewer",
   });
   const [picked, setPicked] = useState<TeamToday["people"][number] | null>(null);
+  // Each person after their HQ (Aryan's phase 5, PLAN 269): "TAFT · Marwin Dy".
+  const { named } = useHqNames();
   const data = query.data;
   if (!data) return <PageState query={query} what="the team" />;
   const t = data.totals;
@@ -133,7 +136,7 @@ export function TeamHome() {
               <li key={one.id}>
                 <button type="button" onClick={() => setPicked(one)} className="flex w-full items-start justify-between gap-3 px-4 py-3 text-left hover:bg-slate-50">
                   <span className="min-w-0">
-                    <span className="block font-semibold text-sky-800">{one.name}</span>
+                    <span className="block font-semibold text-sky-800">{named(one.id, one.name)}</span>
                     <span className="block text-xs text-slate-500">
                       {one.done} closed of {one.visits} visits{one.visits > one.planned ? ` (${one.visits - one.planned} added on the day)` : ""}
                       {one.missed ? ` · ${one.missed} missed` : ""}
@@ -181,7 +184,7 @@ export function TeamHome() {
                 <li key={one.id} className="flex items-center justify-between px-4 py-2 text-sm">
                   <span className="flex items-center gap-2">
                     {at === 0 ? <Trophy size={14} className="text-amber-500" /> : <span className="w-3.5 text-center text-xs text-slate-400">{at + 1}</span>}
-                    {one.name}
+                    {named(one.id, one.name)}
                   </span>
                   <span className="font-semibold text-slate-700">{one.closed}</span>
                 </li>
@@ -229,7 +232,7 @@ export function TeamHome() {
             {queue.data.judge.slice(0, 5).map((one) => (
               <li key={one.id}>
                 <Link to={`/visits/${one.id}`} className="block px-4 py-2.5 text-sm hover:bg-slate-50">
-                  <b>{one.client.name}</b> · {one.person.name} · {dayWords(one.day)}
+                  <b>{one.client.name}</b> · {named(one.person.id, one.person.name)} · {dayWords(one.day)}
                   {one.feedback ? <span className="text-slate-500"> · “{one.feedback}”</span> : null}
                 </Link>
               </li>
@@ -240,7 +243,7 @@ export function TeamHome() {
 
       {picked && (
         <ActionSheet
-          title={picked.name}
+          title={named(picked.id, picked.name)}
           sub={picked.started ? `${picked.workType ? WORK_WORDS[picked.workType] : ""} since ${clockOf(picked.started)}` : "Absent today"}
           onClose={() => setPicked(null)}
           actions={[

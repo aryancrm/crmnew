@@ -10,6 +10,7 @@ import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useHqNames } from "../team/hq-name";
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { Button, CARD, PageState, Tabs, peso } from "../ui";
 import { AddVisitsDialog } from "./plan";
@@ -26,6 +27,8 @@ export function MrVisitsPage() {
   const [state, setState] = useState<VisitState | "all">("all");
   const [adding, setAdding] = useState(false);
   const unit = useTeamUnit();
+  // Each person after their HQ (Aryan's phase 5, PLAN 269).
+  const { named } = useHqNames();
   const query = useQuery({
     queryKey: ["mr", "visits", kind, month, day, person, unit],
     queryFn: () =>
@@ -48,7 +51,7 @@ export function MrVisitsPage() {
     <div className={`mx-auto flex max-w-4xl flex-col gap-3 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
       <MrHead
         title="Visits"
-        sub={`${data.person ? data.person.name : "Everyone"} · ${data.month ? monthWords(data.month) : dayWords(thisDay)}`}
+        sub={`${data.person ? named(data.person.id, data.person.name) : "Everyone"} · ${data.month ? monthWords(data.month) : dayWords(thisDay)}`}
         actions={
           data.can.work && (
             <Button variant="primary" small onClick={() => setAdding(true)}>
@@ -95,7 +98,7 @@ export function MrVisitsPage() {
             <option value="">{mr.data?.access === "viewer" ? "Everyone" : "Mine"}</option>
             <option value="all">Everyone</option>
             {data.people.map((one) => (
-              <option key={one.id} value={one.id}>{one.name}</option>
+              <option key={one.id} value={one.id}>{named(one.id, one.name)}</option>
             ))}
           </select>
         )}
@@ -127,7 +130,7 @@ export function MrVisitsPage() {
                   <span className="shrink-0">{dayWords(one.day)}</span>
                 </span>
                 {(!data.person || data.person.id !== one.person.id) && (
-                  <span className="block text-xs text-slate-500">Emp name: {one.person.name}</span>
+                  <span className="block text-xs text-slate-500">Emp name: {named(one.person.id, one.person.name)}</span>
                 )}
                 {one.unplanned && <span className="mt-1 inline-block rounded bg-amber-100 px-1.5 text-[11px] font-semibold text-amber-800">Added on the day</span>}
                 {one.booked > 0 && <span className="mt-1 ml-1 inline-block rounded bg-emerald-100 px-1.5 text-[11px] font-semibold text-emerald-800">{peso(one.booked)} ordered</span>}

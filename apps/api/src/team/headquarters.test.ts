@@ -10,7 +10,7 @@ import { migrate } from "../db/migrate";
 import { seedDemoTeam } from "../orders/seed-team";
 import { seedRxTeam } from "../rx/seed";
 import { seedDemo } from "../seed";
-import type { DoctorHistory, Headquarters, HqDoctors, HqPeople } from "../types";
+import type { DoctorHistory, Headquarters, HqDoctors, HqPeople, TeamHqs } from "../types";
 import { hqOf } from "./headquarters";
 
 const PASSWORD = "test-password-1";
@@ -52,6 +52,19 @@ describe("headquarters", () => {
     // A second on-site HQ of a channel (PLAN 264), whoever works it or nobody.
     expect(hqOf("B2C | ON SITE | 2", null)).toBe("ON SITE");
     expect(hqOf("B2C | ON SITE", "Rachelle Upao")).toBe("ON SITE");
+  });
+
+  it("gives each person's HQ in the team in view, for the pages that name people (PLAN 269)", async () => {
+    const [joy] = await rows<{ id: number }>(db, sql`select id::int as id from person where email = 'joy@2mg.test'`);
+    const [kim] = await rows<{ id: number }>(db, sql`select id::int as id from person where email = 'kim@2mg.test'`);
+    // The head: every seller of the team, by their HQ; a lead's own seat is none.
+    const rosa = (await (await get("rosa", "/api/team/hqs")).json()) as TeamHqs;
+    expect(rosa.people.find((one) => one.personId === joy?.id)?.hq).toBe("Cebu");
+    expect(rosa.people.find((one) => one.personId === kim?.id)?.hq).toBe("Oncology");
+    expect(rosa.people.some((one) => one.hq === "")).toBe(false);
+    // A seller: their own only.
+    const own = (await (await get("joy", "/api/team/hqs")).json()) as TeamHqs;
+    expect(own.people).toEqual([{ personId: joy?.id, hq: "Cebu" }]);
   });
 
   it("shows a lead each HQ of the team with who works it and what it sold; a seller reads none", async () => {

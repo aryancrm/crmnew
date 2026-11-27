@@ -7,7 +7,7 @@ import { type Env, idParam, readBody } from "../http";
 import { teamAccounts } from "./accounts";
 import { teamBoard, territories } from "./service";
 import { orderWays } from "./ways";
-import { doctorHistory, headquarters, hqDoctors } from "./headquarters";
+import { doctorHistory, headquarters, hqDoctors, teamHqs } from "./headquarters";
 import { addHq, closeHq, hqPeople, renameHq, setHqPerson } from "./hq-change";
 
 const hqName = z.string({ error: "Name the HQ." }).trim().min(1, "Name the HQ.").max(40, "Keep the HQ's name under 40 characters.");
@@ -54,6 +54,9 @@ export function teamRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHan
     await closeHq(db, c.get("me"), idParam(c));
     return c.json({ ok: true });
   });
+  app.use("/api/team/hqs", signedIn);
+  // Each person's HQ in the team in view, for the pages that name people (28 Nov, PLAN 269).
+  app.get("/api/team/hqs", async (c) => c.json(await teamHqs(db, c.get("me"))));
   app.use("/api/team/ways", signedIn);
   // How the month's orders came: the doctor dispensing, the doctor's referral, and the rest (27 Nov).
   app.get("/api/team/ways", async (c) => c.json(await orderWays(db, c.get("me"), { month: c.req.query("month") })));

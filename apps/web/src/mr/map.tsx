@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { MapPin } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useHqNames } from "../team/hq-name";
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { CARD, PageState } from "../ui";
 import { clockOf, dayWords, MrHead, mapLink } from "./parts";
@@ -24,6 +25,8 @@ export function MrMapPage() {
   const [params] = useSearchParams();
   const person = params.get("person");
   const unit = useTeamUnit();
+  // Each person after their HQ (Aryan's phase 5, PLAN 269).
+  const { named } = useHqNames();
   const query = useQuery({
     queryKey: ["mr", "map", person, unit],
     queryFn: () => api<MapPeople>(withUnit(`/api/mr/map${person ? `?person=${person}` : ""}`, unit)),
@@ -39,7 +42,7 @@ export function MrMapPage() {
         return (
           <section key={one.id} className={`${CARD} p-4`}>
             <div className="flex items-center justify-between gap-2">
-              <b>{one.name}</b>
+              <b>{named(one.id, one.name)}</b>
               {last ? (
                 <a href={mapLink(last.place)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-sm font-semibold text-sky-700">
                   <MapPin size={14} /> Last: {clockOf(last.at)}

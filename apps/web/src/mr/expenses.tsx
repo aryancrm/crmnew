@@ -13,6 +13,7 @@ import { useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { manilaToday } from "../team/range";
+import { useHqNames } from "../team/hq-name";
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { Button, CARD, Dialog, PageState, Problem, peso, useAction } from "../ui";
 import { dayWords, FIELD, Label, MrHead, monthWords, shiftMonth } from "./parts";
@@ -27,6 +28,8 @@ export function MrExpensesPage() {
   const person = params.get("person");
   const waiting = params.get("waiting") === "1";
   const unit = useTeamUnit();
+  // Each person after their HQ (Aryan's phase 5, PLAN 269).
+  const { named } = useHqNames();
   const [head, setHead] = useState("");
   const [open, setOpen] = useState<{ what: "add" | "line" | "rates"; row?: ExpenseRow } | null>(null);
   const query = useQuery({
@@ -52,7 +55,7 @@ export function MrExpensesPage() {
     <div className={`mx-auto flex max-w-4xl flex-col gap-3 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
       <MrHead
         title={waiting ? "Expenses to approve" : "Expenses"}
-        sub={waiting ? `${data.rows.length} waiting${data.person ? ` · ${data.person.name}` : ""}` : data.person ? data.person.name : "Everyone"}
+        sub={waiting ? `${data.rows.length} waiting${data.person ? ` · ${named(data.person.id, data.person.name)}` : ""}` : data.person ? named(data.person.id, data.person.name) : "Everyone"}
         actions={
           <>
             {data.can.decide && !waiting && <Button small onClick={() => set({ waiting: "1", month: null })}>To approve</Button>}
@@ -81,7 +84,7 @@ export function MrExpensesPage() {
             <option value="">Mine</option>
             <option value="all">Everyone</option>
             {data.people.map((one) => (
-              <option key={one.id} value={one.id}>{one.name}</option>
+              <option key={one.id} value={one.id}>{named(one.id, one.name)}</option>
             ))}
           </select>
         )}
@@ -117,7 +120,7 @@ export function MrExpensesPage() {
                 <span className={`block truncate text-[11px] font-semibold ${one.status === "approved" ? "text-emerald-700" : one.status === "sent_back" ? "text-rose-700" : one.status === "pending" ? "text-amber-700" : "text-slate-400"}`}>
                   {EXPENSE_STATUS_WORDS[one.status]}
                   {one.auto ? ` · worked out ${peso(one.generated)}` : ""}
-                  {!data.person ? ` · ${one.person.name}` : ""}
+                  {!data.person ? ` · ${named(one.person.id, one.person.name)}` : ""}
                   {one.decisionNote ? ` · ${one.decisionNote}` : ""}
                 </span>
               </span>

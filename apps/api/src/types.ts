@@ -6236,6 +6236,9 @@ export type Headquarters = {
   today: number;
 };
 
+/** Each person's HQ in the team in view (28 Nov, PLAN 269): the pages that name people put it first. */
+export type TeamHqs = { people: { personId: number; hq: string }[] };
+
 /** Whom a head can put in an HQ (28 Nov, PLAN 264): the people working their HQs (with the HQ and
  *  team) and the sellers with no HQ now. */
 export type HqPeople = {

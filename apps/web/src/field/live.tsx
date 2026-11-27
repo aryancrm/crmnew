@@ -9,6 +9,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { EmptyState, NoResults } from "../no-results";
+import { useHqNames } from "../team/hq-name";
 import { CARD, PageHead, PageState } from "../ui";
 
 const ago = (iso: string | null) => {
@@ -26,12 +27,14 @@ export function FieldLivePage() {
     queryFn: () => api<LivePeople>("/api/field/where"),
     refetchInterval: 60_000,
   });
+  // Each person after their HQ (Aryan's phase 5, PLAN 269); found by it too.
+  const { named } = useHqNames();
   const [q, setQ] = useState("");
   const data = query.data;
   if (!data) return <PageState query={query} what="where the team is" />;
   const words = q.trim().toLowerCase();
   const rows = data.people
-    .filter((one) => !words || `${one.name} ${one.team ?? ""}`.toLowerCase().includes(words))
+    .filter((one) => !words || `${named(one.personId, one.name)} ${one.team ?? ""}`.toLowerCase().includes(words))
     .sort(
       (a, b) => Number(Boolean(b.place)) - Number(Boolean(a.place)) || a.name.localeCompare(b.name),
     );
@@ -62,7 +65,7 @@ export function FieldLivePage() {
                   to={`/visits?person=${one.personId}`}
                   className="font-semibold text-slate-900 hover:text-emerald-700"
                 >
-                  {one.name}
+                  {named(one.personId, one.name)}
                 </Link>
                 <div className="text-xs text-slate-500">{one.team ?? "No team"}</div>
               </div>
