@@ -165,6 +165,21 @@ describe("several companies on one server", () => {
     expect(((await (await send("/api/company", { cookie: "org=999999x" })).json()) as { company: { code: string } }).company.code).toBe("2MG");
   });
 
+  it("signs someone in to the company that has their email, whatever its domain (27 Nov)", async () => {
+    // A 2MG employee whose work email is on GetMeds' domain, and one on Gmail: both are 2MG's.
+    await main.execute(sql`update person set email = 'fiona.sales@getmeds.test' where email = 'fiona@2mg.test'`);
+    await main.execute(sql`update person set email = 'marco.2mg@gmail.com' where email = 'marco@2mg.test'`);
+    for (const email of ["fiona.sales@getmeds.test", "marco.2mg@gmail.com"]) {
+      const response = await login(email, PASSWORD, `org=${gm.ref.orgId}`);
+      expect(response.status, email).toBe(200);
+      expect(jar("", response)).toContain(`org=${list.home().ref.orgId}`);
+    }
+    // Nobody has it: the domain's own company answers, as before (a wrong login there).
+    expect((await login("nobody@getmeds.test", PASSWORD)).status).toBe(401);
+    await main.execute(sql`update person set email = 'fiona@2mg.test' where email = 'fiona.sales@getmeds.test'`);
+    await main.execute(sql`update person set email = 'marco@2mg.test' where email = 'marco.2mg@gmail.com'`);
+  });
+
   it("keeps a browser inside its company after signing out of a system, until it signs out of the company", async () => {
     // Aryan, 27 Nov: "signing out of Management should leave that app, not the company".
     type Answer = { inside: boolean; company: { code: string } };

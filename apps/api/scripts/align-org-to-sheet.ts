@@ -256,7 +256,9 @@ const bidLead = bidLeadNow && (await holderOf(bidLeadNow.id)) !== "Subir Dey" ? 
 const subirSeats = await seatsOf("Subir Dey");
 if (bidLead) {
   say(`Government Bidding: "${bidLead.title}" (${await holderOf(bidLead.id)}) is no longer its lead; the seat, its work and its tenders desk stay`);
-  if (apply) await updateSeat(db, me, bidLead.id, { lead: false });
+  // Written as it was on 19 Nov (live has it so): the seat keeps its work. Teams & people now refuses
+  // a lead's work on a seat that leads nothing (checkLeadWork), so the box's lead is unticked here.
+  if (apply) await db.execute(sql`update seat set lead = false where id = ${bidLead.id}`);
 }
 const bidSubir = await leadBy(bidBox, "Subir Dey", "Government Bidding Manager", "manager", bidLead?.id);
 if (bidSubir || !apply) await underTheBox([bidBox], subirSeats.filter((seat) => seat.id !== bidSubir?.id).map((seat) => seat.id));

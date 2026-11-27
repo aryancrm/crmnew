@@ -285,6 +285,18 @@ export async function openCompanies(options: {
     home: () => homeOne,
     byOrgId: (orgId: string | undefined | null) => (orgId && ORG_ID.test(orgId) && running.get(orgId)) || null,
     byDomain: (domain: string) => [...running.values()].find((one) => one.ref.loginDomain === domain) ?? null,
+    /** The company whose person signs in with this email, whatever its domain (27 Nov, the backend
+     *  developer: people keep the work email HR has for them, a 2MG employee's @getmeds.ph or Gmail,
+     *  until their email is changed). The domain's own company is asked first; a paused one too. */
+    async byLoginEmail(email: string): Promise<Running | null> {
+      const domain = email.slice(email.lastIndexOf("@") + 1);
+      const order = [...running.values()].sort((a, b) => Number(b.ref.loginDomain === domain) - Number(a.ref.loginDomain === domain));
+      for (const one of order) {
+        const [found] = await rows(one.db, sql`select 1 as one from person where lower(email) = ${email} and active limit 1`);
+        if (found) return one;
+      }
+      return null;
+    },
     /** Why a company on the list isn't answering, if it isn't. */
     brokenWhy: (orgId: string | undefined | null) => (orgId && broken.get(orgId)) || null,
     isBrokenDomain: async (domain: string) => {
