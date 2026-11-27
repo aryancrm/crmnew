@@ -11,6 +11,7 @@ import { Clock3, Hourglass, PackageCheck, Truck, Undo2, UserCheck, Wallet } from
 import type { ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState } from "../no-results";
 import { Lines, Ring } from "../team/charts";
 import { RangePicker, short } from "../team/range";
 import { PageState } from "../ui";
@@ -245,7 +246,9 @@ export function SpeedPage() {
           )}
         </div>
         {groups.length === 0 ? (
-          <p className="text-sm text-slate-500">No order moved on in these days.</p>
+          <EmptyState title="No order moved on in these days.">
+            Each person who did a step shows here, slowest first, against its limit.
+          </EmptyState>
         ) : (
           <div className="grid gap-6 lg:grid-cols-2">
             {groups.map((group) => {
@@ -384,7 +387,9 @@ export function SpeedPage() {
           On the road, by courier or rider
         </h2>
         {data.couriers.length === 0 ? (
-          <p className="text-sm text-slate-500">Nothing was delivered in these days.</p>
+          <EmptyState title="Nothing was delivered in these days.">
+            Each courier or rider shows here with how long their deliveries took.
+          </EmptyState>
         ) : (
           <ul className="grid gap-2.5">
             {data.couriers.map((one) => {

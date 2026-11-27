@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api";
 import { Button, CARD, PageState, Problem, useAction } from "../ui";
+import { EmptyState } from "../no-results";
 
 export function ApproversTab() {
   const query = useQuery({
@@ -23,7 +24,11 @@ export function ApproversTab() {
         no division is for those who approve everything.
       </p>
       {data.people.length === 0 ? (
-        <div className={`${CARD} p-5 text-sm text-slate-500`}>No one in Management yet.</div>
+        <div className={CARD}>
+          <EmptyState title="No one in Management yet.">
+            Each Management person shows here, with the divisions whose orders they approve.
+          </EmptyState>
+        </div>
       ) : (
         data.people.map((person) => (
           <ApproverRow key={person.id} person={person} divisions={data.divisions} />

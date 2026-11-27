@@ -15,7 +15,7 @@ import { api } from "../api";
 import { ME, useMe } from "../auth";
 import { useCompany, useInsideCompany } from "../companies";
 import { heroLogo } from "../portal/hero-logos";
-import { WORKSPACES } from "../workspaces";
+import { ALL_SYSTEMS } from "../workspaces";
 import { SignIn } from "./login";
 
 const GROUPS = [
@@ -106,12 +106,14 @@ export function ChooseSystem() {
                   <div key={group.id}>
                     <h2 className="text-[16px] font-semibold tracking-[-0.01em] text-[#16181d]">{group.label}</h2>
                     <ul className="mt-3 grid gap-2 sm:grid-cols-2">
-                      {WORKSPACES.filter((one) => one.group === group.id).map((one) => (
+                      {ALL_SYSTEMS.filter((one) => one.group === group.id).map((one) => (
                         <li key={one.key}>
                           <Link
-                            to={tileTo(one.key)}
+                            // A system on the way (WorkDrive, Digital Marketing): an empty link for now.
+                            to={one.soon ? "#" : tileTo(one.key)}
                             state={location.state}
                             onClick={(event) => {
+                              if (one.soon) return event.preventDefault();
                               // The company's ID signs out first; with nobody signed in, straight on.
                               if (!me.data) return;
                               event.preventDefault();

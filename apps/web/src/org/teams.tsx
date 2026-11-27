@@ -41,6 +41,7 @@ import {
 } from "./dialogs";
 import { lookAs } from "../shell";
 import { Button, CARD, PageHead, PageState, Problem, useAction } from "../ui";
+import { NoResults } from "../no-results";
 
 const KIND_WORD: Record<OrgUnit["kind"], string> = {
   company: "Company",
@@ -1046,7 +1047,9 @@ function Found({ tree, q, onPick }: { tree: OrgTree; q: string; onPick: (unit: O
           </li>
         ))}
         {hits.length === 0 && (
-          <li className="px-4 py-6 text-center text-sm text-slate-500">Nobody matches.</li>
+          <li>
+            <NoResults title="Nobody matches.">Check the spelling, or search for another name.</NoResults>
+          </li>
         )}
       </ul>
     </section>

@@ -8,6 +8,7 @@ import { Download, Printer, Search } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { timeLabel } from "../ui";
+import { EmptyState, NoResults } from "../no-results";
 
 const CARD = "rounded-xl border border-slate-200 bg-white";
 const TH = "px-3 py-2 text-left text-[11px] font-semibold tracking-wide text-slate-500 uppercase";
@@ -57,7 +58,9 @@ export function BatchTracePage() {
         </button>
       </form>
       {query.isError && <p className="text-sm text-rose-700">{(query.error as Error).message}</p>}
-      {batch && data && !data.batches.length && <p className="text-sm text-slate-500">No batch numbered like "{batch}".</p>}
+      {batch && data && !data.batches.length && (
+        <NoResults title={<>No batch numbered like "{batch}".</>}>Check the batch number and trace it again.</NoResults>
+      )}
       {data && data.batches.length > 0 && (
         <>
           <section className={`${CARD} p-4`}>
@@ -131,7 +134,7 @@ export function BatchTracePage() {
                   ))}
                 </tbody>
               </table>
-              {!data.customers.length && <p className="px-4 py-4 text-sm text-slate-500">No piece of it has gone to a customer.</p>}
+              {!data.customers.length && <EmptyState title="No piece of it has gone to a customer.">Every customer this batch reaches shows here, with how to reach them.</EmptyState>}
             </div>
           </section>
           <section className={`${CARD} print:hidden`}>

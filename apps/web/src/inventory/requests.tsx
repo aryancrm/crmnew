@@ -9,6 +9,7 @@ import { type FormEvent, useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { Button, count, Dialog, PageHead, PageState, timeLabel, useAction } from "../ui";
+import { EmptyState } from "../no-results";
 
 const FIELD =
   "h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 focus:outline-none";
@@ -311,10 +312,12 @@ export function MedicineRequestsPage() {
         ))}
       </div>
       {data.rows.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white px-5 py-8 text-center text-sm text-slate-500">
-          {show === "open"
-            ? "Nothing waiting: nobody asked for a medicine we don't have."
-            : "Nothing answered yet."}
+        <div className="rounded-2xl border border-slate-200 bg-white">
+          {show === "open" ? (
+            <EmptyState title="Nothing waiting">Nobody asked for a medicine we don't have.</EmptyState>
+          ) : (
+            <EmptyState title="Nothing answered yet.">Requests Inventory has answered show here.</EmptyState>
+          )}
         </div>
       ) : (
         <div className="grid gap-3 md:grid-cols-2">

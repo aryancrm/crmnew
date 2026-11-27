@@ -14,7 +14,6 @@ import {
   Building2,
   CalendarDays,
   CalendarRange,
-  Check,
   ChevronRight,
   ClipboardList,
   Coffee,
@@ -74,7 +73,7 @@ export function MrDay() {
   const c = data.counts;
   const left = c.open;
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4">
+    <div className="mx-auto flex max-w-screen-2xl flex-col gap-4">
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-sky-200 to-sky-50 px-4 pt-5 pb-8 text-center">
         <div className="flex items-center justify-between text-left">
           <div>
@@ -182,50 +181,60 @@ function MyDayCard() {
   const at = data.visits.find((one) => one.status === "planned" && one.checkedInAt);
   const open = data.visits.filter((one) => one.status === "planned" && !one.checkedInAt);
   const over = data.visits.filter((one) => one.status !== "planned");
-  const go = "inline-flex h-11 w-full items-center justify-center gap-2 rounded-[10px] bg-brand px-4 text-sm font-semibold text-white hover:bg-brand-dark sm:w-auto";
+  const go = "inline-flex h-9 w-full items-center justify-center gap-1.5 rounded-[9px] bg-white px-3.5 text-[13px] font-semibold text-[#c62828] shadow-sm hover:bg-[#fff1f1] sm:w-auto";
   let line: ReactNode;
   let next: ReactNode;
   if (!day) {
     line = (
       <>
-        <b className="text-slate-900">Your day hasn't started.</b>{" "}
+        <b className="font-medium text-white">Your day hasn't started.</b>{" "}
         {data.visits.length ? `${data.visits.length} visit${data.visits.length === 1 ? "" : "s"} planned for today.` : "Start, then pick whom you are going to see."}
       </>
     );
     next = (
       <button type="button" className={go} onClick={() => setStarting(true)}>
-        <MapPin size={16} /> Start working
+        Start working
       </button>
     );
   } else if (day.endedAt) {
-    line = <><b className="text-slate-900">Day closed {clockOf(day.endedAt)}.</b> {over.length} visit{over.length === 1 ? "" : "s"} done, the day report is sent.</>;
-    next = <Link to="/field/day-report" className="text-sm font-semibold text-sky-700 hover:underline">See the day report</Link>;
+    line = <><b className="font-medium text-white">Day closed {clockOf(day.endedAt)}.</b> {over.length} visit{over.length === 1 ? "" : "s"} done, the day report is sent.</>;
+    next = <Link to="/field/day-report" className={go}>See the day report</Link>;
   } else if (day.onBreak) {
-    line = <><b className="text-slate-900">On a break since {clockOf(day.breakSince)}.</b></>;
+    line = <><b className="font-medium text-white">On a break since {clockOf(day.breakSince)}.</b></>;
     next = <Link to="/field" className={go}>Back to work <ChevronRight size={16} /></Link>;
   } else if (at) {
-    line = <><b className="text-slate-900">You are at {at.client.name}</b> since {clockOf(at.checkedInAt)}.</>;
+    line = <><b className="font-medium text-white">You are at {at.client.name}</b> since {clockOf(at.checkedInAt)}.</>;
     next = <Link to={`/visits/${at.id}`} className={go}>Say what happened and close the call <ChevronRight size={16} /></Link>;
   } else if (open.length) {
-    line = <><b className="text-slate-900">Where are you going now?</b> {open.length} visit{open.length === 1 ? "" : "s"} left today, next {open[0]?.client.name}.</>;
+    line = <><b className="font-medium text-white">Where are you going now?</b> {open.length} visit{open.length === 1 ? "" : "s"} left today, next {open[0]?.client.name}.</>;
     next = <Link to="/field" className={go}>Open my day <ChevronRight size={16} /></Link>;
   } else if (over.length) {
-    line = <><b className="text-slate-900">Today's visits are done</b> ({over.length}). One more visit, or stop working and send the day report.</>;
+    line = <><b className="font-medium text-white">Today's visits are done</b> ({over.length}). One more visit, or stop working and send the day report.</>;
     next = <Link to="/field" className={go}>Open my day <ChevronRight size={16} /></Link>;
   } else {
-    line = <><b className="text-slate-900">Working since {clockOf(day.startedAt)}{day.cities.length ? ` in ${day.cities.join(", ")}` : ""}.</b> Nothing is planned for today yet.</>;
+    line = <><b className="font-medium text-white">Working since {clockOf(day.startedAt)}{day.cities.length ? ` in ${day.cities.join(", ")}` : ""}.</b> Nothing is planned for today yet.</>;
     next = <Link to="/field" className={go}>Pick whom to visit <ChevronRight size={16} /></Link>;
   }
   return (
-    <section className={`${CARD} flex flex-col gap-3 border-sky-200 p-4`}>
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-sm font-bold text-slate-900">My day</h2>
-        <Link to="/field" className="text-xs font-semibold text-sky-700 hover:underline">Open</Link>
-      </div>
-      <Steps data={data} />
+    // The coral photo behind it (public/homeimage, Aryan 26 Nov): on computers the woman on its right
+    // shows, and the words keep clear of her; on phones only the coral on its left.
+    <section
+      className={`${CARD} flex flex-col gap-3 border-transparent bg-[linear-gradient(90deg,rgba(196,40,40,0.72)_0%,rgba(214,58,58,0.5)_45%,rgba(230,80,80,0.12)_72%,transparent_82%),url('/homeimage.webp')] bg-cover bg-[position:left_center] p-4 sm:bg-[position:right_center] sm:pr-[24%]`}
+    >
+      <h2 className="text-base font-medium text-white">My day</h2>
+      <Steps data={data} onPhoto />
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <p className="text-sm text-slate-600">{line}</p>
-        <div className="shrink-0">{next}</div>
+        <p className="text-sm text-white/90">{line}</p>
+        {/* Open beside the day's next step (Aryan, 26 Nov). */}
+        <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
+          <Link
+            to="/field"
+            className="inline-flex h-9 items-center justify-center rounded-[9px] px-3.5 text-[13px] font-semibold text-white ring-1 ring-white/70 hover:bg-white/15"
+          >
+            Open
+          </Link>
+          {next}
+        </div>
       </div>
       {starting && <PlaceDialog home={data} mode="start" onClose={() => setStarting(false)} />}
     </section>
@@ -381,8 +390,9 @@ function PlaceDialog({ home, mode, onClose }: { home: MrHome; mode: "start" | "e
   );
 }
 
-/** Where the day stands: 1 Start working, 2 the visits, 3 the day report. */
-function Steps({ data }: { data: MrHome }) {
+/** Where the day stands: 1 Start working, 2 the visits, 3 the day report, as a label, a dot and a
+ *  rounded bar each (Aryan, 26 Nov): done full, the step now half, the ones ahead empty. */
+function Steps({ data, onPhoto = false }: { data: MrHome; onPhoto?: boolean }) {
   const day = data.day;
   const closed = data.visits.filter((one) => one.status !== "planned").length;
   const at = !day ? 1 : day.endedAt ? 4 : 2;
@@ -392,19 +402,20 @@ function Steps({ data }: { data: MrHome }) {
     { n: 3, label: "Report" },
   ];
   return (
-    <ol className="grid grid-cols-3 gap-1.5">
+    <ol className="grid grid-cols-3 gap-2">
       {steps.map((one) => {
         const done = one.n < at || (one.n === 3 && at === 4);
         const now = one.n === at;
         return (
-          <li
-            key={one.n}
-            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1.5 text-xs font-semibold ${done ? "bg-emerald-50 text-emerald-800" : now ? "bg-sky-600 text-white" : "bg-slate-100 text-slate-500"}`}
-          >
-            <span className={`grid size-5 shrink-0 place-items-center rounded-full text-[11px] ${done ? "bg-emerald-600 text-white" : now ? "bg-white text-sky-700" : "bg-slate-300 text-white"}`}>
-              {done ? <Check size={12} /> : one.n}
+          <li key={one.n} className="flex flex-col items-center gap-1.5" aria-current={now ? "step" : undefined}>
+            <span className={`truncate text-[12px] ${done || now ? (onPhoto ? "text-white" : "text-slate-700") : onPhoto ? "text-white/75" : "text-slate-400"}`}>
+              {one.label}
+              {done && <span className="sr-only"> (done)</span>}
             </span>
-            <span className="truncate">{one.label}</span>
+            <span aria-hidden="true" className={`size-1.5 rounded-full ${done || now ? (onPhoto ? "bg-white" : "bg-brand") : onPhoto ? "bg-white/50" : "bg-slate-300"}`} />
+            <span aria-hidden="true" className={`h-2 w-full overflow-hidden rounded-full ${onPhoto ? "bg-white/30" : "bg-slate-200"}`}>
+              <span className={`block h-full rounded-full ${onPhoto ? "bg-white" : "bg-brand"} ${done ? "w-full" : now ? "w-1/2" : "w-0"}`} />
+            </span>
           </li>
         );
       })}

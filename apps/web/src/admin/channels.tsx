@@ -21,6 +21,7 @@ import {
 import { type FormEvent, type ReactNode, useMemo, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 import { AreaDialog } from "../org/areas-requests";
 import { FIELD } from "../org/dialogs";
 import { Button, CARD, Dialog, PageHead, PageState, Problem, useAction } from "../ui";
@@ -663,6 +664,7 @@ function ChannelPage({ tree, channel }: { tree: OrgTree; channel: Channel }) {
             ) : (
               <Empty
                 text="Nobody heads this channel yet."
+                sub="The head of the channel shows here once their seat is added."
                 action={
                   place && (
                     <Button
@@ -700,6 +702,7 @@ function ChannelPage({ tree, channel }: { tree: OrgTree; channel: Channel }) {
             {shape.teams.length === 0 && direct.length === 0 && (
               <Empty
                 text="No team yet. Add a team, then its team lead and MedReps."
+                sub="Each team shows here with its team lead and MedReps."
                 action={
                   place && (
                     <Button
@@ -767,7 +770,10 @@ function ChannelPage({ tree, channel }: { tree: OrgTree; channel: Channel }) {
             }
           >
             {shape.areas.length === 0 ? (
-              <Empty text="No area yet: a MedRep gets the customers of the area their seat holds." />
+              <Empty
+                text="No area yet: a MedRep gets the customers of the area their seat holds."
+                sub="Each area added here shows with the seat that holds it."
+              />
             ) : (
               <ul className={`${CARD} divide-y divide-slate-100`}>
                 {shape.areas.map((one) => {
@@ -857,11 +863,13 @@ function Step({
   );
 }
 
-function Empty({ text, action }: { text: string; action?: ReactNode }) {
+function Empty({ text, sub, action }: { text: string; sub: string; action?: ReactNode }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-dashed border-slate-300 px-4 py-3">
-      <span className="text-[13px] text-slate-500">{text}</span>
-      {action}
+    <div className="rounded-2xl border border-dashed border-slate-300">
+      <EmptyState art={<NoInvoicesArt size={72} />} title={text}>
+        {sub}
+        {action && <span className="mt-2 flex justify-center">{action}</span>}
+      </EmptyState>
     </div>
   );
 }

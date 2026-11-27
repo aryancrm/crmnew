@@ -6,7 +6,7 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { heroLogo } from "../portal/hero-logos";
-import { type Workspace, WORKSPACES } from "../workspaces";
+import { ALL_SYSTEMS, type Workspace } from "../workspaces";
 import { Icon, OrbitLogo, useScrollPosition } from "./HomePage.jsx";
 import "./site-nav.css";
 
@@ -17,8 +17,13 @@ const GROUPS = [
 ] as const;
 
 type GroupId = (typeof GROUPS)[number]["id"];
-const inGroup = (id: GroupId) => WORKSPACES.filter((one) => one.group === id);
-const signInTo = (one: Workspace) => `/login/${one.key}`;
+const inGroup = (id: GroupId) => ALL_SYSTEMS.filter((one) => one.group === id);
+/** A system's sign-in; a system on the way (WorkDrive, Digital Marketing) has an empty link for now. */
+const signInTo = (one: Workspace) => (one.soon ? "#" : `/login/${one.key}`);
+/** Keeps an empty link from jumping to the top of the page. */
+const stayIfSoon = (one: Workspace) => (event: { preventDefault: () => void }) => {
+  if (one.soon) event.preventDefault();
+};
 
 /** A workspace's own logo, the same as in the hero and the Systems menu. */
 function TileIcon({ workspace }: { workspace: Workspace }) {
@@ -64,8 +69,8 @@ function SearchBar({ className = "", onOpen }: { className?: string; onOpen?: ()
   const words = query.trim().toLowerCase();
   const matches = words
     ? [
-        ...WORKSPACES.filter((one) => one.label.toLowerCase().startsWith(words)),
-        ...WORKSPACES.filter(
+        ...ALL_SYSTEMS.filter((one) => one.label.toLowerCase().startsWith(words)),
+        ...ALL_SYSTEMS.filter(
           (one) => !one.label.toLowerCase().startsWith(words) && `${one.label} ${one.about}`.toLowerCase().includes(words),
         ),
       ]
@@ -76,6 +81,7 @@ function SearchBar({ className = "", onOpen }: { className?: string; onOpen?: ()
     setQuery("");
     setFocused(false);
     input.current?.blur();
+    if (one.soon) return;
     onOpen?.();
     navigate(signInTo(one));
   };
@@ -174,7 +180,14 @@ function SystemsPanel({ onNavigate }: { onNavigate: () => void }) {
             <ul>
               {inGroup(group.id).map((one) => (
                 <li key={one.key}>
-                  <Link className="systems-menu__app" to={signInTo(one)} onClick={onNavigate}>
+                  <Link
+                    className="systems-menu__app"
+                    to={signInTo(one)}
+                    onClick={(event) => {
+                      if (one.soon) return event.preventDefault();
+                      onNavigate();
+                    }}
+                  >
                     <img src={heroLogo(one.key)} alt="" width={28} height={28} decoding="async" />
                     <span>
                       <strong>
@@ -332,7 +345,14 @@ export function Navbar() {
                     <div key={group.id} className="drawer__systems-group">
                       <p className="drawer__systems-head">{group.label}</p>
                       {inGroup(group.id).map((one) => (
-                        <Link key={one.key} to={signInTo(one)} onClick={() => setMobileOpen(false)}>
+                        <Link
+                          key={one.key}
+                          to={signInTo(one)}
+                          onClick={(event) => {
+                            if (one.soon) return event.preventDefault();
+                            setMobileOpen(false);
+                          }}
+                        >
                           <strong>{one.label}</strong>
                           <span>{one.about}</span>
                         </Link>
@@ -415,7 +435,7 @@ export function Footer() {
               <ul>
                 {inGroup(group.id).map((one) => (
                   <li key={one.key}>
-                    <Link to={signInTo(one)}>
+                    <Link to={signInTo(one)} onClick={stayIfSoon(one)}>
                       <span className="footer__logo">
                         <TileIcon workspace={one} />
                       </span>

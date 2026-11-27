@@ -16,6 +16,7 @@ import { Button, CARD, PageHead, PageState, Problem, Tabs, useAction } from "../
 import { LEAVE_WORDS } from "./attendance-report";
 import { FixLineRow } from "./corrections";
 import { daysWords, FormLineRow, LEAVE_STATUS, LeavePapers, PrintLink, spanWords } from "./my-leave";
+import { EmptyState } from "../no-results";
 
 type View = "waiting" | "asked" | "approved" | "refused" | "cancelled" | "returned" | "revoked";
 const shiftMonth = (month: string, by: number) => {
@@ -95,9 +96,14 @@ export function LeaveListPage() {
     { key: "forms", label: "Forms", count: q?.forms ?? 0 },
     { key: "fixes", label: "Attendance", count: q?.fixes ?? 0 },
   ];
+  // The picture with a line under it (Aryan, 26 Nov), in every section and tab.
   const empty = (
-    <li className="px-4 py-8 text-center text-sm text-slate-500">
-      {view === "waiting" ? "Nothing waiting for you." : "Nothing here."}
+    <li>
+      {view === "waiting" ? (
+        <EmptyState title="Nothing waiting for you.">Requests that need your decision show here.</EmptyState>
+      ) : (
+        <EmptyState title="Nothing here.">Requests in this tab show here. Try another tab or month.</EmptyState>
+      )}
     </li>
   );
   const section = (title: string, lines: ReactNode[]) => (

@@ -19,6 +19,7 @@ import type { ReactNode } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
+import { EmptyState } from "../no-results";
 import { zDate, zMoney } from "./kinds";
 import { useOwnCompanyName } from "../companies";
 
@@ -691,7 +692,11 @@ function tableOf(key: string, data: unknown): Shown {
                 </tr>
               </tbody>
             </table>
-            {!gp.rows.length && <p className="py-6 text-center text-[#6c718a]">No order made in the CRM has had its goods leave in these days.</p>}
+            {!gp.rows.length && (
+              <EmptyState title="No order made in the CRM has had its goods leave in these days.">
+                Orders billed in these days show here once their goods have left. Try other days.
+              </EmptyState>
+            )}
           </>
         ),
         csvHead: head,
@@ -754,7 +759,7 @@ function insightTable(data: Insight): Shown {
             </tbody>
           </table>
         </div>
-        {!data.rows.length && <p className="py-6 text-center text-[#6c718a]">Nothing in these days.</p>}
+        {!data.rows.length && <EmptyState title="Nothing in these days.">Pick other days to see this report's figures.</EmptyState>}
       </>
     ),
     csvHead: data.columns.map((column) => column.label),

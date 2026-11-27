@@ -14,6 +14,7 @@ import { api } from "../api";
 import { shortPeso } from "../ceo";
 import { Button, CARD, dayLabel, Dialog, PageHead, PageState, Problem, Tabs, useAction } from "../ui";
 import { withUnit } from "../team/switch";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 type Prospect = NbdDay["prospects"][number];
 type Account = CrrDay["accounts"][number];
@@ -281,7 +282,7 @@ export function NbdHome() {
           </Button>
         </header>
         {due.length === 0 ? (
-          <p className="px-4 py-3 text-[13px] text-slate-500">No call due today.</p>
+          <EmptyState title="No call due today.">Prospects whose next call is due show here.</EmptyState>
         ) : (
           <ul className="divide-y divide-slate-100">
             {due.map((p) => (
@@ -296,7 +297,7 @@ export function NbdHome() {
             <FileWarning className="size-4 text-amber-600" /> Papers missing
           </h3>
           {missing.length === 0 ? (
-            <p className="px-4 py-3 text-[13px] text-slate-500">Every prospect's papers are in.</p>
+            <EmptyState art={<NoInvoicesArt size={72} />} title="Every prospect's papers are in.">Prospects with papers missing show here.</EmptyState>
           ) : (
             <ul className="divide-y divide-slate-100">
               {missing.map((p) => (
@@ -317,7 +318,7 @@ export function NbdHome() {
             <UserCheck className="size-4 text-emerald-600" /> Ready to hand to CRR
           </h3>
           {ready.length === 0 ? (
-            <p className="px-4 py-3 text-[13px] text-slate-500">None yet: an account goes to CRR at its 3rd order or 90 days after the first.</p>
+            <EmptyState art={<NoInvoicesArt size={72} />} title="None yet">An account goes to CRR at its 3rd order or 90 days after the first.</EmptyState>
           ) : (
             <ul className="divide-y divide-slate-100">
               {ready.map((p) => (
@@ -370,7 +371,11 @@ export function ProspectsPage() {
       />
       <section className={CARD}>
         {list.length === 0 ? (
-          <p className="px-4 py-4 text-[13px] text-slate-500">{view === "handed" ? "Nothing handed over yet." : "No prospect yet: add the first one."}</p>
+          view === "handed" ? (
+            <EmptyState title="Nothing handed over yet.">Accounts you hand to CRR show here.</EmptyState>
+          ) : (
+            <EmptyState title="No prospect yet">Add the first one.</EmptyState>
+          )
         ) : view === "handed" ? (
           <ul className="divide-y divide-slate-100">
             {list.map((p) => (
@@ -438,14 +443,14 @@ function AccountRow({ account, onCall }: { account: Account; onCall: () => void 
   );
 }
 
-function AccountList({ title, accounts, empty, onCall }: { title: string; accounts: Account[]; empty: string; onCall: (account: Account) => void }) {
+function AccountList({ title, accounts, empty, emptySub, onCall }: { title: string; accounts: Account[]; empty: string; emptySub: string; onCall: (account: Account) => void }) {
   return (
     <section className={`${CARD} min-w-0`}>
       <h3 className="border-b border-slate-100 px-4 py-3 text-sm font-bold text-slate-900">
         {title} <span className="font-normal text-slate-400">· {accounts.length}</span>
       </h3>
       {accounts.length === 0 ? (
-        <p className="px-4 py-3 text-[13px] text-slate-500">{empty}</p>
+        <EmptyState art={<NoInvoicesArt size={72} />} title={empty}>{emptySub}</EmptyState>
       ) : (
         <ul className="divide-y divide-slate-100">
           {accounts.map((account) => (
@@ -480,16 +485,17 @@ export function CrrHome() {
           </div>
         ))}
       </section>
-      <AccountList title="Late: call today" accounts={live.filter((a) => a.state === "late")} empty="No account is late." onCall={setCalling} />
-      <AccountList title="Due to reorder this week" accounts={live.filter((a) => a.state === "due")} empty="No account due this week." onCall={setCalling} />
+      <AccountList title="Late: call today" accounts={live.filter((a) => a.state === "late")} empty="No account is late." emptySub="Accounts late to reorder show here, to call today." onCall={setCalling} />
+      <AccountList title="Due to reorder this week" accounts={live.filter((a) => a.state === "due")} empty="No account due this week." emptySub="Accounts due to reorder this week show here." onCall={setCalling} />
       <div className="grid gap-4 lg:grid-cols-2">
         <AccountList
           title="Buying less than their 3-month average"
           accounts={live.filter((a) => a.trend === "down" && (a.state === "ok" || a.state === "due"))}
           empty="No account buying less."
+          emptySub="Accounts buying less than their 3-month average show here."
           onCall={setCalling}
         />
-        <AccountList title="Stopped 90 days: win back" accounts={live.filter((a) => a.state === "stopped")} empty="No account stopped." onCall={setCalling} />
+        <AccountList title="Stopped 90 days: win back" accounts={live.filter((a) => a.state === "stopped")} empty="No account stopped." emptySub="Accounts with no order for 90 days show here, to win back." onCall={setCalling} />
       </div>
       {calling && <CallDialog customerId={calling.customerId} name={calling.name} onClose={() => setCalling(null)} />}
     </>
@@ -519,7 +525,7 @@ export function AccountsPage() {
         value={state}
         onChange={setState}
       />
-      <AccountList title="Accounts" accounts={shown} empty="No account here." onCall={setCalling} />
+      <AccountList title="Accounts" accounts={shown} empty="No account here." emptySub="Accounts handed to you show here. Try another tab." onCall={setCalling} />
       {calling && <CallDialog customerId={calling.customerId} name={calling.name} onClose={() => setCalling(null)} />}
     </div>
   );
@@ -723,7 +729,9 @@ export function B2bTeamCard({ unit = null }: { unit?: number | null } = {}) {
         <section className={`${CARD} min-w-0`}>
           <h2 className="border-b border-slate-100 px-4 py-3 text-sm font-semibold text-slate-900">Hand-overs waiting</h2>
           {data.handOvers.length === 0 ? (
-            <p className="px-4 py-3 text-[13px] text-slate-500">No account ready for CRR (3rd order or day 90) and none flagged.</p>
+            <EmptyState title="No account ready for CRR (3rd order or day 90) and none flagged.">
+              Accounts ready to hand to CRR, or flagged, show here.
+            </EmptyState>
           ) : (
             <ul className="divide-y divide-slate-100">
               {data.handOvers.map((p) => (

@@ -9,6 +9,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { took } from "../desk/speed";
 import { Ring } from "./charts";
+import { EmptyState } from "../no-results";
 
 const CARD = "rounded-2xl border border-slate-200 bg-white shadow-sm";
 const STEP_WORD: Record<string, string> = {
@@ -65,9 +66,11 @@ export function DeskWork({ personIds }: { personIds: number[] }) {
         ))}
       </div>
       {people.length === 0 ? (
-        <div className={`${CARD} p-5 text-sm text-slate-500`}>
-          Nobody in this team moved an order on in these days. It doesn't sell, so it has no sales
-          figures; its people's work shows here once they act on orders.
+        <div className={CARD}>
+          <EmptyState title="Nobody in this team moved an order on in these days.">
+            It doesn't sell, so it has no sales figures; its people's work shows here once they act on
+            orders.
+          </EmptyState>
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

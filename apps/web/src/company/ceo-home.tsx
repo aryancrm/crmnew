@@ -7,7 +7,6 @@
 import type { CeoAlert, CeoHome as Data, MoneySummary, PaceTone } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import {
-  CheckCircle2,
   ChevronRight,
   Hourglass,
   Landmark,
@@ -20,6 +19,7 @@ import type { ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 import { collectedChange, counted, exactPeso, monthShort, shortPeso } from "../ceo";
 import { AtWorkCard } from "../hr/parts";
 import {
@@ -498,9 +498,9 @@ export function CeoHomePage() {
             )}
           </header>
           {data.alerts.length === 0 ? (
-            <p className="flex items-center gap-2 px-4 pb-4 text-sm text-slate-500 sm:px-5">
-              <CheckCircle2 className="size-4 text-emerald-600" /> Nothing needs you right now
-            </p>
+            <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing needs you right now">
+              Anything about sales, orders, money, stock, refunds or customers that needs you shows here.
+            </EmptyState>
           ) : (
             <ul className="pb-2">
               {data.alerts.map((alert) => {

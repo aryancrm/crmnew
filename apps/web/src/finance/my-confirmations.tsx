@@ -7,6 +7,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { manilaToday, RangePicker } from "../team/range";
 import { Card, count, PageHead, PageState, peso, timeLabel } from "../ui";
+import { EmptyState } from "../no-results";
 
 export function MyConfirmations() {
   const [params] = useSearchParams();
@@ -37,7 +38,9 @@ export function MyConfirmations() {
       ) : (
         <Card className="overflow-x-auto">
           {data.rows.length === 0 ? (
-            <div className="p-8 text-center text-ink-2">Nothing confirmed on these days.</div>
+            <EmptyState title="Nothing confirmed on these days.">
+              Orders you confirm show here with when you checked them. Try other days.
+            </EmptyState>
           ) : (
             <table className="t">
               <thead>

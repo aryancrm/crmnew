@@ -14,6 +14,7 @@ import { TeamSwitch, useTeamUnit, withUnit } from "./switch";
 import { exactPeso, shortPeso } from "../ceo";
 import { Bars, Ring } from "./charts";
 import { PageState, useAction } from "../ui";
+import { EmptyState } from "../no-results";
 
 const CARD = "rounded-2xl border border-slate-200/90 bg-white shadow-sm";
 type Row = TargetList["rows"][number];
@@ -234,8 +235,8 @@ export function Targets() {
       )}
 
       {data.rows.length === 0 ? (
-        <div className={`${CARD} px-5 py-8 text-center text-sm text-slate-500`}>
-          Nobody under you sells yet.
+        <div className={CARD}>
+          <EmptyState title="Nobody under you sells yet.">Each person's monthly sales target shows here, team by team.</EmptyState>
         </div>
       ) : (
         groups.map((group) => (

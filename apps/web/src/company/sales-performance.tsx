@@ -10,6 +10,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Download, TrendingUp } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState } from "../no-results";
 import { TeamSwitch, useTeamUnit } from "../team/switch";
 import { CARD, PageHead, PageState } from "../ui";
 
@@ -65,8 +66,8 @@ function Table({ title, head, rows, foot }: { title: string; head: string[]; row
             ))}
             {!rows.length && (
               <tr>
-                <td colSpan={head.length} className="px-3 py-6 text-center text-slate-500">
-                  Nothing in these days.
+                <td colSpan={head.length}>
+                  <EmptyState title="Nothing in these days.">Pick other days to see the figures for them.</EmptyState>
                 </td>
               </tr>
             )}

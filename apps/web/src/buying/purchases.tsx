@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState } from "../no-results";
 import { Card, dayLabel, PageHead, PageState, peso, Status, Tabs } from "../ui";
 
 type View = "all" | "ordered" | "received" | "cancelled";
@@ -69,9 +70,11 @@ export function Purchases() {
 
       <Card className="overflow-x-auto">
         {rows.length === 0 ? (
-          <div className="p-8 text-center text-ink-2">
-            {data.rows.length === 0 ? "No purchase order yet." : "Nothing in this list."}
-          </div>
+          data.rows.length === 0 ? (
+            <EmptyState title="No purchase order yet.">Everything ordered from suppliers shows here once an order is made.</EmptyState>
+          ) : (
+            <EmptyState title="Nothing in this list.">Pick another tab to see the other purchase orders.</EmptyState>
+          )
         ) : (
           <table className="t">
             <thead>

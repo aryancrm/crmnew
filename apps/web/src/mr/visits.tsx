@@ -14,6 +14,7 @@ import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { Button, CARD, PageState, Tabs, peso } from "../ui";
 import { AddVisitsDialog } from "./plan";
 import { dayWords, Initial, MrHead, monthWords, shiftDay, shiftMonth, StatePill, useMrMe } from "./parts";
+import { EmptyState } from "../no-results";
 
 export function MrVisitsPage() {
   const [params, setParams] = useSearchParams();
@@ -137,11 +138,13 @@ export function MrVisitsPage() {
         ))}
       </ul>
       {shown.length === 0 && (
-        <div className={`${CARD} px-4 py-8 text-center text-sm text-slate-500`}>
-          No {KIND_TABS[kind]} visits here.{" "}
-          {data.can.work && (
-            <button type="button" className="font-semibold text-sky-700" onClick={() => setAdding(true)}>Add a visit</button>
-          )}
+        <div className={CARD}>
+          <EmptyState title={<>No {KIND_TABS[kind]} visits here.</>}>
+            Visits on this day or month show here. Try another state or day.{" "}
+            {data.can.work && (
+              <button type="button" className="font-semibold text-sky-700" onClick={() => setAdding(true)}>Add a visit</button>
+            )}
+          </EmptyState>
         </div>
       )}
       {adding && <AddVisitsDialog day={data.day && data.day >= data.today ? data.day : data.today} kind={params.get("kind") ? kind : undefined} onClose={() => setAdding(false)} />}

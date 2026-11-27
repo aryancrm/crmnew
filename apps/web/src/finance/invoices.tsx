@@ -40,6 +40,7 @@ import {
   taxRows,
   ZohoPaper,
 } from "../orders/sales-order";
+import { EmptyState, NoInvoicesArt, NoResults } from "../no-results";
 
 const TAB_LABEL: Record<InvoiceTab, string> = {
   all: "All",
@@ -137,10 +138,12 @@ export function Invoices() {
           </div>
         </div>
         {data.rows.length === 0 ? (
-          <div className="p-8 text-center text-ink-2">
-            {data.counts.all === 0
-              ? "No invoice yet. Finance makes one when it lets an order go to Dispatch."
-              : "No invoice here."}
+          <div>
+            {data.counts.all === 0 ? (
+              <EmptyState title="No invoice yet.">Finance makes one when it lets an order go to Dispatch.</EmptyState>
+            ) : (
+              <NoResults title="No invoice here.">Try another tab, or clear the search.</NoResults>
+            )}
           </div>
         ) : (
           <table className="t">
@@ -314,9 +317,13 @@ export function Invoice() {
         </div>
         {data.payments.length === 0 ? (
           <div className="px-5 py-4 text-[13px] text-ink-2">
-            {invoice.terms === "days"
-              ? `The customer pays within ${invoice.paymentDays} days.`
-              : "Nothing received yet."}
+            {invoice.terms === "days" ? (
+              `The customer pays within ${invoice.paymentDays} days.`
+            ) : (
+              <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing received yet.">
+                Payments recorded on this invoice show here.
+              </EmptyState>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">

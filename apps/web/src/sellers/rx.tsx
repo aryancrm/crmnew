@@ -13,6 +13,7 @@ import { api } from "../api";
 import { CARD, count, dayLabel, PageHead, PageState, Problem, useAction } from "../ui";
 import { EnrolDialog } from "./care-groups";
 import { RxBusinessCard } from "./rx-business";
+import { EmptyState } from "../no-results";
 
 type Doctor = RxDay["doctors"][number];
 
@@ -82,14 +83,16 @@ export function RxHome() {
           <span className="text-[11px] text-slate-500">Eight calls: refill due first, then missing this month, then Tier 1 behind on visits</span>
         </header>
         {route.length === 0 ? (
-          <p className="px-4 py-4 text-[13px] text-slate-500">
-            {data.doctors.some((doctor) => doctor.tier) ? "Every doctor is on track." : "Put your doctors in tiers first: "}
-            {!data.doctors.some((doctor) => doctor.tier) && (
+          data.doctors.some((doctor) => doctor.tier) ? (
+            <EmptyState title="Every doctor is on track.">Doctors whose refill is due, missing this month or behind on visits show here.</EmptyState>
+          ) : (
+            <EmptyState title="Put your doctors in tiers first">
+              Today's route is made from your doctors' tiers.{" "}
               <Link to="/rx/doctors" className="font-semibold text-emerald-700 hover:underline">
                 My doctors
               </Link>
-            )}
-          </p>
+            </EmptyState>
+          )
         ) : (
           <ol className="divide-y divide-slate-100">
             {route.map((doctor, n) => (
@@ -152,7 +155,7 @@ function RxGroups() {
         </span>
       </header>
       {waiting.length === 0 && quiet.length === 0 ? (
-        <p className="px-4 py-3 text-[13px] text-slate-500">Every group is answered and active.</p>
+        <EmptyState title="Every group is answered and active.">Groups waiting for first contact, or gone quiet, show here.</EmptyState>
       ) : (
         <ul className="divide-y divide-slate-100">
           {waiting.map((row) => (
@@ -242,8 +245,12 @@ export function RxDoctorsPage() {
           <tbody className="divide-y divide-slate-100">
             {shown.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
-                  {show === "listed" ? "No doctor on the list yet: pick them from the doctors of your area." : "Every doctor of your area is on the list."}
+                <td colSpan={5}>
+                  {show === "listed" ? (
+                    <EmptyState title="No doctor on the list yet">Pick them from the doctors of your area.</EmptyState>
+                  ) : (
+                    <EmptyState title="Every doctor of your area is on the list.">Doctors of your area not on the list yet show here.</EmptyState>
+                  )}
                 </td>
               </tr>
             )}
@@ -325,8 +332,8 @@ export function RxFieldTable({ data }: { data: RxField }) {
         <tbody className="divide-y divide-slate-100">
           {data.rows.length === 0 && (
             <tr>
-              <td colSpan={7} className="px-4 py-6 text-center text-slate-500">
-                No Rx CHC under you yet.
+              <td colSpan={7}>
+                <EmptyState title="No Rx CHC under you yet.">Each Rx CHC under you shows here with their doctors, visits and groups.</EmptyState>
               </td>
             </tr>
           )}

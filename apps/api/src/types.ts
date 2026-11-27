@@ -5784,6 +5784,8 @@ export type KpiFigures = {
   /** Placed, not invoiced yet (waiting for Management or held): shown, never counted. */
   waitingOrders: number;
   waitingSales: number;
+  /** Sales without VAT each day of the month (centavos), day 1 first; the days not come yet are 0. */
+  daily: number[];
 };
 export type KpiDay = { sales: number; orders: number };
 export type KpiPanel = {

@@ -62,6 +62,7 @@ import {
   StatePill,
   whereAmI,
 } from "./parts";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 const NEAR = 300;
 const objectiveWords = (list: string[]) =>
@@ -776,7 +777,11 @@ function History({ data }: { data: VisitPage }) {
     <div className="grid gap-4">
       <section className={`${CARD} p-4`}>
         <h2 className="mb-2 text-sm font-bold text-slate-900">Last five visits</h2>
-        {data.history.length === 0 && <p className="text-sm text-slate-500">First visit.</p>}
+        {data.history.length === 0 && (
+          <EmptyState art={<NoInvoicesArt size={72} />} title="First visit.">
+            Earlier visits to this customer show here, the last five.
+          </EmptyState>
+        )}
         <ul className="flex flex-col gap-2">
           {data.history.map((one) => (
             <li key={one.id} className="rounded-xl border border-slate-200 p-3 text-[13px]">

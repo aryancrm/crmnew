@@ -10,6 +10,7 @@ import { Search } from "lucide-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState, NoResults } from "../no-results";
 import { useMe } from "../auth";
 import { RecordPaymentDialog } from "./parts";
 import { Button, dayLabel, PageHead, PageState, peso } from "../ui";
@@ -227,9 +228,11 @@ export function CollectPage() {
             </tbody>
           </table>
           {shown.length === 0 && (
-            <p className="px-4 py-8 text-center text-sm text-slate-500">
-              {q ? "Nothing matches the search." : "Nothing here."}
-            </p>
+            q ? (
+              <NoResults title="Nothing matches the search.">Check the spelling, or clear the search to see every order on these terms.</NoResults>
+            ) : (
+              <EmptyState title="Nothing here.">Orders on these terms that still owe money show here.</EmptyState>
+            )
           )}
         </div>
       )}
@@ -275,7 +278,7 @@ export function CollectPage() {
             </tbody>
           </table>
           {done.length === 0 && (
-            <p className="px-4 py-8 text-center text-sm text-slate-500">No later payment came in the last 30 days.</p>
+            <EmptyState title="No later payment came in the last 30 days.">Orders paid in full on later terms show here once they are marked paid.</EmptyState>
           )}
         </div>
       )}

@@ -11,6 +11,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { Button, CARD, Dialog, PageHead, PageState, Problem, useAction } from "../ui";
+import { EmptyState } from "../no-results";
 
 type Row = CareGroups["rows"][number];
 
@@ -99,7 +100,7 @@ export function WaitingGroups({ data, limit = 8 }: { data: CareGroups; limit?: n
         <span className="text-[11px] text-slate-500">First contact within {data.firstContactMinutes} minutes of enrolment; the first to contact takes the group</span>
       </header>
       {waiting.length === 0 ? (
-        <p className="px-4 py-3 text-[13px] text-slate-500">No group is waiting.</p>
+        <EmptyState title="No group is waiting.">New groups an Rx CHC enrols show here, waiting for first contact.</EmptyState>
       ) : (
         <ul className="divide-y divide-slate-100">
           {waiting.map((row) => (
@@ -238,8 +239,8 @@ export function CareGroupsPage() {
           <tbody className="divide-y divide-slate-100">
             {rest.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-500">
-                  No group answered yet.
+                <td colSpan={5}>
+                  <EmptyState title="No group answered yet.">Groups show here once MD Telesales has made first contact.</EmptyState>
                 </td>
               </tr>
             )}

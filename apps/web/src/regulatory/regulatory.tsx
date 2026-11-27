@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api } from "../api";
 import { Button, CARD, dayLabel, Dialog, PageHead, PageState, Problem, useAction } from "../ui";
+import { EmptyState } from "../no-results";
 
 export const STAGE: Record<PipelineStage, string> = {
   identified: "Identified", talks: "In talks", agreement: "Agreement signed", dossier: "Dossier in hand",
@@ -232,7 +233,9 @@ export function PipelineList({ data, only }: { data: RegulatoryDesk; only?: "liv
         )}
       </header>
       {shown.length === 0 ? (
-        <p className="px-4 py-3 text-[13px] text-slate-500">No product in the pipeline.</p>
+        <EmptyState title="No product in the pipeline.">
+          Products from first look to launch show here, each with its next step and day.
+        </EmptyState>
       ) : (
         <ul className="divide-y divide-slate-100">
           {shown.map((p) => {
@@ -285,7 +288,13 @@ export function RegistrationList({ data, only }: { data: RegulatoryDesk; only?: 
         )}
       </header>
       {shown.length === 0 ? (
-        <p className="px-4 py-3 text-[13px] text-slate-500">{only === "flagged" ? "Nothing to renew or follow up." : "No registration recorded."}</p>
+        only === "flagged" ? (
+          <EmptyState title="Nothing to renew or follow up.">
+            Registrations being prepared or filed, or due for renewal, show here.
+          </EmptyState>
+        ) : (
+          <EmptyState title="No registration recorded.">The FDA CPRs show here with when they are valid until.</EmptyState>
+        )
       ) : (
         <ul className="divide-y divide-slate-100">
           {shown.map((r) => (

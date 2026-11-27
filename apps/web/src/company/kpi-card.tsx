@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Gauge } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 import { toneOf } from "../sellers/my-score";
 
 const CARD = "rounded-xl border border-slate-200 bg-white";
@@ -32,9 +33,9 @@ export function KpiCard({ month }: { month: string }) {
       {!data ? (
         <p className="px-4 pb-4 text-sm text-slate-500 sm:px-5">{query.isError ? "The scorecards couldn't be read." : "Reading every scorecard…"}</p>
       ) : data.scored === 0 ? (
-        <p className="px-4 pb-4 text-sm text-slate-500 sm:px-5">
-          No one has a card yet this month: a card starts with a target, a sale, an order or a field day.
-        </p>
+        <EmptyState art={<NoInvoicesArt size={72} />} title="No one has a card yet this month: a card starts with a target, a sale, an order or a field day.">
+          The sellers' average and each person's score show here once there are cards.
+        </EmptyState>
       ) : (
         <div className="grid gap-4 px-4 pb-4 sm:px-5 lg:grid-cols-3">
           <div>

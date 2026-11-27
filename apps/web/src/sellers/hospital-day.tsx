@@ -4,16 +4,28 @@
 
 import type { Collections, Huddle, Pulse, Reorders } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
-import { Check, HandCoins, Megaphone, Phone, PhoneCall, ShoppingCart } from "lucide-react";
+import { Check, FileText, HandCoins, Megaphone, PhoneCall, Pill, RefreshCw, TrendingUp, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { shortPeso } from "../ceo";
+import { EmptyState } from "../no-results";
 
-const TONE: Record<Pulse["tiles"][number]["tone"], { dot: string; ring: string; text: string }> = {
-  green: { dot: "bg-emerald-500", ring: "ring-emerald-200", text: "text-emerald-800" },
-  amber: { dot: "bg-amber-400", ring: "ring-amber-200", text: "text-amber-800" },
-  red: { dot: "bg-rose-500", ring: "ring-rose-200", text: "text-rose-800" },
-  none: { dot: "bg-slate-300", ring: "ring-slate-200", text: "text-slate-500" },
+/** The light of each number, as the colour of its icon's circle (Aryan, 26 Nov). */
+const TONE: Record<Pulse["tiles"][number]["tone"], string> = {
+  green: "bg-emerald-500",
+  amber: "bg-amber-400",
+  red: "bg-rose-500",
+  none: "bg-slate-400",
+};
+
+/** Each number's icon, by its key (the API's: sales, dso, reorder, invoice; refills, groups). */
+const PULSE_ICON: Record<string, typeof TrendingUp> = {
+  sales: TrendingUp,
+  dso: HandCoins,
+  reorder: RefreshCw,
+  invoice: FileText,
+  refills: Pill,
+  groups: Users,
 };
 
 export function TodaysPulse() {
@@ -23,18 +35,28 @@ export function TodaysPulse() {
     <section aria-label="Today's pulse" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {(tiles ?? Array.from({ length: 4 }, () => null)).map((tile, n) =>
         tile ? (
+          // A thin light-grey line, the icon in a circle of the number's light on the left, the words black and medium
+          // (Aryan, 26 Nov).
           <Link
             key={tile.key}
             to={tile.to}
-            className={`block min-w-0 rounded-2xl bg-white px-4 py-3 shadow-2xs ring-1 hover:bg-slate-50 ${TONE[tile.tone].ring}`}
+            className="flex min-w-0 items-center gap-3 rounded-2xl bg-white px-4 py-3 ring-1 ring-slate-200 hover:bg-slate-50"
           >
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
-              <span className={`size-2 rounded-full ${TONE[tile.tone].dot}`} /> {tile.label}
-            </div>
-            <div className={`mt-0.5 truncate text-xl font-bold tracking-tight tabular-nums ${TONE[tile.tone].text}`}>{tile.value}</div>
-            <div className="truncate text-[11px] text-slate-400" title={tile.sub}>
-              {tile.sub}
-            </div>
+            {(() => {
+              const Icon = PULSE_ICON[tile.key] ?? TrendingUp;
+              return (
+                <span aria-hidden="true" className={`grid size-10 shrink-0 place-items-center rounded-full text-white ${TONE[tile.tone]}`}>
+                  <Icon className="size-[18px]" strokeWidth={2} />
+                </span>
+              );
+            })()}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-[11px] font-medium text-slate-900">{tile.label}</span>
+              <span className="mt-0.5 block truncate text-xl font-medium tracking-tight text-slate-900 tabular-nums">{tile.value}</span>
+              <span className="block truncate text-[11px] font-medium text-slate-600" title={tile.sub}>
+                {tile.sub}
+              </span>
+            </span>
           </Link>
         ) : (
           <div key={`slot-${n}`} className="h-[78px] animate-pulse rounded-2xl bg-white ring-1 ring-slate-100" />
@@ -85,13 +107,14 @@ export function GoHereFirst() {
         <span className="text-[11px] text-slate-500">Hospitals due to reorder first; then money owed to us 60 days and more</span>
       </header>
       {stops.length === 0 ? (
-        <p className="px-4 py-4 text-[13px] text-slate-500">No hospital due to reorder and nothing owed past 60 days. Plan new hospitals.</p>
+        <EmptyState title="No hospital due to reorder and nothing owed past 60 days.">Plan new hospitals.</EmptyState>
       ) : (
         <ul className="divide-y divide-slate-100">
           {stops.map((stop, n) => (
             <li key={stop.key} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
-              <span className="grid size-6 shrink-0 place-items-center rounded-full bg-slate-100 text-[11px] font-bold text-slate-600">{n + 1}</span>
-              <span className={`grid size-8 shrink-0 place-items-center rounded-lg ${stop.kind === "collect" ? "bg-amber-50 text-amber-700" : "bg-sky-50 text-sky-700"}`}>
+              {/* The number plain, the icon light grey with no tile behind it (Aryan, 26 Nov). */}
+              <span className="w-5 shrink-0 text-center text-[12px] font-semibold text-slate-500 tabular-nums">{n + 1}</span>
+              <span className="grid size-8 shrink-0 place-items-center text-slate-400">
                 {stop.kind === "collect" ? <HandCoins className="size-4" /> : <PhoneCall className="size-4" />}
               </span>
               {/* On a phone the name keeps the row and the buttons go under it (Aryan, 19 Nov: the
@@ -106,24 +129,24 @@ export function GoHereFirst() {
                 {stop.phone && stop.phone.replace(/\D/g, "").length >= 7 && (
                   <a
                     href={`tel:${stop.phone.replace(/\s/g, "")}`}
-                    className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[12px] font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50"
+                    className="inline-flex items-center rounded px-2.5 py-1 text-[12px] font-semibold text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50"
                   >
-                    <Phone className="size-3" /> Call
+                    Call
                   </a>
                 )}
                 {stop.kind === "collect" && stop.orderId ? (
                   <Link
                     to={`/orders/${stop.orderId}`}
-                    className="inline-flex items-center gap-1 rounded-lg bg-amber-600 px-2 py-1 text-[12px] font-semibold text-white hover:bg-amber-700"
+                    className="inline-flex items-center rounded bg-emerald-600 px-2.5 py-1 text-[12px] font-semibold text-white hover:bg-emerald-700"
                   >
-                    <HandCoins className="size-3" /> Collect
+                    Collect
                   </Link>
                 ) : (
                   <Link
                     to={`/orders/new?customer=${stop.customerId}`}
-                    className="inline-flex items-center gap-1 rounded-lg bg-brand px-2 py-1 text-[12px] font-semibold text-white"
+                    className="inline-flex items-center rounded bg-brand px-2.5 py-1 text-[12px] font-semibold text-white"
                   >
-                    <ShoppingCart className="size-3" /> New order
+                    New order
                   </Link>
                 )}
               </span>

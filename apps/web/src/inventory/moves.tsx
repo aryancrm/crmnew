@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { Button, Card, count, dayLabel, PageHead, PageState, timeLabel } from "../ui";
+import { EmptyState } from "../no-results";
 
 /** Where each is done from: a count or a move starts on the medicine in Stock by warehouse, a
  *  receive on its purchase order (Aryan, 23 Nov: the empty list didn't say where to begin). */
@@ -16,21 +17,24 @@ const START: Record<MoveKind, { to: string; label: string }> = {
   receive: { to: "/purchases", label: "Receive a purchase order" },
 };
 
-const WORDS: Record<MoveKind, { title: string; sub: string; empty: string }> = {
+const WORDS: Record<MoveKind, { title: string; sub: string; empty: string; emptySub: string }> = {
   adjust: {
     title: "Inventory adjustments",
     sub: "Stock counted on the shelf and corrected",
-    empty: "No stock has been adjusted yet. Open a medicine in Stock by warehouse and count it: the correction shows here.",
+    empty: "No stock has been adjusted yet.",
+    emptySub: "Open a medicine in Stock by warehouse and count it: the correction shows here.",
   },
   transfer: {
     title: "Transfers",
     sub: "Stock moved from one warehouse to another",
-    empty: "No stock has been moved between warehouses yet. Open a medicine in Stock by warehouse and move it: the move shows here.",
+    empty: "No stock has been moved between warehouses yet.",
+    emptySub: "Open a medicine in Stock by warehouse and move it: the move shows here.",
   },
   receive: {
     title: "Receives",
     sub: "Stock that came in, by batch",
-    empty: "Nothing has been received yet. Receive a purchase order to bring stock in.",
+    empty: "Nothing has been received yet.",
+    emptySub: "Receive a purchase order to bring stock in.",
   },
 };
 
@@ -64,7 +68,9 @@ export function Moves({ kind }: { kind: MoveKind }) {
       {!data ? (
         <PageState query={query} what={words.title.toLowerCase()} />
       ) : data.rows.length === 0 ? (
-        <Card className="p-8 text-center text-ink-2">{words.empty}</Card>
+        <Card>
+          <EmptyState title={words.empty}>{words.emptySub}</EmptyState>
+        </Card>
       ) : (
         <>
           <Card className={`overflow-x-auto ${query.isPlaceholderData ? "opacity-60" : ""}`}>

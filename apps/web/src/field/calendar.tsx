@@ -7,6 +7,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 import { manilaToday } from "../team/range";
 import { Button, CARD, PageHead, PageState } from "../ui";
 import { LEAVE_WORDS } from "../hr/attendance-report";
@@ -270,7 +271,9 @@ function DayPanel({
       </div>
       {team && query.isLoading && <p className="px-4 py-4 text-sm text-slate-500">Loading…</p>}
       {!query.isLoading && visits.length === 0 && (
-        <p className="px-4 py-4 text-sm text-slate-500">No visits this day.</p>
+        <EmptyState art={<NoInvoicesArt size={72} />} title="No visits this day.">
+          Visits done, planned or skipped on this day show here.
+        </EmptyState>
       )}
       <ul className="divide-y divide-slate-100">
         {[...byPerson].map(([personId, list]) => (

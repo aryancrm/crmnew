@@ -9,6 +9,7 @@ import { ArrowDown, ArrowUp, ArrowUpRight, ChevronDown, ChevronLeft, ChevronRigh
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState } from "../no-results";
 import { DocView } from "./doc";
 import { useMay } from "./forms";
 import { useMayLedger } from "./ledger";
@@ -503,7 +504,7 @@ export function BookListPage() {
             ))}
           </tbody>
         </table>
-        {data && !data.rows.length && <p className="px-6 py-10 text-center text-[#6c718a]">Nothing in this view.</p>}
+        {data && !data.rows.length && <EmptyState title="Nothing in this view.">They show here as soon as there are any. Pick another view to see the rest.</EmptyState>}
         {query.isError && <p className="px-6 py-10 text-center text-[#f76831]">{query.error.message}</p>}
       </div>
       {data && <Pager page={data.page} perPage={data.perPage} total={data.total} onPage={(page) => set({ page: String(page) })} onPer={(per) => set({ perPage: String(per), page: null })} />}

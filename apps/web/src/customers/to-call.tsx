@@ -12,6 +12,7 @@ import { useMe } from "../auth";
 import { seatWords } from "../seat-words";
 import { shortPeso } from "../ceo";
 import { CARD, count, dayLabel, PageHead, PageState, Tabs } from "../ui";
+import { EmptyState } from "../no-results";
 
 const STATE_SUB: Record<ReorderState, string> = {
   soon: "Their refill falls in the next two days: reach them before they run out.",
@@ -19,6 +20,15 @@ const STATE_SUB: Record<ReorderState, string> = {
   late: "Past 1.5 times their usual gap.",
   at_risk: "Past 2.5 times their usual gap, or 90 days and late.",
   lost: "No order in 180 days and far past their gap (last two years only).",
+};
+
+/** The line under an empty tab's "No one here." (Aryan, 26 Nov): what would show there, and when. */
+const EMPTY_SUB: Record<ReorderState, string> = {
+  soon: "No one's refill falls in the next two days. They show here two days ahead, so you can reach them before they run out.",
+  due: "No one's refill day has come. They show here on the day, so you can call before they order elsewhere.",
+  late: "No one is past 1.5 times their usual gap between orders.",
+  at_risk: "No one is past 2.5 times their usual gap, or 90 days and late.",
+  lost: "No one has gone 180 days without an order and far past their gap.",
 };
 
 export function ToCallPage() {
@@ -98,8 +108,8 @@ export function ToCallPage() {
           <tbody className="divide-y divide-slate-100">
             {data.rows.length === 0 && (
               <tr>
-                <td colSpan={own ? 6 : 7} className="px-4 py-6 text-center text-slate-500">
-                  No one here.
+                <td colSpan={own ? 6 : 7}>
+                  <EmptyState title="No one here.">{EMPTY_SUB[state]}</EmptyState>
                 </td>
               </tr>
             )}

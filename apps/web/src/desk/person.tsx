@@ -8,6 +8,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
+import { EmptyState } from "../no-results";
 import { CARD, PageHead, PageState, peso } from "../ui";
 
 const manila = (offsetDays = 0) =>
@@ -122,7 +123,7 @@ export function DeskPersonPage() {
                 ))}
               </ul>
             ) : (
-              <p className="px-4 py-5 text-sm text-slate-500">Nothing in hand now.</p>
+              <EmptyState title="Nothing in hand now.">The orders they have now show here, with when each became theirs.</EmptyState>
             )}
           </section>
 
@@ -171,7 +172,9 @@ export function DeskPersonPage() {
                 </tbody>
               </table>
             ) : (
-              <p className="px-4 py-5 text-sm text-slate-500">Nothing moved on in these days.</p>
+              <EmptyState title="Nothing moved on in these days.">
+                Orders they approved, sent back, held or rejected show here. Try other days.
+              </EmptyState>
             )}
           </section>
         </>

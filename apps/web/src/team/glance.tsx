@@ -20,6 +20,7 @@ import { StepCard, took } from "../desk/speed";
 import { span } from "../orders/parts";
 import { count, dayLabel } from "../ui";
 import { Bars, Donut } from "./charts";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 const CARD = "rounded-2xl border border-slate-200 bg-white shadow-sm";
 
@@ -199,7 +200,7 @@ export function MedicinesCard({ board }: { board: TeamBoard }) {
           color="bg-sky-500"
         />
       ) : (
-        <p className="text-sm text-slate-500">No order in these days.</p>
+        <EmptyState art={<NoInvoicesArt size={72} />} title="No order in these days.">The medicines sold show here, by value.</EmptyState>
       )}
     </GlanceCard>
   );
@@ -271,7 +272,7 @@ export function PeopleCard({
       {rows.length ? (
         <Bars rows={rows} />
       ) : (
-        <p className="text-sm text-slate-500">Nobody sold yet in these days.</p>
+        <EmptyState art={<NoInvoicesArt size={72} />} title="Nobody sold yet in these days.">What each seat sold against its target shows here.</EmptyState>
       )}
     </GlanceCard>
   );
@@ -448,7 +449,7 @@ export function DeskGlance({ steps, people }: { steps: string[]; people: string 
             format={(minutes) => took(minutes)}
           />
         ) : (
-          <p className="text-sm text-slate-500">Nobody moved an order on in these days.</p>
+          <EmptyState art={<NoInvoicesArt size={72} />} title="Nobody moved an order on in these days.">How long each person took to move an order on shows here.</EmptyState>
         )}
       </GlanceCard>
     </section>

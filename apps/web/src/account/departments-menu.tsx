@@ -4,7 +4,7 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 import { heroLogo } from "../portal/hero-logos";
-import { WORKSPACES } from "../workspaces";
+import { ALL_SYSTEMS } from "../workspaces";
 
 const GRADIENT = "linear-gradient(135deg, #ff5a00 0%, #ff8a00 50%, #ffd400 100%)";
 const DOT = 7; // each square, px
@@ -79,7 +79,7 @@ export function DepartmentsMenu(props: { current: string; onPick: (key: string |
         >
           <p className="px-2 pt-1 pb-1.5 text-[11px] font-medium text-[#7a8394]">All departments</p>
           <ul className="grid max-h-[min(480px,72vh)] grid-cols-3 gap-1 overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {WORKSPACES.map((one, i) => (
+            {ALL_SYSTEMS.map((one, i) => (
               <li
                 key={one.key}
                 className="animate-[launcher-item-in_380ms_cubic-bezier(.2,.8,.2,1)_both] motion-reduce:animate-none"
@@ -88,6 +88,8 @@ export function DepartmentsMenu(props: { current: string; onPick: (key: string |
                 <button
                   type="button"
                   onClick={() => {
+                    // A system on the way has no sign-in yet: its link goes nowhere.
+                    if (one.soon) return;
                     setOpenMenu(false);
                     props.onPick(one.key);
                   }}

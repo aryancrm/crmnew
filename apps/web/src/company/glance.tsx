@@ -11,7 +11,7 @@ import { api } from "../api";
 import { shortPeso } from "../ceo";
 
 const CARD = "min-w-0 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm";
-const PALETTE = ["#1f9d55", "#2563eb", "#f59e0b", "#e11d48", "#7c3aed", "#0d9488", "#ea580c", "#0891b2", "#65a30d", "#db2777"];
+const PALETTE = ["#1f9d55", "#1d9fda", "#f59e0b", "#e11d48", "#7c3aed", "#0d9488", "#ea580c", "#0891b2", "#65a30d", "#db2777"];
 const STEP: Record<string, string> = {
   pending_approval: "At Management",
   finance_check: "At Finance",
@@ -112,7 +112,7 @@ export function CompanyGlance({ part = "business" }: { part?: "business" | "peop
         <div className="grid grid-cols-2 gap-3">
           {[
             ["People", people.toLocaleString("en-PH"), `${data.departments.length} departments`, "#1f9d55", "/company"],
-            ["Working today", `${data.working.in} of ${data.working.all}`, "signed in for the day", "#2563eb", "/hr/attendance"],
+            ["Working today", `${data.working.in} of ${data.working.all}`, "signed in for the day", "#1d9fda", "/hr/attendance"],
           ].map(([label, value, sub, colour, to]) => (
             <Link key={label} to={to as string} className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm hover:border-slate-300">
               <span className="absolute inset-x-0 top-0 h-1" style={{ background: colour }} />

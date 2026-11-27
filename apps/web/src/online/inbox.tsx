@@ -23,6 +23,7 @@ import { avatarTone, initials } from "../look";
 import { ChatPanel } from "./chat";
 import { ROAD_BADGE } from "./parts";
 import { count, PageState, Pill, Problem, timeLabel, useAction } from "../ui";
+import { EmptyState, NoInvoicesArt, NoResults } from "../no-results";
 
 const FILTERS: { key: InboxFilter; label: string }[] = [
   { key: "all", label: "All" },
@@ -112,15 +113,17 @@ export function InboxPage() {
       </div>
 
       {data.accounts.length === 0 ? (
-        <div className="rounded-2xl border border-slate-200 bg-white px-5 py-10 text-center text-sm text-slate-600">
-          No Facebook page or mailbox is connected yet.
-          {data.can.manageChannels ? (
-            <Link to="/channels" className="ml-1 font-semibold text-emerald-700 hover:underline">
-              Connect one
-            </Link>
-          ) : (
-            " Ask the Admin to connect one."
-          )}
+        <div className="rounded-2xl border border-slate-200 bg-white">
+          <EmptyState title="No Facebook page or mailbox is connected yet.">
+            Chats from the connected pages and mailboxes show here.
+            {data.can.manageChannels ? (
+              <Link to="/channels" className="ml-1 font-semibold text-emerald-700 hover:underline">
+                Connect one
+              </Link>
+            ) : (
+              " Ask the Admin to connect one."
+            )}
+          </EmptyState>
         </div>
       ) : (
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm lg:grid-cols-[20rem_minmax(0,1fr)] xl:grid-cols-[21rem_minmax(0,1fr)_17rem]">
@@ -180,8 +183,14 @@ export function InboxPage() {
             </div>
             <ul className="min-h-0 flex-1 overflow-y-auto">
               {data.chats.length === 0 && (
-                <li className="p-6 text-center text-sm text-slate-500">
-                  {q ? "No chat matches." : "No conversation here."}
+                <li>
+                  {q ? (
+                    <NoResults size={72} title="No chat matches.">Check the spelling, or clear the search.</NoResults>
+                  ) : (
+                    <EmptyState art={<NoInvoicesArt size={72} />} title="No conversation here.">
+                      Chats in this filter show here, the ones waiting for us first.
+                    </EmptyState>
+                  )}
                 </li>
               )}
               {data.chats.map((item) => (
@@ -476,7 +485,9 @@ function HeldSendersDialog({ onClose }: { onClose: () => void }) {
           <Problem message={action.problem?.message} />
           {!held.data && <div className="p-4 text-sm text-slate-500">Loading…</div>}
           {held.data?.senders.length === 0 && (
-            <div className="p-4 text-center text-sm text-slate-500">No one is waiting.</div>
+            <EmptyState art={<NoInvoicesArt size={72} />} title="No one is waiting.">
+              New email senders wait here for Make enquiry or Not a customer.
+            </EmptyState>
           )}
           <ul className="flex flex-col gap-2.5">
             {held.data?.senders.map((sender) => (

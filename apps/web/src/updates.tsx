@@ -4,10 +4,11 @@
 
 import type { NotificationList } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BellRing, CheckCheck, Inbox } from "lucide-react";
+import { CheckCheck } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { api } from "./api";
 import { waited } from "./orders/parts";
+import { EmptyState, NoInvoicesArt } from "./no-results";
 
 /** News that waits on the person: something to do, decide or look at now. */
 const NEEDS_YOU = new Set([
@@ -128,15 +129,16 @@ export function UpdatesList({ box }: { box: UpdatesBox }) {
       </div>
       <ul className="min-h-0 flex-1 divide-y divide-slate-100 overflow-y-auto pb-24 md:pb-4">
         {rows.length === 0 && (
-          <li className="flex flex-col items-center gap-2 px-6 py-12 text-center text-sm text-slate-500">
+          <li>
             {box === "important" ? (
-              <BellRing className="size-8 text-slate-300" />
+              <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing waits on you.">
+                What needs you comes here.
+              </EmptyState>
             ) : (
-              <Inbox className="size-8 text-slate-300" />
+              <EmptyState art={<NoInvoicesArt size={72} />} title="No news yet.">
+                What moves on your orders and team comes here.
+              </EmptyState>
             )}
-            {box === "important"
-              ? "Nothing waits on you. What needs you comes here."
-              : "No news yet. What moves on your orders and team comes here."}
           </li>
         )}
         {rows.map((row) => (

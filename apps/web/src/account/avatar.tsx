@@ -22,7 +22,7 @@ export function Avatar({
   return (
     <span
       aria-hidden="true"
-      className={`grid shrink-0 place-items-center overflow-hidden rounded-full bg-[#2563eb] font-semibold text-white ${SIZE[size]}`}
+      className={`grid shrink-0 place-items-center overflow-hidden rounded-full bg-[#1d9fda] font-semibold text-white ${SIZE[size]}`}
     >
       {person.photo && !failed ? (
         <img

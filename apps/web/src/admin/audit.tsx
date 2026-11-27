@@ -6,6 +6,7 @@ import type { AuditTrail } from "@2mg/api/types";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { NoResults } from "../no-results";
 import { PageState } from "../ui";
 
 const INPUT = "h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm";
@@ -92,7 +93,7 @@ export function AuditPage() {
             ))}
           </tbody>
         </table>
-        {!data.lines.length && <p className="px-4 py-6 text-center text-sm text-slate-500">Nothing matches.</p>}
+        {!data.lines.length && <NoResults title="Nothing matches.">Try other words, another kind or person, or wider days.</NoResults>}
       </div>
       <div className="flex items-center justify-end gap-2 text-sm">
         <button type="button" disabled={data.page <= 1} onClick={() => set("page", String(data.page - 1))} className="rounded-lg border border-slate-200 px-3 py-1.5 disabled:opacity-40">

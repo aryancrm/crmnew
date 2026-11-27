@@ -6,6 +6,7 @@ import { Plus } from "lucide-react";
 import { type FormEvent, useState } from "react";
 import { api } from "../api";
 import { useMe } from "../auth";
+import { EmptyState } from "../no-results";
 import {
   Button,
   Card,
@@ -46,7 +47,7 @@ export function Suppliers() {
       />
       <Card>
         {data.length === 0 ? (
-          <div className="p-8 text-center text-ink-2">No supplier yet.</div>
+          <EmptyState title="No supplier yet.">Each supplier the medicines are bought from shows here, with the currency they bill in.</EmptyState>
         ) : (
           <ul className="flex flex-col">
             {data.map((supplier) => (

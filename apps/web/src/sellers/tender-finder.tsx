@@ -13,6 +13,7 @@ import { api } from "../api";
 import { bidDateText, deliveryText } from "./bid-dates";
 import { shortPeso } from "../ceo";
 import { Button, CARD, dayLabel, Dialog, Facts, PageHead, PageState, Pill, Problem, peso, Tabs, Tile, useAction } from "../ui";
+import { EmptyState, NoInvoicesArt, NoResults } from "../no-results";
 
 const PORTAL = { philgeps: "PhilGEPS", ps: "PS-PhilGEPS" } as const;
 const MODE: Record<TenderMode, string> = {
@@ -736,17 +737,19 @@ export function TenderFinderPage() {
       <Problem message={action.problem?.message} />
       <section className={`${CARD} min-w-0 overflow-x-auto`}>
         {data.rows.length === 0 ? (
-          <p className="px-4 py-6 text-center text-[13px] text-slate-500">
-            {filtering || q || data.docs !== "all" || leftOut.length
-              ? "No tender matches the search and filters."
-              : data.view === "opportunities"
-                ? "No tender of ours found yet on either portal."
-                : data.view === "screened"
-                  ? "Nothing screened and waiting. Add a tender worth bidding on from Opportunities."
-                  : data.view === "tenders"
-                    ? "No found tender has been made a tender yet."
-                    : "Nothing found yet."}
-          </p>
+          filtering || q || data.docs !== "all" || leftOut.length ? (
+            <NoResults title="No tender matches the search and filters.">Try other words, or clear the filters.</NoResults>
+          ) : data.view === "opportunities" ? (
+            <EmptyState title="No tender of ours found yet on either portal.">
+              What the robot finds on PhilGEPS and PS-PhilGEPS for our medicines shows here.
+            </EmptyState>
+          ) : data.view === "screened" ? (
+            <EmptyState title="Nothing screened and waiting.">Add a tender worth bidding on from Opportunities.</EmptyState>
+          ) : data.view === "tenders" ? (
+            <EmptyState title="No found tender has been made a tender yet.">Found tenders show here once they are made tenders.</EmptyState>
+          ) : (
+            <EmptyState title="Nothing found yet.">What the robot finds on PhilGEPS and PS-PhilGEPS for our medicines shows here.</EmptyState>
+          )
         ) : (
           <table className="w-full min-w-[860px] text-left text-[13px]">
             <thead className="border-b border-slate-100 text-[11.5px] font-semibold text-slate-500">
@@ -1097,7 +1100,9 @@ function MakeTenderDialog({ detail, onClose }: { detail: FoundDetail; onClose: (
       </p>
       <h4 className="mt-4 text-[12.5px] font-bold text-slate-900">Our bid, medicine by medicine</h4>
       {detail.lines.length === 0 ? (
-        <p className="mt-1 text-[12.5px] text-slate-500">No line was read on this notice: add the medicines on the tender's page.</p>
+        <EmptyState art={<NoInvoicesArt size={72} />} title="No line was read on this notice">
+          Add the medicines on the tender's page.
+        </EmptyState>
       ) : (
         <ul className="mt-1 divide-y divide-slate-100 rounded-xl border border-slate-200">
           {detail.lines.map((line) => {
@@ -1460,7 +1465,9 @@ export function FoundTenderPage() {
           What it asks for <span className="font-normal text-slate-400">· {data.lines.length} {data.lines.length === 1 ? "line" : "lines"} of ours</span>
         </h3>
         {data.lines.length === 0 ? (
-          <p className="px-4 py-3 text-[13px] text-slate-500">No line of ours was read on this notice{found.molecules.length ? " yet (its papers may hold them)" : ""}.</p>
+          <EmptyState title={<>No line of ours was read on this notice{found.molecules.length ? " yet (its papers may hold them)" : ""}.</>}>
+            What the notice asks for, line by line, shows here.
+          </EmptyState>
         ) : (
           <table className="w-full min-w-[40rem] text-[13px]">
             <thead>

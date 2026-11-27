@@ -17,6 +17,7 @@ import { allItems, spaceFor } from "../menus";
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { CARD, PageState, Panel, peso } from "../ui";
 import { ActionSheet, clockOf, dayWords, MrHead, useMrMe } from "./parts";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 /** The field on a lead's or head's Home (Aryan, 23 Nov: "how does what the MedReps do reach the
  *  lead?"): who is at work, the visits closed and what was ordered there, who hasn't started, and
@@ -156,8 +157,8 @@ export function TeamHome() {
               </li>
             ))}
             {data.people.length === 0 && (
-              <li className="px-4 py-8 text-center text-sm text-slate-500">
-                No MedReps under you here.
+              <li>
+                <EmptyState title="No MedReps under you here.">Your MedReps show here with where their day stands.</EmptyState>
               </li>
             )}
           </ul>
@@ -185,7 +186,13 @@ export function TeamHome() {
                   <span className="font-semibold text-slate-700">{one.closed}</span>
                 </li>
               ))}
-              {data.champions.length === 0 && <li className="px-4 py-4 text-sm text-slate-500">No call closed yet today.</li>}
+              {data.champions.length === 0 && (
+                <li>
+                  <EmptyState art={<NoInvoicesArt size={72} />} title="No call closed yet today.">
+                    Who closed the most visits today shows here.
+                  </EmptyState>
+                </li>
+              )}
             </ol>
           </Panel>
           <Panel title="Field activities">
@@ -204,7 +211,13 @@ export function TeamHome() {
                   <span className="ml-1 text-xs text-slate-400">{clockOf(one.at)}</span>
                 </li>
               ))}
-              {data.feed.length === 0 && <li className="px-4 py-4 text-sm text-slate-500">Nothing yet today.</li>}
+              {data.feed.length === 0 && (
+                <li>
+                  <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing yet today.">
+                    Visits checked in and closed today show here.
+                  </EmptyState>
+                </li>
+              )}
             </ul>
           </Panel>
         </div>

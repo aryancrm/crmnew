@@ -21,6 +21,7 @@ import {
   Pill,
   Tabs,
 } from "../ui";
+import { NoResults } from "../no-results";
 
 type Show = "all" | "out" | "low" | "expiring" | "expired";
 
@@ -365,4 +366,6 @@ export function Inventory() {
   );
 }
 
-const Empty = () => <div className="p-8 text-center text-ink-2">No medicine matches.</div>;
+const Empty = () => (
+  <NoResults title="No medicine matches.">Try another filter, or check the spelling of the search.</NoResults>
+);

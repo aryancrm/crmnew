@@ -9,6 +9,7 @@ import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 import { reportsFor } from "../books/reports";
 import { exactPeso, monthName, shiftMonth, shortPeso } from "../ceo";
 import { Bars } from "../team/charts";
@@ -265,7 +266,9 @@ function ChannelRow({
                     }))}
                   />
                 ) : (
-                  <p className="text-sm text-slate-500">Nobody in this channel yet.</p>
+                  <EmptyState art={<NoInvoicesArt size={72} />} title="Nobody in this channel yet.">
+                    The people in this channel show here with what each sold.
+                  </EmptyState>
                 )}
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -281,7 +284,9 @@ function ChannelRow({
                     color="bg-violet-500"
                   />
                 ) : (
-                  <p className="text-sm text-slate-500">No sale this month.</p>
+                  <EmptyState art={<NoInvoicesArt size={72} />} title="No sale this month.">
+                    Customers who bought this month show here with their orders.
+                  </EmptyState>
                 )}
               </div>
               <div className="rounded-xl border border-slate-200 bg-white p-4">
@@ -297,7 +302,9 @@ function ChannelRow({
                     color="bg-sky-500"
                   />
                 ) : (
-                  <p className="text-sm text-slate-500">No sale this month.</p>
+                  <EmptyState art={<NoInvoicesArt size={72} />} title="No sale this month.">
+                    Medicines sold this month show here with the pieces sold.
+                  </EmptyState>
                 )}
               </div>
             </>

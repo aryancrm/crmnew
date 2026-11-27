@@ -150,17 +150,20 @@ export function Donut({
   slices,
   middle,
   label,
+  centred = false,
 }: {
   slices: Slice[];
   middle: string;
   label: string;
+  /** The circle centred on its own line, the list under it (a narrow card). */
+  centred?: boolean;
 }) {
   const total = slices.reduce((sum, one) => sum + one.value, 0);
   const r = 40;
   const c = 2 * Math.PI * r;
   let at = 0;
   return (
-    <div className="flex flex-wrap items-center gap-5">
+    <div className={centred ? "flex flex-col items-center gap-4" : "flex flex-wrap items-center gap-5"}>
       <div className="relative size-36 shrink-0">
         <svg viewBox="0 0 100 100" className="size-36" role="img" aria-label={label}>
           <circle cx="50" cy="50" r={r} fill="none" stroke="#f1f5f9" strokeWidth="14" />
@@ -197,12 +200,14 @@ export function Donut({
           </div>
         )}
       </div>
-      <ul className="grid min-w-0 flex-1 gap-1.5 text-[13px]">
+      {/* minmax(0, 1fr): the list takes the room there is, the long labels shorten, and the numbers
+          stay inside the card (they ran past its edge, Aryan 26 Nov). */}
+      <ul className={`grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1.5 text-[13px] ${centred ? "w-full" : "flex-1 basis-40"}`}>
         {slices.map((one) => (
-          <li key={one.label} className="flex items-center gap-2">
+          <li key={one.label} className="flex min-w-0 items-center gap-2">
             <span className="size-2.5 shrink-0 rounded-sm" style={{ background: one.color }} />
             <span className="min-w-0 flex-1 truncate text-slate-600">{one.label}</span>
-            <span className="font-semibold text-slate-900 tabular-nums">{one.value}</span>
+            <span className="shrink-0 pl-2 font-semibold text-slate-900 tabular-nums">{one.value}</span>
           </li>
         ))}
       </ul>

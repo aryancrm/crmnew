@@ -14,6 +14,7 @@ import { manilaToday } from "../team/range";
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { Button, CARD, Dialog, PageState, Problem, useAction } from "../ui";
 import { clockOf, dayWords, Initial, MrHead, monthWords, shiftMonth, StatePill, useMrMe } from "./parts";
+import { EmptyState } from "../no-results";
 
 type CallRow = {
   id: number;
@@ -241,7 +242,13 @@ function LeadLists({ judge }: { judge: boolean }) {
               </li>
             ))}
       </ul>
-      {(judge ? query.data.judge : query.data.reports).length === 0 && <div className={`${CARD} px-4 py-8 text-center text-sm text-slate-500`}>Nothing waiting.</div>}
+      {(judge ? query.data.judge : query.data.reports).length === 0 && (
+        <div className={CARD}>
+          <EmptyState title="Nothing waiting.">
+            {judge ? "Your team's calls to judge show here." : "Your team's day reports to see show here."}
+          </EmptyState>
+        </div>
+      )}
     </div>
   );
 }
@@ -272,7 +279,15 @@ export function MrFollowUpsPage() {
           </li>
         ))}
       </ul>
-      {query.data.rows.length === 0 && <div className={`${CARD} px-4 py-8 text-center text-sm text-slate-500`}>{done ? "Nothing done yet." : "No follow-ups open."}</div>}
+      {query.data.rows.length === 0 && (
+        <div className={CARD}>
+          {done ? (
+            <EmptyState title="Nothing done yet.">Follow-ups marked Done show here.</EmptyState>
+          ) : (
+            <EmptyState title="No follow-ups open.">Follow-ups still to do show here, by the day they are due.</EmptyState>
+          )}
+        </div>
+      )}
       <Problem message={action.problem?.message} />
     </div>
   );

@@ -71,6 +71,7 @@ import {
   timeLabel,
   useAction,
 } from "../ui";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 type StepKey = "docs" | "quote" | "apply" | "letter" | "order" | "pay";
 
@@ -1751,8 +1752,10 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
             </ul>
           </div>
         ) : (
-          <div className="rounded-xl border border-dashed border-slate-300 px-3 py-5 text-center text-[13px] text-slate-500">
-            No medicine on the quotation yet: select one below.
+          <div className="rounded-xl border border-dashed border-slate-300">
+            <EmptyState art={<NoInvoicesArt size={72} />} title="No medicine on the quotation yet">
+              Select one below.
+            </EmptyState>
           </div>
         )}
 

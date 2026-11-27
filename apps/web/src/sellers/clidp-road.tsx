@@ -15,6 +15,7 @@ import { useMe } from "../auth";
 import { exactPeso, shortPeso } from "../ceo";
 import { withUnit } from "../team/switch";
 import { Button, CARD, Dialog, PageHead, PageState, Problem, peso, useAction } from "../ui";
+import { EmptyState } from "../no-results";
 
 type Row = ClidpRoad["rows"][number];
 
@@ -159,7 +160,7 @@ function Road({ data, limit }: { data: ClidpRoad; limit?: number }) {
           </span>
         </header>
         {shown.length === 0 ? (
-          <p className="px-4 py-3 text-[13px] text-slate-500">None at this stage.</p>
+          <EmptyState title="None at this stage.">Pharmacies and distributors at this stage of the road show here.</EmptyState>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-[12.5px]">

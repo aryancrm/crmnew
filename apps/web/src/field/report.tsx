@@ -11,6 +11,7 @@ import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
+import { EmptyState, NoResults } from "../no-results";
 import { Ring } from "../team/charts";
 import { manilaToday, RangePicker, short } from "../team/range";
 import { CARD, PageHead, PageState, peso } from "../ui";
@@ -246,8 +247,12 @@ export function FieldReportPage() {
               ))}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={11} className="px-4 py-6 text-center text-sm text-slate-500">
-                    Nobody here.
+                  <td colSpan={11}>
+                    {words ? (
+                      <NoResults title="Nobody here.">No one by that name or team. Try other words.</NoResults>
+                    ) : (
+                      <EmptyState title="Nobody here.">Each MedRep shows here with their visits done, skipped and still planned.</EmptyState>
+                    )}
                   </td>
                 </tr>
               )}

@@ -8,6 +8,7 @@ import { Printer } from "lucide-react";
 import { useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { Button, dayLabel, PageState, peso } from "../ui";
+import { EmptyState } from "../no-results";
 
 const KIND: Record<Statement["lines"][number]["kind"], string> = {
   invoice: "Invoice",
@@ -149,8 +150,10 @@ export function StatementPage() {
             ))}
             {data.lines.length === 0 && (
               <tr>
-                <td className="py-4 text-center text-slate-500" colSpan={6}>
-                  Nothing billed or paid in these days.
+                <td colSpan={6}>
+                  <EmptyState title="Nothing billed or paid in these days.">
+                    Invoices, payments and refunds for this customer show here. Try other days.
+                  </EmptyState>
                 </td>
               </tr>
             )}

@@ -11,6 +11,7 @@ import { shortPeso } from "../ceo";
 import { METHODS, RefundDialog } from "./parts";
 import { Bars } from "../team/charts";
 import { Button, Card, count, dayLabel, PageHead, PageState, peso, Tile, timeLabel } from "../ui";
+import { EmptyState, NoInvoicesArt, NoResults } from "../no-results";
 
 /** The address's own filters, with a box that types into `q`. */
 function useFilters() {
@@ -165,7 +166,9 @@ export function Payments() {
               color="bg-emerald-500"
             />
           ) : (
-            <p className="text-sm text-slate-500">Nothing came in this month.</p>
+            <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing came in this month.">
+              Payments received this month show here, by how they were paid.
+            </EmptyState>
           )}
         </div>
       </section>
@@ -197,7 +200,9 @@ export function Payments() {
           </div>
         </div>
         {data.rows.length === 0 ? (
-          <div className="p-8 text-center text-ink-2">No payment in {data.monthLabel}.</div>
+          <EmptyState title={<>No payment in {data.monthLabel}.</>}>
+            Payments received this month show here. Try another month, or every way of paying.
+          </EmptyState>
         ) : (
           <table className="t">
             <thead>
@@ -341,8 +346,12 @@ export function CustomersOwe() {
           <SearchBox value={typed} onChange={setTyped} placeholder="Customer or city" />
         </div>
         {data.rows.length === 0 ? (
-          <div className="p-8 text-center text-ink-2">
-            {q ? "No customer matches." : "Nobody owes anything."}
+          <div>
+            {q ? (
+              <NoResults title="No customer matches.">Check the spelling, or clear the search.</NoResults>
+            ) : (
+              <EmptyState title="Nobody owes anything.">Customers with unpaid invoices show here, by how late they are.</EmptyState>
+            )}
           </div>
         ) : (
           <table className="t">
@@ -436,7 +445,9 @@ export function Refunds() {
       />
       <Card className="mb-4 overflow-x-auto">
         {data.owed.length === 0 ? (
-          <div className="p-8 text-center text-ink-2">Nothing to give back.</div>
+          <EmptyState title="Nothing to give back.">
+            Orders cancelled after the customer paid, and goods returned after paying, show here.
+          </EmptyState>
         ) : (
           <table className="t">
             <thead>

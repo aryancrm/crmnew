@@ -16,6 +16,8 @@ export const HERO_LOGOS: Record<string, string> = {
   ceo: "ceo",
   admin: "administration",
   books: "books",
+  marketing: "digitalmarketing",
+  workdrive: "workdrive",
 };
 
 /** The address of a workspace's logo. */

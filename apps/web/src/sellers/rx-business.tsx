@@ -13,6 +13,7 @@ import { useMe } from "../auth";
 import { exactPeso, shortPeso } from "../ceo";
 import { withUnit } from "../team/switch";
 import { CARD, PageHead, PageState } from "../ui";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 const day = (value: string | null) =>
   value ? new Date(`${value.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-PH", { day: "numeric", month: "short", timeZone: "UTC" }) : "—";
@@ -128,7 +129,7 @@ function Business({ data, compact }: { data: RxBusiness; compact?: boolean }) {
             Doctors prescribing most <span className="font-normal text-slate-400">· the last 90 days</span>
           </h3>
           {data.doctors.length === 0 ? (
-            <p className="px-4 py-3 text-[13px] text-slate-500">No order written with a doctor in 90 days.</p>
+            <EmptyState title="No order written with a doctor in 90 days.">The doctors prescribing most over the last 90 days show here.</EmptyState>
           ) : (
             <table className="w-full text-[12.5px]">
               <thead>
@@ -182,7 +183,7 @@ function Business({ data, compact }: { data: RxBusiness; compact?: boolean }) {
             Guarantee letters <span className="font-normal text-slate-400">· by agency, the last 12 months</span>
           </h3>
           {data.letters.length === 0 ? (
-            <p className="px-4 py-3 text-[13px] text-slate-500">No guarantee letter in 12 months.</p>
+            <EmptyState art={<NoInvoicesArt size={72} />} title="No guarantee letter in 12 months.">Guarantee letters over the last 12 months show here, by agency.</EmptyState>
           ) : (
             <table className="w-full text-[12.5px]">
               <thead>

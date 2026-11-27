@@ -30,6 +30,7 @@ import { DeskBoard } from "./desk-board";
 import { DeskTable, deskSortOf, sortDeskCards } from "./desk-table";
 import { AGENCIES, NewLeadDialog, ROAD_BADGE, ROAD_TRACK, ROADS, SOURCES } from "./parts";
 import { count, PageState, timeLabel } from "../ui";
+import { EmptyState, NoResults } from "../no-results";
 
 const QUEUES: { key: LeadQueue; label: string; dot?: string }[] = [
   { key: "all", label: "All" },
@@ -181,7 +182,7 @@ export function LeadsDesk({ desk = "online" }: { desk?: "online" | "pap" }) {
           <div
             role="tablist"
             aria-label="Enquiries"
-            className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1 [scrollbar-width:none]"
+            className="flex gap-0.5 overflow-x-auto rounded-lg bg-slate-100 p-1 [scrollbar-width:none]"
           >
             {QUEUES.map((item) => {
               const selected = data.queue === item.key;
@@ -192,10 +193,10 @@ export function LeadsDesk({ desk = "online" }: { desk?: "online" | "pap" }) {
                   role="tab"
                   aria-selected={selected}
                   onClick={() => set({ queue: item.key === HOME ? "" : item.key, at: "" })}
-                  className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none ${
+                  className={`flex shrink-0 items-center gap-1.5 rounded-md px-3.5 py-1.5 text-[13px] whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none ${
                     selected
-                      ? "bg-brand text-white shadow-sm"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                      ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]"
+                      : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
                   {item.dot && (
@@ -204,12 +205,12 @@ export function LeadsDesk({ desk = "online" }: { desk?: "online" | "pap" }) {
                   {item.key === "done" && (
                     <CheckCheck
                       aria-hidden="true"
-                      className={`size-3.5 ${selected ? "text-emerald-300" : "text-emerald-600"}`}
+                      className="size-3.5 text-emerald-600"
                     />
                   )}
                   <span>{item.label}</span>
                   <span
-                    className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${selected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}
+                    className={`inline-grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1 text-[10px] leading-none font-semibold text-slate-900 tabular-nums ${selected ? "bg-slate-100" : "bg-white"}`}
                   >
                     {count(data.counts[item.key] ?? 0)}
                   </span>
@@ -358,16 +359,22 @@ export function LeadsDesk({ desk = "online" }: { desk?: "online" | "pap" }) {
         </div>
 
         {data.cards.length === 0 ? (
-          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-8 text-center text-sm text-slate-500">
-            {narrowed
-              ? pap
-                ? "No case matches."
-                : "No enquiry matches."
-              : data.queue === "active"
-                ? pap
-                  ? "No open PAP case. Add one with New PAP case: the patient, the agency (DSWD, PCSO…), then the guarantee letter's papers."
-                  : "No open enquiry. Add one with New lead."
-                : "Nothing here."}
+          <div className="rounded-2xl border border-slate-200 bg-white">
+            {narrowed ? (
+              <NoResults title={pap ? "No case matches." : "No enquiry matches."}>
+                Try other filters, or clear the search.
+              </NoResults>
+            ) : data.queue === "active" ? (
+              pap ? (
+                <EmptyState title="No open PAP case.">
+                  Add one with New PAP case: the patient, the agency (DSWD, PCSO…), then the guarantee letter's papers.
+                </EmptyState>
+              ) : (
+                <EmptyState title="No open enquiry.">Add one with New lead.</EmptyState>
+              )
+            ) : (
+              <EmptyState title="Nothing here.">{pap ? "Cases" : "Enquiries"} in this list show here. Try another list.</EmptyState>
+            )}
           </div>
         ) : (
           <>

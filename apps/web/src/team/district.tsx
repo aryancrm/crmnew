@@ -10,6 +10,7 @@ import { api } from "../api";
 import { shortPeso } from "../ceo";
 import { CARD } from "../ui";
 import { withUnit } from "./switch";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 const tone = (good: boolean | null, warn: boolean) =>
   good === null ? "text-slate-400" : good ? "text-emerald-700" : warn ? "text-amber-700" : "text-rose-700";
@@ -37,7 +38,9 @@ export function DistrictNow({ unit = null }: { unit?: number | null } = {}) {
           <span className="text-xs text-slate-500">{needs.length ? `${needs.length} of ${data.rows.length} CHCs` : "Nothing urgent"}</span>
         </header>
         {needs.length === 0 ? (
-          <p className="px-4 py-3 text-[13px] text-slate-500 sm:px-5">Every CHC invoiced in the last three days, collections are under 90 days and the huddle is in.</p>
+          <EmptyState title="Nothing urgent">
+            Every CHC invoiced in the last three days, collections are under 90 days and the huddle is in.
+          </EmptyState>
         ) : (
           <ul className="divide-y divide-slate-100">
             {needs.map((row) => (
@@ -150,7 +153,9 @@ export function DistrictNow({ unit = null }: { unit?: number | null } = {}) {
           {!data.rescueOpen ? (
             <p className="mt-1 text-[13px] text-slate-500">Opens on the 15th: IST below 40%, DSO over 75, over 20% lapsed, NZSD under 80%.</p>
           ) : rescue.length === 0 ? (
-            <p className="mt-1 text-[13px] text-slate-500">No one in the district needs the rescue plan.</p>
+            <EmptyState art={<NoInvoicesArt size={72} />} title="No one in the district needs the rescue plan.">
+              Anyone who needs the 15th rescue plan shows here.
+            </EmptyState>
           ) : (
             <ul className="mt-2 space-y-1.5 text-[12.5px]">
               {rescue.map((row) => (

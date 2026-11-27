@@ -10,6 +10,7 @@ import { AlertTriangle, ChevronRight, Plus } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 import { useMe } from "../auth";
 import { LEDGER_ROLES, zMoney } from "./kinds";
 import { useOwnCompanyName } from "../companies";
@@ -201,7 +202,7 @@ function TopExpenses({ data }: { data: BooksDashboard["topExpenses"] }) {
   const R = 54;
   const C = 2 * Math.PI * R;
   let at = 0;
-  if (!data.total) return <p className="py-10 text-center text-[#6c718a]">No expenses this month yet.</p>;
+  if (!data.total) return <EmptyState title="No expenses this month yet.">The accounts this month's expenses go to show here, the biggest first.</EmptyState>;
   return (
     <div className="flex flex-wrap items-center gap-6">
       <svg viewBox="0 0 140 140" className="size-[150px]" role="img" aria-label="This month's top expenses">
@@ -318,7 +319,11 @@ export function BooksHome() {
                 </li>
               ))}
             </ul>
-            {!d.banks.length && <p className="text-center text-[#6c718a]">No bank, cash or card accounts in the chart yet.</p>}
+            {!d.banks.length && (
+              <EmptyState art={<NoInvoicesArt size={72} />} title="No bank, cash or card accounts in the chart yet.">
+                Once they are in the chart of accounts, each shows here with its balance.
+              </EmptyState>
+            )}
           </Card>
         </div>
       )}

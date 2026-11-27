@@ -16,6 +16,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
 import { Button, count, Dialog, Field, INPUT, Problem, peso, timeLabel, useAction } from "../ui";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 export const REASONS: { value: ReturnReason; label: string }[] = [
   { value: "expired", label: "Expired" },
@@ -483,7 +484,9 @@ export function OrderReturnsBox({ orderId }: { orderId: number }) {
           <ReturnCard key={row.id} row={row} />
         ))}
         {!data.returns.length && (
-          <div className="text-[13px] text-slate-500">Nothing has come back.</div>
+          <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing has come back.">
+            Returns and refunds asked for on this order show here.
+          </EmptyState>
         )}
       </div>
       {asking && <AskDialog orderId={orderId} data={data} onClose={() => setAsking(false)} />}

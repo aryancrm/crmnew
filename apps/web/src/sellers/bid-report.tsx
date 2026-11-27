@@ -12,6 +12,7 @@ import { exactPeso, shortPeso } from "../ceo";
 import { withUnit } from "../team/switch";
 import { CARD, PageHead, PageState } from "../ui";
 import { REASON } from "./tender-words";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 const RESULT: Record<BidReport["rows"][number]["result"], { word: string; pill: string }> = {
   won: { word: "Won", pill: "bg-emerald-50 text-emerald-800" },
@@ -111,7 +112,7 @@ function ComingUp({ data, limit }: { data: BidReport; limit?: number }) {
         Coming up <span className="font-normal text-slate-400">· where we bid next, the nearest deadline first</span>
       </h3>
       {rows.length === 0 ? (
-        <p className="px-4 py-3 text-[13px] text-slate-500">No tender is being prepared. Each one found on PhilGEPS is recorded under Tenders.</p>
+        <EmptyState title="No tender is being prepared.">Each one found on PhilGEPS is recorded under Tenders.</EmptyState>
       ) : (
         <table className="w-full text-[12.5px]">
           <thead>
@@ -158,7 +159,7 @@ function Results({ data, limit }: { data: BidReport; limit?: number }) {
         The bids <span className="font-normal text-slate-400">· every price read at the opening, the lowest first</span>
       </h3>
       {rows.length === 0 ? (
-        <p className="px-4 py-3 text-[13px] text-slate-500">No bid opened in these days.</p>
+        <EmptyState title="No bid opened in these days.">Every price read at a bid's opening shows here. Try other days.</EmptyState>
       ) : (
         <table className="w-full text-[12.5px]">
           <thead>
@@ -235,7 +236,7 @@ function ByAgency({ data }: { data: BidReport }) {
     <section className={`${CARD} min-w-0 overflow-x-auto`}>
       <h3 className="border-b border-slate-100 px-4 py-3 text-sm font-bold text-slate-900">By agency</h3>
       {data.byAgency.length === 0 ? (
-        <p className="px-4 py-3 text-[13px] text-slate-500">No bid yet.</p>
+        <EmptyState art={<NoInvoicesArt size={72} />} title="No bid yet.">The bids by agency show here.</EmptyState>
       ) : (
         <table className="w-full text-[12.5px]">
           <thead>
@@ -273,7 +274,7 @@ function Reasons({ data }: { data: BidReport }) {
     <section className={`${CARD} p-4`}>
       <h3 className="text-sm font-bold text-slate-900">Why we lost</h3>
       {data.byReason.length === 0 ? (
-        <p className="mt-1 text-[13px] text-slate-500">No bid lost in these days.</p>
+        <EmptyState art={<NoInvoicesArt size={72} />} title="No bid lost in these days.">Why bids were lost shows here.</EmptyState>
       ) : (
         <ul className="mt-2 space-y-2">
           {data.byReason.map((one) => (
@@ -301,7 +302,7 @@ function Securities({ data }: { data: BidReport }) {
         Securities still out <span className="font-normal text-slate-400">· {shortPeso(data.securities.reduce((sum, one) => sum + one.amount, 0))}</span>
       </h3>
       {data.securities.length === 0 ? (
-        <p className="px-4 py-3 text-[13px] text-slate-500">None waiting to come back.</p>
+        <EmptyState art={<NoInvoicesArt size={72} />} title="None waiting to come back.">Bid securities still out show here until they come back.</EmptyState>
       ) : (
         <ul className="divide-y divide-slate-100 text-[12.5px]">
           {data.securities.map((one) => (
@@ -332,7 +333,7 @@ function Late({ data }: { data: BidReport }) {
         Late in delivery <span className="font-normal text-slate-400">· 0.1% of the late goods a day; cancellable at 10%</span>
       </h3>
       {data.late.length === 0 ? (
-        <p className="px-4 py-3 text-[13px] text-slate-500">Every award is on time.</p>
+        <EmptyState art={<NoInvoicesArt size={72} />} title="Every award is on time.">Awards late in delivery show here.</EmptyState>
       ) : (
         <ul className="divide-y divide-slate-100 text-[12.5px]">
           {data.late.map((one) => (

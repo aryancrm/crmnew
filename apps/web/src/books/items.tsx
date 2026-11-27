@@ -11,6 +11,7 @@ import { ArrowDown, ArrowUp, ImageIcon, Plus, X } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState } from "../no-results";
 import { kindInfo, statusClass, statusText, zDate, zMoney, zQty } from "./kinds";
 import { Pager, ViewMenu } from "./list";
 
@@ -268,9 +269,15 @@ function Item({ id, onClose }: { id: number; onClose: () => void }) {
             ))}
             {!item.warehouses.length && (
               <tr>
-                <td colSpan={2} className="px-3 py-4 text-[#6c718a]">
-                  {item.medicineId ? "None on the shelf." : "Not one of this CRM's medicines: the old system's figures are on Overview."}
-                </td>
+                {item.medicineId ? (
+                  <td colSpan={2}>
+                    <EmptyState title="None on the shelf.">Each warehouse holding this medicine shows here with its stock on hand.</EmptyState>
+                  </td>
+                ) : (
+                  <td colSpan={2} className="px-3 py-4 text-[#6c718a]">
+                    Not one of this CRM's medicines: the old system's figures are on Overview.
+                  </td>
+                )}
               </tr>
             )}
           </tbody>
@@ -298,8 +305,8 @@ function Item({ id, onClose }: { id: number; onClose: () => void }) {
               ))}
               {!item.batches.length && (
                 <tr>
-                  <td colSpan={4} className="px-3 py-4 text-[#6c718a]">
-                    No batch on the shelf here.
+                  <td colSpan={4}>
+                    <EmptyState title="No batch on the shelf here.">Each batch in stock shows here with its expiry date and warehouse.</EmptyState>
                   </td>
                 </tr>
               )}

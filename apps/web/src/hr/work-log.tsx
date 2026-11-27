@@ -8,6 +8,7 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { Button, CARD, dayLabel, PageHead, PageState, Problem, useAction } from "../ui";
+import { EmptyState } from "../no-results";
 
 const PARTS = [
   ["done", "What I did"],
@@ -86,7 +87,7 @@ export function WorkLogPage() {
       <section className={`${CARD} min-w-0`}>
         <h3 className="border-b border-slate-100 px-4 py-3 text-sm font-bold text-slate-900">Earlier days</h3>
         {past.length === 0 ? (
-          <p className="px-4 py-3 text-[13px] text-slate-500">Nothing written before today.</p>
+          <EmptyState title="Nothing written before today.">The days you write show here, the latest first.</EmptyState>
         ) : (
           <ul className="divide-y divide-slate-100">
             {past.map((e) => (
@@ -132,7 +133,7 @@ export function WorkLogsPage() {
           {dayLabel(data.day)} · {data.entries.length} {data.entries.length === 1 ? "person" : "people"} wrote
         </h3>
         {data.entries.length === 0 ? (
-          <p className="px-4 py-3 text-[13px] text-slate-500">Nobody wrote their day.</p>
+          <EmptyState title="Nobody wrote their day.">What people write about their day shows here. Writing it is optional.</EmptyState>
         ) : (
           <ul className="divide-y divide-slate-100">
             {data.entries.map((e) => (

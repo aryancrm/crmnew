@@ -7,12 +7,12 @@
 
 import type { KpiFigures, KpiPanel } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Target } from "lucide-react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState } from "../no-results";
 
-const CARD = "rounded-xl border border-slate-200 bg-white";
 /** Centavos as "₱1,234.56", as the hub prints them. */
 const peso = (centavos: number) =>
   `₱${(centavos / 100).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -38,14 +38,16 @@ function PeriodPicker({ period, onChange }: { period: string; onChange: (next: s
       key={key}
       type="button"
       onClick={pick}
-      className={`px-3 py-1.5 text-xs font-semibold ${mode === key ? "bg-brand text-white" : "bg-white text-slate-600 hover:bg-slate-50"}`}
+      aria-pressed={mode === key}
+      className={`rounded-md px-3.5 py-1.5 text-[13px] transition-colors ${mode === key ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]" : "text-slate-500 hover:text-slate-800"}`}
     >
       {label}
     </button>
   );
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="inline-flex overflow-hidden rounded-lg border border-slate-300">
+      {/* A soft grey track, the picked one a raised white chip (Aryan, 26 Nov). */}
+      <div className="inline-flex gap-0.5 rounded-lg bg-slate-100 p-1">
         {button("today", "Today", () => onChange(today))}
         {button("yesterday", "Yesterday", () => onChange(yesterday))}
         {button("day", "Pick a date", () => onChange(mode === "day" ? period : manilaDay(2)))}
@@ -65,63 +67,165 @@ function PeriodPicker({ period, onChange }: { period: string; onChange: (next: s
   );
 }
 
-function Bar({ percent }: { percent: number | null }) {
-  if (percent === null) return <p className="mt-2 text-xs text-slate-500">No target set for this month</p>;
-  const tone = percent >= 100 ? "bg-emerald-600" : percent >= 70 ? "bg-brand" : "bg-amber-500";
+/** The target as a dotted half circle (after the "Target Range" gauge, Aryan 26 Nov): three rows
+ *  of dots, as many lit as the share of the target reached, the percent in the middle. */
+function TargetGauge({ percent }: { percent: number | null }) {
+  const per = 19;
+  const rings = [44, 37, 30];
+  const lit = percent === null ? 0 : Math.round((Math.min(percent, 100) / 100) * per);
+  const tone = percent === null ? "#cbd5e1" : percent >= 100 ? "#059669" : percent >= 70 ? "#1d9fda" : "#f59e0b";
   return (
-    <div className="mt-2">
-      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-        <div className={`h-full ${tone}`} style={{ width: `${Math.min(percent, 100)}%` }} />
+    <div className="relative w-[104px] shrink-0">
+      <svg viewBox="0 0 100 54" className="w-full" aria-hidden="true">
+        {rings.map((r) =>
+          Array.from({ length: per }, (_, i) => {
+            const angle = Math.PI - (i / (per - 1)) * Math.PI;
+            return (
+              <circle
+                key={`${r}-${i}`}
+                cx={50 + r * Math.cos(angle)}
+                cy={50 - r * Math.sin(angle)}
+                r={r === 44 ? 2.1 : 1.8}
+                fill={i < lit ? tone : "#e2e8f0"}
+              />
+            );
+          }),
+        )}
+      </svg>
+      <div className="absolute inset-x-0 bottom-0 text-center">
+        <p className="text-[16px] leading-none font-medium text-slate-900 tabular-nums">{percent === null ? "—" : `${percent}%`}</p>
+        <p className="mt-0.5 text-[10px] text-slate-500">{percent === null ? "no target" : "of target"}</p>
       </div>
-      <p className="mt-1 text-xs text-slate-500">
-        <b className="text-slate-900">{percent}%</b> of target
-      </p>
     </div>
   );
 }
 
-export function KpiBlock({ title, sub, k, extra }: { title: string; sub?: string; k: KpiFigures; extra?: ReactNode }) {
+const ordinal = (n: number) => {
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  return `${n}${n % 10 === 1 ? "st" : n % 10 === 2 ? "nd" : n % 10 === 3 ? "rd" : "th"}`;
+};
+
+/** The month as a wave of thin bars (Aryan, 26 Nov, after a "Daily Stress" card): one bar a day,
+ *  its height that day's sales without VAT; days with sales dark, the rest a short light tick. */
+function DailyWave({ daily }: { daily?: number[] }) {
+  // An older API (or a month with no days) sends none: no wave then.
+  if (!daily?.length) return null;
+  const top = Math.max(...daily, 0);
+  const best = top > 0 ? daily.indexOf(top) + 1 : null;
   return (
-    <div className={`${CARD} p-4`}>
-      <div className="flex items-baseline justify-between gap-2">
-        <p className="text-sm font-semibold text-slate-900">{title}</p>
-        {sub && <p className="text-xs text-slate-500">{sub}</p>}
+    <div>
+      <div
+        role="img"
+        aria-label={best ? `Sales each day this month; the best day was the ${ordinal(best)}, ${peso(top)}` : "No sales yet this month"}
+        className="flex h-10 w-full items-end gap-[3px]"
+      >
+        {daily.map((sales, i) => (
+          <span
+            // biome-ignore lint/suspicious/noArrayIndexKey: one bar per day of the month
+            key={i}
+            title={`Day ${i + 1}: ${peso(sales)}`}
+            className={`min-w-0 flex-1 rounded-full ${sales > 0 ? "bg-slate-800" : "bg-slate-300"}`}
+            style={{ height: sales > 0 && top > 0 ? `${Math.max(28, (sales / top) * 100)}%` : "22%" }}
+          />
+        ))}
       </div>
-      <div className="mt-2 flex flex-wrap items-end gap-2">
-        <p className="text-2xl font-bold text-slate-900 tabular-nums">{peso(k.sales)}</p>
-        <p className="mb-1 text-xs text-slate-500">
-          invoiced, without VAT{k.target ? ` · of ${peso(k.target)} target` : ""}
-        </p>
+      <div aria-hidden="true" className="mt-1 flex justify-between text-[10px] text-slate-400 tabular-nums">
+        <span>1</span>
+        <span>{Math.ceil(daily.length / 2)}</span>
+        <span>{daily.length}</span>
       </div>
-      <p className="mt-0.5 text-[11px] text-slate-500">
-        With VAT {peso(k.withVat)} · VAT {peso(k.vat)}
-      </p>
-      <Bar percent={k.percent} />
-      {k.vacantTarget > 0 && (
-        <p className="mt-1 text-[11px] text-slate-500">Target includes {peso(k.vacantTarget)} for empty seats</p>
-      )}
-      <dl className="mt-3 grid grid-cols-2 gap-2 text-center sm:grid-cols-4">
+    </div>
+  );
+}
+
+/** A KPI as a card (Aryan, 26 Nov, after the dashboards he gave; kept short): the title, the sales
+ *  in large with VAT beside the words and a pill for the target, the target gauge on the right,
+ *  the month's wave, then the four counts as soft tiles in one row. The figures are the same as before; only the look changed. */
+export function KpiBlock({ title, sub, k, extra }: { title: string; sub?: string; k: KpiFigures; extra?: ReactNode }) {
+  const pill =
+    k.percent === null
+      ? { text: "No target set for this month", tone: "bg-slate-100 text-slate-600" }
+      : {
+          text: `${k.percent}% of ${peso(k.target ?? 0)} target`,
+          tone: k.percent >= 100 ? "bg-emerald-50 text-emerald-700" : k.percent >= 70 ? "bg-blue-50 text-blue-700" : "bg-amber-50 text-amber-800",
+        };
+  return (
+    <div className="flex flex-col rounded-[22px] border border-slate-200/80 bg-[linear-gradient(160deg,#ffffff_0%,#f8fafc_55%,#eef4ff_100%)] p-4">
+      <div>
+        <p className="text-[15px] font-medium text-slate-900">{title}</p>
+        {sub && <p className="mt-0.5 text-xs text-slate-500">{sub}</p>}
+      </div>
+
+      {/* The amount and the gauge side by side; the words and the target pill under the amount. */}
+      <div className="mt-3 flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <p className="text-[32px] leading-none font-medium tracking-[-0.03em] text-slate-900 tabular-nums">{peso(k.sales)}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            invoiced, without VAT · With VAT {peso(k.withVat)} · VAT {peso(k.vat)}
+          </p>
+          <span className={`mt-2 inline-flex w-fit items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium ${pill.tone}`}>{pill.text}</span>
+        </div>
+        <TargetGauge percent={k.percent} />
+      </div>
+
+      <div className="mt-3">
+        <DailyWave daily={k.daily} />
+      </div>
+      {k.vacantTarget > 0 && <p className="mt-2 text-[11px] text-slate-500">Target includes {peso(k.vacantTarget)} for empty seats</p>}
+
+      {/* The four counts in four colours, square and touching (Aryan, 26 Nov). */}
+      <dl className="mt-3 grid grid-cols-2 sm:grid-cols-4">
         {(
           [
-            ["Orders invoiced", k.ordersInvoiced],
-            ["New customers", k.newCustomers],
-            ["Orders raised", k.ordersRaised],
-            ["Orders held", k.ordersHeld],
+            ["Orders invoiced", k.ordersInvoiced, "bg-[#1d9fda] text-white", "text-white/85"],
+            ["New customers", k.newCustomers, "bg-[#f5c400] text-[#3b2f00]", "text-[#3b2f00]/80"],
+            ["Orders raised", k.ordersRaised, "bg-[#e8505b] text-white", "text-white/85"],
+            ["Orders held", k.ordersHeld, "bg-[#22b378] text-white", "text-white/85"],
           ] as const
-        ).map(([label, value]) => (
-          <div key={label} className="rounded-lg bg-slate-50 py-2">
-            <dd className="text-base font-semibold text-slate-900 tabular-nums">{int(value)}</dd>
-            <dt className="text-[11px] text-slate-500">{label}</dt>
+        ).map(([label, value, tone, soft]) => (
+          <div key={label} className={`flex flex-col-reverse px-3 py-2.5 ${tone}`}>
+            <dt className={`truncate text-[11px] ${soft}`}>{label}</dt>
+            <dd className="text-[18px] leading-tight font-medium tabular-nums">{int(value)}</dd>
           </div>
         ))}
       </dl>
       {k.waitingOrders > 0 && (
-        <p className="mt-2 rounded-md bg-amber-50 px-2 py-1 text-[11px] text-amber-900">
+        <p className="mt-2 rounded-xl bg-sky-50 px-3 py-1.5 text-[11px] text-sky-900">
           {int(k.waitingOrders)} order{k.waitingOrders === 1 ? "" : "s"} ({peso(k.waitingSales)}) waiting for approval, not invoiced
           yet: not counted yet
         </p>
       )}
       {extra}
+    </div>
+  );
+}
+
+/** A day's sales as a blue card (after the dashboards' coloured cards): the day in large, the
+ *  orders in a pill, and a grid of 36 dots lit for the day's share of the month's sales. */
+function DayCard({ label, sales, orders, month, note }: { label: string; sales: number; orders: number; month: number; note: string }) {
+  const dots = 36;
+  const share = month > 0 ? Math.min(sales / month, 1) : 0;
+  const lit = Math.round(share * dots);
+  return (
+    <div className="flex flex-col rounded-[22px] bg-[linear-gradient(155deg,#1784b5_0%,#1d9fda_45%,#38bdf8_100%)] p-4 text-white">
+      <p className="text-[15px] font-medium">{label}</p>
+      <p className="mt-0.5 text-xs text-white/75">{note}</p>
+      <p className="mt-3 text-[32px] leading-none font-medium tracking-[-0.03em] tabular-nums">{peso(sales)}</p>
+      <span className="mt-2 inline-flex w-fit items-center rounded-full bg-white/20 px-2.5 py-1 text-[11px] font-medium ring-1 ring-white/30">
+        {int(orders)} order{orders === 1 ? "" : "s"} invoiced
+      </span>
+      <div className="mt-auto pt-4">
+        <div role="img" aria-label={`${Math.round(share * 100)}% of the month's sales`} className="grid grid-cols-12 gap-1">
+          {Array.from({ length: dots }, (_, i) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a fixed grid of dots
+            <span key={i} className={`aspect-square rounded-[3px] ${i < lit ? "bg-white" : "bg-white/20"}`} />
+          ))}
+        </div>
+        <p className="mt-2 text-[12px] text-white/85">
+          <span className="text-[17px] font-medium text-white tabular-nums">{Math.round(share * 100)}%</span> of the month's sales so far
+        </p>
+      </div>
     </div>
   );
 }
@@ -145,8 +249,8 @@ export function MyKpis({ company = false }: { company?: boolean }) {
   return (
     <section aria-label="My KPIs" className={`space-y-3 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="inline-flex items-center gap-2 text-base font-semibold text-slate-900">
-          <Target className="size-4 text-brand" /> {company ? "Company KPIs" : "My KPIs"}
+        <h2 className="text-base font-semibold text-slate-900">
+          {company ? "Company KPIs" : "My KPIs"}
         </h2>
         <div className="flex flex-wrap items-center gap-2 text-xs">
           <PeriodPicker period={period} onChange={setPeriod} />
@@ -177,62 +281,68 @@ export function MyKpis({ company = false }: { company?: boolean }) {
         <p className="text-sm text-slate-500">{query.isError ? "Your KPIs couldn't be read right now." : "Reading your KPIs…"}</p>
       ) : (
         <>
-          <div className={`grid gap-3 ${data.own && data.team ? "md:grid-cols-2" : ""}`}>
-            {data.own && (
-              <KpiBlock
-                title="My Own KPI"
-                sub="orders that are yours"
-                k={data.own}
-                extra={
-                  data.own.enteredForOthers > 0 || data.own.enteredForMe > 0 ? (
-                    <div className="mt-3 space-y-1 text-xs text-slate-500">
-                      {data.own.enteredForOthers > 0 && (
-                        <p>
-                          You also entered <b className="text-slate-900">{peso(data.own.enteredForOthers)}</b> for others (counted on their KPI).
-                        </p>
-                      )}
-                      {data.own.enteredForMe > 0 && (
-                        <p>
-                          Others entered <b className="text-slate-900">{peso(data.own.enteredForMe)}</b> for you (counted here).
-                        </p>
-                      )}
-                    </div>
-                  ) : null
-                }
+          {/* Two tall cards side by side (Aryan, 26 Nov): My Own KPI and My Team KPI, or, with no team,
+              My Own KPI and the day's sales; then the other day cards and the day's invoices. */}
+          {(() => {
+            const days = (
+              [
+                ["own", data.ownDay, `My sales ${dayWord}`, data.own?.sales ?? 0],
+                ["team", data.teamDay, company ? `The company's sales ${dayWord}` : `My team's sales ${dayWord}`, data.team?.sales ?? 0],
+              ] as const
+            ).filter(([, figures]) => onDay && figures);
+            const dayCard = ([key, figures, label, monthSales]: (typeof days)[number]) => (
+              <DayCard
+                key={key}
+                label={label}
+                sales={figures?.sales ?? 0}
+                orders={figures?.orders ?? 0}
+                month={monthSales}
+                note={`without VAT${period === today ? " · so far today" : ""}`}
               />
-            )}
-            {data.team && (
-              <KpiBlock
-                title={company ? (data.team.label === "The company" ? "Company KPI" : `KPI · ${data.team.label}`) : data.team.label === "My team" ? "My Team KPI" : `My Team KPI · ${data.team.label}`}
-                sub={`${int(data.team.people)} people · ${int(data.team.peopleWithTarget)} with a target`}
-                k={data.team}
-              />
-            )}
-          </div>
-          {onDay && (data.ownDay || data.teamDay) && (
-            <div className="space-y-3">
-              <div className={`grid gap-3 ${data.ownDay && data.teamDay ? "md:grid-cols-2" : ""}`}>
-                {(
-                  [
-                    ["own", data.ownDay, `My sales ${dayWord}`],
-                    ["team", data.teamDay, company ? `The company's sales ${dayWord}` : `My team's sales ${dayWord}`],
-                  ] as const
-                )
-                  .filter(([, figures]) => figures)
-                  .map(([key, figures, label]) => (
-                    <div key={key} className={`${CARD} p-4`}>
-                      <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">{label}</p>
-                      <p className="mt-1 text-2xl font-bold text-slate-900 tabular-nums">{peso(figures?.sales ?? 0)}</p>
-                      <p className="text-xs text-slate-500">
-                        {int(figures?.orders ?? 0)} order{figures?.orders === 1 ? "" : "s"} invoiced · without VAT
-                        {period === today ? " · so far today" : ""}
-                      </p>
-                    </div>
-                  ))}
-              </div>
-              <DayOrders rows={data.dayOrders} names={Boolean(data.team)} />
-            </div>
-          )}
+            );
+            const both = Boolean(data.own && data.team);
+            return (
+              <>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {data.own && (
+                    <KpiBlock
+                      title="My Own KPI"
+                      sub="orders that are yours"
+                      k={data.own}
+                      extra={
+                        data.own.enteredForOthers > 0 || data.own.enteredForMe > 0 ? (
+                          <div className="mt-3 space-y-1 text-xs text-slate-500">
+                            {data.own.enteredForOthers > 0 && (
+                              <p>
+                                You also entered <b className="text-slate-900">{peso(data.own.enteredForOthers)}</b> for others (counted on their KPI).
+                              </p>
+                            )}
+                            {data.own.enteredForMe > 0 && (
+                              <p>
+                                Others entered <b className="text-slate-900">{peso(data.own.enteredForMe)}</b> for you (counted here).
+                              </p>
+                            )}
+                          </div>
+                        ) : null
+                      }
+                    />
+                  )}
+                  {data.team && (
+                    <KpiBlock
+                      title={company ? (data.team.label === "The company" ? "Company KPI" : `KPI · ${data.team.label}`) : data.team.label === "My team" ? "My Team KPI" : `My Team KPI · ${data.team.label}`}
+                      sub={`${int(data.team.people)} people · ${int(data.team.peopleWithTarget)} with a target`}
+                      k={data.team}
+                    />
+                  )}
+                  {!both && days[0] && dayCard(days[0])}
+                </div>
+                {both && days.length > 0 && <div className="grid gap-4 md:grid-cols-2">{days.map(dayCard)}</div>}
+                {onDay && (data.ownDay || data.teamDay) && (
+                  <DayOrders rows={data.dayOrders} names={Boolean(data.team)} />
+                )}
+              </>
+            );
+          })()}
         </>
       )}
     </section>
@@ -246,10 +356,10 @@ function DayOrders({ rows: all, names }: { rows: KpiPanel["dayOrders"]; names: b
   const [open, setOpen] = useState(false);
   const rows = open ? all : all.slice(0, DAY_ROWS);
   return (
-    <div className={`${CARD} overflow-x-auto`}>
+    <div className="overflow-x-auto rounded-md border border-slate-200 bg-white">
       <table className="w-full min-w-[560px] text-sm">
         <thead className="border-b border-slate-200 bg-slate-50">
-          <tr className="text-left text-[11px] tracking-wide text-slate-500 uppercase">
+          <tr className="text-left text-[12px] text-slate-400 [&>th]:font-medium">
             <th className="px-3 py-2">Order</th>
             {names && <th className="px-3 py-2">Salesperson</th>}
             <th className="px-3 py-2">Invoice</th>
@@ -272,8 +382,10 @@ function DayOrders({ rows: all, names }: { rows: KpiPanel["dayOrders"]; names: b
             ))
           ) : (
             <tr>
-              <td colSpan={names ? 5 : 4} className="px-3 py-4 text-slate-500">
-                No invoiced orders on this day.
+              <td colSpan={names ? 5 : 4}>
+                <EmptyState title="No invoiced orders on this day">
+                  An order shows here once Management approves it and its invoice is made.
+                </EmptyState>
               </td>
             </tr>
           )}

@@ -16,6 +16,7 @@ import { GroupsGlance, WaitingGroups } from "../sellers/care-groups";
 import { RxFieldTable } from "../sellers/rx";
 import { BiddingCard } from "../sellers/tenders";
 import { withUnit } from "./switch";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 type Row = District["rows"][number];
 
@@ -135,7 +136,7 @@ function AtRisk({ data }: { data: TeamScores }) {
         </Link>
       </div>
       {risky.length === 0 ? (
-        <p className="mt-1 text-[13px] text-slate-500">No one below 60 this month or on an improvement plan.</p>
+        <EmptyState art={<NoInvoicesArt size={72} />} title="No one below 60 this month or on an improvement plan.">People at risk show here, with their scorecards.</EmptyState>
       ) : (
         <ul className="mt-2 divide-y divide-slate-100">
           {risky.map((row) => (

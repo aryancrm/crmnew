@@ -78,6 +78,7 @@ import { avatarTone, initials } from "../look";
 import { OrderChecksBox } from "./parts";
 import { PAPER_ACCEPT, uploadPaper } from "../photo";
 import { count, Dialog, dayLabel, inPacks, PageState, peso, timeLabel, useAction } from "../ui";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 /** The price a kind of customer usually gets. */
 const USUAL: Record<CustomerKind, string> = {
@@ -2180,8 +2181,10 @@ export function OrderNew({
         )}
         {action.at("items") && <div className="text-xs text-rose-700">{action.at("items")}</div>}
         {lines.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-slate-300 px-4 py-6 text-center text-xs text-slate-500">
-            Search a medicine above to add it.
+          <div className="rounded-2xl border border-dashed border-slate-300">
+            <EmptyState art={<NoInvoicesArt size={72} />} title="Search a medicine above to add it.">
+              The medicines on this order show here.
+            </EmptyState>
           </div>
         )}
         {lines.map((line, index) => {

@@ -10,6 +10,7 @@ import { Link } from "react-router-dom";
 import { avatarTone, initials } from "../look";
 import { count, timeLabel } from "../ui";
 import { AGENCIES, ROAD_BADGE } from "./parts";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 
 /** How many cards a lane draws before "more in this lane". */
 const LANE_CARDS = 25;
@@ -109,7 +110,9 @@ export function DeskBoard({
                 <BoardCard key={card.id} card={card} />
               ))}
               {shown.length === 0 && (
-                <p className="px-1.5 py-3 text-center text-[11px] text-stone-400">Nothing here</p>
+                <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing here">
+                  Cases at this step show here.
+                </EmptyState>
               )}
               {more > 0 && (
                 <button

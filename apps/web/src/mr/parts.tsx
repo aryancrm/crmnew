@@ -140,7 +140,7 @@ export function ActionSheet({
 /** The app's page top: a back arrow, the title, a line under it, buttons on the right. */
 export function MrHead({ title, sub, actions }: { title: string; sub?: ReactNode; back?: string; actions?: ReactNode }) {
   return (
-    <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+    <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
       <div className="flex min-w-0 items-start gap-2">
         <div className="min-w-0">
           <h1 className="text-[28px] leading-tight font-semibold tracking-tight text-slate-900">{title}</h1>

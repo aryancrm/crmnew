@@ -26,16 +26,18 @@ import {
 } from "@2mg/api/mr";
 import type { CustomerKind, CustomerList } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, RefreshCw, Search } from "lucide-react";
+import { MapPin, Plus, RefreshCw, Search } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { CustomerDialog } from "../customers/dialog";
+import { initials } from "../look";
 import { manilaToday } from "../team/range";
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
 import { Button, CARD, Dialog, PageState, Problem, peso, useAction } from "../ui";
 import { AddVisitsDialog } from "./plan";
-import { ActionSheet, Choices, clientLine, clockOf, dayWords, directions, FIELD, Initial, Label, MrHead, useMrMe } from "./parts";
+import { ActionSheet, Choices, clientLine, clockOf, dayWords, directions, FIELD, Label, MrHead, useMrMe } from "./parts";
+import { EmptyState, NoInvoicesArt, NoResults } from "../no-results";
 
 /** The CRM kind a new customer starts as, from the field's tab. */
 const NEW_KIND: Record<ClientTab, CustomerKind | undefined> = {
@@ -82,7 +84,7 @@ export function MrClientsPage() {
   if (!data) return <PageState query={query} what="the list" />;
   const member = mr.data?.access === "mr" || mr.data?.access === "lead";
   return (
-    <div className={`mx-auto flex max-w-4xl flex-col gap-3 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
+    <div className={`mx-auto flex max-w-screen-2xl flex-col gap-3 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
       <MrHead
         title={kind === "all" ? (scope === "mine" ? "All my customers" : "The team's customers") : TAB_WORDS[kind]}
         sub="Their orders and what they owe, their visits and the best time to go"
@@ -90,23 +92,47 @@ export function MrClientsPage() {
           <>
             <Button small variant="quiet" aria-label="Refresh" onClick={() => void query.refetch()}><RefreshCw size={15} /></Button>
             {/* The sales table (filters by who owes, sorting) stays one tap away. */}
-            <Link to="/my/area" className="inline-flex h-8 items-center rounded-lg px-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100">
+            <Link to="/my/area" className="inline-flex h-8 items-center rounded-lg bg-brand px-3 text-sm font-semibold text-white transition-colors hover:bg-brand-dark">
               Table
             </Link>
             {data.can.add && (
-              <Button small variant="primary" onClick={() => setAdding(true)}>
+              // Black, as Create New Order (Aryan, 27 Nov).
+              <button
+                type="button"
+                onClick={() => setAdding(true)}
+                className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white transition-colors hover:bg-black"
+              >
                 <Plus size={15} /> Add {isFieldKind(kind) ? KIND_ONE[kind].toLowerCase() : kind === "patient" ? "patient" : "customer"}
-              </Button>
+              </button>
             )}
           </>
         }
       />
-      <div className="flex gap-1 overflow-x-auto">
-        {CLIENT_TABS.map((one) => (
-          <button key={one} type="button" onClick={() => set({ kind: one })} className={`rounded-full px-3 py-1.5 text-sm font-semibold ${kind === one ? "bg-slate-900 text-white" : "bg-white text-slate-700 ring-1 ring-slate-200"}`}>
-            {TAB_WORDS[one]}
-          </button>
-        ))}
+      {/* The tabs in our style on the left, the search filling the rest of the line (Aryan, 27 Nov). */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div role="tablist" aria-label="Which customers" className="flex shrink-0 gap-0.5 overflow-x-auto rounded-lg bg-slate-100 p-1 [scrollbar-width:none]">
+          {CLIENT_TABS.map((one) => (
+            <button
+              key={one}
+              type="button"
+              role="tab"
+              aria-selected={kind === one}
+              onClick={() => set({ kind: one })}
+              className={`rounded-md px-3.5 py-1.5 text-[13px] whitespace-nowrap transition-colors ${
+                kind === one ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {TAB_WORDS[one]}
+            </button>
+          ))}
+        </div>
+        {/* The bar's own line lights up: darker on hover, and while typing the top search's look: a blue line with a second one
+            just outside it (Aryan, 27 Nov); no
+            box around the words inside (in-bar, styles.css). */}
+        <label className="flex min-w-[16rem] flex-1 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 transition-colors hover:border-slate-300 focus-within:border-brand focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand">
+          <Search size={16} className="text-slate-400" />
+          <input value={typed} onChange={(event) => setTyped(event.target.value)} placeholder="Search by name, city, hospital name or code" className="in-bar h-10 flex-1 bg-transparent text-sm outline-none" />
+        </label>
       </div>
       {member && data.can.team && (
         <div className="flex rounded-full bg-sky-600 p-1">
@@ -118,42 +144,96 @@ export function MrClientsPage() {
         </div>
       )}
       {scope === "team" && <TeamSwitch />}
-      <label className="flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-3">
-        <Search size={16} className="text-slate-400" />
-        <input value={typed} onChange={(event) => setTyped(event.target.value)} placeholder="Search by name, city, hospital name or code" className="h-10 flex-1 bg-transparent text-sm outline-none" />
-      </label>
-      <div className="text-sm font-semibold text-sky-800">ALL ({data.rows.length}{data.more ? "+" : ""})</div>
-      <ul className="flex flex-col gap-2">
-        {data.rows.map((one) => (
-          <li key={one.id}>
-            <button type="button" onClick={() => setPicked(one)} className={`${CARD} flex w-full items-start gap-3 p-3.5 text-left hover:border-sky-300`}>
-              <Initial name={one.name} />
-              <span className="min-w-0 flex-1">
-                <span className="block font-semibold text-slate-900 uppercase">{one.name}</span>
-                <span className="block text-xs text-slate-500">{clientLine(one)}</span>
-                <span className="block text-xs text-slate-500">
+      <div className="text-sm font-medium text-slate-900">All ({data.rows.length}{data.more ? "+" : ""})</div>
+      {/* The customers as cards in the order cards' style, four to a row (Aryan, 27 Nov): a black
+          initials circle, the name, its code, a solid pill for its kind with its city, the orders
+          and what they owe, then under a thin line who visits and when. Pressing one opens the same
+          actions as before. */}
+      <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {data.rows.map((one) => {
+          const kindWord = one.patient ? "Patient" : (one.customerKind || one.kind).replace(/^./, (c) => c.toUpperCase());
+          const kindTone = one.patient
+            ? "bg-teal-600"
+            : one.kind === "hospital"
+              ? "bg-[#1d9fda]"
+              : one.kind === "doctor"
+                ? "bg-indigo-600"
+                : one.customerKind === "drugstore"
+                  ? "bg-amber-600"
+                  : "bg-slate-700";
+          const details = [one.category ? `Category ${one.category}` : null, one.specialty, one.detail].filter(Boolean).join(" · ");
+          return (
+            <li key={one.id} className="min-w-0">
+              <button
+                type="button"
+                onClick={() => setPicked(one)}
+                className="flex h-full w-full flex-col rounded-2xl border border-slate-200/90 bg-white p-3.5 text-left shadow-2xs transition-[border-color,box-shadow] hover:border-[#7ccbee] hover:shadow-sm"
+              >
+                <span className="flex min-w-0 items-center gap-3">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[13px] font-bold text-white">
+                    {initials(one.name)}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="line-clamp-2 text-[15px] leading-snug font-semibold tracking-tight text-slate-900">{one.name}</span>
+                    {one.code && <span className="block truncate text-[12.5px] font-medium text-slate-500">{one.code}</span>}
+                  </span>
+                </span>
+                <span className="mt-3 flex min-w-0 flex-wrap items-center gap-1.5">
+                  <span className={`inline-flex shrink-0 items-center rounded-full px-2.5 py-0.5 text-[11.5px] font-medium text-white ${kindTone}`}>
+                    {kindWord}
+                  </span>
+                  {one.city && (
+                    <span className="inline-flex min-w-0 items-center gap-0.5 truncate text-[11.5px] text-slate-500">
+                      <MapPin className="size-3 shrink-0 text-slate-400" />
+                      <span className="truncate">{one.city}</span>
+                    </span>
+                  )}
+                </span>
+                {details && <span className="mt-2 line-clamp-2 text-[12.5px] text-slate-600">{details}</span>}
+                <span className="mt-2 text-[12.5px] text-slate-600">
+                  <span className="font-semibold text-slate-700">Orders:</span>{" "}
                   {one.orders ? `${one.orders} order${one.orders === 1 ? "" : "s"}` : "no order yet"}
                   {one.lastOrderAt ? ` · last ${dayWords(one.lastOrderAt.slice(0, 10))}` : ""}
-                  {one.owed > 0 ? <span className="font-semibold text-amber-700"> · owes {peso(one.owed)}</span> : null}
                 </span>
-                {!one.patient && (
-                  <span className="block text-xs text-slate-500">
-                    {one.assignedTo ? `${one.assignedTo.name} · ` : ""}
-                    {one.lastVisit ? `last visit ${dayWords(one.lastVisit)}` : "never visited"}
-                    {one.nextVisit ? ` · next ${dayWords(one.nextVisit)}` : ""}
+                {one.owed > 0 && (
+                  <span className="mt-1.5 inline-flex w-fit items-center gap-1.5 text-[12px] font-semibold text-amber-800">
+                    <span className="size-1.5 rounded-full bg-amber-500" /> Owes {peso(one.owed)}
                   </span>
                 )}
-                {(one.prefDays.length > 0 || one.prefTime) && (
-                  <span className="block text-xs font-semibold text-sky-700">Pref day/time: {[one.prefDays.map((d) => DAY_WORDS[d as keyof typeof DAY_WORDS] ?? d).join(", "), one.prefTime].filter(Boolean).join(" · ")}</span>
+                {(!one.patient || one.prefDays.length > 0 || one.prefTime) && (
+                  <span className="mt-auto block pt-3">
+                    <span className="block border-t border-slate-100 pt-2.5 text-[12px] text-slate-600">
+                      {!one.patient && (
+                        <span className="block">
+                          {one.assignedTo ? `${one.assignedTo.name} · ` : ""}
+                          {one.lastVisit ? `last visit ${dayWords(one.lastVisit)}` : "never visited"}
+                          {one.nextVisit ? ` · next ${dayWords(one.nextVisit)}` : ""}
+                        </span>
+                      )}
+                      {(one.prefDays.length > 0 || one.prefTime) && (
+                        <span className="mt-0.5 block font-medium text-[#1784b5]">
+                          Pref day/time: {[one.prefDays.map((d) => DAY_WORDS[d as keyof typeof DAY_WORDS] ?? d).join(", "), one.prefTime].filter(Boolean).join(" · ")}
+                        </span>
+                      )}
+                    </span>
+                  </span>
                 )}
-              </span>
-            </button>
-          </li>
-        ))}
+              </button>
+            </li>
+          );
+        })}
       </ul>
       {data.rows.length === 0 && (
-        <div className={`${CARD} px-4 py-8 text-center text-sm text-slate-500`}>
-          {kind === "all" ? "No customers here yet." : `No ${TAB_WORDS[kind]} here yet.`}
+        <div className={CARD}>
+          {q ? (
+            <NoResults title={kind === "all" ? "No customers here yet." : `No ${TAB_WORDS[kind]} here yet.`}>
+              Check the spelling, or clear the search.
+            </NoResults>
+          ) : (
+            <EmptyState title={kind === "all" ? "No customers here yet." : `No ${TAB_WORDS[kind]} here yet.`}>
+              The CRM's customers you look after show here, for the field.
+            </EmptyState>
+          )}
         </div>
       )}
 
@@ -218,7 +298,9 @@ function LastFive({ clientId, onClose }: { clientId: number; onClose: () => void
       {!query.data ? (
         <PageState query={query} what="the visits" />
       ) : query.data.history.length === 0 ? (
-        <p className="text-sm text-slate-500">Never visited yet.</p>
+        <EmptyState art={<NoInvoicesArt size={72} />} title="Never visited yet.">
+          The last five visits to this customer show here.
+        </EmptyState>
       ) : (
         <VisitLines rows={query.data.history} />
       )}
@@ -311,7 +393,11 @@ function OffRequests() {
           </div>
         </div>
       ))}
-      {query.data.rows.length === 0 && <div className={`${CARD} px-4 py-8 text-center text-sm text-slate-500`}>No requests waiting.</div>}
+      {query.data.rows.length === 0 && (
+        <div className={CARD}>
+          <EmptyState title="No requests waiting.">Requests to take a customer off the field's lists show here.</EmptyState>
+        </div>
+      )}
       <Problem message={action.problem?.message} />
     </div>
   );
@@ -504,7 +590,11 @@ export function FieldPanel({ data }: { data: ClientPage }) {
           </button>
         </div>
         {showCalls ? (calls.data ? <VisitLines rows={calls.data.rows} /> : <PageState query={calls} what="the calls" />) : <VisitLines rows={data.history} />}
-        {!showCalls && data.history.length === 0 && <p className="text-sm text-slate-500">Never visited yet.</p>}
+        {!showCalls && data.history.length === 0 && (
+          <EmptyState art={<NoInvoicesArt size={72} />} title="Never visited yet.">
+            The last five visits to this customer show here.
+          </EmptyState>
+        )}
       </div>
       {data.can.askOff && (
         <button type="button" onClick={() => setAsking(true)} className="self-start text-xs font-semibold text-rose-700 hover:underline">

@@ -12,6 +12,7 @@ import { hours } from "./parts";
 import { Ring } from "../team/charts";
 import { manilaToday, RangePicker, short } from "../team/range";
 import { CARD, PageHead, PageState } from "../ui";
+import { EmptyState, NoResults } from "../no-results";
 
 export const LEAVE_WORDS: Record<LeaveKind, string> = {
   vl: "Vacation",
@@ -263,8 +264,12 @@ export function AttendanceReportPage() {
               })}
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
-                    Nobody here.
+                  <td colSpan={9}>
+                    {words ? (
+                      <NoResults title="Nobody here.">Check the spelling, or clear the search.</NoResults>
+                    ) : (
+                      <EmptyState title="Nobody here.">People's hours, lateness, absence and leave over these days show here.</EmptyState>
+                    )}
                   </td>
                 </tr>
               )}

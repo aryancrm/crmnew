@@ -10,6 +10,7 @@ import { Ban, Plus, Trash2, Wallet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState, NoInvoicesArt, NoResults } from "../no-results";
 import { useChoices, useMay } from "../books/forms";
 import { Button, count, PageHead, PageState, Problem, Tabs, useAction } from "../ui";
 import {
@@ -159,8 +160,12 @@ export function DocListPage({ kind }: { kind: DocKind }) {
                 ))}
                 {data.rows.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-slate-500">
-                      Nothing here.
+                    <td colSpan={7}>
+                      {q ? (
+                        <NoResults title="Nothing here.">Nothing matches that search. Try other words.</NoResults>
+                      ) : (
+                        <EmptyState title="Nothing here.">{word.title} show here as soon as there are any.</EmptyState>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -317,13 +322,19 @@ export function DocPage({ kind }: { kind: DocKind }) {
           </Box>
         ) : (
           <Box title="Lines">
-            <p className="px-4 py-6 text-center text-[13px] text-slate-500">{kind === "vendor_payment" ? "A payment has no lines: see the bills it went on." : "No lines."}</p>
+            {kind === "vendor_payment" ? (
+              <p className="px-4 py-6 text-center text-[13px] text-slate-500">A payment has no lines: see the bills it went on.</p>
+            ) : (
+              <EmptyState title="No lines.">What this document is for, line by line, shows here.</EmptyState>
+            )}
           </Box>
         )}
         <div className="flex flex-col gap-4">
           <Box title="Linked">
             {doc.linkedDocs.length === 0 ? (
-              <p className="px-4 py-5 text-[13px] text-slate-500">Nothing linked.</p>
+              <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing linked.">
+                Documents tied to this one show here.
+              </EmptyState>
             ) : (
               <ul className="divide-y divide-slate-100">
                 {doc.linkedDocs.map((one) => (
@@ -364,7 +375,14 @@ function useOpenBills(vendorId: number | null) {
 }
 
 function BillPicker({ bills, amounts, setAmounts, error, today }: { bills: ReturnType<typeof useOpenBills>; amounts: Record<number, string>; setAmounts: (next: Record<number, string>) => void; error?: (at: number) => string | undefined; today: string }) {
-  if (!bills.length) return <p className="rounded-xl border border-dashed border-slate-200 px-4 py-5 text-center text-[13px] text-slate-500">No unpaid bill for this vendor.</p>;
+  if (!bills.length)
+    return (
+      <div className="rounded-xl border border-dashed border-slate-200">
+        <EmptyState art={<NoInvoicesArt size={72} />} title="No unpaid bill for this vendor.">
+          Their bills with money still owed show here.
+        </EmptyState>
+      </div>
+    );
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-200">
       <table className={TABLE}>

@@ -22,7 +22,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { shortPeso } from "../ceo";
-import { avatarTone, dayHeading, initials, PRIMARY_SM } from "../look";
+import { avatarSolid, avatarTone, dayHeading, initials } from "../look";
 import { Donut } from "../team/charts";
 import { count, dayLabel, PageState, peso, manilaDay } from "../ui";
 import { Figure, type Period, PeriodBox, periodWord as periodWordOf } from "../home/figures";
@@ -37,6 +37,7 @@ import { greeting, todayWords } from "../home/home";
 import { OrderCardItem } from "../orders/board";
 import { HospitalsCard } from "./hospitals";
 import { MyKpis as KpiPanel } from "../kpis/my-kpis";
+import { EmptyState, NoInvoicesArt } from "../no-results";
 import { FieldDayCard } from "../mr/home";
 
 const NEWS: Record<StockNews["kind"], { label: string; style: string }> = {
@@ -81,7 +82,8 @@ const SCORE_STATUS = {
   },
   watch: {
     label: "Watch",
-    style: "bg-amber-50 text-amber-900 ring-amber-200",
+    // Green, as Aryan asked (26 Nov).
+    style: "bg-emerald-50 text-emerald-800 ring-emerald-200",
     bar: "bg-amber-500",
   },
   review: { label: "Review", style: "bg-rose-50 text-rose-700 ring-rose-200", bar: "bg-rose-500" },
@@ -155,7 +157,8 @@ export function MedrepHome() {
   const periodWord = periodWordOf(period, data?.day ?? null);
 
   return (
-    <div className="mx-auto max-w-screen-xl space-y-4">
+    // home-skin: the boxes take the KPI cards' look (styles.css), the page only.
+    <div className="home-skin mx-auto max-w-screen-xl space-y-4">
       {/* Who and when, and the one thing to do. */}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -187,7 +190,7 @@ export function MedrepHome() {
       {(hospital || anesthesia) && <TodaysPulse />}
       {(hospital || anesthesia) && <GoHereFirst />}
       {/* Their hospitals: whom to call, accreditation ending, formulary waiting, money (19 Nov). */}
-      {hospital && <HospitalsCard first="due" />}
+      {hospital && <HospitalsCard first="due" colours />}
       {/* An Rx CHC's day: the doctors, today's route, PAP (docs/PLAN.md 16.2). No sales target here. */}
       {rx && <RxHome />}
       {/* MD Telesales: the pulse, the groups waiting (15 minutes), the refills due. */}
@@ -234,6 +237,7 @@ export function MedrepHome() {
 
       {/* The period's figures: what was submitted and where it stands now. */}
       <PeriodBox
+        colours
         title="My orders"
         period={period}
         day={day}
@@ -300,7 +304,7 @@ export function MedrepHome() {
           {data && data.scorecard.status !== "none" && (
             <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
               <header className="flex flex-wrap items-center gap-3 border-b border-slate-200 bg-slate-50/70 px-4 py-3">
-                <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600">
+                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-white text-slate-600">
                   <Gauge className="size-4" />
                 </span>
                 <div className="min-w-0 flex-1">
@@ -332,7 +336,7 @@ export function MedrepHome() {
                     key={kpi.code}
                     className="grid grid-cols-[3.5rem_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3"
                   >
-                    <span className="rounded-md border border-slate-200 bg-white py-1 text-center text-[11px] font-bold text-slate-700">
+                    <span className="rounded-md bg-white py-1 text-center text-[11px] font-bold text-slate-700">
                       {kpi.code}
                     </span>
                     <div className="min-w-0">
@@ -390,7 +394,7 @@ export function MedrepHome() {
                 to="/orders"
                 className="text-xs font-medium text-slate-600 hover:text-slate-900"
               >
-                All my orders →
+                All my orders
               </Link>
             </header>
             {!data ? (
@@ -398,16 +402,17 @@ export function MedrepHome() {
                 {kpis.isError ? "Couldn't read your orders." : "Reading…"}
               </div>
             ) : data.orders.length === 0 ? (
-              <div className="px-4 py-8 text-center text-sm text-slate-500">
-                No order{" "}
-                {period === "month" ? "this month" : period === "today" ? "today" : "that day"}.{" "}
+              // The same words and link, with the receipt drawn above them (Aryan, 26 Nov).
+              <EmptyState
+                title={`No order ${period === "month" ? "this month" : period === "today" ? "today" : "that day"}.`}
+              >
                 <Link
                   to="/orders/new"
                   className="font-semibold text-emerald-700 underline-offset-2 hover:underline"
                 >
                   Place one
                 </Link>
-              </div>
+              </EmptyState>
             ) : (
               <ul className="divide-y divide-slate-100">
                 {data.orders.map((order) => (
@@ -489,10 +494,11 @@ export function MedrepHome() {
                 to={`/my/area?kind=${kind}`}
                 className="text-xs font-medium text-slate-600 hover:text-slate-900"
               >
-                See all →
+                See all
               </Link>
             </header>
-            <div role="tablist" className="mt-2 flex gap-1 px-3">
+            {/* As My KPIs' periods (Aryan, 26 Nov): a soft grey track, the picked one a white chip. */}
+            <div role="tablist" className="mx-3 mt-2 flex gap-0.5 rounded-lg bg-slate-100 p-1">
               {KIND_TABS.map((tab) => (
                 <button
                   key={tab.key}
@@ -500,15 +506,15 @@ export function MedrepHome() {
                   role="tab"
                   aria-selected={kind === tab.key}
                   onClick={() => setKind(tab.key)}
-                  className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                  className={`flex flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 py-1.5 text-[13px] transition-colors ${
                     kind === tab.key
-                      ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200"
-                      : "text-slate-600 hover:bg-slate-100"
+                      ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]"
+                      : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
                   {tab.label}
                   <span
-                    className={`rounded-full px-1.5 text-[10px] font-bold tabular-nums ${kind === tab.key ? "bg-white/20" : "bg-slate-100 text-slate-500"}`}
+                    className={`inline-grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1 text-[10px] leading-none font-semibold text-slate-900 tabular-nums ${kind === tab.key ? "bg-slate-100" : "bg-white"}`}
                   >
                     {count(area.data?.counts[tab.key] ?? 0)}
                   </span>
@@ -523,7 +529,7 @@ export function MedrepHome() {
                     className="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50"
                   >
                     <span
-                      className={`flex size-8 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold ${avatarTone(row.name)}`}
+                      className={`flex size-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold ${avatarSolid(row.name)}`}
                     >
                       {initials(row.name)}
                     </span>
@@ -546,7 +552,11 @@ export function MedrepHome() {
                 </li>
               ))}
               {customers.data && customers.data.rows.length === 0 && (
-                <li className="px-4 py-5 text-center text-xs text-slate-500">None yet.</li>
+                <li>
+                  <EmptyState art={<NoInvoicesArt size={72} />} title="None yet.">
+                    The customers you look after show here.
+                  </EmptyState>
+                </li>
               )}
             </ul>
             {area.data && area.data.quiet > 0 && (
@@ -632,6 +642,21 @@ const STAGE_TABS: { key: MyOrderStage; label: string }[] = [
   { key: "delivered", label: "Delivered this month" },
 ];
 
+/** The order banner's parcel in the portal's four colours (Aryan, 26 Nov): the top yellow, the
+ *  front blue, the side red, a green plus. */
+function OrderParcel() {
+  return (
+    <svg viewBox="0 0 48 48" className="size-16" aria-hidden="true">
+      <path d="M24 6l16 8-16 8-16-8z" fill="#f5c400" stroke="#111827" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M8 14l16 8v20L8 34z" fill="#1d9fda" stroke="#111827" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M40 14l-16 8v20l16-8z" fill="#e8505b" stroke="#111827" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M16 10l16 8v6" fill="none" stroke="#111827" strokeWidth="1.5" strokeLinejoin="round" />
+      <circle cx="38" cy="37" r="7.5" fill="#22b378" stroke="#ffffff" strokeWidth="2" />
+      <path d="M38 33.5v7M34.5 37h7" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /** A MedRep's (or a team lead's) orders as cards, by where they stand. */
 export function MyOrdersPage() {
   const me = useMe().data;
@@ -649,23 +674,11 @@ export function MyOrdersPage() {
 
   return (
     <div className="mx-auto max-w-screen-2xl">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <h1 className="text-[28px] font-semibold tracking-tight text-ink">
-            {team ? "Team orders" : "My orders"}
-          </h1>
-          <span className="rounded-full bg-stone-200/75 px-2.5 py-0.5 text-xs font-semibold text-stone-600 tabular-nums">
-            {count(data.counts.all)}
-          </span>
-        </div>
-        {/* Every seller's own way in, as the hub's "+ New Order" on My Orders (the Online desk's
-            orders start as cases). */}
-        {me?.role !== "online" && (
-          <Link to="/orders/new" className={PRIMARY_SM}>
-            <Plus className="size-4" /> Create New Order
-          </Link>
-        )}
-      </div>
+      {/* The title sits in the order banner below (Aryan, 26 Nov); the Online desk, with no banner,
+          keeps it here. No count pill after it: the All tab says it. */}
+      {me?.role === "online" && (
+        <h1 className="text-[28px] font-semibold tracking-tight text-ink">{team ? "Team orders" : "My orders"}</h1>
+      )}
 
       {team && (
         <div className="mt-4">
@@ -674,43 +687,116 @@ export function MyOrdersPage() {
       )}
       {/* What came from which Division this month (Aryan, 19 Nov: a MedRep may bring another
           Division's order; their screen says what came from which); a press shows only those. */}
-      {data.byDivision.length > 0 && (
-        <div className="mt-4 flex flex-wrap items-center gap-1.5">
-          <span className="mr-1 text-xs font-semibold text-slate-500">{data.sales.month} by Division</span>
-          {data.byDivision.map((one) => {
-            const on = data.division === one.division;
-            return (
-              <button
-                key={one.division}
-                type="button"
-                aria-pressed={on}
-                onClick={() => {
-                  const next = new URLSearchParams(params);
-                  if (on) next.delete("division");
-                  else next.set("division", one.division);
-                  next.delete("page");
-                  setParams(next, { replace: true });
-                }}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors ${
-                  on
-                    ? "border-brand bg-brand text-white"
-                    : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
-                }`}
-              >
-                {one.division}
-                <span className={`tabular-nums ${on ? "text-white/80" : "text-slate-500"}`}>
-                  {count(one.orders)} · {shortPeso(one.value)}
+      {/* The order banner (Aryan, 26 Nov, after a "Create Your Order" banner he gave, not copied): on
+          the left a parcel in the four colours with speed lines, a thin line, the title and a line
+          under it; on the right the month by Division and the black Create New Order. The Online desk
+          doesn't place orders here (theirs start as cases): it keeps the Divisions alone. */}
+      {me?.role !== "online" ? (
+        // No box, no border (Aryan, 26 Nov): the parcel, the page's title and the line under it on the
+        // left; the Divisions and Create New Order on the right.
+        <section>
+          <div className="grid items-center gap-y-3 md:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)]">
+            <div className="flex items-center gap-4">
+              <span aria-hidden="true" className="flex shrink-0 items-center">
+                {/* Speed lines, as if the parcel is on its way. */}
+                <span className="mr-1.5 flex flex-col items-end gap-1">
+                  <span className="h-0.5 w-4 rounded-full bg-slate-300" />
+                  <span className="h-0.5 w-6 rounded-full bg-slate-400" />
+                  <span className="h-0.5 w-3 rounded-full bg-slate-300" />
                 </span>
-              </button>
-            );
-          })}
+                <OrderParcel />
+              </span>
+              <span aria-hidden="true" className="h-12 w-px shrink-0 bg-slate-200" />
+              <div className="min-w-0">
+                <h1 className="text-[32px] leading-tight font-semibold tracking-tight text-ink">{team ? "Team orders" : "My orders"}</h1>
+                <p className="mt-0.5 text-[13px] text-slate-500">Pick the customer and the medicines; Management checks it next.</p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+            {data.byDivision.length > 0 && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="mr-1 text-xs font-semibold text-slate-500">{data.sales.month} by Division</span>
+                {data.byDivision.map((one) => {
+                  const on = data.division === one.division;
+                  return (
+                    <button
+                      key={one.division}
+                      type="button"
+                      aria-pressed={on}
+                      onClick={() => {
+                        const next = new URLSearchParams(params);
+                        if (on) next.delete("division");
+                        else next.set("division", one.division);
+                        next.delete("page");
+                        setParams(next, { replace: true });
+                      }}
+                      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                        on
+                          ? "border-brand bg-brand text-white"
+                          : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      {one.division}
+                      <span className={`tabular-nums ${on ? "text-white/80" : "text-slate-500"}`}>
+                        {count(one.orders)} · {shortPeso(one.value)}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+              {/* Every seller's own way in, as the hub's "+ New Order" on My Orders. */}
+              <Link
+                to="/orders/new"
+                className="ml-auto inline-flex items-center justify-center gap-2 rounded-[10px] bg-slate-900 px-4 py-2 text-xs font-semibold text-white transition-colors hover:bg-black"
+              >
+                <Plus className="size-4" /> Create New Order
+              </Link>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <div className="mt-4">
+        {data.byDivision.length > 0 && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-1 text-xs font-semibold text-slate-500">{data.sales.month} by Division</span>
+            {data.byDivision.map((one) => {
+              const on = data.division === one.division;
+              return (
+                <button
+                  key={one.division}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => {
+                    const next = new URLSearchParams(params);
+                    if (on) next.delete("division");
+                    else next.set("division", one.division);
+                    next.delete("page");
+                    setParams(next, { replace: true });
+                  }}
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-colors ${
+                    on
+                      ? "border-brand bg-brand text-white"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                  }`}
+                >
+                  {one.division}
+                  <span className={`tabular-nums ${on ? "text-white/80" : "text-slate-500"}`}>
+                    {count(one.orders)} · {shortPeso(one.value)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
         </div>
       )}
-      <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+      {/* As My KPIs' periods (Aryan, 26 Nov): a soft grey track, the picked tab a raised white chip. */}
+      <div className="mt-3 rounded-lg bg-slate-100 p-1">
         <div
           role="tablist"
           aria-label="Orders"
-          className="-mx-1 flex gap-1 overflow-x-auto px-1 [scrollbar-width:none]"
+          className="flex gap-0.5 overflow-x-auto [scrollbar-width:none]"
         >
           {STAGE_TABS.map((tab) => {
             const selected = tab.key === data.stage;
@@ -730,10 +816,10 @@ export function MyOrdersPage() {
                     { replace: true },
                   )
                 }
-                className={`flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors ${
+                className={`flex shrink-0 items-center gap-1.5 rounded-md px-3.5 py-1.5 text-[13px] transition-colors ${
                   selected
-                    ? "bg-brand text-white shadow-sm"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                    ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]"
+                    : "text-slate-500 hover:text-slate-800"
                 }`}
               >
                 {(tab.key === "held" || tab.key === "sent_back") && (
@@ -744,7 +830,7 @@ export function MyOrdersPage() {
                 )}
                 <span>{tab.key === "sent_back" && !team ? "Sent back to me" : tab.label}</span>
                 <span
-                  className={`rounded-full px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${selected ? "bg-white/20 text-white" : "bg-slate-100 text-slate-500"}`}
+                  className={`inline-grid h-5 min-w-5 shrink-0 place-items-center rounded-full px-1 text-[10px] leading-none font-semibold text-slate-900 tabular-nums ${selected ? "bg-slate-100" : "bg-white"}`}
                 >
                   {count(data.counts[tab.key])}
                 </span>
@@ -753,7 +839,7 @@ export function MyOrdersPage() {
           })}
           <Link
             to="/returns"
-            className="ml-auto flex shrink-0 items-center rounded-lg px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            className="ml-auto flex shrink-0 items-center rounded-md px-3.5 py-1.5 text-[13px] text-slate-500 transition-colors hover:text-slate-800"
           >
             Returns
           </Link>
@@ -762,8 +848,8 @@ export function MyOrdersPage() {
 
       <div className={`mt-4 space-y-4 ${mine.isPlaceholderData ? "opacity-60" : ""}`}>
         {data.cards.length === 0 ? (
-          <div className="rounded-2xl border border-slate-200 bg-white px-5 py-8 text-center text-sm text-slate-500">
-            No order here.
+          <div className="rounded-2xl border border-slate-200 bg-white">
+            <EmptyState title="No order here.">Orders in this tab show here. Try another tab.</EmptyState>
           </div>
         ) : (
           days.map((day) => {
@@ -1002,6 +1088,7 @@ function MyOrdersNow() {
         My orders right now
       </h3>
       <Donut
+        centred
         label="open"
         middle={String(open)}
         slices={[

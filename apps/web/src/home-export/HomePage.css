@@ -3833,7 +3833,7 @@
 /* --- Scene ------------------------------------------------------------- */
 .hx .stage__scene {
   position: relative;
-  height: clamp(320px, 46vw, 600px);
+  height: clamp(340px, 50vw, 680px);
   margin-top: clamp(1.5rem, 4vw, 3rem);
   perspective: 1600px;
 }
@@ -3868,7 +3868,7 @@
   top: 2%;
   width: min(1240px, 106vw);
   transform-origin: 50% 0;
-  transform: translateX(-50%) scale(0.7) rotateX(18deg) rotateY(-12deg) rotateZ(3deg) translateY(40px);
+  transform: translateX(-50%) scale(0.64) rotateX(18deg) rotateY(-12deg) rotateZ(3deg) translateY(40px);
   opacity: 0;
   transition: opacity 1s var(--ease-out) 0.2s, transform 1.4s var(--ease-out) 0.2s;
   transform-style: preserve-3d;
@@ -3876,7 +3876,7 @@
 
 .hx .stage.is-in .monitor {
   opacity: 1;
-  transform: translateX(-50%) scale(0.7) rotateX(18deg) rotateY(-12deg) rotateZ(3deg);
+  transform: translateX(-50%) scale(0.64) rotateX(18deg) rotateY(-12deg) rotateZ(3deg);
 }
 
 /* Bezel: black fading into graphite grey. */
@@ -7636,4 +7636,28 @@
   .hx .footer__social {
     margin-left: 0;
   }
+}
+
+/* The monitor showing a MedRep's Home (medrep-screen.tsx, 27 Nov): the copy fills the glass
+   edge to edge, at any width (it scales itself). */
+.hx .monitor__screen.monitor__screen--app {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+}
+/* Inside the copy, the page's own reset steps aside: margins and line heights come back from the
+   app's styles (its mt-3, leading-tight and so on), so nothing in it runs into anything else. */
+.hx .app-screen,
+.hx .app-screen * {
+  margin: revert-layer;
+  line-height: revert-layer;
+}
+
+/* Only the neck shows under the desktop (Aryan, 27 Nov): it runs on past the section's bottom
+   edge (the section crops it), and the foot is gone. */
+.hx .monitor__neck {
+  height: 600px;
+}
+.hx .monitor__foot {
+  display: none;
 }

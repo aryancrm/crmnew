@@ -8,6 +8,7 @@ import { useQuery } from "@tanstack/react-query";
 import { CalendarClock, Factory, PackageCheck, Plus, ReceiptText, ShoppingCart, Undo2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api";
+import { EmptyState } from "../no-results";
 import { useMay } from "../books/forms";
 import { Button, count, PageHead, PageState, Tile } from "../ui";
 import { Box, docPath, KIND_WORD, plainState, money, shortMoney, StatePill, TD, TH, TABLE, when, ZohoLink } from "./shared";
@@ -86,9 +87,9 @@ export function PurchasesBoard() {
             aside={<span className="text-[12px] text-slate-500">Medicines at or under their low-stock level</span>}
           >
             {data.buyMore.length === 0 ? (
-              <p className="px-4 py-6 text-center text-[13px] text-slate-500">
-                Nothing is under its low-stock level. A medicine's level is set on its page (Edit → Details).
-              </p>
+              <EmptyState title="Nothing is under its low-stock level. A medicine's level is set on its page (Edit → Details).">
+                Medicines at or under their low-stock level show here, so they can be bought again before they run out.
+              </EmptyState>
             ) : (
               <div className="overflow-x-auto">
                 <table className={TABLE}>
