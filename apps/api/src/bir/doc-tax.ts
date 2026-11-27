@@ -10,6 +10,20 @@ import { originByName, share, WITHHOLDING, withholdingDecision } from "./ewt";
 
 const clean = (v?: string | null) => v?.trim() || null;
 
+/** Whole centavos shared out by the weights (equally when they are all 0); the last share takes the
+ *  rounding, so the shares always add up to the whole. */
+export function spread(whole: number, weights: number[]): number[] {
+  const sum = weights.reduce((a, b) => a + b, 0);
+  const out: number[] = [];
+  let given = 0;
+  weights.forEach((weight, n) => {
+    const part = n === weights.length - 1 ? whole - given : Math.round(sum ? (whole * weight) / sum : whole / weights.length);
+    out.push(part);
+    given += part;
+  });
+  return out;
+}
+
 export async function saveDocBirTaxMeta(
   tx: Runner,
   me: Me,
@@ -58,25 +72,30 @@ export async function saveDocBirTaxMeta(
     throw new Refusal(400, "invalid", "Pick a valid YYYY-MM-DD customs assessment date.", "importAssessmentDate");
   }
 
-  // If a partial-VAT utility bill (e.g. Meralco) was entered as a single gross line with no % tax,
-  // split that line into net + manualVat so Tax Payable in book_entry matches SLP/2550Q to the centavo.
+  // The VAT typed for a partial-VAT bill (Meralco and the like) is the document's VAT, in the books
+  // too (Aryan, 27 Nov; the accountant to confirm): the total stays as the supplier billed it, the
+  // typed VAT is spread over the lines by their size, and each line's own amount takes the rest. So
+  // Tax Payable in book_entry (a bill's: its total less its lines; an expense's: its lines' tax)
+  // equals SLP / 2550Q to the centavo.
   if (manualVat != null && fx === 1) {
-    const docLines = await rows<{ id: number; amount: number; taxAmount: number }>(
+    const docLines = await rows<{ id: number; amount: number; taxAmount: number; inclusive: boolean }>(
       tx,
-      sql`select id::int as id, coalesce(amount, 0)::bigint::float8 as amount, coalesce(tax_amount, 0)::bigint::float8 as "taxAmount"
-          from book_line where doc_id = ${docId}`,
+      sql`select l.id::int as id, coalesce(l.amount, 0)::bigint::float8 as amount, coalesce(l.tax_amount, 0)::bigint::float8 as "taxAmount",
+            coalesce(d.fields->>'Is Inclusive Tax', '') = 'true' as inclusive
+          from book_line l join book_doc d on d.id = l.doc_id where l.doc_id = ${docId} order by l.n`,
     );
-    if (docLines.length === 1 && docLines[0]!.taxAmount === 0 && Math.round(docLines[0]!.amount) === totalPhp) {
-      const netLine = totalPhp - manualVat;
-      if (doc.kind === "bill") {
-        await tx.execute(sql`update book_line set amount = ${netLine}, tax_amount = ${manualVat || null} where id = ${docLines[0]!.id}`);
-        await tx.execute(sql`update book_doc set sub_total = ${netLine} where id = ${docId}`);
-      } else {
-        await tx.execute(sql`update book_line set tax_amount = ${manualVat || null} where id = ${docLines[0]!.id}`);
-        await tx.execute(
-          sql`update book_doc set sub_total = ${netLine}, fields = fields || jsonb_build_object('Is Inclusive Tax', 'true') where id = ${docId}`,
-        );
+    if (docLines.length) {
+      const inclusive = doc.kind === "expense" && docLines[0]!.inclusive;
+      // A line's whole size: an inclusive expense's amount has its tax in it already.
+      const gross = docLines.map((line) => (inclusive ? line.amount : line.amount + line.taxAmount));
+      const taxes = spread(manualVat, gross);
+      const nets = spread(totalPhp - manualVat, gross);
+      for (const [n, line] of docLines.entries()) {
+        // A bill's line holds its net; an expense's keeps its own way (inclusive: the whole, tax inside).
+        const amount = doc.kind === "bill" ? nets[n]! : inclusive ? line.amount : gross[n]! - taxes[n]!;
+        await tx.execute(sql`update book_line set amount = ${amount}, tax_amount = ${taxes[n] || null} where id = ${line.id}`);
       }
+      await tx.execute(sql`update book_doc set sub_total = ${totalPhp - manualVat} where id = ${docId}`);
     }
   }
 

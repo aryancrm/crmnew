@@ -423,6 +423,7 @@ const booksLinks: MenuItem[] = [
   { to: "/books/journals", label: "Manual journals", icon: BookOpenCheck },
   { to: "/books/accounts", label: "Chart of accounts", icon: ListTree },
   { to: "/books/locking", label: "Transaction locking", icon: Lock },
+  { to: "/books/bir/readiness", label: "BIR & Tax", icon: FileSpreadsheet },
 ];
 
 const financeApp: Space = {
@@ -1521,6 +1522,8 @@ function ownDesk(me: Me): Space {
               folder("Money", Banknote, moneyLinks.filter((link) => link.to !== "/refunds"), "Money"),
               // Another app, so a link (↗), never a folder: its pages are Books' own menu.
               { to: "/books/home", label: "Books", icon: Landmark },
+              // Straight to Books' BIR & Tax, its Readiness check first (Aryan, 27 Nov).
+              { to: "/books/bir/readiness", label: "BIR & Tax", icon: FileSpreadsheet },
             ],
           },
           {

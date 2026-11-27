@@ -16,7 +16,7 @@ import { todayManila } from "../inventory/rules";
 import type { Role } from "../people/roles";
 import type { BirTaxInput, BookChoices, Me } from "../types";
 import { saveDocBirTaxMeta } from "../bir/doc-tax";
-import { LEDGER_ROLES } from "./accounts";
+import { accountNamed, LEDGER_ROLES, MONEY_LIKE, MONEY_TYPES } from "./accounts";
 import { keepFile } from "../files/store";
 import { landedCosts } from "../purchases/landed";
 import { assertOpen } from "./write";
@@ -52,9 +52,21 @@ export async function bookChoices(db: Database, me: Me): Promise<BookChoices> {
           (select s.sku from medicine_sku s where s.medicine_id = m.id order by s.id limit 1) as sku, m.pack as unit
         from medicine m where m.active order by lower(m.name)`,
     ),
-    rows<{ a: string }>(db, sql`select account as a from book_line where account is not null group by account order by count(*) desc limit 60`),
+    // The chart's own accounts (the forms take no other since 27 Nov), the most used first: a new
+    // company with no bills yet still sees them all.
+    rows<{ a: string }>(
+      db,
+      sql`with used as (select lower(account) as key, count(*) as n from book_line where account is not null group by 1)
+        select a.name as a from book_account a left join used u on u.key = lower(a.name)
+        where a.active order by coalesce(u.n, 0) desc, lower(a.name)`,
+    ),
     rows<{ a: string }>(db, sql`select fields->>'Mode' as a from book_doc where kind = 'vendor_payment' and fields ? 'Mode' group by 1 order by count(*) desc`),
-    rows<{ a: string }>(db, sql`select fields->>'Paid Through' as a from book_doc where kind = 'vendor_payment' and fields ? 'Paid Through' group by 1 order by count(*) desc limit 40`),
+    rows<{ a: string }>(
+      db,
+      sql`select name as a from book_account
+        where active and (type in (${sql.join(MONEY_TYPES.map((t) => sql`${t}`), sql`, `)}) or name in (${sql.join(MONEY_LIKE.map((t) => sql`${t}`), sql`, `)}))
+        order by lower(name)`,
+    ),
     nextNumber(db, "purchase_order", "PO-", 5),
     nextNumber(db, "purchase_receive", "PR-", 5),
     nextNumber(db, "vendor_payment", "", 0),
@@ -113,16 +125,18 @@ export async function linesOf(tx: Runner, input: LineInput[]): Promise<MadeLine[
       unit = medicine.unit;
     }
     if (!itemName && !clean(line.account)) throw new Refusal(400, "invalid", "Pick an item or an account.", `lines.${at}.medicineId`);
+    // A typed account is one the chart has (its own spelling), never a new name the books invent.
+    const account = clean(line.account) ? await accountNamed(tx, line.account, `lines.${at}.account`) : null;
     if (!(line.qty > 0)) throw new Refusal(400, "invalid", "Type how many.", `lines.${at}.qty`);
     if (!(line.rate >= 0)) throw new Refusal(400, "invalid", "Type the rate.", `lines.${at}.rate`);
     const amount = centsOf(line.qty * line.rate);
     const taxAmount = line.taxPct ? Math.round((amount * line.taxPct) / 100) : 0;
     out.push({
       medicineId: line.medicineId ?? null,
-      itemName: itemName ?? (clean(line.account) as string),
+      itemName: itemName ?? (account as string),
       sku,
       description: clean(line.description),
-      account: clean(line.account),
+      account,
       unit,
       qty: line.qty,
       rate: line.rate,
@@ -565,7 +579,10 @@ export async function createBill(db: Database, me: Me, input: BillInput): Promis
     if (dueDate < date) throw new Refusal(400, "invalid", "The due date comes after the bill date.", "dueDate");
     const fxRate = vendor.currency === "PHP" ? 1 : (input.fxRate ?? 0);
     if (!(fxRate > 0)) throw new Refusal(400, "invalid", `Type how many pesos one ${vendor.currency} is.`, "fxRate");
-    const typed = await linesOf(tx, input.lines ?? []);
+    // A landed-cost bill's lines all go to Inventory Asset (below), so an account typed on them is
+    // not asked of the chart: the line keeps its words as the item.
+    const asked = input.landedOn ? (input.lines ?? []).map((line) => ({ ...line, itemName: clean(line.itemName) ?? clean(line.account), account: null })) : (input.lines ?? []);
+    const typed = await linesOf(tx, asked);
     const subTotal = typed.reduce((sum, line) => sum + line.amount, 0);
     const total = subTotal + typed.reduce((sum, line) => sum + line.taxAmount, 0);
     // Landed cost: the bill sits in the stock's value (Inventory Asset) and each piece of that
@@ -759,6 +776,7 @@ export async function payVendor(db: Database, me: Me, input: PaymentInput): Prom
     const bills = await billsFor(tx, vendor.id, applied);
     const used = applied.reduce((sum, entry) => sum + entry.amount, 0);
     if (used > input.amount) throw new Refusal(400, "invalid", "More is put on the bills than was paid.", "amount");
+    const paidThrough = clean(input.paidThrough) ? await accountNamed(tx, input.paidThrough, "paidThrough", true) : null;
     const number = await nextNumber(tx, "vendor_payment", "", 0);
     // A vendor billed in another currency is paid in it: the payment keeps the rate of the bill it
     // pays (else the vendor's latest), so its peso worth is right in every report. It used to be
@@ -783,7 +801,7 @@ export async function payVendor(db: Database, me: Me, input: PaymentInput): Prom
       total: input.amount,
       balance: input.amount - used,
       notes: input.notes,
-      fields: { ...(clean(input.mode) ? { Mode: clean(input.mode) } : {}), ...(clean(input.paidThrough) ? { "Paid Through": clean(input.paidThrough) } : {}) },
+      fields: { ...(clean(input.mode) ? { Mode: clean(input.mode) } : {}), ...(paidThrough ? { "Paid Through": paidThrough } : {}) },
       by: me.id,
     });
     for (const [at, bill] of bills.entries()) {
@@ -940,8 +958,9 @@ export async function receivePayment(db: Database, me: Me, input: ReceiptInput):
     const invoices = await billsFor(tx, customer.id, applied, "invoice");
     const used = applied.reduce((sum, entry) => sum + entry.amount, 0);
     if (used > input.amount) throw new Refusal(400, "invalid", "More is put on the invoices than was received.", "amount");
+    const depositTo = clean(input.depositTo) ? await accountNamed(tx, input.depositTo, "depositTo", true) : null;
     const number = await nextNumber(tx, "customer_payment", "", 0);
-    const fields = { ...(clean(input.mode) ? { Mode: clean(input.mode) } : {}), ...(clean(input.depositTo) ? { "Deposit To": clean(input.depositTo) } : {}) };
+    const fields = { ...(clean(input.mode) ? { Mode: clean(input.mode) } : {}), ...(depositTo ? { "Deposit To": depositTo } : {}) };
     const [made] = await rows<{ id: number }>(
       tx,
       sql`insert into book_doc (kind, number, reference, doc_date, status, customer_id, party_name, total, balance, notes, fields, created_by)

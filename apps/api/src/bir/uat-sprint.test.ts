@@ -5,6 +5,7 @@ import { createApp } from "../app";
 import { type Database, openDatabase, rows } from "../db/index";
 import { migrate } from "../db/migrate";
 import { seedDemo } from "../seed";
+import { spread } from "./doc-tax";
 
 const PASSWORD = "test-password-uat-2a";
 let db: Database;
@@ -179,6 +180,36 @@ describe("Step 2A Finance UAT Sprint workflows", () => {
     expect(mEntries.find((e) => e.account === "Withholding Tax Payable")?.credit).toBe(193_20);
     expect(mEntries.find((e) => e.account === "Accounts Payable")?.credit).toBe(10306_80);
 
+    // 2b. The same kind of bill typed the usual way, 12% on its lines (two lines this time): the typed
+    // VAT still wins in the books (Aryan, 27 Nov). ₱10,000 + ₱1,200 = ₱11,200; typed VAT ₱1,185.42.
+    const typed = await postJson("fiona", "/api/books/bill/new", {
+      supplierId: meralcoId,
+      number: "MER-2026-03",
+      date: "2026-03-20",
+      lines: [
+        { itemName: "Electricity, office", account: "Utilities Expense", qty: 1, rate: 7500, taxPct: 12 },
+        { itemName: "Electricity, warehouse", account: "Utilities Expense", qty: 1, rate: 2500, taxPct: 12 },
+      ],
+      birTax: { supplierOrigin: "local", vatKind: "vat", manualVatCentavos: 1185_42, purchaseType: "services", atcCode: "WC160" },
+    });
+    expect(typed.status).toBe(200);
+    const typedId = ((await typed.json()) as { id: number }).id;
+    const tEntries = await rows<{ account: string; debit: number; credit: number }>(
+      db,
+      sql`select account, sum(debit)::float8 as debit, sum(credit)::float8 as credit from book_entry where source = 'books' and doc_id = ${typedId} group by account`,
+    );
+    expect(tEntries.find((e) => e.account === "Tax Payable")?.debit).toBe(1185_42);
+    expect(tEntries.find((e) => e.account === "Utilities Expense")?.debit).toBe(10014_58);
+    // 2% of ₱10,014.58 withheld; the supplier is owed the rest of the ₱11,200.
+    expect(tEntries.find((e) => e.account === "Withholding Tax Payable")?.credit).toBe(200_29);
+    expect(tEntries.find((e) => e.account === "Accounts Payable")?.credit).toBe(10999_71);
+    expect(tEntries.reduce((s, e) => s + e.debit - e.credit, 0)).toBe(0);
+    const [typedDoc] = await rows<{ total: number; subTotal: number }>(
+      db,
+      sql`select total::float8 as total, sub_total::float8 as "subTotal" from book_doc where id = ${typedId}`,
+    );
+    expect(typedDoc).toEqual({ total: 11200_00, subTotal: 10014_58 });
+
     // 3. Expense with EWT (WC100 5% Rent on ₱20,000 net + 12% VAT = ₱22,400 gross -> ₱1,000 EWT)
     const lChoices = (await (await req("fiona", "/api/books-ledger-choices")).json()) as {
       taxes: { id: number; pct: number }[];
@@ -211,6 +242,36 @@ describe("Step 2A Finance UAT Sprint workflows", () => {
     );
     expect(expEntries.find((e) => e.account === "Withholding Tax Payable")?.credit).toBe(1000_00);
     expect(expEntries.find((e) => e.account === "Cash in Bank - BDO")?.credit).toBe(21400_00);
+
+    // 3b. An expense with its VAT inside (₱5,600 at 12% = ₱600) and ₱580 typed: the books take ₱580.
+    const inside = await postJson("fiona", "/api/books/expense/new", {
+      date: "2026-02-23",
+      lines: [{ account: "Utilities Expense", amount: 5600_00, description: "Water, partial VAT", taxId: vatTaxId }],
+      taxInclusive: true,
+      paidThrough: "Cash in Bank - BDO",
+      supplierId: meralcoId,
+      reference: "OR-9913",
+      costCentre: lChoices.options["Cost Centre"]?.[0] ?? "Head Office",
+      type: lChoices.options["Type"]?.[0] ?? "Goods",
+      department: lChoices.options["Department"]?.[0] ?? "Finance",
+      pic: "Fiona",
+      birTax: { supplierOrigin: "local", vatKind: "vat", manualVatCentavos: 580_00, purchaseType: "services", noWithholdingReason: "not_covered" },
+    });
+    expect(inside.status, await inside.clone().text()).toBe(200);
+    const insideId = ((await inside.json()) as { id: number }).id;
+    const iEntries = await rows<{ account: string; debit: number; credit: number }>(
+      db,
+      sql`select account, sum(debit)::float8 as debit, sum(credit)::float8 as credit from book_entry where source = 'books' and doc_id = ${insideId} group by account`,
+    );
+    expect(iEntries.find((e) => e.account === "Tax Payable")?.debit).toBe(580_00);
+    expect(iEntries.find((e) => e.account === "Utilities Expense")?.debit).toBe(5020_00);
+    expect(iEntries.find((e) => e.account === "Cash in Bank - BDO")?.credit).toBe(5600_00);
+  });
+
+  it("spreads a typed VAT over lines so the shares always add up", () => {
+    expect(spread(1185_42, [840000, 280000])).toEqual([889_07, 296_35]);
+    expect(spread(100, [1, 1, 1])).toEqual([33, 33, 34]);
+    expect(spread(5, [0, 0])).toEqual([3, 2]);
   });
 
   it("handles Ms. Erica's AR payment workflow (ATC auto-routing, 1% retention, late penalty, bank charges, Advances to GPI) and smart bank recon", async () => {

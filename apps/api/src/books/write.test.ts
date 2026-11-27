@@ -13,6 +13,7 @@ import { todayManila } from "../inventory/rules";
 import { seedDemo } from "../seed";
 import type { BankReconcileView, BankStatement, BooksDashboard, Insight, LedgerChoices } from "../types";
 import { dueDays, makeDueRecurring } from "./recurring";
+import { ownCompanysOnly } from "./write";
 
 const PASSWORD = "test-password-1";
 const BANK = "BDO - 2MG 6722";
@@ -80,7 +81,12 @@ describe("writing the books", () => {
   it("only Finance, the CEO and the Admin write; the forms get Zoho's lists", async () => {
     await refused("sarla", "/api/books/expense/new", expense(), 403);
     const choices = await read<LedgerChoices>("fiona", "/api/books-ledger-choices");
-    expect(choices.options["Cost Centre"]).toEqual(["GetMEDS0001", "2MG0001", "Cenevo0001"]);
+    // Only this company's own (Aryan, 27 Nov): Zoho's GetMeds and Cenevo choices stay off 2MG's forms.
+    expect(choices.options["Cost Centre"]).toEqual(["2MG0001"]);
+    expect(choices.options.Company).toEqual(["2MG"]);
+    // GetMeds' own database keeps its own; a company none of them names keeps the whole list.
+    expect(ownCompanysOnly(["GetMEDS0001", "2MG0001", "Cenevo0001"], ["Getmeds Philippines Inc.", "GM"])).toEqual(["GetMEDS0001"]);
+    expect(ownCompanysOnly(["Getmeds", "2MG"], ["Acme Pharma", "AP"])).toEqual(["Getmeds", "2MG"]);
     expect(choices.taxes.map((tax) => tax.name)).toContain("RENT");
     expect(choices.moneyAccounts.map((one) => one.name)).toContain(BANK);
     expect(choices.moneyAccounts.map((one) => one.name)).not.toContain("Office Rent");

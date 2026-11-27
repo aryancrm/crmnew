@@ -2645,6 +2645,61 @@ another person, who carries on. So no office call desk for a field team's accoun
 cards by kind: each account keeps its team's screens. The Works box stays for setting an account
 up right.
 
+## 30. Finance: BIR & Tax in Books, and the fixes before UAT (26–27 Nov 2026, on the `finance` branch)
+
+Built by the finance developer (zie1203) on top of Aryan's Finance desk and Books; Aryan answered
+the questions on 27 Nov. Nothing is live until Aryan merges it; UAT runs on a test copy first.
+
+**What Finance has now.**
+- **BIR & Tax** in Books (Finance, the CEO and the Admin): the taxpayer profile (TIN, RDO, branch,
+  VAT or Non-VAT), the tax codes (ATC), a **Readiness** check before filing (customers or
+  suppliers with no TIN, old purchase pages outside the books, local suppliers with no tax
+  withheld), the returns as BIR's own forms filled in (2550Q, 0619-E, 1601-EQ, 1604-E, 1702Q,
+  1601-C from released payslips), the RELIEF / alphalist .DAT files, and each supplier's 2307.
+  `FINANCE_BIR_ENABLED=false` hides it all. A **Starter chart** button adds any account the forms
+  need that is missing (bank and GCash accounts, Advances to GPI, Retention Receivable, Bank Fees
+  and Charges); pressed again it adds nothing.
+- **A bill or an expense in Books** carries its BIR part: local or foreign supplier, purchase type
+  (goods, services, capital goods, importation with its customs fields), VAT kind, the **VAT typed
+  by hand** when it isn't a clean 12% (Meralco), and the tax code, which works out the tax to
+  withhold on the amount without VAT. The bill prints its 2307.
+- **Due payments → Mark paid** takes the customer's tax code (WC158, WC160, WC640, WV010) and the
+  2307 number, a retention they keep (1%, to Retention Receivable), a penalty or other deduction
+  with its reason, a bank fee the bank took off the deposit (to Bank Fees and Charges), and one
+  **shared slip number** when one transfer pays several invoices.
+- **Bank matching** finds the book's payment by the bank's reference number, also when the bank
+  took a fee off the amount.
+
+**Aryan's answers (27 Nov) and what was done.**
+1. Merge for UAT, on a test copy first.
+2. The Finance desk's **New bill** opens Books' bill form (the one with the BIR part) for Finance,
+   the CEO and the Admin; Inventory keeps its own.
+3. The expense's **Cost Centre** and the journal's **Company** offer only this company's own
+   (Zoho's GetMeds and Cenevo choices came into every database). Earlier documents keep theirs.
+4. **The typed VAT is the VAT in the books too**: the bill keeps its total, the typed VAT is
+   spread over its lines and each line's amount takes the rest, so Tax Payable, the bill and the
+   2550Q agree to the centavo (before, the journal kept the lines' 12%: ₱1,200 against ₱1,185.42).
+   Aryan is confirming this with the accountant (question 42).
+5. The old purchase pages (`/purchases/old`): Aryan is checking with Purchasing (question 39).
+6. MedReps' expenses: **Visits › My expenses** is the one; approved claims go on to Finance for
+   paying back (to build, question 40).
+7. The live chart of accounts: Aryan checks live first (question 41).
+8. **Accounts only from the chart**: a bill's lines, a supplier payment's Paid Through and a
+   receipt's Deposit To must be accounts the chart has (any spelling; the chart's is kept), as
+   expenses and journals already were. The forms suggest the chart's accounts, the most used
+   first, so a new company's forms are never empty. A landed-cost bill's lines go to Inventory
+   Asset as before. **Bigger amounts** (money columns past ₱21.47 million) come next, on their
+   own.
+9. These lines in the plan: written by the finance developer.
+10. A **BIR & Tax** shortcut on the Finance desk's menu (after Books), opening Readiness.
+
+**Still found, not changed (the finance developer's check, 26 Nov):** the Finance desk's screens
+and Books' Finance group are the same screens twice; two purchase systems (`/purchases/old` posts
+nothing to the books); the field expenses' code exists twice (`field/` and `mr/`); Zoho's old
+history sits beside the books (BIR never reads it); "sales" and "owed" are counted a little
+differently on different pages; payroll's release posts no journal; tender bonds and retentions
+are not in the books; Books has no second person approving (held off on purpose).
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -2764,6 +2819,18 @@ up right.
 38. **The hospitals' contacts** (25, step 4): the 40 hospitals' contact persons, numbers and
     e-mails in the bidding system: are they the CRM customers' own contacts (kept on the customer,
     seen by whoever sees the customer), or the bidding team's own list?
+
+39. **The old purchase pages** (30, answer 5): is anyone in Purchasing still using `/purchases/old`?
+    If not, retire them; if so, their purchases must reach the books, or BIR's purchase list
+    (SLP / SLI) misses them. Aryan is asking Purchasing.
+40. **MedReps' expenses to Finance** (30, answer 6): once the team lead approves a claim in Visits ›
+    My expenses, how does Finance pay it back: one payout per claim, or one per MedRep per month?
+    And which account does each expense head go to (ER Fuel, ER Meals, Mktg Activities…)? For the
+    accountant.
+41. **The chart of accounts on live** (30, answer 7): does live have Zoho's whole chart? Since 27
+    Nov the forms take only the chart's accounts, so every account Finance uses must be in it (the
+    Starter chart button adds the ones the BIR part needs).
+42. **The typed VAT** (30, answer 4): the accountant's yes that the books take the typed VAT.
 
 ## 14. Change log
 
@@ -4304,3 +4371,6 @@ up right.
 - 27 Nov (237), the backend developer, after the first check on live (2MG: 120 people, every data check fine; Getmeds: its System admin only): **the one password is for HR's sheet's people only** (and Getmeds' System admin); an Admin login and Aryan's own ("Aryan & Saurav") keep theirs. HR's sheet is in the image (`scripts/data/hr-master-data-2026-11-27.csv`): pasted into the server's terminal it came out broken at its end.
 - 27 Nov (238), live: `align-companies --live --together --apply` ran (225 changes, both companies' 19 data checks fine). Then the backend developer: "changing accounts with another company's email: make that possible". **Add another account works across companies**: each account kept on a browser says whose it is (`<Org ID>~<token>`); the account menu lists them with their company's code, switching to another company's account makes the browser that company's, removing or signing out ends it in its own company's database (`setOtherCompanies`, companies/context.ts). Test: a 2MG person and Getmeds' Admin on one browser, switched, removed.
 - 27 Nov (239), Aryan: "please do not remove lead and enquiry data, every other data can be deleted" (the teams saw the 20 Nov walkthrough's orders on their Home). **`scripts/clear-test-data.ts`**: checks first; `--apply` cancels every order not made from a lead (payments taken off, invoices cancelled; a shipped or delivered one puts its pieces back on their shelf with a return move), voids the Books documents made in the CRM, archives the walkthrough's customers ("Demo · 20 Nov walkthrough") not tied to a lead with their calls, drops its tenders ("Demo · …"), closes its care groups, removes its attendance rows; then the data checks. Kept: leads, enquiries and the orders made from them, people, medicines, prices and stock, targets, Zoho's history. Tried on a copy of the demo database: 17 orders cancelled, the lead's order kept, every data check fine after.
+- 26 Nov (241), the finance developer (zie1203), on the `finance` branch: **BIR & Tax in Books** (section 30): taxpayer profile and tax codes, Readiness, the returns on BIR's own forms (2550Q, 0619-E, 1601-EQ, 1604-E, 1702Q, 1601-C), the .DAT files, 2307 certificates; `FINANCE_BIR_ENABLED=false` hides it. Migration 0167 (new tables; optional company and tax columns on accounts, Books documents and payments; old Zoho documents tagged from Zoho's own Company field). A pull-request checklist (`.github/pull_request_template.md`).
+- 27 Nov (242), the finance developer, for the Finance UAT: the BIR part on Books' bill and expense (origin, purchase type, VAT kind, typed VAT, tax code, customs fields, the bill's 2307); Mark paid with the customer's tax code and 2307 number, retention, penalty, bank fee and shared slip number; bank matching by reference and net of the bank's fee; the Starter chart button. Migration 0168. Moved onto Aryan's 27 Nov main: the BIR migration renumbered 0160 → 0167 (after his 0166), and the BIR pages' own 2MG/GPI switch taken out for one company per database (`ownCompanyName`).
+- 27 Nov (243), Aryan's answers to the finance developer's ten questions (section 30): merge for UAT on a test copy first; New bill opens Books' form; only this company's Cost Centre and Company; the books take the typed VAT (the accountant to confirm); Visits › My expenses goes on to Finance; accounts only from the chart, and bigger amounts; a BIR & Tax shortcut. Built the same day: **New bill** on the Finance desk opens `/books/bills/new` for Finance, the CEO and the Admin (`buying/docs.tsx`); **Cost Centre / Company** show only this company's own (`ownCompanysOnly`, books/write.ts; earlier documents keep theirs); **the typed VAT** spread over the bill's or expense's lines so Tax Payable equals it (`spread`, bir/doc-tax.ts; a ₱11,200 bill at 12% with ₱1,185.42 typed: Tax Payable ₱1,185.42, the expense ₱10,014.58); **accounts only from the chart** on bills, supplier payments' Paid Through and receipts' Deposit To (`accountNamed`, now in books/accounts.ts for every form; the forms' lists are the chart's, most used first; a landed-cost bill's lines still go to Inventory Asset); **BIR & Tax** on the Finance desk's menu and in the Finance app's Books group. Tests: books/actions.test.ts (a typo'd account and a non-money Paid Through refused), books/write.test.ts (only 2MG's own choices; GetMeds' database keeps its own), bir/uat-sprint.test.ts (the typed VAT on a two-line bill and an inclusive expense). Questions 39–42 open.
