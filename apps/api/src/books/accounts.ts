@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
+import type { Runner } from "../inventory/service";
 import type { BookAccountDetail, BookAccountList, BookAccountRow, Banking, Me, Role } from "../types";
 
 /** Money in the banks and the books' accounts: Finance, the CEO and the Admin. */
@@ -21,6 +22,25 @@ export const ACCOUNT_HEADS: Record<string, string[]> = {
   expense: ["expense", "cost_of_goods_sold", "other_expense"],
 };
 export const MONEY_TYPES = ["bank", "cash", "credit_card", "payment_clearing"];
+/** Not a bank, but money goes "through" them: what the company owes a person, cash not yet banked. */
+export const MONEY_LIKE = ["Employee Reimbursements", "Undeposited Funds"];
+
+/** An account by name, as the chart has it; money accounts must be bank, cash or card. Every form
+ *  that names an account asks here, so the books never post to a name the chart doesn't have
+ *  (bills, payments and receipts too since 27 Nov, Aryan's yes). */
+export async function accountNamed(tx: Runner, name: string | null | undefined, field: string, money = false): Promise<string> {
+  const wanted = name?.trim();
+  if (!wanted) throw new Refusal(400, "invalid", money ? "Pick the account the money went through." : "Pick an account.", field);
+  const [found] = await rows<{ name: string; type: string; active: boolean }>(
+    tx,
+    sql`select name, type, active from book_account where lower(name) = lower(${wanted}) order by active desc limit 1`,
+  );
+  if (!found) throw new Refusal(400, "invalid", `"${wanted}" is not in the chart of accounts: pick one from the list, or add it to the chart first.`, field);
+  if (!found.active) throw new Refusal(400, "invalid", `${found.name} is inactive.`, field);
+  if (money && !MONEY_TYPES.includes(found.type) && !MONEY_LIKE.includes(found.name))
+    throw new Refusal(400, "invalid", `${found.name} is not a bank, cash or card account.`, field);
+  return found.name;
+}
 
 /** Each account's movements up to today, once: debits, credits, how many and the last day. A
  *  document dated ahead (next year's rent journals) counts on its day, as in Zoho. */

@@ -527,7 +527,7 @@ he wants every department's order page laid out like the Leads & enquiries case.
   Pack & ship → Delivered → Paid; "Not needed" where a step was skipped), the six steps on the left
   with whose step each is ("Your step"), Money and Activity under them, and the open step's work on
   the right (`?step=`; each person opens on their own step). Hold, exception, cancel and place again
-  sit under the steps. Since 27 Nov it has the case page's three pieces (change log 241): how a
+  sit under the steps. Since 27 Nov it has the case page's three pieces (change log 244): how a
   patient pays as the case's box (locked), the journey drawn as the case journey, and the
   customer's orders under the head.
 - The Leads & enquiries list stays as it was (a redesign was tried and taken back at Aryan's word).
@@ -2647,6 +2647,61 @@ another person, who carries on. So no office call desk for a field team's accoun
 cards by kind: each account keeps its team's screens. The Works box stays for setting an account
 up right.
 
+## 30. Finance: BIR & Tax in Books, and the fixes before UAT (26–27 Nov 2026, on the `finance` branch)
+
+Built by the finance developer (zie1203) on top of Aryan's Finance desk and Books; Aryan answered
+the questions on 27 Nov. Nothing is live until Aryan merges it; UAT runs on a test copy first.
+
+**What Finance has now.**
+- **BIR & Tax** in Books (Finance, the CEO and the Admin): the taxpayer profile (TIN, RDO, branch,
+  VAT or Non-VAT), the tax codes (ATC), a **Readiness** check before filing (customers or
+  suppliers with no TIN, old purchase pages outside the books, local suppliers with no tax
+  withheld), the returns as BIR's own forms filled in (2550Q, 0619-E, 1601-EQ, 1604-E, 1702Q,
+  1601-C from released payslips), the RELIEF / alphalist .DAT files, and each supplier's 2307.
+  `FINANCE_BIR_ENABLED=false` hides it all. A **Starter chart** button adds any account the forms
+  need that is missing (bank and GCash accounts, Advances to GPI, Retention Receivable, Bank Fees
+  and Charges); pressed again it adds nothing.
+- **A bill or an expense in Books** carries its BIR part: local or foreign supplier, purchase type
+  (goods, services, capital goods, importation with its customs fields), VAT kind, the **VAT typed
+  by hand** when it isn't a clean 12% (Meralco), and the tax code, which works out the tax to
+  withhold on the amount without VAT. The bill prints its 2307.
+- **Due payments → Mark paid** takes the customer's tax code (WC158, WC160, WC640, WV010) and the
+  2307 number, a retention they keep (1%, to Retention Receivable), a penalty or other deduction
+  with its reason, a bank fee the bank took off the deposit (to Bank Fees and Charges), and one
+  **shared slip number** when one transfer pays several invoices.
+- **Bank matching** finds the book's payment by the bank's reference number, also when the bank
+  took a fee off the amount.
+
+**Aryan's answers (27 Nov) and what was done.**
+1. Merge for UAT, on a test copy first.
+2. The Finance desk's **New bill** opens Books' bill form (the one with the BIR part) for Finance,
+   the CEO and the Admin; Inventory keeps its own.
+3. The expense's **Cost Centre** and the journal's **Company** offer only this company's own
+   (Zoho's GetMeds and Cenevo choices came into every database). Earlier documents keep theirs.
+4. **The typed VAT is the VAT in the books too**: the bill keeps its total, the typed VAT is
+   spread over its lines and each line's amount takes the rest, so Tax Payable, the bill and the
+   2550Q agree to the centavo (before, the journal kept the lines' 12%: ₱1,200 against ₱1,185.42).
+   Aryan is confirming this with the accountant (question 42).
+5. The old purchase pages (`/purchases/old`): Aryan is checking with Purchasing (question 39).
+6. MedReps' expenses: **Visits › My expenses** is the one; approved claims go on to Finance for
+   paying back (to build, question 40).
+7. The live chart of accounts: Aryan checks live first (question 41).
+8. **Accounts only from the chart**: a bill's lines, a supplier payment's Paid Through and a
+   receipt's Deposit To must be accounts the chart has (any spelling; the chart's is kept), as
+   expenses and journals already were. The forms suggest the chart's accounts, the most used
+   first, so a new company's forms are never empty. A landed-cost bill's lines go to Inventory
+   Asset as before. **Bigger amounts** (money columns past ₱21.47 million) come next, on their
+   own.
+9. These lines in the plan: written by the finance developer.
+10. A **BIR & Tax** shortcut on the Finance desk's menu (after Books), opening Readiness.
+
+**Still found, not changed (the finance developer's check, 26 Nov):** the Finance desk's screens
+and Books' Finance group are the same screens twice; two purchase systems (`/purchases/old` posts
+nothing to the books); the field expenses' code exists twice (`field/` and `mr/`); Zoho's old
+history sits beside the books (BIR never reads it); "sales" and "owed" are counted a little
+differently on different pages; payroll's release posts no journal; tender bonds and retentions
+are not in the books; Books has no second person approving (held off on purpose).
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -2766,6 +2821,18 @@ up right.
 38. **The hospitals' contacts** (25, step 4): the 40 hospitals' contact persons, numbers and
     e-mails in the bidding system: are they the CRM customers' own contacts (kept on the customer,
     seen by whoever sees the customer), or the bidding team's own list?
+
+39. **The old purchase pages** (30, answer 5): is anyone in Purchasing still using `/purchases/old`?
+    If not, retire them; if so, their purchases must reach the books, or BIR's purchase list
+    (SLP / SLI) misses them. Aryan is asking Purchasing.
+40. **MedReps' expenses to Finance** (30, answer 6): once the team lead approves a claim in Visits ›
+    My expenses, how does Finance pay it back: one payout per claim, or one per MedRep per month?
+    And which account does each expense head go to (ER Fuel, ER Meals, Mktg Activities…)? For the
+    accountant.
+41. **The chart of accounts on live** (30, answer 7): does live have Zoho's whole chart? Since 27
+    Nov the forms take only the chart's accounts, so every account Finance uses must be in it (the
+    Starter chart button adds the ones the BIR part needs).
+42. **The typed VAT** (30, answer 4): the accountant's yes that the books take the typed VAT.
 
 ## 14. Change log
 
@@ -4307,4 +4374,10 @@ up right.
 - 27 Nov (238), live: `align-companies --live --together --apply` ran (225 changes, both companies' 19 data checks fine). Then the backend developer: "changing accounts with another company's email: make that possible". **Add another account works across companies**: each account kept on a browser says whose it is (`<Org ID>~<token>`); the account menu lists them with their company's code, switching to another company's account makes the browser that company's, removing or signing out ends it in its own company's database (`setOtherCompanies`, companies/context.ts). Test: a 2MG person and Getmeds' Admin on one browser, switched, removed.
 - 27 Nov (239), Aryan: "please do not remove lead and enquiry data, every other data can be deleted" (the teams saw the 20 Nov walkthrough's orders on their Home). **`scripts/clear-test-data.ts`**: checks first; `--apply` cancels every order not made from a lead (payments taken off, invoices cancelled; a shipped or delivered one puts its pieces back on their shelf with a return move), voids the Books documents made in the CRM, archives the walkthrough's customers ("Demo · 20 Nov walkthrough") not tied to a lead with their calls, drops its tenders ("Demo · …"), closes its care groups, removes its attendance rows; then the data checks. Kept: leads, enquiries and the orders made from them, people, medicines, prices and stock, targets, Zoho's history. Tried on a copy of the demo database: 17 orders cancelled, the lead's order kept, every data check fine after.
 - 27 Nov (240), the backend developer: `care19@getmeds.ph` is Emmanuel Greg Escalona's (2MG-242); Benjie Dan Lacebal (2MG-216) is `sale17@getmeds.ph`. HR's sheet in the image corrected; live changed by a one-off command in the API's terminal (by Employee ID).
-- 27 Nov (241), Aryan (the Online desk's case page with its payment box, Case journey and "Orders on <number>" circled: "online desk screen is mature, can we add these in all orders section … on other screens"): **every order's page (`/orders/:id`, every desk and channel) has the case page's three pieces** (`orders/order-head.tsx`). How a patient pays (Regular, Senior / PWD, GL with its agency) is the case's box at the head's right, greyed with a lock as the case shows it once its order is placed; a business's order has none. The order's journey is drawn as the case journey: a patient's road forks by how they pay (the letter above, the senior / PWD ID & Rx below, the prescription straight on), a paper the order needs and doesn't have yet is flagged "!" on that stop with what is missing, then Management, Finance, Pack & ship, Delivered, the letter's claim (GL) and Paid, each with who, when and how long it waited; a stop opens its step (each desk only its own). A business's order walks one road. It replaces the row of dots under Management's and Finance's Timeline tab. Under the head, the customer's orders: "Orders on <number>" for a patient (the same number, as on the case page), "Orders of <customer>" for a business, newest first, only the orders the reader may open (`GET /api/orders/:id/history`; `orders/order-history.test.ts`), the first ten listed and the rest on the customer page.
+- 26 Nov (241), the finance developer (zie1203), on the `finance` branch: **BIR & Tax in Books** (section 30): taxpayer profile and tax codes, Readiness, the returns on BIR's own forms (2550Q, 0619-E, 1601-EQ, 1604-E, 1702Q, 1601-C), the .DAT files, 2307 certificates; `FINANCE_BIR_ENABLED=false` hides it. Migration 0167 (new tables; optional company and tax columns on accounts, Books documents and payments; old Zoho documents tagged from Zoho's own Company field). A pull-request checklist (`.github/pull_request_template.md`).
+- 27 Nov (242), the finance developer, for the Finance UAT: the BIR part on Books' bill and expense (origin, purchase type, VAT kind, typed VAT, tax code, customs fields, the bill's 2307); Mark paid with the customer's tax code and 2307 number, retention, penalty, bank fee and shared slip number; bank matching by reference and net of the bank's fee; the Starter chart button. Migration 0168. Moved onto Aryan's 27 Nov main: the BIR migration renumbered 0160 → 0167 (after his 0166), and the BIR pages' own 2MG/GPI switch taken out for one company per database (`ownCompanyName`).
+- 27 Nov (243), Aryan's answers to the finance developer's ten questions (section 30): merge for UAT on a test copy first; New bill opens Books' form; only this company's Cost Centre and Company; the books take the typed VAT (the accountant to confirm); Visits › My expenses goes on to Finance; accounts only from the chart, and bigger amounts; a BIR & Tax shortcut. Built the same day: **New bill** on the Finance desk opens `/books/bills/new` for Finance, the CEO and the Admin (`buying/docs.tsx`); **Cost Centre / Company** show only this company's own (`ownCompanysOnly`, books/write.ts; earlier documents keep theirs); **the typed VAT** spread over the bill's or expense's lines so Tax Payable equals it (`spread`, bir/doc-tax.ts; a ₱11,200 bill at 12% with ₱1,185.42 typed: Tax Payable ₱1,185.42, the expense ₱10,014.58); **accounts only from the chart** on bills, supplier payments' Paid Through and receipts' Deposit To (`accountNamed`, now in books/accounts.ts for every form; the forms' lists are the chart's, most used first; a landed-cost bill's lines still go to Inventory Asset); **BIR & Tax** on the Finance desk's menu and in the Finance app's Books group. Tests: books/actions.test.ts (a typo'd account and a non-money Paid Through refused), books/write.test.ts (only 2MG's own choices; GetMeds' database keeps its own), bir/uat-sprint.test.ts (the typed VAT on a two-line bill and an inclusive expense). Questions 39–42 open.
+- 27 Nov (244), Aryan (the Online desk's case page with its payment box, Case journey and "Orders on <number>" circled: "online desk screen is mature, can we add these in all orders section … on other screens"): **every order's page (`/orders/:id`, every desk and channel) has the case page's three pieces** (`orders/order-head.tsx`). How a patient pays (Regular, Senior / PWD, GL with its agency) is the case's box at the head's right, greyed with a lock as the case shows it once its order is placed; a business's order has none. The order's journey is drawn as the case journey: a patient's road forks by how they pay (the letter above, the senior / PWD ID & Rx below, the prescription straight on), a paper the order needs and doesn't have yet is flagged "!" on that stop with what is missing, then Management, Finance, Pack & ship, Delivered, the letter's claim (GL) and Paid, each with who, when and how long it waited; a stop opens its step (each desk only its own). A business's order walks one road. It replaces the row of dots under Management's and Finance's Timeline tab. Under the head, the customer's orders: "Orders on <number>" for a patient (the same number, as on the case page), "Orders of <customer>" for a business, newest first, only the orders the reader may open (`GET /api/orders/:id/history`; `orders/order-history.test.ts`), the first ten listed and the rest on the customer page.
+- 27 Nov (245), Aryan: "persons we know by their number; give the hospitals, drugstores and pharmacies a unique number too: you make one, or what is right?" Chosen (asked for a recommendation): **the customer's own number** that every customer has had since 26 Nov (`CUS-00012`, made by the system when the customer is added, never repeated, never changed, so never missing or mistyped as an LTO or a TIN can be); the LTO, the TIN and the business papers stay what Management checks. Shown wherever a business must be told apart: beside its name on the order's page, "Orders on CUS-00012 · <name>" under it (a patient stays "Orders on <mobile>"), and in the new order's customer list and the picked customer (`OrderDetail.order.customerCode`, `OrderHistory.code`).
+- 27 Nov (246), Aryan: "on the Online enquiry Rx & documents comes later, but the documents are checked first of all; the flow must not be wrong; check the others too": **the papers first**. The case's steps are 1 Rx & documents ("you collect the papers first"), 2 Enquiry & quotation (2.1 / 2.2 the agency's on a guarantee letter), 3 Order & delivery, 4 Payment & follow-up, each Next going on in that order; a new case opens on Rx & documents and on the quotation once the prescription is approved (the case's own road steps already went new → Rx → quotation). The **case journey** draws the prescription right after the enquiry (Rx verification on the regular and letter roads, Senior / PWD ID & Rx below), then the conversation and the quotation, then a letter's application and letter, then the order; a case quoted with its papers still missing stands at the papers (`online/journey.ts`, `journey.test.ts`); the websites' progress shows the same order. A quotation can still be saved before the papers are in, as before. Checked the others: Management's checks already start with RX & documents, and the order's journey (244) puts the papers right after placing.
+- 27 Nov (247), Aryan: "Lead & enquiry had Money at the bottom: what it was, what we gave it at, what it came to, how much discount: is it still there? If not, add it, and everywhere": **the Money card as the old CRM's** (`orders/money.tsx`): each medicine at its price with the list price beside it when given lower, then what it comes to at the list price, what came off (given below the list price, the senior / PWD's no VAT and 20% off, free goods; the total discount when more than one), the delivery fee and the total, worked from the same lines so the rows always add up; then each card's own (points, the letter's amount, the bill, received, still owed). On every order's page (every desk) and on the case: the quotation's money before the order, the order's own card after it (its lines as placed or changed). Patient-facing amounts only, as the old card: no cost, no profit.

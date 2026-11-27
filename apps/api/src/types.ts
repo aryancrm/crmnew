@@ -1736,7 +1736,7 @@ export type PaymentRow = {
   /** Who paid it: the customer, or a guarantee letter's agency. */
   payer?: "customer" | "agency";
   /** Why it was deducted, when it is a deduction. */
-  deductionKind?: DeductionKind | null;
+  deductionKind?: DeductionKind | "retention" | null;
   active: boolean;
   removedReason: string | null;
 };
@@ -1912,6 +1912,15 @@ export type PaymentInput = {
    *  payment of its own, settling the invoice too. */
   withheld?: number | null;
   form2307?: string | null;
+  /** Optional BIR ATC code (e.g. WC158, WC160, WV010) for SAWT 1702Q vs 2550Q routing. */
+  taxAtc?: string | null;
+  /** Bank transfer charge deducted by the bank (posts to Bank Fees and Charges). */
+  bankCharges?: number | null;
+  /** 1% contract retention held by hospital/government (posts to Retention Receivable). */
+  retention?: number | null;
+  retentionRef?: string | null;
+  /** Shared deposit / transfer slip batch identifier when one transfer pays several invoices. */
+  paymentGroupId?: string | null;
   /** What the customer deducted from it, why, and their debit memo's number. */
   deducted?: number | null;
   deductionKind?: DeductionKind | null;
@@ -7041,6 +7050,7 @@ export type BookDoc = BookRow & {
   kind: BookKind;
   fxRate: number;
   subTotal: number | null;
+  withheld?: number;
   paymentTerms: string | null;
   notes: string | null;
   fields: Record<string, unknown>;
@@ -7381,6 +7391,22 @@ export type LedgerChoices = {
   locks: { module: LockModule; lockDate: string }[];
 };
 
+export type BirTaxInput = {
+  supplierOrigin?: "local" | "foreign" | null;
+  vatKind?: "vat" | "zero" | "exempt" | "none" | null;
+  manualVatCentavos?: number | null;
+  purchaseType?: "services" | "capital_goods" | "other_goods" | "importation" | null;
+  atcCode?: string | null;
+  ewtBaseCentavos?: number | null;
+  ewtCentavos?: number | null;
+  noWithholdingReason?: "foreign" | "not_covered" | "government" | "exempt_charge" | "other" | null;
+  noWithholdingNote?: string | null;
+  importIeirdNo?: string | null;
+  importAssessmentDate?: string | null;
+  importDutiableCentavos?: number | null;
+  importVatCentavos?: number | null;
+};
+
 export type BookExpenseLineInput = { account: string; amount: number; description?: string | null; taxId?: number | null };
 export type BookExpenseInput = {
   date: string;
@@ -7398,6 +7424,7 @@ export type BookExpenseInput = {
   pic: string;
   voucher?: string | null;
   orNumber?: string | null;
+  birTax?: BirTaxInput | null;
 };
 
 export type JournalLineInput = { account: string; description?: string | null; contact?: string | null; debit: number; credit: number; taxId?: number | null };
@@ -7426,7 +7453,18 @@ export type AccountInput = { name: string; code?: string | null; type: string; p
 // ------------------------------------------------------------------ bank statements and reconciliation
 
 /** One document's entries on a bank account: 'books:<doc>' or 'crm:<kind>:<id>'; amount into the bank positive. */
-export type BankEntry = { key: string; kind: string; docId: number; date: string; amount: number; number: string | null; party: string | null };
+export type BankEntry = {
+  key: string;
+  kind: string;
+  docId: number;
+  date: string;
+  amount: number;
+  number: string | null;
+  party: string | null;
+  reference?: string | null;
+  matchReason?: "reference" | "exact" | "fee";
+  feeDiff?: number;
+};
 export type BankLineRow = {
   id: number;
   date: string;

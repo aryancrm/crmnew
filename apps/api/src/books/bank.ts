@@ -23,15 +23,30 @@ const keyOf = sql`case when e.source = 'books' then 'books:' || e.doc_id else 'c
 function entriesSql(account: string, from: string | null, to: string | null, extra: SQL = sql``): SQL {
   return sql`
     select x.key, x.kind, x."docId", to_char(x.on_date, 'YYYY-MM-DD') as date, x.net::float8 as amount,
-      coalesce(d.number, x.number) as number, coalesce(d.party_name, d.notes, d.reference) as party
+      coalesce(d.number, x.number) as number,
+      coalesce(d.party_name, c.name, d.notes, d.reference, cp.reference) as party,
+      coalesce(d.reference, cp.reference) as reference
     from (
-      select ${keyOf} as key, e.source, e.kind, e.doc_id::int as "docId", min(e.on_date) as on_date, sum(e.debit - e.credit) as net, max(e.number) as number
+      select ${keyOf} as key, e.source, e.kind, e.doc_id::int as "docId", min(e.on_date) as on_date, sum(e.debit - e.credit) as net, max(e.number) as number, max(e.customer_id) as customer_id
       from book_entry e
       where lower(e.account) = lower(${account}) ${from ? sql`and e.on_date >= ${from}::date` : sql``} ${to ? sql`and e.on_date <= ${to}::date` : sql``}
       group by 1, 2, 3, 4
-    ) x left join book_doc d on x.source = 'books' and d.id = x."docId"
+    ) x
+    left join book_doc d on x.source = 'books' and d.id = x."docId"
+    left join payment cp on x.source = 'crm' and x.kind = 'crm_payment' and cp.id = x."docId"
+    left join customer c on c.id = x.customer_id
     where x.net <> 0 ${extra}`;
 }
+
+const normRef = (raw?: string | null) => (raw ?? "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+const refMatches = (lineRef: string, lineDesc: string, candRef: string): boolean => {
+  if (candRef.length < 5) return false;
+  if (lineRef && lineRef === candRef) return true;
+  if (lineRef.length >= 6 && candRef.length >= 6 && (lineRef.endsWith(candRef.slice(-6)) || candRef.endsWith(lineRef.slice(-6)))) {
+    return true;
+  }
+  return lineDesc.includes(candRef);
+};
 
 async function bankAccount(tx: Runner, name: string): Promise<string> {
   const [found] = await rows<{ name: string; type: string }>(tx, sql`select name, type from book_account where lower(name) = lower(${name.trim()})`);
@@ -66,10 +81,34 @@ export async function bankStatement(db: Database, me: Me, account: string, asked
         where not exists (select 1 from bank_line b where b.entry_key = c.key and b.status in ('matched', 'categorized'))`,
     );
     for (const line of open) {
-      line.suggestions = candidates
-        .filter((c) => c.amount === line.amount && Math.abs(Date.parse(c.date) - Date.parse(line.date)) <= 10 * 86_400_000)
-        .sort((a, b) => Math.abs(Date.parse(a.date) - Date.parse(line.date)) - Math.abs(Date.parse(b.date) - Date.parse(line.date)))
-        .slice(0, 5);
+      const lRef = normRef(line.reference);
+      const lDesc = normRef(line.description);
+      const scored: { entry: BankEntry; tier: number; dayGap: number; feeDiff: number }[] = [];
+      for (const c of candidates) {
+        if ((c.amount > 0) !== (line.amount > 0)) continue;
+        const dayGap = Math.abs(Date.parse(c.date) - Date.parse(line.date));
+        if (dayGap > 10 * 86_400_000) continue;
+        const cRef = normRef(c.reference);
+        const byRef = refMatches(lRef, lDesc, cRef);
+        const diff = c.amount - line.amount;
+        const maxRefFee = Math.max(50_00, Math.round(Math.abs(c.amount) * 0.1));
+        const maxBlindFee = Math.max(50_00, Math.round(Math.abs(c.amount) * 0.05));
+
+        if (byRef && (diff === 0 || (line.amount > 0 && diff > 0 && diff <= maxRefFee))) {
+          scored.push({
+            entry: { ...c, matchReason: "reference", ...(diff > 0 ? { feeDiff: diff } : {}) },
+            tier: 0,
+            dayGap,
+            feeDiff: Math.abs(diff),
+          });
+        } else if (diff === 0) {
+          scored.push({ entry: { ...c, matchReason: "exact" }, tier: 1, dayGap, feeDiff: 0 });
+        } else if (line.amount > 0 && diff > 0 && diff <= maxBlindFee && dayGap <= 5 * 86_400_000) {
+          scored.push({ entry: { ...c, matchReason: "fee", feeDiff: diff }, tier: 2, dayGap, feeDiff: diff });
+        }
+      }
+      scored.sort((a, b) => a.tier - b.tier || a.dayGap - b.dayGap || a.feeDiff - b.feeDiff);
+      line.suggestions = scored.slice(0, 5).map((s) => s.entry);
     }
   }
   const [booked] = await rows<{ balance: number }>(db, sql`select coalesce(sum(debit - credit), 0)::float8 as balance from book_entry where lower(account) = lower(${name}) and on_date <= ${todayManila()}::date`);
@@ -130,14 +169,34 @@ async function openLine(tx: Runner, id: number): Promise<{ id: number; account: 
 
 /** A statement line is what the books already hold: one document's entries on this account, of
  *  the same amount. */
-export async function matchLine(db: Database, me: Me, id: number, input: { entryKey: string }): Promise<void> {
+export async function matchLine(db: Database, me: Me, id: number, input: { entryKey: string; recordBankCharge?: boolean }): Promise<void> {
   allow(me, LEDGER_ROLES, "match a statement line");
   await db.transaction(async (tx) => {
     const line = await openLine(tx, id);
     if (line.status !== "uncategorized") throw new Refusal(409, "done", "That line is already done.");
-    const [entry] = await rows<BankEntry>(tx, sql`select * from (${entriesSql(line.account, null, null)}) c where c.key = ${input.entryKey}`);
+    let [entry] = await rows<BankEntry>(tx, sql`select * from (${entriesSql(line.account, null, null)}) c where c.key = ${input.entryKey}`);
     if (!entry) throw new Refusal(400, "invalid", "That is not on this account.", "entryKey");
-    if (entry.amount !== line.amount) throw new Refusal(400, "invalid", "The amounts differ.", "entryKey");
+    if (entry.amount !== line.amount) {
+      const diff = Math.round(entry.amount - line.amount);
+      const maxFee = Math.max(50_00, Math.round(Math.abs(entry.amount) * 0.1));
+      if (input.recordBankCharge && line.amount > 0 && diff > 0 && diff <= maxFee) {
+        if (input.entryKey.startsWith("crm:crm_payment:")) {
+          const payId = Number(input.entryKey.slice("crm:crm_payment:".length));
+          await tx.execute(sql`update payment set bank_charges = bank_charges + ${diff} where id = ${payId} and active`);
+        } else if (input.entryKey.startsWith("books:")) {
+          const docId = Number(input.entryKey.slice(6));
+          await tx.execute(
+            sql`update book_doc set bank_charges = coalesce(bank_charges, 0) + ${diff},
+                  fields = fields || jsonb_build_object('Bank Charges', ((coalesce(bank_charges, 0) + ${diff})::numeric / 100)::text)
+                where id = ${docId} and kind = 'customer_payment'`,
+          );
+        }
+        [entry] = await rows<BankEntry>(tx, sql`select * from (${entriesSql(line.account, null, null)}) c where c.key = ${input.entryKey}`);
+      }
+      if (!entry || entry.amount !== line.amount) {
+        throw new Refusal(400, "invalid", "The amounts differ.", "entryKey");
+      }
+    }
     const [taken] = await rows<{ id: number }>(tx, sql`select id::int as id from bank_line where entry_key = ${input.entryKey} and status in ('matched', 'categorized')`);
     if (taken) throw new Refusal(409, "taken", "Another statement line is matched to it.", "entryKey");
     await tx.execute(sql`update bank_line set status = 'matched', entry_key = ${input.entryKey}, done_by = ${me.id}, done_at = now() where id = ${id}`);

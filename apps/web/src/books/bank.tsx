@@ -220,8 +220,16 @@ function LineRow({ line, open, onOpen }: { line: BankStatement["lines"][number];
           {line.status === "uncategorized" ? (
             <div className="space-y-1">
               {(line.suggestions ?? []).map((one) => (
-                <button key={one.key} type="button" disabled={action.busy} onClick={() => run(`/api/books-bank/line/${line.id}/match`, { entryKey: one.key })} className="block text-left text-[#1c5bd9] hover:underline">
+                <button
+                  key={one.key}
+                  type="button"
+                  disabled={action.busy}
+                  onClick={() => run(`/api/books-bank/line/${line.id}/match`, { entryKey: one.key, ...(one.feeDiff ? { recordBankCharge: true } : {}) })}
+                  className="block text-left text-[#1c5bd9] hover:underline"
+                >
                   Match: {one.number ?? one.kind} · {one.party ?? ""} · {zDate(one.date)}
+                  {one.matchReason === "reference" ? " · Ref# match" : ""}
+                  {one.feeDiff ? ` · Record ${zMoney(one.feeDiff)} bank fee` : ""}
                 </button>
               ))}
               <div className="flex gap-3">

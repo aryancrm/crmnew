@@ -24,6 +24,8 @@ beforeAll(async () => {
   await migrate(db);
   await seedDemo(db, PASSWORD);
   await seedDemoInventory(db);
+  // The company's chart has its freight account: since 27 Nov a bill names only the chart's accounts.
+  await db.execute(sql`insert into book_account (name, type) values ('Freight Charges', 'expense'), ('Cash in Bank - BDO', 'bank') on conflict do nothing`);
   app = createApp(db, { webUrl: "http://localhost:5180" });
   for (const name of ["irene", "fiona", "ryan", "naresh"]) {
     const response = await app.request("/api/auth/login", {
@@ -113,5 +115,28 @@ describe("making Purchases documents", () => {
     expect(paid).toMatchObject({ status: "partially_paid", balance: 190000 });
     vendorNow = await json<VendorDetail>(await get("naresh", `/api/books/vendors/${vendor.id}`));
     expect(vendorNow).toMatchObject({ payables: 190000, credits: 0 });
+  });
+
+  it("names only the chart's accounts: a typo is refused, a different spelling takes the chart's (27 Nov)", async () => {
+    const vendor = await json<{ id: number }>(await post("fiona", "/api/books/vendors", { name: "Chart Check Supplies", currency: "PHP" }));
+    const choices = await json<BookChoices>(await get("fiona", "/api/books-choices"));
+    // The form's lists are the chart's, so a new company with no bills still has them.
+    expect(choices.accounts).toContain("Freight Charges");
+    expect(choices.paidThrough).toContain("Cash in Bank - BDO");
+    expect(choices.paidThrough).not.toContain("Freight Charges");
+    const typo = await post("fiona", "/api/books/bill/new", { supplierId: vendor.id, number: "CC-1", date: choices.today, lines: [{ itemName: "Courier", account: "Freight Charge", qty: 1, rate: 100 }] });
+    expect(typo.status).toBe(400);
+    expect(((await typo.json()) as { error: { field: string } }).error.field).toBe("lines.0.account");
+    const bill = await json<{ id: number }>(
+      await post("fiona", "/api/books/bill/new", { supplierId: vendor.id, number: "CC-2", date: choices.today, lines: [{ itemName: "Courier", account: "freight charges", qty: 1, rate: 100 }] }),
+    );
+    const [line] = await rows<{ account: string }>(db, sql`select account from book_line where doc_id = ${bill.id}`);
+    expect(line?.account).toBe("Freight Charges");
+    // Paid through an account the chart doesn't have, or one that isn't money: refused.
+    const pay = (paidThrough: string) =>
+      post("fiona", "/api/books/vendor_payment/new", { supplierId: vendor.id, date: choices.today, amount: 10000, paidThrough, bills: [{ billId: bill.id, amount: 10000 }] });
+    expect((await pay("BDO Bank")).status).toBe(400);
+    expect((await pay("Freight Charges")).status).toBe(400);
+    expect((await pay("cash in bank - bdo")).status).toBe(200);
   });
 });

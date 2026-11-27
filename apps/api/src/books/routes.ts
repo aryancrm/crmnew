@@ -186,6 +186,24 @@ export function bookActionRoutes(app: Hono<Env>, db: Database): void {
     await afterStockIn(db);
     return c.json(made);
   });
+  const birTaxSchema = z
+    .object({
+      supplierOrigin: z.enum(["local", "foreign"]).nullish(),
+      vatKind: z.enum(["vat", "zero", "exempt", "none"]).nullish(),
+      manualVatCentavos: z.number().int().min(0).nullish(),
+      purchaseType: z.enum(["services", "capital_goods", "other_goods", "importation"]).nullish(),
+      atcCode: TEXT(20),
+      ewtBaseCentavos: z.number().int().min(0).nullish(),
+      ewtCentavos: z.number().int().min(0).nullish(),
+      noWithholdingReason: z.enum(["foreign", "not_covered", "government", "exempt_charge", "other"]).nullish(),
+      noWithholdingNote: TEXT(300),
+      importIeirdNo: TEXT(80),
+      importAssessmentDate: DAY.nullish(),
+      importDutiableCentavos: z.number().int().min(0).nullish(),
+      importVatCentavos: z.number().int().min(0).nullish(),
+    })
+    .nullish();
+
   const billBody = z.object({
     supplierId: z.number().int().min(0).optional(),
     number: z.string().max(120),
@@ -199,6 +217,7 @@ export function bookActionRoutes(app: Hono<Env>, db: Database): void {
     receiveId: z.number().int().positive().nullish(),
     lines: z.array(line).max(200).optional(),
     landedOn: z.number().int().positive().nullish(),
+    birTax: birTaxSchema,
   });
   app.post("/api/books/purchase_order/:id/bill", async (c) => c.json(await billOrder(db, c.get("me"), Number(c.req.param("id")), await readBody(c, billBody))));
   app.post("/api/books/bill/new", async (c) => c.json(await createBill(db, c.get("me"), await readBody(c, billBody))));
@@ -282,6 +301,7 @@ export function bookActionRoutes(app: Hono<Env>, db: Database): void {
             pic: NAME,
             voucher: TEXT(100),
             orNumber: TEXT(100),
+            birTax: birTaxSchema,
           }),
         ),
       ),
@@ -396,7 +416,7 @@ export function bookActionRoutes(app: Hono<Env>, db: Database): void {
     ),
   );
   app.post("/api/books-bank/line/:id/match", async (c) => {
-    await matchLine(db, me(c), Number(c.req.param("id")), await readBody(c, z.object({ entryKey: z.string().max(80) })));
+    await matchLine(db, me(c), Number(c.req.param("id")), await readBody(c, z.object({ entryKey: z.string().max(80), recordBankCharge: z.boolean().optional() })));
     return c.json({ ok: true });
   });
   app.post("/api/books-bank/line/:id/categorize", async (c) =>
