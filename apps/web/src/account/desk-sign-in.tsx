@@ -13,6 +13,7 @@ import { ApiFailure, api } from "../api";
 import { ME } from "../auth";
 import { rememberWorkspace, type Workspace } from "../workspaces";
 import { markActive } from "./idle";
+import { LocalOpenList } from "./local-open-list";
 
 /** The desks that open with the desks' common password. */
 export const DESK_KEYS: readonly string[] = ["management", "finance", "dispatch"];
@@ -128,6 +129,18 @@ function DeskSignIn({ workspace, onOwn }: { workspace: Workspace; onOwn: () => v
         </button>
         <p>Forgot the desk password? Ask your administrator.</p>
       </div>
+      {/* Vite's dev server only, and only where the API lets anyone in (local-open-list.tsx). */}
+      {import.meta.hot && (
+        <LocalOpenList
+          workspace={workspace}
+          onOpened={(me) => {
+            markActive();
+            queries.setQueryData(ME, me);
+            rememberWorkspace(workspace.key);
+            navigate("/", { replace: true });
+          }}
+        />
+      )}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import { ME, rememberPerson, returnTo, useMe } from "../auth";
 import { DepartmentsMenu } from "./departments-menu";
 import { DESK_KEYS, DeskOrOwn } from "./desk-sign-in";
 import { DevUserPicker } from "./dev-user-picker";
+import { LocalOpenList } from "./local-open-list";
 import { markActive } from "./idle";
 import { DepartmentCollage } from "../portal/department-collage";
 import { DepartmentMark } from "../portal/department-side";
@@ -376,6 +377,8 @@ export function SignIn({
       <div className="mt-5 grid gap-1 border-t border-[#eceef3] pt-3 text-[12.5px] text-[#5b6472]">
         <p>Forgot your password? Ask your administrator for a one-time password.</p>
       </div>
+      {/* Vite's dev server only, and only where the API lets anyone in (local-open-list.tsx). */}
+      {import.meta.hot && !adding && <LocalOpenList workspace={picked} onOpened={signedInAs} />}
     </div>
     </>
   );

@@ -7,6 +7,8 @@
 import { fileURLToPath } from "node:url";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
+import { localOpenAllowed } from "./auth/local-open";
+import { letAnyoneInLocally } from "./auth/sessions";
 import { asCompany } from "./companies/context";
 import { controlRoutes } from "./companies/control-routes";
 import { folderPlaces, openCompanies, postgresPlaces } from "./companies/registry";
@@ -23,6 +25,12 @@ const mainUrl = process.env.DATABASE_URL || undefined;
 const mainDir = process.env.PGLITE_DIR ?? fileURLToPath(new URL("../../../.data/pg", import.meta.url));
 const embedded = !mainUrl;
 const QUARTER_HOUR = 15 * 60 * 1000;
+// A developer's own computer: the sign-in page opens as anyone, no password (auth/local-open.ts).
+const localOpen = localOpenAllowed(process.env, webUrl);
+if (localOpen) {
+  letAnyoneInLocally();
+  console.log("api: on this computer anyone opens without a password (LOCAL_OPEN=off to stop it)");
+}
 
 const listening = () => {
   console.log(`api: listening on http://localhost:${port}`);
@@ -36,7 +44,7 @@ if (process.env.COMPANIES !== "on") {
   setInterval(() => companyTick(db, start), QUARTER_HOUR).unref();
   // Every connected Facebook page and mailbox is read on a timer, and the webhook's events worked.
   if (process.env.CHANNEL_JOBS !== "off") startChannelJobs(db);
-  serve({ fetch: createApp(db, { webUrl }).fetch, port }, listening);
+  serve({ fetch: createApp(db, { webUrl, localOpen }).fetch, port }, listening);
 } else {
   const places = mainUrl ? postgresPlaces(mainUrl) : folderPlaces(mainDir);
   const control = await places.control();
@@ -59,7 +67,7 @@ if (process.env.COMPANIES !== "on") {
         // Each company reads its own Facebook pages, mailboxes and websites (Aryan, 26 Nov: 2MG and
         // GetMeds each have their own), under its own name: the timers keep this company's context.
         if (process.env.CHANNEL_JOBS !== "off") startChannelJobs(db, () => !paused(ref.orgId));
-        return createApp(db, { webUrl });
+        return createApp(db, { webUrl, localOpen });
       }),
   });
   paused = (orgId) => Boolean(list.byOrgId(orgId)?.row.pausedAt);

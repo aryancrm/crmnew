@@ -18,6 +18,7 @@ import { accountEvent } from "./account/events";
 import { accountRoutes } from "./account/routes";
 import { signUpRoutes } from "./account/sign-up-routes";
 import { deviceCookie, deviceMark, passwordGuard } from "./auth/guard";
+import { localOpenRoutes } from "./auth/local-open";
 import { makeTicket, readTicket, spendTicket, twoStepOn, useCode } from "./auth/two-step";
 import { hashPassword, passwordProblem } from "./auth/password";
 import { ownWorkspace, WORKSPACE_KEYS, type WorkspaceKey, workspaceAllows, workspaceByKey } from "./auth/workspaces";
@@ -87,6 +88,8 @@ import type { ApiError, Me } from "./types";
 export type AppOptions = {
   /** The web app's address: allowed to call with the cookie; https makes the cookie Secure. */
   webUrl: string;
+  /** A developer's own computer: anyone opens without a password (auth/local-open.ts). */
+  localOpen?: boolean;
 };
 
 
@@ -711,6 +714,7 @@ export function createApp(db: Database, options: AppOptions) {
   });
   accountRoutes(app, db, signedIn, passwordRight);
   signUpRoutes(app, db, signedIn, options.webUrl);
+  if (options.localOpen) localOpenRoutes(app, db);
 
   inventoryRoutes(app, db, signedIn);
   notifyRoutes(app, db, signedIn);

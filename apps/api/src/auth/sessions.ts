@@ -24,6 +24,12 @@ const DAY = 24 * 60 * 60 * 1000;
 /** A desk's shared screen, as its name reads (the desks' common password opens it). */
 const DESK_SCREEN_WORDS = { management: "Management", finance: "Finance", dispatch: "Dispatch" } as const;
 
+/** Set only by server.ts on a developer's own computer (auth/local-open.ts): no password asked. */
+let anyoneLocally = false;
+export const letAnyoneInLocally = () => {
+  anyoneLocally = true;
+};
+
 export const DAY_SESSION_ROLES: readonly string[] = ["management", "finance", "dispatch"];
 
 const hashOf = (token: string) => createHash("sha256").update(token).digest("hex");
@@ -148,7 +154,8 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
         eq(person.active, true),
         // Whoever is at the keyboard (the viewer, when looking as someone) has a password of their
         // own and still works here; a desk's shared screen was opened with the desks' password.
-        sql`(${session.desk} is not null or coalesce(${viewer.passwordPending}, ${person.passwordPending}) = false)`,
+        // On a developer's own computer anyone opens without a password (auth/local-open.ts).
+        anyoneLocally ? undefined : sql`(${session.desk} is not null or coalesce(${viewer.passwordPending}, ${person.passwordPending}) = false)`,
         sql`coalesce(${viewer.active}, true)`,
         // A desk's screen stays a desk's: its seat's holder still works at that desk.
         sql`(${session.desk} is null or ${person.role} = ${session.desk})`,
@@ -203,7 +210,7 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
     photo: row.photo ?? null,
     twoStep: row.viewerId ? undefined : row.twoStep,
     // Someone looking as this person isn't asked to change their password.
-    mustChangePassword: row.viewerId ? false : row.mustChangePassword,
+    mustChangePassword: row.viewerId || anyoneLocally ? false : row.mustChangePassword,
     channel:
       row.channelCode && row.channelName
         ? { code: row.channelCode, name: row.channelName, division: row.channelDivision ?? null }
