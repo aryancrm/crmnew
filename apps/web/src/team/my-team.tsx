@@ -35,7 +35,7 @@ import {
   UserRoundX,
 } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { hqOfSeat } from "./hq-name";
 import { TeamSwitch } from "./switch";
@@ -1027,8 +1027,18 @@ const STAGES: { key: MyOrderStage; label: string }[] = [
 ];
 
 /** One seat of the team: who sits in it, their days picked, their orders and their customers. */
+/** The pages a person's page may be opened from, for its way back (28 Nov, PLAN 272). */
+const BACK_WORDS: [string, string][] = [
+  ["/sales-vs-target", "Sales vs target"],
+  ["/headquarters", "Headquarters"],
+  ["/team-scores", "Scorecards"],
+  ["/collections", "Collections"],
+];
+
 export function TeamSeatPage() {
   const { id } = useParams();
+  // Opened from another page (Sales vs target…): its way back goes there, not to Whole business.
+  const from = (useLocation().state as { from?: string } | null)?.from ?? null;
   const me = useMe().data;
   const places = placesOrders(me);
   const [params, setParams] = useSearchParams();
@@ -1052,7 +1062,9 @@ export function TeamSeatPage() {
   const keep = new URLSearchParams();
   for (const key of ["unit", "from", "to"])
     if (params.get(key)) keep.set(key, params.get(key) as string);
-  const back = `/my-team${keep.size ? `?${keep}` : ""}`;
+  const elsewhere = from && !from.startsWith("/my-team") ? from : null;
+  const back = elsewhere ?? `/my-team${keep.size ? `?${keep}` : ""}`;
+  const backWord = elsewhere ? (BACK_WORDS.find(([path]) => elsewhere.startsWith(path))?.[1] ?? "Back") : null;
   const seat = board.data.seats.find((one) => String(one.seatId) === id);
   if (!seat)
     return (
@@ -1128,13 +1140,14 @@ export function TeamSeatPage() {
           to={back}
           className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"
         >
-          <ChevronLeft className="size-4" /> {board.data.viewing ?? "My team"}
+          <ChevronLeft className="size-4" /> {backWord ?? board.data.viewing ?? "My team"}
         </Link>
         {order.length > 1 && at >= 0 && (
           <div className="flex items-center gap-1 text-sm">
             {near(-1) ? (
               <Link
                 to={hrefOf(near(-1)?.seatId as number)}
+                state={elsewhere ? { from: elsewhere } : undefined}
                 className="rounded-lg px-2.5 py-1 font-semibold text-slate-600 hover:bg-slate-100"
                 title={near(-1)?.person?.name}
               >
@@ -1147,6 +1160,7 @@ export function TeamSeatPage() {
             {near(1) ? (
               <Link
                 to={hrefOf(near(1)?.seatId as number)}
+                state={elsewhere ? { from: elsewhere } : undefined}
                 className="rounded-lg px-2.5 py-1 font-semibold text-slate-600 hover:bg-slate-100"
                 title={near(1)?.person?.name}
               >

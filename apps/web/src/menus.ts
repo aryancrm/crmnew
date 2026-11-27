@@ -777,15 +777,18 @@ function withSalesLinks(me: Me, space: Space): Space {
     ...(listed.includes("/calls")
       ? []
       : [{ to: "/calls", label: own ? (me.channel?.code === "RX" ? "My phone calls" : "My calls") : "Calls", icon: PhoneCall }]),
-    // The Admin sets the company up; sales figures are the CEO's and the leads' (Aryan, 18 Nov).
-    ...(listed.includes("/sales-performance") || me.role === "admin" ? [] : [{ to: "/sales-performance", label: "Sales performance", icon: TrendingUp }]),
+    // The Admin sets the company up; sales figures are the CEO's and the leads' (Aryan, 18 Nov). A
+    // menu with Sales vs target opens Sales performance from there (PLAN 272).
+    ...(listed.includes("/sales-performance") || listed.includes("/sales-vs-target") || me.role === "admin"
+      ? []
+      : [{ to: "/sales-performance", label: "Sales performance", icon: TrendingUp }]),
   ];
   return { ...space, groups: [{ ...first, items: [...first.items, ...add] }, ...rest] };
 }
 
 const LEAD_ROLES: Role[] = ["team_lead", "manager"];
 /** Links about the people under a lead: their team, scores, targets, visits and attendance. */
-const TEAM_LINKS = ["/my-team", "/team-scores", "/targets", "/hr/attendance", "/field/report", "/rx/field", "/calls", "/sales-performance"];
+const TEAM_LINKS = ["/my-team", "/sales-vs-target", "/team-scores", "/targets", "/hr/attendance", "/field/report", "/rx/field", "/calls", "/sales-performance"];
 /** What a lead looks things up in: customers and the stock. */
 const LOOK_UP_LINKS = ["/customers", "/medicines"];
 /** Splits a lead's links into the day's work, the team and the look-ups, keeping their order. A
@@ -1324,10 +1327,13 @@ function ownDesk(me: Me): Space {
             // CHCs' own tiers, which nobody keeps, so it was all zeros. The page stays at its address.
             // Prescription sales merged into Headquarters (Aryan, 28 Nov: "Home and it repeat";
             // PLAN 263): the doctors' counts and the top doctors are on Headquarters now.
-            { to: "/my-team", label: "Whole business", icon: Users, teams: true },
+            // Team numbers is three pages, not five (Aryan, 28 Nov: "what repeats there and above?";
+            // "Yes, do it", PLAN 272): Sales vs target (each HQ's target, sold, balance, today, as the
+            // sheet) in place of Whole business, Targets and Sales performance, whose own parts it holds
+            // or opens; then Scorecards and Calls. The pages stay at their addresses.
             { to: "/care-groups", label: "Care groups", icon: Users, short: "Groups" },
+            { to: "/sales-vs-target", label: "Sales vs target", icon: Target, short: "Sales" },
             { to: "/team-scores", label: "Scorecards", icon: Gauge, short: "Scores" },
-            { to: "/targets", label: "Targets", icon: Target },
             { to: "/collections", label: "Collections", icon: HandCoins },
             ordersLink("Business orders"),
             // Three pages, not eleven (Aryan, 28 Nov: "are this many needed? how many repeat?",

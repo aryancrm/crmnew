@@ -48,7 +48,8 @@ const list = (values: readonly string[]) =>
     sql`, `,
   );
 
-/** Invoices (alias `i`) that count as sold in a month. */
+/** Invoices (alias `i`) that count as sold in a month: their amount without VAT (`i.net`), as My
+ *  KPIs, Sales performance and the targets count it (Aryan, 28 Nov: "one number everywhere", PLAN 272). */
 /** Every sale (the CRM's and Zoho's invoices) with its order's seat, MedRep, channel and id as "o". */
 const saleAs = sql`sale_invoice i cross join lateral (select i.seat_id, i.medrep_id, i.covered, i.cover_lead_id, i.channel_id, coalesce(i.order_id, -i.id) as id) o`;
 
@@ -89,8 +90,8 @@ async function figuresOf(
   const [sold, placed, now, targets] = await Promise.all([
     rows<{ id: number; sold: number; today: number }>(
       db,
-      sql`select ${whose}::int as id, sum(i.total)::float8 as sold,
-          coalesce(sum(i.total) filter (where i.issued_on = ${facts.today}::date), 0)::float8 as today
+      sql`select ${whose}::int as id, sum(i.net)::float8 as sold,
+          coalesce(sum(i.net) filter (where i.issued_on = ${facts.today}::date), 0)::float8 as today
         from sale_invoice i cross join lateral (select i.seat_id, i.medrep_id, i.covered, i.cover_lead_id) o
         where ${soldIn(facts)} and ${whose} in (${ids(personIds)}) group by 1`,
     ),
@@ -213,7 +214,7 @@ export async function teamSales(db: Database, me: Me, asked?: string): Promise<T
     whole
       ? rows<{ sold: number; today: number }>(
           db,
-          sql`select coalesce(sum(i.total), 0)::float8 as sold, coalesce(sum(i.total) filter (where i.issued_on = ${facts.today}::date), 0)::float8 as today
+          sql`select coalesce(sum(i.net), 0)::float8 as sold, coalesce(sum(i.net) filter (where i.issued_on = ${facts.today}::date), 0)::float8 as today
             from sale_invoice i where ${soldIn(facts)}`,
         )
       : Promise.resolve([]),
@@ -282,8 +283,8 @@ export async function channelSales(db: Database, facts: MonthFacts): Promise<Cha
     sql`select ch.id::int as id, ch.code, ch.name, ch.active, h.name as head,
         (select nullif(sum(${targetShare(facts)}), 0) from sales_target t join person p on p.id = t.person_id
           where p.channel_id = ch.id and p.active)::float8 as target,
-        coalesce((select sum(i.total) from sale_invoice i where i.channel_id = ch.id and ${soldIn(facts)}), 0)::float8 as sold,
-        coalesce((select sum(i.total) from sale_invoice i where i.channel_id = ch.id and ${soldIn(facts)} and i.issued_on = ${facts.today}::date), 0)::float8 as today
+        coalesce((select sum(i.net) from sale_invoice i where i.channel_id = ch.id and ${soldIn(facts)}), 0)::float8 as sold,
+        coalesce((select sum(i.net) from sale_invoice i where i.channel_id = ch.id and ${soldIn(facts)} and i.issued_on = ${facts.today}::date), 0)::float8 as today
       from channel ch left join person h on h.id = ch.head_id
       order by ch.sort, ch.id`,
   );
@@ -329,7 +330,7 @@ export async function sheetChannelSales(db: Database, facts: MonthFacts): Promis
     db,
     sql`with recursive ${SHEET_PLACE},
       sold as (
-        select i.seat_id, sum(i.total) as sold, coalesce(sum(i.total) filter (where i.issued_on = ${today}::date), 0) as today
+        select i.seat_id, sum(i.net) as sold, coalesce(sum(i.net) filter (where i.issued_on = ${today}::date), 0) as today
         from sale_invoice i where ${soldIn(facts)} group by 1),
       figures as (
         select pl.business, pl.box, coalesce(sum(so.sold), 0)::float8 as sold, coalesce(sum(so.today), 0)::float8 as today,
@@ -353,7 +354,7 @@ export async function sheetChannelSales(db: Database, facts: MonthFacts): Promis
   );
   const [all] = await rows<{ sold: number; today: number }>(
     db,
-    sql`select coalesce(sum(i.total), 0)::float8 as sold, coalesce(sum(i.total) filter (where i.issued_on = ${today}::date), 0)::float8 as today
+    sql`select coalesce(sum(i.net), 0)::float8 as sold, coalesce(sum(i.net) filter (where i.issued_on = ${today}::date), 0)::float8 as today
       from sale_invoice i where ${soldIn(facts)}`,
   );
   const listed: ChannelFigures[] = found.map((row) => ({
@@ -429,8 +430,8 @@ export async function ceoHome(
     }>(
       db,
       sql`select
-          coalesce((select sum(i.total) from sale_invoice i where ${soldIn(facts)}), 0)::float8 as achieved,
-          coalesce((select sum(i.total) from sale_invoice i where ${soldIn(facts)} and i.issued_on = ${today}::date), 0)::float8 as today,
+          coalesce((select sum(i.net) from sale_invoice i where ${soldIn(facts)}), 0)::float8 as achieved,
+          coalesce((select sum(i.net) from sale_invoice i where ${soldIn(facts)} and i.issued_on = ${today}::date), 0)::float8 as today,
           -- Money only, as Finance's Home counts it: a bill settled with the customer's credit, a
           -- deduction, tax withheld or points brought no money in (the two Homes disagreed, 23 Nov).
           coalesce((select sum(amount) from payment where active and method not in ('points', 'withholding', 'credit', 'deduction') and paid_on >= ${first}::date and paid_on < ${next}::date), 0)::float8 as collected,
@@ -768,7 +769,7 @@ export async function channelSalesDetail(
     rows<ChannelSalesDetail["people"][number]>(
       db,
       sql`select p.id::int as id, p.name, a.name as area,
-          coalesce((select sum(i.total) from ${saleAs} where o.channel_id = ${channel.id} and ${whose} = p.id and ${sold}), 0)::float8 as sold,
+          coalesce((select sum(i.net) from ${saleAs} where o.channel_id = ${channel.id} and ${whose} = p.id and ${sold}), 0)::float8 as sold,
           (select sum(${targetShare(facts)}) from sales_target t where t.person_id = p.id)::float8 as target,
           (select count(distinct o.id) from ${saleAs} where o.channel_id = ${channel.id} and ${whose} = p.id and ${sold})::int as orders
         from person p left join area a on a.id = p.area_id
@@ -779,7 +780,7 @@ export async function channelSalesDetail(
     ),
     rows<ChannelSalesDetail["customers"][number]>(
       db,
-      sql`select c.id::int as id, c.name, c.kind, sum(i.total)::float8 as sold, count(distinct o.id)::int as orders
+      sql`select c.id::int as id, c.name, c.kind, sum(i.net)::float8 as sold, count(distinct o.id)::int as orders
         from ${saleAs} join customer c on c.id = i.customer_id
         where o.channel_id = ${channel.id} and ${sold}
         group by c.id, c.name, c.kind order by sold desc limit 50`,

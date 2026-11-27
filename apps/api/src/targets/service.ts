@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
+import { salesByPerson } from "../kpis/invoices";
 import { creditedTo, inForce } from "../org/service";
 import { ROLE_LABEL, type Role } from "../people/roles";
 import type { Me, TargetList } from "../types";
@@ -96,6 +97,10 @@ export async function listTargets(db: Database, me: Me, asked?: string): Promise
         and not exists (select 1 from seat_holder h where h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", todayManila())})
       order by u.sort, u.id, s.sort`,
   );
+  // What each one sold is what My KPIs, Sales performance and Sales vs target count: this CRM's
+  // invoices and Zoho's, without VAT (Aryan, 28 Nov: "one number everywhere"; it counted this CRM's
+  // own invoices only, with VAT, and said ₱0 of ₱12.7M while the company bills in Zoho; PLAN 272).
+  const sales = await salesByPerson(db, first, `${month}-${String(daysInMonth).padStart(2, "0")}`);
   return {
     emptySeats,
     month,
@@ -108,7 +113,7 @@ export async function listTargets(db: Database, me: Me, asked?: string): Promise
       timeZone: "Asia/Manila",
     }),
     can: { set: true },
-    rows: found.map(({ role, ...row }) => ({ ...row, roleLabel: ROLE_LABEL[role] })),
+    rows: found.map(({ role, ...row }) => ({ ...row, sold: sales.get(row.personId)?.sales ?? 0, roleLabel: ROLE_LABEL[role] })),
   };
 }
 

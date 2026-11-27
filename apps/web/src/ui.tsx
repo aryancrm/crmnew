@@ -2,7 +2,7 @@
 
 import { X } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { ApiFailure } from "./api";
 import { Loading } from "./no-results";
 
@@ -593,9 +593,11 @@ export function useLook<T extends string>(key: string, looks: readonly (readonly
  *  doesn't open it. The name inside stays a link, for the keyboard. */
 export function useOpenOnPress(): (to: string) => (event: React.MouseEvent) => void {
   const navigate = useNavigate();
+  const location = useLocation();
   return (to) => (event) => {
     if ((event.target as HTMLElement).closest("a, button, input, select, textarea, label")) return;
     if (window.getSelection()?.toString()) return;
-    navigate(to);
+    // The page opened knows where it was opened from, for its way back (28 Nov, PLAN 272).
+    navigate(to, { state: { from: `${location.pathname}${location.search}` } });
   };
 }

@@ -53,19 +53,19 @@ export async function companyGlance(db: Database, me: Me): Promise<CompanyGlance
     ),
     rows<{ day: string; amount: number }>(
       db,
-      sql`select to_char(s.issued_on, 'YYYY-MM-DD') as day, sum(s.total)::float8 as amount from sale_invoice s
+      sql`select to_char(s.issued_on, 'YYYY-MM-DD') as day, sum(s.net)::float8 as amount from sale_invoice s
         where s.status <> 'cancelled' and s.issued_on between ${first}::date and ${today}::date group by 1 order by 1`,
     ),
     rows<{ name: string; amount: number }>(
       db,
-      sql`select coalesce(p.name, 'Not tied to a seat') as name, sum(s.total)::float8 as amount from sale_invoice s
+      sql`select coalesce(p.name, 'Not tied to a seat') as name, sum(s.net)::float8 as amount from sale_invoice s
           left join lateral (select h.person_id from seat_holder h where h.seat_id = s.seat_id and h.kind = 'holder' order by h.ends_on desc nulls first, h.starts_on desc limit 1) h on true
           left join person p on p.id = coalesce(s.medrep_id, h.person_id)
         where s.status <> 'cancelled' and s.issued_on between ${first}::date and ${today}::date group by 1 order by 2 desc limit 5`,
     ),
     rows<{ name: string; amount: number }>(
       db,
-      sql`select c.name, sum(s.total)::float8 as amount from sale_invoice s join customer c on c.id = s.customer_id
+      sql`select c.name, sum(s.net)::float8 as amount from sale_invoice s join customer c on c.id = s.customer_id
         where s.status <> 'cancelled' and s.issued_on between ${first}::date and ${today}::date group by c.name order by 2 desc limit 5`,
     ),
     rows<{ name: string; amount: number }>(

@@ -6236,6 +6236,29 @@ export type Headquarters = {
   today: number;
 };
 
+/** Sales vs target (28 Nov, PLAN 272): each channel with its manager, each HQ with who works it, its
+ *  target for the month, what it sold (without VAT, as My KPIs counts it) and today, as the team's
+ *  November sheet; the team's sales day by day and the medicines sold. Centavos. */
+export type SalesVsTarget = {
+  month: string;
+  /** The day "today" is counted for (the month's last day for a month gone by). */
+  day: string;
+  daysInMonth: number;
+  daysGone: number;
+  channels: {
+    unitId: number;
+    name: string;
+    manager: string | null;
+    hqs: { seatId: number; hq: string; person: string | null; personId: number | null; target: number | null; sold: number; today: number }[];
+    target: number | null;
+    sold: number;
+    today: number;
+  }[];
+  total: { target: number | null; sold: number; today: number };
+  daily: { day: string; sold: number }[];
+  medicines: { name: string; qty: number; value: number }[];
+};
+
 /** Each person's HQ in the team in view (28 Nov, PLAN 269): the pages that name people put it first. */
 export type TeamHqs = { people: { personId: number; hq: string }[] };
 

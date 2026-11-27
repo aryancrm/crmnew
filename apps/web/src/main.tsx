@@ -64,6 +64,7 @@ import { CompanyMapPage } from "./company/map";
 import { MyTeamPage, TeamSeatPage } from "./team/my-team";
 import { SalesTreePage } from "./company/sales-tree";
 import { HeadquartersPage } from "./team/headquarters";
+import { SalesVsTargetPage } from "./team/sales-target";
 import { DivisionsPage } from "./company/divisions";
 import { StockReportPage } from "./inventory/stock-report";
 import { NotBuilt, OnlyFor } from "./home/not-built";
@@ -348,6 +349,7 @@ createRoot(root).render(
             <Route path="company/map" element={<CompanyMapPage />} />
             <Route path="company/sales" element={<SalesTreePage />} />
             <Route path="headquarters" element={<HeadquartersPage />} />
+            <Route path="sales-vs-target" element={<SalesVsTargetPage />} />
             <Route path="divisions" element={<DivisionsPage />} />
             <Route path="inventory/stock-report" element={<StockReportPage />} />
             <Route path="people" element={<OrgPage />} />

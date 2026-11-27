@@ -273,20 +273,21 @@ export async function teamBoard(
             coalesce(sum(i.total - i.paid) filter (where i.status = 'open' and ${due} and i.due_on < ${today}::date), 0)::float8 as overdue
           from invoice i join sales_order o on o.id = i.order_id where o.seat_id in (${list}) group by o.seat_id
           union all
-          -- Zoho's unpaid invoices of the seat's Zoho salesperson: the sales view's Zoho half asked
-          -- directly (the same documents, amounts and day: unpaid = a balance, not void, not a
-          -- draft), so the database reads only the invoices with a balance, not every invoice the
-          -- seats ever had (1.2 seconds of the board, 22 Nov).
-          select zs.seat_id::int,
+          -- Zoho's unpaid invoices by the HQ the customer belongs to (its territory's seat), as
+          -- Collections and the Home count them (one number everywhere, 28 Nov, PLAN 272: ₱10.2M
+          -- here beside their ₱11.8M); asked directly, so the database reads only the invoices
+          -- with a balance (1.2 seconds of the board, 22 Nov).
+          select s.id::int,
             sum(round(d.total * d.fx_rate)::bigint - round((d.total - d.balance) * d.fx_rate)::bigint)::float8,
             coalesce(sum(round(d.total * d.fx_rate)::bigint - round((d.total - d.balance) * d.fx_rate)::bigint) filter (where d.due_date < ${today}::date), 0)::float8
-          from book_doc d join zoho_seller zs on zs.name = coalesce(d.fields->>'Sales Person', d.fields->>'salesperson_name')
+          from book_doc d join customer c on c.id = d.customer_id join seat s on s.area_id = c.area_id and s.active
           where d.kind = 'invoice' and d.zoho_id is not null and d.status not in ('draft', 'void') and d.balance > 0
-            and zs.seat_id in (${list}) group by zs.seat_id`,
+            and s.id in (${list}) group by s.id`,
     ),
     rows<{ seatId: number; day: string; amount: number }>(
       db,
-      sql`select i.seat_id::int as "seatId", ${day("i.issued_on")} as day, sum(i.total)::float8 as amount
+      // Sold without VAT, as My KPIs and the targets count it (28 Nov, PLAN 272).
+      sql`select i.seat_id::int as "seatId", ${day("i.issued_on")} as day, sum(i.net)::float8 as amount
           from sale_invoice i
           where i.seat_id in (${list}) and i.status <> 'cancelled' and ${inRange(sql`i.issued_on`)} group by 1, 2`,
     ),
@@ -298,9 +299,16 @@ export async function teamBoard(
     ),
     rows<{ seatId: number; day: string; count: number; amount: number }>(
       db,
+      // This CRM's orders and Zoho's, by the seat they came under, as the Home's "How the orders
+      // came" counts them (one number everywhere, 28 Nov, PLAN 272: it said 0 beside the Home's 328).
       sql`select o.seat_id::int as "seatId", to_char(${placedDay}, 'YYYY-MM-DD') as day, count(*)::int as count,
             sum(o.total)::float8 as amount
           from sales_order o where o.seat_id in (${list}) and o.status not in ('draft', 'cancelled') and ${inRange(placedDay)}
+          group by 1, 2
+          union all
+          select zs.seat_id::int, to_char(p.ordered_on, 'YYYY-MM-DD'), count(*)::int, sum(p.total)::float8
+          from past_order p join zoho_seller zs on zs.name = p.seller
+          where zs.seat_id in (${list}) and p.status <> 'void' and ${inRange(sql`p.ordered_on`)}
           group by 1, 2`,
     ),
     rows<{ seatId: number; delivered: number; newCustomers: number }>(
