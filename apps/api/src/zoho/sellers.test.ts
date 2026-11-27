@@ -38,13 +38,16 @@ beforeAll(async () => {
   }
 });
 
+// The teams and seats these tests stand on are set up straight from the chart's data: the Admin's
+// button for it is gone (Aryan, 27 Nov: "forget the organisation chart", PLAN 256).
 describe("the chart's teams and seats", () => {
   it("come in once, empty, each selling seat with its own area", async () => {
     const before = { units: await count("org_unit"), seats: await count("seat"), areas: await count("area") };
     const dry = await importChart(db, CHART_2026, false);
     expect(await count("seat")).toBe(before.seats);
-    expect((await post("sarla", "/api/admin/import/chart", { apply: true })).status).toBe(403);
-    const made = (await (await post("admin", "/api/admin/import/chart", { apply: true })).json()) as typeof dry;
+    // No screen sets them up any more.
+    expect((await post("admin", "/api/admin/import/chart", { apply: true })).status).toBe(404);
+    const made = await importChart(db, CHART_2026, true);
     expect(made).toMatchObject({ units: dry.units, seats: dry.seats, noChannel: [] });
     expect(made.seats).toBeGreaterThan(60);
     expect(await count("seat")).toBe(before.seats + made.seats);

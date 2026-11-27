@@ -1,16 +1,15 @@
 // The Admin panel's Zoho salespeople: each name Zoho's orders carry ("HOS | PASAY"), how many
 // customers it last sold to, and the seat it is tied to here. Tying it puts those customers
-// under the seat's area, so its holder, their coach and their channel see them. A first step
-// sets up the 2026 chart's selling teams and seats (empty, for HR to fill).
+// under the seat's area, so its holder, their coach and their channel see them. (The step that set
+// up the 2026 paper chart's teams and seats is gone, Aryan 27 Nov: "forget the organisation chart;
+// only the photo": it would bring back the boxes deleted for the Headquarters, PLAN 256.)
 
 import type { ZohoSellers } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, LoaderCircle, Wand2 } from "lucide-react";
+import { LoaderCircle, Wand2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { api } from "../api";
 import { Button, count, dayLabel, PageHead, PageState, peso, Problem, Tabs } from "../ui";
-
-type ChartResult = { units: number; seats: number; areas: number; alreadyHere: number; citiesTaken: string[]; noChannel: string[] };
 
 export function AdminZohoSellers() {
   const queries = useQueryClient();
@@ -18,7 +17,6 @@ export function AdminZohoSellers() {
   const [busy, setBusy] = useState<string | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [moved, setMoved] = useState<Record<string, number>>({});
-  const [chart, setChart] = useState<ChartResult | null>(null);
   const [onlyRecent, setOnlyRecent] = useState(true);
   const [view, setView] = useState<"compare" | "tie">("compare");
   const data = query.data;
@@ -36,18 +34,6 @@ export function AdminZohoSellers() {
       const said = await api<{ moved: number }>("/api/admin/zoho-sellers", { method: "POST", body: { name, seatId } });
       setMoved((old) => ({ ...old, [name]: said.moved }));
       await queries.invalidateQueries({ queryKey: ["admin", "zoho-sellers"] });
-    } catch (error) {
-      setProblem(error instanceof Error ? error.message : String(error));
-    } finally {
-      setBusy(null);
-    }
-  };
-  const setUpChart = async (apply: boolean) => {
-    setBusy("chart");
-    setProblem(null);
-    try {
-      setChart(await api<ChartResult>("/api/admin/import/chart", { method: "POST", body: { apply } }));
-      if (apply) await queries.invalidateQueries({ queryKey: ["admin", "zoho-sellers"] });
     } catch (error) {
       setProblem(error instanceof Error ? error.message : String(error));
     } finally {
@@ -82,30 +68,6 @@ export function AdminZohoSellers() {
         <Compare data={data} />
       ) : (
       <>
-      <section className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="min-w-0 text-[13px] text-slate-700">
-            <b className="text-slate-900">The 2026 chart's selling teams and seats.</b> Hospital, Prescription, Sales and Marketing, Modern Trade: every
-            team and seat, empty for HR to fill, each selling seat with its own area. Safe to run again.
-          </div>
-          <div className="flex gap-2">
-            <Button small disabled={busy !== null} onClick={() => void setUpChart(false)}>
-              See what it adds
-            </Button>
-            <Button small variant="primary" disabled={busy !== null} onClick={() => void setUpChart(true)}>
-              {busy === "chart" ? <LoaderCircle className="size-3.5 animate-spin" /> : <Check className="size-3.5" />} Set them up
-            </Button>
-          </div>
-        </div>
-        {chart && (
-          <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2 text-[12.5px] text-slate-700">
-            {count(chart.units)} teams, {count(chart.seats)} seats, {count(chart.areas)} areas
-            {chart.alreadyHere ? ` · ${count(chart.alreadyHere)} seats already here` : ""}
-            {chart.citiesTaken.length ? ` · cities already in another area: ${chart.citiesTaken.join(", ")}` : ""}
-            {chart.noChannel.length ? ` · channels missing: ${chart.noChannel.join(", ")}` : ""}
-          </div>
-        )}
-      </section>
       <Problem message={problem} />
       <div className="mb-2 flex items-center justify-between gap-3 text-[12.5px]">
         <label className="inline-flex items-center gap-2 text-slate-600">
