@@ -131,7 +131,10 @@ export function companyRouter(list: CompanyList, options: { secure: boolean; con
       const typed = (await typedEmail(c.req.raw)).trim().toLowerCase();
       const domain = typed.includes("@") ? typed.slice(typed.lastIndexOf("@") + 1) : "";
       if (domain) {
-        chosen = list.byDomain(domain);
+        // Signing in: the company that has this email as someone's login, whatever its domain (a
+        // 2MG employee whose work email is @getmeds.ph); else the domain's own company, as before.
+        if (path === "/api/auth/login") chosen = await list.byLoginEmail(typed);
+        chosen ??= list.byDomain(domain);
         if (!chosen && (await list.isBrokenDomain(domain)))
           return refuse(c, 503, "company_unreachable", "Your company's data can't be reached right now. Try again in a few minutes.");
       }

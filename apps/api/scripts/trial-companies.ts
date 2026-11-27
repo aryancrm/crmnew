@@ -12,8 +12,10 @@
 //              Philippines Incorporated added (its System admin naresh@getmeds.ph) with its own
 //              people from the sheet (GPI IDs not on the chart). Prints what it did and what is left.
 //
-// Who goes where (27 Nov, "B, the safe route"): by the work on the chart, so 2MG's teams stay whole;
-// the employer stays on each HR record (Company, from the Employee ID). The two System admins get the
+// Who goes where (27 Nov: "the Employee ID is the basis"): 2MG-… in 2MG, GPI-… in Getmeds. A GPI
+// employee on 2MG's chart gets the same team and seat in Getmeds (its boxes made there as 2MG has
+// them) and leaves 2MG's (the seat stays, vacant). Each signs in with the work email HR has for
+// them, whatever its domain, until it is changed (sign-in finds the company that has it). The two System admins get the
 // password given in ADMIN_PASSWORD (never written here), without being asked to change it; everyone
 // else has none until scripts/give-passwords.ts gives each a one-time one.
 //
@@ -34,7 +36,7 @@ import { folderPlaces, openCompanies } from "../src/companies/registry";
 import { readyCompany } from "../src/companies/start";
 import { type Database, rows } from "../src/db/index";
 import { updateRecord } from "../src/hr/people";
-import { addPerson } from "../src/org/service";
+import { addPerson, addUnit, personLeaves } from "../src/org/service";
 import { readXlsxBytes } from "../src/reports/xlsx-read";
 import type { Me } from "../src/types";
 
@@ -67,6 +69,7 @@ const list = await openCompanies({
 });
 const home = list.all().find((one) => one.ref.home);
 if (!home) throw new Error("2MG isn't on the list.");
+const homeDb = home.db;
 
 /** The System admin opens with the password given, not asked to change it (both admins, 27 Nov). */
 async function adminPassword(db: Database, login: string, name?: string) {
@@ -172,49 +175,51 @@ const admin = (db: Database, row: { id: number; name: string }): Me =>
 
 const done: string[] = [];
 const left: string[] = [];
+/** Every login email given so far, in either company: one person each. */
+const used = new Set<string>([HOME.loginId, GETMEDS.loginId]);
 
-/** Puts HR's facts on one person of a company: the name as HR writes it, the Employee ID, the
- *  employer, and their login email when it is on this company's domain and nobody else's. */
+/** The work email HR has for them, kept as it is whatever its domain (27 Nov: "keep their work
+ *  emails for now; we change the email later"): the one on their company's domain when HR lists
+ *  two, else the first; none when it is someone else's already. */
+function workEmail(person: SheetPerson, domain: string): string | null {
+  const email = person.emails.find((one) => one.endsWith(`@${domain}`)) ?? person.emails[0] ?? null;
+  if (!email) return null;
+  if (used.has(email)) {
+    left.push(`${person.id} ${person.name}: ${email} is already someone else's login; signs in with their seat's login.`);
+    return null;
+  }
+  used.add(email);
+  return email;
+}
+
+/** Puts HR's facts on one of 2MG's people: the Employee ID, the employer and the work email. */
 async function apply(db: Database, me: Me, domain: string, personId: number, person: SheetPerson, was: string) {
   // The name stays as the CRM has it (the sheet has its own slips, "Atonette"); a different spelling
   // is listed to be decided.
   if (words(was).join(" ") !== words(person.name).join(" ")) left.push(`${person.id}: the CRM says "${was}", HR's sheet "${person.full}". Which spelling?`);
   await updateRecord(db, me, personId, { employeeCode: person.id, company: person.employer });
-  const email = person.emails.find((one) => one.endsWith(`@${domain}`));
-  if (email) {
-    const [taken] = await rows<{ id: number }>(db, sql`select id::int as id from person where lower(email) = ${email} and id <> ${personId}`);
-    if (taken) left.push(`${person.id} ${person.name}: ${email} is someone else's here; signs in with their seat's login.`);
-    else await db.execute(sql`update person set email = ${email} where id = ${personId}`);
-  }
-  done.push(`${person.id} ${was}${email ? ` · ${email}` : " · seat login"}`);
+  const email = workEmail(person, domain);
+  if (email) await db.execute(sql`update person set email = ${email} where id = ${personId}`);
+  done.push(`[2MG] ${person.id} ${was}${email ? ` · ${email}` : " · seat login"}`);
 }
 
-/** Someone of HR's sheet with no place on the chart: a login of their first name, in the company's
- *  top box, for HR to place (27 Nov: "make them an account on their first name for now"). */
-async function addUnplaced(db: Database, me: Me, domain: string, person: SheetPerson) {
-  const [already] = await rows<{ id: number }>(
-    db,
-    sql`select p.id::int as id from person p join employee e on e.person_id = p.id where e.employee_code = ${person.id}`,
-  );
+/** Someone of HR's sheet with no place on the chart: their work email, else a login of their first
+ *  name, in the company's top box, for HR to place (27 Nov: "an account on their first name"). */
+async function addUnplaced(db: Database, me: Me, domain: string, code: string, person: SheetPerson) {
+  const [already] = await rows<{ id: number }>(db, sql`select p.id::int as id from person p join employee e on e.person_id = p.id where e.employee_code = ${person.id}`);
   if (already) return;
   const [top] = await rows<{ id: number }>(db, sql`select id::int as id from org_unit where parent_id is null and active order by id limit 1`);
   const base = (words(person.first)[0] ?? "person").replace(/[^a-z]/g, "");
-  let login = person.emails.find((one) => one.endsWith(`@${domain}`)) ?? `${base}@${domain}`;
-  for (let n = 2; (await rows(db, sql`select 1 from person where lower(email) = ${login}`)).length; n++) login = `${base}${n}@${domain}`;
-  const made = await addPerson(db, me, {
-    name: person.name,
-    email: login,
-    unitId: top?.id,
-    title: "To be placed (HR)",
-    module: "staff",
-    employeeCode: person.id,
-  });
+  let login = workEmail(person, domain) ?? `${base}@${domain}`;
+  for (let n = 2; used.has(login) && !person.emails.includes(login); n++) login = `${base}${n}@${domain}`;
+  used.add(login);
+  const made = await addPerson(db, me, { name: person.name, email: login, unitId: top?.id, title: "To be placed (HR)", module: "staff", employeeCode: person.id });
   await db.execute(sql`update person set password_pending = true where id = ${made.personId}`);
   await updateRecord(db, me, made.personId, { company: person.employer });
-  done.push(`${person.id} ${person.name} · added, not on the chart · ${login}`);
+  done.push(`[${code}] ${person.id} ${person.name} · added, not on the chart · ${login}`);
 }
 
-// ---- 2MG: the chart's people ----
+// ---- Who on 2MG's chart each one is ----
 const [homeAdmin] = await rows<{ id: number; name: string }>(home.db, sql`select id::int as id, name from person where lower(email) = ${HOME.loginId}`);
 if (!homeAdmin) throw new Error(`2MG's System admin ${HOME.loginId} isn't there: run init first.`);
 const chart = await rows<{ id: number; name: string }>(
@@ -246,31 +251,110 @@ for (const person of [...notOnChart]) {
     notOnChart.splice(notOnChart.indexOf(person), 1);
   }
 }
-await asCompany(home.ref, async () => {
-  const me = admin(home.db, homeAdmin);
-  for (const [personId, person] of taken) {
-    const was = chart.find((one) => one.id === personId)?.name ?? "";
-    await apply(home.db, me, home.ref.loginDomain, personId, person, was);
-  }
-  for (const person of notOnChart.filter((one) => one.employer === "2mg")) await addUnplaced(home.db, me, home.ref.loginDomain, person);
-});
 for (const one of chart) if (!taken.has(one.id)) left.push(`${one.name}: on the chart, not in HR's sheet (kept for now; their official account later).`);
 
-// ---- Getmeds Philippines Incorporated: its own database, its own people ----
+// ---- Getmeds Philippines Incorporated: its own database ----
 let getmeds = list.all().find((one) => one.ref.code === GETMEDS.code);
-if (!getmeds) {
-  const made = await list.add({ name: GETMEDS.name, code: GETMEDS.code, loginId: GETMEDS.loginId }, null);
-  getmeds = made.company;
-}
+if (!getmeds) getmeds = (await list.add({ name: GETMEDS.name, code: GETMEDS.code, loginId: GETMEDS.loginId }, null)).company;
 await adminPassword(getmeds.db, GETMEDS.loginId, "Naresh Bishnoi");
-const [gmAdmin] = await rows<{ id: number; name: string }>(getmeds.db, sql`select id::int as id, name from person where lower(email) = ${GETMEDS.loginId}`);
-await asCompany(getmeds.ref, async () => {
-  const me = admin(getmeds.db, gmAdmin as { id: number; name: string });
-  for (const person of notOnChart.filter((one) => one.employer === "gpi")) await addUnplaced(getmeds.db, me, getmeds.ref.loginDomain, person);
+const gm = getmeds;
+const [gmAdmin] = await rows<{ id: number; name: string }>(gm.db, sql`select id::int as id, name from person where lower(email) = ${GETMEDS.loginId}`);
+if (!gmAdmin) throw new Error(`Getmeds' System admin ${GETMEDS.loginId} isn't there.`);
+
+/** A box of 2MG's tree, made the same in Getmeds (its name, kind and channel, under the same boxes). */
+const gmUnits = new Map<number, number>();
+async function gmUnitOf(homeUnitId: number, me: Me): Promise<number> {
+  const had = gmUnits.get(homeUnitId);
+  if (had) return had;
+  const [unit] = await rows<{ name: string; kind: string; parentId: number | null; channel: string | null }>(
+    homeDb,
+    sql`select u.name, u.kind, u.parent_id::int as "parentId", c.code as channel from org_unit u left join channel c on c.id = u.channel_id where u.id = ${homeUnitId}`,
+  );
+  if (!unit) throw new Error(`No box ${homeUnitId} on 2MG's tree.`);
+  const [gmTop] = await rows<{ id: number }>(gm.db, sql`select id::int as id from org_unit where parent_id is null and active order by id limit 1`);
+  // 2MG's company box is Getmeds' own company box.
+  if (unit.parentId === null) {
+    gmUnits.set(homeUnitId, gmTop?.id as number);
+    return gmTop?.id as number;
+  }
+  const parent = await gmUnitOf(unit.parentId, me);
+  const [same] = await rows<{ id: number }>(gm.db, sql`select id::int as id from org_unit where parent_id = ${parent} and active and lower(name) = lower(${unit.name})`);
+  let id = same?.id;
+  if (!id) {
+    const [channel] = unit.channel ? await rows<{ id: number }>(gm.db, sql`select id::int as id from channel where code = ${unit.channel}`) : [];
+    id = (await addUnit(gm.db, me, { name: unit.name, kind: unit.kind as never, parentId: parent, channelId: channel?.id ?? null })).unitId;
+  }
+  gmUnits.set(homeUnitId, id);
+  return id;
+}
+
+/** A GPI employee on 2MG's chart: the same team and seat in Getmeds, with their work email; their
+ *  2MG seats left vacant (27 Nov: "copy their team"). Their 2MG record is marked as left, its
+ *  history kept. */
+async function moveToGetmeds(homeMe: Me, gmMe: Me, personId: number, person: SheetPerson, was: string) {
+  const [already] = await rows<{ id: number }>(gm.db, sql`select p.id::int as id from person p join employee e on e.person_id = p.id where e.employee_code = ${person.id}`);
+  if (already) return;
+  const seats = await rows<{ unitId: number; title: string; module: string; lead: boolean; area: string | null; cities: string[] | null }>(
+    homeDb,
+    sql`select s.unit_id::int as "unitId", s.title, s.module, s.lead, a.name as area, a.cities
+      from seat_holder h join seat s on s.id = h.seat_id and s.active left join area a on a.id = s.area_id
+      where h.person_id = ${personId} and h.kind = 'holder' and (h.ends_on is null or h.ends_on >= current_date)
+      order by s.lead desc, h.starts_on, h.id`,
+  );
+  const first = seats[0];
+  if (!first) {
+    left.push(`${person.id} ${was}: GPI, but no seat on 2MG's chart to copy.`);
+    return;
+  }
+  const email = workEmail(person, gm.ref.loginDomain);
+  const unitId = await gmUnitOf(first.unitId, gmMe);
+  const [leadHere] = first.lead ? await rows(gm.db, sql`select 1 as one from seat where unit_id = ${unitId} and active and lead`) : [];
+  const lead = first.lead && !leadHere;
+  const areaTaken = first.area ? (await rows(gm.db, sql`select 1 as one from area where lower(name) = lower(${first.area})`)).length > 0 : false;
+  const made = await addPerson(gm.db, gmMe, {
+    name: was,
+    email: email ?? null,
+    unitId,
+    title: first.title,
+    module: (lead ? first.module : first.module === "team_lead" || first.module === "manager" ? "medrep" : first.module) as never,
+    lead,
+    ...(first.area && !areaTaken ? { newArea: { name: first.area, cities: first.cities ?? [] } } : {}),
+    employeeCode: person.id,
+  });
+  await gm.db.execute(sql`update person set password_pending = true where id = ${made.personId}`);
+  await updateRecord(gm.db, gmMe, made.personId, { company: person.employer });
+  if (words(was).join(" ") !== words(person.name).join(" ")) left.push(`${person.id}: the CRM says "${was}", HR's sheet "${person.full}". Which spelling?`);
+  if (first.lead && !lead) left.push(`${person.id} ${was}: led their 2MG team; Getmeds' copy of it has its lead already, so placed in it.`);
+  for (const other of seats.slice(1)) left.push(`${person.id} ${was}: also held "${other.title}" at 2MG; only their first seat was copied.`);
+  await personLeaves(homeDb, homeMe, personId, { reason: `Employed by ${GETMEDS.name} (${person.id}): works in Getmeds' own database` });
+  done.push(`[GPI] ${person.id} ${was} · ${first.title} copied${email ? ` · ${email}` : " · seat login"}`);
+}
+
+const homeMe = admin(home.db, homeAdmin);
+const gmMe = admin(gm.db, gmAdmin);
+// The two admins' emails are theirs; then 2MG's own people, then Getmeds' (leads first, so their
+// teams' boxes are made under them).
+await asCompany(home.ref, async () => {
+  for (const [personId, person] of taken) if (person.employer === "2mg") await apply(home.db, homeMe, home.ref.loginDomain, personId, person, chart.find((one) => one.id === personId)?.name ?? "");
+  for (const person of notOnChart.filter((one) => one.employer === "2mg")) await addUnplaced(home.db, homeMe, home.ref.loginDomain, home.ref.code, person);
+});
+const gpiOnChart = [...taken].filter(([, person]) => person.employer === "gpi");
+const leadFirst = await rows<{ id: number; lead: boolean }>(
+  home.db,
+  sql`select p.id::int as id, coalesce(bool_or(s.lead), false) as lead from person p left join seat_holder h on h.person_id = p.id left join seat s on s.id = h.seat_id
+    where p.id in (${sql.join([0, ...gpiOnChart.map(([id]) => id)].map((id) => sql`${id}`), sql`, `)}) group by p.id`,
+);
+gpiOnChart.sort(([a], [b]) => Number(leadFirst.find((one) => one.id === b)?.lead) - Number(leadFirst.find((one) => one.id === a)?.lead));
+for (const [personId, person] of gpiOnChart) {
+  const was = chart.find((one) => one.id === personId)?.name ?? "";
+  await asCompany(gm.ref, () => moveToGetmeds(homeMe, gmMe, personId, person, was));
+}
+await asCompany(gm.ref, async () => {
+  for (const person of notOnChart.filter((one) => one.employer === "gpi")) await addUnplaced(gm.db, gmMe, gm.ref.loginDomain, gm.ref.code, person);
 });
 
 console.log(`\n${home.ref.name} (Org ID ${home.ref.orgId}, @${home.ref.loginDomain}) · System admin ${HOME.loginId}`);
-console.log(`${getmeds.ref.name} (Org ID ${getmeds.ref.orgId}, @${getmeds.ref.loginDomain}) · System admin ${GETMEDS.loginId}`);
+console.log(`${gm.ref.name} (Org ID ${gm.ref.orgId}, @${gm.ref.loginDomain}) · System admin ${GETMEDS.loginId}`);
 console.log(`\nDone (${done.length}):`);
 for (const line of done) console.log(`  ${line}`);
 console.log(`\nTo look at (${left.length}):`);
