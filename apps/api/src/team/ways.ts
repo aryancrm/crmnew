@@ -43,10 +43,17 @@ export async function orderWays(db: Database, me: Me, asked: { month?: string | 
   if (!LEADS.includes(me.role)) throw new Refusal(403, "not_allowed", "How the team's orders came is the leads' view.");
   const today = todayManila();
   const month = asked.month && MONTH.test(asked.month) && asked.month <= today.slice(0, 7) ? asked.month : today.slice(0, 7);
+  const { seatIds } = await teamSeats(db, me, me.unit ?? null);
+  return waysOf(db, seatIds, month);
+}
+
+/** The month's orders on these seats by way, one count for every screen that shows it (the Home's
+ *  card, Prescription sales). */
+export async function waysOf(db: Database, seatIds: number[], month: string): Promise<OrderWays> {
+  const today = todayManila();
   const from = `${month}-01`;
   const [year, number] = month.split("-").map(Number) as [number, number];
   const to = new Date(Date.UTC(year, number, 0)).toISOString().slice(0, 10);
-  const { seatIds } = await teamSeats(db, me, me.unit ?? null);
   const result: OrderWays = {
     month,
     from,

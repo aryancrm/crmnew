@@ -1,9 +1,10 @@
-// Prescription sales (Aryan, 19 Nov: "press RX: Honey, her whole team, what the team is doing and
-// where, right now; the sales they made, A to Z"; 27 Nov: "the name is wrong, nobody understands
-// what it is; make it look clear, so one sees what is going on", PLAN 250). The orders that came
-// with a doctor's prescription this month: how much, which doctors wrote them, through whom, and
-// the guarantee letters (a government agency pays for the patient's medicine). Each part says in
-// one line what it is. A CHC sees their own ("My prescriptions"); a lead their team.
+// Prescription sales (Aryan, 19 Nov; renamed 27 Nov, PLAN 250; built on the two doctor ways and the
+// HQs 28 Nov, PLAN 262: "Prescription Sales counts both doctor ways"; "a guarantee letter is only a
+// process of an order: don't treat it apart"; "no Zoho on a screen"). This month's sales through
+// doctors: Doctor referral (the patients they sent, a guarantee letter's among them) and Doctor
+// dispense (what they bought), how many doctors wrote and how many for the first time; each HQ with
+// who works it; the doctors bringing the most, by way, through which HQ (a press opens all their
+// orders). A CHC sees their own ("My prescriptions"); a lead their team.
 
 import type { RxBusiness } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
@@ -12,13 +13,15 @@ import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { exactPeso, shortPeso } from "../ceo";
+import { History } from "../team/headquarters";
 import { withUnit } from "../team/switch";
 import { CARD, PageHead, PageState } from "../ui";
-import { EmptyState, NoInvoicesArt } from "../no-results";
+import { EmptyState } from "../no-results";
 
 const day = (value: string | null) =>
   value ? new Date(`${value.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-PH", { day: "numeric", month: "short", timeZone: "UTC" }) : "—";
-const plural = (count: number, one: string, many = `${one}s`) => `${count.toLocaleString("en-PH")} ${count === 1 ? one : many}`;
+const count = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("en-PH")} ${n === 1 ? one : many}`;
+const LEADS = ["team_lead", "manager", "ceo", "admin"];
 
 function useRx(unit: number | null = null) {
   return useQuery({
@@ -38,72 +41,61 @@ export function RxBusinessPage() {
         title={own ? "My prescriptions" : "Prescription sales"}
         sub={
           own
-            ? "Your orders that came with a doctor's prescription: how much, and which doctors wrote them."
-            : "Orders that came with a doctor's prescription: how much, which doctors wrote them, and through whom."
+            ? "This month's sales through your doctors: the patients they sent (referral) and what they bought (dispense)."
+            : "This month's sales through doctors: the patients they sent (referral, guarantee letters too) and what they bought (dispense), HQ by HQ."
         }
-        actions={<Freshness on={query.data.summary.lastOrderOn} />}
+        actions={query.data.summary.lastOrderOn ? <span className="text-[12px] text-slate-500">Orders counted up to {day(query.data.summary.lastOrderOn)}</span> : undefined}
       />
       <Business data={query.data} />
     </div>
   );
 }
 
-/** How fresh the figures are: the latest order counted. */
-function Freshness({ on }: { on: string | null }) {
-  if (!on) return null;
-  return <span className="text-[12px] text-slate-500">Orders counted up to {day(on)}</span>;
-}
-
 /** On a Home: a CHC's own, or the head's RX channel for one box. */
 export function RxBusinessCard({ unit = null }: { unit?: number | null }) {
   const query = useRx(unit);
-  if (!query.data || (query.data.people.length === 0 && query.data.doctors.length === 0)) return null;
+  if (!query.data || (query.data.ways.orders === 0 && query.data.doctors.length === 0)) return null;
   return <Business data={query.data} compact />;
 }
 
-/** The area's own words, when they add something to the seat's title ("RX | Cebu" → "Cebu"). */
-const plain = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
-const placeOf = (person: RxBusiness["people"][number]) => {
-  const place = person.area?.split("|").slice(1, 2).join("").trim() || null;
-  return place && plain(place) !== plain(person.name) ? place : null;
-};
-
 function Business({ data, compact }: { data: RxBusiness; compact?: boolean }) {
+  const w = data.ways;
   const s = data.summary;
-  const many = data.people.length > 1;
-  const lettersThisMonth = data.people.reduce((sum, one) => sum + one.letters, 0);
   return (
     <div className="space-y-3">
       <section aria-label="This month at a glance" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Tile
-          label="Prescription sales"
-          value={shortPeso(s.value)}
-          title={exactPeso(s.value)}
-          hint={`${plural(s.prescriptions, "order")} with a prescription, this month`}
+          colour="bg-emerald-600"
+          label="Doctor referral"
+          value={shortPeso(w.referral.value)}
+          title={exactPeso(w.referral.value)}
+          hint={`${count(w.referral.orders, "order")} · ${count(w.referral.patients, "patient")}${w.referral.roads.gl.value ? ` · ${shortPeso(w.referral.roads.gl.value)} by guarantee letter` : ""}`}
+        />
+        <Tile
+          colour="bg-teal-600"
+          label="Doctor dispense"
+          value={shortPeso(w.dispense.value)}
+          title={exactPeso(w.dispense.value)}
+          hint={`${count(w.dispense.orders, "order")} · ${count(w.dispense.doctors, "doctor")} bought`}
         />
         <Tile label="Doctors prescribing" value={s.prescribers.toLocaleString("en-PH")} hint="wrote for us at least once this month" />
-        <Tile label="New doctors" value={s.newPrescribers.toLocaleString("en-PH")} hint="their first prescription for us, this month" />
-        <Tile
-          label="Guarantee letters"
-          value={lettersThisMonth.toLocaleString("en-PH")}
-          hint={s.glOpen ? `this month · ${shortPeso(s.glOpenAmount)} still to be paid by agencies` : "this month · none waiting for an agency"}
-        />
+        <Tile label="New doctors" value={s.newPrescribers.toLocaleString("en-PH")} hint="their first order with us, this month" />
       </section>
 
-      {many && <People data={data} />}
+      {w.people.length > 1 && <EachHq data={data} />}
 
-      <div className="grid gap-3 lg:grid-cols-[3fr_2fr]">
-        <Doctors data={data} compact={compact} />
-        <Letters data={data} compact={compact} />
-      </div>
+      <Doctors data={data} compact={compact} />
     </div>
   );
 }
 
-function Tile({ label, value, hint, title }: { label: string; value: string; hint: string; title?: string }) {
+function Tile({ label, value, hint, title, colour }: { label: string; value: string; hint: string; title?: string; colour?: string }) {
   return (
     <div className={`${CARD} px-4 py-3`}>
-      <p className="text-[12.5px] font-medium text-slate-600">{label}</p>
+      <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-slate-600">
+        {colour && <span className={`size-2.5 rounded-full ${colour}`} aria-hidden="true" />}
+        {label}
+      </p>
       <p className="mt-0.5 text-2xl font-semibold tracking-tight text-slate-900 tabular-nums" title={title}>
         {value}
       </p>
@@ -112,7 +104,7 @@ function Tile({ label, value, hint, title }: { label: string; value: string; hin
   );
 }
 
-/** A section's head: what it is, in a few words, and one line saying what it shows. */
+/** A section's head: what it is, and one line saying what it shows. */
 function Head({ title, line }: { title: string; line: string }) {
   return (
     <header className="border-b border-slate-100 px-4 py-3">
@@ -124,63 +116,59 @@ function Head({ title, line }: { title: string; line: string }) {
 
 const TH = "px-3 py-2 text-[10.5px] font-semibold tracking-wide text-slate-400 uppercase";
 
-function People({ data }: { data: RxBusiness }) {
-  const people = [...data.people].sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
-  const top = Math.max(1, ...people.map((one) => one.value));
-  // Today's visits only when someone has any (they are Field visits' own; here as a glance).
-  const visits = people.some((one) => one.visitsToday > 0 || one.lastCheckIn);
+/** Each HQ this month: who works it, what came by referral and by dispense, its doctors. */
+function EachHq({ data }: { data: RxBusiness }) {
+  const doctorsOf = new Map(data.people.map((one) => [one.seatId, one]));
+  const rows = [...data.ways.people].sort(
+    (a, b) => b.referral.value + b.dispense.value - (a.referral.value + a.dispense.value) || a.hq.localeCompare(b.hq),
+  );
+  const top = Math.max(1, ...rows.map((one) => one.referral.value + one.dispense.value));
+  const money = (part: { orders: number; value: number }) =>
+    part.orders ? (
+      <>
+        <span className="font-semibold text-slate-900" title={exactPeso(part.value)}>
+          {shortPeso(part.value)}
+        </span>
+        <span className="block text-[11px] text-slate-500">{count(part.orders, "order")}</span>
+      </>
+    ) : (
+      <span className="text-slate-300">—</span>
+    );
   return (
     <section className={`${CARD} min-w-0 overflow-x-auto`}>
-      <Head title="Each person this month" line="Their prescription sales, the doctors who wrote for them and the new ones. Highest first." />
-      <table className="w-full text-[13px]">
+      <Head title="Each HQ this month" line="Who works it, what came by referral and by dispense, its doctors. Highest first." />
+      <table className="w-full min-w-[720px] text-[13px]">
         <thead>
           <tr className="text-left">
-            <th className={`${TH} pl-4`}>Person</th>
-            <th className={`${TH} w-[28%]`}>Prescription sales</th>
-            <th className={`${TH} text-right`}>Orders</th>
+            <th className={`${TH} pl-4`}>HQ</th>
+            <th className={`${TH} w-[22%]`} aria-label="Share" />
+            <th className={`${TH} text-right`}>Doctor referral</th>
+            <th className={`${TH} text-right`}>Doctor dispense</th>
             <th className={`${TH} text-right`}>Doctors</th>
-            <th className={`${TH} text-right`}>New doctors</th>
-            <th className={`${TH} text-right`}>Letters</th>
-            {visits && <th className={TH}>Today</th>}
+            <th className={`${TH} pr-4 text-right`}>New doctors</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
-          {people.map((one) => {
-            const none = one.prescriptions === 0;
+          {rows.map((one) => {
+            const whole = one.referral.value + one.dispense.value;
+            const doctors = doctorsOf.get(one.seatId);
             return (
-              <tr key={one.seatId} className={none ? "text-slate-400" : ""}>
+              <tr key={one.seatId} className={whole ? "" : "text-slate-400"}>
                 <td className="px-4 py-2.5">
-                  <span className={`font-semibold ${none ? "text-slate-500" : "text-slate-900"}`}>{one.name}</span>
-                  <span className="block text-[11.5px] text-slate-500">{[one.title, placeOf(one)].filter(Boolean).join(" · ")}</span>
+                  <span className="block font-bold text-slate-900">{one.hq}</span>
+                  <span className="block text-[11.5px] text-slate-500">{one.person ?? "Empty"}</span>
                 </td>
                 <td className="px-3 py-2.5">
-                  {none ? (
-                    <span className="text-[12px]">No prescription this month</span>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <span className="w-14 shrink-0 text-right font-semibold text-slate-900 tabular-nums" title={exactPeso(one.value)}>
-                        {shortPeso(one.value)}
-                      </span>
-                      <span className="h-1.5 min-w-0 flex-1 rounded-full bg-slate-100" aria-hidden="true">
-                        <span className="block h-full rounded-full bg-emerald-500" style={{ width: `${Math.max(3, (one.value / top) * 100)}%` }} />
-                      </span>
-                    </div>
-                  )}
+                  {/* Referral then dispense, against the HQ bringing the most. */}
+                  <span className="flex h-2 overflow-hidden rounded-full bg-slate-100" aria-hidden="true">
+                    <span className="bg-emerald-600" style={{ width: `${(one.referral.value / top) * 100}%` }} />
+                    <span className="bg-teal-600" style={{ width: `${(one.dispense.value / top) * 100}%` }} />
+                  </span>
                 </td>
-                <td className="px-3 py-2.5 text-right tabular-nums">{none ? "—" : one.prescriptions}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums">{none ? "—" : one.prescribers}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums">{none ? "—" : one.newPrescribers}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums">{one.letters || "—"}</td>
-                {visits && (
-                  <td className="px-3 py-2.5 text-[12px] whitespace-nowrap">
-                    {one.visitsToday ? `${one.doneToday} of ${one.visitsToday} visits` : "No visit planned"}
-                    {one.lastCheckIn && (
-                      <span className="block text-[11px] text-slate-500">
-                        last at {one.lastCheckIn} · {one.lastCheckInAt}
-                      </span>
-                    )}
-                  </td>
-                )}
+                <td className="px-3 py-2.5 text-right tabular-nums">{money(one.referral)}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums">{money(one.dispense)}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums">{doctors?.prescribers || "—"}</td>
+                <td className="px-3 py-2.5 pr-4 text-right tabular-nums">{doctors?.newPrescribers || "—"}</td>
               </tr>
             );
           })}
@@ -190,123 +178,73 @@ function People({ data }: { data: RxBusiness }) {
   );
 }
 
+/** The doctors bringing the most in the last 90 days, by way, through which HQ; a press opens all
+ *  their orders (a lead's view). */
 function Doctors({ data, compact }: { data: RxBusiness; compact?: boolean }) {
+  const me = useMe().data;
+  const canOpen = Boolean(me && LEADS.includes(me.role));
   const [all, setAll] = useState(!compact);
+  const [open, setOpen] = useState<RxBusiness["doctors"][number] | null>(null);
   const doctors = all ? data.doctors : data.doctors.slice(0, 8);
   return (
     <section className={`${CARD} min-w-0 overflow-x-auto`}>
-      <Head title="Top doctors" line="The doctors whose prescriptions brought the most sales in the last 90 days, and through whom." />
+      <Head
+        title="Top doctors"
+        line={`The doctors bringing the most in the last 90 days: the patients they sent and what they bought.${canOpen ? " Press one for all their orders." : ""}`}
+      />
       {data.doctors.length === 0 ? (
-        <EmptyState title="No prescription in 90 days.">The doctors whose prescriptions bring the most sales show here.</EmptyState>
+        <EmptyState title="No order through a doctor in 90 days.">The doctors bringing the most show here.</EmptyState>
       ) : (
-        <table className="w-full text-[13px]">
+        <table className="w-full min-w-[680px] text-[13px]">
           <thead>
             <tr className="text-left">
               <th className={`${TH} pl-4`}>Doctor</th>
-              <th className={TH}>Through</th>
-              <th className={`${TH} text-right`}>Orders</th>
-              <th className={`${TH} text-right`}>Sales</th>
-              <th className={TH}>Last order</th>
+              <th className={TH}>HQ</th>
+              <th className={`${TH} text-right`}>Doctor referral</th>
+              <th className={`${TH} text-right`}>Doctor dispense</th>
+              <th className={`${TH} pr-4`}>Last order</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {doctors.map((one) => (
-              <tr key={`${one.name}-${one.firstOn}`}>
+              <tr
+                key={one.key}
+                className={canOpen ? "cursor-pointer hover:bg-slate-50" : ""}
+                onClick={canOpen ? () => setOpen(one) : undefined}
+              >
                 <td className="px-4 py-2.5">
-                  {one.customerId ? (
-                    <Link to={`/customers/${one.customerId}`} className="font-semibold text-slate-900 hover:text-emerald-700 hover:underline">
-                      {one.name}
-                    </Link>
-                  ) : (
-                    <span className="font-semibold text-slate-900">{one.name}</span>
+                  <span className="block font-semibold text-slate-900">{one.name}</span>
+                  {(one.specialty || one.city) && (
+                    <span className="block text-[11.5px] text-slate-500">{[one.specialty, one.city].filter(Boolean).join(" · ")}</span>
                   )}
-                  <span className="block text-[11.5px] text-slate-500">
-                    {[one.specialty, one.city, `first order ${day(one.firstOn)}`].filter(Boolean).join(" · ")}
-                  </span>
                 </td>
-                <td className="px-3 py-2.5 whitespace-nowrap text-slate-600">{one.seller ?? "—"}</td>
-                <td className="px-3 py-2.5 text-right tabular-nums">{one.orders}</td>
-                <td className="px-3 py-2.5 text-right font-semibold text-slate-900 tabular-nums" title={exactPeso(one.value)}>
-                  {shortPeso(one.value)}
+                <td className="px-3 py-2.5 whitespace-nowrap">
+                  <span className="block font-medium text-slate-800">{one.hq ?? "—"}</span>
+                  {one.seller && <span className="block text-[11.5px] text-slate-500">{one.seller}</span>}
                 </td>
-                <td className="px-3 py-2.5 whitespace-nowrap">{day(one.lastOn)}</td>
+                <td className="px-3 py-2.5 text-right tabular-nums" title={exactPeso(one.referral)}>
+                  {one.referral ? <span className="font-semibold text-slate-900">{shortPeso(one.referral)}</span> : <span className="text-slate-300">—</span>}
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums" title={exactPeso(one.dispense)}>
+                  {one.dispense ? <span className="font-semibold text-slate-900">{shortPeso(one.dispense)}</span> : <span className="text-slate-300">—</span>}
+                </td>
+                <td className="px-3 py-2.5 pr-4 whitespace-nowrap">{day(one.lastOn)}</td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
       {data.doctors.length > doctors.length && (
-        <button
-          type="button"
-          onClick={() => setAll(true)}
-          className="w-full border-t border-slate-100 px-4 py-2.5 text-[12.5px] font-semibold text-emerald-700 hover:bg-slate-50"
-        >
+        <button type="button" onClick={() => setAll(true)} className="w-full border-t border-slate-100 px-4 py-2.5 text-[12.5px] font-semibold text-emerald-700 hover:bg-slate-50">
           Show all {data.doctors.length}
         </button>
-      )}
-    </section>
-  );
-}
-
-function Letters({ data, compact }: { data: RxBusiness; compact?: boolean }) {
-  return (
-    <section className={`${CARD} min-w-0 overflow-x-auto`}>
-      <Head
-        title="Guarantee letters"
-        line="A government agency (DSWD, PCSO, the Office of the President…) pays for the patient's medicine: we deliver, the agency pays us later. The last 12 months."
-      />
-      {data.letters.length === 0 ? (
-        <EmptyState art={<NoInvoicesArt size={72} />} title="No guarantee letter in 12 months.">
-          Letters from DSWD, PCSO and the other agencies show here.
-        </EmptyState>
-      ) : (
-        <table className="w-full text-[13px]">
-          <thead>
-            <tr className="text-left">
-              <th className={`${TH} pl-4`}>Agency</th>
-              <th className={`${TH} text-right`}>Letters</th>
-              <th className={`${TH} text-right`}>Value</th>
-              <th className={`${TH} text-right`}>Still to be paid</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {data.letters.map((one) => {
-              const stages = [one.received, one.serving, one.billed, one.paid, one.zoho];
-              const count = stages.reduce((sum, stage) => sum + stage.count, 0);
-              const value = stages.reduce((sum, stage) => sum + stage.amount, 0);
-              const waiting = one.received.amount + one.serving.amount + one.billed.amount;
-              // Where this CRM's letters stand (the older ones are counted in Letters; no "Zoho" on a
-              // screen, Aryan 28 Nov: "we are ending Zoho").
-              const where = [
-                one.received.count ? `${one.received.count} received` : null,
-                one.serving.count ? `${one.serving.count} being delivered` : null,
-                one.billed.count ? `${one.billed.count} billed` : null,
-                one.paid.count ? `${one.paid.count} paid` : null,
-              ].filter(Boolean);
-              return (
-                <tr key={one.programme}>
-                  <td className="px-4 py-2.5">
-                    <span className="font-semibold text-slate-900">{one.programme}</span>
-                    {where.length > 0 && <span className="block text-[11.5px] text-slate-500">{where.join(" · ")}</span>}
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">{count}</td>
-                  <td className="px-3 py-2.5 text-right font-semibold text-slate-900 tabular-nums" title={exactPeso(value)}>
-                    {shortPeso(value)}
-                  </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums">
-                    {waiting ? <span className="font-semibold text-amber-700">{shortPeso(waiting)}</span> : <span className="text-slate-300">—</span>}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
       )}
       {compact && (
         <Link to="/rx/business" className="block border-t border-slate-100 px-4 py-2.5 text-[12.5px] font-semibold text-emerald-700 hover:bg-slate-50">
           Open prescription sales
         </Link>
       )}
+      {open && <History doctor={{ key: open.key, name: open.name, hospital: null }} onClose={() => setOpen(null)} />}
     </section>
   );
 }

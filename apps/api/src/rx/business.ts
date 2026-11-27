@@ -18,7 +18,9 @@ import { Refusal } from "../http";
 import { addDays, todayManila } from "../inventory/rules";
 import { inForce } from "../org/service";
 import { teamSeats } from "../team/service";
-import { doctorOrders } from "./doctors";
+import { doctorOrders, GL_SOURCES } from "./doctors";
+import { hqOf } from "../team/headquarters";
+import { waysOf } from "../team/ways";
 import type { Me, RxBusiness } from "../types";
 
 const LEADS = ["team_lead", "manager", "ceo", "admin"];
@@ -56,6 +58,7 @@ export async function rxBusiness(db: Database, me: Me): Promise<RxBusiness> {
     people: [],
     doctors: [],
     letters: [],
+    ways: await waysOf(db, [], today.slice(0, 7)),
   };
   if (!seatIds.length) return empty;
   const seats = ids(seatIds);
@@ -108,11 +111,16 @@ export async function rxBusiness(db: Database, me: Me): Promise<RxBusiness> {
             where rx.day >= ${first}::date and f.since >= ${first}::date)::int as "newPrescribers",
           (select to_char(max(day), 'YYYY-MM-DD') from rx) as "lastOrderOn"`,
     ),
-    // The doctors prescribing most in the last 90 days.
-    rows<RxBusiness["doctors"][number]>(
+    // The doctors prescribing most in the last 90 days: what came by each of their ways (a patient
+    // they sent, a guarantee letter's among them; what they bought), through which HQ (28 Nov).
+    rows<Omit<RxBusiness["doctors"][number], "hq"> & { area: string | null }>(
       db,
       sql`with rx as materialized ${rx}
-        select max(rx.doctor_id)::int as "customerId", max(rx.doctor) as name,
+        select rx.dkey as key, max(rx.doctor_id)::int as "customerId", max(rx.doctor) as name,
+          coalesce(sum(rx.total) filter (where rx.day > ${addDays(today, -90)}::date
+            and (rx.way = 'Patient order referred by doctor' or rx.way in (${sql.join(GL_SOURCES.map((one) => sql`${one}`), sql`, `)}))), 0)::float8 as referral,
+          coalesce(sum(rx.total) filter (where rx.day > ${addDays(today, -90)}::date and rx.way = 'Doctor order'), 0)::float8 as dispense,
+          (select a.name from seat s join area a on a.id = s.area_id where s.id = (array_agg(rx.seat order by rx.day desc))[1]) as area,
           (select c.specialty from customer c where c.id = max(rx.doctor_id)) as specialty,
           (select c.city from customer c where c.id = max(rx.doctor_id)) as city,
           (select pe.name from seat_holder h join person pe on pe.id = h.person_id
@@ -171,7 +179,9 @@ export async function rxBusiness(db: Database, me: Me): Promise<RxBusiness> {
       lastOrderOn: total?.lastOrderOn ?? null,
     },
     people,
-    doctors,
+    // Each doctor's HQ in a word (NCL, TAFT), as everywhere: the HQ, not a Zoho name.
+    doctors: doctors.map(({ area, ...one }) => ({ ...one, hq: area ? hqOf(area, one.seller) : null })),
+    ways: await waysOf(db, seatIds, today.slice(0, 7)),
     letters: byProgramme.sort(
       (a, b) => b.billed.amount + b.serving.amount + b.zoho.amount - (a.billed.amount + a.serving.amount + a.zoho.amount),
     ),

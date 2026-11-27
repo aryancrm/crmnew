@@ -209,7 +209,7 @@ function DoctorList({ title, line, doctors, onDoctor }: { title: string; line: s
 
 /** A doctor's whole history in the team: how many orders came from them, what happened to each,
  *  how much they took, and what is still pending. */
-function History({ doctor, onClose }: { doctor: HqDoctor; onClose: () => void }) {
+export function History({ doctor, onClose }: { doctor: { key: string; name: string; hospital: string | null }; onClose: () => void }) {
   const query = useQuery({
     queryKey: ["headquarters", "doctor", doctor.key],
     queryFn: () => api<DoctorHistory>(`/api/headquarters/doctor?key=${encodeURIComponent(doctor.key)}`),

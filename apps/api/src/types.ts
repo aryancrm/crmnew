@@ -6305,9 +6305,16 @@ export type RxBusiness = {
     letters: number;
   }[];
   doctors: {
+    /** The doctor's name as compared (for their history). */
+    key: string;
     /** The CRM's customer, when one of the doctor's orders names it (Zoho's history doesn't). */
     customerId: number | null;
     name: string;
+    /** The last 90 days by way: the patients they sent (a guarantee letter's too), what they bought. */
+    referral: number;
+    dispense: number;
+    /** The HQ of their latest order. */
+    hq: string | null;
     specialty: string | null;
     city: string | null;
     seller: string | null;
@@ -6316,6 +6323,8 @@ export type RxBusiness = {
     lastOn: string;
     firstOn: string;
   }[];
+  /** The month's orders by way, HQ by HQ (the Home's count, 28 Nov). */
+  ways: OrderWays;
   letters: {
     programme: string;
     received: { count: number; amount: number };
