@@ -9,6 +9,8 @@ import { useQuery } from "@tanstack/react-query";
 import { HandCoins, MessageSquareWarning, UserRoundX } from "lucide-react";
 import { Link } from "react-router-dom";
 import { api } from "../api";
+import { useMe } from "../auth";
+import { placeOf } from "../company/sales-tree";
 import { shortPeso } from "../ceo";
 import { CARD } from "../ui";
 import { B2cDeskCard } from "../online/b2c-home";
@@ -123,8 +125,22 @@ function Teams({ rows }: { rows: Row[] }) {
   );
 }
 
+/** Where a person works, in a word, else their job (never their own name again). */
+const whereOf = (row: TeamScores["rows"][number]) => {
+  const place = placeOf({ area: row.area ? { name: row.area } : null, person: row.name ? { name: row.name } : null });
+  return place === "On site" ? row.title : place;
+};
+
 function AtRisk({ data }: { data: TeamScores }) {
-  const risky = data.rows.filter((row) => row.card?.recipe !== "team" && row.personId && (row.pip || (row.card && row.card.max > 0 && row.card.percent < 60)));
+  const me = useMe().data;
+  // The people under them, not themselves (27 Nov: Javed was listed at risk on his own Home).
+  const risky = data.rows.filter(
+    (row) =>
+      row.card?.recipe !== "team" &&
+      row.personId &&
+      row.personId !== me?.id &&
+      (row.pip || (row.card && row.card.max > 0 && row.card.percent < 60)),
+  );
   return (
     <section className={`${CARD} min-w-0 p-4`}>
       <div className="flex items-baseline justify-between gap-2">
@@ -145,7 +161,10 @@ function AtRisk({ data }: { data: TeamScores }) {
                 <Link to={`/my/score?person=${row.personId}`} className="font-semibold text-slate-900 hover:underline">
                   {row.name}
                 </Link>
-                <span className="text-[11.5px] text-slate-500"> · {row.area ?? row.title} · {row.unit}</span>
+                <span className="text-[11.5px] text-slate-500">
+                  {" "}
+                  · {[...new Set([whereOf(row), row.unit].filter(Boolean))].join(" · ")}
+                </span>
               </span>
               <span className="shrink-0 text-right text-[12px]">
                 {row.card && (

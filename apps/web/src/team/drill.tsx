@@ -28,7 +28,7 @@ import { BiddingCard, BiddingHome } from "../sellers/tenders";
 import { TeamAccountsCard } from "./accounts-card";
 import { DistrictNow } from "./district";
 import { divisionOf } from "./hierarchy";
-import { HospitalTeams, RxFieldBlock, TelesalesCoachHome } from "./mentor";
+import { HospitalTeams, TelesalesCoachHome } from "./mentor";
 import { EmptyState } from "../no-results";
 
 const CARD = "rounded-xl border border-slate-200 bg-white";
@@ -586,13 +586,9 @@ export function ChannelWork({
 }) {
   switch (division) {
     case "RX Business":
-      // The field (doctors, coverage, visits), then the prescriptions and the letters.
-      return (
-        <>
-          <RxFieldBlock unit={unit} />
-          <RxBusinessCard unit={unit} />
-        </>
-      );
+      // The prescriptions and the letters. No field team table (Aryan, 27 Nov: it repeated the
+      // Visits report and Scorecards, and read the empty tier lists).
+      return <RxBusinessCard unit={unit} />;
     case "MD Telesales":
       // Each telesales person's calls, orders, customers and money; then the online desk and the
       // patient care groups.

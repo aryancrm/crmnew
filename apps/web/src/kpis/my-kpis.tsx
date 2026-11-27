@@ -242,7 +242,20 @@ export function MyKpis({ company = false }: { company?: boolean }) {
     placeholderData: (previous) => previous,
     staleTime: 60_000,
   });
-  const data = query.data;
+  const answer = query.data;
+  // Someone with a team and nothing of their own this month (no target, no sales, no order: a head
+  // as Javed, 27 Nov) sees their team's KPI alone, not an empty "My Own KPI" beside it.
+  const ownEmpty = Boolean(
+    answer?.team &&
+      answer.own &&
+      !answer.own.target &&
+      !answer.own.sales &&
+      !answer.own.ordersRaised &&
+      !answer.own.waitingOrders &&
+      !answer.own.enteredForOthers &&
+      !answer.own.enteredForMe,
+  );
+  const data = answer && ownEmpty ? { ...answer, own: null, ownDay: null } : answer;
   const today = manilaDay();
   const onDay = period !== "month";
   const dayWord = period === today ? "today" : `on ${dayLabel(period)}`;

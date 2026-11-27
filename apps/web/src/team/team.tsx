@@ -154,50 +154,55 @@ export function TeamSalesPage() {
       {!whole && <FieldTodayCard />}
       {!whole && <MyKpis />}
 
-      <section aria-label="The team's month" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Figure
-          label={data.running ? "Sold this month" : `Sold in ${monthShort(data.month)}`}
-          value={shortPeso(total.sold)}
-          title={exactPeso(total.sold)}
-        >
-          {total.pct !== null && total.target !== null ? (
-            <>
-              <PaceBar
-                pct={total.pct}
-                pace={data.running ? data.pace : null}
-                tone={total.tone === "far" ? "behind" : total.tone}
-              />
-              <span
-                className={`mt-2 block ${total.tone === "on" ? "text-emerald-700" : "text-amber-700"}`}
-              >
-                {Math.round(total.pct)}% of {shortPeso(total.target)}
-                {data.running && ` · pace ${pacePct}%`}
-              </span>
-            </>
-          ) : (
-            <span className="text-slate-500">No targets set</span>
-          )}
-        </Figure>
-        <Figure
-          label="Today"
-          value={data.running ? shortPeso(total.today) : "—"}
-          title={exactPeso(total.today)}
-        >
-          <span className="text-slate-500">
-            {data.running ? `${counted(data.daysLeft, "day")} left` : "A month gone by"}
-          </span>
-        </Figure>
-        <Figure label="Orders placed" value={total.placed.toLocaleString("en-PH")}>
-          <span className="text-slate-500">
-            {shortPeso(total.placedValue)} · sold when Finance invoices
-          </span>
-        </Figure>
-        <Figure label="Stopped now" value={stoppedNow.toLocaleString("en-PH")}>
-          <span className={stoppedNow ? "text-rose-600" : "text-slate-500"}>
-            {stoppedNow ? "On hold or sent back" : "Nothing stopped"}
-          </span>
-        </Figure>
-      </section>
+      {/* The month's four figures on the company's view only: a lead's or head's My Team KPI above
+          says the same (sold against target, today, orders raised and held), so they aren't twice
+          (Aryan, 27 Nov: "things repeat"). */}
+      {whole && (
+        <section aria-label="The team's month" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Figure
+            label={data.running ? "Sold this month" : `Sold in ${monthShort(data.month)}`}
+            value={shortPeso(total.sold)}
+            title={exactPeso(total.sold)}
+          >
+            {total.pct !== null && total.target !== null ? (
+              <>
+                <PaceBar
+                  pct={total.pct}
+                  pace={data.running ? data.pace : null}
+                  tone={total.tone === "far" ? "behind" : total.tone}
+                />
+                <span
+                  className={`mt-2 block ${total.tone === "on" ? "text-emerald-700" : "text-amber-700"}`}
+                >
+                  {Math.round(total.pct)}% of {shortPeso(total.target)}
+                  {data.running && ` · pace ${pacePct}%`}
+                </span>
+              </>
+            ) : (
+              <span className="text-slate-500">No targets set</span>
+            )}
+          </Figure>
+          <Figure
+            label="Today"
+            value={data.running ? shortPeso(total.today) : "—"}
+            title={exactPeso(total.today)}
+          >
+            <span className="text-slate-500">
+              {data.running ? `${counted(data.daysLeft, "day")} left` : "A month gone by"}
+            </span>
+          </Figure>
+          <Figure label="Orders placed" value={total.placed.toLocaleString("en-PH")}>
+            <span className="text-slate-500">
+              {shortPeso(total.placedValue)} · sold when Finance invoices
+            </span>
+          </Figure>
+          <Figure label="Stopped now" value={stoppedNow.toLocaleString("en-PH")}>
+            <span className={stoppedNow ? "text-rose-600" : "text-slate-500"}>
+              {stoppedNow ? "On hold or sent back" : "Nothing stopped"}
+            </span>
+          </Figure>
+        </section>
+      )}
 
       {/* How the month's orders came: the doctor's referral and dispensing first (Aryan, 27 Nov). */}
       {!whole && <OrderWaysCard month={asked} />}
