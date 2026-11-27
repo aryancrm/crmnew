@@ -27,6 +27,7 @@ import { useMe } from "../auth";
 import { exactPeso, shortPeso } from "../ceo";
 import { OrgPops, type Pop } from "../org/teams";
 import { lookAs } from "../shell";
+import { hqName, ON_SITE } from "../team/hq-name";
 import { type Tone, toneOf } from "../team/pace";
 import { reportRange } from "../team/range";
 import { PageState } from "../ui";
@@ -110,20 +111,14 @@ function codeOf(name: string): string {
     : name.slice(0, 3).toUpperCase();
 }
 const initialOf = (name: string) => (name.trim()[0] ?? "?").toUpperCase();
-const plainWords = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
 /** Where a person works, in a word: their territory's last part ("RX | NCR 1" → NCR 1). A part
  *  that is only the person's own name says nothing (Aryan, 27 Nov: "who is in which area"):
  *  "RX | Blood & Bone Care | Marwin Dy" is Blood & Bone Care; a territory that is only its
  *  channel and the person ("B2C | Rachelle Upao") is "On site", and so is one the head made on
  *  site ("B2C | ON SITE | 2", PLAN 264). */
 export function placeOf(seat: { area: { name: string } | null; person: { name: string } | null }): string {
-  const own = seat.person ? plainWords(seat.person.name) : null;
-  const parts = (seat.area?.name ?? "")
-    .split("|")
-    .map((part) => part.trim())
-    .filter((part) => part && plainWords(part) !== own);
-  if (parts.some((part) => plainWords(part) === "on site")) return "On site";
-  return parts.length > 1 ? (parts[parts.length - 1] as string) : "On site";
+  const hq = hqName(seat.area?.name ?? null, seat.person?.name ?? null);
+  return hq === ON_SITE ? "On site" : hq;
 }
 
 /** The frame of the tree on a Home: a card the page scrolls past, the full screen a press away. */

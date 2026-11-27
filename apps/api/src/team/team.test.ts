@@ -108,6 +108,8 @@ describe("a team lead's team", () => {
     // The order and seat needs; a scorecard one may follow, by the day of the month.
     expect(seen.needs.filter((need) => need.kind !== "score").map((need) => need.kind)).toEqual(["held", "vacant"]);
     expect(seen.needs[1]?.why).toContain("1 customer and 1 open order wait with you");
+    // Named by its HQ, never the territory's Zoho-era name (PLAN 265).
+    expect(seen.needs[1]?.who).toBe("MedRep · Quezon City");
 
     // One seat's orders and customers, for the person's page.
     const mine = await read<MyOrders>("daniel", `/api/orders/mine?seat=${empty?.seatId}`);

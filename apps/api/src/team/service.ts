@@ -25,6 +25,7 @@ import type {
   TeamSeatCard,
   TeamTerritories,
 } from "../types";
+import { hqOf } from "./hq-name";
 
 const LEADS: Role[] = ["team_lead", "manager"];
 const WHOLE: Role[] = ["ceo", "admin"];
@@ -701,7 +702,8 @@ async function teamNeeds(db: Database, seatIds: number[], today: string): Promis
         code: null,
         customer: null,
         customerId: null,
-        who: `${row.title}${row.area ? ` · ${row.area}` : ""}`,
+        // Its HQ, never the territory's Zoho-era name (PLAN 264).
+        who: `${row.title}${row.area ? ` · ${hqOf(row.area, null)}` : ""}`,
         seatId: row.seatId,
         why: row.acting
           ? `Nobody sits here; ${row.acting} covers it. ${row.customers} customer${row.customers === 1 ? "" : "s"}, ${row.open} open order${row.open === 1 ? "" : "s"}.`

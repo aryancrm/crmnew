@@ -37,6 +37,7 @@ import {
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { hqOfSeat } from "./hq-name";
 import { TeamSwitch } from "./switch";
 import { placesOrders, useMe } from "../auth";
 
@@ -164,6 +165,9 @@ const CHIPS: [keyof TeamSeatCard["stages"], string, string][] = [
 /** One person (or empty seat), as the customer cards look: who, how they are doing, where things stand. */
 function PersonCard({ seat, pace, to }: { seat: TeamSeatCard; pace: number; to: string }) {
   const tone: Tone = seat.person ? toneOf(seat.sold, seat.target, pace) : "vacant";
+  // A seller's card is their HQ, the person under it (PLAN 265); a lead's is the person.
+  const hq = hqOfSeat(seat);
+  const who = seat.person?.name ?? (seat.acting ? `${seat.acting.name} covers` : "Nobody yet");
   const share = seat.target ? seat.sold / seat.target : null;
   const chips = CHIPS.filter(([key]) => seat.stages[key] > 0);
   return (
@@ -178,9 +182,10 @@ function PersonCard({ seat, pace, to }: { seat: TeamSeatCard; pace: number; to: 
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="truncate text-sm font-semibold tracking-tight text-slate-900 group-hover:text-emerald-800">
-            {seat.person?.name ?? (seat.acting ? `${seat.acting.name} covers` : "Nobody yet")}
+            {hq ?? who}
           </h3>
           <div className="truncate text-[11px] font-medium text-slate-500">
+            {hq && <span className="font-semibold text-slate-700">{who} · </span>}
             {seat.login && (
               <span className="font-mono font-semibold text-slate-700">{seat.login}</span>
             )}
@@ -195,7 +200,7 @@ function PersonCard({ seat, pace, to }: { seat: TeamSeatCard; pace: number; to: 
         </span>
       </div>
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-slate-500">
-        {seat.area && (
+        {seat.area && !hq && (
           <span className="inline-flex max-w-[170px] items-center gap-0.5 truncate">
             <MapPin className="size-2.5 shrink-0 text-slate-400" />
             <span className="truncate">{seat.area.name}</span>
@@ -328,7 +333,16 @@ const NEED: Record<TeamNeed["kind"], { icon: ReactNode; tone: string }> = {
   score: { icon: <Gauge className="size-4" />, tone: "bg-violet-50 text-violet-700" },
 };
 
-function Needs({ needs, seatHref }: { needs: TeamNeed[]; seatHref: (seatId: number) => string }) {
+function Needs({
+  needs,
+  seatHref,
+  hqOf,
+}: {
+  needs: TeamNeed[];
+  seatHref: (seatId: number) => string;
+  /** A seat's HQ, to put before whose it is (PLAN 265). */
+  hqOf: (seatId: number | null) => string | null;
+}) {
   if (needs.length === 0)
     return (
       <EmptyState art={<NoInvoicesArt size={72} />} title="Nothing stuck.">
@@ -350,10 +364,10 @@ function Needs({ needs, seatHref }: { needs: TeamNeed[]; seatHref: (seatId: numb
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate text-[13px] font-medium text-slate-900">
-                {need.code ? `${need.code} · ${need.customer}` : need.who}
+                {need.code ? `${need.code} · ${need.customer}` : need.kind === "vacant" ? need.who : `${[hqOf(need.seatId), need.who].filter(Boolean).join(" · ")}`}
               </span>
               <span className="line-clamp-2 text-xs text-slate-500">
-                {need.code ? `${need.who} · ` : ""}
+                {need.code ? `${[hqOf(need.seatId), need.who].filter(Boolean).join(" · ")} · ` : ""}
                 {need.why}
                 {need.amount && need.kind === "overdue" ? ` · ${shortPeso(need.amount)}` : ""}
               </span>
@@ -409,7 +423,7 @@ function PerformanceTable({
       <table className="t">
         <thead>
           <tr>
-            <th>Person</th>
+            <th>HQ · Person</th>
             <th>Team</th>
             <th className="num">Today</th>
             <th className="num">Sold</th>
@@ -426,6 +440,7 @@ function PerformanceTable({
             const share = seat.target ? seat.sold / seat.target : null;
             const tone = TONE[toneOf(seat.sold, seat.target, pace)];
             const stopped = seat.stages.held + seat.stages.sentBack;
+            const hq = hqOfSeat(seat);
             return (
               <tr key={seat.seatId}>
                 <td>
@@ -433,9 +448,9 @@ function PerformanceTable({
                     {seat.today > 0 ? n + 1 : "–"}
                   </span>
                   <Link to={seatHref(seat.seatId)} className="font-semibold text-slate-900 hover:underline">
-                    {seat.person?.name}
+                    {hq ?? seat.person?.name}
                   </Link>
-                  <span className="block text-[11px] text-slate-500">{seat.title}</span>
+                  <span className="block text-[11px] text-slate-500">{hq ? `${seat.person?.name} · ${seat.title}` : seat.title}</span>
                 </td>
                 <td className="whitespace-nowrap text-slate-600">{unitName.get(seat.unitId) ?? "—"}</td>
                 <td className="num" title={exactPeso(seat.today)}>
@@ -542,21 +557,24 @@ export function MyTeamPage() {
   const leaders = data.seats
     .filter((seat) => seat.person && (!seat.lead || seat.sold > 0 || seat.placedValue > 0))
     .sort((a, b) => b.sold - a.sold || b.placedValue - a.placedValue)
-    .map((seat) => ({
-      key: seat.seatId,
-      label: seat.person?.name ?? "",
-      sub: [
-        seat.lead ? "Lead" : null,
-        seat.login,
-        seat.area?.name,
-        seat.placedValue ? `placed ${shortPeso(seat.placedValue)}` : null,
-      ]
-        .filter(Boolean)
-        .join(" · "),
-      value: seat.sold,
-      mark: seat.target,
-      tone: TONE[toneOf(seat.sold, seat.target, pace)].bar,
-    }));
+    .map((seat) => {
+      const hq = hqOfSeat(seat);
+      return {
+        key: seat.seatId,
+        label: hq ?? seat.person?.name ?? "",
+        sub: [
+          hq ? seat.person?.name : null,
+          seat.lead ? "Lead" : null,
+          seat.login,
+          seat.placedValue ? `placed ${shortPeso(seat.placedValue)}` : null,
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        value: seat.sold,
+        mark: seat.target,
+        tone: TONE[toneOf(seat.sold, seat.target, pace)].bar,
+      };
+    });
   const rangeWords =
     data.from === data.to ? short(data.from) : `${short(data.from)} – ${short(data.to)}`;
 
@@ -891,7 +909,14 @@ export function MyTeamPage() {
               .filter(Boolean)
               .join(" · ")}
           >
-            <Needs needs={data.needs} seatHref={seatHref} />
+            <Needs
+              needs={data.needs}
+              seatHref={seatHref}
+              hqOf={(seatId) => {
+                const seat = data.seats.find((one) => one.seatId === seatId);
+                return seat ? hqOfSeat(seat) : null;
+              }}
+            />
           </Panel>
         </div>
       )}
@@ -1149,7 +1174,7 @@ export function TeamSeatPage() {
             </Ring>
             <div className="min-w-0">
               <h1 className="flex flex-wrap items-center gap-2 text-[28px] font-semibold tracking-tight text-slate-900">
-                {seat.person?.name ?? "Nobody sits here yet"}
+                {[hqOfSeat(seat), seat.person?.name ?? "Nobody sits here yet"].filter(Boolean).join(" · ")}
                 <span
                   className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${TONE[tone].pill}`}
                 >
@@ -1160,9 +1185,8 @@ export function TeamSeatPage() {
                 {[
                   seat.title,
                   unitName,
-                  seat.area
-                    ? `${seat.area.name}${seat.area.cities.length ? ` (${seat.area.cities.join(", ")})` : ""}`
-                    : null,
+                  seat.area && !hqOfSeat(seat) ? seat.area.name : null,
+                  seat.area?.cities.length ? seat.area.cities.join(", ") : null,
                 ]
                   .filter(Boolean)
                   .join(" · ")}

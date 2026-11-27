@@ -25,26 +25,12 @@ import { doctorOrders } from "../rx/doctors";
 import { sheetName } from "../sales/target-sheet";
 import { STATUS_LABEL } from "../orders/rules";
 import type { DoctorHistory, Headquarters, HqDoctors, Me, OrderStatus } from "../types";
+import { hqOf } from "./hq-name";
 import { teamSeats } from "./service";
 
 const LEADS = ["team_lead", "manager", "ceo", "admin"];
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
-export const plain = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
-
-/** An HQ with no territory of its own: the on-site sellers'. */
-export const ON_SITE = "ON SITE";
-
-/** The HQ in a word: the territory's last part that isn't the person's own name ("RX | NCL" → NCL;
- *  "B2C | Rachelle Upao" → ON SITE; "B2C | ON SITE | 2", a second on-site HQ → ON SITE). */
-export function hqOf(area: string | null, person: string | null): string {
-  const own = person ? plain(person) : null;
-  const parts = (area ?? "")
-    .split("|")
-    .map((part) => part.trim())
-    .filter((part) => part && plain(part) !== own);
-  if (parts.some((part) => plain(part) === "on site")) return ON_SITE;
-  return parts.length > 1 ? (parts[parts.length - 1] as string) : ON_SITE;
-}
+export { hqOf, ON_SITE, plain } from "./hq-name";
 
 /** The boxes whose HQs this person makes and changes (PLAN 264): null for all (the CEO, the Admin);
  *  a head's own boxes and those under them; none for anyone else (a team lead sees, the head
