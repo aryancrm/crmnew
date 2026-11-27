@@ -4,7 +4,7 @@
 
 import type { CustomerKind, CustomerList, CustomerRow, MyArea } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
-import { MapPin, Plus, Search } from "lucide-react";
+import { Building2, MapPin, Plus, Search, Stethoscope, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
@@ -14,9 +14,12 @@ import { shortPeso } from "../ceo";
 import { CustomerDialog } from "./dialog";
 import { RepStrip } from "../rep-strip";
 import { seatWords } from "../seat-words";
-import { Button, Card, count, dayLabel, PageHead, PageState, Pill, manilaDay } from "../ui";
+import { Button, count, dayLabel, PageState, manilaDay } from "../ui";
 import { Figure } from "../home/figures";
-import { KIND_BADGE } from "../orders/board";
+import { initials } from "../look";
+
+/** The pattern of the tiles' lines (heights in %): low ticks with a few tall lines, as the wave. */
+const TILE_WAVE = [22, 22, 30, 22, 55, 30, 22, 22, 70, 40, 22, 30, 22, 85, 45, 22, 22, 35, 60, 22, 22, 30, 22, 22];
 
 export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean }) {
   const me = useMe().data;
@@ -95,29 +98,69 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
 
   return (
     <div className="mx-auto flex max-w-[88rem] flex-col gap-4">
-      <PageHead
-        title={review && !mine ? "New customers to check" : title}
-        sub={
-          review
-            ? "Hospitals, doctors and patients a MedRep added. Their orders go through; check each one's details and mark it checked."
-            : `${count(data.total)} ${(data.total === 1 ? (kindLabel?.label ?? "customer") : (kindLabel?.plural ?? "customers")).toLowerCase()}`
-        }
-        actions={
-          <div className="flex flex-wrap gap-2">
-            {(me?.role === "management" || me?.role === "admin") && (
-              <Link to="/customers/import" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
-                Import from a sheet
-              </Link>
-            )}
-            {data.can.add && (
-              <Button variant="primary" onClick={() => setAdding(true)}>
-                <Plus size={16} aria-hidden="true" /> Add{" "}
-                {kindLabel ? kindLabel.label.toLowerCase() : "customer"}
-              </Button>
+      {/* The head (Aryan, 27 Nov): the title, the seller's area under it (its channel and cities),
+          and the buttons on the right, level with the bottom of the words (Add in black). */}
+      <section className="mb-4 flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <div className="flex min-w-0 items-center gap-4">
+          <div className="min-w-0">
+            <h1 className="text-[32px] leading-tight font-semibold tracking-tight text-ink">
+              {review && !mine ? "New customers to check" : title}
+            </h1>
+            {review ? (
+              <p className="mt-0.5 max-w-2xl text-[13px] text-slate-500">
+                Hospitals, doctors and patients a MedRep added. Their orders go through; check each one's details and mark it checked.
+              </p>
+            ) : mine && area.data?.area ? (
+              // The area under the title (Aryan, 27 Nov): its name with a short line, then the
+              // channel and the cities whose customers are theirs.
+              <>
+                <p className="mt-0.5 text-[13px] text-slate-500">
+                  <span className="font-semibold text-slate-800">{area.data.area.name}</span> · your area: the customers
+                  of these cities are yours
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {area.data.area.channel && (
+                    <span className="rounded-full bg-slate-900 px-2.5 py-0.5 text-[11.5px] font-semibold text-white">
+                      {area.data.area.channel} channel
+                    </span>
+                  )}
+                  {area.data.area.cities.map((city, index) => (
+                    <span
+                      key={city}
+                      className="flex items-center gap-1 rounded-full bg-[#1d9fda] px-2.5 py-0.5 text-[11.5px] font-semibold text-white"
+                    >
+                      {index === 0 && <MapPin size={12} aria-hidden="true" />}
+                      {city}
+                    </span>
+                  ))}
+                </div>
+              </>
+            ) : mine && area.data ? (
+              <p className="mt-0.5 text-[13px] text-slate-500">You have no area yet. You see the customers you added.</p>
+            ) : (
+              <p className="mt-0.5 text-[13px] text-slate-500">
+                {`${count(data.total)} ${(data.total === 1 ? (kindLabel?.label ?? "customer") : (kindLabel?.plural ?? "customers")).toLowerCase()}`}
+              </p>
             )}
           </div>
-        }
-      />
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {(me?.role === "management" || me?.role === "admin") && (
+            <Link to="/customers/import" className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+              Import from a sheet
+            </Link>
+          )}
+          {data.can.add && (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-slate-900 px-3 text-sm font-semibold text-white transition-colors hover:bg-black"
+            >
+              <Plus size={15} aria-hidden="true" /> Add {kindLabel ? kindLabel.label.toLowerCase() : "customer"}
+            </button>
+          )}
+        </div>
+      </section>
 
       {/* The kind's customers at a glance (not narrowed by the search). */}
       {!mine && (
@@ -162,52 +205,55 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
       )}
 
       {mine && area.data && (
-        <Card className="flex flex-col gap-3 p-4">
-          {area.data.area ? (
-            <>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="text-lg font-bold">{area.data.area.name}</div>
-                {area.data.area.channel && (
-                  <Pill tone="brand">{area.data.area.channel} channel</Pill>
-                )}
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {area.data.area.cities.map((city, index) => (
-                  <div
-                    key={city}
-                    className="flex items-center gap-1.5 rounded-full border border-line bg-ground px-2.5 py-1 text-[13px]"
-                  >
-                    {index === 0 && <MapPin size={14} className="text-brand" aria-hidden="true" />}
-                    {city}
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="text-ink-2">You have no area yet. You see the customers you added.</div>
-          )}
-          <div className="grid grid-cols-3 gap-3">
-            {(["hospital", "doctor", "patient"] as const).map((key) => (
+        // The three counts as a strip (the area itself sits under the title, 27 Nov).
+        <div className="flex flex-col gap-3">
+          {/* The three counts as touching, square tiles in three colours, each with its icon in a
+              glassy circle; the picked one carries a white inner line. */}
+          <div className="grid grid-cols-3">
+            {(
+              [
+                ["hospital", Building2, "bg-[#1d9fda]"],
+                ["doctor", Stethoscope, "bg-[#7c5cff]"],
+                ["patient", UserRound, "bg-[#22b378]"],
+              ] as const
+            ).map(([key, Icon, tone]) => (
               <button
                 key={key}
                 type="button"
                 aria-pressed={picked === key}
                 onClick={() => set({ kind: picked === key ? (hospitalsFirst ? "all" : "") : key, page: "" })}
-                className={`flex flex-col gap-0.5 rounded-lg p-3 text-left ${picked === key ? "bg-brand-tint ring-2 ring-brand" : "bg-ground"}`}
+                className={`flex items-center gap-3 p-3.5 text-left text-white transition-[filter] hover:brightness-110 ${tone} ${picked === key ? "ring-[3px] ring-inset ring-white/80" : ""}`}
               >
-                <span className="text-xl font-semibold">{count(area.data.counts[key] ?? 0)}</span>
-                <span className="text-xs text-ink-2">
-                  {data.kinds.find((entry) => entry.key === key)?.plural}
+                <span aria-hidden="true" className="grid size-11 shrink-0 place-items-center rounded-full bg-white/20 ring-1 ring-white/40 backdrop-blur-sm">
+                  <Icon className="size-5" strokeWidth={1.8} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block text-xl leading-tight font-semibold">{count(area.data.counts[key] ?? 0)}</span>
+                  <span className="block truncate text-xs text-white/85">
+                    {data.kinds.find((entry) => entry.key === key)?.plural}
+                  </span>
+                </span>
+                {/* Thin white lines on the right, as the KPI card's wave (Aryan, 27 Nov). Only a
+                    pattern: there is no day-by-day figure here, so it stands for none. */}
+                <span aria-hidden="true" className="ml-auto hidden h-10 w-[45%] max-w-56 items-end gap-[3px] md:flex">
+                  {TILE_WAVE.map((height, n) => (
+                    <span
+                      // biome-ignore lint/suspicious/noArrayIndexKey: a fixed pattern
+                      key={n}
+                      className={`min-w-0 flex-1 rounded-full ${height > 40 ? "bg-white/90" : "bg-white/35"}`}
+                      style={{ height: `${height}%` }}
+                    />
+                  ))}
                 </span>
               </button>
             ))}
           </div>
-        </Card>
+        </div>
       )}
 
-      {/* The search and filters in one box, as the Leads desk draws them. */}
-      <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="relative min-w-0 flex-[3_1_16rem]">
+      {/* The search and filters on one line, no box around them (Aryan, 27 Nov). */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[16rem] flex-1">
           <Search
             size={16}
             className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-slate-400"
@@ -218,12 +264,12 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
             placeholder="Search by name, phone number, CUS number or city"
             value={typed}
             onChange={(event) => setTyped(event.target.value)}
-            className="h-9 w-full rounded-lg border border-slate-200 bg-white pr-3 pl-9 text-sm focus:border-emerald-600 focus:ring-2 focus:ring-emerald-100 focus:outline-none"
+            className="h-10 w-full rounded-lg border border-slate-200 bg-white pr-3 pl-9 text-sm transition-colors hover:border-slate-300"
           />
         </div>
         <select
           aria-label="Who owes"
-          className="h-9 flex-[1_1_9rem] rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700"
+          className="select-arrow h-10 w-36 shrink-0 rounded-lg border border-slate-200 bg-white pr-8 pl-3 text-xs font-medium text-slate-700"
           value={owes}
           onChange={(event) => set({ owes: event.target.value, page: "" })}
         >
@@ -233,7 +279,7 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
         </select>
         <select
           aria-label="Order by"
-          className="h-9 flex-[1_1_10rem] rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700"
+          className="select-arrow h-10 w-44 shrink-0 rounded-lg border border-slate-200 bg-white pr-8 pl-3 text-xs font-medium text-slate-700"
           value={sort}
           onChange={(event) => set({ sort: event.target.value, page: "" })}
         >
@@ -246,7 +292,7 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
         {!kind && (
           <select
             aria-label="Kind of customer"
-            className="h-9 flex-[1_1_11rem] rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-medium text-slate-700"
+            className="select-arrow h-10 w-44 shrink-0 rounded-lg border border-slate-200 bg-white pr-8 pl-3 text-xs font-medium text-slate-700"
             value={picked ?? ""}
             onChange={(event) => set({ kind: event.target.value || (hospitalsFirst ? "all" : ""), page: "" })}
           >
@@ -277,7 +323,7 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
             Not checked yet
           </button>
         )}
-        <fieldset className="hidden shrink-0 gap-0.5 rounded-lg bg-slate-100 p-0.5 text-[11px] font-semibold sm:inline-flex">
+        <fieldset className="hidden shrink-0 gap-0.5 rounded-lg bg-slate-100 p-1 text-[13px] sm:inline-flex">
           <legend className="sr-only">View</legend>
           {(["cards", "table"] as const).map((key) => (
             <button
@@ -285,7 +331,7 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
               type="button"
               aria-pressed={view === key}
               onClick={() => set({ view: key === "cards" ? "" : key })}
-              className={`h-8 rounded-md px-3 capitalize ${view === key ? "bg-white text-slate-900 shadow-sm ring-1 ring-slate-200" : "text-slate-600 hover:text-slate-900"}`}
+              className={`rounded-md px-3.5 py-1.5 capitalize transition-colors ${view === key ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]" : "text-slate-500 hover:text-slate-800"}`}
             >
               {key}
             </button>
@@ -492,59 +538,62 @@ function CustomerCard({
   return (
     <Link
       to={`/customers/${row.id}`}
-      className={`group flex min-w-0 flex-col justify-between rounded-2xl border p-3.5 shadow-sm transition-[border-color,box-shadow] hover:shadow-md ${
+      className={`group flex min-w-0 flex-col justify-between rounded-2xl border p-3.5 shadow-2xs transition-[border-color,box-shadow] hover:shadow-sm ${
         toCheck
           ? "border-amber-200 bg-amber-50/40 hover:border-amber-300"
-          : "border-slate-200/90 bg-white hover:border-emerald-300"
+          : "border-slate-200/90 bg-white hover:border-[#7ccbee]"
       }`}
     >
       <div>
-        <div className="flex items-start justify-between gap-2">
+        {/* As the order cards (Aryan, 27 Nov): the initials in a black circle, the name, its code;
+            the "new" pill under them so it never squeezes the name. */}
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[13px] font-bold text-white">
+            {initials(row.name)}
+          </span>
           <div className="min-w-0">
             <h3
-              className="truncate text-sm font-semibold tracking-tight text-slate-900 group-hover:text-emerald-800"
+              className="line-clamp-2 text-[15px] leading-snug font-semibold tracking-tight text-slate-900 group-hover:text-[#1784b5]"
               title={row.name}
             >
               {row.name}
             </h3>
-            <div className="truncate text-[11px] font-medium text-slate-500">
+            <div className="truncate text-[12.5px] font-medium text-slate-500">
               <span className="font-semibold text-slate-700">{row.code}</span>
               {row.specialty ? ` · ${row.specialty}` : ""}
             </div>
           </div>
-          {toCheck && (
-            <span
-              className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-900 ring-1 ring-amber-300"
-              title="A new customer: Management checks their papers (licence, BIR 2303) once"
-            >
-              New: Management checks it
-            </span>
-          )}
         </div>
-        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[10px]">
+        {toCheck && (
+          <span
+            className="mt-2 inline-flex w-fit items-center rounded-full bg-amber-500 px-2.5 py-0.5 text-[11.5px] font-semibold text-white"
+            title="A new customer: Management checks their papers (licence, BIR 2303) once"
+          >
+            New: Management checks it
+          </span>
+        )}
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11.5px]">
           {kind && (
-            <span
-              className={`rounded-full border px-2 py-0.5 font-semibold ${KIND_BADGE[row.kind]?.style ?? "border-slate-200 bg-slate-50 text-slate-700"}`}
-            >
+            <span className={`rounded-full px-2.5 py-0.5 font-medium text-white ${KIND_SOLID[row.kind] ?? "bg-slate-700"}`}>
               {kind}
             </span>
           )}
           {row.city && (
             <span className="inline-flex max-w-[150px] items-center gap-0.5 truncate text-slate-500">
-              <MapPin className="size-2.5 shrink-0 text-slate-400" />
+              <MapPin className="size-3 shrink-0 text-slate-400" />
               <span className="truncate">{row.city}</span>
             </span>
           )}
           {row.phone && <span className="text-slate-500 tabular-nums">{row.phone}</span>}
         </div>
         {row.worksAt && (
-          <p className="mt-1.5 truncate text-[11px] text-slate-600">Works at {row.worksAt}</p>
+          <p className="mt-1.5 truncate text-[12.5px] text-slate-600">Works at {row.worksAt}</p>
         )}
       </div>
-      <div className="mt-3 flex items-end justify-between gap-2 border-t border-slate-100 pt-2.5 text-[11px]">
+      <div className="mt-3 flex items-end justify-between gap-2 border-t border-slate-100 pt-2.5 text-[12.5px]">
         {!mine ? (
           <div className="min-w-0">
-            <div className="text-[10px] font-medium text-slate-400">Under</div>
+            <div className="text-[11.5px] font-medium text-slate-400">Under</div>
             {row.medrep ? (
               <div className="truncate font-semibold text-slate-800">
                 {row.medrep}
@@ -568,7 +617,7 @@ function CustomerCard({
             {count(row.orders)} {row.orders === 1 ? "order" : "orders"}
           </div>
           <div
-            className={`text-[10px] ${quietDays(row.lastOrderAt) > 45 ? "font-semibold text-amber-700" : "text-slate-500"}`}
+            className={`text-[11.5px] ${quietDays(row.lastOrderAt) > 45 ? "font-semibold text-amber-700" : "text-slate-500"}`}
           >
             {row.lastOrderAt
               ? `last ${dayLabel(manilaDay(row.lastOrderAt))} · ${quietDays(row.lastOrderAt)}d ago`
@@ -579,7 +628,7 @@ function CustomerCard({
       {row.owed > 0 && (
         // What they owe, past due in red; the bar is the credit limit used.
         <div className="mt-2.5 border-t border-slate-100 pt-2">
-          <div className="flex items-baseline justify-between gap-2 text-[11px]">
+          <div className="flex items-baseline justify-between gap-2 text-[12.5px]">
             <span className="text-slate-500">
               Owes <b className="text-slate-900 tabular-nums">{shortPeso(row.owed)}</b>
             </span>
@@ -605,6 +654,16 @@ function CustomerCard({
     </Link>
   );
 }
+
+/** A customer kind's pill in a bold colour with white words, as the order cards (27 Nov). */
+const KIND_SOLID: Record<string, string> = {
+  hospital: "bg-[#1d9fda]",
+  doctor: "bg-indigo-600",
+  patient: "bg-teal-600",
+  drugstore: "bg-amber-600",
+  distributor: "bg-violet-600",
+  government: "bg-rose-600",
+};
 
 /** Days since an order (0 when none). */
 function quietDays(iso: string | null): number {

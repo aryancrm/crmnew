@@ -115,6 +115,10 @@ body {
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
 }
+/* A field inside a bar that lights up itself (the bar's focus-within): no second box inside. */
+.in-bar:focus-visible {
+  outline: none;
+}
 
 @layer components {
   /* A text box or select, as the old CRM's Case details draws them: 40px high, a slate-300
@@ -352,6 +356,18 @@ select.field {
   75% { transform: translateY(-3px) scaleX(0.15); }
 }
 @keyframes no-invoices-spark { 0%, 100% { opacity: 0.25; transform: scale(0.6); } 50% { opacity: 1; transform: scale(1.15); } }
+/* The loading picture (no-results.tsx LoadingArt): its rows fill in blue one after another, then
+   fade and fill again; the arc in the blue circle turns. */
+.loading-row { transform-origin: left center; animation: loading-fill 2.4s ease-in-out infinite; }
+.loading-row--2 { animation-delay: 0.3s; }
+.loading-row--3 { animation-delay: 0.6s; }
+.loading-spin { animation: loading-spin 1s linear infinite; }
+@keyframes loading-fill {
+  0% { transform: scaleX(0); opacity: 1; }
+  45%, 80% { transform: scaleX(1); opacity: 1; }
+  100% { transform: scaleX(1); opacity: 0; }
+}
+@keyframes loading-spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   .no-results * { animation: none !important; }
 }
@@ -526,4 +542,35 @@ html[data-theme="midnight"] .app-sidebar .text-\[\#1784b5\] {
    instead, never a white block (Aryan, 27 Nov). */
 html[data-theme="midnight"] .app-sidebar .hover\:bg-white:hover {
   background-color: #1d2740;
+}
+
+/* Every search bar, when it is being typed in (Aryan, 27 Nov), as the top search: a blue line with
+   a second blue line just outside it.
+   - A search box drawn by the field itself: its own border turns blue (the outer line is the
+     app's focus outline, above).
+   - A search bar drawn as a box around an icon and the field: the box turns blue and takes the
+     outer line, and the field inside draws no box of its own. */
+input:is([type="search"], [placeholder^="Search"]):focus-visible {
+  border-color: var(--color-brand);
+}
+:is(label, div, form).border:has(> input:is([type="search"], [placeholder^="Search"]):focus-visible) {
+  border-color: var(--color-brand);
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
+}
+:is(label, div, form).border > input:is([type="search"], [placeholder^="Search"]):focus-visible {
+  outline: none;
+}
+
+/* A dropdown with its arrow drawn by us (Aryan, 27 Nov): the browser's own arrow sat hard against
+   the edge; this one sits 12px in, centred on the height. Room for it is the field's pr-8. */
+select.select-arrow {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px 14px;
+}
+select.select-arrow:hover {
+  border-color: #cbd5e1;
 }

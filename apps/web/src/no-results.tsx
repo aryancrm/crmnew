@@ -104,3 +104,42 @@ export function EmptyState({ art, title, children }: { art?: ReactNode; title: R
     </div>
   );
 }
+
+/** "Loading", drawn (Aryan, 27 Nov): a card whose rows fill in blue one after another, a blue
+ *  circle with a white arc turning, the card floating and two sparkles twinkling. Shown above
+ *  every "Loading …" (ui.tsx PageState); the moves are in styles.css (loading-*), and it stands
+ *  still for people who turn motion off. */
+export function LoadingArt({ size = 112 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 120 100" width={size} height={(size * 100) / 120} aria-hidden="true" className="no-results">
+      <ellipse className="no-results__shadow" cx="54" cy="92" rx="32" ry="4.5" fill="#dbe6fb" />
+      <g className="no-results__card">
+        <rect x="22" y="18" width="62" height="62" rx="8" fill="#ffffff" stroke="#1f2937" strokeWidth="1.6" />
+        <rect x="31" y="27" width="20" height="5" rx="2.5" fill="#1d9fda" />
+        {[40, 50, 60].map((y, i) => (
+          <g key={y}>
+            <rect x="31" y={y} width={i === 1 ? 34 : 42} height="4.5" rx="2.25" fill="#e8f6fc" />
+            <rect className={`loading-row loading-row--${i + 1}`} x="31" y={y} width={i === 1 ? 34 : 42} height="4.5" rx="2.25" fill="#1d9fda" />
+          </g>
+        ))}
+        <rect x="31" y="69" width="16" height="4" rx="2" fill="#dbe6fb" />
+      </g>
+      {/* The turning arc, in a blue circle. */}
+      <circle cx="90" cy="28" r="12" fill="#1d9fda" stroke="#ffffff" strokeWidth="2" />
+      <path className="loading-spin" d="M90 21.5a6.5 6.5 0 1 1-6.5 6.5" fill="none" stroke="#ffffff" strokeWidth="2.2" strokeLinecap="round" />
+      <path className="no-invoices__spark" d="M15 46l1.4 3.4 3.4 1.4-3.4 1.4-1.4 3.4-1.4-3.4-3.4-1.4 3.4-1.4z" fill="#93b4f5" />
+      <path className="no-invoices__spark no-invoices__spark--2" d="M98 60l1.1 2.7 2.7 1.1-2.7 1.1-1.1 2.7-1.1-2.7-2.7-1.1 2.7-1.1z" fill="#34a853" />
+    </svg>
+  );
+}
+
+/** The loading picture with its words under it, centred. */
+export function Loading({ children }: { children: ReactNode }) {
+  return (
+    <div className="flex flex-col items-center px-4 py-14 text-center" role="status" aria-live="polite">
+      {/* Bigger than the empty-state pictures (Aryan, 27 Nov). */}
+      <LoadingArt size={190} />
+      <p className="mt-4 text-[15px] text-slate-500">{children}</p>
+    </div>
+  );
+}

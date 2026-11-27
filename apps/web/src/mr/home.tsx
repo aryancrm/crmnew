@@ -73,7 +73,7 @@ export function MrDay() {
   const c = data.counts;
   const left = c.open;
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4">
+    <div className="mx-auto flex max-w-screen-2xl flex-col gap-4">
       <div className="relative overflow-hidden rounded-3xl bg-gradient-to-b from-sky-200 to-sky-50 px-4 pt-5 pb-8 text-center">
         <div className="flex items-center justify-between text-left">
           <div>

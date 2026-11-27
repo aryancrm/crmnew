@@ -4,6 +4,7 @@ import { X } from "lucide-react";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { ApiFailure } from "./api";
+import { Loading } from "./no-results";
 
 // ---------------------------------------------------------------- words
 
@@ -502,7 +503,8 @@ export function PageState({
   query: { isPending: boolean; isError: boolean; error: unknown; refetch: () => void };
   what: string;
 }) {
-  if (query.isPending) return <div className="p-8 text-center text-ink-2">Loading {what}…</div>;
+  // The loading picture above the words (Aryan, 27 Nov).
+  if (query.isPending) return <Loading>Loading {what}…</Loading>;
   // Not this person's page: say so, and lead back home (asking again changes nothing).
   if (query.isError && query.error instanceof ApiFailure && query.error.status === 403)
     return (
