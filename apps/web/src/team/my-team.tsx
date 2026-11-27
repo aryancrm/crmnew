@@ -40,6 +40,7 @@ import { api } from "../api";
 import { hqOfSeat } from "./hq-name";
 import { TeamSwitch } from "./switch";
 import { placesOrders, useMe } from "../auth";
+import { headsMenuName } from "../menus";
 
 import { counted, exactPeso, shortPeso } from "../ceo";
 import { dayHeading, PRIMARY_SM } from "../look";
@@ -514,6 +515,8 @@ export function MyTeamPage() {
   const data = query.data;
   if (!data) return <PageState query={query} what="your team" />;
   const { totals, pace } = data;
+  // A head's own view is named as his menu names it (Javed's "Whole business").
+  const ownName = headsMenuName(me, "/my-team") ?? "My team";
   const keep = new URLSearchParams();
   if (unit) keep.set("unit", unit);
   if (params.get("from")) keep.set("from", params.get("from") as string);
@@ -621,7 +624,7 @@ export function MyTeamPage() {
                   to={`/my-team${dates.size ? `?${dates}` : ""}`}
                   className="hover:text-emerald-700 hover:underline"
                 >
-                  My team
+                  {ownName}
                 </Link>
               ) : null}
               {data.path.map((one, n) => (
@@ -639,7 +642,7 @@ export function MyTeamPage() {
             </nav>
           )}
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
-            {data.viewing ?? "My team"}
+            {data.viewing ?? ownName}
           </h1>
           <p className="mt-1 text-[13px] text-slate-500">
             {[
@@ -1155,7 +1158,7 @@ export function TeamSeatPage() {
           to={back}
           className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-800"
         >
-          <ChevronLeft className="size-4" /> {backWord ?? board.data.viewing ?? "My team"}
+          <ChevronLeft className="size-4" /> {backWord ?? board.data.viewing ?? headsMenuName(me, "/my-team") ?? "My team"}
         </Link>
         {order.length > 1 && at >= 0 && (
           <div className="flex items-center gap-1 text-sm">

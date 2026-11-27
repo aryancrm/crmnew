@@ -37,7 +37,7 @@ import { greeting, todayWords } from "../home/home";
 import { OrderCardItem } from "../orders/board";
 import { HospitalsCard } from "./hospitals";
 import { MyKpis as KpiPanel } from "../kpis/my-kpis";
-import { allItems, spaceFor } from "../menus";
+import { headsMenuName } from "../menus";
 import { EmptyState, NoInvoicesArt } from "../no-results";
 import { FieldDayCard } from "../mr/home";
 
@@ -670,10 +670,7 @@ export function MyOrdersPage() {
   const data = mine.data;
   const team = me?.role === "team_lead" || me?.role === "manager";
   // A head's banner names the page as his menu does (Javed's and Subir's "Business orders").
-  const menuName =
-    me?.role === "manager"
-      ? allItems(spaceFor(me, "/orders").groups.flatMap((group) => group.items)).find((item) => item.to === "/orders")?.label
-      : undefined;
+  const menuName = headsMenuName(me, "/orders");
   if (!data) return <PageState query={mine} what="your orders" />;
   const pages = Math.max(1, Math.ceil(data.total / data.pageSize));
   const days = [...new Set(data.cards.map((card) => card.placedOn))];

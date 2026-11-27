@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
+import { headsMenuName } from "../menus";
 import { EmptyState, NoResults } from "../no-results";
 import { shortPeso } from "../ceo";
 import { CustomerDialog } from "./dialog";
@@ -81,7 +82,8 @@ export function Customers({ kind, mine }: { kind?: CustomerKind; mine?: boolean 
     ? seatWords(me).myCustomers === "My hospitals"
       ? "All my customers"
       : seatWords(me).myCustomers
-    : (kindLabel?.plural ?? "Customers");
+    : // A head's list is named as his menu names it (Javed's "Doctors & patients", 28 Nov).
+      (kindLabel?.plural ?? headsMenuName(me, "/customers") ?? "Customers");
   const pages = Math.max(1, Math.ceil(data.total / data.pageSize));
   const label = (key: CustomerKind) => data.kinds.find((entry) => entry.key === key)?.label ?? key;
   const plural = (kindLabel?.plural ?? "Customers").toLowerCase();

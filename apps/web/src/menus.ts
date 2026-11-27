@@ -140,6 +140,14 @@ const folder = (
 /** Every link of a menu, the pages inside folders too. */
 export const allItems = (items: MenuItem[]): MenuItem[] =>
   items.flatMap((item) => (item.children ? [item, ...allItems(item.children)] : [item]));
+
+/** What a head's menu calls a page ("Whole business", "Doctors & patients"), so its title says the
+ *  same (28 Nov); nothing for anyone else, whose pages keep their own titles. */
+export function headsMenuName(me: Me | null | undefined, path: string): string | undefined {
+  if (me?.role !== "manager") return undefined;
+  // The page's own link, not the folder it sits in (a folder takes its first page's address).
+  return allItems(spaceFor(me, path).groups.flatMap((group) => group.items)).find((item) => item.to === path && !item.children)?.label;
+}
 export type MenuGroup = {
   title?: string;
   items: MenuItem[];
