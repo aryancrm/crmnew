@@ -45,7 +45,8 @@ export function CollectionsPage() {
       <div className="mb-4">
         <TeamSwitch />
       </div>
-      <section className={`${CARD} mb-4 p-4`}>
+      {/* Bigger, no shadow, a lighter line (Aryan, 27 Nov); the amounts as the dashboards' numbers. */}
+      <section className="mb-4 rounded-2xl border border-slate-200/60 bg-white p-5">
         <div className="flex h-3 overflow-hidden rounded-full bg-slate-100">
           {data.buckets
             .filter((one) => one.amount > 0)
@@ -53,13 +54,13 @@ export function CollectionsPage() {
               <span key={one.key} className={FLAG[one.key].bar} style={{ width: `${(one.amount / Math.max(1, data.total)) * 100}%` }} />
             ))}
         </div>
-        <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-4">
           {data.buckets.map((one) => (
             <div key={one.key}>
-              <div className="flex items-center gap-1.5 text-[11.5px] text-slate-500">
+              <div className="flex items-center gap-1.5 text-[13px] text-slate-500">
                 <span className={`size-2 rounded-full ${FLAG[one.key].bar}`} /> {one.label}
               </div>
-              <div className="text-[15px] font-bold text-slate-900 tabular-nums">{shortPeso(one.amount)}</div>
+              <div className="mt-1 text-[28px] leading-tight font-medium tracking-tight text-slate-900 tabular-nums">{shortPeso(one.amount)}</div>
             </div>
           ))}
         </div>

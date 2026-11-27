@@ -1092,7 +1092,7 @@ export function OrderCardItem({
         onKeyDown={(event) => {
           if (event.key === "Enter" && event.target === event.currentTarget) open();
         }}
-        className={`group relative flex min-w-0 cursor-pointer flex-col justify-between rounded-2xl border p-3.5 shadow-sm transition-[border-color,box-shadow] hover:shadow-md focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none ${
+        className={`group relative flex min-w-0 cursor-pointer flex-col justify-between rounded-2xl border p-3.5 shadow-2xs transition-[border-color,box-shadow] hover:shadow-sm focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:outline-none ${
           stopped
             ? "border-rose-200/80 bg-rose-50/60 hover:border-rose-300"
             : finished

@@ -11,6 +11,7 @@
 */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import './HomePage.css'
+import { MedrepScreen } from './medrep-screen'
 
 /* ===== components/ui/OrbitLogo.jsx ===== */
 /**
@@ -2732,163 +2733,9 @@ function DashboardStage() {
       <div className="stage__scene" aria-hidden="true">
         <div className="stage__rings" />
         <div className="monitor">
-          <div className="monitor__screen">
-            <aside className="dash__side">
-              <div className="dash__brand">
-                <span className="dash__brand-dot" /> Bishnoi One
-              </div>
-              <div className="dash__search">Search anything…</div>
-              <p className="dash__group">Systems</p>
-              {products.map((p, i) => (
-                <div key={p.id} className={`dash__nav ${i === 0 ? 'is-active' : ''}`}>
-                  <img src={p.logo} alt="" width="14" height="14" />
-                  {p.name}
-                </div>
-              ))}
-              <p className="dash__group">Workspace</p>
-              <div className="dash__nav">
-                Approvals <span className="dash__badge">12</span>
-              </div>
-              <div className="dash__nav">Team &amp; roles</div>
-              <div className="dash__nav">Reports</div>
-              <div className="dash__nav">Audit trail</div>
-              <div className="dash__user">
-                <span className="dash__avatar" style={{ background: '#173f2a' }}>
-                  AB
-                </span>
-                <div>
-                  <b>Ana Bautista</b>
-                  <small>Operations</small>
-                </div>
-              </div>
-            </aside>
-
-            <div className="dash__main">
-              <div className="dash__topbar" style={{ '--d': 0 }}>
-                <div>
-                  <b>Good morning, Ana</b>
-                  <small>Here is what changed since yesterday</small>
-                </div>
-                <span className="dash__pill dash__pill--live">
-                  <span className="dash__live" /> Live
-                </span>
-              </div>
-
-              <div className="dash__kpis">
-                {KPIS.map((k, i) => (
-                  <Kpi key={k.label} k={k} active={inView} d={i + 1} />
-                ))}
-              </div>
-
-              <div className="dash__card dash__chart" style={{ '--d': 5 }}>
-                <div className="dash__card-head">
-                  <strong>Orders vs returns</strong>
-                  <div className="dash__legend">
-                    <span className="dash__key dash__key--a" /> Orders
-                    <span className="dash__key dash__key--b" /> Returns
-                    <span className="dash__pill">This year ▾</span>
-                  </div>
-                </div>
-                <svg viewBox={`0 0 ${W} ${H + 24}`} className="dash__svg">
-                  <defs>
-                    <linearGradient id="dash-area" x1="0" x2="0" y1="0" y2="1">
-                      <stop offset="0" stopColor="#f36b21" stopOpacity="0.22" />
-                      <stop offset="1" stopColor="#f36b21" stopOpacity="0" />
-                    </linearGradient>
-                  </defs>
-                  {[0, 0.33, 0.66, 1].map((g) => (
-                    <line key={g} x1="0" x2={W} y1={H * g} y2={H * g} className="dash__grid" />
-                  ))}
-                  <path d={`${smooth(ORDERS, W, H, max)} L${W},${H} L0,${H} Z`} className="dash__area" fill="url(#dash-area)" />
-                  <path d={smooth(RETURNS, W, H, max)} className="dash__line dash__line--soft" />
-                  <path d={smooth(ORDERS, W, H, max)} className="dash__line" />
-                  <line x1={px} x2={px} y1="0" y2={H} className="dash__cursor" />
-                  <circle cx={px} cy={py} r="4.5" className="dash__dot" />
-                  {MONTHS.map((m, i) => (
-                    <text key={m} x={(i / 11) * W} y={H + 18} className={`dash__tick ${i === peak ? 'is-on' : ''}`}>
-                      {m}
-                    </text>
-                  ))}
-                </svg>
-                <div className="dash__tip" style={{ left: `${(px / W) * 100}%` }}>
-                  <b>Oct 2026</b>
-                  <span>Orders 97k</span>
-                  <span>Returns 33k</span>
-                </div>
-              </div>
-
-              <div className="dash__card dash__table" style={{ '--d': 6 }}>
-                <div className="dash__card-head">
-                  <strong>Recent activity</strong>
-                  <span className="dash__link">View all →</span>
-                </div>
-                <div className="dash__feed">
-                  {feed.map((a, k) => (
-                    <div className={`dash__row ${k === 0 ? 'is-new' : ''}`} key={a.key}>
-                      <img src={byId[a.system]?.logo} alt="" width="14" height="14" />
-                      <span className="dash__event">{a.event}</span>
-                      <span className="dash__time">{a.time}</span>
-                      <span className="dash__ok">✓ {a.status}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="dash__aside">
-              <div className="dash__card" style={{ '--d': 3 }}>
-                <div className="dash__card-head">
-                  <strong>Waiting for approval</strong>
-                  <span className="dash__muted">12 open</span>
-                </div>
-                {APPROVALS.map((a) => (
-                  <div className={`dash__task dash__task--${a.tone}`} key={a.title}>
-                    <span className="dash__level">{a.level}</span>
-                    <div>
-                      <b>{a.title}</b>
-                      <small>{a.note}</small>
-                    </div>
-                    <span className="dash__due">{a.due}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="dash__card" style={{ '--d': 5 }}>
-                <div className="dash__card-head">
-                  <strong>Stock levels</strong>
-                  <span className="dash__muted">Manila DC</span>
-                </div>
-                {DASH_STOCK.map((s, i) => (
-                  <div className="dash__stock" key={s.name}>
-                    <div className="dash__stock-top">
-                      <span>{s.name}</span>
-                      <b>{s.pct}%</b>
-                    </div>
-                    <div className={`dash__bar dash__bar--${s.tone}`}>
-                      <span style={{ '--w': `${s.pct}%`, '--i': i }} />
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="dash__card" style={{ '--d': 7 }}>
-                <div className="dash__card-head">
-                  <strong>In today</strong>
-                  <span className="dash__muted">198 of 214</span>
-                </div>
-                <div className="dash__team">
-                  {DASH_TEAM.map((t, i) => (
-                    <span key={t.i} className="dash__avatar" style={{ background: t.c, '--i': i }}>
-                      {t.i}
-                    </span>
-                  ))}
-                  <span className="dash__avatar dash__avatar--more">+193</span>
-                </div>
-                <div className="dash__synced">
-                  <span className="dash__live" /> All eight systems in sync · 2 min ago
-                </div>
-              </div>
-            </div>
+          {/* A MedRep's Home, made-up figures only (medrep-screen.tsx, Aryan 27 Nov). */}
+          <div className="monitor__screen monitor__screen--app">
+            <MedrepScreen />
           </div>
           <div className="monitor__chin" />
           <div className="monitor__neck" />
