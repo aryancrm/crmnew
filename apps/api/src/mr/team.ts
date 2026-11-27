@@ -77,10 +77,15 @@ export async function teamToday(db: Database, me: Me, asked: { day?: string | nu
         (select count(*) from field_day where report_status = 'sent' and person_id <> ${me.id} and ${inTeam(me, "person_id")})::int as reports,
         (select count(*) from visit where status = 'done' and productive = 'pending' and person_id <> ${me.id} and ${inTeam(me, "person_id")})::int as judge,
         (select count(*) from visit_plan where status = 'sent' and person_id <> ${me.id} and ${inTeam(me, "person_id")})::int as plans,
+        -- The month of the oldest plan waiting, so its link opens that month (a plan sent for next
+        -- month is found there).
+        (select to_char(min(month), 'YYYY-MM') from visit_plan where status = 'sent' and person_id <> ${me.id} and ${inTeam(me, "person_id")}) as "plansMonth",
         (select count(*) from plan_deviation where status = 'waiting' and person_id <> ${me.id} and ${inTeam(me, "person_id")})::int as deviations,
         (select count(*) from field_expense where status = 'pending' and person_id <> ${me.id} and ${inTeam(me, "person_id")})::int as expenses`,
   );
   const weekStart = addDays(day, -((new Date(`${day}T00:00:00Z`).getUTCDay() + 6) % 7));
+  // The one looking is not in their own team's figures (closed visits, Call Champion, the feed), as
+  // they are not in its list of people.
   const [clients, closed, champions, feed] = await Promise.all([
     rows<TeamToday["clients"]>(
       db,
@@ -95,28 +100,29 @@ export async function teamToday(db: Database, me: Me, asked: { day?: string | nu
       sql`${teamSql(me)} select count(*) filter (where day = ${day}::date)::int as today, count(*) filter (where day >= ${weekStart}::date)::int as week,
           count(*)::int as month
         from visit where status = 'done' and day between ${`${day.slice(0, 7)}-01`}::date and ${day}::date
-          and ${inTeam(me, "person_id")}`,
+          and person_id <> ${me.id} and ${inTeam(me, "person_id")}`,
     ),
     rows<TeamToday["champions"][number]>(
       db,
       sql`${teamSql(me)} select p.id::int as id, p.name, count(*)::int as closed from visit v join person p on p.id = v.person_id
-        where v.status = 'done' and v.day = ${day}::date and ${inTeam(me, "v.person_id")}
+        where v.status = 'done' and v.day = ${day}::date and v.person_id <> ${me.id} and ${inTeam(me, "v.person_id")}
         group by p.id, p.name order by closed desc, p.name limit 5`,
     ),
     rows<TeamToday["feed"][number]>(
       db,
       sql`${teamSql(me)} select * from (
-          select ${iso("v.checked_in_at")} as at, p.name, 'checked_in' as what, c.name as client, v.id::int as "visitId",
-              null::text as meeting, 0::float8 as booked
+          select ${iso("v.checked_in_at")} as at, p.name, p.id::int as "personId", 'checked_in' as what, c.name as client,
+              v.id::int as "visitId", null::text as meeting, 0::float8 as booked
             from visit v join person p on p.id = v.person_id join customer c on c.id = v.customer_id
-            where v.day = ${day}::date and v.checked_in_at is not null and ${inTeam(me, "v.person_id")}
+            where v.day = ${day}::date and v.checked_in_at is not null and v.person_id <> ${me.id} and ${inTeam(me, "v.person_id")}
           union all
           -- A closed visit says what came of it: met or not, and what was ordered there.
-          select ${iso("v.done_at")} as at, p.name, 'closed' as what, c.name as client, v.id::int as "visitId", v.meeting,
+          select ${iso("v.done_at")} as at, p.name, p.id::int as "personId", 'closed' as what, c.name as client,
+              v.id::int as "visitId", v.meeting,
               (select coalesce(sum(o.total), 0) from visit_order vo join sales_order o on o.id = vo.order_id
                 where vo.visit_id = v.id and o.status <> 'cancelled')::float8
             from visit v join person p on p.id = v.person_id join customer c on c.id = v.customer_id
-            where v.day = ${day}::date and v.done_at is not null and ${inTeam(me, "v.person_id")}) f
+            where v.day = ${day}::date and v.done_at is not null and v.person_id <> ${me.id} and ${inTeam(me, "v.person_id")}) f
         order by at desc limit 40`,
     ),
   ]);
@@ -137,7 +143,7 @@ export async function teamToday(db: Database, me: Me, asked: { day?: string | nu
       bookedAmount: people.reduce((sum, one) => sum + one.bookedAmount, 0),
       reportsToSee: people.filter((one) => one.report === "sent").length,
     },
-    waiting: waiting ?? { reports: 0, judge: 0, plans: 0, deviations: 0, expenses: 0 },
+    waiting: waiting ?? { reports: 0, judge: 0, plans: 0, plansMonth: null, deviations: 0, expenses: 0 },
   };
 }
 

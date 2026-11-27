@@ -7532,8 +7532,8 @@ export type TeamSamples = {
   month: string;
   reps: { personId: number; name: string; samples: number; gifts: number; received: number; given: number; doctors: number; counted: boolean; difference: number }[];
   requests: { id: number; code: string; kind: SampleKind; status: SampleRequestStatus; note: string | null; personId: number; person: string; askedAt: string; lines: { medicine: string; qty: number }[]; canDecide: boolean; canIssue: boolean }[];
-  counts: { person: string; kind: SampleKind; medicine: string; difference: number; reason: string | null; at: string }[];
-  doctors: { customerId: number; doctor: string; person: string; medicines: string; pieces: number; visits: number }[];
+  counts: { personId: number; person: string; kind: SampleKind; medicine: string; difference: number; reason: string | null; at: string }[];
+  doctors: { customerId: number; doctor: string; personId: number; person: string; medicines: string; pieces: number; visits: number }[];
   can: { send: boolean };
 };
 /** Every file about a customer (ERP phase 4): where it came from, what it is, where it opens. */

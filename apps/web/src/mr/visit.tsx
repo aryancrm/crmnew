@@ -47,6 +47,7 @@ import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api";
 import { GiveSamplesDialog } from "../inventory/samples";
+import { useHqNames } from "../team/hq-name";
 import { StartWorkingDialog } from "./home";
 import { Button, CARD, Dialog, PageState, Problem, peso, useAction, manilaDay } from "../ui";
 import {
@@ -71,6 +72,8 @@ const objectiveWords = (list: string[]) =>
 export function MrVisitPage() {
   const id = Number(useParams().id);
   const query = useQuery({ queryKey: ["mr", "visit", id], queryFn: () => api<VisitPage>(`/api/mr/visits/${id}`) });
+  // Whose visit, after their HQ (Aryan's phase 5, PLAN 269).
+  const { named } = useHqNames();
   const data = query.data;
   if (!data) return <PageState query={query} what="the visit" />;
   const v = data.visit;
@@ -85,7 +88,7 @@ export function MrVisitPage() {
         actions={<StatePill visit={v} />}
       />
       <section className={`${CARD} grid gap-2 p-4 text-[13px] sm:grid-cols-2`}>
-        <Fact label="Visit date">{dayWords(v.day)}{v.person.name ? ` · ${v.person.name}` : ""}</Fact>
+        <Fact label="Visit date">{dayWords(v.day)}{v.person.name ? ` · ${named(v.person.id, v.person.name)}` : ""}</Fact>
         <Fact label="Address">{c.address || c.city || "—"}</Fact>
         {c.worksAt && <Fact label="Hospital">{c.worksAt.name}</Fact>}
         {c.phone && <Fact label="Contact">{c.phone}{c.contactPerson ? ` · ${c.contactPerson}` : ""}</Fact>}
@@ -738,6 +741,7 @@ function LeadTools({ data }: { data: VisitPage }) {
   const action = useAction();
   const [note, setNote] = useState("");
   const [reopening, setReopening] = useState(false);
+  const { named } = useHqNames();
   if (!data.can.judge && !data.can.reopen) return null;
   const v = data.visit;
   const refresh = () => queries.invalidateQueries({ queryKey: ["mr"] });
@@ -746,7 +750,7 @@ function LeadTools({ data }: { data: VisitPage }) {
       <h2 className="text-sm font-bold text-slate-900">Team lead</h2>
       {data.can.judge && (
         <div className="flex flex-col gap-2">
-          <span className="text-sm text-slate-700">{v.person.name} wasn't sure this call was productive. Your call:</span>
+          <span className="text-sm text-slate-700">{named(v.person.id, v.person.name)} wasn't sure this call was productive. Your call:</span>
           <input className={FIELD} value={note} onChange={(event) => setNote(event.target.value)} placeholder="A word (optional)" />
           <div className="flex gap-2">
             <Button small variant="primary" disabled={action.busy} onClick={() => action.run(async () => { await api(`/api/mr/visits/${v.id}/judge`, { body: { productive: "yes", note: note || null } }); await refresh(); })}>Productive</Button>

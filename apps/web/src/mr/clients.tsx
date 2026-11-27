@@ -367,10 +367,12 @@ function AskOff({ clientId, onClose }: { clientId: number; onClose: () => void }
 function OffRequests() {
   const queries = useQueryClient();
   const action = useAction();
+  // Who asked, after their HQ (Aryan's phase 5, PLAN 269).
+  const { named } = useHqNames();
   const query = useQuery({
     queryKey: ["mr", "off-requests"],
     queryFn: () =>
-      api<{ rows: { id: number; code: string | null; name: string; kind: string; city: string | null; why: string; by: string; at: string }[] }>(
+      api<{ rows: { id: number; code: string | null; name: string; kind: string; city: string | null; why: string; by: string; byId: number; at: string }[] }>(
         "/api/mr/clients/off-requests",
       ),
   });
@@ -388,7 +390,7 @@ function OffRequests() {
           <div className="min-w-0 text-sm">
             <Link to={`/field/clients/${one.id}`} className="font-bold hover:underline">{one.name}</Link>{" "}
             <span className="text-slate-500">{[one.code, one.kind, one.city].filter(Boolean).join(" · ")}</span>
-            <div className="text-slate-600">{one.by}: {one.why}</div>
+            <div className="text-slate-600">{named(one.byId, one.by)}: {one.why}</div>
           </div>
           <div className="flex gap-2">
             <Button small variant="primary" disabled={action.busy} onClick={() => answer(one.id, true)}>Take off</Button>

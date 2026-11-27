@@ -17,7 +17,7 @@ import { useMe } from "../auth";
 import { allItems, spaceFor } from "../menus";
 import { useHqNames } from "../team/hq-name";
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
-import { CARD, PageState, Panel, peso } from "../ui";
+import { CARD, PageState, Panel, peso, useOpenOnPress } from "../ui";
 import { ActionSheet, clockOf, dayWords, MrHead, mapLink, useMrMe } from "./parts";
 import { EmptyState, NoInvoicesArt } from "../no-results";
 
@@ -38,6 +38,8 @@ export function FieldTodayCard() {
     enabled: watches,
     refetchInterval: 60_000,
   });
+  // Each person after their HQ, as on Team today (PLAN 269): "TAFT · Marwin Dy".
+  const { named } = useHqNames();
   const data = query.data;
   if (!watches || !data || data.totals.people === 0) return null;
   const t = data.totals;
@@ -60,15 +62,15 @@ export function FieldTodayCard() {
       </div>
       {(idle.length > 0 || at.length > 0) && (
         <p className="text-[13px] text-slate-600">
-          {at.length > 0 && <>Now at a customer: {at.map((one) => `${one.name} (${one.at})`).join(", ")}. </>}
-          {idle.length > 0 && <span className="text-amber-800">Visits today, not started yet: {idle.map((one) => one.name).join(", ")}.</span>}
+          {at.length > 0 && <>Now at a customer: {at.map((one) => `${named(one.id, one.name)} (${one.at})`).join(", ")}. </>}
+          {idle.length > 0 && <span className="text-amber-800">Visits today, not started yet: {idle.map((one) => named(one.id, one.name)).join(", ")}.</span>}
         </p>
       )}
       {w.reports + w.judge + w.plans + w.deviations + w.expenses > 0 && (
         <ul className="grid gap-2 sm:grid-cols-3">
           <Wait n={w.reports} label="Day reports to see" to="/field/reports?view=day-reports" />
           <Wait n={w.judge} label="Calls to judge" to="/field/reports?view=judge" />
-          <Wait n={w.plans} label="Tour plans to approve" to="/field/plan?view=team" />
+          <Wait n={w.plans} label="Tour plans to approve" to={`/field/plan?view=team${w.plansMonth ? `&month=${w.plansMonth}` : ""}`} />
           <Wait n={w.deviations} label="Plan changes (deviations)" to="/field/plan?view=deviations" />
           <Wait n={w.expenses} label="Expenses to approve" to="/visits/expenses?waiting=1" />
         </ul>
@@ -96,6 +98,8 @@ export function TeamHome() {
   const [picked, setPicked] = useState<TeamToday["people"][number] | null>(null);
   // Each person after their HQ (Aryan's phase 5, PLAN 269): "TAFT · Marwin Dy".
   const { named } = useHqNames();
+  // A Call Champion row opens that person's visits when pressed anywhere on it (PLAN 271).
+  const open = useOpenOnPress();
   // Where each one is now, from their phone (Aryan, 28 Nov: "what is the difference between Team
   // today and Where the team is?": none worth a page, PLAN 271): a person's row says they are
   // live, and pressing it opens where they are and their places today.
@@ -128,8 +132,9 @@ export function TeamHome() {
         <Link to={withUnit("/visits?person=all", unit)} className="hover:underline">All visits</Link>
         <Link to={withUnit("/field/plan?view=team", unit)} className="hover:underline">Tour plans</Link>
         <Link to={withUnit("/visits/expenses?waiting=1", unit)} className="hover:underline">Expenses</Link>
-        <Link to="/field/follow-ups" className="hover:underline">Follow-ups</Link>
-        <Link to="/field/reports" className="hover:underline">Call reports</Link>
+        {/* The team's follow-ups, not the lead's own; the call list itself, not the page of tiles. */}
+        <Link to="/field/follow-ups?person=all" className="hover:underline">Follow-ups</Link>
+        <Link to={withUnit("/field/reports?view=calls", unit)} className="hover:underline">Call reports</Link>
         <Link to={withUnit("/field/clients?scope=team", unit)} className="hover:underline">Customers</Link>
       </nav>
 
@@ -138,7 +143,12 @@ export function TeamHome() {
           <ul className="grid gap-2 p-3 sm:grid-cols-3">
             <Wait n={data.waiting.reports} label="Day reports to see" to={withUnit("/field/reports?view=day-reports", unit)} />
             <Wait n={data.waiting.judge} label="Calls to judge" to={withUnit("/field/reports?view=judge", unit)} />
-            <Wait n={data.waiting.plans} label="Tour plans to approve" to={withUnit("/field/plan?view=team", unit)} />
+            <Wait
+              n={data.waiting.plans}
+              label="Tour plans to approve"
+              // Opens on the month of the oldest plan waiting: a plan sent for next month is there.
+              to={withUnit(`/field/plan?view=team${data.waiting.plansMonth ? `&month=${data.waiting.plansMonth}` : ""}`, unit)}
+            />
             <Wait n={data.waiting.deviations} label="Plan changes (deviations)" to={withUnit("/field/plan?view=deviations", unit)} />
             <Wait n={data.waiting.expenses} label="Expenses to approve" to={withUnit("/visits/expenses?waiting=1", unit)} />
             <Wait n={offList.data?.rows.length ?? 0} label="Customers to take off the list" to="/field/clients?view=off" />
@@ -203,10 +213,16 @@ export function TeamHome() {
           <Panel title="Call Champion (today)">
             <ol className="divide-y divide-slate-100">
               {data.champions.map((one, at) => (
-                <li key={one.id} className="flex items-center justify-between px-4 py-2 text-sm">
+                <li
+                  key={one.id}
+                  onClick={open(`/visits?person=${one.id}&day=${data.day}`)}
+                  className="flex cursor-pointer items-center justify-between px-4 py-2 text-sm hover:bg-slate-50"
+                >
                   <span className="flex items-center gap-2">
                     {at === 0 ? <Trophy size={14} className="text-amber-500" /> : <span className="w-3.5 text-center text-xs text-slate-400">{at + 1}</span>}
-                    {named(one.id, one.name)}
+                    <Link to={`/visits?person=${one.id}&day=${data.day}`} className="hover:underline">
+                      {named(one.id, one.name)}
+                    </Link>
                   </span>
                   <span className="font-semibold text-slate-700">{one.closed}</span>
                 </li>
@@ -225,7 +241,7 @@ export function TeamHome() {
               {data.feed.map((one) => (
                 <li key={`${one.visitId}-${one.what}`} className="px-4 py-2 text-[13px] text-slate-700">
                   <Link to={`/visits/${one.visitId}`} className="hover:underline">
-                    <b>{one.name}</b> has {one.what === "closed" ? "closed" : "checked in"} the visit of {one.client}
+                    <b>{named(one.personId, one.name)}</b> has {one.what === "closed" ? "closed" : "checked in"} the visit of {one.client}
                   </Link>
                   {one.what === "closed" && one.meeting && (
                     <span className={`ml-1.5 rounded px-1.5 py-0.5 text-[11px] font-semibold ${one.meeting === "met" ? "bg-emerald-50 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>

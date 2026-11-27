@@ -563,13 +563,14 @@ export type TeamToday = {
     report: "open" | "sent" | "seen" | null;
   }[];
   totals: { people: number; started: number; planned: number; done: number; missed: number; bookedAmount: number; reportsToSee: number };
-  waiting: { reports: number; judge: number; plans: number; deviations: number; expenses: number };
+  /** plansMonth: the month (YYYY-MM) of the oldest tour plan waiting, null when none waits. */
+  waiting: { reports: number; judge: number; plans: number; plansMonth: string | null; deviations: number; expenses: number };
   /** SEFMED's dashboard: the app's clients, closed calls today / this week / this month, the
    *  Call Champion (most calls closed today), and the field's activity today. */
   clients: { doctors: number; hospitals: number; firms: number };
   closed: { today: number; week: number; month: number };
   champions: { id: number; name: string; closed: number }[];
-  feed: { at: string; name: string; what: "checked_in" | "closed"; client: string; visitId: number; meeting: Meeting | null; booked: number }[];
+  feed: { at: string; name: string; personId: number; what: "checked_in" | "closed"; client: string; visitId: number; meeting: Meeting | null; booked: number }[];
 };
 
 export type LeadQueue = {

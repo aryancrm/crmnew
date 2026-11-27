@@ -62,6 +62,11 @@ export function FieldReportPage() {
   };
   const visitsOn = me && ["team_lead", "manager"].includes(me.role);
   const plansWaiting = data.people.filter((one) => one.plan === "sent");
+  // A person's visits for the range shown (the visits page shows a day or a month): the month when
+  // the range is days of one month, else its first day.
+  const oneMonth = data.from !== data.to && data.from.slice(0, 7) === data.to.slice(0, 7);
+  const visitsOf = (personId: number) =>
+    `/visits?person=${personId}&${oneMonth ? `month=${data.from.slice(0, 7)}` : `day=${data.from}`}`;
 
   return (
     <div className={`flex flex-col gap-4 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
@@ -192,10 +197,10 @@ export function FieldReportPage() {
             </thead>
             <tbody className="divide-y divide-slate-100">
               {rows.map((one) => (
-                <tr key={one.personId} onClick={open(`/visits?person=${one.personId}&day=${data.to}`)} className="cursor-pointer hover:bg-slate-50/70">
+                <tr key={one.personId} onClick={open(visitsOf(one.personId))} className="cursor-pointer hover:bg-slate-50/70">
                   <td className="px-4 py-2.5">
                     <Link
-                      to={`/visits?person=${one.personId}&day=${data.to}`}
+                      to={visitsOf(one.personId)}
                       className="font-semibold text-slate-900 hover:text-emerald-700"
                     >
                       {named(one.personId, one.name)}

@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useHqNames } from "../team/hq-name";
 import { Button, CARD, PageState, Problem, peso, useAction } from "../ui";
 import { clockOf, dayWords, FIELD, Label, minutesWords, MrHead, PlaceLink, StatePill, whereAmI } from "./parts";
 
@@ -26,6 +27,8 @@ export function MrDayReportPage() {
   const [reasons, setReasons] = useState<Record<number, { reason: MissReason | ""; note: string }>>({});
   const [note, setNote] = useState("");
   const [seenNote, setSeenNote] = useState("");
+  // Whose day, after their HQ (Aryan's phase 5, PLAN 269).
+  const { named } = useHqNames();
   const data = query.data;
   if (!data) return <PageState query={query} what="the day report" />;
   const s = data.state;
@@ -47,7 +50,7 @@ export function MrDayReportPage() {
   const allGiven = data.open.every((one) => reasons[one.id]?.reason && (reasons[one.id]?.reason !== "other" || reasons[one.id]?.note.trim()));
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-4 pb-10">
-      <MrHead title="Day report" back="/field" sub={`${data.person.name} · ${dayWords(data.day)}`} />
+      <MrHead title="Day report" back="/field" sub={`${named(data.person.id, data.person.name)} · ${dayWords(data.day)}`} />
       {!s ? (
         <div className={`${CARD} px-4 py-8 text-center text-sm text-slate-500`}>The day hasn't started (no Start working).</div>
       ) : (

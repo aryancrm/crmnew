@@ -7,11 +7,12 @@ import type { VisitPlanPage as PlanData, PlanStatus, VisitClass } from "@2mg/api
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronLeft, ChevronRight, Send, Sparkles, Undo2 } from "lucide-react";
 import { type FormEvent, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { EmptyState } from "../no-results";
 import { FIELD } from "../org/dialogs";
 import { Ring } from "../team/charts";
+import { hqName } from "../team/hq-name";
 import { Button, CARD, Dialog, PageHead, PageState, Problem, useAction } from "../ui";
 
 export const PLAN_WORDS: Record<PlanStatus, { word: string; tone: string }> = {
@@ -45,7 +46,6 @@ const dayWords = (day: string) =>
   });
 
 export function VisitPlanPage() {
-  const navigate = useNavigate();
   const queries = useQueryClient();
   const [params, setParams] = useSearchParams();
   const person = params.get("person");
@@ -77,28 +77,7 @@ export function VisitPlanPage() {
 
   return (
     <div className={`flex flex-col gap-4 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
-      {!mine && (
-        <nav
-          aria-label="Where you are"
-          className="flex items-center gap-1.5 text-xs text-slate-500"
-        >
-          <button
-            type="button"
-            onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/field/report"))}
-            aria-label="Back"
-            className="mr-1 grid size-6 place-items-center rounded-full border border-slate-200 bg-white text-slate-500 shadow-sm hover:border-emerald-300 hover:text-emerald-700"
-          >
-            <ChevronLeft className="size-3.5" />
-          </button>
-          <Link to="/field/report" className="hover:text-slate-800">
-            Visits report
-          </Link>
-          <span aria-hidden="true" className="text-slate-300">
-            ›
-          </span>
-          <span className="font-medium text-slate-700">{data.person.name}</span>
-        </nav>
-      )}
+      {/* One way back: the shell's ‹ over every page (its own crumb here made two). */}
       <PageHead
         // The tour plan seen by customer (one plan, two views: the calendar is the other).
         title={mine ? "My tour plan · by customer" : `${data.person.name}'s tour plan · by customer`}
@@ -112,7 +91,8 @@ export function VisitPlanPage() {
             </span>
           )
         }
-        sub={`${data.customers.length} customers · ${workDays} working days${data.person.area ? ` · ${data.person.area}` : ""}`}
+        // The person's HQ ("TAFT"), never the territory's whole name ("RX | TAFT").
+        sub={`${data.customers.length} customers · ${workDays} working days${data.person.area ? ` · ${hqName(data.person.area, data.person.name)}` : ""}`}
         actions={
           <div className="flex flex-wrap items-center gap-1">
             <Link

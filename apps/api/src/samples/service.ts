@@ -467,18 +467,18 @@ export async function teamSamples(db: Database, me: Me, asked: { month?: string 
     });
   const counts = await rows<TeamSamples["counts"][number]>(
     db,
-    sql`select p.name as person, x.kind, m.name as medicine, x.qty::int as difference, x.reason, x.at::text as at
+    sql`select p.id::int as "personId", p.name as person, x.kind, m.name as medicine, x.qty::int as difference, x.reason, x.at::text as at
       from sample_move x join person p on p.id = x.person_id join medicine m on m.id = x.medicine_id
       where x.what = 'counted' and x.qty <> 0 and to_char(x.at at time zone 'Asia/Manila', 'YYYY-MM') = ${month} and ${scope}
       order by x.at desc`,
   );
   const doctors = await rows<TeamSamples["doctors"][number]>(
     db,
-    sql`select c.id::int as "customerId", c.name as doctor, p.name as person, string_agg(distinct m.name, ', ') as medicines,
+    sql`select c.id::int as "customerId", c.name as doctor, p.id::int as "personId", p.name as person, string_agg(distinct m.name, ', ') as medicines,
         sum(-x.qty)::int as pieces, count(distinct x.visit_id)::int as visits
       from sample_move x join person p on p.id = x.person_id join customer c on c.id = x.customer_id join medicine m on m.id = x.medicine_id
       where x.what = 'given' and to_char(x.at at time zone 'Asia/Manila', 'YYYY-MM') = ${month} and ${scope}
-      group by c.id, c.name, p.name order by pieces desc`,
+      group by c.id, c.name, p.id, p.name order by pieces desc`,
   );
   return { month, reps, requests, counts, doctors, can: { send: ISSUE_ROLES.includes(me.role) } };
 }

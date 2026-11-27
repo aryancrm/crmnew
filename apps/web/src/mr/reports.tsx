@@ -10,9 +10,11 @@ import { BarChart3, CalendarCheck, ClipboardList, ListChecks, PhoneOff, Scale, S
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useMe } from "../auth";
+import { useHqNames } from "../team/hq-name";
 import { manilaToday } from "../team/range";
 import { TeamSwitch, useTeamUnit, withUnit } from "../team/switch";
-import { Button, CARD, Dialog, PageState, Problem, useAction } from "../ui";
+import { Button, CARD, Dialog, PageState, Problem, useAction, useOpenOnPress } from "../ui";
 import { clockOf, dayWords, Initial, MrHead, monthWords, shiftMonth, StatePill, useMrMe } from "./parts";
 import { EmptyState } from "../no-results";
 
@@ -73,6 +75,8 @@ function CallReports({ missed }: { missed: boolean }) {
   const [status, setStatus] = useState(missed ? "missed" : "");
   const [open, setOpen] = useState<CallRow | null>(null);
   const unit = useTeamUnit();
+  // Each person after their HQ (Aryan's phase 5, PLAN 269).
+  const { named } = useHqNames();
   const query = useQuery({
     queryKey: ["mr", "report", "calls", from, to, person, status, unit],
     queryFn: () =>
@@ -93,7 +97,7 @@ function CallReports({ missed }: { missed: boolean }) {
         {data.people.length > 0 ? (
           <select aria-label="Employee" className="h-9 rounded-lg border border-slate-300 px-2 text-sm" value={person} onChange={(event) => setPerson(event.target.value)}>
             <option value="">All</option>
-            {data.people.map((one) => <option key={one.id} value={one.id}>{one.name}</option>)}
+            {data.people.map((one) => <option key={one.id} value={one.id}>{named(one.id, one.name)}</option>)}
           </select>
         ) : <span />}
         <select aria-label="Status" className="h-9 rounded-lg border border-slate-300 px-2 text-sm" value={status} onChange={(event) => setStatus(event.target.value)}>
@@ -113,7 +117,7 @@ function CallReports({ missed }: { missed: boolean }) {
               <span className="min-w-0 flex-1">
                 <span className="flex justify-between gap-2"><b className="truncate">{one.client.name}</b><StatePill visit={one} /></span>
                 <span className="flex justify-between gap-2 text-xs text-slate-500"><span>{one.client.city}</span><span>{dayWords(one.day)}</span></span>
-                <span className="block text-xs text-slate-600">Emp name: {one.person.name}</span>
+                <span className="block text-xs text-slate-600">Emp name: {named(one.person.id, one.person.name)}</span>
               </span>
             </button>
           </li>
@@ -122,7 +126,7 @@ function CallReports({ missed }: { missed: boolean }) {
       {open && (
         <Dialog title="Visit details" onClose={() => setOpen(null)}>
           <dl className="grid gap-1.5 text-sm">
-            <Line label="Employee name" value={open.person.name} />
+            <Line label="Employee name" value={named(open.person.id, open.person.name)} />
             <Line label="Client name" value={open.client.name} />
             <Line label="Client no" value={open.client.code} />
             <Line label="Visit date" value={dayWords(open.day)} />
@@ -163,6 +167,8 @@ function Attendance() {
   const [params, setParams] = useSearchParams();
   const [month, setMonth] = useState(manilaToday().slice(0, 7));
   const person = params.get("person");
+  // Each person after their HQ (Aryan's phase 5, PLAN 269).
+  const { named } = useHqNames();
   const query = useQuery({
     queryKey: ["mr", "report", "attendance", month, person],
     queryFn: () =>
@@ -180,7 +186,7 @@ function Attendance() {
   const blank = new Date(`${data.month}-01T00:00:00Z`).getUTCDay();
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-3">
-      <MrHead title="Attendance report" back="/field/reports" sub={data.person.name} />
+      <MrHead title="Attendance report" back="/field/reports" sub={named(data.person.id, data.person.name)} />
       <div className="flex flex-wrap items-center gap-2">
         <Button small variant="quiet" onClick={() => setMonth(shiftMonth(month, -1))}>‹</Button>
         <span className="text-sm font-semibold">{monthWords(data.month)}</span>
@@ -188,7 +194,7 @@ function Attendance() {
         {data.people.length > 0 && (
           <select aria-label="Whose" className="h-9 rounded-lg border border-slate-300 px-2 text-sm" value={person ?? ""} onChange={(event) => { const out = new URLSearchParams(params); if (event.target.value) out.set("person", event.target.value); else out.delete("person"); setParams(out, { replace: true }); }}>
             <option value="">Mine</option>
-            {data.people.map((one) => <option key={one.id} value={one.id}>{one.name}</option>)}
+            {data.people.map((one) => <option key={one.id} value={one.id}>{named(one.id, one.name)}</option>)}
           </select>
         )}
       </div>
@@ -219,6 +225,8 @@ function Attendance() {
 function LeadLists({ judge }: { judge: boolean }) {
   const unit = useTeamUnit();
   const query = useQuery({ queryKey: ["mr", "queue", unit], queryFn: () => api<LeadQueue>(withUnit("/api/mr/team/queue", unit)) });
+  // Each person after their HQ (Aryan's phase 5, PLAN 269).
+  const { named } = useHqNames();
   if (!query.data) return <PageState query={query} what="the list" />;
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-3">
@@ -229,7 +237,7 @@ function LeadLists({ judge }: { judge: boolean }) {
           ? query.data.judge.map((one) => (
               <li key={one.id}>
                 <Link to={`/visits/${one.id}`} className={`${CARD} block p-3 text-sm hover:border-sky-300`}>
-                  <b>{one.client.name}</b> · {one.person.name} · {dayWords(one.day)}
+                  <b>{one.client.name}</b> · {named(one.person.id, one.person.name)} · {dayWords(one.day)}
                   {one.feedback && <div className="text-slate-500">“{one.feedback}”</div>}
                 </Link>
               </li>
@@ -237,7 +245,7 @@ function LeadLists({ judge }: { judge: boolean }) {
           : query.data.reports.map((one) => (
               <li key={`${one.personId}-${one.day}`}>
                 <Link to={`/field/day-report?person=${one.personId}&day=${one.day}`} className={`${CARD} block p-3 text-sm hover:border-sky-300`}>
-                  <b>{one.name}</b> · {dayWords(one.day)} · {one.done} closed{one.missed ? ` · ${one.missed} missed` : ""}
+                  <b>{named(one.personId, one.name)}</b> · {dayWords(one.day)} · {one.done} closed{one.missed ? ` · ${one.missed} missed` : ""}
                 </Link>
               </li>
             ))}
@@ -255,9 +263,21 @@ function LeadLists({ judge }: { judge: boolean }) {
 
 export function MrFollowUpsPage() {
   const [done, setDone] = useState(false);
+  // Whose: ?person=all is the team's (Team today's link), a person's id theirs, none one's own.
+  const [params] = useSearchParams();
+  const person = params.get("person");
   const queries = useQueryClient();
   const action = useAction();
-  const query = useQuery({ queryKey: ["mr", "follow-ups", done], queryFn: () => api<{ rows: FollowUpRow[] }>(`/api/mr/follow-ups${done ? "?status=done" : ""}`) });
+  const me = useMe().data;
+  // Each person after their HQ (Aryan's phase 5, PLAN 269).
+  const { named } = useHqNames();
+  // A follow-up opens its customer when pressed anywhere on it, as its name does (PLAN 271).
+  const open = useOpenOnPress();
+  const query = useQuery({
+    queryKey: ["mr", "follow-ups", done, person],
+    queryFn: () =>
+      api<{ rows: FollowUpRow[] }>(`/api/mr/follow-ups?${new URLSearchParams({ ...(done ? { status: "done" } : {}), ...(person ? { person } : {}) })}`),
+  });
   const today = manilaToday();
   if (!query.data) return <PageState query={query} what="the follow-ups" />;
   return (
@@ -265,15 +285,20 @@ export function MrFollowUpsPage() {
       <MrHead title="Follow-ups" back="/field" actions={<Button small variant="quiet" onClick={() => setDone(!done)}>{done ? "Open ones" : "Done ones"}</Button>} />
       <ul className="flex flex-col gap-2">
         {query.data.rows.map((one) => (
-          <li key={one.id} className={`${CARD} flex flex-wrap items-center justify-between gap-2 p-3 text-sm`}>
+          <li
+            key={one.id}
+            onClick={open(`/field/clients/${one.client.id}`)}
+            className={`${CARD} flex cursor-pointer flex-wrap items-center justify-between gap-2 p-3 text-sm hover:bg-slate-50`}
+          >
             <span className="min-w-0">
               <b className={one.status === "open" && one.dueOn < today ? "text-rose-700" : ""}>{dayWords(one.dueOn)}</b> · {FOLLOW_UP_WORDS[one.kind]}: {one.what}
               <span className="block text-xs text-slate-500">
-                <Link to={`/field/clients/${one.client.id}`} className="hover:underline">{one.client.name}</Link> · {one.person.name}
+                <Link to={`/field/clients/${one.client.id}`} className="hover:underline">{one.client.name}</Link> · {named(one.person.id, one.person.name)}
                 {one.doneNote ? ` · ${one.doneNote}` : ""}
               </span>
             </span>
-            {one.status === "open" && (
+            {/* Marked done by the one whose follow-up it is (as the server allows), not by the lead. */}
+            {one.status === "open" && one.person.id === me?.id && (
               <Button small disabled={action.busy} onClick={() => action.run(async () => { await api(`/api/mr/follow-ups/${one.id}`, { body: { drop: false } }); await queries.invalidateQueries({ queryKey: ["mr"] }); })}>Done</Button>
             )}
           </li>

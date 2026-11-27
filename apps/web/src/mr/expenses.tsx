@@ -114,7 +114,17 @@ export function MrExpensesPage() {
         </div>
         <ul className="divide-y divide-slate-100">
           {rows.map((one) => (
-            <li key={one.id} className="grid grid-cols-[1fr_3.25rem_3.75rem_3.75rem_1.75rem] items-center gap-1 px-3 py-2 text-[13px]">
+            <li
+              key={one.id}
+              // A press anywhere on the line opens what its ⋮ opens (PLAN 271); the ⋮ stays, for the
+              // keyboard. Selecting its text doesn't open it.
+              onClick={(event) => {
+                if ((event.target as HTMLElement).closest("a, button, input, select, textarea, label")) return;
+                if (window.getSelection()?.toString()) return;
+                setOpen({ what: "line", row: one });
+              }}
+              className="grid cursor-pointer grid-cols-[1fr_3.25rem_3.75rem_3.75rem_1.75rem] items-center gap-1 px-3 py-2 text-[13px] hover:bg-slate-50"
+            >
               <span className="min-w-0">
                 <span className="block truncate">{one.headName}</span>
                 <span className={`block truncate text-[11px] font-semibold ${one.status === "approved" ? "text-emerald-700" : one.status === "sent_back" ? "text-rose-700" : one.status === "pending" ? "text-amber-700" : "text-slate-400"}`}>

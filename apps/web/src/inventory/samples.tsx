@@ -11,6 +11,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type FormEvent, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useHqNames } from "../team/hq-name";
 import { Dialog, PageState, useAction, useOpenOnPress } from "../ui";
 import { EmptyState } from "../no-results";
 
@@ -273,6 +274,8 @@ export function TeamSamplesPage() {
   const [params, setParams] = useSearchParams();
   // A press anywhere on a row opens it, not only its name (Aryan, 28 Nov, PLAN 271).
   const open = useOpenOnPress();
+  // Each rep after their HQ (Aryan's phase 5, PLAN 269): "TAFT · Marwin Dy".
+  const { named } = useHqNames();
   const month = params.get("month") ?? thisMonth();
   const query = useQuery({ queryKey: ["samples", "team", month], queryFn: () => api<TeamSamples>(`/api/samples/team?month=${month}`) });
   const run = useRun();
@@ -309,7 +312,7 @@ export function TeamSamplesPage() {
         {data.requests.map((one) => (
           <div key={one.id} className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-2 text-sm last:border-b-0">
             <span>
-              <b>{one.code}</b> · {one.person} · <span className="capitalize">{one.kind}</span>: {one.lines.map((line) => `${line.medicine} ${line.qty}`).join(", ")}
+              <b>{one.code}</b> · {named(one.personId, one.person)} · <span className="capitalize">{one.kind}</span>: {one.lines.map((line) => `${line.medicine} ${line.qty}`).join(", ")}
               {one.note && <span className="text-slate-500"> · {one.note}</span>}
             </span>
             <span className="flex items-center gap-2 text-xs">
@@ -355,7 +358,7 @@ export function TeamSamplesPage() {
                 <tr key={one.personId} onClick={open(`/me/samples?rep=${one.personId}`)} className="cursor-pointer border-t border-slate-100 hover:bg-slate-50">
                   <td className="px-3 py-2">
                     <Link to={`/me/samples?rep=${one.personId}`} className="font-semibold text-brand hover:underline">
-                      {one.name}
+                      {named(one.personId, one.name)}
                     </Link>
                   </td>
                   <td className="px-3 py-2 text-right tabular-nums">{one.samples}</td>
@@ -379,7 +382,7 @@ export function TeamSamplesPage() {
           {data.counts.map((one, n) => (
             <div key={`${one.at}-${n}`} className="flex justify-between gap-2 border-b border-slate-100 px-4 py-2 text-sm last:border-b-0">
               <span>
-                {one.person} · {one.medicine} <span className="text-slate-500">({one.kind})</span>
+                {named(one.personId, one.person)} · {one.medicine} <span className="text-slate-500">({one.kind})</span>
               </span>
               <span>
                 <b className={one.difference < 0 ? "text-rose-700" : "text-emerald-700"}>{one.difference > 0 ? `+${one.difference}` : one.difference}</b>{" "}
@@ -393,7 +396,7 @@ export function TeamSamplesPage() {
           <h2 className="border-b border-slate-100 px-4 py-3 text-sm font-semibold">Given by doctor</h2>
           {data.doctors.map((one) => (
             <div
-              key={`${one.customerId}-${one.person}`}
+              key={`${one.customerId}-${one.personId}`}
               onClick={open(`/customers/${one.customerId}`)}
               className="flex cursor-pointer justify-between gap-2 border-b border-slate-100 px-4 py-2 text-sm last:border-b-0 hover:bg-slate-50"
             >
@@ -401,7 +404,7 @@ export function TeamSamplesPage() {
                 <Link to={`/customers/${one.customerId}`} className="font-semibold text-brand hover:underline">
                   {one.doctor}
                 </Link>{" "}
-                <span className="text-slate-500">· {one.person} · {one.medicines}</span>
+                <span className="text-slate-500">· {named(one.personId, one.person)} · {one.medicines}</span>
               </span>
               <span className="tabular-nums">
                 {one.pieces} pcs · {one.visits} visits

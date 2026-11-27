@@ -435,6 +435,8 @@ describe("the tour plan", () => {
     const visitId = (added.ids as number[])[0] as number;
     await ok("ryan", "/api/mr/plan/send", { month: nextMonth });
     expect((await send("ryan", "/api/mr/plan/send", { month: nextMonth })).status).toBe(409);
+    // Team today's "Tour plans to approve" opens on the month of the plan waiting.
+    expect((await read<TeamToday>("daniel", "/api/mr/team")).waiting).toMatchObject({ plans: 1, plansMonth: nextMonth });
     const team = await read<{ people: { id: number; status: string | null }[] }>("daniel", `/api/mr/plan/team?month=${nextMonth}`);
     expect(team.people.find((one) => one.id === ids.ryan)?.status).toBe("sent");
     const sent = await read<PlanMonth>("daniel", `/api/mr/plan?person=${ids.ryan}&month=${nextMonth}`);
@@ -454,5 +456,27 @@ describe("the tour plan", () => {
     expect((await send("naresh", `/api/mr/deviations/${waiting.rows[0]?.id}`, { approve: true })).status).toBe(403);
     await ok("daniel", `/api/mr/deviations/${waiting.rows[0]?.id}`, { approve: true });
     expect((await read<{ rows: unknown[] }>("daniel", "/api/mr/deviations")).rows).toHaveLength(0);
+  });
+});
+
+// Last, as it adds a call of the team lead's own today.
+describe("Team today counts as its list of people does", () => {
+  it("leaves the one looking out of closed visits, Call Champion and the feed; the head above counts them", async () => {
+    const before = await read<TeamToday>("daniel", "/api/mr/team");
+    // The team lead closes a call of his own today.
+    const [own] = await rows<{ id: number }>(
+      db,
+      sql`insert into visit (person_id, customer_id, day, status, checked_in_at, done_at, made_by)
+        values (${ids.daniel}, ${customers.firm}, ${today()}::date, 'done', now(), now(), ${ids.daniel}) returning id::int as id`,
+    );
+    const lead = await read<TeamToday>("daniel", "/api/mr/team");
+    expect(lead.people.map((one) => one.id)).not.toContain(ids.daniel);
+    expect(lead.closed).toEqual(before.closed);
+    expect(lead.champions.map((one) => one.id)).not.toContain(ids.daniel);
+    expect(lead.feed.map((one) => one.personId)).not.toContain(ids.daniel);
+    // The head above him counts it: he is one of her team.
+    const head = await read<TeamToday>("vanessa", "/api/mr/team");
+    expect(head.champions.map((one) => one.id)).toContain(ids.daniel);
+    expect(head.feed.filter((one) => one.visitId === own?.id).map((one) => one.personId)).toEqual([ids.daniel, ids.daniel]);
   });
 });

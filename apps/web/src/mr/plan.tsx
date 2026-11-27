@@ -478,8 +478,8 @@ function DecideDialog({ data, approve, onClose }: { data: PlanMonth; approve: bo
               await api("/api/mr/plan/decide", { body: { person: data.person.id, month: data.month, approve, note: note || null } });
               await queries.invalidateQueries({ queryKey: ["mr"] });
               onClose();
-              // Back to the team's plans: the next one waiting is there.
-              navigate("/field/plan?view=team");
+              // Back to the team's plans of the same month: the next one waiting is there.
+              navigate(`/field/plan?view=team&month=${data.month.slice(0, 7)}`);
             })
           }
         >
@@ -494,6 +494,8 @@ function DeviationList({ rows, decide }: { rows: DeviationRow[]; decide?: boolea
   const queries = useQueryClient();
   const action = useAction();
   const [notes, setNotes] = useState<Record<number, string>>({});
+  // Each person after their HQ (Aryan's phase 5, PLAN 269).
+  const { named } = useHqNames();
   return (
     <section className={`${CARD} p-4`}>
       <h2 className="mb-2 text-sm font-bold">Tour plan deviations</h2>
@@ -505,7 +507,7 @@ function DeviationList({ rows, decide }: { rows: DeviationRow[]; decide?: boolea
               <span className={one.status === "waiting" ? "text-amber-700" : one.status === "approved" ? "text-emerald-700" : "text-rose-700"}>{one.status}</span>
             </div>
             <div className="text-slate-600">
-              {one.person.name} · {dayWords(one.day)}
+              {named(one.person.id, one.person.name)} · {dayWords(one.day)}
               {one.fromDay && one.toDay ? ` · ${dayWords(one.fromDay)} → ${dayWords(one.toDay)}` : ""}
             </div>
             <div>{one.note}</div>
@@ -566,7 +568,15 @@ function TeamPlans() {
   const unit = useTeamUnit();
   // Each MedRep after their HQ (Aryan's phase 5, PLAN 269).
   const { named } = useHqNames();
-  const [month, setMonth] = useState(manilaToday().slice(0, 7));
+  // The month in the address (Team today sends the oldest plan waiting's), else this month.
+  const [params, setParams] = useSearchParams();
+  const asked = params.get("month");
+  const month = asked && /^\d{4}-\d{2}$/.test(asked) ? asked : manilaToday().slice(0, 7);
+  const setMonth = (next: string) => {
+    const out = new URLSearchParams(params);
+    out.set("month", next);
+    setParams(out, { replace: true });
+  };
   const query = useQuery({
     queryKey: ["mr", "plan", "team", month, unit],
     queryFn: () => api<TeamPlans>(withUnit(`/api/mr/plan/team?month=${month}`, unit)),
