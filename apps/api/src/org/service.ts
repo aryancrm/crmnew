@@ -634,7 +634,7 @@ function checkLeadWork(module: Role, lead: boolean): void {
     throw new Refusal(400, "invalid", "The seat that leads a team works as its team lead (or its head).", "module");
 }
 
-async function makeSeat(tx: Runner, input: OrgSeatInput): Promise<number> {
+export async function makeSeat(tx: Runner, input: OrgSeatInput): Promise<number> {
   const unit = await unitRow(tx, input.unitId);
   const title = input.title.trim();
   if (!title) throw new Refusal(400, "invalid", "Name the job (its title).", "title");
@@ -886,30 +886,33 @@ export async function updateSeat(
 /** Closes a vacant seat. Its area is free for another seat; its history stays. */
 export async function closeSeat(db: Database, me: Me, seatId: number): Promise<void> {
   allow(me, ORG_CHANGE_ROLES, "close seats");
-  await change(db, async (tx, today) => {
-    const seat = await seatRow(tx, seatId, today);
-    if (seat.holderId)
-      throw new Refusal(
-        409,
-        "taken",
-        `${seat.holder} sits in "${seat.title}": move them or mark them as left first.`,
-      );
-    const [reporting] = await rows<{ n: number }>(
-      tx,
-      sql`select count(*)::int as n from seat where reports_to_seat_id = ${seat.id} and active`,
+  await change(db, (tx, today) => closeSeatIn(tx, me, seatId, today));
+}
+
+/** closeSeat's work inside a change already open (a head closing an HQ, PLAN 264). */
+export async function closeSeatIn(tx: Runner, me: Me, seatId: number, today: string): Promise<void> {
+  const seat = await seatRow(tx, seatId, today);
+  if (seat.holderId)
+    throw new Refusal(
+      409,
+      "taken",
+      `${seat.holder} sits in "${seat.title}": move them or mark them as left first.`,
     );
-    if (reporting?.n)
-      throw new Refusal(
-        409,
-        "in_use",
-        `${reporting.n} seat${reporting.n === 1 ? " reports" : "s report"} to "${seat.title}": point them elsewhere first.`,
-      );
-    await tx.execute(
-      sql`update seat_holder set ends_on = greatest(${addDays(today, -1)}::date, starts_on - 1), end_reason = 'Seat closed', ended_by = ${me.id}
-        where seat_id = ${seat.id} and (ends_on is null or ends_on >= ${today}::date)`,
+  const [reporting] = await rows<{ n: number }>(
+    tx,
+    sql`select count(*)::int as n from seat where reports_to_seat_id = ${seat.id} and active`,
+  );
+  if (reporting?.n)
+    throw new Refusal(
+      409,
+      "in_use",
+      `${reporting.n} seat${reporting.n === 1 ? " reports" : "s report"} to "${seat.title}": point them elsewhere first.`,
     );
-    await tx.execute(sql`update seat set active = false, closed_at = now() where id = ${seat.id}`);
-  });
+  await tx.execute(
+    sql`update seat_holder set ends_on = greatest(${addDays(today, -1)}::date, starts_on - 1), end_reason = 'Seat closed', ended_by = ${me.id}
+      where seat_id = ${seat.id} and (ends_on is null or ends_on >= ${today}::date)`,
+  );
+  await tx.execute(sql`update seat set active = false, closed_at = now() where id = ${seat.id}`);
 }
 
 /** A person already here sits in a vacant seat: moving out of their seat, or keeping it too. */
@@ -961,75 +964,81 @@ async function heldSeats(tx: Runner, personId: number, today: string): Promise<n
   return found.map((one) => one.id);
 }
 
+/** Who takes a vacant seat, from when, and why. */
+type FillInput = {
+  personId: number;
+  keepOther?: boolean;
+  reason?: string | null;
+  startsOn?: string | null;
+  moveKind?: MoveKind | null;
+};
+
 export async function fillSeat(
   db: Database,
   me: Me,
   seatId: number,
-  input: {
-    personId: number;
-    keepOther?: boolean;
-    reason?: string | null;
-    startsOn?: string | null;
-    moveKind?: MoveKind | null;
-  },
+  input: FillInput,
   roles: readonly Role[] = ORG_CHANGE_ROLES,
 ): Promise<void> {
   allow(me, roles, "move people");
-  await change(db, async (tx, today) => {
-    const seat = await seatRow(tx, seatId, today);
-    if (seat.holderId === input.personId)
-      throw new Refusal(409, "taken", `${seat.holder} already sits there.`);
-    if (seat.holderId)
-      throw new Refusal(
-        409,
-        "taken",
-        `${seat.holder} sits in "${seat.title}": it isn't vacant.`,
-        "seatId",
-      );
-    await refuseIfPromised(tx, seat.id, today);
-    const person = await activePerson(tx, input.personId);
-    // HR's move may be planned for a later day (up to three months, as a joiner's first day); the
-    // tree switches by itself that morning.
-    const starts = input.moveKind ? moveDay(input.startsOn, today) : startDay(input.startsOn, today);
-    const reason = clean(input.reason);
-    const before = input.keepOther ? [] : await heldSeats(tx, person.id, starts);
-    if (!input.keepOther)
-      await tx.execute(
-        sql`update seat_holder set ends_on = greatest(${addDays(starts, -1)}::date, starts_on - 1),
-            end_reason = ${reason ?? `Moved to ${seat.title}`}, ended_by = ${me.id}
-          where person_id = ${person.id} and kind = 'holder' and (ends_on is null or ends_on >= ${starts}::date)`,
-      );
-    // Covering the seat until now ends with taking it.
+  await change(db, (tx, today) => fillSeatIn(tx, me, seatId, input, today));
+}
+
+/** fillSeat's work inside a change already open (a head putting someone in an HQ, PLAN 264). */
+export async function fillSeatIn(tx: Runner, me: Me, seatId: number, input: FillInput, today: string): Promise<void> {
+  const seat = await seatRow(tx, seatId, today);
+  if (seat.holderId === input.personId)
+    throw new Refusal(409, "taken", `${seat.holder} already sits there.`);
+  if (seat.holderId)
+    throw new Refusal(
+      409,
+      "taken",
+      `${seat.holder} sits in "${seat.title}": it isn't vacant.`,
+      "seatId",
+    );
+  await refuseIfPromised(tx, seat.id, today);
+  const person = await activePerson(tx, input.personId);
+  // HR's move may be planned for a later day (up to three months, as a joiner's first day); the
+  // tree switches by itself that morning.
+  const starts = input.moveKind ? moveDay(input.startsOn, today) : startDay(input.startsOn, today);
+  const reason = clean(input.reason);
+  const before = input.keepOther ? [] : await heldSeats(tx, person.id, starts);
+  if (!input.keepOther)
     await tx.execute(
-      sql`update seat_holder set ends_on = greatest(${addDays(starts, -1)}::date, starts_on - 1), end_reason = 'Took the seat', ended_by = ${me.id}
-        where seat_id = ${seat.id} and kind = 'acting' and person_id = ${person.id} and (ends_on is null or ends_on >= ${starts}::date)`,
+      sql`update seat_holder set ends_on = greatest(${addDays(starts, -1)}::date, starts_on - 1),
+          end_reason = ${reason ?? `Moved to ${seat.title}`}, ended_by = ${me.id}
+        where person_id = ${person.id} and kind = 'holder' and (ends_on is null or ends_on >= ${starts}::date)`,
     );
-    await tx.execute(
-      sql`insert into seat_holder (seat_id, person_id, kind, starts_on, reason, by_person, move_kind)
-        values (${seat.id}, ${person.id}, 'holder', ${starts}::date, ${reason ?? (input.keepOther ? "Second seat" : "Moved")}, ${me.id},
-          ${input.moveKind ?? null})`,
-    );
-    const to = await seatWords(tx, seat.id);
-    const from = await Promise.all(before.filter((id) => id !== seat.id).map((id) => seatWords(tx, id)));
-    const verb = input.keepOther
-      ? `Took a second seat: ${to.place}`
-      : `${input.moveKind ? MOVE_WORD[input.moveKind] : "Moved"} to ${to.place}`;
-    await hrEvent(
-      tx,
-      person.id,
-      me.id,
-      "move",
-      `${verb}${from.length ? `, from ${from.map((one) => one.place).join(", ")}` : ""}, from ${starts}${reason ? `: ${reason}` : ""}`,
-      input.keepOther ? seatChanges([], to) : seatChanges(from, to),
-    );
-    // The seat's targets come with it, from the month they start (not over one already theirs).
-    await tx.execute(
-      sql`insert into sales_target (person_id, month, amount, set_by)
-        select ${person.id}, t.month, t.amount, t.set_by from seat_target t
-        where t.seat_id = ${seat.id} and t.month >= date_trunc('month', ${starts}::date)::date
-        on conflict (person_id, month) do nothing`,
-    );
-  });
+  // Covering the seat until now ends with taking it.
+  await tx.execute(
+    sql`update seat_holder set ends_on = greatest(${addDays(starts, -1)}::date, starts_on - 1), end_reason = 'Took the seat', ended_by = ${me.id}
+      where seat_id = ${seat.id} and kind = 'acting' and person_id = ${person.id} and (ends_on is null or ends_on >= ${starts}::date)`,
+  );
+  await tx.execute(
+    sql`insert into seat_holder (seat_id, person_id, kind, starts_on, reason, by_person, move_kind)
+      values (${seat.id}, ${person.id}, 'holder', ${starts}::date, ${reason ?? (input.keepOther ? "Second seat" : "Moved")}, ${me.id},
+        ${input.moveKind ?? null})`,
+  );
+  const to = await seatWords(tx, seat.id);
+  const from = await Promise.all(before.filter((id) => id !== seat.id).map((id) => seatWords(tx, id)));
+  const verb = input.keepOther
+    ? `Took a second seat: ${to.place}`
+    : `${input.moveKind ? MOVE_WORD[input.moveKind] : "Moved"} to ${to.place}`;
+  await hrEvent(
+    tx,
+    person.id,
+    me.id,
+    "move",
+    `${verb}${from.length ? `, from ${from.map((one) => one.place).join(", ")}` : ""}, from ${starts}${reason ? `: ${reason}` : ""}`,
+    input.keepOther ? seatChanges([], to) : seatChanges(from, to),
+  );
+  // The seat's targets come with it, from the month they start (not over one already theirs).
+  await tx.execute(
+    sql`insert into sales_target (person_id, month, amount, set_by)
+      select ${person.id}, t.month, t.amount, t.set_by from seat_target t
+      where t.seat_id = ${seat.id} and t.month >= date_trunc('month', ${starts}::date)::date
+      on conflict (person_id, month) do nothing`,
+  );
 }
 
 /** Someone covers a seat until a day (while it is empty or its person is away). */
@@ -1092,27 +1101,36 @@ export async function endHolding(
   roles: readonly Role[] = ORG_CHANGE_ROLES,
 ): Promise<void> {
   allow(me, roles, "end a cover");
-  await change(db, async (tx, today) => {
-    const [found] = await rows<{ id: number; personId: number; seatId: number; kind: "holder" | "acting" }>(
-      tx,
-      sql`select id::int as id, person_id::int as "personId", seat_id::int as "seatId", kind
-        from seat_holder h where id = ${holdingId} and ${inForce("h", today)}`,
-    );
-    if (!found) throw new Refusal(404, "not_found", "That isn't in force any more.");
-    await tx.execute(
-      sql`update seat_holder set ends_on = greatest(${addDays(today, -1)}::date, starts_on - 1),
-          end_reason = ${clean(reason) ?? "Ended"}, ended_by = ${me.id} where id = ${holdingId}`,
-    );
-    const place = await seatWords(tx, found.seatId);
-    await hrEvent(
-      tx,
-      found.personId,
-      me.id,
-      "move",
-      `${found.kind === "acting" ? "Cover of" : "Stepped out of"} ${place.place} ended${clean(reason) ? `: ${clean(reason)}` : ""}`,
-      found.kind === "acting" ? [] : seatChanges([place], null),
-    );
-  });
+  await change(db, (tx, today) => endHoldingIn(tx, me, holdingId, reason, today));
+}
+
+/** endHolding's work inside a change already open (a head emptying an HQ, PLAN 264). */
+export async function endHoldingIn(
+  tx: Runner,
+  me: Me,
+  holdingId: number,
+  reason: string | null | undefined,
+  today: string,
+): Promise<void> {
+  const [found] = await rows<{ id: number; personId: number; seatId: number; kind: "holder" | "acting" }>(
+    tx,
+    sql`select id::int as id, person_id::int as "personId", seat_id::int as "seatId", kind
+      from seat_holder h where id = ${holdingId} and ${inForce("h", today)}`,
+  );
+  if (!found) throw new Refusal(404, "not_found", "That isn't in force any more.");
+  await tx.execute(
+    sql`update seat_holder set ends_on = greatest(${addDays(today, -1)}::date, starts_on - 1),
+        end_reason = ${clean(reason) ?? "Ended"}, ended_by = ${me.id} where id = ${holdingId}`,
+  );
+  const place = await seatWords(tx, found.seatId);
+  await hrEvent(
+    tx,
+    found.personId,
+    me.id,
+    "move",
+    `${found.kind === "acting" ? "Cover of" : "Stepped out of"} ${place.place} ended${clean(reason) ? `: ${clean(reason)}` : ""}`,
+    found.kind === "acting" ? [] : seatChanges([place], null),
+  );
 }
 
 /** Someone leaves the company: their seats stay, vacant; their login is switched off. */

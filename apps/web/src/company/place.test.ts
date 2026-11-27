@@ -13,4 +13,8 @@ describe("a person's area on the tree", () => {
     expect(placeOf(seat("B2C | Mary Jane Vinas", "Mary Jane Viñas"))).toBe("On site");
     expect(placeOf(seat(null))).toBe("On site");
   });
+  it("is On site for an on-site HQ the head made, whoever works it or nobody (PLAN 264)", () => {
+    expect(placeOf(seat("B2C | ON SITE"))).toBe("On site");
+    expect(placeOf({ area: { name: "B2C | ON SITE | 2" }, person: null })).toBe("On site");
+  });
 });

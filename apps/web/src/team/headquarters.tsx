@@ -4,7 +4,8 @@
 // the doctor referral's and the doctor dispense's data, the doctor's name on top and the hospital they
 // work at a little under it. Press the doctor: all their past data, how many orders came from them,
 // what happened, how much they took, how much money is pending." Each channel a row of its HQs, as
-// the team's sheet has them; no Zoho names on the screen ("we are ending Zoho").
+// the team's sheet has them; no Zoho names on the screen ("we are ending Zoho"). The head makes,
+// renames and closes HQs and decides who works each, here (phase 4, PLAN 264, hq-change.tsx).
 
 import type { DoctorHistory, Headquarters, HqDoctor, HqDoctors, RxBusiness } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
@@ -16,6 +17,7 @@ import { exactPeso, monthName, shiftMonth, shortPeso } from "../ceo";
 import { useMe } from "../auth";
 import { EmptyState } from "../no-results";
 import { CARD, Dialog, PageHead, PageState } from "../ui";
+import { HqTools, NewHq } from "./hq-change";
 
 const day = (value: string) =>
   new Date(`${value}T00:00:00Z`).toLocaleDateString("en-PH", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
@@ -100,9 +102,12 @@ export function HeadquartersPage() {
                   {channel.name}
                   {channel.manager && <span className="text-[13px] font-normal text-slate-500"> · Manager: {channel.manager}</span>}
                 </h2>
-                <span className="text-[12.5px] text-slate-500">
-                  {count(channel.hqs.length, "HQ")} · {shortPeso(channel.sold)} sold in {monthName(data.month).split(" ")[0]}
-                </span>
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-[12.5px] text-slate-500">
+                    {count(channel.hqs.length, "HQ")} · {shortPeso(channel.sold)} sold in {monthName(data.month).split(" ")[0]}
+                  </span>
+                  {channel.canChange && <NewHq channel={channel} onMade={setPicked} />}
+                </div>
               </header>
 
               <Row hqs={channel.hqs} picked={picked} onPick={(seatId) => setPicked(picked === seatId ? null : seatId)} />
@@ -113,6 +118,7 @@ export function HeadquartersPage() {
                   month={asked}
                   onDoctor={setDoctor}
                   counts={data.month === current ? (rx.data?.people.find((one) => one.seatId === chosen.seatId) ?? null) : null}
+                  tools={channel.canChange ? <HqTools hq={chosen} onClosed={() => setPicked(null)} /> : null}
                 />
               ) : (
                 <p className="border-t border-slate-100 px-5 py-3 text-[12.5px] text-slate-500">Press a person to see their doctors.</p>
@@ -176,12 +182,15 @@ function Doctors({
   month,
   onDoctor,
   counts,
+  tools,
 }: {
   hq: Hq;
   month: string;
   onDoctor: (doctor: HqDoctor) => void;
   /** This month's doctors of the HQ (the running month only). */
   counts: { prescribers: number; newPrescribers: number } | null;
+  /** The head's buttons: who works it, its name, closing it. */
+  tools?: React.ReactNode;
 }) {
   const query = useQuery({
     queryKey: ["headquarters", hq.seatId, "doctors", month],
@@ -201,6 +210,7 @@ function Doctors({
           {counts ? ` · ${count(counts.prescribers, "doctor")} wrote this month, ${counts.newPrescribers} new` : ""}
         </p>
       </div>
+      {tools}
       {!data ? (
         <p className="mt-3 text-[13px] text-slate-500">{query.isError ? "Their doctors couldn't be read." : "Reading their doctors…"}</p>
       ) : (

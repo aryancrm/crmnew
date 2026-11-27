@@ -7,6 +7,10 @@ import { CircleCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 
 const DONE: [RegExp, string][] = [
+  [/^\/api\/headquarters$/, "HQ made"],
+  [/^\/api\/headquarters\/\d+$/, "HQ renamed"],
+  [/^\/api\/headquarters\/\d+\/person$/, "Saved: who works the HQ"],
+  [/^\/api\/headquarters\/\d+\/close$/, "HQ closed"],
   [/^\/api\/orders$/, "Order placed: it waits for Management"],
   [/^\/api\/orders\/\d+\/approve$/, "Approved"],
   [/^\/api\/orders\/\d+\/send_back$/, "Sent back to the MedRep"],

@@ -10,12 +10,17 @@
 // with us, from the order's own Source (as How the orders came): **dispense**, a doctor who bought
 // ("Doctor order"), and **referral**, a doctor who sent a patient ("Patient order referred by
 // doctor"); the month's value of each, and the doctors bringing the most. A doctor is one by name.
+//
+// The head makes, renames and closes the HQs and decides who works each (phase 4, PLAN 264,
+// team/hq-change.ts): each channel says whether the one looking may change it.
 
 import { type SQL, sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
 import { Refusal } from "../http";
 import { addDays, todayManila } from "../inventory/rules";
+import type { Runner } from "../inventory/service";
 import { invoicesSql } from "../kpis/invoices";
+import { ledUnits } from "../org/service";
 import { doctorOrders } from "../rx/doctors";
 import { sheetName } from "../sales/target-sheet";
 import { STATUS_LABEL } from "../orders/rules";
@@ -24,17 +29,30 @@ import { teamSeats } from "./service";
 
 const LEADS = ["team_lead", "manager", "ceo", "admin"];
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
-const plain = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
+export const plain = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
+
+/** An HQ with no territory of its own: the on-site sellers'. */
+export const ON_SITE = "ON SITE";
 
 /** The HQ in a word: the territory's last part that isn't the person's own name ("RX | NCL" → NCL;
- *  "B2C | Rachelle Upao" → ON SITE). */
+ *  "B2C | Rachelle Upao" → ON SITE; "B2C | ON SITE | 2", a second on-site HQ → ON SITE). */
 export function hqOf(area: string | null, person: string | null): string {
   const own = person ? plain(person) : null;
   const parts = (area ?? "")
     .split("|")
     .map((part) => part.trim())
     .filter((part) => part && plain(part) !== own);
-  return parts.length > 1 ? (parts[parts.length - 1] as string) : "ON SITE";
+  if (parts.some((part) => plain(part) === "on site")) return ON_SITE;
+  return parts.length > 1 ? (parts[parts.length - 1] as string) : ON_SITE;
+}
+
+/** The boxes whose HQs this person makes and changes (PLAN 264): null for all (the CEO, the Admin);
+ *  a head's own boxes and those under them; none for anyone else (a team lead sees, the head
+ *  decides). */
+export async function hqBoxes(db: Runner, me: Me): Promise<number[] | null> {
+  if (me.role === "ceo" || me.role === "admin") return null;
+  if (me.role !== "manager") return [];
+  return ledUnits(db, me);
 }
 
 export async function headquarters(db: Database, me: Me, asked: { month?: string | null }): Promise<Headquarters> {
@@ -63,10 +81,13 @@ export async function headquarters(db: Database, me: Me, asked: { month?: string
     since: string | null;
     customers: number;
     manager: string | null;
+    login: string | null;
+    sellers: string[] | null;
   }>(
     db,
     sql`select s.id::int as "seatId", u.id::int as "unitId", u.name as unit, coalesce(u.sort, 0)::int as "unitSort", a.name as area, s.title,
-        p.id::int as "personId", p.name as person, to_char(h.starts_on, 'YYYY-MM-DD') as since,
+        p.id::int as "personId", p.name as person, to_char(h.starts_on, 'YYYY-MM-DD') as since, s.login,
+        array(select z.name from zoho_seller z where z.seat_id = s.id) as sellers,
         (select count(*) from customer c where c.area_id = s.area_id and c.active)::int as customers,
         (select pe.name from seat l join seat_holder lh on lh.seat_id = l.id and lh.kind = 'holder' and lh.ends_on is null
           join person pe on pe.id = lh.person_id where l.unit_id = u.id and l.lead and l.active limit 1) as manager
@@ -78,6 +99,7 @@ export async function headquarters(db: Database, me: Me, asked: { month?: string
   );
   if (!hqs.length) return empty;
   const hqSeats = sql.join(hqs.map((one) => sql`${one.seatId}`), sql`, `);
+  const changeable = await hqBoxes(db, me);
   const [sold, before, order] = await Promise.all([
     // What each HQ sold this month and on the day (the invoices My KPIs counts, by the seat).
     rows<{ seatId: number; sold: number; today: number }>(
@@ -92,6 +114,7 @@ export async function headquarters(db: Database, me: Me, asked: { month?: string
       sql`select h.seat_id::int as "seatId", p.name, to_char(h.starts_on, 'YYYY-MM-DD') as "from", to_char(h.ends_on, 'YYYY-MM-DD') as "to"
         from seat_holder h join person p on p.id = h.person_id
         where h.seat_id in (${hqSeats}) and h.kind = 'holder' and h.ends_on is not null and h.ends_on < ${today}::date
+          and h.ends_on >= h.starts_on
         order by h.ends_on desc`,
     ),
     // The sheet's order of the HQs (the photo's), when the month has one.
@@ -183,17 +206,28 @@ export async function headquarters(db: Database, me: Me, asked: { month?: string
   };
   const rank = new Map<string, number>();
   for (const row of order) for (const name of row.zoho) if (!rank.has(sheetName(name))) rank.set(sheetName(name), row.sort);
-  const rankOf = (area: string) => rank.get(sheetName(area)) ?? Number.MAX_SAFE_INTEGER;
+  // An HQ keeps its place by its sales name too, when it is renamed; a new one comes last.
+  const rankOf = (one: (typeof hqs)[number]) =>
+    Math.min(...[one.area, ...(one.sellers ?? [])].map((name) => rank.get(sheetName(name)) ?? Number.MAX_SAFE_INTEGER));
 
   const channels = new Map<number, Headquarters["channels"][number]>();
-  for (const one of [...hqs].sort((a, b) => a.unitSort - b.unitSort || rankOf(a.area) - rankOf(b.area) || a.area.localeCompare(b.area))) {
-    const channel = channels.get(one.unitId) ?? { unitId: one.unitId, name: one.unit, manager: one.manager, hqs: [], sold: 0, today: 0 };
+  for (const one of [...hqs].sort((a, b) => a.unitSort - b.unitSort || rankOf(a) - rankOf(b) || a.area.localeCompare(b.area))) {
+    const channel = channels.get(one.unitId) ?? {
+      unitId: one.unitId,
+      name: one.unit,
+      manager: one.manager,
+      canChange: changeable === null || changeable.includes(one.unitId),
+      hqs: [],
+      sold: 0,
+      today: 0,
+    };
     const figures = soldBy.get(one.seatId);
     channel.hqs.push({
       seatId: one.seatId,
       hq: hqOf(one.area, one.person),
       zoho: one.area,
       title: one.title,
+      login: one.login,
       personId: one.personId,
       person: one.person,
       since: one.since,

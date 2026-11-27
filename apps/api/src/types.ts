@@ -6188,6 +6188,8 @@ export type Headquarters = {
     unitId: number;
     name: string;
     manager: string | null;
+    /** Whether the one looking makes and changes its HQs: its head, the CEO, the Admin (PLAN 264). */
+    canChange: boolean;
     hqs: {
       seatId: number;
       /** The HQ in a word (NCL, SL NORTH, ON SITE). */
@@ -6195,6 +6197,8 @@ export type Headquarters = {
       /** Its territory's full name: the Zoho name its sales came under (RX | NCL). */
       zoho: string;
       title: string;
+      /** The sign-in ID that goes with the HQ: whoever works it signs in with it (rx4). */
+      login: string | null;
       personId: number | null;
       /** Who works it now; null when it is empty. */
       person: string | null;
@@ -6222,6 +6226,12 @@ export type Headquarters = {
   }[];
   sold: number;
   today: number;
+};
+
+/** Whom a head can put in an HQ (28 Nov, PLAN 264): the people working their HQs (with the HQ and
+ *  team) and the sellers with no HQ now. */
+export type HqPeople = {
+  people: { id: number; name: string; seatId: number | null; hq: string | null; team: string | null }[];
 };
 
 /** How a team's orders came in a month (27-28 Nov, PLAN 252 and 260): the doctor's two ways (a
