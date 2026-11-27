@@ -42,6 +42,8 @@ export function SalesVsTargetPage() {
   const share = pct(t.sold, t.target);
   const pace = Math.round((data.daysGone / data.daysInMonth) * 100);
   const TH = "px-3 py-2 text-[10.5px] font-semibold tracking-wide text-slate-500 uppercase";
+  // A month gone by has no today: its figure is its last day's ("On 31 Oct").
+  const todayWord = data.month < current ? `On ${Number(data.day.slice(8, 10))} ${monthName(data.month).slice(0, 3)}` : "Today";
 
   return (
     <div className={`mx-auto w-full max-w-6xl space-y-4 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
@@ -71,7 +73,7 @@ export function SalesVsTargetPage() {
           value={t.target === null ? "—" : shortPeso(Math.max(0, t.target - t.sold))}
           hint={t.target !== null && data.daysGone < data.daysInMonth ? `${shortPeso(Math.max(0, t.target - t.sold) / Math.max(1, data.daysInMonth - data.daysGone))} a day for ${data.daysInMonth - data.daysGone} days` : undefined}
         />
-        <Figure label="Today" value={shortPeso(t.today)} title={exactPeso(t.today)} />
+        <Figure label={todayWord} value={shortPeso(t.today)} title={exactPeso(t.today)} />
         <Figure label="Days gone" value={`${data.daysGone} of ${data.daysInMonth}`} hint={`${pace}% of the month`} />
       </section>
 
@@ -86,7 +88,7 @@ export function SalesVsTargetPage() {
                 <th className={`${TH} text-right`}>Target</th>
                 <th className={`${TH} text-right`}>Sold</th>
                 <th className={`${TH} text-right`}>Balance to do</th>
-                <th className={`${TH} text-right`}>Today</th>
+                <th className={`${TH} text-right`}>{todayWord}</th>
                 <th className={`${TH} pr-4 text-right`}>%</th>
               </tr>
             </thead>

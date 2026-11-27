@@ -11,13 +11,14 @@ import type { DoctorHistory, Headquarters, HqDoctor, HqDoctors, RxBusiness } fro
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { exactPeso, monthName, shiftMonth, shortPeso } from "../ceo";
 import { useMe } from "../auth";
 import { EmptyState } from "../no-results";
-import { CARD, Dialog, PageHead, PageState } from "../ui";
+import { CARD, Dialog, PageHead, PageState, useOpenOnPress } from "../ui";
 import { HqTools, NewHq } from "./hq-change";
+import { ON_SITE, withHq } from "./hq-name";
 
 const day = (value: string) =>
   new Date(`${value}T00:00:00Z`).toLocaleDateString("en-PH", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
@@ -44,7 +45,19 @@ export function HeadquartersPage() {
     queryFn: () => api<Headquarters>(`/api/headquarters${asked ? `?month=${asked}` : ""}`),
     placeholderData: (previous) => previous,
   });
-  const [picked, setPicked] = useState<number | null>(null);
+  // The HQ open is kept in the address (?hq=), so coming back from an order or a person's page
+  // opens it again (28 Nov).
+  const picked = Number(params.get("hq")) || null;
+  const setPicked = (seatId: number | null) =>
+    setParams(
+      (now) => {
+        const next = new URLSearchParams(now);
+        if (seatId === null) next.delete("hq");
+        else next.set("hq", String(seatId));
+        return next;
+      },
+      { replace: true },
+    );
   const [doctor, setDoctor] = useState<HqDoctor | null>(null);
   // Prescription sales' own parts, merged here (Aryan, 28 Nov, PLAN 263): how many doctors wrote this
   // month and how many for the first time, the team's and each HQ's; the top doctors of all HQs.
@@ -52,9 +65,21 @@ export function HeadquartersPage() {
   const data = query.data;
   if (!data) return <PageState query={query} what="the headquarters" />;
   const current = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }).slice(0, 7);
-  const goTo = (month: string) => setParams(month >= current ? {} : { month }, { replace: true });
+  // Another month keeps the HQ open.
+  const goTo = (month: string) =>
+    setParams(
+      (now) => {
+        const next = new URLSearchParams(now);
+        if (month >= current) next.delete("month");
+        else next.set("month", month);
+        return next;
+      },
+      { replace: true },
+    );
   const arrow = "grid size-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100 disabled:text-slate-300 disabled:hover:bg-transparent";
   const count_ = data.channels.reduce((sum, one) => sum + one.hqs.length, 0);
+  // A month gone by is said by its name ("sold in October"); null for this month.
+  const monthWord = data.month < current ? (monthName(data.month).split(" ")[0] as string) : null;
 
   return (
     <div className={`mx-auto w-full max-w-6xl space-y-4 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
@@ -116,8 +141,14 @@ export function HeadquartersPage() {
                 <Doctors
                   hq={chosen}
                   month={asked}
+                  monthWord={monthWord}
                   onDoctor={setDoctor}
-                  counts={data.month === current ? (rx.data?.people.find((one) => one.seatId === chosen.seatId) ?? null) : null}
+                  // An HQ with no row has no doctor's order this month: 0 (an online seat, 28 Nov).
+                  counts={
+                    data.month === current && rx.data
+                      ? (rx.data.people.find((one) => one.seatId === chosen.seatId) ?? { prescribers: 0, newPrescribers: 0 })
+                      : null
+                  }
                   tools={channel.canChange ? <HqTools hq={chosen} onClosed={() => setPicked(null)} /> : null}
                 />
               ) : (
@@ -180,12 +211,15 @@ function Row({ hqs, picked, onPick }: { hqs: Hq[]; picked: number | null; onPick
 function Doctors({
   hq,
   month,
+  monthWord,
   onDoctor,
   counts,
   tools,
 }: {
   hq: Hq;
   month: string;
+  /** The month's name for a month gone by; null for this month. */
+  monthWord: string | null;
   onDoctor: (doctor: HqDoctor) => void;
   /** This month's doctors of the HQ (the running month only). */
   counts: { prescribers: number; newPrescribers: number } | null;
@@ -197,16 +231,26 @@ function Doctors({
     queryFn: () => api<HqDoctors>(`/api/headquarters/${hq.seatId}/doctors${month ? `?month=${month}` : ""}`),
   });
   const data = query.data;
+  // The person's page, with its way back here (this HQ open, the month in view).
+  const { search } = useLocation();
   return (
     <div className="border-t border-slate-100 px-4 py-4 sm:px-5">
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h3 className="text-[15px] font-semibold text-slate-900">
-          {hq.hq} · {hq.person ?? "Empty"}
+          {hq.hq} ·{" "}
+          {hq.person ? (
+            <Link to={`/my-team/seat/${hq.seatId}`} state={{ from: `/headquarters${search}` }} className="text-emerald-700 hover:underline">
+              {hq.person}
+            </Link>
+          ) : (
+            "Empty"
+          )}
         </h3>
         <p className="text-[12px] text-slate-500">
           {hq.person && hq.since ? `Since ${day(hq.since)}` : ""}
           {hq.before.length ? ` · before: ${hq.before.map((one) => one.name).join(", ")}` : ""}
-          {` · ${shortPeso(hq.sold)} sold this month · ${count(hq.hospitals, "hospital")}`}
+          {` · ${shortPeso(hq.sold)} sold ${monthWord ? `in ${monthWord}` : "this month"}`}
+          {hq.hospitals > 0 ? ` · ${count(hq.hospitals, "hospital")}` : ""}
           {counts ? ` · ${count(counts.prescribers, "doctor")} wrote this month, ${counts.newPrescribers} new` : ""}
         </p>
       </div>
@@ -215,15 +259,44 @@ function Doctors({
         <p className="mt-3 text-[13px] text-slate-500">{query.isError ? "Their doctors couldn't be read." : "Reading their doctors…"}</p>
       ) : (
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
-          <DoctorList title="Doctor referral" line="Doctors who sent patients to us" doctors={data.referral} onDoctor={onDoctor} />
-          <DoctorList title="Doctor dispense" line="Doctors who bought from us" doctors={data.dispense} onDoctor={onDoctor} />
+          <DoctorList
+            title="Doctor referral"
+            line="Doctors who sent patients to us"
+            doctors={data.referral}
+            none={data.noDoctor.referral}
+            monthWord={monthWord}
+            onDoctor={onDoctor}
+          />
+          <DoctorList
+            title="Doctor dispense"
+            line="Doctors who bought from us"
+            doctors={data.dispense}
+            none={data.noDoctor.dispense}
+            monthWord={monthWord}
+            onDoctor={onDoctor}
+          />
         </div>
       )}
     </div>
   );
 }
 
-function DoctorList({ title, line, doctors, onDoctor }: { title: string; line: string; doctors: HqDoctor[]; onDoctor: (doctor: HqDoctor) => void }) {
+function DoctorList({
+  title,
+  line,
+  doctors,
+  none,
+  monthWord,
+  onDoctor,
+}: {
+  title: string;
+  line: string;
+  doctors: HqDoctor[];
+  /** The way's orders with no doctor named: in no row, said at the foot. */
+  none: HqDoctors["noDoctor"]["referral"];
+  monthWord: string | null;
+  onDoctor: (doctor: HqDoctor) => void;
+}) {
   const [all, setAll] = useState(false);
   const shown = all ? doctors : doctors.slice(0, 10);
   return (
@@ -232,7 +305,9 @@ function DoctorList({ title, line, doctors, onDoctor }: { title: string; line: s
         <p className="text-[14px] font-semibold text-slate-900">
           {title} <span className="font-normal text-slate-500">· {count(doctors.length, "doctor")}</span>
         </p>
-        <p className="text-[11.5px] text-slate-500">{line}, the last 12 months; this month on the right</p>
+        <p className="text-[11.5px] text-slate-500">
+          {line}, the last 12 months; {monthWord ?? "this month"} on the right
+        </p>
       </div>
       {doctors.length === 0 ? (
         <p className="px-3 py-3 text-[12.5px] text-slate-500">None in the last 12 months.</p>
@@ -264,6 +339,17 @@ function DoctorList({ title, line, doctors, onDoctor }: { title: string; line: s
           Show all {doctors.length}
         </button>
       )}
+      {/* The orders with no doctor named: in no row above, yet in the way's total on the Home. */}
+      {none.orders > 0 && (
+        <p className="flex items-baseline justify-between gap-3 border-t border-slate-100 px-3 py-2 text-[12px] text-slate-500">
+          <span>
+            {count(none.orders, "order")} ({shortPeso(none.value)}) with no doctor named
+          </span>
+          <span className="shrink-0 tabular-nums" title={exactPeso(none.month.value)}>
+            {none.month.orders ? `${shortPeso(none.month.value)} · ${count(none.month.orders, "order")}` : "—"}
+          </span>
+        </p>
+      )}
     </div>
   );
 }
@@ -276,13 +362,19 @@ export function History({ doctor, onClose }: { doctor: { key: string; name: stri
     queryFn: () => api<DoctorHistory>(`/api/headquarters/doctor?key=${encodeURIComponent(doctor.key)}`),
   });
   const data = query.data;
+  const open = useOpenOnPress();
   const WAY: Record<DoctorHistory["orders"][number]["way"], string> = { dispense: "Dispense", referral: "Referral", other: "Other" };
+  // The hospital the list knew, else the one the answer knows (Top doctors doesn't say).
+  const hospital = doctor.hospital ?? data?.hospital ?? null;
+  // The orders come newest first: the last is their first order.
+  const firstOn = data?.orders[data.orders.length - 1]?.day ?? null;
   return (
-    <Dialog title={doctor.name} sub={doctor.hospital ?? "Hospital not known"} onClose={onClose} wide>
+    <Dialog title={doctor.name} sub={hospital ?? (query.isPending ? undefined : "Hospital not known")} onClose={onClose} wide>
       {!data ? (
         <p className="text-[13px] text-slate-500">{query.isError ? "Their orders couldn't be read." : "Reading their orders…"}</p>
       ) : (
         <div className="space-y-3">
+          {firstOn && <p className="text-[12px] text-slate-500">All their orders, every HQ, since {day(firstOn)}</p>}
           <div className="grid grid-cols-3 gap-2">
             <Fact label="Orders from them" value={data.total.orders.toLocaleString("en-PH")} />
             <Fact label="Taken" value={shortPeso(data.total.value)} title={exactPeso(data.total.value)} />
@@ -291,6 +383,7 @@ export function History({ doctor, onClose }: { doctor: { key: string; name: stri
           <p className="text-[12.5px] text-slate-600">
             Dispense: {count(data.dispense.orders, "order")} · {shortPeso(data.dispense.value)} — Referral: {count(data.referral.orders, "order")} ·{" "}
             {shortPeso(data.referral.value)}
+            {data.other.orders > 0 && ` — Other: ${count(data.other.orders, "order")} · ${shortPeso(data.other.value)}`}
           </p>
           <div className="max-h-[55dvh] overflow-auto rounded-lg border border-slate-200">
             <table className="w-full min-w-[600px] text-[12.5px]">
@@ -307,7 +400,12 @@ export function History({ doctor, onClose }: { doctor: { key: string; name: stri
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {data.orders.map((order) => (
-                  <tr key={`${order.code}-${order.day}`}>
+                  // This CRM's order opens when its row is pressed anywhere.
+                  <tr
+                    key={`${order.code}-${order.day}`}
+                    onClick={order.orderId ? open(`/orders/${order.orderId}`) : undefined}
+                    className={order.orderId ? "cursor-pointer hover:bg-slate-50" : undefined}
+                  >
                     <td className="px-2 py-1.5 whitespace-nowrap text-slate-600">{day(order.day)}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap">
                       {order.orderId ? (
@@ -320,7 +418,9 @@ export function History({ doctor, onClose }: { doctor: { key: string; name: stri
                       <span className="block text-[11px] text-slate-500">{WAY[order.way]}</span>
                     </td>
                     <td className="max-w-[9rem] truncate px-2 py-1.5 text-slate-700">{order.buyer ?? "—"}</td>
-                    <td className="px-2 py-1.5 whitespace-nowrap text-slate-600">{order.hq ?? "—"}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-slate-600">
+                      {order.hq === ON_SITE && order.person ? withHq(order.hq, order.person) : (order.hq ?? "—")}
+                    </td>
                     <td className="px-2 py-1.5 text-right font-semibold tabular-nums">{shortPeso(order.value)}</td>
                     <td className="px-2 py-1.5 whitespace-nowrap">{order.status}</td>
                     <td className={`px-2 py-1.5 text-right tabular-nums ${order.pending >= 100 ? "font-semibold text-amber-700" : "text-slate-400"}`}>

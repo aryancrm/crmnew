@@ -21,7 +21,7 @@ import { addDays, todayManila } from "../inventory/rules";
 import type { Runner } from "../inventory/service";
 import { invoicesSql } from "../kpis/invoices";
 import { inForce, ledUnits } from "../org/service";
-import { doctorOrders } from "../rx/doctors";
+import { doctorOrders, GL_SOURCES } from "../rx/doctors";
 import { sheetName } from "../sales/target-sheet";
 import { STATUS_LABEL } from "../orders/rules";
 import type { DoctorHistory, Headquarters, HqDoctors, Me, OrderStatus, TeamHqs } from "../types";
@@ -129,11 +129,12 @@ export async function headquarters(db: Database, me: Me, asked: { month?: string
           and h.ends_on >= h.starts_on
         order by h.ends_on desc`,
     ),
-    // The sheet's order of the HQs (the photo's), when the month has one.
+    // The sheet's order of the HQs (the photo's): the latest sheet's, whatever month is shown, so an
+    // earlier month keeps the same order (28 Nov).
     rows<{ zoho: string[]; sort: number }>(
       db,
       sql`select zoho_names as zoho, sort::int as sort from target_sheet_row
-        where month = (select max(month) from target_sheet_row where month <= ${first}::date) order by sort`,
+        where month = (select max(month) from target_sheet_row) order by sort`,
     ),
   ]);
   const soldBy = new Map(sold.map((one) => [one.seatId, one]));
@@ -330,19 +331,39 @@ async function doctorOrdersWithPending(db: Database, seats: SQL, where: SQL): Pr
   return found.map((one) => ({ ...one, pending: pendingOf.get(`${one.origin}:${one.ref}`) ?? 0 }));
 }
 
-/** Where each doctor works: their record's hospital (the CRM's doctor, else the one doctor of that
- *  name). */
+/** Where each doctor works: the hospital on the doctor's own record when their orders carry one (one
+ *  doctor is one record, 28 Nov); only for a doctor whose orders carry none (a name typed on Zoho's
+ *  orders), the one doctor of that name. */
 async function hospitalsOf(db: Database, doctors: { dkey: string; doctorId: number | null }[]): Promise<Map<string, string>> {
-  const keys = [...new Set(doctors.map((one) => one.dkey))];
-  if (!keys.length) return new Map();
-  const found = await rows<{ dkey: string; hospital: string }>(
-    db,
-    sql`select lower(trim(d.name)) as dkey, h.name as hospital from customer d join customer h on h.id = d.works_at
-      where d.kind = 'doctor' and d.active and lower(trim(d.name)) in (${sql.join(keys.map((key) => sql`${key}`), sql`, `)})`,
-  );
+  const records = new Map<string, Set<number>>();
+  for (const one of doctors) if (one.doctorId !== null) records.set(one.dkey, (records.get(one.dkey) ?? new Set()).add(one.doctorId));
+  const typed = [...new Set(doctors.map((one) => one.dkey))].filter((key) => !records.has(key));
+  const ids = [...new Set([...records.values()].flatMap((set) => [...set]))];
+  const [byRecord, byName] = await Promise.all([
+    ids.length
+      ? rows<{ id: number; hospital: string }>(
+          db,
+          sql`select d.id::int as id, h.name as hospital from customer d join customer h on h.id = d.works_at
+            where d.id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`,
+        )
+      : Promise.resolve([] as { id: number; hospital: string }[]),
+    typed.length
+      ? rows<{ dkey: string; hospital: string }>(
+          db,
+          sql`select lower(trim(d.name)) as dkey, h.name as hospital from customer d join customer h on h.id = d.works_at
+            where d.kind = 'doctor' and d.active and lower(trim(d.name)) in (${sql.join(typed.map((key) => sql`${key}`), sql`, `)})`,
+        )
+      : Promise.resolve([] as { dkey: string; hospital: string }[]),
+  ]);
+  const hospitalOf = new Map(byRecord.map((one) => [one.id, one.hospital]));
   const byKey = new Map<string, Set<string>>();
-  for (const one of found) byKey.set(one.dkey, (byKey.get(one.dkey) ?? new Set()).add(one.hospital));
-  // A name two doctors share at two hospitals says nothing for sure: left blank.
+  for (const [key, set] of records)
+    for (const id of set) {
+      const at = hospitalOf.get(id);
+      if (at) byKey.set(key, (byKey.get(key) ?? new Set()).add(at));
+    }
+  for (const one of byName) byKey.set(one.dkey, (byKey.get(one.dkey) ?? new Set()).add(one.hospital));
+  // Two doctors of one name at two hospitals say nothing for sure: left blank.
   return new Map([...byKey].filter(([, set]) => set.size === 1).map(([key, set]) => [key, [...set][0] as string]));
 }
 
@@ -365,7 +386,34 @@ export async function hqDoctors(db: Database, me: Me, seatId: number, asked: { m
   const last = new Date(Date.UTC(year, number, 0)).toISOString().slice(0, 10);
   const day = today < last ? today : last;
   const yearAgo = addDays(day, -364);
-  const orders = await doctorOrdersWithPending(db, sql`${seatId}`, sql`x.day between ${yearAgo}::date and ${day}::date`);
+  const placed = sql`(coalesce(o.submitted_at, o.created_at) at time zone 'Asia/Manila')::date`;
+  const [orders, unnamed] = await Promise.all([
+    doctorOrdersWithPending(db, sql`${seatId}`, sql`x.day between ${yearAgo}::date and ${day}::date`),
+    // Each way's orders with no doctor named (none on the order, and not bought by one): in no list,
+    // but in the way's orders on the Home, counted as the Home counts them (team/ways.ts: a
+    // guarantee letter's order is a referral's).
+    rows<{ way: "referral" | "dispense"; orders: number; value: number; monthOrders: number; monthValue: number }>(
+      db,
+      sql`select case when x.source = 'Doctor order' then 'dispense' else 'referral' end as way,
+          count(*)::int as orders, coalesce(sum(x.total), 0)::float8 as value,
+          count(*) filter (where x.day >= ${first}::date)::int as "monthOrders",
+          coalesce(sum(x.total) filter (where x.day >= ${first}::date), 0)::float8 as "monthValue"
+        from (
+          select nullif(trim(o.source), '') as source, o.order_type as type, o.total::float8 as total, ${placed} as day
+            from sales_order o join customer c on c.id = o.customer_id
+            where o.seat_id = ${seatId} and o.status not in ('draft', 'cancelled') and o.doctor_id is null and c.kind is distinct from 'doctor'
+              and ${placed} between ${yearAgo}::date and ${day}::date
+          union all
+          select nullif(trim(p.source), ''), null, p.total::float8, p.ordered_on
+            from past_order p join zoho_seller zs on zs.name = p.seller left join customer c on c.id = p.customer_id
+            where zs.seat_id = ${seatId} and p.status <> 'void' and nullif(trim(p.doctor), '') is null and c.kind is distinct from 'doctor'
+              and p.ordered_on between ${yearAgo}::date and ${day}::date
+        ) x
+        where x.source in ('Doctor order', 'Patient order referred by doctor', ${sql.join(GL_SOURCES.map((one) => sql`${one}`), sql`, `)})
+          or x.type = 'gl'
+        group by 1`,
+    ),
+  ]);
   const hospitals = await hospitalsOf(db, orders);
   const lists = { referral: new Map<string, HqDoctors["referral"][number]>(), dispense: new Map<string, HqDoctors["referral"][number]>() };
   for (const order of orders) {
@@ -393,7 +441,18 @@ export async function hqDoctors(db: Database, me: Me, seatId: number, asked: { m
   }
   const sorted = (map: Map<string, HqDoctors["referral"][number]>) =>
     [...map.values()].sort((a, b) => b.month.value - a.month.value || b.value - a.value);
-  return { seatId, month, day, referral: sorted(lists.referral), dispense: sorted(lists.dispense) };
+  const noDoctor = (way: "referral" | "dispense") => {
+    const found = unnamed.find((one) => one.way === way);
+    return { orders: found?.orders ?? 0, value: found?.value ?? 0, month: { orders: found?.monthOrders ?? 0, value: found?.monthValue ?? 0 } };
+  };
+  return {
+    seatId,
+    month,
+    day,
+    referral: sorted(lists.referral),
+    dispense: sorted(lists.dispense),
+    noDoctor: { referral: noDoctor("referral"), dispense: noDoctor("dispense") },
+  };
 }
 
 /** One doctor's whole history in the team (Aryan, 28 Nov: "press the doctor: all their past data,
@@ -424,12 +483,15 @@ export async function doctorHistory(db: Database, me: Me, key: string): Promise<
   ]);
   const buyerName = new Map(buyers.map((one) => [one.id, one.name]));
   const placeOf = new Map(places.map((one) => [one.seatId, one.area ? hqOf(one.area, one.person) : null]));
+  // Who works each HQ now, sent with it: two HQs are both ON SITE, told apart by their person.
+  const personOf = new Map(places.map((one) => [one.seatId, one.person]));
   const list: DoctorHistory["orders"] = orders.map((order) => ({
     code: order.code,
     day: order.day,
     way: wayOfSource(order.way) ?? "other",
     buyer: order.buyer !== null ? (buyerName.get(order.buyer) ?? null) : null,
     hq: placeOf.get(order.seat) ?? null,
+    person: personOf.get(order.seat) ?? null,
     value: order.total,
     status: order.origin === "crm" ? (STATUS_LABEL[order.status as OrderStatus] ?? order.status) : (ZOHO_STATUS[order.status] ?? order.status),
     pending: order.pending,
@@ -447,5 +509,6 @@ export async function doctorHistory(db: Database, me: Me, key: string): Promise<
     total: { orders: list.length, value: list.reduce((total, one) => total + one.value, 0), pending: list.reduce((total, one) => total + one.pending, 0) },
     dispense: sum("dispense"),
     referral: sum("referral"),
+    other: sum("other"),
   };
 }

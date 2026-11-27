@@ -101,11 +101,12 @@ export async function salesVsTarget(db: Database, me: Me, asked: { month?: strin
             and d.doc_date between ${first}::date and ${day}::date and coalesce(l.qty, 1) > 0 and zs.seat_id in (${hqSeats})
         ) x group by name order by value desc limit 10`,
     ),
-    // The sheet's order of the HQs (the photo's), when the month has one.
+    // The sheet's order of the HQs (the photo's): the latest sheet's, whatever month is shown, so an
+    // earlier month keeps the same order (28 Nov).
     rows<{ zoho: string[]; sort: number }>(
       db,
       sql`select zoho_names as zoho, sort::int as sort from target_sheet_row
-        where month = (select max(month) from target_sheet_row where month <= ${first}::date) order by sort`,
+        where month = (select max(month) from target_sheet_row) order by sort`,
     ),
   ]);
   const soldBy = new Map(sold.map((one) => [one.seatId, one]));

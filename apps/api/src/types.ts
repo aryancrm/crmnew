@@ -6152,6 +6152,9 @@ export type HqDoctors = {
   day: string;
   referral: HqDoctor[];
   dispense: HqDoctor[];
+  /** Each way's orders with no doctor named, in no list above: over the same 12 months and this
+   *  month. With the lists they make the way's orders as the Home counts them (28 Nov). */
+  noDoctor: Record<"referral" | "dispense", { orders: number; value: number; month: { orders: number; value: number } }>;
 };
 export type HqDoctor = {
   /** The doctor's name as compared (for their history). */
@@ -6178,6 +6181,8 @@ export type DoctorHistory = {
     /** Who bought: the doctor (dispense) or the patient they sent (referral). */
     buyer: string | null;
     hq: string | null;
+    /** Who works that HQ now: an ON SITE HQ is told apart by them. */
+    person: string | null;
     value: number;
     /** What happened to it, in words. */
     status: string;
@@ -6188,6 +6193,8 @@ export type DoctorHistory = {
   total: { orders: number; value: number; pending: number };
   dispense: { orders: number; value: number };
   referral: { orders: number; value: number };
+  /** Orders by neither way (another Source): with the two ways they make the total. */
+  other: { orders: number; value: number };
 };
 
 /** A team's Headquarters (27 Nov, PLAN 257): each channel's HQs, as the sheet photo lays them out. */

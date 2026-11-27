@@ -10,7 +10,7 @@ import { migrate } from "../db/migrate";
 import { seedDemoTeam } from "../orders/seed-team";
 import { seedRxTeam } from "../rx/seed";
 import { seedDemo } from "../seed";
-import type { DoctorHistory, Headquarters, HqDoctors, HqPeople, TeamHqs } from "../types";
+import type { DoctorHistory, Headquarters, HqDoctors, HqPeople, OrderWays, TeamHqs } from "../types";
 import { hqOf } from "./headquarters";
 
 const PASSWORD = "test-password-1";
@@ -126,6 +126,44 @@ describe("headquarters", () => {
     // Not the sellers', and not another team's HQ.
     expect((await get("joy", `/api/headquarters/${joy?.seat}/doctors`)).status).toBe(403);
     expect((await get("daniel", `/api/headquarters/${joy?.seat}/doctors`)).status).toBe(404);
+  });
+
+  it("says each way's orders with no doctor named, so the lists and they make the Home's way (28 Nov)", async () => {
+    const [joy] = await rows<{ id: number; seat: number }>(
+      db,
+      sql`select p.id::int as id, h.seat_id::int as seat from person p join seat_holder h on h.person_id = p.id and h.kind = 'holder'
+        where p.email = 'joy@2mg.test' limit 1`,
+    );
+    await db.execute(sql`insert into zoho_seller (name, seat_id) values ('RX | HQ UNNAMED', ${joy?.seat})`);
+    const add = async (name: string, kind: string) =>
+      (await rows<{ id: number }>(db, sql`insert into customer (name, kind, added_by) values (${name}, ${kind}, ${joy?.id}) returning id::int as id`))[0]
+        ?.id as number;
+    const patient = await add("Hq Unnamed Patient", "patient");
+    const hospital = await add("Hq Unnamed Hospital", "hospital");
+    const today = todayManila();
+    // No doctor on any: a patient sent, a guarantee letter's (a referral's) with a blank doctor, and
+    // a doctor order a hospital placed.
+    for (const [code, buyer, source, named, total] of [
+      ["SO-HQ3", patient, "Patient order referred by doctor", null, 50000],
+      ["SO-HQ4", patient, "PCSO", "  ", 70000],
+      ["SO-HQ5", hospital, "Doctor order", null, 90000],
+    ] as const)
+      await db.execute(
+        sql`insert into past_order (zoho_id, code, customer_id, ordered_on, status, total, seller, source, doctor)
+          values (${code}, ${code}, ${buyer}, ${today}::date, 'confirmed', ${total}, 'RX | HQ UNNAMED', ${source}, ${named})`,
+      );
+    const doctors = (await (await get("rosa", `/api/headquarters/${joy?.seat}/doctors`)).json()) as HqDoctors;
+    expect(doctors.noDoctor.referral).toEqual({ orders: 2, value: 120000, month: { orders: 2, value: 120000 } });
+    expect(doctors.noDoctor.dispense).toEqual({ orders: 1, value: 90000, month: { orders: 1, value: 90000 } });
+    // No list's rows change: none of them is a doctor.
+    expect([...doctors.referral, ...doctors.dispense].some((one) => one.key.includes("unnamed"))).toBe(false);
+    // The lists' month and these make the HQ's month by way on the Home.
+    const ways = (await (await get("rosa", "/api/team/ways")).json()) as OrderWays;
+    const home = ways.people.find((one) => one.seatId === joy?.seat);
+    const month = (list: HqDoctors["referral"]) => list.reduce((sum, one) => sum + one.month.value, 0);
+    expect(home?.referral.value).toBeGreaterThanOrEqual(120000);
+    expect(month(doctors.referral) + doctors.noDoctor.referral.month.value).toBe(home?.referral.value);
+    expect(month(doctors.dispense) + doctors.noDoctor.dispense.month.value).toBe(home?.dispense.value);
   });
 });
 
