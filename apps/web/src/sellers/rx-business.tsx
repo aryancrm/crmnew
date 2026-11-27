@@ -8,20 +8,16 @@
 
 import type { RxBusiness } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { Link } from "react-router-dom";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { exactPeso, shortPeso } from "../ceo";
-import { History } from "../team/headquarters";
+import { TopDoctors } from "../team/headquarters";
 import { withUnit } from "../team/switch";
 import { CARD, PageHead, PageState } from "../ui";
-import { EmptyState } from "../no-results";
 
 const day = (value: string | null) =>
   value ? new Date(`${value.slice(0, 10)}T00:00:00Z`).toLocaleDateString("en-PH", { day: "numeric", month: "short", timeZone: "UTC" }) : "—";
 const count = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("en-PH")} ${n === 1 ? one : many}`;
-const LEADS = ["team_lead", "manager", "ceo", "admin"];
 
 function useRx(unit: number | null = null) {
   return useQuery({
@@ -84,7 +80,7 @@ function Business({ data, compact }: { data: RxBusiness; compact?: boolean }) {
 
       {w.people.length > 1 && <EachHq data={data} />}
 
-      <Doctors data={data} compact={compact} />
+      <TopDoctors data={data} compact={compact} />
     </div>
   );
 }
@@ -174,77 +170,6 @@ function EachHq({ data }: { data: RxBusiness }) {
           })}
         </tbody>
       </table>
-    </section>
-  );
-}
-
-/** The doctors bringing the most in the last 90 days, by way, through which HQ; a press opens all
- *  their orders (a lead's view). */
-function Doctors({ data, compact }: { data: RxBusiness; compact?: boolean }) {
-  const me = useMe().data;
-  const canOpen = Boolean(me && LEADS.includes(me.role));
-  const [all, setAll] = useState(!compact);
-  const [open, setOpen] = useState<RxBusiness["doctors"][number] | null>(null);
-  const doctors = all ? data.doctors : data.doctors.slice(0, 8);
-  return (
-    <section className={`${CARD} min-w-0 overflow-x-auto`}>
-      <Head
-        title="Top doctors"
-        line={`The doctors bringing the most in the last 90 days: the patients they sent and what they bought.${canOpen ? " Press one for all their orders." : ""}`}
-      />
-      {data.doctors.length === 0 ? (
-        <EmptyState title="No order through a doctor in 90 days.">The doctors bringing the most show here.</EmptyState>
-      ) : (
-        <table className="w-full min-w-[680px] text-[13px]">
-          <thead>
-            <tr className="text-left">
-              <th className={`${TH} pl-4`}>Doctor</th>
-              <th className={TH}>HQ</th>
-              <th className={`${TH} text-right`}>Doctor referral</th>
-              <th className={`${TH} text-right`}>Doctor dispense</th>
-              <th className={`${TH} pr-4`}>Last order</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {doctors.map((one) => (
-              <tr
-                key={one.key}
-                className={canOpen ? "cursor-pointer hover:bg-slate-50" : ""}
-                onClick={canOpen ? () => setOpen(one) : undefined}
-              >
-                <td className="px-4 py-2.5">
-                  <span className="block font-semibold text-slate-900">{one.name}</span>
-                  {(one.specialty || one.city) && (
-                    <span className="block text-[11.5px] text-slate-500">{[one.specialty, one.city].filter(Boolean).join(" · ")}</span>
-                  )}
-                </td>
-                <td className="px-3 py-2.5 whitespace-nowrap">
-                  <span className="block font-medium text-slate-800">{one.hq ?? "—"}</span>
-                  {one.seller && <span className="block text-[11.5px] text-slate-500">{one.seller}</span>}
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums" title={exactPeso(one.referral)}>
-                  {one.referral ? <span className="font-semibold text-slate-900">{shortPeso(one.referral)}</span> : <span className="text-slate-300">—</span>}
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums" title={exactPeso(one.dispense)}>
-                  {one.dispense ? <span className="font-semibold text-slate-900">{shortPeso(one.dispense)}</span> : <span className="text-slate-300">—</span>}
-                </td>
-                <td className="px-3 py-2.5 pr-4 whitespace-nowrap">{day(one.lastOn)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {data.doctors.length > doctors.length && (
-        <button type="button" onClick={() => setAll(true)} className="w-full border-t border-slate-100 px-4 py-2.5 text-[12.5px] font-semibold text-emerald-700 hover:bg-slate-50">
-          Show all {data.doctors.length}
-        </button>
-      )}
-      {compact && (
-        <Link to="/rx/business" className="block border-t border-slate-100 px-4 py-2.5 text-[12.5px] font-semibold text-emerald-700 hover:bg-slate-50">
-          Open prescription sales
-        </Link>
-      )}
-      {open && <History doctor={{ key: open.key, name: open.name, hospital: null }} onClose={() => setOpen(null)} />}
     </section>
   );
 }

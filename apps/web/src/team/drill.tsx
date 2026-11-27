@@ -20,7 +20,6 @@ import { B2bTeamCard } from "../sellers/b2b";
 import { ClidpTeamCard } from "../sellers/clidp";
 import { ClidpRoadCard } from "../sellers/clidp-road";
 import { HospitalsCard } from "../sellers/hospitals";
-import { RxBusinessCard } from "../sellers/rx-business";
 import { TelesalesTeamCard } from "../sellers/telesales-team";
 import { MtHome } from "../sellers/mt";
 import { BidReportCard } from "../sellers/bid-report";
@@ -586,9 +585,9 @@ export function ChannelWork({
 }) {
   switch (division) {
     case "RX Business":
-      // The prescriptions and the letters. No field team table (Aryan, 27 Nov: it repeated the
-      // Visits report and Scorecards, and read the empty tier lists).
-      return <RxBusinessCard unit={unit} />;
+      // Nothing more here: the doctors and their ways are on Headquarters, the month by way on the
+      // Home's own card (Aryan, 28 Nov: "they repeat"; PLAN 263).
+      return null;
     case "MD Telesales":
       // Each telesales person's calls, orders, customers and money; then the online desk and the
       // patient care groups.

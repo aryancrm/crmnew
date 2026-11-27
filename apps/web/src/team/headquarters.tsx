@@ -6,13 +6,15 @@
 // what happened, how much they took, how much money is pending." Each channel a row of its HQs, as
 // the team's sheet has them; no Zoho names on the screen ("we are ending Zoho").
 
-import type { DoctorHistory, Headquarters, HqDoctor, HqDoctors } from "@2mg/api/types";
+import type { DoctorHistory, Headquarters, HqDoctor, HqDoctors, RxBusiness } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { exactPeso, monthName, shiftMonth, shortPeso } from "../ceo";
+import { useMe } from "../auth";
+import { EmptyState } from "../no-results";
 import { CARD, Dialog, PageHead, PageState } from "../ui";
 
 const day = (value: string) =>
@@ -20,6 +22,17 @@ const day = (value: string) =>
 const count = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("en-PH")} ${n === 1 ? one : many}`;
 
 type Hq = Headquarters["channels"][number]["hqs"][number];
+const LEADS = ["team_lead", "manager", "ceo", "admin"];
+const TH = "px-3 py-2 text-[10.5px] font-semibold tracking-wide text-slate-400 uppercase";
+/** A section's head: what it is, and one line saying what it shows. */
+function Head({ title, line }: { title: string; line: string }) {
+  return (
+    <header className="border-b border-slate-100 px-4 py-3">
+      <h3 className="text-sm font-bold text-slate-900">{title}</h3>
+      <p className="mt-0.5 text-[12px] text-slate-500">{line}</p>
+    </header>
+  );
+}
 
 export function HeadquartersPage() {
   const [params, setParams] = useSearchParams();
@@ -31,6 +44,9 @@ export function HeadquartersPage() {
   });
   const [picked, setPicked] = useState<number | null>(null);
   const [doctor, setDoctor] = useState<HqDoctor | null>(null);
+  // Prescription sales' own parts, merged here (Aryan, 28 Nov, PLAN 263): how many doctors wrote this
+  // month and how many for the first time, the team's and each HQ's; the top doctors of all HQs.
+  const rx = useQuery({ queryKey: ["rx", "business", ""], queryFn: () => api<RxBusiness>("/api/rx/business") });
   const data = query.data;
   if (!data) return <PageState query={query} what="the headquarters" />;
   const current = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }).slice(0, 7);
@@ -56,6 +72,22 @@ export function HeadquartersPage() {
         }
       />
 
+      {/* The month's doctors: counted for the running month only. */}
+      {rx.data && data.month === current && (
+        <section aria-label="This month's doctors" className="grid grid-cols-2 gap-3 sm:max-w-md">
+          <div className={`${CARD} px-4 py-3`}>
+            <p className="text-[12.5px] font-medium text-slate-600">Doctors prescribing</p>
+            <p className="text-2xl font-semibold tracking-tight text-slate-900 tabular-nums">{rx.data.summary.prescribers.toLocaleString("en-PH")}</p>
+            <p className="text-[11.5px] text-slate-500">wrote for us this month</p>
+          </div>
+          <div className={`${CARD} px-4 py-3`}>
+            <p className="text-[12.5px] font-medium text-slate-600">New doctors</p>
+            <p className="text-2xl font-semibold tracking-tight text-slate-900 tabular-nums">{rx.data.summary.newPrescribers.toLocaleString("en-PH")}</p>
+            <p className="text-[11.5px] text-slate-500">their first order with us this month</p>
+          </div>
+        </section>
+      )}
+
       {count_ === 0 ? (
         <section className={`${CARD} px-5 py-8 text-center text-sm text-slate-500`}>No headquarters in your team yet.</section>
       ) : (
@@ -76,7 +108,12 @@ export function HeadquartersPage() {
               <Row hqs={channel.hqs} picked={picked} onPick={(seatId) => setPicked(picked === seatId ? null : seatId)} />
 
               {chosen ? (
-                <Doctors hq={chosen} month={asked} onDoctor={setDoctor} />
+                <Doctors
+                  hq={chosen}
+                  month={asked}
+                  onDoctor={setDoctor}
+                  counts={data.month === current ? (rx.data?.people.find((one) => one.seatId === chosen.seatId) ?? null) : null}
+                />
               ) : (
                 <p className="border-t border-slate-100 px-5 py-3 text-[12.5px] text-slate-500">Press a person to see their doctors.</p>
               )}
@@ -84,6 +121,8 @@ export function HeadquartersPage() {
           );
         })
       )}
+
+      {rx.data && rx.data.doctors.length > 0 && <TopDoctors data={rx.data} title="Top doctors · all HQs" />}
 
       {doctor && <History doctor={doctor} onClose={() => setDoctor(null)} />}
     </div>
@@ -132,7 +171,18 @@ function Row({ hqs, picked, onPick }: { hqs: Hq[]; picked: number | null; onPick
 }
 
 /** The person's doctors: who sent patients (referral) and who bought (dispense). */
-function Doctors({ hq, month, onDoctor }: { hq: Hq; month: string; onDoctor: (doctor: HqDoctor) => void }) {
+function Doctors({
+  hq,
+  month,
+  onDoctor,
+  counts,
+}: {
+  hq: Hq;
+  month: string;
+  onDoctor: (doctor: HqDoctor) => void;
+  /** This month's doctors of the HQ (the running month only). */
+  counts: { prescribers: number; newPrescribers: number } | null;
+}) {
   const query = useQuery({
     queryKey: ["headquarters", hq.seatId, "doctors", month],
     queryFn: () => api<HqDoctors>(`/api/headquarters/${hq.seatId}/doctors${month ? `?month=${month}` : ""}`),
@@ -148,6 +198,7 @@ function Doctors({ hq, month, onDoctor }: { hq: Hq; month: string; onDoctor: (do
           {hq.person && hq.since ? `Since ${day(hq.since)}` : ""}
           {hq.before.length ? ` · before: ${hq.before.map((one) => one.name).join(", ")}` : ""}
           {` · ${shortPeso(hq.sold)} sold this month · ${count(hq.hospitals, "hospital")}`}
+          {counts ? ` · ${count(counts.prescribers, "doctor")} wrote this month, ${counts.newPrescribers} new` : ""}
         </p>
       </div>
       {!data ? (
@@ -284,5 +335,76 @@ function Fact({ label, value, title, warn }: { label: string; value: string; tit
         {value}
       </p>
     </div>
+  );
+}
+
+/** The doctors bringing the most in the last 90 days, by way, through which HQ; a press opens all
+ *  their orders (a lead's view). Shared with the Rx CHC's own page (My prescriptions). */
+export function TopDoctors({ data, compact, title = "Top doctors" }: { data: RxBusiness; compact?: boolean; title?: string }) {
+  const me = useMe().data;
+  const canOpen = Boolean(me && LEADS.includes(me.role));
+  const [all, setAll] = useState(!compact);
+  const [open, setOpen] = useState<RxBusiness["doctors"][number] | null>(null);
+  const doctors = all ? data.doctors : data.doctors.slice(0, 8);
+  return (
+    <section className={`${CARD} min-w-0 overflow-x-auto`}>
+      <Head
+        title={title}
+        line={`The doctors bringing the most in the last 90 days: the patients they sent and what they bought.${canOpen ? " Press one for all their orders." : ""}`}
+      />
+      {data.doctors.length === 0 ? (
+        <EmptyState title="No order through a doctor in 90 days.">The doctors bringing the most show here.</EmptyState>
+      ) : (
+        <table className="w-full min-w-[680px] text-[13px]">
+          <thead>
+            <tr className="text-left">
+              <th className={`${TH} pl-4`}>Doctor</th>
+              <th className={TH}>HQ</th>
+              <th className={`${TH} text-right`}>Doctor referral</th>
+              <th className={`${TH} text-right`}>Doctor dispense</th>
+              <th className={`${TH} pr-4`}>Last order</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {doctors.map((one) => (
+              <tr
+                key={one.key}
+                className={canOpen ? "cursor-pointer hover:bg-slate-50" : ""}
+                onClick={canOpen ? () => setOpen(one) : undefined}
+              >
+                <td className="px-4 py-2.5">
+                  <span className="block font-semibold text-slate-900">{one.name}</span>
+                  {(one.specialty || one.city) && (
+                    <span className="block text-[11.5px] text-slate-500">{[one.specialty, one.city].filter(Boolean).join(" · ")}</span>
+                  )}
+                </td>
+                <td className="px-3 py-2.5 whitespace-nowrap">
+                  <span className="block font-medium text-slate-800">{one.hq ?? "—"}</span>
+                  {one.seller && <span className="block text-[11.5px] text-slate-500">{one.seller}</span>}
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums" title={exactPeso(one.referral)}>
+                  {one.referral ? <span className="font-semibold text-slate-900">{shortPeso(one.referral)}</span> : <span className="text-slate-300">—</span>}
+                </td>
+                <td className="px-3 py-2.5 text-right tabular-nums" title={exactPeso(one.dispense)}>
+                  {one.dispense ? <span className="font-semibold text-slate-900">{shortPeso(one.dispense)}</span> : <span className="text-slate-300">—</span>}
+                </td>
+                <td className="px-3 py-2.5 pr-4 whitespace-nowrap">{day(one.lastOn)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {data.doctors.length > doctors.length && (
+        <button type="button" onClick={() => setAll(true)} className="w-full border-t border-slate-100 px-4 py-2.5 text-[12.5px] font-semibold text-emerald-700 hover:bg-slate-50">
+          Show all {data.doctors.length}
+        </button>
+      )}
+      {compact && (
+        <Link to="/rx/business" className="block border-t border-slate-100 px-4 py-2.5 text-[12.5px] font-semibold text-emerald-700 hover:bg-slate-50">
+          Open prescription sales
+        </Link>
+      )}
+      {open && <History doctor={{ key: open.key, name: open.name, hospital: null }} onClose={() => setOpen(null)} />}
+    </section>
   );
 }

@@ -1243,7 +1243,7 @@ function ownDesk(me: Me): Space {
               "Team",
             ),
             { to: "/care-groups", label: "Care groups", icon: Users, short: "Groups" },
-            { to: "/rx/business", label: "Prescription sales", icon: Stethoscope },
+            // Prescription sales merged into Headquarters (Aryan, 28 Nov: "they repeat"; PLAN 263).
             { to: "/to-call", label: "Refills due", icon: Pill, badge: "refills", short: "Refills" },
             // A coach who leads RX Business's field CHCs too (Honey, 19 Nov's sheet): their visits.
             // No "Field team" (Aryan, 27 Nov: it repeated other pages; see the Country Mentor's).
@@ -1322,7 +1322,8 @@ function ownDesk(me: Me): Space {
             // coverage are the Visits report's (Field visits), its new doctors and letters
             // Prescription sales' and the Scorecards', its groups Care groups'; and it counted the
             // CHCs' own tiers, which nobody keeps, so it was all zeros. The page stays at its address.
-            { to: "/rx/business", label: "Prescription sales", icon: Stethoscope },
+            // Prescription sales merged into Headquarters (Aryan, 28 Nov: "Home and it repeat";
+            // PLAN 263): the doctors' counts and the top doctors are on Headquarters now.
             { to: "/my-team", label: "Whole business", icon: Users, teams: true },
             { to: "/care-groups", label: "Care groups", icon: Users, short: "Groups" },
             { to: "/team-scores", label: "Scorecards", icon: Gauge, short: "Scores" },
