@@ -13,8 +13,9 @@
 // - Each signs in with their Zoho email as HR lists it (else the company email), whatever its domain
 //   (sign-in finds the company that has it), until it is changed; an email two people share stays
 //   the first one's.
-// - With ALL_PASSWORD: every active person of both companies gets that password, not asked to change
-//   it (27 Nov: "the same password for all for now; we change them later"). Never written here.
+// - With ALL_PASSWORD: everyone of HR's sheet (and Getmeds' System admin) gets that password, not asked
+//   to change it (27 Nov: "the same password for all for now; we change them later"). Anyone else (an
+//   Admin login, Aryan's own) keeps theirs. Never written here.
 // - The data checks (Admin panel → Data checks) of each company, before, and after when applied.
 //
 // --together (27 Nov, the backend developer: "keep both companies connected for now; only what is
@@ -254,6 +255,13 @@ const adminOf = async (db: Database): Promise<Me> => {
 
 // Every login email already somebody's, in either company: one person each.
 const used = new Map<string, string>();
+/** Everyone of HR's sheet, per company, by person: the ones the one password is for. */
+const sheetPeople = new Map<Running, Set<number>>();
+const ofSheet = (one: Running, personId: number) => {
+  const set = sheetPeople.get(one) ?? new Set<number>();
+  set.add(personId);
+  sheetPeople.set(one, set);
+};
 for (const one of list.all())
   for (const row of await rows<{ email: string; code: string | null }>(
     one.db,
@@ -289,6 +297,7 @@ for (const [personId, person] of twoMg.taken) {
   const was = homeKnown.find((one) => one.id === personId) as Known;
   if (!sameName(was.name, person.name)) toLook.push(`${person.id}: the CRM says "${was.name}", HR's sheet "${person.full}". Which spelling?`);
   if (person.employer === "gpi" && !together) continue;
+  ofSheet(home, personId);
   const email = workEmail(person, home.ref.loginDomain, was.email?.toLowerCase() ?? null);
   if (was.code !== person.id) say(`[2MG] ${was.name}: Employee ID ${person.id}, employer ${person.employer.toUpperCase()}`);
   if (email) say(`[2MG] ${was.name}: signs in with ${email}`);
@@ -311,6 +320,7 @@ async function addUnplaced(one: Running, me: Me, person: SheetPerson) {
     const [top] = await rows<{ id: number }>(one.db, sql`select id::int as id from org_unit where parent_id is null and active order by id limit 1`);
     const made = await addPerson(one.db, me, { name: person.name, email: login, unitId: top?.id, title: TO_PLACE, module: "staff", employeeCode: person.id });
     await updateRecord(one.db, me, made.personId, { company: person.employer });
+    ofSheet(one, made.personId);
   });
 }
 for (const person of twoMg.free.filter((one) => together || one.employer === "2mg")) await addUnplaced(home, homeMe, person);
@@ -349,6 +359,7 @@ if (getmeds && !together) {
   const inGm = matchUp(gpiPeople, gmKnown);
   for (const [personId, person] of inGm.taken) {
     const was = gmKnown.find((one) => one.id === personId) as Known;
+    ofSheet(gm, personId);
     const email = workEmail(person, gm.ref.loginDomain, was.email?.toLowerCase() ?? null);
     if (was.code !== person.id) say(`[GPI] ${was.name}: Employee ID ${person.id}, employer GPI`);
     if (email) say(`[GPI] ${was.name}: signs in with ${email}`);
@@ -422,6 +433,7 @@ if (getmeds && !together) {
         employeeCode: person.id,
       });
       await updateRecord(gm.db, gmMe, made.personId, { company: "gpi" });
+      ofSheet(gm, made.personId);
       if (first.lead && !lead) toLook.push(`${person.id} ${was.name}: led their 2MG team; Getmeds' copy has its lead already, so placed in it.`);
     });
     await write(home, async () => {
@@ -433,14 +445,23 @@ if (getmeds && !together) {
   for (const one of gmKnown) if (!inGm.taken.has(one.id)) toLook.push(`[GPI] ${one.name}${one.code ? ` (${one.code})` : ""}: in Getmeds, not in HR's sheet (left as it is).`);
 } else if (!together) toLook.push(`${GETMEDS.name} isn't on the list yet: its people are added when this is applied.`);
 
-// ---- One password for everyone, for now ----
+// ---- One password for HR's sheet's people, for now (an Admin login, Aryan's own keep theirs) ----
 if (password !== null) {
   const hash = await hashPassword(password);
+  if (getmeds) {
+    const [gmAdmin] = await rows<{ id: number }>(getmeds.db, sql`select id::int as id from person where lower(email) = ${GETMEDS.loginId} and active`);
+    if (gmAdmin) ofSheet(getmeds, gmAdmin.id);
+  }
   for (const one of list.all()) {
-    const [counted] = await rows<{ n: number }>(one.db, sql`select count(*)::int as n from person where active`);
-    say(`[${one.ref.code}] the same password for all ${counted?.n} active people, not asked to change it`);
+    const ids = [...(sheetPeople.get(one) ?? [])];
+    // Added in this run: counted by the sheet's people not yet there (their ids come when applied).
+    say(`[${one.ref.code}] the same password for ${ids.length} people of HR's sheet${apply ? "" : " (and whoever this run adds)"}, not asked to change it`);
+    if (!ids.length) continue;
     await write(one, async () => {
-      await one.db.execute(sql`update person set password_hash = ${hash}, password_pending = false, must_change_password = false where active`);
+      await one.db.execute(
+        sql`update person set password_hash = ${hash}, password_pending = false, must_change_password = false
+          where active and id in (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})`,
+      );
     });
   }
 } else toLook.push("No ALL_PASSWORD: passwords left as they are.");
