@@ -20,6 +20,7 @@ import { PageState } from "../ui";
 import { PACE_TEXT, PaceBar } from "../company/ceo-home";
 import { seatWords } from "../seat-words";
 import { TeamDrill } from "./drill";
+import { OrderWaysCard } from "./ways-card";
 import { channelsIn, useTeamTree } from "./hierarchy";
 import { toneOf } from "./pace";
 import { HeadRisks } from "./mentor";
@@ -198,9 +199,12 @@ export function TeamSalesPage() {
         </Figure>
       </section>
 
+      {/* How the month's orders came: the doctor's referral and dispensing first (Aryan, 27 Nov). */}
+      {!whole && <OrderWaysCard month={asked} />}
+
       {/* The team as the tracker draws it (Aryan, 19 Nov): each channel big, hover for its details,
           a press opens its manager, each person and the channel's own work. */}
-      {!whole && top && <TeamDrill top={top} pace={data.pace} running={data.running} me={me} />}
+      {!whole && top && <TeamDrill top={top} pace={data.pace} running={data.running} me={me} range={span} />}
 
       {!whole && me.role === "manager" && <HeadRisks />}
 

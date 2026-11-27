@@ -5,6 +5,7 @@ import type { Database } from "../db/index";
 import type { Env } from "../http";
 import { teamAccounts } from "./accounts";
 import { teamBoard, territories } from "./service";
+import { orderWays } from "./ways";
 
 export function teamRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandler<Env>): void {
   app.use("/api/team/board", signedIn);
@@ -16,6 +17,9 @@ export function teamRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHan
   app.get("/api/team/territories", async (c) =>
     c.json(await territories(db, c.get("me"), { unitId: Number(c.req.query("unit")) || null })),
   );
+  app.use("/api/team/ways", signedIn);
+  // How the month's orders came: the doctor dispensing, the doctor's referral, and the rest (27 Nov).
+  app.get("/api/team/ways", async (c) => c.json(await orderWays(db, c.get("me"), { month: c.req.query("month") })));
   app.get("/api/team/board", async (c) =>
     c.json(
       await teamBoard(db, c.get("me"), {

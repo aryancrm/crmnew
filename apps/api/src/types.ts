@@ -6133,6 +6133,29 @@ export type RxField = {
   }[];
 };
 
+/** How a team's orders came in a month (27 Nov): each order's Source, the doctor's two first
+ *  ("Doctor order": the doctor dispensing; "Patient order referred by doctor": the referral). */
+export type OrderWays = {
+  month: string;
+  from: string;
+  to: string;
+  /** The latest order counted (this CRM's or Zoho's), YYYY-MM-DD. */
+  lastOrderOn: string | null;
+  orders: number;
+  value: number;
+  ways: {
+    source: string;
+    orders: number;
+    /** Centavos. */
+    value: number;
+    /** Customers who bought (for a doctor's dispensing: the doctors). */
+    buyers: number;
+    /** Doctors named on the orders (for a referral: the doctors who sent them). */
+    doctors: number;
+    lastOn: string | null;
+  }[];
+};
+
 /** The prescription business at a glance (19 Nov): each person's day and month, the doctors
  *  prescribing most, the guarantee letters by agency from received to paid. */
 export type RxBusiness = {

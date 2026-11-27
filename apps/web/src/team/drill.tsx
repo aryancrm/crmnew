@@ -9,13 +9,13 @@
 
 import { DIVISIONS } from "@2mg/api/divisions";
 import type { Me } from "@2mg/api/types";
-import { ChevronRight, ListTree, Rows3 } from "lucide-react";
+import { ChevronRight, Network, Rows3 } from "lucide-react";
 import { type MouseEvent as ReactMouseEvent, type ReactNode, useState } from "react";
 import { Link } from "react-router-dom";
 import { exactPeso, shortPeso } from "../ceo";
 import { lookAs } from "../shell";
 import { PACE_TEXT, PaceBar } from "../company/ceo-home";
-import { type Node, pctOf, toneOfNode } from "../company/sales-tree";
+import { type Node, pctOf, SalesTreePage, toneOfNode } from "../company/sales-tree";
 import { B2bTeamCard } from "../sellers/b2b";
 import { ClidpTeamCard } from "../sellers/clidp";
 import { ClidpRoadCard } from "../sellers/clidp-road";
@@ -27,7 +27,7 @@ import { BidReportCard } from "../sellers/bid-report";
 import { BiddingCard, BiddingHome } from "../sellers/tenders";
 import { TeamAccountsCard } from "./accounts-card";
 import { DistrictNow } from "./district";
-import { divisionOf, TeamTree } from "./hierarchy";
+import { divisionOf } from "./hierarchy";
 import { HospitalTeams, RxFieldBlock, TelesalesCoachHome } from "./mentor";
 import { EmptyState } from "../no-results";
 
@@ -83,13 +83,28 @@ function tilesOf(top: Node): Node[] {
     .map(({ child }) => child);
 }
 
-export function TeamDrill({ top, pace, running, me }: { top: Node; pace: number; running: boolean; me: Me }) {
+export function TeamDrill({
+  top,
+  pace,
+  running,
+  me,
+  range,
+}: {
+  top: Node;
+  pace: number;
+  running: boolean;
+  me: Me;
+  /** The month the Home shows: the tree's figures are that month's. */
+  range: { from: string; to: string };
+}) {
   const tiles = tilesOf(top);
   // Open at first: the channel with the most people (Vanessa's HOSP, Subir's B2B, Javed's RX).
   const biggest = [...tiles].sort((a, b) => b.figures.people - a.figures.people)[0];
   const [picked, setPicked] = useState<string | null>(biggest?.key ?? null);
   const [manager, setManager] = useState<string | null>(null);
-  const [look, setLook] = useState<"tiles" | "tree">("tiles");
+  // The team's tree first (Aryan, 27 Nov: "build the team's whole tree right here: who is in which
+  // area, who the MedReps are; zooming in and out as the CEO's chart"), the channels' tiles beside it.
+  const [look, setLook] = useState<"chart" | "tiles">("chart");
   const [hover, setHover] = useState<{ node: Node; x: number; y: number } | null>(null);
   const channel = tiles.find((one) => one.key === picked) ?? null;
   // The branch opened below: a manager picked inside the channel, else the channel, else the lead's
@@ -104,18 +119,19 @@ export function TeamDrill({ top, pace, running, me }: { top: Node; pace: number;
       <header className="flex flex-wrap items-end justify-between gap-2 px-1">
         <div>
           <h2 id="your-team" className="text-base font-semibold text-slate-900">
-            {tiles.length ? "Your channels" : "Your team"}
+            {look === "chart" || !tiles.length ? "Your team" : "Your channels"}
           </h2>
           <p className="text-[12px] text-slate-500">
-            Sold against target{running ? ` on the month's pace (${Math.round(pace * 100)}%)` : ""} · hover for the details,
-            press to open
+            {look === "chart"
+              ? "Who is under whom, each person's area, and what each sold against target · press a box for its details"
+              : `Sold against target${running ? ` on the month's pace (${Math.round(pace * 100)}%)` : ""} · hover for the details, press to open`}
           </p>
         </div>
         <div className="flex gap-0.5 overflow-x-auto rounded-lg bg-slate-100 p-1 [scrollbar-width:none]" role="tablist" aria-label="Look">
           {(
             [
+              ["chart", "Team tree", Network],
               ["tiles", "Channels", Rows3],
-              ["tree", "Whole tree", ListTree],
             ] as const
           ).map(([key, label, Icon]) => (
             <button
@@ -132,20 +148,8 @@ export function TeamDrill({ top, pace, running, me }: { top: Node; pace: number;
         </div>
       </header>
 
-      {look === "tree" ? (
-        <TeamTree
-          top={top}
-          pace={pace}
-          running={running}
-          onChannel={(division) => {
-            const found = tiles.find((one) => divisionOf(one) === division);
-            if (found) {
-              setPicked(found.key);
-              setManager(null);
-              setLook("tiles");
-            }
-          }}
-        />
+      {look === "chart" ? (
+        <SalesTreePage embedded range={range} />
       ) : (
         <>
           {tiles.length > 0 && (

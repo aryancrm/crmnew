@@ -105,13 +105,40 @@ function codeOf(name: string): string {
     : name.slice(0, 3).toUpperCase();
 }
 const initialOf = (name: string) => (name.trim()[0] ?? "?").toUpperCase();
+const plainWords = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").trim().toLowerCase();
+/** Where a person works, in a word: their territory's last part ("RX | NCR 1" → NCR 1). A part
+ *  that is only the person's own name says nothing (Aryan, 27 Nov: "who is in which area"):
+ *  "RX | Blood & Bone Care | Marwin Dy" is Blood & Bone Care; a territory that is only its
+ *  channel and the person ("B2C | Rachelle Upao") is "On site". */
+export function placeOf(seat: { area: { name: string } | null; person: { name: string } | null }): string {
+  const own = seat.person ? plainWords(seat.person.name) : null;
+  const parts = (seat.area?.name ?? "")
+    .split("|")
+    .map((part) => part.trim())
+    .filter((part) => part && plainWords(part) !== own);
+  return parts.length > 1 ? (parts[parts.length - 1] as string) : "On site";
+}
 
-export function SalesTreePage() {
+/** The frame of the tree on a Home: a card the page scrolls past, the full screen a press away. */
+const FRAME = "relative flex h-[880px] max-h-[88dvh] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-[#f6f7f9]";
+
+export function SalesTreePage({
+  embedded = false,
+  range,
+}: {
+  /** On a lead's or head's Home (Aryan, 27 Nov: "the team's tree right here, who is in which area,
+   *  who the MedReps are, zooming in and out as the CEO's chart"): their own boxes in a card, the
+   *  Org chart look first; nothing to change from here. */
+  embedded?: boolean;
+  /** The month the Home shows. */
+  range?: { from: string; to: string };
+} = {}) {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
-  const unit = params.get("unit");
-  const look = params.get("look") === "chart" ? "chart" : "tree";
-  const { from, to } = reportRange(params);
+  const unit = embedded ? null : params.get("unit");
+  const [embeddedLook, setEmbeddedLook] = useState<"tree" | "chart">("chart");
+  const look = embedded ? embeddedLook : params.get("look") === "chart" ? "chart" : "tree";
+  const { from, to } = range ?? reportRange(params);
   const qs = new URLSearchParams();
   if (unit) qs.set("unit", unit);
   qs.set("from", from);
@@ -125,7 +152,7 @@ export function SalesTreePage() {
   const [headsOnly, setHeadsOnly] = useState(false);
   // The seats that don't sell (Finance, Dispatch, HR, IT…) are on the same tree: shown when asked,
   // and always while positions are edited, so everyone's place is set here (Aryan, 23 Nov).
-  const [everyone, setEveryone] = useState(params.get("all") === "1");
+  const [everyone, setEveryone] = useState(!embedded && params.get("all") === "1");
   const [find, setFind] = useState("");
   const [picked, setPicked] = useState<string | null>(null);
   const [hover, setHover] = useState<{ key: string; x: number; y: number } | null>(null);
@@ -134,12 +161,12 @@ export function SalesTreePage() {
   // under whom, and the whole software uses it"): the CEO and the Admin change it from a box's
   // panel, with the same windows as the Admin's Teams & people; every other screen reads it.
   const me = useMe().data;
-  const canChange = me?.role === "ceo" || me?.role === "admin";
+  const canChange = !embedded && (me?.role === "ceo" || me?.role === "admin");
   const org = useQuery({ queryKey: ["org"], queryFn: () => api<OrgTree>("/api/org"), enabled: canChange });
   const [pop, setPop] = useState<Pop | null>(null);
   // Changing is one button on top (Aryan, 20 Nov: "an Edit button; otherwise the normal data, no
   // clutter"): off, a box's panel is its figures as before; on, it has the changes.
-  const [editing, setEditing] = useState(params.get("edit") === "1");
+  const [editing, setEditing] = useState(!embedded && params.get("edit") === "1");
   const queries = useQueryClient();
   const orgStamp = useRef(0);
   // A change saved: the tree is read again.
@@ -154,14 +181,18 @@ export function SalesTreePage() {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || pop) return;
       if (picked) setPicked(null);
-      else navigate(-1);
+      else if (!embedded) navigate(-1);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [picked, navigate, pop]);
+  }, [picked, navigate, pop, embedded]);
 
   if (!board.data || !tree)
-    return (
+    return embedded ? (
+      <div className={`${FRAME} grid place-items-center`}>
+        <PageState query={board} what="the team's tree" />
+      </div>
+    ) : (
       <div className="fixed inset-0 z-50 grid place-items-center bg-[#f6f7f9]">
         <PageState query={board} what="the sales organisation" />
       </div>
@@ -219,6 +250,10 @@ export function SalesTreePage() {
     onHover: (node, event) => setHover(node && event ? { key: node.key, x: event.clientX, y: event.clientY } : null),
   };
   const setLook = (next: "tree" | "chart") => {
+    if (embedded) {
+      setEmbeddedLook(next);
+      return;
+    }
     const nextParams = new URLSearchParams(params);
     if (next === "chart") nextParams.set("look", "chart");
     else nextParams.delete("look");
@@ -226,11 +261,12 @@ export function SalesTreePage() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-[#f6f7f9]">
+    <div className={embedded ? FRAME : "fixed inset-0 z-50 flex flex-col bg-[#f6f7f9]"}>
       {/* The bar on top: what it is, find, open all, heads only, the zoom (in the canvas), the look. */}
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-white px-5 py-3">
         <div className="min-w-0">
-          <h1 className="text-[20px] font-semibold tracking-tight text-slate-900">Company tree</h1>
+          {/* On a Home the section above names it. */}
+          {!embedded && <h1 className="text-[20px] font-semibold tracking-tight text-slate-900">Company tree</h1>}
           <p className="text-[13px] text-slate-500">
             Who is under whom{editing ? ": press a box to change it, every screen follows" : ""} · {month} ·{" "}
             {pace < 1 ? `day ${dayOf} of ${data.days}` : "the whole month"} ·{" "}
@@ -245,7 +281,7 @@ export function SalesTreePage() {
               value={find}
               onChange={(event) => setFind(event.target.value)}
               placeholder="Find a person, territory, team"
-              className="h-10 w-72 rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm focus:border-emerald-500 focus:outline-none"
+              className="h-10 w-60 rounded-xl border border-slate-200 bg-white pr-3 pl-9 text-sm focus:border-emerald-500 focus:outline-none"
             />
           </label>
           {canChange && (
@@ -266,9 +302,11 @@ export function SalesTreePage() {
           <Toggle on={headsOnly} onClick={() => setHeadsOnly(!headsOnly)}>
             Heads only
           </Toggle>
-          <Toggle on={everyone} onClick={() => setEveryone(!everyone)} title="The teams that don't sell too (Finance, Dispatch, Inventory, HR, IT…)">
-            Non-sales seats too
-          </Toggle>
+          {!embedded && (
+            <Toggle on={everyone} onClick={() => setEveryone(!everyone)} title="The teams that don't sell too (Finance, Dispatch, Inventory, HR, IT…)">
+              Non-sales seats too
+            </Toggle>
+          )}
           <div className="flex gap-0.5 overflow-x-auto rounded-lg bg-slate-100 p-1 [scrollbar-width:none]" role="tablist" aria-label="Look">
             {(
               [
@@ -288,27 +326,41 @@ export function SalesTreePage() {
               </button>
             ))}
           </div>
-          <button
-            type="button"
-            title="The whole screen"
-            aria-label="The whole screen"
-            onClick={() => {
-              if (document.fullscreenElement) void document.exitFullscreen();
-              else void document.documentElement.requestFullscreen?.();
-            }}
-            className="grid size-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-          >
-            <Maximize className="size-4" />
-          </button>
-          <button
-            type="button"
-            aria-label="Close"
-            title="Close (Esc)"
-            onClick={() => navigate(-1)}
-            className="grid size-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-          >
-            <X className="size-4" />
-          </button>
+          {embedded ? (
+            // The same tree on the whole screen (Esc or the X brings the Home back).
+            <Link
+              to={`/company/sales${look === "chart" ? "?look=chart" : ""}`}
+              title="Open on the whole screen"
+              aria-label="Open on the whole screen"
+              className="grid size-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+            >
+              <Maximize className="size-4" />
+            </Link>
+          ) : (
+            <>
+              <button
+                type="button"
+                title="The whole screen"
+                aria-label="The whole screen"
+                onClick={() => {
+                  if (document.fullscreenElement) void document.exitFullscreen();
+                  else void document.documentElement.requestFullscreen?.();
+                }}
+                className="grid size-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              >
+                <Maximize className="size-4" />
+              </button>
+              <button
+                type="button"
+                aria-label="Close"
+                title="Close (Esc)"
+                onClick={() => navigate(-1)}
+                className="grid size-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+              >
+                <X className="size-4" />
+              </button>
+            </>
+          )}
         </div>
       </header>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-b border-slate-200 bg-white px-5 py-2 text-[13px] text-slate-600">
@@ -323,7 +375,7 @@ export function SalesTreePage() {
       </div>
 
       <div className="relative min-h-0 flex-1">
-        <Canvas key={`${look}:${everyone}`}>
+        <Canvas key={`${look}:${everyone}`} embedded={embedded}>
           {look === "tree" ? <TreeBox node={tree} {...props} /> : <ChartTop node={tree} {...props} />}
         </Canvas>
         {selected && (
@@ -371,7 +423,7 @@ function Legend({ color, children }: { color: string; children: ReactNode }) {
 }
 
 /** The space the tree sits on: drag to move it, the wheel or − / + to zoom, Fit to see it all. */
-function Canvas({ children }: { children: ReactNode }) {
+function Canvas({ children, embedded = false }: { children: ReactNode; embedded?: boolean }) {
   const outer = useRef<HTMLDivElement>(null);
   const inner = useRef<HTMLDivElement>(null);
   const [view, setView] = useState({ x: 40, y: 40, scale: 0.85 });
@@ -404,6 +456,8 @@ function Canvas({ children }: { children: ReactNode }) {
     const element = outer.current;
     if (!element) return;
     const onWheel = (event: WheelEvent) => {
+      // On a Home the wheel scrolls the page; Ctrl (or ⌘) with it, or a trackpad's pinch, zooms.
+      if (embedded && !event.ctrlKey && !event.metaKey) return;
       event.preventDefault();
       const box = element.getBoundingClientRect();
       zoomAt(event.deltaY < 0 ? 1.1 : 1 / 1.1, event.clientX - box.left, event.clientY - box.top);
@@ -451,6 +505,7 @@ function Canvas({ children }: { children: ReactNode }) {
         <button type="button" onClick={fit} className="h-10 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm hover:bg-slate-50">
           Fit
         </button>
+        {embedded && <span className="hidden text-[12px] text-slate-500 sm:inline">Drag to move · Ctrl + scroll or pinch to zoom</span>}
       </div>
     </div>
   );
@@ -1042,7 +1097,7 @@ export function build(board: TeamBoard, everyone: boolean): Node {
     unit: null,
     seat,
     name: seat.person?.name ?? "VACANT",
-    sub: seat.area?.name?.split("|").pop()?.trim() || "On site",
+    sub: placeOf(seat),
     code: initialOf(seat.person?.name ?? "?"),
     hue,
     figures: seatFigures(seat),
