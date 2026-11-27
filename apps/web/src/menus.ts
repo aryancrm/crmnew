@@ -211,23 +211,21 @@ const ordersLink = (label: string): MenuItem => ({
 });
 
 /** A seller's field work in one folder (SEFMED's work in the MedRep's pages, docs/PLAN.md 22): My
- *  day (Start working, the day report, the tiles), the day's visits (or calls), the tour plan, the
- *  customers as KOLs, hospitals and KBLs, the visit plan by class, the calendar, their phone log,
- *  expenses and samples. */
-const fieldFolder = (label: string, today: string, _plan: string, phone = "My calls"): MenuItem =>
+ *  day (Start working, the day report, the tiles), their visits (or calls), the tour plan (the
+ *  month: no second calendar, 25 Nov), expenses and samples. Their phone log is with their
+ *  numbers, and their customers (the field's KOLs, hospitals, KBLs too) in their one customer
+ *  list, `customersLink` (25 Nov). */
+const fieldFolder = (label: string, visits: string): MenuItem =>
   folder(
     label,
     CalendarCheck,
     [
       { to: "/field", label: "My day", icon: Smartphone },
-      { to: "/visits", label: today, icon: CalendarCheck },
+      { to: "/visits", label: visits, icon: CalendarCheck },
       // One plan, one link (Aryan, 22 Nov: "two features of one thing: merge them"). The tour plan's
       // calendar and its view by customer (the visits each class asks for) are the same
       // month's plan, sent to the team lead once: each page opens the other.
       { to: "/field/plan", label: "Tour plan", icon: CalendarRange },
-      { to: "/field/clients", label: "KOLs, hospitals, KBLs", icon: Stethoscope },
-      { to: "/visits/calendar", label: "Calendar", icon: CalendarDays },
-      { to: "/calls", label: phone, icon: PhoneCall },
       { to: "/visits/expenses", label: "My expenses", icon: Receipt },
       { to: "/me/samples", label: "My samples & gifts", icon: Gift },
     ],
@@ -254,17 +252,49 @@ const teamFieldItems = (calendar = false): MenuItem[] => [
 
 /** A seller's own numbers in one folder: their score and the day's sales performance (and the
  *  Hospital CHC's evening huddle). */
-const numbersFolder = (first: MenuItem[] = []): MenuItem =>
+const numbersFolder = (first: MenuItem[] = [], score = true): MenuItem =>
   folder(
     "My numbers",
     Gauge,
-    [
-      ...first,
-      { to: "/my/score", label: "My score", icon: Gauge },
-      { to: "/sales-performance", label: "Sales performance", icon: TrendingUp },
-    ],
+    [...first, ...(score ? [{ to: "/my/score", label: "My score", icon: Gauge }] : []), salesLink],
     "Numbers",
   );
+
+// The links several sellers' menus share, written once (the medrep branch, 25 Nov).
+const callsLink: MenuItem = { to: "/calls", label: "My calls", icon: PhoneCall };
+const collectionsLink: MenuItem = { to: "/collections", label: "Collections", icon: HandCoins };
+const salesLink: MenuItem = { to: "/sales-performance", label: "Sales performance", icon: TrendingUp };
+const careGroupsLink = (label: string): MenuItem => ({ to: "/care-groups", label, icon: Users });
+/** A tender's road from posting to payment: the bidding coachee's and Government Bidding's. */
+const tendersFolder: MenuItem = folder(
+  "Tenders",
+  FileText,
+  [
+    { to: "/tenders", label: "Tenders", icon: FileText },
+    { to: "/tenders/finder", label: "Tender finder", icon: Search },
+    { to: "/tenders/report", label: "Bid report", icon: FileText },
+    { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
+  ],
+  "Tenders",
+);
+/** The seat's customers to call, in its channel's words ("Accounts to call", "Refills due":
+ *  seat-words.ts), one page for every seller. */
+const toCallLink = (me: Me, short?: string): MenuItem => ({
+  to: "/to-call",
+  label: seatWords(me).toCall,
+  icon: PhoneCall,
+  badge: "refills",
+  ...(short ? { short } : {}),
+});
+/** A field seller's one customer list (`mr/clients.tsx`): every kind, with the orders and the
+ *  visits on each card; `tab` opens it on one kind (a PAP officer's patients). */
+const customersLink = (label: string, icon: LucideIcon, tab?: "patient"): MenuItem => ({
+  to: tab ? `/field/clients?kind=${tab}` : "/field/clients",
+  label,
+  icon,
+});
+/** The seat's own customers, in its channel's words ("My accounts", "My patients"). */
+const myCustomersLink = (me: Me, icon: LucideIcon): MenuItem => ({ to: "/my/area", label: seatWords(me).myCustomers, icon });
 
 /** Inventory, laid out the way Zoho Inventory lays out its own. */
 function inventoryApp(me: Me): Space {
@@ -406,6 +436,7 @@ const financeApp: Space = {
         { to: "/finance", label: "Orders to check", icon: ClipboardCheck, badge: "finance" },
         { to: "/finance/prepaid", label: "Prepaid orders", icon: CreditCard },
         { to: "/collect", label: "Due payments", icon: Wallet },
+        { to: "/finance/gl", label: "Guarantee letters", icon: HeartHandshake },
         { to: "/purchases/bills?view=open", label: "Supplier bills to pay", icon: Receipt },
         { to: "/desk/team?desk=finance", label: "Finance team figures", icon: BarChart3 },
         ...moneyLinks,
@@ -460,7 +491,15 @@ const papApp: Space = {
   label: "PAP",
   icon: HeartHandshake,
   tone: "bg-rose-600 text-white",
-  groups: [{ items: [{ to: "/pap", label: "Guarantee-letter cases", icon: HeartHandshake }] }],
+  groups: [
+    {
+      items: [
+        { to: "/pap", label: "Guarantee-letter cases", icon: HeartHandshake },
+        // Their money, months after the delivery: marked by PAP, confirmed by Finance (26 Nov).
+        { to: "/finance/gl", label: "Guarantee letters' money", icon: Banknote },
+      ],
+    },
+  ],
 };
 
 const reportsApp: Space = {
@@ -595,7 +634,7 @@ const messagesLink: MenuItem = folder(
  *  of its work, and Speed with what they look things up in: few links, folders for the rest
  *  (Aryan, 15 Nov: less clutter). */
 function deskFor(me: Me): Space {
-  const desk = ownDesk(me);
+  const desk = withWorks(me, ownDesk(me));
   const space = withVacantSeats(me, withSalesLinks(me, desk));
   const [first, ...rest] = space.groups;
   if (!first) return space;
@@ -618,6 +657,7 @@ function deskFor(me: Me): Space {
                 icon: CalendarDays,
               },
               { to: "/me/payslips", label: "My payslips", icon: ReceiptText },
+              { to: "/me/documents", label: "My documents", icon: FileText },
             ],
             "Me",
           ),
@@ -634,8 +674,7 @@ function deskFor(me: Me): Space {
   // A seller's look-ups (the stock) sit under Look up too, below their own work (19 Nov); the
   // Online desk's as well (22 Nov).
   const seller = !sorted && (me.role === "medrep" || me.role === "online");
-  // HR's one link into the stock is a look-up too (HR's own work is people, leave and pay).
-  const sellerLookUp = seller || me.role === "hr" ? first.items.filter((item) => SELLER_LOOK_UP.includes(item.to)) : [];
+  const sellerLookUp = seller ? first.items.filter((item) => SELLER_LOOK_UP.includes(item.to)) : [];
   // Management approves orders: the calls and the sales figures are what it looks up (22 Nov).
   const deskLookUp = me.role === "management" ? first.items.filter((item) => !item.children && MANAGEMENT_LOOK_UP.includes(item.to)) : [];
   const own = first.items.filter((item) => !sellerLookUp.includes(item) && !deskLookUp.includes(item));
@@ -649,7 +688,9 @@ function deskFor(me: Me): Space {
   // Their own leave, payslips and messages at the foot of every menu, under the work (19 Nov: "each
   // one's own things on top").
   // The CEO's and the Admin's messages (decisions to take) stay at the top with their work.
-  const personal = [...mine, messagesLink];
+  // A desk's shared screen (the desks' common password, 27 Nov) is nobody's own: no "Me", no one
+  // person's messages (Aryan, 19 Nov). Each person's own login keeps them.
+  const personal = me.deskScreen ? [] : [...mine, messagesLink];
   const onTop = me.role === "ceo" || me.role === "admin";
   return {
     ...space,
@@ -756,14 +797,45 @@ function sortLead(items: MenuItem[]): { work: MenuItem[]; team: MenuItem[]; look
   return { work: rest.filter((item) => !TEAM_LINKS.includes(item.to)), team, lookUp };
 }
 
-/** Each role's own desk: only that person's work, and one link into the shared stock. */
+/** The field folder: the one with My visits (or My doctor calls) in it. */
+const isFieldFolder = (item: MenuItem) => Boolean(item.children?.some((child) => child.to === "/visits"));
+
+/** Office or field (docs/PLAN.md 29): the seat's kind decides the field's pages. An office seat
+ *  loses the field folder (My day, visits, tour plan, expenses, samples) and "Log a call"; a field
+ *  seat whose channel sells by phone gets the folder, before their numbers. */
+export function withWorks(me: Me, space: Space): Space {
+  if (me.role !== "medrep" || !me.works) return space;
+  const items = space.groups.flatMap((group) => group.items);
+  const has = items.some(isFieldFolder);
+  if (me.works === "office") {
+    if (!has && space.cta2?.to !== "/field") return space;
+    const { cta2, ...rest } = space;
+    return {
+      ...rest,
+      ...(cta2 && cta2.to !== "/field" ? { cta2 } : {}),
+      groups: space.groups.map((group) => ({ ...group, items: group.items.filter((one) => !isFieldFolder(one)) })),
+      ...(space.tabs ? { tabs: space.tabs.filter((one) => !isFieldFolder(one) && one.to !== "/field") } : {}),
+    };
+  }
+  if (has) return space;
+  const [first, ...others] = space.groups;
+  if (!first) return space;
+  const numbers = first.items.findIndex((one) => one.label === "My numbers");
+  const stock = first.items.findIndex((one) => one.to === stockLink.to);
+  const at = numbers >= 0 ? numbers : stock >= 0 ? stock : first.items.length;
+  const visits = fieldFolder("Visits", "My visits");
+  return { ...space, groups: [{ ...first, items: [...first.items.slice(0, at), visits, ...first.items.slice(at)] }, ...others] };
+}
+
+/** Each role's own desk: only that person's work, and one link into the shared stock (not HR's). */
 function ownDesk(me: Me): Space {
   const desk = (items: MenuItem[], icon: LucideIcon = House): Space => ({
     key: "desk",
     label: seatWords(me).desk,
     icon,
     tone: "bg-brand text-white",
-    groups: [{ items: [...items, stockLink] }],
+    // HR's work is people, leave and pay: no stock (26 Nov; the API refuses it too).
+    groups: [{ items: me.role === "hr" ? items : [...items, stockLink] }],
   });
   switch (me.role) {
     case "medrep": {
@@ -776,11 +848,11 @@ function ownDesk(me: Me): Space {
             { to: "/inbox", label: "Inbox", icon: MessagesSquare, badge: "inbox" },
             // Their guarantee-letter cases, which the PAP person works (22 Nov).
             { to: "/pap", label: "With PAP", icon: HeartHandshake },
-            { to: "/to-call", label: "Refills due", icon: Pill, badge: "refills", short: "Refills" },
+            { ...toCallLink(me, "Refills"), icon: Pill },
             ordersLink("My orders"),
             { to: "/customers", label: "Patients", icon: Users },
             { to: "/points", label: "Points", icon: Gift },
-            { to: "/my/score", label: "My score", icon: Gauge, short: "Score" },
+            numbersFolder(),
           ]),
           cta: { to: "/leads?new=1", label: "New lead" },
         };
@@ -799,32 +871,19 @@ function ownDesk(me: Me): Space {
               Building2,
               [
                 { to: "/hospital-board", label: "My hospitals", icon: Building2 },
-                { to: "/to-call", label: "Hospitals to call", icon: PhoneCall, badge: "refills" },
-                { to: "/collections", label: "Collections", icon: HandCoins },
+                toCallLink(me),
+                collectionsLink,
                 // Every customer of the area (hospitals, and their doctors and patients): it said
-                // "Hospital list" (22 Nov).
-                { to: "/my/area", label: "All my customers", icon: Building2 },
+                // "Hospital list" (22 Nov). Not seat-words' "My hospitals": that is the board above.
+                customersLink("All my customers", Building2),
               ],
               "Hospitals",
             ),
-            fieldFolder("Visits", "Today's visits", "Visit plan"),
-            // The Government Account's bidding coachee works tenders; the CHCs declare the 7 PM huddle.
-            ...(bidding
-              ? [
-                  folder(
-                    "Tenders",
-                    FileText,
-                    [
-                      { to: "/tenders", label: "Tenders", icon: FileText },
-                      { to: "/tenders/finder", label: "Tender finder", icon: Search },
-                      { to: "/tenders/report", label: "Bid report", icon: FileText },
-                      { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
-                    ],
-                    "Tenders",
-                  ),
-                ]
-              : []),
-            numbersFolder(bidding ? [] : [{ to: "/huddle", label: "Tonight's huddle", icon: Megaphone }]),
+            fieldFolder("Visits", "My visits"),
+            // The Government Account's bidding coachee works tenders; the CHCs declare the 7 PM huddle
+            // (a report of the day, not a number: its own link, 25 Nov).
+            ...(bidding ? [tendersFolder] : [{ to: "/huddle", label: "Tonight's huddle", icon: Megaphone }]),
+            numbersFolder(),
           ]),
           cta: newOrder,
         };
@@ -844,7 +903,7 @@ function ownDesk(me: Me): Space {
               "Prospects",
             ),
             ordersLink("My orders"),
-            { to: "/calls", label: "My calls", icon: PhoneCall, short: "Calls" },
+            { ...callsLink, short: "Calls" },
             numbersFolder(),
           ]),
           cta: newOrder,
@@ -855,8 +914,8 @@ function ownDesk(me: Me): Space {
         return {
           ...desk([
             home,
-            { to: "/to-call", label: "Accounts to call", icon: PhoneCall, badge: "refills", short: "Call" },
-            { to: "/b2b/accounts", label: "My accounts", icon: Building2, short: "Accounts" },
+            toCallLink(me, "Call"),
+            { to: "/b2b/accounts", label: seatWords(me).myCustomers, icon: Building2, short: "Accounts" },
             folder(
               "My orders",
               ClipboardList,
@@ -866,8 +925,8 @@ function ownDesk(me: Me): Space {
               ],
               "Orders",
             ),
-            { to: "/calls", label: "My calls", icon: PhoneCall },
-            { to: "/collections", label: "Collections", icon: HandCoins },
+            callsLink,
+            collectionsLink,
             numbersFolder(),
           ]),
           cta: newOrder,
@@ -875,24 +934,8 @@ function ownDesk(me: Me): Space {
       // Government Bidding's coachees and CHC (docs/PLAN.md 16.6): tenders from posting to payment.
       if (me.channel?.code === "BID")
         return {
-          ...desk([
-            home,
-            folder(
-              "Tenders",
-              FileText,
-              [
-                { to: "/tenders", label: "Tenders", icon: FileText },
-                { to: "/tenders/finder", label: "Tender finder", icon: Search },
-                { to: "/tenders/report", label: "Bid report", icon: FileText },
-                { to: "/company-papers", label: "Documents", icon: ClipboardCheck },
-              ],
-              "Tenders",
-            ),
-            ordersLink("My orders"),
-            { to: "/collections", label: "Collections", icon: HandCoins },
-            { to: "/calls", label: "My calls", icon: PhoneCall },
-            { to: "/sales-performance", label: "Sales performance", icon: TrendingUp },
-          ]),
+          // Their numbers are their calls and the day's sales (no scorecard yet).
+          ...desk([home, tendersFolder, ordersLink("My orders"), collectionsLink, numbersFolder([], false)]),
           cta: newOrder,
           cta2: { to: "/tenders", label: "Record a tender" },
         };
@@ -906,17 +949,16 @@ function ownDesk(me: Me): Space {
               Building2,
               [
                 { to: "/clidp/road", label: "Pharmacies and distributors", icon: Building2 },
-                { to: "/my/area", label: "My accounts", icon: Building2 },
-                { to: "/to-call", label: "Accounts to call", icon: PhoneCall, badge: "refills" },
+                myCustomersLink(me, Building2),
+                toCallLink(me),
                 { to: "/clidp/listings", label: "Listings", icon: FileText },
                 // What the accounts owe sits with the accounts (22 Nov: loose links grouped).
-                { to: "/collections", label: "Collections", icon: HandCoins },
+                collectionsLink,
               ],
               "Accounts",
             ),
             ordersLink("My orders"),
-            { to: "/calls", label: "My calls", icon: PhoneCall },
-            { to: "/sales-performance", label: "Sales performance", icon: TrendingUp },
+            numbersFolder([], false),
           ]),
           cta: newOrder,
         };
@@ -925,18 +967,10 @@ function ownDesk(me: Me): Space {
         return {
           ...desk([
             home,
-            { to: "/to-call", label: "Customers to call", icon: PhoneCall, badge: "refills", short: "Call" },
+            toCallLink(me, "Call"),
             ordersLink("My orders"),
-            folder(
-              "Customers",
-              Building2,
-              [
-                { to: "/my/area", label: "My customers", icon: Building2 },
-                { to: "/collections", label: "Collections", icon: HandCoins },
-              ],
-              "Customers",
-            ),
-            { to: "/calls", label: "My calls", icon: PhoneCall },
+            folder("Customers", Building2, [myCustomersLink(me, Building2), collectionsLink], "Customers"),
+            callsLink,
             numbersFolder(),
           ]),
           cta: newOrder,
@@ -947,18 +981,10 @@ function ownDesk(me: Me): Space {
         return {
           ...desk([
             home,
-            { to: "/to-call", label: "Refills due", icon: Pill, badge: "refills", short: "Refills" },
+            { ...toCallLink(me, "Refills"), icon: Pill },
             ordersLink("My orders"),
-            folder(
-              "Patients",
-              Users,
-              [
-                { to: "/my/area", label: "My patients", icon: Users },
-                { to: "/care-groups", label: "Care groups", icon: Users },
-              ],
-              "Patients",
-            ),
-            { to: "/calls", label: "My calls", icon: PhoneCall },
+            folder("Patients", Users, [myCustomersLink(me, Users), careGroupsLink("Care groups")], "Patients"),
+            callsLink,
             numbersFolder(),
           ]),
           cta: newOrder,
@@ -978,11 +1004,13 @@ function ownDesk(me: Me): Space {
               [
                 { to: "/rx/doctors", label: "My doctors", icon: Stethoscope },
                 { to: "/rx/business", label: "My prescriptions", icon: Stethoscope },
-                { to: "/care-groups", label: "Patient care groups", icon: Users },
+                careGroupsLink("Patient care groups"),
+                // The doctors' tiers above plan the route; this is every customer, hospitals and KBLs too.
+                customersLink("All my customers", Building2),
               ],
               "Doctors",
             ),
-            fieldFolder("Calls", "Today's calls", "Route plan", "My phone calls"),
+            fieldFolder("Calls", "My doctor calls"),
             numbersFolder(),
           ]),
           cta: newOrder,
@@ -994,18 +1022,28 @@ function ownDesk(me: Me): Space {
       return {
         ...desk([
           home,
-          ...(pap ? [{ to: "/pap", label: "PAP cases", icon: HeartHandshake, short: "Cases" }] : []),
+          ...(pap
+            ? [
+                { to: "/pap", label: "PAP cases", icon: HeartHandshake, short: "Cases" },
+                // The letters' money after the delivery: she marks what came in (26 Nov).
+                { to: "/finance/gl", label: "GL money", icon: Banknote, short: "Money" },
+              ]
+            : []),
           ordersLink("My orders"),
+          // A PAP MedRep in seat-words' words; any other in the plain ones (a Modern Trade MedRep's
+          // seat-words say "Chains", the COO's desk's words, not theirs).
           folder(
             pap ? "Patients" : "Customers",
             pap ? Users : MapPin,
-            [
-              { to: "/my/area", label: pap ? "My patients" : "My area", icon: pap ? Users : MapPin },
-              { to: "/to-call", label: pap ? "Patients to call" : "Customers to call", icon: PhoneCall, badge: "refills" },
-            ],
+            pap
+              ? [customersLink(seatWords(me).myCustomers, Users, "patient"), toCallLink(me)]
+              : [
+                  customersLink("My area", MapPin),
+                  { to: "/to-call", label: "Customers to call", icon: PhoneCall, badge: "refills" },
+                ],
             pap ? "Patients" : "Customers",
           ),
-          fieldFolder("Visits", "Today's visits", "Visit plan"),
+          fieldFolder("Visits", "My visits"),
           numbersFolder(),
         ]),
         cta: newOrder,
@@ -1474,6 +1512,8 @@ function ownDesk(me: Me): Space {
               { to: "/finance/prepaid", label: "Prepaid orders", icon: CreditCard, short: "Prepaid" },
               // Its count: the payments past their day (cash on delivery once delivered, credit's days).
               { to: "/collect", label: "Due payments", icon: Wallet, short: "Due", badge: "latePayments" },
+              // Guarantee letters: the agency pays months after the delivery; PAP marks it, Finance confirms (26 Nov).
+              { to: "/finance/gl", label: "Guarantee letters", icon: HeartHandshake, short: "GL" },
               // Money going out, every day: refunds owed to customers and suppliers' bills to pay.
               { to: "/refunds", label: "Refunds owed", icon: Undo2, badge: "refunds", short: "Refunds" },
               { to: "/purchases/bills?view=open", label: "Supplier bills to pay", icon: Receipt, short: "Bills" },
@@ -1548,6 +1588,12 @@ function ownDesk(me: Me): Space {
           { to: "/vacant-seats", label: "Vacant seats", icon: UserX },
           { to: "/hr/schedules", label: "Schedules", icon: Timer },
           { to: "/hr/holidays", label: "Holidays", icon: CalendarHeart },
+          // Papers in and out (26 Nov): HR's documents, its reports, and its imports and exports.
+          folder("Documents & reports", FileText, [
+            { to: "/hr/documents", label: "Documents", icon: FileText },
+            { to: "/hr/reports", label: "Reports", icon: BarChart3 },
+            { to: "/hr/import-export", label: "Import & export", icon: FileSpreadsheet },
+          ]),
         ]),
         icon: Users,
       };
@@ -1762,4 +1808,35 @@ export function spaceFor(me: Me, pathname: string): Space {
   if (me.role !== "inventory" && under(pathname, INVENTORY_PATHS))
     return { ...inventoryApp(me), back: { to: "/", label: `Back to ${me.roleLabel}` } };
   return desk;
+}
+
+/** Whether a page of a folder (or the folder's own) is open: it then shows unfolded. A filtered
+ *  link (/orders?stuck=1) counts only on that list with that filter, not on every order. A link
+ *  open only as a parent path (My day at /field, on /field/clients) doesn't count when a deeper
+ *  link anywhere in the menu is the page (All my customers in another folder: 25 Nov, two
+ *  folders lit at once). */
+export function folderOpen(
+  item: MenuItem,
+  location: { pathname: string; search: string },
+  every: { to: string }[] = [],
+): boolean {
+  const deeperElsewhere = (path: string) =>
+    every.some((other) => {
+      const otherPath = other.to.split("?")[0] ?? "";
+      return (
+        otherPath.startsWith(`${path}/`) &&
+        (location.pathname === otherPath || location.pathname.startsWith(`${otherPath}/`))
+      );
+    });
+  return allItems(item.children ?? [item]).some((one) => {
+    const [path = "", query] = one.to.split("?");
+    if (path === "/") return false;
+    if (query) {
+      if (location.pathname !== path) return false;
+      const now = new URLSearchParams(location.search);
+      return [...new URLSearchParams(query)].every(([key, value]) => now.get(key) === value);
+    }
+    if (location.pathname === path) return true;
+    return location.pathname.startsWith(`${path}/`) && !deeperElsewhere(path);
+  });
 }

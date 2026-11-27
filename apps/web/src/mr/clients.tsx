@@ -1,3 +1,8 @@
+// A seller's one customer list (medrep branch, 25 Nov: it was two, "All my customers" and the
+// field's KOLs, hospitals, KBLs, of the same customers): tabs All · Hospitals · KOLs · KBLs ·
+// Patients, each card with the sales side (orders, the last one, what it owes) and the field side
+// (last and next visit, the best day and time). Patients are never visited: their actions are
+// the CRM's (open their page, add an order). The rest as SEFMED's:
 // SEFMED's KOLs, Hospitals and KBLs (docs/PLAN.md 22) over the CRM's own customers: For me · Team
 // with counts, search by name, city, hospital or code; each card with its code, city, specialty
 // or type, best day / time; a tap opens the actions (open, directions, add visit, add order on the
@@ -5,13 +10,25 @@
 // with the CRM's own form. A customer's field page holds the field's profile and its history; the
 // customer itself (name, address, licence) stays the CRM's, edited on its own page.
 
-import type { ClientKind, ClientList, ClientPage, FieldProfile, FirmType, VisitPage } from "@2mg/api/mr";
-import { CATEGORIES, CLIENT_KINDS, DAYS, DAY_WORDS, FIRM_TYPES, FIRM_WORDS, KIND_ONE, KIND_TABS, MEETING_WORDS, OBJECTIVE_WORDS } from "@2mg/api/mr";
+import type { ClientKind, ClientList, ClientPage, ClientTab, FieldProfile, FirmType, VisitPage } from "@2mg/api/mr";
+import {
+  CATEGORIES,
+  CLIENT_KINDS,
+  CLIENT_TABS,
+  DAYS,
+  DAY_WORDS,
+  FIRM_TYPES,
+  FIRM_WORDS,
+  KIND_ONE,
+  MEETING_WORDS,
+  OBJECTIVE_WORDS,
+  TAB_WORDS,
+} from "@2mg/api/mr";
 import type { CustomerKind, CustomerList } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, RefreshCw, Search } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
-import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { CustomerDialog } from "../customers/dialog";
 import { manilaToday } from "../team/range";
@@ -22,14 +39,21 @@ import { ActionSheet, Choices, clientLine, clockOf, dayWords, directions, FIELD,
 import { EmptyState, NoInvoicesArt, NoResults } from "../no-results";
 
 /** The CRM kind a new customer starts as, from the field's tab. */
-const NEW_KIND: Record<ClientKind, CustomerKind> = { doctor: "doctor", hospital: "hospital", firm: "drugstore" };
+const NEW_KIND: Record<ClientTab, CustomerKind | undefined> = {
+  all: undefined,
+  doctor: "doctor",
+  hospital: "hospital",
+  firm: "drugstore",
+  patient: "patient",
+};
+const isFieldKind = (tab: ClientTab): tab is ClientKind => (CLIENT_KINDS as string[]).includes(tab);
 
 export function MrClientsPage() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const mr = useMrMe();
   const unit = useTeamUnit();
-  const kind = (params.get("kind") as ClientKind) || "doctor";
+  const kind: ClientTab = (CLIENT_TABS as string[]).includes(params.get("kind") ?? "") ? (params.get("kind") as ClientTab) : "all";
   const scope = params.get("scope") ?? (mr.data?.access === "mr" ? "mine" : "team");
   const view = params.get("view");
   const [typed, setTyped] = useState(params.get("q") ?? "");
@@ -46,7 +70,7 @@ export function MrClientsPage() {
   });
   const [picked, setPicked] = useState<ClientList["rows"][number] | null>(null);
   const [adding, setAdding] = useState(false);
-  const [visiting, setVisiting] = useState<number | null>(null);
+  const [visiting, setVisiting] = useState<{ id: number; kind: ClientKind } | null>(null);
   const [lastFive, setLastFive] = useState<number | null>(null);
   const [asking, setAsking] = useState<number | null>(null);
   const set = (next: Record<string, string | null>) => {
@@ -61,21 +85,27 @@ export function MrClientsPage() {
   return (
     <div className={`mx-auto flex max-w-4xl flex-col gap-3 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
       <MrHead
-        title={KIND_TABS[kind]}
-        sub="The CRM's customers you look after, for the field"
+        title={kind === "all" ? (scope === "mine" ? "All my customers" : "The team's customers") : TAB_WORDS[kind]}
+        sub="Their orders and what they owe, their visits and the best time to go"
         actions={
           <>
             <Button small variant="quiet" aria-label="Refresh" onClick={() => void query.refetch()}><RefreshCw size={15} /></Button>
+            {/* The sales table (filters by who owes, sorting) stays one tap away. */}
+            <Link to="/my/area" className="inline-flex h-8 items-center rounded-lg px-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100">
+              Table
+            </Link>
             {data.can.add && (
-              <Button small variant="primary" onClick={() => setAdding(true)}><Plus size={15} /> Add {KIND_ONE[kind].toLowerCase()}</Button>
+              <Button small variant="primary" onClick={() => setAdding(true)}>
+                <Plus size={15} /> Add {isFieldKind(kind) ? KIND_ONE[kind].toLowerCase() : kind === "patient" ? "patient" : "customer"}
+              </Button>
             )}
           </>
         }
       />
       <div className="flex gap-1 overflow-x-auto">
-        {CLIENT_KINDS.map((one) => (
+        {CLIENT_TABS.map((one) => (
           <button key={one} type="button" onClick={() => set({ kind: one })} className={`rounded-full px-3 py-1.5 text-sm font-semibold ${kind === one ? "bg-slate-900 text-white" : "bg-white text-slate-700 ring-1 ring-slate-200"}`}>
-            {KIND_TABS[one]}
+            {TAB_WORDS[one]}
           </button>
         ))}
       </div>
@@ -103,10 +133,17 @@ export function MrClientsPage() {
                 <span className="block font-semibold text-slate-900 uppercase">{one.name}</span>
                 <span className="block text-xs text-slate-500">{clientLine(one)}</span>
                 <span className="block text-xs text-slate-500">
-                  {one.assignedTo ? `${one.assignedTo.name} · ` : ""}
-                  {one.lastVisit ? `last visit ${dayWords(one.lastVisit)}` : "never visited"}
-                  {one.nextVisit ? ` · next ${dayWords(one.nextVisit)}` : ""}
+                  {one.orders ? `${one.orders} order${one.orders === 1 ? "" : "s"}` : "no order yet"}
+                  {one.lastOrderAt ? ` · last ${dayWords(one.lastOrderAt.slice(0, 10))}` : ""}
+                  {one.owed > 0 ? <span className="font-semibold text-amber-700"> · owes {peso(one.owed)}</span> : null}
                 </span>
+                {!one.patient && (
+                  <span className="block text-xs text-slate-500">
+                    {one.assignedTo ? `${one.assignedTo.name} · ` : ""}
+                    {one.lastVisit ? `last visit ${dayWords(one.lastVisit)}` : "never visited"}
+                    {one.nextVisit ? ` · next ${dayWords(one.nextVisit)}` : ""}
+                  </span>
+                )}
                 {(one.prefDays.length > 0 || one.prefTime) && (
                   <span className="block text-xs font-semibold text-sky-700">Pref day/time: {[one.prefDays.map((d) => DAY_WORDS[d as keyof typeof DAY_WORDS] ?? d).join(", "), one.prefTime].filter(Boolean).join(" · ")}</span>
                 )}
@@ -118,9 +155,13 @@ export function MrClientsPage() {
       {data.rows.length === 0 && (
         <div className={CARD}>
           {q ? (
-            <NoResults title={<>No {KIND_TABS[kind]} here yet.</>}>Check the spelling, or clear the search.</NoResults>
+            <NoResults title={kind === "all" ? "No customers here yet." : `No ${TAB_WORDS[kind]} here yet.`}>
+              Check the spelling, or clear the search.
+            </NoResults>
           ) : (
-            <EmptyState title={<>No {KIND_TABS[kind]} here yet.</>}>The CRM's customers you look after show here, for the field.</EmptyState>
+            <EmptyState title={kind === "all" ? "No customers here yet." : `No ${TAB_WORDS[kind]} here yet.`}>
+              The CRM's customers you look after show here, for the field.
+            </EmptyState>
           )}
         </div>
       )}
@@ -131,18 +172,31 @@ export function MrClientsPage() {
           sub={clientLine(picked)}
           onClose={() => setPicked(null)}
           actions={[
-            { label: "Open", onPick: () => navigate(`/field/clients/${picked.id}`) },
-            { label: "Get directions", onPick: () => window.open(directions(picked), "_blank") },
-            { label: "Add visit", hidden: !member, onPick: () => setVisiting(picked.id) },
+            // A patient opens on the CRM's own page (the field has none for them) and is never visited.
+            { label: "Open", onPick: () => navigate(picked.patient ? `/customers/${picked.id}` : `/field/clients/${picked.id}`) },
+            { label: "Get directions", hidden: picked.patient, onPick: () => window.open(directions(picked), "_blank") },
+            { label: "Add visit", hidden: !member || picked.patient, onPick: () => setVisiting({ id: picked.id, kind: picked.kind }) },
             { label: "Add order", hidden: !member, onPick: () => navigate(`/orders/new?customer=${picked.id}`) },
-            { label: "View last five visits", onPick: () => setLastFive(picked.id) },
-            { label: "Call history", onPick: () => navigate(`/field/clients/${picked.id}?view=calls`) },
-            { label: "Ask to take off the list", hidden: mr.data?.access !== "mr" || scope !== "mine", danger: true, onPick: () => setAsking(picked.id) },
+            { label: "View last five visits", hidden: picked.patient, onPick: () => setLastFive(picked.id) },
+            { label: "Call history", hidden: picked.patient, onPick: () => navigate(`/field/clients/${picked.id}?view=calls`) },
+            {
+              label: "Ask to take off the list",
+              hidden: picked.patient || mr.data?.access !== "mr" || scope !== "mine",
+              danger: true,
+              onPick: () => setAsking(picked.id),
+            },
           ]}
         />
       )}
-      {adding && <AddCustomer kind={kind} onClose={() => setAdding(false)} onSaved={(id) => navigate(`/field/clients/${id}?profile=1`)} />}
-      {visiting && <AddVisitsDialog day={manilaToday()} kind={kind} preset={[visiting]} onClose={() => setVisiting(null)} />}
+      {adding && (
+        <AddCustomer
+          kind={kind}
+          onClose={() => setAdding(false)}
+          // A doctor, hospital or firm goes on to its field details; anyone else to the CRM's page.
+          onSaved={(id) => navigate(isFieldKind(kind) ? `/field/clients/${id}?profile=1` : `/customers/${id}`)}
+        />
+      )}
+      {visiting && <AddVisitsDialog day={manilaToday()} kind={visiting.kind} preset={[visiting.id]} onClose={() => setVisiting(null)} />}
       {lastFive && <LastFive clientId={lastFive} onClose={() => setLastFive(null)} />}
       {asking && <AskOff clientId={asking} onClose={() => setAsking(null)} />}
     </div>
@@ -150,15 +204,15 @@ export function MrClientsPage() {
 }
 
 /** The CRM's own Add customer (the same checks as everywhere: one per city, a hospital's papers). */
-function AddCustomer({ kind, onClose, onSaved }: { kind: ClientKind; onClose: () => void; onSaved: (id: number) => void }) {
+function AddCustomer({ kind, onClose, onSaved }: { kind: ClientTab; onClose: () => void; onSaved: (id: number) => void }) {
   const crm = useQuery({
-    queryKey: ["customers", "field-add", NEW_KIND[kind]],
+    queryKey: ["customers", "field-add", NEW_KIND[kind] ?? "any"],
     // The CRM's list gives the form what it needs (who may set what, the kinds).
-    queryFn: () => api<CustomerList>(`/api/customers?kind=${NEW_KIND[kind]}`),
+    queryFn: () => api<CustomerList>(NEW_KIND[kind] ? `/api/customers?kind=${NEW_KIND[kind]}` : "/api/customers"),
   });
   if (!crm.data)
     return (
-      <Dialog title={`Add ${KIND_ONE[kind].toLowerCase()}`} onClose={onClose}>
+      <Dialog title={`Add ${isFieldKind(kind) ? KIND_ONE[kind].toLowerCase() : kind === "patient" ? "patient" : "customer"}`} onClose={onClose}>
         <PageState query={crm} what="the form" />
       </Dialog>
     );
@@ -393,46 +447,53 @@ function ProfileDialog({ data, onClose }: { data: ClientPage; onClose: () => voi
 
 /** A customer's field page: the CRM's details, the field's profile, last five visits (or all
  *  calls), its orders and what it owes; add a visit or an order. */
+/** The field's side of a customer (doctor, hospital, firm), read once and shared by the customer
+ *  page's action bar, What's next and field panel. Only for those with the field's pages. */
+export function useFieldClient(customerId: number, enabled: boolean) {
+  return useQuery({
+    queryKey: ["mr", "client", customerId],
+    queryFn: () => api<ClientPage>(`/api/mr/clients/${customerId}`),
+    enabled,
+    retry: false,
+  });
+}
+
+/** The old field page of a customer: the customer's own page now holds it all (25 Nov: one page
+ *  per customer, with what the seller does there). Old links keep working. */
 export function MrClientPage() {
   const id = Number(useParams().id);
+  const { search } = useLocation();
+  return <Navigate replace to={`/customers/${id}${search}`} />;
+}
+
+/** The field's side on the customer's page: the best day and time, visits a month and calls, the
+ *  pinned place, a doctor's hospital and licence, the last five visits or the call history, and
+ *  the off-the-list ask. Field details (?profile=1) opens from the page's More. */
+export function FieldPanel({ data }: { data: ClientPage }) {
   const [params, setParams] = useSearchParams();
-  const navigate = useNavigate();
   const queries = useQueryClient();
   const action = useAction();
-  const query = useQuery({ queryKey: ["mr", "client", id], queryFn: () => api<ClientPage>(`/api/mr/clients/${id}`) });
-  const calls = useQuery({
-    queryKey: ["mr", "client", id, "calls"],
-    queryFn: () => api<{ rows: VisitPage["history"] }>(`/api/mr/clients/${id}/calls`),
-    enabled: params.get("view") === "calls",
-  });
-  const [visiting, setVisiting] = useState(false);
-  const [asking, setAsking] = useState(false);
-  const data = query.data;
-  if (!data) return <PageState query={query} what="the customer" />;
   const c = data.client;
-  const showCalls = params.get("view") === "calls";
+  const [showCalls, setShowCalls] = useState(params.get("view") === "calls");
+  const calls = useQuery({
+    queryKey: ["mr", "client", c.id, "calls"],
+    queryFn: () => api<{ rows: VisitPage["history"] }>(`/api/mr/clients/${c.id}/calls`),
+    enabled: showCalls,
+  });
+  const [asking, setAsking] = useState(false);
   const editing = params.get("profile") === "1";
-  const setEditing = (on: boolean) => {
+  const closeEditing = () => {
     const next = new URLSearchParams(params);
-    if (on) next.set("profile", "1");
-    else next.delete("profile");
+    next.delete("profile");
     setParams(next, { replace: true });
   };
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-4">
-      <MrHead
-        title={c.name}
-        sub={`${KIND_ONE[c.kind]} · ${clientLine(c)}${c.offList ? " · off the field's list" : ""}`}
-        actions={
-          <>
-            {data.can.profile && <Button small onClick={() => setEditing(true)}>Field details</Button>}
-            {data.can.visit && <Button small variant="primary" onClick={() => setVisiting(true)}>Add visit</Button>}
-            {data.can.order && <Button small onClick={() => navigate(`/orders/new?customer=${c.id}`)}>Add order</Button>}
-          </>
-        }
-      />
+    <section className={`${CARD} flex flex-col gap-3 p-4`} aria-labelledby="field-panel">
+      <h2 id="field-panel" className="text-sm font-bold text-slate-900">
+        In the field{c.offList ? <span className="font-normal text-slate-500"> · off the field's list</span> : null}
+      </h2>
       {c.offAsked && (
-        <div className={`${CARD} flex flex-wrap items-center justify-between gap-3 border-amber-200 bg-amber-50 p-3 text-sm`}>
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-amber-50 p-3 text-sm ring-1 ring-amber-200">
           <span>{c.offAsked.by} asked to take it off the list: {c.offAsked.why}</span>
           {data.can.answerOff && (
             <span className="flex gap-2">
@@ -442,24 +503,20 @@ export function MrClientPage() {
           )}
         </div>
       )}
-      <section className={`${CARD} grid gap-2 p-4 text-[13px] sm:grid-cols-2`}>
-        <Info label="Looked after by">{c.assignedTo?.name ?? "—"}</Info>
-        <Info label="Address">{c.address || "—"}{c.city ? `, ${c.city}` : ""}{c.zone ? ` · ${c.zone}` : ""}</Info>
-        <Info label="Contact">{[c.contactPerson, c.phone, c.email].filter(Boolean).join(" · ") || "—"}</Info>
+      <div className="grid gap-2 text-[13px] sm:grid-cols-2">
+        <Info label="Best day / time">{[c.prefDays.map((d) => DAY_WORDS[d as keyof typeof DAY_WORDS] ?? d).join(", "), c.prefTime].filter(Boolean).join(" · ") || "Not set yet"}</Info>
+        <Info label="Visits a month">{c.visitsAMonth ?? "—"} · {data.calls} calls in all</Info>
+        <Info label="Place">{c.pin ? <a className="text-sky-700 hover:underline" href={directions(c)} target="_blank" rel="noreferrer">Pinned · directions</a> : "Not pinned yet (pinned from a check-in)"}</Info>
+        {c.contactPerson && <Info label="Contact person">{c.contactPerson}</Info>}
         {c.kind === "doctor" && <Info label="Hospital / firm">{[c.worksAtName, c.firmName].filter(Boolean).join(" · ") || "—"}</Info>}
         {c.kind === "doctor" && <Info label="Licence · qualification">{[c.licenceNo, c.qualification, c.dispensing === null ? null : c.dispensing ? "Dispensing" : "Non-dispensing"].filter(Boolean).join(" · ") || "—"}</Info>}
-        <Info label="Best day / time">{[c.prefDays.map((d) => DAY_WORDS[d as keyof typeof DAY_WORDS] ?? d).join(", "), c.prefTime].filter(Boolean).join(" · ") || "—"}</Info>
-        <Info label="Visits a month">{c.visitsAMonth ?? "—"} · {data.calls} calls in all</Info>
-        <Info label="Owes">{data.owed.total ? `${peso(data.owed.total)}${data.owed.overdue ? ` · ${peso(data.owed.overdue)} overdue` : ""}` : "Nothing"}</Info>
-        <Info label="Place">{c.pin ? <a className="text-sky-700 hover:underline" href={directions(c)} target="_blank" rel="noreferrer">Pinned · directions</a> : "Not pinned yet (pinned from a check-in)"}</Info>
-        <Info label="In the CRM">
-          <Link to={`/customers/${c.id}`} className="font-semibold text-sky-700 hover:underline">{c.code ?? "Open"} · the customer's page</Link>
-        </Info>
-      </section>
-      <section className={`${CARD} p-4`}>
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-sm font-bold text-slate-900">{showCalls ? "Call history" : "Last five visits"}</h2>
-          <Link to={showCalls ? `/field/clients/${id}` : `/field/clients/${id}?view=calls`} className="text-xs font-semibold text-sky-700">{showCalls ? "Last five" : "Call history"}</Link>
+      </div>
+      <div>
+        <div className="mb-1 flex items-center justify-between">
+          <h3 className="text-[13px] font-semibold text-slate-900">{showCalls ? "Call history" : "Last five visits"}</h3>
+          <button type="button" onClick={() => setShowCalls(!showCalls)} className="text-xs font-semibold text-sky-700 hover:underline">
+            {showCalls ? "Last five visits" : "Call history"}
+          </button>
         </div>
         {showCalls ? (calls.data ? <VisitLines rows={calls.data.rows} /> : <PageState query={calls} what="the calls" />) : <VisitLines rows={data.history} />}
         {!showCalls && data.history.length === 0 && (
@@ -467,29 +524,15 @@ export function MrClientPage() {
             The last five visits to this customer show here.
           </EmptyState>
         )}
-      </section>
-      {data.orders.length > 0 && (
-        <section className={`${CARD} p-4`}>
-          <h2 className="mb-2 text-sm font-bold text-slate-900">Orders</h2>
-          <ul className="text-[13px]">
-            {data.orders.map((one) => (
-              <li key={one.id} className="flex justify-between gap-2 border-b border-slate-100 py-1.5 last:border-0">
-                <Link to={`/orders/${one.id}`} className="hover:underline">{one.code ?? `#${one.id}`} · {dayWords(one.on)} · {one.by} · {one.statusWord}</Link>
-                <span className={one.status === "cancelled" ? "text-slate-400 line-through" : "font-semibold"}>{peso(one.total)}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      </div>
       {data.can.askOff && (
         <button type="button" onClick={() => setAsking(true)} className="self-start text-xs font-semibold text-rose-700 hover:underline">
           Ask to take it off the list
         </button>
       )}
-      {editing && data.can.profile && <ProfileDialog data={data} onClose={() => setEditing(false)} />}
-      {visiting && <AddVisitsDialog day={manilaToday()} kind={c.kind} preset={[c.id]} onClose={() => setVisiting(false)} />}
+      {editing && data.can.profile && <ProfileDialog data={data} onClose={closeEditing} />}
       {asking && <AskOff clientId={c.id} onClose={() => setAsking(false)} />}
-    </div>
+    </section>
   );
 }
 

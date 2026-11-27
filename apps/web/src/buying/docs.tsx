@@ -800,7 +800,7 @@ export function NewVendorPayment() {
           </label>
           <label className="flex flex-col gap-1">
             <span className={LABEL}>Paid from (account)</span>
-            <input className={FIELD} list="pay-through" placeholder="BDO - Getmeds…" value={form.paidThrough} onChange={(event) => setForm({ ...form, paidThrough: event.target.value })} />
+            <input className={FIELD} list="pay-through" placeholder="BDO current account…" value={form.paidThrough} onChange={(event) => setForm({ ...form, paidThrough: event.target.value })} />
             <datalist id="pay-through">
               {choices.paidThrough.map((one) => (
                 <option key={one} value={one} />

@@ -46,6 +46,9 @@ function Flag({ seat, data }: { seat: Seat; data: VacantSeats }) {
         Nobody covering past {data.leadDays} days
       </span>
     );
+  // A lead's seat: its people report to the lead above meanwhile (26 Nov), nobody covers it.
+  if (seat.leads)
+    return <span className="text-xs text-slate-500">Its team reports to {seat.lead ?? "the lead above"} meanwhile</span>;
   return <span className="text-xs text-slate-500">Waits with {seat.lead ?? "the lead above"}</span>;
 }
 
@@ -120,7 +123,7 @@ export function VacantSeatsPage() {
                   {shortPeso(seat.soldCovering)} of it sold covering: the seat's, kept with the email ID each was sold as.
                 </p>
               )}
-              {data.can.cover && (
+              {data.can.cover && !seat.leads && (
                 <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-3">
                   {seat.cover ? (
                     <Button small disabled={back.busy} onClick={() => takeBack(seat)}>

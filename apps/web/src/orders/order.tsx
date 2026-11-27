@@ -16,7 +16,7 @@ import { DISPATCH_HOLDS, type DispatchAsk, DispatchDialogs } from "../dispatch/p
 import { ConfirmPaymentDialog, InvoiceStatus, useMoney } from "../finance/parts";
 import { rememberConfirm } from "../finance/undo";
 import { ApproveDialog, shipsFromOf } from "./approve-dialog";
-import { ReasonDialog, StatusPill, shortSpan, useOrderAction } from "./parts";
+import { PapChip, ReasonDialog, StatusPill, shortSpan, useOrderAction } from "./parts";
 import { AskUpBox } from "./asks";
 import { OrderReturnsBox, RefundButton } from "./returns";
 import { SendToCustomer } from "./send-update";
@@ -851,6 +851,14 @@ export function Order() {
                     Online · {order.via.source}
                   </Link>
                 )}
+                {order.pap &&
+                  (order.pap.leadId ? (
+                    <Link to={`/leads/${order.pap.leadId}`} className="hover:opacity-90">
+                      <PapChip pap={order.pap} big />
+                    </Link>
+                  ) : (
+                    <PapChip pap={order.pap} big />
+                  ))}
                 {order.relief && (
                   <span
                     className="rounded bg-brand-tint px-2 py-0.5 text-xs font-medium text-brand-dark"

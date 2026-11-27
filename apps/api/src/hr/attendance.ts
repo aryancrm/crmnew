@@ -37,6 +37,7 @@ import {
   type WorkSchedule,
   workMinutes,
 } from "./work-time";
+import { companyKey } from "../companies/context";
 
 /** Who sees everyone's attendance. */
 export const ATTENDANCE_ALL_ROLES: Role[] = ["ceo", "admin", "hr"];
@@ -48,7 +49,8 @@ const LEAVE_KINDS: LeaveKind[] = ["vl", "sl", "lwop", "other"];
 const LEAD_ROLES: Role[] = ["team_lead", "manager"];
 
 const SEEN_EVERY_MS = 2 * 60_000;
-const seenAt = new Map<number, number>();
+// Per company (companies/context.ts): person 7 of one company isn't person 7 of another.
+const seenAt = new Map<string, number>();
 
 type ScheduleRow = {
   id: number;
@@ -100,8 +102,8 @@ export async function workCalendar(
 export async function markSeen(db: Database, me: Me): Promise<void> {
   if (me.viewedBy) return;
   const now = Date.now();
-  if ((seenAt.get(me.id) ?? 0) > now - SEEN_EVERY_MS) return;
-  seenAt.set(me.id, now);
+  if ((seenAt.get(companyKey(String(me.id))) ?? 0) > now - SEEN_EVERY_MS) return;
+  seenAt.set(companyKey(String(me.id)), now);
   const today = todayManila();
   const moved = await rows<{ id: number }>(
     db,
@@ -136,7 +138,7 @@ export async function startDay(db: Database, me: Me, place?: string | null): Pro
       on conflict (person_id, day) do update set last_seen = now(),
         in_place = coalesce(attendance.in_place, excluded.in_place)`,
   );
-  seenAt.set(me.id, Date.now());
+  seenAt.set(companyKey(String(me.id)), Date.now());
 }
 
 export async function endDay(db: Database, me: Me, place?: string | null): Promise<void> {

@@ -1,7 +1,8 @@
 // The order line's words and rules, with no database: the statuses, what each is called,
 // which the dashboard's tiles count, and who may do what. After the hub's own state machine.
 
-import { COMPANIES } from "../companies";
+import { companyName, OWN } from "../companies";
+import { ownCompanyName } from "../companies/context";
 import { DISPATCH_ROLES } from "../dispatch/rules";
 import { poExpected, RX_DIVISIONS } from "./divisions";
 import { FINANCE_ROLES } from "../finance/rules";
@@ -310,11 +311,11 @@ export const PAPER_LABEL: Record<PaperKind, string> = {
 };
 export const PAPER_KINDS = Object.keys(PAPER_LABEL) as PaperKind[];
 
-/** The company billing an order, by its registered name (src/companies.ts). */
-export const INVOICE_FROM_LABEL: Record<InvoiceFrom, string> = {
-  "2mg": COMPANIES["2mg"].name,
-  gpi: COMPANIES.gpi.name,
-};
+/** The company billing an order: the company itself, since the separation (Aryan, 26 Nov night:
+ *  "no invoice from 2MG or GetMeds"); its papers print the name in its Company details. An older
+ *  record billed from the other company before then keeps that company's name, as it was issued. */
+export const invoiceFromLabel = (code?: InvoiceFrom | string | null): string =>
+  !code || code === OWN ? ownCompanyName() : companyName(code);
 
 /** The papers an order is expected to carry. Only a proof of payment is needed before it can
  *  go on (for a customer who pays in advance); the rest are kept when there are any. */
@@ -442,12 +443,17 @@ export function mayAddPaper(
     leadId?: number | null;
     /** One of the team's, for its lead. */
     team?: boolean;
+    /** A guarantee letter's order. */
+    gl?: boolean;
   },
   kind?: PaperKind,
 ): boolean {
   if (order.status === "cancelled") return false;
   if (FINANCE_ROLES.includes(me.role) && (kind === undefined || kind === "payment_proof"))
     return true;
+  // The PAP person who placed a guarantee letter's order files the proof of the money that came in,
+  // months after the delivery sometimes, for Finance to confirm (Aryan, 26 Nov).
+  if (order.gl && kind === "payment_proof" && order.raisedBy === me.id) return true;
   if (DISPATCH_ROLES.includes(me.role) && (kind === undefined || kind === "dr")) return true;
   if (order.status === "completed") return false;
   return (

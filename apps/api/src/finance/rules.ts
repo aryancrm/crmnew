@@ -1,7 +1,6 @@
 // Finance's words and rules, with no database: who may act, how an invoice is numbered and
 // split for VAT, when it falls due, and how an unpaid one reads ("Overdue by 12 days").
 
-import { COMPANIES } from "../companies";
 import type { Role } from "../people/roles";
 import type { DeductionKind, InvoiceFrom, InvoiceState, PaymentMethod, PaymentTerms, Vat } from "../types";
 
@@ -39,9 +38,8 @@ export const STAFF_METHODS = METHODS.filter(
 /** Settled without cash: never counted as money in, never given back as money. */
 export const NOT_CASH = ["points", "withholding", "credit", "deduction"] as const;
 
-/** Each company's own invoice series. */
-export const invoiceCode = (from: InvoiceFrom, n: number) =>
-  `${COMPANIES[from].invoiceSeries}${String(n).padStart(6, "0")}`;
+/** An invoice's number: the company's own series (its Company details), then six digits. */
+export const invoiceCode = (series: string, n: number) => `${series}${String(n).padStart(6, "0")}`;
 
 /** The VAT inside an invoice's lines. Prices include VAT; a 12% line holds 12/112 of itself as
  *  VAT. Worked out once over all its 12% lines, so the parts always add up to the total. */

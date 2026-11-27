@@ -18,7 +18,7 @@ import nodemailer from "nodemailer";
 import { type Database, rows } from "../db/index";
 import { allow, may, onlineDesk, Refusal } from "../http";
 import type { HeldSender, Me } from "../types";
-import { type Account, caseOf, chatOf, type IncomingFile, keepMessage } from "./conversation";
+import { type Account, answerGate, caseOf, chatOf, type IncomingFile, keepMessage } from "./conversation";
 import { CHANNEL_ROLES } from "./messenger";
 import { LEAD_WORK_ROLES } from "./rules";
 import { seal, unseal } from "./secrets";
@@ -598,6 +598,12 @@ async function land(db: Database, account: MailAccount, mail: Email): Promise<bo
     missingFiles: mail.missingFiles,
     opens: { name, email: mail.from.address, source: "email" },
   });
+  // A new enquiry by email is thanked by itself, when the company switched it on; never one
+  // read from the mailbox's past (a mailbox just connected).
+  if (kept.opened && kept.leadId && Date.now() - mail.at.getTime() < 24 * 60 * 60 * 1000) {
+    const { tellCase } = await import("./case-mail");
+    void tellCase(db, null, kept.leadId, "enquiry");
+  }
   return kept.kept;
 }
 
@@ -676,7 +682,7 @@ export async function replyByEmail(
   text: string,
   extra: { subject?: string; attachments?: MailFile[] } = {},
 ): Promise<void> {
-  allow(me, LEAD_WORK_ROLES, "answer an email");
+  await answerGate(db, me, leadId, "answer an email");
   await sendOnCase(db, leadId, text, extra, me.id);
   if (onlineDesk(me))
     await db.execute(

@@ -15,6 +15,7 @@ import { teamSeats } from "../team/service";
 import type { CompanyScores, Me, MyScore, ScoreCard, ScoreDispute, TeamNeed, TeamScores } from "../types";
 import { myCustomers } from "../mr/day";
 import { incrementOf, type Recipe, RECIPES, scoreOf } from "./recipes";
+import { companyKey } from "../companies/context";
 
 const WHOLE = ["ceo", "admin"];
 
@@ -678,6 +679,7 @@ export async function teamScores(db: Database, me: Me, asked: { month?: string; 
 }
 
 // The CEO's Home reads every card in the company; worked out at most every five minutes a month.
+// Per company (companies/context.ts): one company's scores are never shown to another.
 const companyKept = new Map<string, { at: number; data: CompanyScores }>();
 
 /** The month's KPI picture for the CEO's Home (PLAN 23): every scored person's card, the company's
@@ -686,7 +688,7 @@ export async function companyScores(db: Database, me: Me, asked: { month?: strin
   if (!WHOLE.includes(me.role)) throw new Refusal(403, "not_allowed", "The company's scorecards are the CEO's and the Admin's.");
   const today = todayManila();
   const month = monthOf(asked.month, today);
-  const kept = companyKept.get(month);
+  const kept = companyKept.get(companyKey(month));
   if (kept && Date.now() - kept.at < 5 * 60_000) return kept.data;
   const team = await teamScores(db, me, { month, unitId: null });
   const percent = (card: ScoreCard | null) => (card && card.max > 0 ? card.percent : null);
@@ -728,7 +730,7 @@ export async function companyScores(db: Database, me: Me, asked: { month?: strin
     field: { people: fields.length, average: avg(fields) },
     questions: team.disputes.filter((one) => one.state === "open").length,
   };
-  companyKept.set(month, { at: Date.now(), data });
+  companyKept.set(companyKey(month), { at: Date.now(), data });
   return data;
 }
 

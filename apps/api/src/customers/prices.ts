@@ -133,8 +133,10 @@ const pastOf = async (db: Database, customerId: number) => {
 
 /** A customer's prices: every medicine they were sold and at what, and their orders from before
  *  this CRM. Whoever may see the customer may see it. */
-export async function customerPrices(db: Database, me: Me, id: number): Promise<CustomerPrices> {
+export async function customerPrices(db: Database, me: Me, id: number, asked?: string | null): Promise<CustomerPrices> {
   await customerDetail(db, me, id);
+  // Earlier orders of one month (26 Nov: "what did this person order this month"), else all.
+  const month = asked && /^\d{4}-(0[1-9]|1[0-2])$/.test(asked) ? asked : null;
   const [lines, past, under, owes, orders, invoices, payments] = await Promise.all([
     linesOf(db, id),
     pastOf(db, id),
@@ -159,6 +161,7 @@ export async function customerPrices(db: Database, me: Me, id: number): Promise<
           (select string_agg(i.name || ' × ' || i.qty || case when i.free then ' (free)' else '' end, ', ' order by i.id)
             from past_order_item i where i.past_order_id = p.id) as medicines
         from past_order p where p.customer_id = ${id}
+          ${month ? sql`and to_char(p.ordered_on, 'YYYY-MM') = ${month}` : sql``}
         order by p.ordered_on desc, p.id desc limit ${PAST_ORDERS}`,
     ),
     // The old system's invoices with what each still owes, and the payments it took: the whole
@@ -181,8 +184,16 @@ export async function customerPrices(db: Database, me: Me, id: number): Promise<
         order by d.doc_date desc, d.id desc limit ${PAST_ORDERS}`,
     ),
   ]);
+  const months = await rows<CustomerPrices["months"][number]>(
+    db,
+    sql`select to_char(ordered_on, 'YYYY-MM') as month, count(*)::int as orders, coalesce(sum(total), 0)::float8 as total
+      from past_order where customer_id = ${id} and status <> 'void'
+      group by 1 order by 1 desc`,
+  );
   return {
     past,
+    months,
+    month,
     zoho: {
       seller: under[0]?.seller ?? null,
       division: under[0]?.division ?? null,
@@ -222,7 +233,7 @@ export async function orderPrices(db: Database, me: Me, id: number): Promise<Ord
           coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late > 0), 0)::float8 as overdue,
           coalesce(max(dd.late) filter (where not dd.on_delivery and dd.late > 0), 0)::int as days,
           coalesce(sum(dd.balance) filter (where dd.source <> 'crm'), 0)::float8 as zoho
-        from ${duesSql(today)} dd where dd.customer_id = ${customerId}`,
+        from ${duesSql(today)} dd where dd.customer_id = ${customerId} and not dd.gl_waiting`,
     ),
   ]);
   const medicines = byMedicine(lines);

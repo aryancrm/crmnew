@@ -44,6 +44,14 @@ function scope(me: Me): SQL {
   throw new Refusal(403, "not_allowed", "Care groups are the Rx CHCs', MD Telesales' and their heads'.");
 }
 
+/** The doctors (customer alias `c`) of the open care groups this person works: an MD Telesales'
+ *  own and those waiting for anyone, their coach's and the Country Mentor's. Theirs to open from
+ *  Care groups, though the doctor sits in an Rx CHC's area (26 Nov). Null for anyone else. */
+export function careGroupDoctors(me: Me): SQL | null {
+  if (!isTelesales(me) && !(seesAll(me) && !["ceo", "admin"].includes(me.role))) return null;
+  return sql`c.id in (select g.doctor_id from care_group g where g.closed_at is null and ${scope(me)})`;
+}
+
 export async function careGroups(db: Database, me: Me): Promise<CareGroups> {
   const where = scope(me);
   const today = todayManila();

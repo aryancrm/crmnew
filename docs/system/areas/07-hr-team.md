@@ -630,6 +630,30 @@ All under `signedIn` (`hr/routes.ts:64`, `team/routes.ts:10-14`, `worklog/routes
 
 ---
 
+### 6.9 HR's documents, sheets and reports (`apps/api/src/hr/documents-routes.ts`, 26 Nov)
+
+| Method | Path | Who may | What it does |
+|---|---|---|---|
+| GET | `/api/hr/documents?person=&kind=&q=` | `hr`, `ceo`, `admin` | HR's documents, newest first |
+| GET | `/api/hr/documents/mine` | self | One's own documents, and clearances waiting for one's desk |
+| GET | `/api/hr/documents/:id` | HR roles; the person; a clearance's signers | The paper: letterhead, number, text, signers, what one may do |
+| POST | `/api/hr/documents` | `hr`, `admin` | Issue: `coe`, `coe_pay`, `clearance`, `memo`, `nte` (numbered from `counter`) |
+| POST | `/api/hr/documents/:id/void` | `hr`, `admin` | Void with a reason |
+| POST | `/api/hr/documents/:id/acknowledge` | the person | Acknowledge a memo or notice; `reply` answers a notice |
+| POST | `/api/hr/documents/:id/sign` | the desk's people (lead: whom the person reports to) | Sign a clearance's part (`desk`, `note`); HR last |
+| GET | `/api/hr/import` | HR roles | The sheets and their columns |
+| GET | `/api/hr/export/:kind.xlsx?template=1&year=` | HR roles | A sheet as it is now, or a blank template |
+| POST | `/api/hr/import/:kind/read` | `hr`, `admin` | Read an uploaded .xlsx/.csv (not kept), with a guessed column match |
+| POST | `/api/hr/import/:kind` | `hr`, `admin` | `{ mapping, rows, save }`: a test run (`save: false`) or save; a result per row |
+| GET | `/api/hr/reports` | HR roles | The ten reports |
+| GET | `/api/hr/reports/:key[.xlsx]?from=&to=&year=&days=&company=` | HR roles | One report as JSON, or as Excel |
+| GET | `/api/hr/payroll/:month/register.xlsx` | as the CSV | The payroll register as Excel |
+
+Leave and form printouts (`/api/hr/print/…`) now carry `code` and `letterhead`; `/api/settings`
+returns each company's details and `/api/settings/company?company=gpi` saves Getmeds Philippines'.
+
+---
+
 ## 7. Screens
 
 The web has no route guards; a page a role may not use shows the API's refusal. "Menu" says where
@@ -667,6 +691,20 @@ the link is (`apps/web/src/menus.ts`).
 
 `work-clock.ts` is not a screen: it gives the orders board, Finance's lanes and Dispatch's lanes
 "minutes waited on the working clock" and "late or not" from `/api/hr/calendar`.
+
+---
+
+### 7.9 HR's documents, sheets and reports (26 Nov)
+
+| URL | File | Who gets it | What is on it |
+|---|---|---|---|
+| `/hr/documents` | `documents.tsx` `DocumentsPage` | HR desk → Documents & reports → Documents; a person's HR record → *Documents* | The list (kind, search, one person); *New document* |
+| `/hr/documents/:id` (outside the frame) | `documents.tsx` `DocumentPaperPage` | as the API allows | The paper on its letterhead; *I received it*, *Write my explanation*, *Sign … part*, *Void*, *Print or save as PDF* |
+| `/me/documents` | `documents.tsx` `MyDocumentsPage` | everyone's Me folder | One's own documents; clearances waiting for one's desk |
+| `/hr/import-export` | `sheets.tsx` `SheetsPage` | HR desk → Documents & reports | Each sheet: *Download*, *Blank template*, *Import* |
+| `/hr/import/:kind` | `sheets.tsx` `ImportPage` | HR, Admin | Choose the file → match the columns → test run → save, a result per line |
+| `/hr/reports`, `/hr/reports/:key` | `reports.tsx` | HR desk → Documents & reports → Reports | Filters, figures, the table, *Excel*, *Print or save as PDF* with remarks and signatories |
+| `/admin/settings` | `admin/settings.tsx` | Admin, CEO | Company details, one tab per company (the letterhead) |
 
 ---
 

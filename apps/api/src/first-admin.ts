@@ -7,6 +7,7 @@ import { sql } from "drizzle-orm";
 import { hashPassword } from "./auth/password";
 import { type Database, rows } from "./db/index";
 import { channel, person } from "./db/schema";
+import { companyNow } from "./companies/context";
 import { CHANNELS } from "./seed";
 
 export async function makeFirstAdmin(
@@ -44,7 +45,7 @@ export async function makeFirstAdmin(
  * company's settings, else "2MG Inc."), one business box per sales channel, and a System admin
  * seat for every admin who has none. It does nothing once the tree exists.
  */
-export async function ensureCompanyTree(db: Database): Promise<boolean> {
+export async function ensureCompanyTree(db: Database, name = companyNow()?.name ?? "2MG Inc."): Promise<boolean> {
   const [company] = await rows<{ id: number }>(
     db,
     sql`select id::int as id from org_unit where kind = 'company'`,
@@ -58,7 +59,7 @@ export async function ensureCompanyTree(db: Database): Promise<boolean> {
   await db.transaction(async (tx) => {
     const [made] = await rows<{ id: number }>(
       tx,
-      sql`insert into org_unit (name, kind, parent_id, sort) values ('2MG Inc.', 'company', null, 0)
+      sql`insert into org_unit (name, kind, parent_id, sort) values (${name}, 'company', null, 0)
         returning id::int as id`,
     );
     const root = made?.id as number;

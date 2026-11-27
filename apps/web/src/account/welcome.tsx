@@ -11,12 +11,20 @@ import { ME } from "../auth";
 import { useAction } from "../ui";
 import { Alert, Heading, MAIN_BUTTON, PublicPage, TextField } from "./public-page";
 
+/** The company a link of another company than the first names (`?org=`, its Org ID). */
+const orgOf = (search: string) => {
+  const org = new URLSearchParams(search).get("org") ?? "";
+  return /^[1-9][0-9]{5}$/.test(org) ? org : "";
+};
+
 export function Welcome() {
-  const { hash } = useLocation();
+  const { hash, search } = useLocation();
   const navigate = useNavigate();
   const queries = useQueryClient();
   const action = useAction();
   const [token, setToken] = useState(() => hash.slice(1));
+  const [org, setOrg] = useState(() => orgOf(search));
+  const at = (path: string) => (org ? `${path}?org=${org}` : path);
   const [info, setInfo] = useState<WelcomeInfo | null>(null);
   const [dead, setDead] = useState<string | null>(null);
   const [password, setPassword] = useState("");
@@ -29,6 +37,7 @@ export function Welcome() {
     if (!hash) return;
     // Another link opened in the same tab.
     setToken(hash.slice(1));
+    setOrg(orgOf(window.location.search));
     window.history.replaceState(window.history.state, "", "/welcome");
   }, [hash]);
 
@@ -41,7 +50,7 @@ export function Welcome() {
       return;
     }
     let here = true;
-    api<WelcomeInfo>("/api/auth/welcome", { body: { token } })
+    api<WelcomeInfo>(at("/api/auth/welcome"), { body: { token } })
       .then((answer) => here && setInfo(answer))
       .catch((error) => {
         if (!here) return;
@@ -54,14 +63,14 @@ export function Welcome() {
     return () => {
       here = false;
     };
-  }, [token]);
+  }, [token, org]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setMismatch(password !== again);
     if (password !== again) return;
     const ok = await action.run(async () => {
-      await api("/api/auth/welcome/password", { body: { token, password } });
+      await api(at("/api/auth/welcome/password"), { body: { token, password } });
     });
     if (!ok) return;
     setPassword("");

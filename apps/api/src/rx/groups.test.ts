@@ -51,6 +51,11 @@ describe("the Prescription channel", () => {
 
     const kimSees = (await (await get("kim", "/api/care-groups")).json()) as CareGroups;
     expect(kimSees.rows.find((row) => row.id === made.id)?.state).toBe("waiting");
+    // The doctor sits in Joy's area, yet a group's doctor opens for MD Telesales from Care groups
+    // (waiting for anyone, then theirs), and for the coach; not for the Hospital Division (26 Nov).
+    expect((await get("kim", `/api/customers/${doctor?.id}/page`)).status).toBe(200);
+    expect((await get("lara", `/api/customers/${doctor?.id}`)).status).toBe(200);
+    expect((await get("ryan", `/api/customers/${doctor?.id}`)).status).not.toBe(200);
     expect(kimSees.can.contact).toBe(true);
     expect((await post("joy", `/api/care-groups/${made.id}/contact`, {})).status).toBe(403);
     expect((await post("kim", `/api/care-groups/${made.id}/contact`, {})).status).toBe(200);

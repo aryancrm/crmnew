@@ -1,13 +1,13 @@
 // Invoices, as Zoho Books lists them: date, number, order, customer, company, status, due
 // date, amount and balance, with tabs; and one invoice as a document with its payments.
 
-import { allCompanyNames } from "@2mg/api/companies";
 import type { DocLine, InvoiceDetail, InvoiceList, InvoiceTab } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { Search, X } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { useOwnCompanyName } from "../companies";
 import {
   InvoiceStatus,
   RecordPaymentDialog,
@@ -51,6 +51,7 @@ const TAB_LABEL: Record<InvoiceTab, string> = {
 };
 
 export function Invoices() {
+  const ownName = useOwnCompanyName();
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const [typed, setTyped] = useState(params.get("q") ?? "");
@@ -92,7 +93,7 @@ export function Invoices() {
         sub={
           data.customer
             ? `For ${data.customer.name}`
-            : `Every sales invoice, under ${allCompanyNames(" or ")}`
+            : `Every sales invoice, under ${ownName}`
         }
         tags={
           data.customer && (
@@ -445,7 +446,8 @@ export function Invoice() {
 }
 
 /** The invoice as Zoho prints it: the status ribbon across the corner, the company on the left
- *  (a logo only on GetMeds' papers, and only when there is one to show; 2MG's template has none),
+ *  (its own name, address, TIN and phone from Company details; one issued under the other company
+ *  before the separation, 26 Nov night, shows that company's name as it was issued),
  *  "Invoice" with its number and balance due on the right, Ship To and its dates, the lines under
  *  the dark heading, then Sub Total, Zoho's tax lines, Total, Payment Made and Balance Due. */
 function InvoicePaper({ data }: { data: InvoiceDetail }) {

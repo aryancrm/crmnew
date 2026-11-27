@@ -265,3 +265,33 @@ describe("HR's people", () => {
     expect(again.record).toMatchObject({ leftReason: null, leftOn: null });
   });
 });
+
+describe("HR and the stock", () => {
+  it("HR has no business in the stock: the API refuses it and HR's search finds no medicines", async () => {
+    for (const path of ["/api/inventory", "/api/inventory/medicines", "/api/inventory/requests"])
+      expect((await get("helen", path)).status).toBe(403);
+    expect((await send("helen", "/api/inventory/requests", { name: "Anything" })).status).toBe(403);
+    await db.execute(sql`insert into medicine (name, generic) values ('Stockcillin 500 mg', 'Stockcillin')`);
+    const word = "Stockcillin";
+    const found = await read<{ medicines: unknown[] }>("helen", `/api/search?q=${encodeURIComponent(word)}`);
+    expect(found.medicines).toEqual([]);
+    // Everyone else still looks the stock up as before.
+    expect((await get("admin", "/api/inventory/medicines")).status).toBe(200);
+    expect((await read<{ medicines: unknown[] }>("admin", `/api/search?q=${encodeURIComponent(word)}`)).medicines.length).toBeGreaterThan(0);
+  });
+});
+
+describe("HR's search", () => {
+  it("finds people only: anyone, by name, login ID, email or employee ID, those who left too", async () => {
+    type Found = { medicines: unknown[]; customers: unknown[]; orders: unknown[]; people: { id: number; name: string; employeeCode?: string | null; left?: boolean }[] };
+    const { rows: people } = await read<HrPeople>("helen", "/api/hr/people");
+    const mia = people.find((one) => one.name === "Mia Santos");
+    for (const word of ["Mia San", "mia.santos@2mginc", "1001"]) {
+      const found = await read<Found>("helen", `/api/search?q=${encodeURIComponent(word)}`);
+      expect(found.people.map((one) => one.id)).toContain(mia?.personId);
+      expect([found.medicines, found.customers, found.orders]).toEqual([[], [], []]);
+    }
+    // Someone outside HR's own team: HR still finds them (a seller can't search people at all).
+    expect((await read<Found>("helen", "/api/search?q=Ryan")).people.length).toBeGreaterThan(0);
+  });
+});

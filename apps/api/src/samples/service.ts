@@ -18,7 +18,7 @@ import type { IncomingFile } from "../files/store";
 import { allow, Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
 import type { Runner } from "../inventory/service";
-import { FIELD_ROLES, leads, LEAD_ROLES } from "../field/visits";
+import { FIELD_ROLES, leads, LEAD_ROLES, refuseOffice } from "../field/visits";
 import { notify } from "../notify/service";
 import type { Me, Role, SampleKind, SampleLineInput, SamplesOfPerson, TeamSamples } from "../types";
 
@@ -75,6 +75,7 @@ export async function askSamples(
   input: { kind: SampleKind; lines: SampleLineInput[]; note?: string | null },
 ): Promise<{ id: number; code: string }> {
   if (!FIELD_ROLES.includes(me.role) || me.viewedBy) throw new Refusal(403, "not_allowed", "Samples are asked for by MedReps and their team leads.");
+  refuseOffice(me);
   if (!isKind(input.kind)) throw new Refusal(400, "invalid", "Samples or gifts?", "kind");
   checkLines(input.lines, 1000, 20);
   return db.transaction(async (tx) => {
@@ -275,6 +276,7 @@ export async function giveSamples(
   input: { visitId: number; kind: SampleKind; lines: SampleLineInput[]; ack: IncomingFile | null },
 ): Promise<void> {
   if (!FIELD_ROLES.includes(me.role) || me.viewedBy) throw new Refusal(403, "not_allowed", "Samples are given by the rep at their visit.");
+  refuseOffice(me);
   if (!isKind(input.kind)) throw new Refusal(400, "invalid", "Samples or gifts?", "kind");
   checkLines(input.lines, 100, 20);
   if (!input.ack) throw new Refusal(400, "invalid", "Attach the doctor's signed acknowledgement.", "file");

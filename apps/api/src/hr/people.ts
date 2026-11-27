@@ -18,7 +18,7 @@ import {
   EMAIL,
   fillSeat,
   fillSeatLogins,
-  LOGIN_DOMAIN,
+  loginDomain,
   type MoveKind,
   personLeaves,
   refuseIfPromised,
@@ -97,7 +97,7 @@ const seatLateral = (today: string) => sql`left join lateral (
 
 /** What they sign in with: the email HR gave them, else their seat's login ID. */
 const loginIdOf = (seatLogin: string | null, email: string | null) =>
-  email ?? (seatLogin ? `${seatLogin}@${LOGIN_DOMAIN}` : null);
+  email ?? (seatLogin ? `${seatLogin}@${loginDomain()}` : null);
 
 export async function hrPeople(
   db: Database,
@@ -416,7 +416,7 @@ async function checkLoginEmail(
     throw new Refusal(
       400,
       "invalid",
-      "Type the email they sign in with, like juan@2mginc.com.",
+      `Type the email they sign in with (on @${loginDomain()}).`,
       "loginEmail",
     );
   const [used] = await rows<{ name: string; active: boolean }>(

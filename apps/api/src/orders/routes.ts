@@ -30,6 +30,7 @@ import {
   orderBoard,
   orderDashboard,
   orderDetail,
+  orderAssignments,
   orderForList,
   PAPER_MAX_BYTES,
   placeOrder,
@@ -209,6 +210,10 @@ export function orderRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHa
         division: c.req.query("division") || undefined,
       }),
     ),
+  );
+  // The Divisions and Sub-divisions the account orders in, from the tree (the form's General part).
+  app.get("/api/orders/assignments", async (c) =>
+    c.json(await orderAssignments(db, c.get("me"), Number(c.req.query("medrep")) || null)),
   );
   app.get("/api/orders/for", async (c) =>
     c.json(await orderForList(db, c.get("me"), Number(c.req.query("customerId")) || null)),

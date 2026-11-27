@@ -30,9 +30,11 @@ import {
   PageHead,
   PageState,
   Pill,
+  Problem,
   packPrice,
   peso,
   timeLabel,
+  useAction,
 } from "../ui";
 import { StatusPill } from "./inventory";
 import { EmptyState, NoInvoicesArt } from "../no-results";
@@ -555,6 +557,7 @@ export function Medicine() {
                 </div>
               ))}
             </div>
+            <PcsoPrices data={data} editable={can.price} piece={piece} />
           </Card>
 
           <Card className="p-4">
@@ -688,3 +691,105 @@ function Figure({
     </div>
   );
 }
+
+/**
+ * PCSO asks for three quotations: ours and two other vendors' (Aryan, 26 Nov, as the old CRM).
+ * The two vendors' price for one piece, typed once here, fills a PCSO case's quotations 2 and 3
+ * by themselves; a vendor that is one of the group's companies gets its own letterhead.
+ */
+function PcsoPrices({ data, editable, piece }: { data: MedicineDetail; editable: boolean; piece: string }) {
+  const queries = useQueryClient();
+  const action = useAction();
+  const [editing, setEditing] = useState(false);
+  const start = () =>
+    ([2, 3] as const).map((slot) => {
+      const found = data.canvass.find((one) => one.slot === slot);
+      return { slot, vendor: found?.vendor ?? "", amount: found ? (found.amount / 100).toFixed(2) : "" };
+    });
+  const [rows, setRows] = useState(start);
+  if (!editable && data.canvass.length === 0) return null;
+  async function save() {
+    const ok = await action.run(async () => {
+      const body: Record<number, { vendor: string; amount: number } | null> = {};
+      for (const row of rows)
+        body[row.slot] =
+          row.vendor.trim() || row.amount.trim()
+            ? { vendor: row.vendor.trim(), amount: Math.round(Number(row.amount.replace(/,/g, "")) * 100) || 0 }
+            : null;
+      await api(`/api/inventory/medicines/${data.medicine.id}/canvass`, { body });
+    });
+    if (!ok) return;
+    setEditing(false);
+    await queries.invalidateQueries({ queryKey: ["inventory"] });
+  }
+  return (
+    <div className="mt-2 flex flex-col gap-1.5 border-t border-slate-100 pt-3">
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs font-semibold text-slate-500">PCSO's quotations 2 and 3</div>
+        {editable && !editing && (
+          <button
+            type="button"
+            onClick={() => {
+              setRows(start());
+              setEditing(true);
+            }}
+            className="text-[13px] font-medium text-brand"
+          >
+            {data.canvass.length ? "Change" : "Add"}
+          </button>
+        )}
+      </div>
+      {!editing &&
+        (data.canvass.length === 0 ? (
+          <div className="text-slate-500">Not set: a PCSO case's other two quotations are typed by hand.</div>
+        ) : (
+          data.canvass.map((one) => (
+            <div key={one.slot} className="flex justify-between gap-3">
+              <span>
+                Quotation {one.slot}: {one.vendor}
+              </span>
+              <span className="tabular-nums">
+                {peso(one.amount)} a {piece}
+              </span>
+            </div>
+          ))
+        ))}
+      {editing && (
+        <div className="flex flex-col gap-2">
+          {rows.map((row, at) => (
+            <div key={row.slot} className="grid gap-2 sm:grid-cols-[1fr_8rem]">
+              <input
+                aria-label={`Quotation ${row.slot}: vendor`}
+                placeholder={`Quotation ${row.slot}: vendor's name`}
+                className="field"
+                value={row.vendor}
+                onChange={(event) => setRows((all) => all.map((one, i) => (i === at ? { ...one, vendor: event.target.value } : one)))}
+              />
+              <input
+                aria-label={`Quotation ${row.slot}: price of one ${piece} (₱)`}
+                placeholder={`₱ a ${piece}`}
+                inputMode="decimal"
+                className="field tabular-nums"
+                value={row.amount}
+                onChange={(event) => setRows((all) => all.map((one, i) => (i === at ? { ...one, amount: event.target.value } : one)))}
+              />
+            </div>
+          ))}
+          <div className="text-[11px] text-slate-500">
+            The same vendor on every medicine, above our price. Empty both to take one off.
+          </div>
+          <Problem message={action.problem?.message} />
+          <div className="flex justify-end gap-2">
+            <Button small onClick={() => setEditing(false)} disabled={action.busy}>
+              Cancel
+            </Button>
+            <Button small variant="primary" onClick={save} disabled={action.busy}>
+              {action.busy ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+

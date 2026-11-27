@@ -2,7 +2,6 @@
 // reports (a title, the company, the period, then the table), each with its days, an account that
 // opens its transactions, Print and Export CSV. Read from the same debits and credits as the chart.
 
-import { allCompanyNames } from "@2mg/api/companies";
 import type {
   BalanceSheet,
   Insight,
@@ -22,6 +21,7 @@ import { api } from "../api";
 import { useMe } from "../auth";
 import { EmptyState } from "../no-results";
 import { zDate, zMoney } from "./kinds";
+import { useOwnCompanyName } from "../companies";
 
 type Report = {
   key: string;
@@ -211,6 +211,7 @@ function ReportsIndex() {
 }
 
 function ReportPage({ report }: { report: Report }) {
+  const ownName = useOwnCompanyName();
   const [params, setParams] = useSearchParams();
   const range = presets()[0] as { from: string; to: string };
   const from = params.get("from") ?? range.from;
@@ -307,7 +308,7 @@ function ReportPage({ report }: { report: Report }) {
       <div className={`flex-1 overflow-y-auto px-5 py-6 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
         <div className="mx-auto max-w-[960px]">
           <div className="mb-5 text-center">
-            <div className="text-[#6c718a]">{allCompanyNames(" · ")}</div>
+            <div className="text-[#6c718a]">{ownName}</div>
             <h1 className="text-[22px] font-normal">{report.title}</h1>
             <div className="text-[#6c718a]">{period}</div>
           </div>

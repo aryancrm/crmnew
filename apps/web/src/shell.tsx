@@ -32,26 +32,38 @@ import {
   Plus,
   Search,
   ShieldCheck,
+  UserPlus,
   UserRound,
+  X,
 } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import { Navigate, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { api } from "./api";
+import { useCompany } from "./companies";
 import { LeavesArrow, useLeavesTo } from "./app-switch";
 import { ME, onlineDesk, useMe } from "./auth";
+import { SignedOut } from "./account/signed-out";
 import { DeskPeople } from "./desk/people";
 import { LiveLocationSender } from "./field/live-sender";
 import { UndoConfirmBar } from "./finance/undo";
 import { MyDayButton } from "./hr/parts";
-import { allItems, type Badge, type MenuGroup, type MenuItem, spaceFor } from "./menus";
+import { allItems, type Badge, folderOpen, type MenuGroup, type MenuItem, spaceFor } from "./menus";
 import { NoResults } from "./no-results";
 import { THEMES, useAppliedTheme, useTheme } from "./theme";
 import { Toasts } from "./toast";
+
+/** The accounts signed in on this browser (GET /api/auth/accounts), the one in use first. */
+type AccountsOnBrowser = {
+  accounts: { id: number; name: string; email: string | null; title: string | null; roleLabel: string; photo: number | null; current: boolean }[];
+  max: number;
+};
 import { unreadIn, useUpdates } from "./updates";
 
 export function Shell() {
   const me = useMe();
   const queries = useQueryClient();
+  // The company, when the server has several: its code beside Bishnoi One's name.
+  const company = useCompany();
   const navigate = useNavigate();
   // Nothing else is asked for until they have chosen their own password.
   const ready = Boolean(me.data && !me.data.mustChangePassword);
@@ -134,7 +146,7 @@ export function Shell() {
         </div>
       </Centered>
     );
-  if (!me.data) return <Navigate to="/login" replace state={{ from: location.pathname + location.search }} />;
+  if (!me.data) return <SignedOut />;
   if (me.data.mustChangePassword)
     return location.pathname === "/password" ? (
       <div className="flex min-h-dvh items-center bg-ground p-6">
@@ -193,7 +205,14 @@ export function Shell() {
             <img src={heroLogo(home.key)} alt="" className="size-8 shrink-0 object-contain" />
             {/* Two lines: "Bishnoi One", then the workspace, "MedReps" (Aryan, 24 Nov). */}
             <span className="flex min-w-0 flex-col text-[17px] leading-[1.15] font-semibold tracking-tight whitespace-nowrap text-slate-700">
-              <span>Bishnoi One</span>
+              <span className="flex items-center gap-1.5">
+                Bishnoi One
+                {company && (
+                  <span title={company.name} className="rounded-md bg-brand-tint px-1.5 py-0.5 text-[11px] leading-none font-semibold text-brand">
+                    {company.code}
+                  </span>
+                )}
+              </span>
               <span className="truncate">{home.label}</span>
             </span>
           </NavLink>
@@ -222,7 +241,7 @@ export function Shell() {
       <div className="flex items-center gap-2.5 pt-2 pr-2 pb-3 pl-4">
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold text-slate-900">{space.label}</div>
-          <div className="truncate text-[11px] text-slate-500">2MG Inc.</div>
+          <div className="truncate text-[11px] text-slate-500">{company?.name ?? "2MG Inc."}</div>
         </div>
         {/* Folds the sidebar to its rail (on a phone, closes the menu), beside the desk's name. */}
         <button
@@ -308,6 +327,11 @@ export function Shell() {
               <NavLink to="/" aria-label="Bishnoi One home" className="flex shrink-0 items-center gap-2">
                 <img src="/brand/bishnoi-one-mark.png" alt="" className="size-8" />
                 <span className="hidden text-[15px] font-semibold tracking-tight text-slate-900 sm:inline">Bishnoi One</span>
+                {company && (
+                  <span title={company.name} className="rounded-md bg-brand-tint px-1.5 py-0.5 text-[11px] leading-none font-semibold text-brand">
+                    {company.code}
+                  </span>
+                )}
               </NavLink>
             </>
           )}
@@ -384,7 +408,7 @@ export function Shell() {
               }
               className={({ isActive }) =>
                 `flex min-h-12 min-w-0 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] ${
-                  (item.children ? inFolder(item, location) : openOf(item.to, isActive))
+                  (item.children ? folderOpen(item, location, allItems(flat)) : openOf(item.to, isActive))
                     ? "font-semibold text-brand"
                     : "text-slate-500"
                 }`
@@ -520,21 +544,6 @@ function PageBack({ trail }: { trail: string[] }) {
       ))}
     </nav>
   );
-}
-
-/** Whether a page of a folder (or the folder's own) is open: it then shows unfolded. A filtered
- *  link (/orders?stuck=1) counts only on that list with that filter, not on every order. */
-function inFolder(item: MenuItem, location: { pathname: string; search: string }): boolean {
-  return allItems(item.children ?? [item]).some((one) => {
-    const [path = "", query] = one.to.split("?");
-    if (path === "/") return false;
-    if (query) {
-      if (location.pathname !== path) return false;
-      const now = new URLSearchParams(location.search);
-      return [...new URLSearchParams(query)].every(([key, value]) => now.get(key) === value);
-    }
-    return location.pathname === path || location.pathname.startsWith(`${path}/`);
-  });
 }
 
 /** A count beside a menu link: a small filled blue circle, the number white and centred in it
@@ -740,7 +749,7 @@ function MenuList({
   };
 
   const folder = (item: MenuItem) => {
-    const here = inFolder(item, location);
+    const here = folderOpen(item, location, every);
     const open = folded[item.label] ?? here;
     // In the rail a folder is its icon; pressing it opens the sidebar with the folder open.
     if (rail)
@@ -833,6 +842,9 @@ function MenuList({
 
 /** The top bar's search: medicines and the customers this person may see. */
 function SearchBox() {
+  // HR searches people only, by what HR knows them by (26 Nov).
+  const hr = useMe().data?.role === "hr";
+  const hint = hr ? "Search people by name, login ID, email or employee ID" : "Search medicines, customers, orders, people";
   const [text, setText] = useState("");
   const [asked, setAsked] = useState("");
   const [open, setOpen] = useState(false);
@@ -865,11 +877,19 @@ function SearchBox() {
       label: `${row.code} · ${row.customer}`,
       sub: `Order · ${row.status}`,
     })),
-    ...(found.data?.people ?? []).map((row) => ({
-      to: row.seatId ? `/my-team/seat/${row.seatId}` : `/people?q=${encodeURIComponent(row.name)}`,
-      label: row.name,
-      sub: ["Person", row.title, row.team, row.login].filter(Boolean).join(" · "),
-    })),
+    ...(found.data?.people ?? []).map((row) =>
+      hr
+        ? {
+            to: `/hr/people/${row.id}`,
+            label: row.name,
+            sub: [row.left ? "Left" : "Person", row.title, row.team, row.login, row.employeeCode].filter(Boolean).join(" · "),
+          }
+        : {
+            to: row.seatId ? `/my-team/seat/${row.seatId}` : `/people?q=${encodeURIComponent(row.name)}`,
+            label: row.name,
+            sub: ["Person", row.title, row.team, row.login].filter(Boolean).join(" · "),
+          },
+    ),
     ...(found.data?.medicines ?? []).map((row) => ({
       to: `/medicines/${row.id}`,
       label: [row.name, row.strength].filter(Boolean).join(" "),
@@ -896,8 +916,8 @@ function SearchBox() {
       />
       <input
         type="search"
-        aria-label="Search medicines, customers, orders and people"
-        placeholder="Search medicines, customers, orders, people"
+        aria-label={hint}
+        placeholder={hint}
         value={text}
         onChange={(event) => {
           setText(event.target.value);
@@ -967,6 +987,51 @@ function Account({ me, role }: { me: Me; role: string }) {
   async function signOut() {
     await leaveNow(queries, navigate);
   }
+  // The accounts on this browser (26 Nov: "like Google: add an account, then switch").
+  const accounts = useQuery({
+    queryKey: ["auth", "accounts"],
+    queryFn: () => api<AccountsOnBrowser>("/api/auth/accounts"),
+    enabled: open && !me.viewedBy,
+  }).data;
+  const others = accounts?.accounts.filter((one) => !one.current) ?? [];
+  const [switching, setSwitching] = useState<number | null>(null);
+  /** Signs one account out of this browser (27 Nov); the one in use: the next one opens. */
+  async function remove(personId: number) {
+    setSwitching(personId);
+    try {
+      const { me: now } = await api<{ me: Me | null }>("/api/auth/accounts/remove", { body: { personId } });
+      if (personId === me.id) window.location.assign(now ? "/" : "/signin");
+      else await queries.invalidateQueries({ queryKey: ["auth", "accounts"] });
+    } finally {
+      setSwitching(null);
+    }
+  }
+  async function switchTo(personId: number) {
+    setSwitching(personId);
+    try {
+      const { me: now } = await api<{ me: Me }>("/api/auth/switch", { body: { personId } });
+      // The whole app opens afresh as the other account: nothing of this one's stays on screen.
+      window.location.assign(now ? "/" : "/signin");
+    } catch {
+      setSwitching(null);
+      await queries.invalidateQueries({ queryKey: ["auth", "accounts"] });
+    }
+  }
+
+  // A desk's shared screen (the desks' common password): the desk's name and Sign out, nothing of
+  // one person's (no profile, password or other accounts).
+  if (me.deskScreen)
+    return (
+      <button
+        type="button"
+        onClick={() => void signOut()}
+        title={`Sign out of the ${me.name.toLowerCase()} screen`}
+        className="flex h-10 shrink-0 items-center gap-2 rounded-lg px-2 text-[13px] font-medium text-ink-2 hover:bg-head hover:text-ink"
+      >
+        <span className="hidden sm:inline">{me.name}</span>
+        <LogOut size={15} aria-hidden="true" /> Sign out
+      </button>
+    );
 
   return (
     <div ref={box} className="relative">
@@ -982,88 +1047,172 @@ function Account({ me, role }: { me: Me; role: string }) {
         <ChevronDown size={15} className="hidden text-slate-400 sm:block" aria-hidden="true" />
       </button>
       {open && (
-        <div
-          role="menu"
-          className="absolute right-0 mt-1 w-64 rounded-xl bg-white p-1.5 text-[13px] shadow-pop"
-        >
-          <div className="mb-1 flex items-center gap-3 border-b border-line-soft px-3 pt-1.5 pb-2.5">
-            <Avatar person={me} size="md" />
-            <div className="min-w-0">
-              <div className="font-semibold wrap-break-word">{me.name}</div>
-              <div className="text-xs text-ink-2">{role}</div>
+        // Laid out as Google's account switcher (27 Nov): the account in use on top with its own Sign
+        // out in the same row, the other accounts on this browser below (press to switch, x to
+        // remove), Add another account, and Sign out of all accounts at the foot.
+        <div role="menu" className="absolute right-0 mt-2 w-[21rem] rounded-3xl bg-slate-100 p-2 text-[13px] shadow-pop">
+          <div className="rounded-2xl bg-white p-3">
+            <div className="flex items-center gap-3">
+              <Avatar person={me} size="md" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-semibold">{me.name}</div>
+                <div className="truncate text-xs text-ink-2">{me.email ?? role}</div>
+                {me.email && <div className="truncate text-xs text-ink-2">{role}</div>}
+              </div>
+              {!me.viewedBy && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={switching !== null}
+                  // With other accounts here: this one only, the next opens; alone: signed out.
+                  onClick={() => (others.length ? void remove(me.id) : void signOut())}
+                  title={others.length ? `Sign out of ${me.name} only` : "Sign out"}
+                  className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-line-soft px-3 text-xs font-semibold text-ink-2 hover:bg-hover disabled:opacity-60"
+                >
+                  <LogOut size={14} aria-hidden="true" /> Sign out
+                </button>
+              )}
+            </div>
+            <div className="mt-2 flex flex-col border-t border-line-soft pt-1">
+              {/* Someone looking as them doesn't get their profile. */}
+              {!me.viewedBy && (
+                <>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setOpen(false);
+                      navigate("/profile");
+                    }}
+                    className="flex h-10 w-full items-center gap-3 rounded-lg px-2 text-left hover:bg-hover"
+                  >
+                    <UserRound size={16} aria-hidden="true" /> My profile
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={() => {
+                      setOpen(false);
+                      navigate("/profile/security");
+                    }}
+                    className="flex h-10 w-full items-center gap-3 rounded-lg px-2 text-left hover:bg-hover"
+                  >
+                    <ShieldCheck size={16} aria-hidden="true" />
+                    <span className="flex-1">Security</span>
+                    <span className={`text-xs font-semibold ${me.twoStep ? "text-good" : "text-warn"}`}>
+                      {me.twoStep ? "2FA on" : "2FA off"}
+                    </span>
+                  </button>
+                </>
+              )}
+              {/* The theme (Aryan, 26 Nov): Light, Dark, or Midnight (only the sidebar dark). */}
+              <div className="flex items-center gap-3 px-2 pt-1 pb-1.5">
+                <Palette size={16} aria-hidden="true" />
+                <span className="flex-1">Theme</span>
+              </div>
+              <div role="radiogroup" aria-label="Theme" className="mx-2 mb-1.5 flex gap-0.5 rounded-lg bg-slate-100 p-1">
+                {THEMES.map((one) => (
+                  <button
+                    key={one.key}
+                    type="button"
+                    role="radio"
+                    aria-checked={theme === one.key}
+                    onClick={() => setTheme(one.key)}
+                    className={`flex-1 rounded-md px-2 py-1.5 text-[12px] transition-colors ${
+                      theme === one.key ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]" : "text-slate-500 hover:text-slate-800"
+                    }`}
+                  >
+                    {one.label}
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setOpen(false);
+                  navigate("/password");
+                }}
+                className="flex h-10 w-full items-center gap-3 rounded-lg px-2 text-left hover:bg-hover"
+              >
+                <KeyRound size={16} aria-hidden="true" /> Change password
+              </button>
+              {me.viewedBy && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={signOut}
+                  className="flex h-10 w-full items-center gap-3 rounded-lg px-2 text-left hover:bg-hover"
+                >
+                  <LogOut size={16} aria-hidden="true" /> Sign out
+                </button>
+              )}
             </div>
           </div>
-          {/* Someone looking as them doesn't get their profile. */}
+
           {!me.viewedBy && (
-            <>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setOpen(false);
-                  navigate("/profile");
-                }}
-                className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
-              >
-                <UserRound size={17} aria-hidden="true" /> My profile
-              </button>
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  setOpen(false);
-                  navigate("/profile/security");
-                }}
-                className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
-              >
-                <ShieldCheck size={17} aria-hidden="true" />
-                <span className="flex-1">Security</span>
-                <span className={`text-xs font-semibold ${me.twoStep ? "text-good" : "text-warn"}`}>
-                  {me.twoStep ? "2FA on" : "2FA off"}
-                </span>
-              </button>
-            </>
+            <div className="mt-1.5 overflow-hidden rounded-2xl bg-white">
+              {others.length > 0 && (
+                <div className="px-4 pt-2.5 pb-1 text-[11px] font-semibold tracking-wide text-ink-2 uppercase">Other accounts</div>
+              )}
+              {others.map((one) => (
+                <div key={one.id} className="group flex items-center hover:bg-hover">
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={switching !== null}
+                    onClick={() => void switchTo(one.id)}
+                    title={`Switch to ${one.name}`}
+                    className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-4 py-2 text-left disabled:opacity-60"
+                  >
+                    <Avatar person={one} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{switching === one.id ? "Opening…" : one.name}</span>
+                      <span className="block truncate text-xs text-ink-2">{one.email ?? one.title ?? one.roleLabel}</span>
+                    </span>
+                  </button>
+                  {/* Sign this account out of this browser. */}
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={switching !== null}
+                    onClick={() => void remove(one.id)}
+                    aria-label={`Remove ${one.name} from this browser`}
+                    title="Remove from this browser"
+                    className="mr-2 grid size-9 shrink-0 place-items-center rounded-full text-slate-400 hover:bg-white hover:text-rose-600 disabled:opacity-60"
+                  >
+                    <X size={15} aria-hidden="true" />
+                  </button>
+                </div>
+              ))}
+              {(accounts?.accounts.length ?? 1) < (accounts?.max ?? 5) && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    navigate(`/login/${workspaceOf(me).key}?add=1`);
+                  }}
+                  className={`flex h-12 w-full items-center gap-3 px-4 text-left hover:bg-hover ${others.length ? "border-t border-line-soft" : ""}`}
+                >
+                  <span className="grid size-9 place-items-center rounded-full bg-slate-100">
+                    <UserPlus size={16} aria-hidden="true" />
+                  </span>
+                  Add another account
+                </button>
+              )}
+              {others.length > 0 && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={signOut}
+                  className="flex h-11 w-full items-center justify-center gap-2 border-t border-line-soft text-left font-medium hover:bg-hover"
+                >
+                  <LogOut size={15} aria-hidden="true" /> Sign out of all accounts
+                </button>
+              )}
+            </div>
           )}
-          {/* The theme (Aryan, 26 Nov): Light, Dark, or Midnight (only the sidebar dark). */}
-          <div className="flex items-center gap-3 px-3 py-2">
-            <Palette size={17} aria-hidden="true" />
-            <span className="flex-1">Theme</span>
-          </div>
-          <div role="radiogroup" aria-label="Theme" className="mx-3 mb-1.5 flex gap-0.5 rounded-lg bg-slate-100 p-1">
-            {THEMES.map((one) => (
-              <button
-                key={one.key}
-                type="button"
-                role="radio"
-                aria-checked={theme === one.key}
-                onClick={() => setTheme(one.key)}
-                className={`flex-1 rounded-md px-2 py-1.5 text-[12px] transition-colors ${
-                  theme === one.key ? "bg-white text-slate-900 shadow-[0_1px_3px_rgba(15,23,42,0.12)]" : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                {one.label}
-              </button>
-            ))}
-          </div>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              navigate("/password");
-            }}
-            className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
-          >
-            <KeyRound size={17} aria-hidden="true" /> Change password
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            onClick={signOut}
-            className="flex h-11 w-full items-center gap-3 rounded-lg px-3 text-left hover:bg-hover"
-          >
-            <LogOut size={17} aria-hidden="true" /> Sign out
-          </button>
         </div>
       )}
     </div>
@@ -1127,7 +1276,8 @@ async function leaveNow(queries: ReturnType<typeof useQueryClient>, navigate: Re
   const ending = api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
   await queries.cancelQueries();
   queries.setQueryData(ME, null);
-  navigate("/login", { replace: true });
+  // Out of this system, still inside the company: its systems again (Aryan, 27 Nov).
+  navigate("/signin", { replace: true });
   await ending;
   queries.removeQueries({ predicate: (query) => query.queryKey[0] !== ME[0] });
 }

@@ -1,23 +1,22 @@
-// One code per company (26 Nov): 2mg = 2MG Incorporated, gpi = Getmeds Philippines Incorporated.
+// One code per company (26 Nov): 2mg = 2MG Incorporated, gpi = Getmeds Philippines Incorporated; since
+// the separation the same night, one company per database: every new row carries OWN.
 // Migration 0159 moves orders and invoices from the old "getmeds" to "gpi" on a live database; it
 // must keep every invoice's number and let Getmeds Philippines' series go on from where it was.
 import { readFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { COMPANIES, COMPANY_CODES, companyName } from "./companies";
+import { COMPANY_CODES, OWN } from "./companies";
 import { openDatabase, rows } from "./db/index";
 import { migrate } from "./db/migrate";
 import { invoiceCode } from "./finance/rules";
 
-describe("the group's companies", () => {
-  it("two codes, each with its registered name and its invoice series", () => {
+describe("one company per database (since the separation, 26 Nov night)", () => {
+  it("every row carries the company's own code; its invoices its own series, six digits", () => {
+    // The codes made before stay for the rows that carry them (the database's checks know both).
     expect(COMPANY_CODES).toEqual(["2mg", "gpi"]);
-    expect(companyName("2mg")).toBe("2MG Incorporated");
-    expect(companyName("gpi")).toBe("Getmeds Philippines Incorporated");
-    // The series never change: invoices already out keep their numbers.
-    expect(invoiceCode("2mg", 123)).toBe("2MG-SI-000123");
-    expect(invoiceCode("gpi", 45)).toBe("INV-000045");
-    expect(COMPANIES.gpi.short).toBe("GPI");
+    expect(OWN).toBe("2mg");
+    expect(invoiceCode("2MG-SI-", 123)).toBe("2MG-SI-000123");
+    expect(invoiceCode("INV-", 45)).toBe("INV-000045");
   });
 });
 
@@ -74,6 +73,6 @@ describe("migration 0159 on a database made before it", () => {
       db,
       sql`update counter set value = value + 1 where name = 'invoice:gpi' returning value::int as value`,
     );
-    expect(invoiceCode("gpi", next?.value ?? 0)).toBe("INV-000042");
+    expect(invoiceCode("INV-", next?.value ?? 0)).toBe("INV-000042");
   });
 });

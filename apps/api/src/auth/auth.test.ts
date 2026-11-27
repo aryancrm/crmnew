@@ -64,8 +64,9 @@ afterEach(() => {
 });
 
 describe("the one way in", () => {
-  it("has no desk, door or PIN way in", async () => {
-    expect((await post("/api/auth/desk", { desk: "finance", password: PASSWORD })).status).toBe(404);
+  it("has no door or PIN way in; a desk's screen opens only with the desks' own password (desk.test.ts)", async () => {
+    // Nobody's own password opens a desk's screen, and none opens it until the Admin sets one.
+    expect(await codeOf(await post("/api/auth/desk", { desk: "finance", password: PASSWORD }))).toBe("desk_off");
     expect((await post("/api/auth/door", { door: "heads", password: PASSWORD })).status).toBe(404);
     const admin = await signIn("admin");
     expect((await post(`/api/org/people/${await idOf("ryan")}/pin`, {}, admin)).status).toBe(404);
@@ -123,9 +124,19 @@ describe("nobody in without a password of their own", () => {
     expect((await post(`/api/auth/view/${ryan}`, {}, admin)).status).toBe(200);
   });
 
-  it("signs nobody in on a shared screen's old session", async () => {
+  it("doesn't bring back a shared screen's session of before 23 Nov with the desks' password", async () => {
     const token = await startSession(db, await idOf("marco"));
     await db.execute(sql`update session set desk = 'dispatch'`);
+    // Migration 0166 clears them before the desk screens come back.
+    await db.execute(sql`delete from schema_migration where name = '0166_desk_password.sql'`);
+    expect(await migrate(db)).toEqual(["0166_desk_password.sql"]);
+    expect(await whoIs(db, token)).toBeNull();
+  });
+
+  it("keeps a desk's screen to the desk: its seat's person moved to another role opens nothing", async () => {
+    const token = await startSession(db, await idOf("marco"), undefined, "dispatch", undefined, "dispatch");
+    expect((await whoIs(db, token))?.deskScreen).toBe("dispatch");
+    await db.execute(sql`update person set role = 'inventory' where id = ${await idOf("marco")}`);
     expect(await whoIs(db, token)).toBeNull();
   });
 

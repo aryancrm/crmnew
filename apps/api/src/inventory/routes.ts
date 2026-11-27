@@ -4,10 +4,10 @@ import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import { addOffer, endOffer } from "./offers";
 import type { Database } from "../db/index";
-import { allow, type Env, idParam, may, readBody } from "../http";
+import { allow, type Env, idParam, may, readBody, Refusal } from "../http";
 import { afterStockIn } from "../orders/stock-wait";
 import { answerRequest, askForMedicine, medicineRequests, REQUEST_ANSWER_ROLES } from "./requests";
-import { BUYER_TYPES, CATALOGUE_ROLES, COST_ROLES, PRICE_ROLES, STOCK_ROLES } from "./rules";
+import { BUYER_TYPES, CATALOGUE_ROLES, COST_ROLES, NO_STOCK_ROLES, PRICE_ROLES, STOCK_ROLES } from "./rules";
 import { askedOf, stockReport, stockReportWorkbook } from "./stock-report";
 import {
   addPromo,
@@ -22,6 +22,7 @@ import {
   postNews,
   receiveStock,
   saveMedicine,
+  setCanvass,
   setPrices,
 } from "./service";
 
@@ -77,6 +78,12 @@ export function inventoryRoutes(
   // "/path/*" also covers "/path" itself.
   app.use("/api/inventory/*", signedIn);
   app.use("/api/stock-news/*", signedIn);
+  // HR has no business in the stock (26 Nov): not the medicines, the prices, nor a request for one.
+  app.use("/api/inventory/*", async (c, next) => {
+    if (NO_STOCK_ROLES.includes(c.get("me").role))
+      throw new Refusal(403, "not_allowed", "The stock isn't part of HR's work.");
+    await next();
+  });
 
   app.get("/api/inventory", async (c) => c.json(await listInventory(db, c.get("me"))));
 
@@ -150,6 +157,18 @@ export function inventoryRoutes(
       z.object({ prices: z.object(shape), packPrices: z.object(shape).optional() }),
     );
     await setPrices(db, c.get("me"), idParam(c), input.prices, input.packPrices ?? {});
+    return c.json({ ok: true });
+  });
+
+  // PCSO's quotations 2 and 3: the other vendors' price for one piece (Aryan, 26 Nov).
+  app.post("/api/inventory/medicines/:id/canvass", async (c) => {
+    allow(c.get("me"), PRICE_ROLES, "change prices");
+    const quote = z
+      .object({ vendor: z.string().max(120), amount: centavos })
+      .nullable()
+      .optional();
+    const input = await readBody(c, z.object({ 2: quote, 3: quote }));
+    await setCanvass(db, c.get("me"), idParam(c), input);
     return c.json({ ok: true });
   });
 

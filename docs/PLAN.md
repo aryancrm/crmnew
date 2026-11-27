@@ -917,7 +917,7 @@ it is; its screens are the reference for the same pages here, on the new API.
 |---|---|---|
 | Scope | **Everything is new**: code, database, screens | Aryan's decision, 14 Nov: a complete new project with a free hand on every choice. The old CRM is reference only. |
 | Language | **TypeScript**, frontend and backend | The work is database reads and writes, so the language does not set the speed; the database design and the number of queries do. One language means the frontend and backend share the same types and one person or AI can work on all of it. |
-| Company | **One company** | The old CRM was built to be sold to many businesses, so every table and query carried a company. This one is for 2MG / GetMeds only: simpler tables, faster queries. The two invoicing companies are a field on the order. |
+| Company | **One company per database** (26 Nov: several companies on one server, section 28) | The old CRM was built to be sold to many businesses, so every table and query carried a company. This one keeps each company in a database of its own: the tables stay as simple and fast as for one company, and no query can mix two companies. Inside a company everything is its own (26 Nov night, change log 212): no choice of company on an order, an invoice or a person. |
 | Frontend and backend | **Separate apps, one repository** | The API also serves the two websites, Messenger and later a phone app. Each can be deployed and scaled on its own. Sharing one repository keeps the API contract in one place. |
 | Frontend | **React single-page app (Vite)**, installable on a phone | Everyone is signed in, so nothing needs to be rendered on a server. The browser loads the app once from a CDN and then only asks the API for data: moving between screens is instant. This is how the hub is built. The old CRM renders every page on Vercel, which then calls the API, which then calls the database: three hops per page. |
 | Backend | **Node.js, Hono, Zod, Drizzle** | Small, fast, well understood. Plain routes: one call per screen. |
@@ -2453,6 +2453,198 @@ type-checked, not yet clicked through in a browser.
 **Not done.** The employee ID made compulsory (HR's *Missing* view lists who lacks one); a screen to
 move past covered sales' credit to someone (the data is kept for it).
 
+## 27. HR: documents, imports and reports (26 Nov 2026, on the `hr` branch)
+
+Asked by the backend department ("we must have proper document exports… be ready to handle forms in
+and out, import and export, and the generation of reports"), modelled on the documents part of the
+ovio project; the full working is [HR-PLAN.md](HR-PLAN.md) step 4c. Migration 0160.
+
+**What HR has now.**
+- **Letterhead and numbers on every HR paper.** Each company's details (address, phone, email, TIN,
+  foot line) in Company details, one tab per company; the registered name from `companies.ts`. HR's
+  documents are numbered by kind and year (`COE-2026-00001`); leave and form printouts by their row
+  (`LV-000123`, `OT-000045`).
+- **Documents** (Documents & reports → Documents): certificate of employment (with or without the
+  pay), clearance (the lead, Finance, Inventory and the Admin sign their part, HR last), memo, notice
+  to explain (acknowledged and answered by the person). Kept as issued; voided with a reason, never
+  deleted; every step in HR's trail. Everyone has Me → *My documents*.
+- **Import & export**: People (masterlist), Leave balances, Holidays: download as is or a blank
+  template; import with a column match, a test run that changes nothing, then save, each row saying
+  what changed or why not. The payroll register also as Excel.
+- **Reports**: ten (headcount, joiners and leavers, attrition, late/absent/hours, leave balances,
+  leave taken, overtime, leave and forms filed, due soon, missing details), each with a company
+  filter, Excel, and a print on the letterhead with who prepared it, remarks and signatories.
+
+**Scenarios and how each is checked** ("Auto" names the test; run them with
+`pnpm --filter @2mg/api exec vitest run src/hr/documents.test.ts src/hr/sheets.test.ts src/hr/reports.test.ts`):
+
+| # | Scenario | Expected | Auto (test) | By hand |
+|---|---|---|---|---|
+| 1 | HR issues a certificate of employment for a GPI employee | Numbered `COE-2026-00001`, on Getmeds Philippines Incorporated's letterhead, "has been employed … as … since …", the purpose they gave | `hr/documents.test.ts` "a certificate of employment…" | HR → Documents & reports → Documents → *New document* |
+| 2 | A certificate with the pay, then the person gets a raise | The paper keeps the pay of the day it was issued | same | — |
+| 3 | A paper was made wrong | *Void* with the reason: it stays listed as Void, its number is never reused, HR's trail writes both | same | Open it → *Void* |
+| 4 | A colleague opens someone's certificate; a seller tries to issue one | Refused | same | — |
+| 5 | A notice to explain: the person acknowledges, then answers | *Waiting* → *Received* → *Answered*; HR is told; their signature in *Received by* | "a notice to explain…" | Sign in as the person → Me → *My documents* |
+| 6 | A clearance: each desk signs its part, HR last | The lead, Finance, Inventory and the Admin each sign only their own part, with a note of what is still owed; HR only once the others signed; a second open clearance for the same person refused | "a clearance…" | Finance, Inventory, Admin, the lead open it from their alert |
+| 7 | A leave or form printout | Its number (`LV-000123`, `OT-000045`) and the employer's letterhead with the address and TIN from Company details | "leave and form printouts…" | Approved leave → *Print* |
+| 8 | The masterlist downloaded and brought straight back | Every row says *Nothing to change* | `hr/sheets.test.ts` "the exported masterlist…" | Import & export → People → *Download*, then *Import* the same file |
+| 9 | An import with mistakes | The test run changes nothing; *Save* keeps the rows that pass; each other row says why, by its line (no such person, "someday" isn't a day, the ID is one person's and the email another's) | "an import: a test run changes nothing…" | Import a file with a wrong date |
+| 10 | Opening leave balances from the old system | One adjustment per kind reaches the days left, with the reason; the same file again: nothing to change; 7.3 days refused (half-day steps) | "leave balances…" | Import & export → Leave balances |
+| 11 | Holidays from a sheet | Added once; the same day and name again is left as it is | "holidays…" | Import & export → Holidays |
+| 12 | The payroll register as Excel | The same headings as the CSV, the people, a total row | `hr/payroll.test.ts` | Payroll → a month → *Excel* |
+| 13 | Every report | Runs on the demo company; the total row adds the rows up; a company filter narrows it (and its letterhead); Excel has the title, the period and the same rows | `hr/reports.test.ts` | Documents & reports → Reports → any → *Excel* / *Print* |
+| 14 | Due soon | A probationary person's month-3 review and a birthday in the next 30 days are listed | same | Reports → *Due soon* |
+| 15 | A seller tries the reports, a download or an import | Refused | `hr/reports.test.ts`, `hr/sheets.test.ts` | — |
+
+Kept green: `hr/print.test.ts`, `hr/payroll.test.ts`, `hr/people.test.ts`, `hr/leave.test.ts`,
+`hr/forms.test.ts`, `hr/leave-credits.test.ts`, `hr/holidays.test.ts`, `hr/events.test.ts`,
+`hr/attendance.test.ts`, `points/points.test.ts`, `checks/scale.test.ts` (130 people),
+`db/migrate.test.ts`. The screens are type-checked, not yet clicked through in a browser.
+
+**Not done.** A person asking for their own certificate on the CRM; the government reports from
+payroll (SSS R3, PhilHealth RF-1, Pag-IBIG MCRF, BIR 2316, alphalist); Getmeds Philippines' address
+and TIN are for the Admin to type in Company details.
+
+## 28. Several companies on one server: Bishnoi One's control panel (26 Nov 2026)
+
+Aryan, 26 Nov: "we need to make it multi company … each organisation its own ID and password …
+GetMeds and 2MG, everything of theirs is separate, people separate, revenue separate, so each its
+own cluster." Agreed the same day, with his teammate's points: an Org ID of six digits, the email
+domain tied to the company, the company's Admin adding its people, a one-time password; "just keep
+the inventory" for GetMeds.
+
+**The rules**
+
+- **Each company's data is in a database of its own**: its people, customers, stock, orders and
+  money. Nothing of one company can show in another, by mistake or by a bug: the code under a
+  request is given only its own company's database. One website and one server for all, so one
+  update reaches every company.
+- **The list of companies** is one more small database (`bishnoi_control` on the same Postgres;
+  `apps/api/migrations-control`): each company's **Org ID** (six digits, made at random, never
+  changed: its account number with us), its name, its **short code** for documents (2MG, GM), the
+  **email domain** its people sign in with (2mginc.com, getmeds.ph), and where its data is.
+- **The company's login ID**: the one Aryan types for it in the panel (26 Nov: "I give it an ID myself
+  and a one-time password they change"), an email on its own domain: **2MG's is `info@2mginc.com`**
+  (his word, 26 Nov), set once by the server when the list is first made (`HOME_COMPANY_LOGIN`).
+  It is its first System admin's login and opens all its apps; the domain after the @ is the one all
+  its people sign in with. Never made up: an ID, email or password is never chosen by the code.
+- **Signing in**: a person's own login ID with their company's domain after the @, and their own
+  password (`hos1@2mginc.com`, `info@getmeds.ph`). No shared company password. The browser then
+  remembers the company, so a login ID typed without the @ is that company's (else the first's):
+  2MG's people sign in exactly as before. One company at a time in a browser.
+- **The first company is the server's own database**: 2MG Inc., `@2mginc.com`. The tender robot is
+  its. **Each company has its own Facebook pages, mailboxes and websites** (Aryan, 26 Nov: "2MG and
+  GetMeds each have their own"), connected by its own Admin under Online pages & mail: the server
+  reads every company's on its timer (a paused one's wait); Meta's one webhook goes to the company
+  that connected the page it is for (a page nobody connected waits at the first company's); a
+  website calls `/webhooks/store/<Org ID>` (the first company's keep `/webhooks/store/2mg`), as its
+  Channels page shows; every email it sends by itself goes from its own mailbox. Links a customer
+  or a new person opens without signing in (a quotation, the welcome link) name their company
+  (`?org=`), and a request to join goes by its email's domain.
+- **Our control panel** (`one.bishnoi.ai/control`; `/admin` is each company's own Admin pages): only
+  for the people who run Bishnoi One, on logins of its own that are no company's: a short login ID
+  (no email) and a password of 8 characters or more; **no phone code** (Aryan, 26 Nov: "remove it";
+  until then 12 characters and the authenticator app's code every time). Five wrong tries lock it
+  for 15 minutes. The first panel login is made with the setup key the server writes in its log
+  while there is none (a new key at every start until then); after that the key is gone.
+- **Adding a company** (in the panel): its name, short code and login ID (an email on its own domain,
+  not Gmail or the like). The panel makes its database, its company tree (one box per sales channel),
+  and its first System admin on that login ID with a one-time password, shown once for Aryan to give
+  them; they choose their own password at the first sign-in and add their people. It can **start with a copy of another company's medicines,
+  prices and stock**: the warehouses, medicines with their SKUs and prices, every batch, and what is
+  on each shelf today as opening stock (one receipt per batch and warehouse by its Admin, so each
+  shelf equals its log). No orders, invoices, money, customers or people come across. From then on
+  each company's stock is its own: a sale in one never takes a piece off the other's.
+- **Changing, pausing, a new one-time password**: name, code and login ID can be changed (a login ID
+  on another domain changes every person's sign-in domain: tell them first); a company can be paused (nobody of it can sign
+  in or work; nothing is deleted) and resumed; its Admin can be given a new one-time password (their
+  phone code, if on, stays on). 2MG is a company like the others (it pauses the same way; no
+  label of its own: Aryan, 26 Nov). Every change is kept on the
+  panel's own list of what was done.
+- **What follows the company besides its database**: the domain its login IDs end in, its name
+  until its Company details are saved (Admin panel), its code beside "Bishnoi One" in the frame and
+  its name on the sign-in page, and the answers kept in memory for a while (each company's own).
+
+**As built** (`apps/api/src/companies/`; `apps/web/src/control/`). On by `COMPANIES=on`; without it
+the server runs one company exactly as before (the old site, the tests). Online the database user
+must be able to create databases (Coolify's `postgres` can), and `SECRETS_KEY` must be set (it is:
+the API needs it to start). Tested: 12 tests (two companies side by side, sign-in by domain, a
+session of one company refused in the other, a paused company, the stock copy with every data check
+green, the panel's setup, sign-in, lock and actions); the CI's real-Postgres check makes a second
+company too. Tried on a copy of the local data: GetMeds added in about ten seconds with 282
+medicines and 3,203,465 pieces, its Admin signed in by `@getmeds.ph`, its 19 data checks fine.
+
+**Not yet (each its own step, on Aryan's word)**
+
+- Live on one.bishnoi.ai since 26 Nov (change log 206): 2MG Inc. is the first company, Org ID 237227;
+  Aryan set up the panel and added Getmeds Philippines Incorporated (GPI, Org ID 749607, @getmeds.ph)
+  the same evening. Its Admin fills its Company details (address, TIN, and the invoice series before
+  its first invoice) and connects its own pages, mailboxes and websites in its Online pages & mail.
+- The daily backup (Coolify, the database's Backups, 18:00 UTC) copies only the first company's
+  database (`postgres`): `bishnoi_control` and each new company's `co_<Org ID>` must be added to
+  it (Aryan's yes first: it is a server setting).
+- Emptying the dummy data Aryan asked to clear (26 Nov: "empty all the data, just keep the inventory
+  … 2MG's too, those were dummy orders … keep the leads and enquiries in 2MG"): what goes is listed
+  for his yes first; nothing is deleted before.
+- Inside each company everything is its own since 26 Nov night (change log 212, 228): no choice of
+  company on an order, an invoice or a person. The tender robot stays with the first company; a
+  person in both companies signs in to one at a time. Which
+  Facebook pages and mailboxes move from 2MG's to GetMeds's is Aryan's to say (each is connected
+  in its company's own Online pages & mail).
+
+## 29. Office or field: each seller's seat is one or the other (26 Nov 2026, built)
+
+Asked by the backend developer: split the sellers into those who stay in the office and work by
+phone, and those who go out and visit. Agreed and built the same day (on the `medrep` branch).
+
+**The rule.** Every seller's seat (their login ID) is either **Office** or **Field**, never both.
+A person is never both at once: to change, HR moves them to a seat of the other kind (section 26's
+move, with its reason and trail), and the new seat brings its own screens. The CEO or the Admin
+sets a seat's kind in Teams & people (Change the seat → Works); the holder's HR trail says so.
+
+| | **Office** | **Field** |
+|---|---|---|
+| Who today | MD Telesales (Oncology), TeleSales Anesthesia, Online (B2C CHC), B2B CRR, the Sales Admins | Rx CHC (visits doctors), Hospital CHC (visits hospitals), B2B NBD if they go out |
+| Works by | Phone, Messenger, email: patients, doctors and hospitals | Visits, the visit plan, the calendar |
+| Their screens | Calls to make today, refills due, enquiries, orders | Today's route, visits to log, field expenses, orders where the team takes them |
+| Not on their screens | Visits, the route plan, field expenses | The call desk |
+
+**Decided (26 Nov):**
+1. **Who places the order stays as each team works now.** In Rx the field CHC places none (MD
+   Telesales take them); in the Hospital Division the field CHC places their own; Online and B2B
+   place their own.
+2. **The sale counts for whoever takes and processes the order.** In Rx that is the office
+   (MD Telesales), not the field CHC who visited; the field CHC is scored on visits and doctors
+   covered, as today.
+3. **Both see the customer.** The field seller whose area it is and the office seller who calls
+   them each see the customer, its orders and its visits.
+4. **One seat, one kind.** No seat is both; the kind belongs to the seat, so whoever sits in it
+   gets its screens. A person given another seat of the other kind changes screens with it.
+
+**Built (26 Nov).**
+- `seat.works` (migration 0163): office or field, a MedRep seat's only. Every MedRep seat was set
+  as its channel works (`works_of_channel`: HOSP, RX, PAP and MT field; ONLINE, TS, B2B, BID and
+  CLIDP office); a new seat takes its channel's unless the form picks one. `person_works(id)` reads
+  a person's main seat's kind (else their channel's); the sign-in carries it as `me.works`.
+- Teams & people: the seat form has **Works** (As the team works / From the office / In the field);
+  a change writes "Their seat now works from the office" in the holder's trail.
+- Menus (`withWorks` in `menus.ts`): an office seat loses the field folder (My day, visits, tour
+  plan, expenses, samples) and "Log a call"; a field seat in a phone channel gets the folder before
+  My numbers. A seat as its channel works keeps exactly today's menu.
+- The API refuses an office seat its own visits, the field day's work, asking for and giving
+  samples (`refuseOffice`, code `office_seat`): "Your seat works from the office: visits, the tour
+  plan, field expenses and samples are for field seats."
+- Customers: an office seller also sees the customers they took orders for; the customer page's
+  head says "Visits: (the area's field seller) · Calls and orders: (the office seller of the
+  latest order)".
+- Tests: `org/works.test.ts` (4); `menus.test.ts` keeps every MedRep's menu as it was and checks an
+  office Hospital, Rx and PAP seat lose the field's pages and a field NBD gains them.
+
+**Not needed (26 Nov, the backend developer):** an account doesn't change kind; it is handed to
+another person, who carries on. So no office call desk for a field team's account and no Home
+cards by kind: each account keeps its team's screens. The Works box stays for setting an account
+up right.
+
 ## 13. Questions waiting for Aryan
 
 1. Does Management check **every** MedRep order (as in the hub), or only the ones on which the
@@ -3891,3 +4083,218 @@ move past covered sales' credit to someone (the data is kept for it).
 - 24 Nov (198), asked by the backend developer: **blue for what you press, again; the app's frame and the public pages redone.** The accent goes from the GetMeds green (19 Nov) back to blue `#2563eb` (`--color-brand` and the emerald, blue and sky scales in `styles.css`): buttons, links, the selected menu item, counts, the focus ring. What is fine, done or paid keeps the pharmacy green (`--color-good`). The frame (`shell.tsx`): white sidebar and page; the sidebar runs the full height with the person's workspace logo and "Bishnoi One / MedReps" at its top, folds to an icon rail with a sliding width, and the desk's name and the top bar's desk label are gone from the top bar; page titles match the home's greeting (28px semibold). Public pages (local only, not yet on main): the home page's hero and navbar, the About page (`/about`), Sign in and Sign up as split screens with card collages. Waits for Aryan's approval before main or deploy.
 - 25 Nov (199), Aryan, after seeing the sign-in pages side by side: "if it doesn't clash and there is no risk, push it"; asked which colour, since (198) undoes his 19 Nov green: **blue (his)**, green only for what is fine, done or paid. The frontend developer's work (198) joined to main. Checked: it joined with no clash but this change log; the web type-check and build pass; no API, database or sign-in change (the sign-in form sends the same login ID and password); the side menu of 12 demo logins (MedRep, team lead, head, CEO, Admin, Management, Finance, Dispatch, Inventory, HR and others) lists exactly the same pages as before, plus the desk's name at its top; all 166 of their menu pages opened with no error; the phone drawer and bottom bar work; the home page's styles and animations stay inside its own pages. Its used pictures were re-encoded at the same pixel size (29 MB to 7.6 MB: the welcome page and the sign-in pages open faster on a phone); a local AI tool's empty database (`.claude/data`) that came with it was left out and is now ignored.
 - 26 Nov (200), recorded by the backend developer: **one code per company everywhere.** `2mg` = 2MG Incorporated, `gpi` = Getmeds Philippines Incorporated. Orders and invoices called Getmeds Philippines `getmeds` while HR and payroll called it `gpi`, and the names were written five ways (2MG Inc., 2MG Incorporated, GetMeds Philippines Inc., Getmeds Philippines…). Now one list, `apps/api/src/companies.ts` (code, registered name, short name, invoice series), used by orders, invoices, HR, payroll, printouts and the books' headings. Migration 0159 moves the orders and invoices already made from `getmeds` to `gpi` and renames the invoice counter with it, so every invoice keeps its number and the `INV-` series goes on from the last one (tested on a copy made the old way: `companies.test.ts`). The group's own name (the company tree's top box, the settings) is unchanged.
+- 26 Nov (201), asked by the backend developer: **HR has no business in the stock.** HR's work is people, leave and pay, so HR's menu loses "Medicines & stock" (it sat under Look up), the API refuses HR on everything under `/api/inventory` (the medicines, prices, stock report, medicine requests: `NO_STOCK_ROLES` in `inventory/rules.ts`), and HR's top search finds no medicines. Everyone else is unchanged. Test: `hr/people.test.ts` "HR and the stock".
+- 26 Nov (202), asked by the backend developer after (201): **HR's search bar searches people.** HR's top search finds people only: anyone with an HR record, those who left too (marked "Left"), by name, login ID, email or employee ID, and opens their HR record (`/hr/people/:id`); no medicines, customers or orders. Its hint says so. Other roles' search is unchanged. Test: `hr/people.test.ts` "HR's search".
+- 26 Nov (203), asked by the backend developer: **HR's documents, imports and reports** (section 27, HR-PLAN 4c). Papers on each company's letterhead with numbers (certificates of employment, clearance signed desk by desk, memos and notices to explain acknowledged and answered by the person; leave and form printouts numbered too); the masterlist, leave balances and holidays downloaded and imported back with a test run first; ten HR reports on screen, in Excel and printed with who prepared them. Migration 0160. Tests: `hr/documents.test.ts`, `hr/sheets.test.ts`, `hr/reports.test.ts`.
+- 26 Nov (204), Aryan: **several companies on one server, each in its own database** (section 28).
+  Asked first, then "Yes, start": an Org ID of six digits (his teammate's point), people sign in with
+  their company's email domain (`@2mginc.com`, `@getmeds.ph`, his), no shared company password, our
+  own control panel with a short ID, a password and the phone's code. Then, mid-way: "don't stress,
+  empty all the data, just keep the inventory" for GetMeds. Built: the list of companies, each
+  request answered on its own company's database, the control panel (`/control`), adding a company
+  with a copy of another's medicines, prices and stock, pausing, a new Admin password; the company's
+  code in the frame and its name on the sign-in page. All 817 API tests green (12 new); tried on a
+  copy of the local data. Not live yet; emptying the dummy data waits for his yes on the list.
+- 26 Nov (205), Aryan, after the panel's picture: "who told you to do 'you'?" (its "you@2mginc.com"
+  was only a label, but read as a made-up ID), and "I give it an ID myself and a one-time password
+  they change, that's all". The panel now takes the **login ID he types** (an email on the company's
+  own domain): adding a company asks only its name, short code, login ID and what it starts with;
+  each company shows its Login ID; "New one-time password". **2MG's login ID is `info@2mginc.com`**
+  (his word), set once by the server when the list is first made (`HOME_COMPANY_LOGIN`); its Admin's
+  seat login (`admin`), where it has one, keeps working too. 14 tests for several companies (2 new); tried on a fresh copy
+  of the local data. To go live with the team's evening work, after their pull requests are merged.
+- 26 Nov (206), Aryan: "if multicompany architecture is ready and you integrate the other team
+  members work pls deploy". **Joined to main and put live on one.bishnoi.ai** (API and web, commit
+  `40cce8a`): the backend developer's company codes and plain-English CI report (pull request 7, already
+  on main), HR's documents, imports and reports (`hr` branch), the MedRep pages (`medrep` branch: one
+  customer list for field sellers, the customer page, the menus written once) and several companies
+  (204-205). No other branch has work main lacks. Clashes only in this plan's numbers (HR keeps
+  section 27 and 201-203; several companies is section 28 and 204-205) and in the settings code (both
+  kept: the company's name from Bishnoi One's list and HR's letterhead per company). The MedRep menus'
+  test picture gains HR's "My documents" under Me (on purpose, for everyone); nothing else in the 13
+  menus changed. The control panel's setup screen no longer shows example login IDs. Checked: 839 API
+  tests, 35 web tests, the builds, GitHub's checks (a second company on a real Postgres, the Docker
+  smoke test, the security scan); a trial start on a copy of the local data with several companies on
+  (migrations 0145-0160 applied, the Admin's login became info@2mginc.com, the old one kept in the
+  panel's log). Online: a database backup just before (43 MB); `COMPANIES=on` and
+  `HOME_COMPANY_LOGIN=info@2mginc.com` added to the API in Coolify; the live API applied 0160 and made
+  the list: 2MG Inc., Org ID 237227, `@2mginc.com`. Signed-in people stayed signed in.
+- 26 Nov (207), Aryan, evening: "the old repository handled the leads, enquiries and GL cases, all
+  automated: check it; 2MG and GetMeds are two companies, each with its own Facebook pages and its
+  own emails, on which the automatic emails go: is it built? If not, build it; any GL case from
+  anywhere, PAP's GL person handles it, the orders go to her; PCSO gets three quotations
+  automatically, the others one." Read the old CRM (`~/Projects/crm`: `frontend/lib/agency-quotes.ts`,
+  `backend/server/src/quotation.ts`, `apps/crm/src/customer-mail.ts`, the GL tracker). **Already so
+  (22 Nov):** a guarantee-letter case from any channel is the PAP person's (Fhaye Norella, Patient
+  Assistance Program Officer, on the local data), a seller's "Hand to PAP", the sale counted where
+  it came from, Management approving, Finance recording the agency's payment, the PAP app as the
+  GL tracker. **Built:** (1) each company's own Facebook pages, mailboxes, websites and links
+  (section 28); one Messenger drain per company. (2) PCSO three quotations, every other agency one
+  (on 22 Nov it was three for every agency): each medicine keeps the two other vendors' price for
+  one piece (the medicine page: PCSO's quotations 2 and 3; migration 0161), a PCSO case's
+  quotations 2 and 3 fill themselves from them (typed ones win, as before), and a vendor that is
+  one of the group's companies gets its whole quotation on its own letterhead; the 2MG logo only
+  on the first company's quotations. (3) Automatic emails on a case, as the old CRM: thank you for
+  contacting us (a new enquiry, an email one too; never one from a mailbox's past), the quotation
+  with its PDF (PCSO's once all three are there; a guarantee letter's says to apply with it), the
+  guarantee letter received, verified; once each, from the case's mailbox. Off until the Admin
+  switches them on (Company details → Automatic emails on a case), as the old CRM's owner decided;
+  the order's own emails unchanged. Not carried: "prescription checked" and "senior / PWD ID
+  checked" (no such step: Management reads them on approving, 19 Nov). **Found, not changed (asked
+  Aryan):** the PAP person can't answer her patients on Messenger or by email; only the Online desk
+  and the Admin can. Also: the two-step sign-in test waits out a code's last seconds (it failed
+  once on GitHub on a busy machine). Live on one.bishnoi.ai the same night, with (208).
+- 26 Nov (208), Aryan, night: "put it all live; Fhaye should reply too; after the letter it is the
+  same process, Management, Finance, Dispatch, but write everywhere that it is PAP's; the agency
+  doesn't pay the whole, so who records how much came, Fhaye or Finance? You decide; the patient
+  often pays the rest" and then "the agency's money comes very late, months sometimes; Fhaye marks
+  it when it comes and then Finance approves? But we give the medicine first, we don't make the
+  patient wait: build it that way." Decided and built: (1) **the PAP person reads and answers her
+  own cases on Messenger and by email** (only the Online desk and the Admin could). (2) **"PAP ·
+  GL" on every guarantee letter's order**: the order lists, the Management, Finance and Dispatch
+  boards, the order page (its case and the PAP person on hover); the sale still counts where the
+  patient came from. (3) **A guarantee letter's money**: the order goes Management, Finance,
+  Dispatch on credit to the agency, nothing paid first, so the medicine goes out (as before);
+  after the delivery the PAP person or Finance marks the claim sent; when money comes, often
+  months later, the PAP person marks it (the agency's, or the patient's rest) with its proof, and
+  **Finance confirms it against the bank: only then is it a payment**, or refuses it saying why;
+  Finance may still record a payment itself and alone lets the rest go (22 Nov). While the agency
+  hasn't paid anything, its money is not the patient's debt: the order checks, the customer lists
+  and the late-payment reminders leave it out; the company's totals and the books keep it.
+  **Guarantee letters** (Finance; the PAP person's "GL money"; the CEO's and the Admin's PAP app):
+  every letter by where its money stands, with how many days it has waited for the agency.
+  Migration 0162. (4) Confirmed: each company is its own (people, stock, orders, money, enquiries,
+  its own pages, mailboxes, websites and automatic emails); 2MG today, GetMeds and any other
+  added in the control panel the same way (section 28). **Live on one.bishnoi.ai** (API and web,
+  commit `21f843c`), a database backup just before; the live API applied 0161 and 0162. The full
+  test run had caught one mistake before it went out: the agency-waiting check came out unknown
+  for orders with no type and hid their debts from Management's check (fixed: 851 tests green).
+- 26 Nov (209), Aryan, making his control panel login: "make the password the normal 6 or 8, not
+  12; what is this phone code, is it needed?" Told him what the code protects (the panel gives
+  any company's Admin a new password) and that it isn't needed to work; he said **"Remove it"**.
+  The control panel now signs in with its login ID and a password of 8 characters or more; setup
+  is one form (the setup key, the login ID, the name, the password twice) and signs in at once;
+  five wrong tries still lock a login for 15 minutes. Control migration 0002 drops the kept
+  authenticator keys. A company's own people's two-step sign-in is unchanged.
+- 26 Nov (210), Aryan, in an incognito window: "Sign in opens the systems straight away, nothing
+  about the company; I want Sign in to open a popup for the company's ID and password, then that
+  company's apps; /control is the super admin's". Asked which way; he chose **one sign-in, then the
+  company's apps**. The navbar's Sign in (`/signin`) now shows "Sign in to your company" (the
+  company's ID, like info@2mginc.com, or a person's own login ID, and the password; the phone code
+  for whoever uses two-step sign-in); after it, the company's name and the systems this login may
+  open: the company's ID (its Admin) and the CEO every app of the company, Finance its desk and
+  Books, anyone with one system straight into it, a one-time password changed first. A
+  department's own page (`/login/<department>`) still signs in there directly. Checked: the form answers on a demo copy, the server opens the person's own department
+  with none picked, and which systems each login gets (a web test); the page after signing in was
+  not clicked through (the demo's password isn't mine to type).
+- 26 Nov (211), Aryan: "why Main company on 2MG? 2MG is normal like the other companies, don't treat
+  it differently" and "my team signed in to the Admin panel and Company details lets them change
+  both, 2MG's and GetMeds's". (1) The control panel shows 2MG like any company: no label of its
+  own, and it pauses and resumes the same way. (2) Company details shows the signed-in company's
+  own details alone (they were two tabs, 2MG Incorporated and Getmeds Philippines Incorporated,
+  from the backend developer's one list of the group's companies, 200); on the local copy of 2MG's
+  data no order is billed and nobody employed under Getmeds Philippines. **Still to decide with
+  Aryan:** the same list still offers "Invoice from 2MG / GetMeds" on an order and "employer 2MG /
+  GPI" in HR inside each company; with each company separate, each should bill and employ in its
+  own name only (GetMeds's when it is added in the panel).
+- 26 Nov (212), Aryan: "yes, separate 2MG and GetMeds: no 'employee of 2MG or GPI', no 'invoice from
+  2MG or GetMeds', everything separate; test well that nothing like the Admin panel's is left
+  anywhere; 2MG is a normal company like GetMeds; each its own mail IDs with the automatic mails, its
+  own Messenger pages, its own websites; then put it live." **One company per database**: inside a
+  company everything is its own. (1) An order bills as the company itself (no "Invoicing from" on
+  the order form or Management's edit; an old screen's choice is ignored); an invoice is numbered in
+  the company's own series, kept in Company details ("Invoice series"): 2MG keeps 2MG-SI- and its
+  counter; another company bills nothing until it sets its own, so none goes out under 2MG's
+  numbers. (2) HR employs in the company's own name (no Employer choice on joining or the person's
+  page; the masterlist import can't move anyone to another company; the reports have no company
+  filter); payslips, leave and form printouts, certificates (the words "employed by …") and the
+  reports print the company's own Company details. (3) The books, the invoice list and HR's pages
+  show the company's own name (they said "2MG Incorporated and Getmeds Philippines Incorporated").
+  (4) A PCSO quotation's other vendors are printed by their name; another company's details are
+  never read. (5) **Found by the new side-by-side test**: migration 0017 writes 2MG's own details
+  (address, phone, info@2mginc.com, FDA licence, foot line) into every new database: a company
+  added in the panel now starts with its own blank details under its own name. Checked as well:
+  the server's memory is kept per company, files are named by their content (one company can't
+  overwrite or open another's), signing out clears what the screen kept, each company's pages,
+  mailboxes, websites and automatic emails are its own (207). The rows made before (orders and
+  invoices billed under `gpi`, people marked GPI) keep their code and print as the company's own.
+  Tests: two companies side by side (names, letterhead, billing name, invoice series, Company
+  details each its own).
+- 26 Nov (213), asked by the backend developer: **office or field.** Every seller's seat is either Office (works by phone) or Field (visits doctors or hospitals), never both; HR moves a person to a seat of the other kind to change. Who places the order stays as each team works now; the sale counts for whoever takes and processes the order; the field and the office seller both see the customer (section 29). Plan only, nothing built yet.
+- 26 Nov (214), asked by the backend developer: "proceed". **Office or field built** (section 29): each MedRep seat carries its kind, set as its channel works; the CEO or the Admin changes it in Teams & people; the menu, the field's pages and the customer page follow it.
+- 26 Nov (215), the backend developer: an account isn't switched between office and field; it is handed to the next person, who carries on, and no data is lost. The two "not done" items of section 29 are dropped.
+- 26 Nov (216), asked by the backend developer (Kim's Refills due → a patient's page led nowhere): **a refill call from start to end.** Opened from Refills due, the customer's page says "Refills due › Details" and leads with the refill call: when they need their medicines and what they took last, (1) call them, (2) what they said: ordering now (the order form, then back to the list with "Order placed"), not yet (set the day they run out), no answer or call back (log the call), (3) the next one on the same list (`customers/refill-flow.tsx`).
+- 26 Nov (217), asked by the backend developer (a patient's page read as a new customer): **the customer page counts the old system too, and every customer has its number.** Their buying's Orders and Bought add the old system's ("3 · all in the old system", not "0 · + 3 earlier"); Paid says "in this system"; Medicines points to Prices given. Migration 0164 numbers every customer left without one (`CUS-00017`: only Add customer gave one, so seeds and imports showed a blank chip and an empty "Customer no.") and numbers any added later on the way in.
+- 26 Nov (218), asked by the backend developer: **Earlier orders by month.** The customer page's Earlier orders has a month picker: All months, This month, and every month they ordered in with its orders and total ("Oct 2026 · 1 order · ₱18,500"); a month with none says so (`/api/customers/:id/prices?month=2026-10`, `months`).
+- 26 Nov (219), asked by the backend developer ("walang upload files dito?"): **upload on a customer's Files.** Whoever keeps the customer's details (the sellers, Management, the Admin) uploads a photo or PDF there: a patient's prescription or valid ID, a business's BIR 2303, LTO permit or business permit, or any other file (migration 0165). Only the three papers count toward a business's missing list.
+- 26 Nov (220), the backend developer: **B2B like RX Business, office and field.** NBD and CRR work from the office (calls, referrals) for now; an NBD or CRR account set to In the field visits its accounts like an Rx CHC: its drugstores and distributors can be planned and visited (distributors joined the visit lists), and the customer page names the B2B account's owner (its NBD until handed over, then its CRR) as who visits or who calls. Whether any of them go out is still Aryan's to say (19 Nov: "decide later").
+- 26 Nov (221), the backend developer: **the order's General part is the account's.** A seller (or a lead for one of their people) orders in their account's Division only: the form shows it as it is ("B2B · yours"), the API refuses another ("This account's orders count for HOSP. For CLIDP, switch to an account of that Division."). Management, the Admin and the CEO still pick any; an order being fixed keeps its Division. **This replaces Aryan's 19 Nov rule** ("any other Division a pick away", section 4.2): to be told to him with pull request 8.
+- 26 Nov (222), the backend developer: **more than one account on one browser, like Google.** The avatar menu has *Add another account*: the sign-in page (`?add=1`) asks that account's own login ID and password (and code), and the account in use stays signed in beside it. The other accounts are listed in the menu with *Switch* (no password again; the app opens afresh as that account). Each account is only what its own login opened: the orders, sales and screens are that account's. At most five on one browser; a plain sign-in starts the browser afresh; *Sign out* signs every account out, on the server too (a shared computer keeps nobody's). Kept in an httpOnly cookie read only under `/api/auth` (`sid_more`); not while looking as someone else.
+- 27 Nov (223), the backend developer (the demo's Carlo reported to Daniel, who covered Mindanao's vacant lead seat): **a vacant lead seat goes to the lead above, never to a cover.** "When the team lead is vacant, supervision goes straight to the one above; don't anchor it on someone else, it isn't their task." A team lead's or head's seat can't be covered (the API refuses; Teams & people and Vacant seats offer no cover for it, and say "Its team reports to … meanwhile"); a cover already on one leads nobody (the tree and the teams a lead sees count holders only). Covering a vacant MedRep's area (section 26) is unchanged. The demo no longer has Daniel covering Mindanao: Carlo reports to the Hospital head.
+- 27 Nov (224), the backend developer (Fritz's order form asked for a Sub-division: "he is a CRR already, it should be recorded"): **the Sub-division is the account's too.** A seller's order carries the Division's fixed one (HOSP's "Hospital", the hub's rule) or else the account's own team or place (a CRR's "CRR", an NBD's "NBD"), shown as it is on the form; the API keeps it whatever is sent. An account with none still picks; Management, the Admin and the CEO as before.
+- 27 Nov (225), the backend developer: **remove an account from the browser.** In the avatar menu each other account has an × (signed out of this browser and on the server), and *Sign out of (name) only* signs out the one in use and opens the next one kept here (none left: the sign-in page). *Sign out of all accounts* stays.
+- 27 Nov (226), the backend developer: **the account menu as Google's switcher.** The account in use on top (picture, name, email, role) with its own *Sign out* in the same row (this account only when others are here; alone, signing out); its profile, security and password under it; then *Other accounts* (press a row to switch, x to remove), *Add another account*, and *Sign out of all accounts* at the foot.
+- 27 Nov (227), the backend developer: **the General part offers what the account holds on the tree.** "Each account has its assigned Division and Sub-division from the tree in the Admin; one may handle several Sub-divisions, Divisions or areas: put them in a search dropdown." `GET /api/orders/assignments` (a lead's `?medrep=` for one of their people) lists one per seat held today (a vacant MedRep seat's cover too, never a lead seat's): its Division with the Division's fixed Sub-division, else the seat's team or place, its area and team. One shows as it is; several are a searchable list (`orders/assignment-picker.tsx`: Division, Sub-division, area or team), the Sub-division following the pick. The API takes the Sub-division sent only when it is one of the account's for that Division, else its first.
+- 27 Nov (228), the separation finished before it goes live: (1) **GetMeds repaired**: it was added
+  in the panel before (212)'s fix, so it held 2MG's details from migration 0017 (address, phone,
+  info@2mginc.com, licence, foot line). On start the server gives any company whose details are
+  still exactly those, never saved by anyone, its own blank ones under its own name; a company that
+  saved its details is never touched (tested). (2) A row from before the separation billed under
+  GetMeds inside 2MG (`gpi`) keeps GetMeds's name, as it was issued (the invoice, its sales order,
+  HR's history line), instead of printing as 2MG's; "2mg" on a row means the company itself in each
+  database. (3) HR's masterlist sheet: the Company column is shown only (the company's own code); an
+  import neither reads nor changes it, and finds a person by employee ID or login email alone. (4)
+  The purchase form's sample bank account no longer names GetMeds. Checked again: no screen or paper
+  offers or shows the other company (the old 2026 chart page, out of every menu, keeps its title).
+  **Live the same night** (server and screens at 30667b6, with pull request 8): the server's log
+  said "[GPI] company details: 2MG's from the old migration replaced by its own", and both
+  companies' databases took the team's 0163-0165. All 863 server and 41 screen tests passed.
+- 27 Nov (229), Aryan (the screen after the company's sign-in listed Administration, Books, Orders,
+  Online, PAP…: "why did you make it like this, make it as it was"): **after the company's
+  sign-in, the old systems grid** under the company's name: Selling (MedReps, Team leads, Heads,
+  Online desk), Operations (Management, Finance, Dispatch, Inventory), Office (HR, Regulatory,
+  Office staff, CEO, Administration, Books), each with its logo. A system the login holds opens at
+  once (the company's ID: Administration and Books); any other opens its own sign-in, where the
+  person working there signs in with their own login ID, the company's staying signed in beside it
+  (Add another account). Someone with one system still goes straight in.
+- 27 Nov (230), Aryan ("why do Administration and Books open straight away; what is 'Adding another
+  account'; why these extra words, and Sign up? the Admin adds people"): after the company's
+  sign-in the grid is the company's ID's (its Admin's) alone, anyone else goes to their own desk;
+  **every system, Administration and Books too, opens its own sign-in**: pressing it signs the
+  company's ID out first (the browser keeps the company, so a plain "fin1" is this company's). The
+  sign-in pages say only "Sign in to …", Login ID, Password: no "This signs in to …, another
+  company?" line, **no Sign up** there, in the home page's top bar, its menu or its footer (the
+  /signup page stays, unlinked; the About page says the Admin adds people). Aryan also asked for
+  Management, Finance and Dispatch's common password back, as the shared desk screen of 19 Nov
+  (125, 126; removed by 164): being rebuilt, the password typed by the company's Admin in the
+  Admin panel, never in the code.
+- 27 Nov (231), Aryan (asked: "own ID + the common password, or password only on a shared desk
+  screen?" He chose **the shared desk screen**, as 19 Nov (125, 126)): **the desks' common password
+  is back**, reversing 164's "no desk sign-in" for these three desks only. The company's Admin (or
+  the CEO) types it in the Admin panel (Company details → "Desk password: Management, Finance,
+  Dispatch"; typed twice, kept only as a scrypt hash in the company's own database, never shown
+  again, never in the code; "Take it off" closes the desk screens). While it is set, Management's,
+  Finance's and Dispatch's sign-in pages open with **the desk password alone** ("Sign in with my own
+  ID instead" under it): the desk's shared screen, as its lead seat (else whoever works there),
+  named "Finance desk" and so on, until the working day ends. On it: the desk's work only; nobody's
+  own leave, forms, payslips, documents, day, messages, profile, password, two-step or accounts
+  (refused by the API, not only hidden), nobody marked present, nobody started (each starts on their
+  own login); what is done on an order is written in the name of the person it was given to when
+  they started today (18 Nov's rule), else in the desk's. Five wrong passwords close that desk's
+  screen for 15 minutes, never anyone's own login. A new password, or none, signs out every desk
+  screen open. Migration 0166 clears any desk session left from before 23 Nov. No PINs (21 Nov's
+  were not asked for again). Tests: `auth/desk.test.ts` (5), `account/desk-sign-in.test.tsx` (3).
+  **Live on 27 Nov** (server and screens at 5839743; both companies' databases took 0166): off
+  until each company's Admin types its desks' password.
+- 27 Nov (232), Aryan (desk password set by him: "fine now; but signing out of Management takes me out
+  of the company: it should leave that app, not the company"): **a browser stays inside its
+  company.** Once it has signed in to a company, signing out of a system (its Sign out, the
+  15-minute sign-out, the end of the day, a one-time password's Sign out, the last account taken
+  off) goes back to the company's systems grid (/signin, the company's name over Selling,
+  Operations, Office), not to the home page or the company's sign-in; each system still asks its
+  own sign-in. **"Sign out of the company"** at the grid's foot signs out every account on the
+  browser and forgets the company (`POST /api/auth/leave-company`), so the next person starts at
+  "Sign in to your company". `/api/company` says `inside` (the browser's remembered company is
+  this one); a new browser still lands on the home page. A desk's sign-in now also makes the browser
+  remember its company.
+

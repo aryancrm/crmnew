@@ -105,10 +105,16 @@ export type Me = {
   /** The Divisions their orders carry: one per seat (its box where it names one: CLIDP, URO, B&B;
    *  else its channel's), the main seat's first. One seat, one Division (Aryan, 19 Nov). */
   divisions?: string[];
+  /** A MedRep's seat works from the office (by phone) or in the field (visits), never both
+   *  (docs/PLAN.md 29). Null for anyone who isn't a MedRep. */
+  works?: SeatWorks | null;
   /** The CEO or Admin looking as this person (read only), when it is that. */
   viewedBy?: { id: number; name: string; role: string } | null;
   /** The department this session was opened for (the sign-in page it was made on). */
   workspace?: string | null;
+  /** A desk's shared screen (Management, Finance or Dispatch), opened with the desks' common
+   *  password (Aryan, 27 Nov): nobody's own, so no one person's leave, payslips or messages on it. */
+  deskScreen?: "management" | "finance" | "dispatch" | null;
   /** The box picked on a lead's team switch for this request (?unit=, checked): the page counts the
    *  seats in it and under it (org/scope.ts). */
   unit?: number | null;
@@ -333,6 +339,95 @@ export type MedicineDetail = {
     by: string;
   }[];
   news: StockNews[];
+  /** PCSO's quotations 2 and 3: the other vendors' price for one piece (empty: not set). */
+  canvass: CanvassPrice[];
+};
+
+/** Where a guarantee letter's money stands (Aryan, 26 Nov): the medicine not delivered yet; the
+ *  claim to send; waiting for the agency; the agency paid short (the patient's rest, or let go);
+ *  nothing owed. */
+export type GlStage = "deliver" | "claim" | "agency" | "short" | "done";
+
+/** The PAP person's mark that money came in, for Finance to confirm against the bank. */
+export type GlMark = {
+  id: number;
+  payer: "agency" | "patient";
+  amount: number;
+  paidOn: string;
+  reference: string | null;
+  note: string | null;
+  proofId: number | null;
+  by: string;
+  at: string;
+  state: "waiting" | "confirmed" | "refused";
+  reason: string | null;
+  decidedBy: string | null;
+};
+
+/** One guarantee letter's order and its money. Centavos. */
+export type GlMoneyRow = {
+  orderId: number;
+  orderCode: string;
+  status: OrderStatus;
+  patient: string;
+  /** Whose sale it is (the seller it came from). */
+  seller: string | null;
+  leadId: number | null;
+  caseCode: string | null;
+  agency: GlAgency | null;
+  letterNo: string | null;
+  letterAmount: number | null;
+  /** The PAP person who works it. */
+  papBy: string | null;
+  invoiceId: number | null;
+  invoiceCode: string | null;
+  total: number;
+  owed: number;
+  deliveredOn: string | null;
+  claimSentOn: string | null;
+  claimRef: string | null;
+  /** Days since the claim went (else since the delivery), while the agency hasn't paid. */
+  waitingDays: number | null;
+  agencyPaid: number;
+  patientPaid: number;
+  letGo: number;
+  stage: GlStage;
+  /** Marks waiting for Finance, and those refused in the last month (with why). */
+  marks: GlMark[];
+};
+
+export type GlMoneyList = {
+  rows: GlMoneyRow[];
+  counts: Record<GlStage | "confirm", number>;
+  can: { confirm: boolean; mark: boolean };
+};
+
+export type GlMarkInput = {
+  payer: "agency" | "patient";
+  amount: number;
+  paidOn: string;
+  reference?: string | null;
+  note?: string | null;
+  proofId?: number | null;
+};
+
+/** A case's own steps the customer hears of by email (Aryan, 26 Nov, as the old CRM). */
+export type CaseMailEvent = "enquiry" | "quotation" | "gl_received" | "gl_verified";
+/** Automatic emails on a case: off until the Admin switches them on, then each step its own. */
+/** The desks' common password, as the Admin panel shows it: whether it is set, never the password. */
+export type DeskPasswordState = { on: boolean; savedAt: string | null; savedBy: string | null };
+
+export type CaseMailSettings = { enabled: boolean; events: Record<CaseMailEvent, boolean> };
+
+/** Another vendor's price for one piece of a medicine, for PCSO's quotation 2 or 3. Centavos. */
+export type CanvassPrice = { slot: 2 | 3; vendor: string; amount: number };
+
+/** One of PCSO's other quotations, filled from the medicines' canvass prices: the vendor, its total
+ *  and its lines (each medicine at that vendor's price). Centavos. */
+export type CanvassQuote = {
+  vendor: string;
+  amount: number;
+  lines: { medicine: string; qty: number; price: number; total: number }[];
 };
 
 /** Stock on an open purchase, on its way. */
@@ -546,7 +641,8 @@ export type CustomerInput = {
 };
 
 /** A business customer's paper (the hub asked a hospital for all three). */
-export type CustomerPaperKind = "bir_2303" | "lto_permit" | "business_permit";
+/** A business's three papers, a patient's prescription and valid ID, and any other file. */
+export type CustomerPaperKind = "bir_2303" | "lto_permit" | "business_permit" | "prescription" | "valid_id" | "other";
 export type CustomerPaper = {
   id: number;
   kind: CustomerPaperKind;
@@ -697,7 +793,7 @@ export type SearchResult = {
   customers: { id: number; name: string; kind: CustomerKind; city: string | null }[];
   /** Orders by code or customer PO, among those the person may read. */
   orders: { id: number; code: string; customer: string; status: string }[];
-  /** People by name or seat login: the CEO's anyone, a lead's own team. */
+  /** People by name or seat login: the CEO's anyone, a lead's own team; HR everyone, also by email and employee ID. */
   people: {
     id: number;
     name: string;
@@ -705,6 +801,9 @@ export type SearchResult = {
     login: string | null;
     seatId: number | null;
     team: string | null;
+    /** HR's search only: the employee ID, and whether they have left. */
+    employeeCode?: string | null;
+    left?: boolean;
   }[];
 };
 
@@ -985,6 +1084,9 @@ export type OrderRow = {
   changed?: boolean;
   /** It came through the Online desk: the case's code and where it came in ("Messenger"). */
   via?: { code: string; source: string } | null;
+  /** A guarantee letter's order: PAP's (Aryan, 26 Nov: "write everywhere that it is PAP's"), with
+   *  its case and who works it; null on every other order. */
+  pap?: { code: string | null; leadId: number | null; by: string | null } | null;
 };
 
 export type OrderList = {
@@ -2305,7 +2407,8 @@ export type LeadCase = {
     /** The claim after delivery (guarantee letter). */
     claimSentOn: string | null;
     claimRef: string | null;
-    /** PCSO's other two quotations: each vendor's name and total, from their written quote. */
+    /** PCSO's other two quotations typed by hand: each vendor's name and total, from their written
+     *  quote. Empty: they fill themselves from the medicines' prices (`canvassAuto`). */
     canvass: { vendor: string; amount: number }[];
     /** online: the Online desk's; pap: a PAP MedRep's patient-assistance case. */
     desk: "online" | "pap";
@@ -2342,6 +2445,12 @@ export type LeadCase = {
     stale: boolean;
     savedAt: string | null;
   };
+  /** How many quotations the agency asks for: PCSO three (ours and two other vendors'), every
+   *  other one ours alone (Aryan, 26 Nov, as the old CRM). */
+  quotesNeeded: number;
+  /** PCSO's quotations 2 and 3 filled from the medicines' canvass prices; null when a quoted
+   *  medicine has none, or the medicines name different vendors (then they are typed). */
+  canvassAuto: CanvassQuote[] | null;
   order: {
     id: number;
     code: string;
@@ -2623,6 +2732,8 @@ export type CompanyInfo = {
   footer: string;
   signatory: string;
   signatoryTitle: string;
+  /** Printed before its invoices' six-digit numbers (2MG-SI-000123). Empty: not set yet. */
+  invoiceSeries: string;
 };
 
 export type PointsProgram = { enabled: boolean; rateBps: number };
@@ -2842,6 +2953,10 @@ export type CustomerPrices = {
   /** The payments the old system took from them, newest first. */
   payments: { id: number; number: string | null; on: string; mode: string | null; reference: string | null; amount: number }[];
   medicines: MedicinePrices[];
+  /** Every month they ordered in before this CRM, the latest first: its orders and total (not void). */
+  months: { month: string; orders: number; total: number }[];
+  /** The month `orders` is narrowed to ("2026-10"), or null for all of them. */
+  month: string | null;
 };
 
 /** For an order being decided: the customer in short, and for each of its lines (by the line's
@@ -2880,6 +2995,9 @@ export type OrderPrices = {
 export type CustomerPage = CustomerDetail & {
   /** Who looks after them and the people above: the MedRep (or the desk agent), their manager, the head. */
   line: { name: string; title: string | null; role: string }[];
+  /** Both sellers see the customer (docs/PLAN.md 29): the field seller of their area, and the
+   *  office seller who took their latest order. */
+  sellers: { field: string | null; office: string | null };
   totals: {
     orders: number;
     bought: number;
@@ -3330,6 +3448,8 @@ export type OrgSeat = {
   title: string;
   module: Role;
   moduleLabel: string;
+  /** A MedRep seat's kind: office or field. */
+  works: SeatWorks | null;
   lead: boolean;
   area: { id: number; name: string; cities: string[] } | null;
   reportsToSeatId: number | null;
@@ -3399,6 +3519,8 @@ export type OrgPersonInput = {
   unitId?: number | null;
   title?: string | null;
   module?: Role | null;
+  /** The new seat's kind, when it is a MedRep's: office or field. */
+  works?: SeatWorks | null;
   lead?: boolean;
   reportsToSeatId?: number | null;
   areaId?: number | null;
@@ -3408,10 +3530,26 @@ export type OrgPersonInput = {
   employeeCode?: string | null;
 };
 
+/** One Division and Sub-division an account orders in, from a seat it holds on the company's tree
+ *  (27 Nov: "each account has its assigned Division and Sub-division, from the tree in the Admin"). */
+export type OrderAssignment = {
+  division: string;
+  subDivision: string;
+  /** The seat's area ("HOS | Pasay"), job title and team, to tell two apart. */
+  area: string | null;
+  seat: string | null;
+  team: string | null;
+};
+
+/** Office: works by phone, Messenger and email. Field: visits doctors and hospitals. */
+export type SeatWorks = "office" | "field";
+
 export type OrgSeatInput = {
   unitId: number;
   title: string;
   module: Role;
+  /** A MedRep seat's kind; left out, it follows how its channel works. */
+  works?: SeatWorks | null;
   lead?: boolean;
   reportsToSeatId?: number | null;
   areaId?: number | null;
@@ -4439,7 +4577,8 @@ export type HrEventKind =
   | "paper"
   | "attendance"
   | "leave"
-  | "move";
+  | "move"
+  | "document";
 export type HrPaperKind = "contract" | "government_id" | "certificate" | "clearance" | "medical" | "other";
 /** A person's papers on their HR record: the ones kept, then the ones taken off (archived). */
 export type HrPapers = {
@@ -5044,6 +5183,8 @@ export type VacantSeats = {
     days: number;
     /** The team lead it waits with. */
     lead: string | null;
+    /** A lead's own seat: never covered by someone else; its people report to the lead above. */
+    leads: boolean;
     cover: { holdingId: number; personId: number; name: string; until: string | null } | null;
     /** A joiner or a move already planned into it. */
     promised: { name: string; startsOn: string } | null;
@@ -5079,6 +5220,10 @@ export type Printout = {
   kind: "leave" | FormKind;
   title: string;
   company: string;
+  /** Its number on paper (LV-000123, OT-000045). */
+  code: string;
+  /** The employer's letterhead: its registered name and details. */
+  letterhead: Letterhead;
   person: {
     name: string;
     employeeCode: string | null;
@@ -5098,6 +5243,163 @@ export type Printout = {
     /** The signature as a data URL, or null (not signed yet, or no signature drawn). */
     image: string | null;
   }[];
+};
+
+/** A company's letterhead on HR's papers: the registered name (companies.ts) and the details the
+ *  Admin keeps in Company details. */
+export type Letterhead = {
+  code: Company;
+  name: string;
+  address: string;
+  phone: string;
+  email: string;
+  tin: string;
+  footer: string;
+};
+
+// ------------------------------------------------------------------ HR's documents
+
+/** coe: certificate of employment; coe_pay: with the pay; nte: notice to explain. */
+export type HrDocKind = "coe" | "coe_pay" | "clearance" | "memo" | "nte";
+/** A clearance's sign-offs, in order: HR signs last. */
+export type ClearanceDesk = "lead" | "finance" | "inventory" | "admin" | "hr";
+export type HrDocStatus = "issued" | "waiting" | "received" | "answered" | "cleared" | "void";
+
+export type HrDocRow = {
+  id: number;
+  code: string;
+  kind: HrDocKind;
+  title: string;
+  personId: number;
+  name: string;
+  employeeCode: string | null;
+  company: Company;
+  subject: string | null;
+  issuedAt: string;
+  issuedBy: string;
+  status: HrDocStatus;
+  /** In words: "Waiting for Finance, Inventory", "Received 26 Nov". */
+  statusWords: string;
+};
+
+export type HrDocList = {
+  rows: HrDocRow[];
+  /** The person asked for (?person=), even before they have any document. */
+  person: { id: number; name: string; employeeCode: string | null; position: string | null; company: Company; active: boolean } | null;
+  kinds: { key: HrDocKind; label: string }[];
+  can: { issue: boolean };
+};
+
+export type HrDocInput = {
+  kind: HrDocKind;
+  personId: number;
+  subject?: string | null;
+  body?: string | null;
+  replyBy?: string | null;
+};
+
+export type HrDocPage = {
+  id: number;
+  code: string;
+  kind: HrDocKind;
+  title: string;
+  status: HrDocStatus;
+  statusWords: string;
+  letterhead: Letterhead;
+  person: { id: number; name: string; employeeCode: string | null; position: string | null; department: string | null };
+  issuedOn: string;
+  issuedBy: string;
+  /** Label and value lines above the text (a memo's To, From, Date, Subject). */
+  fields: { label: string; value: string }[];
+  /** The letter, paragraph by paragraph. */
+  paragraphs: string[];
+  /** A notice to explain: the day to answer by, and the answer. */
+  replyBy: string | null;
+  reply: { text: string; at: string } | null;
+  /** A clearance's desks. */
+  clearance: { desk: ClearanceDesk; label: string; signer: string | null; at: string | null; note: string | null }[] | null;
+  signers: Printout["signers"];
+  void: { at: string; by: string; reason: string } | null;
+  can: { void: boolean; acknowledge: boolean; reply: boolean; sign: ClearanceDesk[] };
+};
+
+/** A person's own documents, and the clearances waiting for their desk's sign-off. */
+export type MyDocuments = { rows: HrDocRow[]; toSign: HrDocRow[] };
+
+// ------------------------------------------------------------------ HR's sheets in and out
+
+export type HrImportKind = "people" | "leave-balances" | "holidays";
+
+/** An uploaded sheet read (never kept): its headings and rows, and each column matched to a heading. */
+export type HrImportRead = {
+  kind: HrImportKind;
+  headers: string[];
+  rows: string[][];
+  columns: { key: string; label: string; note: string | null }[];
+  /** A column's key → the heading's place (from 0), or null when none matched. */
+  mapping: Record<string, number | null>;
+};
+
+export type HrImportRow = {
+  /** The row's line in the file (the headings are line 1). */
+  line: number;
+  /** new: added; update: changed; same: nothing to change; not_found: no such person. */
+  status: "new" | "update" | "same" | "problem" | "not_found";
+  who: string;
+  changes: string[];
+  problem?: string;
+};
+
+export type HrImportResult = {
+  /** False: a test run, nothing changed. */
+  saved: boolean;
+  rows: HrImportRow[];
+  counts: Record<HrImportRow["status"], number>;
+};
+
+export type HrSheets = {
+  kinds: { key: HrImportKind; title: string; what: string; columns: { label: string; readOnly: boolean; note: string | null }[] }[];
+  can: { import: boolean };
+};
+
+// ------------------------------------------------------------------ HR's reports
+
+export type HrReportKey =
+  | "headcount"
+  | "movement"
+  | "attrition"
+  | "attendance"
+  | "leave-balances"
+  | "leave-taken"
+  | "overtime"
+  | "forms"
+  | "due-soon"
+  | "missing";
+/** What a report is asked for: a range of days, one day, a year, or the days ahead. */
+export type HrReportPeriod = "range" | "day" | "year" | "ahead";
+export type HrReportColumn = { key: string; label: string; type: "text" | "number" | "money" | "date" | "percent" | "hours" };
+export type HrReportValue = string | number | null;
+
+export type HrReportList = {
+  reports: { key: HrReportKey; title: string; what: string; period: HrReportPeriod; group: string }[];
+};
+
+export type HrReport = {
+  key: HrReportKey;
+  title: string;
+  what: string;
+  period: HrReportPeriod;
+  /** What it was asked for, in words ("1 Nov 2026 to 26 Nov 2026", "As of 26 Nov 2026", "2026"). */
+  periodWords: string;
+  asked: { from: string; to: string; year: number; days: number; company: Company | null };
+  columns: HrReportColumn[];
+  rows: Record<string, HrReportValue>[];
+  totals: Record<string, HrReportValue> | null;
+  /** The headline figures above the table. */
+  figures: { label: string; value: string }[];
+  letterhead: Letterhead;
+  preparedBy: string;
+  preparedAt: string;
 };
 
 // ------------------------------------------------------------------ payroll

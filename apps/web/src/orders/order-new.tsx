@@ -4,7 +4,6 @@
 // total, and what Management will see. A MedRep's order is always his own; Dispatch decides how
 // it goes out.
 
-import { COMPANIES, COMPANY_CODES } from "@2mg/api/companies";
 import {
   DIVISION_BUYERS,
   DIVISIONS,
@@ -38,6 +37,7 @@ import type {
   OrderForList,
   OrderInput,
   PaperKind,
+  OrderAssignment,
 } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -64,6 +64,7 @@ import {
 import { type FormEvent, Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { api } from "../api";
+import { AssignmentPicker, assignmentKey } from "./assignment-picker";
 import { AGENCIES } from "../online/parts";
 import { VAT_WORDS } from "../inventory/vat";
 import { MedicineFinder } from "./medicine-finder";
@@ -485,12 +486,43 @@ export function OrderNew({
   // Their own marked; every channel one press away.
   const ownChips: readonly string[] = anyDivision ? [] : ownDivisions;
   const ownDivision = ownDivisions[0] ?? "";
-  const pickedDivision = divisionOf(division) ?? ownDivision;
-  const pickedSubDivision =
-    subDivision ??
-    (pickedDivision
-      ? subDivisionOfArea(pickedDivision, forRep ? forRep.area : me?.area?.name, forRep ? null : me?.title)
+  // The General part is the account's (26 Nov, the backend developer; it replaces "any other a pick
+  // away"): a seller orders in their account's Divisions only; another Division's order is placed
+  // from an account of that Division (Add another account, then switch). The API refuses it too.
+  const lockedDivisions = !anyDivision && ownDivisions.length > 0;
+  // What the account holds on the company's tree (27 Nov: "each account has its assigned Division and
+  // Sub-division; one may handle several"): one shows as it is, several in a searchable list.
+  const assignments =
+    useQuery({
+      queryKey: ["orders", "assignments", forRep?.id ?? 0],
+      queryFn: () =>
+        api<{ assignments: OrderAssignment[] }>(`/api/orders/assignments${forRep ? `?medrep=${forRep.id}` : ""}`),
+      enabled: Boolean(me) && lockedDivisions && !fixId,
+    }).data?.assignments ?? [];
+  const askedDivision = divisionOf(division);
+  const pickedAssignment =
+    lockedDivisions && !fixId && assignments.length
+      ? (assignments.find((one) => one.division === askedDivision && one.subDivision === subDivision) ??
+        assignments.find((one) => one.division === askedDivision) ??
+        assignments[0])
+      : null;
+  const pickedDivision =
+    pickedAssignment?.division ??
+    // An order being fixed keeps the Division it was placed in.
+    ((askedDivision && (!lockedDivisions || fixId || ownDivisions.includes(askedDivision)) ? askedDivision : null) ?? ownDivision);
+  // The account's own Sub-division (its team, CRR or NBD, or its place), when it has one: fixed like
+  // the Division (27 Nov, the backend developer: "he is a CRR already, it should be recorded").
+  const accountSub =
+    pickedAssignment?.subDivision ||
+    (lockedDivisions && !fixId && pickedDivision === ownDivision
+      ? subDivisionOfArea(ownDivision, forRep ? forRep.area : me?.area?.name, forRep ? null : me?.title)
       : "");
+  const pickedSubDivision =
+    accountSub ||
+    (subDivision ??
+      (pickedDivision
+        ? subDivisionOfArea(pickedDivision, forRep ? forRep.area : me?.area?.name, forRep ? null : me?.title)
+        : ""));
   // The hub's rule for the Division (and a guarantee letter's order in its five Divisions): a fixed
   // Sub-division shows as it is, B2B's is CRR or NBD; the Headquarter starts as the Division's.
   const pap = orderType === "gl" && PAP_DIVISIONS.includes(pickedDivision);
@@ -1050,6 +1082,12 @@ export function OrderNew({
       navigate(`/visits/${visitId}`, { replace: true });
       return;
     }
+    // A refill call's order (refill-flow.tsx): back to the same list, for the next one.
+    const refills = !fixId && params.get("from") === "refills" ? params.get("state") : null;
+    if (refills && !failed.length) {
+      navigate(`/to-call?state=${refills}`, { replace: true, state: { placed: { orderId: id } } });
+      return;
+    }
     navigate(`/orders/${id}`, {
       replace: true,
       state: failed.length
@@ -1220,27 +1258,53 @@ export function OrderNew({
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <label className="col-span-2 flex flex-col gap-1 sm:col-span-1">
             <Label text="Division" needed />
-            <select
-              aria-label="Division"
-              value={pickedDivision}
-              disabled={Boolean(fixId)}
-              onChange={(event) => event.target.value && divisionPicked(event.target.value)}
-              className={FIELD}
-            >
-              {!pickedDivision && <option value="">-- Pick the Division --</option>}
-              {DIVISIONS.map((name) => (
-                <option key={name} value={name}>
-                  {name}
-                  {ownChips.includes(name) ? (forRep ? " · theirs" : " · yours") : ""}
-                </option>
-              ))}
-            </select>
+            {pickedAssignment && assignments.length > 1 ? (
+              // Several held: only those, searchable; the Sub-division follows the pick.
+              <AssignmentPicker
+                options={assignments}
+                value={assignmentKey(pickedAssignment)}
+                className={FIELD}
+                onPick={(one) => {
+                  setDivision(one.division);
+                  setSubDivision(one.subDivision);
+                  setHeadquarter(null);
+                  if (orderType === "gl" && !PAP_DIVISIONS.includes(one.division)) setOrderType(null);
+                }}
+              />
+            ) : lockedDivisions && (assignments.length === 1 || ownDivisions.length === 1) ? (
+              // The account's own, as it is: another Division's order comes from that Division's account.
+              <div className={FIXED} title="Your account's Division. For another Division, switch to an account of that Division.">
+                {pickedDivision}
+                {fixId ? "" : forRep ? " · theirs" : " · yours"}
+              </div>
+            ) : (
+              <select
+                aria-label="Division"
+                value={pickedDivision}
+                disabled={Boolean(fixId)}
+                onChange={(event) => event.target.value && divisionPicked(event.target.value)}
+                className={FIELD}
+              >
+                {!pickedDivision && <option value="">-- Pick the Division --</option>}
+                {(lockedDivisions ? ownDivisions : DIVISIONS).map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                    {ownChips.includes(name) ? (forRep ? " · theirs" : " · yours") : ""}
+                  </option>
+                ))}
+              </select>
+            )}
           </label>
             <label className="flex flex-col gap-1">
               <Label text="Sub-division" />
               {rule?.sub ? (
                 // Fixed by the Division (the hub's rule).
                 <div className={FIXED}>{rule.sub}</div>
+              ) : accountSub ? (
+                // The account's own.
+                <div className={FIXED} title="Your account's Sub-division.">
+                  {accountSub}
+                </div>
               ) : rule?.subOptions ? (
                 <select value={sentSub} onChange={(event) => setSubDivision(event.target.value)} className={FIELD}>
                   <option value="">-- Not set --</option>
@@ -1858,20 +1922,6 @@ export function OrderNew({
               ))}
             </select>
             {action.at("source") && <span className="text-xs text-rose-700">{action.at("source")}</span>}
-          </label>
-          <label className="flex flex-col gap-1">
-            <Label text="Invoicing from" needed />
-            <select
-              value={invoiceFrom}
-              onChange={(event) => setInvoiceFrom(event.target.value as InvoiceFrom)}
-              className={FIELD}
-            >
-              {COMPANY_CODES.map((code) => (
-                <option key={code} value={code}>
-                  {COMPANIES[code].name}
-                </option>
-              ))}
-            </select>
           </label>
           {/* Their PO number: asked on an order with their PO, never on a patient's own (19 Nov). */}
           {(orderType === "po" || patientOrder || customerPo || (!orderType && picked?.kind !== "patient")) && (
@@ -2772,7 +2822,6 @@ export function OrderNew({
                   ["Source", source],
                   ["Date needed", expectedOn ? dayLabel(expectedOn) : ""],
                   ["Deliver to", address],
-                  ["Invoicing from", COMPANIES[invoiceFrom].name],
                   [
                     "Documents",
                     [

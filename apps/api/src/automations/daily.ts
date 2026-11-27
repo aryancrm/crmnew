@@ -89,7 +89,7 @@ async function lateCustomers(db: Database, today: string, monday: string): Promi
     db,
     sql`select x.holder::int as holder, count(distinct x.customer_id)::int as customers, sum(x.balance)::float8 as owed
       from (select d.customer_id, d.balance, ${HOLDER} as holder from ${duesSql(today)} d join customer c on c.id = d.customer_id
-        where d.late > 60 and not d.on_delivery) x
+        where d.late > 60 and not d.on_delivery and not d.gl_waiting) x
       where x.holder is not null group by x.holder`,
   );
   for (const one of found)

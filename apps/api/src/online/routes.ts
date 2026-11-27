@@ -31,6 +31,7 @@ import {
   setBuyer,
   setCasePoints,
 } from "./service";
+import { tellCase } from "./case-mail";
 import { tellCustomer } from "./tell";
 
 const optional = (max: number) =>
@@ -82,9 +83,12 @@ export function onlineRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
       }),
     );
   });
-  app.post("/api/leads", async (c) =>
-    c.json({ id: await addLead(db, c.get("me"), (await readBody(c, leadInput)) as LeadInput) }),
-  );
+  app.post("/api/leads", async (c) => {
+    const id = await addLead(db, c.get("me"), (await readBody(c, leadInput)) as LeadInput);
+    // Thank you for contacting us, by itself when the company switched it on (case-mail.ts).
+    void tellCase(db, c.get("me"), id, "enquiry");
+    return c.json({ id });
+  });
   // A seller hands their patient to PAP: a guarantee letter is PAP's to work (22 Nov).
   app.post("/api/leads/hand-to-pap", async (c) => {
     const input = await readBody(
@@ -128,6 +132,7 @@ export function onlineRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
       }),
     );
     await saveQuote(db, c.get("me"), idParam(c), input as QuoteInput);
+    void tellCase(db, c.get("me"), idParam(c), "quotation");
     return c.json({ ok: true });
   });
   app.post("/api/leads/:id/quote-sent", async (c) => {
@@ -152,6 +157,13 @@ export function onlineRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
       }),
     );
     await saveGl(db, c.get("me"), idParam(c), input as GlInput);
+    // The letter in, then (when it is) verified: each emailed once, if switched on.
+    const id = idParam(c);
+    const me = c.get("me");
+    void (async () => {
+      if (input.letterNo || input.letterOn) await tellCase(db, me, id, "gl_received");
+      if (input.verify) await tellCase(db, me, id, "gl_verified");
+    })();
     return c.json({ ok: true });
   });
   app.post("/api/leads/:id/claim", async (c) => {
@@ -174,6 +186,8 @@ export function onlineRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
       }),
     );
     await saveCanvass(db, c.get("me"), idParam(c), input.lines);
+    // PCSO's quotation goes once its other two are there.
+    void tellCase(db, c.get("me"), idParam(c), "quotation");
     return c.json({ ok: true });
   });
   // Who buys: the patient, or a business through the desk (its own price list).

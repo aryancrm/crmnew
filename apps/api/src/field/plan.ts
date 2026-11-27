@@ -102,7 +102,7 @@ export async function fieldPlan(
         from customer c
         left join visit v on v.customer_id = c.id and v.person_id = ${personId}
           and v.day between ${first}::date and ${last}::date
-        where c.active and c.kind in ('doctor', 'hospital', 'drugstore')
+        where c.active and c.kind in ('doctor', 'hospital', 'drugstore', 'distributor')
           and ${lookedAfterBy(sql`${personId}`, today)}
         group by c.id
         order by coalesce(c.visit_class, 'E'), c.name`,
@@ -267,7 +267,7 @@ export async function setVisitClass(
   const changed = await rows<{ id: number }>(
     db,
     sql`update customer c set visit_class = ${visitClass}
-      where c.id = ${customerId} and c.active and c.kind in ('doctor', 'hospital', 'drugstore') ${scope}
+      where c.id = ${customerId} and c.active and c.kind in ('doctor', 'hospital', 'drugstore', 'distributor') ${scope}
       returning c.id::int as id`,
   );
   if (!changed.length)

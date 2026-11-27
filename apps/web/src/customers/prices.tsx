@@ -747,6 +747,12 @@ const PAST_STATUS: Record<string, string> = {
   void: "Cancelled",
 };
 
+/** "2026-10" as "Oct 2026". */
+const monthWords = (month: string) =>
+  new Date(`${month}-01T00:00:00Z`).toLocaleString("en-PH", { month: "short", year: "numeric", timeZone: "UTC" });
+/** This month in Manila: "2026-11". */
+const thisMonth = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila" }).format(new Date()).slice(0, 7);
+
 /** On the customer's page: what they were given, medicine by medicine, and their orders from
  *  before this CRM. Shown once they have any such history. */
 export function PricesGiven({ customerId }: { customerId: number }) {
@@ -758,8 +764,18 @@ export function PricesGiven({ customerId }: { customerId: number }) {
   const [all, setAll] = useState(false);
   const [look, pickLook] = useLook("crm:prices-look", LOOKS);
   const toggle = (key: string) => setOpen(open === key ? null : key);
+  // Earlier orders of one month (26 Nov: "what did this person order this month"), else all.
+  const [month, setMonth] = useState("");
+  const narrowed = useQuery({
+    queryKey: ["customers", "prices", customerId, "month", month],
+    queryFn: () => api<CustomerPrices>(`/api/customers/${customerId}/prices?month=${month}`),
+    enabled: Boolean(month),
+  });
   const data = query.data;
   if (!data || data.past.orders === 0) return null;
+  const now = thisMonth();
+  const picked = month ? data.months.find((one) => one.month === month) : undefined;
+  const orders = month ? (narrowed.data?.orders ?? []) : data.orders;
   const medicines = all ? data.medicines : data.medicines.slice(0, 12);
   return (
     <>
@@ -787,13 +803,32 @@ export function PricesGiven({ customerId }: { customerId: number }) {
 
       <SectionPanel
         icon={History}
-        title={`Earlier orders · ${count(data.past.orders)}`}
+        title={`Earlier orders · ${count(month ? (picked?.orders ?? 0) : data.past.orders)}`}
         actions={
-          <span className="text-xs text-slate-500">
-            <b className="text-slate-800 tabular-nums">{peso(data.past.bought)}</b>
-            {data.past.firstOn && data.past.lastOn
-              ? ` · ${dayLabel(data.past.firstOn)} to ${dayLabel(data.past.lastOn)}`
-              : ""}
+          <span className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+            <span>
+              <b className="text-slate-800 tabular-nums">{peso(month ? (picked?.total ?? 0) : data.past.bought)}</b>
+              {month
+                ? ` · ${monthWords(month)}`
+                : data.past.firstOn && data.past.lastOn
+                  ? ` · ${dayLabel(data.past.firstOn)} to ${dayLabel(data.past.lastOn)}`
+                  : ""}
+            </span>
+            <select
+              aria-label="Which month"
+              value={month}
+              onChange={(event) => setMonth(event.target.value)}
+              className="h-8 rounded-lg border border-slate-200 bg-white px-2 text-xs font-semibold text-slate-700"
+            >
+              <option value="">All months</option>
+              {!data.months.some((one) => one.month === now) && <option value={now}>This month ({monthWords(now)}) · none</option>}
+              {data.months.map((one) => (
+                <option key={one.month} value={one.month}>
+                  {one.month === now ? "This month · " : ""}
+                  {monthWords(one.month)} · {count(one.orders)} {one.orders === 1 ? "order" : "orders"} · {peso(one.total)}
+                </option>
+              ))}
+            </select>
           </span>
         }
         flush
@@ -825,8 +860,11 @@ export function PricesGiven({ customerId }: { customerId: number }) {
             )}
           </div>
         )}
+        {month && !narrowed.isFetching && orders.length === 0 && (
+          <p className="px-4 py-4 text-sm text-slate-500 sm:px-5">No orders in {monthWords(month)}.</p>
+        )}
         <ul className="divide-y divide-slate-100">
-          {data.orders.map((order) => (
+          {orders.map((order) => (
             <li key={order.id} className="px-4 py-2.5 hover:bg-slate-50/60 sm:px-5">
               <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5">
                 <span className="flex flex-wrap items-center gap-x-2 text-sm">
@@ -861,7 +899,7 @@ export function PricesGiven({ customerId }: { customerId: number }) {
             </li>
           ))}
         </ul>
-        {data.past.orders > data.orders.length && (
+        {!month && data.past.orders > data.orders.length && (
           <div className="border-t border-slate-100 px-4 py-2 text-xs text-slate-500 sm:px-5">
             The newest {data.orders.length}; each medicine's prices above cover them all.
           </div>

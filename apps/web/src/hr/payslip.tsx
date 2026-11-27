@@ -2,7 +2,6 @@
 // deductions and the net pay, with the attendance it came from. HR sees the company's shares and,
 // while the month is a draft, adds or takes off its own lines here.
 
-import { COMPANIES } from "@2mg/api/companies";
 import type { Company, PayLine, Payslip } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Printer, X } from "lucide-react";
@@ -10,9 +9,9 @@ import { type FormEvent, useState } from "react";
 import { api } from "../api";
 import { Button, CARD, Dialog, Field, Problem, peso, useAction } from "../ui";
 import { hours } from "./parts";
+import { useOwnCompanyName } from "../companies";
 
-/** Each company's registered name (one list for the system: @2mg/api/companies). */
-export const COMPANY_NAME: Record<Company, string> = { "2mg": COMPANIES["2mg"].name, gpi: COMPANIES.gpi.name };
+/** Employed by the company itself (one company per database since the separation, 26 Nov night). */
 export const longDay = (day: string) =>
   new Date(`${day}T00:00:00Z`).toLocaleDateString("en-PH", {
     day: "numeric",
@@ -59,6 +58,7 @@ export function PayslipView({
   canAdjust?: boolean;
   onPrint?: boolean;
 }) {
+  const ownName = useOwnCompanyName();
   const [adding, setAdding] = useState(false);
   const remove = useAction();
   const queries = useQueryClient();
@@ -98,7 +98,7 @@ export function PayslipView({
       <header className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
         <div className="min-w-0">
           <div className="text-xs font-semibold tracking-wide text-slate-500 uppercase">
-            {COMPANY_NAME[p.company]} · Payslip{draft ? " (draft)" : ""}
+            {ownName} · Payslip{draft ? " (draft)" : ""}
           </div>
           <h2 className="mt-1 text-lg font-bold text-slate-900">{p.name}</h2>
           <div className="text-xs text-slate-500">

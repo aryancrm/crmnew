@@ -8,6 +8,7 @@
 import { randomInt } from "node:crypto";
 import { type SQL, sql } from "drizzle-orm";
 import { accountEvent } from "../account/events";
+import { loginDomain } from "../companies/context";
 import { hrEvent } from "../hr/events";
 import { hashPassword, passwordProblem } from "../auth/password";
 import { type Database, rows } from "../db/index";
@@ -18,7 +19,7 @@ import { sendMessage } from "../messages/service";
 import { notify } from "../notify/service";
 import { divisionOf } from "../orders/divisions";
 import { isRole, ROLE_LABEL, ROLES, type Role } from "../people/roles";
-import type { HrChange } from "../types";
+import type { HrChange, SeatWorks } from "../types";
 import type {
   Me,
   OrgHolder,
@@ -38,6 +39,8 @@ import type {
 } from "../types";
 
 export const ORG_CHANGE_ROLES: Role[] = ["ceo", "admin"];
+/** Office or field in words (docs/PLAN.md 29). */
+export const WORKS_WORDS: Record<SeatWorks, string> = { office: "From the office", field: "In the field" };
 
 /** A holding (by its alias) in force on the day. */
 export const inForce = (alias: string, today: string): SQL =>
@@ -63,8 +66,8 @@ export const soldFor = (alias: string): SQL =>
 
 export const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/** Seat login IDs end in the company's domain: "hos1@2mginc.com". */
-export const LOGIN_DOMAIN = (process.env.LOGIN_DOMAIN ?? "2mginc.com").toLowerCase();
+/** Seat login IDs end in the company's domain: "hos1@2mginc.com" (each company its own, 26 Nov). */
+export { loginDomain };
 
 /** The first part of a seat's login ID, by its work and its channel: hos1, rx2, tl1, fin1. */
 const CHANNEL_LOGIN: Record<string, string> = {
@@ -102,7 +105,8 @@ function loginPrefix(module: Role, channelCode: string | null): string {
 export function seatLoginOf(typed: string): string | null {
   const id = typed.trim().toLowerCase();
   if (!id.includes("@")) return id || null;
-  return id.endsWith(`@${LOGIN_DOMAIN}`) ? id.slice(0, -(LOGIN_DOMAIN.length + 1)) : null;
+  const domain = loginDomain();
+  return id.endsWith(`@${domain}`) ? id.slice(0, -(domain.length + 1)) : null;
 }
 
 /** Who signs in with a seat's login ID: whoever holds the seat today. */
@@ -161,7 +165,9 @@ type PersonRow = {
  * first one they were given), and each
  * channel's head is whoever leads its top unit. A seat's boss is the lead of its unit (a lead's:
  * of the unit above), else the seat it names; a vacant boss seat is skipped upwards and an acting
- * cover counts as its occupant. People with no seat are left as they are. Writes only what changed.
+ * cover counts as its occupant, except on a lead seat (26 Nov, the backend developer: "when the team
+ * lead is vacant, supervision goes straight to the one above; don't anchor it on someone else, it
+ * isn't their task"). People with no seat are left as they are. Writes only what changed.
  */
 export async function projectOrg(db: Runner, today = todayManila()): Promise<void> {
   const units = await rows<UnitRow>(
@@ -208,7 +214,8 @@ export async function projectOrg(db: Runner, today = todayManila()): Promise<voi
       if (seat && (!known || (seat.lead && !known.lead))) firstSeatOf.set(hold.personId, seat);
     } else actingOf.set(hold.seatId, hold.personId);
   }
-  const occupant = (seat: SeatRow) => actingOf.get(seat.id) ?? holderOf.get(seat.id) ?? null;
+  // A lead seat is led by its holder only: vacant, its people go to the lead above (26 Nov).
+  const occupant = (seat: SeatRow) => (seat.lead ? null : actingOf.get(seat.id)) ?? holderOf.get(seat.id) ?? null;
   const parentOf = (unitId: number) => unitById.get(unitId)?.parentId ?? null;
 
   const nextUp = (seat: SeatRow): SeatRow | null => {
@@ -223,7 +230,7 @@ export async function projectOrg(db: Runner, today = todayManila()): Promise<voi
     return null;
   };
   const bossOf = (seat: SeatRow): number | null => {
-    const own = new Set([holderOf.get(seat.id), actingOf.get(seat.id)]);
+    const own = new Set([holderOf.get(seat.id), seat.lead ? undefined : actingOf.get(seat.id)]);
     const seen = new Set([seat.id]);
     let up = nextUp(seat);
     while (up && !seen.has(up.id)) {
@@ -351,7 +358,8 @@ export async function orgTree(db: Database, me: Me): Promise<OrgTree> {
       }
     >(
       db,
-      sql`select s.id::int as id, s.unit_id::int as "unitId", s.login, s.title, s.module, s.lead, s.reports_to_seat_id::int as "reportsToSeatId",
+      sql`select s.id::int as id, s.unit_id::int as "unitId", s.login, s.title, s.module,
+          case when s.module = 'medrep' then coalesce(s.works, works_of_channel(seat_channel(s.id)), 'field') end as works, s.lead, s.reports_to_seat_id::int as "reportsToSeatId",
           b.name as boss, s.area_id::int as "areaId", a.name as "areaName", a.cities,
           (select count(*) from customer c where s.area_id is not null and c.area_id = s.area_id)::int as customers,
           (select count(*) from sales_order o where o.seat_id = s.id
@@ -410,7 +418,7 @@ export async function orgTree(db: Database, me: Me): Promise<OrgTree> {
   }
   return {
     today,
-    loginDomain: LOGIN_DOMAIN,
+    loginDomain: loginDomain(),
     units: units.map(({ channelId, code, channelName, ...unit }) => ({
       ...unit,
       channel: channelId ? { id: channelId, code: code ?? "", name: channelName ?? "" } : null,
@@ -500,12 +508,14 @@ export async function seatRow(tx: Runner, seatId: number, today: string) {
     title: string;
     module: Role;
     lead: boolean;
+    works: SeatWorks | null;
     areaId: number | null;
     holderId: number | null;
     holder: string | null;
   }>(
     tx,
-    sql`select s.id::int as id, s.unit_id::int as "unitId", s.title, s.module, s.lead, s.area_id::int as "areaId",
+    sql`select s.id::int as id, s.unit_id::int as "unitId", s.title, s.module, s.lead,
+        case when s.module = 'medrep' then coalesce(s.works, works_of_channel(seat_channel(s.id)), 'field') end as works, s.area_id::int as "areaId",
         p.id::int as "holderId", p.name as holder
       from seat s left join seat_holder h on h.seat_id = s.id and h.kind = 'holder' and ${inForce("h", today)}
         and exists (select 1 from person q where q.id = h.person_id and q.active)
@@ -653,7 +663,13 @@ async function makeSeat(tx: Runner, input: OrgSeatInput): Promise<number> {
         (select coalesce(max(sort), 0) + 1 from seat where unit_id = ${unit.id}))
       returning id::int as id`,
   );
-  return made?.id as number;
+  const seatId = made?.id as number;
+  // Office or field: as asked, else as its channel works (docs/PLAN.md 29).
+  if (input.module === "medrep")
+    await tx.execute(
+      sql`update seat set works = coalesce(${input.works ?? null}::text, works_of_channel(seat_channel(id)), 'field') where id = ${seatId}`,
+    );
+  return seatId;
 }
 
 /** A move's first day: today, earlier, or up to three months ahead. */
@@ -738,6 +754,7 @@ export async function addPerson(
         unitId: input.unitId,
         title: input.title ?? "",
         module: input.module,
+        works: input.works ?? null,
         lead: input.lead,
         reportsToSeatId: input.reportsToSeatId,
         areaId: input.areaId,
@@ -777,7 +794,7 @@ export async function addPerson(
       tx,
       sql`select login from seat where id = ${seatId}`,
     );
-    return { personId, seatId, login: login?.login ? `${login.login}@${LOGIN_DOMAIN}` : null };
+    return { personId, seatId, login: login?.login ? `${login.login}@${loginDomain()}` : null };
   });
   return { ...result, email, password: typed ? null : password };
 }
@@ -832,11 +849,23 @@ export async function updateSeat(
       input.areaId === undefined && input.newArea === undefined
         ? seat.areaId
         : await seatArea(tx, unitId, input, seat.id);
+    // Office or field belongs to a MedRep seat only; a seat becoming one takes its channel's way
+    // unless it is asked (docs/PLAN.md 29).
+    const works =
+      module !== "medrep"
+        ? null
+        : (input.works ?? (seat.module === "medrep" && seat.works ? seat.works : null));
     await tx.execute(
-      sql`update seat set unit_id = ${unitId}, title = ${title}, module = ${module}, lead = ${lead}, area_id = ${areaId}
+      sql`update seat set unit_id = ${unitId}, title = ${title}, module = ${module}, lead = ${lead}, area_id = ${areaId},
+        works = ${module === "medrep" ? sql`coalesce(${works}::text, works_of_channel(seat_channel(id)), 'field')` : sql`null`}
         ${reportsTo === undefined ? sql`` : sql`, reports_to_seat_id = ${reportsTo}`}
         where id = ${seat.id}`,
     );
+    const [after] = await rows<{ works: SeatWorks | null }>(tx, sql`select works from seat where id = ${seat.id}`);
+    if (seat.holderId && seat.module === "medrep" && module === "medrep" && seat.works && after?.works && after.works !== seat.works)
+      await hrEvent(tx, seat.holderId, me.id, "move", `Their seat now works ${WORKS_WORDS[after.works].toLowerCase()}`, [
+        { field: "works", label: "Works", from: WORKS_WORDS[seat.works], to: WORKS_WORDS[after.works], hidden: false },
+      ]);
     // Whoever lost the area keeps no customers by it.
     if (seat.areaId && seat.areaId !== areaId)
       await tx.execute(sql`update person set area_id = null where area_id = ${seat.areaId}`);
@@ -902,7 +931,7 @@ async function seatWords(tx: Runner, seatId: number): Promise<{ place: string; l
   );
   return {
     place: found ? `${found.title} (${found.unit})` : "a seat",
-    login: found?.login ? `${found.login}@${LOGIN_DOMAIN}` : null,
+    login: found?.login ? `${found.login}@${loginDomain()}` : null,
   };
 }
 
@@ -1014,6 +1043,15 @@ export async function coverSeat(
   allow(me, roles, "arrange cover");
   await change(db, async (tx, today) => {
     const seat = await seatRow(tx, seatId, today);
+    // A lead's seat isn't covered by someone else (26 Nov, the backend developer: "it isn't their
+    // task"): while it is vacant, its people report to the lead above it.
+    if (seat.lead)
+      throw new Refusal(
+        400,
+        "invalid",
+        "A team lead's or head's seat isn't covered by someone else: while it is vacant, its people report to the lead above it.",
+        "seatId",
+      );
     const person = await activePerson(tx, input.personId);
     if (seat.holderId === person.id)
       throw new Refusal(
@@ -1147,7 +1185,7 @@ export async function resetPassword(db: Database, me: Me, personId: number): Pro
   return {
     personId: person.id,
     seatId: seat?.id ?? null,
-    login: seat?.login ? `${seat.login}@${LOGIN_DOMAIN}` : person.email,
+    login: seat?.login ? `${seat.login}@${loginDomain()}` : person.email,
     email: person.email,
     password,
   };
@@ -1487,7 +1525,8 @@ export async function ledUnits(db: Runner, me: Me): Promise<number[]> {
     db,
     sql`with recursive down as (
         select s.unit_id as id from seat_holder h join seat s on s.id = h.seat_id and s.active and s.lead
-        where h.person_id = ${me.id} and ${inForce("h", todayManila())}
+        -- Led by its holder only: a cover never leads a team (26 Nov).
+        where h.person_id = ${me.id} and h.kind = 'holder' and ${inForce("h", todayManila())}
         union all select u.id from org_unit u join down on u.parent_id = down.id where u.active)
       select distinct id::int as id from down`,
   );

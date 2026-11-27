@@ -5,7 +5,8 @@
 import type { Reorders, ReorderState } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { Phone } from "lucide-react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useSearchParams } from "react-router-dom";
+import { inRefills, STATE_LABEL } from "./refill-flow";
 import { api } from "../api";
 import { useMe } from "../auth";
 import { seatWords } from "../seat-words";
@@ -13,7 +14,6 @@ import { shortPeso } from "../ceo";
 import { CARD, count, dayLabel, PageHead, PageState, Tabs } from "../ui";
 import { EmptyState } from "../no-results";
 
-const STATE_LABEL: Record<ReorderState, string> = { soon: "In 2 days", due: "Due now", late: "Late", at_risk: "At risk", lost: "Lost" };
 const STATE_SUB: Record<ReorderState, string> = {
   soon: "Their refill falls in the next two days: reach them before they run out.",
   due: "Their refill day has come (the day set by hand, else their usual gap): call before they order elsewhere.",
@@ -37,6 +37,8 @@ export function ToCallPage() {
   // A seller's own list: every line is theirs, so no seller column.
   const own = me?.role === "medrep" || me?.role === "online";
   const [params, setParams] = useSearchParams();
+  // Back from a refill call's order (refill-flow.tsx): said once, on top.
+  const placed = (useLocation().state as { placed?: { orderId: number } } | null)?.placed;
   // MD Telesales start on the refills coming due; everyone else on the ones due now.
   const state = (params.get("state") as ReorderState | null) ?? (me?.channel?.code === "TS" && me.business === "RX" ? "soon" : "due");
   const area = params.get("area");
@@ -81,6 +83,15 @@ export function ToCallPage() {
         onChange={(key) => set("state", key)}
       />
       <p className="mt-2 mb-3 text-[12.5px] text-slate-500">{STATE_SUB[state]}</p>
+      {placed && (
+        <p className="mb-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-[13px] text-emerald-900">
+          Order placed.{" "}
+          <Link to={`/orders/${placed.orderId}`} className="font-semibold underline">
+            Open it
+          </Link>{" "}
+          · on to the next one below.
+        </p>
+      )}
       <div className={`${CARD} mb-5 overflow-x-auto`}>
         <table className="w-full text-[13px]">
           <thead>
@@ -105,7 +116,7 @@ export function ToCallPage() {
             {data.rows.map((row) => (
               <tr key={row.customerId} className="hover:bg-slate-50/60">
                 <td className="px-4 py-2.5">
-                  <Link to={`/customers/${row.customerId}`} className="font-semibold text-slate-900 hover:underline">
+                  <Link to={inRefills(`/customers/${row.customerId}`, state)} className="font-semibold text-slate-900 hover:underline">
                     {row.name}
                   </Link>
                   <div className="flex flex-wrap items-center gap-x-2 text-[11.5px] text-slate-500">

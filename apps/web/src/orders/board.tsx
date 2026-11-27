@@ -43,7 +43,7 @@ import { ConfirmPaymentDialog, useMoney } from "../finance/parts";
 import { rememberConfirm } from "../finance/undo";
 import { avatarTone, dayHeading, initials, PRIMARY_SM, QUIET_SM } from "../look";
 import { Checks, checksOf } from "./checks";
-import { ReasonDialog, useOrderAction, waited } from "./parts";
+import { PapChip, ReasonDialog, useOrderAction, waited } from "./parts";
 import { count, Dialog, dayLabel, PageState, peso } from "../ui";
 import { useWorkClock } from "../work-clock";
 import { EmptyState, NoInvoicesArt, NoResults } from "../no-results";
@@ -1245,6 +1245,7 @@ export function OrderCardItem({
                 Online · {card.via.source}
               </span>
             )}
+            <PapChip pap={card.pap} />
             <span className="inline-flex items-center rounded-full bg-slate-700 px-2.5 py-0.5 text-[11.5px] font-medium text-white">
               {termsOf(card)}
             </span>
@@ -2097,6 +2098,7 @@ function OrdersCardTable({
               <td className="px-3 py-2 text-slate-600">
                 {card.channel ?? "—"}
                 {card.via && <div className="text-[11px] font-semibold text-violet-700">Online · {card.via.source}</div>}
+                {card.pap && <div className="text-[11px] font-semibold text-fuchsia-700">PAP · GL{card.pap.by ? ` · ${card.pap.by}` : ""}</div>}
               </td>
               <td className="px-3 py-2 text-right font-semibold text-slate-900 tabular-nums">
                 {peso(card.total)}
@@ -2194,7 +2196,7 @@ function OrdersLanes({
                         </span>
                       </div>
                       <div className="mt-0.5 truncate text-xs text-stone-500">
-                        {card.code} · {card.via ? `Online · ${card.via.source}` : (card.channel ?? card.customerKind)}
+                        {card.code} · {card.pap ? "PAP · GL" : card.via ? `Online · ${card.via.source}` : (card.channel ?? card.customerKind)}
                       </div>
                     </div>
                   </div>

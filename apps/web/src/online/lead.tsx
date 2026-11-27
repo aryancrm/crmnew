@@ -195,7 +195,7 @@ export function LeadPage() {
       key: "pay",
       number: "4",
       label: gl ? "Claim & payment" : "Payment & follow-up",
-      who: gl ? "Finance sends the claim · the agency pays" : "Money in · the refill reminder",
+      who: gl ? "The claim · the agency pays (PAP marks it, Finance confirms)" : "Money in · the refill reminder",
     },
   ];
   const roadLock = orderLive
@@ -1268,20 +1268,24 @@ const toDraft = (line: QuoteLine): Draft => ({
 });
 const centavos = (text: string) => Math.round(Number(text.replace(/,/g, "")) * 100);
 
-/** A guarantee letter's agency asks for three quotations (every agency, 22 Nov): ours and two other vendors' totals, each from that
- *  vendor's written quotation. They print after ours, one page each. */
+/** PCSO asks for three quotations (Aryan, 26 Nov, as the old CRM; the other agencies ours alone): ours
+ *  and two other vendors'. They fill themselves from each medicine's PCSO prices (Inventory), a
+ *  sister company's on its own letterhead; else, or to change them, each vendor's total is typed
+ *  from their written quotation. They print after ours. */
 function Canvass({ data, editable }: { data: LeadCase; editable: boolean }) {
   const { lead } = data;
   const write = useCaseWrite(lead.id);
+  const auto = lead.canvass.length === 0 ? data.canvassAuto : null;
+  const shown = lead.canvass.length ? lead.canvass : (data.canvassAuto ?? []);
   const [rows, setRows] = useState(() =>
     [0, 1].map((at) => ({
-      vendor: lead.canvass[at]?.vendor ?? "",
-      amount: lead.canvass[at] ? (lead.canvass[at].amount / 100).toFixed(2) : "",
+      vendor: shown[at]?.vendor ?? "",
+      amount: shown[at] ? (shown[at].amount / 100).toFixed(2) : "",
     })),
   );
   const change = (at: number, changes: Partial<{ vendor: string; amount: string }>) =>
     setRows((all) => all.map((row, index) => (index === at ? { ...row, ...changes } : row)));
-  const saved = lead.canvass.length === 2;
+  const saved = lead.canvass.length === 2 || Boolean(auto);
   async function save() {
     await write.send(`/api/leads/${lead.id}/canvass`, {
       lines: rows
@@ -1299,8 +1303,13 @@ function Canvass({ data, editable }: { data: LeadCase; editable: boolean }) {
           className={`size-2 rounded-full ${saved ? "bg-emerald-500" : "bg-amber-400"}`}
           aria-hidden="true"
         />
-        The agency's 3 quotations: ours, and two other vendors'
+        PCSO's 3 quotations: ours, and two other vendors'
       </div>
+      {auto && (
+        <div className="mb-2 text-[11px] text-slate-500">
+          Filled by themselves from each medicine's PCSO prices (Inventory). Type to change them.
+        </div>
+      )}
       <div className="grid gap-2">
         {rows.map((row, at) => (
           <div key={`vendor-${at + 2}`} className="grid gap-2 sm:grid-cols-[1fr_10rem]">
@@ -1328,7 +1337,9 @@ function Canvass({ data, editable }: { data: LeadCase; editable: boolean }) {
       {editable && (
         <div className="mt-2 flex items-center justify-between gap-2">
           <span className="text-[11px] text-slate-500">
-            From each vendor's written quotation. The PDF prints all 3.
+            {lead.canvass.length && data.canvassAuto
+              ? "Typed by hand. Empty both and save to use the medicines' prices."
+              : "The PDF prints all 3."}
           </span>
           <Button small disabled={write.busy} onClick={save}>
             {write.busy ? "Saving…" : "Save"}
@@ -1793,7 +1804,7 @@ function QuotationStep({ data, onNext }: { data: LeadCase; onNext: () => void })
           </dl>
         )}
 
-        {quoted && lead.road === "gl" && (
+        {quoted && data.quotesNeeded > 1 && (
           <Canvass data={data} editable={editable} />
         )}
         {quoted && <QuotationOut data={data} />}
@@ -2541,6 +2552,9 @@ function ClaimSteps({ data }: { data: LeadCase }) {
   const photo = data.papers.find((paper) => paper.kind === "pickup_photo");
   const hasPhoto = Boolean(photo?.files.length);
   const agency = AGENCIES.find((item) => item.key === lead.agency)?.short ?? "the agency";
+  // The PAP person marks the claim on her own case once the medicine is delivered (26 Nov).
+  const delivered = data.order?.status === "completed";
+  const canClaim = data.can.work && delivered;
   const dot = (done: boolean) => (
     <span
       className={`grid size-5 shrink-0 place-items-center rounded-full text-[10px] font-bold ${done ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-600"}`}
@@ -2575,7 +2589,7 @@ function ClaimSteps({ data }: { data: LeadCase }) {
                   {...field}
                   type="date"
                   className={INPUT}
-                  disabled
+                  disabled={!canClaim || write.busy}
                   value={sentOn}
                   onChange={(event) => setSentOn(event.target.value)}
                 />
@@ -2586,13 +2600,24 @@ function ClaimSteps({ data }: { data: LeadCase }) {
                 <input
                   {...field}
                   className={INPUT}
-                  disabled
+                  disabled={!canClaim || write.busy}
                   value={ref}
                   onChange={(event) => setRef(event.target.value)}
                 />
               )}
             </Field>
-            <span className="text-[12px] text-slate-500">Finance sends the claim and writes it here.</span>
+            {canClaim ? (
+              <Button
+                small
+                variant={lead.claimSentOn ? "plain" : "primary"}
+                disabled={write.busy || !sentOn}
+                onClick={() => write.send(`/api/leads/${lead.id}/claim`, { sentOn: sentOn || null, ref: ref.trim() || null })}
+              >
+                {lead.claimSentOn ? "Save" : "Claim sent"}
+              </Button>
+            ) : (
+              <span className="text-[12px] text-slate-500">{delivered ? "The PAP person or Finance marks it here." : "After the delivery."}</span>
+            )}
           </div>
           <Problem message={write.general(["sentOn", "ref"])} />
         </div>
@@ -2606,7 +2631,12 @@ function ClaimSteps({ data }: { data: LeadCase }) {
               ? "Paid."
               : data.can.pay
                 ? "Record the agency's money below when it comes."
-                : "Finance records the agency's money on the invoice when it comes."}
+                : "Often months after the claim. When it comes, mark it under GL money (with its proof): Finance confirms it against the bank. If the agency paid less, the patient pays the rest, or Finance lets it go."}
+          </div>
+          <div className="mt-1">
+            <Link to="/finance/gl" className="text-[13px] font-medium text-brand hover:underline">
+              GL money
+            </Link>
           </div>
         </div>
       </div>

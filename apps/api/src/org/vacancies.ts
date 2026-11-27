@@ -15,7 +15,7 @@ import { todayManila } from "../inventory/rules";
 import type { Role } from "../people/roles";
 import type { Me, VacantSeats } from "../types";
 import { HR_ROLES, HR_WRITE_ROLES } from "../hr/people";
-import { coverSeat, endHolding, inForce, LOGIN_DOMAIN, ledUnits, ORG_CHANGE_ROLES } from "./service";
+import { coverSeat, endHolding, inForce, loginDomain, ledUnits, ORG_CHANGE_ROLES } from "./service";
 
 /** Days vacant with nobody covering before the lead is reminded, and before the head and HR are. */
 export const VACANT_LEAD_DAYS = 7;
@@ -51,7 +51,7 @@ export async function vacantSeats(db: Database, me: Me): Promise<VacantSeats> {
     db,
     sql`select s.id::int as "seatId", s.title, u.name as team, a.name as area, s.login,
         to_char(${vacantSince(today)}, 'YYYY-MM-DD') as since, (${today}::date - ${vacantSince(today)})::int as days,
-        (select b.name from person b where b.id = s.boss_id) as lead,
+        (select b.name from person b where b.id = s.boss_id) as lead, s.lead as leads,
         (select json_build_object('holdingId', h.id::int, 'personId', q.id::int, 'name', q.name, 'until', to_char(h.ends_on, 'YYYY-MM-DD'))
           from seat_holder h join person q on q.id = h.person_id and q.active
           where h.seat_id = s.id and h.kind = 'acting' and ${inForce("h", today)} order by h.starts_on desc limit 1) as cover,
@@ -85,8 +85,8 @@ export async function vacantSeats(db: Database, me: Me): Promise<VacantSeats> {
     upDays: VACANT_UP_DAYS,
     seats: seats.map((seat) => ({
       ...seat,
-      login: seat.login ? `${seat.login}@${LOGIN_DOMAIN}` : null,
-      alert: seat.cover || seat.promised ? "none" : seat.days >= VACANT_UP_DAYS ? "up" : seat.days >= VACANT_LEAD_DAYS ? "lead" : "none",
+      login: seat.login ? `${seat.login}@${loginDomain()}` : null,
+      alert: seat.cover || seat.promised || seat.leads ? "none" : seat.days >= VACANT_UP_DAYS ? "up" : seat.days >= VACANT_LEAD_DAYS ? "lead" : "none",
     })),
     people: people.filter((one) => one.id !== me.id || units === null).sort((a, b) => a.name.localeCompare(b.name)),
     can: { cover: canCover },

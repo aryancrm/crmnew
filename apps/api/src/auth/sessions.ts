@@ -8,14 +8,22 @@ import { alias } from "drizzle-orm/pg-core";
 import type { Database } from "../db/index";
 import { area, channel, person, session } from "../db/schema";
 import { isRole, ROLE_LABEL } from "../people/roles";
-import type { Me } from "../types";
+import type { Me, SeatWorks } from "../types";
 
 export const SESSION_COOKIE = "sid";
 /** Holds the CEO's (or Admin's) own session while they look as someone else. */
 export const BACK_COOKIE = "sid_back";
+/** The other accounts signed in on this browser (26 Nov: "like Google, add an account, then switch"):
+ *  their session tokens, comma between, newest first. Each was opened with its own login. */
+export const MORE_COOKIE = "sid_more";
+/** At most this many accounts on one browser, the one in use among them. */
+export const MAX_ACCOUNTS = 5;
 export const SESSION_DAYS = 30;
 const DAY = 24 * 60 * 60 * 1000;
 /** They work on shared computers: their session ends with the working day, never kept alive. */
+/** A desk's shared screen, as its name reads (the desks' common password opens it). */
+const DESK_SCREEN_WORDS = { management: "Management", finance: "Finance", dispatch: "Dispatch" } as const;
+
 export const DAY_SESSION_ROLES: readonly string[] = ["management", "finance", "dispatch"];
 
 const hashOf = (token: string) => createHash("sha256").update(token).digest("hex");
@@ -27,11 +35,14 @@ export async function startSession(
   workspace?: string | null,
   /** When it ends, if not the usual (Management, Finance, Dispatch: the end of the working day). */
   until?: Date,
+  /** A desk's shared screen, opened with the desks' common password (app.ts, /api/auth/desk). */
+  desk?: "management" | "finance" | "dispatch",
 ): Promise<string> {
   const token = randomBytes(32).toString("base64url");
   await db.insert(session).values({
     tokenHash: hashOf(token),
     personId,
+    desk: desk ?? null,
     workspace: workspace ?? null,
     // Looking as someone else lasts two hours at most.
     expiresAt: until ?? new Date(Date.now() + (viewedBy ? 2 * 60 * 60 * 1000 : SESSION_DAYS * DAY)),
@@ -108,6 +119,7 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
       viewerName: viewer.name,
       viewerRole: viewer.role,
       workspace: session.workspace,
+      desk: session.desk,
       photo: sql<number | null>`(select ph.id::int from person_photo ph where ph.person_id = ${person.id} and ph.archived_at is null)`,
       twoStep: sql<boolean>`exists (select 1 from person_two_step ts where ts.person_id = ${person.id} and ts.on_at is not null)`,
       // The business box their seat sits in (by its channel), so a seat's desk follows the chart.
@@ -116,6 +128,8 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
       businessCode: sql<string | null>`(select seat_business_channel(h.seat_id) from seat_holder h join seat s on s.id = h.seat_id and s.active
         where h.person_id = ${person.id} and h.starts_on <= (now() at time zone 'Asia/Manila')::date and (h.ends_on is null or h.ends_on >= (now() at time zone 'Asia/Manila')::date)
         order by (h.kind = 'holder') desc, s.lead desc, h.starts_on, h.id limit 1)`,
+      // Office or field (docs/PLAN.md 29): their main seat's, else their channel's.
+      works: sql<SeatWorks | null>`person_works(${person.id})`,
       // The Divisions their orders carry: their seats' own (migration 0114), the main seat's first.
       seatDivisions: sql<string[] | null>`(select array_agg(seat_division(h.seat_id) order by (h.kind = 'holder') desc, s.lead desc, h.starts_on, h.id)
         from seat_holder h join seat s on s.id = h.seat_id and s.active
@@ -133,10 +147,11 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
         gt(session.expiresAt, sql`now()`),
         eq(person.active, true),
         // Whoever is at the keyboard (the viewer, when looking as someone) has a password of their
-        // own and still works here; a shared screen's session signs nobody in.
-        sql`coalesce(${viewer.passwordPending}, ${person.passwordPending}) = false`,
+        // own and still works here; a desk's shared screen was opened with the desks' password.
+        sql`(${session.desk} is not null or coalesce(${viewer.passwordPending}, ${person.passwordPending}) = false)`,
         sql`coalesce(${viewer.active}, true)`,
-        isNull(session.desk),
+        // A desk's screen stays a desk's: its seat's holder still works at that desk.
+        sql`(${session.desk} is null or ${person.role} = ${session.desk})`,
       ),
     )
     .limit(1);
@@ -150,6 +165,30 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
       .set({ lastSeenAt: new Date(), expiresAt: new Date(Date.now() + SESSION_DAYS * DAY) })
       .where(eq(session.id, row.sessionId));
 
+  // A desk's shared screen is the desk's, nobody's own (Aryan, 18-19 Nov): its name, not the name of
+  // the seat it was opened on; no picture, no own password or two-step to manage.
+  const desk = row.desk === "management" || row.desk === "finance" || row.desk === "dispatch" ? row.desk : null;
+  if (desk)
+    return {
+      id: row.id,
+      name: `${DESK_SCREEN_WORDS[desk]} desk`,
+      email: null,
+      title: null,
+      role: row.role,
+      roleLabel: ROLE_LABEL[row.role],
+      business: row.businessCode ?? null,
+      works: null,
+      divisions: divisionsOf(row.seatDivisions, row.channelDivision ?? CHANNEL_DIVISION[row.channelCode ?? ""] ?? null),
+      workspace: row.workspace ?? desk,
+      photo: null,
+      mustChangePassword: false,
+      channel: null,
+      area: null,
+      reportsTo: null,
+      viewedBy: null,
+      deskScreen: desk,
+    };
+
   return {
     id: row.id,
     name: row.name,
@@ -158,6 +197,7 @@ export async function whoIs(db: Database, token: string): Promise<Me | null> {
     role: row.role,
     roleLabel: ROLE_LABEL[row.role],
     business: row.businessCode ?? null,
+    works: row.works ?? null,
     divisions: divisionsOf(row.seatDivisions, row.channelDivision ?? CHANNEL_DIVISION[row.channelCode ?? ""] ?? null),
     workspace: row.workspace ?? null,
     photo: row.photo ?? null,

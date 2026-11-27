@@ -8,6 +8,7 @@
 
 import { createHash, randomBytes } from "node:crypto";
 import { type SQL, sql } from "drizzle-orm";
+import { companyNow, isHomeCompany } from "../companies/context";
 import { hashPassword, passwordProblem } from "../auth/password";
 import { ownWorkspace, workspaceByKey } from "../auth/workspaces";
 import { type Database, rows } from "../db/index";
@@ -15,7 +16,7 @@ import { allow, Refusal } from "../http";
 import type { Runner } from "../inventory/service";
 import { notify, peopleIn } from "../notify/service";
 import { sendFromMailbox } from "../online/email";
-import { addPerson, LOGIN_DOMAIN, seatLoginOf } from "../org/service";
+import { addPerson, loginDomain, seatLoginOf } from "../org/service";
 import type { Role } from "../people/roles";
 import type { Me, OrgPersonInput, SignUpInput, SignUpList, SignUpRow, SignUpSent, WelcomeInfo } from "../types";
 import { accountEvent } from "./events";
@@ -178,7 +179,8 @@ async function sendAccepted(db: Database, webUrl: string, signUpId: number, toke
   );
   if (!to) throw new Refusal(404, "not_found", "No such sign-up.");
   // After #, so it stays out of the servers' logs. The address is the server's own setting, never the request's.
-  const link = `${webUrl.replace(/\/+$/, "")}/welcome#${token}`;
+  // Another company than the first: the link names it (its Org ID), so it opens in that company.
+  const link = `${webUrl.replace(/\/+$/, "")}/welcome${isHomeCompany() ? "" : `?org=${companyNow()?.orgId}`}#${token}`;
   let problem: string | null = null;
   try {
     const sent = await sendFromMailbox(db, {
@@ -323,7 +325,7 @@ export async function welcomeInfo(db: Database, token: string): Promise<WelcomeI
   return {
     firstName: who.first,
     email: who.email,
-    seatLogin: seat ? `${seat.login}@${LOGIN_DOMAIN}` : null,
+    seatLogin: seat ? `${seat.login}@${loginDomain()}` : null,
     department: ownWorkspace(who.role)?.key ?? null,
   };
 }

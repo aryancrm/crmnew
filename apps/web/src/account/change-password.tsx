@@ -104,7 +104,7 @@ export function ChangePassword() {
             onClick={async () => {
               await api("/api/auth/logout", { method: "POST" }).catch(() => undefined);
               queries.setQueryData(ME, null);
-              navigate("/login", { replace: true });
+              navigate("/signin", { replace: true });
             }}
             className="h-11 rounded-lg border border-field px-4"
           >

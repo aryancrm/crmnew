@@ -2,7 +2,6 @@
 // HR adds a joiner into a vacant seat with the login email and password HR made for them and
 // hands them over; the system sends nothing. Leaving keeps the record.
 
-import { allCompanyNames, COMPANIES } from "@2mg/api/companies";
 import type {
   CivilStatus,
   Classification,
@@ -21,12 +20,14 @@ import type {
   JoinerForm,
 } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useOwnCompanyName } from "../companies";
 import {
   ArrowRightLeft,
   Check,
   ChevronLeft,
   Copy,
   FilePlus,
+  FileText,
   KeyRound,
   Pencil,
   Search,
@@ -60,7 +61,7 @@ import {
 } from "../ui";
 import { EmptyState, NoResults } from "../no-results";
 
-const COMPANY: Record<Company, string> = { "2mg": COMPANIES["2mg"].name, gpi: COMPANIES.gpi.name };
+
 const CLASS: Record<Classification, string> = {
   probationary: "Probationary",
   regular: "Regular",
@@ -167,6 +168,8 @@ type View = "working" | "joining" | "missing" | "left";
 // ------------------------------------------------------------------ People (HR's Home)
 
 export function HrPeoplePage() {
+  // Employed by the company itself: one company per database since the separation (26 Nov night).
+  const ownName = useOwnCompanyName();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const view = (params.get("view") as View | null) ?? "working";
@@ -202,7 +205,7 @@ export function HrPeoplePage() {
     >
       <PageHead
         title="People"
-        sub={`${data.counts.active} working · ${allCompanyNames()}`}
+        sub={`${data.counts.active} working · ${ownName}`}
         actions={
           data.can.add && (
             <Button variant="primary" onClick={() => setAdding(true)}>
@@ -283,7 +286,7 @@ export function HrPeoplePage() {
                     </div>
                   </td>
                   <td className="px-3 py-2.5 text-slate-700">
-                    {COMPANY[one.company]}
+                    {ownName}
                   </td>
                   <td className="px-3 py-2.5 whitespace-nowrap">
                     {one.stage === "active" ? (
@@ -489,21 +492,6 @@ function NewJoinerDialog({ onClose }: { onClose: () => void }) {
                 className={FIELD}
               />
             </Label>
-            <Label text="Company *" error={at("company")}>
-              <select
-                value={values.company}
-                onChange={(event) =>
-                  set({ company: event.target.value as Company })
-                }
-                className={FIELD}
-              >
-                {Object.entries(COMPANY).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </Label>
             <Label text="Employed as *" error={at("classification")}>
               <select
                 value={values.classification}
@@ -684,6 +672,7 @@ function HandOver({
 // ------------------------------------------------------------------ One person
 
 export function HrPersonPage() {
+  const ownName = useOwnCompanyName();
   const { id } = useParams();
   const me = useMe().data;
   const navigate = useNavigate();
@@ -783,6 +772,14 @@ export function HrPersonPage() {
                     <Pencil size={15} /> Edit record
                   </Button>
                 )}
+                {data.can.edit && (
+                  <Link
+                    to={`/hr/documents?person=${data.personId}`}
+                    className="inline-flex h-10 items-center gap-2 rounded-[10px] px-4 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+                  >
+                    <FileText size={15} /> Documents
+                  </Link>
+                )}
                 {data.can.leave && (
                   <Button onClick={() => setOpen("move")}>
                     <ArrowRightLeft size={15} /> Move
@@ -804,7 +801,7 @@ export function HrPersonPage() {
             <StagePill stage={data.stage} hireDate={r.hireDate} />
           </div>
           <p className="mt-1 text-sm text-slate-500">
-            {[r.position ?? data.roleLabel, data.seat?.team, COMPANY[r.company]]
+            {[r.position ?? data.roleLabel, data.seat?.team, ownName]
               .filter(Boolean)
               .join(" · ")}
           </p>
@@ -1601,19 +1598,6 @@ function RecordDialog({
       <form onSubmit={submit} className="flex flex-col gap-5">
         <Section title="Job">
           <div className="grid gap-3 sm:grid-cols-3">
-            <Label text="Company" error={action.at("company")}>
-              <select
-                value={company}
-                onChange={(event) => setCompany(event.target.value as Company)}
-                className={FIELD}
-              >
-                {Object.entries(COMPANY).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </Label>
             <Label text="Employed as" error={action.at("classification")}>
               <select
                 value={classification}

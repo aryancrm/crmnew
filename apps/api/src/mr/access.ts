@@ -6,7 +6,7 @@
 
 import { type SQL, sql } from "drizzle-orm";
 import { rows } from "../db/index";
-import { FIELD_READ_ROLES, FIELD_ROLES, LEAD_ROLES, leads, maySeeField } from "../field/visits";
+import { FIELD_READ_ROLES, FIELD_ROLES, LEAD_ROLES, leads, maySeeField, refuseOffice } from "../field/visits";
 import { Refusal } from "../http";
 import { todayManila } from "../inventory/rules";
 import { clean, type Runner } from "../inventory/service";
@@ -35,6 +35,7 @@ export async function mustWork(_db: Runner, me: Me): Promise<void> {
   if (me.viewedBy) throw new Refusal(403, "not_allowed", "Looking at someone's screens changes nothing.");
   if (!FIELD_ROLES.includes(me.role))
     throw new Refusal(403, "not_allowed", "The field day is worked by the MedReps and their leads.");
+  refuseOffice(me);
 }
 
 /** Deciding for a person (approve, send back, reopen, judge, mark seen): their team lead (anyone

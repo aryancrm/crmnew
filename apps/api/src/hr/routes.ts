@@ -3,7 +3,7 @@
 
 import type { Context, Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
-import { COMPANY_CODES } from "../companies";
+import { type CompanyCode, OWN } from "../companies";
 import type { Database } from "../db/index";
 import { type Env, idParam, Refusal, readBody } from "../http";
 import type { LeaveKind } from "../types";
@@ -26,6 +26,7 @@ import {
   setSecondApprover,
   vlConversionReport,
 } from "./credits";
+import { documentRoutes } from "./documents-routes";
 import { hrHistory } from "./events";
 import { addHoliday, archiveHoliday, holidayYear } from "./holidays";
 import {
@@ -86,6 +87,7 @@ import {
   payrollMonth,
   payslipOf,
   registerCsv,
+  registerXlsx,
   releaseMonth,
   removeAdjustment,
 } from "./payroll";
@@ -106,7 +108,8 @@ const clock = z.string().regex(/^\d{2}:\d{2}$/, "Type the time as 08:30.");
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Pick the day.");
 const words = (max: number) => z.string().max(max).nullish();
 const pesos = z.number().int("Type whole centavos.").min(0).nullish();
-const company = z.enum(COMPANY_CODES, { message: "Pick the company." });
+// Employed by the company itself (Aryan, 26 Nov night: "no 'employer 2MG or GPI'; everything separate").
+const company = z.unknown().optional().transform((): CompanyCode => OWN);
 const classification = z.enum(["probationary", "regular", "part_time", "intern"], {
   message: "Pick how they are employed.",
 });
@@ -126,6 +129,10 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
     "/api/hr/leave/conversion",
     "/api/hr/credits/*",
     "/api/hr/print/*",
+    "/api/hr/documents/*",
+    "/api/hr/import/*",
+    "/api/hr/export/*",
+    "/api/hr/reports/*",
     "/api/hr/signature",
     "/api/hr/timekeeping",
     "/api/hr/timekeeping/*",
@@ -294,6 +301,7 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
       ),
     );
   });
+  documentRoutes(app, db);
   app.get("/api/hr/print/leave/:id", async (c) => c.json(await leavePrintout(db, c.get("me"), idParam(c))));
   app.get("/api/hr/print/form/:id", async (c) => c.json(await formPrintout(db, c.get("me"), idParam(c))));
   app.get("/api/hr/forms/mine", async (c) => c.json({ lines: await myForms(db, c.get("me")) }));
@@ -681,6 +689,13 @@ export function hrRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandl
   app.get("/api/hr/payroll/:month", async (c) =>
     c.json(await payrollMonth(db, c.get("me"), c.req.param("month"))),
   );
+  app.get("/api/hr/payroll/:month/register.xlsx", async (c) => {
+    const { name, bytes } = await registerXlsx(db, c.get("me"), c.req.param("month"));
+    return c.body(new Uint8Array(bytes), 200, {
+      "content-type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      "content-disposition": `attachment; filename="${name}"`,
+    });
+  });
   app.get("/api/hr/payroll/:month/register.csv", async (c) => {
     const { name, csv } = await registerCsv(db, c.get("me"), c.req.param("month"));
     return c.body(csv, 200, {

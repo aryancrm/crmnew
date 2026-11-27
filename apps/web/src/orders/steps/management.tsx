@@ -2,7 +2,6 @@
 // documents, medicines and price, stock and warehouse, customer and licence, approve), what each
 // found, and Approve, Send back, Reject; the warehouse it ships from; the order's details.
 
-import { COMPANIES, COMPANY_CODES } from "@2mg/api/companies";
 import { DIVISIONS, divisionOf, PAYMENT_TERMS, SUB_DIVISIONS, termsOfLabel } from "@2mg/api/divisions";
 import type { OrderAction, OrderDetail } from "@2mg/api/types";
 import { useQueryClient } from "@tanstack/react-query";
@@ -572,20 +571,6 @@ function CompleteDetails({ data }: { data: OrderDetail }) {
         {input("receiverPhone", "Receiver's contact")}
         {input("deliveryAddress", "Delivery address", { wide: true })}
         {input("customerPo", "Customer's PO")}
-        <label className="flex flex-col gap-1">
-          <span className="text-xs font-semibold text-slate-600">Invoicing from</span>
-          <select
-            value={value.invoiceFrom}
-            onChange={(event) => set("invoiceFrom", event.target.value)}
-            className={INPUT}
-          >
-            {COMPANY_CODES.map((code) => (
-              <option key={code} value={code}>
-                {COMPANIES[code].name}
-              </option>
-            ))}
-          </select>
-        </label>
         {input("note", "Customer remarks", { wide: true })}
       </div>
       <Problem message={action.general(Object.keys(value))} />

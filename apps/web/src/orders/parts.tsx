@@ -1,7 +1,7 @@
 // What the order screens share: a status as a pill, the orders table with its filters, the
 // "say why" dialog, and how waiting time is written.
 
-import type { OrderAction, OrderList, OrderStatus } from "@2mg/api/types";
+import type { OrderAction, OrderList, OrderRow, OrderStatus } from "@2mg/api/types";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ImagePlus, Search } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
@@ -38,6 +38,21 @@ export const STATUS_TONE: Record<OrderStatus, Tone> = {
   exception: "bad",
   cancelled: "plain",
 };
+
+/** A guarantee letter's order is PAP's, said wherever the order shows, as its channel is (Aryan,
+ *  26 Nov): its case and who works it on hover. */
+export function PapChip({ pap, big }: { pap?: OrderRow["pap"]; big?: boolean }) {
+  if (!pap) return null;
+  const title = `A guarantee-letter order: PAP's${pap.by ? `, worked by ${pap.by}` : ""}${pap.code ? ` (case ${pap.code})` : ""}`;
+  return (
+    <span
+      title={title}
+      className={`inline-flex shrink-0 items-center rounded-full bg-fuchsia-700 font-semibold whitespace-nowrap text-white ${big ? "px-2 py-0.5 text-xs" : "px-1.5 py-0.5 text-[10px]"}`}
+    >
+      PAP · GL
+    </span>
+  );
+}
 
 export function StatusPill({ status, label }: { status: OrderStatus; label: string }) {
   return <Pill tone={STATUS_TONE[status]}>{label}</Pill>;
@@ -494,6 +509,11 @@ export function OrdersTable({ title }: { title: string }) {
                     {row.via && (
                       <span className="ml-1.5 rounded-full bg-violet-600 px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap text-white">
                         Online · {row.via.source}
+                      </span>
+                    )}
+                    {row.pap && (
+                      <span className="ml-1.5">
+                        <PapChip pap={row.pap} />
                       </span>
                     )}
                   </td>

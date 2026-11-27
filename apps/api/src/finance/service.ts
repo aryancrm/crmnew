@@ -8,6 +8,7 @@ import { keepFile } from "../files/store";
 import { releaseCredit } from "./credit";
 import { awaitingPaymentSql, duesSql, notDueSql, refundsOwedCountSql } from "./dues";
 import { type SQL, sql } from "drizzle-orm";
+import { OWN } from "../companies";
 import { customerDetail } from "../customers/service";
 import { type Database, rows } from "../db/index";
 import { allow, Refusal } from "../http";
@@ -17,7 +18,7 @@ import { SOURCE_LABEL } from "../online/rules";
 import { logEvent, peso } from "../orders/events";
 import {
   CASE_AGENT_ROLES,
-  INVOICE_FROM_LABEL,
+  invoiceFromLabel,
   orderActions,
   PAPER_LABEL,
   STATUS_LABEL,
@@ -104,7 +105,7 @@ const shown = (row: InvoiceSql, today: string): InvoiceRow => {
   const { delivered, awaiting, ...rest } = row;
   return {
     ...rest,
-    invoiceFromLabel: INVOICE_FROM_LABEL[row.invoiceFrom],
+    invoiceFromLabel: invoiceFromLabel(row.invoiceFrom),
     // Money given back is no longer money paid: a refunded overpayment leaves nothing owed either way.
     balance: row.status === "cancelled" ? 0 : row.total - row.paid + row.refunded,
     state: invoiceState({ ...row, delivered, awaiting }, today),
@@ -142,7 +143,7 @@ export async function moneyOf(
         coalesce(sum(dd.balance) filter (where not dd.cod_waiting), 0)::float8 as owed,
         coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late > 0), 0)::float8 as overdue,
         coalesce(max(dd.late) filter (where not dd.on_delivery and dd.late > 0), 0)::int as days
-      from ${duesSql(today)} dd where dd.customer_id in (${ids([...new Set(customerIds)])})
+      from ${duesSql(today)} dd where dd.customer_id in (${ids([...new Set(customerIds)])}) and not dd.gl_waiting
         ${leaveOut ? sql`and dd.order_id is distinct from ${leaveOut}` : sql``}
       group by dd.customer_id
       having coalesce(sum(dd.balance) filter (where not dd.cod_waiting), 0) > 0`,
@@ -162,7 +163,7 @@ export async function ownDues(
     sql`select dd.order_id::int as "orderId",
         coalesce(sum(dd.balance) filter (where not dd.cod_waiting), 0)::float8 as owed,
         coalesce(sum(dd.balance) filter (where not dd.on_delivery and dd.late > 0), 0)::float8 as overdue
-      from ${duesSql(todayManila())} dd where dd.order_id in (${ids(orderIds)}) group by dd.order_id`,
+      from ${duesSql(todayManila())} dd where dd.order_id in (${ids(orderIds)}) and not dd.gl_waiting group by dd.order_id`,
   );
   return new Map(found.map(({ orderId, ...money }) => [orderId, money]));
 }
@@ -283,13 +284,18 @@ async function invoiceFigures(tx: Runner, orderId: number) {
   return vatSplit(lines);
 }
 
-/** The next number in a company's own invoice series. */
-async function nextInvoiceCode(tx: Runner, from: LockedOrder["invoiceFrom"]): Promise<string> {
+/** The next number in the company's own invoice series (its Company details). A company that
+ *  hasn't set one yet bills nothing: no invoice goes out under another company's numbers. */
+async function nextInvoiceCode(tx: Runner): Promise<string> {
+  const series = (await companyInfo(tx)).invoiceSeries;
+  if (!series)
+    throw new Refusal(409, "no_series", "Type the company's invoice series in Company details (Admin) first.");
+  await tx.execute(sql`insert into counter (name, value) values (${`invoice:${OWN}`}, 0) on conflict (name) do nothing`);
   const [next] = await rows<{ value: number }>(
     tx,
-    sql`update counter set value = value + 1 where name = ${`invoice:${from}`} returning value::int as value`,
+    sql`update counter set value = value + 1 where name = ${`invoice:${OWN}`} returning value::int as value`,
   );
-  return invoiceCode(from, next?.value ?? 1);
+  return invoiceCode(series, next?.value ?? 1);
 }
 
 const whenDue = (terms: string, due: string) =>
@@ -337,12 +343,12 @@ async function issueInvoice(
   today: string,
 ): Promise<{ id: number; code: string }> {
   const split = await invoiceFigures(tx, order.id);
-  const code = await nextInvoiceCode(tx, order.invoiceFrom);
+  const code = await nextInvoiceCode(tx);
   const due = order.payBy ?? dueOn(order.terms, order.days, today, order.expectedOn);
   const [made] = await rows<{ id: number }>(
     tx,
     sql`insert into invoice (code, order_id, customer_id, invoice_from, terms, issued_on, due_on, total, vatable, vat, exempt, zero_rated, by_person)
-      values (${code}, ${order.id}, ${order.customerId}, ${order.invoiceFrom}, ${order.terms}, ${today}::date, ${due}::date, ${order.total},
+      values (${code}, ${order.id}, ${order.customerId}, ${OWN}, ${order.terms}, ${today}::date, ${due}::date, ${order.total},
         ${split.vatable}, ${split.vat}, ${split.exempt}, ${split.zeroRated}, ${me.id})
       returning id::int as id`,
   );
@@ -351,7 +357,7 @@ async function issueInvoice(
     order.id,
     me,
     "invoice",
-    `Invoice ${code} made under ${INVOICE_FROM_LABEL[order.invoiceFrom]}: ${peso(order.total)}, ${whenDue(order.terms, due)}.`,
+    `Invoice ${code} made under ${invoiceFromLabel()}: ${peso(order.total)}, ${whenDue(order.terms, due)}.`,
     "invoiced",
   );
   const invoice = { id: made?.id as number, code };
@@ -380,11 +386,11 @@ async function reissueInvoice(
       `Money was given back on ${order.code}'s cancelled invoice ${voided.code}: place a new order instead.`,
     );
   const split = await invoiceFigures(tx, order.id);
-  const code =
-    voided.invoiceFrom === order.invoiceFrom ? voided.code : await nextInvoiceCode(tx, order.invoiceFrom);
+  // Its own number again (one company, one series).
+  const code = voided.code;
   const due = order.payBy ?? dueOn(order.terms, order.days, today, order.expectedOn);
   await tx.execute(
-    sql`update invoice set code = ${code}, invoice_from = ${order.invoiceFrom}, terms = ${order.terms}, issued_on = ${today}::date,
+    sql`update invoice set code = ${code}, invoice_from = ${OWN}, terms = ${order.terms}, issued_on = ${today}::date,
         due_on = ${due}::date, total = ${order.total}, vatable = ${split.vatable}, vat = ${split.vat}, exempt = ${split.exempt},
         zero_rated = ${split.zeroRated}, status = case when paid >= ${order.total} and ${order.total} > 0 then 'paid' else 'open' end,
         cancelled_reason = null, cancelled_at = null, by_person = ${me.id}
@@ -396,7 +402,7 @@ async function reissueInvoice(
     order.id,
     me,
     "invoice",
-    `Invoice ${code}${code !== voided.code ? ` (was ${voided.code})` : ""} made good again under ${INVOICE_FROM_LABEL[order.invoiceFrom]}: ${peso(order.total)}, ${whenDue(order.terms, due)}.${kept > 0 ? ` ${peso(kept)} received before counts on it again.` : ""}`,
+    `Invoice ${code}${code !== voided.code ? ` (was ${voided.code})` : ""} made good again under ${invoiceFromLabel()}: ${peso(order.total)}, ${whenDue(order.terms, due)}.${kept > 0 ? ` ${peso(kept)} received before counts on it again.` : ""}`,
     "invoiced",
   );
   const invoice = { id: voided.id, code };
@@ -658,24 +664,18 @@ export async function refreshInvoice(tx: Runner, me: Me, orderId: number): Promi
   );
   if (!invoice) return;
   const due = order.payBy ?? dueOn(order.terms, order.days, invoice.issuedOn, order.expectedOn);
-  let code = invoice.code;
-  if (invoice.invoiceFrom !== order.invoiceFrom) {
-    const [next] = await rows<{ value: number }>(
-      tx,
-      sql`update counter set value = value + 1 where name = ${`invoice:${order.invoiceFrom}`} returning value::int as value`,
-    );
-    code = invoiceCode(order.invoiceFrom, next?.value ?? 1);
-  }
-  if (code === invoice.code && due === invoice.dueOn && order.terms === invoice.terms) return;
+  // One company per database: an invoice keeps its number; its terms and due day follow.
+  const code = invoice.code;
+  if (due === invoice.dueOn && order.terms === invoice.terms) return;
   await tx.execute(
-    sql`update invoice set code = ${code}, invoice_from = ${order.invoiceFrom}, terms = ${order.terms}, due_on = ${due}::date where id = ${invoice.id}`,
+    sql`update invoice set terms = ${order.terms}, due_on = ${due}::date where id = ${invoice.id}`,
   );
   await logEvent(
     tx,
     orderId,
     me,
     "invoice",
-    `Invoice ${invoice.code}${code !== invoice.code ? ` is now ${code} under ${INVOICE_FROM_LABEL[order.invoiceFrom]}` : ""} follows the new details: ${order.terms === "days" ? `due on ${dated(due)}` : order.terms === "cod" ? "collected on delivery" : "paid in advance"}.`,
+    `Invoice ${code} follows the new details: ${order.terms === "days" ? `due on ${dated(due)}` : order.terms === "cod" ? "collected on delivery" : "paid in advance"}.`,
   );
 }
 

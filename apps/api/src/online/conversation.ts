@@ -6,8 +6,10 @@
 import { type KeptFile, keepFile } from "../files/store";
 import { sql } from "drizzle-orm";
 import { type Database, rows } from "../db/index";
+import { may, Refusal } from "../http";
 import type { Runner } from "../inventory/service";
-import type { LeadSource } from "../types";
+import type { LeadSource, Me } from "../types";
+import { isPapRep, LEAD_WORK_ROLES } from "./rules";
 
 export type ChannelKind = "messenger" | "email";
 export type Account = { id: number; kind: ChannelKind; key: string; name: string };
@@ -208,3 +210,24 @@ export async function chatOf(
     lastInboundAt: found.lastInboundAt,
   };
 }
+
+/**
+ * Who answers a case's customer, on Messenger or by email: the Online desk and the Admin, as
+ * before, and the PAP person on the PAP cases that are theirs (Aryan, 26 Nov: "Fhaye should be
+ * able to reply too").
+ */
+export async function mayAnswer(db: Runner, me: Me, leadId: number): Promise<boolean> {
+  if (may(me, LEAD_WORK_ROLES)) return true;
+  if (!isPapRep(me)) return false;
+  const [lead] = await rows<{ desk: string; assignedTo: number | null }>(
+    db,
+    sql`select desk, assigned_to::int as "assignedTo" from lead where id = ${leadId}`,
+  );
+  return lead?.desk === "pap" && lead.assignedTo === me.id;
+}
+
+export async function answerGate(db: Runner, me: Me, leadId: number, what: string): Promise<void> {
+  if (!(await mayAnswer(db, me, leadId)))
+    throw new Refusal(403, "forbidden", `Only the Online desk, the Admin, and the PAP person on their own cases can ${what}.`);
+}
+

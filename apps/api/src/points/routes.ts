@@ -4,7 +4,8 @@ import type { Hono, MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Database } from "../db/index";
 import { type Env, idParam, readBody } from "../http";
-import { saveCompany, savePointsProgram, settingsOf } from "../settings/service";
+import { saveDeskPassword } from "../auth/desk-password";
+import { saveCaseMail, saveCompany, savePointsProgram, settingsOf } from "../settings/service";
 import type { CompanyInfo } from "../types";
 import { addPointsByPhone, adjustPoints, openAccountFor, pointsAccount, pointsList } from "./service";
 
@@ -61,9 +62,35 @@ export function pointsRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareH
         footer: line(200),
         signatory: line(120),
         signatoryTitle: line(120),
+        invoiceSeries: line(20).optional(),
       }),
     );
-    await saveCompany(db, c.get("me"), input as CompanyInfo);
+    // The company's own details: one company per database since the separation (26 Nov night).
+    await saveCompany(db, c.get("me"), { ...input, invoiceSeries: input.invoiceSeries ?? "" } as CompanyInfo);
+    return c.json({ ok: true });
+  });
+  // A case's own steps emailed to the customer by themselves (Aryan, 26 Nov, as the old CRM).
+  app.post("/api/settings/case-emails", async (c) => {
+    const input = await readBody(
+      c,
+      z.object({
+        enabled: z.boolean(),
+        events: z.object({
+          enquiry: z.boolean(),
+          quotation: z.boolean(),
+          gl_received: z.boolean(),
+          gl_verified: z.boolean(),
+        }),
+      }),
+    );
+    await saveCaseMail(db, c.get("me"), input);
+    return c.json({ ok: true });
+  });
+  // The desks' common password (Aryan, 27 Nov): typed by the Admin here, kept only as a hash. Null
+  // closes the desk screens.
+  app.post("/api/settings/desk-password", async (c) => {
+    const input = await readBody(c, z.object({ password: z.string().max(200).nullable() }));
+    await saveDeskPassword(db, c.get("me"), input.password);
     return c.json({ ok: true });
   });
   app.post("/api/settings/points", async (c) => {
