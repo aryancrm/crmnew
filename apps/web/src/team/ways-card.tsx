@@ -9,10 +9,10 @@
 
 import type { OrderWays, OrderWaysPart, OrderWaysPay, TeamBoard } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { api } from "../api";
 import { exactPeso, shortPeso } from "../ceo";
-import { CARD } from "../ui";
+import { CARD, useOpenOnPress } from "../ui";
 
 /** The other sources in plain words. */
 const OTHER_WORDS: Record<string, string> = {
@@ -196,6 +196,9 @@ function Paid({ pay, whole }: { pay: OrderWaysPay; whole: number }) {
  *  "how many orders which person placed must show on Javed's screen, like the Orders tab"). */
 export function OrdersByPerson({ month, board }: { month: string; board: TeamBoard | undefined }) {
   const data = useWays(month).data;
+  // A press anywhere on an HQ's row opens its person page, which goes back here (28 Nov).
+  const openRow = useOpenOnPress();
+  const location = useLocation();
   if (!data || data.people.length === 0) return null;
   const stagesOf = (seatId: number) => board?.seats.find((one) => one.seatId === seatId)?.stages ?? null;
   const STAGES: [keyof NonNullable<ReturnType<typeof stagesOf>>, string][] = [
@@ -237,9 +240,15 @@ export function OrdersByPerson({ month, board }: { month: string; board: TeamBoa
             const stages = stagesOf(one.seatId);
             const open = stages ? STAGES.filter(([key]) => stages[key] > 0) : [];
             return (
-              <tr key={one.seatId}>
+              <tr key={one.seatId} onClick={openRow(`/my-team/seat/${one.seatId}`)} className="cursor-pointer hover:bg-slate-50">
                 <td className="px-4 py-2.5 sm:px-5">
-                  <span className="block font-semibold text-slate-900">{one.hq}</span>
+                  <Link
+                    to={`/my-team/seat/${one.seatId}`}
+                    state={{ from: `${location.pathname}${location.search}` }}
+                    className="block font-semibold text-slate-900 hover:underline"
+                  >
+                    {one.hq}
+                  </Link>
                   <span className="block text-[11.5px] text-slate-500">{one.person ?? "Empty"}</span>
                 </td>
                 <td className="px-3 py-2.5 text-right tabular-nums">{one.orders || "—"}</td>

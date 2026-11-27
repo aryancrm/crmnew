@@ -230,10 +230,18 @@ function DayCard({ label, sales, orders, month, note }: { label: string; sales: 
   );
 }
 
-/** The panel. `company` (the CEO's Home) titles the team block as the company's. */
-export function MyKpis({ company = false }: { company?: boolean }) {
-  const [monthPicked, setMonth] = useState(manilaDay().slice(0, 7));
-  const [period, setPeriod] = useState(manilaDay());
+/** The panel. `company` (the CEO's Home) titles the team block as the company's. `month` ("YYYY-MM",
+ *  a Home's month gone by) opens it on that month, as This month shows it, instead of today; a new
+ *  one given (the Home's month arrows) moves it there, none brings it back to today. */
+export function MyKpis({ company = false, month: opened }: { company?: boolean; month?: string }) {
+  const [monthPicked, setMonth] = useState(opened ?? manilaDay().slice(0, 7));
+  const [period, setPeriod] = useState(opened ? "month" : manilaDay());
+  const [openedOn, setOpenedOn] = useState(opened);
+  if (opened !== openedOn) {
+    setOpenedOn(opened);
+    setMonth(opened ?? manilaDay().slice(0, 7));
+    setPeriod(opened ? "month" : manilaDay());
+  }
   const month = period === "month" ? monthPicked : period.slice(0, 7);
   const query = useQuery({
     queryKey: ["kpis", "me", month, period],

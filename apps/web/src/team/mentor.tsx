@@ -12,11 +12,12 @@ import { api } from "../api";
 import { useMe } from "../auth";
 import { placeOf } from "../company/sales-tree";
 import { shortPeso } from "../ceo";
-import { CARD } from "../ui";
+import { CARD, useOpenOnPress } from "../ui";
 import { B2cDeskCard } from "../online/b2c-home";
 import { GroupsGlance, WaitingGroups } from "../sellers/care-groups";
 import { RxFieldTable } from "../sellers/rx";
 import { BiddingCard } from "../sellers/tenders";
+import { useHqNames, withHq } from "./hq-name";
 import { withUnit } from "./switch";
 import { EmptyState, NoInvoicesArt } from "../no-results";
 
@@ -25,7 +26,8 @@ type Row = District["rows"][number];
 export function MentorHome() {
   const district = useQuery({ queryKey: ["team", "district"], queryFn: () => api<District>("/api/team/district"), refetchInterval: 120_000 });
   const scores = useQuery({ queryKey: ["scores", "team", ""], queryFn: () => api<TeamScores>("/api/scores/team") });
-  const money = useQuery({ queryKey: ["my", "collections"], queryFn: () => api<Collections>("/api/my/collections") });
+  // Every customer who owes, not the oldest 300, so the biggest owers are the real biggest (28 Nov).
+  const money = useQuery({ queryKey: ["my", "collections", "all"], queryFn: () => api<Collections>("/api/my/collections?all=1") });
   return (
     <>
       {district.data && <Teams rows={district.data.rows} />}
@@ -133,6 +135,8 @@ export const whereOf = (row: TeamScores["rows"][number]) => {
 
 function AtRisk({ data }: { data: TeamScores }) {
   const me = useMe().data;
+  const { named, hqOf } = useHqNames();
+  const open = useOpenOnPress();
   // The people under them, not themselves (27 Nov: Javed was listed at risk on his own Home).
   const flagged = data.rows.filter(
     (row) =>
@@ -161,14 +165,27 @@ function AtRisk({ data }: { data: TeamScores }) {
       ) : (
         <ul className="mt-2 divide-y divide-slate-100">
           {risky.map((row) => (
-            <li key={row.seatId} className="flex items-center justify-between gap-2 py-1.5 text-[13px]">
+            // The whole line opens the person's scorecard, not only the name (28 Nov).
+            <li
+              key={row.seatId}
+              onClick={open(`/my/score?person=${row.personId}`)}
+              className="flex cursor-pointer items-center justify-between gap-2 py-1.5 text-[13px] hover:bg-slate-50"
+            >
               <span className="min-w-0">
+                {/* Their HQ first, then the name ("TAFT · Marwin Dy", "ON SITE · Rachelle Upao"). */}
                 <Link to={`/my/score?person=${row.personId}`} className="font-semibold text-slate-900 hover:underline">
-                  {row.name}
+                  {named(row.personId, row.name ?? "")}
                 </Link>
+                {/* A seller's HQ is in the name already: their teams after it; a lead (no HQ): their job
+                    and every team they lead. */}
                 <span className="text-[11.5px] text-slate-500">
                   {" "}
-                  · {[...new Set([whereOf(row)?.replace(/\s*–.*$/, ""), ...(units.get(row.personId as number) ?? [row.unit])].filter(Boolean))].join(" · ")}
+                  ·{" "}
+                  {[
+                    ...new Set(
+                      [hqOf(row.personId) ? null : whereOf(row)?.replace(/\s*–.*$/, ""), ...(units.get(row.personId as number) ?? [row.unit])].filter(Boolean),
+                    ),
+                  ].join(" · ")}
                 </span>
               </span>
               <span className="shrink-0 text-right text-[12px]">
@@ -195,6 +212,7 @@ const AGE_BAR: Record<Collections["buckets"][number]["key"], string> = {
 };
 
 function Money({ data }: { data: Collections }) {
+  const open = useOpenOnPress();
   const biggest = [...data.rows].sort((a, b) => b.owed - a.owed).slice(0, 5);
   return (
     <section className={`${CARD} min-w-0 p-4`}>
@@ -223,12 +241,17 @@ function Money({ data }: { data: Collections }) {
       <h3 className="mt-3 text-[11px] font-semibold tracking-wide text-slate-500 uppercase">Biggest owers</h3>
       <ul className="mt-1 divide-y divide-slate-100">
         {biggest.map((row) => (
-          <li key={row.customerId} className="flex items-center justify-between gap-2 py-1.5 text-[13px]">
+          <li
+            key={row.customerId}
+            onClick={open(`/customers/${row.customerId}`)}
+            className="flex cursor-pointer items-center justify-between gap-2 py-1.5 text-[13px] hover:bg-slate-50"
+          >
             <span className="min-w-0 truncate">
               <Link to={`/customers/${row.customerId}`} className="font-medium text-slate-900 hover:underline">
                 {row.customer}
               </Link>
-              <span className="text-[11.5px] text-slate-500"> · {row.seller ?? "no seller"}</span>
+              {/* The HQ it was sold from, then who sold it ("TAFT · Marwin Dy"), as on Collections. */}
+              <span className="text-[11.5px] text-slate-500"> · {row.seller ? withHq(row.hq, row.seller) : (row.hq ?? "no seller")}</span>
             </span>
             <span className="shrink-0 text-right font-semibold tabular-nums">
               {shortPeso(row.owed)}
@@ -281,7 +304,7 @@ export function RxMentorHome() {
   const field = useQuery({ queryKey: ["rx", "field"], queryFn: () => api<RxField>("/api/rx/field") });
   const groups = useQuery({ queryKey: ["care-groups"], queryFn: () => api<CareGroups>("/api/care-groups"), refetchInterval: 60_000 });
   const scores = useQuery({ queryKey: ["scores", "team", ""], queryFn: () => api<TeamScores>("/api/scores/team") });
-  const money = useQuery({ queryKey: ["my", "collections"], queryFn: () => api<Collections>("/api/my/collections") });
+  const money = useQuery({ queryKey: ["my", "collections", "all"], queryFn: () => api<Collections>("/api/my/collections?all=1") });
   return (
     <>
       {field.data && <RxFieldTable data={field.data} />}
@@ -308,7 +331,7 @@ export function RxFieldBlock({ unit = null }: { unit?: number | null } = {}) {
 /** A head's people at risk, money owed and score questions, for any division's Mentor. */
 export function HeadRisks() {
   const scores = useQuery({ queryKey: ["scores", "team", ""], queryFn: () => api<TeamScores>("/api/scores/team") });
-  const money = useQuery({ queryKey: ["my", "collections"], queryFn: () => api<Collections>("/api/my/collections") });
+  const money = useQuery({ queryKey: ["my", "collections", "all"], queryFn: () => api<Collections>("/api/my/collections?all=1") });
   return (
     <>
       <div className="grid gap-3 lg:grid-cols-2">

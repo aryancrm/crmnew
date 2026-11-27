@@ -11,7 +11,7 @@ import { DIVISIONS } from "@2mg/api/divisions";
 import type { Me } from "@2mg/api/types";
 import { ChevronRight, Network, Rows3 } from "lucide-react";
 import { type MouseEvent as ReactMouseEvent, type ReactNode, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { exactPeso, shortPeso } from "../ceo";
 import { lookAs } from "../shell";
 import { PACE_TEXT, PaceBar } from "../company/ceo-home";
@@ -27,6 +27,7 @@ import { BiddingCard, BiddingHome } from "../sellers/tenders";
 import { TeamAccountsCard } from "./accounts-card";
 import { DistrictNow } from "./district";
 import { divisionOf } from "./hierarchy";
+import { hqOfSeat, withHq } from "./hq-name";
 import { HospitalTeams, TelesalesCoachHome } from "./mentor";
 import { EmptyState } from "../no-results";
 
@@ -430,8 +431,12 @@ function PersonRow({
   canLook: boolean;
 }) {
   const [opening, setOpening] = useState(false);
+  // The person page's way back comes here (28 Nov).
+  const location = useLocation();
   const seat = node.seat;
   const vacant = !seat?.person;
+  // The HQ first, then who works it ("TAFT · Marwin Dy"), never the territory's whole name.
+  const hq = seat ? hqOfSeat(seat) : null;
   const pct = pctOf(node.figures);
   const t = tone(node, pace);
   const more = moreOf(node);
@@ -440,12 +445,10 @@ function PersonRow({
       <span className="flex min-w-0 items-center gap-2.5">
         <span className="min-w-0">
           <span className={`block truncate text-sm font-semibold ${vacant ? "text-rose-600" : "text-slate-900"}`}>
-            {vacant ? "Vacant seat" : node.name}
+            {withHq(hq, vacant ? "Vacant seat" : node.name)}
           </span>
           <span className="block truncate text-[11.5px] text-slate-500">
-            {opening
-              ? "Opening their screen…"
-              : [seat?.title, seat?.area?.name?.split("|").slice(1, 2).join("").trim() || null].filter(Boolean).join(" · ")}
+            {opening ? "Opening their screen…" : (seat?.title ?? "")}
           </span>
         </span>
       </span>
@@ -496,7 +499,11 @@ function PersonRow({
           {body}
         </button>
       ) : seat ? (
-        <Link to={`/my-team/seat/${seat.seatId}`} className={`${grid} hover:bg-slate-50`}>
+        <Link
+          to={`/my-team/seat/${seat.seatId}`}
+          state={{ from: `${location.pathname}${location.search}` }}
+          className={`${grid} hover:bg-slate-50`}
+        >
           {body}
         </Link>
       ) : (
@@ -505,6 +512,7 @@ function PersonRow({
       {person && canLook && seat && (
         <Link
           to={`/my-team/seat/${seat.seatId}`}
+          state={{ from: `${location.pathname}${location.search}` }}
           className="absolute top-1.5 right-4 hidden rounded-md bg-white px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700 ring-1 ring-slate-200 group-hover:block hover:underline sm:right-5"
         >
           Their record
@@ -550,8 +558,11 @@ function HoverCard({ node, pace, running, x, y }: { node: Node; pace: number; ru
       className="pointer-events-none fixed z-40 w-72 rounded-xl border border-slate-200 bg-white p-3 shadow-xl"
       style={{ left, top }}
     >
-      <p className="text-[13px] font-semibold text-slate-900">{seat && !seat.person ? "Vacant seat" : node.name}</p>
-      <p className="truncate text-[11.5px] text-slate-500">{seat ? [seat.title, seat.area?.name].filter(Boolean).join(" · ") : node.sub}</p>
+      {/* A seat: its HQ first, then who works it, never the territory's whole name ("RX | TAFT"). */}
+      <p className="text-[13px] font-semibold text-slate-900">
+        {withHq(seat ? hqOfSeat(seat) : null, seat && !seat.person ? "Vacant seat" : node.name)}
+      </p>
+      <p className="truncate text-[11.5px] text-slate-500">{seat ? seat.title : node.sub}</p>
       {node.figures.target > 0 && (
         <div className="mt-2">
           <PaceBar pct={pct} pace={running ? pace : null} tone={t} />

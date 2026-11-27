@@ -4,7 +4,7 @@
 // are stopped now. The team lead's and manager's Home; for the CEO and the Admin, every seller
 // in the company ("Sales by person").
 
-import type { TeamBoard, TeamSales } from "@2mg/api/types";
+import type { OrderStatus, TeamBoard, TeamSales } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, CirclePause, Undo2 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -22,6 +22,7 @@ import { seatWords } from "../seat-words";
 import { TeamDrill } from "./drill";
 import { OrdersByPerson, OrderWaysCard } from "./ways-card";
 import { channelsIn, useTeamTree } from "./hierarchy";
+import { hqOfSeat, withHq } from "./hq-name";
 import { toneOf } from "./pace";
 import { HeadRisks } from "./mentor";
 import { greeting, todayWords } from "../home/home";
@@ -107,6 +108,15 @@ export function TeamSalesPage() {
       }
     : data.total;
   const stoppedNow = boxes ? boxes.stopped : data.stopped.length;
+  // Where the team's orders stand, in the CEO Home's kind of line (28 Nov, PLAN 274).
+  const ordersNow = board.data ? ordersNowLine(board.data) : null;
+  // The HQ a stopped order was placed from: its seat on the team's board, found by the order's own
+  // number (none when the board isn't read, as on the company's view).
+  const stoppedHq = (orderId: number) => {
+    const seatId = board.data?.needs.find((need) => need.orderId === orderId)?.seatId;
+    const seat = board.data?.seats.find((one) => one.seatId === seatId);
+    return seat ? hqOfSeat(seat) : null;
+  };
   const pacePct = Math.round(data.pace * 100);
   const arrow = "grid size-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100";
 
@@ -150,15 +160,16 @@ export function TeamSalesPage() {
       </header>
 
       {/* My KPIs first on the head of the Prescription business's Home (Aryan, 28 Nov: "put My KPIs
-          at the very top this time", PLAN 274). */}
-      {!whole && rxMentor && <MyKpis />}
+          at the very top this time", PLAN 274), on the Home's month: a month gone by opens on that
+          month, this month on today. */}
+      {!whole && rxMentor && <MyKpis month={data.month < current ? data.month : undefined} />}
       {/* First, as his plan's Home has them (Aryan, 28 Nov, PLAN 259): how the month's orders came
           (doctor referral, doctor dispense, guarantee letters, others), then the team's tree (each
           HQ and who works it; the channels' tiles a press away). */}
       {!whole && <OrderWaysCard month={asked} />}
       {/* Where his team's orders stand now, as on the CEO's Home (Aryan, 28 Nov: "the CEO's Home shows
           which order is at Management, which at Finance; it should show on Javed's too", PLAN 274). */}
-      {!whole && rxMentor && board.data && (
+      {!whole && rxMentor && board.data && ordersNow && (
         <OrdersNowCard
           board={board.data}
           title="Orders right now"
@@ -169,16 +180,8 @@ export function TeamSalesPage() {
                 {(board.data.totals.waiting + board.data.totals.stopped).toLocaleString("en-PH")}{" "}
                 <span className="text-sm font-normal text-slate-500">open</span>
               </div>
-              <div className={`text-xs ${board.data.totals.stopped ? "text-rose-600" : "text-slate-500"}`}>
-                {[
-                  `${board.data.stagesNow.management.toLocaleString("en-PH")} at Management`,
-                  `${board.data.stagesNow.finance.toLocaleString("en-PH")} with Finance`,
-                  `${(board.data.stagesNow.dispatch + board.data.stagesNow.road).toLocaleString("en-PH")} with Dispatch or on the road`,
-                  board.data.totals.stopped ? `${board.data.totals.stopped.toLocaleString("en-PH")} on hold or sent back` : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </div>
+              {/* The CEO Home's kind of line, not the ring's labels again (Aryan, 28 Nov). */}
+              <div className={`text-xs ${ordersNow.late ? "text-rose-600" : "text-slate-500"}`}>{ordersNow.line}</div>
             </>
           }
         />
@@ -381,7 +384,8 @@ export function TeamSalesPage() {
                       {order.code} · {order.customer}
                     </span>
                     <span className="block truncate text-xs text-slate-500">
-                      {order.statusLabel} · {order.medrep}
+                      {/* The HQ first, then who placed it ("TAFT · Marwin Dy"), as on every order card. */}
+                      {order.statusLabel} · {withHq(stoppedHq(order.id), order.medrep)}
                       {order.reason ? ` · ${order.reason}` : ""}
                     </span>
                   </span>
@@ -404,6 +408,33 @@ function monthSpan(asked: string): { from: string; to: string } {
   const [y, m] = month.split("-").map(Number) as [number, number];
   const last = new Date(Date.UTC(y, m, 0)).getUTCDate();
   return { from: `${month}-01`, to: `${month}-${String(last).padStart(2, "0")}` };
+}
+
+/** The steps an order is open at, as the board counts it (Management, Finance, Dispatch, the road):
+ *  not on hold or sent back. */
+const OPEN_STEPS: OrderStatus[] = ["pending_approval", "finance_check", "ready_for_invoice", "ready_for_dispatch", "packing", "shipped"];
+
+/** The team's orders in the CEO Home's kind of line (Aryan, 28 Nov, PLAN 274): how many wait for a
+ *  decision (at Management or Finance), how long the oldest open order has stood at its step, and
+ *  how many are late at their desk (the board's late: past the desk's own time, the count the team
+ *  page's "Stuck in your team" shows). A part with nothing in it is left out. */
+function ordersNowLine(board: TeamBoard): { line: string; late: number } {
+  const waiting = board.stagesNow.management + board.stagesNow.finance;
+  const since = board.seats.flatMap((seat) =>
+    seat.oldest && OPEN_STEPS.includes(seat.oldest.status) ? [Date.parse(seat.oldest.since)] : [],
+  );
+  const oldest = since.length ? Math.round((Date.now() - Math.min(...since)) / 3_600_000) : 0;
+  const late = board.needs.filter((need) => need.kind === "late").length;
+  return {
+    late,
+    line: [
+      waiting ? `${waiting.toLocaleString("en-PH")} waiting for a decision` : "Nothing waiting for a decision",
+      oldest > 0 ? `oldest ${oldest}h` : null,
+      late ? `${late.toLocaleString("en-PH")} late` : null,
+    ]
+      .filter(Boolean)
+      .join(" · "),
+  };
 }
 
 /** Whether a channel has a desk of its own to show under the tree. */
