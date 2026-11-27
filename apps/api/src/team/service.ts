@@ -191,6 +191,13 @@ export async function teamBoard(
 ): Promise<TeamBoard> {
   const today = todayManila();
   const { from, to, days } = rangeOf(asked, today);
+  // This month so far (the 1st to today): the month's whole target against how much of the month
+  // is gone, as My KPIs and Sales vs target show it (one number everywhere, 28 Nov, PLAN 273); any
+  // other days picked share their months' targets out over those days.
+  const [year, number] = to.split("-").map(Number) as [number, number];
+  const monthEnd = `${to.slice(0, 7)}-${String(new Date(Date.UTC(year, number, 0)).getUTCDate()).padStart(2, "0")}`;
+  const wholeMonth = from === `${to.slice(0, 7)}-01` && to === today && today < monthEnd;
+  const targetTo = wholeMonth ? monthEnd : to;
   const view = await viewOf(db, me, asked.unitId ?? null);
   const { seatIds } = view;
   const list = ids(seatIds);
@@ -447,13 +454,13 @@ export async function teamBoard(
         ? prorated(
             seatTargets.filter((row) => row.seatId === seat.seatId),
             from,
-            to,
+            targetTo,
           )
         : seat.personId && !seatedTargets.some((row) => row.personId === seat.personId)
           ? prorated(
               targets.filter((row) => row.personId === seat.personId),
               from,
-              to,
+              targetTo,
             )
           : null,
       sold: sumOf(sold, seat.seatId, (row) => row.amount),
@@ -524,7 +531,8 @@ export async function teamBoard(
     from,
     to,
     days,
-    pace: days ? elapsed / days : 1,
+    pace: wholeMonth ? Number(today.slice(8, 10)) / Number(monthEnd.slice(8, 10)) : days ? elapsed / days : 1,
+    targetTo,
     lead: {
       name: mine[0]?.name ?? me.name,
       title: mine[0]?.title ?? me.title,

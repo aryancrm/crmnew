@@ -3759,6 +3759,9 @@ export type TeamBoard = {
   to: string;
   days: number;
   pace: number;
+  /** The last day the targets count to: the month's end for this month so far (the month's whole
+   *  target, as My KPIs shows it), else the last day picked (PLAN 273). */
+  targetTo: string;
   /** Who is looking, and the boxes their team is in (for a head, several teams). */
   lead: { name: string; title: string | null; units: string[]; covering: string[] };
   /** The box looked at (one asked for, or the company for the CEO). */

@@ -1109,7 +1109,7 @@ export function TeamSeatPage() {
   const daysLeft = Math.max(
     0,
     Math.round(
-      (Date.parse(`${board.data.to}T00:00:00Z`) - Date.parse(`${board.data.today}T00:00:00Z`)) /
+      (Date.parse(`${board.data.targetTo ?? board.data.to}T00:00:00Z`) - Date.parse(`${board.data.today}T00:00:00Z`)) /
         86_400_000,
     ),
   );

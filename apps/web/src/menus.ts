@@ -1327,10 +1327,12 @@ function ownDesk(me: Me): Space {
             // CHCs' own tiers, which nobody keeps, so it was all zeros. The page stays at its address.
             // Prescription sales merged into Headquarters (Aryan, 28 Nov: "Home and it repeat";
             // PLAN 263): the doctors' counts and the top doctors are on Headquarters now.
-            // Team numbers is three pages, not five (Aryan, 28 Nov: "what repeats there and above?";
-            // "Yes, do it", PLAN 272): Sales vs target (each HQ's target, sold, balance, today, as the
-            // sheet) in place of Whole business, Targets and Sales performance, whose own parts it holds
-            // or opens; then Scorecards and Calls. The pages stay at their addresses.
+            // Team numbers (PLAN 272-273): Whole business first, its pictures of the team's month as he
+            // liked them (Aryan, 28 Nov: "so much data showed there visually, it looked very good, why
+            // did you remove it? bring it back"); then Sales vs target (each HQ's target, sold, balance,
+            // today, as the sheet, with Targets and Sales performance a press away), Scorecards and
+            // Calls. Every one shows the same numbers.
+            { to: "/my-team", label: "Whole business", icon: Users, teams: true },
             { to: "/care-groups", label: "Care groups", icon: Users, short: "Groups" },
             { to: "/sales-vs-target", label: "Sales vs target", icon: Target, short: "Sales" },
             { to: "/team-scores", label: "Scorecards", icon: Gauge, short: "Scores" },
