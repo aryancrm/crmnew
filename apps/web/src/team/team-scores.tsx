@@ -9,6 +9,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { TeamSwitch, useTeamUnit, withUnit } from "./switch";
 import { CARD, PageHead, PageState } from "../ui";
+import { whereOf } from "./mentor";
 import { Disputes, MonthPicker, toneOf } from "../sellers/my-score";
 
 export function TeamScoresPage() {
@@ -71,7 +72,8 @@ export function TeamScoresPage() {
                   ) : (
                     <span className="font-semibold text-slate-400">Empty seat</span>
                   )}
-                  <div className="text-[11.5px] text-slate-500">{[row.area ?? row.title, row.unit].join(" · ")}</div>
+                  {/* The area as the Home says it, once (27 Nov): "NCR 1 · Uro & Onco Care". */}
+                  <div className="text-[11.5px] text-slate-500">{[...new Set([whereOf(row), row.unit].filter(Boolean))].join(" · ")}</div>
                 </td>
                 <td className="px-3 py-2.5 text-right">
                   {row.card ? (

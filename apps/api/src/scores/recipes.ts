@@ -149,7 +149,7 @@ export const RX: Recipe = {
   source: "Rx CHC Play Book",
   kpis: [
     {
-      key: "nbd", label: "NBD · new prescribing doctors", how: "Doctors invoiced for the first time this month", weight: 30, unit: "count", better: "high",
+      key: "nbd", label: "NBD · new prescribing doctors", how: "Doctors whose first order with us came this month: one who bought (dispense) or sent a patient (referral)", weight: 30, unit: "count", better: "high",
       bands: [
         { from: 9, points: 30, label: "GetMeds Best" },
         { from: 7, points: 27, label: "Elite" },
@@ -160,7 +160,7 @@ export const RX: Recipe = {
       ],
     },
     {
-      key: "crr", label: "CRR · doctors prescribing again", how: "Doctors invoiced last month and again this month ÷ invoiced last month", weight: 30, unit: "%", better: "high",
+      key: "crr", label: "CRR · doctors prescribing again", how: "Doctors with an order last month (bought or sent a patient) who had one again this month ÷ last month's", weight: 30, unit: "%", better: "high",
       bands: [
         { from: 90, points: 30, label: "GetMeds Best" },
         { from: 80, points: 27, label: "Elite" },
@@ -171,7 +171,7 @@ export const RX: Recipe = {
       ],
     },
     {
-      key: "pap", label: "PAP · assistance approved", how: "Guarantee letters received this month on the person's PAP cases", weight: 25, unit: "count", better: "high",
+      key: "pap", label: "PAP · assistance approved", how: "Guarantee letters received this month: on the person's PAP cases, and their orders paid by an agency's letter", weight: 25, unit: "count", better: "high",
       bands: [
         { from: 11, points: 25, label: "GetMeds Best" },
         { from: 8, points: 23, label: "Elite" },
@@ -393,7 +393,7 @@ export const LEAD: Recipe = {
       ],
     },
     {
-      key: "teamist", label: "Team sales vs target", how: "Invoiced by the team this month ÷ the team's targets (on the working-day pace)", weight: 30, unit: "%", better: "high",
+      key: "teamist", label: "Team sales vs target", how: "The team's sales this month, as My KPIs counts them ÷ the team's targets (on the working-day pace)", weight: 30, unit: "%", better: "high",
       bands: istBands(30),
     },
     {

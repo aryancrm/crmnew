@@ -10,7 +10,7 @@ import { migrate } from "../db/migrate";
 import { todayManila } from "../inventory/rules";
 import { seedDemoTeam } from "../orders/seed-team";
 import { seedDemo } from "../seed";
-import type { RxBusiness } from "../types";
+import type { MyScore, RxBusiness } from "../types";
 
 const PASSWORD = "test-password-1";
 let db: Database;
@@ -64,6 +64,14 @@ describe("the prescription business", () => {
     expect(row).toMatchObject({ prescriptions: 2, prescribers: 2, newPrescribers: 1, value: 400000, letters: 1 });
     expect(mine.doctors.map((one) => one.name).sort()).toEqual(["Dr. New Writer", "Dr. Old Writer"]);
     expect(mine.letters.find((one) => one.programme === "DSWD")?.zoho).toEqual({ count: 1, amount: 500000 });
+    // The CHC's own scorecard counts the same doctors (27 Nov, PLAN 254): one new prescribing doctor
+    // this month (Dr. Old Writer first ordered in January), and the DSWD letter's order.
+    const score = (await (await get("joy", "/api/scores")).json()) as MyScore;
+    expect(score.card?.recipe).toBe("rx");
+    const kpi = (key: string) => score.card?.kpis.find((one) => one.key === key)?.value;
+    expect(kpi("nbd")).toBe(row?.newPrescribers);
+    expect(kpi("nbd")).toBe(1);
+    expect(kpi("pap")).toBe(1);
     // Management sells nothing: not theirs to read.
     expect((await get("sarla", "/api/rx/business")).status).toBe(403);
   });

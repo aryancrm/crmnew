@@ -14,6 +14,7 @@ import { inForce } from "../org/service";
 import { teamSeats } from "../team/service";
 import type { CompanyScores, Me, MyScore, ScoreCard, ScoreDispute, TeamNeed, TeamScores } from "../types";
 import { myCustomers } from "../mr/day";
+import { doctorsByPerson } from "../rx/doctors";
 import { incrementOf, type Recipe, RECIPES, scoreOf } from "./recipes";
 import { companyKey } from "../companies/context";
 
@@ -200,19 +201,13 @@ export async function measure(
   values.ocr = r.orders > 0 ? (r.cancelled / r.orders) * 100 : null;
   notes.ocr = r.orders ? `${r.cancelled} of ${r.orders} orders cancelled` : "No orders yet";
   if (recipe.key === "rx") {
-    const doctorInvoices = sql`invoice i join sales_order o on o.id = i.order_id join customer c on c.id = i.customer_id`;
-    const [rx] = await rows<{ newDoctors: number; lastDoctors: number; doctorsBack: number; approved: number; visited: number; listed: number; listedVisited: number }>(
+    // The doctors from the orders, this CRM's and Zoho's, both of a doctor's ways: one who bought
+    // (dispense) and one named on a patient's order (referral). They read only this CRM's own
+    // invoices before, and November's sales are Zoho's: every Rx CHC's card read 0 (Aryan, 27 Nov).
+    const docs = (await doctorsByPerson(db, first, upTo)).get(personId) ?? { newDoctors: 0, lastDoctors: 0, doctorsBack: 0, letters: 0 };
+    const [rx] = await rows<{ approved: number; visited: number; listed: number; listedVisited: number }>(
       db,
       sql`select
-          (select count(distinct i.customer_id) from ${doctorInvoices}
-            where ${mine} and c.kind = 'doctor' and i.status <> 'cancelled' and i.issued_on between ${first}::date and ${upTo}::date
-              and not exists (select 1 from invoice e where e.customer_id = i.customer_id and e.status <> 'cancelled' and e.issued_on < ${first}::date))::int as "newDoctors",
-          (select count(distinct i.customer_id) from ${doctorInvoices}
-            where ${mine} and c.kind = 'doctor' and i.status <> 'cancelled' and i.issued_on between ${prevFirst}::date and (${first}::date - 1))::int as "lastDoctors",
-          (select count(distinct i.customer_id) from ${doctorInvoices}
-            where ${mine} and c.kind = 'doctor' and i.status <> 'cancelled' and i.issued_on between ${prevFirst}::date and (${first}::date - 1)
-              and exists (select 1 from invoice n where n.customer_id = i.customer_id and n.status <> 'cancelled'
-                and n.issued_on between ${first}::date and ${upTo}::date))::int as "doctorsBack",
           (select count(*) from lead l where l.assigned_to = ${personId} and l.road = 'gl'
             and l.gl_letter_on between ${first}::date and ${upTo}::date)::int as approved,
           (select count(distinct v.customer_id) from visit v join customer c on c.id = v.customer_id
@@ -228,24 +223,29 @@ export async function measure(
                 where l.ended_at is null or l.ended_at::date > ${upTo}::date))::int as "listedVisited"`,
     );
     const x = rx as NonNullable<typeof rx>;
+    const letters = x.approved + docs.letters;
     const rxValues: Record<string, number | null> = {
-      nbd: x.newDoctors,
-      crr: x.lastDoctors > 0 ? (x.doctorsBack / x.lastDoctors) * 100 : null,
-      pap: x.approved,
+      nbd: docs.newDoctors,
+      crr: docs.lastDoctors > 0 ? (docs.doctorsBack / docs.lastDoctors) * 100 : null,
+      pap: letters,
       // The formulary tracker comes in Phase 5.
       hit: null,
       // No list yet: nothing to measure coverage against.
       ccf: x.listed > 0 ? (x.listedVisited / x.listed) * 100 : null,
     };
     const rxNotes: Record<string, string> = {
-      nbd: `${x.newDoctors} doctor${x.newDoctors === 1 ? "" : "s"} invoiced for the first time`,
-      crr: x.lastDoctors ? `${x.doctorsBack} of last month's ${x.lastDoctors} doctors again` : "No doctors last month",
-      pap: `${x.approved} guarantee letter${x.approved === 1 ? "" : "s"} received`,
+      nbd: `${docs.newDoctors} doctor${docs.newDoctors === 1 ? "" : "s"} prescribing for us for the first time (bought, or sent a patient)`,
+      crr: docs.lastDoctors ? `${docs.doctorsBack} of last month's ${docs.lastDoctors} doctors prescribed again` : "No doctors last month",
+      pap: `${letters} guarantee letter${letters === 1 ? "" : "s"} received`,
       hit: "Not in the CRM yet: the formulary tracker comes in Phase 5",
       ccf: x.listed ? `${x.listedVisited} of the ${x.listed} doctors on my list visited` : "No doctor list yet: make it under My doctors",
     };
     // A rep is scored once they visit, sell, get a letter or have a target.
-    return { values: rxValues, notes: rxNotes, active: Boolean(r.target || r.sales || r.orders || x.visited || x.approved) };
+    return {
+      values: rxValues,
+      notes: rxNotes,
+      active: Boolean(r.target || r.sales || r.orders || x.visited || letters || docs.newDoctors || docs.lastDoctors),
+    };
   }
   // The interim cards' own figures (PLAN 23).
   let extra = false;
@@ -363,12 +363,13 @@ async function leadMeasure(db: Database, personId: number, month: string, upTo: 
   if (!members.length) return { values, notes: { ...notes, team: "No one under them yet" }, active: false };
   const ids = sql.join(members.map((id) => sql`${id}`), sql`, `);
   const list = sql`array[${ids}]::bigint[]`;
-  const [row] = await rows<{ sales: number; target: number | null; sent: number; seen: number; joint: number }>(
+  // The team's sales as My KPIs counts them (this CRM's invoices and Zoho's, without VAT): they
+  // read only this CRM's own invoices before, and November's sales are Zoho's (Aryan, 27 Nov).
+  const counted = await salesByPerson(db, first, upTo);
+  const teamSales = members.reduce((sum, id) => sum + (counted.get(id)?.sales ?? 0), 0);
+  const [found] = await rows<{ target: number | null; sent: number; seen: number; joint: number }>(
     db,
     sql`select
-        coalesce((select sum(i.total) from invoice i join sales_order o on o.id = i.order_id
-          where (o.medrep_id in (${ids}) or o.raised_by in (${ids})) and i.status <> 'cancelled'
-            and i.issued_on between ${first}::date and ${upTo}::date), 0)::float8 as sales,
         (select sum(t.amount)::float8 from sales_target t where t.person_id in (${ids}) and t.month = ${first}::date) as target,
         (select count(*)::int from field_day d where d.person_id in (${ids}) and d.day between ${first}::date and ${upTo}::date
           and d.report_status in ('sent', 'seen')) as sent,
@@ -382,7 +383,7 @@ async function leadMeasure(db: Database, personId: number, month: string, upTo: 
           union select v.day from visit v where v.person_id in (${ids}) and v.status = 'done' and ${personId} = any(v.working_with)
             and v.day between ${first}::date and ${upTo}::date) x) as joint`,
   );
-  const r = row as NonNullable<typeof row>;
+  const r = { ...(found as NonNullable<typeof found>), sales: teamSales };
   const holidays = await holidaysIn(db, first, last);
   const workDay = (day: string) => isWorkDay(day, DEFAULT_SCHEDULE, holidays);
   const workedSoFar = daysBetween(first, upTo).filter(workDay).length;

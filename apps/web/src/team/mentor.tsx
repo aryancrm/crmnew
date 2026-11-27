@@ -126,7 +126,7 @@ function Teams({ rows }: { rows: Row[] }) {
 }
 
 /** Where a person works, in a word, else their job (never their own name again). */
-const whereOf = (row: TeamScores["rows"][number]) => {
+export const whereOf = (row: TeamScores["rows"][number]) => {
   const place = placeOf({ area: row.area ? { name: row.area } : null, person: row.name ? { name: row.name } : null });
   return place === "On site" ? row.title : place;
 };
