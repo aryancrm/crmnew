@@ -385,6 +385,18 @@ const QUESTIONS = [
   },
 ];
 
+/** The questions as schema.org FAQPage, for search engines: put in the page's head as plain text
+ *  while the About page is open (textContent, never parsed as HTML), and taken out after. */
+function useFaqSchema() {
+  useEffect(() => {
+    const tag = document.createElement("script");
+    tag.type = "application/ld+json";
+    tag.textContent = FAQ_SCHEMA;
+    document.head.appendChild(tag);
+    return () => tag.remove();
+  }, []);
+}
+
 /** The questions as schema.org FAQPage, for search engines. */
 const FAQ_SCHEMA = JSON.stringify({
   "@context": "https://schema.org",
@@ -489,6 +501,7 @@ function FaqArt({ open }: { open: number }) {
 /** The questions: grey cards, one answer open at a time, the orange panel beside them. On
  *  computers the block stays pinned while the scroll opens each question in turn. */
 function Faq() {
+  useFaqSchema();
   const [open, setOpen] = useState<number | null>(0);
   const id = useId();
   const wide = useWide();
@@ -622,12 +635,6 @@ function Faq() {
         </div>
       </div>
       </div>
-      {/* The same questions for search engines (FAQPage). */}
-      <script
-        type="application/ld+json"
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: our own fixed words, as JSON
-        dangerouslySetInnerHTML={{ __html: FAQ_SCHEMA }}
-      />
     </section>
   );
 }
