@@ -1,4 +1,5 @@
-// The two companies on a computer, for a trial before live (27 Nov 2026, the backend developer: "set it
+// (The sheet step is now scripts/align-companies.ts, the same that runs on live; this file's 'sheet'
+// stays for the first trial.) The two companies on a computer, for a trial before live (27 Nov 2026, the backend developer: "set it
 // up properly on the computer for the trial"; HR's master data "HR Dashboard Project - UPDATED.xlsx"
 // and the 2026 chart). Two steps, with the chart's own scripts between them:
 //
