@@ -1,7 +1,7 @@
 // The API. Every route answers JSON; every refusal is { error: { code, message, field? } }.
 
 import { createMiddleware } from "hono/factory";
-import { companyKey, companyNow } from "./companies/context";
+import { companyKey, companyNow, otherCompanies } from "./companies/context";
 import { ORG_COOKIE } from "./companies/router";
 import { decisionRoutes } from "./decisions/routes";
 import { sampleRoutes } from "./samples/routes";
@@ -284,11 +284,21 @@ export function createApp(db: Database, options: AppOptions) {
   // (httpOnly, read only under /api/auth). Each was opened with its own login ID and password;
   // signing out signs every one of them out (a shared computer keeps nobody's). ----
   const TOKEN = /^[A-Za-z0-9_-]{20,100}$/;
-  const moreOf = (c: Context<Env>) =>
-    (getCookie(c, MORE_COOKIE) ?? "").split(",").filter((one) => TOKEN.test(one));
-  const keepMore = (c: Context<Env>, tokens: string[]) =>
-    tokens.length
-      ? setCookie(c, MORE_COOKIE, tokens.join(","), {
+  // With several companies each kept session says whose it is ("<Org ID>~<token>", 27 Nov: an account
+  // of another company added): it is asked about in that company's database (companies/context.ts).
+  type Kept = { org: string | null; token: string };
+  const ENTRY = /^(?:(\d{6})~)?([A-Za-z0-9_-]{20,100})$/;
+  const myOrg = () => companyNow()?.orgId ?? null;
+  const mine = (one: Kept) => one.org === myOrg();
+  const moreOf = (c: Context<Env>): Kept[] =>
+    (getCookie(c, MORE_COOKIE) ?? "")
+      .split(",")
+      .map((one) => ENTRY.exec(one))
+      .filter((one): one is RegExpExecArray => Boolean(one))
+      .map((one) => ({ org: one[1] ?? myOrg(), token: one[2] as string }));
+  const keepMore = (c: Context<Env>, kept: Kept[]) =>
+    kept.length
+      ? setCookie(c, MORE_COOKIE, kept.map((one) => (one.org ? `${one.org}~${one.token}` : one.token)).join(","), {
           httpOnly: true,
           secure,
           sameSite: "Lax",
@@ -298,6 +308,24 @@ export function createApp(db: Database, options: AppOptions) {
       : deleteCookie(c, MORE_COOKIE, { path: "/api/auth" });
   const useSession = (c: Context<Env>, token: string) =>
     setCookie(c, SESSION_COOKIE, token, { httpOnly: true, secure, sameSite: "Lax", path: "/", maxAge: SESSION_DAYS * 24 * 60 * 60 });
+  /** This browser becomes that company's (switching to an account of another company). */
+  const useOrg = (c: Context<Env>, org: string | null) => {
+    if (org) setCookie(c, ORG_COOKIE, org, { httpOnly: true, secure, sameSite: "Lax", path: "/", maxAge: 365 * 24 * 60 * 60 });
+  };
+  const endKept = async (one: Kept) => {
+    if (mine(one)) await endSession(db, one.token);
+    else if (one.org) await otherCompanies()?.end(one.org, one.token);
+  };
+  const whoKept = async (one: Kept): Promise<Me | null> =>
+    mine(one) ? whoIs(db, one.token) : one.org ? ((await otherCompanies()?.whoIs(one.org, one.token)) ?? null) : null;
+  /** The session in use, and whose it is: a sign-in on this company may come from a browser whose
+   *  account in use was another company's. */
+  const currentKept = (c: Context<Env>): Kept | null => {
+    const token = getCookie(c, SESSION_COOKIE);
+    if (!token || !TOKEN.test(token)) return null;
+    const remembered = getCookie(c, ORG_COOKIE) ?? null;
+    return { org: myOrg() && remembered && /^\d{6}$/.test(remembered) ? remembered : myOrg(), token };
+  };
 
   /** The end of every sign-in, with or without a code. `add`: kept beside the account in use. */
   async function letIn(c: Context<Env>, found: typeof person.$inferSelect, workspace: string | null, add = false) {
@@ -319,14 +347,20 @@ export function createApp(db: Database, options: AppOptions) {
     const role = found.role as Role;
     // The accounts already on this browser: kept beside the new one when it is added (each still
     // good, never twice), else signed out, so a plain sign-in starts this browser afresh.
-    const current = getCookie(c, SESSION_COOKIE);
-    const earlier = [...(current && TOKEN.test(current) ? [current] : []), ...moreOf(c)];
-    const kept: string[] = [];
+    const current = currentKept(c);
+    const earlier = [...(current ? [current] : []), ...moreOf(c)];
+    const kept: Kept[] = [];
     for (const one of earlier) {
-      const held = add ? await sessionOf(db, one) : null;
-      if (held && !held.viewedBy && held.personId !== found.id && !kept.includes(one) && kept.length < MAX_ACCOUNTS - 1)
-        kept.push(one);
-      else await endSession(db, one);
+      const room = kept.length < MAX_ACCOUNTS - 1 && !kept.some((other) => other.token === one.token);
+      // Another company's account: kept as it is (its own company tells whether it is still good).
+      if (add && !mine(one)) {
+        if (room) kept.push(one);
+        else await endKept(one);
+        continue;
+      }
+      const held = add ? await sessionOf(db, one.token) : null;
+      if (held && !held.viewedBy && held.personId !== found.id && room) kept.push(one);
+      else await endKept(one);
     }
     const until = DAY_SESSION_ROLES.includes(role) ? endOfWorkingDay() : undefined;
     const token = await startSession(db, found.id, undefined, workspace ?? ownWorkspace(role)?.key ?? null, until);
@@ -388,8 +422,8 @@ export function createApp(db: Database, options: AppOptions) {
     );
     if (!found) throw new Refusal(409, "no_seat", `Nobody works at ${words} yet. Ask the administrator.`, "password");
     // A desk's screen starts this browser afresh, as a plain sign-in does.
-    const current = getCookie(c, SESSION_COOKIE);
-    for (const one of [...(current && TOKEN.test(current) ? [current] : []), ...moreOf(c)]) await endSession(db, one);
+    const current = currentKept(c);
+    for (const one of [...(current ? [current] : []), ...moreOf(c)]) await endKept(one);
     const until = endOfWorkingDay();
     const token = await startSession(db, found.personId, undefined, input.desk, until, input.desk);
     setCookie(c, SESSION_COOKIE, token, { httpOnly: true, secure, sameSite: "Lax", path: "/", expires: until });
@@ -486,7 +520,7 @@ export function createApp(db: Database, options: AppOptions) {
   app.post("/api/auth/logout", async (c) => {
     const token = getCookie(c, SESSION_COOKIE);
     if (token) await endSession(db, token);
-    for (const one of moreOf(c)) await endSession(db, one);
+    for (const one of moreOf(c)) await endKept(one);
     deleteCookie(c, SESSION_COOKIE, { path: "/" });
     deleteCookie(c, MORE_COOKIE, { path: "/api/auth" });
     return c.json({ ok: true });
@@ -497,32 +531,48 @@ export function createApp(db: Database, options: AppOptions) {
   app.post("/api/auth/leave-company", async (c) => {
     const token = getCookie(c, SESSION_COOKIE);
     if (token) await endSession(db, token);
-    for (const one of moreOf(c)) await endSession(db, one);
+    for (const one of moreOf(c)) await endKept(one);
     deleteCookie(c, SESSION_COOKIE, { path: "/" });
     deleteCookie(c, MORE_COOKIE, { path: "/api/auth" });
     deleteCookie(c, ORG_COOKIE, { path: "/" });
     return c.json({ ok: true });
   });
 
-  // The accounts on this browser: the one in use first, then the others still signed in.
+  // The accounts on this browser: the one in use first, then the others still signed in, whichever
+  // company each is (27 Nov). Each is known by its key: "<Org ID>:<person>" (a person's number is
+  // only theirs inside their own company).
+  const keyOf = (org: string | null, personId: number) => `${org ?? ""}:${personId}`;
+  const accountsBody = z.object({ key: z.string().max(40).optional(), personId: z.number().int().positive().optional() });
+  /** The key asked about: the key, else (the screen before 27 Nov) a person of this company. */
+  const askedKey = (body: z.infer<typeof accountsBody>) => body.key ?? (body.personId ? keyOf(myOrg(), body.personId) : "");
+  const keptWithWho = async (c: Context<Env>, me: Me) => {
+    const out: { kept: Kept; who: Me }[] = [];
+    for (const one of moreOf(c)) {
+      const who = await whoKept(one);
+      if (who && !who.viewedBy && !(mine(one) && who.id === me.id)) out.push({ kept: one, who });
+    }
+    return out;
+  };
+
   app.get("/api/auth/accounts", signedIn, async (c) => {
     const me = c.get("me");
-    const others: { token: string; who: Me }[] = [];
-    for (const one of moreOf(c)) {
-      const who = await whoIs(db, one);
-      if (who && !who.viewedBy && who.id !== me.id) others.push({ token: one, who });
-    }
-    keepMore(c, others.map((one) => one.token));
-    const row = (who: Me, current: boolean) => ({
+    const others = await keptWithWho(c, me);
+    keepMore(c, others.map((one) => one.kept));
+    const row = (who: Me, org: string | null, current: boolean) => ({
+      key: keyOf(org, who.id),
       id: who.id,
       name: who.name,
       email: who.email,
       title: who.title,
       roleLabel: who.roleLabel,
       photo: who.photo ?? null,
+      company: org ? (mine({ org, token: "" }) ? (companyNow()?.code ?? null) : (otherCompanies()?.code(org) ?? null)) : null,
       current,
     });
-    return c.json({ accounts: [row(me, true), ...others.map((one) => row(one.who, false))], max: MAX_ACCOUNTS });
+    return c.json({
+      accounts: [row(me, myOrg(), true), ...others.map((one) => row(one.who, one.kept.org, false))],
+      max: MAX_ACCOUNTS,
+    });
   });
 
   // Remove one account from this browser (27 Nov: "be able to remove them also"): it is signed out
@@ -530,56 +580,40 @@ export function createApp(db: Database, options: AppOptions) {
   app.post("/api/auth/accounts/remove", signedIn, async (c) => {
     const me = c.get("me");
     if (me.viewedBy) throw new Refusal(400, "invalid", "Go back to your own screens first.");
-    const { personId } = await readBody(c, z.object({ personId: z.number().int().positive() }));
-    const more = moreOf(c);
-    if (personId === me.id) {
+    const key = askedKey(await readBody(c, accountsBody));
+    const others = await keptWithWho(c, me);
+    if (key === keyOf(myOrg(), me.id)) {
       await endSession(db, c.get("token"));
-      for (const one of more) {
-        const who = await whoIs(db, one);
-        if (!who || who.viewedBy) {
-          await endSession(db, one);
-          continue;
-        }
-        keepMore(c, more.filter((other) => other !== one));
-        useSession(c, one);
-        return c.json({ me: who });
+      const [next, ...rest] = others;
+      if (next) {
+        keepMore(c, rest.map((one) => one.kept));
+        useSession(c, next.kept.token);
+        useOrg(c, next.kept.org);
+        return c.json({ me: next.who });
       }
       deleteCookie(c, SESSION_COOKIE, { path: "/" });
       keepMore(c, []);
       return c.json({ me: null });
     }
-    const left: string[] = [];
-    let found = false;
-    for (const one of more) {
-      const held = await sessionOf(db, one);
-      if (held && held.personId === personId) {
-        await endSession(db, one);
-        found = true;
-      } else left.push(one);
-    }
-    if (!found) throw new Refusal(404, "not_found", "That account isn't signed in on this browser.");
-    keepMore(c, left);
+    const gone = others.find((one) => keyOf(one.kept.org, one.who.id) === key);
+    if (!gone) throw new Refusal(404, "not_found", "That account isn't signed in on this browser.");
+    await endKept(gone.kept);
+    keepMore(c, others.filter((one) => one !== gone).map((one) => one.kept));
     return c.json({ me });
   });
 
-  // Switch to another account on this browser; the one in use waits beside it.
+  // Switch to another account on this browser, whichever company it is; the one in use waits beside it.
   app.post("/api/auth/switch", signedIn, async (c) => {
     const me = c.get("me");
     if (me.viewedBy) throw new Refusal(400, "invalid", "Go back to your own screens first.");
-    const { personId } = await readBody(c, z.object({ personId: z.number().int().positive() }));
-    const more = moreOf(c);
-    let chosen: string | null = null;
-    for (const one of more) {
-      const held = await sessionOf(db, one);
-      if (held && !held.viewedBy && held.personId === personId) {
-        chosen = one;
-        break;
-      }
-    }
+    const key = askedKey(await readBody(c, accountsBody));
+    const others = await keptWithWho(c, me);
+    const chosen = others.find((one) => keyOf(one.kept.org, one.who.id) === key);
     if (!chosen) throw new Refusal(404, "not_found", "That account isn't signed in on this browser any more. Add it again.");
-    keepMore(c, [c.get("token"), ...more.filter((one) => one !== chosen)]);
-    useSession(c, chosen);
-    return c.json({ me: await whoIs(db, chosen) });
+    keepMore(c, [{ org: myOrg(), token: c.get("token") }, ...others.filter((one) => one !== chosen).map((one) => one.kept)]);
+    useSession(c, chosen.kept.token);
+    useOrg(c, chosen.kept.org);
+    return c.json({ me: chosen.who });
   });
 
   app.get("/api/me", signedIn, (c) => c.json({ me: c.get("me") }));

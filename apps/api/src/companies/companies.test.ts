@@ -180,6 +180,48 @@ describe("several companies on one server", () => {
     await main.execute(sql`update person set email = 'marco@2mg.test' where email = 'marco.2mg@gmail.com'`);
   });
 
+  it("keeps accounts of both companies on one browser: add, list, switch, remove (27 Nov)", async () => {
+    type Accounts = { accounts: { key: string; name: string; company: string | null; current: boolean }[] };
+    // Getmeds' Admin has chosen their own password by now.
+    await gm.db.execute(sql`update person set must_change_password = false where role = 'admin'`);
+    const gmSessions = await count(gm.db, sql`select count(*)::int as n from session`);
+    // A 2MG person signs in; then adds Getmeds' Admin (another company's email) beside it.
+    let cookie = jar("", await login("helen@2mg.test", PASSWORD));
+    const added = await send("/api/auth/login", { body: { email: "Admin@GetMeds.test", password: gmPassword, add: true }, cookie });
+    expect(added.status, await added.clone().text()).toBe(200);
+    cookie = jar(cookie, added);
+    expect(cookie).toContain(`org=${gm.ref.orgId}`);
+    const listed = await send("/api/auth/accounts", { cookie });
+    expect(listed.status, await listed.clone().text()).toBe(200);
+    const both = (await listed.json()) as Accounts;
+    expect(both.accounts.map((one) => [one.name, one.company, one.current])).toEqual([
+      ["Admin", "GM", true],
+      ["Helen", "2MG", false],
+    ]);
+
+    // Switch back to the 2MG account: the browser is 2MG's again.
+    const helen = both.accounts.find((one) => one.name === "Helen");
+    const switched = await send("/api/auth/switch", { body: { key: helen?.key }, cookie });
+    expect(switched.status).toBe(200);
+    cookie = jar(cookie, switched);
+    expect(cookie).toContain(`org=${list.home().ref.orgId}`);
+    expect(((await (await send("/api/me", { cookie })).json()) as { me: { name: string } }).me.name).toBe("Helen");
+    const back = (await (await send("/api/auth/accounts", { cookie })).json()) as Accounts;
+    expect(back.accounts.map((one) => [one.name, one.company, one.current])).toEqual([
+      ["Helen", "2MG", true],
+      ["Admin", "GM", false],
+    ]);
+
+    // Remove Getmeds' account from here: it is signed out in Getmeds' database too.
+    const gmKey = back.accounts.find((one) => one.company === "GM")?.key;
+    const removed = await send("/api/auth/accounts/remove", { body: { key: gmKey }, cookie });
+    expect(removed.status).toBe(200);
+    cookie = jar(cookie, removed);
+    expect(((await (await send("/api/auth/accounts", { cookie })).json()) as Accounts).accounts.map((one) => one.name)).toEqual(["Helen"]);
+    expect(await count(gm.db, sql`select count(*)::int as n from session`)).toBe(gmSessions);
+    expect((await send("/api/auth/logout", { body: {}, cookie })).status).toBe(200);
+  });
+
   it("keeps a browser inside its company after signing out of a system, until it signs out of the company", async () => {
     // Aryan, 27 Nov: "signing out of Management should leave that app, not the company".
     type Answer = { inside: boolean; company: { code: string } };
@@ -289,7 +331,7 @@ describe("the control panel", () => {
       cookie: panelCookie,
       body: { name: "Third Pharma Inc.", code: "tp", loginId: "boss@third.test" },
     });
-    expect(added.status).toBe(200);
+    expect(added.status, await added.clone().text()).toBe(200);
     const third = (await added.json()) as { orgId: string; loginId: string; password: string };
     expect(third.loginId).toBe("boss@third.test");
     expect((await login("boss@third.test", third.password)).status).toBe(200);

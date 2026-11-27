@@ -24,6 +24,20 @@ const current = new AsyncLocalStorage<CompanyRef>();
 
 export const companyNow = (): CompanyRef | null => current.getStore() ?? null;
 
+/** The other companies a browser has accounts in (27 Nov: "add another account" with another
+ *  company's email): set by the company router, so one company's sign-in can show, end and switch to
+ *  a session kept in another's database. Null with one company. */
+export type OtherCompanies = {
+  whoIs: (orgId: string, token: string) => Promise<import("../types").Me | null>;
+  end: (orgId: string, token: string) => Promise<void>;
+  code: (orgId: string) => string | null;
+};
+let others: OtherCompanies | null = null;
+export const setOtherCompanies = (hook: OtherCompanies | null): void => {
+  others = hook;
+};
+export const otherCompanies = (): OtherCompanies | null => others;
+
 /** Runs work (a request, a timed job) as one company's. */
 export const asCompany = <T>(company: CompanyRef, work: () => T): T => current.run(company, work);
 
