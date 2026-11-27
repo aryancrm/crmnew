@@ -47,6 +47,7 @@ import type {
   OrderDetailsInput,
   OrderFinding,
   OrderForList,
+  OrderHistory,
   OrderInput,
   OrderList,
   OrderPaper,
@@ -151,6 +152,53 @@ export async function mayReadOrder(db: Database, me: Me, orderId: number): Promi
     sql`${team(me)} select o.id::int as id from sales_order o where o.id = ${orderId} and ${seen(me)}`,
   );
   return Boolean(found);
+}
+
+/** The customer behind an order, as the Online case's "Orders on <number>" bar shows them (Aryan,
+ *  27 Nov: the case page's pieces on every order): the orders of the customer on file and, for a
+ *  patient, every order on the same mobile number (the number is who they are, as on the case
+ *  page; names are never matched). Newest first, and only the orders this person may open. */
+export async function orderHistory(db: Database, me: Me, id: number): Promise<OrderHistory> {
+  await visibleOrder(db, me, id);
+  const [base] = await rows<{ customerId: number; customer: string; number: string | null }>(
+    db,
+    sql`select o.customer_id::int as "customerId", c.name as customer,
+        coalesce(l.phone_key, case when c.kind = 'patient' then c.phone_key end) as number
+      from sales_order o join customer c on c.id = o.customer_id left join lead l on l.id = o.lead_id
+      where o.id = ${id}`,
+  );
+  if (!base) throw new Refusal(404, "not_found", "That order isn't one of yours, or it doesn't exist.");
+  const same = base.number
+    ? sql`(o.customer_id = ${base.customerId}
+        or o.customer_id in (select c.id from customer c where c.kind = 'patient' and c.phone_key = ${base.number})
+        or o.lead_id in (select l.id from lead l where l.phone_key = ${base.number}))`
+    : sql`o.customer_id = ${base.customerId}`;
+  const [orders, totals] = await Promise.all([
+    rows<Omit<OrderHistory["orders"][number], "statusLabel">>(
+      db,
+      sql`${team(me)} select o.id::int as id, o.code, o.total::int as total, o.status, ${iso("o.created_at")} as at,
+          o.lead_id::int as "leadId",
+          (select string_agg(m.name || ' × ' || i.qty, ', ' order by i.id) from order_item i
+             join medicine m on m.id = i.medicine_id where i.order_id = o.id) as medicines,
+          (select (v.total - v.paid)::int from invoice v where v.order_id = o.id and v.status <> 'cancelled'
+             order by v.id desc limit 1) as "invoiceBalance"
+        from sales_order o
+        where o.status <> 'draft' and ${same} and ${seen(me)}
+        order by o.created_at desc, o.id desc limit 50`,
+    ),
+    rows<{ n: number }>(
+      db,
+      sql`${team(me)} select count(*)::int as n from sales_order o
+        where o.status <> 'draft' and ${same} and ${seen(me)}`,
+    ),
+  ]);
+  return {
+    number: base.number,
+    customerId: base.customerId,
+    customer: base.customer,
+    orders: orders.map((order) => ({ ...order, statusLabel: STATUS_LABEL[order.status] })),
+    ordersTotal: totals[0]?.n ?? 0,
+  };
 }
 
 /** Orders this person may read whose code or customer PO holds the text (the search box). */

@@ -18,6 +18,7 @@ import { rememberConfirm } from "../finance/undo";
 import { ApproveDialog, shipsFromOf } from "./approve-dialog";
 import { PapChip, ReasonDialog, StatusPill, shortSpan, useOrderAction } from "./parts";
 import { AskUpBox } from "./asks";
+import { CustomerOrders, OrderJourney, PayRoadBox, payRoadOf } from "./order-head";
 import { OrderReturnsBox, RefundButton } from "./returns";
 import { SendToCustomer } from "./send-update";
 import { OrderVersions } from "./versions";
@@ -221,6 +222,8 @@ export function Order() {
   if (!data) return <PageState query={query} what="this order" />;
   const { order, can } = data;
   const { steps, current } = stepsOf(data);
+  // How a patient pays (Regular, Senior / PWD or GL): the case page's box at the head's right.
+  const payRoad = payRoadOf(order);
   const fill = data.warehouseFill ?? [];
   const stockPick = pickedWarehouse ?? firstPick(fill);
   const shipsFrom = shipsFromOf(fill, stockPick);
@@ -429,79 +432,6 @@ export function Order() {
   const shownOthers = others.filter((item) => can[item.action]);
 
   // The order's road, each stop with who and when.
-  const journey = (
-      <section className="mt-4 rounded-2xl border border-slate-200 bg-white px-4 pt-3 pb-4 shadow-sm">
-        <div className="text-xs font-semibold tracking-[0.06em] text-slate-500">
-          ORDER JOURNEY
-        </div>
-        <ol className="relative mt-3 grid grid-cols-6 gap-1">
-          <span
-            aria-hidden="true"
-            className="absolute top-[13px] right-[8.33%] left-[8.33%] h-[3px] rounded bg-slate-200"
-          />
-          <span
-            aria-hidden="true"
-            className="absolute top-[13px] left-[8.33%] h-[3px] rounded bg-emerald-500"
-            style={{
-              width: `${(Math.max(0, steps.filter((item) => item.shape === "done" || item.shape === "skipped").length - 1) / 5) * 83.34}%`,
-            }}
-          />
-          {steps.map((item) => (
-            <li key={item.key} className="relative flex min-w-0 flex-col items-center text-center">
-              <button
-                type="button"
-                // Each desk opens only its own steps: Management doesn't tick Finance's or Dispatch's.
-                disabled={!ownStep(item.key)}
-                onClick={() => open(item.key)}
-                aria-label={`${item.label}: ${item.shape === "done" ? "done" : item.shape === "skipped" ? "not needed" : item.shape === "now" ? "now" : item.shape === "stopped" ? "held" : "later"}`}
-                className={`grid size-7 place-items-center rounded-full focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-none ${
-                  item.shape === "done"
-                    ? "bg-emerald-500 text-white"
-                    : item.shape === "skipped"
-                      ? "border-2 border-emerald-400 bg-white text-emerald-600"
-                      : item.shape === "now"
-                        ? "border-[3px] border-amber-500 bg-amber-50"
-                        : item.shape === "stopped"
-                          ? "border-[3px] border-rose-500 bg-rose-50 text-rose-600"
-                          : "border-2 border-slate-300 bg-white"
-                }`}
-              >
-                {item.shape === "done" ? (
-                  <Check className="size-4" />
-                ) : item.shape === "skipped" ? (
-                  <Check className="size-3.5" />
-                ) : item.shape === "stopped" ? (
-                  "!"
-                ) : null}
-              </button>
-              <span
-                className={`mt-2 text-xs leading-tight font-semibold sm:text-xs ${item.shape === "now" ? "text-amber-700" : item.shape === "stopped" ? "text-rose-700" : item.shape === "later" ? "text-slate-500" : "text-ink"}`}
-              >
-                {item.label}
-              </span>
-              <span className="mt-0.5 hidden text-xs text-slate-500 sm:block">
-                {item.who}
-                {item.when && item.shape === "done"
-                  ? ` · ${item.key === "delivered" ? dayLabel(item.when.slice(0, 10)) : short(item.when)}`
-                  : ""}
-              </span>
-              {item.took && (
-                <span
-                  className={`mt-0.5 rounded-full px-1.5 py-px text-xs font-semibold tabular-nums ${item.took.open ? "bg-amber-500 text-white" : "text-slate-500"}`}
-                  title={item.took.open ? "Waiting here for" : "Time it took at this step"}
-                >
-                  {item.took.minutes < 1
-                    ? item.took.open
-                      ? "just came"
-                      : "took <1m"
-                    : `${item.took.open ? "waiting" : "took"} ${shortSpan(item.took.minutes)}`}
-                </span>
-              )}
-            </li>
-          ))}
-        </ol>
-      </section>
-  );
   const paidStep = steps.find((item) => item.key === "paid");
   const rowLook = (on: boolean) =>
     `flex w-full items-center gap-2.5 rounded-xl border px-2.5 py-2.5 text-left text-sm transition-colors ${on ? "border-emerald-200 bg-emerald-50/70 font-semibold text-emerald-950" : "border-transparent text-slate-700 hover:border-slate-200 hover:bg-slate-50"}`;
@@ -744,7 +674,6 @@ export function Order() {
         <div className="p-4">
           {tab === "timeline" && (
             <div className="flex flex-col gap-4">
-              {journey}
               <Activity data={data} />
             </div>
           )}
@@ -873,10 +802,14 @@ export function Order() {
                 )}
               </div>
             </div>
-            <div className="flex shrink-0 flex-col items-start sm:items-end sm:text-right">
-              <span className="text-xs text-ink-2">Total</span>
-              <span className="text-2xl leading-8 font-bold tabular-nums text-ink">{peso(order.total)}</span>
-              {data.money.invoice && <InvoiceStatus state={data.money.invoice.state} />}
+            <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-start sm:gap-5">
+              {/* How the patient pays, as the Online case's box (Aryan, 27 Nov). */}
+              {payRoad && <PayRoadBox order={order} road={payRoad} />}
+              <div className="flex shrink-0 flex-col items-start sm:items-end sm:text-right">
+                <span className="text-xs text-ink-2">Total</span>
+                <span className="text-2xl leading-8 font-bold tabular-nums text-ink">{peso(order.total)}</span>
+                {data.money.invoice && <InvoiceStatus state={data.money.invoice.state} />}
+              </div>
             </div>
           </div>
 
@@ -1153,6 +1086,9 @@ export function Order() {
             </>
           )}
 
+          {/* The order's journey, drawn as the Online case's (Aryan, 27 Nov), for every desk: it was a
+              row of dots under Management's and Finance's Timeline tab. */}
+          <OrderJourney data={data} steps={steps} road={payRoad} onOpen={open} canOpen={ownStep} />
           <OrderVersions versions={data.versions} />
           {changedBy && !data.versions.some((version) => version.kind === "changed") && (
             // Changed before versions were kept: Management's words from the order's history.
@@ -1186,6 +1122,8 @@ export function Order() {
           )}
         </section>
       </div>
+      {/* The customer's orders, as under the Online case's head (Aryan, 27 Nov). */}
+      <CustomerOrders orderId={order.id} />
 
       {deskView && (
         <div className="mt-4 grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[19rem_minmax(0,1fr)] lg:grid-rows-[auto_1fr] 2xl:grid-cols-[21rem_minmax(0,1fr)]">

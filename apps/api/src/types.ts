@@ -2891,6 +2891,17 @@ export type CaseHistory = {
   enquiriesTotal: number;
 };
 
+/** The customer behind an order, for the order page's bar as the case page has it
+ *  (orders/service.ts, orderHistory): their orders, newest first, only those the reader may open. */
+export type OrderHistory = {
+  /** The mobile number's last ten digits when it says who they are (a patient's), else null. */
+  number: string | null;
+  customerId: number;
+  customer: string;
+  orders: CaseHistory["orders"];
+  ordersTotal: number;
+};
+
 /** One order (and price) on which a customer was given a medicine. */
 export type PriceRow = {
   /** The order's day (YYYY-MM-DD, Manila). */
