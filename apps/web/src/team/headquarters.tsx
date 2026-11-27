@@ -1,23 +1,25 @@
-// Headquarters (Aryan, 27 Nov: "the main thing is the Headquarter; Javed opens his screen and sees HQ
-// NCL, who works in it, its data, in this hierarchy"; PLAN 257). Laid out as his sheet photo: each
-// channel with its manager, then each HQ: who works it, its Zoho name, what it sold this month and
-// today, the channel's total and the whole. A press on an HQ opens who worked it before and its
-// customers. Targets come in once it is decided where they are set. Each HQ's hospitals and its
-// doctors by the way they work with us, dispense (they buy) and referral (they send patients), over
-// the last 12 months, with the month's value of each (Phase 3, PLAN 258).
+// Headquarters (Aryan, 27-28 Nov, PLAN 257 and 261): "RX Business, and inside it the main thing, the
+// HQs: write them across the top (NCL, SL NORTH, SL SOUTH, CEBU NORTH, CEBU SOUTH, DAVAO, TAFT, EAST
+// AVE, RODRIGUEZ, KALAW, ORTIGAS/TMC), a line under each to the person working it. Press the person:
+// the doctor referral's and the doctor dispense's data, the doctor's name on top and the hospital they
+// work at a little under it. Press the doctor: all their past data, how many orders came from them,
+// what happened, how much they took, how much money is pending." Each channel a row of its HQs, as
+// the team's sheet has them; no Zoho names on the screen ("we are ending Zoho").
 
-import type { Headquarters } from "@2mg/api/types";
+import type { DoctorHistory, Headquarters, HqDoctor, HqDoctors } from "@2mg/api/types";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { Fragment, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { api } from "../api";
 import { exactPeso, monthName, shiftMonth, shortPeso } from "../ceo";
-import { CARD, PageHead, PageState } from "../ui";
+import { CARD, Dialog, PageHead, PageState } from "../ui";
 
 const day = (value: string) =>
   new Date(`${value}T00:00:00Z`).toLocaleDateString("en-PH", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
-const TH = "px-3 py-2 text-[10.5px] font-semibold tracking-wide text-slate-400 uppercase";
+const count = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString("en-PH")} ${n === 1 ? one : many}`;
+
+type Hq = Headquarters["channels"][number]["hqs"][number];
 
 export function HeadquartersPage() {
   const [params, setParams] = useSearchParams();
@@ -27,231 +29,260 @@ export function HeadquartersPage() {
     queryFn: () => api<Headquarters>(`/api/headquarters${asked ? `?month=${asked}` : ""}`),
     placeholderData: (previous) => previous,
   });
-  const [open, setOpen] = useState<number | null>(null);
+  const [picked, setPicked] = useState<number | null>(null);
+  const [doctor, setDoctor] = useState<HqDoctor | null>(null);
   const data = query.data;
   if (!data) return <PageState query={query} what="the headquarters" />;
   const current = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }).slice(0, 7);
   const goTo = (month: string) => setParams(month >= current ? {} : { month }, { replace: true });
   const arrow = "grid size-9 place-items-center rounded-lg text-slate-600 hover:bg-slate-100 disabled:text-slate-300 disabled:hover:bg-transparent";
-  const count = data.channels.reduce((sum, one) => sum + one.hqs.length, 0);
+  const count_ = data.channels.reduce((sum, one) => sum + one.hqs.length, 0);
 
   return (
     <div className={`mx-auto w-full max-w-6xl space-y-4 ${query.isPlaceholderData ? "opacity-60" : ""}`}>
       <PageHead
         title="Headquarters"
-        sub={`Each HQ of your team: who works it, and what it sold in ${monthName(data.month)}. Counted to ${day(data.day)}.`}
+        sub="Each HQ and who works it. Press a person for their doctors, then a doctor for all their orders."
         actions={
           <nav aria-label="Month" className={`${CARD} flex items-center p-0.5`}>
             <button type="button" aria-label="Month before" onClick={() => goTo(shiftMonth(data.month, -1))} className={arrow}>
               <ChevronLeft className="size-4" />
             </button>
             <span className="min-w-32 px-1 text-center text-sm font-semibold text-slate-900">{monthName(data.month)}</span>
-            <button
-              type="button"
-              aria-label="Month after"
-              disabled={data.month >= current}
-              onClick={() => goTo(shiftMonth(data.month, 1))}
-              className={arrow}
-            >
+            <button type="button" aria-label="Month after" disabled={data.month >= current} onClick={() => goTo(shiftMonth(data.month, 1))} className={arrow}>
               <ChevronRight className="size-4" />
             </button>
           </nav>
         }
       />
 
-      {count === 0 ? (
+      {count_ === 0 ? (
         <section className={`${CARD} px-5 py-8 text-center text-sm text-slate-500`}>No headquarters in your team yet.</section>
       ) : (
-        <section className={`${CARD} min-w-0 overflow-x-auto`}>
-          <table className="w-full min-w-[860px] text-[13px]">
-            <thead>
-              <tr className="border-b border-slate-100 text-left">
-                <th className={`${TH} pl-4`}>HQ</th>
-                <th className={TH}>Works it</th>
-                <th className={TH}>Zoho name</th>
-                <th className={`${TH} text-right`}>Sold this month</th>
-                <th className={`${TH} text-right`}>Today</th>
-                <th className={`${TH} text-right`} title="Hospitals in the HQ, or where its doctors work">
-                  Hospitals
-                </th>
-                <th className={`${TH} text-right`} title="Doctors who bought from us in the last 12 months">
-                  Dispense
-                </th>
-                <th className={`${TH} pr-4 text-right`} title="Doctors who sent patients to us in the last 12 months">
-                  Referral
-                </th>
-              </tr>
-            </thead>
-            {data.channels.map((channel) => (
-              <tbody key={channel.unitId} className="divide-y divide-slate-100 border-b border-slate-200">
-                <tr className="bg-slate-50/80">
-                  <th colSpan={8} className="px-4 py-2 text-left text-[13px] font-semibold text-slate-900">
-                    {channel.name}
-                    {channel.manager && <span className="font-normal text-slate-500"> · Manager: {channel.manager}</span>}
-                  </th>
-                </tr>
-                {channel.hqs.map((hq) => {
-                  const shown = open === hq.seatId;
-                  return (
-                    <Fragment key={hq.seatId}>
-                      <tr
-                        className="cursor-pointer hover:bg-slate-50"
-                        onClick={() => setOpen(shown ? null : hq.seatId)}
-                        aria-expanded={shown}
-                      >
-                        <td className="px-4 py-2.5">
-                          <span className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-slate-900">
-                            <ChevronDown className={`size-3.5 text-slate-400 transition-transform ${shown ? "" : "-rotate-90"}`} aria-hidden="true" />
-                            {hq.hq}
-                          </span>
-                        </td>
-                        <td className="px-3 py-2.5">
-                          {hq.person ? (
-                            <span className="text-slate-800">{hq.person}</span>
-                          ) : (
-                            <span className="rounded bg-rose-50 px-1.5 py-0.5 text-[11px] font-bold text-rose-600">EMPTY</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-2.5 text-slate-500">{hq.zoho}</td>
-                        <td className="px-3 py-2.5 text-right font-semibold text-slate-900 tabular-nums" title={exactPeso(hq.sold)}>
-                          {hq.sold ? shortPeso(hq.sold) : "—"}
-                        </td>
-                        <td className="px-3 py-2.5 text-right tabular-nums" title={exactPeso(hq.today)}>
-                          {hq.today ? shortPeso(hq.today) : "—"}
-                        </td>
-                        <td className="px-3 py-2.5 text-right tabular-nums">{hq.hospitals || "—"}</td>
-                        <td className="px-3 py-2.5 text-right tabular-nums">
-                          <span className="font-semibold text-slate-900">{hq.dispense.doctors || "—"}</span>
-                          {hq.dispense.month.doctors > 0 && <span className="block text-[11px] text-slate-500">{hq.dispense.month.doctors} this month</span>}
-                        </td>
-                        <td className="px-3 py-2.5 pr-4 text-right tabular-nums">
-                          <span className="font-semibold text-slate-900">{hq.referral.doctors || "—"}</span>
-                          {hq.referral.month.doctors > 0 && <span className="block text-[11px] text-slate-500">{hq.referral.month.doctors} this month</span>}
-                        </td>
-                      </tr>
-                      {shown && (
-                        <tr className="bg-slate-50/50">
-                          <td colSpan={8} className="px-4 pt-1 pb-3">
-                            <div className="grid gap-3 pl-5 text-[12.5px] text-slate-600 sm:grid-cols-3">
-                              <div>
-                                <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">Works it now</p>
-                                <p className="mt-0.5 text-slate-900">
-                                  {hq.person ? `${hq.person}${hq.since ? `, since ${day(hq.since)}` : ""}` : "Nobody: the HQ is empty"}
-                                </p>
-                                <p className="text-slate-500">{hq.title}</p>
-                                {hq.personId && (
-                                  <Link to={`/my/score?person=${hq.personId}`} className="font-semibold text-emerald-700 hover:underline">
-                                    Their scorecard
-                                  </Link>
-                                )}
-                              </div>
-                              <div>
-                                <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">Worked it before</p>
-                                {hq.before.length ? (
-                                  <ul className="mt-0.5 space-y-0.5">
-                                    {hq.before.map((one) => (
-                                      <li key={`${one.name}-${one.from}`} className="text-slate-800">
-                                        {one.name} <span className="text-slate-500">· {day(one.from)} to {day(one.to)}</span>
-                                      </li>
-                                    ))}
-                                  </ul>
-                                ) : (
-                                  <p className="mt-0.5 text-slate-500">Nobody else in this CRM</p>
-                                )}
-                              </div>
-                              <div>
-                                <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">This month</p>
-                                <p className="mt-0.5 text-slate-900">
-                                  {shortPeso(hq.sold)} sold · {shortPeso(hq.today)} today
-                                </p>
-                                <p className="text-slate-500">{hq.customers.toLocaleString("en-PH")} customers in this HQ</p>
-                              </div>
-                            </div>
-                            <div className="mt-3 grid gap-3 pl-5 text-[12.5px] text-slate-600 sm:grid-cols-3">
-                              <div>
-                                <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">Hospitals and doctors</p>
-                                <p className="mt-0.5 text-slate-900">
-                                  {hq.hospitals} hospital{hq.hospitals === 1 ? "" : "s"} · {hq.doctors} doctor{hq.doctors === 1 ? "" : "s"}
-                                </p>
-                                <p className="text-slate-500">
-                                  In the last 12 months: {hq.dispense.doctors} bought from us, {hq.referral.doctors} sent patients
-                                </p>
-                              </div>
-                              <Way
-                                title="Dispense · doctors who buy"
-                                line={`This month ${hq.dispense.month.doctors} doctor${hq.dispense.month.doctors === 1 ? "" : "s"} bought ${shortPeso(hq.dispense.month.value)}`}
-                                top={hq.dispense.top}
-                              />
-                              <Way
-                                title="Referral · doctors who send patients"
-                                line={`This month ${hq.referral.month.doctors} doctor${hq.referral.month.doctors === 1 ? "" : "s"} sent ${hq.referral.month.patients} patient${hq.referral.month.patients === 1 ? "" : "s"}: ${shortPeso(hq.referral.month.value)}`}
-                                top={hq.referral.top}
-                              />
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-                <tr className="bg-slate-50/80 font-semibold text-slate-900">
-                  <td colSpan={3} className="px-4 py-2 text-[12.5px]">
-                    {channel.name} total
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums" title={exactPeso(channel.sold)}>
-                    {shortPeso(channel.sold)}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums" title={exactPeso(channel.today)}>
-                    {shortPeso(channel.today)}
-                  </td>
-                  <td colSpan={3} className="px-3 py-2 pr-4 text-right tabular-nums">
-                    {channel.hqs.length} HQs
-                  </td>
-                </tr>
-              </tbody>
-            ))}
-            <tfoot>
-              <tr className="bg-slate-100 font-bold text-slate-900">
-                <td colSpan={3} className="px-4 py-2.5">
-                  Total
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums" title={exactPeso(data.sold)}>
-                  {shortPeso(data.sold)}
-                </td>
-                <td className="px-3 py-2.5 text-right tabular-nums" title={exactPeso(data.today)}>
-                  {shortPeso(data.today)}
-                </td>
-                <td colSpan={3} className="px-3 py-2.5 pr-4 text-right tabular-nums">
-                  {count} HQs
-                </td>
-              </tr>
-            </tfoot>
-          </table>
-        </section>
+        data.channels.map((channel) => {
+          const chosen = channel.hqs.find((one) => one.seatId === picked) ?? null;
+          return (
+            <section key={channel.unitId} className={`${CARD} min-w-0`}>
+              <header className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-100 px-4 py-3 sm:px-5">
+                <h2 className="text-[17px] font-semibold text-slate-900">
+                  {channel.name}
+                  {channel.manager && <span className="text-[13px] font-normal text-slate-500"> · Manager: {channel.manager}</span>}
+                </h2>
+                <span className="text-[12.5px] text-slate-500">
+                  {count(channel.hqs.length, "HQ")} · {shortPeso(channel.sold)} sold in {monthName(data.month).split(" ")[0]}
+                </span>
+              </header>
+
+              <Row hqs={channel.hqs} picked={picked} onPick={(seatId) => setPicked(picked === seatId ? null : seatId)} />
+
+              {chosen ? (
+                <Doctors hq={chosen} month={asked} onDoctor={setDoctor} />
+              ) : (
+                <p className="border-t border-slate-100 px-5 py-3 text-[12.5px] text-slate-500">Press a person to see their doctors.</p>
+              )}
+            </section>
+          );
+        })
+      )}
+
+      {doctor && <History doctor={doctor} onClose={() => setDoctor(null)} />}
+    </div>
+  );
+}
+
+/** The channel's HQs across, a line from each down to the person working it. */
+function Row({ hqs, picked, onPick }: { hqs: Hq[]; picked: number | null; onPick: (seatId: number) => void }) {
+  const half = `${50 / Math.max(1, hqs.length)}%`;
+  return (
+    <div className="overflow-x-auto px-4 pt-5 pb-4 sm:px-5">
+      <div className="relative grid gap-2" style={{ gridTemplateColumns: `repeat(${hqs.length}, minmax(84px, 1fr))` }}>
+        {/* The line joining the HQs, from the first one's middle to the last one's. */}
+        {hqs.length > 1 && <span className="absolute top-0 h-px bg-slate-300" style={{ left: half, right: half }} aria-hidden="true" />}
+        {hqs.map((hq) => {
+          const on = picked === hq.seatId;
+          return (
+            <div key={hq.seatId} className="flex flex-col items-center">
+              <span className="h-3 w-px bg-slate-300" aria-hidden="true" />
+              <button
+                type="button"
+                onClick={() => onPick(hq.seatId)}
+                className={`w-full rounded-xl border px-2 py-2 text-center transition-colors ${on ? "border-emerald-600 bg-emerald-50" : "border-slate-200 bg-white hover:bg-slate-50"}`}
+                aria-pressed={on}
+              >
+                <span className="block text-[12.5px] leading-tight font-bold tracking-tight break-words text-slate-900">{hq.hq}</span>
+                <span className="block text-[11px] text-slate-500 tabular-nums" title={exactPeso(hq.sold)}>
+                  {hq.sold ? shortPeso(hq.sold) : "—"}
+                </span>
+              </button>
+              <span className="h-4 w-px bg-slate-300" aria-hidden="true" />
+              <button
+                type="button"
+                onClick={() => onPick(hq.seatId)}
+                className={`w-full rounded-lg px-1.5 py-1.5 text-center text-[12.5px] leading-snug transition-colors ${on ? "bg-emerald-600 font-semibold text-white" : hq.person ? "bg-slate-100 font-medium text-slate-800 hover:bg-slate-200" : "bg-rose-50 font-semibold text-rose-600"}`}
+                aria-pressed={on}
+              >
+                {hq.person ?? "Empty"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** The person's doctors: who sent patients (referral) and who bought (dispense). */
+function Doctors({ hq, month, onDoctor }: { hq: Hq; month: string; onDoctor: (doctor: HqDoctor) => void }) {
+  const query = useQuery({
+    queryKey: ["headquarters", hq.seatId, "doctors", month],
+    queryFn: () => api<HqDoctors>(`/api/headquarters/${hq.seatId}/doctors${month ? `?month=${month}` : ""}`),
+  });
+  const data = query.data;
+  return (
+    <div className="border-t border-slate-100 px-4 py-4 sm:px-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+        <h3 className="text-[15px] font-semibold text-slate-900">
+          {hq.hq} · {hq.person ?? "Empty"}
+        </h3>
+        <p className="text-[12px] text-slate-500">
+          {hq.person && hq.since ? `Since ${day(hq.since)}` : ""}
+          {hq.before.length ? ` · before: ${hq.before.map((one) => one.name).join(", ")}` : ""}
+          {` · ${shortPeso(hq.sold)} sold this month · ${count(hq.hospitals, "hospital")}`}
+        </p>
+      </div>
+      {!data ? (
+        <p className="mt-3 text-[13px] text-slate-500">{query.isError ? "Their doctors couldn't be read." : "Reading their doctors…"}</p>
+      ) : (
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
+          <DoctorList title="Doctor referral" line="Doctors who sent patients to us" doctors={data.referral} onDoctor={onDoctor} />
+          <DoctorList title="Doctor dispense" line="Doctors who bought from us" doctors={data.dispense} onDoctor={onDoctor} />
+        </div>
       )}
     </div>
   );
 }
 
-/** One of a doctor's two ways in an HQ: the month's line, then the five doctors bringing the most
- *  over the last 12 months. */
-function Way({ title, line, top }: { title: string; line: string; top: { name: string; value: number }[] }) {
+function DoctorList({ title, line, doctors, onDoctor }: { title: string; line: string; doctors: HqDoctor[]; onDoctor: (doctor: HqDoctor) => void }) {
+  const [all, setAll] = useState(false);
+  const shown = all ? doctors : doctors.slice(0, 10);
   return (
-    <div>
-      <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">{title}</p>
-      <p className="mt-0.5 text-slate-900">{line}</p>
-      {top.length > 0 ? (
-        <ol className="mt-1 space-y-0.5">
-          {top.map((one) => (
-            <li key={one.name} className="flex justify-between gap-3">
-              <span className="truncate text-slate-700">{one.name}</span>
-              <span className="shrink-0 tabular-nums text-slate-500">{shortPeso(one.value)}</span>
+    <div className="rounded-xl border border-slate-200">
+      <div className="border-b border-slate-100 px-3 py-2">
+        <p className="text-[14px] font-semibold text-slate-900">
+          {title} <span className="font-normal text-slate-500">· {count(doctors.length, "doctor")}</span>
+        </p>
+        <p className="text-[11.5px] text-slate-500">{line}, the last 12 months; this month on the right</p>
+      </div>
+      {doctors.length === 0 ? (
+        <p className="px-3 py-3 text-[12.5px] text-slate-500">None in the last 12 months.</p>
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {shown.map((one) => (
+            <li key={one.key}>
+              <button type="button" onClick={() => onDoctor(one)} className="flex w-full items-start gap-3 px-3 py-2 text-left hover:bg-slate-50">
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-semibold text-slate-900">{one.name}</span>
+                  {one.hospital && <span className="block truncate text-[11.5px] text-slate-500">{one.hospital}</span>}
+                </span>
+                <span className="shrink-0 text-right text-[12px] tabular-nums">
+                  <span className="block font-semibold text-slate-900" title={exactPeso(one.month.value)}>
+                    {one.month.orders ? `${shortPeso(one.month.value)} · ${count(one.month.orders, "order")}` : "—"}
+                  </span>
+                  <span className="block text-slate-500">
+                    {shortPeso(one.value)} in 12 months
+                    {one.pending >= 100 && <span className="font-semibold text-amber-700"> · {shortPeso(one.pending)} pending</span>}
+                  </span>
+                </span>
+              </button>
             </li>
           ))}
-        </ol>
-      ) : (
-        <p className="text-slate-500">None in the last 12 months</p>
+        </ul>
       )}
+      {doctors.length > shown.length && (
+        <button type="button" onClick={() => setAll(true)} className="w-full border-t border-slate-100 px-3 py-2 text-[12.5px] font-semibold text-emerald-700 hover:bg-slate-50">
+          Show all {doctors.length}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** A doctor's whole history in the team: how many orders came from them, what happened to each,
+ *  how much they took, and what is still pending. */
+function History({ doctor, onClose }: { doctor: HqDoctor; onClose: () => void }) {
+  const query = useQuery({
+    queryKey: ["headquarters", "doctor", doctor.key],
+    queryFn: () => api<DoctorHistory>(`/api/headquarters/doctor?key=${encodeURIComponent(doctor.key)}`),
+  });
+  const data = query.data;
+  const WAY: Record<DoctorHistory["orders"][number]["way"], string> = { dispense: "Dispense", referral: "Referral", other: "Other" };
+  return (
+    <Dialog title={doctor.name} sub={doctor.hospital ?? "Hospital not known"} onClose={onClose} wide>
+      {!data ? (
+        <p className="text-[13px] text-slate-500">{query.isError ? "Their orders couldn't be read." : "Reading their orders…"}</p>
+      ) : (
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-2">
+            <Fact label="Orders from them" value={data.total.orders.toLocaleString("en-PH")} />
+            <Fact label="Taken" value={shortPeso(data.total.value)} title={exactPeso(data.total.value)} />
+            <Fact label="Pending" value={shortPeso(data.total.pending)} title={exactPeso(data.total.pending)} warn={data.total.pending >= 100} />
+          </div>
+          <p className="text-[12.5px] text-slate-600">
+            Dispense: {count(data.dispense.orders, "order")} · {shortPeso(data.dispense.value)} — Referral: {count(data.referral.orders, "order")} ·{" "}
+            {shortPeso(data.referral.value)}
+          </p>
+          <div className="max-h-[55dvh] overflow-auto rounded-lg border border-slate-200">
+            <table className="w-full min-w-[600px] text-[12.5px]">
+              <thead className="sticky top-0 bg-slate-50 text-left text-[10.5px] font-semibold tracking-wide text-slate-500 uppercase">
+                <tr>
+                  <th className="px-2 py-2">Date</th>
+                  <th className="px-2 py-2">Order</th>
+                  <th className="px-2 py-2">Bought by</th>
+                  <th className="px-2 py-2">HQ</th>
+                  <th className="px-2 py-2 text-right">Value</th>
+                  <th className="px-2 py-2">What happened</th>
+                  <th className="px-2 py-2 text-right">Pending</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {data.orders.map((order) => (
+                  <tr key={`${order.code}-${order.day}`}>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-slate-600">{day(order.day)}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">
+                      {order.orderId ? (
+                        <Link to={`/orders/${order.orderId}`} className="font-medium text-emerald-700 hover:underline">
+                          {order.code}
+                        </Link>
+                      ) : (
+                        <span className="font-medium">{order.code}</span>
+                      )}
+                      <span className="block text-[11px] text-slate-500">{WAY[order.way]}</span>
+                    </td>
+                    <td className="max-w-[9rem] truncate px-2 py-1.5 text-slate-700">{order.buyer ?? "—"}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap text-slate-600">{order.hq ?? "—"}</td>
+                    <td className="px-2 py-1.5 text-right font-semibold tabular-nums">{shortPeso(order.value)}</td>
+                    <td className="px-2 py-1.5 whitespace-nowrap">{order.status}</td>
+                    <td className={`px-2 py-1.5 text-right tabular-nums ${order.pending >= 100 ? "font-semibold text-amber-700" : "text-slate-400"}`}>
+                      {order.pending >= 100 ? shortPeso(order.pending) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </Dialog>
+  );
+}
+
+function Fact({ label, value, title, warn }: { label: string; value: string; title?: string; warn?: boolean }) {
+  return (
+    <div className="rounded-lg border border-slate-200 px-3 py-2">
+      <p className="text-[11px] text-slate-500">{label}</p>
+      <p className={`text-[18px] font-semibold tabular-nums ${warn ? "text-amber-700" : "text-slate-900"}`} title={title}>
+        {value}
+      </p>
     </div>
   );
 }

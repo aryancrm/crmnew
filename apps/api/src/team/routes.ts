@@ -6,7 +6,7 @@ import type { Env } from "../http";
 import { teamAccounts } from "./accounts";
 import { teamBoard, territories } from "./service";
 import { orderWays } from "./ways";
-import { headquarters } from "./headquarters";
+import { doctorHistory, headquarters, hqDoctors } from "./headquarters";
 
 export function teamRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHandler<Env>): void {
   app.use("/api/team/board", signedIn);
@@ -21,6 +21,13 @@ export function teamRoutes(app: Hono<Env>, db: Database, signedIn: MiddlewareHan
   app.use("/api/headquarters", signedIn);
   // Each HQ of the team: who works it, who did before, what it sold this month and today (27 Nov).
   app.get("/api/headquarters", async (c) => c.json(await headquarters(db, c.get("me"), { month: c.req.query("month") })));
+  app.use("/api/headquarters/*", signedIn);
+  // One doctor's whole history in the team, by their name's key (28 Nov).
+  app.get("/api/headquarters/doctor", async (c) => c.json(await doctorHistory(db, c.get("me"), c.req.query("key") ?? "")));
+  // One HQ's doctors: who sent patients (referral), who bought (dispense) (28 Nov).
+  app.get("/api/headquarters/:seatId/doctors", async (c) =>
+    c.json(await hqDoctors(db, c.get("me"), Number(c.req.param("seatId")) || 0, { month: c.req.query("month") })),
+  );
   app.use("/api/team/ways", signedIn);
   // How the month's orders came: the doctor dispensing, the doctor's referral, and the rest (27 Nov).
   app.get("/api/team/ways", async (c) => c.json(await orderWays(db, c.get("me"), { month: c.req.query("month") })));

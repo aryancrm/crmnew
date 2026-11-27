@@ -6133,6 +6133,52 @@ export type RxField = {
   }[];
 };
 
+/** One HQ's doctors (28 Nov, PLAN 261): who sent patients (referral) and who bought (dispense), over
+ *  the last 12 months to the day; values in centavos. */
+export type HqDoctors = {
+  seatId: number;
+  month: string;
+  day: string;
+  referral: HqDoctor[];
+  dispense: HqDoctor[];
+};
+export type HqDoctor = {
+  /** The doctor's name as compared (for their history). */
+  key: string;
+  name: string;
+  /** The hospital they work at, when the CRM knows it. */
+  hospital: string | null;
+  orders: number;
+  value: number;
+  month: { orders: number; value: number };
+  lastOn: string;
+  /** Still owed on these orders. */
+  pending: number;
+};
+/** One doctor's whole history in the team (28 Nov): every order through them, newest first. */
+export type DoctorHistory = {
+  key: string;
+  name: string;
+  hospital: string | null;
+  orders: {
+    code: string;
+    day: string;
+    way: "dispense" | "referral" | "other";
+    /** Who bought: the doctor (dispense) or the patient they sent (referral). */
+    buyer: string | null;
+    hq: string | null;
+    value: number;
+    /** What happened to it, in words. */
+    status: string;
+    pending: number;
+    /** This CRM's order, to open it; null for an older one. */
+    orderId: number | null;
+  }[];
+  total: { orders: number; value: number; pending: number };
+  dispense: { orders: number; value: number };
+  referral: { orders: number; value: number };
+};
+
 /** A team's Headquarters (27 Nov, PLAN 257): each channel's HQs, as the sheet photo lays them out. */
 export type Headquarters = {
   month: string;

@@ -10,7 +10,7 @@ import { migrate } from "../db/migrate";
 import { seedDemoTeam } from "../orders/seed-team";
 import { seedRxTeam } from "../rx/seed";
 import { seedDemo } from "../seed";
-import type { Headquarters } from "../types";
+import type { DoctorHistory, Headquarters, HqDoctors } from "../types";
 import { hqOf } from "./headquarters";
 
 const PASSWORD = "test-password-1";
@@ -91,5 +91,18 @@ describe("headquarters", () => {
     expect(hq?.referral).toMatchObject({ doctors: 1, month: { doctors: 1, patients: 1, value: 120000 } });
     expect(hq?.referral.top[0]?.name).toBe("Dr. Hq Sender");
     expect(hq?.doctors).toBeGreaterThanOrEqual(2);
+
+    // Pressing the person: their doctors by way (28 Nov, PLAN 261).
+    const doctors = (await (await get("rosa", `/api/headquarters/${joy?.seat}/doctors`)).json()) as HqDoctors;
+    expect(doctors.referral.find((one) => one.key === "dr. hq sender")).toMatchObject({ orders: 1, value: 120000, month: { orders: 1 } });
+    expect(doctors.dispense.find((one) => one.key === "dr. hq buyer")).toMatchObject({ orders: 1, value: 300000 });
+    // Pressing a doctor: every order through them, what happened, what is pending.
+    const history = (await (await get("rosa", `/api/headquarters/doctor?key=${encodeURIComponent("dr. hq buyer")}`)).json()) as DoctorHistory;
+    expect(history.total).toMatchObject({ orders: 1, value: 300000 });
+    expect(history.dispense).toEqual({ orders: 1, value: 300000 });
+    expect(history.orders[0]).toMatchObject({ code: "SO-HQ1", way: "dispense", buyer: "Dr. Hq Buyer", status: "Confirmed" });
+    // Not the sellers', and not another team's HQ.
+    expect((await get("joy", `/api/headquarters/${joy?.seat}/doctors`)).status).toBe(403);
+    expect((await get("daniel", `/api/headquarters/${joy?.seat}/doctors`)).status).toBe(404);
   });
 });

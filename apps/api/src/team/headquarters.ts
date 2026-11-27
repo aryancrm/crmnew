@@ -18,7 +18,8 @@ import { addDays, todayManila } from "../inventory/rules";
 import { invoicesSql } from "../kpis/invoices";
 import { doctorOrders } from "../rx/doctors";
 import { sheetName } from "../sales/target-sheet";
-import type { Headquarters, Me } from "../types";
+import { STATUS_LABEL } from "../orders/rules";
+import type { DoctorHistory, Headquarters, HqDoctors, Me, OrderStatus } from "../types";
 import { teamSeats } from "./service";
 
 const LEADS = ["team_lead", "manager", "ceo", "admin"];
@@ -213,5 +214,192 @@ export async function headquarters(db: Database, me: Me, asked: { month?: string
     channels: list,
     sold: list.reduce((sum, one) => sum + one.sold, 0),
     today: list.reduce((sum, one) => sum + one.today, 0),
+  };
+}
+
+/** The ways a doctor's order counts as (Aryan, 28 Nov: a guarantee letter is a patient's order, a
+ *  referral's). */
+const LETTER_SOURCES = ["DSWD", "PCSO", "Office of the President", "IAPF", "Malasakit"];
+const wayOfSource = (source: string | null): "dispense" | "referral" | null =>
+  source === "Doctor order"
+    ? "dispense"
+    : source === "Patient order referred by doctor" || (source !== null && LETTER_SOURCES.includes(source))
+      ? "referral"
+      : null;
+
+/** What Zoho's older statuses mean, in words. */
+const ZOHO_STATUS: Record<string, string> = {
+  draft: "Draft",
+  confirmed: "Confirmed",
+  open: "Open",
+  invoiced: "Invoiced",
+  partially_invoiced: "Partly invoiced",
+  closed: "Delivered",
+  fulfilled: "Delivered",
+  void: "Cancelled",
+};
+
+type DoctorOrder = {
+  seat: number;
+  doctor: string;
+  dkey: string;
+  day: string;
+  total: number;
+  doctorId: number | null;
+  way: string | null;
+  buyer: number | null;
+  origin: "crm" | "zoho";
+  ref: number;
+  code: string;
+  status: string;
+};
+
+/** The orders through a doctor on these seats (the last `since` day on), with what is still owed on
+ *  each: this CRM's invoices less what was paid; a Zoho order's invoices in the books (tied to it
+ *  by its number) at their balance. */
+async function doctorOrdersWithPending(db: Database, seats: SQL, where: SQL): Promise<(DoctorOrder & { pending: number })[]> {
+  const found = await rows<DoctorOrder>(
+    db,
+    sql`select x.seat::int as seat, x.doctor, x.dkey, to_char(x.day, 'YYYY-MM-DD') as day, x.total::float8 as total,
+        x.doctor_id::int as "doctorId", x.way, x.buyer::int as buyer, x.origin, x.ref::int as ref, x.code, x.status
+      from ${doctorOrders(seats)} x where ${where} order by x.day desc`,
+  );
+  if (!found.length) return [];
+  const crm = found.filter((one) => one.origin === "crm").map((one) => one.ref);
+  const zoho = found.filter((one) => one.origin === "zoho").map((one) => one.ref);
+  const list = (ids: number[]) => (ids.length ? sql.join(ids.map((id) => sql`${id}`), sql`, `) : sql`0`);
+  const owed = await rows<{ origin: string; ref: number; pending: number }>(
+    db,
+    sql`select 'crm' as origin, i.order_id::int as ref, sum(i.total - i.paid)::float8 as pending from invoice i
+        where i.order_id in (${list(crm)}) and i.status = 'open' and i.total > i.paid group by i.order_id
+      union all
+      select 'zoho', p.id::int, sum(round(inv.balance * inv.fx_rate))::float8 from past_order p
+        join book_doc so on so.kind = 'sales_order' and so.number = p.code
+        join book_link l on l.to_doc = so.id or l.from_doc = so.id
+        join book_doc inv on inv.id = (case when l.to_doc = so.id then l.from_doc else l.to_doc end) and inv.kind = 'invoice'
+        where p.id in (${list(zoho)}) and inv.balance > 0 and inv.status not in ('void', 'draft') and inv.voided_at is null
+        group by p.id`,
+  );
+  const pendingOf = new Map(owed.map((one) => [`${one.origin}:${one.ref}`, one.pending]));
+  return found.map((one) => ({ ...one, pending: pendingOf.get(`${one.origin}:${one.ref}`) ?? 0 }));
+}
+
+/** Where each doctor works: their record's hospital (the CRM's doctor, else the one doctor of that
+ *  name). */
+async function hospitalsOf(db: Database, doctors: { dkey: string; doctorId: number | null }[]): Promise<Map<string, string>> {
+  const keys = [...new Set(doctors.map((one) => one.dkey))];
+  if (!keys.length) return new Map();
+  const found = await rows<{ dkey: string; hospital: string }>(
+    db,
+    sql`select lower(trim(d.name)) as dkey, h.name as hospital from customer d join customer h on h.id = d.works_at
+      where d.kind = 'doctor' and d.active and lower(trim(d.name)) in (${sql.join(keys.map((key) => sql`${key}`), sql`, `)})`,
+  );
+  const byKey = new Map<string, Set<string>>();
+  for (const one of found) byKey.set(one.dkey, (byKey.get(one.dkey) ?? new Set()).add(one.hospital));
+  // A name two doctors share at two hospitals says nothing for sure: left blank.
+  return new Map([...byKey].filter(([, set]) => set.size === 1).map(([key, set]) => [key, [...set][0] as string]));
+}
+
+async function seatsInView(db: Database, me: Me): Promise<number[]> {
+  if (!LEADS.includes(me.role)) throw new Refusal(403, "not_allowed", "Headquarters are the leads' view.");
+  return (await teamSeats(db, me, me.unit ?? null)).seatIds;
+}
+
+/** One HQ's doctors (Aryan, 28 Nov: "press the person: the doctor referral's and the doctor
+ *  dispense's data; the doctor's name on top, the hospital they work at a little under it"), over
+ *  the last 12 months to the day, by way: each with the month's orders and value, the year's, the
+ *  last order and what is still pending on their orders. */
+export async function hqDoctors(db: Database, me: Me, seatId: number, asked: { month?: string | null }): Promise<HqDoctors> {
+  const seatIds = await seatsInView(db, me);
+  if (!seatIds.includes(seatId)) throw new Refusal(404, "not_found", "That HQ isn't in your team.");
+  const today = todayManila();
+  const month = asked.month && MONTH.test(asked.month) && asked.month <= today.slice(0, 7) ? asked.month : today.slice(0, 7);
+  const first = `${month}-01`;
+  const [year, number] = month.split("-").map(Number) as [number, number];
+  const last = new Date(Date.UTC(year, number, 0)).toISOString().slice(0, 10);
+  const day = today < last ? today : last;
+  const yearAgo = addDays(day, -364);
+  const orders = await doctorOrdersWithPending(db, sql`${seatId}`, sql`x.day between ${yearAgo}::date and ${day}::date`);
+  const hospitals = await hospitalsOf(db, orders);
+  const lists = { referral: new Map<string, HqDoctors["referral"][number]>(), dispense: new Map<string, HqDoctors["referral"][number]>() };
+  for (const order of orders) {
+    const way = wayOfSource(order.way);
+    if (!way) continue;
+    const doctor = lists[way].get(order.dkey) ?? {
+      key: order.dkey,
+      name: order.doctor,
+      hospital: hospitals.get(order.dkey) ?? null,
+      orders: 0,
+      value: 0,
+      month: { orders: 0, value: 0 },
+      lastOn: order.day,
+      pending: 0,
+    };
+    doctor.orders += 1;
+    doctor.value += order.total;
+    doctor.pending += order.pending;
+    if (order.day >= first) {
+      doctor.month.orders += 1;
+      doctor.month.value += order.total;
+    }
+    if (order.day > doctor.lastOn) doctor.lastOn = order.day;
+    lists[way].set(order.dkey, doctor);
+  }
+  const sorted = (map: Map<string, HqDoctors["referral"][number]>) =>
+    [...map.values()].sort((a, b) => b.month.value - a.month.value || b.value - a.value);
+  return { seatId, month, day, referral: sorted(lists.referral), dispense: sorted(lists.dispense) };
+}
+
+/** One doctor's whole history in the team (Aryan, 28 Nov: "press the doctor: all their past data,
+ *  how many orders came from them, what happened, how much they took, how much money is pending"):
+ *  every order through them, by either way, newest first. */
+export async function doctorHistory(db: Database, me: Me, key: string): Promise<DoctorHistory> {
+  const seatIds = await seatsInView(db, me);
+  const dkey = key.trim().toLowerCase();
+  if (!seatIds.length || !dkey) throw new Refusal(404, "not_found", "No such doctor in your team.");
+  const seats = sql.join(seatIds.map((id) => sql`${id}`), sql`, `);
+  const orders = await doctorOrdersWithPending(db, seats, sql`x.dkey = ${dkey}`);
+  if (!orders.length) throw new Refusal(404, "not_found", "No order through this doctor in your team.");
+  const [hospitals, buyers, places] = await Promise.all([
+    hospitalsOf(db, orders),
+    rows<{ id: number; name: string }>(
+      db,
+      sql`select id::int as id, name from customer where id in (${sql.join(
+        [...new Set(orders.map((one) => one.buyer).filter((id): id is number => id !== null))].map((id) => sql`${id}`).concat(sql`0`),
+        sql`, `,
+      )})`,
+    ),
+    rows<{ seatId: number; area: string | null; person: string | null }>(
+      db,
+      sql`select s.id::int as "seatId", a.name as area, (select p.name from seat_holder h join person p on p.id = h.person_id
+          where h.seat_id = s.id and h.kind = 'holder' and h.ends_on is null order by h.starts_on desc limit 1) as person
+        from seat s left join area a on a.id = s.area_id where s.id in (${seats})`,
+    ),
+  ]);
+  const buyerName = new Map(buyers.map((one) => [one.id, one.name]));
+  const placeOf = new Map(places.map((one) => [one.seatId, one.area ? hqOf(one.area, one.person) : null]));
+  const list: DoctorHistory["orders"] = orders.map((order) => ({
+    code: order.code,
+    day: order.day,
+    way: wayOfSource(order.way) ?? "other",
+    buyer: order.buyer !== null ? (buyerName.get(order.buyer) ?? null) : null,
+    hq: placeOf.get(order.seat) ?? null,
+    value: order.total,
+    status: order.origin === "crm" ? (STATUS_LABEL[order.status as OrderStatus] ?? order.status) : (ZOHO_STATUS[order.status] ?? order.status),
+    pending: order.pending,
+    orderId: order.origin === "crm" ? order.ref : null,
+  }));
+  const sum = (way: string) => {
+    const mine = list.filter((one) => one.way === way);
+    return { orders: mine.length, value: mine.reduce((total, one) => total + one.value, 0) };
+  };
+  return {
+    key: dkey,
+    name: orders[0]?.doctor ?? key,
+    hospital: hospitals.get(dkey) ?? null,
+    orders: list,
+    total: { orders: list.length, value: list.reduce((total, one) => total + one.value, 0), pending: list.reduce((total, one) => total + one.pending, 0) },
+    dispense: sum("dispense"),
+    referral: sum("referral"),
   };
 }
