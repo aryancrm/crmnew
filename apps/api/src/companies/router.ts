@@ -20,7 +20,8 @@ import { sql } from "drizzle-orm";
 import { type Context, Hono } from "hono";
 import { getCookie } from "hono/cookie";
 import { rows } from "../db/index";
-import { asCompany } from "./context";
+import { endSession, whoIs } from "../auth/sessions";
+import { asCompany, setOtherCompanies } from "./context";
 import type { CompanyList, Running } from "./registry";
 
 export const ORG_COOKIE = "org";
@@ -96,6 +97,19 @@ function pagesIn(body: ArrayBuffer): string[] {
 
 export function companyRouter(list: CompanyList, options: { secure: boolean; control?: { fetch: (request: Request, env?: unknown) => Response | Promise<Response> } }): Hono {
   const router = new Hono();
+  // Accounts of several companies on one browser: a session is asked about in its own company's
+  // database, as that company's.
+  setOtherCompanies({
+    whoIs: async (orgId, token) => {
+      const one = list.byOrgId(orgId);
+      return one ? asCompany(one.ref, () => whoIs(one.db, token)) : null;
+    },
+    end: async (orgId, token) => {
+      const one = list.byOrgId(orgId);
+      if (one) await asCompany(one.ref, () => endSession(one.db, token));
+    },
+    code: (orgId) => list.byOrgId(orgId)?.ref.code ?? null,
+  });
   // The control panel answers for itself, apart from every company.
   const control = options.control;
   if (control) router.all("/api/control/*", (c) => control.fetch(c.req.raw, c.env));

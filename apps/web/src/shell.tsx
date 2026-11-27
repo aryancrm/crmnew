@@ -51,7 +51,18 @@ import { Toasts } from "./toast";
 
 /** The accounts signed in on this browser (GET /api/auth/accounts), the one in use first. */
 type AccountsOnBrowser = {
-  accounts: { id: number; name: string; email: string | null; title: string | null; roleLabel: string; photo: number | null; current: boolean }[];
+  /** `key`: "<Org ID>:<person>", whichever company the account is (27 Nov); `company` its code. */
+  accounts: {
+    key: string;
+    id: number;
+    name: string;
+    email: string | null;
+    title: string | null;
+    roleLabel: string;
+    photo: number | null;
+    company: string | null;
+    current: boolean;
+  }[];
   max: number;
 };
 import { unreadIn, useUpdates } from "./updates";
@@ -984,22 +995,25 @@ function Account({ me, role }: { me: Me; role: string }) {
     enabled: open && !me.viewedBy,
   }).data;
   const others = accounts?.accounts.filter((one) => !one.current) ?? [];
-  const [switching, setSwitching] = useState<number | null>(null);
+  const mine = accounts?.accounts.find((one) => one.current);
+  // Accounts of more than one company here: each says whose it is.
+  const companies = new Set(accounts?.accounts.map((one) => one.company)).size > 1;
+  const [switching, setSwitching] = useState<string | null>(null);
   /** Signs one account out of this browser (27 Nov); the one in use: the next one opens. */
-  async function remove(personId: number) {
-    setSwitching(personId);
+  async function remove(key: string) {
+    setSwitching(key);
     try {
-      const { me: now } = await api<{ me: Me | null }>("/api/auth/accounts/remove", { body: { personId } });
-      if (personId === me.id) window.location.assign(now ? "/" : "/signin");
+      const { me: now } = await api<{ me: Me | null }>("/api/auth/accounts/remove", { body: { key } });
+      if (key === mine?.key) window.location.assign(now ? "/" : "/signin");
       else await queries.invalidateQueries({ queryKey: ["auth", "accounts"] });
     } finally {
       setSwitching(null);
     }
   }
-  async function switchTo(personId: number) {
-    setSwitching(personId);
+  async function switchTo(key: string) {
+    setSwitching(key);
     try {
-      const { me: now } = await api<{ me: Me }>("/api/auth/switch", { body: { personId } });
+      const { me: now } = await api<{ me: Me }>("/api/auth/switch", { body: { key } });
       // The whole app opens afresh as the other account: nothing of this one's stays on screen.
       window.location.assign(now ? "/" : "/signin");
     } catch {
@@ -1055,7 +1069,7 @@ function Account({ me, role }: { me: Me; role: string }) {
                   role="menuitem"
                   disabled={switching !== null}
                   // With other accounts here: this one only, the next opens; alone: signed out.
-                  onClick={() => (others.length ? void remove(me.id) : void signOut())}
+                  onClick={() => (others.length && mine ? void remove(mine.key) : void signOut())}
                   title={others.length ? `Sign out of ${me.name} only` : "Sign out"}
                   className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border border-line-soft px-3 text-xs font-semibold text-ink-2 hover:bg-hover disabled:opacity-60"
                 >
@@ -1125,18 +1139,23 @@ function Account({ me, role }: { me: Me; role: string }) {
                 <div className="px-4 pt-2.5 pb-1 text-[11px] font-semibold tracking-wide text-ink-2 uppercase">Other accounts</div>
               )}
               {others.map((one) => (
-                <div key={one.id} className="group flex items-center hover:bg-hover">
+                <div key={one.key} className="group flex items-center hover:bg-hover">
                   <button
                     type="button"
                     role="menuitem"
                     disabled={switching !== null}
-                    onClick={() => void switchTo(one.id)}
+                    onClick={() => void switchTo(one.key)}
                     title={`Switch to ${one.name}`}
                     className="flex min-h-14 min-w-0 flex-1 items-center gap-3 px-4 py-2 text-left disabled:opacity-60"
                   >
                     <Avatar person={one} />
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate font-medium">{switching === one.id ? "Opening…" : one.name}</span>
+                      <span className="block truncate font-medium">
+                        {switching === one.key ? "Opening…" : one.name}
+                        {companies && one.company && (
+                          <span className="ml-1.5 rounded bg-slate-100 px-1.5 py-px text-[10px] font-semibold text-slate-600">{one.company}</span>
+                        )}
+                      </span>
                       <span className="block truncate text-xs text-ink-2">{one.email ?? one.title ?? one.roleLabel}</span>
                     </span>
                   </button>
@@ -1145,7 +1164,7 @@ function Account({ me, role }: { me: Me; role: string }) {
                     type="button"
                     role="menuitem"
                     disabled={switching !== null}
-                    onClick={() => void remove(one.id)}
+                    onClick={() => void remove(one.key)}
                     aria-label={`Remove ${one.name} from this browser`}
                     title="Remove from this browser"
                     className="mr-2 grid size-9 shrink-0 place-items-center rounded-full text-slate-400 hover:bg-white hover:text-rose-600 disabled:opacity-60"
