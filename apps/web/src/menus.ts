@@ -1244,12 +1244,8 @@ function ownDesk(me: Me): Space {
             { to: "/rx/business", label: "Prescription sales", icon: Stethoscope },
             { to: "/to-call", label: "Refills due", icon: Pill, badge: "refills", short: "Refills" },
             // A coach who leads RX Business's field CHCs too (Honey, 19 Nov's sheet): their visits.
-            ...(me.divisions?.includes("RX Business")
-              ? [
-                  { to: "/rx/field", label: "Field team", icon: Stethoscope },
-                  folder("Team visits", CalendarCheck, teamFieldItems(), "Visits"),
-                ]
-              : []),
+            // No "Field team" (Aryan, 27 Nov: it repeated other pages; see the Country Mentor's).
+            ...(me.divisions?.includes("RX Business") ? [folder("Team visits", CalendarCheck, teamFieldItems(), "Visits")] : []),
             ordersLink("Team orders"),
             { to: "/targets", label: "Targets", icon: Target },
             { to: "/collections", label: "Collections", icon: HandCoins },
@@ -1318,7 +1314,10 @@ function ownDesk(me: Me): Space {
           cta: newOrder,
           ...desk([
             home,
-            { to: "/rx/field", label: "Field team", icon: Stethoscope },
+            // No "Field team" (Aryan, 27 Nov: "what is it showing? things repeat"): its visits and
+            // coverage are the Visits report's (Field visits), its new doctors and letters
+            // Prescription sales' and the Scorecards', its groups Care groups'; and it counted the
+            // CHCs' own tiers, which nobody keeps, so it was all zeros. The page stays at its address.
             { to: "/rx/business", label: "Prescription sales", icon: Stethoscope },
             { to: "/my-team", label: "Whole business", icon: Users, teams: true },
             { to: "/care-groups", label: "Care groups", icon: Users, short: "Groups" },
